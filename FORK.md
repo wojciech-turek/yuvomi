@@ -8,6 +8,7 @@ this file describes what is different here.
 
 - `deploy/hetzner/`: Docker Compose + Caddy deployment, bootstrap and update scripts,
   setup guide (start there).
+- `.github/workflows/deploy.yml` runs `deploy/hetzner/update.sh` on the server after each build.
 - `.github/workflows/home-image.yml` builds this fork's image to
   `ghcr.io/wojciech-turek/yuvomi`. Upstream's publish, Umbrel, Claude review and
   Dependabot workflows were removed: they push to upstream's registries or need

@@ -1,7 +1,11 @@
-# Yuvomi behind Caddy (automatic HTTPS) on a single Hetzner server.
-# Run from this folder: docker compose up -d
-# Only Caddy is reachable from outside (80/443); Yuvomi stays on the
-# internal network.
+# Yuvomi on a Hetzner server. Run from this folder: docker compose up -d
+#
+# Two ways in, chosen by COMPOSE_PROFILES in .env (bootstrap.sh picks one):
+#   COMPOSE_PROFILES=caddy  - ports 80/443 are free: the bundled Caddy serves
+#                             HTTPS with automatic Let's Encrypt certificates.
+#   COMPOSE_PROFILES=       - another web server already owns 80/443: it proxies
+#                             to Yuvomi on 127.0.0.1:${YUVOMI_LOCAL_PORT}.
+# Yuvomi itself is never published beyond localhost.
 
 services:
   yuvomi:
@@ -26,8 +30,8 @@ services:
       - ./backups:/backups
       - ./modules:/app/modules
       - ./documents:/documents
-    expose:
-      - "3000"
+    ports:
+      - "127.0.0.1:${YUVOMI_LOCAL_PORT:-3080}:3000"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 30s
@@ -37,7 +41,8 @@ services:
 
   caddy:
     image: caddy:2.10
-    container_name: caddy
+    container_name: yuvomi-caddy
+    profiles: ["caddy"]
     restart: unless-stopped
     depends_on:
       - yuvomi
