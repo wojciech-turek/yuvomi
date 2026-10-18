@@ -1,0 +1,8 @@
+#!/bin/sh
+# After `git pull` brought main up to GitHub's main (e.g. a PR merged on GitHub), deploy
+# it (deploy/hetzner/deploy.sh). A local merge that is not on GitHub yet deploys on push.
+[ "$(git symbolic-ref -q --short HEAD)" = main ] || exit 0
+[ "$(git rev-parse HEAD)" = "$(git rev-parse -q --verify origin/main)" ] || exit 0
+log="$(git rev-parse --absolute-git-dir)/yuvomi-deploy.log"
+DEPLOY_NOTIFY=1 nohup "$(git rev-parse --show-toplevel)/deploy/hetzner/deploy.sh" >>"$log" 2>&1 &
+echo "yuvomi: deploying main in the background, log: $log" >&2

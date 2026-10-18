@@ -13,7 +13,6 @@ REPO_URL="${REPO_URL:-https://github.com/wojciech-turek/yuvomi.git}"
 BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/yuvomi}"
 DEPLOY_DIR="$APP_DIR/deploy/hetzner"
-DEPLOY_KEY=/root/.ssh/yuvomi_deploy
 
 [[ $EUID -eq 0 ]] || { echo "Run as root." >&2; exit 1; }
 
@@ -78,18 +77,6 @@ if ufw status 2>/dev/null | grep -q "Status: active" && grep -q '^COMPOSE_PROFIL
   ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp
 fi
 
-echo "==> Deploy key for GitHub Actions (can only run update.sh)"
-mkdir -p /root/.ssh && chmod 700 /root/.ssh
-touch /root/.ssh/authorized_keys
-if ! grep -q "yuvomi-github-deploy" /root/.ssh/authorized_keys; then
-  rm -f "$DEPLOY_KEY" "$DEPLOY_KEY.pub"
-  ssh-keygen -q -t ed25519 -N "" -C "yuvomi-github-deploy" -f "$DEPLOY_KEY"
-  echo "command=\"$DEPLOY_DIR/update.sh\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty $(cat "$DEPLOY_KEY.pub")" \
-    >> /root/.ssh/authorized_keys
-  chmod 600 /root/.ssh/authorized_keys
-  NEW_KEY=1
-fi
-
 echo "==> Starting Yuvomi"
 docker compose pull --ignore-pull-failures
 docker compose up -d
@@ -108,15 +95,5 @@ if [[ -n "${NEW_ENV:-}" ]]; then
   echo "!! Without it the database and all backups are unreadable:"
   grep '^DB_ENCRYPTION_KEY=' .env
 fi
-if [[ -n "${NEW_KEY:-}" ]]; then
-  IP=$(curl -fsS4 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
-  echo
-  echo "== GitHub → wojciech-turek/yuvomi → Settings → Secrets and variables → Actions:"
-  echo "   DEPLOY_HOST        = ${IP}"
-  echo "   DEPLOY_KNOWN_HOSTS = ${IP} $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
-  echo "   DEPLOY_SSH_KEY     = everything between the lines below:"
-  echo "-----8<-----"
-  cat "$DEPLOY_KEY"
-  echo "-----8<-----"
-  echo "   (then delete it from the server if you like: rm $DEPLOY_KEY - the public half stays authorised)"
-fi
+echo
+echo "Later updates are deployed from your Mac: deploy/hetzner/deploy.sh (see README.md)."

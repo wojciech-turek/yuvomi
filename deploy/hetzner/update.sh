@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull the latest fork and image, then restart. Run on the server as root:
 #   /opt/yuvomi/deploy/hetzner/update.sh
-# GitHub Actions (deploy.yml) runs this too, through a key that can run nothing else.
+# deploy.sh runs it from your Mac over SSH.
 set -euo pipefail
 cd "$(dirname "$0")"
 git -C ../.. pull --ff-only

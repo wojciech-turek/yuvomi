@@ -1,0 +1,12 @@
+#!/bin/sh
+# After a push of main to origin, deploy to the server (deploy/hetzner/deploy.sh). The
+# deploy runs in the background and waits for the push to land, so it never holds it up.
+[ "$1" = origin ] || exit 0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = refs/heads/main ] && [ "$local_sha" != 0000000000000000000000000000000000000000 ]; then
+    log="$(git rev-parse --absolute-git-dir)/yuvomi-deploy.log"
+    DEPLOY_NOTIFY=1 nohup "$(git rev-parse --show-toplevel)/deploy/hetzner/deploy.sh" "$local_sha" >>"$log" 2>&1 &
+    echo "yuvomi: deploying $(git rev-parse --short "$local_sha") in the background, log: $log" >&2
+  fi
+done
+exit 0
