@@ -1,0 +1,215 @@
+/**
+ * Modul: CSS Reset
+ * Zweck: Browser-Defaults normalisieren, Box-Sizing, Touch-Verhalten
+ * Abhängigkeiten: tokens.css
+ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* DIE EINE AUSNAHME VOM `margin: 0` DARUEBER - und sie muss hier stehen.
+ *
+ * Ein modales `<dialog>` zentriert der Browser NICHT ueber `position`, sondern
+ * allein ueber den Aussenabstand: sein UA-Blatt setzt `inset: 0` (alle vier
+ * Kanten) und ueberlaesst `margin: auto` die Mitte. Der Stern oben ist eine
+ * Autoren-Regel und schlaegt das UA-Blatt - `margin: 0` liess damit JEDEN
+ * nativen Dialog in der linken oberen Ecke kleben, festgenagelt an `inset: 0`.
+ *
+ * Betroffen war nicht eine Stelle, sondern jede: die Symbolauswahl
+ * (components/icon-picker.js - Schnellzugriffe, Kalender, Schichtplan,
+ * Abfallarten) und der Zuschnitt-Dialog fuers Profilbild (utils/avatar-crop.js).
+ * Beide bringen eigene Regeln mit, keine der beiden setzte einen Abstand, und
+ * beide erbten deshalb dieselbe Ecke. Genau deshalb wird das hier zurueckgeholt
+ * und nicht in den zwei Stylesheets einzeln nachgetragen: die naechste
+ * `<dialog>`-Verwendung braucht dann keinen dritten Nachtrag.
+ *
+ * `auto` ist woertlich der UA-Wert, den der Reset entfernt hat - das stellt das
+ * Standardverhalten wieder her, statt eine eigene Zentrierung zu erfinden. */
+dialog {
+  margin: auto;
+}
+
+html {
+  font-family: var(--font-sans);
+  /* 100% statt 16px: die rem-Skala folgt damit der Schriftgrößen-EINSTELLUNG
+   * des Browsers (WCAG 1.4.4), nicht nur dem Seitenzoom; der Default bleibt
+   * 16px und ändert nichts am gerenderten Standardbild. */
+  font-size: 100%;
+  line-height: var(--line-height-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+}
+
+/* KOREANISCH BRICHT AN DER WORTGRENZE, NICHT ZWISCHEN ZWEI SILBEN (#1607).
+ * Der Browser behandelt Hangul wie chinesische Schrift und darf zwischen je zwei
+ * Zeichen umbrechen; Koreanisch trennt seine Woerter aber mit Leerzeichen.
+ * Gemessen bei 375px im Blatt "Darstellung": "선택합니 / 다.", "6 / 시까지는",
+ * "다 / 른" - eine einzelne Silbe allein auf der naechsten Zeile, 68 solche
+ * Stellen in 27 von 46 Ansichten. `keep-all` nimmt genau diese Stellen weg.
+ *
+ * NUR FUER `ko`, und am Wurzelelement statt an jedem Element: Japanisch und
+ * Chinesisch schreiben ohne Leerzeichen, dort waere jeder Satz EIN Wort - und
+ * `html:lang(ko)` trifft nur `<html>` (i18n.js setzt `lang` beim Sprachwechsel),
+ * alles darunter erbt, und jede Regel, die an ihrem Element selbst etwas anderes
+ * sagt, gewinnt weiter.
+ *
+ * `overflow-wrap` GEHOERT DAZU: mit `keep-all` hat ein Wort, das breiter ist
+ * als seine Zeile, keine Umbruchstelle mehr (ein Titel aus 200 Silben ohne
+ * Leerzeichen liefe aus seiner Karte). `break-word` und nicht `anywhere`: es
+ * trennt erst, wenn das Wort allein nicht passt, und laesst die Mindestbreite
+ * eines Elements beim laengsten Wort - `anywhere` zoege sie auf ein Zeichen
+ * zusammen (list-row.css beschreibt, was das in einer Flex-Zeile anrichtet). */
+html:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+body {
+  /* Dieselbe Kette wie an .app-shell in layout.css, mit der Begruendung dort
+   * (#1276): 100dvh, wo der Browser dvh kennt; sonst -webkit-fill-available,
+   * das sich an html (height: 100%) misst und auf iOS 13.4 bis 15.3 die
+   * sichtbare Hoehe ergibt; sonst 100vh. Ohne jede Hoehe waechst der Body mit
+   * seinem Inhalt, overflow: hidden schneidet nichts mehr ab, und der
+   * Hauptbereich hat keine Grenze, an der er scrollen koennte. */
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--color-bg);
+}
+
+img, svg, video {
+  display: block;
+  max-width: 100%;
+}
+
+/* `display: block` oben ist eine Autorenregel und schlaegt das UA-`[hidden]` -
+ * jedes `<img hidden>` der App stand damit sichtbar da, etwa das noch nicht
+ * geladene Dokument-Thumbnail ueber seinem Glyph (#1340, test:hidden-cascade). */
+img[hidden], svg[hidden], video[hidden] {
+  display: none;
+}
+
+/* `color: inherit` ist hier die WICHTIGSTE Zeile, und sie hat gefehlt: `a` und
+ * `input, textarea, select` erben ihre Farbe direkt darunter, `button` als
+ * einziges der vier tat es nicht. Ohne sie nimmt ein Button die UA-Farbe
+ * `buttontext`, also Schwarz - in BEIDEN Themes. Im Light faellt das nicht auf,
+ * im Dark stand ein schwarzes Icon auf #0A0A0C: 1.06:1 (gemessen an
+ * #cal-prev/#cal-next, #budget-prev/#budget-next, #rail-toggle).
+ *
+ * Sichtbar wurde es nur an Knöpfen OHNE Variantenklasse: `.btn--primary`,
+ * `--secondary` und `--ghost` setzen alle eine Farbe, `.btn--icon` allein nicht.
+ * Deshalb ist der Ort hier und nicht bei `.btn` - der Reset hat `font`, `border`
+ * und `background` zurückgesetzt und `color` bei genau dem Element vergessen,
+ * das es am nötigsten hat. `inherit` statt eines festen Tokens, weil ein Button
+ * auf farbigem Grund die Farbe seiner Flaeche braucht, nicht die des Bodys.
+ * Guard: Sonde 14 in test-document-guards.js. */
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+/* Fokus-Styles (Accessibility)
+ *
+ * Die einzige Basisregel. Sie liest die Tokens aus tokens.css §7b; wer den Ring
+ * anders will, überschreibt dort `--focus-ring-color`, statt hier eine zweite
+ * Spezifikation danebenzustellen - genau so entstanden die sechs, die es vorher
+ * gab (Critique P1, 2026-07-30). */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-xs);
+}
+
+/* Reduzierte Bewegung (Barrierefreiheit)
+ *
+ * BEWEGUNG FAELLT WEG, UEBERBLENDEN BLEIBT (Re-Critique 2026-09-27, C5). Hier
+ * stand `transition-duration: 0s !important` fuer jedes Element - auch fuer
+ * die Opacity-Blenden, die als bewegungsfreier Ersatz fuer einen Slide gebaut
+ * sind (Mehr-Blatt, Such-Overlay in layout.css). Sie liefen nie, aus der
+ * Blende wurde ein harter Schnitt. Apple ersetzt Bewegung durch Ueberblenden.
+ *
+ * Die Sperre gilt weiter fuer alles; eine Ersatz-Blende meldet sich per
+ * `--motion-fade` ab. Die Variable steht auf JEDEM Element auf 0s, damit ein
+ * Kind die Abmeldung seines Elternteils nicht erbt (sonst liefe dessen
+ * Transform-Transition wieder). Wer sich abmeldet, darf nur Opacity
+ * uebergehen lassen - das haelt test:motion, Punkt 7. Die Abmeldungen stehen
+ * unten gesammelt, damit es EINE Liste der erlaubten Blenden gibt. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    --motion-fade: 0s;
+    --motion-blend: 0s;
+    animation-duration: var(--motion-blend) !important;
+    animation-delay: 0s !important;
+    transition-duration: var(--motion-fade) !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Ersatz-Blenden (die Opacity-Transition steht in layout.css). Modal und
+   * eigene native Dialoge blenden per Web Animations (modal.js `_fade`,
+   * utils/dialog-surface.js) - eine CSS-Transition griffe dort nicht, siehe
+   * den Block fuer reduzierte Bewegung am Modal in layout.css. */
+  .more-sheet,
+  .more-sheet[aria-hidden="false"],
+  .more-backdrop,
+  .more-backdrop--visible,
+  .search-overlay,
+  .popover-menu,
+  .page-toolbar--fold-row > * {
+    --motion-fade: var(--duration-sm);
+  }
+
+  /* Dasselbe fuer ANIMATIONEN, die nur blenden (R20, Re-Critique 2026-10-17
+   * a6 P3): der Titel eines gedeckelten Kopfes setzt sich beim Ein- und
+   * Ausklappen per `page-title-settle` (reine Deckkraft, layout.css) - unter
+   * reduzierter Bewegung schlug er sonst hart um. Nur Elemente, deren
+   * einzige Animation eine Blende ist, stehen hier: die Dauer gilt jeder
+   * Animation des Elements. */
+  .page-toolbar--capped > .page-toolbar__title {
+    --motion-blend: var(--duration-sm);
+  }
+}
+
+/* Versteckte, aber zugängliche Elemente */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

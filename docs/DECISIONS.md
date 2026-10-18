@@ -1,0 +1,990 @@
+# Decisions made once
+
+[SCOPE.md](SCOPE.md) says what Yuvomi will not become. This page is for the other kind of
+answer: something Yuvomi does build, where the *shape* was argued out once in a thread and
+would otherwise be argued again in the next one. Each entry states the rule in a sentence or
+two, the reason, where the rule lives in the code, and what would reopen it. The full
+reasoning stays where it was made - in the thread and in the CHANGELOG entry of the release
+that shipped it - and this page points there rather than restating it a third time.
+
+An entry earns its place when a decision reached in one thread has been reached again,
+independently, in another. That is the sign it will be argued a third time. How a single
+feature works belongs in [SPEC.md](SPEC.md); anything not built yet lives in its thread, and
+the direction those threads add up to is in [ROADMAP.md](ROADMAP.md).
+
+---
+
+## 1. Privacy beats admin convenience
+
+**Access to a member's private data is never implied by a role, and never widened by an
+update.** It is granted per person, by an explicit and visible act, and the default is
+closed.
+
+Yuvomi is a household planner, not a company tool. The admin is usually a parent, and the
+other members are partners, teenagers and grandparents with a privacy of their own. Somebody
+who marked an entry private did so trusting that private means private. A right that reaches
+into existing private data cannot be inferred from a field people filled in for another
+purpose, and cannot be narrowed silently on update: permissions can be opened later, but what
+somebody has already seen cannot be unseen.
+
+The same rule was reached four times, each time from a different module:
+
+- **Health, v1.83.0 (#584).** Asked for as a property of the family role - dad, mum,
+  guardian. Built as a per-person grant an admin sets under Settings → Family, because the
+  role version would have given two people read access to the private health data of
+  everyone carrying the role "child" the moment they updated, including the seventeen-year-
+  old who has that role only because it fit best. Until somebody sets a grant, nothing
+  changes for anybody. A grant covers reading as well as writing, since a caregiver who could
+  write but not read would lose sight of the reading they just took; the cycle diary is
+  excluded, because giving medicine is care and reading someone's cycle diary is not.
+- **Invitations, v2.62.0 (#869).** A new member used to start with every module. That was
+  never decided for invitations: it was inherited from migration v74, where storing
+  permissions sparsely was the right call so that existing households behaved exactly as
+  before. The invite path got its own answer - a *starting permissions* field, preselected to
+  *Without personal areas*, which locks Health, Budget and Documents, with the resolved set
+  stored on the invitation. The stored default was left alone, so no household changed on
+  update. There is deliberately no "full access" template: a member override cannot widen a
+  role profile, and a template that quietly does nothing would be a promise that does not
+  hold.
+- **Documents, review of PR #989 (September 2026).** The destructive folder delete skipped
+  the ownership check for admins, so an admin could permanently delete a member's private
+  document that the single-document path would not even show them. Decided in review: the
+  visibility rule stands and admins do not override it. The subtree is selected through the
+  one visibility rule, and a row in it that is invisible to the caller is never deleted - at
+  first by refusing the whole subtree, later by leaving that row in place with only its folder
+  cleared, because a refusal that depends on a hidden row tells the caller it is there;
+  sharing a single document deliberately is the owner's act, and that path already exists.
+- **Gravatar, review of PR #1791 (October 2026).** The profile picture import was proposed on in
+  every install, with gravatar.com as the built-in target. Decided in review: off unless the
+  operator sets `GRAVATAR_BASE_URL`, with nothing sent and no button while it is unset, and only
+  for household members, because a split-expense guest's address is typed by whoever manages the
+  group, not by the guest. Sending the hash of somebody's address to an outside company stays
+  that member's own click on a server whose operator opened the door.
+
+The task lock in v2.30.0 rests on the same reasoning from the other side: a family role says
+who somebody is, not what they may do, and Yuvomi had already replaced that inference with
+explicit grants once.
+
+### Where the rule lives
+
+One rule, one place, so a future change cannot be forgotten in a copy:
+
+- **Documents:** `documentVisibleSql()` in `server/services/document-access.js` has exactly
+  three branches - creator, family visibility, explicit share - and no admin branch. Every
+  path that hands out documents goes through it, including the modules that only link them.
+- **Tasks and events:** `visibilityWhere()` in `server/services/visibility.js`, enforced on
+  the server and without an admin bypass (#474).
+- **Health:** `server/routes/health/caregivers.js`. Grants are per person, managed by admins,
+  and every member can read their own.
+- **Invitations:** `INVITE_PRESETS` in `server/permissions.js`, default `restricted`, and the
+  invite handler in `server/auth.js`, where a *missing* field means the narrow template so
+  that an older client cannot invite with full access by accident.
+
+### What would reopen it
+
+Whether an admin should ever see past the visibility rule is a real question, and it has an
+address: #1007, member visibility as its own axis. If the answer there is ever yes, the change
+goes into `document-access.js` - one rule, all paths, one test - and never into an `isAdmin`
+check at a single call site. Until then, an admin who cannot see a document still has the
+non-destructive path, and a pull request that adds an admin exception to any of the four
+places above is undoing this decision rather than extending it.
+
+---
+
+## 2. A rule lives in one place, not at a call site
+
+**Whatever decides who may see, write or store something exists once, as a function every
+path calls, and never as a second copy at the place that happens to need it.** A copy is not
+a shortcut. It is a second answer, waiting to diverge from the first.
+
+Every copy is a place a future change can miss, and a missed copy fails silently: nothing
+errors, one path simply answers differently from the other. Each time that happened here it
+was found from outside, after it had shipped, by somebody comparing two paths to the same
+data.
+
+The rule was reached three times within the same two days of September 2026, from three
+different shapes of copy:
+
+- **An inlined check, review of PR #989.** The destructive folder delete selected its subtree
+  without the document visibility rule and put an `isAdmin` check of its own in its place. Two
+  paths to the same document gave two answers: the single-document path told an admin that a
+  member's private document did not exist, the folder path deleted it. Decided in review: the
+  subtree goes through the one visibility rule, and if admins are ever to see past it, that
+  change goes into `document-access.js` - one rule, all paths, one test.
+- **A second regex, #1013.** The storage check for dashboard widget ids was written without
+  ever seeing how `fullWidgetId()` composes them, so it knew nothing of the colon in
+  `<module-id>:<widget-id>`, and every layout containing a third-party widget was refused
+  whole. Fixed in #1015 by moving the notation to where the composition is, with the storage
+  check built from the same parts instead of imitating them.
+- **A condition on a future build, #1007.** Member visibility, if it is built, comes with two
+  conditions: every list of people goes through a single predicate, the way documents go
+  through `documentVisibleSql()`, and all screens change at once, because a person hidden in a
+  picker but visible in a mention is not hidden, only inconsistently visible.
+
+An older instance shows the third shape of copy, a rule living inside a middleware. In
+v2.25.1 (#823) the MCP tools ran in-process past Express, and so past the only place the
+module permission had been written; a member with a module set to none got its data through
+that door while the REST path refused. The fix moved the verdict into a function both
+surfaces call - a call, not a rebuild. Earlier still, #583 folded three verbatim copies of the
+document visibility SQL into one file, and that file's header records why.
+
+### Where the rule lives
+
+- **Documents:** `documentVisibleSql()` and `filterVisibleDocumentIds()` in
+  `server/services/document-access.js`, called from documents, dms, tasks and the document
+  links every other module uses.
+- **Tasks and events:** `visibilityWhere()` in `server/services/visibility.js`. **Budget:**
+  `server/services/budget-visibility.js`, owner-based and without an admin bypass.
+- **Module permission:** `moduleAccessVerdict()` and `deniedModules()` in
+  `server/permissions.js`. The path middleware and the MCP tool layer call the same verdict,
+  and a route that carries several modules sorts with `deniedModules()`, because a middleware
+  that reads the path cannot know what such a route returns.
+- **Widget and module id notation:** `server/services/module-capabilities.js`, where
+  `fullWidgetId()` composes them and `isWidgetId()` is built from the same parts.
+
+### What counts as undoing it
+
+An `isAdmin` or ownership check inlined at a call site instead of the shared predicate. A
+regex for a format that already has an owner. A permission rule written inside a middleware
+or a guard, which binds it to that guard's construction and leaves the next surface without
+it. The test that protects such a rule kills it at its home and expects every path to go red;
+a test that only reads the source for the right name stays green over dead code.
+
+---
+
+## 3. One head, one width
+
+**A page head holds the edge of its widest body and does not move when the view changes.**
+Where the bodies of a page differ in width, the narrow ones keep their own lane underneath;
+the head is not narrowed along with them.
+
+A head that follows its body is right in exactly one view and jumps in every other. The
+calendar settled this on 27 August 2026 (v2.50.3): its head stood over four bodies, three of
+them full width, and once the view switcher had moved into the toolbar row the full title
+line no longer fit on one line inside the 720px reading cap. The answer was not a wider cap
+but a rule: the head keeps the edge of its widest body, and the agenda list keeps its reading
+lane underneath.
+
+Tasks reached the same point in #1012, reported by @Kyrodan: three views, two head widths,
+and the actions on the right moved 354px on every switch at 1358px. It was the same coupling,
+and Tasks had not followed when the calendar changed course. The one-line fix did not exist:
+PAGE-016 requires that a measure which caps anything on a page is visible in its head, so a
+reading page cannot simply release its head. The page had to be built the calendar's way
+first - no measure on the root, the reading lane taken back per view on the page root, the
+head untouched - and only then did the jump stop, with the task rows still ending at 720px.
+
+### Where the rule lives
+
+- **The construction:** `app-page--full` on the page root, and `is-reading-measure` toggled
+  on that root per view (`public/pages/calendar.js`, `public/pages/tasks.js`).
+  `.app-page.is-reading-measure` in `public/styles/layout.css` sets the measure, and rows and
+  filter rows cap themselves at it; the head reads nothing from it.
+- **The guards** in `test/test-frontend-audit.js`. "EIN Kopf, EINE Breite" recognises the
+  shape by how it is written - a measure toggle on the body with no toggle on the head - and
+  requires a narrowed head on the list pages it scans. PAGE-016 closes the other door: a page
+  with a measured mode and a full-width head may cap nothing.
+- **The mechanism** of a narrowed head, the `::after` slot that pulls the row end to the
+  measure, is described in [PAGE-COMPOSITION.md](PAGE-COMPOSITION.md).
+
+### What counts as undoing it
+
+Toggling a head's width modifier with the view. Releasing the head of a reading page without
+changing the page's mode, which PAGE-016 reports. A new page with mixed body widths that
+narrows its head to the narrow body: it will be right in one view and jump in the others,
+and it will be reported by whoever switches views first.
+
+---
+
+## 4. A household is people, not accounts
+
+**A person in the household is a row in `users`. Whether that person can sign in is a state
+of that row, not a second table beside it; and what kind of person they are - member, staff,
+guest, display - is a property of the row too, never a relationship between two people.**
+
+The question arrives in different clothes: a pet that should be assignable (#846), a cleaner
+who has a schedule but will never log in (#787), a wall tablet that must not count as a family
+member (#913), a babysitter who is in the house for one evening (#777), and finally the
+question underneath all of them, whether being *visible as a person* is a property or a
+relationship (#1007). Yuvomi had already answered it twice in the code before anybody asked:
+housekeeping staff are `users` rows filtered out of the member list, split-expense guests are
+`users` rows with `access_scope = 'split_guest'`. Two kinds of person without a normal login,
+each with its own side table and its own predicate. The decision is to say that out loud
+rather than to add a third mechanism.
+
+- **#1007, September 2026.** Decided: member visibility stays a property of a person, not a
+  "who may see whom" matrix; what it rules in is a third kind of account alongside the two
+  that exist. Two conditions attached: every list of people goes through one predicate, and
+  the rollout is all of it or none of it, because somebody hidden from a picker but visible in
+  a mention is not hidden, they are inconsistently visible.
+- **#913, August 2026.** The display account is not a new type from scratch: `access_scope`
+  already carries one non-member scope, and the real work is the exclusion list - every
+  surface that lists people today reads the member list through its own query.
+- **#787, August 2026.** Whether a staff member is a person with an account or a record about
+  a person has two honest answers - the live-in helper is the first, the plumber who comes
+  twice a year is the second - and the module is right for the first. The record-about-a-
+  person case does not need an account model; it needs the module to work without billing.
+
+The alternative, a `persons` table with an optional `user_id` (the shape Home Assistant and
+Splitwise use), was considered and declined: every assignment, birthday, contact and balance
+in this schema points at `users.id`, and a second table would make every new feature answer
+"person or user?" again.
+
+### Where the rule lives
+
+- `server/services/household-members.js` - `householdMemberSql()`, the member predicate (a
+  `users` row minus staff minus guests), and `accessScopeSql()`, which resolves `access_scope`
+  per account to `family` or `split_guest`. The predicate has one form, decided in #1207: no
+  staff and no guests, in every list of members, and `npm run test:household-member-guard`
+  turns red when a new list reads `users` without it. Lists of accounts rather than members
+  stand in the guard's allowlist with a reason, among them user administration
+  (`GET /auth/users`, which no picker reads any more), sign-in, the permission matrix, API token
+  subjects, background jobs per account and the two-factor overview, which shows every account
+  because the second factor protects accounts, not membership.
+- Choosing follows listing (#1007, all or nothing): the routes that take people for these
+  lists - task assignees, calendar attendees, budget responsibles, schedule owners, reward
+  enrolment, the default assignee of a synced calendar, the Outlook account owner and the cook
+  of a meal or of a repeating meal (#1679) - refuse a
+  newly chosen non-member through `newNonMembers()`, while a reference already stored stays
+  valid, so an old record keeps its staff member or guest and still saves. Split expenses are
+  the one place guests belong: the candidates are members plus the guests of that group, and
+  adding a group member refuses staff only.
+- `server/routes/housekeeping.js` (`createWorkerUser`) - a worker is a `users` row with a
+  random password, role `member`, family role `other`.
+- `server/services/oidc.js` - the `$oidc$` placeholder: "this account has no password" is a
+  state of the column itself, which is the pattern "can sign in" follows.
+
+### What is not built yet
+
+"Can sign in" as an explicit state of the row, with a migration that classifies today's staff
+and guests; the Family page adding a person with a login as an option rather than a
+prerequisite. The order and the threads are in [ROADMAP.md](ROADMAP.md). A `persons` table, a second list-of-people query that
+bypasses the predicate, or a per-pair visibility setting would each be this decision undone.
+
+---
+
+## 5. One visibility vocabulary
+
+**"Who may see this row" is answered in one vocabulary across modules: `private` (the owner),
+a named set (assignees, or an explicit access list), and `all` (the household). A module keeps
+storing what it stores; the read side maps `family` and `shared` to `all`. Stored values are
+never rewritten by a migration, and the interface uses the same three words everywhere.**
+
+The same question had grown three answers. Tasks and calendar say `all | assignees | private`
+through one function. Health says `private | family`, default private. Budget says
+`private | shared | shared_amount`, default shared, and its third value is not a visibility
+level at all but a second axis ("what of it": the amount counts, the details stay). Documents
+carry `family` plus a named list. The interface followed suit: "Alle Familienmitglieder",
+"Ganze Familie", "Familie", "Mit dem Haushalt teilen" and "Alle im Haushalt" are five German
+phrasings of one state.
+
+- **#699, September 2026.** The maintainer's own correction after re-reading the schema: not
+  three copies of one pattern but two patterns that disagree in both directions - health is
+  private by default and calls the open state `family`, budget is shared by default and calls
+  it `shared` - and the earlier answer had silently picked one vocabulary and the opposite
+  default. The fork was real and had been presented as settled.
+- **PR #1019, September 2026.** A new health tab arrived with its own `visibility` column in
+  the health pair, default private, chosen alone as every module before it. Two vocabularies
+  left "deliberately" means every new module picks, and the count grows.
+
+Normalising on read rather than by migration follows #984 (read-side transformation) and
+entry 1: a visibility default never changes existing data. `shared_amount` stays budget's own,
+because it answers a different question.
+
+### Where the rule lives
+
+- `server/services/visibility.js` - `VISIBILITY_VALUES` and `visibilityWhere()`, the canonical
+  set and the one WHERE fragment tasks and calendar share (#474).
+- `server/routes/health/helpers.js` - the health pair, to be read through an adapter.
+- `server/services/budget-visibility.js` - the budget triple, with `shared_amount` as the
+  second axis.
+- `server/services/document-access.js` - `documentVisibleSql()`, `family` plus the access list.
+- `public/locales/*.json` - the visibility labels under tasks, documents, health, budget and
+  quick links, the place the family sees first.
+
+### What is not built yet
+
+The shared labels in the interface, the read adapters per module, and the register of which
+module has moved; new modules take the canonical set from the start. A fourth stored
+vocabulary, a migration that rewrites `family` or `shared`, or a module-local label set would
+each be this decision undone.
+
+---
+
+## 6. One model, not two
+
+**Two threads describing the same arithmetic get one model, and a view of that model lives
+where the model lives.** A fixed weekly timetable and a rotating shift rota are one feature
+with two cycle lengths. A screen that shows either of them belongs to the module that owns the
+rows, not to the page people happen to open most often.
+
+The first half was settled on 24 August 2026, in #786 against #749. Benoit had asked for a
+weekly timetable with a Week A and a Week B; @mclgoerg had proposed a shift planner with an
+Early-Early-Late-Late-Night-Night-Off-Off rotation. They are the same thing: a "Week A / Week
+B" timetable is a 14-day cycle anchored to a date, the rota an 8-day one. Building the
+timetable separately would have meant writing the same cycle arithmetic a second time six
+months later. One module went in, named `schedule` rather than `shifts`, so that the timetable
+case would not be a guest in its own module.
+
+A week after Schedule shipped, #1018 arrived from @matthiasNX: a module of its own,
+`timetables`, with its own tables and a `week_type IN ('all','A','B')` column. The PR carried
+its own proof. `week_type` had no anchor anywhere, so nothing in the module could answer "is
+this week A or B?" - the user picked it from a dropdown, which is a label rather than a
+recurrence. Every entry then stored its own subject, times and colour, which forced a
+`POST /copy` endpoint that Schedule does not need, because a second pattern there points at the
+same shift types. What was genuinely new in it - room, instructor, period number, and more than
+one block per cycle day - was a change to the existing tables, and that is the shape #1022
+built.
+
+The same thread reached the rule a third time the following day, and that is the part worth
+keeping. @mclgoerg asked, before building, where a side-by-side timetable overview should live:
+a mode inside the calendar's week view, or a tab in Schedule. The answer came from the data
+rather than from the traffic. Every schedule entry carries a `user_id` - `resolveEntries()`
+stamps it on both the override and the pattern branch - so a lane per person is something the
+rows already are. Holidays, events and tasks carry no person at all, and the calendar's week
+view puts all three into one all-day cell per day, with a single column count shared by three
+grid rows. Splitting a day column into person lanes would have meant answering "whose holiday
+is Christmas?", a question the schema does not ask. The overview became a Schedule tab.
+
+The calendar side of this had already been answered, from the other direction and for other
+data. #670 asks for a multi-column family calendar, one column per member, and the reply on 24
+August said that organising by person first and time second is a genuinely different layout
+rather than a variant of week view, which is why it cannot be a switch on the existing one.
+That request is open and welcome; it is about calendar events, which do carry assignments per
+member. What this entry rules out is not a person-first view, but putting one module's data
+into another module's page to get one.
+
+The rule was reached a fourth time in September 2026, from household chores. #736 asked for a
+cleaning plan for households without a cleaning helper, and @Kyrodan's daily routines, in the
+same thread and in his wall-display vision in #913, asked for chores that reset, credit the
+person who did them and stay out of the calendar. Yuvomi already had two answers to "do this
+again some days after it was last done": the Housekeeping decay tasks (`frequency_days` counted
+from `last_completed`) and tasks with `recurrence_from_completion`. It is the same arithmetic,
+and only the task side carries assignees, points, a completion history and reminders. Growing
+the decay tasks into the chores feature would have meant building each of those a second time.
+Routines therefore become a kind of task, with their own tab in the tasks module; the decay
+tasks move into them, and Housekeeping keeps the helper side (#787). The first step is #1205.
+
+### Where the rule lives
+
+- **The model:** migration 165 in `server/db.js` - `schedule_patterns` with `anchor_date` and
+  `cycle_length`, `schedule_pattern_days` for the ordered cycle, `schedule_overrides` for a
+  single day. Described under "Schedule" in [SPEC.md](SPEC.md).
+- **The arithmetic, once:** `cyclePosition()` and `resolveEntries()` in
+  `server/services/schedule.js`, covered by `npm run test:schedule`. There is exactly one
+  implementation of cycle-position-from-anchor-date in the tree.
+- **Computed on read, never materialised:** `GET /schedule/entries` resolves patterns and
+  overrides per request and writes nothing. The calendar renders the result as a layer it can
+  switch off; it does not own the rows.
+- **The same move elsewhere:** cycle reminders (migration 177) anchor to
+  `cycle_reminder_anchors` for a stable reminder id, but reuse `predictCycle()` from
+  `public/utils/health-cycle.js` rather than keeping a second copy of the prediction maths.
+
+### What counts as undoing it
+
+A module that stores its own weekly or rotating pattern instead of a Schedule pattern. A
+`week_type`, `week_parity` or similar column anywhere: it is a cycle length under another name,
+and without an anchor it cannot say which week is which. Materialising a pattern into rows,
+which trades one pattern row plus its overrides for roughly seven hundred rows per person per
+two years, and makes every edit a reconciliation. And placing an editor or a comparison view
+for schedule data inside the calendar because that is where people look first: the calendar
+renders schedule entries as a layer, it does not host them. A person-first view of the
+calendar's own events is a different question, asked in #670 and still open. A second model
+for recurring household work next to tasks, whether as a module of its own or by giving the
+Housekeeping decay tasks people, points or a history of their own.
+
+---
+
+## 7. Data the household owns, not data we tend
+
+**A field or a row earns its place when it stays true without anybody tending it.** A fact the
+household states about its own things is that kind of data, and Yuvomi stores it. A catalogue of
+facts about the world, which somebody here would have to keep correct forever, is not, and Yuvomi
+declines it even when the same screen would benefit from both.
+
+The rule was written down first as a refusal, in [SCOPE.md](SCOPE.md) against #714: a product
+database with nutrition values and package sizes. The reason recorded there matters more than the
+refusal, because the first reason given was the wrong one. It was not privacy - the reporter
+correctly pointed out that you can type nutrition off the packaging with no outside server
+involved. It is that such a table is only useful while it is accurate, and nothing in a
+self-hosted household planner keeps it accurate.
+
+It was reached again, independently, in #1298: "what can I cook from what I have". The matching
+between a recipe ingredient and a stock row looks like the same product-identity problem, and a
+shipped catalogue of canonical ingredient names would indeed be that tended table. But a match the
+household confirms itself, between two rows it created itself, is the other kind of data entirely:
+it is a statement about their own recipe and their own shelf, and it keeps being true with nobody
+tending it. So the answer split along the line rather than along the feature, and stage one became
+reachable (#1314) while the catalogue stayed declined.
+
+That is what the rule is for. Both threads asked "may Yuvomi know what this ingredient is", and the
+answer is that Yuvomi may know what *you* said it is.
+
+### Where the rule lives
+
+Not in one function, because it is a rule about which columns get written at all. The visible
+consequences: `recipe_ingredients` keeps a quantity as free text and `pantry_items` keeps a number
+plus a unit, and the comment above `pantry_items.quantity` (`server/db.js`) says why - a stepper and
+a minimum need a number. Bridging the two is a household statement, not a computation over a
+catalogue. Since migration 222 (#1335) that statement has a table of its own,
+`recipe_ingredient_pantry_matches`, and it is written on confirmation only:
+`PUT /recipes/:id/ingredient-match` in `server/routes/recipes.js` is the one route that creates a
+match.
+
+### What counts as undoing it
+
+Guessing an identity from a name and storing the guess: that is the tended table again, one
+inference at a time, and it is wrong exactly where a household's own wording differs from ours.
+Shipping a seed list of canonical ingredients, products or nutrition values, whether in a migration
+or as a download. Importing such a list from an outside service and keeping it. And presenting an
+unmatched ingredient as missing rather than unknown, which makes an answer built on partial data
+read as complete.
+
+### Where the criterion was applied next
+
+#1293 asked for nutrition values on recipes and daily targets per person, and was answered with
+this criterion in hand: the values a family types about its own recipe are its own data, the
+arithmetic over ingredients would be the catalogue. Entry 8 records where that put the line.
+
+---
+
+## 8. A number somebody typed, not a number somebody looked up
+
+**Nutrition enters Yuvomi as a figure a person states about their own recipe or their own meal.
+Values per portion on a recipe, a daily target per person and a logged intake are the household's
+own data, and they are agreed and ticketed, not yet built. What stays declined is the step in
+between: turning "200 g flour"
+into grams of carbohydrate, which needs a table of facts about products that somebody would have
+to keep correct forever.**
+
+#1293 asked for macros and nutrition across Health and Recipes - nutrients on a recipe, a daily
+target per person, a log at dinnertime and the progress on the dashboard. The answer is yes to all
+four, and the thread also asked the right question: whether this is the product database #714 was
+refused for. It is not, and the difference is worth writing down, because the two look identical
+on the screen where they meet.
+
+The criterion is entry 7's: a field earns its place when it stays true without anybody tending it.
+"This pot serves four and one portion is about 650 kcal" passes that test the way a price passes
+it. It is a statement about one household's own recipe, made once, wrong only if they typed it
+wrong, and an old value is a usable old value. "200 g of flour contains 152 g of carbohydrate"
+fails it: that is a fact about a product, manufacturers change recipes and package sizes, and it
+is only useful while every row of it is accurate.
+
+**The line is already drawn in the schema, and this entry only names it.** Migration 13 made
+`recipe_ingredients.quantity` a TEXT column and nothing has altered it since; the comment above
+`pantry_items.quantity` says why the pantry is the exception - it is the one kitchen table that
+has to do arithmetic. A recipe ingredient has always been prose, because nothing was ever meant to
+compute over it. Per-portion nutrition sits on the prose side: typed and stored, never derived.
+Per-ingredient nutrition sits on the other side and would need the catalogue first. So the
+boundary is not a compromise reached for this thread; it is where the kitchen module has kept it
+from the beginning.
+
+Two consequences follow from the same reasoning rather than from taste:
+
+- **Eight named columns, fixed, and the same eight everywhere.** Energy in kilocalories, fat,
+  saturates, carbohydrate, sugars, protein, salt and fibre. Those are the seven the EU requires on
+  a package plus fibre - the set a person is reading off the packet in front of them, rather than
+  a number picked here. Fixed matters twice over: a ninth column later is a migration every
+  install has to take, and a `nutrient_key` / `value` pair instead would say the answer is
+  "whatever anybody types", which is the shape a catalogue grows in one row at a time. Eight
+  columns say the answer is macros and stays macros.
+- **A logged intake stores numbers, not a reference.** Editing a recipe next month must not
+  rewrite what somebody ate last week. Same reason migration 193 stores a paid price on the
+  shopping item rather than pointing at a product.
+
+### Where the rule lives
+
+Not in one function, for the same reason as entry 7: it is a rule about which columns get written
+at all. The first quarter of it exists: #1326 built the daily target, the logged intake and the
+dashboard progress, in `health_nutrition_targets` and `health_nutrition_entries`. #1327 to #1329
+are still ahead, so what follows is partly a description of the schema and partly what the rule
+requires of the tickets that remain:
+
+- `recipe_ingredients.quantity` stays TEXT (`server/db.js`, migration 13), and no code path parses
+  it into a number and a unit. `server/services/recipe-providers/mealie.js`
+  (`flattenIngredient()`) deliberately flattens the provider's structured quantity, unit and food
+  into that text, and the comment there says so.
+- Nutrition will live on `recipes` as a fixed set of nullable per-portion columns beside a servings
+  count, never on `recipe_ingredients`. NULL means "not stated" and must render as nothing, never
+  as a zero, so a recipe nobody filled in does not claim to contain no fat.
+- The intake log and the daily target belong in Health as rows per person, under the `health` API
+  scope (`server/scopes.js`), and they take **the canonical set from entry 5** - `private`, a named
+  set, `all` - with `private` as the default. Not the `private` / `family` pair Health stores today:
+  entry 5 names that pair among the vocabularies it exists to normalize, and it records the failure
+  case by name, a new health tab that arrived with its own `visibility` column in that pair
+  (PR #1019). "New modules take the canonical set from the start" is the sentence this has to obey,
+  and nutrition is a new module's worth of rows. None of them carries a column named `calories`:
+  `health_activities.calories` is energy **burnt**, and one word for both directions would be a
+  bug waiting in the vocabulary.
+
+### What counts as undoing it
+
+A nutrition value on an ingredient row, whether typed, imported or inferred. Parsing
+`recipe_ingredients.quantity` into a number and a unit in order to total something up - that is
+the catalogue's first half arriving on its own. A shipped or downloaded list of foods, products or
+nutrition values, including a barcode lookup against an outside database, which is entry 7's
+refusal wearing a scanner. A key/value nutrient table, or a ninth nutrient added without asking
+what the eight were for. And a logged intake that points at a recipe for its numbers instead of
+copying them, which makes an edit today change what somebody ate last month.
+
+---
+
+## 9. A shipped name follows the reader until somebody renames it
+
+**What Yuvomi ships as a starting point - a category, a payment method, and with step 4 of #736 a
+set of chores - carries a translation key and a name on its row. As long as nobody renames it,
+every reader sees it in their own language (`label_key ? t(label_key) : name`); a rename drops the
+translation key and makes the text the household's. A shipped chore also carries a fixed key
+beside the two, which a rename does not touch, and that fixed key is what recognises the row
+later, including after the household deleted it on purpose.**
+
+#736 asked for a cleaning plan, and the direction settled there makes routines a kind of task
+(entry 6). Its step 4 is template sets: an area with its usual routines, applied in one go, drawn
+from the list @elmocito wrote down in the thread. How a shipped set is stored was left open on
+purpose, between a translation key per chore and sets as data in one language, translated once per
+set or shipped in the household's language and edited afterwards. Decided on 21 September 2026:
+neither alone, but translation key and name together, the pair five tables already carry, and
+beside them a fixed key of the chore's own.
+
+The pair was reached table by table, each time from a list that read wrong in some language. A
+fixed key beside it is not part of the pair, and not every one of the five has one:
+
+- **Tasks and contacts, migrations 83 and 84.** When their categories became editable, the seeded
+  ones got a stable `key` and a `label_key`, and a category somebody creates carries a `name`
+  instead.
+- **Inventory, migration 143.** The five seeded categories had been German literals and stayed
+  German in every language until they moved to the same shape.
+- **Subscriptions, migration 170 (#950).** The payment methods were stored as English text and read
+  English to every reader, next to categories in the reader's own language. The comment above the
+  migration records why a lookup table in the frontend could not fix it: keyed on names, it cannot
+  tell a default from a row the household created under the same name. Whether a row is a default
+  is a property of the row. The subscription categories had a fixed key already
+  (`budget_subcategory_key`, migration 59); the payment methods have none, and their translation
+  key was matched on the name alone.
+
+Document folders reached the other half. Until migration 157 a module's folder was found by its
+translated name, and two people with different languages created two folders, "Belege" and
+"Receipts", each holding half of the receipts. Since then a module folder is found by its
+`module_key`, while its name stays in the language of whoever created it: the identity without the
+translation.
+
+What this shape does for chores:
+
+- **A mixed-language household sees one entry in two languages, each reader in their own.** A set
+  stored as data in one language cannot do that: every entry stays in the language of whoever
+  applied the set, which is the effect #950 had to remove.
+- **The fixed key is the identity the deletion record needs.** @Kyrodan's condition in #736 was
+  that a shipped chore somebody deleted must not come back with the next update of its set, and
+  recognising it needs something to match on. Today's eight suggestions have nothing: they are
+  entries in the source (`TASK_TEMPLATES` in `server/routes/housekeeping.js`), and applying one
+  stores the translated name and nothing else. The translation key cannot be the identity either: a
+  rename drops it, on purpose, because the new name belongs to whoever typed it. So a shipped
+  chore gets a fixed key of its own, the way the task, contact and inventory categories keep a
+  `key` beside the `label_key` a rename clears. Without it, a chore that was renamed and then
+  deleted comes back with the next update.
+- **The text is always filled.** Some readers have no language to ask. A routine is a task, and a
+  task's title leaves the app as the `SUMMARY` of a CalDAV to-do
+  (`server/services/caldav-todo-outbound.js`) and as the reason of a points booking
+  (`awardForCompletion()` in `server/services/rewards.js` copies `tasks.title` into
+  `reward_ledger.reason`). So a chore from a set is created with its text already resolved beside
+  the translation key, never with the text left NULL the way the seeded categories leave `name`.
+  The app reads the translation key; a reader without a language reads the text.
+
+**The price is translation, and it sets the size.** Every shipped chore costs one entry in each of
+the 24 locale files. So the first sets are small, three or four with about twenty chores between
+them, picked from @elmocito's list rather than all 74 of it. Whatever a household adds beyond that,
+it adds in its own words, which cost nothing to translate.
+
+**How this stands to entry 7.** Entry 7 declines "a seed list of canonical ingredients, products or
+nutrition values", and a shipped chore set is a seed list. It is not the kind entry 7 means. The
+criterion there is whether a row stays true without anybody tending it, and a nutrition table fails
+it because it states facts about products that change under it. A chore set states no fact:
+"clean the shower every 14 days" is a suggestion the household accepts, changes or deletes, and
+once applied the row is theirs, with their interval and, after a rename, their words. Nothing
+computes over it, and a suggestion that has aged is still a usable suggestion rather than a wrong
+answer. What it costs to keep is translation, which the size of the sets bounds, not correctness,
+which nothing would bound.
+
+### Where the rule lives
+
+- The five tables in `server/db.js`: `task_categories` and `contact_categories` (migrations 83 and
+  84), `inventory_categories` (143), `subscription_categories` and `subscription_payment_methods`
+  (170). A rename clears `label_key` in `server/routes/tasks.js`, `server/routes/contacts.js`,
+  `server/routes/inventory/categories.js` and `server/routes/subscriptions.js`, and the pages read
+  `label_key ? t(label_key) : name`, for instance `public/utils/task-fields.js`.
+- The fixed key beside the pair, where there is one: `key` in the three category tables,
+  `budget_subcategory_key` on the subscription categories. The payment methods have none.
+- The identity half alone: `family_document_folders.module_key`, resolved by `ensureModuleFolder()`
+  in `server/services/document-folders.js`.
+- The chore sets are not built yet. They are step 4 of #736 and wait for areas that a household
+  creates and reuses (step 3).
+
+### What counts as undoing it
+
+A shipped set stored as text in one language, or applied by copying the translated text into the
+row and keeping neither key: the first reads in the applier's language forever, the second forgets
+where the row came from. A translation key without text beside it, which leaves the CalDAV title
+and the points history with nothing to write. The translation key used as the identity, which a
+rename erases, so a renamed chore loses where it came from and returns after it was deleted. A
+rename that keeps the translation running, so the household's own words are replaced the next time
+somebody with another language opens the page. Offering a shipped
+chore again that the household deleted. And sets that grow past what their translations can carry:
+the size is the price of the shape, not a first draft to be extended.
+
+---
+
+## 10. A follow-on entry belongs to the action that made it
+
+**What an action writes into another module as its automatic consequence belongs to that action
+and needs only the action's right, on both axes, member permission and token scope. The other
+module's right is asked only for an explicit transfer, where a person sends something into that
+module: then the route asks `mayWriteModule(req, '<target>')`, and the page asks the same at the
+control before it draws it.**
+
+The path guard in `server/index.js` judges a request by its path prefix (`moduleForPath()` in
+`server/scopes.js`), so a route that writes across that line has to ask for the second right itself,
+or nobody does. Whether it has to was decided three times, twice in one direction and once in the
+other:
+
+- **#1290, September 2026.** Three meal and recipe routes put items on the shopping list, and the
+  shopping list's meal-plan import flipped meal-plan flags, each judged only by its own path.
+  Decided: writing into a module needs write access to that module. #1303 built it: the
+  `to-shopping-list` routes ask for `shopping`, `import-meal-plan` asks for `meals`, and undoing a
+  transfer asks for `meals` only when one of its items came from the meal plan.
+- **#1351, September 2026.** A housekeeping supply request creates a shopping item, and a shopping
+  list when there is none. Decided the same way, built in #1353.
+- **#1349, September 2026.** Checking a housekeeper in creates a calendar event for the visit and,
+  if the household keeps payment tasks, a task to pay; marking the visit paid completes that task,
+  and editing or deleting the visit moves or removes both. The read-only work on the Housekeeping
+  page asked whether #1290 reaches this far. Decided: it does not. With the calendar right asked
+  there, a member with `calendar: read` could no longer check anybody in, for a reason the
+  Housekeeping page cannot show: it has no calendar control to leave out, only a check-in button
+  that would refuse.
+
+That last reason is the whole line. An explicit transfer names its target on its control - "to
+shopping list", "import meal plan" - so the page can ask the target's right there and leave the
+control out (rule 1 in the header of `public/utils/module-access.js`), and a refusal matches
+something the person can see. A follow-on entry has no control of its own. Asking its module's
+right would make an action fail for a reason that, seen from the page it stands on, does not exist.
+
+### How to sort the next case
+
+1. **Does the control name the other module?** "Add to shopping list" does, "Check in" does not.
+2. **Is the row in the other module what the person asked for, or what the action leaves behind?**
+   Without its shopping item a supply request has done nothing; without its calendar event a
+   check-in has still recorded the visit.
+3. **Who keeps the row afterwards?** A follow-on entry is kept in step by its source: the event and
+   the payment task of a visit move and disappear with the visit. A transferred item lives on in
+   the target and is bought, edited and deleted there.
+
+A yes to the first question, or "what the person asked for" in the second, makes it a transfer.
+A route without a control, reached over the API, is sorted by the second question alone, which is
+how the supply request, with no caller in `public/`, landed on the transfer side. The third
+question is the check: a follow-on entry the source does not keep in step is a transfer somebody
+forgot to ask about.
+
+### Where the rule lives
+
+- `mayWriteModule()` in `server/permissions.js`, both axes in one call. The transfer routes ask it
+  before any lookup that could answer 404, so a refusal does not confirm that an id exists: the
+  `to-shopping-list` routes in `server/routes/meals.js` and `server/routes/recipes.js` for
+  `shopping`, `import-meal-plan` and the undo of a meal transfer in `server/routes/shopping.js` for
+  `meals`, `PUT /recipes/:id/ingredient-match` for `pantry`, because it hooks a row of the pantry
+  into a recipe, the housekeeping supply request with #1353, and a calendar attachment upload for
+  `documents` (#1358, `attachmentUploadRefused()` in `server/routes/calendar/helpers.js`): the
+  attachment lands in the Documents module as a document of its own, named on the dialog's upload
+  area.
+- `mayReadModule()` beside it for the other half: a route that reads another module's rows asks
+  for read access to that module, built on `hiddenModulesFor()` so there is one rule. A transfer
+  that copies rows out of a module refuses without it: `POST /pantry/import-shopping` asks for
+  `shopping`, `POST /shopping/:listId/import-pantry` for `pantry`, both before the list lookup,
+  and the controls need no second check because each stands on its source's own page. A response
+  that merely carries fields from another module leaves them out instead: the member candidates of
+  a shared-expense group (contacts, and birthdays under `calendar`), the budget bookings linked to
+  an inventory item (`budgetViewer()` in `server/routes/inventory/entry-links.js`). Adding a
+  contact to a shared-expense group reads the contact, so it needs `contacts`, and a contact without
+  an account is linked to the new guest, which writes it and needs `contacts` write; the birthday the
+  new guest gets is a follow-on entry of the guest and asks nothing of `calendar`.
+- `npm run test:cross-module-write` (`test/test-cross-module-write-rights.js`) holds those routes on
+  both axes and checks the effect after each refusal, not only the status.
+  `npm run test:split-expenses-routes` holds the member candidates and adding a contact,
+  `npm run test:inventory-item-entries` the budget bookings of an inventory item.
+- The follow-on entries of a visit in `server/routes/housekeeping.js`: `createVisitCalendarEvent()`
+  and `createPaymentTask()` at check-in, the completed task at payment, `updateVisitLinks()` and
+  `deleteVisitLinks()` on edit and delete. None of them asks for more than `housekeeping`.
+- The same shape, older than the question: a task's status change books its points and takes them
+  back through `syncTaskRewards()` in `server/services/rewards.js`, called from
+  `server/routes/tasks.js`, and asks nothing of `rewards`.
+- On the page: rule 8 in the header of `public/utils/module-access.js`.
+
+### What counts as undoing it
+
+A `mayWriteModule()` call for the module of a follow-on entry, which lets an action refuse for a
+right its page never mentions. A transfer that asks only for its own path's right, which is #1290
+again. And a new route that writes into another module without deciding which of the two it is:
+the next reader of this entry should find the answer in the route's comment, not by guessing.
+
+---
+
+## 11. Switching a module off is not a lock
+
+**Switching a module off for the household (`disabled_modules`, Settings → Modules → Active
+modules) means the household does not use it. What the server does on its own, or hands over
+unasked, follows the switch. The module's own routes stay open, for sessions and API tokens
+alike.**
+
+Taking access away already has two instruments with their own gate and their own error wording:
+member permissions and token scopes (entry 2 names where they live). A second lock on the same
+path map would be that rule a third time, and the switch is the wrong carrier for it: it has
+neither a confirmation nor an undo, three modules ship switched off (`inventory`, `schedule`,
+`waste`), and `/api/v1` is a promised surface. A path gate would have turned a tidy-up click into
+a broken integration.
+
+The line was reached in three places before it was written down:
+
+- **Countdowns, #647 (review of #793).** The tile belongs to two modules, so its filter could not
+  sit in the browser like every other tile's: with the calendar off, the five nearest countdowns
+  were events, the browser dropped all five, and the flagged task behind them had never been
+  sent. `getCountdowns()` merged the household switch and the member's rights into one set.
+- **Reminders, #1279.** Only pantry, schedule and waste reminders respected the switch. Task,
+  calendar, subscription, inventory, document, cycle and birthday reminders kept arriving for a
+  module that was off, and tapping one opened a page that turned you away. Delivery and
+  `GET /reminders/pending` now skip them.
+- **Background jobs and mixed answers, #1660.** Measured against 2.72.0 with ten modules off:
+  every module route answered 200 and wrote, by session and by token, and that was left as it is.
+  What changed is the medication scheduler (it wrote doses and sent pushes with Health off), the
+  prevention sync, the hourly recipe provider sync, the overview, and the birthdays that travel in
+  the calendar, the overview and the calendar feed.
+
+### How to sort the next case
+
+1. **Did a person ask for exactly this module?** A request to the module's own path, a button
+   pressed on its page or in its settings ("Sync now"), its own export, its own ICS feed: open.
+   So is a follow-on entry of a person's action in another module (entry 10) - a completed task
+   still books its points with Rewards off.
+2. **Does the server start it by itself?** A timer, a periodic sync, a push, a notification on a
+   channel: it follows the switch. Sources a run recreates clear what is pending and bring it
+   back when the module is switched on again; anything a person set by hand is held back, never
+   deleted (#1279).
+3. **Does one answer carry several modules?** The overview, the global search, the reminder list,
+   another module's rows blended into the calendar: the part that belongs to a switched-off
+   module is left out. The field stays in the response with its empty value, so no `/api/v1`
+   consumer trips over a missing key.
+
+Two switches have no permission of their own: `birthdays` sits under the `calendar` right and
+`recipes` under `meals`. As rights they go with their parent, as switches they stand alone - a
+household with the calendar off and birthdays on keeps its birthday tile and its birthday
+reminders.
+
+Left open on purpose: the module routes, exports and the database backup, the OpenAPI document,
+each module's own ICS feed, and incoming calendar, reminder and contact sync.
+
+### Where the rule lives
+
+- `server/services/household-modules.js`: `householdDisabledModules()` is the one reading of the
+  stored value. `modulesLeftOut()` merges it with what `hiddenModulesFor()` in
+  `server/permissions.js` withholds from this caller, one set for a mixed answer.
+  `birthdaysSwitchedOff()` and `notBirthdayEventSql()` are for the birthday events that live in
+  `calendar_events`. Not in a middleware: the path of a mixed answer names none of the modules it
+  carries.
+- Mixed answers: `GET /dashboard` (`server/routes/dashboard.js`, the same empty forms as a denied
+  module), `getCountdowns()` in `server/services/countdowns.js`, the global search
+  (`server/routes/search.js`), `GET /reminders/pending`
+  (`withoutSwitchedOffModules()` in `server/services/reminder-origins.js`), and the birthday
+  events wherever calendar rows are read for a list: `GET /calendar` and `/calendar/search`
+  (`server/routes/calendar/read.js`), the shared reader behind `/calendar/upcoming`, the overview
+  and the MCP tool `list_upcoming_events` (`birthdayFilter()` in
+  `server/services/calendar-event-reader.js`, in the reader so that a caller cannot forget to
+  ask), the event bucket of the global search, event countdowns, and `buildFeed()`
+  (`server/services/ics-export.js`).
+- Background work: delivery in `server/services/notifications.js`, the reminder syncs for pantry,
+  schedule, waste, cycle, fasting, birthdays and prevention, the medication scheduler, the waste
+  URL sources and the hourly recipe provider sync.
+- The calendar's other layers (waste, schedule, cycle) are fetched by the page from each module's
+  own route and are left out there, in the browser; the server blends only the birthdays in.
+- `npm run test:disabled-module-reminders`, `npm run test:disabled-module-mixed-answers` and the
+  switch tests in `npm run test:dashboard-permissions` hold it, each with the other half: the
+  module's own route still answers.
+
+### What counts as undoing it
+
+A check of `disabled_modules` in the path guard of `server/index.js` or at the top of a module
+router, which makes the switch a lock and breaks tokens for a module that is merely off. A new
+timer, push or periodic sync that never asks the switch, which is #1279 again. A mixed answer
+that drops the key instead of emptying the value. And treating `hidden_modules` the same way:
+that one is a member tidying their own navigation and takes nothing away anywhere (#673).
+
+---
+
+## 12. A module gets in by the operator's choice, and stays off until somebody looked
+
+**Installing a module from Settings is the operator's choice (`MODULES_ALLOW_WEB_INSTALL`, off
+by default). A module installed that way stays off until an admin approves it in a browser
+session, and that state travels with the folder. The web interface removes or replaces only
+what it installed.**
+
+Module code never runs in the Node process: `modules/<id>/` is read as data and served as
+assets, so installing one is not code execution on the server. In the browser it is something
+else. A module is same-origin script with the session of whoever opens it, an admin included.
+Until #1671 (Settings → Modules → Add custom module, 2026-10), putting such script on the server
+took filesystem access. With the feature, a foothold in an admin's browser session is enough,
+an XSS or a module that is already enabled, and what it writes stays after the session ends,
+after a password change and after a token is revoked. The session requirement on the routes
+stops a leaked admin token, but it cannot stop that case, because that case runs inside the
+session. No design closes it completely. So it is a risk the operator chose where `modules/`
+is mounted, not something every installation receives with an update: the switch is a hard
+gate on purpose, unlike the household switch of entry 11, which is a tidy-up and never a lock.
+
+The three parts of the rule answer the three ways the gate could leak once it is open:
+
+- **Off by default.** Two settings decide it, the switch and the browser session, and both
+  have to be set by a person: the operator in `.env`, the Unraid template or the Portainer
+  stack, the admin by signing in. An API token, and therefore the MCP bridge, installs
+  nothing, deletes nothing and enables nothing; disabling by token stays, because taking code
+  away is the safe direction.
+- **Off until approved, and the approval lives in the folder.** Every install and every
+  replace writes `approved: false` into `.yuvomi-install.json` next to the module. Enabling
+  the module from a browser session rewrites it to `true` and clears the household switch;
+  disabling sets the household switch first and then writes `approved: false` back, so
+  `approved` means exactly "an admin has this version switched on". The state is in the
+  folder and not only in the database because no backup contains `modules/`: a database
+  restored from before the install, or a fresh one over a kept modules volume, must not turn
+  on a module nobody looked at, must not turn off one that was approved, and must not turn
+  back on one the admin switched off. The write on disable is best effort (the household
+  switch alone already decides): taking code away never fails because the folder is read-only,
+  and never waits for an install. It rewrites the record only when the install lock is free;
+  while an install or delete holds it, the record is left as it is, because a replace landing
+  between its read and its rewrite would carry the old version's source and install date into
+  the new folder (which arrives with `approved: false` of its own).
+  A replace resets
+  the approval even from "the same" GitHub repository, since the ref is a branch or a movable
+  tag and the comparison would be on a name that can change hands. A folder without the
+  record was copied by hand and behaves as before: the household switch alone.
+- **The web removes or replaces only what the web installed.** A hand-copied folder can be a
+  working checkout with uncommitted work, and `rm -r` has no undo; a replace moves the old
+  folder aside and removes it, which is the same thing with one step in between. Without the
+  record, delete and replace both answer 409 `not_web_installed`: the page shows no delete
+  button and asks no replace question, it says to remove the folder on the server first.
+
+### How to sort the next case
+
+1. **Does it put script in front of members, or take it away?** Putting it there (install,
+   replace, enable) sits behind both the switch and the session. Taking it away (disable) is
+   open to a token.
+2. **Would a fresh database change what runs?** Then the state belongs in the folder, next to
+   the code it describes, not in `sync_config`.
+3. **Did the web put it there?** Only then may the web take it away or swap it out.
+
+### Where the rule lives
+
+- The switch: `MODULES_ALLOW_WEB_INSTALL` in `tools/installer/env-schema.js`, `.env.example`,
+  `templates/yuvomi.xml`, `docs/docker-compose.portainer.yml` and the installer page; read
+  once at startup by `isWebInstallEnabled()` in `server/services/module-install.js`, with the
+  parse rule of the private-network opt-ins (exactly `true` or `1`). `requireWebInstall` in
+  `server/routes/modules.js` answers 403 `module_web_install_disabled` before the body is
+  read; `GET /modules/install/info` reports `webInstall`, and the page shows the manual way.
+  The default itself is pinned: `npm run test:module-install` imports the service afresh with
+  the variable unset, `yes`, `TRUE `, empty, `false` and `0` and expects the switch shut, so a
+  constant in place of the environment read turns the suite red.
+- The session: `requireBrowserSession` and `sessionRefusal` in `server/routes/modules.js`
+  (403 `module_session_required`) on install, delete and `PATCH /:id` with `enabled: true`;
+  the install and delete operations carry `x-mcp-exclude` in `server/openapi/paths/modules.js`.
+- The approval: `approved: false` in the install record written by `installFilesUnlocked()`
+  in `server/services/module-install.js`; `readInstallRecord()` and `writeInstallApproval()`
+  in `server/services/modules.js`, where `readModule()` keeps a module with a record off until
+  the record says `approved: true`, and `setModuleEnabled(id, true)` writes that. It writes
+  it under the install lock (`acquireInstallLock()` in `server/services/modules.js`, the same
+  lock install and delete take), so a replace cannot land between the read of the record and
+  its rewrite and collect an approval meant for the version before it; while the lock is held
+  enabling answers 409 `busy`, and a folder the server cannot write answers 503
+  `not_writable` with no server path in the message. `setModuleEnabled(id, false)` takes the
+  same lock without waiting: free, it writes `approved: false` under it; held, the household
+  switch alone turns the module off and the record write is skipped with a warning in the log.
+- The delete and the replace: `deleteModule()` and the record check in `installFilesUnlocked()`
+  in `server/services/module-install.js`, 409 `not_web_installed` without a record, checked
+  before the overwrite question. An unreadable record counts as none for both; `readModule()`
+  reports it as an error to fix on the server.
+- `npm run test:module-install` holds all of it: the switch off before the body and
+  `info.webInstall`, a record over an empty database, approval written on enable and reset on
+  disable and on replace from every source, enabling by token refused and by session accepted, disabling by
+  token, delete and replace refused without a record (ZIP and GitHub, with and without
+  overwrite). `npm run test:modules` holds the reading of the
+  record, the atomic rewrite, the literal `true` and the disable that leaves the record
+  untouched while the lock is held; `npm run test:installer-schema` holds the
+  switch in the schema, `.env.example` and the Portainer stack; `npm run test:mcp` holds what
+  the bridge lists and says about enabling.
+
+### What counts as undoing it
+
+A default of on. Enabling, installing or replacing by token, which hands the step that makes
+code live to a long-lived secret in a script. A review state that a fresh database forgets,
+which is the deny-list in `sync_config` deciding alone again. A replace that keeps the switch
+because the source "is the same". And a delete or a replace that reaches a folder without an
+install record.
+
+---
+
+## 13. Comments stay in the source and stay off the wire
+
+**The files under `public/` keep their comments. The server removes them from Yuvomi's own
+JavaScript and CSS when it serves them, keeps the result in memory, and gives it the ETag of the
+bytes it sends. There is no build step, and line numbers stay where they are.**
+
+Yuvomi has no bundler on purpose, and its comments carry the reasons a reader needs: why a guard
+exists, which measurement a value came from, which issue a branch closes. They are also most of
+what goes over the wire. Measured on 2026-10-16 over `public/`: 59 % of the CSS and 41 % of the
+JavaScript are comments, and after Brotli the share is larger still, because German prose packs
+worse than code - JavaScript went from 2.0 to 0.9 MB, CSS from 621 to 129 KB. Critique R18
+(2026-10-07) had decided to keep the comments and save on transport only; R19 measured that this
+was not enough on a phone and moved the cut to delivery time, decided by Ulas on 2026-10-16.
+
+The cut happens where it can be checked rather than where it is cheapest. A build step would put
+a second copy of every file into the image and leave the operator reading code without its
+reasons. Doing it per request would cost CPU on every load. So the server cuts each file once, on
+its first request, and holds the result next to its Brotli version (`server/utils/static-assets.js`).
+A comment is replaced by the line breaks it contained, so a stack trace from a bug report points
+at the same line in the repository. Comments marked `/*!`, `@license` or `@preserve` stay, and
+vendored code (`public/vendor/`, `*.min.js`) is never touched.
+
+The risky half is JavaScript: a tokenizer that mistakes a `//` inside a regular expression for a
+comment deletes code. The rule for whether a `/` starts a regular expression is the usual one for a
+tokenizer without a parser, and the proof is not that rule but a comparison with a real parser on
+every file that ships.
+
+### How to sort the next case
+
+1. **Is it our own text file under `public/`?** Then it is cut. A vendored or minified file is not.
+2. **Does a new file type need it?** Add a cutter with its own proof against a real parser or the
+   browser before it joins; until then it goes as it is.
+3. **Does the served text differ from the file?** Then the ETag is the hash of the served text,
+   and any path that serves the file itself uses the file's hash. The same ETag must mean the same
+   bytes, or the service worker's revalidation keeps a stale copy.
+
+### Where the rule lives
+
+- `server/utils/strip-comments.js` does the cut (`stripJsComments`, `stripCssComments`).
+- `server/utils/static-assets.js` (point 4 of its header) decides which files are cut, stores the
+  result, compresses it, and serves it with its own ETag; `server/index.js` mounts it with the
+  default `strip: true`. The over-limit path past the in-memory store serves the raw file under the
+  raw file's ETag.
+- `npm run test:strip-comments` compares the comments the cutter finds with acorn's (shipped with
+  Node, reached with `--expose-internals` in that suite only) for every JavaScript file under
+  `public/`, runs `node --check` on every result, and checks every stylesheet rule by rule.
+- `npm run test:static-assets` holds the transport: same bytes on br, gzip and identity under one
+  ETag, raw vendor files, raw over-limit responses under their own ETag, re-cutting a changed file.
+
+### What counts as undoing it
+
+Stripping comments in the repository or in a build step. Serving a cut file under the raw file's
+ETag, or the other way round. Cutting vendored code. And a cutter for a new file type that ships
+without a check against a real parser.
+
+---
+
+## 14. Cascade layers wait for the browser floor
+
+**No `@layer` until the supported floor reaches Chrome 99, Firefox 97 and Safari 15.4; until
+then the number of real `!important` declarations in `public/styles/` may only go down** (R20,
+2026-10-18: the floor in [installation.md](installation.md) is Chrome 87 / Firefox 79 / Safari
+14.1, which drop a layered stylesheet whole, and wrapping the current sheets in layers changed
+52 of 76 measured screens; the ceiling lives in `npm run test:frontend-audit`,
+"!important-Sperrklinke"; raising the floor reopens it).

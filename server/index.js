@@ -1,0 +1,949 @@
+/**
+ * Modul: Server Entry Point
+ * Zweck: Express-App initialisieren, Middleware einbinden, Routen registrieren
+ * Abhängigkeiten: express, helmet, server/db.js, server/auth.js, server/routes/*
+ */
+
+import './utils/claim-instance-lock.js';
+import express from 'express';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { readFileSync } from 'node:fs';
+import { createLogger } from './logger.js';
+import { readBindAddress } from './utils/bind-address.js';
+import * as db from './db.js';
+import { router as authRouter, sessionMiddleware, requireAuth, requireAdmin, isPasswordLoginEnabled } from './auth.js';
+import { csrfMiddleware } from './middleware/csrf.js';
+import idempotencyMiddleware from './middleware/idempotency.js';
+import { createRestoreWriteGate, trackAdmittedWrite } from './middleware/restore-gate.js';
+import { runExternalJob } from './utils/restore-state.js';
+import { createErrorHandler } from './middleware/error-handler.js';
+import { buildOpenApiSpec } from './openapi.js';
+import * as googleCalendar from './services/google-calendar.js';
+import * as appleCalendar from './services/apple-calendar.js';
+import * as icsSubscription from './services/ics-subscription.js';
+import * as icsExport from './services/ics-export.js';
+import { findCalendarByFeedToken } from './services/local-calendars.js';
+import * as inventoryDeadlinesIcs from './services/inventory-deadlines-ics.js';
+import * as cycleIcs from './services/cycle-ics.js';
+import * as scheduleIcs from './services/schedule-ics.js';
+import * as wasteIcs from './services/waste-ics.js';
+import * as caldavReminders from './services/caldav-reminders-sync.js';
+import * as caldavSync from './services/caldav-sync.js';
+import * as outlookCalendar from './services/outlook-calendar.js';
+import * as carddavSync from './services/cardav-sync.js';
+import * as holidays from './services/holidays.js';
+import { startScheduler as startBackupScheduler } from './services/backup-scheduler.js';
+import { startScheduler as startSplitExpenseScheduler } from './services/split-expenses-scheduler.js';
+import { startRewardMoneyScheduler } from './services/reward-money-scheduler.js';
+import { startScheduler as startPushScheduler } from './services/push-scheduler.js';
+import { startScheduler as startMedicationScheduler } from './services/medication-scheduler.js';
+import { startScheduler as startRecipeProviderScheduler } from './services/recipe-provider-sync.js';
+import { startWasteSourceScheduler } from './services/waste-source-scheduler.js';
+import { emailService } from './services/email.js';
+import { passwordLoginWarning, OIDC_PASSWORD_SENTINEL } from './services/oidc.js';
+import dashboardRouter from './routes/dashboard.js';
+import tasksRouter from './routes/tasks.js';
+import shoppingRouter from './routes/shopping.js';
+import mealsRouter from './routes/meals.js';
+import recipesRouter from './routes/recipes.js';
+import pantryRouter from './routes/pantry.js';
+import inventoryRouter from './routes/inventory/index.js';
+import kitchenRouter from './routes/kitchen.js';
+import calendarRouter from './routes/calendar.js';
+import notesRouter from './routes/notes.js';
+import quickLinksRouter from './routes/quick-links.js';
+import contactsRouter from './routes/contacts.js';
+import cardavRouter from './routes/cardav.js';
+import birthdaysRouter from './routes/birthdays.js';
+import * as birthdayIcs from './services/birthday-ics.js';
+import budgetRouter from './routes/budget.js';
+import subscriptionsRouter from './routes/subscriptions.js';
+import documentsRouter from './routes/documents.js';
+import googleDriveStorageRouter from './routes/document-storage-google-drive.js';
+import { checkLocalStorageMount } from './services/document-storage.js';
+import dmsRouter from './routes/dms.js';
+import recipeProvidersRouter from './routes/recipe-providers.js';
+import splitExpensesRouter from './routes/split-expenses.js';
+import weatherRouter from './routes/weather.js';
+import preferencesRouter from './routes/preferences.js';
+import screensaverRouter from './routes/screensaver.js';
+import remindersRouter from './routes/reminders.js';
+import searchRouter from './routes/search.js';
+import familyRouter from './routes/family.js';
+// ZWEI IMPORTZEILEN FUER EINE DATEI, ABSICHTLICH. `test:openapi-coverage`
+// findet die Routen eines Routers, indem es hier Namen auf Dateien abbildet -
+// und seine Muster kennen den reinen Default-Import und den reinen
+// Named-Import, nicht die Mischform `a, { b }`. Als eine Zeile geschrieben fand
+// der Guard fuer /displays keine einzige Route und meldete die Spec als
+// Beschreibung von etwas, das es nicht gibt. Zwei Zeilen kosten nichts und
+// halten den Guard sehend.
+import displaysRouter from './routes/displays.js';
+import { pairingRouter } from './routes/displays.js';
+import { peopleRouter } from './routes/displays.js';
+import { displayMayAct } from './display-scopes.js';
+import { DISPLAY_PASSWORD_SENTINEL } from './services/display-accounts.js';
+import backupRouter from './routes/backup.js';
+import housekeepingRouter from './routes/housekeeping.js';
+import wasteRouter from './routes/waste/index.js';
+import modulesRouter from './routes/modules.js';
+import { listModules } from './services/modules.js';
+import { recoverInterruptedInstalls } from './services/module-install.js';
+import pushRouter from './routes/push.js';
+import emailRouter from './routes/email.js';
+import notificationsRouter from './routes/notifications.js';
+import healthRouter from './routes/health.js';
+import rewardsRouter from './routes/rewards.js';
+import permissionsRouter from './routes/permissions.js';
+import changelogRouter from './routes/changelog.js';
+import mcpRouter from './mcp/server.js';
+import scheduleRouter from './routes/schedule.js';
+import scheduleFeedRouter from './routes/schedule-feed.js';
+import schedulePreferencesRouter from './routes/schedule-preferences.js';
+import scheduleExtrasRouter from './routes/schedule-extras.js';
+import { sessionModuleAccessRequirement, tokenAccessRequirement, tokenAllows } from './scopes.js';
+import { moduleAccessVerdict, MODULE_ACCESS_DENIED, MODULE_ACCESS_READ_ONLY } from './permissions.js';
+import { BODY_LIMIT, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from './utils/upload-limit.js';
+import { createServiceWorkerResponseLoader } from './utils/service-worker.js';
+import { createStaticAssets } from './utils/static-assets.js';
+
+const log     = createLogger('Server');
+const logSync = createLogger('Sync');
+const logYuvomi = createLogger('Yuvomi');
+
+const { version: APP_VERSION } = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+);
+const SERVICE_WORKER_PATH = new URL('../public/sw.js', import.meta.url);
+const SERVICE_WORKER_OPTIONS = {
+  appVersion: APP_VERSION,
+  buildRevision: process.env.APP_BUILD_REVISION,
+};
+const getServiceWorkerResponse = createServiceWorkerResponseLoader(
+  SERVICE_WORKER_PATH,
+  SERVICE_WORKER_OPTIONS,
+);
+
+// Das prüft die Build-Revision schon beim Start und liefert in der Entwicklung
+// nach einer sw.js-Änderung dennoch die neue Quelle ohne manuellen Neustart.
+getServiceWorkerResponse();
+const DEFAULT_APP_NAME = 'Yuvomi';
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+// Leer = alle Interfaces, wie vor der Variable. Ein Container braucht genau das,
+// sonst erreicht ihn das veroeffentlichte Port-Mapping nicht.
+const BIND_ADDRESS = readBindAddress(process.env.BIND_ADDRESS);
+
+// --------------------------------------------------------
+// Security-Middleware
+// --------------------------------------------------------
+const isSecure = process.env.SESSION_SECURE === 'true';
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'self'"],
+      // upgrade-insecure-requests nur mit HTTPS aktivieren
+      upgradeInsecureRequests: isSecure ? [] : null,
+    },
+  },
+  // HSTS nur mit HTTPS aktivieren
+  hsts: isSecure ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  } : false,
+}));
+
+// Trust Proxy: Default 1 = trust one proxy hop (correct for Caddy/nginx/Traefik in Docker).
+// Env vars are always strings, so numeric values like "1" must be parsed as integers —
+// Express treats a numeric hop count differently from an IP/subnet string.
+// TRUST_PROXY=1            → trust 1 hop (default; reads X-Forwarded-For correctly)
+// TRUST_PROXY=172.16.0.0/12 → trust only requests from that subnet
+// TRUST_PROXY=loopback     → trust loopback only (direct, no proxy)
+const _rawTrustProxy = process.env.TRUST_PROXY;
+const _trustProxy = _rawTrustProxy === undefined
+  ? 1
+  : /^\d+$/.test(_rawTrustProxy) ? parseInt(_rawTrustProxy, 10) : _rawTrustProxy;
+app.set('trust proxy', _trustProxy);
+
+// --------------------------------------------------------
+// Kompression (gzip/deflate)
+// --------------------------------------------------------
+app.use(compression());
+
+// --------------------------------------------------------
+// Request-Parsing
+// --------------------------------------------------------
+// Schreibsperre waehrend eines Restores (#1431). Vor den Body-Parsern: ein
+// zweiter Restore wird abgewiesen, bevor sein Upload gelesen wird. Vor den
+// Sessions: auch deren Schreiben (Login, Logout) gehoert dazu. Vor /mcp und
+// allen Routern, damit kein Schreibzugriff durchrutscht.
+app.use(createRestoreWriteGate(db.isRestoreRunning, db.isDatabaseOpen));
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+
+// JSON-Parse-Fehler abfangen (gibt sonst HTML zurück). Benannt, weil
+// test/test-restore-gate-routes.js globale Middleware am Namen erkennt (#1531).
+app.use(function bodyParseErrorHandler(err, req, res, next) {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON in request body.', code: 400 });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: `Request body too large (max. ${MAX_UPLOAD_MB} MB per file).`, code: 413 });
+  }
+  next(err);
+});
+
+// --------------------------------------------------------
+// Sessions
+// --------------------------------------------------------
+app.use(sessionMiddleware);
+
+// --------------------------------------------------------
+// API-Antworten: kein Browser-Caching (Sicherheit + Aktualität)
+// --------------------------------------------------------
+app.use('/api/', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
+// --------------------------------------------------------
+// Globaler API-Rate-Limiter (Schritt 29)
+// Verhindert Brute-Force und DoS auf allen API-Endpunkten.
+// Login hat einen eigenen, strengeren Limiter (auth.js).
+// Früh definiert, damit auch die nicht unter /api/ liegenden Admin-Routen
+// (/docs, /openapi.json) ihn als Route-Middleware nutzen können.
+// --------------------------------------------------------
+const apiLimiter = rateLimit({
+  windowMs: 60_000,         // 1 Minute
+  max: 300,                 // 300 Requests/Minute pro IP (großzügig für Familien-App)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a moment.', code: 429 },
+  skip: (req) => req.path === '/health', // Health-Check ausgenommen
+});
+
+if (process.env.NODE_ENV === 'production' && process.env.ENABLE_API_DOCS !== 'true') {
+  app.get(['/docs', '/docs/'], (_req, res) => {
+    res.status(404).json({ error: 'Not found.', code: 404 });
+  });
+} else {
+  app.get(['/docs', '/docs/'], apiLimiter, requireAuth, requireAdmin, (_req, res) => {
+    res.type('text/plain').send('OpenAPI JSON is available to admins at /api/v1/openapi.json');
+  });
+}
+
+// --------------------------------------------------------
+// Statische Dateien (Frontend) - differenzierte Caching-Strategie
+//
+// HTML + JS + CSS: no-cache (Browser revalidiert via ETag/304, kein stale Content
+//   nach Deployment). Bei unverändertem File → 304 Not Modified ohne Übertragung.
+// Bilder + Icons + Fonts: 30 Tage immutable (ändern sich praktisch nie).
+// manifest.json: no-cache (PWA-Updates sollen sofort greifen).
+// /sw.js wird direkt darunter als no-store-Antwort gerendert.
+// --------------------------------------------------------
+app.get('/sw.js', (_req, res) => {
+  const response = getServiceWorkerResponse();
+  res.type(response.contentType);
+  res.setHeader('Cache-Control', response.cacheControl);
+  res.setHeader('CDN-Cache-Control', response.cdnCacheControl);
+  res.setHeader('Cloudflare-CDN-Cache-Control', response.cloudflareCdnCacheControl);
+  res.send(response.body);
+});
+
+const PUBLIC_DIR = path.join(import.meta.dirname, '..', 'public');
+
+/**
+ * Header jeder Datei aus public/ - EINE Funktion fuer beide Wege, auf denen sie
+ * das Haus verlaesst: express.static und die Brotli-Fassung aus dem Speicher
+ * (utils/static-assets.js). Sonst traegt dieselbe Adresse je nach Weg ein
+ * anderes Cache-Control.
+ */
+function setStaticHeaders(res, filePath, stat) {
+  const ext = path.extname(filePath).toLowerCase();
+  const isPwaIcon = /\/icons\/(icon-|apple-touch-icon|favicon)/.test(filePath);
+  if (isPwaIcon) {
+    // PWA-Icons müssen bei Deployments sofort aktualisiert werden
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  } else if (['.png', '.jpg', '.jpeg', '.ico', '.svg', '.webp', '.woff2', '.woff'].includes(ext)) {
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 Tage
+  } else {
+    // HTML, JS, CSS, JSON und manifest immer revalidieren.
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  }
+  // manifest.json: korrekter MIME-Type für PWA-Erkennung durch Chrome/Android
+  if (filePath.endsWith('manifest.json')) {
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  }
+  // .mjs (z. B. gevendorte pdf.js-Module + Worker) müssen als JS-Modul ausgeliefert
+  // werden; nicht jede `send`-Version mappt die Endung, sonst schlägt der Modul-Import fehl.
+  if (ext === '.mjs') {
+    res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+  }
+  // ETag aus dem Inhalt statt aus Groesse und Aenderungszeit (Begruendung in
+  // utils/static-assets.js): der Service Worker revalidiert beim Precache und
+  // verlaesst sich darauf, dass ein gleicher ETag gleichen Inhalt heisst.
+  // Scheitert das Lesen, setzt express.static seinen eigenen wie bisher.
+  try {
+    res.setHeader('ETag', staticAssets.etagFor(filePath, stat));
+  } catch { /* siehe oben */ }
+}
+
+// STATIC_BROTLI=off schaltet nur die vorkomprimierte Auslieferung ab; die
+// compression()-Middleware oben uebernimmt dann jede Anfrage wie vor R18.
+const staticAssets = createStaticAssets(PUBLIC_DIR, {
+  brotli: String(process.env.STATIC_BROTLI || '').trim().toLowerCase() !== 'off',
+  setHeaders: setStaticHeaders,
+});
+// Die Bremse vor dem Speicher (Begruendung in utils/static-assets.js, Punkt 3).
+// Grosszuegig: ein kalter Start holt rund 125 Dateien, der Precache eines neuen
+// Workers rund 310, und hinter einem Router teilen sich alle Geraete eines
+// Haushalts EINE Adresse - fuenf Telefone, die nach einem Release gleichzeitig
+// aktualisieren, bleiben darunter. Wer darueber liegt, verliert nur die
+// vorkomprimierte Fassung, nie die Datei.
+const staticStoreLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 3000,
+  standardHeaders: false,
+  legacyHeaders: false,
+  handler: staticAssets.overLimit,
+});
+// Benannt: der Guard ueber die globalen Middlewares (test:restore-gate-routes)
+// fuehrt jede mit Namen und Begruendung, und rateLimit() liefert eine namenlose.
+Object.defineProperty(staticStoreLimiter, 'name', { value: 'staticStoreLimiter' });
+app.use(staticStoreLimiter, staticAssets.middleware);
+
+app.use(express.static(PUBLIC_DIR, {
+  etag: true,
+  lastModified: true,
+  // Kein automatischer Trailing-Slash-Redirect für Verzeichnisse (z. B. /settings →
+  // /settings/), sonst kollidiert das public/settings/-Verzeichnis mit der SPA-Route
+  // /settings und der Client-Router landet beim Hard-Load auf dem Dashboard.
+  redirect: false,
+  setHeaders: setStaticHeaders,
+}));
+
+// Globaler API-Rate-Limiter auf alle /api/-Endpunkte (Definition siehe oben).
+app.use('/api/', apiLimiter);
+
+// --------------------------------------------------------
+// API-Routen
+// --------------------------------------------------------
+// Anmeldung, Passwort-Reset und Einladungen schreiben ebenfalls - /auth/login
+// liest den Nutzer, wartet auf bcrypt und schreibt dann die Sitzung. Ein
+// Restore in dieser Luecke wartet sie ab, statt dass die Sitzung nach dem Tausch
+// in der eingespielten Datenbank landet (#1441). Der Koerper ist hier schon
+// gelesen (express.json oben), eine langsame Anfrage haelt also nichts auf.
+app.use('/api/v1/auth', trackAdmittedWrite, authRouter);
+
+function buildVersionPayload(includeVersion = false) {
+  let appName = DEFAULT_APP_NAME;
+  let setupRequired = false;
+  try {
+    const row = db.get().prepare('SELECT value FROM sync_config WHERE key = ?').get('app_name');
+    if (row?.value) appName = row.value;
+  } catch {
+    // fall back to default
+  }
+  try {
+    const { count } = db.get().prepare('SELECT COUNT(*) AS count FROM users').get();
+    setupRequired = count === 0;
+  } catch {
+    // Fail-safe: bei DB-Fehler kein Setup erzwingen
+    setupRequired = false;
+  }
+  // Password reset can only deliver when SMTP is configured AND an explicit
+  // BASE_URL origin is set (the request Host is deliberately not trusted, to
+  // prevent reset poisoning). Expose the capability so the login page can gate
+  // the "forgot password" affordance instead of offering a dead end.
+  // Mit abgeschalteter eingebauter Anmeldung fuehrt der Reset ins Leere: es gibt
+  // kein Passwort mehr, das er zuruecksetzen koennte (#847). Der Link darf dann
+  // gar nicht erst erscheinen - die Routen weisen ihn ohnehin ab.
+  let passwordResetEnabled = false;
+  try {
+    // Drei Bedingungen, und die dritte ist neu: sind ALLE Konten auf SSO
+    // umgestellt, gibt es kein Passwort mehr, das ein Reset zuruecksetzen
+    // koennte - der Link waere eine Sackgasse, obwohl SMTP steht. Die Abfrage
+    // haelt bei der ersten Zeile an.
+    // BEIDE PLATZHALTER, nicht nur der von SSO (#1208). Ein Wandtablett traegt
+    // `$display$` statt eines Hashes, und das ist ebenso wenig ein Passwort, das
+    // sich zuruecksetzen liesse. In einem Haushalt, in dem alle Menschen per SSO
+    // anmelden, liess ein einziges Display den Reset-Link wieder erscheinen -
+    // eine Sackgasse, genau die, die diese Abfrage verhindern soll.
+    const hasResettable = !!db.get()
+      .prepare('SELECT 1 FROM users WHERE password_hash NOT IN (?, ?) LIMIT 1')
+      .get(OIDC_PASSWORD_SENTINEL, DISPLAY_PASSWORD_SENTINEL);
+    passwordResetEnabled = isPasswordLoginEnabled()
+      && hasResettable
+      && emailService.isConfigured()
+      && Boolean(String(process.env.BASE_URL || '').trim());
+  } catch {
+    passwordResetEnabled = false;
+  }
+  return {
+    ...(includeVersion ? { version: APP_VERSION } : {}),
+    app_name: appName,
+    setup_required: setupRequired,
+    password_reset_enabled: passwordResetEnabled,
+    // Nur für Angemeldete: die Oberfläche muss dieselbe Obergrenze nennen und
+    // prüfen, die der Server annimmt (#806). Vor der Anmeldung gibt es nichts
+    // hochzuladen, also auch keinen Grund, die Konfiguration zu verraten.
+    ...(includeVersion ? { max_upload_bytes: MAX_UPLOAD_BYTES } : {}),
+  };
+}
+
+// Public bootstrap metadata for login/setup. The exact app version is returned only
+// when a valid session or API token is present.
+app.get('/api/v1/version', (req, res) => {
+  const hasAuthCredential = Boolean(
+    req.session?.userId
+      || req.headers.authorization
+      || req.headers['x-api-key']
+  );
+  if (!hasAuthCredential) {
+    return res.json(buildVersionPayload(false));
+  }
+  return requireAuth(req, res, () => res.json(buildVersionPayload(true)));
+});
+
+app.get('/manifest.webmanifest', apiLimiter, (req, res) => {
+  let appName = DEFAULT_APP_NAME;
+  try {
+    const row = db.get().prepare('SELECT value FROM sync_config WHERE key = ?').get('app_name');
+    if (row?.value) appName = row.value;
+  } catch {
+    // fall back to default
+  }
+
+  res.type('application/manifest+json');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.json({
+    name: `${appName} Familienplaner`,
+    short_name: appName,
+    description: 'Selbstgehosteter Familienplaner',
+    id: '/',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    display_override: ['standalone', 'minimal-ui'],
+    // Kein `orientation`: der Schluessel ist eine Sperre, keine Bevorzugung.
+    // Auf einem Tablet zwang `portrait-primary` die installierte App in den
+    // schmalen Hochkant-Streifen, obwohl das Layout bis 1024px+ reicht (#890).
+    // Ohne den Schluessel folgt die App der Geraeteorientierung - und der
+    // Systemsperre, die der Nutzer gesetzt hat. Ein ausdrueckliches 'any' waere
+    // wieder eine Ansage und nicht dasselbe.
+    // theme_color/background_color muessen mit public/manifest.json und den
+    // theme-color-Metas in index.html zusammenbleiben: der App-Grund
+    // (#F5F3ED = --neutral-100, warmes Papier).
+    theme_color: '#F5F3ED',
+    background_color: '#F5F3ED',
+    lang: 'de-DE',
+    categories: ['productivity', 'lifestyle'],
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+    screenshots: [],
+  });
+});
+
+function sendOpenApi(req, res) {
+  if (req.query.download === '1') {
+    res.setHeader('Content-Disposition', 'attachment; filename="openapi.json"');
+  }
+  res.json(buildOpenApiSpec(req, APP_VERSION));
+}
+
+app.get('/api/v1/openapi.json', requireAuth, requireAdmin, sendOpenApi);
+// /openapi.json liegt außerhalb von /api/, daher Rate-Limiter explizit als Route-Middleware.
+app.get('/openapi.json', apiLimiter, requireAuth, requireAdmin, sendOpenApi);
+
+// --------------------------------------------------------
+// Öffentlicher read-only ICS-Feed (Discussion #387)
+// Außerhalb /api/v1: keine Session/CSRF — Token in URL ist das Geheimnis.
+// --------------------------------------------------------
+const feedLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.get('/feed/calendar/:token.ics', feedLimiter, (req, res) => {
+  try {
+    const userId = icsExport.findUserIdByFeedToken(db.get(), req.params.token);
+    const localCalendar = userId ? null : findCalendarByFeedToken(db.get(), req.params.token);
+    if (!userId && !localCalendar) return res.status(404).type('text/plain').send('Not found');
+    const ics = userId
+      ? icsExport.buildFeed(db.get(), userId)
+      : icsExport.buildCalendarFeed(db.get(), localCalendar.id);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', `inline; filename="${localCalendar ? `yuvomi-${localCalendar.id}.ics` : 'yuvomi.ics'}"`);
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+app.get('/feed/birthdays/:token.ics', feedLimiter, (req, res) => {
+  try {
+    if (!birthdayIcs.findUserIdByFeedToken(db.get(), req.params.token)) {
+      return res.status(404).type('text/plain').send('Not found');
+    }
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-birthdays.ics"');
+    res.type('text/calendar; charset=utf-8').send(birthdayIcs.buildBirthdayFeed(db.get()));
+  } catch (err) {
+    log.error('Birthday feed', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// Eigenständiger Feed für Inventar-Garantiefristen (Stufe 4) - getrennt vom
+// Haushaltskalender-Feed oben, siehe server/services/inventory-deadlines-ics.js.
+app.get('/feed/inventory-deadlines/:token.ics', feedLimiter, (req, res) => {
+  try {
+    // Auflösen statt nur prüfen, wie beim Kalender-Feed oben: das Token gehört
+    // einem Nutzer, damit es einzeln zurückziehbar ist. In den Feed-Inhalt geht
+    // die Id nicht ein - Inventar ist Haushaltseigentum ohne Sichtbarkeitsachse.
+    const userId = inventoryDeadlinesIcs.findUserIdByFeedToken(db.get(), req.params.token);
+    if (!userId) return res.status(404).type('text/plain').send('Not found');
+    const ics = inventoryDeadlinesIcs.buildInventoryDeadlinesFeed(db.get());
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-inventory-deadlines.ics"');
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// Vorhergesagter Zyklus-Feed (Phase 5, Health) - anders als der Inventar-Feed
+// oben ist der INHALT hier schon personengebunden (cycle_periods.user_id),
+// nicht nur das Token; siehe server/services/cycle-ics.js.
+//
+// BEWUSST UNGEGATET GEGEN DEN ZYKLUS-TAB/HEALTH-MODUL: server/services/
+// cycle-reminders.js stellt den Erinnerungs-Sync ein, sobald das Health-Modul
+// 'none' ist oder der Zyklus-Tab gesperrt wurde (Haushalt oder persönlich,
+// healthCycleViews()) - dieser Feed lässt sich davon nicht abschalten. Kein
+// Leck: der Inhalt bleibt der des Token-Besitzers selbst, kein Dritter sieht
+// je etwas Fremdes. Gleiche Lücke wie beim Inventar-Feed oben, dieselbe
+// Antwort - ein bestehendes Abo (Kalender-App auf einem anderen Gerät) soll
+// nicht stillschweigend leerlaufen, nur weil die Ansicht in der App gerade
+// gesperrt ist; Abschalten bleibt "Feed deaktivieren" in den Einstellungen.
+app.get('/feed/cycle/:token.ics', feedLimiter, (req, res) => {
+  try {
+    const userId = cycleIcs.findUserIdByFeedToken(db.get(), req.params.token);
+    if (!userId) return res.status(404).type('text/plain').send('Not found');
+    const ics = cycleIcs.buildCycleFeed(db.get(), userId);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-cycle.ics"');
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// Eigenständiger Feed für den persönlichen Schichtplan (Schedule v3) - anders
+// als beim Inventar-Feed steckt hier die Nutzer-Id auch im Inhalt: gefeedet
+// werden NUR die eigenen aufgelösten Einträge dieses Tokens, siehe
+// server/services/schedule-ics.js.
+app.get('/feed/schedule/:token.ics', feedLimiter, (req, res) => {
+  try {
+    const userId = scheduleIcs.findUserIdByFeedToken(db.get(), req.params.token);
+    if (!userId) return res.status(404).type('text/plain').send('Not found');
+    const ics = scheduleIcs.buildScheduleFeed(db.get(), userId);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-schedule.ics"');
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// Eigenständiger Feed für Abfuhrtermine (Waste, Stufe 10) - anders als beim
+// Schichtplan-Feed oben steckt hier keine Nutzer-Id im INHALT (Abfuhrtermine
+// sind Haushaltseigentum ohne Sichtbarkeitsachse, wie beim Inventar-Feed);
+// nur das optionale Typ-Filter je Nutzer, siehe server/services/waste-ics.js.
+app.get('/feed/waste/:token.ics', feedLimiter, (req, res) => {
+  try {
+    const userId = wasteIcs.findUserIdByFeedToken(db.get(), req.params.token);
+    if (!userId) return res.status(404).type('text/plain').send('Not found');
+    const ics = wasteIcs.buildWasteFeed(db.get(), userId);
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Content-Disposition', 'inline; filename="yuvomi-waste.ics"');
+    res.type('text/calendar; charset=utf-8').send(ics);
+  } catch (err) {
+    log.error('', err);
+    res.status(500).type('text/plain').send('Internal error');
+  }
+});
+
+// MCP-Endpoint (Streamable HTTP, stateless): Auth über bestehende Bearer-API-Tokens.
+// Eigener Namespace außerhalb von /api/v1 → kein CSRF, kein Guest-Guard.
+app.use('/mcp', apiLimiter, requireAuth, trackAdmittedWrite, mcpRouter);
+
+// Alle weiteren API-Routen erfordern Authentifizierung + CSRF-Schutz
+// Kopplung eines Wandtabletts (#1208): VOR requireAuth, wie /auth/login. Ein
+// frisch aufgehaengtes Geraet hat noch nichts, womit es sich ausweisen koennte -
+// es hat einen Code, den ein Mensch ihm eingetippt hat. Der Router traegt genau
+// eine Route; alles andere unter /displays faellt durch und landet weiter unten
+// im Administrator-Router hinter requireAuth.
+app.use('/api/v1/displays', pairingRouter);
+app.use('/api/v1', requireAuth);
+// Ab hier steht die Identitaet fest: schreibende Anfragen wartet ein Restore ab (#1431).
+app.use('/api/v1', trackAdmittedWrite);
+// System-Metadaten: authentifiziert, aber bewusst vor Guest-/Token-Scope-Gates
+// wie /version behandelt. Keine Haushaltsdaten, nur upstream Release Notes.
+app.use('/api/v1/changelog', changelogRouter);
+app.use('/api/v1', (req, res, next) => {
+  try {
+    const guest = db.get().prepare('SELECT 1 FROM split_expense_guest_users WHERE user_id = ?').get(req.authUserId);
+    if (!guest) return next();
+    const allowed = req.path.startsWith('/split-expenses')
+      || req.path === '/auth/me'
+      || req.path === '/auth/logout'
+      || req.path === '/version';
+    if (allowed) return next();
+    return res.status(403).json({ error: 'This account can only access Shared expenses.', code: 403, reason: 'split_guest_scope' });
+  } catch {
+    return res.status(403).json({ error: 'This account can only access Shared expenses.', code: 403, reason: 'split_guest_scope' });
+  }
+});
+// Scopes: Ein gescoptes Zugangsmittel (scopes !== null) darf ein Modul nur in
+// der gewährten Zugriffsart (read/write) erreichen; jeder nicht abgedeckte
+// /api/v1-Pfad wird verweigert (Least Privilege). Deckt damit zugleich die
+// MCP-OpenAPI-Brücke ab, da diese per Loopback mit demselben Token hier
+// durchläuft.
+//
+// DIE BEDINGUNG FRAGT NACH DEN SCOPES, NICHT NACH DER ANMELDEART (#1208). Sie
+// las bis dahin `req.authMethod !== 'api_token' || req.authScopes == null` -
+// beides zusammen, obwohl nur das zweite die Regel ist. Solange es Scopes nur
+// am Token-Pfad gab, war der Unterschied unsichtbar; mit dem gekoppelten
+// Display gibt es einen zweiten Träger, und die Methode zu prüfen hieße, ihn
+// hier durchzulassen. Für Sessions ändert sich nichts: sie tragen
+// `authScopes === null` und steigen in derselben Zeile aus wie vorher.
+app.use('/api/v1', (req, res, next) => {
+  if (req.authScopes == null) return next();
+  // Ein gekoppeltes Display darf zusaetzlich zu seinen Modulen eine Handvoll
+  // Geruestpfade LESEN (display-scopes.js, `DISPLAY_READ_PATHS`): die eigene
+  // Zeile, die Darstellungseinstellungen, die Modulliste, die Personen fuer
+  // seine Aktionen - und, nur wenn ein Administrator es fuer dieses Display
+  // eingeschaltet hat, die Fotos des Bildschirmschoners (`DISPLAY_READ_ROUTES`,
+  // #1766). Keiner davon ist ein scopebares Modul, also verwuerfe dieses Gate
+  // sie samt und sonders - und die App auf dem Tablett kaeme nie ueber ihren
+  // Start hinaus. Die Ausnahme gilt NUR fuer `authMethod === 'display'`; fuer
+  // ein gescoptes Token aendert sich nichts.
+  if (req.authMethod === 'display'
+    && displayMayAct(req.method, req.path, { screensaver: req.displayShowsScreensaver === true })) return next();
+  // `tokenAccessRequirement()` statt `moduleForPath()` + `requiredAccess()`:
+  // dieselbe Regel, plus die EINE Ausnahme, die fuer beide Achsen gilt
+  // (Rezept -> Einkauf liest `meals`, #1290 - Begruendung in server/scopes.js).
+  const { moduleKey, access } = tokenAccessRequirement(req.path, req.method);
+  if (tokenAllows(req.authScopes, moduleKey, access)) return next();
+  return res.status(403).json({ error: 'Token scope does not permit this operation.', code: 403 });
+});
+// Rollen-/Mitglied-Rechte: Für eingeschränkte Mitglieds-Sessions (#467). Anders
+// als Token-Scopes ist dies eine DENY-Liste — nur konfigurierte Module werden
+// gesperrt, jeder unbekannte Pfad (/auth, /preferences, /settings-Daten …) bleibt
+// erreichbar, damit die App bedienbar bleibt. Admins haben sessionModuleAccess
+// === null (Bypass), ebenso unbeschränkte Mitglieder (Fast-Path).
+app.use('/api/v1', (req, res, next) => {
+  // Die Regel selbst steht in permissions.js — dieselbe Funktion prüft den
+  // MCP-Endpoint (#823), damit beide Oberflächen nicht auseinanderlaufen.
+  //
+  // AUSNAHME /schedule/preferences (S-12, UX-Audit): der Vorlauf/die
+  // Wochenstunden hängen an der EIGENEN users-Zeile (siehe
+  // routes/schedule-preferences.js' eigener Kommentar, "keine Admin-Gate") -
+  // ein Mitglied mit `schedule: read` darf nur FREMDE Schichtplan-Daten nicht
+  // schreiben, seine eigene Erinnerungsvorlaufzeit ist keine davon.
+  // `sessionModuleAccessRequirement()` senkt dafür nur das benötigte Niveau
+  // auf `read` (exakt für diesen Pfad, kein `startsWith`) - der Modul-
+  // Schlüssel bleibt `schedule`, damit `none` weiterhin verweigert wird; die
+  // API-Token-Scope-Prüfung oben bleibt unveraendert an `schedule:write`
+  // gebunden.
+  //
+  // AUSNAHME POST /recipes/:id/to-shopping-list (#1290, 22.09.2026): die Route
+  // liest das Rezept und schreibt nur in den Einkauf, also reicht `meals: read`;
+  // `shopping: write` verlangt die Route selbst. Anders als oben gilt diese
+  // Ausnahme auch im Token-Gate darueber (server/scopes.js).
+  // DIESELBE DISPLAY-AUSNAHME WIE IM GATE DARUEBER (#1209), und sie muss hier
+  // ein zweites Mal stehen. Ein Display traegt `modules.tasks === 'read'` -
+  // absichtlich, denn seine Oberflaeche soll kein Anlegen und kein Bearbeiten
+  // zeigen -, und dieser Riegel liest genau das: ein PATCH auf eine Aufgabe
+  // verlangt `write` und faellt in MODULE_ACCESS_READ_ONLY. Das erste Gate
+  // durchzulassen und hier zu scheitern hiesse, die Ausnahme gaebe es gar nicht;
+  // im Browser sah das aus wie „das Tablett hakt nicht ab", mit 403 und ohne
+  // jeden Hinweis worauf.
+  //
+  // DIE MODULSTUFE AUF `write` ZU HEBEN WAERE DER FALSCHE WEG GEWESEN. Sie
+  // steuert auch, was die App ZEICHNET (permissions.js, „Navigation, Kacheln und
+  // der Anlege-Knopf" folgen derselben Quelle) - ein Display bekaeme dann
+  // Anlegen-, Bearbeiten- und Loeschen-Knoepfe, die der Server hinterher
+  // abweist. Die Erlaubnis ist keine Modulstufe, sondern genau zwei Routen, und
+  // beide Gates fragen dieselbe Liste.
+  // Die Bildschirmschoner-Wahl geht auch hier mit, damit beide Gates dieselbe
+  // Frage stellen - entscheidend ist sie an dieser Stelle nicht, und kein Test
+  // misst sie hier: das Scope-Gate davor hat ein ausgeschaltetes Display
+  // schon abgewiesen, und `/screensaver` ist kein Modul, das dieses Gate
+  // sperren koennte (#1766). Die Regel steht im Scope-Gate.
+  if (req.authMethod === 'display'
+    && displayMayAct(req.method, req.path, { screensaver: req.displayShowsScreensaver === true })) return next();
+  const { moduleKey: scopedModuleKey, access: scopedAccess } =
+    sessionModuleAccessRequirement(req.path, req.method);
+  const verdict = moduleAccessVerdict(
+    req.sessionModuleAccess,
+    scopedModuleKey,
+    scopedAccess,
+  );
+  // `reason` ist der maschinenlesbare Grund (#1607): der Satz in `error` ist
+  // englisch und stand so in jeder Oberflaechensprache im Toast. Die App
+  // uebersetzt ueber den Grund (public/api.js), API-Nutzer behalten den Satz.
+  if (verdict === MODULE_ACCESS_DENIED) {
+    return res.status(403).json({ error: 'You do not have access to this module.', code: 403, reason: 'module_access_denied' });
+  }
+  if (verdict === MODULE_ACCESS_READ_ONLY) {
+    return res.status(403).json({ error: 'You have read-only access to this module.', code: 403, reason: 'module_read_only' });
+  }
+  return next();
+});
+app.use('/api/v1', csrfMiddleware);
+// Retry-Sicherheit für schreibende Aufrufer (#822): greift nur, wenn ein
+// `Idempotency-Key` mitkommt, und liegt hinter Auth, Scopes und CSRF - ein
+// abgewiesener Aufruf darf keinen Schlüssel verbrauchen.
+app.use('/api/v1', idempotencyMiddleware);
+app.use('/api/v1/dashboard', dashboardRouter);
+app.use('/api/v1/tasks', tasksRouter);
+app.use('/api/v1/shopping', shoppingRouter);
+app.use('/api/v1/meals', mealsRouter);
+app.use('/api/v1/recipes', recipesRouter);
+app.use('/api/v1/recipe-providers', recipeProvidersRouter);
+app.use('/api/v1/pantry', pantryRouter);
+app.use('/api/v1/inventory', inventoryRouter);
+// Kreislauf-Zustand der vier Küchen-Tabs in einer Abfrage (utils/kitchen-tabs.js).
+app.use('/api/v1/kitchen', kitchenRouter);
+app.use('/api/v1/calendar', calendarRouter);
+app.use('/api/v1/notes', notesRouter);
+app.use('/api/v1/quick-links', quickLinksRouter);
+app.use('/api/v1/contacts/cardav', cardavRouter);
+app.use('/api/v1/contacts', contactsRouter);
+app.use('/api/v1/birthdays', birthdaysRouter);
+app.use('/api/v1/budget/subscriptions', subscriptionsRouter);
+app.use('/api/v1/budget', budgetRouter);
+app.use('/api/v1/documents/storage/google-drive', googleDriveStorageRouter);
+app.use('/api/v1/documents/dms', dmsRouter);
+app.use('/api/v1/documents', documentsRouter);
+app.use('/api/v1/split-expenses', splitExpensesRouter);
+app.use('/api/v1/weather', weatherRouter);
+app.use('/api/v1/preferences', preferencesRouter);
+app.use('/api/v1/screensaver', screensaverRouter);
+app.use('/api/v1/reminders', remindersRouter);
+app.use('/api/v1/search', searchRouter);
+app.use('/api/v1/family', familyRouter);
+// Die Personenliste fuer den Picker eines Tabletts (#1209) haengt VOR dem
+// Administrator-Router: der traegt `requireAdmin` auf dem ganzen Router, und ein
+// Display ist ein Mitglied ohne Adminrecht. Express nimmt den ersten Router, der
+// die Route kennt - `/people` gibt es nur hier, alles andere unter `/displays`
+// faellt durch in den Administrator-Router dahinter.
+app.use('/api/v1/displays', peopleRouter);
+app.use('/api/v1/displays', displaysRouter);
+app.use('/api/v1/backup', backupRouter);
+app.use('/api/v1/housekeeping', housekeepingRouter);
+app.use('/api/v1/waste', wasteRouter);
+app.use('/api/v1/modules', modulesRouter);
+app.use('/api/v1/push', pushRouter);
+app.use('/api/v1/email', emailRouter);
+app.use('/api/v1/notifications', notificationsRouter);
+app.use('/api/v1/health', healthRouter);
+app.use('/api/v1/rewards', rewardsRouter);
+// The specific /schedule/* prefixes must mount before the general /schedule
+// router: schedule.js has no first-segment param route today, so a request
+// like /schedule/feed still falls through to the right router either way -
+// but that only holds by accident, and breaks silently (no error, just a 404)
+// the day someone adds a router.get('/:id') to schedule.js.
+app.use('/api/v1/schedule/feed', scheduleFeedRouter);
+app.use('/api/v1/schedule/preferences', schedulePreferencesRouter);
+app.use('/api/v1/schedule/extras', scheduleExtrasRouter);
+app.use('/api/v1/schedule', scheduleRouter);
+app.use('/api/v1/permissions', permissionsRouter);
+
+// --------------------------------------------------------
+// Health-Check (für Docker)
+// --------------------------------------------------------
+app.get('/health', (req, res, next) => {
+  // Browser-Navigation (Deep-Link/Reload/Bookmark auf den Gesundheit-Übersicht-Tab,
+  // Client-Route ebenfalls /health) erwartet die SPA, nicht den JSON-Healthcheck.
+  // Docker/Monitoring senden Accept: */* (ohne text/html) und bekommen weiter JSON,
+  // damit der Container-Healthcheck nicht mit der SPA-Wurzelroute kollidiert.
+  if (req.headers.accept && req.headers.accept.includes('text/html')) return next();
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// --------------------------------------------------------
+// Rate-Limiter für SPA-Fallback (verhindert Dateisystem-Hammering)
+// --------------------------------------------------------
+const spaLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a moment.', code: 429 },
+});
+
+// --------------------------------------------------------
+// SPA Fallback: Alle nicht-API-Routen → index.html
+// --------------------------------------------------------
+app.get('/{*path}', spaLimiter, (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found.', code: 404 });
+  }
+  // root-Option statt absolutem Pfad: sendFile ohne root laesst `send` JEDES
+  // Segment des absoluten Pfads auf Dotfiles pruefen - liegt der Checkout unter
+  // einem Dot-Verzeichnis (z. B. ~/.claude/...), liefert jede Deep-URL 500.
+  // Mit root prueft `send` nur den relativen Teil ('index.html').
+  res.sendFile('index.html', { root: path.join(import.meta.dirname, '..', 'public') });
+});
+
+// --------------------------------------------------------
+// Globaler Error-Handler
+// --------------------------------------------------------
+app.use(createErrorHandler(log));
+
+// --------------------------------------------------------
+// Auto-Sync Scheduler (Google + Apple Calendar)
+// --------------------------------------------------------
+
+const SYNC_INTERVAL_MS = (parseInt(process.env.SYNC_INTERVAL_MINUTES, 10) || 15) * 60_000;
+
+async function runSync() {
+  // Ein abgelehntes Token (#2019) steht auf der Karte; jeder Takt schriebe
+  // sonst denselben Fehler ins Log, ohne dass ein Lauf etwas ändern könnte.
+  const { connected: googleConnected, needsReauth: googleNeedsReauth } = googleCalendar.getStatus();
+  if (googleConnected && !googleNeedsReauth) {
+    googleCalendar.sync().catch((e) => logSync.error('Google error:', e.message));
+  }
+
+  const { configured: appleConfigured } = appleCalendar.getStatus();
+  if (appleConfigured) {
+    appleCalendar.sync().catch((e) => logSync.error('Apple error:', e.message));
+  }
+
+  // ICS: kein Guard nötig — sync() fragt die DB ab und kehrt sofort zurück wenn keine Abonnements existieren
+  icsSubscription.sync().catch((e) => logSync.error('ICS error:', e.message));
+
+  // CalDAV Kalender (VEVENT): kein Guard nötig — sync() kehrt sofort zurück, wenn
+  // keine Accounts konfiguriert sind.
+  caldavSync.sync().catch((e) => logSync.error('CalDAV error:', e.message));
+
+  // CalDAV Reminders (VTODO → Tasks/Shopping): kein Guard nötig — sync() kehrt sofort
+  // zurück, wenn keine aktivierten Reminder-Listen konfiguriert sind.
+  caldavReminders.sync().catch((e) => logSync.error('CalDAV reminders error:', e.message));
+
+  // Outlook-Push (Microsoft Graph, one-way): kein Guard nötig — sync() kehrt sofort
+  // zurück, wenn keine Konten verbunden sind.
+  outlookCalendar.sync().catch((e) => logSync.error('Outlook error:', e.message));
+
+  // CardDAV Kontakte: kein Guard nötig — sync() kehrt sofort zurück, wenn keine
+  // Accounts konfiguriert sind.
+  carddavSync.sync().catch((e) => logSync.error('CardDAV error:', e.message));
+
+  // Holidays: kein Guard nötig — sync() kehrt sofort zurück, wenn kein Land konfiguriert ist.
+  holidays.sync().catch((e) => logSync.error('Holidays error:', e.message));
+}
+
+// --------------------------------------------------------
+// Server starten
+// --------------------------------------------------------
+// Scan the extension catalog before the socket accepts requests. resolvePermissions
+// drops unknown ext:* rows, and moduleAccessVerdict is a deny-list — a missing
+// key means allow. Starting the scan inside the listen callback left that window
+// open until the first GET /api/v1/modules (or /permissions/catalog).
+// Davor: ein Ersetzen, das ein Neustart zwischen seinen zwei Umbenennungen
+// abgeschnitten hat, holt die alte Fassung aus `.backup-<id>-*` zurueck, damit
+// schon die erste Liste das Modul wieder kennt. Wirft nie.
+await recoverInterruptedInstalls();
+try {
+  await listModules({ admin: true });
+} catch (err) {
+  log.warn('Initial module registry scan failed:', err.message);
+}
+
+const server = app.listen(PORT, BIND_ADDRESS, () => {
+  // Der gebundene Port statt der Wunschangabe: mit PORT=0 vergibt der Kernel
+  // einen freien Port, und genau der gehoert ins Log. Fuer den Regelfall
+  // (PORT=3000, kein BIND_ADDRESS) steht dort weiterhin wortgleich dieselbe Zeile.
+  const boundTo = BIND_ADDRESS ? ` (bound to ${BIND_ADDRESS})` : '';
+  logYuvomi.info(`Server running on port ${server.address()?.port ?? PORT}${boundTo} | Version ${APP_VERSION}`);
+  logYuvomi.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Ein Sicherheitsschalter, der still nicht greift, ist schlimmer als keiner:
+  // der Betreiber glaubt, das Anmeldeformular sei zu (#847). Beide Fail-open-
+  // Zustaende melden sich, auch der erwartete einer frischen Installation.
+  let linkedSso = true;
+  try {
+    linkedSso = !!db.get()
+      .prepare("SELECT 1 FROM users WHERE oidc_sub IS NOT NULL AND role = 'admin' LIMIT 1").get();
+  } catch { /* ohne Antwort lieber keine falsche Entwarnung */ }
+  const loginWarning = passwordLoginWarning({ hasLinkedSsoAccount: linkedSso });
+  if (loginWarning) logYuvomi.warn(loginWarning);
+
+  // Erster Sync nach 10 Sekunden (warten bis DB vollständig initialisiert)
+  //
+  // `unref()` wie bei den uebrigen Schedulern (push, medication,
+  // recipe-provider, split-expenses): den Prozess am Leben haelt der
+  // Server-Socket, nicht der Sync-Takt. Ohne das blieben nach `server.close()`
+  // zwei Timer offen - und Suiten, die server/index.js als Programm
+  // importieren, muessten den Prozess mit `process.exit(0)` erschlagen, was
+  // den Exit-Code von node:test ueberschreibt (siehe test/server-ready.js).
+  //
+  // Der Takt selbst als Job (#1532): `runSync` liest vor dem ersten Lauf
+  // synchron die DB (`getStatus()`). Faellt der Takt in einen Restore bei
+  // geschlossener Verbindung, wirft `db.get()`, und aus der async-Funktion
+  // wird eine Rejection ohne Handler - Node beendet den Prozess mitten im
+  // Tausch. Waehrend eines Restores faellt der Takt deshalb aus; die
+  // einzelnen Laeufe sind ohnehin Jobs.
+  const syncTick = () => {
+    runExternalJob(runSync).catch((e) => logSync.error('Sync tick failed:', e.message));
+  };
+  setTimeout(() => {
+    syncTick();
+    setInterval(syncTick, SYNC_INTERVAL_MS).unref();
+    logSync.info(`Auto-sync active every ${SYNC_INTERVAL_MS / 60_000} minutes.`);
+  }, 10_000).unref();
+
+  // Ein fehlender Mount fuer die lokale Dokumentablage faellt sonst erst auf,
+  // wenn die Dateien nach einem Update verschwunden sind (#751).
+  checkLocalStorageMount(createLogger('DocumentStorage'))
+    .catch((err) => log.error('Document storage check failed:', err.message));
+
+  // Backup-Scheduler starten
+  startBackupScheduler();
+  startSplitExpenseScheduler();
+  startRewardMoneyScheduler();
+  startPushScheduler();
+  startMedicationScheduler();
+  startRecipeProviderScheduler();
+  startWasteSourceScheduler();
+});
+
+export default app;
+
+// Der laufende HTTP-Server. Tests, die diese Datei als Programm importieren,
+// brauchen ein Handle zum Schliessen - sonst haelt der Socket den Prozess
+// offen und node:test kommt nie zu seinem Exit-Code.
+export { server };

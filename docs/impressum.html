@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security headers via meta (GitHub Pages allows no custom HTTP headers).
+       Note: X-Frame-Options / CSP frame-ancestors only take effect as HTTP headers, not via meta. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Impressum - Yuvomi</title>
+  <meta name="description" content="Anbieterkennzeichnung nach § 5 DDG für yuvomi.cloud.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#FBFAF7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#191816" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://yuvomi.cloud/impressum.html">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Yuvomi">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:title" content="Impressum - Yuvomi">
+  <meta property="og:description" content="Impressum und Anbieterkennzeichnung für yuvomi.cloud.">
+  <meta property="og:url" content="https://yuvomi.cloud/impressum.html">
+  <meta property="og:image" content="https://yuvomi.cloud/og-image.png">
+  <meta property="og:image:alt" content="Yuvomi - der selbstgehostete Familienplaner">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Impressum - Yuvomi">
+  <meta name="twitter:description" content="Impressum und Anbieterkennzeichnung für yuvomi.cloud.">
+  <meta name="twitter:image" content="https://yuvomi.cloud/twitter-image.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!-- site.css: Tokens und Bauteile aller fuenf Seiten. legal.css: die
+       Spaltenseite der drei Rechtstexte. Hier stand frueher ein eigener
+       Style-Block, auf privacy.html und datenschutz.html byteweise gleich. -->
+  <link rel="stylesheet" href="assets/site.css">
+  <link rel="stylesheet" href="assets/legal.css">
+  <style>
+    /* Nur, was dem Impressum allein gehoert (alles andere: assets/legal.css).
+       Seine Infobloecke sind Schluessel/Wert-Paare (dl) statt Absaetzen,
+       brauchen also Polster statt Absatzraender; und lange Adressen und URLs
+       brechen auch im Fliesstext. */
+    .info-block { padding: 20px 24px; margin: 0 0 16px; }
+    .info-block dl { display: grid; grid-template-columns: 200px 1fr; gap: 8px 24px; }
+    .info-block dt { color: var(--text-3); font-size: 14px; font-weight: 600; }
+    .info-block dd { color: var(--text-1); font-size: 15px; word-break: break-word; }
+    @media (max-width: 560px) {
+      .info-block dl { grid-template-columns: 1fr; gap: 2px 0; }
+      .info-block dd { margin-bottom: 12px; }
+    }
+    p { overflow-wrap: anywhere; }
+  </style>
+  <script>
+    /* Honor the theme picked on any page before the first paint; the bar's toggle writes the same key. */
+    (function(){
+      try {
+        var t = localStorage.getItem('yuvomi-theme') || localStorage.getItem('oikos-theme');
+        if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+<header class="site-bar">
+ <div class="topbar">
+  <div class="wrap bar-row">
+    <a href="index.html" class="nav-logo">
+      <svg viewBox="0 0 160 160" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="gf" x1="0" y1="0" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#8b5cf6"/>
+            <stop offset="100%" stop-color="#6c3aed"/>
+          </linearGradient>
+        </defs>
+        <rect width="160" height="160" rx="36" fill="url(#gf)"/>
+        <g fill="white" fill-opacity="0.82"><circle cx="64" cy="72" r="27"/><circle cx="100" cy="78" r="25"/><circle cx="80" cy="106" r="24"/></g>
+        
+      </svg>
+      Yuvomi
+    </a>
+    <div class="nav-controls">
+      <a href="index.html" class="nav-btn nav-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg><span class="nav-back-label">Übersicht</span></a>
+      <button class="nav-btn" id="themeBtn" type="button" aria-pressed="false" aria-label="Design umschalten">
+        <svg aria-hidden="true" id="sunIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg aria-hidden="true" id="moonIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </div>
+ </div>
+</header>
+
+<main id="main-content" tabindex="-1">
+  <div class="wrap">
+
+    <h1>Impressum</h1>
+    <p class="subtitle">Anbieterkennzeichnung gemäß § 5 Digitale-Dienste-Gesetz (DDG)</p>
+
+    <div class="legal-disclaimer">
+      <strong>Hinweis:</strong> Diese Seite enthält die gesetzlich vorgeschriebene Anbieterkennzeichnung
+      für das digitale Angebot unter <code>yuvomi.cloud</code> sowie das zugehörige Open-Source-Projekt
+      <a href="https://github.com/ulsklyc/yuvomi">github.com/ulsklyc/yuvomi</a>. Die hier genannten
+      Kontaktdaten dienen ausschließlich der Erfüllung der Pflichten nach § 5 DDG und § 18 Medienstaatsvertrag (MStV).
+    </div>
+
+    <p lang="en" class="en-summary">
+      <strong>In English:</strong> This page is the provider identification (Impressum) legally required for
+      <code>yuvomi.cloud</code> under German law (§ 5 DDG) and applies to this website and its open-source project.
+      The contact details below exist solely to meet that obligation. For how data is handled, see the
+      <a href="privacy.html">Privacy Policy</a>.
+    </p>
+
+    <h2 id="im-anbieter">Anbieter / Diensteanbieter</h2>
+    <div class="info-block">
+      <dl>
+        <dt>Name</dt>
+        <dd>Ulas Kalayci</dd>
+
+        <dt>Anschrift</dt>
+        <dd>
+          c/o MDC#885<br>
+          Welserstraße 3<br>
+          87463 Dietmannsried<br>
+          Deutschland
+        </dd>
+      </dl>
+    </div>
+
+    <h2 id="im-kontakt">Kontakt</h2>
+    <div class="info-block">
+      <dl>
+        <dt>E-Mail</dt>
+        <dd><a href="mailto:info@yuvomi.cloud">info@yuvomi.cloud</a></dd>
+
+        <dt>Telefon</dt>
+        <dd><a href="tel:+4915229278918">+49 1522 927 89 18</a></dd>
+
+        <dt>GitHub</dt>
+        <dd><a href="https://github.com/ulsklyc" target="_blank" rel="noopener">github.com/ulsklyc</a></dd>
+      </dl>
+    </div>
+
+    <h2 id="im-umsatzsteuer">Umsatzsteuer</h2>
+    <div class="info-block">
+      <p>
+        Aufgrund der Kleinunternehmerregelung gemäß § 19 Umsatzsteuergesetz (UStG) wird keine
+        Umsatzsteuer ausgewiesen.
+      </p>
+    </div>
+
+    <h2 id="im-verantwortlich">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+    <div class="info-block">
+      <dl>
+        <dt>Name</dt>
+        <dd>Ulas Kalayci</dd>
+        <dt>Anschrift</dt>
+        <dd>identisch mit der Anbieter-Anschrift (siehe oben)</dd>
+      </dl>
+    </div>
+
+    <h2 id="im-verbraucherstreitbeilegung">Verbraucherstreitbeilegung / Universalschlichtungsstelle</h2>
+    <div class="info-block">
+      <p>
+        Der Anbieter ist nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer
+        Verbraucherschlichtungsstelle teilzunehmen (§ 36 Verbraucherstreitbeilegungsgesetz - VSBG).
+      </p>
+    </div>
+
+    <h2 id="im-haftung-inhalte">Haftung für Inhalte</h2>
+    <p>
+      Als Diensteanbieter ist der Betreiber gemäß § 7 Abs. 1 DDG für eigene Inhalte auf diesen Seiten
+      nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 DDG ist der Betreiber als
+      Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen
+      zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
+      Verpflichtungen zur Entfernung oder Sperrung der Nutzung von Informationen nach den allgemeinen
+      Gesetzen bleiben hiervon unberührt. Eine diesbezügliche Haftung ist jedoch erst ab dem Zeitpunkt
+      der Kenntnis einer konkreten Rechtsverletzung möglich. Bei Bekanntwerden von entsprechenden
+      Rechtsverletzungen werden diese Inhalte umgehend entfernt.
+    </p>
+
+    <h2 id="im-haftung-links">Haftung für Links</h2>
+    <p>
+      Dieses Angebot enthält Links zu externen Websites Dritter (z. B. github.com), auf deren Inhalte
+      der Betreiber keinen Einfluss hat. Deshalb kann für diese fremden Inhalte auch keine Gewähr
+      übernommen werden. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder
+      Betreiber der Seiten verantwortlich. Die verlinkten Seiten wurden zum Zeitpunkt der Verlinkung
+      auf mögliche Rechtsverstöße überprüft. Rechtswidrige Inhalte waren zum Zeitpunkt der Verlinkung
+      nicht erkennbar. Eine permanente inhaltliche Kontrolle der verlinkten Seiten ist jedoch ohne
+      konkrete Anhaltspunkte einer Rechtsverletzung nicht zumutbar. Bei Bekanntwerden von
+      Rechtsverletzungen werden derartige Links umgehend entfernt.
+    </p>
+
+    <h2 id="im-urheberrecht">Urheberrecht</h2>
+    <p>
+      Die durch den Betreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen
+      Urheberrecht. Der Quellcode des Yuvomi-Projekts steht unter der
+      <a href="https://github.com/ulsklyc/yuvomi/blob/main/LICENSE" target="_blank" rel="noopener">MIT-Lizenz</a>;
+      es gelten die dort genannten Bedingungen. Darüber hinausgehende Vervielfältigung, Bearbeitung,
+      Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechts bedürfen der
+      schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
+    </p>
+
+    <p class="small" style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
+      Stand: 09.06.2026. Informationen zur Verarbeitung personenbezogener Daten finden Sie in der
+      <a href="datenschutz.html">Datenschutzerklärung</a>.
+    </p>
+
+  </div>
+</main>
+
+<footer class="bot">
+  <div class="wrap">
+    <span>&copy; <span id="year">2026</span> Ulas Kalayci · Yuvomi</span>
+    <nav aria-label="Fußzeile">
+      <a href="index.html">Startseite</a>
+      <a href="https://github.com/ulsklyc/yuvomi" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/ulsklyc/yuvomi/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+      <a href="https://github.com/ulsklyc/yuvomi/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Mitmachen</a>
+      <a href="impressum.html">Impressum</a>
+      <a href="datenschutz.html">Datenschutz</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+<a class="to-top" href="#main-content" id="toTop"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>Nach oben</a>
+<script>
+(function(){
+  var b = document.getElementById('toTop'); if (!b) return;
+  function sync(){ b.classList.toggle('show', scrollY > 600); }
+  addEventListener('scroll', sync, { passive: true }); sync();
+})();
+</script>
+<script>
+/* Der Umschalter schreibt denselben localStorage-Schluessel wie die Hauptseiten,
+   die Wahl gilt also ueber alle vier Seiten. `aria-pressed` meldet den aktuellen
+   Zustand, das Label nennt das Ziel - das Icon allein sagt keines von beidem. */
+(function(){
+  var btn = document.getElementById('themeBtn'); if (!btn) return;
+  var sun = document.getElementById('sunIco'), moon = document.getElementById('moonIco');
+  function stored(){ try { return localStorage.getItem('yuvomi-theme') || localStorage.getItem('oikos-theme'); } catch (e) { return null; } }
+  function isDark(){ var t = stored(); if (t === 'dark') return true; if (t === 'light') return false; return matchMedia('(prefers-color-scheme:dark)').matches; }
+  function apply(){
+    var d = isDark();
+    var t = stored();
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    else document.documentElement.removeAttribute('data-theme');
+    sun.style.display = d ? 'none' : 'block';
+    moon.style.display = d ? 'block' : 'none';
+    btn.setAttribute('aria-pressed', String(d));
+    btn.setAttribute('aria-label', d ? 'Zu hellem Design wechseln' : 'Zu dunklem Design wechseln');
+  }
+  btn.addEventListener('click', function(){
+    try { localStorage.setItem('yuvomi-theme', isDark() ? 'light' : 'dark'); } catch (e) {}
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

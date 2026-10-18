@@ -1,0 +1,411 @@
+/**
+ * Modul: Anmeldung und Kontoeinrichtung
+ * Zweck: Styles für die Seiten VOR der App-Shell
+ * Abhängigkeiten: tokens.css, reset.css, layout.css
+ *
+ * EINE Seitenfamilie, fünf Routen: /login, /setup, /join, /forgot-password und
+ * /reset-password. Sie hieß bis zur Namensbereinigung nach ihrer ersten Route
+ * (`login.css`, `.login-*`), obwohl vier der fünf Seiten keine Anmeldung sind -
+ * gemeinsam ist ihnen, dass sie ohne App-Shell auskommen.
+ *
+ * Was hier NICHT mehr steht: die Rückmeldung eines Formulars (`.form-error`,
+ * `.form-success`). Sie stand als `.login-*` hier, während sie längst auch in
+ * Aufgaben, Dokumenten und Belohnungen benutzt wurde, und liegt jetzt in
+ * layout.css.
+ */
+
+/* DIE ZUGANGSSEITEN HABEN EINEN ORT (R18, 2026-10-07).
+ *
+ * Bis hierher: eine 380px-Karte mit dem Kartenradius auf planer Buehne, Marke
+ * und Name frei darueber. Jetzt zwei Ebenen, wie die App sie ueberall sonst
+ * kennt - Raumlicht und Glas:
+ *
+ *   1. Die Shell traegt das Marken-Lichtfeld (`--brand-field`, tokens.css):
+ *      drei stehende, weiche Kreise in den Farben der Bildmarke. Es ist die
+ *      eine Stelle neben dem Ladebild, an der nichts Opakes darueber liegt.
+ *   2. Die Seite selbst (`main.auth-page`) ist die Glastafel: 26px wie jede
+ *      schwebende Flaeche, Lichtkante, Blur - sie bricht das Feld.
+ *
+ * ALLES STEHT AUF DER TAFEL, auch Marke, Name und Versionszeile. Das ist keine
+ * Geschmacksfrage: direkt auf dem Feld faellt Sekundaertext unter AA (Rechnung
+ * am Token), auf der Tafel haelt jede Tinte. Deshalb ist die TAFEL das <main>
+ * und nicht mehr die Karte darin - am Markup der Seiten aendert sich nichts,
+ * `.auth-card` gibt nur Flaeche, Schatten und Polster an die Tafel ab.
+ *
+ * Diese Seiten werden direkt in #app.app-shell gerendert (keine Sidebar vor
+ * der Anmeldung). Ab 1024px schaltet .app-shell auf flex-direction: row fuer
+ * die Sidebar um; solange eine Auth-Seite praesent ist, bleibt sie im
+ * Spaltenfluss.
+ *
+ * `:has()` IST DIE WEICHE: ein Browser ohne `:has()` (Chrome < 105, Firefox
+ * < 121) verwirft die Regeln unten. Er bekommt die plane Buehne ohne Feld und
+ * die Tafel waagerecht mittig mit festem Abstand nach oben - bedienbar, nur
+ * ohne Ort. */
+.app-shell:has(.auth-page) {
+  flex-direction: column;
+  background-color: var(--color-bg);
+  background-image: var(--brand-field);
+  background-repeat: no-repeat;
+}
+
+/* Der Router haengt jede Seite in eine `.page-transition`-Huelle. Fuer die
+ * Zugangsseiten ist sie der Rahmen der Tafel: sie fuellt die Shell, stellt die
+ * Tafel in ihre Mitte (`margin: auto` an einem Flex-Kind zentriert in beiden
+ * Richtungen und klemmt nicht, wenn der Inhalt hoeher ist) und SCROLLT, wenn
+ * die Tafel hoeher ist als das Fenster (Einrichtung auf einem kleinen Telefon,
+ * Querformat). `body` ist `overflow: hidden` - vorher lief die Seite dort
+ * unten aus dem Bild und liess sich von Hand nicht scrollen (gemessen bei
+ * 390x420: 543px Inhalt, der Knopf nur per Tab erreichbar). Das Feld haengt an
+ * der Shell und bleibt beim Scrollen stehen. */
+.page-transition:has(> .auth-page) {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-block: var(--space-4);
+}
+
+.page-transition:has(> .auth-page) > .auth-page {
+  margin: auto;
+}
+
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
+  /* 380px Formularbreite plus das Polster der Tafel; auf dem Telefon bleibt
+   * beidseits der Seitenrand der App. */
+  inline-size: min(100% - 2 * var(--space-4), 380px + 2 * var(--space-4));
+  /* Der Rueckfall ohne `:has()`: die Huelle ist dort ein Block, `auto`
+   * zentriert nur waagerecht, und der senkrechte Wert haelt die Tafel von der
+   * Fensterkante ab. Mit der Flex-Huelle gilt die Regel direkt darueber. */
+  margin: var(--space-4) auto;
+  /* 16px Polster: aussen 26px minus 16px sind die 10px der Felder
+   * (`--radius-sm`) - konzentrisch. Oben eine Stufe mehr, damit die Marke
+   * nicht an der Lichtkante klebt. */
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  /* Der opake Rueckfall steht AUSSERHALB von @supports (Fallback-Regel in
+   * DESIGN.md): ohne backdrop-filter liefe das Feld ungefiltert durch. */
+  background-color: var(--color-surface);
+  border: var(--space-px) solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-inset-elevated), var(--glass-shadow-lg);
+}
+
+/* Hier scrollt nichts unter dem Glas weg (die Tafel ist der Inhalt), also
+ * darf sie den Blur selbst tragen - anders als `.modal-panel`, dessen Rumpf
+ * scrollt. Unter prefers-reduced-transparency und prefers-contrast kippen
+ * `--glass-bg-elevated` auf `--color-surface` und `--blur-lg` auf 0: dieselbe
+ * opake Tafel wie im Rueckfall darueber. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .auth-page {
+    background-color: var(--glass-bg-elevated);
+    backdrop-filter: var(--blur-lg) saturate(var(--lg-glass-saturate));
+    -webkit-backdrop-filter: var(--blur-lg) saturate(var(--lg-glass-saturate));
+  }
+}
+
+/* Kopf der Tafel: Marke, Name, ein Satz. */
+.auth-hero {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+/* Marken-Anker: die Bildmarke selbst (utils/brand-mark.js) - dieselbe Kachel
+ * wie in der Seitenleiste und auf dem Homescreen, in beiden Themes dieselbe.
+ *
+ * Hier stand eine akzentfarbene Kachel mit den Kreisen in `currentColor` bei
+ * 55 %: im Dark dunkle Punkte auf Flieder, und die Kreise fuellten rund 30 %
+ * der Kachel statt der Haelfte (19px in 64px, R18). Der Traeger gibt jetzt nur
+ * noch Groesse und Schatten; die Rundung ist das Verhaeltnis der Marke
+ * (36 auf 160), damit der Schatten ihrer Kante folgt - in jeder Groesse. */
+.auth-hero__mark {
+  display: inline-block;
+  width: var(--space-16);
+  height: var(--space-16);
+  margin-bottom: var(--space-4);
+  border-radius: 22.5%;
+  box-shadow: var(--shadow-md);
+}
+
+/* DER KOPF UEBER EINER KARTE MIT EIGENEM TITEL (R16, utils/auth-ui.js):
+ * Einladung und Passwort-Reset tragen dieselbe Marke wie die Anmeldung, aber
+ * eine Stufe leiser - die Seite hat ihre <h1> in der Karte ("Einladung
+ * annehmen"), der App-Name ist dort Absender, nicht Titel. */
+.auth-hero--compact {
+  margin-bottom: var(--space-6);
+}
+
+.auth-hero--compact .auth-hero__mark {
+  width: var(--space-12);
+  height: var(--space-12);
+  margin-bottom: var(--space-2);
+}
+
+.auth-hero--compact .auth-hero__title {
+  margin: 0;
+  font-size: var(--type-section-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Large Title wie jeder Seitentitel, in Label-Farbe. Der Titel stand bis Runde 3
+ * auf einer eigenen 48px-Stufe und in --color-accent - beides verbietet
+ * DESIGN.md ausdruecklich (Ueberschriften enden bei 34px; Large Titles tragen
+ * immer --color-text-primary). Die Marke trägt das Tile darueber, das laut
+ * PRODUCT.md unantastbar ist. */
+.auth-hero__title {
+  font-size: var(--type-page-title-mobile);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--space-2);
+}
+
+.auth-hero__tagline {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  max-width: 360px;
+  margin-inline: auto;
+  line-height: var(--line-height-relaxed, 1.6);
+  text-wrap: balance;
+}
+
+/* Die Karte ist nur noch die Huelle des Formulars: Flaeche, Schatten, Radius
+ * und Polster traegt die Tafel (`.auth-page`). Eine Karte IN der Tafel waere
+ * Flaeche auf Flaeche. `overflow: visible`, weil `.card` clippt - der
+ * Fokusring eines Felds an der Kante gehoert nicht abgeschnitten.
+ * Zwei Klassen im Selektor: `.card` und `.card--padded` stehen in layout.css
+ * und laden frueher, aber mit gleicher Spezifitaet waere das eine Wette auf
+ * die Ladereihenfolge. */
+.auth-page .auth-card {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.auth-form__submit {
+  width: 100%;
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* Der Kartentitel der Seiten ohne Hero (/join, /forgot-password,
+ * /reset-password, /pair). Er hatte KEINE Regel (Critique 2026-09-26, Minor
+ * Observations): das <h1> fiel auf die Reset-Basis zurueck, 17px halbfett -
+ * so gross wie der Fliesstext darunter, und die Seite hatte keinen Titel, der
+ * als Titel las. Title 2 wie der Modul-Kopf (--type-toolbar-title, 22px, fett),
+ * nicht der Large Title des /login-Heros: der steht ueber der Karte, dieser
+ * Titel in ihr. */
+.auth-card__title {
+  font-size: var(--type-toolbar-title);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+  text-wrap: balance;
+  margin-bottom: var(--space-2);
+}
+
+/* Einleitungstext unter dem Kartentitel (/join). */
+.auth-card__intro {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+
+/* Hinweis unter einem Feld, das die Einladung vorgibt. Bewusst ohne
+ * display-Angabe: eine solche überschriebe das UA-display:none des
+ * hidden-Attributs, und der Hinweis stünde auch ohne Vorgabe da. */
+.auth-form__hint {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Das vorgegebene Feld selbst: eigene Klasse statt eines .input[readonly]-
+ * Selektors. readonly wird auch dort gesetzt, wo ein Feld nur seine Tastatur-
+ * eingabe sperrt und trotzdem normal aussehen soll; die Dämpfung gilt hier
+ * ausdrücklich nur für "die Einladung gibt diesen Wert vor". */
+.input--fixed {
+  background-color: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+/* Caps-Lock-Hinweis am Passwortfeld */
+.auth-capslock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+}
+
+/* Das display:flex oben überschreibt sonst das UA-display:none des
+ * hidden-Attributs – Hinweis würde permanent sichtbar sein. */
+.auth-capslock[hidden] {
+  display: none;
+}
+
+/* Nach falschen Zugangsdaten wird der Recovery-Link betont, damit der Nutzer
+ * einen Ausweg sieht statt es blind erneut zu versuchen. */
+.auth-form__forgot--emphasis a {
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-accent);
+}
+
+.auth-version {
+  margin-top: var(--space-3);
+  /* Platz reservieren, damit die spät nachgeladene Version das zentrierte
+   * Formular nicht nach oben schiebt (CLS). */
+  min-height: var(--text-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary, var(--color-text-secondary));
+  text-align: center;
+}
+
+/* Anmeldung ausschliesslich per SSO (#847): der Satz steht anstelle des
+ * Formulars, nicht daneben. Er traegt deshalb den Abstand, den sonst die
+ * Eingabefelder zwischen Karte und Schaltflaeche gebracht haetten. */
+.auth-form__sso-only {
+  margin-bottom: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* Der Zweitweg unter dem SSO-Block (#847): eine Schaltflaeche, die aussieht wie
+ * der „Passwort vergessen"-Link darueber, weil sie dasselbe Gewicht hat - ein
+ * Nebenweg fuer Gastkonten, nicht die zweite Hauptaktion. */
+.auth-linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* „oder"-Trenner zwischen Passwort- und SSO-Anmeldung */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+/* Passwort-Sichtbarkeit-Toggle */
+.input-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.input-password-wrapper .input {
+  flex: 1;
+  min-width: 0;
+  /* logisch statt physisch, damit der Toggle-Platz in RTL auf der richtigen
+   * Seite reserviert wird (ar/fa) */
+  padding-inline-end: calc(var(--target-lg) + var(--space-1));
+}
+
+.password-toggle {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Komfortable Daumen-Trefferfläche (≥44 px) statt der bisherigen 40 px */
+  width: var(--target-lg);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  /* logische Ecken: rundet in RTL automatisch die richtige Seite */
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  border-end-start-radius: 0;
+  transition: color var(--transition-fast);
+}
+
+.password-toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.password-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+/* Feld-Fehler-Zustand */
+.form-group--error .input {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) var(--tint-shadow), transparent);
+}
+
+.form-group--error .label {
+  color: var(--color-danger);
+}
+
+.auth-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-spinner { animation: none; opacity: 0.6; }
+}
+
+/* --------------------------------------------------------
+   Zweiter Schritt der Anmeldung (#672)
+   -------------------------------------------------------- */
+.auth-form__lead {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Mittig und gesperrt: der Code wird abgelesen und abgetippt, nicht gelesen.
+   Die Sperrung kommt aus dem Label-Token - die Hauptarbeit leistet ohnehin die
+   dicktengleiche Schrift, ein eigenes Token fuer diesen einen Effekt waere ein
+   vierter Wert fuer etwas, das ein vorhandener traegt. */
+.auth-form__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  letter-spacing: var(--tracking-label);
+  text-align: center;
+}

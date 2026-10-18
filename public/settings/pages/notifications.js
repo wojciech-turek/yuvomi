@@ -1,0 +1,553 @@
+/**
+ * Settings-Seite: Push-Benachrichtigungen (pro Gerät) und Admin-Notification-Channels.
+ */
+import { t } from '/i18n.js';
+import { pushSupported, pushStatus, enablePush, disablePush, repairPush } from '/push.js';
+import { api, notifications } from '/api.js';
+import { confirmModal } from '/components/modal.js';
+import { esc } from '/utils/html.js';
+import { getPwaInstallState } from '/utils/pwa-install.js';
+import { toggleRowHtml, settingSwitchRowHtml } from '/settings/components.js';
+
+const DEFAULT_PROVIDERS = [
+  { id: 'gotify', name: 'Gotify' },
+  { id: 'ntfy', name: 'ntfy' },
+  { id: 'webhook', name: 'Webhook' },
+  { id: 'email', name: 'Email' },
+];
+
+/**
+ * Traegt dieser Provider einen eigenen Endpunkt? Beantwortet aus den Defaults
+ * statt aus einer zweiten Liste - sonst driften die beiden auseinander, und
+ * der naechste Provider ohne Endpunkt bekommt still ein Pflichtfeld, das er
+ * nicht fuellen kann. Mail ist der erste solche Fall: sein Zugang steht
+ * app-weit in den E-Mail-Einstellungen, nicht am Kanal.
+ */
+function usesBaseUrl(provider) {
+  return Object.hasOwn(channelDefaults(provider).config, 'baseUrl');
+}
+
+function selected(value, expected) {
+  return value === expected ? ' selected' : '';
+}
+
+function channelDefaults(provider = 'gotify') {
+  if (provider === 'ntfy') {
+    return {
+      provider: 'ntfy',
+      name: '',
+      enabled: false,
+      config: { baseUrl: '', topic: '', priority: 'default', authType: 'none' },
+      secretSet: false,
+    };
+  }
+  if (provider === 'webhook') {
+    return {
+      provider: 'webhook',
+      name: '',
+      enabled: false,
+      // Leere Vorlage = Yuvomi-Standardbody. Empfaenger mit eigenem Pflichtschema
+      // (Discord, Slack) tragen hier ihre Form ein, statt einen Adapter je Dienst
+      // zu brauchen (#692).
+      config: { baseUrl: '', payloadTemplate: '' },
+      secretSet: false,
+    };
+  }
+  if (provider === 'email') {
+    return {
+      provider: 'email',
+      name: '',
+      enabled: false,
+      // Kein baseUrl und keine Geheimnisse: der SMTP-Zugang gilt app-weit
+      // (Einstellungen > E-Mail), der Kanal traegt nur sein Ziel (#944).
+      config: { toAddress: '' },
+      secretSet: false,
+    };
+  }
+  return {
+    provider: 'gotify',
+    name: '',
+    enabled: false,
+    config: { baseUrl: '', priority: 5 },
+    secretSet: false,
+  };
+}
+
+function renderPage(container, user) {
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.pushToggleTitle')}</h2>
+      <!-- Zeilen im Traeger (R17, E9): der Schalter mit seinem Hinweis und
+           dem Zustand darunter, die Probe als eigene Zeile. Vorher eine Karte,
+           in der drei Hinweise UEBER dem Schalter standen, den sie erklaeren. -->
+      <div class="row-carrier settings-group">
+        ${settingSwitchRowHtml({
+          label: t('settings.pushToggleLabel'),
+          disabled: true,
+          description: t('settings.pushDeviceDescription'),
+          descriptionId: 'push-device-description',
+          extra: `<p class="form-hint" id="push-ios-hint" hidden>${t('settings.pushIosHomescreenHint')}</p>
+            <p class="form-hint" id="push-status" aria-live="polite">${t('settings.pushChecking')}</p>`,
+          attrs: { id: 'push-toggle', 'aria-describedby': 'push-device-description push-status' },
+        })}
+        <div class="settings-setting-row settings-setting-row--stacked">
+          <div class="settings-setting-row__control settings-form-actions">
+            <button type="button" class="btn btn--secondary" id="push-test-btn" disabled>
+              <i data-lucide="bell-ring" aria-hidden="true"></i>
+              <span>${t('settings.pushTestButton')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section" id="notification-channels-section"></section>
+  `);
+  renderChannelShell(container, user);
+}
+
+function renderChannelShell(container, user) {
+  const section = container.querySelector('#notification-channels-section');
+  if (!section) return;
+  if (user?.role !== 'admin') {
+    section.replaceChildren();
+    section.insertAdjacentHTML('beforeend', `
+      <h2 class="settings-section__title">${t('settings.notificationChannelsTitle')}</h2>
+      <p class="form-hint">${t('settings.notificationChannelAdminOnlyHint')}</p>
+    `);
+    return;
+  }
+  section.replaceChildren();
+  section.insertAdjacentHTML('beforeend', `
+    <h2 class="settings-section__title">${t('settings.notificationChannelsTitle')}</h2>
+    <p class="form-hint">${t('settings.notificationChannelsDescription')}</p>
+    <div class="settings-form-actions">
+      <button type="button" class="btn btn--secondary" id="notification-channel-add">
+        <i data-lucide="plus" aria-hidden="true"></i>
+        <span>${t('settings.notificationChannelAdd')}</span>
+      </button>
+    </div>
+    <p class="form-hint" id="notification-channel-status" role="status" aria-live="polite"></p>
+    <div id="notification-channel-list"></div>
+  `);
+}
+
+function providerNotReady(providers, providerId) {
+  return providers.some((p) => p.id === providerId && p.ready === false);
+}
+
+function providerOptions(providers, current) {
+  return providers.map((provider) => `
+    <option value="${esc(provider.id)}"${selected(current, provider.id)}>${esc(provider.name)}</option>
+  `).join('');
+}
+
+function renderChannelList(container, channels, providers = DEFAULT_PROVIDERS) {
+  const list = container.querySelector('#notification-channel-list');
+  if (!list) return;
+  list.replaceChildren();
+  if (!channels.length) {
+    list.insertAdjacentHTML('beforeend', `<p class="form-hint">${t('settings.notificationChannelEmpty')}</p>`);
+    return;
+  }
+  channels.forEach((rawChannel, index) => {
+    const channel = { ...channelDefaults(rawChannel.provider), ...rawChannel, config: { ...channelDefaults(rawChannel.provider).config, ...(rawChannel.config || {}) } };
+    const suffix = channel.id ? `existing-${channel.id}` : `new-${index}`;
+    const isNtfy = channel.provider === 'ntfy';
+    const isWebhook = channel.provider === 'webhook';
+    const isEmail = channel.provider === 'email';
+    const hasBaseUrl = usesBaseUrl(channel.provider);
+    // `ready === false` kommt nur von einem Provider, der eine Voraussetzung
+    // ausserhalb seines Kanals hat. Der Hinweis steht am Formular, nicht hinter
+    // einem fehlgeschlagenen Testversand - dessen Meldung sagt nur "Fehler".
+    // Nur der Anfangszustand: ein neuer Kanal startet als Gotify, und der
+    // Wechsel auf E-Mail rendert NICHT neu. Wuerde der Absatz hier weggelassen
+    // statt versteckt, koennte updateProviderVisibility() ihn spaeter nicht
+    // einblenden - und der Hinweis erschiene erst nach dem Speichern, also
+    // genau dann nicht, wenn er gebraucht wird.
+    const notReady = providerNotReady(providers, channel.provider);
+    list.insertAdjacentHTML('beforeend', `
+      <form class="settings-card settings-form notification-channel-form" data-channel-index="${index}" data-channel-id="${esc(channel.id ?? '')}">
+        <h3 class="settings-card__title">${esc(channel.name || t('settings.notificationChannelAdd'))}</h3>
+        <div class="form-field">
+          <label class="form-label" for="notification-provider-${suffix}">${t('settings.notificationChannelProvider')}</label>
+          <select class="form-input" id="notification-provider-${suffix}" name="provider">
+            ${providerOptions(providers, channel.provider)}
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="notification-name-${suffix}">${t('settings.notificationChannelName')}</label>
+          <input class="form-input" id="notification-name-${suffix}" name="name" value="${esc(channel.name)}" required>
+        </div>
+        ${toggleRowHtml({
+          control: 'switch',
+          label: t('settings.notificationChannelEnabled'),
+          checked: !!channel.enabled,
+          attrs: { name: 'enabled' },
+        })}
+        <div class="form-field notification-base-url-field${hasBaseUrl ? '' : ' settings-card--hidden'}">
+          <label class="form-label" for="notification-base-url-${suffix}">${t('settings.notificationChannelBaseUrl')}</label>
+          <input class="form-input" id="notification-base-url-${suffix}" name="baseUrl" value="${esc(channel.config.baseUrl ?? '')}"${hasBaseUrl ? ' required' : ''}>
+        </div>
+        <div class="notification-provider-fields notification-provider-fields--gotify${channel.provider === 'gotify' ? '' : ' settings-card--hidden'}">
+          <div class="form-field">
+            <label class="form-label" for="notification-gotify-token-${suffix}">${t('settings.notificationChannelGotifyToken')}</label>
+            <input class="form-input" id="notification-gotify-token-${suffix}" name="gotifyToken" type="password" autocomplete="new-password" placeholder="${channel.secretSet ? esc(t('settings.notificationChannelSecretKeep')) : ''}">
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="notification-gotify-priority-${suffix}">${t('settings.notificationChannelGotifyPriority')}</label>
+            <input class="form-input" id="notification-gotify-priority-${suffix}" name="gotifyPriority" type="number" min="1" max="10" value="${esc(channel.config.priority ?? 5)}">
+          </div>
+        </div>
+        <div class="notification-provider-fields notification-provider-fields--webhook${isWebhook ? '' : ' settings-card--hidden'}">
+          <div class="form-field">
+            <label class="form-label" for="notification-webhook-token-${suffix}">${t('settings.notificationChannelWebhookToken')}</label>
+            <input class="form-input" id="notification-webhook-token-${suffix}" name="webhookToken" type="password" autocomplete="new-password" placeholder="${channel.secretSet ? esc(t('settings.notificationChannelSecretKeep')) : ''}">
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="notification-webhook-template-${suffix}">${t('settings.notificationChannelWebhookTemplate')}</label>
+            <textarea class="form-input" id="notification-webhook-template-${suffix}" name="webhookTemplate" rows="3" spellcheck="false" placeholder="${esc(t('settings.notificationChannelWebhookTemplatePlaceholder'))}">${esc(channel.config.payloadTemplate ?? '')}</textarea>
+            <p class="form-hint">${t('settings.notificationChannelWebhookTemplateHint')}</p>
+          </div>
+        </div>
+        <div class="notification-provider-fields notification-provider-fields--ntfy${isNtfy ? '' : ' settings-card--hidden'}">
+          <div class="form-field">
+            <label class="form-label" for="notification-ntfy-topic-${suffix}">${t('settings.notificationChannelNtfyTopic')}</label>
+            <input class="form-input" id="notification-ntfy-topic-${suffix}" name="ntfyTopic" value="${esc(channel.config.topic ?? '')}">
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="notification-ntfy-priority-${suffix}">${t('settings.notificationChannelNtfyPriority')}</label>
+            <select class="form-input" id="notification-ntfy-priority-${suffix}" name="ntfyPriority">
+              ${['min', 'low', 'default', 'high', 'urgent'].map((priority) => `<option value="${priority}"${selected(channel.config.priority ?? 'default', priority)}>${priority}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="notification-ntfy-auth-${suffix}">${t('settings.notificationChannelNtfyAuth')}</label>
+            <select class="form-input" id="notification-ntfy-auth-${suffix}" name="ntfyAuth">
+              <option value="none"${selected(channel.config.authType ?? 'none', 'none')}>${t('settings.notificationChannelNtfyAuthNone')}</option>
+              <option value="token"${selected(channel.config.authType ?? 'none', 'token')}>${t('settings.notificationChannelNtfyAuthToken')}</option>
+              <option value="basic"${selected(channel.config.authType ?? 'none', 'basic')}>${t('settings.notificationChannelNtfyAuthBasic')}</option>
+            </select>
+          </div>
+          <div class="form-field notification-ntfy-token-field${channel.config.authType === 'token' ? '' : ' settings-card--hidden'}">
+            <label class="form-label" for="notification-ntfy-token-${suffix}">${t('settings.notificationChannelNtfyToken')}</label>
+            <input class="form-input" id="notification-ntfy-token-${suffix}" name="ntfyToken" type="password" autocomplete="new-password" placeholder="${channel.secretSet ? esc(t('settings.notificationChannelSecretKeep')) : ''}">
+          </div>
+          <div class="form-field notification-ntfy-basic-field${channel.config.authType === 'basic' ? '' : ' settings-card--hidden'}">
+            <label class="form-label" for="notification-ntfy-username-${suffix}">${t('settings.notificationChannelNtfyUsername')}</label>
+            <input class="form-input" id="notification-ntfy-username-${suffix}" name="ntfyUsername" autocomplete="username">
+          </div>
+          <div class="form-field notification-ntfy-basic-field${channel.config.authType === 'basic' ? '' : ' settings-card--hidden'}">
+            <label class="form-label" for="notification-ntfy-password-${suffix}">${t('settings.notificationChannelNtfyPassword')}</label>
+            <input class="form-input" id="notification-ntfy-password-${suffix}" name="ntfyPassword" type="password" autocomplete="new-password" placeholder="${channel.secretSet ? esc(t('settings.notificationChannelSecretKeep')) : ''}">
+          </div>
+        </div>
+        <div class="notification-provider-fields notification-provider-fields--email${isEmail ? '' : ' settings-card--hidden'}">
+          <div class="form-field">
+            <label class="form-label" for="notification-email-to-${suffix}">${t('settings.notificationChannelEmailTo')}</label>
+            <input class="form-input" id="notification-email-to-${suffix}" name="emailTo" type="email" autocomplete="email" value="${esc(channel.config.toAddress ?? '')}">
+            <p class="form-hint">${t('settings.notificationChannelEmailToHint')}</p>
+          </div>
+          <p class="form-hint notification-email-not-ready${notReady ? '' : ' settings-card--hidden'}">${t('settings.notificationChannelEmailNotConfigured')}</p>
+        </div>
+        <div class="settings-form-actions">
+          ${channel.id ? `<button type="button" class="btn btn--secondary" data-action="test">${t('settings.notificationChannelTest')}</button>` : ''}
+          ${channel.id ? `<button type="button" class="btn btn--danger" data-action="delete">${t('settings.notificationChannelDelete')}</button>` : ''}
+          <button type="submit" class="btn btn--primary">${t('settings.notificationChannelSave')}</button>
+        </div>
+      </form>
+    `);
+  });
+  // Den Anfangszustand einmal durchziehen: frisch gerenderte Bloecke tragen
+  // zwar ihre Versteckt-Klasse, ihre Felder sind aber noch aktiv - und ein
+  // unsichtbares `type="email"` mit Altwert blockiert das Absenden genauso, ob
+  // es nun durch einen Wechsel oder durch das erste Rendern dorthin kam.
+  list.querySelectorAll('.notification-channel-form')
+    .forEach((form) => updateProviderVisibility(form, providers));
+  window.lucide?.createIcons({ el: list });
+}
+
+function readChannelForm(form) {
+  const provider = form.elements.provider.value;
+  const body = {
+    provider,
+    name: form.elements.name.value.trim(),
+    enabled: form.elements.enabled.checked,
+    config: {},
+    secrets: {},
+  };
+  // Nur senden, was der Provider kennt: ein leeres baseUrl an einen
+  // Mail-Kanal wuerde serverseitig als "Basis-URL fehlt" abgelehnt.
+  if (usesBaseUrl(provider)) body.config.baseUrl = form.elements.baseUrl.value.trim();
+  if (provider === 'email') {
+    body.config.toAddress = form.elements.emailTo.value.trim();
+  } else if (provider === 'ntfy') {
+    body.config.topic = form.elements.ntfyTopic.value.trim();
+    body.config.priority = form.elements.ntfyPriority.value;
+    body.config.authType = form.elements.ntfyAuth.value;
+    if (body.config.authType === 'token' && form.elements.ntfyToken.value) {
+      body.secrets.token = form.elements.ntfyToken.value;
+    }
+    if (body.config.authType === 'basic') {
+      if (form.elements.ntfyUsername.value) body.secrets.username = form.elements.ntfyUsername.value;
+      if (form.elements.ntfyPassword.value) body.secrets.password = form.elements.ntfyPassword.value;
+    }
+  } else if (provider === 'webhook') {
+    body.config.payloadTemplate = form.elements.webhookTemplate.value.trim();
+    if (form.elements.webhookToken.value) body.secrets.token = form.elements.webhookToken.value;
+  } else {
+    body.config.priority = Number(form.elements.gotifyPriority.value || 5);
+    if (form.elements.gotifyToken.value) body.secrets.appToken = form.elements.gotifyToken.value;
+  }
+  if (!Object.keys(body.secrets).length) delete body.secrets;
+  return body;
+}
+
+/**
+ * EIN VERSTECKTES FELD DARF DAS ABSENDEN NICHT BLOCKIEREN, und `display:none`
+ * allein sorgt nicht dafuer: der Browser prueft die Bedingungen eines
+ * unsichtbaren Feldes weiter, kann den Fokus zur Meldung aber nicht dorthin
+ * setzen - der Speichern-Knopf tut dann scheinbar nichts.
+ *
+ * Betroffen ist mehr als `required`. `type="email"` bringt seine eigene
+ * Pruefung mit (`typeMismatch`), die auch ohne `required` greift: wer beim
+ * Anlegen `oma@` tippt und dann auf Gotify zurueckwechselt, hinterlaesst ein
+ * unsichtbares ungueltiges Feld. Genau der Fehler, gegen den die baseUrl-Zeile
+ * hier schon geschuetzt war - nur eben nicht fuer das neue Feld.
+ *
+ * Deshalb als Regel ueber den ganzen Block statt als Aufzaehlung einzelner
+ * Felder: `disabled` nimmt ein Element aus der Pruefung UND aus dem Versand,
+ * und der naechste Provider mit einem eigenen Feld ist damit von selbst
+ * gedeckt. `readChannelForm()` liest ueber `form.elements`, das disabled
+ * Elemente weiterhin herausgibt - die Werte bleiben also erreichbar.
+ */
+function setBlockActive(block, active) {
+  if (!block) return;
+  block.classList.toggle('settings-card--hidden', !active);
+  block.querySelectorAll('input, select, textarea').forEach((field) => { field.disabled = !active; });
+}
+
+function updateProviderVisibility(form, providers = DEFAULT_PROVIDERS) {
+  const provider = form.elements.provider.value;
+  for (const id of ['gotify', 'ntfy', 'webhook', 'email']) {
+    setBlockActive(form.querySelector(`.notification-provider-fields--${id}`), provider === id);
+  }
+  const showBaseUrl = usesBaseUrl(provider);
+  setBlockActive(form.querySelector('.notification-base-url-field'), showBaseUrl);
+  if (form.elements.baseUrl) form.elements.baseUrl.required = showBaseUrl;
+  // Der Hinweis wird immer gerendert und hier nur ein-/ausgeblendet: der
+  // Wechsel des Anbieters rendert die Karte nicht neu, ein erst dann erzeugter
+  // Absatz erschiene nie.
+  form.querySelector('.notification-email-not-ready')
+    ?.classList.toggle('settings-card--hidden', !(provider === 'email' && providerNotReady(providers, 'email')));
+  // Die beiden Auth-Bloecke liegen INNERHALB des ntfy-Blocks, der sie oben
+  // schon aktiviert hat - hier wird nachgeschaerft. Reihenfolge ist deshalb
+  // Absicht: erst der Anbieter, dann die Auth-Art darin.
+  const isNtfy = provider === 'ntfy';
+  const auth = form.elements.ntfyAuth?.value || 'none';
+  setBlockActive(form.querySelector('.notification-ntfy-token-field'), isNtfy && auth === 'token');
+  form.querySelectorAll('.notification-ntfy-basic-field').forEach((field) => {
+    setBlockActive(field, isNtfy && auth === 'basic');
+  });
+}
+
+async function setupChannelControls(container, user) {
+  if (user?.role !== 'admin') return;
+  const status = container.querySelector('#notification-channel-status');
+  let channels = [];
+  let providers = DEFAULT_PROVIDERS;
+  const setStatus = (message) => { if (status) status.textContent = message; };
+  const reload = async () => {
+    const [providerResponse, channelResponse] = await Promise.all([
+      notifications.providers(),
+      notifications.listChannels(),
+    ]);
+    providers = providerResponse.data || DEFAULT_PROVIDERS;
+    channels = channelResponse.data || [];
+    renderChannelList(container, channels, providers);
+  };
+
+  container.querySelector('#notification-channel-add')?.addEventListener('click', () => {
+    channels = [...channels, channelDefaults('gotify')];
+    renderChannelList(container, channels, providers);
+  });
+
+  container.addEventListener('change', (event) => {
+    const form = event.target.closest?.('.notification-channel-form');
+    if (!form) return;
+    if (event.target.name === 'provider') {
+      const index = Number(form.dataset.channelIndex);
+      if (!form.dataset.channelId) channels[index] = channelDefaults(event.target.value);
+    }
+    updateProviderVisibility(form, providers);
+  });
+
+  container.addEventListener('submit', async (event) => {
+    const form = event.target.closest?.('.notification-channel-form');
+    if (!form) return;
+    event.preventDefault();
+    const id = form.dataset.channelId;
+    try {
+      const body = readChannelForm(form);
+      if (id) await notifications.updateChannel(id, body);
+      else await notifications.createChannel(body);
+      setStatus(t('settings.notificationChannelSaved'));
+      await reload();
+    } catch {
+      setStatus(t('settings.notificationChannelError'));
+    }
+  });
+
+  container.addEventListener('click', async (event) => {
+    const button = event.target.closest?.('button[data-action]');
+    if (!button) return;
+    const form = button.closest('.notification-channel-form');
+    const id = form?.dataset.channelId;
+    if (!id) return;
+    if (button.dataset.action === 'test') {
+      button.disabled = true;
+      try {
+        await notifications.testChannel(id);
+        setStatus(t('settings.notificationChannelTestSent'));
+      } catch {
+        setStatus(t('settings.notificationChannelError'));
+      } finally {
+        button.disabled = false;
+      }
+    }
+    if (button.dataset.action === 'delete') {
+      const confirmed = await confirmModal(t('settings.notificationChannelDeleteConfirm'), {
+        confirmLabel: t('settings.notificationChannelDelete'),
+        danger: true,
+        detail: t('settings.notificationChannelDeleteConfirmDetail'),
+      });
+      if (!confirmed) return;
+      try {
+        await notifications.deleteChannel(id);
+        setStatus(t('settings.notificationChannelDeleted'));
+        await reload();
+      } catch {
+        setStatus(t('settings.notificationChannelError'));
+      }
+    }
+  });
+
+  try {
+    await reload();
+  } catch {
+    setStatus(t('settings.notificationChannelError'));
+  }
+}
+
+export async function render(container, { user } = {}) {
+  try {
+    renderPage(container, user);
+    window.lucide?.createIcons({ el: container });
+    await setupChannelControls(container, user);
+
+    const toggle  = container.querySelector('#push-toggle');
+    const status  = container.querySelector('#push-status');
+    const testBtn = container.querySelector('#push-test-btn');
+    const iosHint = container.querySelector('#push-ios-hint');
+
+    // getPwaInstallState().ios ist nur true, wenn iOS/iPadOS *und* nicht
+    // installiert. Genau dann liefert iOS keinen Web Push aus.
+    const iosNotInstalled = getPwaInstallState().ios;
+    if (iosNotInstalled) iosHint.hidden = false;
+
+    if (!pushSupported()) {
+      status.textContent = iosNotInstalled
+        ? t('settings.pushIosNotInstalled')
+        : t('settings.pushUnsupported');
+      return;
+    }
+
+    const applyState = (st) => {
+      toggle.checked = st.subscribed;
+      toggle.disabled = st.permission === 'denied';
+      testBtn.disabled = !st.subscribed;
+      if (st.permission === 'denied') status.textContent = t('settings.pushDenied');
+      else status.textContent = st.subscribed ? t('settings.pushEnabled') : t('settings.pushDisabled');
+    };
+
+    // Ohne aktiven Service Worker (Registrierung gescheitert, Proxy ohne SW)
+    // meldet pushStatus nach einer Frist "nicht verfuegbar" - vorher stand hier
+    // "Status wird geprueft ..." fuer immer, und das Blatt hielt die Shell fest
+    // (Re-Critique 2026-09-28, A7 P1-2). Wird der Worker spaeter doch bereit,
+    // holt das Blatt den echten Stand nach.
+    const applyAvailability = (st) => {
+      if (st.available !== false) {
+        applyState(st);
+        return true;
+      }
+      toggle.checked = false;
+      toggle.disabled = true;
+      testBtn.disabled = true;
+      status.textContent = t('settings.pushUnavailable');
+      return false;
+    };
+    if (!applyAvailability(await pushStatus())) {
+      navigator.serviceWorker.ready.then(async () => {
+        if (container.isConnected) applyAvailability(await pushStatus());
+      }).catch(() => {});
+    }
+
+    toggle.addEventListener('change', async () => {
+      toggle.disabled = true;
+      try {
+        const st = toggle.checked ? await enablePush() : await disablePush();
+        applyAvailability({ ...await pushStatus(), ...st });
+      } catch {
+        // Erst den Stand, dann die Meldung - umgekehrt ueberschrieb applyState
+        // den Fehler sofort wieder.
+        const st = await pushStatus();
+        if (applyAvailability(st)) status.textContent = t('settings.pushError');
+      }
+    });
+
+    testBtn.addEventListener('click', async () => {
+      testBtn.disabled = true;
+      try {
+        const sendTest = () => api.post('/push/test', {
+          title: t('settings.pushTestTitle'),
+          body: t('settings.pushTestBody'),
+        });
+
+        // sent === 0 heisst: nichts zugestellt. Ohne diese Unterscheidung meldet
+        // der Button Erfolg, obwohl kein Geraet erreicht wurde.
+        let res = await sendTest();
+        let sent = Number(res?.data?.sent) || 0;
+        let devices = Number(res?.data?.devices) || 0;
+
+        if (sent === 0) {
+          // Selbstheilung: Der Browser haelt das Abo fuer aktiv, der Server kennt
+          // es nicht (mehr). Einmal neu registrieren und genau einmal erneut senden.
+          let repaired = false;
+          try { repaired = await repairPush(); } catch { repaired = false; }
+          if (repaired) {
+            res = await sendTest();
+            sent = Number(res?.data?.sent) || 0;
+            devices = Number(res?.data?.devices) || 0;
+          }
+        }
+
+        if (sent > 0) status.textContent = t('settings.pushTestSent');
+        else if (devices > 0) status.textContent = t('settings.pushTestFailed');
+        else status.textContent = t('settings.pushTestNoDevice');
+      } catch {
+        status.textContent = t('settings.pushError');
+      } finally {
+        testBtn.disabled = false;
+      }
+    });
+  } catch (error) {
+    container.replaceChildren();
+    throw error;
+  }
+}
+
+// Die Sichtbarkeitslogik ist reine Zustandsarbeit auf einem schmalen
+// DOM-Ausschnitt und damit ohne Browser pruefbar. Sie hat zwei Fehler getragen,
+// die ein Textguard nicht gesehen haette: ein verstecktes `type="email"`, das
+// das Absenden blockiert, und einen Hinweis, der beim Anlegen nie erscheint.
+export const __test = { updateProviderVisibility, setBlockActive, providerNotReady, channelDefaults, usesBaseUrl, readChannelForm };

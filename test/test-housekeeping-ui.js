@@ -1,0 +1,1168 @@
+/**
+ * Modul: Housekeeping-Oberflaeche - Besuchsaktionen je Recht (#1135) und
+ *        Monatsnavigation im Berichte-Tab (#1137)
+ * Zweck: Laedt die echte Seite (public/pages/housekeeping.js) ueber den
+ *        Browser-Loader und prueft das gerenderte Markup gegen einen Container
+ *        ohne DOM.
+ *
+ *        #1135: Bearbeiten und Loeschen haengen an den Serverfeldern `can_edit`
+ *        und `can_delete`. Die Fixtures tragen die Felder so, wie der Server sie
+ *        fuer Admin und Mitglied liefert (test-housekeeping-routes.js prueft die
+ *        Server-Seite): ein bezahlter Besuch ist fuer das Mitglied gesperrt, fuer
+ *        den Admin nicht, ein unbezahlter fuer beide offen.
+ *
+ *        #1137: Der gewaehlte Monat ist Seitenzustand. Geprueft wird der Schritt
+ *        (Anfrage mit `?month=`, Summen, Leerzustand), dass ein Neuladen nach einer
+ *        Aktion den Monat behaelt, dass eine ueberholte Antwort nichts
+ *        ueberschreibt, dass ein Fehler den Monat zuruecksetzt, und dass das
+ *        Monatslabel der Sprache folgt.
+ *
+ *        #1174: Ob Schritt oder Neuladen gilt, entscheidet der Start des
+ *        Abrufs - ein gescheiterter Schritt verwirft das Neuladen nach dem
+ *        Bezahlen nicht, und ein vor der Aktion gestarteter Schritt
+ *        ueberschreibt es nicht. Wendet ein Neuladen seinen Bericht an, folgt
+ *        der Stepper dessen Monat - ausser ein spaeter gestarteter Schritt
+ *        laeuft noch.
+ * Ausführen: node --loader ./test/test-browser-loader.mjs --test test/test-housekeeping-ui.js
+ */
+import { test, mock } from 'node:test';
+import assert from 'node:assert/strict';
+
+globalThis.window = globalThis.window ?? {};
+const toasts = [];
+globalThis.window.yuvomi = { showToast: (...args) => toasts.push(args) };
+
+const { __test: hk } = await import('../public/pages/housekeeping.js');
+
+function fakeNode() {
+  return {
+    html: '',
+    hidden: true,
+    // installPopoverMenus() (Mehr-Knopf der Besuchszeile, D6) markiert die Wurzel.
+    dataset: {},
+    addEventListener() {},
+    replaceChildren() { this.html = ''; },
+    insertAdjacentHTML(_position, markup) { this.html += markup; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+  };
+}
+
+/**
+ * Der Inhalt eines Tabs samt dem Zeitraum-Slot im Kopf seiner Seite
+ * (`#housekeeping-period`, Critique 2026-09-26): der Monats-Stepper steht
+ * dort, nicht mehr im Inhalt. `content.period.html` ist, was im Kopf steht.
+ */
+function fakeContainer() {
+  const period = fakeNode();
+  const page = { querySelector: (sel) => (sel === '#housekeeping-period' ? period : null) };
+  return {
+    ...fakeNode(),
+    isConnected: true,
+    period,
+    closest: (sel) => (sel === '.housekeeping-page' ? page : null),
+  };
+}
+
+const count = (html, needle) => html.split(needle).length - 1;
+
+// ---------------------------------------------------------------------------
+// #1135: Aktionen je Besuch
+// ---------------------------------------------------------------------------
+
+// So liefert der Server die Felder (visitCapabilities in server/routes/housekeeping.js).
+const asMember = (visit) => ({ ...visit, can_edit: !visit.paid_at, can_delete: !visit.paid_at, can_mark_paid: !visit.paid_at });
+const asAdmin = (visit) => ({ ...visit, can_edit: true, can_delete: true, can_mark_paid: !visit.paid_at });
+// Housekeeping nur zum Lesen: der Server bietet nichts an.
+const asReader = (visit) => ({ ...visit, can_edit: false, can_delete: false, can_mark_paid: false });
+const paidVisit = { id: 11, check_in: '2026-08-04T09:00:00.000Z', total_amount: 60, paid_at: '2026-08-05T10:00:00Z' };
+const openVisit = { id: 12, check_in: '2026-08-06T09:00:00.000Z', total_amount: 40, paid_at: null };
+
+function staffLogHtml(visits) {
+  const state = hk.state();
+  state.workers = [{ id: 7, display_name: 'Ana' }];
+  state.selectedStaffId = '7';
+  state.staffVisits = visits;
+  return hk.renderStaffVisitLog();
+}
+
+test('Mitglied: bezahlter Besuch ohne Bearbeiten/Loeschen, mit Bericht und Grund; unbezahlter mit beidem', () => {
+  const html = staffLogHtml([asMember(paidVisit), asMember(openVisit)]);
+  const [paidRow, openRow] = html.split('<article').slice(1);
+
+  assert.equal(count(paidRow, 'data-edit-visit='), 0, 'kein Bearbeiten am bezahlten Besuch');
+  assert.equal(count(paidRow, 'data-delete-visit='), 0, 'kein Loeschen am bezahlten Besuch');
+  assert.equal(count(paidRow, 'data-open-visit="11"'), 1, 'der Weg zum Bericht bleibt');
+  assert.match(paidRow, /housekeeping\.settledAdminOnly/, 'die Zeile sagt, warum');
+
+  assert.equal(count(openRow, 'data-edit-visit="12"'), 1);
+  assert.equal(count(openRow, 'data-delete-visit="12"'), 1);
+  // Seit D6 (Critique 2026-10-16) oeffnet JEDER Zeilenkoerper den Bericht;
+  // Bearbeiten ist ein Eintrag im Mehr-Knopf, kein Ersatz fuer den Bericht.
+  assert.equal(count(openRow, 'data-open-visit="12"'), 1);
+  assert.doesNotMatch(openRow, /housekeeping\.settledAdminOnly/);
+});
+
+test('Admin: bezahlter und unbezahlter Besuch behalten Bearbeiten und Loeschen', () => {
+  const html = staffLogHtml([asAdmin(paidVisit), asAdmin(openVisit)]);
+  assert.equal(count(html, 'data-edit-visit='), 2);
+  assert.equal(count(html, 'data-delete-visit='), 2);
+  assert.equal(count(html, 'data-open-visit='), 2, 'der Zeilenkoerper oeffnet den Bericht (D6)');
+  assert.doesNotMatch(html, /housekeeping\.settledAdminOnly/);
+});
+
+test('nur lesend: der unbezahlte Besuch bietet kein Bezahlen an, auch kein gesperrtes (#1265 P6)', () => {
+  // Hier stand bis #1265 ein `disabled`-Knopf mit der Beschriftung „Als bezahlt
+  // markieren" - ein Versprechen fuer eine Beruehrung, die nichts tut. Ohne
+  // `can_mark_paid` hat ein UNBEZAHLTER Besuch nichts, was ein Knopf sagen
+  // koennte: „ausstehend" steht in der Metazeile. Die Rechte-Seite derselben
+  // Regel (`housekeeping: read` im Rechte-Store, auch bei veralteten Feldern)
+  // misst test-module-readonly-ui.js.
+  const html = staffLogHtml([asReader(openVisit)]);
+  assert.equal(count(html, 'data-pay-visit='), 0, 'kein Bezahlen, weder offen noch gesperrt');
+  assert.equal(count(html, 'data-edit-visit='), 0);
+  assert.equal(count(html, 'data-open-visit="12"'), 1, 'der Weg zum Bericht bleibt');
+  assert.match(html, /housekeeping\.paymentPending/, 'der Zahlstatus steht in der Metazeile');
+  const member = staffLogHtml([asMember(openVisit)]);
+  assert.match(member, /data-pay-visit="12"/, 'mit Schreibrecht bleibt Bezahlen');
+  assert.doesNotMatch(member, /data-pay-visit="12" disabled/, 'und zwar offen');
+});
+
+test('ohne Serverfelder bietet die Zeile nichts an, was scheitern koennte', () => {
+  // Ein aelterer Server ohne die Felder: lieber lesen als ein 403 beim Speichern.
+  const html = staffLogHtml([{ ...openVisit }]);
+  assert.equal(count(html, 'data-edit-visit='), 0);
+  assert.equal(count(html, 'data-delete-visit='), 0);
+  assert.equal(count(html, 'data-open-visit="12"'), 1);
+});
+
+// ---------------------------------------------------------------------------
+// #1137: Monatsnavigation
+// ---------------------------------------------------------------------------
+
+const REPORTS = {
+  '2026-09': { month: '2026-09', visits: [{ ...openVisit, id: 21, check_in: '2026-09-02T09:00:00.000Z' }], totals: { total: 40, paid: 0, pending: 40 } },
+  '2026-08': { month: '2026-08', visits: [asMember(paidVisit), asMember(openVisit)], totals: { total: 100, paid: 60, pending: 40 } },
+  '2026-07': { month: '2026-07', visits: [], totals: { total: 0, paid: 0, pending: 0 } },
+};
+
+const requests = [];
+function installApi({ onMonth } = {}) {
+  requests.length = 0;
+  globalThis.__apiStub = {
+    get: async (url) => {
+      requests.push(url);
+      if (url === '/housekeeping/visits') return { data: REPORTS['2026-09'] };
+      const month = url.match(/^\/housekeeping\/visits\?month=(\d{4}-\d{2})$/)?.[1];
+      if (month) return onMonth ? onMonth(month) : { data: REPORTS[month] ?? { month, visits: [], totals: {} } };
+      return { data: null };
+    },
+  };
+}
+
+async function freshReports() {
+  installApi();
+  const state = hk.state();
+  state.reportMonth = null;
+  state.tab = 'reports';
+  await hk.loadData();
+  const content = fakeContainer();
+  hk.renderReports(content);
+  return content;
+}
+
+test('Startzustand: laufender Monat, Reset verborgen', async () => {
+  const content = await freshReports();
+  const head = content.period.html;
+  assert.match(head, /id="housekeeping-report-month">September 2026</);
+  // `.is-current` + `inert` wie Budget und Kalender (#1200), nicht `hidden`:
+  // der Reset behaelt seinen Platz, und der Weiter-Pfeil ruckt nicht.
+  assert.match(head, /<button type="button" class="btn btn--secondary period-stepper__reset housekeeping-month-nav__current is-current" id="housekeeping-report-current" inert>/,
+    'Reset im laufenden Monat verborgen, sein Platz bleibt');
+  assert.ok(head.indexOf('housekeeping-report-prev') < head.indexOf('housekeeping-report-month')
+    && head.indexOf('housekeeping-report-month') < head.indexOf('housekeeping-report-next')
+    && head.indexOf('housekeeping-report-next') < head.indexOf('id="housekeeping-report-current"'),
+  'Reihenfolge: zurueck, Monat, vor, Reset');
+  assert.equal(requests.filter((u) => u.includes('?month=')).length, 0, 'ohne Wahl kein Monatsparameter');
+});
+
+test('der Monats-Stepper steht im Kopf, nicht im Inhalt (Critique 2026-09-26)', async () => {
+  const content = await freshReports();
+  assert.equal(content.period.hidden, false, 'im Berichte-Tab ist der Zeitraum-Slot sichtbar');
+  assert.match(content.period.html, /id="housekeeping-report-prev"/);
+  assert.doesNotMatch(content.html, /housekeeping-report-(prev|next|month|current)/,
+    'in der Karte scrollte der Monat mit der Kennzahl-Zeile weg');
+  hk.state().tab = 'tasks';
+  hk.syncReportPeriod(content);
+  assert.equal(content.period.hidden, true, 'auf anderen Tabs ist der Slot verborgen');
+  assert.equal(content.period.html, '', 'und leer');
+  hk.state().tab = 'reports';
+});
+
+test('die Besuchszeile ist eine list-row: der Koerper oeffnet, Bezahlen steht im Mehr-Knopf (D6)', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  const rows = content.html.split('<article').slice(1).filter((row) => row.includes('housekeeping-report-item'));
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.match(row, /^ class="list-row /, 'Zeile in der Listengrammatik');
+    assert.match(row, /<button type="button" class="list-row__main list-row__main--interactive" data-open-visit="\d+">/,
+      'der Zeilenkoerper oeffnet den Bericht (Critique 2026-10-16, D6)');
+  }
+  const offen = rows.find((row) => row.includes('data-pay-visit'));
+  assert.ok(offen, 'der offene Besuch bietet Bezahlen an');
+  assert.match(offen, /class="row-action row-action--more popover-menu__trigger"/, 'EIN Mehr-Knopf');
+  assert.match(offen, /class="popover-menu__item"\s+data-action="pay-visit" data-pay-visit="12">[\s\S]{0,160}housekeeping\.markPaid</);
+  assert.doesNotMatch(offen, /data-lucide="(?:file-text|edit-2|pencil)"[^>]*><\/i>\s*<\/button>\s*<\/article/, 'kein Stift, kein Bericht-Knopf neben dem Koerper');
+  assert.doesNotMatch(offen, /btn--secondary/, 'kein beschrifteter Knopf mehr in der Zeile');
+  assert.match(content.html, /class="housekeeping-reports row-carrier"/);
+  assert.doesNotMatch(content.html, /metric-card--inset/, 'dieselben Kennzahlkarten wie die Uebersicht');
+});
+
+test('die Besuchs-Kachel im Berichte-Tab behauptet keinen laufenden Monat', async () => {
+  const content = await freshReports();
+  assert.match(content.html, /housekeeping\.reportVisitsCount/);
+  assert.doesNotMatch(content.html, /housekeeping\.visitsThisMonth/);
+});
+
+test('ein Neuladen nach einer Aktion ueberschreibt einen inzwischen gewaehlten Monat nicht', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);                 // August gewaehlt
+  let releaseReload;
+  installApi({
+    onMonth: (month) => (month === '2026-08'
+      ? new Promise((resolve) => { releaseReload = () => resolve({ data: REPORTS[month] }); })
+      : { data: REPORTS[month] }),
+  });
+  const reload = hk.loadData();                          // Aktion im August, Antwort haengt
+  await new Promise((resolve) => setImmediate(resolve));
+  await hk.stepReportMonth(content, -1);                 // derweil Juli
+  releaseReload();
+  await reload;
+  assert.equal(hk.state().visitReport.month, '2026-07', 'der alte Neulade-Bericht bleibt verworfen');
+  assert.equal(hk.state().reportMonth, '2026-07');
+});
+
+test('Schritt zurueck laedt den Vormonat mit seinen Summen und zeigt den Reset', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  assert.equal(requests.at(-1), '/housekeeping/visits?month=2026-08');
+  assert.match(content.period.html, /id="housekeeping-report-month">August 2026</);
+  assert.equal(count(content.html, 'housekeeping-report-item--visit'), 2, 'beide Besuche des August');
+  assert.doesNotMatch(content.period.html, /is-current|inert/, 'der Reset ist da, sobald ein anderer Monat steht');
+  assert.equal(hk.state().visitReport.totals.paid, 60);
+});
+
+test('leerer frueherer Monat: eigener Leerzustand mit dem Monatsnamen', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  await hk.stepReportMonth(content, -1);
+  assert.equal(requests.at(-1), '/housekeeping/visits?month=2026-07');
+  // esc() macht aus den Anfuehrungszeichen des i18n-Stubs &quot;.
+  assert.match(content.html, /housekeeping\.noVisitReportsInMonth\{&quot;month&quot;:&quot;Juli 2026&quot;\}/);
+  assert.doesNotMatch(content.html, /housekeeping\.noVisitReports</, 'nicht der Satz fuer den laufenden Monat');
+});
+
+test('Neuladen nach einer Aktion behaelt den gewaehlten Monat', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  requests.length = 0;
+  // Genau das tut jede Aktion der Seite (Bezahlen, Bearbeiten): loadData(), dann rendern.
+  await hk.loadData();
+  hk.renderReports(content);
+  assert.ok(requests.includes('/housekeeping/visits?month=2026-08'), 'loadData fragt den gewaehlten Monat an');
+  assert.match(content.period.html, /id="housekeeping-report-month">August 2026</);
+  assert.equal(hk.state().recentVisits[0].id, 21, 'die Uebersicht bleibt beim laufenden Monat');
+});
+
+test('zurueck zum laufenden Monat raeumt die Wahl', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  await hk.showReportMonth(content, '2026-09');
+  assert.equal(hk.state().reportMonth, null);
+  requests.length = 0;
+  await hk.loadData();
+  assert.equal(requests.filter((u) => u.includes('?month=')).length, 0);
+});
+
+test('eine ueberholte Antwort ueberschreibt den spaeteren Monat nicht', async () => {
+  const content = await freshReports();
+  const pending = {};
+  installApi({ onMonth: (month) => new Promise((resolve) => { pending[month] = () => resolve({ data: REPORTS[month] }); }) });
+  const first = hk.stepReportMonth(content, -1);   // August
+  const second = hk.stepReportMonth(content, -1);  // Juli, vom August aus
+  assert.equal(hk.state().reportMonth, '2026-07', 'zwei schnelle Schritte gehen zwei Monate');
+  pending['2026-07']();
+  await second;
+  pending['2026-08']();
+  await first;
+  assert.equal(hk.state().visitReport.month, '2026-07');
+  assert.match(content.period.html, /id="housekeeping-report-month">Juli 2026</);
+});
+
+test('ein Fehler setzt den Monat zurueck und meldet ihn', async () => {
+  const content = await freshReports();
+  toasts.length = 0;
+  installApi({ onMonth: () => { throw new Error('offline'); } });
+  await hk.stepReportMonth(content, -1);
+  assert.equal(hk.state().reportMonth, null);
+  assert.equal(hk.state().visitReport.month, '2026-09');
+  assert.deepEqual(toasts.at(-1), ['offline', 'danger']);
+});
+
+test('scheitert der zweite von zwei schnellen Schritten, gilt wieder der angezeigte Monat', async () => {
+  const content = await freshReports();
+  toasts.length = 0;
+  let releaseAugust;
+  installApi({
+    onMonth: (month) => (month === '2026-08'
+      ? new Promise((resolve) => { releaseAugust = () => resolve({ data: REPORTS[month] }); })
+      : Promise.reject(new Error('offline'))),
+  });
+  const first = hk.stepReportMonth(content, -1);   // August, haengt
+  await hk.stepReportMonth(content, -1);           // Juli, scheitert
+  assert.equal(hk.state().visitReport.month, '2026-09', 'angezeigt ist noch September');
+  assert.equal(hk.state().reportMonth, null, 'der Stepper steht wieder auf dem angezeigten Monat, nicht auf August');
+  releaseAugust();
+  await first;
+  assert.equal(hk.state().visitReport.month, '2026-09', 'die ueberholte August-Antwort bleibt verworfen');
+  installApi();
+  await hk.stepReportMonth(content, -1);
+  assert.equal(requests.at(-1), '/housekeeping/visits?month=2026-08', 'der naechste Schritt geht vom angezeigten Monat aus');
+});
+
+test('ein gescheiterter Schritt verwirft das Neuladen einer Aktion nicht (#1174)', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);                 // August gewaehlt und angezeigt
+  toasts.length = 0;
+  const augustPaid = { ...REPORTS['2026-08'], totals: { total: 100, paid: 100, pending: 0 } };
+  let releaseReload;
+  installApi({
+    onMonth: (month) => (month === '2026-08'
+      ? new Promise((resolve) => { releaseReload = () => resolve({ data: augustPaid }); })
+      : Promise.reject(new Error('offline'))),
+  });
+  const reload = hk.loadData();                          // Bezahlen im August, Antwort haengt
+  await new Promise((resolve) => setImmediate(resolve));
+  await hk.stepReportMonth(content, -1);                 // derweil Juli, scheitert
+  assert.equal(hk.state().reportMonth, '2026-08', 'der Stepper steht wieder auf dem angezeigten August');
+  releaseReload();
+  await reload;
+  assert.equal(hk.state().visitReport.month, '2026-08');
+  assert.equal(hk.state().visitReport.totals.paid, 100, 'der August-Bericht traegt die Zahlung');
+});
+
+test('eine vor der Aktion gestartete Monatsantwort ueberschreibt das spaetere Neuladen nicht (#1174)', async () => {
+  const content = await freshReports();
+  const augustBefore = REPORTS['2026-08'];
+  const augustPaid = { ...augustBefore, totals: { total: 100, paid: 100, pending: 0 } };
+  let releaseStep;
+  let stepStarted = false;
+  installApi({
+    onMonth: (month) => {
+      if (month !== '2026-08') return { data: REPORTS[month] };
+      if (!stepStarted) {
+        stepStarted = true;
+        return new Promise((resolve) => { releaseStep = () => resolve({ data: augustBefore }); });
+      }
+      return { data: augustPaid };
+    },
+  });
+  const step = hk.stepReportMonth(content, -1);          // August angefragt, Antwort haengt
+  await hk.loadData();                                   // eine Aktion laedt danach nach und kommt zuerst an
+  assert.equal(hk.state().visitReport.totals.paid, 100);
+  releaseStep();                                         // jetzt erst die aeltere Antwort
+  await step;
+  assert.equal(hk.state().visitReport.month, '2026-08');
+  assert.equal(hk.state().visitReport.totals.paid, 100, 'der Stand von vor der Aktion bleibt verworfen');
+  assert.match(content.period.html, /id="housekeeping-report-month">August 2026</, 'der Schritt rendert trotzdem');
+});
+
+test('kommt nach einem gescheiterten Schritt ein Neuladen mit anderem Monat an, rechnet der Stepper von dessen Monat (#1174)', async () => {
+  const content = await freshReports();                  // September angezeigt
+  toasts.length = 0;
+  const releases = [];
+  installApi({
+    onMonth: (month) => (month === '2026-08'
+      ? new Promise((resolve) => { releases.push(() => resolve({ data: REPORTS[month] })); })
+      : Promise.reject(new Error('offline'))),
+  });
+  const first = hk.stepReportMonth(content, -1);         // August, haengt
+  const reload = hk.loadData();                          // Bezahlen, laedt den gewaehlten August nach
+  await new Promise((resolve) => setImmediate(resolve));
+  await hk.stepReportMonth(content, -1);                 // derweil Juli, scheitert
+  assert.equal(hk.state().reportMonth, null, 'zurueck auf den noch angezeigten September');
+  releases[1]();                                         // das Neuladen kommt an
+  await reload;
+  assert.equal(hk.state().visitReport.month, '2026-08');
+  assert.equal(hk.state().reportMonth, '2026-08', 'der Stepper folgt dem angezeigten August');
+  releases[0]();                                         // der ueberholte erste Schritt
+  await first;
+  installApi();
+  await hk.stepReportMonth(content, -1);
+  assert.equal(requests.at(-1), '/housekeeping/visits?month=2026-07', 'zurueck geht es zum Juli, nicht erneut zum August');
+});
+
+test('ein Neuladen, das vor einem spaeter gestarteten Schritt ankommt, nimmt ihm den Monat nicht (#1174)', async () => {
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);                 // August angezeigt
+  let releaseReload;
+  let releaseJuly;
+  installApi({
+    onMonth: (month) => new Promise((resolve) => {
+      const answer = () => resolve({ data: REPORTS[month] });
+      if (month === '2026-08') releaseReload = answer;
+      else releaseJuly = answer;
+    }),
+  });
+  const reload = hk.loadData();                          // Aktion im August
+  await new Promise((resolve) => setImmediate(resolve));
+  const step = hk.stepReportMonth(content, -1);          // danach Juli, haengt
+  releaseReload();
+  await reload;
+  assert.equal(hk.state().reportMonth, '2026-07', 'der laufende Schritt behaelt seinen Monat');
+  releaseJuly();
+  await step;
+  assert.equal(hk.state().visitReport.month, '2026-07');
+  assert.equal(hk.state().reportMonth, '2026-07');
+});
+
+test('das Monatslabel folgt der Sprache', async () => {
+  try {
+    globalThis.__locale = 'fr';
+    const content = await freshReports();
+    await hk.stepReportMonth(content, -1);
+    assert.match(content.period.html, /id="housekeeping-report-month">août 2026</);
+    globalThis.__locale = 'ja';
+    hk.renderReports(content);
+    assert.match(content.period.html, /id="housekeeping-report-month">2026年8月</);
+  } finally {
+    delete globalThis.__locale;
+  }
+});
+
+test('shiftMonth ueber Jahresgrenzen', () => {
+  assert.equal(hk.shiftMonth('2026-01', -1), '2025-12');
+  assert.equal(hk.shiftMonth('2025-12', 1), '2026-01');
+  assert.equal(hk.shiftMonth('2026-03', -14), '2025-01');
+});
+
+// Desktop-Kopf auf dem Referenzmass (Critique 2026-09-26, R1-Folge): die
+// Reiterleiste trug am Desktop die Kuechenhoehe (56px) um 44px-Reiter, der
+// Kopf stand bei 133px statt wie Budget (gleiche Bauart: Titelzeile + Reiter)
+// bei 121. Am Desktop baut die Leiste so hoch wie ihre Reiter; mobil bleibt sie.
+test('die Reiterleiste der Haushaltshilfe baut am Desktop nicht die Kuechenhoehe', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { eachRule } = await import('./css-rules.js');
+  const css = readFileSync(new URL('../public/styles/housekeeping.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)].filter((r) => r.selector.trim() === '.housekeeping-tabs' && /(^|[\s;])height:/.test(r.body));
+  const heightOf = (r) => r.body.match(/(?:^|[\s;])height:\s*([^;]+);/)?.[1].trim();
+  const base = rules.find((r) => r.at.length === 0);
+  assert.match(heightOf(base) ?? '', /--kitchen-tabs-height/, 'mobil bleibt die Leiste auf der Touch-Hoehe');
+  const desktop = rules.filter((r) => r.at.some((a) => /min-width:\s*1024px/.test(a)));
+  assert.equal(desktop.length, 1, 'genau eine Desktop-Regel (min-width: 1024px) setzt die Hoehe der Leiste');
+  assert.equal(heightOf(desktop[0]), 'auto', 'am Desktop baut die Leiste so hoch wie ihre Reiter');
+});
+
+// ---------------------------------------------------------------------------
+// Review zu #1475: Rueckgaengig waehrend das Neuladen nach dem Erledigen laeuft
+// ---------------------------------------------------------------------------
+
+test('eine vor dem Rueckgaengig gestartete Neulade-Antwort ueberschreibt den zurueckgenommenen Stand nicht', async () => {
+  const task = { id: 5, name: 'Bad', area: 'Bad', frequency_days: 7, last_completed: '2026-09-01T08:00:00Z' };
+  const done = { ...task, last_completed: '2026-09-26T09:00:00Z' };
+  const writes = [];
+  let taskReads = 0;
+  let releaseStale;
+  globalThis.__apiStub = {
+    get: async (url) => {
+      if (url === '/housekeeping/visits') return { data: REPORTS['2026-09'] };
+      if (url === '/housekeeping/decay-tasks') {
+        taskReads += 1;
+        // Das Neuladen nach dem Erledigen haengt und liefert spaeter den
+        // erledigten Stand; das Neuladen nach dem Rueckgaengig kommt sofort.
+        if (taskReads === 1) return new Promise((resolve) => { releaseStale = () => resolve({ data: [done] }); });
+        return { data: [task] };
+      }
+      return { data: null };
+    },
+    post: async (url) => { writes.push(['post', url]); return { data: null }; },
+    patch: async (url, body) => { writes.push(['patch', url, body]); return { data: null }; },
+  };
+  toasts.length = 0;
+  const state = hk.state();
+  state.tab = 'tasks';
+  state.tasks = [task];
+  const content = fakeContainer();
+  const completing = hk.completeTask(task, content, null);
+  while (!releaseStale) await new Promise((resolve) => setImmediate(resolve));
+  const undo = toasts.find((args) => typeof args[3] === 'function')?.[3];
+  assert.ok(undo, 'der Erledigt-Toast traegt Rueckgaengig');
+  await undo();
+  assert.deepEqual(writes.at(-1), ['patch', '/housekeeping/decay-tasks/5', { last_completed: task.last_completed }]);
+  assert.equal(state.tasks[0].last_completed, task.last_completed, 'nach dem Rueckgaengig steht der alte Zeitpunkt');
+  releaseStale();                                        // jetzt erst die aeltere Antwort
+  await completing;
+  assert.equal(state.tasks[0].last_completed, task.last_completed,
+    'die vor dem Rueckgaengig gestartete Antwort ist ueberholt und darf state.tasks nicht schreiben');
+  delete globalThis.__apiStub;
+});
+
+test('scheitert das Neuladen nach dem Rueckgaengig, schreibt die davor gestartete Antwort trotzdem nicht', async () => {
+  // Codex an #1476: bis hierhin galt eine aeltere Antwort, solange keine
+  // juengere ANGEWANDT war. Scheitert die juengere, gewann die aeltere und
+  // zeigte den erledigten Stand ueber dem erfolgreich zurueckgenommenen.
+  const task = { id: 6, name: 'Kueche', area: 'Kueche', frequency_days: 7, last_completed: '2026-09-01T08:00:00Z' };
+  const done = { ...task, last_completed: '2026-09-26T09:00:00Z' };
+  let taskReads = 0;
+  let releaseStale;
+  globalThis.__apiStub = {
+    get: async (url) => {
+      if (url === '/housekeeping/visits') return { data: REPORTS['2026-09'] };
+      if (url === '/housekeeping/decay-tasks') {
+        taskReads += 1;
+        if (taskReads === 1) return new Promise((resolve) => { releaseStale = () => resolve({ data: [done] }); });
+        throw new Error('offline');                      // das Neuladen nach dem Rueckgaengig scheitert
+      }
+      return { data: null };
+    },
+    post: async () => ({ data: null }),
+    patch: async () => ({ data: null }),
+  };
+  toasts.length = 0;
+  const state = hk.state();
+  state.tab = 'tasks';
+  state.tasks = [task];
+  const content = fakeContainer();
+  const completing = hk.completeTask(task, content, null);
+  while (!releaseStale) await new Promise((resolve) => setImmediate(resolve));
+  const undo = toasts.find((args) => typeof args[3] === 'function')?.[3];
+  assert.ok(undo, 'der Erledigt-Toast traegt Rueckgaengig');
+  await undo();
+  assert.equal(state.tasks[0].last_completed, task.last_completed, 'Vorbedingung: der alte Zeitpunkt steht');
+  releaseStale();
+  await completing;
+  assert.equal(state.tasks[0].last_completed, task.last_completed,
+    'die vor dem Rueckgaengig gestartete Antwort ist ueberholt, auch wenn das juengere Neuladen scheitert');
+  delete globalThis.__apiStub;
+});
+
+// ---------------------------------------------------------------------------
+// R10 L10 (Re-Critique 2026-09-27, A3 P2-3, P2-4, P2-10): eine Besuchszeile,
+// eine Faelligkeits-Grammatik, mobil Kennzahlen in einer Zeile und die Liste
+// vor dem Diagramm.
+// ---------------------------------------------------------------------------
+
+const { readFileSync } = await import('node:fs');
+const { eachRule } = await import('./css-rules.js');
+const HK_STYLES = readFileSync(new URL('../public/styles/housekeeping.css', import.meta.url), 'utf8');
+
+/** Name und Meta jeder Besuchszeile im Markup. */
+function visitRows(html) {
+  return html.split('<article').slice(1).filter((row) => /housekeeping-visit-row/.test(row)).map((row) => ({
+    row,
+    name: /list-row__name">([^<]*)</.exec(row)?.[1],
+    meta: /list-row__meta">([^<]*)</.exec(row)?.[1],
+  }));
+}
+
+function dashboardHtml({ lastVisit } = {}) {
+  const state = hk.state();
+  state.tab = 'dashboard';
+  state.workers = [{ id: 7, display_name: 'Maria Silva', rate_type: 'daily', daily_rate: 45, payment_schedule: 'weekly' }];
+  state.dashboard = { visits_this_month: 3, last_visit: lastVisit ? { check_in: lastVisit } : null, pending_tasks: 1, finished_tasks_this_month: 2, monthly_payments: [{ month: '2026-09', total: 90 }], pending_payments: 45 };
+  state.recentVisits = [asAdmin({ ...openVisit, worker_name: 'Maria Silva' })];
+  const content = fakeContainer();
+  hk.renderDashboard(content);
+  return content.html;
+}
+
+test('ein Besuch, eine Zeile: das Datum fuehrt, die Person steht im Meta - in Uebersicht, Berichten und Protokoll', async () => {
+  const uebersicht = visitRows(dashboardHtml());
+  assert.equal(uebersicht.length, 1, 'die Uebersicht zeigt ihren Besuch als Besuchszeile');
+  assert.equal(uebersicht[0].name, openVisit.check_in, 'Uebersicht: das Datum ist der Name');
+  assert.match(uebersicht[0].meta, /^Maria Silva · /, 'Uebersicht: die Person steht im Meta');
+
+  installApi();
+  const content = await freshReports();
+  await hk.stepReportMonth(content, -1);
+  const berichte = visitRows(content.html);
+  assert.equal(berichte.length, 2, 'die Berichte bauen dieselbe Zeile');
+  for (const { row, name, meta } of berichte) {
+    assert.doesNotMatch(row, /housekeeping-avatar/, 'kein Avatar - zehnmal dasselbe Gesicht sagte nichts');
+    assert.doesNotMatch(name, /Ana|Maria|housekeeping\.staff/, `Berichte: der Name ist das Datum, nicht die Person (${name})`);
+    assert.match(meta, / · /, 'Berichte: Person, Betrag und Status im Meta');
+    assert.match(row, /housekeeping-report-item--visit/, 'die Berichte-Klasse bleibt (Aktionsabstand, Zaehlung)');
+  }
+
+  const protokoll = visitRows(staffLogHtml([asAdmin(openVisit)]));
+  assert.equal(protokoll.length, 1, 'das Personal-Protokoll baut dieselbe Zeile');
+  assert.equal(protokoll[0].name, openVisit.check_in);
+  assert.doesNotMatch(protokoll[0].meta, /Ana/, 'im Protokoll einer Person steht ihr Name nicht in jeder Zeile');
+});
+
+test('Uebersicht: die letzten Besuche stehen vor dem Zahlungsdiagramm', () => {
+  const html = dashboardHtml();
+  const liste = html.indexOf('housekeeping-staff-log-list');
+  const diagramm = html.indexOf('class="housekeeping-chart"');
+  assert.ok(liste > 0 && diagramm > 0, 'beide Abschnitte stehen da');
+  assert.ok(liste < diagramm, 'mobil begannen die Besuche bei y760 hinter dem 252px-Diagramm');
+});
+
+// R20 (Re-Critique 2026-10-17 a5 P2-5): das Zahlungsdiagramm las sich wie
+// sechs Fortschrittskapseln ohne Legende, mit viermal "0,00 €" ueber leeren
+// Monaten und "380,00 €", das bei 390px aus seiner Spalte lief.
+test('Uebersicht: das Zahlungsdiagramm zeigt Saeulen mit Legende, leere Monate ohne Betrag', () => {
+  const state = hk.state();
+  state.tab = 'dashboard';
+  state.currency = 'EUR';
+  state.workers = [{ id: 7, display_name: 'Maria Silva', rate_type: 'daily', daily_rate: 45, payment_schedule: 'weekly' }];
+  state.dashboard = {
+    visits_this_month: 3, last_visit: null, pending_tasks: 0, finished_tasks_this_month: 0, pending_payments: 280,
+    monthly_payments: [
+      { month: '2026-05', total: 0, pending: 0 },
+      { month: '2026-09', total: 145, pending: 0 },
+      { month: '2026-10', total: 380, pending: 280 },
+      { month: '2026-11', total: 57.5, pending: 57.5 },
+    ],
+  };
+  state.recentVisits = [];
+  const content = fakeContainer();
+  hk.renderDashboard(content);
+  const html = content.html;
+  const values = [...html.matchAll(/housekeeping-chart__value" aria-hidden="true">([^<]*)</g)].map((m) => m[1]);
+  assert.equal(values.length, 4, 'eine Wertzeile je Monat');
+  assert.equal(values[0], '', 'ein leerer Monat traegt keinen Betrag ("0,00 €")');
+  assert.doesNotMatch(values[2], /[.,]00/, `ganze Betraege ohne Nachkommastellen (${values[2]})`);
+  assert.match(values[3], /57[.,]5/, 'ein krummer Betrag behaelt seine Stellen');
+  const bars = [...html.matchAll(/housekeeping-chart__bar" style="([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(bars.length, 3, 'ein leerer Monat hat keine Saeule, nur die Grundlinie');
+  assert.match(bars[0], /--paid-share:100\.0%/, 'ganz bezahlt');
+  assert.match(bars[1], /--paid-share:26\.3%/, '100 von 380 bezahlt, der Rest ist offen');
+  assert.match(html, /housekeeping-chart__legend[\s\S]*housekeeping\.paymentPaid[\s\S]*housekeeping\.paymentPending/, 'die Legende nennt bezahlt und ausstehend');
+  assert.match(html, /role="listitem" aria-label="[^"]*housekeeping\.paymentPending/, 'jede Saeule nennt ihren offenen Teil im Namen');
+});
+
+test('Uebersicht: der letzte Besuch nennt im laufenden Jahr kein Jahr, in einem anderen schon', () => {
+  const jahr = new Date().getFullYear();
+  const vorher = globalThis.__formatDayMonth;
+  globalThis.__formatDayMonth = (d) => `KURZ(${d})`;
+  try {
+    const wert = (html) => /metric-card__label">housekeeping\.lastVisit<\/div>\s*<div class="metric-card__value">([^<]*)</.exec(html)?.[1];
+    assert.equal(wert(dashboardHtml({ lastVisit: `${jahr}-01-15T08:30:00Z` })), `KURZ(${jahr}-01-15T08:30:00Z)`,
+      'im laufenden Jahr die Kurzform - sie passt in die Viertelzeile');
+    assert.equal(wert(dashboardHtml({ lastVisit: `${jahr - 1}-12-20T08:30:00Z` })), `${jahr - 1}-12-20T08:30:00Z`,
+      'aus einem anderen Jahr bleibt das volle Datum - dann ist das Jahr die Auskunft');
+  } finally {
+    globalThis.__formatDayMonth = vorher;
+  }
+});
+
+// Codex P2 zu R10 L10: die Anzeige rechnet in die Haushaltszone, der
+// Jahresvergleich nahm das Jahr des rohen UTC-Strings und das der Geraetezone.
+// `<Jahr>-01-01T00:30Z` steht in New York am 31.12. des Vorjahrs - und verlor
+// trotzdem sein Jahr; umgekehrt in Tokio.
+test('Uebersicht: ob der letzte Besuch sein Jahr nennt, entscheidet die Haushaltszone wie die Anzeige', async () => {
+  const { setDisplayTimeZone, _resetDisplayTimeZoneCache } = await import('../public/utils/timezone.js');
+  const { todayKey } = await import('../public/utils/date.js');
+  const vorher = globalThis.__formatDayMonth;
+  globalThis.__formatDayMonth = (d) => `KURZ(${d})`;
+  const wert = (html) => /metric-card__label">housekeeping\.lastVisit<\/div>\s*<div class="metric-card__value">([^<]*)</.exec(html)?.[1];
+  try {
+    setDisplayTimeZone('America/New_York');
+    let jahr = Number(todayKey().slice(0, 4));
+    const silvester = `${jahr}-01-01T00:30:00Z`;
+    assert.equal(wert(dashboardHtml({ lastVisit: silvester })), silvester,
+      'New York: der Besuch liegt am 31.12. des Vorjahrs - das Jahr bleibt stehen');
+
+    setDisplayTimeZone('Asia/Tokyo');
+    jahr = Number(todayKey().slice(0, 4));
+    const neujahr = `${jahr - 1}-12-31T20:00:00Z`;
+    assert.equal(wert(dashboardHtml({ lastVisit: neujahr })), `KURZ(${neujahr})`,
+      'Tokio: derselbe Zeitpunkt ist dort schon der 1.1. des laufenden Jahres - Kurzform');
+  } finally {
+    globalThis.__formatDayMonth = vorher;
+    setDisplayTimeZone(null);
+    _resetDisplayTimeZoneCache();
+  }
+});
+
+test('Faelligkeit spricht als Tinte am Wort, nicht als Waesche der Zeile (wie die Aufgaben)', () => {
+  const rules = [...eachRule(HK_STYLES)];
+  const waesche = rules.filter((r) => /housekeeping-task--(?:today|overdue)/.test(r.selector)
+    && /background(?:-color)?\s*:/.test(r.body));
+  assert.deepEqual(waesche.map((r) => r.selector.trim()), [], 'keine Zeilentoenung fuer heute/ueberfaellig');
+  for (const [zustand, farbe] of [['overdue', 'danger'], ['today', 'warning']]) {
+    const tinte = rules.find((r) => r.selector.trim() === `.housekeeping-task--${zustand} .housekeeping-task__status`);
+    assert.match(tinte?.body ?? '', new RegExp(`color:\\s*var\\(--color-${farbe}\\)`), `${zustand}: das Wort traegt die Farbe`);
+  }
+});
+
+test('die vier Kennzahlen stehen auf jeder Breite in einer Zeile, schmal mit Labels an Wortgrenzen', () => {
+  const rules = [...eachRule(HK_STYLES)];
+  const quad = rules.filter((r) => /metric-grid--quad/.test(r.selector));
+  const zeile = quad.find((r) => !r.at.length && r.selector.trim() === '.housekeeping-content .metric-grid--quad');
+  assert.match(zeile?.body ?? '', /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
+    'vier Spalten, unbedingt - und spezifischer als die Telefonstufe in panel.css');
+  assert.deepEqual(quad.filter((r) => /--summary-cards:\s*2/.test(r.body)).map((r) => r.at.join(' ')), [],
+    'keine Zwei-mal-zwei-Stufe mehr (189px mobil)');
+  const label = rules.find((r) => r.selector.trim() === '.metric-grid--quad .metric-card__label'
+    && r.at.includes('@container housekeeping-page (max-width: 479px)'));
+  assert.match(label?.body ?? '', /text-transform:\s*none/, 'Versal brach in der Viertelzeile mitten im Wort');
+  assert.match(label?.body ?? '', /hyphens:\s*auto/);
+});
+
+// Re-Critique 2026-09-28 (P5, A3 P2-3 / A8 P2-3): die Uebersicht mit
+// Kennzahlen, Besuchen und Zahlungen stand im 720px-Lesemass einer Textseite
+// und liess bei 1440 rund 470px leer - Besuche und Zahlungen untereinander.
+test('Uebersicht am Desktop: Besuche | Zahlungen nebeneinander, sobald die Spalte reicht, ausserhalb des Lesemasses', () => {
+  const html = dashboardHtml({ lastVisit: '2026-09-20T08:30:00Z' });
+  const cols = /<div class="housekeeping-dashboard-columns">([\s\S]*)<\/div>\s*$/.exec(html.trim());
+  assert.ok(cols, 'die beiden Karten stehen in EINEM Spaltentraeger');
+  assert.match(cols[1], /housekeeping\.recentVisits[\s\S]*housekeeping\.payments/, 'Besuche links, Zahlungen rechts');
+  const rules = [...eachRule(HK_STYLES)];
+  // Das breite Mass fuehrt die SEITE (Critique R16, 2026-10-05), nicht mehr
+  // nur dieser Reiter: mit `[data-tab="dashboard"] { --page-measure }` endeten
+  // Kopf und Knopf in der Uebersicht bei 996px und in den anderen Reitern bei
+  // 720 - die Kante wechselte je Reiter.
+  assert.equal(rules.filter((r) => /\[data-tab/.test(r.selector) && /--page-measure/.test(r.body)).length, 0,
+    'kein Reiter schaltet das Mass um');
+  // Zwei Spalten am Container der Seite, nicht am Viewport (PAGE-005).
+  const grid = rules.find((r) => r.selector.trim() === '.housekeeping-dashboard-columns'
+    && r.at.some((a) => /@container housekeeping-page \(min-width:\s*60rem\)/.test(a)));
+  assert.match(grid?.body ?? '', /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  const HK_SRC = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  assert.equal((HK_SRC.match(/class="housekeeping-page app-page app-page--dashboard app-page--columns[ "]/g) || []).length, 3,
+    'Seite, Ladezustand und Fehlerzustand fuehren dasselbe breite Mass');
+  assert.doesNotMatch(HK_SRC, /app-page--reading/, 'kein Lesemass-Rest an einer der drei Wurzeln');
+});
+
+// Critique R16 (2026-10-05): Aufgaben, Berichte und Personal standen auf 720px
+// neben 308/468px leerer Flaeche. Die Listen bleiben auf dem Lesemass, aber im
+// Spaltenraster der Shell - mit dem, was es als zweiten Inhalt schon gibt.
+test('Listenreiter am Desktop: Liste im Spaltenraster, Kennzahlen bzw. Protokoll in der Seitenspalte', () => {
+  const HK_SRC = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  const fn = (name) => {
+    const start = HK_SRC.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, `${name} fehlt`);
+    const end = HK_SRC.indexOf('\nfunction ', start + 1);
+    return HK_SRC.slice(start, end < 0 ? undefined : end);
+  };
+  // renderTasks() reicht seit R16 an redrawList() weiter; das Markup baut drawTasks().
+  const tasks = fn('drawTasks');
+  assert.match(tasks, /renderPageColumns\(\{\s*main:[\s\S]*housekeeping-task-list/, 'Aufgaben: die Liste steht in der Listenspalte');
+  // R17: der Reiter HAT einen zweiten Inhalt - „Faellig" und „Erledigt im Monat"
+  // standen nur auf der Uebersicht, die Spalte daneben blieb leer (384px bei 1280).
+  assert.match(tasks, /\brail: taskSummaryHtml\(\),/, 'Aufgaben: die zwei Kennzahlen stehen in der Seitenspalte');
+  assert.doesNotMatch(tasks, /railFirst/, 'hinter der Liste im DOM: schmal stehen sie darunter, nie davor');
+  const summary = fn('taskSummaryHtml');
+  assert.match(summary, /state\.dashboard/, 'derselbe Bestand wie die Uebersicht (nach jedem Erledigen neu geladen)');
+  assert.match(summary, /class="metric-grid budget-glance-details housekeeping-task-summary"/,
+    'unter 640px bleiben die Kacheln aus - das Telefon bekommt nichts vor oder unter die Liste');
+  assert.match(summary, /t\('housekeeping\.pendingChores'\)[\s\S]*data\.pending_tasks|pending_tasks[\s\S]*t\('housekeeping\.pendingChores'\)/);
+  assert.match(summary, /t\('housekeeping\.finishedChores'\)/, 'dieselben Worte wie auf der Uebersicht');
+  assert.equal(summary.match(/class="metric-card\$\{/g)?.length, 2, 'zwei Karten, keine dritte erfunden');
+  const reports = fn('renderReports');
+  assert.match(reports, /renderPageColumns\(\{\s*railFirst: true,\s*rail:[\s\S]*metric-grid[\s\S]*main:[\s\S]*housekeeping-reports/,
+    'Berichte: Kennzahlen im DOM vor der Liste (mobil darueber), am Desktop in der Seitenspalte');
+  const staff = fn('renderStaff');
+  assert.match(staff, /rail: state\.selectedStaffId \? renderStaffVisitLog\(\) : ''/,
+    'Personal: das Protokoll der gewaehlten Person steht in der Seitenspalte');
+  const rules = [...eachRule(HK_STYLES)];
+  const heading = rules.find((r) => r.selector.trim() === '.page-columns__rail .housekeeping-section-heading'
+    && r.at.some((a) => /@container module-surface \(min-width:\s*65rem\)/.test(a)));
+  assert.match(heading?.body ?? '', /flex-direction:\s*column/,
+    'in der 360px-Spalte stehen Titel und Monatswahl untereinander wie am Telefon');
+});
+
+test('Bearbeiten eines Besuchs zeichnet danach den Reiter neu, auf dem es lag', () => {
+  // wireVisitRows faellt ohne `onEdit` auf openVisitEditModal(visit, content)
+  // zurueck, und das zeichnet nach dem Speichern renderStaff - im Reiter
+  // Berichte stand danach die Personal-Liste unter dem Reiter "Berichte".
+  // Jeder Aufrufer ausser Personal selbst gibt seinen eigenen Neuzeichner mit.
+  const HK_SRC = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  const calls = [...HK_SRC.matchAll(/^function (render\w+)\(content\)[\s\S]*?^}/gm)]
+    .filter(([body]) => /wireVisitRows\(/.test(body));
+  assert.deepEqual(calls.map(([, name]) => name).sort(), ['renderDashboard', 'renderReports', 'renderStaff']);
+  for (const [body, name] of calls) {
+    if (name === 'renderStaff') continue;
+    assert.match(body, new RegExp(`onEdit: \\(visit\\) => openVisitEditModal\\(visit, content, \\{ onDone: ${name} \\}\\)`),
+      `${name}: Bearbeiten zeichnet nach dem Speichern ${name}, nicht renderStaff`);
+  }
+});
+
+test('Haushaltshilfe spricht EINEN Namen: Reiter "Besuche"/"Arbeiten", Kennzahlen mit Zeitbezug, Geldschein statt Dollar', () => {
+  const HK_SRC = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(HK_SRC, /badge-dollar-sign/, 'Dollar-Icon bei Euro-Betraegen');
+  assert.match(HK_SRC, /icon: 'banknote'/, 'Bezahlen traegt den Geldschein - seit D6 als Eintrag im Mehr-Knopf');
+  const localeDir = new URL('../public/locales/', import.meta.url);
+  const { readdirSync } = globalThis.process.getBuiltinModule('node:fs');
+  for (const file of readdirSync(localeDir).filter((f) => f.endsWith('.json'))) {
+    const loc = JSON.parse(readFileSync(new URL(file, localeDir), 'utf8'));
+    // Bis zur Re-Kritik 2026-10-17 hiess der erste Reiter der Belohnungen
+    // ebenfalls "Uebersicht" und dieser Test hielt beide gleich. Unter 768px
+    // sind die Reiter dort der Titel; zwei Mal "Uebersicht" (Reiter + Kapsel)
+    // und nirgends "Belohnungen" - er heisst seither "Punkte"
+    // (test:rewards-ui). Seit R20 (Re-Critique a3/a5) gilt dasselbe hier:
+    // "Uebersicht" und "Aufgaben" hiessen wie zwei Tabs der Kapsel darunter,
+    // die Reiter heissen nach ihrem Inhalt - Besuche, Arbeiten.
+    assert.ok(loc.housekeeping.tabVisits && loc.housekeeping.tabChores, `${file}: beide Reiter haben eine Uebersetzung`);
+    for (const key of ['tabVisits', 'tabChores']) {
+      for (const nav of ['dashboard', 'tasks', 'calendar']) {
+        assert.notEqual(loc.housekeeping[key], loc.nav?.[nav], `${file}: Reiter ${key} heisst nicht wie der Kapsel-Tab ${nav}`);
+      }
+    }
+  }
+  assert.match(HK_SRC, /renderTabButton\('dashboard', t\('housekeeping\.tabVisits'\)\)/, 'der erste Reiter heisst "Besuche"');
+  assert.match(HK_SRC, /renderTabButton\('tasks', t\('housekeeping\.tabChores'\)\)/, 'der zweite Reiter heisst "Arbeiten"');
+  const de = JSON.parse(readFileSync(new URL('de.json', localeDir), 'utf8')).housekeeping;
+  assert.equal(de.pendingChores, 'Fällig');
+  assert.equal(de.finishedChores, 'Erledigt im Monat');
+  assert.deepEqual(Object.entries(de).filter(([, v]) => typeof v === 'string' && /Hauspflege/.test(v)).map(([k]) => k), [],
+    'kein zweiter Name neben "Haushaltshilfe"');
+});
+
+// ---------------------------------------------------------------------------
+// #1556: "heute" ist der Tag des Haushalts, nicht der des Geraets
+// ---------------------------------------------------------------------------
+// Tagesabfrage und Check-in schickten `local_date` und
+// `timezone_offset_minutes` von der Uhr des Geraets. Ein Geraet in New York
+// legte den Check-in um 00:30 in Berlin auf den Vortag. Die Seite schickt jetzt
+// die Zone, in der sie anzeigt; den Tag rechnet der Server (test-housekeeping-
+// routes.js misst die Serverseite).
+test('#1556 Tagesabfrage und Check-in lesen den Tag des Haushalts, nicht Tag und Offset des Geraets', async () => {
+  const tz = await import('/utils/timezone.js');
+  const prevTz = process.env.TZ;
+  const gets = [];
+  const posts = [];
+  globalThis.__apiStub = {
+    get: async (url) => { gets.push(url); return { data: null }; },
+    post: async (url, body) => { posts.push({ url, body }); return { data: {} }; },
+  };
+  // Geraet in New York am 30.09. um 18:30 - im Haushalt (Berlin) ist es der 1.10., 00:30.
+  process.env.TZ = 'America/New_York';
+  tz.setDisplayTimeZone('Europe/Berlin');
+  mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-30T22:30:00.000Z') });
+  try {
+    await hk.loadData();
+    hk.state().workers = [{ id: 7, display_name: 'Maria', rate_type: 'daily', daily_rate: 40, current_session: null }];
+    await hk.toggleSession(fakeContainer(), 7);
+  } finally {
+    mock.timers.reset();
+    tz.setDisplayTimeZone(null);
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+    delete globalThis.__apiStub;
+  }
+  const workersUrl = gets.find((url) => url.startsWith('/housekeeping/workers?'));
+  assert.ok(workersUrl, 'die Tagesabfrage laeuft');
+  const query = new URLSearchParams(workersUrl.split('?')[1]);
+  // Die Uebersicht fragt nach demselben Tag (Review): sonst rechnete der Server
+  // ihn ohne Haushaltszone in seiner eigenen.
+  const dashboardUrl = gets.find((url) => url.startsWith('/housekeeping/dashboard'));
+  const dashboardQuery = new URLSearchParams(dashboardUrl?.split('?')[1] ?? '');
+  const checkIn = posts.find((p) => p.url === '/housekeeping/work-sessions/check-in')?.body;
+  assert.ok(checkIn, 'der Check-in laeuft');
+  const sent = [
+    ['Tagesabfrage', query.get('local_date'), query.get('timezone_offset_minutes'), query.get('timezone')],
+    ['Check-in', checkIn.local_date, checkIn.timezone_offset_minutes, checkIn.timezone],
+    ['Uebersicht', dashboardQuery.get('local_date'), dashboardQuery.get('timezone_offset_minutes'), dashboardQuery.get('timezone')],
+  ];
+  for (const [where, day, offset, zone] of sent) {
+    // Ohne `timezone` nimmt der Server Tag und Offset als Angabe eines alten Clients.
+    assert.ok(day == null || day === '2026-10-01', `${where}: kein Tag des Geraets (${day})`);
+    assert.equal(offset ?? null, null, `${where}: kein Offset des Geraets`);
+    assert.equal(zone, 'Europe/Berlin', `${where}: die Zone der Anzeige`);
+  }
+  assert.match(checkIn.payment_description, /"date":"2026-10-01"/, 'die Zahlungsaufgabe nennt den Tag des Haushalts');
+});
+
+// Critique 2026-10-05 (R16): der Namens-Knopf der Personalzeile mass 178x25,5px.
+// Die Maus trifft die ganze Zeile (data-select-worker), Tastatur und assistive
+// Technik aber nur diesen Knopf - und der war so hoch wie eine Textzeile. Er
+// reicht jetzt ueber die Polsterung der Zeile (Polster + Gegenmarge), ohne die
+// Zeile hoeher zu machen.
+test('R16: der Auswahlknopf der Personalzeile hat die Hoehe der Zeile, nicht die des Namens', () => {
+  const rule = [...eachRule(HK_STYLES)].find((r) => r.selector.trim() === '.housekeeping-staff-row__select' && !r.at.length);
+  assert.ok(rule, 'die Regel ist nicht auffindbar - der Guard misst dann nichts');
+  assert.match(rule.body, /padding-block:\s*var\(--space-3\)/, 'der Knopf traegt die Polsterung der Zeile selbst');
+  assert.match(rule.body, /margin-block:\s*calc\(var\(--space-3\)\s*\*\s*-1\)/, 'und nimmt sie nach aussen zurueck: die Zeile bleibt so hoch wie vorher');
+  assert.doesNotMatch(rule.body, /(^|[\s;])padding:\s*0/, 'ein pauschales padding: 0 hoebe das wieder auf');
+});
+
+// ---------------------------------------------------------------------------
+// Review PR #1673: Fokus nach dem Loeschen aus dem Bearbeiten-Dialog
+// ---------------------------------------------------------------------------
+//
+// `deleteTask()` klappt die Zeile aus und zeichnet die Liste ERST DANACH neu.
+// Der Dialog rief `refocusAfterRender()` im selben Atemzug: die alte Zeile stand
+// noch, der Fokus galt als heil, und das spaetere Neuzeichnen liess ihn fallen.
+// Der Rueckruf laeuft jetzt nach dem Neuzeichnen - und noch einmal, wenn der
+// Toast die Zeile zurueckholt. Den Ablauf selbst faehrt
+// test-module-readonly-ui.js (dort steht das Mini-DOM fuer die Aufgabenliste).
+
+test('der Bearbeiten-Dialog gibt den Fokus NACH dem Neuzeichnen weiter, nicht davor', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  const from = src.indexOf("panel.querySelector('[data-delete-task]')?.addEventListener('click'");
+  assert.ok(from > 0, 'der Loeschen-Knopf des Dialogs ist verdrahtet');
+  const handler = src.slice(from, src.indexOf("#housekeeping-task-edit-form')?.addEventListener", from));
+  assert.match(handler, /deleteTask\(task, content, \(\) => focusTaskRowAfterDelete\(content, task\.id, index\)\);/);
+  assert.doesNotMatch(handler, /^\s*refocusAfterRender\(\);\s*$/m,
+    'ein Aufruf als eigene Anweisung laeuft vor dem Neuzeichnen und tut nichts');
+});
+
+// ---------------------------------------------------------------------------
+// #1723, Punkt 6: ein Wort fuer die Person, drei Schluessel fuer drei Aufgaben
+// ---------------------------------------------------------------------------
+//
+// `housekeeping.staff` ("Personal") war zugleich Reiter, Ersatz fuer einen
+// fehlenden Namen und Rollenname in Einstellungen > Familie. Der Reiter will
+// die Mehrzahl, die anderen beiden die Einzahl - ein Schluessel kann das nicht.
+// Gefahren werden die drei Stellen selbst; der i18n-Stub gibt den Schluessel
+// zurueck, den sie lesen.
+
+async function wordsForThePerson() {
+  // Reiter: der Kopf der Seite, wie renderShell() ihn baut.
+  let shell = '';
+  const page = { appendChild() {}, addEventListener() {} };
+  hk.state().tab = 'tasks';
+  // renderShell() baut den FAB ueber die DOM-API; mehr als ein Element, das
+  // Attribute annimmt, braucht er dafuer nicht.
+  const realDocument = globalThis.document;
+  const element = () => ({ dataset: {}, setAttribute() {}, appendChild() {}, addEventListener() {} });
+  globalThis.document = { createElement: element };
+  try {
+    hk.renderShell({
+      replaceChildren() { shell = ''; },
+      insertAdjacentHTML(_position, markup) { shell += markup; },
+      querySelector: (sel) => (sel === '.housekeeping-page' ? page : null),
+    });
+  } finally {
+    globalThis.document = realDocument;
+  }
+  const tab = shell.match(/data-tab-id="staff"[\s\S]*?<span class="sub-tab__label">([^<]+)<\/span>/)?.[1];
+
+  // Ersatzname: ein Besuch ohne `worker_name` im Monatsbericht.
+  const reports = await freshReports();
+  delete globalThis.__apiStub;
+  const placeholder = reports.html.match(/housekeeping\.\w+(?= · )/)?.[0];
+
+  // Rolle: die Zeile eines Haushaltshilfe-Kontos in Einstellungen > Familie.
+  const { __test: family } = await import('../public/settings/pages/admin-family.js');
+  const row = family.memberHtml({
+    id: 4, username: 'carla', display_name: 'Carla', role: 'member', family_role: 'other',
+    avatar_color: '#123456', is_worker: true, is_household_member: false, deactivated_at: null,
+  }, 1);
+  const role = row.match(/@carla · ([\w.]+)/)?.[1];
+  return { tab, placeholder, role };
+}
+
+test('#1723: Reiter, Ersatzname und Rolle der Haushaltshilfe lesen drei verschiedene Schluessel', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const words = await wordsForThePerson();
+  for (const [where, key] of Object.entries(words)) {
+    assert.match(key ?? '', /^housekeeping\.\w+$/, `${where}: kein Schluessel im Markup gefunden - der Test misst dann nichts`);
+  }
+  assert.equal(new Set(Object.values(words)).size, 3,
+    `zwei der drei Stellen teilen sich einen Schluessel: ${JSON.stringify(words)}`);
+
+  const dir = new URL('../public/locales/', import.meta.url);
+  const read = (file) => JSON.parse(readFileSync(new URL(file, dir), 'utf8'));
+  const value = (locale, key) => key.split('.').reduce((o, k) => o?.[k], locale);
+  const de = read('de.json');
+  const en = read('en.json');
+  // Ein Nomen: Haushaltshilfe / Housekeeper. Der Reiter und seine Ueberschrift
+  // tragen die Mehrzahl, der Knopf "+" die Einzahl.
+  assert.equal(value(de, words.tab), 'Haushaltshilfen');
+  assert.equal(value(en, words.tab), 'Housekeepers');
+  for (const key of [words.placeholder, words.role, 'newLabel.housekeepingWorker']) {
+    assert.equal(value(de, key), 'Haushaltshilfe', `de ${key}`);
+    assert.equal(value(en, key), 'Housekeeper', `en ${key}`);
+  }
+  // Der Modulname bleibt, wie er ist.
+  assert.equal(de.housekeeping.title, 'Haushaltshilfe');
+  assert.equal(en.housekeeping.title, 'Housekeeping');
+
+  for (const file of readdirSync(dir).filter((name) => name.endsWith('.json'))) {
+    const locale = read(file);
+    assert.equal(locale.housekeeping.staff, undefined, `${file}: housekeeping.staff ist als toter Schluessel geblieben`);
+    for (const key of Object.values(words)) {
+      assert.equal(typeof value(locale, key), 'string', `${file}: ${key} fehlt`);
+    }
+    // Die Person, die der Knopf "+" anlegt, heisst wie die Person, die in der
+    // Zeile steht - nicht "Person" hier und "Personal" dort.
+    assert.equal(value(locale, 'newLabel.housekeepingWorker'), value(locale, words.role),
+      `${file}: der Knopf nennt die Person anders als ihre Rolle`);
+  }
+});
+
+test('#1723: die Ueberschrift des Reiters heisst wie der Reiter', async () => {
+  const words = await wordsForThePerson();
+  const state = hk.state();
+  state.workers = [{ id: 7, display_name: 'Ana' }];
+  state.selectedStaffId = '7';
+  state.staffVisits = [];
+  state.tab = 'staff';
+  const content = fakeContainer();
+  hk.renderStaff(content);
+  // Unsichtbar: ein sichtbares h2 mit dem Namen des Reiters nennt die Ebene
+  // zweimal (test-typography.js). Die Gliederung behaelt es.
+  const heading = content.html.match(/<h2 class="sr-only">([^<]+)<\/h2>/)?.[1];
+  assert.equal(heading, words.tab, 'Reiter und Ueberschrift nennen dieselbe Liste verschieden');
+  assert.doesNotMatch(content.html.split('page-columns__rail')[0], /<h2 class="u-section-title">/,
+    'ueber der Liste steht eine zweite, sichtbare Ueberschrift');
+});
+
+// ---------------------------------------------------------------------------
+// Critique R17: die Reiterleiste steht auf jedem Reiter gleich
+// ---------------------------------------------------------------------------
+
+/* Der Monats-Stepper des Berichte-Reiters stand im Center-Slot des Kopfs. Mobil
+ * schob er sich damit als eigene Zeile ZWISCHEN Titel und Reiter: die Leiste
+ * sprang beim Wechsel auf "Berichte" von y=53 auf y=105 (Kopf 118 -> 170px).
+ * Jetzt ist der Kopf auf jedem Reiter derselbe, und der Zeitraum steht als
+ * eigene Zeile zwischen Kopf und Inhalt - ausserhalb des Inhalts, weil der bei
+ * jedem Monatsschritt neu gebaut wird und der Pfeil seinen Fokus behalten muss.
+ * Gemessen am ECHTEN Markup von renderShell(). */
+test('R17: der Zeitraum der Berichte steht unter den Reitern, nicht im Kopf', async () => {
+  let html = '';
+  const seite = { appendChild() {}, addEventListener() {}, dataset: {} };
+  const container = {
+    replaceChildren() { html = ''; },
+    insertAdjacentHTML(_pos, markup) { html += markup; },
+    querySelector: (sel) => (sel === '.housekeeping-page' ? seite : null),
+  };
+  hk.state().tab = 'reports';
+  // renderShell() baut nach dem Markup den FAB per DOM-API; dafuer reicht das
+  // Mini-DOM, und es wird danach wieder abgeraeumt.
+  const { installMiniDom } = await import('./mini-dom.js');
+  const abraeumen = installMiniDom();
+  try {
+    hk.renderShell(container);
+  } finally {
+    abraeumen();
+  }
+
+  const kopf = html.match(/<header class="([^"]*)"[^>]*>([\s\S]*?)<\/header>/);
+  assert.ok(kopf, 'die Seite hat einen Kopf');
+  assert.doesNotMatch(kopf[2], /housekeeping-period|page-toolbar__center/,
+    'im Kopf steht kein Zeitraum-Slot - er oeffnete mobil eine Zeile ueber den Reitern');
+  assert.doesNotMatch(kopf[1], /page-toolbar--period\b|page-toolbar--wrap\b/,
+    'der Kopf behauptet keinen Zeitraum mehr (der Modifier engte mobil den Zeilenabstand)');
+  assert.match(kopf[2], /role="tablist"/, 'die Reiter stehen im Kopf');
+
+  const nachKopf = html.slice(html.indexOf('</header>'));
+  assert.match(nachKopf, /^<\/header>\s*<div class="housekeeping-period" id="housekeeping-period" hidden><\/div>\s*<div class="housekeeping-content" id="housekeeping-content"><\/div>/,
+    'der Zeitraum ist die Zeile zwischen Kopf und Inhalt: unter den Reitern, ausserhalb des Inhalts, auf den anderen Reitern verborgen');
+  assert.equal((html.match(/id="housekeeping-period"/g) || []).length, 1, 'genau ein Slot');
+
+  // Die Zeile bringt ihr Layout selbst mit - den Center-Slot der Shell hat sie nicht mehr.
+  const { readFileSync } = await import('node:fs');
+  const { eachRule } = await import('./css-rules.js');
+  const regeln = [...eachRule(readFileSync(new URL('../public/styles/housekeeping.css', import.meta.url), 'utf8'))];
+  const basis = regeln.find((r) => r.selector.trim() === '.housekeeping-period' && r.at.length === 0);
+  assert.ok(basis, '.housekeeping-period hat eine Basisregel');
+  assert.match(basis.body, /display:\s*flex/);
+  assert.match(basis.body, /var\(--page-inline-pad\)/, 'dasselbe Seitenpolster wie der Inhalt darunter');
+  const verborgen = regeln.findIndex((r) => r.selector.trim() === '.housekeeping-period[hidden]' && /display:\s*none/.test(r.body));
+  assert.ok(verborgen > regeln.indexOf(basis), '`[hidden]` gewinnt gegen `display: flex` (steht dahinter)');
+});
+
+/* Entscheidung R17 (E16): am Desktop steht der Zeitraum wieder in der
+ * Titelzeile - dort sprang nie etwas, und unter den Reitern scrollte der Monat
+ * mit dem Inhalt weg. EIN Knoten, zwei Plaetze: placeReportPeriod() haengt ihn
+ * um. Mobil bleibt der Platz aus dem Markup (Test darueber). */
+test('R17/E16: ab 1024px haengt der Zeitraum in der Titelzeile, darunter unter den Reitern', async () => {
+  const klassen = new Set(['housekeeping-period']);
+  const zuege = [];
+  const actions = { name: 'actions' };
+  const slot = {
+    parentNode: null,
+    classList: { add: (c) => klassen.add(c), remove: (c) => klassen.delete(c) },
+  };
+  const head = {
+    querySelector: (sel) => (sel === '.page-toolbar__actions' ? actions : null),
+    insertBefore(node, vor) { zuege.push(['insertBefore', vor.name]); node.parentNode = head; },
+    after(node) { zuege.push(['after']); node.parentNode = page; },
+  };
+  const page = {
+    querySelector: (sel) => (sel === '#housekeeping-period' ? slot : sel === '.housekeeping-toolbar' ? head : null),
+  };
+  slot.parentNode = page;
+
+  hk.placeReportPeriod(page, true);
+  assert.deepEqual(zuege, [['insertBefore', 'actions']], 'breit: der Slot steht im Kopf VOR den Aktionen (Titel, Zeitraum, Pille)');
+  assert.ok(klassen.has('page-toolbar__center'), 'im Kopf ist er der Center-Slot der Shell');
+
+  hk.placeReportPeriod(page, true);
+  assert.equal(zuege.length, 1, 'steht er schon im Kopf, wird er nicht neu eingehaengt (der Pfeil behielte seinen Fokus nicht)');
+
+  hk.placeReportPeriod(page, false);
+  assert.deepEqual(zuege[1], ['after'], 'schmal: zurueck hinter den Kopf, also unter die Reiter');
+  assert.ok(!klassen.has('page-toolbar__center'), 'unter den Reitern ist er kein Center-Slot mehr');
+
+  hk.placeReportPeriod(page, false);
+  assert.equal(zuege.length, 2, 'steht er schon unter den Reitern, bleibt er stehen');
+
+  assert.equal(hk.REPORT_PERIOD_HEAD_QUERY, '(min-width: 1024px)', 'die Schwelle der angedockten Kopf-Pille');
+  const { readFileSync } = await import('node:fs');
+  const quelle = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  const shell = quelle.slice(quelle.indexOf('function renderShell('), quelle.indexOf('\n}\n', quelle.indexOf('function renderShell(')));
+  assert.match(shell, /watchReportPeriodPlace\(page\)/, 'renderShell() stellt den Platz ein und folgt der Breite');
+  const { eachRule } = await import('./css-rules.js');
+  const regeln = [...eachRule(readFileSync(new URL('../public/styles/housekeeping.css', import.meta.url), 'utf8'))];
+  const imKopf = regeln.find((r) => r.selector.trim() === '.page-toolbar > .housekeeping-period');
+  assert.match(imKopf?.body ?? '', /padding:\s*0/, 'im Kopf faellt das eigene Zeilenpolster');
+});
+
+// ---------------------------------------------------------------------------
+// R20: ohne `housekeeping_view_amounts` (neue Kinderkonten) steht kein Geld da
+// ---------------------------------------------------------------------------
+
+test('R20: ohne Betragsrecht keine Euro-Zeile, kein Zahlungsdiagramm, keine Lohnangabe - die Zeiten bleiben', async () => {
+  const perms = await import('../public/permissions.js');
+  // So kommt ein neues Kind an: Modul nur lesen, Betraege aus - und der Server
+  // schickt die Felder als null (test-child-start-permissions.js).
+  perms.setPermissions({ admin: false, modules: { housekeeping: 'read' }, widgets: {}, capabilities: { housekeeping_view_amounts: 'none' } });
+  try {
+    const state = hk.state();
+    state.tab = 'dashboard';
+    state.workers = [{ id: 7, display_name: 'Maria Silva', rate_type: 'daily', daily_rate: null, hourly_rate: null, payment_schedule: 'weekly' }];
+    state.dashboard = { visits_this_month: 3, last_visit: null, pending_tasks: 1, finished_tasks_this_month: 2, monthly_payments: null, pending_payments: null };
+    const visit = {
+      id: 31, worker_name: 'Maria Silva', check_in: '2026-08-06T08:00:00.000Z', check_out: '2026-08-06T11:00:00.000Z',
+      total_amount: null, daily_rate: null, extras: null, paid_at: null, rate_type: 'daily',
+      can_edit: false, can_delete: false, can_mark_paid: false,
+    };
+    state.recentVisits = [visit];
+    const content = fakeContainer();
+    hk.renderDashboard(content);
+    const html = content.html;
+    assert.doesNotMatch(html, /housekeeping-chart"/, 'das Zahlungsdiagramm entfaellt');
+    assert.match(html, /housekeeping-dashboard-columns housekeeping-dashboard-columns--single/, 'die Besuche nehmen die Zeile allein');
+    assert.doesNotMatch(html, /housekeeping\.pendingPayments/, 'keine offenen Zahlungen');
+    assert.doesNotMatch(html, /€|EUR/, 'kein Betrag, auch kein „0,00"');
+    assert.match(html, /housekeeping\.notHereToday/, 'die Personenzeile sagt, ob sie da ist, statt den Lohn zu nennen');
+    const [row] = visitRows(html);
+    assert.equal(row.meta, 'Maria Silva · 2026-08-06T08:00:00.000Z-2026-08-06T11:00:00.000Z', 'Person und Zeit statt Betrag und Zahlstatus');
+    assert.equal(hk.visitWorkDetailsHtml(visit), '', 'der Bericht nennt keinen Tagessatz');
+
+    // Und auch mit Recht: eine `null` aus einer Antwort wird nie „0,00 €".
+    perms.setPermissions({ admin: false, modules: {}, widgets: {}, capabilities: {} });
+    assert.equal(hk.amountsHidden(null), true);
+    assert.equal(hk.amountsHidden(0), false, 'eine echte 0 ist ein Betrag');
+  } finally {
+    perms.clearPermissions();
+  }
+});
+
+// R20 (handoff B2): seit B2 sehen eine Zahlungsaufgabe nur die Person, die
+// eincheckt, und die Admins - der Schalter in den Einstellungen sagt das.
+test('Einstellungen: der Hinweis zu Zahlungsaufgaben nennt, wer sie sieht', () => {
+  const localeDir = new URL('../public/locales/', import.meta.url);
+  const de = JSON.parse(readFileSync(new URL('de.json', localeDir), 'utf8'));
+  const en = JSON.parse(readFileSync(new URL('en.json', localeDir), 'utf8'));
+  assert.match(de.settings.housekeepingPaymentTasksHint, /nur die Person, die eincheckt, und die Administratoren/);
+  assert.match(en.settings.housekeepingPaymentTasksHint, /Only the person who checks in and the administrators/);
+});

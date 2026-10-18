@@ -1,0 +1,87 @@
+/**
+ * Modul: PWA Native Feel
+ * Zweck: Natives Touch- und Scrollverhalten, Safe Areas, Touch-Targets
+ * Abhängigkeiten: tokens.css, layout.css
+ */
+
+/* ── Kein Rubber-Banding, kein Body-Scroll ──
+ * overflow: hidden NUR auf body - NICHT auf html setzen.
+ * iOS Safari Bug: overflow:hidden auf <html> clippt position:fixed-Elemente,
+ * was body::after (Safe-Area-Fill) unsichtbar macht.
+ * overscroll-behavior: none auf html+body deaktiviert Pull-to-Refresh/Rubber-Banding. */
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* ── Kein Tap-Highlight auf allen Elementen (Android Chrome) ──
+ * reset.css setzt es nur auf html; hier global für alle Elemente */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Safe Area Insets (Notch, Dynamic Island, Gesture Bar) ──
+ * Nur horizontale Safe Areas auf body. Vertikale Safe Areas werden über
+ * .app-shell (padding-top im Standalone-Modus) und body::after (unten) gehandhabt.
+ * KEIN body padding-top/bottom - das würde .app-shell (height: 100dvh)
+ * um den Safe-Area-Betrag aus dem Viewport schieben und Scroll-Bleed erzeugen. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Touch-Targets werden über tokens.css (--target-sm/md/lg) und
+ * komponentenspezifische Styles gehandhabt - siehe Redesign Phase E.
+ * Keine globale min-size-Regel hier, da sie mit dem bestehenden
+ * Touch-Target-System kollidiert (::before-Expansion auf kleinen Elementen). */
+
+/* ── Smooth Momentum-Scrolling in scrollbaren Containern ── */
+.scroll-container,
+.nav-bottom__scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* ── Kein Text-Selection in UI-Elementen (nur in Content-Bereichen) ── */
+/* Geteilte Kopf-Klassen statt einer Vier-Modul-Namensliste: sonst haben nur
+ * vier der dreizehn Modul-Köpfe kein Text-Select (Issue #577). */
+nav,
+.nav-bottom,
+.nav-sidebar,
+.page-toolbar,
+.sub-tabs-bar,
+.modal-panel__header {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ── Standalone-Modus: Status-Bar-Bereich berücksichtigen ── */
+@media (display-mode: standalone) {
+  /* padding-top auf .app-shell (nicht body): So bleibt app-shell exakt 100dvh
+   * hoch und überläuft den Viewport nicht - body-padding hätte .app-shell
+   * nach unten verschoben und Scroll-Bleed verursacht. */
+  .app-shell {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Kein Scroll-Bleed - Content bleibt in seinem Container */
+  .app-content {
+    overscroll-behavior-y: contain;
+  }
+
+  /* KEINE EIGENE FLAECHE IM HOME-INDICATOR-BEREICH. Hier stand ein
+   * `body::after` (fixed, bottom: 0, Hoehe der unteren Safe-Area, Surface-Grund
+   * mit Blur), gebaut als Fortsetzung einer DECKENDEN Tab-Leiste in die
+   * Safe-Area. Die Leiste ist seit dem Liquid-Glass-Umbau eine transparente
+   * Zone mit schwebender Kapsel, und seit der Inhalt unter ihr laeuft (#1475)
+   * schnitt der Streifen ihn 34px ueber dem Displayrand ab: in der
+   * installierten App ein dunkler Balken unter der Navigation, der Tipps
+   * schluckte. Die Safe-Area gehoert jetzt der Zone `.nav-bottom` als
+   * padding-bottom, darunter scrollt der Inhalt bis zum Rand.
+   * Guard: test:mobile-chrome (3). */
+}

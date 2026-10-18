@@ -1,0 +1,165 @@
+import { DEFAULT_LOCALE, getSupportedLocales } from '../utils/i18n.js';
+
+function authSecurity() {
+  return [{ bearerAuth: [] }, { apiKeyAuth: [] }, { cookieAuth: [] }];
+}
+
+function csrfHeaderParam() {
+  return {
+    name: 'X-CSRF-Token',
+    in: 'header',
+    required: false,
+    description: 'Required for state-changing requests when using session/cookie authentication. Not required for API-token authentication.',
+    schema: { type: 'string' },
+  };
+}
+
+/**
+ * Retry-Sicherheit fuer POST (#822). Steht als EIN Helfer hier und wird in
+ * `buildOpenApiSpec` ueber alle POST-Operationen gelegt, statt an jeder
+ * einzelnen wiederholt zu werden: die Middleware gilt fuer den ganzen
+ * `/api/v1`-Namensraum, und eine handgepflegte Liste davon waere schon beim
+ * naechsten neuen Endpoint unvollstaendig.
+ */
+function idempotencyHeaderParam() {
+  return {
+    name: 'Idempotency-Key',
+    in: 'header',
+    required: false,
+    description: 'Optional client-generated key (printable ASCII, max 255 chars) that makes this POST retry-safe. Repeating the request with the same key and the same body returns the original response with `Idempotent-Replayed: true` instead of creating a second record. Reusing a key for a different body, or retrying while the first attempt is still running, answers 409. Keys are stored for 24 hours and survive a restart.',
+    schema: { type: 'string', maxLength: 255 },
+  };
+}
+
+// Belege gehoeren dem Dokumente-Modul (#1358, server/services/document-links.js):
+// ein Text je Richtung, damit Budget, Ausgaben und Inventar dasselbe sagen.
+const DOCUMENT_LINKS_READ_NOTE = 'Linked documents follow the Documents module: a document the caller cannot see is left out, and '
+  + 'without access to the Documents module (for API tokens a `documents:read` scope) `attachments` is `null` - neither the documents '
+  + 'nor their number are told, and a record with receipts looks the same as one without.';
+
+const BUDGET_LINKS_READ_NOTE = 'Linked budget entries follow the Budget module: without access to it (for API tokens a '
+  + '`budget:read` scope) `linked_entries` is empty and `linked_entries_total` is 0, and any request that looks up a budget entry '
+  + 'answers 404 as for an unknown one.';
+
+const DOCUMENT_LINK_REFUSAL = 'Linking a document needs access to the Documents module (for API tokens a `documents:read` scope). '
+  + 'Without it, any document id - a stored one, a visible one or one that does not exist - is refused with this same 403, before any '
+  + 'visibility or deletion check. An empty list or leaving the field out is not a link and changes nothing.';
+
+function jsonBody(schemaRef, description = 'JSON request body') {
+  return {
+    required: true,
+    description,
+    content: {
+      'application/json': {
+        schema: schemaRef ? { $ref: schemaRef } : { type: 'object', additionalProperties: true },
+      },
+    },
+  };
+}
+
+function op({
+  summary,
+  tag,
+  description,
+  auth = true,
+  admin = false,
+  params = [],
+  requestBody = null,
+  responses = null,
+  stateChanging = false,
+  documentDeleteConflict = false,
+  documentLinkRefusal = false,
+}) {
+  const operation = {
+    tags: [tag],
+    summary,
+    responses: responses ?? {
+      200: { description: 'Successful response' },
+      401: { $ref: '#/components/responses/Unauthorized' },
+      500: { $ref: '#/components/responses/InternalServerError' },
+    },
+  };
+
+  if (description) operation.description = description;
+  if (auth) operation.security = authSecurity();
+  if (admin) {
+    operation.description = `${operation.description ? `${operation.description}\n\n` : ''}Admin-only endpoint.`;
+    operation.responses[403] = { $ref: '#/components/responses/Forbidden' };
+  }
+  if (documentDeleteConflict) {
+    operation.responses[409] = {
+      description: 'A requested document is being deleted. Retry after the operation finishes. The response body reason is `DOCUMENT_DELETE_IN_PROGRESS`.',
+    };
+  }
+  if (documentLinkRefusal) {
+    operation.responses[403] = { description: DOCUMENT_LINK_REFUSAL };
+  }
+  if (params.length || stateChanging) {
+    operation.parameters = [...params];
+    if (stateChanging) operation.parameters.push(csrfHeaderParam());
+  }
+  if (requestBody) operation.requestBody = requestBody;
+  return operation;
+}
+
+function idParam(name = 'id', description = 'Resource ID') {
+  return {
+    name,
+    in: 'path',
+    required: true,
+    description,
+    schema: { type: 'integer' },
+  };
+}
+
+function stringPathParam(name, description) {
+  return {
+    name,
+    in: 'path',
+    required: true,
+    description,
+    schema: { type: 'string' },
+  };
+}
+
+// Die Werte kommen aus den Locale-Dateien (getSupportedLocales), dieselbe Quelle,
+// aus der die Route ihren `lang` aufloest. Bis #1523 stand hier eine Liste mit
+// 15 Codes, und jede spaeter hinzugekommene Sprache war als ungueltig
+// dokumentiert, obwohl die Route sie bediente.
+//
+// `fallback` sagt, was ohne brauchbares `lang` gilt, denn das ist je Route
+// verschieden: 'household' fuer die Budget-Kategorien (#1859, die Sprache des
+// Haushalts - ein fester `default` waere dort gelogen, er haengt an einer
+// Einstellung), sonst Englisch.
+function langParam({ fallback = 'default' } = {}) {
+  const locales = getSupportedLocales();
+  const supported = `Language code for localized labels. Supported values: ${locales.join(', ')}.`;
+  if (fallback === 'household') {
+    return {
+      name: 'lang',
+      in: 'query',
+      required: false,
+      description: `${supported} Without it, or with a value that is not supported, the labels come in the household language (the \`language\` preference, else derived from \`region\`, else ${DEFAULT_LOCALE}). The response names the language it used in \`lang\`.`,
+      schema: {
+        type: 'string',
+        enum: [...locales],
+      },
+    };
+  }
+  return {
+    name: 'lang',
+    in: 'query',
+    required: false,
+    description: `${supported} Defaults to ${DEFAULT_LOCALE}.`,
+    schema: {
+      type: 'string',
+      default: DEFAULT_LOCALE,
+      enum: [...locales],
+    },
+  };
+}
+
+export {
+  authSecurity, csrfHeaderParam, idempotencyHeaderParam, jsonBody, op, idParam, stringPathParam, langParam,
+  DOCUMENT_LINKS_READ_NOTE, DOCUMENT_LINK_REFUSAL, BUDGET_LINKS_READ_NOTE,
+};

@@ -1,0 +1,198 @@
+/**
+ * Modul: User Multi-Select
+ * Zweck: Wiederverwendbare Mehrfachauswahl-Komponente für Benutzer (Tasks & Kalender)
+ * Abhängigkeiten: public/utils/html.js, public/i18n.js
+ */
+
+import { esc } from '/utils/html.js';
+import { t } from '/i18n.js';
+import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { initials, compactInitials } from '/utils/initials.js';
+
+// Der Rand von `.avatar-stack__item` (user-multi-select.css). Er steht hier
+// als Zahl, weil die Scheibe ihre Groesse und Schrift ohnehin inline in px
+// bekommt und die Passrechnung beides braucht.
+const STACK_BORDER_PX = 2;
+
+/**
+ * Rendert einen Avatar-Stack für mehrere zugewiesene Benutzer.
+ * @param {Array<{id, display_name, color}>} users
+ * @param {object} opts
+ * @param {number} [opts.size=28]      Avatar-Größe in px
+ * @param {number} [opts.maxVisible=3] Maximale Avatare vor "+N"-Anzeige
+ * @param {number} [opts.minFont=11]   Untergrenze der Initialen in px
+ * @returns {string} HTML-String
+ */
+export function renderAvatarStack(users, { size = 28, maxVisible = 3, minFont = 11 } = {}) {
+  if (!users?.length) return '';
+  const visible = users.slice(0, maxVisible);
+  const overflow = users.length - visible.length;
+  // UNTER DER LESBARKEIT GIBT ES KEINE INITIALEN, NUR DIE FARBE (Etappe 3,
+  // 2026-08-17). Hier stand eine 9px-Untergrenze - unter jeder Schwelle, die
+  // die App sonst kennt (Caption 2 ist mit 11px die kleinste Textrolle), und
+  // die Kalender-Gitter riefen mit size 14-16 genau hinein (Sonde
+  // undersized-ui-text, 13 Fundstellen). Ab 20px Scheibe tragen 11px-Initialen
+  // (Verhaeltnis <= 0.55); darunter ist die Scheibe der Kanal - die Nutzerfarbe
+  // ist per User-Farben-Regel ohnehin das Identitaetssignal, und der Name
+  // steht weiter im title. Ein 9px-Text sagt weniger als ein sauberer Punkt.
+  // `minFont` hebt die Untergrenze dort, wo der Stapel neben Fliesstext steht
+  // (Agenda-Zeile: 12px neben 14px-Metazeile, Critique 2026-09-24). Wer sie
+  // hebt, gibt die Scheibe mit: 12px brauchen 22px, damit das Verhaeltnis
+  // <= 0.55 bleibt.
+  const fs = Math.max(minFont, Math.round(size * 0.4));
+  const showText = size >= 20;
+  // ZWEI GEVIERT-ZEICHEN BRAUCHEN BIS ZU 2em (#1607; gemessen: Noto Sans CJK
+  // 1em je Zeichen, die Apple-Systemschrift rund 0.9em). Der Rand der Scheibe (2px je
+  // Seite, user-multi-select.css) zaehlt bei `border-box` in ihre Breite, und
+  // `overflow: hidden` schneidet an seiner Innenkante. In eine 24px-Scheibe
+  // mit 11px Schrift passen deshalb 20px Text: zwei lateinische Buchstaben,
+  // aber keine zwei Hangul- oder Han-Zeichen (22px). Wo sie nicht passen,
+  // steht eines - die Schrift zu verkleinern hiesse unter die Untergrenze
+  // oben zu gehen.
+  const fitsTwoWide = size - 2 * STACK_BORDER_PX >= 2 * fs;
+  const avatars = visible.map((u) => {
+    const text = fitsTwoWide ? initials(u.display_name) : compactInitials(u.display_name);
+    const inner = u.avatar_data
+      ? `<img src="${esc(u.avatar_data)}" alt="${esc(u.display_name ?? '')}" loading="lazy">`
+      : (showText ? esc(text) : '');
+    return `<span class="avatar-stack__item"
+      style="width:${size}px;height:${size}px;font-size:${fs}px;background-color:${esc(u.color ?? AVATAR_FALLBACK_COLOR)};color:${getReadableTextColor(u.color ?? AVATAR_FALLBACK_COLOR)}"
+      title="${esc(u.display_name ?? '')}">
+      ${inner}
+    </span>`;
+  });
+  if (overflow > 0) {
+    avatars.push(`<span class="avatar-stack__item avatar-stack__overflow"
+      style="width:${size}px;height:${size}px;font-size:${fs}px"
+      title="${overflow} ${t('userMultiSelect.moreUsers')}">${showText ? `+${overflow}` : ''}</span>`);
+  }
+  return `<span class="avatar-stack">${avatars.join('')}</span>`;
+}
+
+/**
+ * DER GETEILTE NACHNAME STEHT NICHT IN JEDEM CHIP (R19, Critique 2026-10-16:
+ * Termin-Dialog mobil 1,6 Bildschirme). "Alex Johnson, Emma Johnson, Leo
+ * Johnson, Linda Johnson" brauchten bei 390px drei Chip-Zeilen, und das
+ * vierfache "Johnson" unterscheidet niemanden. Tragen ALLE Personen der Wahl
+ * denselben Nachnamen, zeigt der Chip den Vornamen; der volle Name bleibt sein
+ * zugaenglicher Name (`.sr-only`). Ein Konto mit anderem Nachnamen (Hilfe,
+ * Grosseltern) laesst alle Namen voll stehen - dann unterscheidet er.
+ * @param {Array<{display_name?: string}>} users
+ * @returns {string} der geteilte Nachname, sonst ''
+ */
+export function sharedSurname(users) {
+  if (!Array.isArray(users) || users.length < 2) return '';
+  const lasts = users.map((u) => String(u?.display_name ?? '').trim().split(/\s+/))
+    .map((parts) => (parts.length >= 2 ? parts[parts.length - 1] : ''));
+  const [first] = lasts;
+  return first && lasts.every((l) => l === first) ? first : '';
+}
+
+function userChipName(displayName, surname) {
+  const full = String(displayName ?? '').trim();
+  if (!surname || !full.endsWith(` ${surname}`)) return esc(full);
+  const given = full.slice(0, -(surname.length + 1));
+  return `${esc(given)}<span class="sr-only"> ${esc(surname)}</span>`;
+}
+
+/**
+ * Rendert das Multi-Select-Widget als Dropdown-Checkbox-Liste.
+ * @param {Array<{id, display_name, avatar_color}>} allUsers  Alle verfügbaren Benutzer
+ * @param {number[]} selectedIds                               Bereits ausgewählte IDs
+ * @param {string}   inputName                                 Name-Attribut des Widgets
+ * @param {string}   labelKey                                  i18n-Schlüssel für das Label
+ * @param {string}   [noneLabelKey]                            i18n-Schlüssel für die "Niemand"-Zeile;
+ *   Vorgabe passt für "wem zugewiesen" (Tasks/Kalender/Budget). Ein Aufrufer, dessen Auswahl kein
+ *   Zuweisen ist - z. B. der Schedule-Vergleich, wo "Niemand" nur die Auswahl leert - übergibt
+ *   seinen eigenen Schlüssel (S-19).
+ * @returns {string} HTML-String
+ */
+export function renderUserMultiSelect(allUsers, selectedIds, inputName, labelKey, noneLabelKey = 'userMultiSelect.nobody') {
+  const selectedSet = new Set(selectedIds ?? []);
+  const surname = sharedSurname(allUsers);
+  const items = allUsers.map((u) => {
+    const checked = selectedSet.has(u.id) ? 'checked' : '';
+    const inner = u.avatar_data
+      ? `<img src="${esc(u.avatar_data)}" alt="${esc(u.display_name ?? '')}" loading="lazy">`
+      : esc(initials(u.display_name));
+    return `
+      <label class="user-ms__option">
+        <input type="checkbox" class="user-ms__checkbox" value="${u.id}" ${checked}
+               data-ms-input="${esc(inputName)}">
+        <span class="user-ms__avatar" style="background-color:${esc(u.avatar_color ?? AVATAR_FALLBACK_COLOR)};color:${getReadableTextColor(u.avatar_color ?? AVATAR_FALLBACK_COLOR)}">
+          ${inner}
+        </span>
+        <span class="user-ms__name">${userChipName(u.display_name, surname)}</span>
+      </label>`;
+  });
+
+  // „Niemand" ist ein ruhiger Eintrag, keine Person: kein Avatar und keine
+  // Striche um das Wort. Hier stand ein grauer Kreis mit einem Gedankenstrich
+  // und „- Niemand -" daneben - ein Platzhalter-Gesicht, das neben echten
+  // Initialen wie ein weiteres Mitglied aussah (Critique 2026-09-24).
+  const noneLabel = t(noneLabelKey);
+  return `
+    <div class="user-ms" data-ms-name="${esc(inputName)}">
+      <label class="label">${t(labelKey)}</label>
+      <div class="user-ms__options">
+        <label class="user-ms__option user-ms__option--none">
+          <input type="checkbox" class="user-ms__checkbox user-ms__none" value=""
+                 data-ms-input="${esc(inputName)}" ${selectedSet.size === 0 ? 'checked' : ''}>
+          <span class="user-ms__name">${noneLabel}</span>
+        </label>
+        ${items.join('')}
+      </div>
+    </div>`;
+}
+
+/**
+ * Liest die ausgewählten User-IDs aus einem gerenderten Multi-Select-Widget.
+ * @param {Element} container  DOM-Element, das das Widget enthält
+ * @param {string}  inputName  Name-Attribut des Widgets
+ * @returns {number[]}
+ */
+export function getSelectedUserIds(container, inputName) {
+  const checkboxes = container.querySelectorAll(
+    `[data-ms-input="${CSS.escape(inputName)}"]:not(.user-ms__none):checked`
+  );
+  return Array.from(checkboxes).map((cb) => Number(cb.value)).filter(Boolean);
+}
+
+/**
+ * Bindet die Checkbox-Logik:
+ * - "Niemand" deselektiert alle anderen
+ * - Andere Auswahl deselektiert "Niemand"
+ * - `single`: hoechstens EINE Person. Eine neue Wahl loest die vorige ab, und
+ *   wer die gewaehlte Person abwaehlt, landet wieder bei "Niemand" - sonst
+ *   stuende die Reihe ohne jede Markierung da. Fuer Felder, die genau eine
+ *   Person tragen (der Koch einer Mahlzeit, #1679): dieselbe Auswahl wie bei
+ *   den Zustaendigen einer Aufgabe, nur dass der Server eine einzige id
+ *   erwartet. Das Markup bleibt dasselbe; `getSelectedUserIds()` liefert dann
+ *   null oder eine id.
+ * @param {Element} container
+ * @param {string}  inputName
+ * @param {{ single?: boolean }} [options]
+ */
+export function bindUserMultiSelect(container, inputName, { single = false } = {}) {
+  const widget = container.querySelector(`.user-ms[data-ms-name="${CSS.escape(inputName)}"]`);
+  if (!widget) return;
+
+  widget.addEventListener('change', (e) => {
+    const cb = e.target;
+    if (!cb.matches('.user-ms__checkbox')) return;
+    const none = widget.querySelector('.user-ms__none');
+
+    if (cb.classList.contains('user-ms__none') && cb.checked) {
+      widget.querySelectorAll('.user-ms__checkbox:not(.user-ms__none)').forEach((c) => { c.checked = false; });
+    } else if (!cb.classList.contains('user-ms__none') && cb.checked) {
+      if (none) none.checked = false;
+      if (single) {
+        widget.querySelectorAll('.user-ms__checkbox:not(.user-ms__none)').forEach((c) => {
+          if (c !== cb) c.checked = false;
+        });
+      }
+    } else if (single && none && !widget.querySelector('.user-ms__checkbox:checked')) {
+      none.checked = true;
+    }
+  });
+}

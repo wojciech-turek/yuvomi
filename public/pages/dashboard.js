@@ -1,0 +1,8128 @@
+/**
+ * Modul: Dashboard
+ * Zweck: Startseite mit Begrüßung, Terminen, Aufgaben, Essen, Notizen und FAB
+ * Abhängigkeiten: /api.js
+ */
+
+import { api, auth } from '/api.js';
+import { createPageController } from '/utils/page-lifecycle.js';
+import { canSeeWidget, moduleAccess, navModuleAccess, canUseFasting } from '/permissions.js';
+import { todaySheetContext, collectSourceRows, composeTodaySheet, codaAllowed, speakingSourceIds } from '/utils/today-sheet.js';
+import { t, formatDate, formatDayMonth, formatTime, timeSuffix, getLocale, getNumberFormat } from '/i18n.js';
+import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { resolveEventColor } from '/utils/event-color.js';
+import { hasEventIcon, eventIconHtml } from '/utils/event-icon.js';
+import { compareMembers, sortMembers } from '/utils/member-order.js';
+import { buildWeekStrip } from '/utils/week-strip.js';
+import { relativeDateLabel, housekeepingSinceLabel } from '/utils/day-label.js';
+import { esc, fmtLocation, renderMarkdownLight } from '/utils/html.js';
+import { initials } from '/utils/initials.js';
+// `todayKey` heisst hier schon ein Parameter (bzw. eine lokale Bindung), der den
+// Bezugstag traegt - der Import kommt deshalb unter eigenem Namen herein.
+import { parseLocalDateKey, addLocalDays, todayKey as householdToday } from '/utils/date.js';
+import { nowFields, zonedUTCProxy, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
+import { predictCycle, PHASE } from '/utils/health-cycle.js';
+import { NUTRIENTS, nutrientProgress } from '/utils/health-nutrition.js';
+import { startFasting, finishFasting, startFastingClock, fastingClockSwitchHtml, fastingError } from '/components/fasting-controls.js';
+import { localizeBirthdayEvent } from '/utils/birthday-event.js';
+import { countdownPhrase, countdownRank } from '/utils/countdown.js';
+import { EXPIRY_SOON_DAYS, pantryExpiryPhrase, pantryExpiryTone } from '/utils/pantry-status.js';
+import { locationLabel } from '/utils/pantry-locations.js';
+import { pantryQuantityLabel } from '/utils/pantry-units.js';
+import { findPageFab } from '/utils/fab.js';
+import { setLeaveGuard } from '/utils/leave-guard.js';
+import { openModal, closeModal, confirmModal, refocusAfterRender } from '/components/modal.js';
+import { renderAvatarStack } from '/components/user-multi-select.js';
+import { isSoloHousehold } from '/utils/household.js';
+import { toggleRegion, durationToken, easingToken } from '/utils/ux.js';
+import { swapContent } from '/utils/content-swap.js';
+import { brandMarkSvg } from '/utils/brand-mark.js';
+import { findSettingsLeaf } from '/settings/registry.js';
+import {
+  WIDGET_SIZE_PRESETS, WIDGET_SIZE_OPTIONS,
+  COCKPIT_COVERED_WIDGETS,
+  nearestPreset, sameWidgetConfig, suggestGridHoleFill, rowFillSpans,
+  dashboardQuery, dashboardQueryFiltersCounts, dashboardRequest, normalizeShoppingListSelection,
+  fetchPendingReminders, childDefaultWidgetConfig,
+} from '/utils/dashboard-widgets.js';
+import { EVENT_LIMIT_STEPS, EVENT_LIMIT_DEFAULT, clampEventLimit } from '/utils/dashboard-event-limit.js';
+import {
+  allWidgetIds,
+  buildDefaultWidgetConfig,
+  normalizeDashboardConfigWithExtensions,
+  isExtensionWidget,
+  getExtensionWidgetMeta,
+} from '/utils/extension-widgets.js';
+import { widgetDisplayLabel, optionFieldLabel } from '/utils/extension-i18n.js';
+import { whoMark } from '/utils/seal-pair.js';
+import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
+import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { mountZonePrompt } from '/utils/household-zone-hint.js';
+import { renderWallTimer, wireWallTimer } from '/components/wall-timer.js';
+import { rememberLayoutHint, layoutHintSizes, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
+import { emptyHintHTML } from '/utils/empty-state.js';
+import { quickLinkHost } from '/utils/quick-link-url.js';
+import { hasIcon } from '/utils/lucide-icons.js';
+import { prefersInkText } from '/utils/contrast.js';
+import { attachOverlay, pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.js';
+import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
+import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
+import { wireNoteCategoryOverflow } from '/utils/note-category-overflow.js';
+import { installPopoverMenus, popoverMenuHtml } from '/utils/popover-menu.js';
+import { nextRewardGoal } from '/utils/reward-goal.js';
+
+// Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
+let _fabController = null;
+
+/* DIE WAND HAELT DEN EINEN HISTORY-MARKER (#1559). Zurueck beendete sie nicht:
+ * es gab keinen Eintrag und keinen `popstate`-Handler, in der installierten App
+ * schloss die Geste die App, und beim naechsten Start stand die Wand wieder da.
+ * Sie meldet sich deshalb im Overlay-Register an wie jeder Dialog - derselbe
+ * EINE Marker (utils/overlay-history.js), keine zweite Buchhaltung.
+ *
+ * Angemeldet wird, solange die Flaeche STEHT, nicht beim Einschalten: der Modus
+ * ist gemerkt und steht nach einem Neustart ohne jeden Klick wieder da. Auch
+ * dann fuehrt Zurueck erst aus der Wand auf die Uebersicht und nicht aus der
+ * App. Die Flaeche baut sich oft neu (Timer, Minutentakt, Laden) - der Token
+ * ueberlebt das, und `_wallLeave` zeigt auf den Ausstieg des juengsten Aufbaus.
+ *
+ * `force` (Navigation, Sitzungsende) gibt nur den Marker frei, der Modus BLEIBT
+ * gemerkt: wer per Kurzbefehl woandershin geht, hat die Wand nicht abbestellt.
+ * Sie gilt ohnehin nur auf `/` (isWallRoute). */
+let _wallOverlay = null;
+let _wallLeave = null;
+
+/* WOHIN DER FOKUS NACH DEM MODUSWECHSEL GEHT (R20, Re-Critique 2026-10-17 A1
+ * P2-6). Start und Ausstieg bauen die ganze Seite neu (`rerender`), und danach
+ * stand der Fokus auf <body>: wer per Tastatur „Wand-Modus starten" drueckte,
+ * fand sich nirgends, und nach Esc wieder am Dokumentanfang. Die Absicht
+ * ueberlebt den Neuaufbau hier, weil `render()` eine neue Closure baut:
+ *   'enter' -> die Wandflaeche selbst (`#wall-surface`, tabindex=-1): ein
+ *              ruhiger Einstieg, kein Knopf - ein Enter dort beendete sonst
+ *              gleich wieder, was gerade begonnen hat;
+ *   'leave' -> der Knopf, der die Wand wieder oeffnet (am Finger das Menue).
+ * Einmal gelesen, dann vergessen. */
+let _wallFocusIntent = null;
+function takeWallFocusIntent(kind) {
+  if (_wallFocusIntent !== kind) return false;
+  _wallFocusIntent = null;
+  return true;
+}
+
+function holdWallMarker(leave) {
+  _wallLeave = leave;
+  if (_wallOverlay !== null && isOverlayOpen(_wallOverlay)) return;
+  _wallOverlay = pushOverlay(({ force }) => {
+    _wallOverlay = null;
+    if (!force) _wallLeave?.();
+  });
+}
+
+function releaseWallMarker() {
+  _wallLeave = null;
+  if (_wallOverlay === null) return;
+  const token = _wallOverlay;
+  _wallOverlay = null;
+  dropOverlay(token);
+}
+
+const noteCategoryName = (category) => String(category?.name || '');
+const noteCategoryScope = (category) => t(
+  category?.scope === 'personal' ? 'noteCategories.personal' : 'noteCategories.household',
+);
+
+
+// ── Onboarding ──────────────────────────────────────────────────────────────
+
+const ONBOARDING_KEY = 'yuvomi-onboarded';
+// Der Dialog benennt sich ueber seinen Schritt-Titel; die id steht hier, weil
+// beide Seiten der Verknuepfung sie brauchen (Overlay und `fillStep()`).
+const ONBOARDING_TITLE_ID = 'onboarding-step-title';
+const APP_NAME_STORAGE_KEY = 'yuvomi-app-name';
+const CUSTOMIZE_HINT_KEY = 'yuvomi-dash-customize-hint';
+
+/* DER TAG EINES TERMINS IST DER TAG DER HAUSHALTSZONE, nicht der des Browsers.
+ *
+ * Hier stand `toLocalDateKey(new Date(value))`, und das las einen
+ * synchronisierten Termin (`…Z` oder mit Offset) in der Zone des GERAETS:
+ * `toLocalDateKey` sieht die Haushaltszone bewusst nie (CLAUDE.md, Fallen).
+ * Mit Haushalt in Berlin und Telefon in Tokio stand ein Termin um 23:30 am
+ * Folgetag - in der Liste, im Tagesprogramm, im Familien-Widget und im
+ * Kalender-Link. Zonenlose Wanduhrzeit fiel nicht auf, weil der Umweg ueber
+ * `new Date()` dieselben Ziffern zurueckgibt.
+ *
+ * `zonedDateKey` ist dieselbe Antwort, die der Kalender gibt (`localDate` in
+ * pages/calendar.js): Wanduhrzeit wird gelesen, ein Zeitpunkt in die
+ * Anzeigezone umgerechnet, ohne gesetzte Zone bleibt es beim Browser. */
+function eventOccurrenceDateKey(event) {
+  const value = String(event?.start_datetime || '');
+  if (!value) return '';
+  if (value.length <= 10) return value.slice(0, 10);
+  return zonedDateKey(value) || value.slice(0, 10);
+}
+
+// All-day events store start_datetime as a date-only key ("2026-07-10"). Parsing
+// that with `new Date()` yields UTC midnight, which shifts the calendar day back
+// one day west of UTC. Parse date-only values as local calendar dates so all-day
+// events land on the correct day in the dashboard widget (issue #466).
+function eventStartDate(event) {
+  const value = String(event?.start_datetime || '');
+  if (!value) return null;
+  if (value.length <= 10) return parseLocalDateKey(value);
+  return new Date(value);
+}
+
+function calendarEventRoute(event) {
+  if (!event?.id) return '/calendar';
+  const params = new URLSearchParams({ open: String(event.id) });
+  const occurrenceDate = eventOccurrenceDateKey(event);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(occurrenceDate)) params.set('date', occurrenceDate);
+  return `/calendar?${params.toString()}`;
+}
+
+/**
+ * Ein Zeitpunkt oder eine Wanduhrzeit als Stempel des Haushalts
+ * ('YYYY-MM-DDTHH:MM', Anzeigezone): Wanduhrzeit wird gelesen, ein Zeitpunkt
+ * umgerechnet. Leer, wenn der Wert keinen hergibt. Termin-Kachel, Heute-Blatt
+ * und Familienkarte vergleichen mit DIESEM Stempel.
+ */
+function householdStamp(value) {
+  const day = zonedDateKey(value);
+  const time = zonedTimeKey(value);
+  return day && time ? `${day}T${time}` : '';
+}
+
+/** Jetzt als Wanduhr-Stempel des Haushalts ('YYYY-MM-DDTHH:MM'). */
+function householdNowStamp(now = new Date()) {
+  return householdStamp(now);
+}
+
+/** Geburtstags-Termine tragen serverseitig einen sprachneutralen Titel (#524) -
+ * in beiden Terminlisten der Antwort, der der Kachel und der der Familienkarte. */
+function localizeEventLists(payload) {
+  for (const key of ['upcomingEvents', 'familyEvents']) {
+    if (Array.isArray(payload?.[key])) payload[key] = payload[key].map(localizeBirthdayEvent);
+  }
+}
+
+/**
+ * Ist dieser Termin vorbei (#1449)? „Vorbei" heisst: sein ENDE liegt hinter
+ * uns, gelesen in der Wanduhr des Haushalts - dieselbe Regel wie serverseitig
+ * in `getUpcomingEvents` (`keepEndedToday`). Ein laufender Termin zaehlt also
+ * noch, ein ganztaegiger endet nie an seinem eigenen Tag, und ohne Ende ist
+ * der Start das Ende.
+ *
+ * Gefragt wird hier und nicht nur beim Laden, weil ein Termin auch zwischen
+ * zwei Abrufen endet: das unberuehrte Wandtablet soll um 9:31 nicht mehr den
+ * Termin bis 9:30 zeigen, sondern erst in einer Viertelstunde.
+ */
+function eventHasEnded(event, nowStamp) {
+  if (!event || event.all_day) return false;
+  const end = String(event.end_datetime || event.start_datetime || '');
+  if (end.length <= 10) return false;
+  const endStamp = householdStamp(end);
+  return endStamp !== '' && endStamp <= nowStamp;
+}
+
+/**
+ * Wo die Uebersicht einen Termin HEUTE fuehrt (#1457).
+ *
+ * `upcomingEvents` bringt seit #1457 auch, was vor heute begann und heute
+ * noch laeuft - die Reise von gestern 18:00 bis morgen 12:00. Nach ihrem
+ * Beginn stuende sie auf gestern und fiele aus Kachel, Heute-Blatt, Wand und
+ * Familienkarte; mit ihrer Startzeit neben den heutigen Eintraegen log sie.
+ * Hier bekommt sie deshalb den Tag heute und die Form, die der Kalender fuer
+ * denselben Tag waehlt (agendaSegmentKind): endet sie heute, heisst es
+ * „bis 12:00" (`until`), laeuft sie weiter, steht sie wie ganztaegig da.
+ *
+ * `day`     der Tag der Zeile (Haushaltszone)
+ * `carried` begann vor heute und reicht in heute
+ * `allDay`  ganztaegig oder ueber heute hinweg
+ * `until`   das Ende, wenn ein mitgetragener Termin heute endet, sonst null
+ */
+function overviewEventSpan(event, todayKey) {
+  const raw = String(event?.start_datetime || '');
+  const allDay = Boolean(event?.all_day) || raw.length <= 10;
+  const day = eventOccurrenceDateKey(event);
+  if (!day || !todayKey || day >= todayKey || !eventReachesInto(event, todayKey, allDay)) {
+    return { day, carried: false, allDay, until: null };
+  }
+  const end = String(event?.end_datetime || '');
+  // Ein Ende um genau 00:00 schliesst den Tag davor (#804): bis Mitternacht
+  // heisst „bis heute 24:00", nicht „laeuft morgen weiter".
+  const endsToday = !allDay && end.length > 10 && (zonedDateKey(end) === todayKey
+    || householdStamp(end) === `${addLocalDays(todayKey, 1)}T00:00`);
+  return { day: todayKey, carried: true, allDay: allDay || !endsToday, until: endsToday ? end : null };
+}
+
+/** Reicht der Termin ueber die Mitternacht vor `dayKey` hinaus? Ganztaegig inklusiv, wie im Kalender. */
+function eventReachesInto(event, dayKey, allDay) {
+  const raw = String(event?.start_datetime || '');
+  if (allDay) {
+    const startKey = raw.slice(0, 10);
+    const endKey = event?.end_datetime ? String(event.end_datetime).slice(0, 10) : startKey;
+    return (endKey > startKey ? endKey : startKey) >= dayKey;
+  }
+  const endStamp = householdStamp(String(event?.end_datetime || raw));
+  return endStamp !== '' && endStamp > `${dayKey}T00:00`;
+}
+
+/** Die Zeitangabe eines Termins auf der Uebersicht: „bis 12:00", „Ganztaegig" oder der Beginn. */
+function overviewEventTime(event, span) {
+  if (span.until) return t('dashboard.todayUntil', { time: formatTime(span.until) });
+  if (span.allDay) return t('dashboard.allDay');
+  return formatTime(event.start_datetime);
+}
+
+/**
+ * Der Name des Kalenders, zu dem ein Termin gehoert - oder leer (#1698).
+ *
+ * `source_calendar_name` VOR `cal_name`, dieselbe Reihenfolge wie im
+ * Kalendermodul (calendar.js): `cal_name` kommt ueber die Verknuepfung des
+ * schon synchronisierten Termins und fehlt, solange ein neu angelegter Termin
+ * noch auf seinen Upload wartet; waehrend eines ausstehenden Umzugs nennt er
+ * noch den alten Kalender. `source_calendar_name` nennt in beiden Faellen das
+ * Ziel, das der Mensch gewaehlt hat.
+ */
+function eventCalendarName(event) {
+  return String(event?.source_calendar_name ?? '').trim() || String(event?.cal_name ?? '').trim();
+}
+
+/**
+ * Das Ende eines Termins fuer die WAND (#1698, D#988), fertig formatiert -
+ * oder leer, wenn die Zeile beim Beginn allein bleibt. Die Wand schreibt es
+ * hinter die Zeitangabe, die `overviewEventTime` liefert: Beginn UND Ende.
+ *
+ * „Frueh 6:00" sagt, wann die Schicht anfaengt; an der Wand will man wissen,
+ * wann sie vorbei ist. Wo `overviewEventTime` schon etwas anderes als den
+ * Beginn nennt („bis 12:00", „Ganztaegig"), bleibt es dabei - das Ende steht
+ * dort schon, oder es gibt keins.
+ *
+ * KEINE SPANNE OHNE ECHTES ENDE: fehlt es, liegt es nicht nach dem Beginn, oder
+ * liegt es einen ganzen Tag oder mehr danach, bleibt der Beginn allein. „22:00
+ * - 06:00" liest jeder als die Nacht; „18:00 - 12:00" fuer eine Reise bis
+ * uebermorgen laese sich wie ein Fehler.
+ *
+ * „EIN TAG ODER MEHR" IST EINE FRAGE AN DIE WANDUHR, NICHT AN DIE STOPPUHR.
+ * Verglichen werden die Stempel des Haushalts: das Ende gegen den Beginn am
+ * Folgetag zur selben Uhrzeit. Hier standen zuerst Millisekunden
+ * (`new Date(end) - new Date(start) >= 24 h`), und das war zweimal falsch: in
+ * der Nacht der Zeitumstellung hat der Tag 23 Stunden, Samstag 22:00 bis
+ * Sonntag 22:00 las sich als „22:00 - 22:00"; und `new Date('…T22:00')` liest
+ * die Ziffern in der Zone des GERAETS, die Antwort hing also am Tablett statt
+ * am Haushalt (dieselbe Falle wie #1534).
+ *
+ * Der Bindestrich ist dieselbe Form wie bei den Schichten des Blatts
+ * (utils/today-sheet.js).
+ */
+function wallEventEnd(event, span) {
+  if (span.until || span.allDay) return '';
+  const end = String(event?.end_datetime || '');
+  // Ein Ende ohne Uhrzeit ('YYYY-MM-DD') ist kein Ende einer Spanne. Der
+  // Riegel steht HIER und nicht im Stempel: `householdStamp('2026-09-25')`
+  // liest Mitternacht, und aus „18:00 bis zum 25." wuerde „18:00 - 00:00" -
+  // eine Uhrzeit, die niemand eingetragen hat.
+  if (end.length <= 10) return '';
+  const startStamp = householdStamp(String(event?.start_datetime || ''));
+  const endStamp = householdStamp(end);
+  if (!startStamp || !endStamp || endStamp <= startStamp) return '';
+  const dayLater = `${addLocalDays(startStamp.slice(0, 10), 1)}${startStamp.slice(10)}`;
+  if (endStamp >= dayLater) return '';
+  return formatTime(end);
+}
+
+function getAppName() {
+  return localStorage.getItem(APP_NAME_STORAGE_KEY) || 'Yuvomi';
+}
+
+function getOnboardingSteps() {
+  const appName = getAppName();
+  // Plattform-bewusste Copy (Critique P5/Paket 3): der allererste Eindruck darf
+  // keine UI beschreiben, die der Nutzer nicht sieht - Desktop mit Sidebar
+  // bekommt weder Bottom-Bar- noch Wischgesten-Text. Gleicher Breakpoint wie
+  // der Sidebar-Umbruch (layout.css, min-width: 1024px).
+  const desktop = window.matchMedia('(min-width: 1024px)').matches;
+  // DIE MARKE UND DIE ECHTEN KNOEPFE (Re-Critique 2026-10-17, A1): der
+  // Rundgang begann mit einem Lucide-Haus statt der Bildmarke und beschrieb
+  // Leiste und Plus-Knopf nur in Worten. Schritt 1 traegt jetzt das Zeichen
+  // (utils/brand-mark.js), Schritt 2 und 3 zeigen auf das Bedienelement, das
+  // der Text nennt (`target`, siehe placeSpotlight in showOnboarding).
+  return [
+    { mark: true,           title: t('onboarding.step1Title', { name: appName }), body: t('onboarding.step1Body') },
+    { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
+      target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
+    { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
+      target: () => [...document.querySelectorAll('.page-fab')].find(isShownOnScreen) ?? null },
+  ];
+}
+
+/** Steht das Element sichtbar im Fenster? (Ziel eines Rundgang-Schritts) */
+function isShownOnScreen(el) {
+  if (!el || !el.getClientRects().length) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
+    && r.top < window.innerHeight && r.left < window.innerWidth;
+}
+
+/** Abstand des Lichtrings um das gezeigte Bedienelement, in px. */
+const ONBOARDING_SPOT_PAD = 6;
+
+function showOnboarding(appContainer, onDone) {
+  const steps = getOnboardingSteps();
+  let current = 0;
+
+  // Fokus vor dem Dialog merken, um ihn beim Schließen zurückzugeben.
+  const previouslyFocused = document.activeElement;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'onboarding-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  // EIN DIALOG OHNE NAMEN ist fuer den Screenreader nur „Dialog". Der Name
+  // kommt aus dem Schritt-Titel, den `fillStep()` ohnehin baut; die id ist
+  // deshalb konstant und wandert mit dem Austausch des Karteninhalts mit
+  // (WCAG 4.1.2). `aria-modal` versteckt alles dahinter - was bleibt, muss
+  // sich also selbst benennen.
+  overlay.setAttribute('aria-labelledby', ONBOARDING_TITLE_ID);
+
+  const onKeydown = (event) => {
+    if (event.key === 'Escape') { finish(); return; }
+    if (event.key !== 'Tab') return;
+    // Fokus-Trap (WCAG 2.4.3/2.1.2): der Erststart-Dialog darf den Fokus nicht
+    // auf die verdeckte Seite dahinter entlassen. Fokussierbare Elemente je
+    // Tab-Druck neu ermitteln, da fillStep() den Karteninhalt austauscht.
+    const focusables = overlay.querySelectorAll(
+      'button, [href], input, [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  document.addEventListener('keydown', onKeydown);
+
+  /* DIE KARTE STEHT, IHR INHALT WECHSELT (R17, Bewegung). Bisher baute jeder
+   * Schritt die Karte neu: sie sprang mit der Textlaenge (gemessen 327 ->
+   * 353px) und die Knoepfe wanderten unter dem Zeiger weg. Jetzt bleibt die
+   * Karte derselbe Knoten, `.onboarding-step` darin traegt den Schritt und
+   * tauscht ueber swapContent() in Leserichtung (utils/content-swap.js) - und
+   * er ist so hoch wie der hoechste der Schritte (`fitSteps()`, gemessen
+   * statt geraten: die Texte sind je Sprache verschieden lang). */
+  const card = document.createElement('div');
+  card.className = 'onboarding-card';
+  const stepEl = document.createElement('div');
+  stepEl.className = 'onboarding-step';
+  card.appendChild(stepEl);
+
+  /* DER LICHTRING (Re-Critique 2026-10-17, A1 "kein Bezug auf echte
+   * Bedienelemente"). Nennt ein Schritt die Leiste oder den Plus-Knopf, liegt
+   * ueber genau diesem Knopf ein Ausschnitt: der Ring traegt den Abdunkler als
+   * Schatten nach aussen (`box-shadow` mit 100vmax Spreizung), das Overlay
+   * selbst wird dafuer klar. So steht das echte Element scharf im Bild, der
+   * Rest gedimmt - ohne Maske, ohne Kopie des Elements. Klicks faengt weiter
+   * das Overlay; der Ring ist reine Anzeige (aria-hidden), der Text bleibt die
+   * Aussage. Findet sich das Ziel nicht (Modul ohne Plus, ausgeblendete
+   * Leiste), bleibt der Schritt so, wie er vorher war: Tafel auf Unschaerfe. */
+  const spot = document.createElement('div');
+  spot.className = 'onboarding-spotlight';
+  spot.setAttribute('aria-hidden', 'true');
+  overlay.appendChild(spot);
+  overlay.appendChild(card);
+
+  function placeSpotlight() {
+    const target = steps[current].target?.();
+    const shown = isShownOnScreen(target);
+    overlay.classList.toggle('onboarding-overlay--spot', shown);
+    if (!shown) return;
+    const r = target.getBoundingClientRect();
+    const radius = parseFloat(getComputedStyle(target).borderTopLeftRadius) || 0;
+    const pad = ONBOARDING_SPOT_PAD;
+    spot.style.setProperty('--spot-x', `${Math.round(r.left - pad)}px`);
+    spot.style.setProperty('--spot-y', `${Math.round(r.top - pad)}px`);
+    spot.style.setProperty('--spot-w', `${Math.round(r.width + pad * 2)}px`);
+    spot.style.setProperty('--spot-h', `${Math.round(r.height + pad * 2)}px`);
+    spot.style.setProperty('--spot-r', `${Math.round(Math.min(radius + pad, (r.height + pad * 2) / 2))}px`);
+  }
+  const onResize = () => placeSpotlight();
+  window.addEventListener('resize', onResize);
+
+  function fitSteps() {
+    stepEl.style.minBlockSize = '';
+    const shown = current;
+    let tallest = 0;
+    for (current = 0; current < steps.length; current += 1) {
+      fillStep();
+      tallest = Math.max(tallest, stepEl.offsetHeight);
+    }
+    current = shown;
+    fillStep();
+    if (tallest > 0) stepEl.style.minBlockSize = `${tallest}px`;
+  }
+
+  /** Baut den Schritt `current` in die stehende Karte; gibt seinen Hauptknopf zurueck. */
+  function fillStep() {
+    const step = steps[current];
+    const isLast = current === steps.length - 1;
+    stepEl.replaceChildren();
+
+    let icon;
+    if (step.mark) {
+      icon = document.createElement('span');
+      icon.className = 'onboarding-mark';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.insertAdjacentHTML('beforeend', brandMarkSvg());
+    } else {
+      icon = document.createElement('i');
+      icon.dataset.lucide = step.icon;
+      icon.className = 'onboarding-icon';
+      icon.setAttribute('aria-hidden', 'true');
+    }
+
+    const title = document.createElement('h2');
+    title.className = 'onboarding-title';
+    title.id = ONBOARDING_TITLE_ID;
+    title.textContent = step.title;
+
+    const body = document.createElement('p');
+    body.className = 'onboarding-body';
+    body.textContent = step.body;
+
+    // Die Punkte sind reine Dekoration und fuer Screenreader unsichtbar; die
+    // Fortschrittsansage traegt ein sr-only-Text daneben - vorher hoerte ein
+    // Screenreader gar nicht, an welchem der drei Schritte er steht
+    // (Critique 2026-08-27, Persona Sam).
+    const dots = document.createElement('div');
+    dots.className = 'onboarding-dots';
+    dots.setAttribute('aria-hidden', 'true');
+    steps.forEach((_, i) => {
+      const dot = document.createElement('span');
+      dot.className = `onboarding-dot${i === current ? ' onboarding-dot--active' : ''}`;
+      dots.appendChild(dot);
+    });
+    const progress = document.createElement('p');
+    progress.className = 'sr-only';
+    progress.textContent = t('onboarding.stepProgress', { current: current + 1, total: steps.length });
+
+    const actions = document.createElement('div');
+    actions.className = 'onboarding-actions';
+    actions.dataset.dialogActions = '';
+
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'btn btn--ghost';
+    skipBtn.textContent = t('onboarding.skip');
+    skipBtn.addEventListener('click', finish);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn--primary';
+    nextBtn.textContent = isLast ? t('onboarding.done') : t('onboarding.next');
+    nextBtn.addEventListener('click', () => {
+      if (isLast) { finish(); return; }
+      current++;
+      // Der Fokus geht an den NEUEN Hauptknopf (der alte ist mit dem Schritt
+      // gegangen) - synchron nach dem Tausch, die Blende sperrt nichts.
+      let next = null;
+      swapContent(stepEl, () => { next = fillStep(); }, { direction: 1 });
+      next?.focus();
+    });
+
+    if (!isLast) actions.appendChild(skipBtn);
+    actions.appendChild(nextBtn);
+    stepEl.appendChild(icon);
+    stepEl.appendChild(title);
+    stepEl.appendChild(body);
+    stepEl.appendChild(dots);
+    stepEl.appendChild(progress);
+    stepEl.appendChild(actions);
+
+    if (window.lucide) window.lucide.createIcons({ el: stepEl });
+    placeSpotlight();
+    return nextBtn;
+  }
+
+  let finished = false;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    document.removeEventListener('keydown', onKeydown);
+    window.removeEventListener('resize', onResize);
+    localStorage.setItem(ONBOARDING_KEY, '1');
+    // Am Konto vermerken, nicht nur am Geraet: sonst zeigt ein neues Geraet
+    // oder ein privates Fenster den Rundgang erneut, obwohl das Konto ihn
+    // schon gesehen hat. Bewusst fire-and-forget - ein Netzwerkfehler hier
+    // darf den Dialog nicht am Schliessen hindern; der lokale Merker faengt
+    // den aktuellen Browser ohnehin ab.
+    auth.markOnboardingSeen().catch(() => {});
+    // Fokus dorthin zurückgeben, wo er vor dem Dialog lag (sonst neutral auf
+    // den Body), damit Tastatur-/SR-Nutzer nicht im entfernten Overlay hängen.
+    const restoreTarget = (previouslyFocused && document.contains(previouslyFocused))
+      ? previouslyFocused
+      : document.body;
+    overlay.classList.add('onboarding-overlay--out');
+    overlay.addEventListener('animationend', () => overlay.remove(), { once: true });
+    // Fallback falls animationend nicht feuert (prefers-reduced-motion):
+    setTimeout(() => overlay.remove(), 300);
+    restoreTarget?.focus?.();
+    onDone?.();
+  }
+
+  appContainer.appendChild(overlay);
+  // Messen kann erst ein Knoten im Baum; danach steht Schritt 1.
+  fitSteps();
+  setTimeout(() => stepEl.querySelector('.btn--primary')?.focus(), 50);
+  // Die Zurueck-Geste beendet die Einfuehrung, statt hinter ihr zu navigieren
+  // (#871). `finish()` ist der EINE Weg hinaus und merkt sich das auch.
+  attachOverlay(overlay, finish);
+}
+
+// Einmaliger, zurückhaltender Hinweis auf den „Anpassen"-Einstieg: Da vier Widgets
+// standardmäßig hinter dem Cockpit ausgeblendet sind, macht ein sanfter Puls beim
+// Erststart sichtbar, wo sie sich wieder einblenden lassen. Danach nie wieder.
+function maybeHintCustomize(container) {
+  if (localStorage.getItem(CUSTOMIZE_HINT_KEY)) return;
+  // Mobil steht der Einstieg im Menue (R19) - der Hinweis gehoert dem
+  // sichtbaren Knopf.
+  const btn = [...container.querySelectorAll('#dashboard-customize-btn, .dashboard-tools-btn')]
+    .find((el) => el.getClientRects?.().length !== 0);
+  if (!btn) return;
+  const clear = () => {
+    btn.classList.remove('dashboard-icon-btn--hint');
+    localStorage.setItem(CUSTOMIZE_HINT_KEY, '1');
+  };
+  btn.classList.add('dashboard-icon-btn--hint');
+  btn.addEventListener('click', clear, { once: true });
+  setTimeout(clear, 6000);
+}
+
+// --------------------------------------------------------
+// Widget-Definitionen (Reihenfolge = Standard-Layout)
+// --------------------------------------------------------
+
+// Der Standard-Satz und die reine Logik darauf liegen in
+// `/utils/dashboard-widgets.js` - sie tragen eine Zusicherung über die
+// Reihenfolge und mussten dafür ohne Shell testbar sein. Was hier bleibt,
+// hängt an Haushaltskontext und Modul-Schaltern.
+
+// Widget → Modul-Slug für die „Modul deaktiviert?"-Prüfung. Widgets ohne Eintrag
+// haengen an keinem Modul; eigene Verfuegbarkeitsregeln (family, countdown,
+// weather) stehen in `isWidgetModuleEnabled`. Modulweit, damit Grid-Filter und
+// Wieder-Einblenden-Leiste dieselbe Sichtbarkeitsregel teilen.
+// `split-expenses` ist kein Widget, sondern eine Kachel der Kennzahlreihe -
+// steht aber hier, weil `isWidgetModuleEnabled()` auch die Kacheln filtert, und
+// die geteilten Ausgaben haengen am Budget-Modul (server/scopes.js).
+const MODULE_FOR_WIDGET = { tasks: 'tasks', calendar: 'calendar', shopping: 'shopping', meals: 'meals', notes: 'notes', birthdays: 'birthdays', budget: 'budget', 'split-expenses': 'budget', rewards: 'rewards', health: 'health', cycle: 'health', fasting: 'health', nutrition: 'health', housekeeping: 'housekeeping', schedule: 'schedule', waste: 'waste', pantry: 'pantry' };
+
+const WIDGETS_WITH_OPTIONS = new Set(['calendar', 'tasks', 'notes', 'waste', 'shopping']);
+
+const _extensionWidgetModules = new Map();
+
+function widgetHasOptions(id) {
+  if (WIDGETS_WITH_OPTIONS.has(id)) return true;
+  const meta = getExtensionWidgetMeta(id);
+  return Boolean(meta?.optionsSchema && Object.keys(meta.optionsSchema).length);
+}
+
+async function mountExtensionWidgets(shell, cfg, user) {
+  const mounts = shell.querySelectorAll('[data-extension-widget-mount]');
+  await Promise.all([...mounts].map(async (mount) => {
+    const wrapper = mount.closest('[data-widget-id]');
+    const id = wrapper?.dataset?.widgetId;
+    if (!id) return;
+    const w = cfg.find((item) => item.id === id);
+    const meta = getExtensionWidgetMeta(id);
+    if (!meta?.entry) return;
+    try {
+      let mod = _extensionWidgetModules.get(meta.entry);
+      if (!mod) {
+        mod = await import(/* webpackIgnore: true */ meta.entry);
+        _extensionWidgetModules.set(meta.entry, mod);
+      }
+      mount.replaceChildren();
+      if (typeof mod.renderWidget !== 'function') {
+        throw new Error('renderWidget export missing');
+      }
+      await mod.renderWidget(mount, {
+        size: w?.size,
+        options: w?.options ?? {},
+        user,
+      });
+      if (window.lucide) window.lucide.createIcons({ el: mount });
+    } catch (err) {
+      console.error(`[dashboard] Extension widget "${id}" konnte nicht gerendert werden`, err);
+      mount.replaceChildren();
+      mount.insertAdjacentHTML('afterbegin', renderWidgetError(id));
+      if (window.lucide) window.lucide.createIcons({ el: mount });
+    }
+  }));
+}
+
+/* DER COUNTDOWN IST EIN WIDGET, DAS ES ERST GIBT, WENN JEMAND ETWAS MARKIERT
+ * HAT (#647). Er hat keine eigene Seite und keinen eigenen Bestand: seine
+ * Kachel zeigt Termine und Aufgaben, die jemand ausdrücklich dafür markiert
+ * hat, und in einem Haushalt, der das noch nie getan hat, gibt es nichts zu
+ * zeigen und nichts einzurichten.
+ *
+ * ER RENDERT DESHALB NICHT LEER, SONDERN IST DANN NICHT VERFUEGBAR - das ist
+ * genau der Unterschied, den das Familien-Widget unten schon einmal gekostet
+ * hat: ein Renderer, der '' zurückgibt, verschwindet aus dem Raster, bleibt
+ * aber `visible: true` und taucht damit auch in der Ablage der versteckten
+ * Widgets nicht auf. Hier fällt er aus beiden Listen, so wie ein abgeschaltetes
+ * Modul auch, und kommt mit dem ersten Countdown an seiner gespeicherten
+ * Position zurück.
+ *
+ * Der Zähler ist modulweit und nicht Teil von `data`, weil ihn zwei Aufrufer
+ * brauchen, von denen einer (die Ablage der versteckten Widgets) die Daten
+ * nicht sieht. Er wird bei jedem render() zurückgesetzt und nach dem Laden
+ * gesetzt - ein Stand von vorhin darf keine Kachel versprechen. */
+let countdownAvailable = false;
+
+function setCountdownAvailability(items) {
+  countdownAvailable = Array.isArray(items) && visibleCountdowns(items).length > 0;
+}
+
+/* DAS WETTER IST VERFUEGBAR, SOBALD ES EINGERICHTET IST - NICHT ERST, WENN DER
+ * ANBIETER ANTWORTET. Bis v2.70.0 hing die Kachel an der Antwort selbst: ein
+ * Fehlschlag beim Anbieter lieferte `{ data: null }`, der Renderer gab '' zurueck,
+ * und die Kachel verschwand genau so, wie es die Notiz am Countdown beschreibt -
+ * aus dem Raster, aus der Anpassen-Ablage (sie blieb `visible: true`) und mit
+ * ihr aus der Kopfzeile, die ihr Wetter der Kachel ueberlaesst.
+ *
+ * Jetzt zwei Faelle:
+ *   - nicht eingerichtet: die Kachel ist NICHT VERFUEGBAR wie ein abgeschaltetes
+ *     Modul (dieselbe Regel wie Countdown und Familie). Ein Einrichtungshinweis
+ *     waere eine Kachel, die allen Mitgliedern eine Aufgabe zeigt, die nur der
+ *     Admin erledigen kann, und ab Werk im Raster jedes Haushalts ohne Wetter
+ *     stuende. Der Weg dorthin sind die Einstellungen;
+ *   - eingerichtet, aber gescheitert: die Kachel bleibt stehen und sagt ruhig,
+ *     dass es gerade kein Wetter gibt (`renderWeatherUnavailable`).
+ *
+ * Woher „eingerichtet": der Grund, den der Wetter-Proxy selbst nennt
+ * (`reason`). Er kennt die ganze Regel, samt Standort je Mitglied und
+ * unvollstaendiger Einrichtung - `weather_source` aus /preferences beschreibt
+ * nur den Haushalt. Die Praeferenzen sind der Rueckfall fuer den Fall, dass die
+ * Anfrage selbst scheiterte und der Server gar nichts sagen konnte. */
+let weatherAvailable = false;
+
+function weatherAvailableFrom(res, prefs) {
+  if (res?.data) return true;
+  if (res?.reason === 'not_configured') return false;
+  // `upstream_error` und jeder kuenftige Grund: eingerichtet. Im Zweifel bleibt
+  // die Kachel erreichbar - das Gegenteil war der Fehler.
+  if (res?.reason) return true;
+  const household = prefs?.weather_source?.source;
+  const user = prefs?.weather_user;
+  return Boolean((household && household !== 'none') || (user?.lat && user?.lon));
+}
+
+function setWeatherAvailability(res, prefs) {
+  weatherAvailable = weatherAvailableFrom(res, prefs);
+}
+
+// Aus welchem Modul ein Countdown stammt, entscheidet über ihn: wer den
+// Kalender abgeschaltet hat, soll dessen Einträge auch hier nicht sehen. Die
+// Kachel als Ganzes gehört keinem Modul (siehe PERMISSION_WIDGETS), ihre
+// einzelnen Zeilen schon - dieselbe Aufteilung wie bei der Kennzahlreihe.
+//
+// SEIT DEM REVIEW ZU PR #793 IST DAS DIE ZWEITE INSTANZ, NICHT DIE ERSTE:
+// aussortiert wird schon in services/countdowns.js, vor Schnitt und Gesamtzahl.
+// Hier zu filtern allein war der Fehler - der Server schickte fünf Termine
+// eines abgeschalteten Kalenders, diese Zeile warf alle fünf weg, und die
+// Kachel verschwand mitsamt der Aufgabe, die dahinter gestanden hätte.
+// Stehen bleibt der Filter für den Fall, dass ein Modul umgeschaltet wird,
+// ohne dass das Dashboard neu lädt.
+function visibleCountdowns(items) {
+  return (Array.isArray(items) ? items : []).filter((c) => {
+    const mod = c.source === 'task' ? 'tasks' : 'calendar';
+    return !window.yuvomi?.isModuleDisabled(mod);
+  });
+}
+
+function isWidgetModuleEnabled(id) {
+  if (isExtensionWidget(id)) {
+    const meta = getExtensionWidgetMeta(id);
+    if (!meta) return false;
+    if (meta.permissionModuleKey && moduleAccess(meta.permissionModuleKey) === 'none') return false;
+    if (!canSeeWidget(id)) return false;
+    return true;
+  }
+  const mod = MODULE_FOR_WIDGET[id];
+  if (mod && window.yuvomi?.isModuleDisabled(mod)) return false;
+  // Rollen-/Mitglied-Rechte (#467): serverseitig gesperrtes Widget (bzw. Widget
+  // eines Moduls ohne Zugriff — die Modulsperre wird bereits serverseitig auf die
+  // Widget-Map durchgereicht) hier nicht anbieten.
+  if (!canSeeWidget(id)) return false;
+  // Im Solo-Haushalt ist das Familien-Widget kein VERFUEGBARES Widget, kein
+  // leer gerendertes. Der Unterschied ist die „Anpassen"-Ablage: ein Renderer,
+  // der '' zurueckgibt, verschwindet aus dem Raster, bleibt aber `visible: true`
+  // und taucht damit auch in der Ablage der versteckten Widgets nicht auf - es
+  // waere aus der Oberflaeche heraus nicht mehr erreichbar. Hier faellt es aus
+  // beiden Listen, so wie ein abgeschaltetes Modul auch.
+  if (id === 'family' && isSoloHousehold()) return false;
+  if (id === 'fasting' && !canUseFasting()) return false;
+  if (id === 'countdown' && !countdownAvailable) return false;
+  if (id === 'weather' && !weatherAvailable) return false;
+  return true;
+}
+
+function setHtml(element, html) {
+  element.replaceChildren();
+  element.insertAdjacentHTML('afterbegin', html);
+}
+
+function widgetLabel(id) {
+  const ext = getExtensionWidgetMeta(id);
+  if (ext) return widgetDisplayLabel(ext);
+  const map = {
+    tasks:    () => t('nav.tasks'),
+    calendar: () => t('nav.calendar'),
+    shopping: () => t('nav.shopping'),
+    meals:    () => t('nav.meals'),
+    notes:    () => t('nav.notes'),
+    weather:  () => t('dashboard.weather'),
+    birthdays: () => t('nav.birthdays'),
+    budget:   () => t('nav.budget'),
+    rewards:  () => t('nav.rewards'),
+    health:   () => t('nav.health'),
+    cycle:    () => t('health.cycle.title'),
+    fasting:  () => t('health.fasting.title'),
+    nutrition: () => t('health.nutrition.title'),
+    housekeeping: () => t('nav.housekeeping'),
+    schedule: () => t('nav.schedule'),
+    waste:    () => t('nav.waste'),
+    pantry:   () => t('dashboard.pantryExpiringTitle'),
+    family:   () => t('dashboard.familyTitle'),
+    clock:    () => t('dashboard.clock'),
+    metrics:  () => t('dashboard.metrics'),
+    countdown: () => t('dashboard.countdownTitle'),
+    quicklinks: () => t('dashboard.quickLinksTitle'),
+  };
+  return (map[id] ?? (() => id))();
+}
+
+/* HIER STAND DIE ZWEITE TABELLE MODUL -> ZEICHEN, und sie war von der ersten
+ * abgewichen: Notizen fuehrte hier `pin`, in der Navigation `sticky-note`. Wer
+ * das Widget und die Leiste nebeneinander sah, sah zwei Zeichen fuer ein Modul.
+ * Die Zuordnung steht jetzt einmal in MODULE_ICON (nav-icons.js) - inklusive
+ * der vier Dashboard-eigenen Karten (Wetter, Uhr, Kennzahlen, Countdown), die
+ * keine Module sind, aber dieselbe Absender-Rolle im Kopf tragen. */
+function widgetIcon(id) {
+  const ext = getExtensionWidgetMeta(id);
+  if (ext?.icon) return ext.icon;
+  return MODULE_ICON[id] ?? MODULE_ICON.dashboard;
+}
+
+const BUDGET_CATEGORY_LABEL_KEYS = {
+  housing: 'catHousing',
+  food: 'catFood',
+  transport: 'catTransport',
+  personal_health: 'catPersonalHealth',
+  leisure: 'catLeisure',
+  shopping_clothing: 'catShoppingClothing',
+  education: 'catEducation',
+  financial_other: 'catFinancialOther',
+  subscriptions: 'catSubscriptions',
+  'Erwerbseinkommen': 'catEarnedIncome',
+  'Kapitalerträge': 'catInvestmentIncome',
+  'Geschenke & Transfers': 'catTransferGiftIncome',
+  'Sozialleistungen': 'catGovernmentBenefits',
+  'Sonstiges Einkommen': 'catOtherIncome',
+};
+
+// --------------------------------------------------------
+// Hilfsfunktionen
+// --------------------------------------------------------
+
+/**
+ * DER GRUSS NENNT DEN VORNAMEN (Critique 2026-08-10).
+ *
+ * „Guten Abend, Linda Johnson" brach den Large Title mobil auf zwei Zeilen
+ * (82px, 24 % des ersten Screens) und machte aus einem Gruss eine
+ * Datenbankzeile. Apple gruesst mit dem Vornamen, und ein Haushalt von 2-6
+ * Personen braucht keinen Nachnamen zur Unterscheidung.
+ *
+ * Das erste WORT, nicht das erste Zeichen bis zum Leerzeichen: `display_name`
+ * ist ein frei gesetztes Feld und kann alles enthalten, auch einen einzelnen
+ * Namen oder einen Spitznamen. Ohne Leerzeichen bleibt er, wie er ist - das
+ * Kuerzen darf nie mehr wegnehmen, als es findet.
+ */
+function firstName(displayName) {
+  return String(displayName ?? '').trim().split(/\s+/)[0] || String(displayName ?? '');
+}
+
+function greeting(displayName) {
+  const h = nowFields().hour;
+  const name = esc(firstName(displayName));
+  if (h >= 5 && h < 12) return t('dashboard.greetingMorning', { name });
+  if (h >= 12 && h < 18) return t('dashboard.greetingDay',    { name });
+  return t('dashboard.greetingEvening', { name });
+}
+
+// Tageszeit-Fenster für den Begrüßungs-Gradienten (deckt sich mit greeting()).
+// Nacht (0–4 Uhr) zählt zum Abend, damit 00:37 nicht als „Morgen" begrüßt wird.
+function greetingPeriod() {
+  const h = nowFields().hour;
+  if (h >= 5 && h < 12) return 'morning';
+  if (h >= 12 && h < 18) return 'day';
+  return 'evening';
+}
+
+// Masthead-Datum nach Apple-Kanon („Mittwoch, 6. August"): Wochentag + Tag +
+// Monat in der aktiven App-Locale; die Versalisierung uebernimmt die CSS-Rolle
+// (.dashboard-overview__date, text-transform). Bewusst lokales new Date()
+// (reines Anzeige-Datum, keine ISO-Konvertierung - Zeitzonen-Falle).
+function mastheadDateLabel(now = new Date()) {
+  return new Intl.DateTimeFormat(getLocale(), {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  }).format(zonedUTCProxy(now));
+}
+
+// `relativeDateLabel` wohnt in utils/day-label.js: das Heute-Blatt braucht
+// dieselbe Stufung (#1452), und eine zweite Fassung liefe auseinander.
+
+function formatDateTime(isoString) {
+  if (!isoString) return '';
+  // Der Wert geht als STRING weiter. In `start_datetime` liegen zwei Formen in
+  // einer Spalte: zonenlose Wanduhrzeit ('2026-08-21T19:00') und echte Instants
+  // ('...Z'). `new Date(...)` haette die erste in einen Zeitpunkt der
+  // Browser-Zone verwandelt; beide Formatierer unterscheiden sie selbst.
+  const dateStr = relativeDateLabel(isoString);
+  const timeStr = formatTime(isoString);
+  const suffix = timeSuffix();
+  return `${dateStr}, ${timeStr}${suffix ? ' ' + suffix : ''}`.trim();
+}
+
+/** 'YYYY-MM-DDTHH:mm' als Millisekunden - reine Feldarithmetik, kein Zeitpunkt. */
+function wallStampMs(stamp) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(stamp);
+  if (!m) return NaN;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+}
+
+/**
+ * Die Faelligkeit einer Aufgabe als Beschriftung.
+ *
+ * `due_date`/`due_time` sind zonenlose WANDUHRZEIT: wer „21:00" eingetippt hat,
+ * meinte 21:00, in welcher Zone der Haushalt auch steht. Hier stand ein Umweg
+ * ueber `new Date(\`${dateStr}T${timeStr}\`)`, und der machte daraus einen
+ * Zeitpunkt der BROWSER-Zone, den `formatDate`/`formatTime` anschliessend in die
+ * Anzeigezone umrechneten - mit Haushalt auf Honolulu und Browser in Berlin
+ * wurde aus 21:00 ein 9:00. utils/timezone.js fuehrt die Regel dazu: umgerechnet
+ * wird nur, was seine Zone SELBST traegt.
+ *
+ * Dieselbe Uhr entschied ueber „heute"/„morgen". Sie war die des Browsers, nicht
+ * die des Haushalts - die siebte Uhr, die #829 Teil 3 uebersehen hat.
+ */
+function formatDueDate(dateStr, timeStr) {
+  if (!dateStr) return null;
+
+  const dayKey = String(dateStr).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return null;
+
+  const dueTime = timeStr ? String(timeStr).slice(0, 5) : null;
+  if (timeStr && !/^\d{2}:\d{2}$/.test(dueTime)) return null;
+  // Ohne due_time laeuft der Tag bis zu seinem Ende. Das ist die interne
+  // Sortier-Kruecke und wird unten nie als Uhrzeit angezeigt.
+  const dueStamp = `${dayKey}T${dueTime ?? '23:59'}`;
+
+  const now = nowFields();
+  if (!now) return null;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const todayKey = `${now.year}-${p2(now.month)}-${p2(now.day)}`;
+  const nowStamp = `${todayKey}T${p2(now.hour)}:${p2(now.minute)}`;
+
+  // Beide Seiten sind Wanduhrzeit DERSELBEN Zone und damit als Text vergleichbar.
+  const overdue = dueStamp < nowStamp;
+  const diffH = (wallStampMs(dueStamp) - wallStampMs(nowStamp)) / (1000 * 60 * 60);
+
+  // Kalendertage, nicht Millisekunden: ueber eine Sommerzeitgrenze liegen zwei
+  // aufeinanderfolgende Tage nicht 24h auseinander, ihre Keys aber immer genau
+  // einen.
+  const dayMs = (key) => wallStampMs(`${key}T00:00`);
+  const calDayDiff = Math.round((dayMs(dayKey) - dayMs(todayKey)) / (1000 * 60 * 60 * 24));
+
+  // Die Stempel gehen als STRING an die Formatierer, nicht als Date: nur so
+  // bleibt die Wanduhrzeit, was sie ist (siehe oben).
+  const fullLabel = dueTime
+    ? `${formatDate(dueStamp)}, ${formatTime(dueStamp)}` // beide aus i18n.js
+    : formatDate(dayKey);
+
+  if (overdue) {
+    return { text: `${t('dashboard.overdue')} - ${fullLabel}`, overdue: true };
+  }
+
+  if (calDayDiff === 1 && Number(dueTime?.slice(0, 2)) >= 22 && diffH < 24) {
+    return { text: `${t('dashboard.dueSoon')} - ${fullLabel}`, overdue: false, soon: true };
+  }
+
+  if (calDayDiff === 0) {
+    return { text: dueTime ? `${t('dashboard.dueToday')} - ${formatTime(dueStamp)}` : t('dashboard.dueToday'), overdue: false, soon: true };
+  }
+
+  if (calDayDiff === 1) {
+    // Nur eine ECHTE Uhrzeit anhängen: ohne due_time ist 23:59:59 die interne
+    // Sortier-Krücke - „Morgen fällig – 23:59" behauptete eine Deadline, die
+    // niemand gesetzt hat (Critique P1). Der Heute-Zweig darüber macht es vor.
+    return { text: dueTime ? `${t('dashboard.dueTomorrow')} - ${formatTime(dueStamp)}` : t('dashboard.dueTomorrow'), overdue: false };
+  }
+
+  // Weiter voraus dieselbe Stufung wie am Termin daneben (relativeDateLabel):
+  // „Sa, 10:00" statt „26.09.2026, 10:00". Ueberfaelliges und „bald" oben
+  // behalten das volle Datum - dort ist es die Auskunft.
+  const dayLabel = relativeDateLabel(dayKey);
+  return { text: dueTime ? `${dayLabel}, ${formatTime(dueStamp)}` : dayLabel, overdue: false };
+}
+
+const PRIORITY_LABELS = () => ({
+  urgent: t('tasks.priorityUrgent'),
+  high:   t('tasks.priorityHigh'),
+  medium: t('tasks.priorityMedium'),
+  low:    t('tasks.priorityLow'),
+});
+
+const MEAL_ORDER = Object.freeze(['breakfast', 'lunch', 'dinner', 'snack']);
+
+function normalizeVisibleMealTypes(visibleMealTypes) {
+  if (!Array.isArray(visibleMealTypes)) return MEAL_ORDER;
+  const filtered = MEAL_ORDER.filter((type) => visibleMealTypes.includes(type));
+  return filtered.length ? filtered : MEAL_ORDER;
+}
+
+// Aus utils/meal-types.js, nicht aus vier eigenen t()-Zeilen: der Haushalt darf
+// die Slots umbenennen (#1058), und die Kachel nennt dieselbe Mahlzeit wie der
+// Planer daneben.
+const MEAL_LABELS = () => Object.fromEntries(
+  mealTypeList().map(({ key, label }) => [key, label]),
+);
+
+const MEAL_ICONS = {
+  breakfast: 'sunrise',
+  lunch:     'sun',
+  dinner:    'moon',
+  snack:     'apple',
+};
+
+function budgetCategoryLabel(category) {
+  const key = BUDGET_CATEGORY_LABEL_KEYS[category];
+  return key ? t(`budget.${key}`) : (category || '-');
+}
+
+function formatCurrency(amount, currency = 'EUR') {
+  return getNumberFormat({
+    style: 'currency',
+    currency,
+    maximumFractionDigits: Math.abs(amount) >= 1000 ? 0 : 2,
+  }).format(amount || 0);
+}
+
+function formatPoints(value) {
+  return getNumberFormat().format(Number(value) || 0);
+}
+
+/**
+ * Kopfzeile eines Dashboard-Widgets: Siegel, Titel, Zaehler, Sprung ins Modul.
+ *
+ * DER TITEL IST EINE UEBERSCHRIFT (Critique 2026-08-10). Er war ein `<span>`,
+ * und damit hatte die wichtigste Seite der App drei Ueberschriften fuer sieben
+ * Inhaltsbloecke: wer per H-Taste navigiert, sprang durch drei Marken und war
+ * am Ende. `/health` machte es die ganze Zeit richtig (h1, sr-only h2 je Panel,
+ * h3 je Abschnitt) - das Dashboard war der Ausreisser, nicht die Regel. h3,
+ * weil darueber `h1 Uebersicht` (sr-only) und die beiden `h2` des Grusses und
+ * von „Heute wichtig" stehen.
+ *
+ * UND DER SPRUNG IST EIN LINK, kein Knopf. Fuenf Knoepfe mit dem zugaenglichen
+ * Namen „Alle" sind keine Zielangabe - deshalb `aria-label` mit dem Modulnamen.
+ * Ein Knopf, der navigiert, nimmt dem Nutzer ausserdem Cmd-Klick, Mittelklick
+ * und „Link kopieren". `wireLinks` (unten) kennt `<a>` bereits, der Router
+ * faengt den Klick ueber `data-route` ab - der `href` ist der ehrliche
+ * Zweitkanal, kein toter Zierat.
+ *
+ * DER KOMMENTAR STEHT HIER UND NICHT AM `return`, und das ist kein Geschmack:
+ * der Siegel-Guard (test-frontend-audit.js) sucht die Herkunft in einem Fenster
+ * von acht Zeilen um die Bau-Stelle. Ein Erklaerblock dazwischen schiebt
+ * `--seal-accent` aus dem Fenster, und der Guard meldet ein Siegel ohne
+ * Herkunft - gemessen, nicht vermutet.
+ */
+/* DIE ID, NICHT DAS ZEICHEN (2026-08-17). Hier stand ein Icon-NAME je
+ * Aufrufstelle - die dritte Abschrift der Zuordnung Modul → Zeichen, und die
+ * hartnaeckigste: sie ueberlebte sogar die Zusammenlegung von `widgetIcon()`,
+ * weil kein Kopf ihn je fragte. Notizen trug hier weiter `pin`, waehrend die
+ * Leiste daneben `sticky-note` zeichnete. Wer die Id uebergibt, kann diese
+ * Abweichung gar nicht mehr schreiben. */
+function widgetHeader(widgetId, title, count, linkHref, linkLabel, sealSlug = null) {
+  const icon = widgetIcon(widgetId);
+  // Ein eigenes Link-Label spricht auch im aria-Label mit eigener Stimme:
+  // „Alle: Familienmitglieder" für einen „Verwalten"-Link wäre eine Lüge.
+  const customLabel = linkLabel != null;
+  linkLabel = linkLabel ?? t('dashboard.allLink');
+  // EINE NULL IST KEINE ZAHL, DIE MAN ZEIGT. Der Kopf eines leeren Widgets
+  // trug eine „0"-Badge neben seinem Titel, waehrend der Koerper darunter den
+  // Leerzustand schon in Worten sagt - zwei Stimmen fuer dieselbe Aussage, und
+  // die Badge ist die schlechtere. Die Regel steht HIER und nicht an den
+  // Aufrufstellen: `0` kommt sowohl fest aus den Leerzustaenden als auch
+  // gerechnet aus `totalOpen`/`badge`, und eine Allowlist deckt nur die
+  // Stellen ab, die man beim Schreiben gesehen hat.
+  //
+  // DIE ZAHL STEHT NICHT IM NAMEN DER UEBERSCHRIFT (Critique 2026-09-23). Als
+  // Kind der h3 las ein Screenreader „Geburtstage 5" - eine Ueberschrift, die
+  // anders heisst als ihr Widget, und eine Zahl ohne Wort dazu. Die Badge ist
+  // deshalb aria-hidden, und derselbe Wert steht hinter der h3 als Satz.
+  const numericCount = Number(count);
+  const hasCount = count != null && Number.isFinite(numericCount) && numericCount > 0;
+  const badge = hasCount
+    ? `<span aria-hidden="true" class="widget__badge">${count}</span>`
+    : '';
+  const countText = hasCount
+    ? `<span class="sr-only">${esc(t('dashboard.badgeCount', { count: numericCount }))}</span>`
+    : '';
+  // OHNE ZIEL KEIN LINK. Jede Kachel bis #647 gehoerte genau einer Seite, und
+  // „Alle" fuehrte dorthin. Der Countdown gehoert zweien: seine Zeilen kommen
+  // aus dem Kalender UND aus den Aufgaben, und jede fuehrt selbst an ihren Ort.
+  // Ein Kopf-Link muesste sich fuer eine der beiden entscheiden und waere fuer
+  // die andere Haelfte der Liste falsch. `href="null"` waere die schlechtere
+  // Antwort auf dieselbe Frage gewesen.
+  const link = linkHref
+    ? `<a href="${linkHref}" data-route="${linkHref}" class="widget__link"
+         aria-label="${esc(customLabel ? `${linkLabel}: ${title}` : t('dashboard.allLinkFor', { module: title }))}">
+        ${linkLabel}
+      </a>`
+    : '';
+  // Herkunfts-Regel (Block 2): das Dashboard ist eine Mischstelle, also
+  // traegt jeder Widget-Kopf das Markensiegel seines Moduls. Der Slug kommt
+  // aus dem ersten Segment der Widget-Route; ein unbekannter Slug faellt im
+  // var()-Fallback auf den App-Akzent zurueck. Wo Aktions-Link und Herkunft
+  // auseinanderfallen (Familie: „Verwalten" fuehrt in die Einstellungen, die
+  // Karte gehoert aber den Menschen; der Countdown hat gar keinen Link mehr),
+  // benennt sealSlug die Herkunft explizit - sonst spraeche eine Karte zwei
+  // Modultoene (Critique P2).
+  //
+  // Diese beiden Zeilen bleiben in Sichtweite ihrer Bau-Stelle unten: der
+  // Guard „wer ein Markensiegel baut, benennt eine Herkunft" liest ein Fenster
+  // von acht Zeilen um das `module-seal` herum, und der Link-Block dazwischen
+  // hat sie beim ersten Anlauf genau daraus herausgeschoben.
+  // Query und Hash gehoeren nicht zum Slug: `/budget?tab=budget` ergab
+  // `var(--module-budget?tab=budget, ...)`, eine ungueltige Deklaration - das
+  // Budget-Siegel stand im geerbten Violett der Uebersicht (R18).
+  const slug = sealSlug ?? ((linkHref || '').split(/[?#]/)[0].split('/')[1] || '');
+  const seal = slug ? ` style="--seal-accent: var(--module-${slug}, var(--color-accent))"` : '';
+  // Vollton statt Toenung (Widget-Kopf-Kur 2026-08-17): das Siegel ist seit
+  // dem Rueckbau des Absenderbands der EINZIGE Farbtraeger des Kopfes. Die
+  // Klasse `--vivid` steht hier nicht mehr, weil es die Toenung nicht mehr
+  // gibt: der Vollton ist seither das eine Gesicht des Siegels (layout.css).
+  return `
+    <div class="widget__header">
+      <h3 class="widget__title">
+        <span class="module-seal module-seal--sm"${seal} aria-hidden="true">
+          ${moduleIconHTML(icon)}
+        </span>
+        <span class="widget__title-text">${title}</span>
+        ${badge}
+      </h3>
+      ${countText}
+      ${link}
+    </div>
+  `;
+}
+
+// Dezente Aktivierungs-Affordance für Empty-States: verlinkt in den Modul-Flow,
+// damit ein Erststart-Nutzer nicht in einer beschreibenden Sackgasse landet.
+// Nutzt dasselbe [data-route]-System wie widget__link (wireLinks verkabelt es).
+function emptyStateCta(route, label) {
+  return `<button type="button" class="widget__empty-cta" data-route="${route}">
+    <i data-lucide="plus" aria-hidden="true"></i>
+    <span>${label}</span>
+  </button>`;
+}
+
+function buildTodayHighlights(data) {
+  const tasks = Array.isArray(data?.tasks)
+    ? data.tasks
+    : Array.isArray(data?.urgentTasks)
+      ? data.urgentTasks
+      : [];
+  const events = Array.isArray(data?.events)
+    ? data.events
+    : Array.isArray(data?.upcomingEvents)
+      ? data.upcomingEvents
+      : [];
+  const shoppingItems = Array.isArray(data?.shopping?.items) ? data.shopping.items : [];
+  const shoppingLists = Array.isArray(data?.shoppingLists) ? data.shoppingLists : [];
+  const meals = data?.meals ?? data?.todayMeals ?? null;
+
+  const urgentTask = tasks.find((task) => task.priority === 'urgent') ?? tasks[0] ?? null;
+
+  const today = householdToday();
+  const todayEvents = events.filter((e) => {
+    if (!e.start_datetime) return true;
+    const dayKey = overviewEventSpan(e, today).day;
+    return dayKey ? dayKey === today : true;
+  });
+  const nextEvent = todayEvents[0] ?? null;
+
+  // DIE ZAHL DES SERVERS, wo es sie gibt (#1818): `shoppingLists` traegt
+  // hoechstens drei Listen, die Summe ihrer `open_count` war bei vier Listen
+  // schon zu klein (gemessen 13 gegen 14). `shoppingOpenCount` zaehlt ueber
+  // alle Listen; ohne ihn (aelterer Server, Abfrage gescheitert: `null`)
+  // bleibt die Summe der geladenen Listen.
+  const serverOpenCount = data?.shoppingOpenCount;
+  const openShoppingCount = shoppingItems.length
+    ? shoppingItems.filter((item) => !item.is_checked).length
+    : typeof serverOpenCount === 'number' && Number.isFinite(serverOpenCount)
+    ? serverOpenCount
+    : shoppingLists.reduce((sum, list) => {
+        if (Number.isFinite(Number(list.open_count))) return sum + Number(list.open_count);
+        if (Number.isFinite(Number(list.openCount))) return sum + Number(list.openCount);
+        const items = Array.isArray(list.items) ? list.items : [];
+        return sum + items.filter((item) => !item.is_checked).length;
+      }, 0);
+  const { meal, mealType } = selectTodayMeal(meals);
+
+  return {
+    urgentTask,
+    nextEvent,
+    openShoppingCount,
+    meal,
+    mealType,
+    taskCount: tasks.length,
+    eventCount: todayEvents.length,
+  };
+}
+
+// Pick the meal relevant to the current time of day (matches greeting thresholds:
+// morning → breakfast, afternoon → lunch, evening → dinner). If the target meal
+// is not planned, fall back to the next planned meal later today.
+function selectTodayMeal(meals) {
+  const order = ['breakfast', 'lunch', 'dinner'];
+  const list = Array.isArray(meals)
+    ? meals
+    : meals && typeof meals === 'object'
+      ? order.map((type) => (meals[type] ? { ...meals[type], meal_type: type } : null)).filter(Boolean)
+      : [];
+
+  const h = nowFields().hour;
+  const targetType = h < 12 ? 'breakfast' : h < 18 ? 'lunch' : 'dinner';
+
+  for (let i = order.indexOf(targetType); i < order.length; i++) {
+    const found = list.find((m) => m.meal_type === order[i]);
+    if (found) return { meal: found, mealType: order[i] };
+  }
+  return { meal: null, mealType: targetType };
+}
+
+// Nominale Slot-Zeiten der Mahlzeiten: Mahlzeiten tragen keine Uhrzeit, brauchen
+// im chronologischen Tagesprogramm aber einen Platz. Die Werte ordnen nur ein,
+// sie behaupten keine Essenszeit - deshalb erscheinen sie nie als Label.
+const MEAL_SORT_TIME = { breakfast: '08:00', lunch: '12:30', snack: '15:30', dinner: '18:30' };
+
+/**
+ * Tagesprogramm (Seele-Paket): heutige Termine, fällige Aufgaben und die nächste
+ * Mahlzeit als EINE chronologische Erzählung statt drei Modul-Aggregaten.
+ * Sortiert wird über einen HH:MM-Schlüssel; Zeitloses ordnet sich bewusst ein:
+ * Überfälliges zuerst (00:00, es ist schon zu spät), dann Ganztägiges (00:01),
+ * dann heute Fälliges ohne Uhrzeit (00:02). upcomingEvents liefert nur „ab
+ * jetzt" - Vergangenes verschwindet also von selbst aus dem Programm.
+ */
+/**
+ * Der Koch einer Mahlzeit als Person (#1679) - oder null. `todayMeals` traegt
+ * ihn flach neben der Mahlzeit (`cook_user_id`, `cook_name`, `cook_color`);
+ * Avatar-Stapel und Ueberlappungszeichen lesen eine Person mit `display_name`,
+ * `color` und `avatar_data`.
+ *
+ * DAS BILD KOMMT AUS `users` DER DASHBOARD-ANTWORT, nicht aus der Mahlzeit:
+ * dieselbe Liste, aus der "Wer heute dran ist" seine Gesichter nimmt - sie
+ * geht mit jeder Antwort von `/dashboard` mit, auch an ein Wandtablett. Ein
+ * Koch, der kein Mitglied (mehr) ist, steht dort nicht und zeigt Initialen.
+ */
+function mealCookPerson(meal, users) {
+  if (!meal?.cook_user_id) return null;
+  return {
+    id: meal.cook_user_id,
+    display_name: meal.cook_name ?? '',
+    color: meal.cook_color ?? null,
+    avatar_data: (Array.isArray(users) ? users : []).find((user) => user.id === meal.cook_user_id)?.avatar_data ?? null,
+  };
+}
+
+/* WER SCHAUT (R20, Kinder-Standards). Die Seite setzt das in `render()`; die
+ * Programmzeilen fragen es, damit ein Kind seine Aufgaben zuerst sieht. */
+let dashboardViewer = null;
+
+/** Ein Kinderkonto, das der Vorgabe folgt, bekommt die Kinder-Vorgabe der Kacheln. */
+function childDefaultFor(config, user, followsDefault) {
+  return followsDefault && user?.family_role === 'child' ? childDefaultWidgetConfig(config) : config;
+}
+
+/* Gehoert eine Aufgabe NUR anderen? Fuer ein Kind ruecken solche Zeilen ans
+ * Ende des Blatts (und fallen zuerst unter „+N weitere"): eigene und
+ * niemandem zugewiesene Aufgaben zuerst. Erwachsene sehen das Blatt wie
+ * bisher - ihre Rolle ist es, den Ueberblick ueber alle zu haben. Nichts
+ * verschwindet, die Aufgabenliste zeigt weiter alles. */
+function taskForOthersOnly(task, viewer) {
+  if (viewer?.family_role !== 'child' || viewer?.id == null) return false;
+  const people = Array.isArray(task?.assigned_users) ? task.assigned_users : [];
+  return people.length > 0 && !people.some((person) => person?.id === viewer.id);
+}
+
+function buildTodayProgram(data, { includeTasks = true, includeCalendar = true, includeMeals = true, now = new Date(), viewer = dashboardViewer } = {}) {
+  const highlights = buildTodayHighlights(data);
+  const todayKey = zonedDateKey(now);
+  const nowStamp = householdNowStamp(now);
+  const events = Array.isArray(data?.upcomingEvents) ? data.upcomingEvents : [];
+  const rows = [];
+
+  if (includeCalendar) {
+    for (const event of events) {
+      const span = overviewEventSpan(event, todayKey);
+      if (span.day !== todayKey) continue;
+      // Das Blatt verspricht, was heute NOCH ansteht (#1449): ein beendeter
+      // Termin verlaesst es. Die Termin-Kachel behaelt ihn zurueckgetreten.
+      if (eventHasEnded(event, nowStamp)) continue;
+      // Der Platz im Tag nach der Wanduhr des HAUSHALTS: hier stand
+      // `getHours()` eines Date, also die Zone des Geraets (#1457). Was schon
+      // vor heute begann, steht oben bei den ganztaegigen.
+      const time = !span.allDay && !span.carried ? zonedTimeKey(event.start_datetime) : '';
+      rows.push({
+        kind: 'event',
+        objectId: event.id,
+        sortKey: time || '00:01',
+        timeLabel: overviewEventTime(event, span),
+        title: event.title,
+        // Die Herkunft statt des Wortes „Termin" (#1698): der Name des
+        // Kalenders, im Heute-Blatt wie an der Wand. „Frueh" ist erst mit
+        // „Niklas Arbeitskalender" darunter eine Auskunft. Ein Termin, der nur
+        // in Yuvomi lebt, hat keinen Kalendernamen - er behaelt das Wort.
+        sub: eventCalendarName(event) || t('dashboard.todayEvent'),
+        // Das ENDE bleibt der Wand vorbehalten (entschieden in #1698): es reist
+        // neben `timeLabel` mit, und nur `renderWallRow` schreibt es dahinter.
+        // Das Blatt nennt weiter den Beginn allein.
+        wallTimeEnd: wallEventEnd(event, span),
+        icon: 'calendar',
+        tone: 'event',
+        route: calendarEventRoute(event),
+        who: event.assigned_users?.[0] ?? null,
+        // ALLE Zugewiesenen, nicht nur das eine Gesicht der Zeile (#1828): die
+        // Wand zaehlt den Termin bei jeder Person (rowPeopleIds).
+        people: event.assigned_users ?? [],
+        // Das am Termin gewaehlte Icon (#1829). `icon` bleibt das Zeichen des
+        // Moduls; wer das eigene zeigt, fragt hasEventIcon().
+        eventIcon: event.icon ?? null,
+        // Beitrags-Vertrag (utils/today-sheet.js): ein Termin ist ein Rahmen
+        // des Tages, kein Auftrag - er haelt die Coda nicht auf.
+        priority: 40,
+        open: false,
+      });
+    }
+  }
+
+  if (includeTasks) {
+    const tasks = Array.isArray(data?.urgentTasks) ? data.urgentTasks : Array.isArray(data?.tasks) ? data.tasks : [];
+    for (const task of tasks) {
+      if (!task.due_date || task.due_date > todayKey) continue;
+      const overdue = task.due_date < todayKey;
+      // Faelligkeit ist zonenlose Wanduhrzeit des Haushalts: Stempel, kein Date
+      // (#1534). `new Date(stempel)` las die Ziffern in der Zone des GERAETS,
+      // und `formatTime` rechnete den Zeitpunkt danach in die Haushaltszone -
+      // auf einem Geraet in New York stand an „bis 18:00" in Berlin „bis 00:00".
+      const dueTime = !overdue && task.due_time ? String(task.due_time).slice(0, 5) : null;
+      const dueValid = dueTime && /^\d{2}:\d{2}$/.test(dueTime);
+      const othersOnly = taskForOthersOnly(task, viewer);
+      const baseKey = overdue ? '00:00' : dueValid ? dueTime : '00:02';
+      rows.push({
+        kind: 'task',
+        objectId: task.id,
+        // '~' sortiert hinter jede Uhrzeit: fremde Aufgaben eines Kindes am Ende.
+        sortKey: othersOnly ? `~${baseKey}` : baseKey,
+        othersOnly,
+        timeLabel: overdue ? t('dashboard.overdue') : dueValid ? t('dashboard.todayUntil', { time: formatTime(`${task.due_date}T${dueTime}`) }) : '',
+        overdue,
+        title: task.title,
+        // Begonnenes sagt es in der Unterzeile, nicht mit einem weiteren Zeichen
+        // (#1251): die Zeile ist auf dem Telefon schon voll, und als Wort liest
+        // es auch ein Screenreader mit.
+        sub: t(task.status === 'in_progress' ? 'dashboard.todayTaskStarted' : 'dashboard.todayTask'),
+        icon: 'check-square',
+        tone: 'task',
+        route: '/tasks',
+        who: task.assigned_users?.[0] ?? null,
+        people: task.assigned_users ?? [],
+        priority: othersOnly ? 90 : overdue ? 10 : 30,
+        open: true,
+      });
+    }
+  }
+
+  if (includeMeals && highlights.meal) {
+    rows.push({
+      kind: 'meal',
+      objectId: highlights.meal.id ?? null,
+      sortKey: MEAL_SORT_TIME[highlights.mealType] ?? MEAL_SORT_TIME.dinner,
+      timeLabel: '',
+      title: highlights.meal.title,
+      sub: MEAL_LABELS()[highlights.mealType] ?? t('dashboard.todayDinner'),
+      icon: MEAL_ICONS[highlights.mealType] ?? 'utensils',
+      tone: 'dinner',
+      route: '/meals',
+      // Wer kocht (#1679): dasselbe Ueberlappungszeichen wie bei Termin und
+      // Aufgabe - "wen geht es an" ist bei einer Mahlzeit der Koch. Ohne Koch
+      // bleibt die Zeile, wie sie war.
+      who: mealCookPerson(highlights.meal, data?.users),
+      priority: 80,
+      open: false,
+    });
+  }
+
+  rows.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+
+  // Der nächste kommende Termin über heute hinaus - der beruhigende Ausblick
+  // der „Heute frei"-Zeile. upcomingEvents ist „ab jetzt" sortiert, der erste
+  // Eintrag eines späteren Tages ist also genau er.
+  const nextUpcoming = events.find((event) => eventOccurrenceDateKey(event) > todayKey) ?? null;
+
+  // Und die nächste fällige Aufgabe über heute hinaus: die Beruhigung darf
+  // nicht um Mitternacht enden (Critique P3). urgentTasks ist nach Fälligkeit
+  // sortiert - der erste Eintrag eines späteren Tages ist die nächste Frist.
+  // Ohne sie verspräche die Fläche abends „nichts mehr", während der
+  // Schulausflug-Zettel morgen früh abgegeben werden muss.
+  const allTasks = Array.isArray(data?.urgentTasks) ? data.urgentTasks : Array.isArray(data?.tasks) ? data.tasks : [];
+  const laterTasks = allTasks.filter((task) => task.due_date && task.due_date > todayKey);
+  const nextDueTask = laterTasks.find((task) => !taskForOthersOnly(task, viewer)) ?? laterTasks[0] ?? null;
+
+  return {
+    rows,
+    nextUpcoming,
+    nextDueTask,
+    openShoppingCount: highlights.openShoppingCount,
+    tasksDoneToday: Number(data?.tasksDoneToday) || 0,
+  };
+}
+
+/**
+ * Wen eine Programmzeile angeht - JEDE zugewiesene Person, einmal (#1828).
+ * Die Zeile selbst zeigt ein Gesicht (`who`); gezaehlt hat die Wand deshalb
+ * nur dieses eine, und ein Termin fuer zwei stand bei einer Person. Zeilen
+ * ohne Liste (das Kochen, Beitraege anderer Module) bleiben bei `who`.
+ */
+function rowPeopleIds(row) {
+  const ids = (Array.isArray(row.people) ? row.people : [])
+    .map((person) => person?.id)
+    .filter((id) => id != null);
+  if (ids.length) return [...new Set(ids)];
+  return row.who?.id != null ? [row.who.id] : [];
+}
+
+// --------------------------------------------------------
+// Skeleton
+// --------------------------------------------------------
+
+function skeletonWidget(lines = 3) {
+  const lineHtml = Array.from({ length: lines }, (_, i) => `
+    <div class="skeleton skeleton-line ${i % 2 === 0 ? 'skeleton-line--full' : 'skeleton-line--medium'}"></div>
+  `).join('');
+  return `
+    <div class="widget-skeleton">
+      <div class="skeleton skeleton-line skeleton-line--short"></div>
+      ${lineHtml}
+    </div>
+  `;
+}
+
+// --------------------------------------------------------
+// Widget-Renderer
+// --------------------------------------------------------
+
+const TASK_STATUS_IN_PROGRESS = () => t('tasks.statusInProgress');
+
+function renderUrgentTasks(tasks, openTotal = null) {
+  if (!tasks.length) {
+    return `<div class="widget widget--tasks">
+      ${widgetHeader('tasks', t('nav.tasks'), 0, '/tasks')}
+      <div class="widget__empty">
+        <i data-lucide="check-circle" class="empty-state__icon" style="color:var(--color-success)" aria-hidden="true"></i>
+        <div>${t('dashboard.allDone')}</div>
+      </div>
+    </div>`;
+  }
+
+  const items = tasks.map((t) => {
+    const due = formatDueDate(t.due_date, t.due_time);
+    // Begonnen traegt dasselbe Zeichen wie in der Aufgabenliste (#1251), keine
+    // eigene Bauart. Nur dort: eine offene Zeile bekommt keinen leeren Ring, sonst
+    // haette jede Zeile ein viertes Zeichen. Das Wort steht als sr-only daneben,
+    // weil die Zeile role="button" ist und ihre Kinder damit keine eigene Rolle
+    // mehr tragen - ein role="img" am Ring waere dort verloren.
+    const started = t.status === 'in_progress'
+      ? `<span class="task-status-btn task-status-btn--in_progress task-status-btn--static" aria-hidden="true"></span>
+        <span class="sr-only">${esc(TASK_STATUS_IN_PROGRESS())}</span>`
+      : '';
+    return `
+      <div class="task-item" data-task-id="${t.id}" data-task-title="${esc(t.title)}" role="button" tabindex="0">
+        ${t.priority !== 'none' ? `<div class="task-item__priority task-item__priority--${t.priority}" title="${esc(PRIORITY_LABELS()[t.priority] ?? t.priority)}" aria-hidden="true"></div>` : ''}
+        <span class="sr-only">${PRIORITY_LABELS()[t.priority] ?? t.priority}</span>
+        ${started}
+        <div class="task-item__content">
+          <div class="task-item__title">${esc(t.title)}</div>
+          ${due ? `<div class="task-item__meta ${due.overdue ? 'task-item__meta--overdue' : ''} ${due.soon ? 'task-item__meta--soon' : ''}">${due.text}</div>` : ''}
+        </div>
+        ${renderAvatarStack(t.assigned_users ?? [], { size: 28 })}
+      </div>
+    `;
+  }).join('');
+
+  // `urgentTasks` sind die fuenf dringendsten, `openTaskCount` alle offenen
+  // (siehe listTotal).
+  const total = listTotal(openTotal, tasks.length);
+  return `<div class="widget widget--tasks">
+    ${widgetHeader('tasks', t('nav.tasks'), total, '/tasks')}
+    <div class="widget__body">${items}${listMoreLine('dashboard.tasksMore', total - tasks.length)}</div>
+  </div>`;
+}
+
+/* BEENDETE TERMINE TRETEN ZURUECK, UND DAS LIMIT ZAEHLT NUR KOMMENDES (#1449).
+ *
+ * Die Kachel las nie die Endzeit: ein Termin, der um 9:00 vorbei war, sah aus
+ * wie einer um 18:00, und fuenf vorbeie fuellten das Limit, waehrend der um
+ * 21:00 fehlte. Der Server liefert das Kommende jetzt ungedeckelt vom
+ * Vergangenen (`keepEndedToday`); hier entscheidet die Uhr, was davon vorbei
+ * ist - auch zwischen zwei Abrufen.
+ *
+ * Die zwei juengsten beendeten stehen zurueckgetreten UEBER dem Kommenden
+ * (chronologisch sind sie frueher), der Rest faltet sich in eine Zahl: an einem
+ * vollen Tag waeren sonst sechs vergangene Zeilen der Inhalt der Kachel.
+ * Zurueckgetreten heisst: Farbe statt Deckung (#1230) und ein Wort im Etikett
+ * statt „Heute" - der Zustand haengt nicht an der Farbe allein. */
+const ENDED_EVENTS_SHOWN = 2;
+
+/* Wie viele Kommende, steht in den Optionen der Kachel (#1680) und geht durch
+ * dieselbe Klemme wie der Parameter der Route (`clampEventLimit`). Die Kachel
+ * schneidet trotzdem selbst: im Anpassen-Modus steht bis zum Speichern die
+ * alte Antwort da, und wer von zwoelf auf fuenf zurueckstellt, soll fuenf
+ * sehen und nicht zwoelf bis zum naechsten Abruf. */
+function renderUpcomingEvents(allEvents, { now = new Date(), limit = EVENT_LIMIT_DEFAULT } = {}) {
+  const todayKey = zonedDateKey(now);
+  const nowStamp = householdNowStamp(now);
+  const endedToday = allEvents.filter((e) => overviewEventSpan(e, todayKey).day === todayKey && eventHasEnded(e, nowStamp));
+  const ended = endedToday.slice(-ENDED_EVENTS_SHOWN);
+  const folded = endedToday.length - ended.length;
+  const ahead = allEvents.filter((e) => !endedToday.includes(e)).slice(0, clampEventLimit(limit));
+  const events = [...ended, ...ahead];
+  if (!events.length) {
+    return `<div class="widget widget--calendar">
+      ${widgetHeader('calendar', t('nav.calendar'), 0, '/calendar')}
+      <div class="widget__empty">
+        <i data-lucide="calendar-check" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noEvents')}</div>
+      </div>
+    </div>`;
+  }
+
+  // Der Tagesvergleich ueber KEYS, nicht ueber `toDateString()`: das las die
+  // Browser-Zone und machte „heute" zu einer Frage an das Geraet (#851).
+  const today = todayKey;
+  const items = events.map((e) => {
+    const span = overviewEventSpan(e, today);
+    const dayKey = span.day;
+    const isToday = dayKey === today;
+    const isEnded = ended.includes(e);
+    const _suffix = timeSuffix();
+    // Was gestern begann, nennt nicht seine Startzeit von gestern (#1457).
+    const timeStr = span.until || span.allDay
+      ? overviewEventTime(e, span)
+      : `${formatTime(e.start_datetime)}${_suffix ? ' ' + _suffix : ''}`.trim();
+    const badge = isEnded
+      ? `<span class="event-time-badge">${esc(t('dashboard.eventEnded'))}</span>`
+      : `<span class="event-time-badge ${isToday ? 'event-time-badge--today' : ''}">${isToday ? t('common.today') : relativeDateLabel(dayKey)}</span>`;
+    return `
+      <div class="event-item${isEnded ? ' event-item--ended' : ''}" data-route="${esc(calendarEventRoute(e))}" role="button" tabindex="0">
+        <!-- Dieselbe Regel wie im Kalender, aus derselben Datei. Hier stand
+             e.color || e.cal_color - dieselbe Frage ohne den Zweig fuer die
+             zugewiesene Person, was seit #891 zwei verschiedene Antworten
+             gegeben haette. -->
+        <div class="event-item__bar" style="background-color:${esc(resolveEventColor(e))}"></div>
+        <div class="event-item__content">
+          <div class="event-item__title">${esc(e.title)}</div>
+          <div class="event-item__time">
+            ${badge}
+            ${timeStr}
+            ${e.location ? ` · ${esc(fmtLocation(e.location))}` : ''}
+            ${e.cal_name ? `<span class="event-item__cal">${esc(e.cal_name)}</span>` : ''}
+          </div>
+        </div>
+        ${renderAvatarStack(e.assigned_users ?? [], { size: 28 })}
+      </div>
+    `;
+  }).join('');
+
+  const earlier = folded > 0
+    ? `<p class="event-list__earlier">${esc(t('dashboard.eventsEndedMore', { count: folded }))}</p>`
+    : '';
+  // KEINE BADGE: die Liste ist nach vorn offen und bei der gewaehlten Stufe
+  // (5, 8 oder 12) geschnitten, eine Gesamtzahl gibt es nicht. „5" stuende
+  // genau so lange da, wie mindestens fuenf Termine kommen - eine Zahl, die
+  // nur ihre eigene Obergrenze nennt. Beendete zaehlen ohnehin nie mit (#1449).
+  return `<div class="widget widget--calendar">
+    ${widgetHeader('calendar', t('nav.calendar'), null, '/calendar')}
+    <div class="widget__body">${earlier}${items}</div>
+  </div>`;
+}
+
+/* „DIESE WOCHE" - DER KALENDER IN 2x1 IST EIN STREIFEN, KEINE LISTE.
+ *
+ * Eine GROESSE des bestehenden Widgets und kein eigenes: die Frage ist
+ * dieselbe (was steht an), nur der Zuschnitt ein anderer, und die Filter
+ * („nur meine", Geburtstage), die Rechte und der Kopf gehoeren schon dem
+ * Kalender-Widget. Ein zweites Widget haette sie doppelt gefuehrt und im
+ * Anpassen-Tray eine weitere Kachel neben den einundzwanzig gestellt. Auf 2x1
+ * war die Liste ohnehin die schwaechste Form - drei Zeilen in einer Breite,
+ * die sieben Tage nebeneinander traegt.
+ *
+ * Kein Titel je Termin im Bild: der Streifen sagt, wie voll die Woche ist und
+ * wer, nicht was. Wer es wissen will, tippt den Tag und landet in dessen
+ * Tagesansicht (`/calendar?date=`); die Titel stehen im Tooltip und die Zahl
+ * im zugaenglichen Namen des Tages. */
+const WEEKDAY_SHORT_KEYS = ['dayShortSunday', 'dayShortMonday', 'dayShortTuesday', 'dayShortWednesday', 'dayShortThursday', 'dayShortFriday', 'dayShortSaturday'];
+const WEEKDAY_LONG_KEYS = ['dayLongSunday', 'dayLongMonday', 'dayLongTuesday', 'dayLongWednesday', 'dayLongThursday', 'dayLongFriday', 'dayLongSaturday'];
+
+function renderWeekStrip(weekEvents) {
+  // Geburtstage tragen serverseitig einen sprachneutralen Titel (#524) - hier
+  // und nicht im Ladepfad uebersetzt, weil der Titel nur im Tagesnamen steht.
+  const events = (Array.isArray(weekEvents) ? weekEvents : []).map(localizeBirthdayEvent);
+  const strip = buildWeekStrip(events, householdToday());
+  const lanes = strip.laneCount;
+  const days = strip.days.map((day) => {
+    const column = day.index + 1;
+    const dateLabel = `${t(`calendar.${WEEKDAY_LONG_KEYS[day.weekday]}`)}, ${formatDayMonth(day.key)}`;
+    const countLabel = day.count ? t('dashboard.weekDayEvents', { count: day.count }) : t('dashboard.noEvents');
+    const label = `${dateLabel}${day.isToday ? `, ${t('common.today')}` : ''}: ${countLabel}`;
+    const route = `/calendar?date=${day.key}`;
+    const dots = day.dots.map((dot) => `<span class="week-strip__dot" style="--dot-color:${esc(dot.color)}"></span>`).join('');
+    const more = day.more ? `<span class="week-strip__more">+${day.more}</span>` : '';
+    return `
+      <a href="${route}" data-route="${route}" class="week-strip__day${day.isToday ? ' week-strip__day--today' : ''}"
+         style="grid-column:${column};grid-row:1 / span ${lanes + 2}" ${day.isToday ? 'aria-current="date"' : ''}
+         aria-label="${esc(label)}"${day.titles.length ? ` title="${esc(day.titles.join(', '))}"` : ''}></a>
+      <span class="week-strip__head${day.isToday ? ' week-strip__head--today' : ''}" style="grid-column:${column}" aria-hidden="true">
+        <span class="week-strip__weekday">${esc(t(`calendar.${WEEKDAY_SHORT_KEYS[day.weekday]}`))}</span>
+        <span class="week-strip__date">${day.dayOfMonth}</span>
+      </span>
+      <span class="week-strip__dots" style="grid-column:${column};grid-row:${lanes + 2}" aria-hidden="true">${dots}${more}</span>`;
+  }).join('');
+  const bands = strip.bands.map((band) => `
+      <span class="week-strip__band${band.continuesBefore ? ' week-strip__band--before' : ''}${band.continuesAfter ? ' week-strip__band--after' : ''}"
+            style="grid-column:${band.startIndex + 1} / ${band.endIndex + 2};grid-row:${band.lane + 2};--dot-color:${esc(band.color)}"
+            aria-hidden="true"></span>`).join('');
+  const empty = strip.days.every((day) => day.count === 0)
+    ? `<p class="week-strip__empty">${t('dashboard.weekStripEmpty')}</p>`
+    : '';
+  return `<div class="widget widget--calendar widget--week">
+    ${widgetHeader('calendar', t('dashboard.weekStripTitle'), null, '/calendar')}
+    <div class="widget__body">
+      <div class="week-strip">${days}${bands}</div>
+      ${empty}
+    </div>
+  </div>`;
+}
+
+/** Das Kalender-Widget in seiner Groesse: 2x1 ist die Woche, alles andere die Liste.
+ *  Die Stufe aus den Optionen (#1680) gilt nur der Liste - die Woche zeigt
+ *  sieben Tage, keine Zeilen. */
+function renderCalendarWidget(data, size, options = {}) {
+  return nearestPreset(size ?? '1x2') === '2x1'
+    ? renderWeekStrip(data?.weekEvents)
+    : renderUpcomingEvents(data?.upcomingEvents ?? [], { limit: options?.limit });
+}
+
+/**
+ * WIE VIELE ZEILEN EINE LISTENKACHEL ZEIGT, STEHT IN IHRER HOEHE.
+ *
+ * Bis hierher war jede Zeilenzahl eine Konstante irgendwo zwischen Server und
+ * Renderer - und damit dieselbe fuer eine Kachel, die eine Rasterzeile hoch ist,
+ * und fuer eine, die zwei belegt. Die hohe Fassung lief deshalb unten leer, und
+ * das war kein Layoutfehler, sondern fehlender Nachschub.
+ *
+ * Die Regel steht HIER und nicht an den Aufrufstellen, damit die naechste
+ * Listenkachel sie erbt statt eine eigene Zahl zu erfinden. Sie liest den
+ * Zeilen-Span der Groessenklasse (`<spalten>x<zeilen>`), nicht die Pixelhoehe:
+ * die kennt erst der Browser, und eine Zeilenzahl, die vom Messzeitpunkt
+ * abhaengt, springt beim Laden.
+ */
+const LIST_ROWS_SHORT = 3;
+const LIST_ROWS_TALL = 5;
+
+/* DIE TELEFON-BUEHNE (R14, A7 P2-2). Unter 640px ist das Raster eine Spalte
+ * und die Uebersicht ein Scroll von 3,8 Bildschirmen (gemessen 3192px bei
+ * 390x844); jede hohe Kachel trug dort fuenf Zeilen, obwohl ihre Hoehe nicht
+ * neben einer Nachbarin stand, sondern unter ihr. Dieselbe Grenze wie der
+ * Anpassen-Kopf (dashboard.css, 639px), damit beide dieselbe Frage gleich
+ * beantworten. Ohne `matchMedia` (Node-Tests, alte Umgebungen) ist es die
+ * breite Buehne - dort aendert sich nichts. */
+const PHONE_STAGE_QUERY = '(max-width: 639px)';
+
+function onPhoneStage() {
+  try {
+    return Boolean(globalThis.window?.matchMedia?.(PHONE_STAGE_QUERY)?.matches);
+  } catch {
+    return false;
+  }
+}
+
+function listRowCap(size) {
+  if (onPhoneStage()) return LIST_ROWS_SHORT;
+  return Number(String(size ?? '1x1').split('x')[1]) >= 2 ? LIST_ROWS_TALL : LIST_ROWS_SHORT;
+}
+
+/*
+ * DIE BADGE ZAEHLT DIE SACHE, NICHT DIE ZEILEN (Critique 2026-09-23).
+ *
+ * Bis hierher trugen Notizen, Geburtstage, Aufgaben und Einkauf die Laenge der
+ * GEZEIGTEN Liste im Kopf: „Notizen 3" bei fuenf angehefteten, „Geburtstage 5"
+ * bei acht, „Aufgaben 5" bei zwoelf offenen - eine Zahl, die genau bis zur
+ * Obergrenze der Liste stimmt und darueber still luegt. Die Kennzahlkacheln
+ * hatten dieselbe Lehre schon gezogen (`openTaskCount` statt `urgentTasks`);
+ * die Kachelkoepfe daneben nicht.
+ *
+ * Die Gesamtzahl kommt vom Server, neben der Liste (`notesTotal`,
+ * `birthdayTotal`, `openTaskCount`, `shoppingOpenCount`) - wie `countdownTotal`
+ * beim Countdown. Fehlt sie (aelterer Server, Fehlerpfad), faellt die Badge auf
+ * die geladene Laenge zurueck; nie unter die gezeigten Zeilen, denn eine Badge
+ * kleiner als die Liste darunter waere derselbe Widerspruch andersherum.
+ *
+ * Was nicht in die Kachel passt, wird genannt: eine ruhige Fusszeile „+N
+ * weitere", dieselbe Form wie beim Countdown und bei der Entsorgung.
+ */
+function listTotal(total, loaded) {
+  const n = total === null || total === undefined || total === '' ? NaN : Number(total);
+  return Number.isFinite(n) ? Math.max(n, loaded) : loaded;
+}
+
+function listMoreLine(key, rest) {
+  return rest > 0 ? `<p class="widget-list-more">${esc(t(key, { count: rest }))}</p>` : '';
+}
+
+/* DATUM UND ABSTAND IN EINER ZEILE (#1454). Das Datum folgt der Stufung der
+ * Uebersicht (`relativeDateLabel`: Wochentag bis sechs Tage voraus, dann Tag
+ * und Monat, das Jahr nur, wenn es ein anderes ist) - hier stand `formatDate`
+ * mit Jahr, drei Tage voraus („26.09.2026 · 3 Tage"), neben einem Termin, der
+ * „Sa." sagte. Heute und morgen sagen beide Haelften dasselbe Wort; dann steht
+ * es einmal da. */
+function dateAndCount(dateLabel, countLabel) {
+  if (!dateLabel || dateLabel === countLabel) return countLabel;
+  return `${esc(dateLabel)} · ${countLabel}`;
+}
+
+export function renderUpcomingBirthdays(allBirthdays, size, total = null) {
+  // Der Vorrat kommt fuer die groesste Fassung vom Server (routes/dashboard.js);
+  // was davon erscheint, entscheidet die Kachel. Die Badge zaehlte hier die
+  // gezeigten Zeilen und sagte damit „5" bei acht anstehenden Anlaessen - jetzt
+  // nennt sie `birthdayTotal`, und der Rest steht als Fusszeile da (listTotal).
+  const birthdays = allBirthdays.slice(0, listRowCap(size));
+  if (!birthdays.length) {
+    return `<div class="widget widget--birthdays">
+      ${widgetHeader('birthdays', t('nav.birthdays'), 0, '/birthdays')}
+      <div class="widget__empty">
+        <i data-lucide="cake" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noBirthdays')}</div>
+      </div>
+    </div>`;
+  }
+
+  const items = birthdays.map((b) => {
+    const daysLabel = b.days_until === 0
+      ? t('common.today')
+      : b.days_until === 1
+        ? t('common.tomorrow')
+        : t('dashboard.daysLeft', { count: b.days_until });
+    // Familien-Geburtstage tragen die Identitaetsfarbe des Mitglieds - dieselbe
+    // Farbsprache wie die Familien-Kachel daneben; vorher trug hier jede Zeile
+    // die Modul-Toenung, und dieselbe Person war in einer Kachel leuchtend und
+    // in der naechsten grau (Etappe 4, Critique 2026-08-17). Kontakte OHNE
+    // Verknuepfung behalten die Toenung: sie haben keine Identitaetsfarbe, und
+    // eine erfundene (Hash) spraeche die Farbsprache der Familie fuer Fremde.
+    const avatarStyle = b.family_user_color
+      ? ` style="background-color:${esc(b.family_user_color)};color:${getReadableTextColor(b.family_user_color)}"`
+      : '';
+    const occasionLabel = b.kind === 'name_day'
+      ? t('birthdays.nameDay')
+      : b.next_age != null
+        ? t('birthdays.turnsAge', { age: b.next_age })
+        : '';
+    return `
+      <div class="birthday-widget-item" data-route="${esc(b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays')}" role="button" tabindex="0">
+        <div class="birthday-widget-item__avatar"${avatarStyle}>
+          ${b.photo_data ? `<img src="${esc(b.photo_data)}" alt="" loading="lazy">` : `<span>${esc(initials(b.name))}</span>`}
+        </div>
+        <div class="birthday-widget-item__body">
+          <div class="birthday-widget-item__name">${esc(b.name)}</div>
+          <div class="birthday-widget-item__meta">${dateAndCount(relativeDateLabel(b.next_date ?? b.next_birthday), daysLabel)}</div>
+        </div>
+        ${occasionLabel ? `<div class="birthday-widget-item__age">${esc(occasionLabel)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const gesamt = listTotal(total, allBirthdays.length);
+  return `<div class="widget widget--birthdays">
+    ${widgetHeader('birthdays', t('nav.birthdays'), gesamt, '/birthdays')}
+    <div class="widget__body">${items}${listMoreLine('dashboard.birthdaysMore', gesamt - birthdays.length)}</div>
+  </div>`;
+}
+
+/* DIE KACHEL AUS #647. Sie steht bewusst direkt hinter den Geburtstagen: es ist
+ * dieselbe Form - eine nach Nähe sortierte Liste aus „was" und „noch so lange" -
+ * und der Thread hat genau das als Auflösung vorgeschlagen, statt eines zweiten
+ * Systems neben Kalender und Aufgaben (@jamespurnama1).
+ *
+ * ZWEI QUELLEN, EINE LISTE, UND MAN SIEHT WELCHE. Ein Termin und eine Aufgabe
+ * zählen gleich herunter, führen aber woanders hin: das Icon der Zeile ist das
+ * des Termins (Yuvomi-eigenes Feld) bzw. das Aufgabenzeichen, und der Klick
+ * öffnet das jeweilige Modul. Ohne diesen Unterschied wäre die Liste eine
+ * dritte Sorte Eintrag, und genau die sollte es nicht geben.
+ *
+ * Der Rang ist die Nähe, nicht die Herkunft (sortiert der Server). Was vorbei
+ * ist, kommt eine Nachfrist lang weiter an und steht dann ganz oben - seine
+ * Tageszahl ist negativ. Wie lange und für wen, entscheidet der Server; die
+ * Kachel nimmt die Liste, wie sie kommt (siehe services/countdowns.js). */
+function renderCountdowns(allItems, size, total = null) {
+  const shown = visibleCountdowns(allItems);
+  const items = shown.slice(0, listRowCap(size));
+  // Kein Leerzustand: ohne Countdown ist die Kachel nicht leer, sondern nicht
+  // vorhanden (isWidgetModuleEnabled). Diese Zeile ist der Notausgang für den
+  // Fall, dass die Verfügbarkeit und die Daten auseinanderlaufen.
+  if (!items.length) return '';
+
+  const rows = items.map((c) => {
+    const phrase = countdownPhrase(c.days_until);
+    const label = phrase.count === undefined ? t(phrase.key) : t(phrase.key, { count: phrase.count });
+    // Sagt der Zaehler rechts schon „Heute"/„Morgen", traegt die Zeile kein
+    // zweites (#1454).
+    const when = relativeDateLabel(c.date);
+    const meta = when && when !== label ? `<div class="countdown-item__meta">${esc(when)}</div>` : '';
+    // Die Farbe des Termins trägt die Zeile als schmale Marke - dieselbe
+    // Zuordnung, die er im Kalender hat. Eine Aufgabe hat keine, sie bekommt
+    // den Modulton.
+    const accent = c.color
+      ? ` style="--countdown-accent:${esc(c.color)}"`
+      : ` style="--countdown-accent:var(--module-${c.source === 'task' ? 'tasks' : 'calendar'}, var(--color-accent))"`;
+    /* DIE ZEILE TRIFFT IHR OBJEKT, nicht sein Modul - wie jede andere Zeile des
+     * Dashboards. Sie führte auf `/tasks` bzw. `/calendar`, und damit landete
+     * „Führerschein verlängern, ca. 3 Jahre" in einer ungefilterten Liste, in
+     * der ein Eintrag von 2029 praktisch unauffindbar ist: die Zeile versprach
+     * ein Objekt und lieferte ein Modul.
+     *
+     * Zwei Wege, weil die beiden Quellen zwei Wege HABEN und keinen dritten
+     * brauchen: die Aufgabe hängt sich an denselben Quick-Action-Griff wie die
+     * Zeilen des Aufgaben-Widgets (`data-task-id`, ausgewertet in `wireLinks`),
+     * der Termin an dieselbe Deep-Link-Route wie die Zeilen des
+     * Kalender-Widgets. Wichtig ist dabei das Datum: `c.date` ist das NÄCHSTE
+     * Vorkommen, nicht der Serienstart - ohne es öffnete eine jährliche
+     * Verlängerung ihr Blatt Jahre in der Vergangenheit. */
+    const anchor = c.source === 'task'
+      ? ` data-task-id="${esc(String(c.id))}" data-task-title="${esc(c.title)}"`
+      : ` data-route="/calendar?open=${encodeURIComponent(String(c.id))}&date=${encodeURIComponent(c.date)}"`;
+    return `
+      <div class="countdown-item" role="button" tabindex="0"${anchor}${accent}>
+        <span class="countdown-item__icon" aria-hidden="true">
+          <i data-lucide="${esc(c.icon || 'calendar')}"></i>
+        </span>
+        <div class="countdown-item__body">
+          <div class="countdown-item__title">${esc(c.title)}</div>
+          ${meta}
+        </div>
+        <div class="countdown-item__days countdown-item__days--${countdownRank(c.days_until)}">${esc(label)}</div>
+      </div>
+    `;
+  }).join('');
+
+  /* SIEGEL UND KOPFBAND SPRECHEN JETZT DENSELBEN TON, und der Ton ist der der
+   * Übersicht. Hier stand `'calendar'`: ein teal Kalendersiegel in einem
+   * violetten Kopfband, weil `.widget--countdown` als einzige der vierzehn
+   * Kacheln kein `--widget-accent` bekommen hatte und auf den App-Akzent
+   * zurückfiel. Genau der Fehler, den der `sealSlug`-Parameter verhindern soll -
+   * er war gesetzt, die Gegenseite im Stylesheet fehlte.
+   *
+   * `dashboard` und nicht `calendar`, weil die Kachel zwei Quellen hat und
+   * keiner von beiden gehört; in der Messung kamen drei von fünf Zeilen aus den
+   * Aufgaben. Dieselbe Antwort wie beim Wetter, das aus demselben Grund
+   * `--module-dashboard` trägt: eine Kachel ohne Modul gehört der Seite. */
+  /* WAS NICHT PASST, WIRD GENANNT. Die Kachel schnitt still ab - zweimal sogar:
+   * der Server bei fünf, die Kachel je nach Größe bei drei. Wer sechs Dinge
+   * markiert hatte, sah fünf und nichts, das auf den sechsten hinwies; die
+   * Kachel sah dabei vollständig aus.
+   *
+   * Gezählt wird gegen die SERVER-Gesamtzahl, nicht gegen die geladene Liste:
+   * sonst verschwiege die Zeile genau den Schnitt, der weiter oben passiert
+   * ist. Fehlt sie (älterer Server, Fehlerpfad), fällt sie auf die geladene
+   * Länge zurück - dann stimmt sie wenigstens für den Kachelschnitt. */
+  const gesamt = Number.isFinite(Number(total)) ? Number(total) : shown.length;
+  const rest = Math.max(0, gesamt - items.length);
+  const more = rest > 0
+    ? `<p class="countdown-more">${esc(t('dashboard.countdownMore', { count: rest }))}</p>`
+    : '';
+
+  return `<div class="widget widget--countdown">
+    ${widgetHeader('countdown', t('dashboard.countdownTitle'), gesamt, null, null, 'dashboard')}
+    <div class="widget__body">${rows}${more}</div>
+  </div>`;
+}
+
+function renderTodayMeals(meals, visibleMealTypes = MEAL_ORDER, users = []) {
+  const mealLabels = MEAL_LABELS();
+  const safeMeals = Array.isArray(meals) ? meals : [];
+  const slots = normalizeVisibleMealTypes(visibleMealTypes).map((type) => {
+    const meal = safeMeals.find((m) => m.meal_type === type);
+    // WER KOCHT (#1679): der Avatar steht in der Kopfzeile des Slots, vor dem
+    // Symbol der Mahlzeitenart - dort ist neben dem kurzen Typ-Label Platz,
+    // waehrend der Titel darunter seine zwei Zeilen fuer das Gericht braucht.
+    // Der Name geht als sr-only-Satz mit: die Scheibe traegt ihn sonst nur als
+    // `title`. Ohne Koch steht nichts da, der Slot sieht aus wie bisher.
+    const cook = mealCookPerson(meal, users);
+    const cookMark = cook
+      ? `<span class="meal-slot__cook">${renderAvatarStack([cook], { size: 20, maxVisible: 1 })}<span class="sr-only">${esc(t('meals.cookNamed', { name: cook.display_name }))}</span></span>`
+      : '';
+    return `
+      <div class="meal-slot ${meal ? 'meal-slot--filled' : ''}" data-type="${type}" data-route="/meals" role="button" tabindex="0">
+        <div class="meal-slot__header">
+          <span class="meal-slot__type">${mealLabels[type]}</span>
+          ${cookMark}<i data-lucide="${MEAL_ICONS[type]}" class="meal-slot__icon" aria-hidden="true"></i>
+        </div>
+        <div class="meal-slot__title${meal ? '' : ' meal-slot__title--empty'}">${meal
+          // NUR MIT BILD, anders als im Planer (#1059). Der Slot traegt oben
+          // rechts schon ein Symbol fuer seine Mahlzeitenart; ein zweites,
+          // gleich aussehendes Platzhalter-Symbol daneben waere Unruhe ohne
+          // Aussage. Die Hoehe der Kachel haengt nicht daran - das Bild sitzt
+          // in der Titelzeile und ist so hoch wie sie.
+          ? `${(meal.recipe_has_own_image || meal.recipe_has_image) ? recipeThumbHtml({
+              recipeId: meal.recipe_id,
+              hasImage: meal.recipe_has_image,
+              hasOwnImage: meal.recipe_has_own_image,
+              className: 'meal-slot__thumb',
+            }) : ''}<span class="meal-slot__title-text">${esc(meal.title)}</span>`
+          : '-'}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="widget widget--meals">
+    ${widgetHeader('meals', t('dashboard.todayMeals'), null, '/meals', t('dashboard.weekLink'))}
+    <div class="meals-widget">
+      <div class="meal-slots">${slots}</div>
+    </div>
+  </div>`;
+}
+
+function renderPinnedNotes(allNotes, size, total = null) {
+  /* WIE VIELE ZEILEN, ENTSCHEIDET DIE KACHEL - wie bei jeder anderen
+   * Listenkachel (`listRowCap`). Die Notizen waren die einzige, die ihre Groesse
+   * gar nicht las: der Server schnitt bei drei, und drei war damit die
+   * Obergrenze fuer jede Fassung. Ab Werk steht die Kachel auf 1x2, also hoch -
+   * unter drei Zeilen blieb rund ein Drittel der Karte leer, und wer fuenf
+   * Notizen angepinnt hatte, sah drei davon und keinen Hinweis auf die
+   * uebrigen (#928). Dieselbe Korrektur haben die Geburtstage schon bekommen;
+   * die Notizen wurden dabei uebersehen. */
+  const notes = allNotes.slice(0, listRowCap(size));
+  if (!notes.length) {
+    return `<div class="widget widget--notes">
+      ${widgetHeader('notes', t('nav.notes'), 0, '/notes')}
+      <div class="widget__empty">
+        <i data-lucide="sticky-note" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noPinnedNotes')}</div>
+      </div>
+    </div>`;
+  }
+
+  // Nur der sichtbare Auszug gehört ins DOM: line-clamp kürzt rein visuell,
+  // Screenreader lasen die KOMPLETTE Notiz vor - WLAN-Daten, Schulinfos
+  // (Critique P5). 200 Zeichen decken die zwei sichtbaren Zeilen reichlich;
+  // der Volltext wohnt auf /notes. Schnitt an der Wortgrenze, damit kein
+  // halbes Wort vor der Ellipse steht.
+  const excerpt = (text) => {
+    const s = String(text ?? '');
+    if (s.length <= 200) return s;
+    const cut = s.slice(0, 200);
+    return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 120))}…`;
+  };
+  // EINE LEERE FARBE IST KEINE FARBE, SIE IST EIN KAPUTTES REZEPT. Der Stil
+  // stand unbedingt da, also trugen farblose Notizen `--note-color:;` - ein
+  // gueltiger LEERER Wert, der `var(--note-color, …)` seinen Fallback nimmt und
+  // damit das ganze color-mix ungueltig macht. Uebrig blieb der nackte
+  // Traegergrund: drei graubeige Kaesten, die wie deaktiviert aussahen. Ohne die
+  // Deklaration greift der Fallback im Stylesheet (der Notizen-Ton).
+  const items = notes.map((n) => `
+    <div class="note-item" data-route="${esc(`/notes?open=${encodeURIComponent(String(n.id))}`)}"
+         ${n.color ? `style="--note-color:${esc(n.color)};"` : ''}>
+      <div class="note-item__body" role="link" tabindex="0">
+      ${n.title ? `<div class="note-item__title">${esc(n.title)}</div>` : ''}
+      <div class="note-item__content">${renderMarkdownLight(excerpt(n.content))}</div>
+      </div>
+      ${(n.categories || []).length ? `<div class="note-item__categories" role="group" aria-label="${esc(t('noteCategories.categories'))}">
+        ${n.categories.map((category) => `<span class="note-item__category u-badge">${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>`).join('')}
+        <button type="button" class="note-item__categories-more u-badge" aria-label="${esc(t('noteCategories.categories'))}" hidden></button>
+      </div>` : ''}
+    </div>
+  `).join('');
+
+  // Breite kommt aus dem Größenklassen-System am .widget-wrapper (widget-size--2x1);
+  // die frühere .widget--wide war in keinem CSS definiert und damit tot — entfernt,
+  // damit Notizen wie jedes andere Widget genau ein Größen-Vokabular trägt (Critique P2).
+  // „Notizen 3" stand hier auch bei fuenf angehefteten: die Badge zaehlte die
+  // gezeigten Karten. Die Vorschau ist Angeheftetes zuerst, dann Neuestes -
+  // gezaehlt wird deshalb die Menge, aus der sie schoepft (`notesTotal`, mit
+  // demselben Kategoriefilter), nicht nur die angehefteten (listTotal).
+  const gesamt = listTotal(total, allNotes.length);
+  return `<div class="widget widget--notes">
+    ${widgetHeader('notes', t('nav.notes'), gesamt, '/notes')}
+    <div class="notes-grid-widget">${items}</div>
+    ${listMoreLine('dashboard.notesMore', gesamt - notes.length)}
+  </div>`;
+}
+
+/* DIE KACHELREIHE (#469) - was sie ist und was sie bewusst nicht ist.
+ *
+ * Vier Melder wollten dasselbe: von der Startseite des Haushalts zu den anderen
+ * Diensten im Haus, ohne zwei Klicks Umweg über eine Notiz. Die Diskussion lief
+ * zweimal über die Frage, ob daraus eine Lesezeichen-Bibliothek wird (#759), und
+ * ist zweimal dagegen ausgegangen. Was hier steht, ist deshalb eine ZEILE aus
+ * Kacheln und kein Modul: Name, Adresse, Bild, und wer sie sieht.
+ *
+ * KEIN VORDEFINIERTER APP-KATALOG. radicchiodev hat den Grund geliefert: eine
+ * Liste bekannter Dienste ist an dem Tag falsch, an dem jemand einen betreibt,
+ * der nicht darauf steht. Was hier zählt, ist eine Adresse.
+ *
+ * KEIN FAVICON. Das Bild wird hochgeladen und liegt in der Zeile - ein
+ * geholtes Favicon hiesse, dass die Startseite bei jedem Aufbau jeden
+ * verlinkten Host anspricht. Wer keins hochlädt, bekommt den Anfangsbuchstaben
+ * auf seiner Farbe, dieselbe Antwort wie ein Mitglied ohne Foto: zwölf gleiche
+ * Weltkugeln unterscheiden nichts, "J" auf Violett schon.
+ */
+function quickLinkMonogram(name) {
+  // Der erste BUCHSTABE, nicht das erste Zeichen: ein Name wie "🎬 Jellyfin"
+  // ergäbe sonst eine Kachel, die auf jedem Gerät anders aussieht.
+  const match = String(name ?? '').match(/\p{L}|\p{N}/u);
+  return (match ? match[0] : '?').toUpperCase();
+}
+
+function renderQuickLinkTile(s) {
+  const name = String(s.name ?? '');
+  const host = quickLinkHost(s.url);
+  // Bild, dann Symbol, dann Buchstabe - dieselbe Rangfolge wie im Verwaltungs-
+  // dialog (components/quick-links-manager.js), wo auch ihre Begründung steht.
+  //
+  // `hasIcon()` UND NICHT NUR `s.icon_name`: ein `data-lucide` mit einem Namen,
+  // den dieser Lucide-Stand nicht kennt, wird nicht ersetzt und bleibt als
+  // leeres Element stehen - die Kachel hätte dann gar kein Gesicht. Gefragt,
+  // ob es das Symbol gibt, fällt sie stattdessen auf ihren Buchstaben zurück.
+  let face;
+  if (s.icon_data) {
+    face = `<img src="${esc(s.icon_data)}" alt="" loading="lazy">`;
+  } else if (s.icon_name && hasIcon(s.icon_name)) {
+    face = `<i data-lucide="${esc(s.icon_name)}" aria-hidden="true"></i>`;
+  } else {
+    face = `<span class="quick-link-tile__monogram" aria-hidden="true">${esc(quickLinkMonogram(name))}</span>`;
+  }
+  // WEISS AUF EINER FREI GEWAEHLTEN FARBE IST NICHT IMMER LESBAR - dieselbe
+  // Messung, die die Avatar-Initialen einmal gekostet hat (utils/contrast.js).
+  // CSS kann das nicht entscheiden: die Farbe kommt aus der Datenbank.
+  const ink = prefersInkText(s.color) ? ' quick-link-tile__face--ink' : '';
+  // Die Farbe steht nur da, wenn es eine gibt - eine leere CSS-Variable ist
+  // keine Farbe, sondern ein kaputtes Rezept (dieselbe Falle wie bei den
+  // Notizen, siehe renderPinnedNotes).
+  const tint = s.color ? ` style="--quick-link-color:${esc(s.color)};"` : '';
+  // `rel` und `referrerpolicy` sind hier keine Formalie: ein Ziel im Heimnetz
+  // hat nichts davon zu erfahren, von welcher Adresse aus dieser Haushalt
+  // seine Yuvomi-Instanz betreibt, und `noopener` nimmt der geöffneten Seite
+  // den Griff auf das Fenster, aus dem sie kam.
+  // Name und volle Adresse stehen im `title`: die Host-Zeile darunter ist
+  // einzeilig und kuerzt, und eine gekuerzte Adresse darf nicht die einzige
+  // Auskunft darueber sein, wohin die Kachel fuehrt.
+  return `<a class="quick-link-tile" href="${esc(s.url)}" target="_blank"
+             title="${esc(`${name} - ${s.url}`)}"
+             rel="noopener noreferrer" referrerpolicy="no-referrer"${tint}>
+    <span class="quick-link-tile__face${ink}">${face}</span>
+    <span class="quick-link-tile__name">${esc(name)}</span>
+    ${host ? `<span class="quick-link-tile__host">${esc(host)}</span>` : ''}
+    ${s.visibility === 'private'
+      ? `<i data-lucide="lock" class="quick-link-tile__private" aria-label="${esc(t('quickLinks.privateBadge'))}"></i>`
+      : ''}
+  </a>`;
+}
+
+function renderQuickLinks(items) {
+  const list = Array.isArray(items) ? items : [];
+  const header = widgetHeader('quicklinks', t('dashboard.quickLinksTitle'), list.length, null, null, 'dashboard');
+
+  if (!list.length) {
+    // Der Leerzustand ist hier der WICHTIGSTE Zustand: das Widget kommt
+    // ausgeblendet ins Haus, wer es holt, hat noch nichts angelegt, und es gibt
+    // keine zweite Seite, auf der er anfangen könnte. Deshalb nicht der stumme
+    // Hinweis der anderen Kacheln, sondern der Weg selbst.
+    return `<div class="widget widget--quicklinks">
+      ${header}
+      <div class="widget__empty">
+        <i data-lucide="compass" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('quickLinks.emptyTitle')}</div>
+        <button type="button" class="widget__empty-cta" data-quick-links-manage>
+          <i data-lucide="plus" aria-hidden="true"></i>
+          <span>${esc(t('quickLinks.addFirst'))}</span>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="widget widget--quicklinks">
+    ${header}
+    <div class="quick-link-row">
+      ${list.map(renderQuickLinkTile).join('')}
+      <button type="button" class="quick-link-tile quick-link-tile--add" data-quick-links-manage>
+        <span class="quick-link-tile__face"><i data-lucide="pencil" aria-hidden="true"></i></span>
+        <span class="quick-link-tile__name">${esc(t('quickLinks.manage'))}</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+/*
+ * DIE TAGESLAGE DER FAMILIENKARTE (#1449, Critique 2026-09-23).
+ *
+ * Die Karte nahm den ERSTEN Termin des Tages, den sie fuer eine Person fand,
+ * und verglich ihn nie mit der Uhr: 06:30 stand dort den ganzen Nachmittag,
+ * und ein ganztaegiger Eintrag gewann den Tag, weil er vorne sortiert war.
+ * Release-Notes 2.4.0 und SPEC versprechen den NAECHSTEN.
+ *
+ * „Vorbei" ist `eventHasEnded` - DIESELBE Regel, nach der die Termin-Kachel
+ * einen Termin als „Vorbei" zuruecktreten laesst und das Heute-Blatt ihn
+ * entlaesst (seit /dashboard die heute beendeten mitliefert, #1449). Eine
+ * eigene Rechnung hier hatte in Randfaellen (Ende nur als Datum) das Gegenteil
+ * der Kachel gesagt. Verglichen wird als Stempel der Anzeigezone
+ * (`householdStamp`) - das Geraet hat keine Stimme. Unter den heutigen geht
+ * ein Termin mit Uhrzeit dem ganztaegigen vor.
+ *
+ * Die Termine kommen seit #1449 aus `familyEvents`, eigens je Mitglied
+ * geladen - nicht mehr aus der Liste der Kalenderkachel (fuenf Eintraege, ihr
+ * „nur meine"-Filter).
+ */
+function familyAgenda(events, shownIds, todayKey, now = new Date()) {
+  const nowStamp = householdNowStamp(now);
+  const items = events.map((event) => {
+    const raw = String(event?.start_datetime || '');
+    // Was vor heute begann und heute noch laeuft, ist ein Termin von HEUTE
+    // (#1457) - ganztaegig, wenn es ueber heute hinausgeht, sonst „bis".
+    const span = overviewEventSpan(event, todayKey);
+    const { day, allDay, until } = span;
+    const start = allDay ? '' : span.carried ? `${todayKey}T00:00` : householdStamp(raw);
+    const people = new Set((Array.isArray(event?.assigned_users) ? event.assigned_users : [])
+      .map((a) => Number(a.id))
+      .filter((id) => shownIds.has(id)));
+    const ended = !allDay && eventHasEnded(event, nowStamp);
+    return { event, day, allDay, until, start, ended, people, shared: people.size >= 2 };
+  }).filter((item) => item.day && item.day >= todayKey && item.people.size > 0);
+
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  items.sort((a, b) => cmp(a.day, b.day) || (Number(a.allDay) - Number(b.allDay)) || cmp(a.start, b.start));
+  const ahead = items.filter((item) => !item.ended);
+
+  const byPerson = new Map();
+  for (const id of shownIds) {
+    const own = ahead.filter((item) => !item.shared && item.people.has(id));
+    byPerson.set(id, {
+      nextToday: own.find((item) => item.day === todayKey) ?? null,
+      hadToday: items.some((item) => item.day === todayKey && item.people.has(id)),
+      sharedToday: ahead.some((item) => item.shared && item.day === todayKey && item.people.has(id)),
+      nextLater: own.find((item) => item.day > todayKey) ?? null,
+    });
+  }
+  return { nextShared: ahead.find((item) => item.shared) ?? null, byPerson };
+}
+
+/** „10:00 Zahnarzt" heute, „Sa. · Zahnarzt" an einem spaeteren Tag (escaped). */
+function familyEventLabel(item, todayKey) {
+  const title = esc(item.event.title);
+  if (item.day === todayKey) {
+    if (item.until) return `${esc(t('dashboard.todayUntil', { time: formatTime(item.until) }))} ${title}`;
+    return item.allDay ? title : `${esc(formatTime(item.event.start_datetime))} ${title}`;
+  }
+  return `${esc(relativeDateLabel(item.day))} · ${title}`;
+}
+
+/** „Alex und Linda" in der Grammatik der App-Sprache. */
+function familyNameList(names) {
+  try {
+    return new Intl.ListFormat(getLocale(), { style: 'long', type: 'conjunction' }).format(names);
+  } catch {
+    return names.join(', ');
+  }
+}
+
+/* „VERWALTEN" FUEHRT AN EIN FESTES BLATT, ODER NIRGENDWOHIN (Re-Critique
+ * 2026-09-27, A7 P1-1). Der Link zeigte auf `/settings`, und die Wurzel stellt
+ * das zuletzt besuchte Blatt wieder her (pages/settings.js): nach einem Besuch
+ * der Darstellung landete „Verwalten" dort. Das Ziel ist deshalb das Blatt
+ * selbst, und ob es erscheint, entscheidet DERSELBE Guard, der das Blatt
+ * oeffnet (`findSettingsLeaf`) - wer es nicht oeffnen darf, bekaeme sonst einen
+ * Link, der ihn auf sein Konto umleitet. */
+const FAMILY_SETTINGS_LEAF = '/settings/admin/family';
+
+function familyManageHref(user) {
+  return findSettingsLeaf(FAMILY_SETTINGS_LEAF, user)?.path ?? null;
+}
+
+function renderFamilyWidget(users, data, { manageHref = null } = {}) {
+  // IM SOLO-HAUSHALT GIBT ES DIESES WIDGET NICHT - entschieden in
+  // `isWidgetModuleEnabled`, damit es auch aus der „Anpassen"-Ablage faellt.
+  // Es war das prominenteste Widget rechts oben und zeigte einer Solo-Nutzerin
+  // eine grosse 1 mit „im Haushalt", ein Zaehler, dessen einziger Inhalt ist,
+  // dass sie allein ist (Critique 2026-08-10, Persona Miriam).
+  //
+  // „Heute dran" statt Stat-Zahl (Seele-Paket): die Karte beantwortet, was die
+  // Mitglieder HEUTE angeht - naechster eigener Termin plus offene Tageslast -
+  // statt einer Zahl, die sich nie aendert. Zaehlerquelle ist memberTodayTasks
+  // (serverseitig aggregiert, sichtbarkeitsgefiltert); aus dem 5er-Limit von
+  // urgentTasks zu zaehlen wuerde luegen, sobald mehr ansteht.
+  const openByUser = new Map(
+    (Array.isArray(data?.memberTodayTasks) ? data.memberTodayTasks : [])
+      .map((r) => [r.user_id, Number(r.open_count) || 0])
+  );
+  // Eigene Termine je Mitglied (#1449): die Liste der Kachel ist bei fuenf
+  // Kommenden gedeckelt und traegt deren „nur meine". Ein aelterer Server ohne
+  // `familyEvents` faellt auf sie zurueck.
+  const events = Array.isArray(data?.familyEvents)
+    ? data.familyEvents
+    : Array.isArray(data?.upcomingEvents) ? data.upcomingEvents : [];
+  const todayKey = householdToday();
+  // S-18 (UX-Audit): dieselbe Schichtplan-Kachel, direkt daneben, widersprach
+  // dieser Zeile - eine Person mit einer echten Schicht heute stand hier
+  // trotzdem als "Heute frei", weil dieses Widget Schichtplan nie kannte.
+  // `data.schedule` existiert nur, wenn die Schichtplan-Kachel selbst sichtbar
+  // ist (ensureScheduleSlice() laedt sie nicht sonst) - ohne sie bleibt diese
+  // Zeile unveraendert wie zuvor.
+  const scheduleEntriesToday = Array.isArray(data?.schedule?.entries) ? data.schedule.entries : [];
+
+  const shown = users.slice(0, 6);
+  const shownIds = new Set(shown.map((u) => Number(u.id)));
+  const agenda = familyAgenda(events, shownIds, todayKey);
+
+  // DER GETEILTE TERMIN STEHT EINMAL DA. Ein Termin fuer drei Personen stand in
+  // drei Zeilen („26.09.2026 · Zahnarzt - Familie" bei Alex, Leo und Linda) -
+  // die Karte wiederholte dieselbe Auskunft, statt zu sagen, dass es EIN
+  // gemeinsamer Termin ist (Critique 2026-09-23). Geteilt heisst: zwei oder
+  // mehr der gezeigten Personen sind zugewiesen. Der naechste solche Termin
+  // bekommt eine eigene Zeile oben, die Personenzeilen zeigen nur Eigenes.
+  const sharedNext = agenda.nextShared;
+  let sharedRow = '';
+  if (sharedNext) {
+    const who = shown.filter((u) => sharedNext.people.has(Number(u.id)));
+    const label = who.length === users.length
+      ? t('dashboard.familyEveryone')
+      : familyNameList(who.map((u) => u.display_name));
+    sharedRow = `
+      <div class="family-member family-member--shared">
+        <span class="family-widget-avatar family-widget-avatar--group" aria-hidden="true">
+          <i data-lucide="users"></i>
+        </span>
+        <span class="family-member__body">
+          <span class="family-member__name">${esc(label)}</span>
+          <span class="family-member__status">${familyEventLabel(sharedNext, todayKey)}</span>
+        </span>
+      </div>`;
+  }
+
+  const rows = shown.map((u) => {
+    const mine = agenda.byPerson.get(Number(u.id)) ?? { nextToday: null, hadToday: false, sharedToday: false, nextLater: null };
+    const parts = [];
+    if (mine.nextToday) parts.push(familyEventLabel(mine.nextToday, todayKey));
+    const myShift = scheduleEntriesToday.find((entry) => Number(entry.user_id) === Number(u.id) && entry.shift_type);
+    if (myShift) {
+      const type = myShift.shift_type;
+      parts.push(esc(type.short_code ? `${type.short_code} · ${type.name}` : type.name));
+    }
+    const open = openByUser.get(u.id) ?? 0;
+    if (open > 0) parts.push(esc(t('dashboard.memberOpenTasks', { count: open })));
+
+    // An freien Tagen erzählt die Zeile „als Nächstes dran" statt viermal
+    // dasselbe „Heute frei" zu stapeln (Critique P5: die größte Karte des
+    // Boards mit einem Bit Information). Erst wer auch im Ausblick nichts
+    // hat, ist wirklich frei - und das darf dann leise dastehen.
+    //
+    // Davor zwei Zustaende, die „frei" sonst falsch benannt haette (#1449):
+    // wer heute nur noch den gemeinsamen Termin oben vor sich hat, ist nicht
+    // frei; und wer heute Termine HATTE und keiner mehr kommt, ist „fuer heute
+    // durch" - nicht frei und nicht mit dem Termin von 06:30 beschriftet.
+    let status;
+    let free = false;
+    if (parts.length) {
+      status = parts.join(' · ');
+    } else if (mine.sharedToday) {
+      status = esc(t('dashboard.familyOnlyShared'));
+    } else if (mine.hadToday) {
+      status = esc(t('dashboard.familyDoneToday'));
+      free = true;
+    } else if (mine.nextLater) {
+      status = familyEventLabel(mine.nextLater, todayKey);
+    } else {
+      status = esc(t('dashboard.todayFree'));
+      free = true;
+    }
+    // MOBIL EINE AVATAR-REIHE (R19, Entscheidung Ulas 2026-10-16): dort steht
+    // je Person nur das Gesicht mit der Zahl offener Aufgaben und der Vorname
+    // (dashboard.css, `.family-member__face` / `__short`); Name und Satz
+    // bleiben im Baum und sind der Name fuer Screenreader. Zahl und Vorname
+    // sind Malerei (`aria-hidden`), der Satz sagt dasselbe.
+    const firstName = String(u.display_name || '').trim().split(/\s+/)[0] || '';
+    return `
+      <div class="family-member">
+        <span class="family-member__face">
+          <span class="family-widget-avatar" style="background:${esc(u.avatar_color || AVATAR_FALLBACK_COLOR)};color:${getReadableTextColor(u.avatar_color || AVATAR_FALLBACK_COLOR)}">
+            ${u.avatar_data ? `<img src="${esc(u.avatar_data)}" alt="" loading="lazy">` : esc(initials(u.display_name))}
+          </span>
+          ${open > 0 ? `<span class="family-member__count" aria-hidden="true">${esc(getNumberFormat().format(open))}</span>` : ''}
+        </span>
+        <span class="family-member__short" aria-hidden="true">${esc(firstName)}</span>
+        <span class="family-member__body">
+          <span class="family-member__name">${esc(u.display_name)}</span>
+          <span class="family-member__status${free ? ' family-member__status--free' : ''}">${status}</span>
+        </span>
+      </div>`;
+  }).join('');
+  const moreCount = users.length - Math.min(users.length, 6);
+
+  // DIE BILANZ DES HAUSHALTSTAGES ALS FUSSZEILE.
+  //
+  // Die Karte beantwortet zeilenweise „wer ist heute dran" - aber nicht, wie der
+  // Tag als Ganzes steht. Genau diese Summe fehlte, und genau dort sass in der
+  // 1x2-Kachel der tote Raum: der Koerper endete nach der letzten Person, und
+  // die restlichen ~170px trugen nichts. Die Fusszeile schliesst die Karte ab
+  // (unten verankert, siehe dashboard.css) und sagt dabei etwas, das keine
+  // einzelne Zeile sagen kann.
+  //
+  // Beide Zahlen sind serverseitig aggregiert und sichtbarkeitsgefiltert
+  // (memberTodayTasks, tasksDoneToday) - aus den fuenf gerenderten Zeilen zu
+  // summieren wuerde luegen, sobald der Haushalt groesser ist als das Limit.
+  // Die Platzhalter heissen bewusst NICHT `count`: „offen" und „erledigt" sind
+  // im Deutschen unveraenderliche Adjektive, es gibt also keine Singularform,
+  // die eine `_one`-Variante tragen koennte.
+  const openToday = [...openByUser.values()].reduce((sum, n) => sum + n, 0);
+  const doneToday = Number(data?.tasksDoneToday) || 0;
+  const footer = openToday + doneToday > 0
+    ? esc(t('dashboard.familyDayTally', { open: openToday, done: doneToday }))
+    : esc(t('dashboard.familyDayCalm'));
+
+  return `<div class="widget widget--family">
+    ${/* EIN WORT FUER DEN KOPF-LINK (Critique 2026-10-16): jede Kachel fuehrt
+         mit „Alle" zu ihrer Seite, nur die Familie sagte „Verwalten" - fuer
+         denselben Weg, die ganze Liste. */ ''}
+    ${widgetHeader('family', t('dashboard.familyTitle'), null, manageHref, null, 'contacts')}
+    <div class="family-widget">
+      <div class="family-widget__list">
+        ${sharedRow}
+        ${rows}
+        ${moreCount > 0 ? `<div class="family-member family-member--more">${esc(t('dashboard.shoppingMore', { count: moreCount }))}</div>` : ''}
+      </div>
+      <p class="family-widget__footer">${footer}</p>
+    </div>
+  </div>`;
+}
+
+// Sparziel-Fortschritt statt bloßer Sparquote, sobald ein Budgetplan-Sparziel
+// gesetzt ist (#468). Ohne Ziel bleibt die bekannte Sparquoten-Zeile.
+function renderBudgetSavings(budget, balance, income, savingsRate) {
+  const goal = budget?.savingsGoal;
+  if (goal && goal > 0) {
+    const pct = Math.max(0, Math.min(100, Math.round((balance / goal) * 100)));
+    const met = balance >= goal;
+    const tone = met ? 'positive' : (balance < 0 ? 'negative' : 'neutral');
+    return `
+      <div class="budget-widget__goal">
+        <div class="budget-widget__goal-head">
+          <span>${t('dashboard.savingsGoal')}</span>
+          <strong class="budget-widget__goal-pct budget-widget__goal-pct--${tone}">${Math.round((balance / goal) * 100)}%</strong>
+        </div>
+        <div class="budget-widget__goal-track">
+          <div class="budget-widget__goal-fill budget-widget__goal-fill--${tone}" style="--goal-scale:${pct / 100}"></div>
+        </div>
+      </div>`;
+  }
+  // OHNE SPARZIEL BEKOMMT DIE SPARQUOTE IHREN ZWEITEN KANAL.
+  //
+  // Sie stand als nackte Prozentzahl da - die einzige Kennzahl der Karte, die
+  // eine Relation BEHAUPTET („45 % von was?"), ohne sie zu zeigen. Die Spur
+  // zeigt den Monat als Ganzes: die Einnahmen sind die volle Breite, der
+  // gefuellte Teil das Gesparte, der Rest das Ausgegebene. Damit tragen Zahl
+  // und Flaeche dieselbe Aussage - und die Karte hat unter ihrer Kennzahl
+  // endlich Substanz statt Luft.
+  //
+  // Die Spur ist `aria-hidden`: sie ist der ZWEITE Kanal fuer die Prozentzahl,
+  // die unmittelbar darueber im Text steht. Ein eigenes Label wuerde dieselbe
+  // Auskunft ein zweites Mal vorlesen. Ohne Einnahmen gibt es keinen Anteil,
+  // den man zeigen koennte - dann bleibt die Zeile allein.
+  //
+  // Gefuellt wird auf die SPARQUOTE, nicht auf den Ausgabenanteil: die Flaeche
+  // muss die Zahl zeigen, die neben ihr steht. Und sie wird bei 0 gekappt - eine
+  // negative Quote (mehr ausgegeben als eingenommen) hat keine Balkenlaenge; das
+  // sagt der rote Saldo darueber, nicht eine Spur, die rueckwaerts liefe.
+  const savedShare = income > 0 ? Math.max(0, Math.min(1, balance / income)) : 0;
+  return `
+    <div class="budget-widget__savings">
+      <span>${t('dashboard.savingsRate')}</span>
+      <strong>${income > 0 ? `${savingsRate}%` : '-'}</strong>
+    </div>
+    ${income > 0 ? `
+    <div class="budget-widget__share" aria-hidden="true">
+      <span class="budget-widget__share-saved" style="--share-scale:${savedShare.toFixed(3)}"></span>
+    </div>` : ''}`;
+}
+
+/* DIE HOHE BUDGET-KACHEL FUELLT IHRE HOEHE MIT INHALT (Critique 2026-09-23).
+ *
+ * Als 1x2 bekommt die Karte die Hoehe zweier Rasterzeilen, ihr Inhalt reichte
+ * fuer gut eine: gemessen ~90px leeres Band zwischen „Einnahmen/Ausgaben" und
+ * der Fusszeile, die unten verankert ist (`margin-block-start: auto`, siehe
+ * „Ueberschuessige Hoehe wird Atem" in dashboard.css). Atem war das nicht mehr,
+ * sondern eine Luecke mitten in der Karte. Die hohe Fassung zeigt deshalb die
+ * DREI groessten Ausgabenkategorien statt einer - dieselbe Frage („wohin ging
+ * das Geld?"), vollstaendiger beantwortet, und genau die Hoehe, die fehlte.
+ * Die flache Kachel behaelt ihre eine Zeile; mehr trueg sie nicht. */
+function renderBudgetTopExpenses(budget, currency, size) {
+  const rows = (Array.isArray(budget?.topExpenses) && budget.topExpenses.length
+    ? budget.topExpenses
+    : budget?.topExpenseCategory ? [{ category: budget.topExpenseCategory, amount: budget.topExpenseAmount }] : [])
+    .slice(0, listRowCap(size) === LIST_ROWS_TALL ? 3 : 1);
+  if (!rows.length) return '';
+  if (rows.length === 1) {
+    return `<div class="budget-widget__footer">${t('dashboard.topExpense')}: <strong>${esc(budgetCategoryLabel(rows[0].category))}</strong> · ${formatCurrency(rows[0].amount, currency)}</div>`;
+  }
+  return `
+    <div class="budget-widget__footer budget-widget__top">
+      <p class="budget-widget__top-title">${esc(t('dashboard.topExpenses'))}</p>
+      <ul class="budget-widget__top-list">
+        ${rows.map((row) => `
+        <li class="budget-widget__top-row">
+          <span>${esc(budgetCategoryLabel(row.category))}</span>
+          <strong>${formatCurrency(row.amount, currency)}</strong>
+        </li>`).join('')}
+      </ul>
+    </div>`;
+}
+
+/* DIE BUDGET-KACHEL NENNT IHREN REITER (#1607). Das Budget merkt sich den
+ * zuletzt offenen Reiter und zeigt ihn ohne `?tab=` wieder - richtig fuer die
+ * Navigation, falsch fuer diese Kachel: wer zuletzt in der Statistik stand,
+ * landete ueber „Eintrag hinzufuegen" auf einem Reiter ohne Anlegen. Kachel und
+ * Kennzahl zeigen den Monat (Einnahmen, Ausgaben, Saldo), also fuehren ihre
+ * Wege auf die Monatsuebersicht. */
+const BUDGET_MONTH_ROUTE = '/budget?tab=budget';
+
+function renderBudgetWidget(budget, currency, size = '1x1') {
+  const income = budget?.income || 0;
+  const expenses = budget?.expenses || 0;
+  const balance = budget?.balance || 0;
+  const savingsRate = income > 0 ? Math.round((balance / income) * 100) : 0;
+  const balanceTone = balance >= 0 ? 'positive' : 'negative';
+  const hasData = (budget?.entryCount || 0) > 0;
+
+  if (!hasData) {
+    return `<div class="widget widget--budget">
+      ${widgetHeader('budget', t('nav.budget'), null, BUDGET_MONTH_ROUTE)}
+      <div class="widget__empty">
+        <i data-lucide="wallet" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noBudgetData')}</div>
+        ${emptyStateCta(BUDGET_MONTH_ROUTE, t('budget.addEntryLabel'))}
+      </div>
+    </div>`;
+  }
+
+  return `<div class="widget widget--budget">
+    ${widgetHeader('budget', t('nav.budget'), null, BUDGET_MONTH_ROUTE)}
+    <div class="budget-widget">
+      <div class="budget-widget__headline">
+        <span>${t('dashboard.monthlyBalance')}</span>
+        <strong class="budget-widget__balance budget-widget__balance--${balanceTone}">${formatCurrency(balance, currency)}</strong>
+      </div>
+      ${renderBudgetSavings(budget, balance, income, savingsRate)}
+      <div class="budget-widget__flow">
+        <span class="budget-widget__flow-item budget-widget__flow-item--income">
+          <span>${t('dashboard.monthlyIncome')}</span>
+          <strong>${formatCurrency(income, currency)}</strong>
+        </span>
+        <span class="budget-widget__flow-item budget-widget__flow-item--expense">
+          <span>${t('dashboard.monthlyExpenses')}</span>
+          <strong>${formatCurrency(expenses, currency)}</strong>
+        </span>
+      </div>
+      ${renderBudgetTopExpenses(budget, currency, size)}
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Kennzahlen-Widget (2x2-Kacheln, je eine Kachel = ein Sprungziel)
+// --------------------------------------------------------
+
+/* WARUM DAS EIN WIDGET IST UND KEIN FESTER BLOCK.
+ *
+ * Der Handoff entwirft eine feste Folge: Gruss, „Heute", Kacheln, Familie,
+ * Wetter. `dashboard_widgets` speichert aber Auswahl UND Reihenfolge, seit #585
+ * je Person - als fester Block waere entweder die Einstellung tot oder das
+ * Raster braeche, sobald jemand ein Modul abwaehlt. Als Widget-Typ ordnet die
+ * Kachelreihe sich ein, laesst sich verschieben, ausblenden und in der Groesse
+ * aendern wie jede andere Kachel, und der Server brauchte dafuer keine Zeile:
+ * normalizeWidgetConfig kennt Ids generisch und '2x2' steht laengst in
+ * VALID_WIDGET_SIZES.
+ *
+ * UND WARUM ES .metric-card IST UND KEIN NEUER BAUSTEIN.
+ * Der Entwurf beschreibt Surface, Radius 16, shadow-sm, Label 13/500 sekundaer,
+ * Wert 20/700 tabular, Sub 12px - das ist Zeile fuer Zeile die Kennzahlkarte,
+ * die seit v2.1.0 in panel.css steht und ueber einen Guard als die EINE Bauart
+ * des Hauses festgehalten ist. Neu ist hier nur die Rolle: die Karte ist ein
+ * Sprungziel und traegt deshalb ein Siegel im Kopf.
+ */
+
+/* Die Reihenfolge IST die Vorauswahl. Es gibt bewusst keine eigene Einstellung
+ * dafuer: das Widget-System kennt bislang nur zeigen/verbergen/Groesse/Reihe,
+ * und eine erste Pro-Widget-Option waere eine neue Schema-Achse, die danach
+ * jedes Widget mitschleppt. Faellt ein Modul aus (abgeschaltet, kein Zugriff,
+ * keine Daten), ruecken die hinteren Kandidaten nach - vier Kacheln bleiben
+ * vier Kacheln, statt eine Luecke ins Raster zu reissen.
+ *
+ * DIE LISTE FUEHRTE MIT DENEN, DIE OHNEHIN DASTEHEN (Critique 2026-08-13, P1).
+ * Gemessen im Standard-Layout bei 1440x900 waren alle vier Kacheln Echos:
+ * „2.504 EUR Saldo" stand 800px neben dem Budget-Widget mit derselben Zahl,
+ * „17 Tage / Tante Claire Becker" direkt ueber dem Geburtstage-Widget mit
+ * demselben Namen, „23 Artikel" und „4 ueberfaellig" in den Cockpit-Zeilen.
+ * Der erklaerte Zweck der Reihe ist das Gegenteil: ein Sprungziel fuer die
+ * Module, von denen sonst NICHTS auf dem Schirm steht.
+ *
+ * Deshalb stehen die drei spezialisierten Module jetzt mit in der Liste. Sie
+ * sind es, die im Standard-Layout kein eigenes Widget zeigen
+ * (DEFAULT_HIDDEN_WIDGETS) - und genau deshalb gehoeren sie hierher. Wer sie
+ * nicht nutzt, hat keine Daten und bekommt keine Kachel.
+ *
+ * DIE GETEILTEN AUSGABEN STEHEN DIREKT HINTER DEM BUDGET (Critique 2026-09-23).
+ * Das Modul hatte kein Element auf der Uebersicht, und die Critique wollte
+ * ausdruecklich eine Kennzahl, kein Widget - eine offene Forderung ist genau die
+ * Art Zahl, fuer die diese Reihe da ist. Vor den Opt-in-Modulen, weil eine
+ * Schuld eine Handlung verlangt und ein Punktestand nicht. Ausgeglichen gibt es
+ * keine Kachel (siehe metricTileFor). */
+const METRIC_TILE_ORDER = ['tasks', 'shopping', 'budget', 'split-expenses', 'birthdays', 'meals', 'notes', 'rewards', 'health', 'housekeeping'];
+const METRIC_TILE_COUNT = 4;
+
+/**
+ * Wohin eine Zeile fuehrt, die ueber ALLE Einkaufslisten zaehlt (#1821).
+ *
+ * Die Zahl meint mehrere Listen, also ist die Modulseite das ehrliche Ziel -
+ * bis nur noch EINE Liste etwas Offenes hat: dann meint "5 offen" genau diese
+ * Liste, und `/shopping` oeffnete stattdessen die aelteste (shopping.js liest
+ * `?list=`, sonst die erste geladene). `shoppingOpenLists` zaehlt der Server
+ * ueber alle Listen; `shoppingLists` traegt hoechstens drei, bei einer einzigen
+ * also genau sie.
+ */
+function shoppingSoleListRoute(data) {
+  const lists = Array.isArray(data?.shoppingLists) ? data.shoppingLists : [];
+  if (Number(data?.shoppingOpenLists) !== 1 || lists.length !== 1 || lists[0]?.id == null) return '/shopping';
+  return `/shopping?list=${encodeURIComponent(String(lists[0].id))}`;
+}
+
+function metricTileFor(id, data, currency, sheetSpeaks = new Set()) {
+  const route = { tasks: '/tasks', shopping: '/shopping', budget: BUDGET_MONTH_ROUTE, birthdays: '/birthdays', meals: '/meals', notes: '/notes', rewards: '/rewards', health: '/health', housekeeping: '/housekeeping' }[id];
+  switch (id) {
+    case 'tasks': {
+      const open = data.openTaskCount;
+      if (open == null) return null;
+      const overdue = data.overdueTaskCount ?? 0;
+      return {
+        id, route, icon: widgetIcon('tasks'), label: t('nav.tasks'),
+        value: t('dashboard.metricOpen', { count: open }),
+        note: overdue > 0 ? t('dashboard.metricOverdue', { count: overdue }) : t('dashboard.metricNothingOverdue'),
+        noteTone: overdue > 0 ? 'danger' : null,
+      };
+    }
+    case 'shopping': {
+      const items = data.shoppingOpenCount;
+      if (items == null) return null;
+      const lists = data.shoppingOpenLists ?? 0;
+      return {
+        id, route, icon: widgetIcon('shopping'), label: t('nav.shopping'),
+        value: t('dashboard.metricItems', { count: items }),
+        note: items === 0 ? t('dashboard.metricAllBought') : t('dashboard.metricOnLists', { count: lists }),
+      };
+    }
+    case 'budget': {
+      const budget = data.budget ?? {};
+      if (!(budget.entryCount > 0)) return null;
+      const balance = budget.balance || 0;
+      // DIE VORZEICHENREGEL IST NICHT NEU - sie ist die des Budget-Widgets,
+      // Zeichen fuer Zeichen. Ein Minus allein wird bei 20px auf dem Handy
+      // ueberlesen, deshalb traegt die Farbe den zweiten Kanal; und der
+      // Sonderfall aus #504 kommt mit: wer nur Ausgaben erfasst, hat einen
+      // rechnerisch negativen Saldo, der nichts ueber seine Lage sagt, und
+      // bekommt Label-Farbe statt Rot.
+      const neutral = (budget.income || 0) === 0 && balance < 0;
+      return {
+        id, route, icon: widgetIcon('budget'), label: t('nav.budget'),
+        value: formatCurrency(balance, currency),
+        note: t('dashboard.monthlyBalance'),
+        tone: neutral ? 'balance-neutral' : balance >= 0 ? 'balance-positive' : 'balance-negative',
+      };
+    }
+    case 'split-expenses': {
+      return splitBalanceTile(data.splitBalance);
+    }
+    case 'birthdays': {
+      const next = (data.birthdays ?? [])[0];
+      if (!next) return null;
+      const days = next.days_until;
+      return {
+        id, route, icon: widgetIcon('birthdays'), label: t('nav.birthdays'),
+        value: days === 0 ? t('common.today') : days === 1 ? t('common.tomorrow') : t('dashboard.daysLeft', { count: days }),
+        note: next.kind === 'name_day' ? `${next.name} · ${t('birthdays.nameDay')}` : next.name,
+      };
+    }
+    case 'meals': {
+      const meals = data.todayMeals ?? [];
+      if (!meals.length) return null;
+      return {
+        id, route, icon: widgetIcon('meals'), label: t('nav.meals'),
+        value: t('dashboard.metricMeals', { count: meals.length }),
+        note: meals[0]?.title || t('dashboard.todayMeals'),
+      };
+    }
+    case 'notes': {
+      const notes = data.pinnedNotes ?? [];
+      if (!notes.length) return null;
+      /* `pinnedNotes` ist die VORSCHAU (gepinnt zuerst, dann aktuellste, drei
+       * Stueck), nicht die Menge der gepinnten - `notes.length` las deshalb bei
+       * null Pins "3 angepinnt" und bei fuenf ebenfalls "3". Die Zahl kommt aus
+       * `pinnedNotesCount`, die Vorschau bleibt die Vorschau. */
+      const pinned = data.pinnedNotesCount ?? notes.filter((n) => n.pinned).length;
+      if (!pinned) return null;
+      return {
+        id, route, icon: widgetIcon('notes'), label: t('nav.notes'),
+        value: t('dashboard.metricPinned', { count: pinned }),
+        note: notes[0]?.title || t('notes.titlePlaceholder'),
+      };
+    }
+    case 'rewards': {
+      // KEIN SPITZENREITER (Critique 2026-09-23). Die Kachel nannte den
+      // hoechsten Stand samt Namen - dieselbe Rangliste wie das alte Widget,
+      // nur kuerzer. Wer selbst sammelt, sieht den eigenen Stand und sein Ziel;
+      // wer freigibt, sieht nur, ob etwas auf ihn wartet.
+      const r = data.rewards ?? {};
+      const standings = Array.isArray(r.standings) ? r.standings : [];
+      const own = standings.find((m) => m.id === r.me);
+      if (own && (r.view === 'self' || standings.length === 1)) {
+        return {
+          id, route, icon: widgetIcon('rewards'), label: t('nav.rewards'),
+          value: t('dashboard.metricPoints', { count: Number(own.balance) || 0 }),
+          note: rewardGoalLabel(own.balance, r.catalog),
+        };
+      }
+      // Die Zahl offener Freigaben steht an GENAU EINER Stelle: im
+      // Belohnungen-Widget (dann filtert `shown` diese Kachel weg), sonst im
+      // Heute-Blatt, und nur wenn keines von beiden sie traegt, hier.
+      const pending = r.view === 'approver' ? (Number(r.pending) || 0) + (Number(r.moneyPending) || 0) : 0;
+      if (!pending || sheetSpeaks.has('approvals')) return null;
+      return {
+        id, route, icon: widgetIcon('rewards'), label: t('nav.rewards'),
+        value: t('dashboard.rewardsPending', { count: pending }),
+        note: t('rewards.pendingApprovals'),
+      };
+    }
+    case 'health': {
+      const h = data.health ?? {};
+      // Ohne Medikamente hat die Kachel keine Kennzahl - und der Zyklus ist
+      // bewusst NICHT ihr Ersatz: er haengt an expliziten Grants (#584), und
+      // eine Kachel, die je nach Berechtigung etwas anderes zeigt, ist zwei
+      // Kacheln mit einem Namen.
+      if (!h.hasMeds || !(h.dosesTotal > 0)) return null;
+      // Nennt das Heute-Blatt die offenen Dosen schon, waere „2 offen" hier
+      // dieselbe Zahl ein zweites Mal - ausser eine Packung muss nachbestellt
+      // werden, das sagt das Blatt nicht.
+      if (sheetSpeaks.has('doses') && !(h.lowStockCount > 0)) return null;
+      const offen = h.dosesTotal - (h.dosesTaken ?? 0) - (h.dosesSkipped ?? 0);
+      return {
+        id, route, icon: widgetIcon('health'), label: t('nav.health'),
+        // „2 Dosen" liess offen, ob offen oder genommen (Critique 2026-09-23,
+        // Persona Grosseltern) - der Wert nennt jetzt den Zustand („2 offen",
+        // wie „12 offen" bei den Aufgaben; „2 Dosen offen" passte mobil nicht
+        // in die nicht umbrechende Wertzeile), und die Zweitzeile nennt die
+        // naechste Dosis mit Uhrzeit statt nur dem Namen.
+        value: t('dashboard.metricDoses', { count: Math.max(0, offen) }),
+        // Die Nachbestellung schlaegt die naechste Uhrzeit: eine leere Packung
+        // ist der Zustand, der eine Handlung braucht, eine faellige Dosis der,
+        // der von selbst kommt.
+        note: h.lowStockCount > 0
+          ? t('dashboard.healthRefill', { count: h.lowStockCount })
+          : offen <= 0 || !h.nextDose?.name
+            ? t('dashboard.healthAllTaken')
+            : `${h.nextDose.time ? `${formatTime(h.nextDose.time)} ` : ''}${h.nextDose.name}`,
+        noteTone: h.lowStockCount > 0 ? 'danger' : null,
+      };
+    }
+    case 'housekeeping': {
+      const hk = data.housekeeping ?? {};
+      if (!hk.configured) return null;
+      return {
+        id, route, icon: widgetIcon('housekeeping'), label: t('nav.housekeeping'),
+        // „9 Besuche" ohne Zeitraum - gezaehlt werden die abgeschlossenen
+        // Besuche des laufenden Monats (routes/dashboard.js), und das sagt der
+        // Wert jetzt. Kurz („9 im Monat"), weil der Wert nicht umbricht: die
+        // Kachel ist mobil 152px breit, „9 Besuche diesen Monat" wurde dort
+        // abgeschnitten (gemessen). Das Substantiv steht im Kachelnamen.
+        value: t('dashboard.metricVisitsMonth', { count: hk.visitsThisMonth ?? 0 }),
+        // Drei Zustaende, ein Rang: wer gerade da ist, ist die Nachricht; sonst
+        // zaehlt offenes Geld; sonst der letzte Besuch. „Gerade im Haus" um
+        // 21:18 las sich wie ein Fehler - mit „seit 08:00" ist es eine Auskunft
+        // (und eine vergessene Abmeldung von gestern sieht man am Datum).
+        note: hk.present
+          ? (hk.presentSince
+            ? t('dashboard.housekeepingPresentSince', { time: housekeepingSinceLabel(hk.presentSince) })
+            : t('dashboard.housekeepingPresent'))
+          : hk.unpaidAmount > 0
+            ? t('dashboard.housekeepingUnpaid', { amount: formatCurrency(hk.unpaidAmount, currency) })
+            : hk.lastVisit
+              ? t('dashboard.housekeepingLastVisit', { date: earnedWhenLabel(hk.lastVisit) })
+              : t('dashboard.housekeepingNoVisits'),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Betrag aus dem Ledger in der ISO-Skala seiner Waehrung.
+ *
+ * Der Server liefert Geteilte-Ausgaben-Betraege als Dezimalstring in der
+ * Skala aus `CURRENCY_MINOR_UNITS` (ISO 4217: JPY 0, EUR 2, KWD 3). Die Stellen
+ * kommen deshalb aus dem String und nicht aus `Intl`, dessen CLDR-Konvention
+ * davon abweicht (HUF zeigt dort keine Nachkommastellen, 12,50 stuende als
+ * „13" da). Und anders als `formatCurrency()` bleiben die Stellen auch ab 1000:
+ * ein offener Betrag ist eine Forderung, keine Groessenordnung.
+ */
+function formatLedgerAmount(amount, currency) {
+  const digits = (String(amount).split('.')[1] ?? '').length;
+  return getNumberFormat({
+    style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits,
+  }).format(Number(amount) || 0);
+}
+
+/**
+ * Kachel „Ausgleich offen" der geteilten Ausgaben.
+ *
+ * WERT = NETTO, FUSSNOTE = DIE GROESSTE POSITION. Die Zahl beantwortet „wie
+ * stehe ich insgesamt", die Zeile darunter „bei wem" - mit „+N" fuer die
+ * uebrigen Positionen, statt eine Liste in eine Kachel zu zwaengen. Das Netto
+ * gehoert zur Waehrung der genannten Position; Betraege verschiedener
+ * Waehrungen addiert niemand. Vorzeichen und Farbe nach der Rolle `balance`
+ * (utils/money.js): Minus nur, wer schuldet.
+ *
+ * AUSGEGLICHEN GIBT ES KEINE KACHEL, auch wenn sich zwei Gruppen nur
+ * gegenseitig aufheben. „Alles ausgeglichen" waere wahr, verlangt
+ * aber nichts - und die Reihe hat vier Plaetze, die sonst eine Zahl tragen, die
+ * NIRGENDS steht. Dieselbe Regel wie bei den uebrigen Kandidaten: keine offene
+ * Position, keine Kennzahl.
+ *
+ * Die Saldenquelle ist die der Ausgleichs-Ansicht (server/services/
+ * split-expenses.js, groupBalanceRows) - die Kachel zeigt, was das Modul zeigt,
+ * auch dessen offenen Fehler #1445.
+ */
+function splitBalanceTile(balance) {
+  const positions = Array.isArray(balance?.positions) ? balance.positions : [];
+  // Das Netto entscheidet, nicht die Positionen: es summiert ueber alle
+  // Gruppen und laesst eine Waehrung mit Summe 0 weg, die Positionen bleiben je
+  // Gruppe stehen. Offen ist also nur, wo ein Netto steht - und die genannte
+  // Position gehoert zu dessen Waehrung.
+  const net = (balance?.net ?? []).find((n) => Number(n.netMinor) !== 0);
+  if (!net) return null;
+  const top = positions.find((p) => p.currency === net.currency);
+  if (!top) return null;
+  const netMinor = Number(net.netMinor);
+  const who = top.direction === 'owe'
+    ? t('dashboard.splitYouOwe', { name: top.name })
+    : t('dashboard.splitOwesYou', { name: top.name });
+  const more = positions.length - 1;
+  // „+2" als Zahl der Format-Locale, nicht als Textbaustein: Vorzeichen und
+  // Ziffern gehoeren dem Zahlformat (RTL, arabische Ziffern).
+  const note = more > 0 ? `${who} · ${getNumberFormat({ signDisplay: 'always' }).format(more)}` : who;
+  return {
+    id: 'split-expenses',
+    // Die Ausgleichs-Ansicht liegt im Budget, Reiter „Aufteilung", in der
+    // Gruppe der genannten Position.
+    route: `/budget?tab=split-expenses&group=${encodeURIComponent(String(top.groupId))}`,
+    icon: widgetIcon('split-expenses'),
+    label: t('splitExpenses.title'),
+    value: formatLedgerAmount(net.amount, net.currency),
+    note,
+    tone: netMinor > 0 ? 'balance-positive' : netMinor < 0 ? 'balance-negative' : 'balance-neutral',
+  };
+}
+
+function renderMetricTile(tile) {
+  const noteClass = tile.noteTone === 'danger' ? ' metric-card__note--danger' : '';
+  const toneClass = tile.tone ? ` metric-card--${tile.tone}` : '';
+  return `
+    <a class="metric-card metric-card--tile${toneClass}" href="${tile.route}" data-route="${tile.route}">
+      <span class="metric-card__tile-head">
+        <!-- Der Ton gehoert AUF das Siegel, nicht auf die Karte darum: .module-seal
+             deklariert --seal-accent in seiner eigenen Regel, und eine Deklaration
+             am Element schlaegt jeden geerbten Wert. Von der Karte aus gesetzt
+             trugen alle vier Kacheln denselben violetten App-Akzent.
+             Zwei Siegel-Gesichter auf einem Board waeren zwei Wahrheiten -
+             der Satz galt erst fuer dieses Board und seit 2026-08-17 fuer die
+             ganze App: es gibt nur noch das Vollton-Gesicht, also braucht es
+             auch keine Klasse mehr, die es auswaehlt. -->
+        <span class="module-seal module-seal--sm" aria-hidden="true"
+              style="--seal-accent: var(--module-${tile.id}, var(--color-accent))">${moduleIconHTML(tile.icon)}</span>
+        <span class="metric-card__label">${esc(tile.label)}</span>
+      </span>
+      <span class="metric-card__value">${esc(tile.value)}</span>
+      <span class="metric-card__note${noteClass}">${esc(tile.note)}</span>
+    </a>
+  `;
+}
+
+/**
+ * Die Kachelreihe zeigt, was sonst NIRGENDS auf dem Schirm steht.
+ *
+ * @param {Set<string>} shown  die Modul-Ids, die in diesem Layout ein eigenes
+ *                             sichtbares Widget haben.
+ *
+ * DER FILTER IST DIE GANZE AUSSAGE (Critique 2026-08-13, P1). Ohne ihn fuehrte
+ * die Reihe mit `tasks` und `shopping` - beide in COCKPIT_COVERED_WIDGETS -,
+ * und daneben mit `budget` und `birthdays`, die im Standard-Layout ihr eigenes
+ * Widget haben. Gemessen waren alle vier Kacheln Echos von etwas, das im selben
+ * Viewport schon stand. PRODUCT.md fuehrt das „ueberlastete Feature-Dashboard"
+ * als Anti-Referenz, und eine Zahl zweimal auf einem Schirm ist deren reine
+ * Form.
+ *
+ * Zwei Quellen der Doppelung, zwei Bedingungen:
+ *   - das Cockpit fasst vier Domaenen schon zusammen (COCKPIT_COVERED_WIDGETS);
+ *   - ein sichtbares Widget sagt seine Zahl selbst, ausfuehrlicher als eine
+ *     Kachel es koennte.
+ *
+ * ES IST EIN FILTER, KEINE ZWEITE LISTE. Wer ein Widget ausblendet, bekommt
+ * dessen Kachel - und wer es wieder einblendet, verliert sie. Die Reihe folgt
+ * dem Layout, statt eine eigene Vorstellung davon zu pflegen.
+ */
+function selectMetricTiles(data, currency, shown = new Set(), sheetSpeaks = new Set()) {
+  const tiles = METRIC_TILE_ORDER
+    .filter((id) => isWidgetModuleEnabled(id))
+    .filter((id) => !COCKPIT_COVERED_WIDGETS.has(id))
+    .filter((id) => !shown.has(id))
+    .map((id) => metricTileFor(id, data, currency, sheetSpeaks))
+    .filter(Boolean)
+    .slice(0, METRIC_TILE_COUNT);
+
+  // Weniger als zwei Kacheln sind keine Kachelreihe, sondern eine einsame
+  // Karte - dann traegt das Modul-Widget die Zahl besser.
+  return tiles.length < 2 ? [] : tiles;
+}
+
+/* Die AUSWAHL steht getrennt von der DARSTELLUNG, damit die Zusage pruefbar ist,
+ * ohne ein Dokument zu bauen: was die Reihe zeigt, ist die Aussage - dass sie es
+ * in einem <a> zeigt, ist ihre Form. */
+function renderMetricTiles(data, currency, shown = new Set(), sheetSpeaks = new Set()) {
+  const tiles = selectMetricTiles(data, currency, shown, sheetSpeaks);
+  if (!tiles.length) return '';
+  // Die Reihe war das einzige Widget ohne Ueberschrift: per H-Taste sprang man
+  // an ihr vorbei, und ihre vier Zahlen hingen unter der vorigen Kachel. Die
+  // Ueberschrift ist sr-only, weil jede Kachel ihr Modul schon sichtbar nennt -
+  // ein Etikett „Kennzahlen" ueber einer Reihe, die sich selbst erklaert, waere
+  // nur Kopfhoehe. Sie steht VOR der Reihe, nicht in ihr: `.metric-tiles` ist
+  // selbst das Raster der Kacheln.
+  return `<h3 class="sr-only">${esc(t('dashboard.metrics'))}</h3>
+    <div class="metric-tiles">${tiles.map(renderMetricTile).join('')}</div>`;
+}
+
+// --------------------------------------------------------
+// Belohnungen-Widget: der eigene Weg zur Praemie, kein Wettbewerb
+// --------------------------------------------------------
+
+/* HIER STAND EINE RANGLISTE, UND SIE WAR FUER JEDEN DIESELBE (Critique
+ * 2026-09-23, Persona Emma, 9). "1 Leo 60 / 2 Emma 30" las ein Kind als
+ * Wettbewerb unter Geschwistern - PRODUCT.md verspricht jedem
+ * Familienmitglied den eigenen Blick. Seitdem gibt es keinen Platz und keinen
+ * hervorgehobenen Spitzenreiter mehr, und die Sicht folgt der Rolle, die das
+ * Modul selbst fuer "darf freigeben" fragt (der Server liefert sie als
+ * `view`, siehe routes/dashboard.js):
+ *
+ *   self     - das Kind sieht NUR sich: Stand, einen ruhigen Balken zur
+ *              naechsten Praemie, die zuletzt verdienten Punkte;
+ *   approver - Eltern sehen jedes Kind nebeneinander (nach Namen), je Kind
+ *              Stand und Ziel, dazu die offenen Freigaben als Sprung;
+ *   family   - Wandtablett und Mitglieder ohne eigene Punkte: wie die Eltern,
+ *              ohne Freigaben.
+ *
+ * Das Ziel waehlt /utils/reward-goal.js, dieselbe Regel wie der Balken auf der
+ * Belohnungen-Seite - zwei Balken mit zwei Zielen waeren zwei Wahrheiten. */
+
+/** So viele Mitglieder zeigt die Eltern-Sicht je Kachelhoehe; der Rest spricht als Zahl. */
+const REWARD_MEMBERS_SHORT = 2;
+const REWARD_MEMBERS_TALL = 5;
+
+function sizeSpans(size) {
+  const [cols, rows] = String(size ?? '1x2').split('x').map(Number);
+  return { cols: cols || 1, rows: rows || 1 };
+}
+
+/** Der Satz zur naechsten Praemie - fuer Balken und Kennzahlkachel derselbe. */
+function rewardGoalLabel(balance, catalog, goal = nextRewardGoal(balance, catalog)) {
+  // Ein Minus steht nie ohne Satz da (#1607) - derselbe Satz und dieselbe
+  // Reihenfolge wie nextRewardHint() auf der Belohnungsseite.
+  if (Number(balance) < 0) return t('rewards.balanceBelowZero');
+  if (!goal) return t('rewards.noRewardsYet');
+  if (goal.reached) return t('rewards.canRedeemNow');
+  return t('rewards.remainingToReward', { points: formatPoints(goal.missing), reward: goal.target.name });
+}
+
+/**
+ * Balken plus Satz zur naechsten Praemie. Die Ansage traegt den Satz
+ * (`aria-valuetext`), nicht die Prozentzahl - "noch 15 bis Kinoabend" ist die
+ * Aussage, 75 % ist nur ihre Ableitung. Ohne einloesbare Praemie gibt es
+ * keinen Balken: er behauptete einen Weg, den niemand angelegt hat.
+ *
+ * `compact` laesst den sichtbaren Satz weg und behaelt die Ansage: auf einer
+ * Kachel, die eine Rasterzeile hoch ist, trug die Eltern-Sicht mit Satz 259px
+ * gegen 183px der Nachbarkachel und dehnte deren Zeile mit (gemessen 1440px).
+ * Wer den Satz lesen will, zieht die Kachel auf 1x2 - dort steht er.
+ *
+ * AUSNAHME: DAS MINUS (#1623). Eine negative Zahl neben einem leeren Balken
+ * erklaert sich nicht, und der Satz stand nur in der Ansage. Kompakt steht
+ * deshalb eine Kurzform (`.rewards-goal__label--compact`, hoechstens zwei
+ * Zeilen), und sie steht AN STELLE des Balkens: der ist bei null leer und
+ * sagt sichtbar nichts, kostete mit der Zeile zusammen aber 23px je Mitglied
+ * (so 9px). Er bleibt per `.sr-only` im DOM - die Ansage behaelt Rolle, Wert
+ * und den ganzen Satz. Ueber null und auf der hohen Kachel aendert sich nichts.
+ */
+function rewardGoalHTML(balance, catalog, who = '', { compact = false } = {}) {
+  const goal = nextRewardGoal(balance, catalog);
+  const label = rewardGoalLabel(balance, catalog, goal);
+  if (!goal) return `<p class="rewards-goal__label rewards-goal__label--muted">${esc(label)}</p>`;
+  const name = who ? `${t('rewards.progressLabel')}: ${who}` : t('rewards.progressLabel');
+  const compactHint = compact && Number(balance) < 0
+    ? `<p class="rewards-goal__label rewards-goal__label--compact" aria-hidden="true">${esc(t('rewards.balanceBelowZeroShort'))}</p>`
+    : '';
+  return `
+    <div class="rewards-goal__track${compactHint ? ' sr-only' : ''}" role="progressbar" aria-label="${esc(name)}"
+         aria-valuenow="${goal.pct}" aria-valuemin="0" aria-valuemax="100"
+         aria-valuetext="${esc(label)}"><span class="rewards-goal__fill" style="--rewards-progress:${goal.pct / 100}"></span></div>
+    ${compact ? compactHint : `<p class="rewards-goal__label" aria-hidden="true">${esc(label)}</p>`}`;
+}
+
+function rewardAvatarHTML(m) {
+  const color = m.avatar_color || AVATAR_FALLBACK_COLOR;
+  const inner = m.avatar_data
+    ? `<img src="${esc(m.avatar_data)}" alt="" loading="lazy">`
+    : esc(initials(m.display_name));
+  return `<span class="rewards-member__avatar" aria-hidden="true" style="background:${esc(color)};color:${getReadableTextColor(color)}">${inner}</span>`;
+}
+
+function rewardsFooterHTML(text) {
+  return `<a class="rewards-widget__footer" href="/rewards" data-route="/rewards">
+      <i data-lucide="clock" aria-hidden="true"></i>
+      <span>${esc(text)}</span>
+    </a>`;
+}
+
+/**
+ * Wann eine Gutschrift kam - rueckwaerts gelesen. `relativeDateLabel` schaut
+ * nach vorn (heute, morgen) und schrieb fuer vorgestern "21.09.2026": in einer
+ * Zeile, die ohnehin nur die letzten Tage traegt, ist das Jahr Laerm. Es steht
+ * nur, wenn es ein anderes ist.
+ */
+function earnedWhenLabel(value) {
+  const day = zonedDateKey(value);
+  if (!day) return '';
+  const today = householdToday();
+  if (day === today) return t('common.today');
+  if (day === addLocalDays(today, -1)) return t('common.yesterday');
+  return day.slice(0, 4) === today.slice(0, 4) ? formatDayMonth(value) : formatDate(value);
+}
+
+function renderRewardsSelf(me, rewards, spans) {
+  // Die kleine Kachel traegt nur den Weg zum Ziel: mit einer Verlaufszeile
+  // und dem Anfrage-Chip stand sie bei 275px gegen 183px der Nachbarn
+  // (gemessen 1440px). Breit steht der Verlauf daneben, hoch darunter.
+  const recentCap = spans.rows >= 2 ? 3 : spans.cols >= 2 ? 2 : 0;
+  const recent = (Array.isArray(rewards.recent) ? rewards.recent : []).slice(0, recentCap);
+  const recentHTML = recent.length ? `
+      <div class="rewards-self__recent">
+        <p class="rewards-self__recent-title" aria-hidden="true">${esc(t('dashboard.rewardsRecent'))}</p>
+        <ul class="rewards-recent" aria-label="${esc(t('dashboard.rewardsRecent'))}">
+          ${recent.map((row) => `
+            <li class="rewards-recent__row">
+              <span class="rewards-recent__delta">+${esc(formatPoints(row.delta))}</span>
+              <span class="rewards-recent__reason">${esc(row.reason || t(`rewards.ledgerType.${row.type}`))}</span>
+              <span class="rewards-recent__when">${esc(earnedWhenLabel(row.created_at))}</span>
+            </li>`).join('')}
+        </ul>
+      </div>` : '';
+  // Praemien- und Geld-Anfragen (#1734) zusammen: der Server fuehrt sie
+  // getrennt, die Kachel sagt, wie viele warten.
+  const pending = (Number(rewards.pending) || 0) + (Number(rewards.moneyPending) || 0);
+  return `
+    <div class="widget__body rewards-widget rewards-widget--self">
+      <div class="rewards-self">
+        <div class="rewards-self__goal">
+          <p class="rewards-self__points">${esc(t('dashboard.metricPoints', { count: Number(me.balance) || 0 }))}</p>
+          ${rewardGoalHTML(me.balance, rewards.catalog)}
+        </div>
+        ${recentHTML}
+      </div>
+      ${pending > 0 ? rewardsFooterHTML(t('dashboard.rewardsOwnPending', { count: pending })) : ''}
+    </div>`;
+}
+
+function renderRewardsFamily(members, rewards, spans) {
+  // In der Haushaltsreihenfolge (#1644), nicht nach Punkten: eine Reihenfolge
+  // nach Stand WAERE die Rangliste, nur ohne Ziffern. Der Server liefert die
+  // Liste schon so; sortiert wird hier trotzdem, weil die Zusage dieser Kachel
+  // ("nie nach Stand") nicht an der Abfrage einer anderen Datei haengen soll.
+  const sorted = sortMembers(members);
+  const cap = spans.rows >= 2 ? REWARD_MEMBERS_TALL : REWARD_MEMBERS_SHORT;
+  const shown = sorted.slice(0, cap);
+  const rows = shown.map((m) => `
+      <li class="rewards-member">
+        ${rewardAvatarHTML(m)}
+        <span class="rewards-member__body">
+          <span class="rewards-member__head">
+            <span class="rewards-member__name">${esc(m.display_name)}</span>
+            <span class="rewards-member__points">${esc(t('dashboard.metricPoints', { count: Number(m.balance) || 0 }))}</span>
+          </span>
+          ${rewardGoalHTML(m.balance, rewards.catalog, m.display_name, { compact: spans.rows < 2 })}
+        </span>
+      </li>`).join('');
+  const more = sorted.length - shown.length;
+  const pending = rewards.view === 'approver' ? (Number(rewards.pending) || 0) + (Number(rewards.moneyPending) || 0) : 0;
+  return `
+    <div class="widget__body rewards-widget">
+      <ul class="rewards-widget__members">${rows}</ul>
+      ${more > 0 ? `<p class="rewards-widget__more">${esc(t('dashboard.shoppingMore', { count: more }))}</p>` : ''}
+      ${pending > 0 ? rewardsFooterHTML(t('dashboard.rewardsPending', { count: pending })) : ''}
+    </div>`;
+}
+
+function renderRewardsWidget(rewards, size) {
+  const r = rewards ?? {};
+  const standings = Array.isArray(r.standings) ? r.standings : [];
+  const own = standings.find((m) => m.id === r.me);
+  // Das Kind sieht NUR sich, auch wenn eine Antwort mehr mitbraechte.
+  const members = r.view === 'self' ? (own ? [own] : []) : standings;
+  const header = widgetHeader('rewards', t('nav.rewards'), null, '/rewards');
+
+  if (!members.length) {
+    // Praemien anlegen ist Elternsache: einem Kind einen Knopf zu zeigen, der
+    // in eine Seite fuehrt, auf der es nichts anlegen darf, waere die leere
+    // Zusage aus #700.
+    const cta = r.view === 'approver' && navModuleAccess('rewards') === 'write'
+      ? emptyStateCta('/rewards', t('rewards.addReward')) : '';
+    return `<div class="widget widget--rewards">
+      ${header}
+      <div class="widget__empty">
+        <i data-lucide="award" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noRewards')}</div>
+        ${cta}
+      </div>
+    </div>`;
+  }
+
+  const spans = sizeSpans(size);
+  // WER ALLEIN SAMMELT, SIEHT SEINEN WEG - auch als Elternteil im
+  // Ein-Personen-Haushalt. Eine Uebersicht "je Kind" mit genau einer Zeile,
+  // die man selbst ist, waere die Eltern-Sicht ohne Kinder.
+  const body = own && members.length === 1
+    ? renderRewardsSelf(own, r, spans)
+    : renderRewardsFamily(members, r, spans);
+  return `<div class="widget widget--rewards">
+    ${header}
+    ${body}
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Gesundheit-Widget (heutige Medikamenten-Dosen)
+// --------------------------------------------------------
+
+function renderHealthWidget(health) {
+  if (!health?.hasMeds) {
+    return `<div class="widget widget--health">
+      ${widgetHeader('health', t('nav.health'), null, '/health')}
+      <div class="widget__empty">
+        <i data-lucide="heart-pulse" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.healthNoMeds')}</div>
+        ${emptyStateCta('/health', t('health.meds.add'))}
+      </div>
+    </div>`;
+  }
+
+  const total = Number(health?.dosesTotal) || 0;
+  const taken = Number(health?.dosesTaken) || 0;
+  const lowStock = Number(health?.lowStockCount) || 0;
+  const pct = total > 0 ? Math.max(0, Math.min(1, taken / total)) : 0;
+  const allTaken = total > 0 && taken >= total;
+
+  const lowChip = lowStock > 0
+    ? `<div class="health-widget__refill"><i data-lucide="package" aria-hidden="true"></i><span>${t('dashboard.healthRefill', { count: lowStock })}</span></div>`
+    : '';
+
+  let main;
+  if (total === 0) {
+    main = `<div class="health-widget__none">
+      <i data-lucide="coffee" class="health-widget__none-icon" aria-hidden="true"></i>
+      <span>${t('dashboard.healthNoDosesToday')}</span>
+    </div>`;
+  } else {
+    const status = allTaken
+      ? `<div class="health-widget__status health-widget__status--done"><i data-lucide="check" aria-hidden="true"></i>${t('dashboard.healthAllTaken')}</div>`
+      : health?.nextDose
+        ? `<div class="health-widget__next">
+            <span class="health-widget__next-time">${esc(health.nextDose.time)}</span>
+            <span class="health-widget__next-name">${esc(health.nextDose.name)}</span>
+          </div>`
+        : '';
+    main = `
+      <div class="health-widget__progress">
+        <div class="health-widget__bar" role="img" aria-label="${t('dashboard.healthDosesProgress', { taken, total })}">
+          <div class="health-widget__bar-fill${allTaken ? ' health-widget__bar-fill--done' : ''}" style="--dose-scale:${pct}"></div>
+        </div>
+        <div class="health-widget__count"><strong>${taken}</strong>/${total}</div>
+      </div>
+      ${status}
+    `;
+  }
+
+  return `<div class="widget widget--health">
+    ${widgetHeader('health', t('nav.health'), null, '/health')}
+    <div class="widget__body">
+      <div class="health-widget">${main}${lowChip}</div>
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Zyklus-Widget (owner-only, opt-in)
+// --------------------------------------------------------
+// Strikt privat: Die Vorhersage wird client-seitig aus den nutzer-eigenen
+// /health/cycle/*-Endpunkten berechnet (siehe render()) und fließt NIE in den
+// familienweiten /dashboard-Payload. Zeigt Phase + Zyklustag (Mini-Ring) und die
+// nächste Periode als Countdown — die eine glanceable Zahl für den Alltag.
+
+const CYCLE_WIDGET_PHASE_KEYS = {
+  [PHASE.MENSTRUATION]: 'health.cycle.phase.menstruation',
+  [PHASE.FOLLICULAR]:   'health.cycle.phase.follicular',
+  [PHASE.FERTILE]:      'health.cycle.phase.fertile',
+  [PHASE.OVULATION]:    'health.cycle.phase.ovulation',
+  [PHASE.LUTEAL]:       'health.cycle.phase.luteal',
+};
+
+// Phasenfarbe für den Ring-Bogen; Follikel-/Lutealphase tragen den Modul-Akzent.
+const CYCLE_WIDGET_PHASE_COLOR = {
+  [PHASE.MENSTRUATION]: 'var(--cycle-period)',
+  [PHASE.FERTILE]:      'var(--cycle-fertile)',
+  [PHASE.OVULATION]:    'var(--cycle-ovulation)',
+};
+
+function cycleWidgetCountdown(prediction) {
+  const d = prediction.daysUntilNext;
+  if (d === 0) return t('health.cycle.status.today');
+  if (d < 0) return t('health.cycle.status.overdue', { count: Math.abs(d) });
+  return t('health.cycle.status.inDays', { count: d });
+}
+
+function renderCycleWidget(cycle) {
+  // cycle: { periods, settings } (owner-only) | null (Ladefehler) | undefined (Kachel versteckt)
+  const prediction = cycle
+    ? predictCycle(cycle.periods || [], cycle.settings || {})
+    : { hasData: false };
+
+  // Ohne Historie: Onboarding-Empty statt Fehlerkachel — führt in den Zyklus-Flow.
+  if (!prediction.hasData) {
+    return `<div class="widget widget--cycle">
+      ${widgetHeader('cycle', t('health.cycle.title'), null, '/health/cycle')}
+      <div class="widget__empty">
+        <i data-lucide="calendar-heart" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('health.cycle.emptyTitle')}</div>
+        ${emptyStateCta('/health/cycle', t('health.cycle.add'))}
+      </div>
+    </div>`;
+  }
+
+  const phaseLabel = t(CYCLE_WIDGET_PHASE_KEYS[prediction.phase] || CYCLE_WIDGET_PHASE_KEYS[PHASE.FOLLICULAR]);
+  const dayText = t('health.cycle.ring.cycleDay', { day: prediction.cycleDay });
+  const countdown = cycleWidgetCountdown(prediction);
+  // Dieselbe Stufung wie jedes kommende Datum der Uebersicht (#1454); sagt der
+  // Zaehler schon „heute", steht das Wort nicht zweimal da.
+  const nextLabel = relativeDateLabel(prediction.nextStart);
+  const cycleDate = nextLabel && nextLabel.toLowerCase() !== countdown.toLowerCase()
+    ? `<span class="cycle-widget__date">${esc(nextLabel)}</span>`
+    : '';
+  const phaseColor = CYCLE_WIDGET_PHASE_COLOR[prediction.phase] || 'var(--module-health)';
+
+  // Mini-Fortschrittsring: Zyklustag / Ø-Zyklus als einzelner Bogen in Phasenfarbe.
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  const frac = Math.min(1, Math.max(0, prediction.cycleDay / Math.max(1, prediction.avgCycle)));
+  const lit = (frac * C).toFixed(2);
+  const gap = (C - frac * C).toFixed(2);
+
+  const ring = `
+    <svg class="cycle-widget__ring" viewBox="0 0 64 64" role="img" aria-label="${esc(`${phaseLabel} · ${dayText}`)}">
+      <circle class="cycle-widget__ring-track" cx="32" cy="32" r="${R}" fill="none" stroke-width="6" />
+      <circle class="cycle-widget__ring-arc" cx="32" cy="32" r="${R}" fill="none" stroke="${phaseColor}"
+        stroke-width="6" stroke-linecap="round" stroke-dasharray="${lit} ${gap}" transform="rotate(-90 32 32)" />
+      <text class="cycle-widget__ring-num" x="32" y="32" text-anchor="middle" dominant-baseline="central">${esc(prediction.cycleDay)}</text>
+    </svg>`;
+
+  return `<div class="widget widget--cycle">
+    ${widgetHeader('cycle', t('health.cycle.title'), null, '/health/cycle')}
+    <div class="widget__body">
+      <div class="cycle-widget" data-phase="${esc(prediction.phase)}">
+        ${ring}
+        <div class="cycle-widget__info">
+          <span class="cycle-widget__phase">${esc(phaseLabel)}</span>
+          <span class="cycle-widget__next">
+            <span class="cycle-widget__next-label">${esc(t('health.cycle.status.nextPeriod'))}</span>
+            <span class="cycle-widget__countdown">${esc(countdown)}</span>
+          </span>
+          ${cycleDate}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderFastingWidget(fasting) {
+  if (!fasting) throw new Error('fasting widget slice failed to load');
+  const active = fasting.active;
+  const writable = moduleAccess('health') === 'write';
+  return `<div class="widget widget--fasting">${widgetHeader('fasting', t('health.fasting.title'), null, null, null, 'health')}
+    <div class="fasting-widget">
+      <div class="fasting-dial fasting-dial--segmented" data-fasting-progress><div data-fasting-segments></div><div class="fasting-dial__content">
+        <span class="fasting-widget__meta" data-fasting-clock-label></span>
+        <strong class="fasting-widget__timer" data-fasting-timer>00:00:00</strong>
+        <span class="fasting-widget__meta" data-fasting-days></span>
+      </div></div>
+      <div class="fasting-widget__controls">${fastingClockSwitchHtml()}
+        ${active ? '<span class="fasting-widget__remaining" data-fasting-remaining></span>' : ''}
+        <p class="sr-only" role="status" aria-live="polite" data-fasting-announcement></p>
+        <div class="fasting-widget__actions">${writable ? `<button type="button" class="btn btn--primary btn--sm" data-fasting-widget-action>${esc(t(active ? 'health.fasting.finish' : 'health.fasting.start'))}</button>` : `<p class="form-hint">${esc(t('health.fasting.readOnly'))}</p>`}<a href="/health/fasting#history" class="btn btn--secondary btn--sm">${esc(t('health.fasting.history'))}</a></div>
+      </div>
+      <p class="form-hint" role="alert" data-fasting-widget-error></p>
+    </div></div>`;
+}
+
+function wireFastingWidget(container, rerender, refresh, fasting, signal) {
+  const root = container.querySelector('.fasting-widget');
+  if (!root || !fasting) return () => {};
+  root.querySelector('[data-fasting-widget-action]')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      if (fasting.active) await finishFasting(fasting.active, rerender, () => !signal.aborted);
+      else if (await startFasting()) { await rerender(); refocusAfterRender(); }
+    } catch (error) {
+      if (root.isConnected) root.querySelector('[data-fasting-widget-error]').textContent = fastingError(error);
+    } finally { button.disabled = false; }
+  }, { signal });
+  return startFastingClock(root, fasting.active, fasting.lastCompleted, fasting.settings, { refresh });
+}
+
+// --------------------------------------------------------
+// Naehrwerte-Widget (opt-in, #1326)
+// --------------------------------------------------------
+
+/**
+ * `nutrition` kommt fertig gerechnet aus `/dashboard` - dieselbe Bilanz, die
+ * auch `/health/nutrition/summary` liefert (services/health-nutrition.js). Hier
+ * wird nichts zusammengezaehlt: eine zweite Rechnung waere eine zweite Zahl,
+ * und die Kachel wuerde dem Tab widersprechen.
+ *
+ * DREI ZUSTAENDE, NICHT ZWEI, und der mittlere ist der, der sonst verloren geht:
+ *   - kein Ziel gesetzt (`target === null`) -> die Kachel sagt das und bietet
+ *     an, eines zu setzen. NICHT "0 von 0", was wie ein erreichtes Ziel
+ *     aussaehe.
+ *   - ein Ziel gesetzt, aber noch nichts erfasst -> Balken bei 0. Das ist eine
+ *     Aussage ueber den Tag, keine ueber das Ziel.
+ *   - ein Ziel von 0 (etwa Zucker) -> ein echtes Ziel, gegen das gemessen wird.
+ *     `nutrientProgress()` haelt diesen Fall von "kein Ziel" getrennt.
+ */
+function renderNutritionWidget(nutrition) {
+  if (nutrition === null || nutrition === undefined) throw new Error('nutrition widget slice failed to load');
+  const target = nutrition.target;
+  const writable = moduleAccess('health') === 'write';
+
+  if (!target) {
+    return `<div class="widget widget--nutrition">
+      ${widgetHeader('nutrition', t('health.nutrition.title'), null, '/health/nutrition')}
+      <div class="widget__empty">
+        <i data-lucide="salad" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.nutritionNoTarget')}</div>
+        ${writable ? emptyStateCta('/health/nutrition', t('health.nutrition.targetSet')) : ''}
+      </div>
+    </div>`;
+  }
+
+  // Nur die Naehrwerte mit Ziel: eine Zeile "- von -" waere eine Zeile, die
+  // nichts sagt und doch Platz nimmt. Wer nur Energie und Eiweiss verfolgt,
+  // bekommt zwei Balken, nicht acht.
+  const rows = NUTRIENTS
+    .filter((n) => target[n.key] !== null && target[n.key] !== undefined)
+    .map((n) => {
+      const value = Number(nutrition.totals?.[n.key] ?? 0);
+      const progress = nutrientProgress(value, target[n.key]);
+      const text = t('health.nutrition.ofTarget', {
+        value: fmtDashNum(value), target: fmtDashNum(target[n.key]), unit: t(n.unitKey),
+      });
+      return `<li class="nutrition-widget__row">
+        <span class="nutrition-widget__label">${esc(t(n.labelKey))}</span>
+        <span class="nutrition-widget__bar${progress.over ? ' nutrition-widget__bar--over' : ''}"
+              role="img" aria-label="${esc(`${t(n.labelKey)}: ${text}`)}">
+          <span class="nutrition-widget__fill" style="--nutrition-scale:${progress.ratio}"></span>
+        </span>
+        <span class="nutrition-widget__value">${esc(text)}</span>
+      </li>`;
+    });
+
+  const body = rows.length
+    ? `<ul class="nutrition-widget__rows">${rows.join('')}</ul>`
+    : `<div class="widget__empty"><div>${t('dashboard.nutritionNoTarget')}</div></div>`;
+
+  return `<div class="widget widget--nutrition">
+    ${widgetHeader('nutrition', t('health.nutrition.title'), null, '/health/nutrition')}
+    <div class="widget__body">
+      <div class="nutrition-widget">
+        ${body}
+        <p class="nutrition-widget__count">${esc(t('dashboard.nutritionEntries', { count: Number(nutrition.entryCount) || 0 }))}</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Eine Naehrwert-Zahl auf der Kachel: hoechstens eine Nachkommastelle. */
+function fmtDashNum(value) {
+  return getNumberFormat({ maximumFractionDigits: 1 }).format(Number(value) || 0);
+}
+
+// --------------------------------------------------------
+// Schedule-Widget (wer heute im Dienst oder frei ist)
+// --------------------------------------------------------
+
+/**
+ * schedule: { entries, hasTypes } (haushaltsweit, kein Owner-Filter noetig -
+ * das Modul liest schon fuer den ganzen Haushalt) | null (Ladefehler,
+ * rendert die geteilte Fehlerkachel ueber den bestehenden try/catch in
+ * renderDashboardLayout, siehe renderWasteWidget) | undefined (Kachel
+ * versteckt, kein Request gelaufen).
+ *
+ * `entries`, nicht `users`: `resolveEntries()` (services/schedule.js) liefert
+ * fuer ein Mitglied ohne jedes Muster und ohne Ausnahme heute gar keinen
+ * Eintrag - genau die Regel, nach der auch die Schedule-Seite ihre eigene
+ * „Heute"-Karte fuellt (renderToday() in schedule.js). Alle Mitglieder
+ * aufzulisten wuerde hier etwas zeigen, das die Seite selbst nicht zeigt.
+ */
+function renderScheduleWidget(schedule, users, size) {
+  // M-6b: ein Ladefehler ist kein leerer Tag - ohne diesen Wurf faellt `null`
+  // (Fehler) auf denselben Zweig wie `hasTypes === false` (echtes Onboarding)
+  // und zeigt die "Schicht-Typ anlegen"-CTA statt der Fehlerkachel, und bleibt
+  // wegen der `data.schedule !== undefined`-Merkung in ensureScheduleSlice
+  // auch nie neu versucht. Wie renderWasteWidget: der Wurf laesst
+  // renderDashboardLayout die geteilte Fehlerkachel (renderWidgetError) mit
+  // ihrem Retry rendern.
+  if (schedule === null) throw new Error('schedule widget slice failed to load');
+  const entries = schedule?.entries ?? [];
+  const hasTypes = Boolean(schedule?.hasTypes);
+
+  if (!hasTypes) {
+    return `<div class="widget widget--schedule">
+      ${widgetHeader('schedule', t('nav.schedule'), null, '/schedule')}
+      <div class="widget__empty">
+        <i data-lucide="calendar-clock" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.scheduleEmpty')}</div>
+        ${emptyStateCta('/schedule', t('schedule.createShiftType'))}
+      </div>
+    </div>`;
+  }
+
+  if (!entries.length) {
+    return `<div class="widget widget--schedule">
+      ${widgetHeader('schedule', t('nav.schedule'), null, '/schedule/patterns')}
+      <div class="widget__body"><p class="u-meta schedule-widget-empty">${esc(t('schedule.empty'))}</p></div>
+    </div>`;
+  }
+
+  // Der Header zaehlt ueber ALLE Eintraege (die ehrliche Zahl), das Raster
+  // darunter nur so viele Zeilen, wie die Kachelgroesse traegt - wie jede
+  // andere Listenkachel (`listRowCap`, PR #930 review). Ohne den Deckel waere
+  // 1x2 nur der Punkt, an dem der Ueberlauf von fuenf Mitgliedern auf sechs
+  // verschoben wird, nicht behoben - genau der Fehler, den #928 bei den
+  // Notizen schon hatte (renderPinnedNotes ist das Vorbild hier).
+  //
+  // Zaehlt PERSONEN, nicht Schicht-Eintraege: eine Person mit einer regulaeren
+  // Schicht UND einem Extra (Bereitschaft daneben, server/routes/schedule-extras.js)
+  // hat zwei Eintraege am selben Tag, aber die Ueberschrift beantwortet "wie
+  // viele arbeiten heute", nicht "wie viele Schicht-Zeilen gibt es".
+  const onShift = new Set(entries.filter((entry) => entry.shift_type).map((entry) => Number(entry.user_id))).size;
+  // Der Deckel allein reicht nicht: `entries` kommt in `users ORDER BY id`,
+  // nicht "im Dienst zuerst" - ohne Sortierung koennte der Header "2" zaehlen,
+  // waehrend die abgeschnittenen Zeilen zufaellig beide "Freier Tag" zeigen
+  // (Review #930: sechs Mitglieder, die zwei im Dienst mit den hoechsten ids).
+  // Im-Dienst-Eintraege zuerst, stabil sortiert, dann erst der Deckel.
+  const sorted = [...entries].sort((a, b) => (a.shift_type ? 0 : 1) - (b.shift_type ? 0 : 1));
+  // Namen aus dem Verzeichnis des Ausschnitts (loadScheduleSlice): auch ein
+  // bestehender Plan von Hauspersonal traegt so einen Namen. Ohne Verzeichnis
+  // bleibt es bei data.users.
+  const directory = schedule?.people?.length ? schedule.people : users;
+  const rows = sorted.slice(0, listRowCap(size)).map((entry) => {
+    const user = directory.find((item) => Number(item.id) === Number(entry.user_id));
+    const type = entry.shift_type;
+    const accent = user?.avatar_color || AVATAR_FALLBACK_COLOR;
+    const avatarInner = user?.avatar_data
+      ? `<img src="${esc(user.avatar_data)}" alt="" loading="lazy">`
+      : esc(initials(user?.display_name ?? ''));
+    const shiftLabel = type
+      ? esc(type.short_code ? `${type.short_code} · ${type.name}` : type.name)
+      : esc(t('schedule.freeDay'));
+    const swatchColor = type ? type.color : 'var(--color-border)';
+    // Eigene Punkt-Klasse statt `.schedule-swatch` (schedule.css): router.js
+    // laedt pro Route nur das CSS des eigenen Moduls nach - auf `/` liegt
+    // dashboard.css, schedule.css nie. Ein geteilter Klassenname waere eine
+    // unsichtbare Abhaengigkeit zwischen zwei Stylesheets, die nie gemeinsam
+    // laufen wuerden.
+    const icon = type?.icon ? `<i data-lucide="${esc(type.icon)}" class="schedule-widget-row__icon" aria-hidden="true"></i>` : '';
+    const badge = entry.source === 'extra' ? `<i data-lucide="layers" class="schedule-widget-row__extra-badge" aria-label="${esc(t('schedule.extraBadgeLabel'))}"></i>` : '';
+    return `
+      <div class="schedule-widget-row" data-route="/schedule/patterns" role="button" tabindex="0">
+        <span class="schedule-widget-row__avatar" style="background:${esc(accent)};color:${getReadableTextColor(accent)}">${avatarInner}</span>
+        <span class="schedule-widget-row__name">${esc(user?.display_name ?? '')}</span>
+        <span class="schedule-widget-row__shift">${icon}<span class="schedule-widget-row__dot" style="--schedule-color:${esc(swatchColor)}"></span>${shiftLabel}${badge}</span>
+      </div>`;
+  }).join('');
+
+  return `<div class="widget widget--schedule">
+    ${widgetHeader('schedule', t('nav.schedule'), onShift, '/schedule/patterns')}
+    <div class="widget__body">
+      <div class="schedule-widget">${rows}</div>
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Vorrat-Widget „Laeuft bald ab" (Critique 2026-09-23)
+// --------------------------------------------------------
+
+/** Menge knapp: 2 bleibt "2", 2,5 wird lokalisiert - wie auf der Vorratsseite,
+ *  und ueber denselben Helfer, damit die Einheit mitflektiert („6 Dosen"). */
+function pantryQuantityText(item) {
+  const nf = getNumberFormat({ maximumFractionDigits: 2 });
+  return pantryQuantityLabel(item.quantity, item.unit, { t, formatNumber: (n) => nf.format(n) });
+}
+
+/**
+ * pantryExpiring: { items, todayItems, total, expiredCount, todayCount } aus
+ * GET /dashboard (services/pantry-expiring.js) | null (Ladefehler, rendert die
+ * geteilte Fehlerkachel ueber den try/catch in renderDashboardLayout).
+ *
+ * EINE ZEILE IST EINE CHARGE, nicht ein Produkt: zwei Packungen Milch mit zwei
+ * Daten sind zwei Zeilen, wie auf der Vorratsseite. Das Haushalts-Produkt ueber
+ * der Charge (#1448) steht noch aus, und eine Gruppierung nach Namen waere
+ * hier eine zweite, eigene Vorstellung davon.
+ *
+ * DIE RESTTAGE KOMMEN VOM SERVER (`days_left`), gerechnet am Haushaltstag
+ * derselben Antwort, aus der auch Badge und Zaehler stammen. Eine zweite
+ * Rechnung hier kippte kurz nach Mitternacht gegen die Badge daneben.
+ *
+ * Der Ton spricht nur in der Resttage-Zeile, und nur, wo es etwas zu tun gibt:
+ * abgelaufen im Gefahrenton, heute und morgen im Warnton, alles Weitere im
+ * Sekundaerton. Eine Liste, die jede Zeile rot faerbt, sagt nichts mehr.
+ *
+ * Reine Anzeige - kein Knopf, der schreibt. Wer nur lesen darf, sieht dieselbe
+ * Kachel; die Zeilen fuehren in den passend gefilterten Vorrat.
+ */
+function renderPantryWidget(pantry, size) {
+  if (pantry === null || pantry === undefined) throw new Error('pantry widget slice failed to load');
+  const title = t('dashboard.pantryExpiringTitle');
+  const items = Array.isArray(pantry.items) ? pantry.items : [];
+
+  if (!items.length) {
+    return `<div class="widget widget--pantry">
+      ${widgetHeader('pantry', title, null, '/pantry')}
+      <div class="widget__empty">
+        <i data-lucide="archive" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${esc(t('dashboard.pantryExpiringEmpty', { count: EXPIRY_SOON_DAYS }))}</div>
+      </div>
+    </div>`;
+  }
+
+  const shown = items.slice(0, listRowCap(size));
+  const rows = shown.map((item) => {
+    const days = Number(item.days_left);
+    const tone = pantryExpiryTone(days);
+    const phrase = pantryExpiryPhrase(days);
+    const label = phrase.count === undefined ? t(phrase.key) : t(phrase.key, { count: phrase.count });
+    const icon = item.location_icon && hasIcon(item.location_icon) ? item.location_icon : 'package';
+    const meta = [pantryQuantityText(item), item.location_name ? locationLabel(item.location_name) : '']
+      .filter(Boolean).join(' · ');
+    const filter = tone === 'expired' ? 'expired' : 'soon';
+    return `
+      <div class="pantry-widget-row" data-route="/pantry?filter=${filter}" role="button" tabindex="0">
+        <span class="pantry-widget-row__icon" aria-hidden="true"><i data-lucide="${esc(icon)}"></i></span>
+        <div class="pantry-widget-row__body">
+          <div class="pantry-widget-row__name">${esc(item.name)}</div>
+          <div class="pantry-widget-row__meta">${esc(meta)}</div>
+        </div>
+        <div class="pantry-widget-row__days pantry-widget-row__days--${tone}">${esc(label)}</div>
+      </div>`;
+  }).join('');
+
+  // Gezaehlt gegen die SERVER-Gesamtzahl: der Server deckelt die Liste selbst,
+  // und eine Fussnote aus der geladenen Laenge verschwiege genau diesen Schnitt
+  // (dieselbe Lehre wie beim Countdown, #647).
+  const total = Number.isFinite(Number(pantry.total)) ? Number(pantry.total) : items.length;
+  const rest = Math.max(0, total - shown.length);
+  const more = rest > 0
+    ? `<p class="pantry-widget-more">${esc(t('dashboard.pantryExpiringMore', { count: rest }))}</p>`
+    : '';
+
+  return `<div class="widget widget--pantry">
+    ${widgetHeader('pantry', title, total, '/pantry')}
+    <div class="widget__body">${rows}${more}</div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Waste-Widget (naechste Abholung je aktivem Typ)
+// --------------------------------------------------------
+
+/**
+ * waste: { items: WasteNextPerTypeEntry[], needsRefresh } (haushaltsweit,
+ * /waste/occurrences/next liefert schon ein Eintrag je aktivem Typ, sortiert
+ * nach Typ-Reihenfolge - die Kachel sortiert selbst nach Datum um, das ist
+ * eine Praesentationsfrage, keine API-Vertragsfrage) | null (Ladefehler,
+ * rendert die geteilte Fehlerkachel ueber den bestehenden try/catch in
+ * renderDashboardLayout) | undefined (Kachel versteckt, kein Request gelaufen).
+ */
+function renderWasteWidget(waste, size) {
+  if (waste === null) throw new Error('waste widget slice failed to load');
+  const items = waste?.items ?? [];
+
+  if (!items.length) {
+    return `<div class="widget widget--waste">
+      ${widgetHeader('waste', t('nav.waste'), null, '/waste')}
+      <div class="widget__empty">
+        <i data-lucide="trash-2" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('waste.emptyTypesTitle')}</div>
+        ${emptyStateCta('/waste', t('waste.addType'))}
+      </div>
+    </div>`;
+  }
+
+  // Datum zuerst, Typ-Reihenfolge nur als Tie-Breaker - anders als die
+  // API-Grundsortierung (Typ-Reihenfolge), die fuer andere Aufrufer (Token/MCP)
+  // die richtige Vorgabe bleibt.
+  const sorted = [...items].sort((a, b) => {
+    const ad = a.next?.date_key ?? null;
+    const bd = b.next?.date_key ?? null;
+    if (ad && bd && ad !== bd) return ad < bd ? -1 : 1;
+    if (ad && !bd) return -1;
+    if (!ad && bd) return 1;
+    return (a.type.sort_order - b.type.sort_order) || (a.type.id - b.type.id);
+  });
+  const earliestDate = sorted.find((e) => e.next)?.next.date_key ?? null;
+  const upcomingCount = items.filter((e) => e.next).length;
+
+  const capped = sorted.slice(0, listRowCap(size));
+  const rows = capped.map((entry) => {
+    const type = entry.type;
+    const next = entry.next;
+    const accent = type.color || 'var(--color-border)';
+    const icon = type.icon ? `<i data-lucide="${esc(type.icon)}" class="waste-widget-row__icon" aria-hidden="true"></i>` : '';
+
+    if (!next) {
+      return `
+        <div class="waste-widget-row" data-route="${esc(`/waste?type=${encodeURIComponent(String(type.id))}`)}" role="button" tabindex="0">
+          <span class="waste-widget-row__dot" style="--waste-color:${esc(accent)}"></span>
+          <span class="waste-widget-row__name">${icon}${esc(type.name)}</span>
+          <span class="waste-widget-row__date waste-widget-row__date--none">${esc(t('waste.noUpcomingPickup'))}</span>
+        </div>`;
+    }
+
+    // Dieselbe Herkunfts-Extraktion wie originBadges() (pages/waste.js): der
+    // Beleg fuer "verschoben" ist der Ursprungstermin des Schedule-Origins, nicht
+    // ein eigenes Feld auf der Occurrence.
+    const movedOriginal = next.moved
+      ? next.origins.find((o) => o.kind === 'schedule' && o.original_date)?.original_date
+      : null;
+    const moved = next.moved
+      ? `<i data-lucide="move" class="waste-widget-row__flag" aria-label="${esc(t('waste.movedFromBadge', { date: movedOriginal ? formatDate(movedOriginal) : '' }))}"></i>`
+      : '';
+    const coalesced = next.coalesced
+      ? `<i data-lucide="layers" class="waste-widget-row__flag" aria-label="${esc(t('waste.coalescedHint'))}"></i>`
+      : '';
+    const emphasize = next.date_key === earliestDate ? ' waste-widget-row__date--next' : '';
+
+    return `
+      <div class="waste-widget-row" data-route="${esc(`/waste${next.deep_link}`)}" role="button" tabindex="0">
+        <span class="waste-widget-row__dot" style="--waste-color:${esc(accent)}"></span>
+        <span class="waste-widget-row__name">${icon}${esc(type.name)}${moved}${coalesced}</span>
+        <span class="waste-widget-row__date${emphasize}">${esc(relativeDateLabel(next.date_key))}</span>
+      </div>`;
+  }).join('');
+
+  const rest = Math.max(0, sorted.length - capped.length);
+  const more = rest > 0
+    ? `<p class="waste-widget-more">${esc(t('dashboard.wasteMore', { count: rest }))}</p>`
+    : '';
+  // Quelle-braucht-Auffrischung (invariant #6) ist ein Source-, kein
+  // Occurrence-Feld - eigener Fetch auf /waste/sources in ensureWasteSlice(),
+  // dieselbe Badge-Bedeutung wie auf der Waste-Seite selbst (sourceHealthBadgeInfo).
+  const refreshWarning = waste?.needsRefresh
+    ? `<div class="waste-widget__refresh-warning">
+        <i data-lucide="alert-triangle" aria-hidden="true"></i>
+        <span>${esc(t('waste.sourceNeedsRefreshBadge'))}</span>
+      </div>`
+    : '';
+
+  return `<div class="widget widget--waste">
+    ${widgetHeader('waste', t('nav.waste'), upcomingCount, '/waste')}
+    <div class="widget__body">
+      <div class="waste-widget">${rows}${more}</div>
+      ${refreshWarning}
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Haushaltshilfe-Widget (Anwesenheit + offene Zahlung)
+// --------------------------------------------------------
+
+function renderHousekeepingWidget(hk, currency) {
+  if (!hk?.configured) {
+    return `<div class="widget widget--housekeeping">
+      ${widgetHeader('housekeeping', t('nav.housekeeping'), null, '/housekeeping')}
+      <div class="widget__empty">
+        <i data-lucide="paintbrush" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.housekeepingNone')}</div>
+        ${emptyStateCta('/housekeeping', t('housekeeping.addTask'))}
+      </div>
+    </div>`;
+  }
+
+  const unpaid = Number(hk.unpaidAmount) || 0;
+  const visits = Number(hk.visitsThisMonth) || 0;
+  const present = Boolean(hk.present);
+
+  const statusBlock = present
+    ? `<div class="housekeeping-widget__status housekeeping-widget__status--present">
+        <span class="housekeeping-widget__dot" aria-hidden="true"></span>
+        <div class="housekeeping-widget__lines">
+          <div class="housekeeping-widget__state">${t('dashboard.housekeepingPresent')}</div>
+          <div class="housekeeping-widget__sub">${hk.workerName ? `${esc(hk.workerName)} · ` : ''}${hk.presentSince ? t('dashboard.housekeepingSince', { time: housekeepingSinceLabel(hk.presentSince) }) : ''}</div>
+        </div>
+      </div>`
+    : `<div class="housekeeping-widget__status">
+        <span class="housekeeping-widget__dot housekeeping-widget__dot--idle" aria-hidden="true"></span>
+        <div class="housekeeping-widget__lines">
+          <div class="housekeeping-widget__state">${hk.lastVisit ? t('dashboard.housekeepingLastVisit', { date: earnedWhenLabel(hk.lastVisit) }) : t('dashboard.housekeepingNoVisits')}</div>
+          <div class="housekeeping-widget__sub">${t('dashboard.housekeepingVisitsMonth', { count: visits })}</div>
+        </div>
+      </div>`;
+
+  const unpaidChip = unpaid > 0
+    ? `<div class="housekeeping-widget__unpaid"><i data-lucide="banknote" aria-hidden="true"></i><span>${t('dashboard.housekeepingUnpaid', { amount: formatCurrency(unpaid, currency) })}</span></div>`
+    : '';
+
+  return `<div class="widget widget--housekeeping">
+    ${widgetHeader('housekeeping', t('nav.housekeeping'), null, '/housekeeping')}
+    <div class="widget__body">
+      <div class="housekeeping-widget">${statusBlock}${unpaidChip}</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Das Zeichen im Siegel einer Programmzeile - fuer "Heute wichtig" und fuer die
+ * Wand, die dieselben Zeilen lesen. Ein Termin zeigt das Icon, das jemand fuer
+ * ihn gewaehlt hat (#1829) - auf demselben Weg wie der Kalender
+ * (utils/event-icon.js): dieselbe Liste, derselbe Rueckfall. Ohne eigene Wahl
+ * und fuer jeden unbekannten Namen bleibt das Zeichen des Moduls, sonst stuende
+ * dort ein leeres Siegel. Die Herkunft traegt weiter die Farbe des Siegels.
+ * `module-glyph` ist die Marke aus nav-icons.js, an der die Strichstaerke haengt.
+ * Sammelzeile und Zustandszeile sprechen fuer kein einzelnes Objekt und fragen
+ * hier nicht.
+ */
+function programRowGlyph(row) {
+  return row.kind === 'event' && hasEventIcon(row.eventIcon)
+    ? eventIconHtml(row.eventIcon, 'module-glyph')
+    : moduleIconHTML(row.icon);
+}
+
+/* DAS UEBERLAPPUNGSZEICHEN (Block-2-Brief, utils/seal-pair.js): „Heute
+ * wichtig" ist die Mischstelle des Dashboards - hier stehen Aufgabe, Termin,
+ * Einkauf und Essen nebeneinander, und das Siegel sagt bereits, aus welchem
+ * Raum jede Zeile kommt. Traegt die Zeile ausserdem eine Person, sagt der
+ * ueberlappende Avatar, wen sie angeht.
+ *
+ * Es erscheint NUR dann - nicht am Einkauf, nicht am Essen, und im
+ * Solo-Haushalt an keiner Zeile (`whoMark` entscheidet das selbst). Ein
+ * Zeichen, das immer da ist, sagt nichts. */
+function renderTodayRow(row, extraClass = '') {
+  const mark = whoMark(row.who);
+  // Trailing-Detail ist die ZEIT, kein Zähler mehr: die Programm-Zeile
+  // beantwortet „wann", und dieselbe Badge-Form für drei Bedeutungen
+  // (Anzahl/offen/Alter) war ein Critique-Befund (H6).
+  const time = row.timeLabel
+    ? `<span class="today-cockpit-card__time${row.overdue ? ' today-cockpit-card__time--overdue' : ''}">${esc(row.timeLabel)}</span>`
+    : '';
+  // Objekt-Anker für die Objekt-Deep-Links (Paket 2): die Zeile weiß bereits,
+  // WOVON sie spricht - nur das Ziel bleibt vorerst die Modul-Route.
+  const objectAttrs = row.objectId != null
+    ? ` data-object-kind="${esc(row.kind)}" data-object-id="${esc(String(row.objectId))}"`
+    : '';
+  // DAS ELEMENT SAGT, WAS ES TUT (Re-Critique A5). Eine Zeile, die an einen Ort
+  // fuehrt, ist ein `<a href>` - dann oeffnen Cmd- und Mittelklick sie in einem
+  // neuen Tab, und „Link kopieren" gibt einen Link her, so wie es die
+  // Widget-Kopf-Links laengst tun. Die AUFGABEN-Zeile bleibt ein `<button>`:
+  // sie navigiert nicht, sie oeffnet das Quick-Action-Modal auf ihrem Objekt.
+  // Ein href waere dort ein Versprechen, das der Handler bricht - Cmd-Klick
+  // landete in der Aufgabenliste statt bei der Aufgabe.
+  //
+  // Die Bedingung ist dieselbe, die `wireLinks` liest (Objektart „task" plus
+  // Objekt-Id), und sie steht bewusst als eine Zeile hier: laufen Markup und
+  // Verdrahtung auseinander, bekommt eine Zeile einen href und trotzdem das
+  // Modal.
+  const opensModal = row.kind === 'task' && row.objectId != null;
+  // Inset-Grouped-Zeile (Apple-Systemapp-Muster): das Markensiegel traegt
+  // die Modulzugehoerigkeit (Herkunfts-Regel, Block 2), der Inhalt steht als
+  // Titel in Textfarbe, das Modul-Label lebt als ruhiger Untertitel weiter
+  // (nie versal, nie ueber dem Titel).
+  // DER TITEL ZUERST, DANN DIE PERSON (Re-Critique 2026-09-27, A7 Sam). Das
+  // Zeichen steht vor dem Text, und sein Name sprach deshalb als Erstes: „Linda
+  // Johnson Einverstaendnis fuer ...". Das Paar ist hier nur Bild; der Name
+  // folgt als eigener Text hinter Titel und Modul - dieselbe Auskunft, in der
+  // Reihenfolge, in der man eine Zeile liest.
+  const whoName = mark ? `<span class="sr-only">, ${esc(row.who?.display_name ?? '')}</span>` : '';
+  const inner = `
+      <span class="${mark ? 'seal-pair' : ''}"${mark ? ' aria-hidden="true"' : ''}><span class="module-seal today-cockpit-card__icon">${programRowGlyph(row)}</span>${mark}</span>
+      <span class="today-cockpit-card__body">
+        <strong class="today-cockpit-card__value">${esc(row.title)}</strong>
+        <span class="today-cockpit-card__sub">${esc(row.sub)}</span>${whoName}
+      </span>
+      ${time}
+  `;
+  const attrs = `class="today-cockpit-card today-cockpit-card--${esc(row.tone)}${extraClass}" data-route="${esc(row.route)}"${objectAttrs}`;
+  return opensModal
+    ? `<button type="button" ${attrs}>${inner}</button>`
+    : `<a href="${esc(row.route)}" ${attrs}>${inner}</a>`;
+}
+
+// Zustands-Zeile des Tagesprogramms: „Heute frei" / „Alles für heute erledigt".
+// Gleiche Zeilen-Anatomie wie das Programm; mit Ausblick (nächster Termin) ist
+// sie ein Link dorthin, ohne bleibt sie ein ruhiges <div> ohne Interaktion.
+function renderTodayStateRow({ title, sub, icon, route }) {
+  const inner = `
+      <span class="module-seal today-cockpit-card__icon">${moduleIconHTML(icon)}</span>
+      <span class="today-cockpit-card__body">
+        <strong class="today-cockpit-card__value">${esc(title)}</strong>
+        ${sub ? `<span class="today-cockpit-card__sub">${esc(sub)}</span>` : ''}
+      </span>
+  `;
+  if (route) {
+    return `<a href="${esc(route)}" class="today-cockpit-card today-cockpit-card--state" data-route="${esc(route)}">${inner}</a>`;
+  }
+  return `<div class="today-cockpit-card today-cockpit-card--state">${inner}</div>`;
+}
+
+// Deckel des Tagesprogramms: mehr Zeilen wären keine Orientierung mehr,
+// sondern eine zweite Aufgabenliste. Der Überlauf spricht als stille Fußzeile.
+const PROGRAM_ROW_CAP = 6;
+
+/* AUF DEM TELEFON ZWEI ZEILEN (R14, A7 P2-2). Sechs Zeilen zu je 64px plus
+ * Kopf und Einkauf machten das Blatt 591px hoch; das erste Widget begann bei
+ * y760 von 844, hinter der Kapsel. Zwei Zeilen beantworten „was steht an?",
+ * der Rest steht eine Geste entfernt hinter „+N weitere" - dort auch die
+ * Einkaufszeile (renderTodayCockpit). Unter dem Deckel bleibt zuerst, was
+ * offen ist (composeTodaySheet), und die Sammelzeile der Ueberfaelligen ist
+ * eine davon. Gemessen danach: erstes Widget y~400 statt y760. */
+const PROGRAM_ROW_CAP_PHONE = 2;
+
+/* AB ZWEI UEBERFAELLIGEN EINE SAMMELZEILE (R14, A7 P2-2). Fuenfmal rotes
+ * „Ueberfaellig" untereinander ist am Morgen kein Programm, sondern ein
+ * Vorwurf - und es schob alles andere unter den Deckel. Die Sammelzeile sagt
+ * die Zahl einmal, zeigt mit gestapelten Avataren, wen es angeht, und klappt
+ * die Zeilen an Ort und Stelle auf. Nur auf dem Telefon: breit stehen die
+ * Zeilen in zwei Spalten neben dem Rest des Tages und kosten keinen Scroll. */
+const OVERDUE_GROUP_MIN = 2;
+
+function groupOverdueRows(rows) {
+  // Fremde Aufgaben eines Kindes (`othersOnly`) gehen nicht in die Gruppe, die
+  // oben steht - sie bleiben einzeln am Ende des Blatts.
+  const overdue = rows.filter((row) => row.kind === 'task' && row.overdue && !row.othersOnly);
+  if (overdue.length < OVERDUE_GROUP_MIN) return rows;
+  const seen = new Set();
+  const people = [];
+  for (const row of overdue) {
+    // JEDE zugewiesene Person, nicht nur das eine Gesicht der Zeile (#1828):
+    // eine Aufgabe fuer zwei geht beide an.
+    const assigned = Array.isArray(row.people) && row.people.length ? row.people : [row.who];
+    for (const person of assigned) {
+      const id = person?.id;
+      if (id == null || seen.has(id)) continue;
+      seen.add(id);
+      // renderAvatarStack liest `color`, die Zeilen tragen `avatar_color`.
+      people.push({ ...person, color: person.color ?? person.avatar_color });
+    }
+  }
+  const group = {
+    kind: 'overdue',
+    objectId: null,
+    members: overdue,
+    people,
+    sortKey: '00:00',
+    timeLabel: '',
+    overdue: true,
+    title: t('dashboard.todayOverdueCount', { count: overdue.length }),
+    sub: t('nav.tasks'),
+    icon: 'check-square',
+    tone: 'task',
+    route: '/tasks?due=today',
+    who: null,
+    priority: 10,
+    open: true,
+  };
+  return [group, ...rows.filter((row) => !overdue.includes(row))];
+}
+
+/**
+ * DAS TAGESPROGRAMM ALS MODELL, EINMAL FUER ZWEI FLAECHEN.
+ *
+ * Es gibt zwei Darstellungen desselben Tages: das Cockpit im normalen
+ * Dashboard (Arm-Laenge, bedienbar) und die Wand (zwei Meter, reine Anzeige).
+ * Was auf beiden STEHT, ist dieselbe Frage - Deckel, Ausblick, Einkaufszeile,
+ * Coda. Zwei Renderer, die diese Regeln je eigenstaendig noch einmal
+ * formulieren, waeren die zweite Wahrheit, gegen die der Wand-Modus als
+ * Zustand statt als Route gebaut ist. Deshalb steht die Antwort hier und die
+ * Form dort.
+ *
+ * @returns {{rows: object[], overflow: number, state: object|null,
+ *            shopping: object|null, coda: string|null}}
+ */
+/** Der Blatt-Kontext - Cockpit, Wand und Kennzahlreihe fragen denselben. */
+function todaySheetContextFor(cfg, now, existing = []) {
+  const todayKey = zonedDateKey(now);
+  return todaySheetContext({
+    todayKey,
+    tomorrowKey: addLocalDays(todayKey, 1),
+    nowTime: zonedTimeKey(now),
+    cfg,
+    isModuleDisabled: (module) => Boolean(window.yuvomi?.isModuleDisabled(module)),
+    existing,
+  });
+}
+
+/** Die Quellen, die im Heute-Blatt gerade eine Zeile tragen (siehe speakingSourceIds). */
+function todaySheetSpeaks(data, cfg, now = new Date()) {
+  return speakingSourceIds(data, todaySheetContextFor(cfg, now));
+}
+
+function buildTodayCockpitModel(data, cfg = [], {
+  cap = onPhoneStage() ? PROGRAM_ROW_CAP_PHONE : PROGRAM_ROW_CAP,
+  now = new Date(),
+  groupOverdue = onPhoneStage(),
+  viewer = dashboardViewer,
+} = {}) {
+  // Kein Echo: ist das Modul-Widget einer Domäne sichtbar, entfallen ihre
+  // Programm-Zeilen — jede Domäne hat genau eine Repräsentation (Cockpit ODER
+  // Widget), statt dieselbe Aufgabe/Termin doppelt zu zeigen.
+  const widgetShown = (id) => Array.isArray(cfg) && cfg.some((w) => w.id === id && w.visible);
+  const domainInCockpit = (module) => !window.yuvomi?.isModuleDisabled(module) && !widgetShown(module);
+
+  const includeTasks = domainInCockpit('tasks');
+  const includeCalendar = domainInCockpit('calendar');
+  const includeMeals = domainInCockpit('meals');
+  const includeShopping = domainInCockpit('shopping');
+
+  const program = buildTodayProgram(data, { includeTasks, includeCalendar, includeMeals, now, viewer });
+
+  // Die uebrigen Quellen des Blatts (Dosen, Freigaben, Abfuhr, Geburtstag,
+  // Schicht, Erinnerungen, Haushaltshilfe) sprechen ueber den Beitrags-Vertrag
+  // in utils/today-sheet.js - mit denselben drei Riegeln wie oben
+  // (Modulschalter, Recht, Kein-Echo) und derselben Zeilenform. Cockpit und
+  // Wand fragen beide hier; die Wand reicht nur keine Kachel-Konfiguration mit.
+  const sheetContext = todaySheetContextFor(cfg, now, program.rows);
+  const contributed = collectSourceRows(data, sheetContext);
+  const programRows = groupOverdue ? groupOverdueRows(program.rows) : program.rows;
+  const sheet = composeTodaySheet([...programRows, ...contributed.rows], { cap });
+  const visibleRows = sheet.rows;
+  const overflow = sheet.overflow;
+
+  // Ausblick über heute hinaus: das chronologisch Nächste aus Termin UND
+  // fälliger Aufgabe - die Beruhigung darf nicht um Mitternacht enden
+  // (Critique P3: „nichts mehr" bei morgen früh fälligem Zettel wäre eine
+  // falsche Entwarnung). Jede Quelle spricht nur, wenn ihre Domäne im
+  // Cockpit spricht.
+  const outlookEvent = includeCalendar ? program.nextUpcoming : null;
+  const outlookTask = includeTasks ? program.nextDueTask : null;
+  let outlook = null;
+  if (outlookEvent || outlookTask) {
+    const eventStart = outlookEvent ? eventStartDate(outlookEvent) : null;
+    const eventTimed = outlookEvent && !outlookEvent.all_day && eventStart && String(outlookEvent.start_datetime).length > 10;
+    // Die Uhrzeit ueber die Anzeigezone, nicht ueber die Browser-Getter des
+    // Dates: in `start_datetime` liegen zonenlose Wanduhrzeit und echte Instants
+    // in einer Spalte, und fuer die zweite Sorte kippte der Vergleich mit
+    // `taskKey` um den Zonenoffset (#851).
+    const eventKey = outlookEvent
+      ? `${eventOccurrenceDateKey(outlookEvent)}T${eventTimed ? zonedTimeKey(outlookEvent.start_datetime) : '00:00'}`
+      : null;
+    const taskKey = outlookTask
+      ? `${outlookTask.due_date}T${outlookTask.due_time ? String(outlookTask.due_time).slice(0, 5) : '23:59'}`
+      : null;
+    if (eventKey && (!taskKey || eventKey <= taskKey)) {
+      const when = eventTimed
+        ? formatDateTime(outlookEvent.start_datetime)
+        : relativeDateLabel(eventOccurrenceDateKey(outlookEvent));
+      outlook = {
+        sub: t('dashboard.todayNextUp', { event: `${when} · ${outlookEvent.title}` }),
+        route: calendarEventRoute(outlookEvent),
+      };
+    } else {
+      // Faelligkeit ist zonenlose Wanduhrzeit: Key und Stempel, kein Date.
+      const dueDay = String(outlookTask.due_date).slice(0, 10);
+      const dueTime = outlookTask.due_time ? String(outlookTask.due_time).slice(0, 5) : null;
+      const when = dueTime
+        ? `${relativeDateLabel(dueDay)}, ${formatTime(`${dueDay}T${dueTime}`)}`
+        : relativeDateLabel(dueDay);
+      outlook = {
+        sub: t('dashboard.todayNextUp', { event: `${when} · ${outlookTask.title}` }),
+        route: '/tasks',
+      };
+    }
+  }
+
+  // Ein leerer Tag spricht, statt zu verschwinden (Critique P2): „Alles
+  // erledigt", wenn heute Fälliges bereits geschafft ist, sonst „Heute frei" -
+  // mit dem Ausblick als beruhigendem Untertitel. Beides nur, wenn die
+  // tragende Domäne überhaupt im Cockpit spricht: neben einem sichtbaren
+  // Kalender-Widget wäre „Heute frei" eine fremde Behauptung.
+  //
+  // S-18 (UX-Audit): dieselbe Regel gilt fuer eine sichtbare Schichtplan-
+  // Kachel. "Heute frei"/"Fuer heute alles erledigt" pruefte bisher nur
+  // Aufgaben/Kalender - eine Person mit einer echten Schicht heute sah
+  // trotzdem eine dieser Behauptungen direkt neben der eigenen Kachel, die
+  // etwas anderes zeigte. Beide Zweige (nicht nur "frei") entfallen deshalb,
+  // sobald die Kachel selbst fuer Schichtplan spricht - kein neuer Programm-
+  // Zeilen-Import noetig, das widerspraeche dem "genau eine Repraesentation
+  // je Domaene" oben.
+  // isModuleDisabled() zusaetzlich zu widgetShown() (Review zu #1099, wie
+  // domainInCockpit() oben): eine abgeschaltete Schedule-Kachel kann in einem
+  // stehengebliebenen Layout weiterhin `visible: true` tragen, obwohl sie
+  // nichts mehr zeigt - ohne den Modul-Check wuerde das "Heute frei"/"Fuer
+  // heute alles erledigt" faelschlich unterdrueckt, obwohl gar keine
+  // Schichtplan-Kachel mehr etwas behauptet.
+  const scheduleWidgetVisible = !window.yuvomi?.isModuleDisabled('schedule') && widgetShown('schedule');
+  let state = null;
+  if (!sheet.allRows.length && !scheduleWidgetVisible) {
+    // „Alles erledigt" sagt auch eine Quelle, deren Offenes heute geschafft
+    // ist (alle Dosen genommen) - sonst hiesse derselbe Tag „Heute frei".
+    const sayAllDone = (includeTasks && program.tasksDoneToday > 0) || contributed.settled;
+    if (sayAllDone || includeCalendar) {
+      state = {
+        title: sayAllDone ? t('dashboard.todayAllDone') : t('dashboard.todayFree'),
+        sub: outlook?.sub ?? '',
+        icon: sayAllDone ? 'check-circle' : 'sparkles',
+        route: outlook?.route ?? null,
+      };
+    }
+  }
+
+  // Einkauf bleibt die zeitlose Schlusszeile - nur wenn etwas offen ist.
+  const shopping = includeShopping && program.openShoppingCount > 0
+    ? {
+        kind: 'shopping',
+        objectId: null,
+        timeLabel: '',
+        title: t('dashboard.todayShoppingCount', { count: program.openShoppingCount }),
+        sub: t('dashboard.todayShopping'),
+        icon: 'shopping-cart',
+        tone: 'shopping',
+        route: shoppingSoleListRoute(data),
+        who: null,
+      }
+    : null;
+
+  // Abschluss-Zeile (Peak-End): das beruhigende „danach nichts mehr" - aber nur,
+  // wenn das Programm wirklich vollständig ist. Neben „+N weitere" wäre sie
+  // gelogen, und unter der Zustands-Zeile wäre sie eine Doppelung. Ist MORGEN
+  // eine Aufgabe fällig, sagt die Coda es dazu - sonst wäre „nichts mehr" um
+  // 21 Uhr eine falsche Entwarnung (Critique P3). Nur morgen, nicht später:
+  // eine Frist in drei Tagen ist keine Falle.
+  //
+  // Seit dem Beitrags-Vertrag ausserdem nur, wenn keine Zeile mehr OFFEN ist
+  // (`codaAllowed`): unter einer offenen Dosis, einer wartenden Freigabe oder
+  // der Tonne am Morgen ist „nichts mehr" keine Entwarnung, sondern ein
+  // Widerspruch zur Zeile darueber.
+  let coda = null;
+  if (codaAllowed(sheet)) {
+    const tomorrowKey = sheetContext.tomorrowKey;
+    const tomorrowTask = includeTasks && program.nextDueTask?.due_date === tomorrowKey ? program.nextDueTask : null;
+    coda = tomorrowTask
+      ? t('dashboard.todayNothingElseTomorrow', { title: tomorrowTask.title })
+      : t('dashboard.todayNothingElse');
+  }
+
+  // `allRows` ist NICHT dasselbe wie `rows`: der Deckel entscheidet, was zu
+  // SEHEN ist, nicht, was heute ansteht. „Wer heute dran ist" zaehlt ueber den
+  // ganzen Tag - sonst verschwaende jemand aus der Antwort, nur weil seine
+  // Zeilen hinter dem Deckel liegen.
+  const hidden = sheet.allRows.filter((row) => !visibleRows.includes(row));
+  const moreRoute = overflow > 0 ? todayMoreRoute(hidden, sheetContext.todayKey) : null;
+  return { rows: visibleRows, allRows: sheet.allRows, hiddenRows: hidden, overflow, moreRoute, state, shopping, coda };
+}
+
+/* „+N WEITERE HEUTE" FUEHRT DORTHIN, WO DIE VERSTECKTEN ZEILEN STEHEN
+ * (Re-Critique 2026-09-27, A7 P2-9). Die Fusszeile war ein `<div>`: sie sagte,
+ * dass es mehr gibt, und liess keinen Weg dorthin.
+ *
+ * EIN LINK NUR, WENN DIE ZIELANSICHT ALLE VERDECKTEN ZEILEN ZEIGT (Codex an
+ * #1485). Die erste Fassung waehlte bei gemischten Quellen „das Naechstbeste":
+ * Aufgabe plus Dosis fuehrte in die Aufgabenliste, Termin plus Abfuhr an den
+ * Kalendertag - der Link versprach „+2 weitere" und zeigte eine davon. Jetzt:
+ *   - nur Aufgaben: die Aufgabenliste mit `?due=today` (offen und bis heute
+ *     faellig, Ueberfaelliges eingeschlossen - genau die Zeilen dieses Blatts),
+ *   - Termine und heute faellige Aufgaben: der Kalendertag, der beides zeigt
+ *     (eine UEBERFAELLIGE Aufgabe steht dort nicht),
+ *   - ein anderes Modul allein, alle Zeilen mit demselben Ziel: dieses Ziel
+ *     samt Filter,
+ *   - sonst `null`: die Fusszeile wird ein Knopf, der die verdeckten Zeilen an
+ *     Ort und Stelle aufklappt (renderTodayCockpit, wireTodayMore).
+ * Ein Termin nennt in seiner Zeile genau EIN Vorkommen (`open=`); fuer mehrere
+ * ist der Tag das ehrliche Ziel. */
+function todayMoreRoute(hiddenRows, todayKey) {
+  if (!hiddenRows.length || hiddenRows.some((row) => !row?.route)) return null;
+  const routes = hiddenRows.map((row) => String(row.route));
+  const base = (route) => route.split('?')[0];
+  const bases = new Set(routes.map(base));
+  if (bases.size === 1 && bases.has('/tasks')) return '/tasks?due=today';
+  const calendarShowsAll = [...bases].every((b) => b === '/calendar' || b === '/tasks')
+    && hiddenRows.every((row) => base(String(row.route)) !== '/tasks' || !row.overdue);
+  if (calendarShowsAll) return `/calendar?date=${encodeURIComponent(todayKey)}`;
+  return new Set(routes).size === 1 ? routes[0] : null;
+}
+
+/** Aufgeklappt bleibt aufgeklappt, auch wenn ein Refresh das Blatt neu zeichnet. */
+let todayMoreOpen = false;
+let todayOverdueOpen = false;
+
+/**
+ * Die Sammelzeile der Ueberfaelligen (groupOverdueRows): dieselbe Anatomie wie
+ * jede Heute-Zeile - Siegel, Titel, Untertitel, Detail am Ende -, aber ein
+ * Aufklapp-Knopf statt eines Wegs. Das Detail am Ende ist, wen es angeht
+ * (gestapelte Avatare, im Solo-Haushalt nichts), und ein Chevron, das sich
+ * wie beim „+N weitere"-Knopf dreht. Die aufgeklappten Zeilen tragen kein
+ * zweites „Ueberfaellig": die Sammelzeile hat es einmal gesagt.
+ */
+function renderTodayOverdueGroup(row, open) {
+  const who = isSoloHousehold() ? [] : (row.people ?? []);
+  const people = who.length ? renderAvatarStack(who, { size: 24, maxVisible: 3 }) : '';
+  // Die Avatare sind Bild; wen die Zeile angeht, spricht der Name dahinter.
+  const names = who.length ? `<span class="sr-only">, ${esc(who.map((p) => p.display_name ?? '').join(', '))}</span>` : '';
+  const button = `<button type="button" class="today-cockpit-card today-cockpit-card--${esc(row.tone)} today-cockpit-card--group" data-today-overdue
+          aria-expanded="${open ? 'true' : 'false'}" aria-controls="today-cockpit-overdue">
+      <span class="module-seal today-cockpit-card__icon">${moduleIconHTML(row.icon)}</span>
+      <span class="today-cockpit-card__body">
+        <strong class="today-cockpit-card__value">${esc(row.title)}</strong>
+        <span class="today-cockpit-card__sub">${esc(row.sub)}</span>${names}
+      </span>
+      <span class="today-cockpit-card__trail" aria-hidden="true">${people}<i data-lucide="chevron-down" class="icon-sm today-cockpit__more-icon"></i></span>
+    </button>`;
+  const members = (row.members ?? []).map((member) => renderTodayRow({ ...member, timeLabel: '' })).join('');
+  return `${button}<div class="today-cockpit__rows today-cockpit__rows--more today-cockpit__rows--group" id="today-cockpit-overdue"${open ? '' : ' hidden'}>${members}</div>`;
+}
+
+/** Die Sammelzeile klappt an Ort und Stelle, wie der „+N weitere"-Knopf. */
+function wireTodayOverdue(root) {
+  root.querySelectorAll('[data-today-overdue]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      const region = root.querySelector(`#${btn.getAttribute('aria-controls')}`);
+      toggleRegion(region, open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      todayOverdueOpen = open;
+    });
+  });
+}
+
+/**
+ * Der Aufklapp-Knopf des Ueberlaufs: schaltet die verdeckten Zeilen an Ort und
+ * Stelle, ohne das Blatt neu zu zeichnen - so bleibt der Fokus auf dem Knopf,
+ * und ein zweiter Tipp klappt wieder zu.
+ */
+function wireTodayMore(root) {
+  root.querySelectorAll('[data-today-more]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      const region = root.querySelector(`#${btn.getAttribute('aria-controls')}`);
+      toggleRegion(region, open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const label = btn.querySelector('span');
+      if (label) label.textContent = open ? btn.dataset.lessLabel : btn.dataset.moreLabel;
+      todayMoreOpen = open;
+    });
+  });
+}
+
+function renderTodayCockpit(data, cfg = [], editing = false, { now = new Date(), moreOpen = todayMoreOpen, overdueOpen = todayOverdueOpen } = {}) {
+  const model = buildTodayCockpitModel(data, cfg, { now });
+
+  /* DIE BREITE BUEHNE TRAEGT ZWEI SPALTEN ZEILEN (Critique 23.09.2026). Am
+   * Desktop ist das Blatt 1140px breit, und eine Zeile nutzte davon ~200px
+   * Text - dazwischen lag ein leeres Band bis zur Uhrzeit. Ab einer
+   * Containerbreite (dashboard.css, `today-cockpit__rows--split`) laufen die
+   * Zeilen deshalb in zwei Spalten, SPALTENWEISE: links die fruehe, rechts die
+   * spaete Haelfte des Tages, damit das Programm von oben nach unten gelesen
+   * bleibt. Die Haelfte steht hier, weil nur das Markup die Zahl kennt; auf
+   * schmaler Buehne haben die Klassen keine Wirkung, das Blatt bleibt eine
+   * Liste in unveraenderter Hoehe. */
+  const listRows = [];
+  if (model.state) listRows.push(renderTodayStateRow(model.state));
+  // Die Sammelzeile gibt es nur auf dem Telefon; dort teilt sich die Liste nie.
+  const grouped = model.rows.some((row) => row.kind === 'overdue');
+  const split = model.rows.length >= 2 && !grouped;
+  const perColumn = Math.ceil(model.rows.length / 2);
+  listRows.push(...model.rows.map((row, index) => (row.kind === 'overdue'
+    ? renderTodayOverdueGroup(row, overdueOpen)
+    : renderTodayRow(row, split && index >= perColumn
+      ? ` today-cockpit-card--col2${index === perColumn ? ' today-cockpit-card--col-start' : ''}`
+      : ''))));
+  const parts = [];
+  const foldShopping = Boolean(model.shopping) && model.overflow > 0 && !model.moreRoute && onPhoneStage();
+  if (listRows.length) {
+    parts.push(`<div class="today-cockpit__rows${split ? ' today-cockpit__rows--split' : ''}"${split ? ` style="--today-rows-per-column:${perColumn}"` : ''}>${listRows.join('')}</div>`);
+  }
+  if (model.overflow > 0 && model.moreRoute) {
+    const moreText = esc(t('dashboard.todayMore', { count: model.overflow }));
+    parts.push(`<a href="${esc(model.moreRoute)}" class="today-cockpit__more today-cockpit__more--link" data-route="${esc(model.moreRoute)}">
+          <span>${moreText}</span><i data-lucide="chevron-right" class="icon-sm" aria-hidden="true"></i>
+        </a>`);
+  } else if (model.overflow > 0) {
+    // Keine Ansicht zeigt alle verdeckten Zeilen (todayMoreRoute): sie stehen
+    // hier, zugeklappt, und der Knopf darunter klappt sie auf. Auf dem Telefon
+    // klappt die Einkaufszeile mit (R14): sie ist zeitlos, und als eigene
+    // Zeile unter dem Knopf schob sie das erste Widget um 64px weiter hinab.
+    const hidden = foldShopping ? [...model.hiddenRows, model.shopping] : model.hiddenRows;
+    const moreText = t('dashboard.todayMore', { count: hidden.length });
+    const lessText = t('dashboard.todayLess');
+    parts.push(`<div class="today-cockpit__rows today-cockpit__rows--more" id="today-cockpit-more"${moreOpen ? '' : ' hidden'}>${
+      hidden.map((row) => renderTodayRow(row)).join('')}</div>`);
+    parts.push(`<button type="button" class="today-cockpit__more today-cockpit__more--link" data-today-more
+          aria-expanded="${moreOpen ? 'true' : 'false'}" aria-controls="today-cockpit-more"
+          data-more-label="${esc(moreText)}" data-less-label="${esc(lessText)}">
+          <span>${esc(moreOpen ? lessText : moreText)}</span><i data-lucide="chevron-down" class="icon-sm today-cockpit__more-icon" aria-hidden="true"></i>
+        </button>`);
+  }
+  if (model.shopping && !foldShopping) parts.push(renderTodayRow(model.shopping));
+  if (model.coda) parts.push(`<div class="today-cockpit__coda">${esc(model.coda)}</div>`);
+
+  // Deckt der Nutzer alle vier Domänen über Widgets ab, wäre das Cockpit leer —
+  // dann entfällt der ganze Abschnitt statt einer leeren Kopfzeile. Im
+  // Bearbeiten-Modus bleibt er stehen, auch ohne Inhalt: sonst wäre der
+  // Schalter, mit dem man ihn abstellt, nur sichtbar solange er etwas zu sagen
+  // hat (#740).
+  if (!parts.length && !editing) return '';
+
+  // Derselbe Ausblenden-Knopf wie an jeder Kachel, damit das Kopfband im
+  // Bearbeiten-Modus keine Sonderbedienung braucht.
+  const hideBtn = editing ? `
+    <button type="button" class="widget-edit-controls__hide" data-glance-hide
+            aria-label="${t('dashboard.customizeHide', { widget: t('dashboard.todayTitle') })}">
+      <i data-lucide="eye-off" aria-hidden="true"></i>
+    </button>` : '';
+
+  // Mobil klappt das Band im Anpassen-Modus auf diese Kopfzeile zusammen
+  // (dashboard.css, `.today-cockpit--editing`): angeordnet wird dort nichts,
+  // und sein Inhalt schob das erste Rasterwidget bis an den Bildschirmrand.
+  return `
+    <section class="today-cockpit${editing ? ' today-cockpit--editing' : ''}" aria-labelledby="today-cockpit-title">
+      <div class="today-cockpit__header">
+        <h2 id="today-cockpit-title">${esc(t('dashboard.todayTitle'))}</h2>
+        ${hideBtn}
+      </div>
+      <div class="today-cockpit__grid">
+        ${parts.join('')}
+      </div>
+    </section>
+  `;
+}
+
+
+/* Vorgabe setzen und Zuruecksetzen - die zwei Knoepfe, die die REICHWEITE
+ * einer Anordnung aendern. Sie stehen am Desktop in der Anpassen-Leiste und
+ * mobil in der Fussnote (R9 M7); beide Stellen verdrahtet derselbe
+ * Datenattribut-Handler (`[data-customize-publish]`/`[data-customize-reset]`).
+ * Die Ids tragen nur die Knoepfe der Leiste - eine Id gibt es einmal. */
+function renderCustomizeScopeActions({ followsDefault = true, canPublish = false, id = false } = {}) {
+  return `${canPublish ? `
+            <button class="btn btn--ghost dashboard-customize-scope-action" data-customize-publish${id ? ' id="dashboard-customize-publish"' : ''}>
+              <i data-lucide="users" class="icon-sm" aria-hidden="true"></i>
+              ${t('dashboard.customizeSetDefault')}
+            </button>` : ''}${followsDefault ? '' : `
+            <button class="btn btn--ghost dashboard-customize-scope-action" data-customize-reset${id ? ' id="dashboard-customize-reset"' : ''}>
+              <i data-lucide="rotate-ccw" class="icon-sm" aria-hidden="true"></i>
+              ${t('dashboard.customizeReset')}
+            </button>`}`;
+}
+
+/* DER REICHWEITEN-SATZ ALS FUSSNOTE (R9 M7, A7 P1-2). Mobil stand er mit
+ * Vorgabe, Zuruecksetzen, Abbrechen und Speichern ueber dem Gruss und brach in
+ * drei Zeilen um (y 180-340); das erste Widget begann erst bei y 946 von 844.
+ * Unter dem Raster beantwortet er dieselbe Frage ("gilt das fuer alle?") vor
+ * dem Tipp auf "Fertig", ohne das Bearbeitete wegzuschieben. Sichtbar nur auf
+ * schmaler Buehne (dashboard.css) - breit steht er im Kopf. */
+function renderCustomizeFootnote({ followsDefault = true, canPublish = false } = {}) {
+  const actions = renderCustomizeScopeActions({ followsDefault, canPublish });
+  return `
+    <section class="dashboard-customize-footnote" aria-label="${esc(t('dashboard.customizeTitle'))}">
+      <p>${t('dashboard.customizeScopeHint')}</p>
+      ${followsDefault ? `<p class="dashboard-customize-scope__state">${t('dashboard.customizeFollowsDefault')}</p>` : ''}
+      ${actions.trim() ? `<div class="dashboard-customize-footnote__actions">${actions}</div>` : ''}
+    </section>`;
+}
+
+/* DER KOPF DER UEBERSICHT: Datumszeile mit Werkzeugen, darunter der Large
+ * Title ueber die volle Breite (Critique 2026-09-23, P1).
+ *
+ * Die Werkzeuge standen als eigene Spalte NEBEN dem Grusstapel, und unter
+ * ihnen der Stand-Anker mit `flex: 0 0 100%`. Der blaehte die Spalte mobil auf
+ * 187px auf; dem Gruss blieben bei 390px 171px, er brach dreizeilig um
+ * („Guten / Abend, / Linda"), und der erste Inhalt stand bei 274 von 844px.
+ * Jetzt teilen sich Datum und Knoepfe EINE Zeile - dieselbe Bauart wie eine
+ * Large-Title-Leiste, deren Knoepfe ueber dem Titel sitzen -, und der Titel
+ * hat die ganze Breite. Das Raster dafuer steht in dashboard.css.
+ *
+ * DER STAND-ANKER („Stand 14:32", Critique R2, A8) gehoert der Wand. Dort
+ * beweist er, dass der stille Refresh laeuft, und dort steht er weiter
+ * (`.wall__updated`, renderWallSurface). Auf dem Telefon und am Schreibtisch
+ * kostete er eine Zeile Kopf fuer eine Frage, die dort niemand stellt: wer die
+ * Seite in der Hand hat, laedt sie im Zweifel selbst neu. */
+function renderDashboardOverview(user, editing = false, weather = null, scope = {}) {
+  // Wer der Vorgabe des Haushalts folgt, hat nichts zurueckzusetzen; wer sie
+  // setzen darf, ist Admin (#827).
+  // `offerNew: false` im Fehlerzustand: wie der Speed-Dial dort (#634-Kommentar
+  // bei initFab) kein Anlegen in Module, deren Daten nicht geladen sind.
+  const { followsDefault = true, canPublish = false, offerNew = true, weatherCard = false } = scope;
+  const dateLabel = mastheadDateLabel();
+  // EIN WANDTABLETT BEKOMMT ZWEI KNOEPFE NICHT, WEIL BEIDE NUR SCHEITERN
+  // KOENNEN (#1808). "Anpassen" endet in `PUT /preferences`, und ein Display
+  // schreibt genau zwei Routen (`DISPLAY_WRITE_ROUTES`, server/display-scopes.js)
+  // - die gehoert nicht dazu, mit Absicht: wer an der Kuechenwand vorbeigeht,
+  // hat das Geraet bedient, und "aendert keine Einstellungen" ist seit #1209
+  // zugesagt. Der Melder ordnete sein Brett um, tippte "Fertig" und bekam eine
+  // 403 - die Oberflaeche bot eine Handlung an, die der Server zu Recht
+  // verweigert. Die Suche daneben ist derselbe Fall (`search` steht nicht in
+  // DISPLAY_SCOPES); die Seitenleiste laesst sie am Display schon weg
+  // (router.js), dieser Kopf tat es nicht. Das Brett eines Tabletts ordnet ein
+  // Administrator ueber die Haushaltsvorgabe: ein Display speichert nie etwas
+  // Eigenes und folgt ihr deshalb immer.
+  const onDisplay = user?.access_scope === 'display';
+
+  return `
+    <section class="dashboard-overview">
+      <div class="dashboard-overview__header${editing ? ' dashboard-overview__header--editing' : ''}">
+        <span class="dashboard-overview__date">${dateLabel}</span>
+        <h2 class="dashboard-overview__title dashboard-overview__title--${greetingPeriod()}">${greeting(user.display_name)}</h2>
+        ${mastheadWeatherHtml(weather, { card: weatherCard })}
+        <div class="dashboard-overview__tools">
+          ${editing ? `
+          <!-- Die Beruhigung stand nur im Toast NACH dem Speichern, die
+               Unsicherheit sitzt aber DAVOR: während man eine Kachel wegzieht
+               und nicht weiß, ob man sie gerade den Kindern wegnimmt (Critique
+               2026-08-16). Ein Satz im Anpassen-Modus beantwortet sie im
+               richtigen Moment. -->
+          <div class="dashboard-customize-scope">
+            <p>${t('dashboard.customizeScopeHint')}</p>
+            ${followsDefault ? `<p class="dashboard-customize-scope__state">${t('dashboard.customizeFollowsDefault')}</p>` : ''}
+          </div>
+          <!-- MOBIL EINE ZEILE: [Abbrechen] Titel [Fertig] (R9 M7, iOS-Muster).
+               Der Titel ist nur dort sichtbar (dashboard.css); am Desktop steht
+               die Leiste wie bisher neben dem Gruss. Vorgabe und Zuruecksetzen
+               stehen mobil mit dem Reichweiten-Satz als Fussnote unter dem
+               Raster (renderCustomizeFootnote) - hier bleiben sie fuer die
+               breite Buehne. -->
+          <div class="dashboard-customize-toolbar" role="toolbar" aria-label="${t('dashboard.customizeTitle')}">
+            ${renderCustomizeScopeActions({ followsDefault, canPublish, id: true })}
+            <span class="dashboard-customize-toolbar__title" aria-hidden="true">${esc(t('dashboard.customizeTitle'))}</span>
+            <button class="btn btn--secondary" id="dashboard-customize-cancel">${t('common.cancel')}</button>
+            <button class="btn btn--primary" id="dashboard-customize-save">${esc(t('dashboard.customizeDone'))}</button>
+          </div>` : ''}
+          <!-- DER EINSTIEG SITZT DA, WO DER AUSSTIEG SITZT (#915). Der Wandmodus
+               liess sich nur unter Einstellungen -> Persoenlich -> Darstellung
+               einschalten, verlassen aber hier auf der Uebersicht - man ging
+               dort hinaus, wo man nicht hineinkam.
+
+               Kein eigener Schalter dafuer, ob dieser Knopf erscheint: er
+               laege in denselben Einstellungen, in denen der Modus selbst
+               schon steht, und waere ein zweiter Schalter fuer eine Sache.
+               Auch keine Regel nach Geraeteform - ein falsch versteckter
+               Einstieg ist wieder unauffindbar und verschoebe das Problem nur.
+               Er ist ein Icon-Knopf wie der daneben und traegt sich so leise
+               wie der.
+
+               Im Anpassen-Modus faellt er weg: dort geht es um die Anordnung
+               der Kacheln, und ein Moduswechsel mittendrin wuerfe eine
+               ungespeicherte Bearbeitung weg. -->
+          <!-- IM ANPASSEN-MODUS GIBT ES KEIN X (Re-Critique 2026-09-27, A7 P2-5).
+               Es hiess „Anpassung beenden" und verwarf still - neben
+               „Abbrechen" ein zweiter Ausgang mit derselben Folge, aber einem
+               Wort, das „fertig" verspricht. Die Leiste hat jetzt genau zwei
+               Wege hinaus: Speichern, und Abbrechen mit Rueckfrage, sobald
+               etwas zu verlieren ist. -->
+          ${editing ? '' : `
+          <!-- DIE SUCHE MIT EINEM TIPP VON DER UEBERSICHT (Re-Critique
+               2026-09-27, A1 P2-6). Mobil lag die globale Suche nur im
+               Mehr-Blatt, zwei Tipps tief. Die Kapsel hat keinen Platz fuer
+               ein sechstes Ziel (gemessen: 52px je Slot, "Übersicht" und
+               "Aufgaben" brechen), also steht sie hier, wo man ankommt - ein
+               Icon-Knopf wie die zwei daneben. -->
+          ${onDisplay ? '' : `<button class="btn btn--secondary btn--icon dashboard-icon-btn" id="dashboard-search"
+                  aria-label="${t('nav.search')}"
+                  title="${t('nav.search')}" aria-haspopup="dialog">
+            <i data-lucide="search" aria-hidden="true"></i>
+          </button>`}
+          <button class="btn btn--secondary btn--icon dashboard-icon-btn" id="dashboard-wall-enter"
+                  aria-label="${t('dashboard.wallEnter')}"
+                  title="${t('dashboard.wallEnter')}">
+            <i data-lucide="maximize-2" aria-hidden="true"></i>
+          </button>
+          ${onDisplay ? '' : `<button class="btn btn--secondary btn--icon dashboard-icon-btn" id="dashboard-customize-btn"
+                  aria-label="${t('dashboard.customize')}"
+                  title="${t('dashboard.customize')}">
+            <i data-lucide="settings-2" aria-hidden="true"></i>
+          </button>`}
+          ${/* MOBIL IST DAS EIN MENUE (R19, Entscheidung Ulas 2026-10-16): der
+               Wand-Modus wandert ins Anpassen-Menue. Drei Icon-Knoepfe ueber dem
+               Gruss waren zwei zu viel fuer eine Handlung, die man auf dem
+               Telefon fast nie braucht. Unter 768px steht dieses Menue statt
+               der beiden Knoepfe davor (dashboard.css), seine Eintraege klicken
+               sie - ein Handler je Handlung, je Breite ein Weg. */ ''}
+          ${onDisplay ? '' : popoverMenuHtml({
+            id: 'dashboard-tools-menu',
+            label: t('dashboard.customize'),
+            icon: 'settings-2',
+            triggerClass: 'btn btn--secondary btn--icon dashboard-icon-btn dashboard-tools-btn',
+            items: [
+              { action: 'dashboard-customize', icon: 'layout-grid', label: t('dashboard.customizeTitle') },
+              { action: 'dashboard-wall', icon: 'maximize-2', label: t('dashboard.wallEnter') },
+            ],
+          })}
+          ${offerNew && onDesktopStage() ? renderNewPill() : ''}`}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+/** Hat der Anpassen-Modus etwas, das „Abbrechen" wegwerfen wuerde? */
+/**
+ * DER ANPASSEN-MODUS VERLIERT NICHTS STILL (Re-Critique 2026-09-28, A7 P2-1).
+ *
+ * Abbrechen fragte seit 2026-09-27 nach, sobald es etwas zu verlieren gab -
+ * aber ein Tipp auf "Kalender" in der Tab-Leiste, die Seitenleiste, die
+ * Befehlspalette oder Zurueck warfen dieselbe Anordnung wortlos weg. Diese
+ * Rueckfrage haengt als Verlassen-Schutz am Router (utils/leave-guard.js) und
+ * ist DIESELBE wie beim Abbrechen: ohne Aenderung kein Dialog, mit Aenderung
+ * "Verwerfen?" - und ein Nein bleibt auf der Seite.
+ *
+ * Rein und mit gereichten Abhaengigkeiten, damit ein Test sie fahren kann.
+ * @returns {Promise<boolean>} ob der Wechsel weitergehen darf
+ */
+async function customizeLeaveAllowed({ customizing, changed, askDiscard, discard }) {
+  if (!customizing()) return true;
+  if (changed()) {
+    const confirmed = await askDiscard();
+    // Im Dialog kann der Modus schon beendet worden sein (gespeichert):
+    // dann gibt es nichts mehr zu verlieren, und der Wechsel darf.
+    if (!confirmed && customizing()) return false;
+  }
+  discard();
+  return true;
+}
+
+function customizeHasChanges({ widgetConfig, savedWidgetConfig, glanceVisible, savedGlanceVisible }) {
+  return !sameWidgetConfig(savedWidgetConfig, widgetConfig)
+    || Boolean(glanceVisible) !== Boolean(savedGlanceVisible);
+}
+
+/**
+ * Ein Selektor, der „dasselbe" Element nach einem Neuaufbau wiederfindet.
+ *
+ * Die Flaeche wird bei jeder Anpassen-Geste per setHtml neu gebaut; Elemente
+ * ueberleben das nicht, ihre IDENTITAET schon: eine Id, oder eines der
+ * data-Attribute, mit denen die Bearbeiten-Knoepfe ihre Kachel nennen. Wo das
+ * Attribut die Kachel nicht selbst nennt (Groesse, Verschieben, Griff), grenzt
+ * die umgebende Kachel es ein.
+ */
+const FOCUS_IDENTITY_ATTRS = [
+  'data-widget-size-preset', 'data-widget-size-menu', 'data-widget-move', 'data-widget-drag-handle',
+  'data-widget-hide', 'data-widget-show', 'data-widget-options',
+  'data-glance-hide', 'data-glance-show',
+];
+
+function focusKeyOf(el) {
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const attr = FOCUS_IDENTITY_ATTRS.find((a) => el.hasAttribute(a));
+  if (!attr) return rowFocusKeyOf(el);
+  const value = el.getAttribute(attr);
+  const own = value ? `[${attr}="${CSS.escape(value)}"]` : `[${attr}]`;
+  const tile = el.closest('.widget-wrapper[data-widget-id]')?.dataset.widgetId;
+  return tile ? `.widget-wrapper[data-widget-id="${CSS.escape(tile)}"] ${own}` : own;
+}
+
+/**
+ * Dasselbe fuer eine INHALTSZEILE (#1821): Termin, Notiz, Liste, Aufgabe.
+ *
+ * Die Flaeche baut nicht nur im Anpassen-Modus neu, sondern auch still - bei
+ * der Rueckkehr in den Tab, im Viertelstundentakt, an einer Tagesgrenze, nach
+ * dem Wetter. Wer mit der Tastatur auf einer Zeile stand, stand danach auf
+ * <body>, und Enter tat nichts mehr. Eine Zeile hat keine Id; ihre Identitaet
+ * ist, wohin sie fuehrt (`data-route`, bei Aufgaben `data-task-id`), in welcher
+ * Kachel sie steht und - wo mehrere Zeilen dasselbe Ziel haben (Schichtplan,
+ * Mahlzeiten) - die wievielte sie ist. Der Fokus kann auch auf einem Kind
+ * liegen (der Notizkoerper traegt den Tabstopp, die Karte den Weg).
+ *
+ * `preventScroll`: der stille Neuaufbau darf niemanden zu einer Zeile
+ * zurueckholen, von der er weggescrollt hat.
+ */
+function rowFocusKeyOf(el) {
+  const row = el.closest?.('[data-route], [data-task-id]');
+  if (!row) return null;
+  const quoted = (name, value) => `[${name}="${CSS.escape(value)}"]`;
+  let own = row.hasAttribute('data-task-id')
+    ? quoted('data-task-id', row.getAttribute('data-task-id'))
+    : quoted('data-route', row.getAttribute('data-route'));
+  if (row.dataset.objectKind && row.dataset.objectId) {
+    own += quoted('data-object-kind', row.dataset.objectKind) + quoted('data-object-id', row.dataset.objectId);
+  }
+  if (el !== row) {
+    const cls = el.classList?.[0];
+    if (!cls) return null;
+    own += ` .${CSS.escape(cls)}`;
+  }
+  const tile = row.closest('.widget-wrapper[data-widget-id]')?.dataset.widgetId;
+  const selector = tile ? `.widget-wrapper[data-widget-id="${CSS.escape(tile)}"] ${own}` : own;
+  const root = row.closest('#dashboard-shell') ?? row.ownerDocument;
+  const index = Math.max(0, [...root.querySelectorAll(selector)].indexOf(el));
+  return { selector, index, preventScroll: true };
+}
+
+/**
+ * VOR dem Neuaufbau: wer hat den Fokus, und unter welchem Schluessel findet
+ * man ihn danach wieder? Nur ein Element IN der Flaeche zaehlt - ein Dialog
+ * oder die Navigation behalten ihren Fokus ohnehin.
+ *
+ * @returns {{key: (string|object|null), had: boolean}}
+ */
+function captureRebuildFocus(shell, active, body) {
+  const had = Boolean(active) && active !== body && Boolean(shell?.contains(active));
+  return { key: had ? focusKeyOf(active) : null, had };
+}
+
+/**
+ * NACH dem Neuaufbau: der erste Kandidat, den es gibt und der bedienbar ist,
+ * bekommt den Fokus. Ein Kandidat ist ein Selektor (erster Treffer gilt: Ids,
+ * Bearbeiten-Knoepfe, der Nachfolger, den eine Geste nennt) oder der Schluessel
+ * einer Inhaltszeile mit Selektor UND Stelle (rowFocusKeyOf) - der kommt ohne
+ * Scrollen zurueck, weil der stille Neuaufbau niemanden zu einer Zeile holen
+ * darf, von der er weggescrollt hat.
+ *
+ * @returns {Element|null} das fokussierte Element
+ */
+function restoreFocusAfterRebuild(container, candidates) {
+  for (const candidate of (candidates ?? []).filter(Boolean)) {
+    const isRow = typeof candidate !== 'string';
+    const el = isRow
+      ? container.querySelectorAll(candidate.selector)[candidate.index]
+      : container.querySelector(candidate);
+    // Ein Knopf, der bei dieser Breite nicht gerendert ist (Anpassen mobil im
+    // Menue, R19), nimmt keinen Fokus - weiter zum naechsten Kandidaten.
+    if (el && !el.disabled && el.getClientRects?.().length !== 0) {
+      if (isRow) el.focus({ preventScroll: candidate.preventScroll });
+      else el.focus();
+      return el;
+    }
+  }
+  return null;
+}
+
+/* EINE ANSAGE-REGION, DIE DEN NEUAUFBAU UEBERLEBT.
+ *
+ * Eine Live-Region wird nur gehoert, wenn es sie schon gab, bevor ihr Text sich
+ * aendert - eine, die mit dem Neuaufbau selbst entsteht, schweigt in der Regel.
+ * Die Seite baut aber bei jeder Anpassen-Geste und bei jedem Timer-Wechsel neu.
+ * Gesprochen wird deshalb ueber den Ansager der Shell (`#route-announcer`,
+ * router.js): hoeflich, atomar, sr-only und fuer die ganze Sitzung da. Er meldet
+ * sonst Seitenwechsel - eine Zustandsaenderung dieser Seite ist dieselbe Sorte
+ * Nachricht. Leeren und verzoegert setzen ist sein eigenes Muster: derselbe Text
+ * zweimal hintereinander waere sonst keine Aenderung. */
+let announceTimer = null;
+function announceDashboard(message) {
+  const region = typeof document === 'undefined' ? null : document.getElementById('route-announcer');
+  if (!region || !message) return;
+  clearTimeout(announceTimer);
+  region.textContent = '';
+  announceTimer = setTimeout(() => { region.textContent = message; }, 50);
+}
+
+/* DIE KACHELN GLEITEN, STATT ZU SPRINGEN (FLIP, Critique 2026-09-26).
+ *
+ * Jede Anpassen-Geste baut die Flaeche per setHtml neu; bis hierher sprang das
+ * Raster dabei in einem Frame auf den neuen Stand - wer eine Kachel eine Stelle
+ * hoch schob oder breiter machte, musste sie danach suchen. Jetzt: vor dem
+ * Neuaufbau die Lage jeder Kachel merken (First), danach die neue messen (Last),
+ * die Kachel per transform auf die alte Stelle zuruecksetzen (Invert) und per
+ * Web Animations nach Hause laufen lassen (Play). Die Identitaet traegt die
+ * Widget-Id - die Elemente selbst ueberleben den Neuaufbau nicht.
+ *
+ * Eine Kachel, die waechst, deckt ihre neue Flaeche per clip-path von der alten
+ * Groesse aus auf; eine, die schrumpft, kann nicht ueber ihren Rand hinaus
+ * zeigen und blendet ihren umgebrochenen Inhalt kurz auf. Eine wieder
+ * eingeblendete Kachel kommt ohne Vorlage und blendet ein. Die Kachel ist ein
+ * Glas-Element: Dauer und Kurve aus den Token (`--duration-lg`, `--ease-glass`).
+ * Unter reduzierter Bewegung bleibt es beim Sprung.
+ *
+ * Gemessen wird in Viewport-Koordinaten: scrollt der Fokus-Nachfolger die Seite
+ * mit, ist genau das der Weg, den das Auge gesehen hat. Laeuft noch eine
+ * Animation, liefert getBoundingClientRect ihre momentane Lage mit - die
+ * naechste Geste setzt dort an, wo die Kachel gerade IST. */
+const DASHBOARD_TILE_SELECTOR = '#dashboard-widget-grid > .widget-wrapper[data-widget-id]';
+
+function captureTileRects(root) {
+  const rects = new Map();
+  root.querySelectorAll(DASHBOARD_TILE_SELECTOR).forEach((tile) => {
+    rects.set(tile.dataset.widgetId, tile.getBoundingClientRect());
+  });
+  return rects;
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function motionTiming() {
+  const styles = typeof document !== 'undefined' && typeof getComputedStyle === 'function'
+    ? getComputedStyle(document.documentElement) : null;
+  const raw = styles?.getPropertyValue('--duration-lg').trim() ?? '';
+  const ms = /ms$/.test(raw) ? parseFloat(raw) : /s$/.test(raw) ? parseFloat(raw) * 1000 : NaN;
+  return {
+    duration: Number.isFinite(ms) ? ms : 250,
+    easing: styles?.getPropertyValue('--ease-glass').trim() || 'ease-out',
+  };
+}
+
+/**
+ * Das Raster gleitet von seiner alten Oberkante an die neue - beim Betreten und
+ * Verlassen des Anpassen-Modus. Nur `transform`, Dauer und Kurve aus den Tokens,
+ * ohne Feder (ein Versatz ueber hunderte Pixel wuerfe sie sichtbar ueber das
+ * Ziel); unter reduzierter Bewegung und ohne messbaren Versatz geschieht nichts.
+ * Der Endzustand steht vor dem Aufruf: die Animation hat kein `fill`.
+ */
+function playGridShift(root, topBefore, options = {}) {
+  const reduced = options.reduced ?? prefersReducedMotion();
+  if (topBefore == null || reduced) return null;
+  const grid = root.querySelector('#dashboard-widget-grid');
+  if (!grid || typeof grid.animate !== 'function') return null;
+  const dy = topBefore - grid.getBoundingClientRect().top;
+  if (Math.abs(dy) < 1) return null;
+  return grid.animate([
+    { transform: `translateY(${dy}px)` },
+    { transform: 'none' },
+  ], { duration: durationToken('--duration-lg', 250), easing: easingToken('--ease-out', 'ease-out') });
+}
+
+function playTileFlip(root, before, options = {}) {
+  const reduced = options.reduced ?? prefersReducedMotion();
+  if (!before || reduced) return [];
+  const timing = { ...motionTiming(), ...options.timing };
+  const played = [];
+  root.querySelectorAll(DASHBOARD_TILE_SELECTOR).forEach((tile) => {
+    if (typeof tile.animate !== 'function') return;
+    const from = before.get(tile.dataset.widgetId);
+    if (!from) {
+      played.push(tile.animate([
+        { opacity: 0, transform: 'scale(0.96)' },
+        { opacity: 1, transform: 'none' },
+      ], timing));
+      return;
+    }
+    const to = tile.getBoundingClientRect();
+    const dx = from.left - to.left;
+    const dy = from.top - to.top;
+    const dw = to.width - from.width;
+    const dh = to.height - from.height;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(dw) < 1 && Math.abs(dh) < 1) return;
+    const first = { transform: `translate(${dx}px, ${dy}px)` };
+    const last = { transform: 'none' };
+    if (dw >= 1 || dh >= 1) {
+      const radius = typeof getComputedStyle === 'function' ? getComputedStyle(tile).borderTopLeftRadius || '0px' : '0px';
+      first.clipPath = `inset(0px ${Math.max(0, dw)}px ${Math.max(0, dh)}px 0px round ${radius})`;
+      last.clipPath = `inset(0px 0px 0px 0px round ${radius})`;
+    } else if (dw <= -1 || dh <= -1) {
+      first.opacity = 0.6;
+      last.opacity = 1;
+    }
+    played.push(tile.animate([first, last], timing));
+  });
+  return played;
+}
+
+function widgetSizeClass(size) {
+  return WIDGET_SIZE_OPTIONS.includes(size) ? `widget-size--${size}` : 'widget-size--1x1';
+}
+
+function renderSizeMiniGrid(size) {
+  return `<span class="widget-size-mini" aria-hidden="true">${renderSizeMiniGridCells(size)}</span>`;
+}
+
+function renderSizeMiniGridCells(size) {
+  // 2x2-Basisraster statt 4x4: die vier Presets unterscheiden sich nur in
+  // Breite/Höhe 1 vs. 2 - auf 16 winzigen Zellen war das kaum ablesbar und
+  // die Buttons wirkten identisch (Audit A1-17).
+  const [cols, rows] = size.split('x').map(Number);
+  return Array.from({ length: 4 }, (_, i) => {
+    const col = (i % 2) + 1;
+    const row = Math.floor(i / 2) + 1;
+    return `<span class="${col <= Math.min(cols, 2) && row <= Math.min(rows, 2) ? 'is-active' : ''}"></span>`;
+  }).join('');
+}
+
+/* WIDGET-OPTIONEN (#814) - was ein Widget zeigt, nicht nur ob und wie gross.
+ *
+ * DIE OPTIONEN GEHOEREN DEM FRONTEND, wie die Widget-Ids seit jeher: der Server
+ * speichert `options` als Form und weiss nicht, was drinsteht (preferences.js,
+ * `normalizeWidgetOptions`). Eine serverseitige Registry „welches Widget kennt
+ * welche Option" waere der billige Anfang und danach der Preis jedes weiteren
+ * Widgets. Was der Browser daraus macht, sind Query-Parameter, die die Route
+ * ohnehin versteht - kein zweiter Filterweg.
+ *
+ * WARUM EIN EIGENER DIALOG statt eines weiteren Steuerelements in der Leiste:
+ * die Kachelleiste traegt Griff, Reihenfolge, vier Groessen und Ausblenden; eine
+ * Kategorienauswahl daneben kippt sie auf 1x1-Kacheln ins Ueberlaufen (die
+ * Lehre aus dem alten Groessen-Select, Critique P1). Der Knopf oeffnet, was
+ * Platz braucht.
+ */
+
+/* Das Etikett einer Kategorie - dieselbe Regel wie im Aufgabenmodul
+ * (`catLabel` in pages/tasks.js): die mitgelieferten Kategorien tragen einen
+ * i18n-Schluessel, die selbst angelegten ihren Namen. Wer hier `key` anzeigt,
+ * stellt „household" neben „Einkaufen" in dieselbe Liste. */
+function taskCategoryLabel(category) {
+  if (!category) return '';
+  return category.label_key ? t(category.label_key) : (category.name || category.key);
+}
+
+/** Kategorien der Aufgaben - nur wenn der Dialog sie braucht, und nur einmal. */
+let taskCategoriesCache = null;
+async function loadTaskCategories() {
+  if (taskCategoriesCache) return taskCategoriesCache;
+  try {
+    const res = await api.get('/tasks/categories');
+    taskCategoriesCache = Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    taskCategoriesCache = [];
+  }
+  return taskCategoriesCache;
+}
+
+/** Waste-Typen fuer den Optionen-Dialog - nur wenn er sie braucht, und nur einmal. Wie loadTaskCategories(). */
+let wasteTypesCache = null;
+async function loadWasteTypes() {
+  if (wasteTypesCache) return wasteTypesCache;
+  try {
+    const res = await api.get('/waste/types');
+    wasteTypesCache = Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    wasteTypesCache = [];
+  }
+  return wasteTypesCache;
+}
+
+/**
+ * Die Einkaufslisten fuer den Optionen-Dialog (#1818). Bewusst OHNE Cache und
+ * mit `null` im Fehlerfall, wie bei den Notiz-Kategorien: eine eben angelegte
+ * Liste muss waehlbar sein, und ein Dialog ohne Katalog darf eine bestehende
+ * Auswahl nicht als "nichts gewaehlt" speichern.
+ */
+async function loadShoppingLists(getLists = (path) => api.get(path)) {
+  try {
+    const res = await getLists('/shopping');
+    return Array.isArray(res?.data) ? res.data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadNoteCategories(getCategories = (path) => api.get(path)) {
+  try {
+    const res = await getCategories('/notes/categories');
+    return Array.isArray(res?.data) ? res.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Generic options dialog for extension widgets (optionsSchema from module.json). */
+async function openExtensionWidgetOptions(id, meta, current = {}) {
+  const schema = meta.optionsSchema || {};
+  const moduleId = meta.moduleId || String(id).split(':')[0];
+  const fields = Object.entries(schema).map(([key, field]) => {
+    const val = current[key] ?? field.default ?? '';
+    const title = esc(optionFieldLabel(moduleId, field, key));
+    if (field.type === 'boolean') {
+      return `<label class="widget-options__choice">
+        <input type="checkbox" name="opt-${esc(key)}" ${val ? 'checked' : ''}>
+        <span>${title}</span>
+      </label>`;
+    }
+    if (field.type === 'number') {
+      return `<label class="form-group"><span class="form-label">${title}</span>
+        <input class="form-input" type="number" name="opt-${esc(key)}" value="${esc(String(val))}"></label>`;
+    }
+    if (Array.isArray(field.enum) && field.enum.length) {
+      return `<label class="form-group"><span class="form-label">${title}</span>
+        <select class="form-input" name="opt-${esc(key)}">
+          ${field.enum.map((opt) => `<option value="${esc(opt)}" ${String(val) === opt ? 'selected' : ''}>${esc(opt)}</option>`).join('')}
+        </select></label>`;
+    }
+    return `<label class="form-group"><span class="form-label">${title}</span>
+      <input class="form-input" type="text" name="opt-${esc(key)}" value="${esc(String(val ?? ''))}"></label>`;
+  }).join('');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    openModal({
+      title: t('dashboard.optionsFor', { widget: widgetLabel(id) }),
+      size: 'sm',
+      content: `
+        <form id="widget-options-form" class="widget-options">
+          ${fields || `<p class="widget-options__hint">${t('dashboard.optionExtensionEmpty')}</p>`}
+          <div class="modal-panel__footer modal-panel__footer--plain">
+            <button type="button" class="btn btn--secondary" data-action="cancel">${t('common.cancel')}</button>
+            <button type="submit" class="btn btn--primary">${t('common.save')}</button>
+          </div>
+        </form>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('[data-action="cancel"]')?.addEventListener('click', () => closeModal({ force: true }));
+        panel.querySelector('#widget-options-form')?.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const next = {};
+          for (const [key, field] of Object.entries(schema)) {
+            const el = panel.querySelector(`[name="opt-${CSS.escape(key)}"]`);
+            if (!el) continue;
+            if (field.type === 'boolean') {
+              if (el.checked) next[key] = true;
+            } else if (field.type === 'number') {
+              const num = Number(el.value);
+              if (Number.isFinite(num)) next[key] = num;
+            } else {
+              const text = el.value.trim();
+              if (text) next[key] = text;
+            }
+          }
+          finish(Object.keys(next).length ? next : {});
+          closeModal({ force: true });
+        });
+      },
+    });
+  });
+}
+
+/** Der Optionen-Dialog eines Widgets. Aufloesen mit den neuen Optionen oder null. */
+async function openWidgetOptions(id, current = {}, { loadNotes = loadNoteCategories, loadLists = loadShoppingLists } = {}) {
+  const extMeta = getExtensionWidgetMeta(id);
+  if (extMeta?.optionsSchema) return openExtensionWidgetOptions(id, extMeta, current);
+
+  const options = { ...current };
+  const categories = id === 'tasks'
+    ? await loadTaskCategories()
+    : id === 'notes' ? await loadNotes() : [];
+  const wasteTypes = id === 'waste' ? await loadWasteTypes() : [];
+  // A missing catalog is different from a valid empty catalog. Closing with
+  // null makes the caller preserve current options instead of saving `{}` and
+  // silently erasing an existing category filter after a transient failure.
+  if (id === 'notes' && categories === null) {
+    window.yuvomi?.showToast(t('dashboard.loadError'), 'danger');
+    return null;
+  }
+  const shoppingLists = id === 'shopping' ? await loadLists() : [];
+  if (shoppingLists === null) {
+    window.yuvomi?.showToast(t('dashboard.loadError'), 'danger');
+    return null;
+  }
+  // Angehakt ist, was gespeichert UND noch da ist: eine geloeschte Liste hat
+  // keine Zeile mehr und faellt mit dem naechsten Speichern aus der Auswahl.
+  const pickedLists = new Set(normalizeShoppingListSelection(options.lists));
+
+  const body = id === 'calendar'
+    ? `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('dashboard.optionCalendarScope')}</legend>
+        <label class="widget-options__choice">
+          <input type="radio" name="cal-scope" value="all" ${options.scope === 'mine' ? '' : 'checked'}>
+          <span>${t('dashboard.optionCalendarAll')}</span>
+        </label>
+        <label class="widget-options__choice">
+          <input type="radio" name="cal-scope" value="mine" ${options.scope === 'mine' ? 'checked' : ''}>
+          <span>${t('calendar.assignedToMe')}</span>
+        </label>
+      </fieldset>
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('calendar.filtersLayers')}</legend>
+        <p class="widget-options__hint">${t('dashboard.optionCalendarBirthdaysHint')}</p>
+        <label class="widget-options__choice">
+          <input type="checkbox" name="cal-birthdays" ${options.birthdays === 'hide' ? '' : 'checked'}>
+          <span>${t('calendar.toggleBirthdays')}</span>
+        </label>
+      </fieldset>
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('dashboard.optionCalendarLimit')}</legend>
+        <p class="widget-options__hint">${esc(t('dashboard.optionCalendarLimitHint', { size: t('dashboard.widgetSizeWide') }))}</p>
+        ${EVENT_LIMIT_STEPS.map((step) => `
+        <label class="widget-options__choice">
+          <input type="radio" name="cal-limit" value="${step}" ${clampEventLimit(options.limit) === step ? 'checked' : ''}>
+          <span>${esc(getNumberFormat().format(step))}</span>
+        </label>`).join('')}
+      </fieldset>`
+    : id === 'waste'
+    ? `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('dashboard.optionWasteTypes')}</legend>
+        <p class="widget-options__hint">${t('dashboard.optionWasteTypesHint')}</p>
+        ${wasteTypes.length ? wasteTypes.map((wt) => `
+        <label class="widget-options__choice">
+          <input type="checkbox" name="waste-type" value="${wt.id}"
+                 ${(options.types ?? []).includes(wt.id) ? 'checked' : ''}>
+          <span>${esc(wt.name)}</span>
+        </label>`).join('') : `<p class="widget-options__hint">${t('dashboard.optionWasteTypesEmpty')}</p>`}
+      </fieldset>`
+    : id === 'shopping' ? `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('dashboard.optionShoppingLists')}</legend>
+        <p class="widget-options__hint">${t('dashboard.optionShoppingListsHint')}</p>
+        ${shoppingLists.length ? shoppingLists.map((list) => `
+        <label class="widget-options__choice">
+          <input type="checkbox" name="shopping-list" value="${esc(String(list.id))}"
+                 ${pickedLists.has(Number(list.id)) ? 'checked' : ''}>
+          <span>${esc(list.name)}</span>
+        </label>`).join('') : `<p class="widget-options__hint">${t('dashboard.noShoppingLists')}</p>`}
+      </fieldset>`
+    : id === 'tasks' ? `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('dashboard.optionTaskCategories')}</legend>
+        <p class="widget-options__hint">${t('dashboard.optionTaskCategoriesHint')}</p>
+        ${categories.length ? categories.map((c) => `
+        <label class="widget-options__choice">
+          <input type="checkbox" name="task-category" value="${esc(c.key)}"
+                 ${(options.categories ?? []).includes(c.key) ? 'checked' : ''}>
+          <span>${esc(taskCategoryLabel(c))}</span>
+        </label>`).join('') : `<p class="widget-options__hint">${t('dashboard.optionTaskCategoriesEmpty')}</p>`}
+      </fieldset>`
+    : `
+      <fieldset class="form-group widget-options__group">
+        <legend class="form-label">${t('noteCategories.categories')}</legend>
+        <p class="widget-options__hint">${t('noteCategories.widgetHint')}</p>
+        ${categories.length ? categories.map((category) => `
+        <label class="widget-options__choice">
+          <input type="checkbox" name="note-category" value="${category.id}"
+                 ${(options.categories ?? []).map(Number).includes(Number(category.id)) ? 'checked' : ''}>
+          <span><i data-lucide="${category.scope === 'personal' ? 'user' : 'home'}" aria-hidden="true"></i>${esc(noteCategoryName(category))}<span class="sr-only"> (${esc(noteCategoryScope(category))})</span></span>
+        </label>`).join('') : `<p class="widget-options__hint">${t('noteCategories.empty')}</p>`}
+      </fieldset>`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    openModal({
+      title: t('dashboard.optionsFor', { widget: widgetLabel(id) }),
+      size: 'sm',
+      content: `
+        <form id="widget-options-form" class="widget-options">
+          ${body}
+          <div class="modal-panel__footer modal-panel__footer--plain">
+            <button type="button" class="btn btn--secondary" data-action="cancel">${t('common.cancel')}</button>
+            <button type="submit" class="btn btn--primary">${t('common.save')}</button>
+          </div>
+        </form>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('[data-action="cancel"]').addEventListener('click', () => closeModal({ force: true }));
+        panel.querySelector('#widget-options-form').addEventListener('submit', (event) => {
+          event.preventDefault();
+          const next = {};
+          if (id === 'calendar') {
+            const scope = panel.querySelector('input[name="cal-scope"]:checked')?.value;
+            // „Alles" ist die Abwesenheit einer Einschraenkung und wird deshalb
+            // nicht gespeichert - sonst stuende in jedem Layout ein Feld, das
+            // den Auslieferungszustand wiederholt.
+            if (scope === 'mine') next.scope = 'mine';
+            // Dasselbe eine Zeile tiefer, nur andersherum notiert: gespeichert
+            // wird das ABWAEHLEN, nicht das Haekchen (#927).
+            if (!panel.querySelector('input[name="cal-birthdays"]')?.checked) next.birthdays = 'hide';
+            // Und die Stufe (#1680): gespeichert wird nur, was von der Vorgabe
+            // abweicht, als Zahl und durch die Klemme - ein Wert, den es im
+            // Dialog nicht gibt, kommt so auch nicht ins Layout.
+            const limit = clampEventLimit(panel.querySelector('input[name="cal-limit"]:checked')?.value);
+            if (limit !== EVENT_LIMIT_DEFAULT) next.limit = limit;
+          } else if (id === 'waste') {
+            const picked = [...panel.querySelectorAll('input[name="waste-type"]:checked')].map((el) => Number(el.value));
+            // Dieselbe Regel wie bei den Aufgaben-Kategorien: keine Auswahl
+            // heisst „alle" - eine seltene Abholung darf nie stillschweigend
+            // verschwinden, nur weil niemand den Dialog geoeffnet hat.
+            if (picked.length) next.types = picked;
+          } else if (id === 'shopping') {
+            // Keine Auswahl heisst „alle Listen" und wird nicht gespeichert -
+            // das Verhalten von vor der Option (#1818).
+            const picked = normalizeShoppingListSelection(
+              [...panel.querySelectorAll('input[name="shopping-list"]:checked')].map((el) => el.value),
+            );
+            if (picked.length) next.lists = picked;
+          } else if (id === 'tasks') {
+            const picked = [...panel.querySelectorAll('input[name="task-category"]:checked')].map((el) => el.value);
+            // Keine Auswahl heisst „alle" - eine leere Liste als Filter waere
+            // ein leeres Dashboard fuer jemanden, der nur den Dialog geoeffnet hat.
+            if (picked.length) next.categories = picked;
+          } else {
+            const picked = [...panel.querySelectorAll('input[name="note-category"]:checked')]
+              .map((el) => el.value);
+            if (picked.length) next.categories = picked;
+          }
+          finish(next);
+          closeModal({ force: true });
+        });
+      },
+    });
+  });
+}
+
+function renderWidgetCustomizeControls(w, index = 0, total = 1) {
+  const isFirst = index === 0;
+  const isLast = index === total - 1;
+  const activeSize = nearestPreset(w.size);
+
+  // Segmentiertes Größen-Steuerelement: vier klickbare Mini-Grid-Presets ersetzen
+  // die frühere Kombination aus dekorativem Mini-Grid + „Größe"-Label + 132px-
+  // <select> (Critique P1: doppelte Kontrolle + Overflow auf 1×1-Kacheln). Jeder
+  // Button zeigt seine Form direkt und markiert die aktive Größe.
+  const sizeButtons = WIDGET_SIZE_PRESETS.map((p) => {
+    const active = p.value === activeSize;
+    return `<button type="button" class="widget-size-btn${active ? ' widget-size-btn--active' : ''}"
+              data-widget-size-preset="${p.value}" data-widget-id="${esc(w.id)}"
+              aria-pressed="${active ? 'true' : 'false'}" aria-label="${esc(t(p.labelKey))}" title="${esc(t(p.labelKey))}">
+        ${renderSizeMiniGrid(p.value)}
+      </button>`;
+  }).join('');
+
+  // Die Leiste steht VOR der Ueberschrift der Kachel. Ohne eigenen Namen hoerte
+  // man per Tab je Kachel denselben Griff und dieselben Groessen - welche Kachel
+  // man anfasst, sagt erst die Gruppe.
+  return `
+    <div class="widget-edit-controls" role="group" aria-label="${esc(widgetLabel(w.id))}" data-widget-controls>
+      <span class="widget-edit-controls__caption" aria-hidden="true">${esc(widgetLabel(w.id))}</span>
+      <button type="button" class="widget-edit-controls__handle" data-widget-drag-handle
+              aria-label="${t('dashboard.customizeReorderHandle')}" aria-keyshortcuts="ArrowUp ArrowDown">
+        <i data-lucide="grip-vertical" aria-hidden="true"></i>
+      </button>
+      <div class="widget-edit-controls__move">
+        <button type="button" class="widget-edit-controls__move-btn" data-widget-move="up" data-widget-id="${esc(w.id)}"
+                ${isFirst ? 'disabled' : ''} aria-label="${t('dashboard.customizeMoveUp')}">
+          <i data-lucide="chevron-up" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="widget-edit-controls__move-btn" data-widget-move="down" data-widget-id="${esc(w.id)}"
+                ${isLast ? 'disabled' : ''} aria-label="${t('dashboard.customizeMoveDown')}">
+          <i data-lucide="chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="widget-edit-controls__size" role="group" aria-label="${t('dashboard.customizeSizeFor', { widget: widgetLabel(w.id) })}">
+        ${sizeButtons}
+      </div>
+      ${renderWidgetSizeMenu(w.id, activeSize)}
+      ${widgetHasOptions(w.id) ? `
+      <button type="button" class="widget-edit-controls__options" data-widget-options="${esc(w.id)}"
+              aria-label="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}"
+              title="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}">
+        <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+      </button>` : ''}
+      <button type="button" class="widget-edit-controls__hide" data-widget-hide="${esc(w.id)}" aria-label="${t('dashboard.customizeHide', { widget: widgetLabel(w.id) })}">
+        <i data-lucide="eye-off" aria-hidden="true"></i>
+      </button>
+    </div>
+  `;
+}
+
+/* EIN GROESSEN-MENUE MIT NUR WIRKSAMEN GROESSEN (R9 M7, A7 P1-2).
+ *
+ * Unter 768px ist das Raster EINE Spalte (dashboard.css, `.dashboard__grid`),
+ * und dort aendert die Breite einer Kachel nichts: 1x1 und 2x1 sehen gleich
+ * aus, 1x2 und 2x2 auch. Die vier Groessenknoepfe boten mobil also zwei
+ * Wahlen doppelt an und kosteten dafuer eine zweite Zeile je Kachel (114px
+ * Bedienleiste). Dort steht deshalb dieses Menue: ein Knopf mit der aktuellen
+ * Form, darin die zwei Hoehen bei gleicher Breite - die Breite bleibt, wie sie
+ * am Desktop gewaehlt wurde, weil sie nur dort wirkt. Welche der beiden Formen
+ * sichtbar ist, entscheidet dieselbe Grenze wie das Raster (dashboard.css).
+ * Die Eintraege tragen `data-widget-size-preset` wie die Knoepfe und laufen
+ * durch denselben Handler. */
+function renderWidgetSizeMenu(id, activeSize) {
+  const width = activeSize.split('x')[0] === '2' ? '2' : '1';
+  const panelId = `widget-size-menu-${id}`;
+  const label = t('dashboard.customizeSizeFor', { widget: widgetLabel(id) });
+  const items = WIDGET_SIZE_PRESETS.filter((p) => p.value.startsWith(`${width}x`)).map((p) => {
+    const checked = p.value === activeSize;
+    return `
+        <button type="button" role="menuitemradio" aria-checked="${checked}" class="popover-menu__item widget-size-menu__item"
+                data-widget-size-preset="${p.value}" data-widget-id="${esc(id)}">
+          ${renderSizeMiniGrid(p.value)}
+          <span>${esc(t(p.labelKey))}</span>
+          <i data-lucide="check" class="icon-md popover-menu__item-trail popover-menu__item-check${checked ? '' : ' popover-menu__item-check--hidden'}" aria-hidden="true"></i>
+        </button>`;
+  }).join('');
+  return `
+      <div class="widget-edit-controls__size-menu">
+        <button type="button" class="widget-edit-controls__size-trigger popover-menu__trigger" data-widget-size-menu="${esc(id)}"
+                popovertarget="${esc(panelId)}" aria-haspopup="menu" aria-expanded="false"
+                aria-label="${esc(label)}" title="${esc(label)}">
+          ${renderSizeMiniGrid(activeSize)}
+        </button>
+        <div class="popover-menu" id="${esc(panelId)}" popover role="menu">${items}
+        </div>
+      </div>`;
+}
+
+// Wieder-Einblenden-Leiste: schließt die Einbahnstraße des Inline-Modus. Ein im
+// Edit-Modus ausgeblendetes Widget landet als Chip hier und lässt sich mit einem
+// Klick zurückholen — so ist der Inline-Editor allein vollständig (Zeigen +
+// Verstecken + Größe + Reihenfolge) und das frühere zweite Editor-Modal entfällt.
+function renderHiddenWidgetsTray(cfg, glanceHidden = false) {
+  const hidden = cfg.filter((w) => !w.visible && allWidgetIds().includes(w.id) && isWidgetModuleEnabled(w.id));
+  if (!hidden.length && !glanceHidden) return '';
+  // Das Kopfband steht mit in dieser Leiste, obwohl es keine Rasterkachel ist:
+  // ausgeblendet waere es sonst nur ueber „Zuruecksetzen" zurueckzuholen.
+  const glanceChip = glanceHidden ? `
+    <button type="button" class="widget-restore-chip" data-glance-show
+            aria-label="${t('dashboard.customizeShow', { widget: t('dashboard.todayTitle') })}">
+      <i data-lucide="sun" class="widget-restore-chip__icon" aria-hidden="true"></i>
+      <span class="widget-restore-chip__label">${t('dashboard.todayTitle')}</span>
+      <i data-lucide="plus" class="widget-restore-chip__add" aria-hidden="true"></i>
+    </button>` : '';
+  /* DIE OPTIONEN MUESSEN AUCH AM AUSGEBLENDETEN WIDGET ERREICHBAR SEIN (#814).
+   * Aufgaben und Kalender sind ab Werk ausgeblendet - das Cockpit deckt ihre
+   * vier Domaenen bereits ab -, und ihre Optionen wirken trotzdem auf die ganze
+   * Seite: das Cockpit und das Kopfband sprechen ueber dieselben Aufgaben.
+   * Ohne diesen Knopf muesste man die Kachel erst einblenden, um einzustellen,
+   * was die Kachel gar nicht zeigt. Deshalb eine Gruppe statt eines Chips: ein
+   * Knopf im Knopf waere kein gueltiges Markup. */
+  const chips = glanceChip + hidden.map((w) => `
+    <div class="widget-restore-chip-group">
+      <button type="button" class="widget-restore-chip" data-widget-show="${esc(w.id)}"
+              aria-label="${t('dashboard.customizeShow', { widget: widgetLabel(w.id) })}">
+        <i data-lucide="${widgetIcon(w.id)}" class="widget-restore-chip__icon" aria-hidden="true"></i>
+        <span class="widget-restore-chip__label">${widgetLabel(w.id)}</span>
+        <i data-lucide="plus" class="widget-restore-chip__add" aria-hidden="true"></i>
+      </button>
+      ${widgetHasOptions(w.id) ? `
+      <button type="button" class="widget-restore-chip__options" data-widget-options="${esc(w.id)}"
+              aria-label="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}"
+              title="${esc(t('dashboard.optionsFor', { widget: widgetLabel(w.id) }))}">
+        <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+      </button>` : ''}
+    </div>`).join('');
+  return `
+    <section class="widget-restore" aria-label="${t('dashboard.customizeHiddenTitle')}">
+      <h3 class="widget-restore__title">${t('dashboard.customizeHiddenTitle')}</h3>
+      <div class="widget-restore__chips">${chips}</div>
+    </section>
+  `;
+}
+
+function renderDashboardLayout(cfg, data, weather, currency, { editing = false, visibleMealTypes = MEAL_ORDER, glanceHidden = false, familyManage = null } = {}) {
+  const widgetById = {
+    tasks: () => renderUrgentTasks(data.urgentTasks ?? [], data.openTaskCount),
+    calendar: (size, options) => renderCalendarWidget(data, size, options),
+    birthdays: (size) => renderUpcomingBirthdays(data.birthdays ?? [], size, data.birthdayTotal),
+    countdown: (size) => renderCountdowns(data.countdowns ?? [], size, data.countdownTotal),
+    budget: (size) => renderBudgetWidget(data.budget ?? {}, currency, size),
+    rewards: (size) => renderRewardsWidget(data.rewards ?? {}, size),
+    health: () => renderHealthWidget(data.health ?? {}),
+    cycle: () => renderCycleWidget(data.cycle),
+    fasting: () => renderFastingWidget(data.fasting),
+    nutrition: () => renderNutritionWidget(data.nutrition),
+    housekeeping: () => renderHousekeepingWidget(data.housekeeping ?? {}, currency),
+    schedule: (size) => renderScheduleWidget(data.schedule, data.users ?? [], size),
+    waste: (size) => renderWasteWidget(data.waste, size),
+    pantry: (size) => renderPantryWidget(data.pantryExpiring, size),
+    family: () => renderFamilyWidget(data.users ?? [], data, { manageHref: familyManage }),
+    meals: () => renderTodayMeals(data.todayMeals ?? [], visibleMealTypes, data.users),
+    notes: (size) => renderPinnedNotes(data.pinnedNotes ?? [], size, data.notesTotal),
+    shopping: () => renderShoppingTile(data),
+    // Hier ankommen heisst eingerichtet (`isWidgetModuleEnabled`); fehlt das
+    // Wetter trotzdem, sagt die Kachel es, statt zu verschwinden.
+    weather: () => (weather ? renderWeatherWidget(weather) : renderWeatherUnavailable()),
+    clock: () => renderClockWidget(),
+    quicklinks: () => renderQuickLinks(data.quicklinks ?? []),
+    // Die Kachelreihe braucht als einziges Widget zu wissen, wer sonst noch
+    // dasteht - sie ist die einzige, die fremde Zahlen zeigt. Gerechnet aus
+    // DERSELBEN Bedingung, nach der die Kacheln gleich gefiltert werden, damit
+    // die beiden nicht auseinanderlaufen; `metrics` selbst ist ausgenommen, es
+    // waere sonst sein eigener Grund zu schweigen.
+    // Dazu, welche Zahl das Heute-Blatt schon nennt (offene Freigaben): die
+    // Kein-Echo-Regel gilt auch zwischen Blatt und Kachel. Ein ausgeblendetes
+    // Blatt nennt nichts.
+    metrics: () => renderMetricTiles(data, currency, new Set(
+      cfg.filter((w) => w.visible && w.id !== 'metrics' && isWidgetModuleEnabled(w.id)).map((w) => w.id),
+    ), glanceHidden ? new Set() : todaySheetSpeaks(data, cfg)),
+  };
+
+  const tiles = cfg
+    .filter((w) => w.visible && isWidgetModuleEnabled(w.id) && (widgetById[w.id] || isExtensionWidget(w.id)))
+    .map((w, index, arr) => {
+      let html;
+      try {
+        if (isExtensionWidget(w.id)) {
+          html = `<div class="widget extension-widget-mount" data-extension-widget-mount="1">
+            <div class="widget__empty">${esc(t('common.loading'))}</div>
+          </div>`;
+        } else {
+          html = widgetById[w.id](w.size, w.options);
+        }
+      } catch (err) {
+        console.error(`[dashboard] Widget "${w.id}" konnte nicht gerendert werden`, err);
+        html = renderWidgetError(w.id);
+      }
+      if (!html) return '';
+      return `<div class="widget-wrapper ${widgetSizeClass(w.size)} ${editing ? 'widget-wrapper--editing' : ''}"
+                   data-widget-id="${esc(w.id)}" ${editing ? 'draggable="true"' : ''}>
+        ${editing ? renderWidgetCustomizeControls(w, index, arr.length) : ''}
+        ${html}
+      </div>`;
+    })
+    .join('');
+
+  // Alle Widgets ausgeblendet: kein toter Screen, sondern ein Hinweis zurück
+  // in die Anpassung (das Cockpit oben bleibt als Orientierung erhalten).
+  const gridInner = tiles
+    || emptyHintHTML(t('dashboard.allWidgetsHidden'), { icon: 'layout-dashboard' });
+  // Dicht gepackt in jedem Zustand (dashboard.css, `.dashboard__grid`): die
+  // Reihenfolge ist die Rangfolge, kein Schalter mehr fuer umsortierte Layouts.
+  /* DAS RASTER HAT SEINE EIGENE UEBERSCHRIFT (Critique 2026-09-23). Ohne sie
+   * hingen alle Widget-h3 unter der h2 „Heute wichtig" - wer per Ueberschriften
+   * navigiert, hielt Budget, Wetter und Notizen fuer Teile des Kopfbands, und
+   * wer das Kopfband ausblendet, hatte gar keine h2 mehr ueber ihnen. Sichtbar
+   * waere sie ein drittes Etikett ueber Kacheln, die ihre eigenen Koepfe tragen;
+   * gebraucht wird sie nur als Gliederungsebene. Das Wort ist dasselbe, das die
+   * Anpassen-Leiste benutzt („Widgets anpassen", „Ausgeblendete Widgets"). */
+  const heading = `<h2 class="sr-only" id="dashboard-widgets-title">${esc(t('dashboard.widgetsHeading'))}</h2>`;
+  const grid = `<div class="dashboard__grid ${editing ? 'dashboard__grid--editing' : ''}" id="dashboard-widget-grid"
+                    role="region" aria-labelledby="dashboard-widgets-title">${gridInner}</div>`;
+  // Im Bearbeiten-Modus steht die Wieder-Einblenden-Leiste UEBER dem Raster
+  // (R14, A7 P2-2), wie die Widget-Galerie in iOS: mobil lag der Vorrat mit 14
+  // Chips unter 3924px Raster, und wer eine Kachel zurueckholen wollte, musste
+  // an allen anderen vorbei. Sie bleibt der Ausweg aus der Sackgasse
+  // „ausgeblendet", nur jetzt am Anfang des Wegs.
+  return `${heading}${editing ? `${renderHiddenWidgetsTray(cfg, glanceHidden)}${grid}` : grid}`;
+}
+
+/* DAS SKELETT VERSPRICHT DAS LAYOUT, DAS GLEICH KOMMT (Critique R1, A10).
+ * Es zeichnete das Standard-Raster, waehrend die eigene Anordnung erst mit
+ * `/preferences` eintrifft - wer sein Dashboard umgebaut hatte, sah beim Laden
+ * jedes Mal fremde Kacheln aufblitzen und dann umspringen. Ein Ladezustand,
+ * der etwas anderes zeigt als das Ergebnis, ist kein Platzhalter, sondern ein
+ * kurzer falscher Bildschirm.
+ *
+ * Der Cache ist bewusst duenn: nur Sichtbarkeit und Groesse, also genau das,
+ * was die Kachelform bestimmt. Er ist eine VORHERSAGE, keine Quelle - die
+ * Wahrheit bleibt die Serverantwort, und ein veralteter oder kaputter Eintrag
+ * faellt still auf den Standard zurueck.
+ *
+ * Er liegt in utils/dashboard-layout-hint.js, weil er seit #585 auch beim
+ * Abmelden verworfen werden muss - die Begruendung steht dort. */
+
+function renderDashboardSkeleton() {
+  const tiles = layoutHintSizes(buildDefaultWidgetConfig().filter((w) => w.visible).map((w) => w.size))
+    .map((size) => `<div class="widget-wrapper ${widgetSizeClass(size)}">${skeletonWidget(3)}</div>`)
+    .join('');
+  return `
+    <section class="dashboard-overview">
+      <div class="dashboard-overview__header">
+        <div>
+          <div class="skeleton skeleton-line skeleton-line--short"></div>
+          <div class="skeleton skeleton-line skeleton-line--medium"></div>
+        </div>
+      </div>
+    </section>
+    <div class="dashboard__grid">${tiles}</div>
+  `;
+}
+
+// Distinkter Fehlerzustand: verhindert, dass ein Ladefehler wie ein ruhiger,
+// leerer Tag aussieht (falsch beruhigend). Bietet einen Retry, der neu lädt.
+// Die Meldung unterscheidet Sitzungsablauf (401/403) und Serverfehler (5xx)
+// von einem generischen Verbindungsproblem — Retry hilft nicht überall gleich.
+function renderDashboardError(status = null) {
+  const messageKey = status === 401 || status === 403
+    ? 'dashboard.loadErrorSession'
+    : (typeof status === 'number' && status >= 500)
+      ? 'dashboard.loadErrorServer'
+      : 'dashboard.loadError';
+  return `
+    <div class="dashboard-error" role="alert">
+      <i data-lucide="cloud-off" class="dashboard-error__icon" aria-hidden="true"></i>
+      <p class="dashboard-error__text">${t(messageKey)}</p>
+      <button type="button" class="btn btn--secondary" id="dashboard-retry">
+        <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        ${t('common.retry')}
+      </button>
+    </div>
+  `;
+}
+
+// Inline-Fehlerkachel für ein einzelnes Widget (siehe Fehler-Isolation in
+// renderDashboardLayout). Nutzt die vorhandene .widget/.widget__empty-Grammatik,
+// damit sie sich ruhig einreiht statt wie ein Systemfehler zu schreien.
+function renderWidgetError(id) {
+  return `<div class="widget widget--error" role="alert">
+    <div class="widget__header">
+      <span class="widget__title">
+        <i data-lucide="${widgetIcon(id)}" class="widget__title-icon" aria-hidden="true"></i>
+        ${widgetLabel(id)}
+      </span>
+    </div>
+    <div class="widget__empty">
+      <i data-lucide="cloud-off" class="empty-state__icon" aria-hidden="true"></i>
+      <div>${t('dashboard.widgetError')}</div>
+      <button type="button" class="btn btn--secondary widget__retry" data-widget-retry="${esc(id)}">
+        <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        ${t('common.retry')}
+      </button>
+    </div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Shopping-Widget
+// --------------------------------------------------------
+
+/**
+ * Was die Einkaufs-Kachel aus der Antwort liest (#1818). Mit einer Auswahl
+ * liefert die Route `shoppingTile` - die gewaehlten Listen, die offenen Artikel
+ * darin und wie viele gewaehlte Listen es gibt. Ohne Auswahl (oder wenn das
+ * Feld fehlt) gelten die Felder, die auch das Heute-Blatt und die Wand lesen.
+ * Die Kachel ist der EINZIGE Leser von `shoppingTile`.
+ */
+function renderShoppingTile(data) {
+  const tile = data?.shoppingTile;
+  if (tile && Array.isArray(tile.lists)) {
+    return renderShoppingLists(tile.lists, tile.openCount, tile.listCount);
+  }
+  return renderShoppingLists(data?.shoppingLists ?? [], data?.shoppingOpenCount, data?.shoppingOpenLists);
+}
+
+function renderShoppingLists(lists, openTotal = null, listTotalCount = null) {
+  if (!lists.length) {
+    return `<div class="widget widget--shopping">
+      ${widgetHeader('shopping', t('nav.shopping'), 0, '/shopping')}
+      <div class="widget__empty">
+        <i data-lucide="shopping-cart" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.noShoppingLists')}</div>
+        ${emptyStateCta('/shopping', t('shopping.newListButton'))}
+      </div>
+    </div>`;
+  }
+
+  // Der Server liefert hoechstens drei Listen und zaehlt daneben, woraus sie
+  // geschnitten sind (listTotal): ohne Auswahl ueber alle Listen mit Offenem
+  // (`shoppingOpenCount`, `shoppingOpenLists`), mit Auswahl ueber die
+  // gewaehlten (`shoppingTile.openCount`, `.listCount`). Ohne die Zahlen
+  // bleibt es bei der Summe der geladenen Listen.
+  const totalOpen = listTotal(openTotal, lists.reduce((sum, l) => sum + l.open_count, 0));
+  // "+n weitere Listen" nennt, was der Deckel abschneidet. OHNE Auswahl sind
+  // das Listen mit Offenem, und jede gezeigte hat welches. MIT Auswahl (#1818)
+  // ist es JEDE gewaehlte Liste, auch eine fertig gekaufte: "eine gewaehlte
+  // Liste bleibt stehen" haelt nur, wenn die abgeschnittene als "+1" da ist.
+  const moreLists = listTotal(listTotalCount, lists.length) - lists.length;
+
+  const listsHtml = lists.map((list) => {
+    const progress = list.total_count > 0
+      ? Math.round(((list.total_count - list.open_count) / list.total_count) * 100)
+      : 0;
+
+    const itemsHtml = list.items.map((item) => `
+      <div class="shopping-widget-item">
+        <span class="shopping-widget-item__dot"></span>
+        <span class="shopping-widget-item__name">${esc(item.name)}</span>
+        ${item.quantity ? `<span class="shopping-widget-item__qty">${esc(item.quantity)}</span>` : ''}
+      </div>
+    `).join('');
+
+    const moreCount = list.open_count - list.items.length;
+
+    // JEDE ZEILE MEINT EINE LISTE, also fuehrt sie auch dorthin. Ein blankes
+    // `/shopping` oeffnet die erste Liste der Einkaufsseite (die aelteste),
+    // waehrend die Kachel die zuletzt geaenderte zuerst zeigt - der Tipp auf
+    // "Drogerie" landete im Wocheneinkauf. Der Kachelkopf bleibt beim blanken
+    // Pfad: er zaehlt ueber mehrere Listen (alle, oder die gewaehlten) und ist
+    // der Sammelverweis. Eine inzwischen geloeschte id faellt
+    // auf der Einkaufsseite auf die erste Liste zurueck.
+    const listRoute = `/shopping?list=${encodeURIComponent(String(list.id))}`;
+
+    return `
+      <div class="shopping-widget-list" data-route="${esc(listRoute)}" role="button" tabindex="0">
+        <div class="shopping-widget-list__header">
+          <span class="shopping-widget-list__name">${esc(list.name)}</span>
+          <span class="shopping-widget-list__count">${list.total_count - list.open_count}/${list.total_count}</span>
+        </div>
+        <div class="shopping-widget-list__progress">
+          <div class="shopping-widget-list__bar" style="--progress-scale:${progress / 100}"></div>
+        </div>
+        <div class="shopping-widget-list__items">
+          ${itemsHtml}
+          ${moreCount > 0 ? `<div class="shopping-widget-item shopping-widget-item--more">${t('dashboard.shoppingMore', { count: moreCount })}</div>` : ''}
+          ${/* Eine AUSGEWAEHLTE Liste steht auch ohne Offenes da (#1818): die
+                Zeile bleibt der Weg zu ihr und sagt, warum sie leer ist. */ ''}
+          ${list.open_count === 0 ? `<div class="shopping-widget-item shopping-widget-item--more">${esc(t('dashboard.shoppingListNothingOpen'))}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="widget widget--shopping">
+    ${widgetHeader('shopping', t('nav.shopping'), totalOpen, '/shopping')}
+    <div class="widget__body">${listsHtml}${listMoreLine('dashboard.shoppingMoreLists', moreLists)}</div>
+  </div>`;
+}
+
+// --------------------------------------------------------
+// Wetter-Widget
+// --------------------------------------------------------
+
+const WEATHER_ICON_BASE = '/api/v1/weather/icon/';
+
+// Geteilte Wetter-Bausteine für Karte UND Masthead-Zeile: Open-Meteo liefert
+// Lucide-Icon-Namen + wmo.*-i18n-Keys; OWM (Legacy) liefert OWM-Icon-Codes
+// (via /icon-Proxy) + bereits lokalisierten Beschreibungstext. OWM-Legacy kann
+// zudem 'standard' (Kelvin) liefern; Open-Meteo nur metric/imperial.
+function weatherUnitSymbol(units) {
+  return units === 'imperial' ? '°F' : units === 'standard' ? 'K' : '°C';
+}
+
+function weatherDescText(weather, desc) {
+  return weather?.provider === 'open-meteo' ? t(desc) : desc;
+}
+
+function weatherIconHtml(weather, icon, cls, size, desc) {
+  if (weather?.provider === 'open-meteo') {
+    return `<i data-lucide="${esc(icon)}" class="${cls}" aria-hidden="true"></i>`;
+  }
+  return `<img class="${cls}" src="${WEATHER_ICON_BASE}${esc(icon)}"
+           alt="${esc(desc)}" width="${size}" height="${size}" loading="lazy">`;
+}
+
+/**
+ * Die Wetterlage als Ton (tokens.css 5b) - sechs Werte, aus dem Icon-Namen
+ * abgeleitet und NICHT aus dem Beschreibungstext: der ist lokalisiert und in
+ * der OWM-Fassung sogar frei formuliert, das Icon dagegen ist beim selben
+ * Provider immer derselbe Schlüssel.
+ *
+ * BEIDE PROVIDER LAUFEN DURCH DIESELBE FUNKTION, weil sie zwei Schreibweisen
+ * für dieselbe Sache liefern: Open-Meteo Lucide-Namen (`cloud-rain`), OWM
+ * Legacy dreistellige Codes mit Tag/Nacht-Suffix (`10d`). Zwei Funktionen
+ * hätten sich beim nächsten neuen Zustand getrennt.
+ *
+ * Ein unbekannter Schlüssel liefert bewusst `null`: das Widget fällt dann auf
+ * seinen bisherigen Modulton zurück, statt eine falsche Lage zu behaupten.
+ */
+function weatherToneKey(icon) {
+  const key = String(icon || '');
+  if (/^\d{2}[dn]$/.test(key)) {
+    const code = key.slice(0, 2);
+    const night = key.endsWith('n');
+    if (code === '01') return night ? 'night' : 'clear';
+    if (code === '02') return night ? 'night' : 'clear';
+    if (code === '09' || code === '10') return 'rain';
+    if (code === '11') return 'storm';
+    if (code === '13') return 'snow';
+    return 'cloud';                      // 03, 04, 50 (Nebel/Dunst)
+  }
+  if (key === 'sun') return 'clear';
+  if (key === 'cloud-sun') return 'clear';
+  if (key === 'moon' || key === 'cloud-moon') return 'night';
+  if (key === 'cloud-lightning') return 'storm';
+  if (key === 'cloud-snow') return 'snow';
+  if (key === 'cloud-rain' || key === 'cloud-drizzle') return 'rain';
+  if (key === 'cloud') return 'cloud';
+  return null;
+}
+
+function weatherToneAttr(icon) {
+  const tone = weatherToneKey(icon);
+  return tone ? ` data-weather-tone="${tone}"` : '';
+}
+
+/**
+ * Die Gangart der Glyphe - vier Bewegungen, und jede sagt, was sie zeigt:
+ * `rays` dreht die Sonnenstrahlen um ihre Scheibe, `drift` lässt die Wolke
+ * ziehen, `fall` schickt Tropfen und Flocken nach unten, `flash` lässt den
+ * Blitz aufleuchten. Klare Nacht bekommt keine - ein Mond zieht nicht.
+ *
+ * WARUM DAS NICHT AM TON HÄNGT: `sun` und `cloud-sun` tragen denselben Ton
+ * (Bernstein), bewegen sich aber gegensätzlich. Bei `sun` sind alle `<path>`
+ * die Strahlen und dürfen rotieren; bei `cloud-sun` ist die Wolke selbst ein
+ * `<path>` und würde mitdrehen. Ein gemeinsames Attribut hätte die beiden
+ * genau einmal verwechselt, und zwar sichtbar.
+ *
+ * Die Bewegung sitzt in Kindknoten der Lucide-SVGs (Strahlen, Tropfen, Blitz),
+ * die dort eine feste Reihenfolge haben (v0.469.0: Wolke zuerst, Niederschlag
+ * danach). Ändert Lucide seinen Aufbau, greift die Regel nicht mehr und die
+ * Glyphe steht still - der schlechtestmögliche Ausgang ist kein Defekt.
+ */
+function weatherMotionAttr(icon) {
+  const key = String(icon || '');
+  const owm = /^(\d{2})([dn])$/.exec(key);
+  const code = owm?.[1];
+  // HIER STAND `key.endsWith('n')` FÜR BEIDE ZWEIGE, und „sun" endet auf n:
+  // die Sonne hat ihre Strahlen nie gedreht. Das Tag/Nacht-Suffix ist eine
+  // Eigenheit der OWM-Codes und wird deshalb auch nur dort gelesen - aus dem
+  // Lucide-Namen kommt es nie.
+  if (key === 'sun') return ' data-weather-motion="rays"';
+  if (key === 'moon') return '';
+  if (code === '01') return owm[2] === 'n' ? '' : ' data-weather-motion="rays"';
+  if (key === 'cloud-rain' || key === 'cloud-drizzle' || key === 'cloud-snow'
+      || code === '09' || code === '10' || code === '13') {
+    return ' data-weather-motion="fall"';
+  }
+  if (key === 'cloud-lightning' || code === '11') return ' data-weather-motion="flash"';
+  if (key === 'cloud' || key === 'cloud-sun' || key === 'cloud-moon'
+      || code === '02' || code === '03' || code === '04' || code === '50') {
+    return ' data-weather-motion="drift"';
+  }
+  return '';
+}
+
+/**
+ * Fünf Temperaturbänder für die Verlaufszeile (tokens.css 5b).
+ *
+ * DIE SCHWELLEN STEHEN IN DER JEWEILIGEN EINHEIT, nicht als Umrechnung einer
+ * Celsius-Zahl: „unter null" ist im Fahrenheit-Haushalt 32 °F und nicht
+ * 31,999. Die drei Leitern sind dieselben Grenzen, dreimal ausgeschrieben -
+ * eine Umrechnung im Code hätte an den Rundungsstellen andere Bänder ergeben
+ * als die Zahl daneben.
+ */
+const WEATHER_BANDS = ['icy', 'cold', 'mild', 'warm', 'hot'];
+const WEATHER_BAND_EDGES = {
+  metric:   [0, 10, 20, 28],
+  imperial: [32, 50, 68, 82],
+  standard: [273, 283, 293, 301],
+};
+
+/**
+ * `Number(null)` ist 0 und `Number('')` auch - beides sind gueltige
+ * Temperaturen, und ein fehlender Wert waere damit stillschweigend zu
+ * „0 Grad, also kalt" geworden. Ein Test hat genau das gefunden. Die 0 selbst
+ * muss durch: sie ist der haeufigste Winterwert.
+ */
+function weatherNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function weatherTempBand(temp, units) {
+  const value = weatherNumber(temp);
+  if (value === null) return null;
+  const edges = WEATHER_BAND_EDGES[units] || WEATHER_BAND_EDGES.metric;
+  let i = 0;
+  while (i < edges.length && value >= edges[i]) i += 1;
+  return WEATHER_BANDS[i];
+}
+
+// Wetter als Masthead-Zeile (Seele-Paket): beiläufiger Kontext unterm Gruß
+// (Apple-Today-Muster) statt einer eigenen Karte - die Karte bleibt als Opt-in
+// für Wandtablets im Anpassen-Tray. Kein Echo: ist die Karte sichtbar, reicht
+// der Aufrufer kein weather herein und die Zeile entfällt.
+function mastheadWeatherHtml(weather, { card = false } = {}) {
+  if (!weather?.current) return '';
+  const desc = weatherDescText(weather, weather.current.desc);
+  // MIT KARTE NUR MOBIL (R19, Entscheidung Ulas 2026-10-16): die Wetterkarte
+  // stand auf dem Telefon bei y 1438 - die Kurzzeile unterm Gruss sagt das
+  // Jetzt sofort, die Karte weiter unten behaelt die Vorhersage. Ab 768px,
+  // wo die Karte neben dem Kopf im Bild steht, schliessen sich beide weiter
+  // aus (`--card`, dashboard.css).
+  return `
+    <p class="dashboard-overview__weather${card ? ' dashboard-overview__weather--card' : ''}"${weatherToneAttr(weather.current.icon)}>
+      ${weatherIconHtml(weather, weather.current.icon, 'dashboard-overview__weather-icon', 18, desc)}
+      <span>${esc(String(weather.current.temp))}${weatherUnitSymbol(weather.units)} · ${esc(desc)}</span>
+    </p>`;
+}
+
+/**
+ * Wie heisst dieser Vorhersagetag?
+ *
+ * Aus dem DATUM, nie aus der Position. Die Position war die Falle (#851): der
+ * Server trennt den laufenden Tag aus `forecast` heraus, `forecast[0]` ist also
+ * morgen - hart als „Heute" beschriftet las sich die Reihe, als fehle ein Tag.
+ *
+ * Bezugsgroesse ist `weather.today.date`, der Kalendertag AM WETTERORT. Weder die
+ * Browser- noch die Haushaltszone taugt dafuer: ein Wetterort darf in einer
+ * dritten Zone liegen, und welcher Tag dort gerade laeuft, weiss nur der
+ * Provider. Fehlt die Angabe, bleibt es beim Wochentag - lieber kein „Heute" als
+ * ein falsches.
+ */
+function weatherIsToday(weather, dateKey) {
+  const ref = weather?.today?.date;
+  return Boolean(ref) && dateKey === ref;
+}
+
+function weatherDayLabel(weather, dateKey) {
+  if (weatherIsToday(weather, dateKey)) return t('common.today');
+  return new Intl.DateTimeFormat(getLocale(), { weekday: 'short' })
+    .format(new Date(`${dateKey}T12:00:00`));
+}
+
+/**
+ * Hoch und Tief des laufenden Tages, in demselben Vokabular wie die Reihe
+ * darunter (semibold Hoch, gedaempftes Tief). Sie stehen im Hauptblock, weil der
+ * Hauptblock heute IST - ohne sie trug die Karte fuer jeden Folgetag eine
+ * Spanne, fuer heute aber nur den Momentanwert (#851).
+ */
+function weatherTodayRange(weather, cls) {
+  const hi = weatherNumber(weather?.today?.temp_max);
+  const lo = weatherNumber(weather?.today?.temp_min);
+  if (hi === null || lo === null) return '';
+  // Zwei nackte Zahlen nebeneinander sagen vorgelesen nichts - die Auszeichnung
+  // traegt die Bedeutung, die das Schriftbild optisch schon hat.
+  const aria = esc(t('dashboard.weatherHighLow', { max: hi, min: lo }));
+  // `role="img"` und nicht nur `aria-label`: auf einem rollenlosen <span> mit
+  // ausschliesslich aria-hidden-Kindern haengt die Auszeichnung an nichts und
+  // wird stellenweise gar nicht angesagt (dasselbe Paar wie beim Dosen-Balken
+  // und beim Zyklus-Ring weiter oben).
+  return `<span class="${cls}" role="img" aria-label="${aria}">
+      <span class="${cls}-high" aria-hidden="true">${esc(String(hi))}°</span>
+      <span class="${cls}-low" aria-hidden="true">${esc(String(lo))}°</span>
+    </span>`;
+}
+
+/**
+ * Die Tagesspanne der Verlaufszeile, normiert auf die Spanne der GANZEN
+ * Vorhersage. Erst dadurch sagt der Balken etwas: eine Zeile aus fünf gleich
+ * langen Balken wäre Dekoration, eine Zeile, in der der Mittwoch nach oben
+ * rutscht, ist eine Auskunft.
+ *
+ * Zwei Randfälle, beide gemessen und nicht gedacht: eine flache Woche (alle
+ * Tage gleich) ergäbe 0/0 und damit einen unsichtbaren Balken, ein einzelner
+ * warmer Tag einen Strich von einem Pixel. Deshalb die Mindestlänge - der
+ * Balken bleibt auch dann ein Balken, wenn die Woche nichts zu erzählen hat.
+ */
+const WEATHER_SPAN_MIN = 0.14;
+
+function weatherSpanModel(forecast) {
+  const days = Array.isArray(forecast) ? forecast : [];
+  const values = days.flatMap((d) => [weatherNumber(d.temp_min), weatherNumber(d.temp_max)])
+    .filter((v) => v !== null);
+  if (values.length < 2) return null;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo;
+  return (d) => {
+    const min = weatherNumber(d.temp_min);
+    const max = weatherNumber(d.temp_max);
+    if (min === null || max === null) return null;
+    let from = span > 0 ? (min - lo) / span : 0;
+    let to   = span > 0 ? (max - lo) / span : 1;
+    if (to - from < WEATHER_SPAN_MIN) {
+      const mid = (from + to) / 2;
+      from = Math.max(0, Math.min(1 - WEATHER_SPAN_MIN, mid - WEATHER_SPAN_MIN / 2));
+      to = from + WEATHER_SPAN_MIN;
+    }
+    return { from, to };
+  };
+}
+
+function renderWeatherWidget(weather) {
+  if (!weather) return '';
+
+  const { city, current, forecast, units } = weather;
+
+  const unitSymbol = weatherUnitSymbol(units);
+  const windUnit   = units === 'imperial' ? 'mph' : 'km/h';
+
+  const descText = (desc) => weatherDescText(weather, desc);
+  const iconHtml = (icon, cls, size, desc) => weatherIconHtml(weather, icon, cls, size, desc);
+
+  const spanOf = weatherSpanModel(forecast);
+
+  const forecastHtml = forecast.map((d, i) => {
+    const label = weatherDayLabel(weather, d.date);
+    const extraCls = i >= 3 ? ' weather-forecast__day--extended' : '';
+    // Der Balken trägt das Band der HÖCHSTtemperatur: sie ist die Zahl, nach
+    // der ein Tag eingeschätzt wird ("wird es warm?"), und sie steht daneben.
+    const band = weatherTempBand(d.temp_max, units);
+    const span = spanOf?.(d);
+    const spanHtml = span
+      ? `<div class="weather-forecast__span"${band ? ` data-weather-band="${band}"` : ''}
+              style="--span-from:${span.from.toFixed(4)};--span-to:${span.to.toFixed(4)}" aria-hidden="true"></div>`
+      : '';
+    return `
+      <div class="weather-forecast__day${extraCls}">
+        <div class="weather-forecast__label${weatherIsToday(weather, d.date) ? ' weather-forecast__label--today' : ''}">${esc(label)}</div>
+        ${iconHtml(d.icon, 'weather-forecast__icon', 32, descText(d.desc))}
+        <div class="weather-forecast__temps">
+          <span class="weather-forecast__high">${d.temp_max}°</span>
+          <span class="weather-forecast__low">${d.temp_min}°</span>
+        </div>
+        ${spanHtml}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="widget widget--weather weather-widget" id="weather-widget"${weatherToneAttr(current.icon)}${weatherMotionAttr(current.icon)}>
+      ${widgetHeader('weather', t('dashboard.weather'), null, null, null, 'dashboard')}
+      <button class="weather-widget__refresh" id="weather-refresh-btn" aria-label="${t('dashboard.weatherRefresh')}" title="${t('dashboard.weatherRefreshTitle')}">
+        <i data-lucide="refresh-cw" class="icon-md" aria-hidden="true"></i>
+      </button>
+      <div class="weather-widget__inner">
+        <div class="weather-widget__main">
+          <div class="weather-widget__left">
+            <div class="weather-widget__temp">${esc(current.temp)}${unitSymbol}</div>
+            ${weatherTodayRange(weather, 'weather-widget__range')}
+            <div class="weather-widget__desc">${esc(descText(current.desc))}</div>
+            <div class="weather-widget__city">${esc(city)}</div>
+            <div class="weather-widget__meta">
+              ${t('dashboard.weatherFeelsLike', { temp: current.feels_like, humidity: current.humidity, wind: current.wind_speed, windUnit })}
+            </div>
+          </div>
+          <span class="weather-widget__glyph">${iconHtml(current.icon, 'weather-widget__icon', 80, descText(current.desc))}</span>
+        </div>
+        ${forecast.length ? `<div class="weather-forecast">${forecastHtml}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+// Eingerichtet, aber gerade kein Wetter (Anbieter aus, Netz weg). Dieselbe
+// Leerzustand-Grammatik wie die uebrigen Kacheln, aber kein `role="alert"` wie
+// die Fehlerkachel: das hier ist ein Zustand, den der Nutzer nicht verschuldet
+// und nicht beheben muss, und er soll nicht bei jedem Aufbau vorgelesen werden.
+// Der Aktualisieren-Knopf bleibt - er ist der Weg zurueck, und
+// `wireWeatherRefresh` tauscht die Kachel bei Erfolg aus.
+function renderWeatherUnavailable() {
+  return `
+    <div class="widget widget--weather weather-widget weather-widget--unavailable" id="weather-widget">
+      ${widgetHeader('weather', t('dashboard.weather'), null, null, null, 'dashboard')}
+      <button class="weather-widget__refresh" id="weather-refresh-btn" aria-label="${t('dashboard.weatherRefresh')}" title="${t('dashboard.weatherRefreshTitle')}">
+        <i data-lucide="refresh-cw" class="icon-md" aria-hidden="true"></i>
+      </button>
+      <div class="widget__empty">
+        <i data-lucide="cloud-off" class="empty-state__icon" aria-hidden="true"></i>
+        <div>${t('dashboard.weatherUnavailable')}</div>
+      </div>
+    </div>`;
+}
+
+// --------------------------------------------------------
+// Uhr-Widget (#651)
+// --------------------------------------------------------
+
+/**
+ * Zeit und Datum für die Uhr. Beides folgt den Formatpräferenzen des Nutzers
+ * (12h/24h über formatTime, Datumsreihenfolge über formatDate); der Wochentag
+ * kommt aus der Locale davor, weil er auf einem Wandbildschirm die eigentliche
+ * Auskunft ist - „welcher Tag ist heute" fragt niemand nach der Ziffernfolge.
+ */
+function clockWidgetParts(now = new Date()) {
+  // Alle drei Teile lesen dieselbe Uhr. Vorher folgten Zeit und Datum bereits
+  // der Haushaltszone (ueber formatTime/formatDate), Wochentag und Maschinenzeit
+  // aber noch dem Browser - auf einem Wandbildschirm in einer anderen Zone
+  // haette dieselbe Kachel zwei Tage gezeigt.
+  const f = nowFields(now);
+  const weekday = new Intl.DateTimeFormat(getLocale(), {
+    weekday: 'long', timeZone: 'UTC',
+  }).format(zonedUTCProxy(now));
+  return {
+    time: formatTime(now),
+    date: `${weekday}, ${formatDate(now)}`,
+    machineTime: `${String(f.hour).padStart(2, '0')}:${String(f.minute).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * @param {{wall?: boolean}} [options] `wall` nimmt der Uhr die Kachel: im
+ *   Wand-Modus ist sie keine Kachel im Raster, sondern der Anker der Flaeche.
+ *   Ihre IDs bleiben dieselben - der Minutentakt (`updateClockWidget`) findet
+ *   sie so in beiden Zustaenden, statt ein zweites Mal geschrieben zu werden.
+ */
+function renderClockWidget({ wall = false } = {}) {
+  const { time, date, machineTime } = clockWidgetParts();
+  const cls = wall ? 'clock-widget clock-widget--wall' : 'widget widget--clock clock-widget';
+  // SPERRZONE FUER MELDUNGEN, NUR AN DER WAND (#1917): dort steht der Stapel
+  // oben (#1559) und lag bis rund 834px Breite auf Uhrzeit und Datum. Das
+  // Attribut liest utils/toast-placement.js; ausgezeichnet sind die beiden
+  // Zeilen selbst, nicht ihr Rahmen - der ist so breit wie die Flaeche, und
+  // der Hinweis wiche ihm auch dort, wo er neben der Uhr Platz hat.
+  const keepout = wall ? ' data-toast-keepout' : '';
+  const body = `
+    <time class="clock-widget__time" id="clock-widget-time" datetime="${esc(machineTime)}"${keepout}>${esc(time)}</time>
+    <p class="clock-widget__date" id="clock-widget-date"${keepout}>${esc(date)}</p>`;
+  // Kachel-Form bekommt seit dem Polish-Batch (PLAN.md #7) denselben
+  // Siegel+Titel-Kopf wie ihre 15 Geschwister-Widgets - vorher eines von zwei
+  // Widgets ganz ohne Kopf (das andere war das Wetter). Die Wand-Form bleibt
+  // unveraendert kopflos: dort ist die Uhr der Anker der Flaeche, keine
+  // Kachel unter anderen, und ihre Kinder bleiben deshalb ungewrappt.
+  if (wall) {
+    return `<div class="${cls}" id="clock-widget">${body}</div>`;
+  }
+  return `
+    <div class="${cls}" id="clock-widget">
+      ${widgetHeader('clock', t('dashboard.clock'), null, null, null, 'dashboard')}
+      <div class="widget__body clock-widget__body">${body}</div>
+    </div>`;
+}
+
+/**
+ * Hält die Uhr aktuell. Minutentakt statt Sekunden: die Anzeige kennt keine
+ * Sekunden, ein Sekundentimer wäre 60-fache Arbeit für dasselbe Bild. Der
+ * Timeout zielt auf die nächste volle Minute, damit der Wechsel dann passiert,
+ * wenn er auch auf jeder anderen Uhr im Raum passiert.
+ *
+ * Der Ticker läuft unabhängig davon, ob das Widget gerade sichtbar ist: das
+ * Raster wird beim Anpassen neu aufgebaut, und ein Tick, der die Elemente nicht
+ * findet, kostet nichts - eine Anmeldung an jeden Umbau dagegen schon.
+ */
+function updateClockWidget(container) {
+  const timeEl = container.querySelector('#clock-widget-time');
+  if (!timeEl) return;
+  const { time, date, machineTime } = clockWidgetParts();
+  timeEl.textContent = time;
+  timeEl.setAttribute('datetime', machineTime);
+  const dateEl = container.querySelector('#clock-widget-date');
+  if (dateEl) dateEl.textContent = date;
+}
+
+function startClockTicker(container, signal, onTick = null) {
+  let timerId = null;
+
+  const tick = () => {
+    updateClockWidget(container);
+    onTick?.();
+    schedule();
+  };
+
+  const schedule = () => {
+    const now = new Date();
+    const msToNextMinute = 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds());
+    timerId = setTimeout(tick, msToNextMinute);
+  };
+
+  schedule();
+  signal.addEventListener('abort', () => clearTimeout(timerId));
+}
+
+// --------------------------------------------------------
+// Wand-Modus (Block D)
+// --------------------------------------------------------
+
+/* DER WACHE ZUSTAND.
+ *
+ * Was hier gebaut wird, ist eine ANZEIGE, kein Werkzeug: ein Familienmitglied
+ * geht am Flurtablet vorbei und will in zwei bis drei Sekunden aus zwei Metern
+ * wissen, was heute noch ansteht - ohne das Geraet zu beruehren. Der Nachweis
+ * ist Lesbarkeit auf Distanz, nicht Funktionsumfang.
+ *
+ * DESHALB SIND DIE ZEILEN KEINE LINKS. Der Modus ist ein Read-Zustand: waeren
+ * die Zeilen beruehrbar, braeuchten sie Distanz-Zielgroessen weit ueber 44px
+ * und fuehrten in Ansichten, die auf Arm-Laenge gebaut sind. Wer wirklich etwas
+ * tun will, ist einen Tap vom normalen Dashboard entfernt. Der einzige
+ * Bedienpunkt der ganzen Flaeche ist der Ausstieg.
+ *
+ * DIE VIER DINGE, IN DIESER RANGFOLGE: Uhrzeit gross (der Anker, aus dem die
+ * 48/72px-Display-Stufen aus tokens.css endlich ihre Rolle bekommen - laut
+ * docs/SPEC.md existieren sie ausdruecklich nur dafuer), das Tagesprogramm, wer
+ * heute dran ist, das Wetter. Die Anti-Referenz ist die
+ * „Smart-Home-Dashboard"-Optik: Kacheln voller Messwerte, Ringdiagramme,
+ * Sensorwerte ohne Anlass - das waere das ueberlastete Feature-Dashboard aus
+ * PRODUCT.md, nur in gross. */
+
+/** Nach diesem Takt versucht die Wand einen Ladefehler von selbst zu heilen. */
+const WALL_HEAL_MS = 60_000;
+/** So lange bleibt der Ausstieg nach einer Beruehrung hell. */
+const WALL_AWAKE_MS = 6000;
+/** So viele Gesichter zeigt „Wer heute dran ist", der Rest spricht als Zahl. */
+const WALL_WHO_CAP = 6;
+
+/* DER DECKEL DER WAND IST KLEINER ALS DER DES COCKPITS - GEMESSEN, NICHT GERATEN.
+ *
+ * Das Cockpit zeigt sechs Zeilen auf Arm-Laenge. In Distanzgroesse ist eine
+ * Zeile rund 88px hoch; mit Uhr, Abschnittskopf, Fusszeile und der zeitlosen
+ * Einkaufszeile ergaben sechs davon 892px - auf dem kleinsten realistischen
+ * Wandtablet (1280x800) lief die Flaeche unten aus dem Bild, samt Ausstieg.
+ * Eine Wand kann nicht scrollen, also muss das Bild passen.
+ *
+ * Vier ist deshalb kein zweiter Deckel neben `PROGRAM_ROW_CAP`, sondern
+ * derselbe Mechanismus mit dem Wert, der auf DIESE Flaeche passt - und der
+ * Ueberlauf luegt nicht: „+N weitere heute" steht darunter und zaehlt aus
+ * demselben Modell. Wer aus zwei Metern mehr als vier Zeilen liest, liest
+ * ohnehin nicht mehr im Vorbeigehen, sondern arbeitet eine Liste ab - und
+ * dafuer gibt es das Dashboard. */
+const WALL_ROW_CAP = 4;
+
+/** Eine Programmzeile als reiner Text - kein href, kein data-route, kein Modal. */
+function renderWallRow(row) {
+  // Der Termin nennt an der Wand, hinter dem Beginn, sein Ende (#1698). Es
+  // steht in einem eigenen Element, weil es auf einer Flaeche unter
+  // Tablettbreite weicht (dashboard.css): dort naehme „9:30 PM - 11:30 PM" dem
+  // Titel mehr als die halbe Zeile.
+  const sub = row.sub;
+  const end = row.timeLabel && row.wallTimeEnd
+    ? `<span class="wall-row__time-end"> - ${esc(row.wallTimeEnd)}</span>`
+    : '';
+  const time = row.timeLabel
+    ? `<span class="wall-row__time${row.overdue ? ' wall-row__time--overdue' : ''}">${esc(row.timeLabel)}${end}</span>`
+    : '';
+  return `
+    <li class="wall-row wall-row--${esc(row.tone)}">
+      <span class="module-seal wall-row__seal">${programRowGlyph(row)}</span>
+      <span class="wall-row__body">
+        <span class="wall-row__title">${esc(row.title)}</span>
+        <span class="wall-row__sub">${esc(sub)}</span>
+      </span>
+      ${time}
+    </li>`;
+}
+
+/**
+ * Das Tagesprogramm in Distanzgroesse. Dieselben Zeilen, derselbe Deckel,
+ * dieselbe Coda wie im Cockpit - nur ohne Bedienung.
+ */
+function renderWallProgram(model) {
+  const parts = [];
+  if (model.state) {
+    // Ein leerer Tag muss auf Distanz sprechen: eine leere Flaeche liest sich
+    // aus zwei Metern wie ein Defekt, nicht wie Ruhe.
+    parts.push(`
+      <li class="wall-row wall-row--state">
+        <span class="module-seal wall-row__seal">${moduleIconHTML(model.state.icon)}</span>
+        <span class="wall-row__body">
+          <span class="wall-row__title">${esc(model.state.title)}</span>
+          ${model.state.sub ? `<span class="wall-row__sub">${esc(model.state.sub)}</span>` : ''}
+        </span>
+      </li>`);
+  }
+  parts.push(...model.rows.map(renderWallRow));
+  if (model.shopping) parts.push(renderWallRow(model.shopping));
+
+  const foot = model.overflow > 0
+    ? t('dashboard.todayMore', { count: model.overflow })
+    : model.coda;
+
+  return `
+    <section class="wall__program" aria-labelledby="wall-program-title">
+      <h2 class="wall__section-title" id="wall-program-title">${esc(t('dashboard.todayTitle'))}</h2>
+      <ol class="wall-program__list">${parts.join('')}</ol>
+      ${foot ? `<p class="wall-program__foot">${esc(foot)}</p>` : ''}
+    </section>`;
+}
+
+/* DIE AUFGABEN UNTER DEM GESICHT (#1817, D#1604).
+ *
+ * Bis dahin stand unter jeder Person eine Zahl. Die Zahl sagt, DASS etwas offen
+ * ist; ein Elternteil, das an der Wand vorbeigeht, will wissen WAS - und was
+ * davon schon erledigt ist. Deshalb stehen dort jetzt Titel: zuerst die
+ * offenen, darunter gedaempft und mit Haken, was heute erledigt wurde.
+ *
+ * DIE WAND SCROLLT NICHT, ALSO FOLGT DIE ZEILENZAHL DEM PLATZ. Wie viele Zeilen
+ * passen, haengt an Tablet, Haushaltsgroesse, Wetter und Kuechentimer - das
+ * laesst sich nicht als eine Zahl festschreiben wie `WALL_ROW_CAP`. Es gibt
+ * darum eine LEITER von Budgets (`WALL_WHO_LADDER`), die von oben nach unten
+ * weniger zeigt, und `fitWallWho` steigt sie im Browser so weit hinab, bis die
+ * Flaeche ins Bild passt. Was die Leiter auf einer Stufe zeigt, entscheidet
+ * `planWallWhoLines` - eine reine Funktion, die ohne Layout pruefbar ist.
+ *
+ * ERLEDIGTES WEICHT ZUERST. Die Leiter nimmt erst den Haken ihre Zeilen (auf
+ * der ganzen Flaeche, nicht je Person: sonst behielte Anna zwei Haken, waehrend
+ * Ben eine offene Aufgabe verliert) und kuerzt danach die offenen. Die letzte
+ * Stufe zeigt keine Titel mehr - Gesichter mit Zahl, wie vor #1817.
+ *
+ * EINE AUSNAHME: wer heute ALLES erledigt hat, behaelt einen Haken, solange
+ * ueberhaupt Titel stehen. Die Spalte zeigt dann, was geschafft wurde, statt
+ * leer zu sein - bis zum Tageswechsel, mit dem der Server sie nicht mehr
+ * liefert. */
+
+/** So viele Zeilen stehen hoechstens unter einem Gesicht, die Zaehlzeile eingerechnet. */
+const WALL_WHO_ROWS_MAX = 5;
+
+/** Die Stufen von „alles" bis „nur Gesichter": erst weichen die Haken, dann die offenen. */
+const WALL_WHO_LADDER = Object.freeze([
+  ...Array.from({ length: WALL_WHO_ROWS_MAX }, (_, i) => ({ rows: WALL_WHO_ROWS_MAX, doneRows: WALL_WHO_ROWS_MAX - 1 - i })),
+  ...Array.from({ length: WALL_WHO_ROWS_MAX }, (_, i) => ({ rows: WALL_WHO_ROWS_MAX - 1 - i, doneRows: 0 })),
+].map(Object.freeze));
+
+/**
+ * Was unter EINER Person steht, bei gegebenem Budget.
+ *
+ * `rows` ist die Zahl der Zeilen einschliesslich der Zaehlzeile, `doneRows` die
+ * Obergrenze fuer Haken darin. Die Zaehlzeile nennt, was nicht passt: offene
+ * als „+N weitere"; sind nur Haken uebrig, „+N erledigt" - eine gemischte Zahl
+ * laese sich als „noch N zu tun". Bei genau einer Zeile gewinnt der Titel, die
+ * Zahl am Gesicht nennt den Rest.
+ *
+ * @param {{open?: object[], done?: object[], open_count?: number, done_count?: number}|null} entry
+ * @param {{rows: number, doneRows: number}} budget
+ */
+function planWallWhoLines(entry, { rows, doneRows }) {
+  const open = Array.isArray(entry?.open) ? entry.open : [];
+  const done = Array.isArray(entry?.done) ? entry.done : [];
+  const openTotal = Math.max(Number(entry?.open_count) || 0, open.length);
+  const doneTotal = Math.max(Number(entry?.done_count) || 0, done.length);
+  const plan = { open: [], done: [], moreOpen: 0, moreDone: 0, openTotal, doneTotal };
+  if (rows <= 0) return plan;
+
+  // Wer nichts Offenes mehr hat, behaelt einen Haken (siehe oben).
+  const doneAllowed = openTotal === 0 ? Math.max(doneRows, 1) : doneRows;
+  let showOpen = Math.min(open.length, rows);
+  let showDone = Math.min(done.length, rows - showOpen, doneAllowed);
+  const hidden = () => (openTotal - showOpen) + (doneTotal - showDone);
+
+  // Die Zaehlzeile braucht selbst eine Zeile: sie verdraengt zuerst einen
+  // Haken, dann eine offene Aufgabe - nie die letzte verbliebene Zeile. Und
+  // ein offener Titel weicht nur fuer die Zahl der OFFENEN: „+2 erledigt" an
+  // der Stelle einer Aufgabe, die noch ansteht, waere der Tausch, den die
+  // Leiter gerade verhindern soll.
+  if (hidden() > 0 && showOpen + showDone >= rows && rows >= 2) {
+    if (showDone > 0) showDone -= 1;
+    else if (openTotal > showOpen) showOpen -= 1;
+  }
+  plan.open = open.slice(0, showOpen);
+  plan.done = done.slice(0, showDone);
+  if (hidden() > 0 && showOpen + showDone < rows) {
+    plan.moreOpen = openTotal - showOpen;
+    plan.moreDone = doneTotal - showDone;
+  }
+  return plan;
+}
+
+/**
+ * „Wer heute dran ist" - ein Gesicht je Person, darunter ihre Aufgaben von
+ * heute beim Namen (#1817).
+ *
+ * WER DRAN IST: wer eine Zeile im Programm traegt (Termin, Aufgabe, Kochen)
+ * ODER heute eine haushaltssichtbare Aufgabe hat, offen oder erledigt. Das
+ * zweite schliesst eine Luecke: das Programm liest `urgentTasks`, haushaltsweit
+ * auf fuenf gekappt - wessen Aufgabe die sechste war, stand hier gar nicht.
+ *
+ * DIE ZAHL AM GESICHT IST, WAS HEUTE NOCH VOR JEMANDEM LIEGT: die offenen
+ * Aufgaben aus `wallTasks` (ungekappt) und dazu, was das Programm sonst fuer
+ * die Person fuehrt - ihr Termin, das Kochen (#1679). Die Aufgabenzeilen des
+ * Programms zaehlen NICHT mit: sie kommen aus `urgentTasks`, das bei fuenf
+ * abschneidet, nur die erste zugewiesene Person kennt und nach der Sicht der
+ * angemeldeten Person filtert - unter Titeln, die jede Aufgabe nennen, stuende
+ * sonst eine Zahl, die ihnen widerspricht. Ist nichts mehr offen und etwas
+ * erledigt, steht dort ein Haken.
+ *
+ * DIE TITEL KOMMEN AUS `wallTasks`, nicht aus dem Programm: der Server liefert
+ * dort nur, was der GANZE Haushalt sehen darf. Ein Wandtablett ist keine
+ * Person; „nur Zugewiesene" steht auf keiner Wand, wer immer angemeldet ist.
+ *
+ * Im Solo-Haushalt entfaellt der Abschnitt still - dieselbe Regel wie beim
+ * Ueberlappungszeichen und beim Familien-Widget: was nur eine sinnvolle
+ * Belegung hat, wird nicht gezeigt.
+ *
+ * NUR DER VORNAME am Gesicht: „Linda Johnson" passt in keine Spalte dieser
+ * Breite und stand als „Linda Jo…" da - ein abgeschnittener Name ist auf zwei
+ * Metern schlechter als gar keiner. Im eigenen Haushalt ist der Vorname
+ * ohnehin die Antwort.
+ *
+ * @param {{rows: number, doneRows: number}} [budget] eine Stufe der Leiter;
+ *   ohne Angabe die oberste. `fitWallWho` steigt von dort hinab.
+ */
+function renderWallWho(data, model, budget = WALL_WHO_LADDER[0]) {
+  if (isSoloHousehold()) return '';
+  const users = Array.isArray(data?.users) ? data.users : [];
+  if (!users.length) return '';
+
+  const inProgram = new Set();
+  const otherRows = new Map();
+  for (const row of model.allRows) {
+    // ALLE Personen der Zeile (#1828), nicht nur ihr eines Gesicht. Die
+    // Aufgabenzeilen des Programms zaehlen hier nicht mit: die Zahl der
+    // Aufgaben kommt ungekappt aus `wallTasks` (#1817).
+    for (const id of rowPeopleIds(row)) {
+      inProgram.add(id);
+      if (row.kind !== 'task') otherRows.set(id, (otherRows.get(id) ?? 0) + 1);
+    }
+  }
+  const tasksOf = new Map();
+  for (const entry of Array.isArray(data?.wallTasks) ? data.wallTasks : []) {
+    if (entry?.user_id != null) tasksOf.set(entry.user_id, entry);
+  }
+  // Der Plan auf der OBERSTEN Stufe sagt, wer ueberhaupt etwas hat - die
+  // Rangfolge darf sich nicht aendern, waehrend die Leiter hinabsteigt.
+  const totals = new Map(users.map((u) => [u.id, planWallWhoLines(tasksOf.get(u.id), WALL_WHO_LADDER[0])]));
+
+  const ahead = (u) => totals.get(u.id).openTotal + (otherRows.get(u.id) ?? 0);
+
+  const onDuty = users
+    .filter((u) => inProgram.has(u.id) || totals.get(u.id).openTotal > 0 || totals.get(u.id).doneTotal > 0)
+    // Wer am meisten vor sich hat, zuerst; bei Gleichstand die Haushaltsreihenfolge (#1644).
+    .sort((a, b) => (ahead(b) - ahead(a)) || compareMembers(a, b));
+
+  const shown = onDuty.slice(0, WALL_WHO_CAP);
+  const plans = new Map(shown.map((u) => [u.id, planWallWhoLines(tasksOf.get(u.id), budget)]));
+  const withTitles = shown.some((u) => {
+    const plan = plans.get(u.id);
+    return plan.open.length || plan.done.length || plan.moreOpen || plan.moreDone;
+  });
+
+  const body = shown.length
+    ? `<ul class="wall-who__list${withTitles ? ' wall-who__list--tasks' : ''}">${shown.map((u) => {
+        const color = u.avatar_color || AVATAR_FALLBACK_COLOR;
+        const plan = plans.get(u.id);
+        const { openTotal, doneTotal } = plan;
+        const count = ahead(u);
+        const mark = count > 0
+          ? `<span class="wall-who__count">
+                <span aria-hidden="true">${esc(String(count))}</span>
+                <span class="sr-only">${esc(t('dashboard.wallWhoCount', { count }))}</span>
+              </span>`
+          : doneTotal > 0
+            ? '<span class="wall-who__count wall-who__count--done"><i data-lucide="check" aria-hidden="true"></i></span>'
+            : '';
+        const tally = openTotal > 0 || doneTotal > 0
+          ? `<span class="sr-only">${esc(t('dashboard.familyDayTally', { open: openTotal, done: doneTotal }))}</span>`
+          : '';
+        const more = plan.moreOpen > 0
+          ? t('dashboard.shoppingMore', { count: plan.moreOpen })
+          : plan.moreDone > 0
+            ? t('dashboard.wallWhoDoneMore', { count: plan.moreDone })
+            : '';
+        const lines = [
+          ...plan.open.map((task) => `<li class="wall-who__task"><span class="wall-who__task-title">${esc(task.title)}</span></li>`),
+          ...plan.done.map((task) => `
+            <li class="wall-who__task wall-who__task--done">
+              <i data-lucide="check" class="wall-who__task-check" aria-hidden="true"></i>
+              <span class="sr-only">${esc(t('tasks.statusDone'))}: </span><span class="wall-who__task-title">${esc(task.title)}</span>
+            </li>`),
+          ...(more ? [`<li class="wall-who__task wall-who__task--more">${esc(more)}</li>`] : []),
+        ];
+        return `
+          <li class="wall-who__member">
+            <span class="wall-who__mark">
+              <span class="wall-who__avatar" style="background:${esc(color)};color:${getReadableTextColor(color)}">
+                ${u.avatar_data ? `<img src="${esc(u.avatar_data)}" alt="" loading="lazy">` : esc(initials(u.display_name))}
+              </span>
+              ${mark}
+            </span>
+            <span class="wall-who__name">${esc(firstName(u.display_name))}</span>${tally}
+            ${lines.length ? `<ul class="wall-who__tasks">${lines.join('')}</ul>` : ''}
+          </li>`;
+      }).join('')}</ul>${onDuty.length > shown.length
+        ? `<p class="wall-who__more">${esc(t('dashboard.shoppingMore', { count: onDuty.length - shown.length }))}</p>`
+        : ''}`
+    : `<p class="wall-who__none">${esc(t('dashboard.wallWhoNone'))}</p>`;
+
+  return `
+    <section class="wall__who" aria-labelledby="wall-who-title">
+      <h2 class="wall__section-title" id="wall-who-title">${esc(t('dashboard.wallWho'))}</h2>
+      ${body}
+    </section>`;
+}
+
+/**
+ * Steigt die Leiter hinab, bis die Wand ins Bild passt.
+ *
+ * GEMESSEN, NICHT GERECHNET. Die Hoehe einer Titelzeile haengt an `vmin`, die
+ * Breite der Spalten am Container, der Platz an Wetter, Timer und der Zahl der
+ * Programmzeilen - eine Formel dafuer waere eine zweite, driftende Fassung des
+ * Stylesheets. Die Wand ist mindestens so hoch wie das Fenster; ist sie
+ * hoeher, laeuft sie unten aus dem Bild, und genau das wird gefragt.
+ *
+ * Jeder Neuaufbau beginnt wieder oben: die Leiter kennt nur „weniger", das
+ * „wieder mehr" (groesseres Fenster, Timer beendet) ergibt sich aus dem
+ * Neubeginn. Alles geschieht synchron vor dem naechsten Bild - niemand sieht
+ * die Zwischenstufen.
+ *
+ * @returns {number} die Stufe, auf der die Flaeche steht (-1: nichts zu tun)
+ */
+function fitWallWho(root, data, { now = new Date(), reset = false } = {}) {
+  const wall = root?.querySelector?.('.wall');
+  if (!wall?.querySelector('.wall__who')) return -1;
+  const overflows = () => wall.scrollHeight > (globalThis.window?.innerHeight ?? 0) + 1;
+  if (!reset && !overflows()) return 0;
+
+  // `allRows` haengt nicht am Deckel, der Timer spielt hier also keine Rolle.
+  const model = buildTodayCockpitModel(data, [], { cap: WALL_ROW_CAP, now, groupOverdue: false });
+  const place = (step) => {
+    const section = wall.querySelector('.wall__who');
+    if (!section) return false;
+    section.insertAdjacentHTML('afterend', renderWallWho(data, model, WALL_WHO_LADDER[step]));
+    section.remove();
+    if (globalThis.window?.lucide) globalThis.window.lucide.createIcons({ el: wall.querySelector('.wall__who') });
+    return true;
+  };
+  let step = 0;
+  if (reset && !place(0)) return -1;
+  const heights = [wall.scrollHeight];
+  while (step < WALL_WHO_LADDER.length - 1 && overflows()) {
+    step += 1;
+    if (!place(step)) break;
+    heights[step] = wall.scrollHeight;
+  }
+  if (!overflows()) return step;
+
+  // AUCH OHNE TITEL ZU HOCH: dann sind nicht die Titel der Grund, und die
+  // Leiter darf nicht blind auf ihrer letzten Stufe stehen bleiben.
+  //
+  // Auf dem TELEFON (alles gestapelt) scrollt die Wand ohnehin, der Fuss klebt
+  // (#1559) - dort nimmt das Kuerzen nur Auskunft weg, also steht alles da.
+  //
+  // UEBERALL SONST gilt: so viele Titel, wie NICHTS KOSTEN. Auf einem Tablett,
+  // das dem Programm links nicht reicht (1024x768: 45px zu hoch, mit oder ohne
+  // Titel), oder im Hochformat, wo das Wetter neben den Gesichtern die Hoehe
+  // bestimmt, ist die Flaeche auf mehreren Stufen gleich hoch. Gewaehlt wird
+  // die reichste davon - die Flaeche wird dadurch nicht hoeher, als sie ohne
+  // Titel waere. Hier stand zuerst „laeuft auf der letzten Stufe noch ueber,
+  // also alles zurueck": das holte auf solchen Tabletts die volle Liste und
+  // schob Fuss und Ausgang weit aus dem Bild.
+  if (wallIsStacked(wall)) {
+    place(0);
+    return 0;
+  }
+  const lowest = Math.min(...heights);
+  const free = heights.findIndex((height) => height <= lowest + 1);
+  if (free !== step) place(free);
+  return free;
+}
+
+/**
+ * Ist die Wand ganz gestapelt - Buehne UND Nebenraum je eine Spalte? Das ist
+ * das Telefon. Ein Hochformat-Tablett stapelt nur die Buehne und stellt „Wer"
+ * und Wetter nebeneinander; es ist keine Flaeche, die scrollen soll.
+ */
+function wallIsStacked(wall) {
+  const single = (selector) => {
+    const element = wall?.querySelector?.(selector);
+    const columns = element ? globalThis.getComputedStyle?.(element)?.gridTemplateColumns : null;
+    // Ohne Antwort (kein Layout) gilt nichts als gestapelt: der vorsichtige
+    // Irrtum ist die kuerzere Liste, nicht die volle.
+    return typeof columns === 'string' && columns.trim() !== '' && columns.trim().split(/\s+/).length < 2;
+  };
+  return single('.wall__stage') && single('.wall__aside');
+}
+
+/**
+ * Das Einpassen der Wand an EINER Stelle verdrahtet (#1817).
+ *
+ * `show` passt die frisch gebaute Flaeche ein und merkt sie sich; der
+ * `resize`-Hoerer passt die gemerkte Flaeche neu ein - von der obersten Stufe
+ * aus, damit ein groesseres Fenster auch wieder MEHR zeigt (Drehen des
+ * Tabletts, Tastatur, Vollbild). Er haengt am Signal der Seite und faellt mit
+ * ihr; pro Bild laeuft er hoechstens einmal.
+ */
+function createWallFit(win, signal) {
+  let shown = null;
+  let frame = 0;
+  win.addEventListener('resize', () => {
+    if (!shown || frame) return;
+    frame = win.requestAnimationFrame(() => {
+      frame = 0;
+      if (shown) fitWallWho(shown.shell, shown.data, { reset: true });
+    });
+  }, { signal, passive: true });
+  signal.addEventListener('abort', () => {
+    win.cancelAnimationFrame(frame);
+    shown = null;
+  }, { once: true });
+  return {
+    show(shell, data) {
+      shown = { shell, data };
+      return fitWallWho(shell, data);
+    },
+  };
+}
+
+/**
+ * Baut die Wand in die Schale: Flaeche, Zeichen, Bedienung, Einpassen. EINE
+ * Funktion, damit kein Schritt davon am Aufrufer vergessen werden kann - das
+ * Einpassen stand zuerst als lose Zeile in `rebuildDashboard`, und kein Test
+ * merkte, wenn sie fehlte.
+ */
+function rebuildWall(container, shell, { data, weather, failed, updatedAt, rerender, signal, fit, screensaverEnabled = false }) {
+  // Der stille Neuaufbau (Minutentakt, Timer) nimmt den Fokus mit, statt ihn
+  // auf <body> fallen zu lassen - dasselbe Paar wie in rebuildDashboard.
+  const doc = globalThis.document;
+  const { key: keepFocus } = captureRebuildFocus(shell, doc?.activeElement, doc?.body);
+  setHtml(shell, renderWallSurface(data, weather, { failed, updatedAt, screensaverEnabled }));
+  if (globalThis.window?.lucide) globalThis.window.lucide.createIcons({ el: shell });
+  wireWallSurface(container, rerender, signal);
+  restoreFocusAfterRebuild(container, [keepFocus, takeWallFocusIntent('enter') ? '#wall-surface' : null]);
+  // Die Titel unter den Gesichtern folgen dem Platz: nach jedem Aufbau von der
+  // obersten Stufe hinab.
+  return fit.show(shell, data);
+}
+
+/**
+ * Wetter mit Vorhersage - dieselben Bausteine wie Karte und Masthead-Zeile,
+ * ohne den Aktualisieren-Knopf: den drueckt am Wandtablet niemand, und ein
+ * Bedienelement in einer reinen Anzeige waere ein falsches Versprechen.
+ */
+function renderWallWeather(weather) {
+  if (!weather?.current) return '';
+  const { city, current, forecast, units } = weather;
+  const desc = weatherDescText(weather, current.desc);
+  const days = (Array.isArray(forecast) ? forecast : []).slice(0, 4).map((d) => {
+    const label = weatherDayLabel(weather, d.date);
+    return `
+      <li class="wall-weather__day"${weatherToneAttr(d.icon)}>
+        <span class="wall-weather__day-label">${esc(label)}</span>
+        ${weatherIconHtml(weather, d.icon, 'wall-weather__day-icon', 32, weatherDescText(weather, d.desc))}
+        <span class="wall-weather__day-temps">
+          <span class="wall-weather__day-high">${esc(String(d.temp_max))}°</span>
+          <span class="wall-weather__day-low">${esc(String(d.temp_min))}°</span>
+        </span>
+      </li>`;
+  }).join('');
+
+  return `
+    <section class="wall__weather" aria-labelledby="wall-weather-title"${weatherToneAttr(current.icon)}${weatherMotionAttr(current.icon)}>
+      <h2 class="wall__section-title" id="wall-weather-title">${esc(t('dashboard.weather'))}</h2>
+      <div class="wall-weather__now">
+        ${weatherIconHtml(weather, current.icon, 'wall-weather__icon', 64, desc)}
+        <span class="wall-weather__body">
+          <span class="wall-weather__temp">${esc(String(current.temp))}${weatherUnitSymbol(units)}</span>
+          ${weatherTodayRange(weather, 'wall-weather__range')}
+          <span class="wall-weather__desc">${esc(desc)}${city ? ` · ${esc(city)}` : ''}</span>
+        </span>
+      </div>
+      ${days ? `<ol class="wall-weather__forecast">${days}</ol>` : ''}
+    </section>`;
+}
+
+/**
+ * Der Ladefehler in Wand-Fassung.
+ *
+ * Der bestehende Fehlerzustand ist auf Arm-Laenge gebaut und traegt einen
+ * Retry-Knopf - am Wandtablet drueckt den niemand. Hier steht deshalb ein Satz,
+ * den man aus zwei Metern als Fehler erkennt, plus die Zusage, dass die Flaeche
+ * es von selbst weiter versucht (der Takt dazu steht in `render`). Die Uhr
+ * bleibt daneben stehen: sie braucht kein Netz und ist der Beweis, dass das
+ * Geraet lebt und nur die Daten fehlen.
+ */
+function renderWallError() {
+  return `
+    <section class="wall__error" role="status">
+      <i data-lucide="cloud-off" class="wall__error-icon" aria-hidden="true"></i>
+      <p class="wall__error-title">${esc(t('dashboard.wallOffline'))}</p>
+      <p class="wall__error-sub">${esc(t('dashboard.wallOfflineHint'))}</p>
+    </section>`;
+}
+
+/**
+ * Die ganze Flaeche.
+ *
+ * DER AUSSTIEG IST LEISE DA, NICHT VERSTECKT. Ein voller Knopf widerspraeche
+ * der ruhigen Flaeche, ein unsichtbarer waere eine Falle - also steht er immer
+ * im DOM, immer im Bild (der Fuss klebt an der Unterkante, #1559) und immer mit
+ * seinem Wort, in Sekundaerfarbe ohne Kapsel. Bis #1559 trug er in Ruhe nur
+ * sein Zeichen, und genau daran fand jemand nicht mehr hinaus (D#1494). Jede
+ * Beruehrung hebt ihn fuer ein paar Sekunden auf die volle Kapsel
+ * (`data-wall-awake`, siehe `wireWallSurface`). Seit dem Kuechentimer (#844)
+ * ist der Ausstieg nicht mehr das Einzige, was man beruehren kann - dessen
+ * Startknoepfe stehen daneben und ruhen genauso leise, aber sichtbar. Damit
+ * ein Tipp, der die Wand nur wecken
+ * sollte, keinen Timer startet, weckt der erste Zeiger auf eine schlafende
+ * Wand dort nur (wall-timer.js).
+ */
+function renderWallSurface(data, weather, { failed = false, loading = false, updatedAt = null, now = new Date(), screensaverEnabled = false } = {}) {
+  // Der Kuechentimer (#844). Er wird auch im Lade- und Fehlerzustand gebaut: er
+  // haengt an nichts, was geladen werden koennte, und ein laufender Timer, der
+  // beim naechsten Netzfehler verschwaende, waere schlimmer als gar keiner.
+  const timer = renderWallTimer();
+  // Seine Anzeige kostet eine Programmzeile Hoehe (64px plus Abstand, gemessen
+  // bei 1280x800). WALL_ROW_CAP ist fuer die Flaeche OHNE sie gerechnet: an
+  // einem vollen Tag schob sie den Fuss samt „Timer abbrechen" und Ausstieg
+  // unter den Bildrand. Solange sie steht, nimmt das Programm eine Zeile
+  // weniger, und „+N weitere" zaehlt sie mit. Der Start und das Ende rufen
+  // ohnehin `rerender()` (wall-timer.js), der Deckel folgt also von selbst.
+  const cap = timer.display ? WALL_ROW_CAP - 1 : WALL_ROW_CAP;
+  const model = failed || loading ? null : buildTodayCockpitModel(data, [], { cap, now, groupOverdue: false });
+
+  let main;
+  if (failed) {
+    main = renderWallError();
+  } else if (loading) {
+    main = '<div class="wall__loading" aria-hidden="true"></div>';
+  } else {
+    const aside = `${renderWallWho(data, model)}${renderWallWeather(weather)}`;
+    main = `
+      ${renderWallProgram(model)}
+      ${aside ? `<div class="wall__aside">${aside}</div>` : ''}`;
+  }
+
+  const stamp = updatedAt
+    ? `<p class="wall__updated">${esc(t('dashboard.updatedAt', { time: formatTime(updatedAt) }))}</p>`
+    : '<p class="wall__updated"></p>';
+
+  return `
+    <div class="wall" id="wall-surface" tabindex="-1" aria-label="${esc(t('settings.wallModeLabel'))}" role="region">
+      ${renderClockWidget({ wall: true })}
+      <div class="wall__stage${failed || loading ? ' wall__stage--single' : ''}">${main}</div>
+      ${timer.display}
+      <div class="wall__foot" data-toast-keepout>
+        ${stamp}
+        ${timer.controls}
+        <div class="wall__foot-end">${screensaverEnabled && !timer.display ? `
+          <button type="button" class="wall__foot-btn wall__foot-btn--icon" id="wall-screensaver-start"
+                  aria-label="${esc(t('dashboard.wallScreensaverStart'))}"
+                  title="${esc(t('dashboard.wallScreensaverStart'))}">
+            <i data-lucide="image" aria-hidden="true"></i>
+          </button>` : ''}
+          <button type="button" class="wall__foot-btn" id="wall-exit" aria-label="${esc(t('dashboard.wallExit'))}">
+            <i data-lucide="minimize-2" aria-hidden="true"></i>
+            <span class="wall__foot-btn-label" aria-hidden="true">${esc(t('dashboard.wallExit'))}</span>
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/**
+ * Verdrahtet die einzige Interaktion der Flaeche: den Ausstieg.
+ *
+ * Drei Wege hinaus, und alle sind derselbe: der Knopf, die Escape-Taste und
+ * seit #1559 Zurueck (`wireWallExit`).
+ * Das Wecken haengt an den Ereignissen, die auch der Screensaver hoert - es
+ * verbraucht sie aber nicht, sondern setzt nur ein Attribut.
+ */
+function wireWallSurface(container, rerender, signal) {
+  const wall = container.querySelector('.wall');
+  if (!wall) return;
+
+  let awakeTimer = null;
+  const wake = () => {
+    wall.setAttribute('data-wall-awake', '');
+    clearTimeout(awakeTimer);
+    awakeTimer = setTimeout(() => wall.removeAttribute('data-wall-awake'), WALL_AWAKE_MS);
+  };
+  for (const type of ['pointerdown', 'pointermove', 'keydown']) {
+    window.addEventListener(type, wake, { passive: true, signal });
+  }
+  signal.addEventListener('abort', () => clearTimeout(awakeTimer));
+
+  wireWallTimer(wall, rerender, signal, { announce: announceDashboard });
+
+  wall.querySelector('#wall-screensaver-start')?.addEventListener('click', async () => {
+    const { preview } = await import('/components/photo-screensaver.js');
+    if (!await preview()) window.yuvomi?.showToast(t('dashboard.wallScreensaverNone'), 'info');
+  }, { signal });
+}
+
+/**
+ * Der Ausstieg - datenunabhaengig, und deshalb getrennt vom Rest.
+ *
+ * Er stand bis zum Review in `wireWallSurface` und wurde damit erst verdrahtet,
+ * wenn die Dashboard-Daten da waren. Auf der Ladeflaeche ist der Knopf sichtbar,
+ * aber tot; haengt die Anfrage, kommt niemand mehr aus dem Wandmodus heraus -
+ * in der installierten PWA ohne Browserleiste heisst das: gar nicht mehr.
+ *
+ * Er haengt am CONTAINER, nicht am Knopf: `setHtml` tauscht dessen Inhalt aus,
+ * der Container selbst bleibt. So ueberlebt die eine Verdrahtung beide Renders,
+ * und es braucht keinen zweiten Aufruf, der Escape ein zweites Mal registrierte.
+ */
+function wireWallExit(container, rerender, signal) {
+  const leave = () => {
+    releaseWallMarker();
+    exitWallMode();
+    _wallFocusIntent = 'leave';
+    // Der Toast sagt, WO der Weg zurueck liegt - wer versehentlich aussteigt,
+    // soll nicht suchen muessen. Der Name kommt aus dem Schluessel des Knopfes
+    // statt aus dem Satz: sonst driftet die Wegbeschreibung, sobald der Knopf
+    // umbenannt wird.
+    //
+    // Er zeigte bis #915 in die Einstellungen, weil der Modus dort als einziges
+    // eingeschaltet werden konnte. Das war nie falsch, aber seit der Einstieg in
+    // der Werkzeugzeile steht, waere es der Umweg - und ein Hinweis, der den
+    // Umweg nennt, waehrend der kurze Weg sichtbar danebenliegt, ist eine
+    // schlechtere Auskunft als gar keiner.
+    window.yuvomi?.showToast(t('dashboard.wallExited', {
+      action: t('dashboard.wallEnter'),
+    }), 'success', 6000);
+    rerender();
+  };
+
+  container.addEventListener('click', (event) => {
+    if (event.target.closest('#wall-exit')) leave();
+  }, { signal });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') leave();
+  }, { signal });
+  // Der dritte Weg hinaus: Zurueck (#1559). Er schliesst die Wand wie ein
+  // Dialog - `handleBackNavigation` ruft `leave`, der Router navigiert nicht.
+  holdWallMarker(leave);
+}
+
+// --------------------------------------------------------
+// FAB Speed-Dial
+// --------------------------------------------------------
+
+/**
+ * Der Speed-Dial bietet nur an, was der Betrachter auch ANLEGEN darf.
+ *
+ * Die Liste stand bis #1208 ungefiltert da: wer Notizen auf `none` hatte, bekam
+ * trotzdem „Notiz anlegen" angeboten und lief in ein 403. Aufgefallen ist es am
+ * Wandtablett, wo ALLE vier Eintraege ins Leere fuehren - dessen Module stehen
+ * samt und sonders auf `read`. Der Filter ist deshalb nicht am Display
+ * aufgehaengt, sondern an der Frage, um die es geht: darf diese Route beschrieben
+ * werden? Damit verschwindet derselbe tote Knopf auch fuer ein eingeschraenktes
+ * Mitglied.
+ *
+ * `navModuleAccess` und nicht `moduleAccess`: die Schluessel hier sind
+ * NAVIGATIONS-Routen, und die Zuordnung auf den Rechte-Schluessel steht in
+ * permissions.js (`/shopping` haengt etwa am Kuechen-Modul). Eine eigene
+ * Uebersetzung hier waere die zweite Tabelle dafuer.
+ */
+const FAB_ACTIONS = () => [
+  { route: '/tasks',    label: t('dashboard.fabTask'),     icon: 'check-square'   },
+  { route: '/calendar', label: t('dashboard.fabCalendar'), icon: 'calendar-plus'  },
+  { route: '/shopping', label: t('dashboard.fabShopping'), icon: 'shopping-cart'  },
+  { route: '/notes',    label: t('dashboard.fabNote'),     icon: 'sticky-note'    },
+].filter((a) => navModuleAccess(a.route.slice(1)) === 'write');
+
+/* AM DESKTOP IST ANLEGEN EINE ANGEDOCKTE PILLE (R14, A8 P3-2). Die Uebersicht
+ * war der einzige schwebende FAB am Desktop - 48x48 unten rechts, nur
+ * "Schnellaktionen" als Name -, waehrend jedes andere Modul "+ Nomen" im Kopf
+ * traegt. Dieselbe Grenze wie das Andocken der Shell (router.js,
+ * isDesktopViewport); dieselbe Form (`page-fab--docked`, schon so gerendert,
+ * damit ein Neuaufbau des Kopfs nicht auf das Andocken warten muss), dasselbe
+ * Menue als Popover. Der Kurzbefehl `n` klickt den `.page-fab` und oeffnet es. */
+const DESKTOP_STAGE_QUERY = '(min-width: 1024px)';
+
+function onDesktopStage() {
+  try {
+    return Boolean(globalThis.window?.matchMedia?.(DESKTOP_STAGE_QUERY)?.matches);
+  } catch {
+    return false;
+  }
+}
+
+function renderNewPill() {
+  const actions = FAB_ACTIONS();
+  if (!actions.length) return '';
+  const items = actions.map((a) => `
+          <button type="button" role="menuitem" class="popover-menu__item" data-new-route="${esc(a.route)}">
+            <i data-lucide="${esc(a.icon)}" class="icon-md" aria-hidden="true"></i>
+            <span>${esc(a.label)}</span>
+          </button>`).join('');
+  const label = t('dashboard.fabNew');
+  return `
+        <div class="page-toolbar__actions dashboard-overview__new">
+          <button type="button" class="page-fab btn btn--primary page-fab--docked popover-menu__trigger" id="fab-main"
+                  data-dock-label="${esc(label)}" aria-label="${esc(t('nav.quickActions'))}" title="${esc(t('nav.quickActions'))} (n)"
+                  aria-keyshortcuts="n" aria-haspopup="menu" aria-expanded="false" popovertarget="dashboard-new-menu">
+            <i data-lucide="plus" aria-hidden="true"></i><span class="toolbar-new-btn__label">${esc(label)}</span>
+          </button>
+          <div class="popover-menu" id="dashboard-new-menu" popover role="menu">${items}
+          </div>
+        </div>`;
+}
+
+/** Die Menuepunkte der Pille: dieselben Wege wie der Speed-Dial (FAB_NEW_BTN). */
+function wireNewMenu(container, signal) {
+  installPopoverMenus(container);
+  container.addEventListener('click', async (event) => {
+    const item = event.target.closest?.('[data-new-route]');
+    if (!item) return;
+    item.closest('[popover]')?.hidePopover?.();
+    const route = item.dataset.newRoute;
+    await window.yuvomi.navigate(route);
+    const btnSelector = FAB_NEW_BTN[route];
+    if (btnSelector) document.querySelector(btnSelector)?.click();
+  }, { signal });
+}
+
+// "Neu"-Button-Selector auf der jeweiligen Zielseite
+const FAB_NEW_BTN = {
+  '/tasks':    '#btn-new-task',
+  '/calendar': '#fab-new-event',
+  '/shopping': '#fab-new-item',
+  '/notes':    '#fab-new-note',
+};
+
+function renderFab() {
+  // Am Desktop steht Anlegen als Pille im Kopf (renderNewPill).
+  if (onDesktopStage()) return '';
+  const actions = FAB_ACTIONS();
+  // Kein Eintrag, kein Knopf. Ein Speed-Dial, der sich auf eine leere Liste
+  // oeffnet, waere die schlechtere Haelfte des Fehlers, den der Filter behebt.
+  if (!actions.length) return '';
+  const actionsHtml = actions.map((a) => `
+    <button type="button" class="fab-action" data-route="${a.route}" tabindex="-1"
+            aria-label="${a.label}">
+      <span class="fab-action__label">${a.label}</span>
+      <span class="fab-action__btn" aria-hidden="true">
+        <i data-lucide="${a.icon}" aria-hidden="true"></i>
+      </span>
+    </button>
+  `).join('');
+
+  // Der Knopf ist ein `.page-fab` und die Gruppe eine `.page-fab-group`: nur so
+  // hebt `adoptPageFab()` den Speed-Dial nach dem Rendern aus dem Scrollport in
+  // die Shell-Layer (#634). Backdrop und Aktionsliste liegen deshalb IN der
+  // Gruppe - sie sind beide `position: fixed`/`absolute` und müssen den Umzug
+  // mitmachen, sonst bleibt die halbe Mechanik im Scroller zurück.
+  return `
+    <div class="page-fab-group" id="fab-group">
+      <div class="fab-backdrop" id="fab-backdrop"></div>
+      <button type="button" class="page-fab" id="fab-main" aria-label="${t('nav.quickActions')}" title="${t('nav.quickActions')} (n)" aria-keyshortcuts="n" aria-expanded="false">
+        <i data-lucide="plus" aria-hidden="true"></i>
+      </button>
+      <div class="fab-actions" id="fab-actions" aria-hidden="true">
+        ${actionsHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Speed-Dial verdrahten - dokumentweit gesucht, nicht im Seiten-Container.
+ *
+ * Der Router zieht die Gruppe direkt nach dem Rendern in die Shell-Layer
+ * (adoptPageFab, #634). Ein `container.querySelector('#fab-main')` fände sie
+ * danach still nicht mehr, und die Verdrahtung entfiele lautlos: der Knopf wäre
+ * sichtbar und täte nichts - genau der Bug hinter #634. `findPageFab()` ist die
+ * eine Stelle, an der der Ort steht.
+ */
+/**
+ * Den Speed-Dial im Anpassen-Modus ausblenden (A7 P2-1). Ausgeblendet wird der
+ * KNOPF, nicht die Gruppe: `.page-fab[hidden]` (layout.css) nimmt ihn aus der
+ * Anzeige, und nur an `.page-fab:not([hidden])` haengen Kapselreserve und
+ * `--fab-safe-zone` - eine versteckte Gruppe liesse beide stehen und die Seite
+ * einen Nachlauf fuer einen Knopf freihalten, den es nicht gibt.
+ */
+function setCustomizeFabHidden(hidden) {
+  const fab = findPageFab('fab-main');
+  if (!fab) return;
+  fab.hidden = hidden;
+}
+
+function initFab(signal) {
+  const fabMain     = findPageFab('fab-main');
+  const fabGroup    = fabMain?.closest('.page-fab-group');
+  const fabActions  = fabGroup?.querySelector('#fab-actions');
+  const fabBackdrop = fabGroup?.querySelector('#fab-backdrop');
+  if (!fabMain || !fabActions) return;
+
+  let open = false;
+
+  function toggleFab(force) {
+    open = force !== undefined ? force : !open;
+    // Kein zweiter Zustandsträger neben `aria-expanded`: die Drehung zum X
+    // hängt in dashboard.css direkt am Attribut.
+    fabMain.setAttribute('aria-expanded', String(open));
+    fabActions.classList.toggle('fab-actions--visible', open);
+    fabActions.setAttribute('aria-hidden', String(!open));
+    fabBackdrop?.classList.toggle('fab-backdrop--visible', open);
+    fabActions.querySelectorAll('.fab-action').forEach((el) => {
+      el.tabIndex = open ? 0 : -1;
+    });
+    if (window.lucide) window.lucide.createIcons({ el: fabGroup });
+  }
+
+  fabMain.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Der Kurzbefehl `n` klickt den Knopf auch, wenn er ausgeblendet ist
+    // (triggerPageFab) - im Anpassen-Modus oeffnet er nichts.
+    if (fabMain.hidden) return;
+    toggleFab();
+  });
+
+  fabActions.querySelectorAll('[data-route]').forEach((el) => {
+    const go = async () => {
+      toggleFab(false);
+      await window.yuvomi.navigate(el.dataset.route);
+      const btnSelector = FAB_NEW_BTN[el.dataset.route];
+      if (btnSelector) document.querySelector(btnSelector)?.click();
+    };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+
+  document.addEventListener('click', () => { if (open) toggleFab(false); }, { signal });
+
+  // ESCAPE SCHLIESST DEN DIAL, und der Fokus geht zurueck an den Knopf.
+  // Vorher schloss ihn nur ein Klick irgendwohin - wer ihn mit der Tastatur
+  // geoeffnet hatte, konnte ihn ohne Maus nicht mehr zumachen und stand in
+  // einer Liste von vier Zielen, die er nicht angesteuert hatte (WCAG 2.1.2).
+  // Der Fokus muss mitgehen: `tabIndex = -1` nimmt den Aktionen beim Schliessen
+  // die Fokussierbarkeit, ein Fokus darauf faellt sonst an den Body.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !open) return;
+    toggleFab(false);
+    fabMain.focus();
+  }, { signal });
+}
+
+// --------------------------------------------------------
+// Eine Aufgabe aus der Übersicht öffnen (#918)
+// --------------------------------------------------------
+
+/**
+ * Dieselbe Leseansicht, die das Aufgabenmodul öffnet.
+ *
+ * Hier stand ein eigenes Kärtchen mit zwei Knöpfen: „Bearbeiten" schickte den
+ * Nutzer ins Aufgabenmodul, „Erledigt" hakte ab. Alles andere, was an einer
+ * Aufgabe hängt - Teilaufgaben, Kommentare, Dokumente, die abhakbaren Zeilen
+ * in der Beschreibung, die Fälligkeit, die Zuweisung - war von hier aus nicht
+ * zu sehen und nicht zu erreichen.
+ *
+ * Das wog schwerer, als die zwei fehlenden Knöpfe klingen: Die Übersicht ist
+ * die Ansicht, in der die App im Alltag steht. Das Aufgabenmodul ist die, in
+ * der Aufgaben angelegt und aufgeräumt werden. Die eine bot weniger an als die
+ * andere, obwohl sie öfter offen ist.
+ *
+ * Das Modul wird nachgeladen statt mitgeladen: Es zieht das Aufgabenformular
+ * mit sich, und dessen Gewicht gehört nicht in den Start der Startseite.
+ *
+ * `rerender` frischt die Kachel auf, aus der geöffnet wurde - der Nutzer
+ * bleibt, wo er war, statt im Aufgabenmodul zu landen. `user` reist mit,
+ * weil an ihm haengt, wem seine eigenen Kommentare gehoeren und wer eine
+ * gesperrte Aufgabe umschreiben darf.
+ */
+async function openTaskFromOverview(taskId, container, rerender, user) {
+  try {
+    const { openTaskById } = await import('/pages/tasks.js');
+    await openTaskById(taskId, { user, container, onChanged: rerender });
+  } catch (err) {
+    console.error('[Dashboard] Aufgabe konnte nicht geöffnet werden:', err);
+    window.yuvomi?.showToast(err.message ?? t('tasks.loadError'), 'danger');
+  }
+}
+
+// --------------------------------------------------------
+// Navigations-Links verdrahten
+// --------------------------------------------------------
+
+function wireLinks(container, rerender, { editing = false, user = null } = {}) {
+  wireTodayMore(container);
+  wireTodayOverdue(container);
+  container.querySelectorAll('[data-route]').forEach((el) => {
+    if (el.id === 'fab-main' || el.closest('#fab-actions')) return;
+    if (editing && el.closest('.widget-wrapper--editing')) return;
+    // Objekt-Deep-Link (Paket 2): die Cockpit-Aufgabenzeile nennt EIN Objekt,
+    // also trifft der Klick auch dieses Objekt - die Leseansicht der Aufgabe
+    // wie bei den Zeilen des Tasks-Widgets, statt den Nutzer in der
+    // Aufgabenliste erneut suchen zu lassen (Critique P3).
+    // Essen-Zeile bewusst ohne Sonderweg: /meals öffnet die aktuelle Woche und
+    // scrollt den Heute-Slot selbst in den Blick (meals.js, day-header--today).
+    if (!editing && el.dataset.objectKind === 'task' && el.dataset.objectId) {
+      const show = () => openTaskFromOverview(el.dataset.objectId, container, rerender, user);
+      el.addEventListener('click', show);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+      });
+      return;
+    }
+    const go = () => window.yuvomi.navigate(el.dataset.route);
+    if (el.tagName === 'A') {
+      el.addEventListener('click', (e) => {
+        // DER BROWSER BEHÄLT SEINEN KLICK. Ein bedingungsloses
+        // `preventDefault()` nimmt dem `<a href>` genau das wieder weg, wofür
+        // der Widget-Kopf von `<button>` auf Link umgestellt wurde: Cmd- und
+        // Mittelklick öffnen einen neuen Tab, Shift ein Fenster. Ohne diese
+        // Zeile wäre der href ein Versprechen, das der Handler bricht.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        go();
+      });
+    } else {
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+    }
+  });
+
+  // Der Weg zur Pflege der Schnellzugriffe geht von der Kachel aus (#469): die
+  // Reihe hat keine Seite, weil sie kein Modul ist. Im Anpassen-Modus nicht -
+  // dort zieht man Kacheln, man bearbeitet ihren Inhalt nicht.
+  if (!editing) {
+    container.querySelectorAll('[data-quick-links-manage]').forEach((el) => {
+      // Erst beim Tipp geladen (Critique R19): der Verwalter samt Sortierung
+      // lag sonst in der Startkette jeder Uebersicht, geoeffnet wird er selten.
+      el.addEventListener('click', async () => {
+        const { openQuickLinksManager } = await import('/components/quick-links-manager.js');
+        openQuickLinksManager({ onChange: rerender });
+      });
+    });
+  }
+
+  // Task-Items öffnen die Leseansicht statt zu navigieren (#918)
+  if (editing) return;
+  // Die Countdown-Zeile einer Aufgabe hängt an demselben Griff (#647): sie
+  // nennt ein Objekt, also trifft der Klick dieses Objekt. Ein eigener Handler
+  // daneben wäre ein zweiter Weg zur selben Handlung.
+  container.querySelectorAll('.task-item[data-task-id], .countdown-item[data-task-id]').forEach((el) => {
+    const show = () => openTaskFromOverview(el.dataset.taskId, container, rerender, user);
+    el.addEventListener('click', show);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+    });
+  });
+}
+
+function reorderWidgetConfig(config, fromId, toId, placement = 'before') {
+  const fromIdx = config.findIndex((w) => w.id === fromId);
+  let toIdx = config.findIndex((w) => w.id === toId);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return config;
+  const next = config.map((w) => ({ ...w }));
+  const [moved] = next.splice(fromIdx, 1);
+  if (fromIdx < toIdx) toIdx -= 1;
+  if (placement === 'after') toIdx += 1;
+  next.splice(toIdx, 0, moved);
+  return next.map((w, i) => ({ ...w, order: i }));
+}
+
+function closestWidgetDrop(grid, event, draggedId) {
+  const candidates = [...grid.querySelectorAll('.widget-wrapper[data-widget-id]')]
+    .filter((item) => item.dataset.widgetId !== draggedId);
+  if (!candidates.length) return null;
+
+  let nearest = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const item of candidates) {
+    const rect = item.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = event.clientX - centerX;
+    const dy = event.clientY - centerY;
+    const distance = (dy * dy * 1.7) + (dx * dx);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = { item, rect };
+    }
+  }
+  if (!nearest) return null;
+
+  const sameRow = event.clientY >= nearest.rect.top && event.clientY <= nearest.rect.bottom;
+  const placement = sameRow
+    ? (event.clientX > nearest.rect.left + nearest.rect.width / 2 ? 'after' : 'before')
+    : (event.clientY > nearest.rect.top + nearest.rect.height / 2 ? 'after' : 'before');
+
+  return { id: nearest.item.dataset.widgetId, placement, item: nearest.item };
+}
+
+/* DER LOCH-HINWEIS IM BEARBEITEN-MODUS (Critique 2026-09-23).
+ *
+ * Das Raster packt immer dicht; was dann noch leer bleibt, liegt an den
+ * GROESSEN - drei Breitkacheln in drei Spalten lassen rechts je eine Zelle
+ * frei, weil keine spaetere Kachel hineinpasst. Das loest keine Reihenfolge,
+ * nur eine andere Groesse, und die schlaegt der Bearbeiten-Modus vor: EINE
+ * Aenderung, nach der kein Loch bleibt und das Raster nicht hoeher wird. Gibt
+ * es keine, schweigt er - ein Hinweis ohne Ausweg waere Laerm.
+ *
+ * Die Spans kommen aus dem Stylesheet, nicht aus einer zweiten Tabelle: welche
+ * Groesse in welcher Breite wie viele Spalten und Zeilen belegt, steht nur in
+ * dashboard.css. Fuer eine Kandidaten-Groesse wird die Klasse kurz getauscht
+ * und der berechnete Stil gelesen - ein Stil-Recalc, kein Layout, und der
+ * Tausch ist zurueckgenommen, bevor der Browser das naechste Bild malt. */
+function gridSpans(el) {
+  const cs = getComputedStyle(el);
+  const span = (start, end) => Number(/span (\d+)/.exec(`${start} ${end}`)?.[1] || 1);
+  return { cols: span(cs.gridColumnStart, cs.gridColumnEnd), rows: span(cs.gridRowStart, cs.gridRowEnd) };
+}
+
+function spansForSize(el, size) {
+  const current = [...el.classList].find((c) => c.startsWith('widget-size--'));
+  const probe = widgetSizeClass(size);
+  if (!current || current === probe) return gridSpans(el);
+  el.classList.replace(current, probe);
+  try {
+    return gridSpans(el);
+  } finally {
+    el.classList.replace(probe, current);
+  }
+}
+
+function gridColumnCount(grid) {
+  return getComputedStyle(grid).gridTemplateColumns.split(' ').filter((v) => v && v !== 'none').length;
+}
+
+function gridHoleSuggestion(grid) {
+  const columns = gridColumnCount(grid);
+  if (columns < 2) return null;
+  const items = [...grid.querySelectorAll(':scope > .widget-wrapper[data-widget-id]')].map((el) => ({
+    id: el.dataset.widgetId,
+    el,
+    size: [...el.classList].find((c) => c.startsWith('widget-size--'))?.slice('widget-size--'.length) ?? '1x1',
+    ...gridSpans(el),
+  }));
+  return suggestGridHoleFill(items, columns,
+    (item) => WIDGET_SIZE_PRESETS.map((p) => ({ size: p.value, ...spansForSize(item.el, p.value) })));
+}
+
+/**
+ * DAS RASTER HAT IM NORMALMODUS KEINE LOECHER (Re-Critique 2026-09-27, A7
+ * P2-12 / R10 L9). Die Kachel vor einer freien Zelle waechst in den Rest ihrer
+ * Zeile (`rowFillSpans`, utils/dashboard-widgets.js) - als Darstellung, nicht
+ * als gespeicherte Groesse: `data-row-fill` plus `--widget-fill-span`
+ * (dashboard.css). Im Anpassen-Modus waechst nichts; dort zeigt das Raster die
+ * gewaehlten Groessen, und der Loch-Hinweis (`gridHoleSuggestion`) schlaegt die
+ * dauerhafte Korrektur vor.
+ *
+ * Gemessen wird mit abgenommenem Wachstum - die Spans kommen aus den
+ * Groessenklassen, nicht aus der letzten Runde dieser Funktion.
+ */
+function applyRowFill(grid, { editing = false } = {}) {
+  // Nur, was im Raster steht: ein verborgenes Kind belegt keine Zelle.
+  const tiles = [...grid.children].filter((el) => getComputedStyle(el).display !== 'none');
+  for (const el of grid.children) {
+    if (!('rowFill' in el.dataset)) continue;
+    delete el.dataset.rowFill;
+    el.style.removeProperty('--widget-fill-span');
+  }
+  if (editing) return;
+  const columns = gridColumnCount(grid);
+  if (columns < 2) return;
+  const items = tiles.map((el, index) => ({ id: el.dataset.widgetId || `#${index}`, el, ...gridSpans(el) }));
+  const grown = rowFillSpans(items, columns);
+  for (const item of items) {
+    const span = grown.get(item.id);
+    if (!span) continue;
+    item.el.dataset.rowFill = '';
+    item.el.style.setProperty('--widget-fill-span', String(span));
+  }
+}
+
+function renderGridHint(suggestion) {
+  const preset = WIDGET_SIZE_PRESETS.find((p) => p.value === suggestion.size);
+  const text = t('dashboard.gridHoleHint', {
+    widget: widgetLabel(suggestion.id),
+    size: preset ? t(preset.labelKey) : suggestion.size,
+  });
+  return `
+    <div class="dashboard-grid-hint" role="status">
+      <p class="dashboard-grid-hint__text">${esc(text)}</p>
+      <button type="button" class="btn btn--ghost" data-grid-hint-apply
+              data-widget-id="${esc(suggestion.id)}" data-size="${esc(suggestion.size)}">${esc(t('dashboard.gridHoleApply'))}</button>
+    </div>`;
+}
+
+function updateWidgetConfig(config, id, patch) {
+  return config.map((w) => w.id === id ? { ...w, ...patch } : w)
+    .map((w, i) => ({ ...w, order: i }));
+}
+
+// --------------------------------------------------------
+// Haupt-Render
+// --------------------------------------------------------
+
+// Dependencies injiziert, damit die Funktion ohne DOM/`navigator`-Globals testbar ist.
+export async function maybeUpdateAutoLocation({ autoLocateEnabled, geolocation, putPreferences }) {
+  if (!autoLocateEnabled || !geolocation) return false;
+  try {
+    const position = await new Promise((resolve, reject) => {
+      geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 });
+    });
+    await putPreferences({
+      weather_user: {
+        lat: position.coords.latitude.toFixed(4),
+        lon: position.coords.longitude.toFixed(4),
+        // Stadt-Label gehört zu den alten Koordinaten — Override löschen, damit das Widget
+        // auf die "lat, lon"-Anzeige zurückfällt statt einen veralteten Namen zu zeigen.
+        city: null,
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function render(container, { user, signal: routeSignal = null } = {}) {
+  _fabController?.abort();
+  // Zwei Achsen, ein Controller (#976/#977): das Router-Signal faellt beim
+  // Verlassen der Seite, der eigene Controller beim naechsten eigenen Aufbau.
+  // Alles, was dieser Aufbau verdrahtet, haengt an `signal` - nicht am
+  // Modul-Feld, sonst registrierte ein ueberholter Aufbau seine Timer am
+  // Controller des neueren. Ein verspaeteter Neuaufbau nach dem Verlassen
+  // zeichnet gar nichts mehr.
+  if (routeSignal?.aborted) return;
+  const controller = createPageController(routeSignal);
+  _fabController = controller;
+  const { signal } = controller;
+  dashboardViewer = user ?? null;
+
+  // Der Wand-Modus ist ein Zustand DIESER Seite, kein zweiter Ort: die Route,
+  // die Daten, der stille Refresh und die Echo-Regel bleiben dieselben - nur
+  // Massstab, Dichte und Bedienbarkeit aendern sich. Ob er laeuft, hat der
+  // Router bereits an der Wurzel vermerkt (utils/wall-mode.js).
+  const wallMode = isWallActive();
+
+  setHtml(container, `
+    <div class="dashboard app-page app-page--dashboard${wallMode ? ' dashboard--wall' : ''}" data-composition="dashboard">
+      <h1 class="sr-only">${t('dashboard.title')}</h1>
+      <div class="dashboard-shell" id="dashboard-shell">
+        ${wallMode ? renderWallSurface(null, null, { loading: true }) : renderDashboardSkeleton()}
+      </div>
+    </div>
+    ${wallMode ? '' : renderFab()}
+  `);
+
+  // Der Zonen-Hinweis fuer Bestandshaushalte (#1607): ein Admin, dessen Browser
+  // in einer anderen Zone steht, als der Haushalt ohne eigene Einstellung
+  // rechnet, wird hier einmal gefragt. HIER und nicht nach den Daten: der Stand
+  // dazu liegt seit dem Anmelden vor (router.js), die Zeile steht also schon
+  // neben dem Skelett. Sie haengt neben `.dashboard-shell`, nicht darin - die
+  // Shell wird mit den Daten neu gefuellt.
+  mountZonePrompt(container.querySelector('.dashboard'), {
+    user, t, api, wall: wallMode,
+    before: container.querySelector('#dashboard-shell'),
+    toast: (message, type) => window.yuvomi?.showToast(message, type),
+  });
+
+  // Ein Neuaufbau AUS DER SEITE HERAUS laeuft nicht durch renderPage() im
+  // Router, und damit an dessen FAB-Wechsel vorbei (#634): den alten Knopf aus
+  // der Shell-Ebene raeumen, den neuen aus dem Container dorthin heben. Der
+  // synchrone Teil von render() hat den Speed-Dial schon gelegt - oder, auf der
+  // Wand, keinen. Ohne diesen Schritt stand beim Betreten der alte Knopf auf der
+  // Wand und nach dem Verlassen der neue ohne Plus im Scrollport (#1588).
+  const rerender = () => {
+    const done = render(container, { user, signal: routeSignal });
+    window.yuvomi?.replacePageFab?.();
+    return done;
+  };
+  // Steht keine Wand mehr (Ausstieg, Einstellungen), gehoert der Marker nicht
+  // mehr ihr - sonst kostete die naechste Zurueck-Geste einen Tipp ins Leere.
+  if (!wallMode) releaseWallMarker();
+
+  // DER TIMER HAENGT NICHT AN DEN DATEN (Review zu #844). Die Wandflaeche wird
+  // erst verdrahtet, wenn das Dashboard geladen hat - der Timer aber ist von
+  // diesen Daten unabhaengig, und ein Neuzeichnen bricht den vorigen Controller
+  // sofort ab. Startete jemand einen Timer, waehrend die Anfrage haengt, waeren
+  // Takt und `data-wall-timer` weg, bis die Antwort kommt: die Anzeige stuende
+  // still, es laeutete nicht, und der Screensaver duerfte sich darueberlegen.
+  //
+  // Er wird deshalb verdrahtet, sobald die Flaeche im DOM steht. Der Aufruf
+  // nach dem Laden bleibt und ersetzt diesen hier - `wireWallTimer` raeumt
+  // seinen vorigen Takt selbst ab.
+  if (wallMode) {
+    wireWallTimer(container.querySelector('.wall'), rerender, signal, { announce: announceDashboard });
+    // Der Ausstieg gehoert zur selben Sorte: er haengt an nichts, was geladen
+    // wird. Einmal verdrahtet, ueber den Container - er ueberlebt das zweite
+    // Rendern und braucht keinen zweiten Aufruf.
+    wireWallExit(container, rerender, signal);
+  }
+
+  let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, rewards: {}, health: {}, housekeeping: {} };
+  // Ein Stand von vorhin darf keine Kachel versprechen: erst nach dem Laden
+  // wieder wahr (siehe die Notiz an `countdownAvailable`).
+  setCountdownAvailability([]);
+  setWeatherAvailability(null, null);
+  let weather      = null;
+  let weatherPrefs = null;
+  let weatherAutoLocate = false;
+  let widgetConfig = buildDefaultWidgetConfig();
+  let savedWidgetConfig = buildDefaultWidgetConfig();
+  // Das Kopfband „Heute auf einen Blick" ist kein Rasterkachel, folgt aber
+  // derselben Anpassen-Grammatik wie die Widgets: ausblenden am Block, zurueck
+  // ueber die Chip-Leiste, und es faehrt in denselben Speicher-, Abbruch- und
+  // Ruecknahme-Zyklus mit (#740). Persoenlich wie `dashboard_widgets` (#585):
+  // beide liegen im selben PUT, und ein haushaltweites Kopfband neben einer
+  // persoenlichen Anordnung hiesse, dass ein Ausblenden je nach Element mal
+  // mich und mal alle traefe.
+  let glanceVisible = true;
+  let savedGlanceVisible = true;
+  // Folge ich der Vorgabe des Haushalts, habe ich nichts Eigenes gespeichert -
+  // dann gibt es auch nichts zurueckzusetzen (#827).
+  let followsDefault = true;
+  const canPublish = user?.role === 'admin';
+  // Die Wand fragt die Haushaltsfassung der Uebersicht ab (#1817,
+  // `dashboardRequest`). JEDER Abruf dieser Seite geht hier durch - auch der
+  // stille Refresh, sonst stuende nach einer Viertelstunde wieder die
+  // persoenliche Fassung an der Wand. Die faelligen Erinnerungen ebenso
+  // (`loadPendingReminders`): sie sind die zweite Antwort, die davon abhaengt,
+  // wer fragt.
+  const overviewRequest = (query) => dashboardRequest(query, { wall: wallMode });
+  let isCustomizing = false;
+  let screensaverEnabled = false;
+  let currency     = 'EUR';
+  let visibleMealTypes = MEAL_ORDER;
+  let loadFailed   = false;
+  let loadErrorStatus = null;
+  // Zeitpunkt des letzten geglueckten Datenstands - der Anker im Masthead (A8).
+  // Bleibt `null`, solange nichts geladen wurde: eine Uhrzeit ohne Daten
+  // dahinter waere die falscheste aller Angaben.
+  let lastLoadedAt = null;
+  try {
+    const [dashRes, weatherRes, prefsRes, remindersRes] = await Promise.all([
+      api.get(overviewRequest(layoutHintQuery('/dashboard'))),
+      api.get(`/weather?lang=${encodeURIComponent(getLocale())}`).catch(() => ({ data: null })),
+      // Beim Start hat der Router dieselbe Antwort schon unterwegs und reicht
+      // sie herein (utils/start-handoff.js) - sonst zwei `/preferences` je
+      // Kaltstart. Danach gibt es nichts mehr abzuholen, und die Seite fragt selbst.
+      (window.yuvomi?.takeStartPreferences?.() ?? api.get('/preferences')).catch(() => ({ data: {} })),
+      loadPendingReminders(overviewRequest),
+    ]);
+    // Ueberholt oder verlassen, waehrend die Antworten unterwegs waren (#977):
+    // dieser Aufbau gehoert niemandem mehr und faesst die Flaeche nicht an.
+    if (signal.aborted) return;
+    primeMealTypeNames(prefsRes?.data);
+    data         = dashRes;
+    /* Die Zahlen an den Nav-Zielen und Modulkacheln kommen aus derselben
+     * Antwort (#868). Sie hier hereinzureichen spart die zweite Aggregation,
+     * die der Shell-Aufbau sonst beim Anmelden anstiess - `layoutHintQuery`
+     * schraenkt sie allerdings ein, und eine eingeschraenkte Zahl ist eine
+     * andere Zahl, also nimmt der Speicher sie nur ungefiltert an. Die Stufe
+     * der Kalender-Kachel (`events_limit`, #1680) ist kein Filter: sie aendert
+     * keine Zahl, und mit ihr als „gefiltert" holte der Router die Antwort bei
+     * jedem Kaltstart ein zweites Mal (`dashboardQueryFiltersCounts`). */
+    window.yuvomi?.primeModuleCountsFrom?.(dashRes, {
+      filtered: dashboardQueryFiltersCounts(overviewRequest(layoutHintQuery('/dashboard'))),
+    });
+    // Geburtstags-Termine tragen serverseitig einen sprachneutralen Titel
+    // („Birthday: <Name>"); anhand von birthday_name in die aktive Sprache
+    // übersetzen (Issue #524).
+    localizeEventLists(data);
+    setCountdownAvailability(data?.countdowns);
+    weather      = weatherRes.data ?? null;
+    weatherPrefs = prefsRes.data ?? null;
+    setWeatherAvailability(weatherRes, weatherPrefs);
+    weatherAutoLocate = Boolean(prefsRes.data?.weather_user?.auto_locate ?? prefsRes.data?.weather_auto_locate);
+    widgetConfig = childDefaultFor(
+      normalizeDashboardConfigWithExtensions(prefsRes.data?.dashboard_widgets ?? buildDefaultWidgetConfig()),
+      user,
+      prefsRes.data?.dashboard_follows_default !== false,
+    );
+    savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+    /* WIDGET-OPTIONEN KOMMEN EINEN SCHRITT ZU SPAET (#814): die Uebersicht und
+     * die Praeferenzen laufen absichtlich parallel los, aber welche Filter
+     * gelten, steht erst in der Antwort der zweiten. Die erste Abfrage nimmt
+     * deshalb den Pfad, den dieses Geraet zuletzt gebraucht hat
+     * (`layoutHintQuery`, dieselbe Vorhersage wie beim Skelett) - im
+     * Regelfall stimmt er, und es bleibt bei einer Abfrage.
+     *
+     * Stimmt er nicht, wird nachgeholt, und zwar VOR dem ersten Zeichnen: sonst
+     * saehe man kurz Termine, die man ausgeblendet hat. Die Alternative - erst
+     * Praeferenzen, dann Uebersicht - kostete JEDEN Aufruf eine Rundreise, auch
+     * die ohne Optionen. */
+    if (dashboardQuery(widgetConfig) !== layoutHintQuery('/dashboard')) {
+      try {
+        const filtered = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
+        if (signal.aborted) return;
+        localizeEventLists(filtered);
+        data = filtered;
+        setCountdownAvailability(data?.countdowns);
+      } catch { /* die ungefilterte Antwort steht bereits - lieber mehr als nichts */ }
+    }
+    data.pendingReminders = remindersRes;
+    glanceVisible = prefsRes.data?.dashboard_today_glance !== false;
+    savedGlanceVisible = glanceVisible;
+    followsDefault = prefsRes.data?.dashboard_follows_default !== false;
+    // Das Skelett des NAECHSTEN Aufrufs lernt hier seine Kachelform.
+    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+    screensaverEnabled = Boolean(prefsRes.data?.screensaver_enabled);
+    currency     = prefsRes.data?.currency ?? 'EUR';
+    visibleMealTypes = normalizeVisibleMealTypes(prefsRes.data?.visible_meal_types);
+    lastLoadedAt = new Date();
+  } catch (err) {
+    console.error('[Dashboard] Ladefehler:', err.message, 'Status:', err.status ?? 'network');
+    loadFailed = true;
+    loadErrorStatus = Number.isFinite(err?.status) ? err.status : null;
+  }
+
+  // Zyklus-Slice strikt owner-only nachladen: Zyklusdaten sind privat und dürfen
+  // nicht in den familienweiten /dashboard-Payload. Genau einmal (data.cycle bleibt
+  // sonst undefined = „noch nie geladen"). Ein Fehler lässt die Kachel auf ihren
+  // Onboarding-Empty fallen, statt das Dashboard zu kippen.
+  async function ensureCycleSlice() {
+    if (data.cycle !== undefined) return;
+    if (window.yuvomi?.isModuleDisabled('health')) return;
+    try {
+      const [periodsRes, settingsRes] = await Promise.all([
+        api.get('/health/cycle/periods'),
+        api.get('/health/cycle/settings').catch(() => ({ data: {} })),
+      ]);
+      data.cycle = { periods: periodsRes.data || [], settings: settingsRes.data || {} };
+    } catch (err) {
+      console.error('[Dashboard] Zyklus-Slice Ladefehler:', err?.message);
+      data.cycle = null;
+    }
+  }
+
+  // Eigener Slice wie Zyklus, aber aus einem anderen Grund: nicht Privatsphaere,
+  // sondern weil /dashboard das Modul schlicht nicht mitfuehrt. `/schedule/entries`
+  // ohne user_id liefert schon den ganzen Haushalt (dieselbe Abfrage, die die
+  // Schedule-Seite fuer ihre eigene „Heute"-Karte nutzt); die Typenliste daneben
+  // unterscheidet „niemand hat heute Dienst" von „das Modul ist noch leer".
+  async function ensureScheduleSlice() {
+    if (data.schedule !== undefined) return;
+    if (window.yuvomi?.isModuleDisabled('schedule')) return;
+    try {
+      data.schedule = await loadScheduleSlice(householdToday());
+    } catch (err) {
+      console.error('[Dashboard] Schedule-Slice Ladefehler:', err?.message);
+      data.schedule = null;
+    }
+  }
+
+  // Eigener Slice aus demselben Grund wie Schedule: /dashboard fuehrt Waste
+  // nicht mit. Zwei parallele Aufrufe wie beim Schedule-Slice (Entries + Typen) -
+  // hier "naechste Abholung je Typ" UND die Quellen-Liste, weil "braucht
+  // Auffrischung" (invariant #6) ein Source-Feld ist, kein Feld der Occurrence
+  // selbst (siehe Kommentar an renderWasteWidget).
+  async function ensureWasteSlice() {
+    if (data.waste !== undefined) return;
+    if (window.yuvomi?.isModuleDisabled('waste')) return;
+    try {
+      const [nextRes, sourcesRes] = await Promise.all([
+        api.get('/waste/occurrences/next'),
+        api.get('/waste/sources'),
+      ]);
+      // Per-type widget option (#1063 Phase 10), same shape as tasks' own
+      // category filter: no selection (or every type selected) means "all" -
+      // an empty picked list would otherwise be an empty widget for anyone
+      // who only ever opened the options dialog.
+      const selectedTypes = widgetConfig.find((w) => w.id === 'waste')?.options?.types;
+      const items = nextRes.data ?? [];
+      data.waste = {
+        items: (selectedTypes?.length ? items.filter((i) => selectedTypes.includes(i.type.id)) : items),
+        needsRefresh: (sourcesRes.data ?? []).some((s) => s.needs_refresh),
+      };
+    } catch (err) {
+      console.error('[Dashboard] Waste-Slice Ladefehler:', err?.message);
+      data.waste = null;
+    }
+  }
+
+  // Nur wenn die opt-in-Kachel sichtbar ist — die Mehrheit ohne aktivierte Kachel
+  // löst keinen Request aus.
+  if (!loadFailed && widgetConfig.some((w) => w.id === 'cycle' && w.visible)) {
+    await ensureCycleSlice();
+  }
+  if (!loadFailed && widgetConfig.some((w) => w.id === 'schedule' && w.visible)) {
+    await ensureScheduleSlice();
+  }
+  if (!loadFailed && widgetConfig.some((w) => w.id === 'waste' && w.visible)) {
+    await ensureWasteSlice();
+  }
+  // Auch die Nachlade-Runden koennen von einem Verlassen oder Neuaufbau
+  // ueberholt worden sein (#977).
+  if (signal.aborted) return;
+
+
+  // Einziger Persist-Pfad für Inline- UND Modal-Speichern. Legt vor dem Schreiben
+  // einen Schnappschuss an und bietet — wenn sich etwas geändert hat — im Toast ein
+  // „Rückgängig" an, das den vorherigen Stand wiederherstellt (inkl. Server).
+  /** Die Uebersicht neu holen, wenn sich die Filter geaendert haben (#814). */
+  async function reloadIfQueryChanged(previousQuery) {
+    if (dashboardQuery(widgetConfig) === previousQuery) return;
+    try {
+      const fresh = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
+      localizeEventLists(fresh);
+      fresh.cycle = data.cycle;
+      fresh.schedule = data.schedule;
+      fresh.waste = data.waste;
+      fresh.pendingReminders = data.pendingReminders;
+      data = fresh;
+      setCountdownAvailability(data?.countdowns);
+      lastLoadedAt = new Date();
+    } catch { /* der alte Stand bleibt stehen, statt die Seite zu leeren */ }
+  }
+
+  async function persistWidgetConfig(nextConfig) {
+    const previousConfig = savedWidgetConfig.map((w) => ({ ...w }));
+    const previousQuery = dashboardQuery(savedWidgetConfig);
+    widgetConfig = nextConfig.map((w) => ({ ...w }));
+    const previousGlance = savedGlanceVisible;
+    await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
+    savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+    savedGlanceVisible = glanceVisible;
+    // Ab jetzt liegt ein eigener Stand vor - die Vorgabe des Haushalts erreicht
+    // mich erst wieder, wenn ich ihn loesche.
+    followsDefault = false;
+    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+    isCustomizing = false;
+    // Wird die Zyklus-Kachel gerade erst eingeblendet, ihren owner-only Slice
+    // nachladen — sonst zeigte sie fälschlich den Empty-State bis zum Reload.
+    if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
+    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
+    // Waste's Typ-Option (#1063 Phase 10) reist nicht in dashboardQuery() mit
+    // (der Slice ist ein eigenstaendiger Client-Fetch, siehe ensureWasteSlice) -
+    // reloadIfQueryChanged() wuerde den alten, ungefilterten Stand also
+    // stillschweigend behalten. Ein geaenderter Typ-Filter verwirft ihn
+    // deshalb hier gezielt, statt bis zum naechsten vollen Seitenaufbau zu
+    // warten (dieselbe Sofort-Zusage wie bei Kalender/Aufgaben-Optionen).
+    const wasteOptionsChanged = JSON.stringify(previousConfig.find((w) => w.id === 'waste')?.options ?? null)
+      !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
+    if (wasteOptionsChanged) data.waste = undefined;
+    if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
+    await reloadIfQueryChanged(previousQuery);
+    rebuildDashboard(widgetConfig);
+
+    const changed = !sameWidgetConfig(previousConfig, widgetConfig) || previousGlance !== glanceVisible;
+    const onUndo = changed
+      ? async () => {
+          const queryBeforeUndo = dashboardQuery(widgetConfig);
+          const wasteOptionsBeforeUndo = JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
+          try {
+            widgetConfig = previousConfig.map((w) => ({ ...w }));
+            glanceVisible = previousGlance;
+            await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
+            savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+            savedGlanceVisible = glanceVisible;
+            rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+            if (wasteOptionsBeforeUndo !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null)) data.waste = undefined;
+            if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
+            await reloadIfQueryChanged(queryBeforeUndo);
+          } catch {
+            window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+          }
+          isCustomizing = false;
+          rebuildDashboard(widgetConfig);
+        }
+      : null;
+    window.yuvomi?.showToast(t('dashboard.customizeSaved'), 'success', onUndo ? 6000 : 1500, onUndo);
+  }
+
+  async function saveDashboardConfig() {
+    try {
+      await persistWidgetConfig(widgetConfig);
+    } catch {
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+    }
+  }
+
+  function cancelDashboardConfig() {
+    widgetConfig = savedWidgetConfig.map((w) => ({ ...w }));
+    glanceVisible = savedGlanceVisible;
+    isCustomizing = false;
+    rebuildDashboard(widgetConfig);
+  }
+
+  /* ABBRECHEN FRAGT, SOBALD ES ETWAS ZU VERLIEREN GIBT (Re-Critique
+   * 2026-09-27, A7 P2-5). Ein Fehlgriff neben „Speichern" warf die ganze
+   * Anordnung wortlos weg. Ohne Aenderung bleibt der Ausgang ein Tipp - eine
+   * Rueckfrage ohne Folge waere nur Reibung. Nach dem Verwerfen steht der Fokus
+   * wieder auf „Anpassen", wie nach jedem Moduswechsel. */
+  // Die eine Rueckfrage fuer Abbrechen UND Verlassen.
+  const confirmDiscardCustomize = () => confirmModal(t('modal.unsavedChanges'), {
+    danger: true,
+    confirmLabel: t('modal.discardChanges'),
+    detail: t('dashboard.customizeDiscardDetail'),
+  });
+
+  async function requestCancelDashboardConfig() {
+    if (customizeHasChanges({ widgetConfig, savedWidgetConfig, glanceVisible, savedGlanceVisible })) {
+      const confirmed = await confirmDiscardCustomize();
+      if (!confirmed || !isCustomizing) return;
+    }
+    focusAfterRebuild = ['#dashboard-customize-btn'];
+    cancelDashboardConfig();
+  }
+
+  // Verlassen-Schutz, solange angepasst wird (siehe customizeLeaveAllowed).
+  // Beim Verlassen wird nicht neu gezeichnet - die Seite geht ohnehin; nur der
+  // Modus endet, damit ein spaeter Neuaufbau nicht im Anpassen landet.
+  let releaseLeaveGuard = null;
+  const syncLeaveGuard = () => {
+    if (isCustomizing && !releaseLeaveGuard) {
+      releaseLeaveGuard = setLeaveGuard(() => customizeLeaveAllowed({
+        customizing: () => isCustomizing,
+        changed: () => customizeHasChanges({ widgetConfig, savedWidgetConfig, glanceVisible, savedGlanceVisible }),
+        askDiscard: confirmDiscardCustomize,
+        discard: () => {
+          widgetConfig = savedWidgetConfig.map((w) => ({ ...w }));
+          glanceVisible = savedGlanceVisible;
+          isCustomizing = false;
+          syncLeaveGuard();
+        },
+      }));
+    } else if (!isCustomizing && releaseLeaveGuard) {
+      releaseLeaveGuard();
+      releaseLeaveGuard = null;
+    }
+  };
+  signal.addEventListener('abort', () => { releaseLeaveGuard?.(); releaseLeaveGuard = null; }, { once: true });
+
+  /* „ZURÜCKSETZEN" HATTE SEIT #585 ZWEI PLAUSIBLE BEDEUTUNGEN und lieferte eine
+   * dritte (Critique 2026-08-16). Solange die Anordnung dem Haushalt gehörte,
+   * war „auf Standard" eindeutig. Seit sie der Person gehört, kann der Satz auch
+   * „zurück zu dem, was die Familie hatte" oder „zurück zu meinem letzten Stand"
+   * heißen - und keine der beiden trifft zu.
+   *
+   * SEIT #827 IST ES DER RÜCKWEG ZUR VORGABE, und zwar durch LÖSCHEN des
+   * eigenen Standes, nicht durch Hineinladen der Vorgabe in den Editor. Der
+   * Unterschied zeigt sich erst später: ein hineingeladenes und gespeichertes
+   * Layout friert die heutige Vorgabe auf dem Konto ein, und die nächste
+   * Änderung des Admins erreicht mich nie wieder. Deshalb schreibt diese
+   * Funktion `null` und wartet nicht auf „Speichern" - sie IST das Speichern. */
+  async function resetDashboardConfig() {
+    const confirmed = await confirmModal(t('dashboard.customizeResetConfirm'), {
+      confirmLabel: t('dashboard.customizeReset'),
+      detail: t('dashboard.customizeResetDetail'),
+    });
+    if (!confirmed) return;
+    const previousConfig = savedWidgetConfig.map((w) => ({ ...w }));
+    const previousGlance = savedGlanceVisible;
+    const previousQuery = dashboardQuery(savedWidgetConfig);
+    try {
+      const res = await api.put('/preferences', { dashboard_widgets: null, dashboard_today_glance: null });
+      widgetConfig = childDefaultFor(
+        normalizeDashboardConfigWithExtensions(res.data?.dashboard_widgets ?? buildDefaultWidgetConfig()),
+        user,
+        true,
+      );
+      glanceVisible = res.data?.dashboard_today_glance !== false;
+    } catch {
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+      return;
+    }
+    savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+    savedGlanceVisible = glanceVisible;
+    followsDefault = true;
+    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+    isCustomizing = false;
+    if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
+    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
+    // Siehe die Notiz an derselben Zeile in persistWidgetConfig() - der Reset
+    // kann eine eigene Typ-Auswahl verwerfen, und dashboardQuery() traegt sie
+    // nicht mit.
+    const wasteOptionsChanged = JSON.stringify(previousConfig.find((w) => w.id === 'waste')?.options ?? null)
+      !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
+    if (wasteOptionsChanged) data.waste = undefined;
+    if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
+    // Die Vorgabe kann andere Filter tragen als mein geloeschter Stand (#814).
+    await reloadIfQueryChanged(previousQuery);
+    rebuildDashboard(widgetConfig);
+    // Ein Zurücksetzen ist so umkehrbar wie jedes andere Speichern (#821):
+    // der vorherige eigene Stand wird zurückgeschrieben, nicht nachgebaut.
+    window.yuvomi?.showToast(t('dashboard.customizeResetDone'), 'success', 6000, async () => {
+      // Der Stand, fuer den die aktuell angezeigten Daten geholt wurden.
+      const queryBeforeUndo = dashboardQuery(widgetConfig);
+      const wasteOptionsBeforeUndo = JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
+      try {
+        widgetConfig = previousConfig.map((w) => ({ ...w }));
+        glanceVisible = previousGlance;
+        await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
+        savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+        savedGlanceVisible = glanceVisible;
+        followsDefault = false;
+        rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+        if (wasteOptionsBeforeUndo !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null)) data.waste = undefined;
+        if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
+        await reloadIfQueryChanged(queryBeforeUndo);
+      } catch {
+        window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+      }
+      isCustomizing = false;
+      rebuildDashboard(widgetConfig);
+    });
+  }
+
+  /* DIE VORGABE DES HAUSHALTS (#827) entsteht dort, wo man eine Übersicht
+   * ohnehin einrichtet - im Anpassen-Modus. Ein zweites Arrangier-Werkzeug in
+   * den Einstellungen wäre eine zweite Fassung derselben Oberfläche, und die
+   * beiden liefen auseinander.
+   *
+   * WER DER VORGABE FOLGT, HÄNGT SICH MIT DEM VERÖFFENTLICHEN NICHT AB: für ihn
+   * wird nichts Persönliches geschrieben. Ein Admin, der die Vorgabe setzt und
+   * damit stillschweigend einen eigenen Stand bekäme, verlöre jede spätere
+   * Änderung eines zweiten Admins - und würde es nicht merken. */
+  async function publishHouseholdDefault() {
+    const confirmed = await confirmModal(t('dashboard.customizeSetDefaultConfirm'), {
+      confirmLabel: t('dashboard.customizeSetDefault'),
+      detail: t('dashboard.customizeSetDefaultDetail'),
+    });
+    if (!confirmed) return;
+    const previousQuery = dashboardQuery(savedWidgetConfig);
+    const payload = {
+      dashboard_widgets_default: widgetConfig,
+      dashboard_today_glance_default: glanceVisible,
+    };
+    if (!followsDefault) {
+      payload.dashboard_widgets = widgetConfig;
+      payload.dashboard_today_glance = glanceVisible;
+    }
+    try {
+      await api.put('/preferences', payload);
+    } catch {
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+      return;
+    }
+    savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+    savedGlanceVisible = glanceVisible;
+    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+    isCustomizing = false;
+    // Wie beim Speichern: haben sich mit den Optionen die Parameter der Abfrage
+    // geaendert, steht noch die alte Antwort da. Ohne den Abruf zeigte die
+    // Kachel nach „Als Vorgabe fuer alle" weiter fuenf Termine, obwohl gerade
+    // zwoelf veroeffentlicht wurden (#1680) - und „nur meine" weiter alle.
+    await reloadIfQueryChanged(previousQuery);
+    rebuildDashboard(widgetConfig);
+    window.yuvomi?.showToast(t('dashboard.customizeSetDefaultDone'), 'success');
+  }
+
+  // Beobachtet im Bearbeiten-Modus die Spaltenzahl des Rasters: ein Loch, das
+  // bei drei Spalten bleibt, gibt es bei zwei vielleicht nicht - und umgekehrt.
+  let gridHintObserver = null;
+  signal.addEventListener('abort', () => gridHintObserver?.disconnect(), { once: true });
+  // Und im Normalmodus dieselbe Beobachtung fuer das Wachstum in den
+  // Zeilenrest: Spaltenzahl und Kachelzahl (Erweiterungs-Widgets haengen sich
+  // spaeter ein) entscheiden, wer waechst. Die Hoehe allein nicht - sonst
+  // loeste das eigene Wachstum die naechste Runde aus.
+  let rowFillObserver = null;
+  signal.addEventListener('abort', () => rowFillObserver?.disconnect(), { once: true });
+
+  function wireRowFill() {
+    rowFillObserver?.disconnect();
+    rowFillObserver = null;
+    const grid = container.querySelector('#dashboard-widget-grid');
+    if (!grid) return;
+    applyRowFill(grid, { editing: isCustomizing });
+    if (isCustomizing || typeof ResizeObserver !== 'function') return;
+    let shape = `${gridColumnCount(grid)}:${grid.childElementCount}`;
+    rowFillObserver = new ResizeObserver(() => {
+      const next = `${gridColumnCount(grid)}:${grid.childElementCount}`;
+      if (next === shape) return;
+      shape = next;
+      applyRowFill(grid);
+    });
+    rowFillObserver.observe(grid);
+  }
+
+  function syncGridHint(grid) {
+    container.querySelector('.dashboard-grid-hint')?.remove();
+    const suggestion = gridHoleSuggestion(grid);
+    if (!suggestion) return;
+    // VOR dem Raster, nicht dahinter: das Loch steht oft oben, und ein Hinweis
+    // unter zwanzig Kacheln waere einer, den man erst nach dem Scrollen findet.
+    grid.insertAdjacentHTML('beforebegin', renderGridHint(suggestion));
+    container.querySelector('.dashboard-grid-hint [data-grid-hint-apply]')?.addEventListener('click', () => {
+      widgetConfig = updateWidgetConfig(widgetConfig, suggestion.id, { size: suggestion.size });
+      rebuildDashboard(widgetConfig);
+    });
+  }
+
+  function wireDashboardEditMode() {
+    gridHintObserver?.disconnect();
+    gridHintObserver = null;
+    if (!isCustomizing) return;
+    const grid = container.querySelector('#dashboard-widget-grid');
+    if (!grid) return;
+    // Groessen-Menue (R9 M7): Position, Pfeiltasten, Schliessen - einmal an der
+    // stabilen Seitenwurzel, idempotent ueber sein data-Attribut.
+    installPopoverMenus(container);
+    let draggedId = '';
+    let currentDrop = null;
+
+    syncGridHint(grid);
+    if (typeof ResizeObserver === 'function') {
+      let columns = gridColumnCount(grid);
+      gridHintObserver = new ResizeObserver(() => {
+        const next = gridColumnCount(grid);
+        if (next === columns) return;
+        columns = next;
+        syncGridHint(grid);
+      });
+      gridHintObserver.observe(grid);
+    }
+
+    const clearDropHint = () => {
+      grid.querySelectorAll('.widget-wrapper--drop-before, .widget-wrapper--drop-after').forEach((el) => {
+        el.classList.remove('widget-wrapper--drop-before', 'widget-wrapper--drop-after');
+      });
+    };
+
+    const updateDropHint = (event) => {
+      if (!draggedId) return null;
+      clearDropHint();
+      currentDrop = closestWidgetDrop(grid, event, draggedId);
+      if (currentDrop) {
+        currentDrop.item.classList.add(currentDrop.placement === 'after' ? 'widget-wrapper--drop-after' : 'widget-wrapper--drop-before');
+      }
+      return currentDrop;
+    };
+
+    grid.querySelectorAll('.widget-wrapper[data-widget-id]').forEach((wrapper) => {
+      wrapper.addEventListener('dragstart', (event) => {
+        draggedId = wrapper.dataset.widgetId;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggedId);
+        wrapper.classList.add('widget-wrapper--dragging');
+      });
+      wrapper.addEventListener('dragend', () => {
+        draggedId = '';
+        wrapper.classList.remove('widget-wrapper--dragging');
+        currentDrop = null;
+        clearDropHint();
+      });
+    });
+
+    grid.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      updateDropHint(event);
+    });
+
+    grid.addEventListener('dragleave', (event) => {
+      if (!grid.contains(event.relatedTarget)) {
+        currentDrop = null;
+        clearDropHint();
+      }
+    });
+
+    grid.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const fromId = event.dataTransfer.getData('text/plain') || draggedId;
+      const drop = currentDrop || updateDropHint(event);
+      if (fromId && drop) {
+        widgetConfig = reorderWidgetConfig(widgetConfig, fromId, drop.id, drop.placement);
+        rebuildDashboard(widgetConfig);
+      }
+    });
+
+    grid.querySelectorAll('[data-widget-size-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const size = btn.dataset.widgetSizePreset;
+        if (!WIDGET_SIZE_OPTIONS.includes(size)) return;
+        // Aus dem Groessen-Menue (R9 M7): der Fokus gehoert danach dem Knopf,
+        // der das Menue oeffnete - der Eintrag steht nach dem Neuaufbau in
+        // einem geschlossenen Panel und naehme ihn nicht an.
+        const menu = btn.closest('.popover-menu');
+        if (menu) {
+          menu.hidePopover?.();
+          grid.querySelector(`[popovertarget="${CSS.escape(menu.id)}"]`)?.focus();
+        }
+        widgetConfig = updateWidgetConfig(widgetConfig, btn.dataset.widgetId, { size });
+        // Der Fokus bleibt auf demselben Knopf (rebuildDashboard traegt ihn
+        // hinueber), und der traegt jetzt aria-pressed - gesagt wird trotzdem,
+        // was sich geaendert hat: die Kachel ist gewachsen, nicht der Knopf.
+        rebuildDashboard(widgetConfig);
+        const preset = WIDGET_SIZE_PRESETS.find((p) => p.value === size);
+        announceDashboard(t('dashboard.customizeSizeDone', {
+          widget: widgetLabel(btn.dataset.widgetId),
+          size: preset ? t(preset.labelKey) : size,
+        }));
+      });
+    });
+
+    container.querySelectorAll('[data-widget-options]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.widgetOptions;
+        const current = widgetConfig.find((w) => w.id === id)?.options ?? {};
+        const next = await openWidgetOptions(id, current);
+        if (next === null) return;
+        // Ein leeres Optionsobjekt wird zu „keine Optionen": so bleibt der
+        // gespeicherte Stand identisch mit dem eines Layouts, das den Dialog
+        // nie gesehen hat.
+        widgetConfig = updateWidgetConfig(widgetConfig, id,
+          Object.keys(next).length ? { options: next } : { options: undefined });
+        rebuildDashboard(widgetConfig);
+      });
+    });
+
+    /* WER AUSBLENDET, VERLIERT SEINEN KNOPF - UND DARF DESHALB NICHT DEN FOKUS
+     * VERLIEREN. Der Neuaufbau ersetzt das ganze Raster; der gedrueckte Knopf
+     * ist danach fort, und der Fokus fiel bis hierher auf <body> zurueck: wer
+     * per Tastatur drei Kacheln ausblenden wollte, stand nach der ersten wieder
+     * am Seitenanfang. Er geht deshalb zum gleichen Knopf der Nachbarkachel
+     * (so laesst sich eine Reihe nacheinander abraeumen), und wo es keine gibt,
+     * zum Chip, der sie zurueckholt. Beim Einblenden spiegelbildlich. */
+    const neighbourIds = (el, selector, attr) => {
+      const next = el?.nextElementSibling?.closest(selector) ? el.nextElementSibling : null;
+      const prev = el?.previousElementSibling?.closest(selector) ? el.previousElementSibling : null;
+      return [next, prev].map((n) => n?.getAttribute(attr) ?? n?.querySelector(`[${attr}]`)?.getAttribute(attr))
+        .filter(Boolean);
+    };
+
+    grid.querySelectorAll('[data-widget-hide]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.widgetHide;
+        const wrapper = btn.closest('.widget-wrapper');
+        focusAfterRebuild = [
+          ...neighbourIds(wrapper, '.widget-wrapper', 'data-widget-id')
+            .map((n) => `.widget-wrapper[data-widget-id="${CSS.escape(n)}"] [data-widget-hide]`),
+          `[data-widget-show="${CSS.escape(id)}"]`,
+        ];
+        widgetConfig = updateWidgetConfig(widgetConfig, id, { visible: false });
+        rebuildDashboard(widgetConfig);
+        announceDashboard(t('dashboard.customizeHiddenDone', { widget: widgetLabel(id) }));
+      });
+    });
+
+    // Wieder-Einblenden aus der Tray-Leiste (außerhalb des Grids, daher container-
+    // weit gesucht): der Gegenpart zum Ausblenden, macht den Inline-Editor komplett.
+    container.querySelectorAll('[data-widget-show]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.widgetShow;
+        focusAfterRebuild = [
+          ...neighbourIds(btn.closest('.widget-restore-chip-group') ?? btn, '.widget-restore-chip-group, [data-glance-show]', 'data-widget-show')
+            .map((n) => `[data-widget-show="${CSS.escape(n)}"]`),
+          `.widget-wrapper[data-widget-id="${CSS.escape(id)}"] [data-widget-hide]`,
+        ];
+        widgetConfig = updateWidgetConfig(widgetConfig, id, { visible: true });
+        rebuildDashboard(widgetConfig);
+        announceDashboard(t('dashboard.customizeShownDone', { widget: widgetLabel(id) }));
+      });
+    });
+
+    // Kopfband: beide Knoepfe sitzen ausserhalb des Grids (der eine im Masthead,
+    // der andere in der Tray-Leiste), deshalb container-weit gesucht.
+    container.querySelector('[data-glance-hide]')?.addEventListener('click', () => {
+      glanceVisible = false;
+      focusAfterRebuild = ['[data-glance-show]'];
+      rebuildDashboard(widgetConfig);
+      announceDashboard(t('dashboard.customizeHiddenDone', { widget: t('dashboard.todayTitle') }));
+    });
+    container.querySelector('[data-glance-show]')?.addEventListener('click', () => {
+      glanceVisible = true;
+      focusAfterRebuild = ['[data-glance-hide]'];
+      rebuildDashboard(widgetConfig);
+      announceDashboard(t('dashboard.customizeShownDone', { widget: t('dashboard.todayTitle') }));
+    });
+
+    // Reorder ohne HTML5-DnD (das feuert nicht per Finger und ist nicht per
+    // Tastatur bedienbar). Ein Pfad für drei Auslöser: Touch-Up/Down-Buttons,
+    // Desktop-Grip-Pfeiltasten und (indirekt) das Modal — alle über den Nachbarn
+    // aus der gerenderten Grid-Reihenfolge und dasselbe reorderWidgetConfig.
+    const moveWidget = (id, dir) => {
+      const wrapper = grid.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"]`);
+      const sibling = dir === 'up' ? wrapper?.previousElementSibling : wrapper?.nextElementSibling;
+      const siblingId = sibling?.dataset?.widgetId;
+      if (!id || !siblingId) return false;
+      widgetConfig = reorderWidgetConfig(widgetConfig, id, siblingId, dir === 'up' ? 'before' : 'after');
+      rebuildDashboard(widgetConfig);
+      // Der Fokus folgt der Kachel (die Aufrufer unten), aber wohin sie
+      // gerutscht ist, sieht nur, wer hinsieht: gesagt wird der neue Platz.
+      const order = [...container.querySelectorAll('#dashboard-widget-grid > .widget-wrapper[data-widget-id]')]
+        .map((w) => w.dataset.widgetId);
+      announceDashboard(t('dashboard.customizeMovedTo', {
+        widget: widgetLabel(id), position: order.indexOf(id) + 1, total: order.length,
+      }));
+      return true;
+    };
+
+    grid.querySelectorAll('[data-widget-move]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.widgetId;
+        const dir = btn.dataset.widgetMove;
+        if (!moveWidget(id, dir)) return;
+        // Fokus dem bewegten Widget nachführen (Tastatur-Kontinuität): gleiche
+        // Richtung, sonst die noch aktive Gegenrichtung.
+        const movedWrapper = container.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"]`);
+        const sameDir = movedWrapper?.querySelector(`[data-widget-move="${dir}"]:not([disabled])`);
+        const anyMove = movedWrapper?.querySelector('[data-widget-move]:not([disabled])');
+        (sameDir ?? anyMove)?.focus();
+      });
+    });
+
+    // Desktop-Tastatur: der Grip ist ein fokussierbarer Button — Pfeil hoch/runter
+    // ordnet um. Schließt die Inline-Reorder-Lücke für Tastatur-Nutzer, ohne die
+    // schmale Edit-Leiste mit zusätzlichen Buttons zu überladen (Drag bleibt Maus).
+    grid.querySelectorAll('[data-widget-drag-handle]').forEach((handle) => {
+      handle.addEventListener('keydown', (event) => {
+        const dir = event.key === 'ArrowUp' ? 'up' : event.key === 'ArrowDown' ? 'down' : null;
+        if (!dir) return;
+        event.preventDefault();
+        const id = handle.closest('.widget-wrapper[data-widget-id]')?.dataset.widgetId;
+        if (moveWidget(id, dir)) {
+          container.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"] [data-widget-drag-handle]`)?.focus();
+        }
+      });
+    });
+  }
+
+  let disposeNoteCategories = () => {};
+  let disposeFastingClock = () => {};
+  // Fokus-Nachfolger, den eine Geste fuer den naechsten Neuaufbau vormerkt
+  // (Selektoren, der erste Treffer gewinnt), und der Modus des letzten Aufbaus -
+  // null, solange noch keiner lief.
+  let focusAfterRebuild = null;
+  let renderedCustomizing = null;
+  signal.addEventListener('abort', () => disposeFastingClock(), { once: true });
+  signal.addEventListener('abort', () => disposeNoteCategories(), { once: true });
+  // Das Einpassen der Wand auf Aufbau und Fenstergroesse (#1817).
+  const wallFit = createWallFit(window, signal);
+  function rebuildDashboard(cfg) {
+    // Der eine Engpass fuer jeden verspaeteten Neuaufbau (#977): eine Antwort,
+    // die nach dem Verlassen der Seite oder nach dem naechsten render()
+    // eintrifft, darf die Flaeche nicht mehr anfassen - sonst ueberschreibt der
+    // aeltere Stand den neueren.
+    if (signal.aborted) return;
+    disposeNoteCategories();
+    disposeFastingClock();
+    const shell = container.querySelector('#dashboard-shell');
+    if (!shell) return;
+    if (wallMode) {
+      rebuildWall(container, shell, {
+        data, weather, failed: loadFailed, updatedAt: lastLoadedAt, rerender, signal, fit: wallFit, screensaverEnabled,
+      });
+      return;
+    }
+    if (loadFailed) {
+      setHtml(shell, `
+        ${renderDashboardOverview(user, false, null, { offerNew: false })}
+        ${renderDashboardError(loadErrorStatus)}
+      `);
+      if (window.lucide) window.lucide.createIcons({ el: shell });
+      container.querySelector('#dashboard-retry')?.addEventListener('click', rerender, { signal: signal });
+      return;
+    }
+    // Signature-„Heute"-Masthead: Begrüßung und Glance-Cockpit teilen sich EIN
+    // erhöhtes Material-Band (statt zweier gestapelter gerahmter Kästen). Die
+    // inneren Sections sind entrahmt; das Band trägt Rahmen/Schatten/Tönung.
+    // Fehlt das Cockpit (alle Domänen als Widgets sichtbar → kein Glance-Inhalt),
+    // kollabiert das Band per --slim auf eine schlanke Gruß-Leiste statt ein
+    // großes leeres Rechteck zu zeigen (Critique R3 P1).
+    const cockpitHtml = (glanceVisible || isCustomizing) ? renderTodayCockpit(data, cfg, isCustomizing) : '';
+    const mastheadSlim = cockpitHtml ? '' : ' dashboard-masthead--slim';
+    // Kein Wetter-Echo: die Masthead-Zeile spricht nur, wenn die Wetter-Karte
+    // nicht ohnehin im Raster sichtbar ist (Opt-in fürs Wandtablet).
+    // Eine nicht verfuegbare Karte steht nicht im Raster, spricht also auch
+    // nicht fuer die Zeile.
+    const weatherCardShown = cfg.some((w) => w.id === 'weather' && w.visible) && isWidgetModuleEnabled('weather');
+    // Wer hatte den Fokus? Nach dem setHtml gibt es sein Element nicht mehr
+    // (captureRebuildFocus / restoreFocusAfterRebuild).
+    const { key: keepFocus, had: hadFocus } = captureRebuildFocus(shell, document.activeElement, document.body);
+    const modeChanged = renderedCustomizing !== null && renderedCustomizing !== isCustomizing;
+    // Nur eine Geste IM Anpassen-Modus gleitet (playTileFlip): beim Betreten
+    // und Verlassen wachsen und schwinden die Bearbeiten-Leisten aller Kacheln,
+    // da waere jede Bewegung nur Unruhe.
+    const tileRectsBefore = isCustomizing && renderedCustomizing === true ? captureTileRects(shell) : null;
+    // BETRETEN UND VERLASSEN: das Raster gleitet ALS GANZES an seine neue Lage
+    // (R16, Bewegung). Der Gruss bricht um, die Ablage schiebt sich davor - das
+    // Raster sprang beim Betreten um mehrere hundert Pixel (gemessen 486 ->
+    // 868). Die Kacheln selbst bleiben ruhig (Satz oben): EIN Versatz fuer das
+    // Raster, keine zweiundzwanzig einzelnen.
+    const gridTopBefore = modeChanged
+      ? shell.querySelector('#dashboard-widget-grid')?.getBoundingClientRect?.().top ?? null
+      : null;
+    renderedCustomizing = isCustomizing;
+    syncLeaveGuard();
+    // Im Anpassen-Modus ist die Seite ein Editor: der Speed-Dial ("Neue
+    // Aufgabe", "Neuer Termin" ...) fuehrte mitten aus der Anordnung hinaus
+    // und stand ueber den Bearbeiten-Leisten der unteren Kacheln (A7 P2-1).
+    setCustomizeFabHidden(isCustomizing);
+    // VOM SKELETT ZUM INHALT BLENDET ES (Critique R19): vorher ein harter
+    // Schnitt, die Kacheln standen von einem Frame auf den anderen da. Nur
+    // dieser eine Uebergang - ein Neuaufbau ueber vorhandenem Inhalt bleibt
+    // still, und unter der Seitenblende ist die Blende schon das Einblenden.
+    const fromSkeleton = Boolean(shell.querySelector('.widget-skeleton'))
+      && !document.documentElement.classList.contains('page-swapping');
+    swapContent(shell, () => setHtml(shell, `
+      <section class="dashboard-masthead dashboard-masthead--${greetingPeriod()}${mastheadSlim}">
+        ${renderDashboardOverview(user, isCustomizing, weather, { followsDefault, canPublish, weatherCard: weatherCardShown })}
+        ${cockpitHtml}
+      </section>
+      ${renderDashboardLayout(cfg, data, weather, currency, { editing: isCustomizing, visibleMealTypes, glanceHidden: !glanceVisible, familyManage: familyManageHref(user) })}
+      ${isCustomizing ? renderCustomizeFootnote({ followsDefault, canPublish }) : ''}
+    `), { animate: fromSkeleton });
+    wireLinks(container, rerender, { editing: isCustomizing, user });
+    disposeFastingClock = wireFastingWidget(container, rerender, refreshDashboardData, data.fasting, signal);
+    // Retry einer isolierten Widget-Fehlerkachel: da /dashboard aggregiert lädt,
+    // ist „erneut versuchen" ein voller Neuaufbau (wie der Page-Level-Retry).
+    container.querySelectorAll('[data-widget-retry]').forEach((btn) =>
+      btn.addEventListener('click', rerender, { signal: signal }));
+    if (window.lucide) window.lucide.createIcons({ el: shell });
+    // Vorschaubilder der Mahlzeitenkachel: Ruecksturz auf den Platzhalter per
+    // Listener, weil ein `onerror` im Markup gegen die CSP liefe (#1059).
+    wireRecipeThumbs(shell);
+    disposeNoteCategories = wireNoteCategoryOverflow(
+      shell,
+      (count) => getNumberFormat().format(count),
+      (count) => t('noteCategories.moreAction', { count }),
+    );
+    wireWeatherRefresh(container, (updatedWeather) => {
+      weather = updatedWeather;
+      rebuildDashboard(cfg);
+    }, signal);
+    container.querySelector('#dashboard-search')?.addEventListener('click', () => {
+      window.yuvomi?.openSearch?.();
+    }, { signal: signal });
+    container.querySelector('#dashboard-wall-enter')?.addEventListener('click', () => {
+      enterWallMode();
+      _wallFocusIntent = 'enter';
+      // EIN KNOPF OHNE WORT SCHALTET DIE GANZE SHELL AB (#1559, D#1494): wer
+      // ihn aus Neugier antippt, steht ohne Seitenleiste und Tab-Leiste da.
+      // Eine Zeile sagt, was das ist und wie man herauskommt - der Name des
+      // Ausstiegs kommt aus dessen Schluessel, wie beim Gegenstueck
+      // `wallExited`, damit die Wegbeschreibung nicht vom Knopf wegdriftet.
+      window.yuvomi?.showToast(t('dashboard.wallEntered', {
+        action: t('dashboard.wallExit'),
+      }), 'default', 8000);
+      rerender();
+    }, { signal: signal });
+    container.querySelector('#dashboard-customize-btn')?.addEventListener('click', () => {
+      // Nur noch der Einstieg: im Anpassen-Modus gibt es diesen Knopf nicht.
+      // Der Fokus geht in die Leiste, die ihn abloest.
+      isCustomizing = true;
+      focusAfterRebuild = ['#dashboard-customize-cancel'];
+      rebuildDashboard(widgetConfig);
+    }, { signal: signal });
+    // Die Eintraege des mobilen Anpassen-Menues loesen die Knoepfe aus, die sie
+    // dort ersetzen - derselbe Weg, dieselbe Rueckmeldung.
+    container.querySelector('#dashboard-tools-menu')?.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      if (action === 'dashboard-customize') container.querySelector('#dashboard-customize-btn')?.click();
+      if (action === 'dashboard-wall') container.querySelector('#dashboard-wall-enter')?.click();
+    }, { signal: signal });
+    container.querySelector('#dashboard-customize-save')?.addEventListener('click', saveDashboardConfig, { signal: signal });
+    container.querySelector('#dashboard-customize-cancel')?.addEventListener('click', requestCancelDashboardConfig, { signal: signal });
+    // ESC BEENDET DAS ANPASSEN (R20, Re-Critique 2026-10-17 A1 P3), wie
+    // "Abbrechen": mit Rueckfrage, wenn etwas geaendert ist. Nicht, solange
+    // ein Dialog oder Menue offen ist - deren Esc gehoert ihnen.
+    if (isCustomizing) {
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || event.defaultPrevented || !isCustomizing) return;
+        if (document.querySelector('dialog[open], .modal-overlay, [popover].is-open, .popover-menu.is-open')) return;
+        try { if (document.querySelector(':popover-open')) return; } catch { /* ohne Popover-API gibt es keins */ }
+        event.preventDefault();
+        requestCancelDashboardConfig();
+      }, { signal: signal });
+    }
+    // Zwei Orte je Knopf (Leiste breit, Fussnote schmal), ein Handler.
+    container.querySelectorAll('[data-customize-reset]').forEach((btn) => btn.addEventListener('click', resetDashboardConfig, { signal: signal }));
+    container.querySelectorAll('[data-customize-publish]').forEach((btn) => btn.addEventListener('click', publishHouseholdDefault, { signal: signal }));
+    wireDashboardEditMode();
+    wireRowFill();
+    void mountExtensionWidgets(shell, cfg, user);
+
+    /* DER FOKUS UEBERLEBT DEN NEUAUFBAU. Jede Geste im Anpassen-Modus baut die
+     * Flaeche neu - und bis hierher fiel der Fokus danach auf <body>: wer per
+     * Tastatur „Anpassen" drueckte, eine Groesse waehlte oder speicherte, stand
+     * wieder am Seitenanfang. Reihenfolge der Kandidaten: dasselbe Element
+     * (gleiche Id bzw. gleiches data-Attribut), dann das, was die Geste selbst
+     * als Nachfolger nennt (Ausblenden -> Nachbarkachel), und wenn die Geste den
+     * Modus gewechselt hat (Speichern, Abbrechen), der Anpassen-Knopf, der ihn
+     * wieder oeffnet. */
+    restoreFocusAfterRebuild(container, [
+      keepFocus,
+      ...(focusAfterRebuild ?? []),
+      ...(hadFocus && modeChanged ? ['#dashboard-customize-btn', '.dashboard-tools-btn'] : []),
+      ...(takeWallFocusIntent('leave') ? ['#dashboard-wall-enter', '.dashboard-tools-btn'] : []),
+    ]);
+    focusAfterRebuild = null;
+    playTileFlip(shell, tileRectsBefore);
+    playGridShift(shell, gridTopBefore);
+  }
+
+  rebuildDashboard(widgetConfig);
+
+  if (wallMode || loadFailed) {
+    // Kein FAB im Fehler-Zustand: seine Schnellaktionen würden in Module
+    // navigieren, deren Daten gerade nicht geladen werden konnten — das würde
+    // dem Fehler-Banner widersprechen. Retry stellt bei Erfolg alles her.
+    // Dokumentweit, nicht im Container: die Gruppe kann zu diesem Zeitpunkt
+    // schon in der Shell-Layer hängen (adoptPageFab, #634). Das Backdrop reist
+    // als ihr Kind mit und braucht keine zweite Zeile.
+    //
+    // Und keiner im Wand-Modus: eine Anlege-Affordance in einer reinen Anzeige
+    // waere ein Versprechen, das die Flaeche nicht einloest. Er wird dort gar
+    // nicht erst gerendert; diese Zeile raeumt nur einen mit, den die Vorseite
+    // in der Shell-Layer zurueckgelassen haben koennte. Bewusst hier und nicht
+    // per CSS: eine Regel, die `.page-fab` auf `opacity: 0` oder
+    // `pointer-events: none` setzt, ist seit #634 verboten (Guard in
+    // test-frontend-audit.js).
+    findPageFab('fab-main')?.closest('.page-fab-group')?.remove();
+  } else {
+    initFab(signal);
+    wireNewMenu(container, signal);
+  }
+
+  // SELBSTHEILUNG STATT RETRY-KNOPF. Am Wandtablet drueckt niemand auf
+  // „erneut versuchen" - die Flaeche muss sich selbst wieder einfangen. Der
+  // Takt ist kuerzer als der stille Refresh: 15 Minuten Fehlerbild waeren an
+  // der Wand eine Viertelstunde Falschauskunft.
+  if (wallMode && loadFailed) {
+    const healTimerId = setTimeout(rerender, WALL_HEAL_MS);
+    signal.addEventListener('abort', () => clearTimeout(healTimerId));
+  }
+
+  // Stiller Daten-Refresh (Paket 2, Critique P4): Inhaltsdaten veralteten sonst
+  // in offenen Tabs - PRODUCT.md nennt Wandtablet und PWA-Dauernutzung als
+  // Kernszene, dort zeigte „Heute wichtig" abends noch den Morgenstand. EIN
+  // Pfad für beide Auslöser (Tab-Reaktivierung + 15-Min-Takt im sichtbaren
+  // Tab), bewusst ohne Skeleton (das gehört dem Erstaufbau) und still bei
+  // Fehlern, wie der Wetter-Timer. Während „Anpassen" wird nicht neu gebaut -
+  // ein Rebuild würde den Bearbeitungszustand wegwerfen.
+  let refreshInFlight = false;
+  async function refreshDashboardData() {
+    if (isCustomizing || loadFailed || refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      const fresh = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
+      if (signal.aborted) return;
+      localizeEventLists(fresh);
+      // Der owner-only Zyklus-Slice reist unveraendert mit: /dashboard
+      // liefert ihn nie, ein Refresh darf ihn nicht auf „nie geladen"
+      // zurückwerfen.
+      fresh.cycle = data.cycle;
+      // Schedule hat anders als Cycle keinen Privatsphaere-Grund, den alten
+      // Stand einfach mitzuschleppen (M-6a): "wer heute Dienst hat" blieb
+      // sonst bis zu 15 Minuten stehen und ueberlebte sogar einen
+      // Mitternachts-Wechsel auf dem Wandtablet. Vor der Uebernahme
+      // zuruecksetzen und mit frisch berechnetem Tag neu laden - derselbe
+      // Weg, den ein frisch eingeblendetes Widget in persistWidgetConfig()
+      // schon nimmt. Das heilt nebenbei auch einen zuvor gescheiterten Slice
+      // (M-6b) beim naechsten stillen Takt, statt auf den Retry-Knopf zu warten.
+      if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) {
+        data.schedule = undefined;
+        await ensureScheduleSlice();
+        if (signal.aborted) return;
+      }
+      fresh.schedule = data.schedule;
+      fresh.waste = data.waste;
+      fresh.pendingReminders = await loadPendingReminders(overviewRequest);
+      if (signal.aborted) return;
+      data = fresh;
+      lastLoadedAt = new Date();
+      rebuildDashboard(widgetConfig);
+    } catch { /* Hintergrund-Refresh: bewusst still */ }
+    finally { refreshInFlight = false; }
+  }
+  const refreshTimerId = setInterval(() => {
+    if (!document.hidden) refreshDashboardData();
+  }, 15 * 60 * 1000);
+  signal.addEventListener('abort', () => clearInterval(refreshTimerId));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    const titleEl = container.querySelector('.dashboard-overview__title');
+    if (titleEl) {
+      titleEl.replaceChildren();
+      titleEl.insertAdjacentHTML('afterbegin', greeting(user.display_name));
+      // Gradient-Periode mit-resyncen: sonst aktualisieren sich über Mittag/18 Uhr
+      // die Worte, aber der Tageszeit-Gradient bliebe auf dem alten Fenster stehen.
+      titleEl.classList.remove(
+        'dashboard-overview__title--morning',
+        'dashboard-overview__title--day',
+        'dashboard-overview__title--evening',
+      );
+      titleEl.classList.add(`dashboard-overview__title--${greetingPeriod()}`);
+    }
+    const dateEl  = container.querySelector('.dashboard-overview__date');
+    if (dateEl)  dateEl.textContent = mastheadDateLabel();
+    // Hintergrund-Tabs bekommen gedrosselte Timer: die Uhr könnte beim
+    // Zurückkehren Minuten nachhängen und muss sofort nachziehen (#651).
+    updateClockWidget(container);
+    // Inhalte ziehen nach, nicht nur Gruß/Datum/Uhr (Paket 2).
+    refreshDashboardData();
+  }, { signal: signal });
+
+  // Der Minutentakt der Uhr traegt die Nachtabsenkung mit: um 22:00 und um
+  // 06:00 muss die Flaeche umschalten, wenn es so weit ist - nicht erst beim
+  // naechsten Laden. Ein zweiter Timer nur dafuer waere ein zweiter Takt fuer
+  // dieselbe Minute.
+  //
+  // Derselbe Takt traegt die Grenzen des Tages (#1449): endet ein Termin, wird
+  // eine Dosis faellig oder ist die Tonne mittags abgeholt, aendert sich das
+  // Blatt - ohne Neuladen, denn das unberuehrte Wandtablet wartet sonst bis zum
+  // stillen Refresh. Gebaut wird nur, wenn sich der Stand WIRKLICH geaendert
+  // hat: der Fingerabdruck ist billig, ein Neuaufbau je Minute waere es nicht.
+  let dayFingerprint = todayFingerprint(data, widgetConfig);
+  const followDayBoundaries = () => {
+    if (loadFailed || isCustomizing) return;
+    const next = todayFingerprint(data, widgetConfig);
+    if (next === dayFingerprint) return;
+    dayFingerprint = next;
+    rebuildDashboard(widgetConfig);
+  };
+  startClockTicker(container, signal, () => {
+    if (wallMode) syncWallMode(location.pathname);
+    followDayBoundaries();
+  });
+
+  // 30-Minuten Auto-Refresh für Wetter (inkl. optionaler Standort-Aktualisierung).
+  // Anker ist der Datensatz, nicht der Karten-Button: seit dem Masthead-Umzug
+  // kann Wetter sichtbar sein (Zeile), ohne dass die Karte samt Refresh-Button
+  // im Raster steht - auch die Zeile darf nicht den ganzen Tag alt werden.
+  // Eingerichtet reicht: eine Kachel, die gerade kein Wetter hat, soll es
+  // nachholen, sobald der Anbieter wieder antwortet.
+  if (weatherAvailable) {
+    const doAutoRefresh = async () => {
+      try {
+        await maybeUpdateAutoLocation({
+          autoLocateEnabled: weatherAutoLocate,
+          geolocation: navigator.geolocation,
+          putPreferences: (body) => api.put('/preferences', body),
+        });
+        const res = await api.get(`/weather?lang=${encodeURIComponent(getLocale())}`).catch(() => ({ data: null }));
+        if (signal.aborted) return;
+        weather = res.data ?? null;
+        setWeatherAvailability(res, weatherPrefs);
+        rebuildDashboard(widgetConfig);
+      } catch { /* Hintergrund-Timer: bewusst still — der Nutzer hat nichts
+                   angestoßen, ein Toast alle 30 Min wäre reiner Lärm. */ }
+    };
+    const timerId = setInterval(doAutoRefresh, 30 * 60 * 1000);
+    signal.addEventListener('abort', () => clearInterval(timerId));
+    if (weatherAutoLocate) doAutoRefresh();
+  }
+
+  // Weder Onboarding noch Anpassen-Hinweis im Wand-Modus: beide sprechen auf
+  // Arm-Laenge ueber Bedienung, die es dort nicht gibt. Der Onboarding-Merker
+  // bleibt bewusst ungesetzt - wer die Wand wieder verlaesst, bekommt seine
+  // Einfuehrung dann, wenn sie ihm etwas nuetzt.
+  if (wallMode) return;
+
+  // Das Konto entscheidet (onboarding_pending aus /auth/me), nicht mehr allein
+  // das Geraet - sonst zeigt ein neues Geraet oder ein privates Fenster den
+  // Rundgang erneut, obwohl das Konto ihn schon gesehen hat. Der lokale
+  // Schluessel bleibt eine ZUSAETZLICHE Bedingung statt zu entfallen: er ist
+  // der Weg, mit dem Test-Faelle (document-guards-harness.js) den Dialog
+  // gezielt unterdruecken, ohne einen Testnutzer am Server zu markieren.
+  if (user?.onboarding_pending && !localStorage.getItem(ONBOARDING_KEY)) {
+    setTimeout(() => showOnboarding(container, () => maybeHintCustomize(container)), 400);
+  } else {
+    maybeHintCustomize(container);
+  }
+}
+
+/**
+ * Was sich am Tag allein durch die Uhr aendert: welche Zeilen im Blatt stehen
+ * (samt offen/ueberfaellig) und welche Termine vorbei sind. Ein Stempel, kein
+ * Markup - verglichen wird nur, ob ein Neuaufbau etwas anderes zeigen wuerde.
+ */
+function todayFingerprint(data, cfg, now = new Date()) {
+  if (!data) return '';
+  const model = buildTodayCockpitModel(data, cfg, { now });
+  const nowStamp = householdNowStamp(now);
+  // Beide Terminlisten: auch die Familienkarte wechselt am Ende eines Termins
+  // auf den naechsten oder auf „fuer heute durch" (#1449).
+  const ended = ['upcomingEvents', 'familyEvents']
+    .flatMap((key) => (Array.isArray(data[key]) ? data[key] : []))
+    .filter((event) => eventHasEnded(event, nowStamp))
+    .map((event) => `${event.id}@${event.start_datetime}`);
+  return JSON.stringify([
+    model.rows.map((row) => [row.kind, row.objectId ?? row.members?.map((m) => m.objectId), row.title, row.open, Boolean(row.overdue)]),
+    model.overflow, Boolean(model.coda), Boolean(model.state), ended,
+  ]);
+}
+
+/**
+ * Die faelligen Erinnerungen fuer das Heute-Blatt (utils/today-sheet.js).
+ *
+ * Derselbe Endpunkt, den die Glocke pollt - er filtert Herkuenfte schon nach
+ * Modulrecht und Token-Scope (`mayTouchOrigin`), das Blatt waehlt daraus nur
+ * noch, welche Herkunft eine Zeile ist. Ein Fehler kostet die Zeilen, nicht
+ * die Uebersicht: die Erinnerung spricht weiter ueber Toast und Glocke.
+ *
+ * `request` IST DIE EINE REGEL DER SEITE (`overviewRequest`): die Wand fragt
+ * auch hier die Haushaltsfassung ab, und die ist leer - eine Erinnerung gilt
+ * der Person, die um sie gebeten hat, nicht der Kueche (#1817).
+ */
+async function loadPendingReminders(request = (path) => path, get = (path) => fetchPendingReminders(path, { get: (p) => api.get(p) })) {
+  try {
+    const res = await get(request('/reminders/pending'));
+    return Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Der Schichtplan eines Tages fuer die Kachel: Eintraege, ob es ueberhaupt
+ * Typen gibt, und die Namen der Plan-Besitzer. data.users kommt aus der
+ * Mitgliederliste (#1207); auch Hauspersonal kann einen Plan haben, und seine
+ * Zeile traegt wie auf der Dienstplan- und der Kalenderseite einen Namen.
+ * Faellt nur das Verzeichnis aus, bleibt die Kachel stehen und nennt die
+ * Mitglieder wie zuvor.
+ */
+async function loadScheduleSlice(day) {
+  const [entriesRes, typesRes, peopleRes] = await Promise.all([
+    api.get(`/schedule/entries?from=${day}&to=${day}`),
+    api.get('/schedule/shift-types'),
+    api.get('/auth/users').catch(() => ({ data: [] })),
+  ]);
+  return {
+    entries: entriesRes.data?.entries ?? [],
+    hasTypes: (typesRes.data ?? []).length > 0,
+    people: peopleRes.data ?? [],
+  };
+}
+
+export const __test = { childDefaultFor, taskForOthersOnly, customizeLeaveAllowed, setCustomizeFabHidden, renderCalendarWidget, renderRewardsWidget, loadScheduleSlice, renderUrgentTasks, renderUpcomingEvents, buildTodayHighlights, buildTodayProgram, buildTodayCockpitModel, renderTodayCockpit, renderPinnedNotes, renderScheduleWidget, renderWasteWidget, renderPantryWidget, renderFamilyWidget, formatDueDate, normalizeVisibleMealTypes, renderTodayMeals, calendarEventRoute, eventOccurrenceDateKey, eventStartDate, renderWallSurface, renderWallWho, planWallWhoLines, fitWallWho, createWallFit, rebuildWall, WALL_WHO_LADDER, renderDashboardOverview, selectMetricTiles, METRIC_TILE_ORDER, PROGRAM_ROW_CAP, WALL_ROW_CAP, weatherToneKey, weatherMotionAttr, weatherTempBand, weatherSpanModel, weatherDayLabel, weatherTodayRange, renderWeatherWidget, renderWeatherUnavailable, weatherAvailableFrom, renderWallWeather, relativeDateLabel, listRowCap, openWidgetOptions, renderFab, widgetHeader, renderDashboardLayout, renderMetricTiles, renderGridHint, captureTileRects, playTileFlip, playGridShift, familyManageHref, customizeHasChanges, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild, shoppingSoleListRoute, todayMoreRoute, wireTodayMore, wireTodayOverdue, renderWidgetSizeMenu, renderNewPill, renderCustomizeFootnote, applyRowFill };
+
+// `signal` ist der Controller des Aufbaus, der die Wetterkarte gezeichnet hat
+// (#976/#977). Vorher las diese Funktion das Modul-Feld `_fabController` -
+// ein ueberholter Aufbau haengte seinen Klick damit an den Controller des
+// neueren, und der Rauchtest im Browser fand den Zugriff als ReferenceError,
+// nachdem das Feld aus render() verschwunden war. Der Aufrufer reicht es herein.
+function wireWeatherRefresh(container, onUpdated = null, signal) {
+  const refreshBtn = container.querySelector('#weather-refresh-btn');
+  if (!refreshBtn) return;
+  const doWeatherRefresh = async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add('weather-widget__refresh--spinning');
+    try {
+      const res = await api.get(`/weather?lang=${encodeURIComponent(getLocale())}`).catch(() => ({ data: null }));
+      if (signal.aborted) return;
+      // Manuelle Aktion: ein Fehlschlag darf nicht still als Erfolg quittiert
+      // werden (sonst wirkt der Button tot). Kein Datensatz → Fehler-Toast.
+      if (!res.data) {
+        window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+        return;
+      }
+      const wWidget = container.querySelector('#weather-widget');
+      if (wWidget) {
+        const wrapper = wWidget.closest('.widget-wrapper');
+        if (wrapper) {
+          wrapper.querySelector('.widget')?.remove();
+          wrapper.insertAdjacentHTML('beforeend', renderWeatherWidget(res.data));
+        }
+        const newWidget = container.querySelector('#weather-widget');
+        if (newWidget && window.lucide) window.lucide.createIcons({ el: newWidget });
+        onUpdated?.(res.data);
+        window.yuvomi?.showToast(t('dashboard.weatherUpdated'), 'success', 1500);
+      }
+    } catch {
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+    } finally {
+      // Immer aufräumen, damit der Button nach jedem Ausgang wieder bedienbar
+      // ist (bei Erfolg wird das Widget ohnehin frisch gerendert).
+      refreshBtn.disabled = false;
+      refreshBtn.classList.remove('weather-widget__refresh--spinning');
+    }
+  };
+  refreshBtn.addEventListener('click', doWeatherRefresh, { signal: signal });
+}
+
+// HIER STAND `wireFabAutoHide()` - der Speed-Dial wich beim Runterscrollen nach
+// unten aus, damit er die „Alle"-Header-Links der Widgets nicht überdeckte
+// (Critique P2). Diese Begründung ist entfallen, bevor der Mechanismus fiel:
+// `--fab-safe-zone` verkürzt den Scrollport, sodass bei JEDEM Scrollstand nichts
+// Bedienbares mehr unter dem FAB liegt - und seit der Speed-Dial ein `.page-fab`
+// ist, gilt das auch hier.
+//
+// Übrig blieb dieselbe Mechanik, die `.page-fab--retracted` schon einmal gekostet
+// hat (#634): ein Zustand an einer Klasse, den nur ein weiteres Scroll-Ereignis
+// wieder abnahm. Ein einziges Abwärts-Delta ohne Nutzergeste - die iOS-
+// Adressleiste, Scroll-Anchoring beim Nachladen eines Widgets - machte die
+// Primäraktion unerreichbar.
+//
+// Die CSS-Seite davon hält test-frontend-audit.js als Regel fest: keine Regel,
+// die `.page-fab` trifft, darf `opacity: 0` oder `pointer-events: none`
+// schreiben - und seit der Dial eine `.page-fab-group` ist, trifft das auch ihn.
+
+// Test-Tor fuer die Klarheits-Runde (test/test-dashboard-clarity.js): eigene
+// Zeile statt Verlaengerung der langen `__test`-Liste oben, damit parallele
+// Aenderungen an beiden nicht in derselben Zeile kollidieren.
+Object.assign(__test, { renderUpcomingEvents, renderShoppingLists, renderShoppingTile, loadShoppingLists, loadPendingReminders, renderDashboardLayout, wireLinks });
+
+// Test-Tor fuer die Uebersichts-Bugs vom 2026-09-29 (#1449, #1451-#1457).
+Object.assign(__test, { renderBudgetWidget });
+Object.assign(__test, { renderCountdowns, renderHousekeepingWidget, renderCycleWidget, todayFingerprint });

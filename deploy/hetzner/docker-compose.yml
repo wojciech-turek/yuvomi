@@ -1,0 +1,62 @@
+# Yuvomi on a Hetzner server. Run from this folder: docker compose up -d
+#
+# Two ways in, chosen by COMPOSE_PROFILES in .env (bootstrap.sh picks one):
+#   COMPOSE_PROFILES=caddy  - ports 80/443 are free: the bundled Caddy serves
+#                             HTTPS with automatic Let's Encrypt certificates.
+#   COMPOSE_PROFILES=       - another web server already owns 80/443: it proxies
+#                             to Yuvomi on 127.0.0.1:${YUVOMI_LOCAL_PORT}.
+# Yuvomi itself is never published beyond localhost.
+
+services:
+  yuvomi:
+    # Built from this fork by .github/workflows/home-image.yml. If the pull
+    # fails (e.g. the package is still private), `docker compose up -d --build`
+    # builds the same image locally from the checked-out repo instead.
+    image: ghcr.io/wojciech-turek/yuvomi:${YUVOMI_TAG:-main}
+    build: ../..
+    container_name: yuvomi
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/yuvomi.db
+      - BACKUP_DIR=/backups
+      - MODULES_DIR=/app/modules
+      - SESSION_SECURE=true
+      - TRUST_PROXY=1
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+      - ./modules:/app/modules
+      - ./documents:/documents
+    ports:
+      - "127.0.0.1:${YUVOMI_LOCAL_PORT:-3080}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.10
+    container_name: yuvomi-caddy
+    profiles: ["caddy"]
+    restart: unless-stopped
+    depends_on:
+      - yuvomi
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN:?Set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,4447 @@
+/**
+ * Module: Family Documents
+ * Purpose: Grid/list document management with local uploads and member visibility.
+ * Dependencies: /api.js, shared modal, i18n
+ */
+
+import { api } from '/api.js';
+import { openModal as openSharedModal, closeModal, selectModal, advancedSection, promptModal, confirmModal, refocusAfterRender, renderKeepingFocus, captureModalContext, isModalContextCurrent, reportFieldError } from '/components/modal.js';
+import { t, formatDate, getLocale } from '/i18n.js';
+import { esc } from '/utils/html.js';
+import { stagger, wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
+import { redrawList, collapseRow } from '/utils/list-motion.js';
+import { renderSkeletonList } from '/utils/skeleton.js';
+import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
+import { previewKind } from '/utils/document-preview.js';
+import { fileShareSupport } from '/utils/web-share.js';
+import { attachOverlay } from '/utils/overlay-history.js';
+import { findPageFab } from '/utils/fab.js';
+import { rowActionHtml } from '/utils/row-action.js';
+// Im Solo-Haushalt hat „Wer darf das sehen" genau eine Antwort - gefragt wird
+// dann nicht (utils/household.js). Das Feld bleibt im DOM und behaelt seinen
+// Wert, es ist nur `hidden`: der Absende-Pfad liest es unveraendert, und kommt
+// ein zweites Mitglied dazu, steht es wieder da.
+import { hidesPrivacyControls } from '/utils/household.js';
+import { withChosenPeople } from '/utils/people-picker.js';
+import { maxUploadBytes } from '/utils/upload-limit.js';
+import { holdDocumentAttachStyle } from '/components/document-attach.js';
+import { mountEmptyState, mountSearchEmpty } from '/utils/empty-state.js';
+import { subtreeIds, folderPath, flattenFolderTree } from '/utils/folder-tree.js';
+import { dateStatus } from '/utils/date-status.js';
+import { expiryChipSpec, expiryViewerSpec } from '/utils/document-expiry.js';
+import { installPopoverMenus } from '/utils/popover-menu.js';
+import { setBulkPill, clearBulkPill } from '/utils/bulk-pill.js';
+import { createPageController } from '/utils/page-lifecycle.js';
+import {
+  browserThumbRenderers,
+  createDocumentThumbs,
+  documentStorageBackend,
+  documentThumbKind,
+} from '/utils/document-thumbs.js';
+import { wireTablist } from '/utils/tablist.js';
+import { attachSegmentIndicator } from '/utils/segment-indicator.js';
+import { firstRovingStop, repairRovingStops, wireRovingToolbars } from '/utils/roving-toolbar.js';
+import { isPermAdmin } from '/permissions.js';
+import { errorSentence, isGone } from '/utils/friendly-error.js';
+import { mayWritePath } from '/utils/module-access.js';
+import { readRowHtml } from '/utils/read-row.js';
+import {
+  DOCUMENT_DEFAULT_VISIBILITY,
+  DOCUMENT_SORTS,
+  categoryFacetCounts,
+  defaultSortDirection,
+  folderFacetCounts,
+  folderRepeatsCategory,
+  folderRowLead,
+  matchesDocumentQuery,
+  normalizeDocumentQuery,
+  showsFolderChip,
+  showsVisibility,
+  sortDocuments as sortDocumentList,
+} from '/utils/document-facets.js';
+import {
+  buildFolderUploadPlan,
+  executeFolderUploadPlan,
+  formatFolderUploadTimestamp,
+  folderUploadOutcome,
+  runRateLimitedOperation,
+  supportsDirectoryUpload,
+} from '/utils/folder-upload.js';
+import {
+  applyPendingFolderDeleteOverlay,
+  createLatestResponseApplier,
+  handleFolderDeleteFailure,
+  scheduleFolderDeleteWithUndo,
+} from '/utils/document-folder-delete.js';
+
+// Warum Teilen fuer ein Dokument nicht geht - je Antwort von fileShareSupport()
+// genau EIN Satz, der die zutreffende Ursache nennt (Re-Critique 2026-09-25).
+const SHARE_NOTE_KEYS = {
+  type: 'documents.shareUnsupportedType',
+  insecure: 'documents.shareInsecure',
+  browser: 'documents.shareBrowserUnsupported',
+};
+
+const CATEGORIES = ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'];
+
+// Jeder Ladeweg in den modulweiten Stand nimmt nur seine JUENGSTE Antwort an.
+// Mitglieder und Metadaten gehoeren dazu (#2005): sonst ueberschriebe die spaete
+// Antwort einer verlassenen Seite, was die neu betretene schon geladen hat.
+const applyLatestDocumentsResponse = createLatestResponseApplier();
+const applyLatestFoldersResponse = createLatestResponseApplier();
+const applyLatestMembersResponse = createLatestResponseApplier();
+const applyLatestMetaOptionsResponse = createLatestResponseApplier();
+
+
+const CATEGORY_ICONS = {
+  medical: 'heart-pulse',
+  school: 'graduation-cap',
+  identity: 'badge-check',
+  insurance: 'shield-check',
+  finance: 'landmark',
+  home: 'home',
+  vehicle: 'car',
+  legal: 'scale',
+  travel: 'plane',
+  pets: 'paw-print',
+  warranty: 'receipt',
+  taxes: 'file-spreadsheet',
+  work: 'briefcase-business',
+  other: 'folder',
+};
+
+function categoryLabels() {
+  return Object.fromEntries(CATEGORIES.map((category) => [category, t(`documents.category.${category}`)]));
+}
+
+/**
+ * Eine Pruefung der Seite selbst (leerer Name, keine Datei, zu gross, nicht
+ * lesbar): traegt ihren schon uebersetzten Satz. Ein eigener Typ, damit die
+ * Fehlerstelle ihn von einer Antwort des Servers unterscheidet, ohne den Text
+ * irgendeines Fehlers zu lesen.
+ */
+class PageProblem extends Error {
+  constructor(sentence) {
+    super(sentence);
+    this.name = 'PageProblem';
+    this.sentence = sentence;
+  }
+}
+
+/**
+ * DER SATZ EINES FEHLERS IN DEN DOKUMENTEN (#1909). Die eigene Pruefung sagt
+ * ihren Satz; alles andere sagt den Satz der App (`errorSentence`): den Fall,
+ * den der Server mit `reason` nennt, sonst den allgemeinen. Der Text des
+ * Servers kommt nie an - bis #1909 stand er hier vorn, auf Englisch, was auch
+ * immer die Sprache der App war.
+ */
+function errorText(err) {
+  if (err instanceof PageProblem) return err.sentence;
+  return errorSentence(err, 'common.unknownError');
+}
+
+/**
+ * EIN WEG FUER DIE FEHLER-TOASTS DER SEITE (#1909). Sagt der Grund, dass es das
+ * Ziel der Handlung nicht mehr gibt (ein anderes Haushaltsmitglied hat den
+ * Ordner oder das Dokument geloescht, oder es ist fuer dich nicht mehr
+ * sichtbar), ist der Stand der Seite veraltet: sie holt Ordner und Dokumente
+ * selbst neu, statt dazu zu raten. `dialog` ist der Modal-Kontext der Handlung
+ * (`captureModalContext()` vor der Anfrage): geschlossen wird nur, wenn genau
+ * dieser Dialog noch offen ist. Hat der Nutzer ihn inzwischen geschlossen, die
+ * Seite gewechselt oder einen anderen geoeffnet, bleibt das so (Codex an #1994).
+ *
+ * KEIN "SCHON GELOESCHT" ALS ERFOLG. Anders als im Einkauf sagt die 404 eines
+ * Dokuments zweierlei: geloescht, ODER die Sichtbarkeit wurde geaendert und die
+ * Zeile steht noch. Ein Loeschen mit diesem Grund laeuft deshalb wie jede
+ * andere Handlung hier durch: der Satz, und die Seite zeigt, was wirklich steht.
+ */
+/**
+ * Zeigt die Seite noch diesen Traeger? Die Navigation in ein anderes Modul
+ * leert `_container` nicht, die Variable zeigt dann weiter auf den
+ * abgehaengten Traeger. "Derselbe Traeger" allein haelt deshalb nicht: er muss
+ * auch noch im DOM haengen (Codex an #2001). Sonst zeichnete ein spaetes
+ * Nachladen in eine Seite, die niemand mehr sieht, und zoege den Fokus auf
+ * der neuen Seite weg.
+ */
+function stillShown(owner) {
+  return Boolean(owner) && _container === owner && owner.isConnected === true;
+}
+
+async function reportError(err, { owner = null, dialog = null } = {}) {
+  window.yuvomi?.showToast(errorText(err), 'danger');
+  if (!isGone(err)) return;
+  // Nachladen nach "gibt es nicht mehr". Die DMS-Konten kommen mit: ein Konto,
+  // das ein Admin entfernt hat, stuende sonst weiter im Menue. Ein scheiterndes
+  // Nachladen meldet nichts weiter - der Satz steht schon da.
+  // Wie deleteDocuments: wer die Seite inzwischen verlassen hat, bekommt
+  // nichts mehr gezeichnet (Review zu #1994). `owner` merkt die Aufrufstelle
+  // VOR ihrer Anfrage: hier gelesen, waere es nach "verlassen und zurueck"
+  // schon der neue Container (Codex an #2001).
+  if (dialog && isModalContextCurrent(dialog)) await closeModal({ force: true });
+  if (!stillShown(owner)) return;
+  try {
+    await Promise.all([loadFolders(), loadDocuments(), loadMetaOptions()]);
+  } catch (loadErr) {
+    console.warn('[Documents] reload after a gone answer failed:', loadErr);
+    return;
+  }
+  if (!stillShown(owner)) return;
+  renderDmsHeaderBtn();
+  renderAll();
+  refocusAfterRender();
+}
+
+/**
+ * Der im Dialog GEWAEHLTE Ordner ist weg (#1909): der Dialog bleibt mit der
+ * Eingabe offen, die Auswahl bekommt die aktuellen Ordner, steht auf der
+ * Wurzel und traegt den Fokus. Scheitert das Nachladen, faellt wenigstens der
+ * verschwundene Ordner aus der Auswahl. Die Seite hinter dem Dialog zeichnet
+ * den frischen Stand mit - wer den Dialog danach abbricht, saehe sonst den
+ * geloeschten Ordner weiter in der Seitenleiste.
+ *
+ * @param {HTMLSelectElement|null} select
+ * @param {string} rootKey - Beschriftung der Wurzel ("kein Ordner", "oberste Ebene")
+ * @param {(goneId: string) => string} optionsHtml - die Optionen in der
+ *   Reihenfolge, die der Dialog beim Oeffnen hatte, ohne `goneId`
+ * @param {object|null} owner - der Container der Seite, VOR der Anfrage gemerkt
+ */
+async function offerCurrentFolders(select, rootKey, optionsHtml, owner) {
+  if (!select) return;
+  // Der Dialog gehoert zu einer Seite, die nicht mehr angezeigt wird.
+  if (!stillShown(owner)) return;
+  const goneId = String(select.value);
+  try {
+    await Promise.all([loadFolders(), loadDocuments()]);
+  } catch (err) {
+    console.warn('[Documents] folder reload failed:', err);
+  }
+  if (stillShown(owner)) renderAll();
+  select.replaceChildren();
+  select.insertAdjacentHTML('beforeend', `<option value="">${esc(t(rootKey))}</option>${optionsHtml(goneId)}`);
+  select.value = '';
+  select.focus();
+}
+
+const isSelectedFolderGone = (err) => isGone(err) && err.data.reason === 'documents_selected_folder_not_found';
+
+// Sortierschlüssel der Liste (utils/document-facets.js). `updated` spiegelt
+// die Server-Reihenfolge (ORDER BY updated_at DESC) und bleibt daher der Default.
+const SORTS = DOCUMENT_SORTS;
+
+function readStoredSort() {
+  const sort = localStorage.getItem('yuvomi-documents-sort');
+  return SORTS.includes(sort) ? sort : 'updated';
+}
+
+/* Die Richtung ist umkehrbar (Critique 2026-09-25, P2) und wird mit dem
+ * Schluessel gemerkt. Fehlt sie oder ist sie kaputt, gilt die natuerliche
+ * Richtung des Schluessels - nie eine Richtung, die zu einem ANDEREN gehoerte. */
+function readStoredSortDirection(sort) {
+  const direction = localStorage.getItem('yuvomi-documents-sort-dir');
+  return direction === 'asc' || direction === 'desc' ? direction : defaultSortDirection(sort);
+}
+
+let state = {
+  allDocuments: [],
+  documents: [],
+  // Treffer der leeren Suche in der ANDEREN Ansicht: { status, query, count }
+  // (probeOtherStatusSearch). Gilt nur fuer genau diesen Status und Begriff.
+  otherStatusHits: null,
+  folders: [],
+  members: [],
+  // Wer hier sitzt - fuer die Besitzregel (mayManage). Aus dem Router-Kontext.
+  currentUserId: null,
+  dmsAccounts: [],
+  activeUploadBackend: 'local',
+  // Mobil ist die kompakte LISTE der Default: die Grid-Karte kostet bei 375px
+  // ~260px je Dokument (~1,5 Dokumente je Schirm), die Listenzeile traegt
+  // dieselben Angaben auf einem Bruchteil (Critique 2026-08-27, P2). Die
+  // gespeicherte Wahl gewinnt auf jedem Geraet; 640px ist die kanonische
+  // Mobile-Grenze (tokens.css §11c).
+  view: localStorage.getItem('yuvomi-documents-view')
+    || (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 639px)').matches ? 'list' : 'grid'),
+  sort: readStoredSort(),
+  sortDirection: readStoredSortDirection(readStoredSort()),
+  status: 'active',
+  category: '',
+  // Erledigt ODER laeuft bald ab (dateStatus() != 'valid') - dieselbe Facette
+  // wie Kategorie/Ordner, rein clientseitig ueber state.allDocuments, kein
+  // eigener Roundtrip.
+  expiringSoon: false,
+  folderId: '',
+  // `query` ist die Vergleichsform (normalizeDocumentQuery), `queryText` die
+  // Eingabe, wie sie getippt wurde - die Leermeldung zitiert die Eingabe.
+  query: '',
+  queryText: '',
+  selectMode: false,
+  selected: new Set(),
+  /* Welche Ordner aufgeklappt sind (#785).
+   *
+   * IM BROWSER GEMERKT UND NICHT AM SERVER: der aufgeklappte Zustand ist eine
+   * Eigenschaft dieses Fensters, nicht des Haushalts - zwei Personen sollen
+   * nicht gegenseitig ihre Zweige zuklappen. Er ueberlebt den Modulwechsel
+   * (localStorage), weil das Zuklappen sonst bei jedem Zurueckkommen von vorn
+   * begaenne. */
+  expanded: new Set(readExpandedFolders()),
+};
+
+/**
+ * Die zuletzt aufgeklappten Ordner, gegen kaputten Speicher abgesichert.
+ * Ein defekter Eintrag ist kein Grund, das Modul nicht zu zeigen - er ist ein
+ * Grund, mit zugeklapptem Baum anzufangen.
+ */
+function readExpandedFolders() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('yuvomi-documents-expanded') || '[]');
+    return Array.isArray(raw) ? raw.map(Number).filter(Number.isInteger) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistExpandedFolders() {
+  try {
+    localStorage.setItem('yuvomi-documents-expanded', JSON.stringify([...state.expanded]));
+  } catch {
+    // Voller oder gesperrter Speicher (privates Fenster): der Baum funktioniert
+    // weiter, er erinnert sich nur bis zum naechsten Laden.
+  }
+}
+let _container = null;
+// Der Container, dessen erster Aufbau fertig ist (applyFolderDeleteResult, #2005).
+let _built = null;
+let _search = null;
+let _statusTablist = null;
+// Seitenleben (utils/page-lifecycle.js): faellt mit dem Router-Signal, wenn die
+// Route wechselt. Daran haengen die Vorschaubilder - ihr Speicher, ihre Abrufe
+// und der pdf.js-Worker enden mit der Seite, nicht irgendwann.
+let _pageController = null;
+let _thumbs = null;
+let _thumbObserver = null;
+
+/**
+ * Darf dieses Konto in die Dokumente schreiben? Regel 1 in
+ * utils/module-access.js. Als Funktion, damit jedes Neuzeichnen neu fragt.
+ *
+ * WAS BEI `read` BLEIBT: Suche, Status-Segment, Kategorie- und Fristen-Chips,
+ * Ordnerbaum und Pfad, Sortierung und Ansicht, die Karte mit Ablauf, Ablageort
+ * und Sichtbarkeit als ZEICHEN - und Ansehen, Vorschau, Herunterladen und
+ * Teilen (das Teilen-Menue des Geraets, kein Serveraufruf). WAS GEHT:
+ * Hochladen (FAB, Leerzustand samt Einladungstext), Ordner anlegen,
+ * umbenennen, verschieben und loeschen, das Dokument-Menue mit Bearbeiten,
+ * Verschieben, Archivieren und Loeschen, der Bearbeiten-Stift im Betrachter
+ * und die Mehrfachauswahl, die nur fuer diese Handlungen da ist.
+ *
+ * KEIN WANDTABLETT: ein Display fuehrt `documents` nicht in seiner Scope-Liste
+ * (server/display-scopes.js) und erreicht diese Seite nicht.
+ */
+function readOnly() {
+  return !mayWritePath('/documents');
+}
+
+/**
+ * Darf dieses Konto DIESES Dokument aendern, verschieben, archivieren oder
+ * loeschen? Zwei Riegel, wie am Server: das Schreibrecht aufs Modul (der
+ * Pfad-Guard) UND die Besitzregel - angelegt hat es die Person selbst, oder sie
+ * ist Admin (`canManageDocument()` in server/services/document-access.js, an
+ * PUT, PATCH /archive und DELETE von routes/documents.js).
+ *
+ * Bis #1265 fragte die Oberflaeche keinen der beiden: jedes sichtbare Dokument
+ * trug das volle Menue, und Speichern, Archivieren oder Loeschen eines fremden
+ * Familien-Dokuments endete mit „Not authorized" - das Loeschen erst nach dem
+ * Rueckgaengig-Fenster, wenn die Karte schon weg war.
+ *
+ * `state.isAdmin` kommt vom Server (`/documents/meta/options`), `isPermAdmin()`
+ * aus `/auth/me`; beide meinen dieselbe Rolle, eines genuegt.
+ */
+function mayManage(doc) {
+  if (!doc || readOnly()) return false;
+  if (isPermAdmin() || state.isAdmin === true) return true;
+  return state.currentUserId != null && Number(doc.created_by) === Number(state.currentUserId);
+}
+
+export async function render(container, context = {}) {
+  _container = container;
+  state.currentUserId = context.user?.id ?? null;
+  _pageController?.abort();
+  _pageController = createPageController(context.signal);
+  _thumbs = createDocumentThumbs({ signal: _pageController.signal, renderers: browserThumbRenderers() });
+  _pageController.signal.addEventListener('abort', () => {
+    _thumbObserver?.disconnect();
+    _thumbObserver = null;
+  }, { once: true });
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
+    <div class="documents-page app-page app-page--full" data-composition="full">
+      ${/* SPRUNGMARKE (Re-Critique 2026-09-25, Sam): 33 Tab-Stopps bis zum
+           ersten Dokument, 16 davon in der Ordnerliste. Dasselbe Muster wie
+           "Zum Inhalt springen" der Shell (router.js): `.sr-only`, sichtbar
+           nur bei Tastaturfokus (layout.css, .sr-only:focus-visible). */ ''}
+      <a class="sr-only documents-skip" href="#documents-list" data-documents-skip>${t('documents.skipToDocuments')}</a>
+      <div class="page-toolbar page-toolbar--wrap page-toolbar--title-tools documents-toolbar">
+        <h1 class="page-toolbar__title">${t('documents.title')}</h1>
+        ${renderPageSearch({ id: 'documents-search', label: t('documents.searchPlaceholder'), placeholder: t('documents.searchPlaceholder'), value: state.query, clearLabel: t('common.searchClear'), className: 'documents-toolbar__search page-toolbar__center' })}
+        <div class="page-toolbar__actions">
+          <button class="btn btn--secondary documents-dms-link-btn" id="documents-dms-link-btn" type="button"
+                  title="${t('documents.linkFromDms')}" aria-label="${t('documents.linkFromDms')}" hidden>
+            <i data-lucide="link" class="icon-md" aria-hidden="true"></i>
+            <span class="documents-dms-link-btn__label">${t('documents.linkFromDms')}</span>
+          </button>
+          ${/* DIE ANSICHTSWAHL IST DAS KANON-SEGMENT (D1, Critique 2026-10-16):
+                `.segmented` in der Icon-Variante statt einer runden Eigen-Pille
+                - dieselbe Form wie Aufgaben und Kalender. */ ''}
+          <div class="segmented segmented--icons documents-view-toggle" role="group" aria-label="${t('documents.viewToggle')}">
+            <button type="button" class="segmented__item documents-view-toggle__btn${state.view === 'grid' ? ' is-active' : ''}" data-view="grid" aria-label="${t('documents.gridView')}" title="${t('documents.gridView')}" aria-pressed="${state.view === 'grid'}">
+              <i data-lucide="layout-grid" class="icon-md" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="segmented__item documents-view-toggle__btn${state.view === 'list' ? ' is-active' : ''}" data-view="list" aria-label="${t('documents.listView')}" title="${t('documents.listView')}" aria-pressed="${state.view === 'list'}">
+              <i data-lucide="list" class="icon-md" aria-hidden="true"></i>
+            </button>
+          </div>
+          ${documentsToolsMenuHtml()}
+        </div>
+      </div>
+      ${/* ZWEI FILTERSPRACHEN WAREN EINE ZU VIEL (Critique 2026-09-25, P1/P2).
+           Aktiv/Archiviert sah aus wie ein Chip und verhielt sich wie ein
+           Segment - genau eins ist immer gewaehlt. Jetzt IST es das Segment
+           der Shell; die Chips daneben sind nur noch Facetten, die man an-
+           und abwaehlt. Sortierung und Auswahl stehen im Kopf-Menue: mobil
+           lagen sie bei x=1020 und x=1203 auf einer 375px-Zeile. Was hier
+           seitlich scrollt, ist allein die Chip-Spur. */ ''}
+      <div class="documents-filters">
+        <div class="segmented documents-status" id="documents-status" role="radiogroup" aria-label="${t('documents.statusLabel')}">
+          ${[['active', 'documents.statusActive'], ['archived', 'documents.statusArchived']].map(([id, key]) => {
+            const on = state.status === id;
+            return `<button type="button" class="segmented__item${on ? ' is-active' : ''}"
+                    role="radio" data-tab-id="${id}" aria-checked="${on}" tabindex="${on ? '0' : '-1'}">${t(key)}</button>`;
+          }).join('')}
+        </div>
+        ${/* FRISTEN VORN (Re-Critique 2026-09-25, P1). Am Ende der Spur lag
+             der Ablauf-Chip bei 1280px ~400px hinter der sichtbaren Kante und
+             bei 375px ganz ausserhalb - der dringlichste Filter war der am
+             schwersten erreichbare. Er steht nur, wenn er etwas findet, und
+             eine Haarlinie trennt ihn von der Kategoriegruppe. */ ''}
+        <div class="documents-filters__chips">
+          ${/* DER ORDNER IST DER ERSTE CHIP (Critique 2026-10-16, P2 mobil).
+               Unter 1024px stand der Auslöser der Ordnerauswahl als eigene
+               48px-Zeile zwischen Filterzeile und Liste - erstes Dokument bei
+               y=216. Jetzt fuehrt er die Chip-Spur an: dieselbe Kapsel wie die
+               Facetten, mit Pfeil, weil er aufklappt statt umzuschalten. Die
+               Liste klappt weiter an ihrem Ort auf (aria-controls). KEIN
+               `aria-label` - Begruendung am alten Ort, siehe unten. Am Desktop
+               ist er ausgeblendet; dort steht die Ordnerspalte. */ ''}
+          <button class="filter-chip filter-chip--sm documents-folder-chip" id="documents-folder-toggle" type="button"
+                  aria-expanded="false" aria-controls="documents-folder-browser">
+            <i data-lucide="folders" class="icon-md" aria-hidden="true"></i>
+            <span class="documents-folder-browser__toggle-label">${esc(t('documents.allDocuments'))}</span>
+            <i data-lucide="chevron-down" aria-hidden="true" class="icon-sm documents-folder-browser__chevron"></i>
+          </button>
+          <div class="documents-filter-chips documents-filter-chips--deadlines" id="documents-expiring-filter" role="group" aria-label="${t('documents.expiringFilterGroupLabel')}"></div>
+          <div class="documents-filter-chips" id="documents-category" role="group" aria-label="${t('documents.categoryFilterLabel')}"></div>
+        </div>
+      </div>
+      <div class="documents-browser-layout">
+        <aside class="documents-folder-browser" aria-label="${t('documents.folderFilterLabel')}">
+          <div class="documents-folder-browser__head">
+            <h2 class="documents-folder-browser__title" id="documents-folder-browser-title">${t('documents.folderBrowserTitle')}</h2>
+            ${/* Der Auslöser der Auswahl (unter 1024px) steht seit der Critique
+                2026-10-16 als erster Chip in der Filterzeile (`#documents-folder-toggle`).
+                KEIN `aria-label` dort. Es trug "Ordner durchsuchen", waehrend der
+                Knopf sichtbar den AKTUELLEN Ordner zeigt: der sichtbare Text stand
+                damit nicht im zugaenglichen Namen (WCAG 2.5.3 - Sprachsteuerung
+                kann den Knopf nicht ansprechen), und der gewaehlte Ordner, unter
+                1024px die einzige Zustandsangabe der Auswahl, wurde nie angesagt.
+                Den Bereich benennt bereits das `aria-label` am <aside> ("Ordner
+                (Ablageort)", seit 2026-09-25 mit der Rolle der Achse); das Label
+                doppelte es und verdeckte den Namen
+                (PR-Review #754). Die Beschriftung startet mit dem Standardordner,
+                damit der Knopf nie namenlos ist - `renderFolderBrowser` schreibt
+                sie danach bei jedem Rendern fort. */ ''}
+            ${readOnly() ? '' : `
+            <button class="documents-folder-browser__add" id="documents-folder-add" type="button" aria-label="${t('documents.addFolderButton')}" title="${t('documents.addFolderButton')}">
+              <i data-lucide="folder-plus" aria-hidden="true"></i>
+            </button>`}
+          </div>
+          <ul class="documents-folder-browser__list row-carrier" id="documents-folder-browser"></ul>
+        </aside>
+        <div class="documents-browser-main">
+          ${/* Der Pfad, in dem man steht (#785). Er steht ueber der Liste und
+               nicht in der Seitenleiste: dort ist die Einrueckung schon die
+               Auskunft ueber die Lage, hier beantwortet er die Frage, zu
+               welchem Ordner die Dokumente daneben gehoeren - unterhalb Tablet
+               ist die Leiste ohnehin zugeklappt. Leer, solange kein Ordner
+               gewaehlt ist: ein Pfad auf "alle Dokumente" waere eine Zeile
+               ohne Aussage. */''}
+          <nav class="documents-breadcrumb" id="documents-breadcrumb" aria-label="${t('documents.folderPathLabel')}" hidden></nav>
+          <div id="documents-list" class="${listClasses()}" aria-busy="true">${renderSkeletonList({ rows: 6, lines: 2 })}</div>
+        </div>
+      </div>
+      <button class="page-fab" id="fab-new-document" aria-label="${t('documents.addButton')}" data-dock-label="${t('newLabel.documents')}">
+        <i data-lucide="upload" class="icon-xl" aria-hidden="true"></i>
+      </button>
+    </div>
+  `);
+
+  if (window.lucide) lucide.createIcons({ el: _container });
+
+  await Promise.all([loadMembers(), loadFolders(), loadMetaOptions()]);
+  await loadDocuments();
+  // Waehrend des ersten Ladens verlassen (oder schon neu betreten): die
+  // Antwort zeichnet nicht in eine Seite, die sie nicht mehr ist.
+  if (!stillShown(container)) return;
+  _built = container;
+  renderDmsHeaderBtn();
+  bindPageEvents();
+  renderCategoryChips();
+  renderExpiringChip();
+  renderFolderBrowser();
+  renderDocuments();
+}
+
+// Alle abhängigen Flächen nach einer Datenänderung neu zeichnen. Die Facetten-
+// Zähler (Kategorie + Ordner) hängen voneinander ab, deshalb nie einzeln aufrufen.
+function renderAll({ motion = false } = {}) {
+  renderCategoryChips();
+  renderExpiringChip();
+  renderFolderBrowser();
+  renderBreadcrumb();
+  renderDocuments({ motion });
+}
+
+/**
+ * Der Pfad zum gewaehlten Ordner, jede Stufe anklickbar.
+ *
+ * DIE LETZTE STUFE IST KEIN LINK. Sie ist der Ort, an dem man schon steht -
+ * ein Knopf, der nichts tut, ist eine Zusage, die er nicht einloest. Sie traegt
+ * `aria-current="page"`, wie es die Breadcrumb-Praxis vorsieht.
+ */
+function renderBreadcrumb() {
+  const host = _container?.querySelector('#documents-breadcrumb');
+  if (!host) return;
+
+  const id = Number(state.folderId);
+  const chain = Number.isInteger(id) && id > 0 ? folderPath(state.folders, id) : [];
+  host.hidden = chain.length === 0;
+  host.replaceChildren();
+  if (!chain.length) return;
+
+  host.insertAdjacentHTML('beforeend', `
+    <button type="button" class="documents-breadcrumb__crumb" data-folder-select="">
+      ${esc(t('documents.allDocuments'))}
+    </button>
+    ${chain.map((folder, i) => {
+    const last = i === chain.length - 1;
+    const sep = '<span class="documents-breadcrumb__sep" aria-hidden="true">/</span>';
+    return sep + (last
+      ? `<span class="documents-breadcrumb__crumb documents-breadcrumb__crumb--current" aria-current="page">${esc(folder.name)}</span>`
+      : `<button type="button" class="documents-breadcrumb__crumb" data-folder-select="${folder.id}">${esc(folder.name)}</button>`);
+  }).join('')}`);
+}
+
+/**
+ * Die Freigabe-Auswahl zeigt Haushaltsmitglieder (#1207); die Namen bestehender
+ * Freigaben kommen aus dem Kontenverzeichnis - auch Hauspersonal oder ein Gast
+ * kann eine haben. Bewusst ohne Fallback auf eine leere Liste: ohne Verzeichnis
+ * fehlte das Kaestchen einer bestehenden Freigabe, und Speichern entzoege sie.
+ */
+async function loadMembers() {
+  return applyLatestMembersResponse(
+    () => Promise.all([api.get('/family/members'), api.get('/auth/users')]),
+    ([members, directory]) => {
+      state.members = members.data || [];
+      state.directory = directory.data || [];
+    },
+  );
+}
+
+// Nur der Status wird serverseitig gefiltert: Kategorie und Ordner sind
+// Facetten über demselben Datensatz und brauchen dessen Gesamtheit, um ehrliche
+// Trefferzahlen zeigen zu können. Nebeneffekt: Kategorie-Klicks sind sofort.
+async function loadDocuments() {
+  return applyLatestDocumentsResponse(
+    () => api.get(`/documents?status=${encodeURIComponent(state.status)}`),
+    (res) => {
+      state.allDocuments = res.data || [];
+      applyPendingFolderDeleteOverlay(state, { freshDocuments: true });
+      applyFilters();
+    },
+  );
+}
+
+async function loadFolders() {
+  return applyLatestFoldersResponse(
+    () => api.get('/documents/folders'),
+    (res) => {
+      state.folders = res.data || [];
+      applyPendingFolderDeleteOverlay(state, { freshFolders: true });
+    },
+  );
+}
+
+async function loadMetaOptions() {
+  try {
+    return await applyLatestMetaOptionsResponse(() => api.get('/documents/meta/options'), (res) => {
+      state.dmsAccounts = res.data?.dms_accounts || [];
+      state.activeUploadBackend = res.data?.active_upload_backend || 'local';
+      state.isAdmin = res.data?.is_admin === true;
+      // Grenzwerte vom Server übernehmen, statt sie im Client zu duplizieren -
+      // sonst driften Hinweistext und tatsächliche Annahme auseinander.
+      state.maxFileSize = Number(res.data?.max_file_size) || maxUploadBytes();
+      state.allowedMimeTypes = Array.isArray(res.data?.allowed_mime_types) ? res.data.allowed_mime_types : [];
+    });
+  } catch {
+    // Hier kommt nur die juengste Anfrage an: eine ueberholte scheitert still.
+    state.dmsAccounts = [];
+    state.activeUploadBackend = 'local';
+    state.isAdmin = false;
+    state.maxFileSize = maxUploadBytes();
+    state.allowedMimeTypes = [];
+  }
+}
+
+/**
+ * Die Sprungmarke: auf den Einstieg des ersten Dokuments, sonst auf die Liste
+ * selbst (Leerzustand, Skelett). Ohne Hash in der Adresse - der Sprung ist
+ * ein Fokuswechsel, kein Ort, zu dem Zurueck fuehren soll.
+ */
+function skipToDocuments(event) {
+  event.preventDefault();
+  const list = _container?.querySelector('#documents-list');
+  if (!list) return;
+  repairRovingStops(list);
+  const stop = firstRovingStop(list);
+  if (stop) {
+    stop.focus();
+    return;
+  }
+  list.setAttribute('tabindex', '-1');
+  list.focus();
+}
+
+// Der Button liegt fest im Markup (hidden) und wird hier nur freigeschaltet —
+// so verschiebt das Nachladen der Konten die Kopfzeile nicht mehr.
+function renderDmsHeaderBtn() {
+  const btn = _container.querySelector('#documents-dms-link-btn');
+  if (!btn) return;
+  btn.hidden = !state.dmsAccounts.length;
+  if (!btn.hidden && !btn.dataset.wired) {
+    btn.dataset.wired = 'true';
+    btn.addEventListener('click', () => openDmsLinkModal());
+  }
+}
+
+function matchesCategory(doc) {
+  return !state.category || doc.category === state.category;
+}
+
+function matchesFolder(doc) {
+  if (state.folderId === '__none') return !doc.folder_id;
+  if (!state.folderId) return true;
+  /* AUCH DIE UNTERORDNER (#785) - dieselbe Regel wie im Server, sonst zeigen
+   * die Zaehler links und die Liste rechts verschiedene Mengen. Der Filter
+   * hier ist die Facette (er laeuft ueber `state.allDocuments`, ohne
+   * Roundtrip); die Abfrage dort ist die Grenze. Beide muessen dasselbe
+   * beantworten. */
+  return doc.folder_id != null && folderSubtree(Number(state.folderId)).has(doc.folder_id);
+}
+
+/** Laeuft der Ablauf bald ab oder ist er schon vorbei? Kein Ablaufdatum heisst nein. */
+function isExpiringOrOverdue(doc) {
+  const status = dateStatus(doc.expires_at);
+  return !!status && status.state !== 'valid';
+}
+
+function matchesExpiringSoon(doc) {
+  return !state.expiringSoon || isExpiringOrOverdue(doc);
+}
+
+function expiringCount() {
+  return state.allDocuments.filter((doc) => matchesCategory(doc) && matchesFolder(doc)
+    && matchesDocumentQuery(doc, state.query) && isExpiringOrOverdue(doc)).length;
+}
+
+function sortDocuments(docs) {
+  return sortDocumentList(docs, { sort: state.sort, direction: state.sortDirection, locale: getLocale() });
+}
+
+function applyFilters() {
+  state.documents = sortDocuments(
+    state.allDocuments.filter((doc) => matchesCategory(doc) && matchesFolder(doc) && matchesExpiringSoon(doc)),
+  );
+}
+
+/**
+ * Das Kopf-Menue fuer Sortierung und Auswahl (Critique 2026-09-25, P1).
+ *
+ * WARUM EIN MENUE UND NICHT DIE FILTERZEILE: Sortieren und Auswaehlen sind
+ * Werkzeuge, keine Filter - sie aendern nicht, WELCHE Dokumente man sieht. In
+ * der Filterzeile standen sie mobil ausserhalb des Bilds (x=1020 und x=1203
+ * auf 375px). Im Kopf stehen sie auf jeder Breite an derselben Stelle.
+ *
+ * Das geteilte popover-menu-Vokabular (utils/popover-menu.js) bringt Top-Layer,
+ * Light-Dismiss, Esc, Pfeiltasten und den Fokus aufs gewaehlte Element mit.
+ * Die Sortierung ist eine Einfachauswahl mit Haken (menuitemradio) wie der
+ * Rezepte-Quellenfilter; die Richtung eine zweite, weil "Name" absteigend
+ * etwas anderes ist als "Name" - der alte Zusatz "(A-Z)" war damit eine
+ * Falschauskunft und ist aus dem Label gewichen.
+ */
+function documentsToolsMenuHtml() {
+  const label = t('documents.toolsMenuLabel');
+  const sortLabels = {
+    updated: t('documents.sortUpdated'),
+    name: t('documents.sortName'),
+    size: t('documents.sortSize'),
+    expiring: t('documents.sortExpiring'),
+  };
+  const check = (on) => `<i data-lucide="check" class="icon-md popover-menu__item-check${on ? '' : ' popover-menu__item-check--hidden'}" aria-hidden="true"></i>`;
+  const directions = [
+    ['asc', t('documents.sortAscending'), 'arrow-up-narrow-wide'],
+    ['desc', t('documents.sortDescending'), 'arrow-down-wide-narrow'],
+  ];
+  return `
+    <button type="button" class="btn btn--secondary btn--icon documents-tools-btn popover-menu__trigger"
+            popovertarget="documents-tools-menu" aria-haspopup="menu" aria-expanded="false"
+            aria-label="${esc(label)}" title="${esc(label)}">
+      <i data-lucide="arrow-up-down" class="icon-md" aria-hidden="true"></i>
+    </button>
+    <div class="popover-menu documents-tools-menu" id="documents-tools-menu" popover role="menu" aria-label="${esc(label)}">
+      ${/* ANSICHT IM MENUE, NUR UNTER 768px (R16, Kopfregel mobil 1a). Der
+           Ansichts-Umschalter ist ein Segment und hielt damit eine eigene
+           Werkzeugzeile; als Einfachauswahl im Menue (wie die Ansichtswahl
+           des Kalenders) bleiben Lupe und Menue uebrig, und die stehen in
+           der Titelzeile. documents.css blendet je Breite EINEN der beiden
+           Wege aus. */ ''}
+      <div class="popover-menu__group documents-tools-menu__view" role="group" aria-labelledby="documents-tools-view-label">
+        <div class="popover-menu__label" id="documents-tools-view-label">${esc(t('documents.viewToggle'))}</div>
+        ${[['grid', t('documents.gridView'), 'layout-grid'], ['list', t('documents.listView'), 'list']].map(([view, text, icon]) => {
+          const on = state.view === view;
+          return `
+        <button type="button" role="menuitemradio" aria-checked="${on}" class="popover-menu__item" data-view-choice="${view}">
+          ${check(on)}<span>${esc(text)}</span><i data-lucide="${icon}" class="icon-md popover-menu__item-trail" aria-hidden="true"></i>
+        </button>`;
+        }).join('')}
+      </div>
+      <div class="popover-menu__separator documents-tools-menu__view" role="separator"></div>
+      <div class="popover-menu__group" role="group" aria-labelledby="documents-tools-sort-label">
+        <div class="popover-menu__label" id="documents-tools-sort-label">${esc(t('documents.sortLabel'))}</div>
+        ${SORTS.map((sort) => {
+          const on = state.sort === sort;
+          return `
+        <button type="button" role="menuitemradio" aria-checked="${on}" class="popover-menu__item" data-sort="${sort}">
+          ${check(on)}<span>${esc(sortLabels[sort])}</span>
+        </button>`;
+        }).join('')}
+      </div>
+      <div class="popover-menu__separator" role="separator"></div>
+      <div class="popover-menu__group" role="group" aria-labelledby="documents-tools-direction-label">
+        <div class="popover-menu__label" id="documents-tools-direction-label">${esc(t('documents.sortDirectionLabel'))}</div>
+        ${directions.map(([direction, text, icon]) => {
+          const on = state.sortDirection === direction;
+          return `
+        <button type="button" role="menuitemradio" aria-checked="${on}" class="popover-menu__item" data-sort-direction="${direction}">
+          ${check(on)}<span>${esc(text)}</span><i data-lucide="${icon}" class="icon-md popover-menu__item-trail" aria-hidden="true"></i>
+        </button>`;
+        }).join('')}
+      </div>
+      ${/* DIE MEHRFACHAUSWAHL IST NUR FUER HANDLUNGEN DA (Verschieben,
+           Archivieren, Loeschen) und faellt bei `read` samt Trennlinie weg
+           (#1265). Mit Schreibrecht, aber ohne ein eigenes Dokument in der
+           Ansicht blendet syncToolsMenu den Einstieg aus. */ ''}
+      ${readOnly() ? '' : `
+      <div class="popover-menu__separator" role="separator" data-select-separator></div>
+      <button type="button" role="menuitem" class="popover-menu__item" data-action="enter-select">
+        <i data-lucide="list-checks" class="icon-md" aria-hidden="true"></i><span>${esc(t('documents.selectLabel'))}</span>
+      </button>
+      ${/* Waehrend der Auswahl: was nicht in die einzeilige Pille passt
+           (syncToolsMenu blendet es ein, wie Ablegen in den Aufgaben). */ ''}
+      <button type="button" role="menuitem" class="popover-menu__item" data-action="select-all" hidden>
+        <i data-lucide="check-check" class="icon-md" aria-hidden="true"></i><span>${esc(t('documents.selectAll'))}</span>
+      </button>
+      <button type="button" role="menuitem" class="popover-menu__item" data-action="select-archive" hidden>
+        <i data-lucide="archive" class="icon-md" aria-hidden="true"></i><span>${esc(t('documents.archiveAction'))}</span>
+      </button>`}
+    </div>`;
+}
+
+/** Haken und aria-checked im offenen Menue nachziehen, ohne es neu zu bauen. */
+function syncToolsMenu() {
+  const menu = _container?.querySelector('#documents-tools-menu');
+  if (!menu) return;
+  const paint = (item, on) => {
+    item.setAttribute('aria-checked', String(on));
+    item.querySelector('.popover-menu__item-check')?.classList.toggle('popover-menu__item-check--hidden', !on);
+  };
+  menu.querySelectorAll('[data-view-choice]').forEach((item) => paint(item, item.dataset.viewChoice === state.view));
+  menu.querySelectorAll('[data-sort]').forEach((item) => paint(item, item.dataset.sort === state.sort));
+  menu.querySelectorAll('[data-sort-direction]').forEach((item) => paint(item, item.dataset.sortDirection === state.sortDirection));
+  const select = menu.querySelector('[data-action="enter-select"]');
+  if (select) {
+    select.disabled = state.selectMode;
+    // Ohne ein Dokument, das diese Person verwalten darf, gaebe es nichts
+    // auszuwaehlen (Besitzregel, mayManage) - dann kein Einstieg.
+    const nothingToSelect = !state.selectMode && !state.allDocuments.some(mayManage);
+    select.hidden = nothingToSelect;
+    const separator = menu.querySelector('[data-select-separator]');
+    if (separator) separator.hidden = nothingToSelect;
+  }
+  // Die Sammel-Eintraege gibt es nur waehrend der Auswahl; Archivieren erst
+  // mit einem Dokument darin, und im Archiv heisst es Wiederherstellen.
+  const all = menu.querySelector('[data-action="select-all"]');
+  if (all) all.hidden = !state.selectMode;
+  const archive = menu.querySelector('[data-action="select-archive"]');
+  if (archive) {
+    archive.hidden = !state.selectMode;
+    archive.disabled = !state.selectMode || state.selected.size === 0;
+    const archived = state.status === 'archived';
+    const text = t(archived ? 'documents.restoreAction' : 'documents.archiveAction');
+    const span = archive.querySelector('span');
+    if (span && span.textContent !== text) span.textContent = text;
+  }
+}
+
+function setSort(sort, direction) {
+  state.sort = SORTS.includes(sort) ? sort : 'updated';
+  state.sortDirection = direction === 'asc' || direction === 'desc' ? direction : defaultSortDirection(state.sort);
+  try {
+    localStorage.setItem('yuvomi-documents-sort', state.sort);
+    localStorage.setItem('yuvomi-documents-sort-dir', state.sortDirection);
+  } catch {
+    // Voller oder gesperrter Speicher: die Wahl gilt bis zum naechsten Laden.
+  }
+  syncToolsMenu();
+  applyFilters();
+  renderDocuments();
+}
+
+function bindToolsMenu() {
+  installPopoverMenus(_container);
+  const menu = _container.querySelector('#documents-tools-menu');
+  menu?.addEventListener('click', (e) => {
+    const item = e.target.closest('.popover-menu__item');
+    if (!item || item.disabled) return;
+    if (item.dataset.viewChoice) {
+      // Derselbe Weg wie der Umschalter im Kopf: sein Klick-Handler haelt
+      // Zustand, Speicher und Zeichnung an EINER Stelle.
+      if (item.dataset.viewChoice !== state.view) {
+        _container.querySelector(`.documents-view-toggle [data-view="${item.dataset.viewChoice}"]`)?.click();
+      }
+      syncToolsMenu();
+    } else if (item.dataset.sort) {
+      // Ein neuer Schluessel beginnt in seiner natuerlichen Richtung.
+      if (item.dataset.sort !== state.sort) setSort(item.dataset.sort);
+    } else if (item.dataset.sortDirection) {
+      if (item.dataset.sortDirection !== state.sortDirection) setSort(state.sort, item.dataset.sortDirection);
+    } else if (readOnly()) {
+      // Ansicht und Sortierung oben sind Lesen; alles ab hier ist die Auswahl.
+    } else if (item.dataset.action === 'enter-select') {
+      enterSelectMode();
+    } else if (item.dataset.action === 'select-all') {
+      toggleSelectAll();
+    } else if (item.dataset.action === 'select-archive') {
+      archiveSelected();
+    }
+  });
+}
+
+/** Zaehler an Kategorien, Ablauf-Chip und Ordnern - sie haengen alle an der Suche. */
+function renderFacets() {
+  renderCategoryChips();
+  renderExpiringChip();
+  renderFolderBrowser();
+}
+
+function bindPageEvents() {
+  _container.querySelector('[data-documents-skip]')?.addEventListener('click', skipToDocuments);
+  _container.querySelector('#documents-folder-add')?.addEventListener('click', () => openFolderModal());
+  findPageFab('fab-new-document')?.addEventListener('click', () => openDocumentModal());
+  bindToolsMenu();
+
+  _search = wirePageSearch(_container, {
+    id: 'documents-search',
+    onQuery: (value) => {
+      state.query = normalizeDocumentQuery(value);
+      state.queryText = String(value ?? '').trim();
+      renderFacets();
+      renderDocuments();
+    },
+  });
+  _statusTablist = wireTablist(_container.querySelector('#documents-status'), {
+    activeId: state.status,
+    activeClass: 'is-active',
+    mode: 'select',
+    onChange: (id) => selectStatus(id),
+  });
+  // EINE Auswahl-Bewegung (Re-Critique 2026-09-27, D8): Status-Segment und
+  // Ansichts-Umschalter tragen die geteilte gleitende Kapsel; sie folgt
+  // wireTablist bzw. dem aria-pressed-Wechsel unten von selbst.
+  const statusBar = _container.querySelector('#documents-status');
+  if (statusBar) attachSegmentIndicator(statusBar);
+  const viewToggle = _container.querySelector('.documents-view-toggle');
+  if (viewToggle) attachSegmentIndicator(viewToggle);
+  // Kategorie ist eine reine Client-Facette: kein Netzwerk-Roundtrip, keine
+  // Skeleton-Zwischenstufe — der Filter greift im selben Frame.
+  _container.querySelector('#documents-category')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-category]');
+    if (!chip || chip.dataset.category === state.category) return;
+    state.category = chip.dataset.category;
+    applyFilters();
+    renderAll();
+  });
+  // Ein-/Ausschalten wie der Kategorie-Filter: reine Client-Facette.
+  _container.querySelector('#documents-expiring-filter')?.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-expiring-toggle]')) return;
+    state.expiringSoon = !state.expiringSoon;
+    applyFilters();
+    renderAll();
+  });
+  // Rand-Fade der Chip-Spur: geteiltes Utility (Audit F-06), deckt auch Resize
+  // und Re-Render ab.
+  //
+  // EIN SCROLLER AUF JEDER BREITE (Critique 2026-09-25). Bis dahin wechselte er
+  // mit dem Breakpoint: am Desktop scrollte die Kategorie-Reihe, mobil die ganze
+  // Bedienzeile samt Sortierung und Auswahl - 1267px Inhalt auf 375px, die
+  // Werkzeuge am Ende ausserhalb des Bilds. Seit die Werkzeuge im Kopf-Menue
+  // stehen, scrollt ueberall nur die Spur aus Kategorie- und Ablauf-Chips;
+  // das Segment davor bleibt stehen.
+  wireScrollFade(_container.querySelector('.documents-filters__chips'));
+  /* DIESE SEITE BEKOMMT DAS LESEMASS NICHT, und das ist eine Entscheidung.
+   *
+   * Sie ist als einzige ZWEISPALTIG: der Ordner-Browser steht links, die
+   * Dokumentliste beginnt erst bei x=508. Gemessen sind Liste und Bedienzeile
+   * beide 720px breit - aber an verschiedenen Startpunkten, und eine
+   * Bedienzeile, die an der Content-Kante beginnt, kann mit einer Liste, die
+   * 256px weiter rechts beginnt, keine rechte Kante teilen. Die Regel „Kopf
+   * fluchtet mit Körper" setzt einspaltig voraus.
+   *
+   * Hier fluchtet der Kopf stattdessen mit der CONTENT-SPALTE, also mit dem
+   * Ordner-Browser plus Liste zusammen - das ist der Körper dieser Seite.
+   * (Critique 2026-08-13, zweite Runde.) */
+  _container.querySelector('.documents-view-toggle')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-view]');
+    if (!btn) return;
+    state.view = btn.dataset.view;
+    localStorage.setItem('yuvomi-documents-view', state.view);
+    _container.querySelectorAll('.documents-view-toggle__btn').forEach((el) => {
+      const active = el === btn;
+      el.classList.toggle('is-active', active);
+      el.setAttribute('aria-pressed', String(active));
+    });
+    syncToolsMenu();
+    renderDocuments();
+  });
+  _container.querySelector('#documents-list')?.addEventListener('click', handleDocumentAction);
+  /* Der Pfad benutzt dasselbe `data-folder-select` wie die Seitenleiste, aber
+   * er haengt an einem anderen Traeger - ein Listener genuegt nicht. Die
+   * Auswahl selbst laeuft ueber `selectFolder()`, damit beide Wege dieselben
+   * Folgeschritte gehen (Aufklappen, Filtern, Zeichnen). */
+  _container.querySelector('#documents-breadcrumb')?.addEventListener('click', (e) => {
+    const crumb = e.target.closest('[data-folder-select]');
+    if (crumb) selectFolder(crumb.dataset.folderSelect);
+  });
+  const folderBrowser = _container.querySelector('#documents-folder-browser');
+  /* AUFKLAPPEN STATT WISCHEN (≤1023px).
+   *
+   * Hier stand `wireScrollFade(folderBrowser)`, weil die Liste unterhalb Tablet
+   * eine seitlich scrollende Chip-Leiste war. Gemessen bei 390px: clientWidth
+   * 356 gegen scrollWidth 1488 - zwei von neun Ordnern sichtbar, bei 320px
+   * einer - und das direkt unter der Filterreihe, die schon seitlich scrollt.
+   * Zwei verschiedene Dinge mit derselben Geste uebereinander (Critique
+   * 2026-08-13, P1).
+   *
+   * Statt eines Popovers (der Vorschlag der Critique) klappt die Auswahl an
+   * Ort und Stelle auf: dieselbe Information, dieselben neun Zeilen, aber ohne
+   * den Kontextwechsel eines Overlays fuer eine Handlung, die man beim
+   * Durchsehen mehrmals macht. Zugeklappt kostet sie EINE Zeile, die zugleich
+   * sagt, in welchem Ordner man steht - weniger Chrome als der Streifen vorher.
+   * Am Desktop gibt es keinen Auslöser und die Liste steht immer offen. */
+  const folderToggle = _container.querySelector('#documents-folder-toggle');
+  const folderAside = _container.querySelector('.documents-folder-browser');
+  const setFolderListOpen = (open) => {
+    folderAside?.classList.toggle('documents-folder-browser--open', open);
+    folderToggle?.setAttribute('aria-expanded', String(open));
+  };
+  folderToggle?.addEventListener('click', () => {
+    setFolderListOpen(folderToggle.getAttribute('aria-expanded') !== 'true');
+  });
+  folderBrowser?.addEventListener('click', (e) => {
+    const menuBtn = e.target.closest('[data-folder-menu]');
+    if (menuBtn) {
+      const folder = state.folders.find((f) => String(f.id) === menuBtn.dataset.folderMenu);
+      if (folder) openFolderMenu(folder, menuBtn);
+      return;
+    }
+    /* Aufklappen wechselt die Ansicht rechts NICHT (#785). Es beantwortet nur
+     * "was liegt darunter" - und nur die Seitenleiste wird neu gezeichnet,
+     * nicht die Dokumentliste, die sich nicht geaendert hat. */
+    const toggleBtn = e.target.closest('[data-folder-toggle]');
+    if (toggleBtn) {
+      const id = Number(toggleBtn.dataset.folderToggle);
+      if (state.expanded.has(id)) state.expanded.delete(id);
+      else state.expanded.add(id);
+      persistExpandedFolders();
+      renderFolderBrowser();
+      return;
+    }
+    const btn = e.target.closest('[data-folder-select]');
+    if (!btn) return;
+    selectFolder(btn.dataset.folderSelect);
+    // Die Wahl beantwortet die Frage, die das Aufklappen gestellt hat: zu.
+    // Am Desktop ist der Auslöser ausgeblendet und die Klasse wirkungslos.
+    setFolderListOpen(false);
+  });
+}
+
+/**
+ * Einen Ordner waehlen - der eine Weg fuer Seitenleiste und Pfad.
+ *
+ * @param {string} id  Ordner-id als Zeichenkette, `''` = alle, `'__none'` = ohne Ordner
+ */
+function selectFolder(id) {
+  state.folderId = id;
+  /* Wer einen Ordner mit Kindern waehlt, klappt ihn auf: die Ansicht zeigt ab
+   * jetzt auch dessen Unterordner, und ein zugeklappter Zweig verschwiege,
+   * woher die Dokumente kommen. */
+  const chosen = Number(id);
+  if (Number.isInteger(chosen) && chosen > 0 && state.folders.some((f) => f.parent_id === chosen)) {
+    state.expanded.add(chosen);
+    persistExpandedFolders();
+  }
+  applyFilters();
+  renderAll();
+}
+
+/**
+ * Status wechseln. Das Segment zeichnet sich selbst (wireTablist); wer den
+ * Status von anderswo aendert (Leerzustand "Aktive zeigen"), geht ueber
+ * `_statusTablist.setActive`, damit Segment und Liste nie auseinanderlaufen.
+ */
+async function selectStatus(status) {
+  if (state.status === status) return;
+  state.status = status;
+  exitSelectMode();
+  showDocumentsLoading();
+  const owner = _container;
+  await loadDocuments();
+  if (!stillShown(owner)) return;
+  renderAll();
+}
+
+// Über den page-search-Handle leeren, damit auch der Lösch-Knopf im Feld
+// mitgeht; danach Fokus zurück ins Suchfeld (der auslösende Button verschwindet).
+// `clear()` setzt nur das Feld zurück und ruft KEIN onQuery — das Neuzeichnen
+// muss hier explizit passieren, sonst bliebe die leere Liste stehen.
+function clearSearch() {
+  state.query = '';
+  state.queryText = '';
+  _search?.clear();
+  renderFacets();
+  renderDocuments();
+  _search?.input.focus();
+}
+
+function resetFilters() {
+  state.category = '';
+  state.folderId = '';
+  state.expiringSoon = false;
+  applyFilters();
+  renderAll();
+}
+
+function filteredDocuments() {
+  if (!state.query) return state.documents;
+  return state.documents.filter((doc) => matchesDocumentQuery(doc, state.query));
+}
+
+/**
+ * Die Klassen des Listen-Trägers. EINE Stelle statt drei: dieselbe Klassenliste
+ * stand an drei Orten, und zwei Aufzählungen derselben Arbeit verlieren eine
+ * davon einen Schritt (die Auswahl-Klasse fehlte im Ladezustand bereits).
+ *
+ * Die LISTENANSICHT ist eine Zeilenliste und trägt deren Trägergrammatik
+ * (`.row-carrier`, list-row.css): eine randlose Karte, Zeilen darin flächenlos,
+ * getrennt über den `+`-Kombinator. Die RASTERANSICHT bleibt ein Raster aus
+ * Objekten mit eigenem Medium - die benannte Ausnahme der Zeilenlisten-Regel.
+ */
+function listClasses() {
+  return [
+    'documents-list',
+    `documents-list--${state.view}`,
+    state.view === 'list' ? 'row-carrier' : '',
+    state.selectMode ? 'documents-list--selecting' : '',
+  ].filter(Boolean).join(' ');
+}
+
+// Ladezustand beim Netzwerk-gebundenen Filterwechsel (Status/Kategorie):
+// dieselbe Skeleton-Sprache wie beim Erstaufbau, statt die veraltete Liste
+// stumm stehen zu lassen. `aria-busy` schaltet die Grid/Flex-Ansicht via CSS
+// auf full-width-Block. renderDocuments() räumt beides wieder ab.
+function showDocumentsLoading() {
+  const list = _container?.querySelector('#documents-list');
+  if (!list) return;
+  list.className = listClasses();
+  list.setAttribute('aria-busy', 'true');
+  list.replaceChildren();
+  list.insertAdjacentHTML('beforeend', renderSkeletonList({ rows: 6, lines: 2 }));
+}
+
+function hasActiveFilter() {
+  return Boolean(state.category) || Boolean(state.folderId) || state.expiringSoon;
+}
+
+// Vier unterscheidbare Leerzustände statt einem. Der alte Einheitszustand
+// behauptete „Noch keine Dokumente", während der Ordner-Browser daneben 6 zählte,
+// und bot mit „Hochladen" die falsche Reparatur an. Jeder Zustand nennt jetzt die
+// tatsächliche Ursache und die Aktion, die sie auflöst.
+/* DIE ANDERE ANSICHT FUER EINE LEERE SUCHE (Re-Critique 2026-09-25). Findet die
+ * Suche in "Aktiv" nichts, kann das Gesuchte im Archiv liegen - und umgekehrt.
+ * Die Probe fragt die andere Ansicht einmal je Suchbegriff und Status ab und
+ * zaehlt nur ueber den Suchbegriff (Kategorie und Ordner gelten drueben nicht
+ * automatisch). Der Weg erscheint nur mit Treffern: ein Knopf in den naechsten
+ * Leerzustand waere schlechter als keiner. Veraltete Antworten fallen weg. */
+let otherStatusProbe = 0;
+
+function otherStatus() {
+  return state.status === 'active' ? 'archived' : 'active';
+}
+
+function otherStatusHits() {
+  const hits = state.otherStatusHits;
+  return hits && hits.status === state.status && hits.query === state.query ? hits.count : 0;
+}
+
+async function probeOtherStatusSearch() {
+  const { query, status } = state;
+  const hits = state.otherStatusHits;
+  if (hits && hits.status === status && hits.query === query) return;
+  const token = ++otherStatusProbe;
+  let docs;
+  try {
+    docs = (await api.get(`/documents?status=${encodeURIComponent(otherStatus())}`)).data || [];
+  } catch (err) {
+    if (err?.name !== 'ApiError') throw err;
+    return;
+  }
+  if (token !== otherStatusProbe || state.query !== query || state.status !== status) return;
+  state.otherStatusHits = { status, query, count: docs.filter((doc) => matchesDocumentQuery(doc, query)).length };
+  if (state.otherStatusHits.count && !filteredDocuments().length) renderDocuments();
+}
+
+function emptyStateFor() {
+  // Die leere SUCHE baut der geteilte Leerzustand (searchEmptyOptions, R19):
+  // Titel „Keine Treffer", Begriff als Chip, „Suche zuruecksetzen". Hier
+  // stehen nur die Wege, die es nur in den Dokumenten gibt.
+  if (state.query) {
+    return {
+      search: true,
+      actions: [
+        ...(otherStatusHits() > 0
+          ? [{
+            id: 'documents-empty-other-status',
+            label: t(state.status === 'active' ? 'documents.searchArchivedAction' : 'documents.searchActiveAction'),
+            icon: state.status === 'active' ? 'archive' : 'corner-up-left',
+            variant: 'secondary',
+          }]
+          : []),
+        ...(hasActiveFilter()
+          ? [{ id: 'documents-empty-reset', label: t('documents.resetFiltersAction'), icon: 'filter-x', variant: 'secondary' }]
+          : []),
+      ],
+    };
+  }
+  if (hasActiveFilter()) {
+    return {
+      variant: 'no-results',
+      icon: 'filter-x',
+      title: t('documents.emptyFilterTitle'),
+      description: t('documents.emptyFilterDescription'),
+      actions: [
+        { id: 'documents-empty-reset', label: t('documents.resetFiltersAction'), icon: 'filter-x', variant: 'primary' },
+        ...(readOnly() ? [] : [{ id: 'documents-empty-upload', label: t('documents.emptyPrimary'), icon: 'upload', variant: 'secondary' }]),
+      ],
+    };
+  }
+  if (state.status === 'archived') {
+    return {
+      variant: 'empty',
+      icon: 'archive',
+      title: t('documents.emptyArchivedTitle'),
+      description: t('documents.emptyArchivedDescription'),
+      actions: [
+        { id: 'documents-empty-active', label: t('documents.showActiveAction'), icon: 'corner-up-left', variant: 'primary' },
+      ],
+    };
+  }
+  // Bei `read` nur die Auskunft: die Beschreibung („Lade Familiendokumente
+  // hoch ...") laedt zu der Handlung ein, die die Knoepfe darunter meinen, und
+  // faellt mit ihnen weg (Regel 9 in utils/module-access.js).
+  if (readOnly()) {
+    return { variant: 'empty', icon: 'folder-open', title: t('documents.emptyTitle'), actions: [] };
+  }
+  return {
+    variant: 'empty',
+    icon: 'folder-open',
+    title: t('documents.emptyTitle'),
+    description: t('documents.emptyDescription'),
+    actions: [
+      { id: 'documents-empty-upload', label: t('documents.emptyPrimary'), icon: 'upload', variant: 'primary' },
+      { id: 'documents-empty-folder', label: t('documents.emptySecondary'), icon: 'folder-plus', variant: 'secondary' },
+    ],
+  };
+}
+
+function renderEmptyState(list) {
+  const empty = emptyStateFor();
+  const actions = empty.actions.map((action) => ({
+    label: action.label,
+    icon: action.icon,
+    tone: action.variant,
+    attrs: { id: action.id },
+  }));
+  // Suche und Filter sind Reaktionen auf eine Eingabe und werden als
+  // `no-results` angesagt; „noch nichts hochgeladen" ist gewoehnlicher
+  // Seiteninhalt. Der Unterschied stand bisher nur im Text.
+  if (empty.search) {
+    mountSearchEmpty(list, {
+      query: state.queryText,
+      resetAttrs: { id: 'documents-empty-clear-search' },
+      actions,
+      className: 'documents-empty-state',
+    });
+  } else {
+    mountEmptyState(list, {
+      variant: empty.variant,
+      className: 'documents-empty-state',
+      icon: empty.icon,
+      title: empty.title,
+      description: empty.description,
+      actions,
+    });
+  }
+  list.querySelector('#documents-empty-upload')?.addEventListener('click', () => openDocumentModal());
+  list.querySelector('#documents-empty-folder')?.addEventListener('click', () => openFolderModal());
+  list.querySelector('#documents-empty-clear-search')?.addEventListener('click', () => clearSearch());
+  list.querySelector('#documents-empty-reset')?.addEventListener('click', () => resetFilters());
+  list.querySelector('#documents-empty-active')?.addEventListener('click', () => _statusTablist?.setActive('active', { focus: true }));
+  list.querySelector('#documents-empty-other-status')?.addEventListener('click', () => _statusTablist?.setActive(otherStatus(), { focus: true }));
+  if (state.query) probeOtherStatusSearch();
+}
+
+const DOCUMENT_ITEM = ':is(.document-card, .document-row)[data-id]';
+
+/* `motion: true` setzt, wer die DATEN geaendert hat (hochgeladen, archiviert,
+ * geloescht, per "Rueckgaengig" zurueckgeholt): das neue Dokument zieht auf,
+ * und was dadurch die Stelle wechselt, gleitet (utils/list-motion.js). Filter,
+ * Suche, Ordner- und Ansichtswechsel zeichnen ohne Bewegung neu - dort
+ * wechselt die Frage, nicht die Liste. */
+function renderDocuments({ motion = false } = {}) {
+  const list = _container.querySelector('#documents-list');
+  if (motion && list) {
+    redrawList(list, drawDocuments, { selector: DOCUMENT_ITEM, keyAttr: 'data-id' });
+    return;
+  }
+  drawDocuments();
+  if (list) stagger(list.querySelectorAll('.document-card, .document-row'), { host: list });
+}
+
+function drawDocuments() {
+  // Jeder Rerender (Moduswechsel, Filter, Löschen) ersetzt die Karten samt
+  // Menü-Anker. Ein offenes Kontextmenü hinge sonst als Geister-Popover im
+  // Top-Layer, weil weder Scroll- noch Resize-Listener feuern.
+  closeContextMenu();
+  const list = _container.querySelector('#documents-list');
+  if (!list) return;
+  list.removeAttribute('aria-busy');
+  const docs = filteredDocuments();
+  list.className = listClasses();
+  // Der Einstieg in die Auswahl haengt an den geladenen Dokumenten (mayManage).
+  syncToolsMenu();
+  if (!docs.length) {
+    renderEmptyState(list);
+    return;
+  }
+  list.replaceChildren();
+  list.insertAdjacentHTML('beforeend', docs.map((doc) => state.view === 'list' ? renderListItem(doc) : renderGridCard(doc)).join(''));
+  if (window.lucide) lucide.createIcons({ el: list });
+  wireRovingToolbars(list);
+  repairRovingStops(list);
+  wireThumbnails(list);
+  wireLocalThumbs(list);
+}
+
+// Facetten-Zähler: jede Achse zählt unter Berücksichtigung der jeweils ANDEREN
+// Achse, aber nicht ihrer selbst. Dadurch führt kein sichtbarer Zähler ins Leere
+// und die eigene Auswahl schrumpft die eigene Liste nicht auf einen Eintrag.
+/** Der sichtbare Teil des Baums - zugeklappte Zweige bleiben aussen vor. */
+function visibleFolderRows() {
+  return flattenFolderTree(state.folders, { expanded: state.expanded });
+}
+
+/**
+ * Der ganze Baum als flache Liste, unabhaengig vom Aufgeklappt-Zustand.
+ * Fuer Auswahllisten: dort ist die Einrueckung die Auskunft ueber die Lage,
+ * und ein zugeklappter Zweig darf keine Wahl verstecken.
+ */
+function visibleAllFolderRows() {
+  return flattenFolderTree(state.folders);
+}
+
+/**
+ * Beschriftung eines Ordners in einer Auswahl: eingerueckt nach seiner Tiefe.
+ * Mit geschuetzten Leerzeichen - gewoehnliche fasst eine <option> zusammen,
+ * und der Unterordner stuende auf der obersten Ebene (Codex an #1994). EIN
+ * Helfer fuer jede Ordner-Auswahl, auch fuer den Neuaufbau nach "gibt es nicht
+ * mehr", damit beide nicht auseinanderlaufen.
+ */
+function folderOptionLabel(row) {
+  return `${'  '.repeat(row.depth)}${row.folder.name}`;
+}
+
+/** Dieser Ordner und alles darunter - dieselbe Regel wie im Server. */
+function folderSubtree(folderId) {
+  return subtreeIds(state.folders, folderId);
+}
+
+/* Beide Achsen zaehlen auch unter der Suche (Critique 2026-09-25, P2): bei
+ * "Keine Treffer" standen links weiter die vollen Zahlen. Die Rechnung selbst
+ * wohnt in utils/document-facets.js und laeuft dort als Programm. */
+function folderCounts() {
+  return folderFacetCounts(state.allDocuments, state.folders, {
+    query: state.query,
+    inScope: matchesCategory,
+    subtreeOf: folderSubtree,
+  });
+}
+
+function categoryCounts() {
+  return categoryFacetCounts(state.allDocuments, { query: state.query, inScope: matchesFolder });
+}
+
+/* WELCHE Chips stehen, entscheidet der Bestand, nicht die Suche: sonst sprangen
+ * die Chips bei jedem Tastendruck heraus und herein, und die Zeile unter dem
+ * Finger ordnete sich neu. Die ZAHL daran folgt der Suche (categoryCounts). */
+function presentCategories() {
+  return categoryFacetCounts(state.allDocuments, { inScope: matchesFolder });
+}
+
+// Nur belegte Kategorien werden zu Chips — 15 permanent sichtbare Filter, von
+// denen die meisten ins Leere führen, sind Rauschen. Die gerade aktive Kategorie
+// bleibt auch bei 0 stehen, damit sie einem beim Ansehen nicht wegspringt.
+//
+// "ALLE KATEGORIEN" TOENT, WENN ES GEWAEHLT IST. Die Reihe ist eine
+// Einfachauswahl, und "Alle" ist darin eine Option wie jede andere: der aktive
+// Chip beantwortet "wo bin ich" (DESIGN.md), und Toenung und `aria-pressed`
+// folgen derselben Bedingung. Zwischen dem 2026-09-25 (Critique, P2) und der
+// Angleichung am selben Abend war "Alle" hier ungetoent - optisch "aus",
+// fuer den Screenreader "an", und als einzige Chipreihe der App anders als
+// Notizen, Inventar, Kontakte und Vorrat.
+function renderCategoryChips() {
+  const host = _container?.querySelector('#documents-category');
+  if (!host) return;
+  const counts = categoryCounts();
+  const present = presentCategories();
+  const visible = CATEGORIES.filter((category) => present.get(category) || category === state.category);
+  const labels = categoryLabels();
+  host.replaceChildren();
+  // Eine Ansicht ohne ein einziges Dokument (das leere Archiv) bekommt keine
+  // Facette: "Alle Kategorien 0" allein in der Spur sagte nur, was der
+  // Leerzustand darunter schon sagt (Re-Critique 2026-09-25). Eine aktive
+  // Kategorie bleibt stehen, damit man sie loesen kann.
+  if (!state.allDocuments.length && !state.category) return;
+  host.insertAdjacentHTML('beforeend', `
+    <button type="button" class="filter-chip filter-chip--sm${!state.category ? ' filter-chip--active' : ''}" data-category="" aria-pressed="${!state.category}">
+      ${t('documents.allCategories')}<span class="filter-chip__count">${counts.get('') || 0}</span>
+    </button>
+    ${visible.map((category) => `
+    <button type="button" class="filter-chip filter-chip--sm${state.category === category ? ' filter-chip--active' : ''}" data-category="${esc(category)}" aria-pressed="${state.category === category}">
+      <i data-lucide="${CATEGORY_ICONS[category] || 'folder'}" class="icon-md" aria-hidden="true"></i>${esc(labels[category])}<span class="filter-chip__count">${counts.get(category) || 0}</span>
+    </button>`).join('')}
+  `);
+  if (window.lucide) lucide.createIcons({ el: host });
+}
+
+// Ein einzelner Umschalt-Chip, gleiches Muster wie renderCategoryChips - nur ein
+// Zustand statt einer Auswahlliste, weil es nur "an" oder "aus" gibt. Und
+// dieselbe Regel: nur zeigen, wenn er irgendwohin fuehrt - direkt nach dem
+// Anlegen des Features hat noch kein Dokument ein Ablaufdatum, und ein
+// dauerhaft sichtbarer Filter, der ins Leere fuehrt, waere Rauschen wie bei
+// den Kategorien oben. Der aktive Filter bleibt auch bei 0 stehen, aus
+// demselben Grund wie dort - er soll waehrend der Benutzung nicht wegspringen.
+function renderExpiringChip() {
+  const host = _container?.querySelector('#documents-expiring-filter');
+  if (!host) return;
+  const count = expiringCount();
+  host.replaceChildren();
+  // Sichtbar nach Bestand, gezaehlt unter der Suche - wie die Kategorien.
+  const present = state.allDocuments.some((doc) => matchesCategory(doc) && matchesFolder(doc) && isExpiringOrOverdue(doc));
+  if (!present && !state.expiringSoon) return;
+  host.insertAdjacentHTML('beforeend', `
+    <button type="button" class="filter-chip filter-chip--sm${state.expiringSoon ? ' filter-chip--active' : ''}" data-expiring-toggle aria-pressed="${state.expiringSoon}" title="${t('documents.expiringFilterGroupLabel')}">
+      <i data-lucide="calendar-clock" class="icon-md" aria-hidden="true"></i>${t('documents.expiringFilterLabel')}<span class="filter-chip__count">${count}</span>
+    </button>
+  `);
+  if (window.lucide) lucide.createIcons({ el: host });
+}
+
+function renderFolderBrowser() {
+  const browser = _container.querySelector('#documents-folder-browser');
+  if (!browser) return;
+  const counts = folderCounts();
+  // Neun Nullen im leeren Archiv waren Rauschen (Re-Critique 2026-09-25): ohne
+  // ein Dokument in dieser Ansicht traegt keine Zeile einen Zaehler.
+  const showCounts = state.allDocuments.length > 0;
+  /* Zwei feste Zeilen, dann der Baum (#785).
+   *
+   * `depth` ruecken die Zeilen ein, `branch` sagt, ob ein Pfeil davorsteht.
+   * Die beiden festen Zeilen sind KEINE Ordner und tragen deshalb weder das
+   * eine noch das andere - "alle Dokumente" ist kein Vorfahre von irgendwas.
+   */
+  const items = [
+    { id: '', name: t('documents.allDocuments'), icon: 'folders', managed: false, depth: 0 },
+    { id: '__none', name: t('documents.noFolder'), icon: 'folder-x', managed: false, depth: 0 },
+    ...visibleFolderRows().map((row) => ({
+      id: String(row.folder.id),
+      name: row.folder.name,
+      // Ein Ordner mit Inhalt sieht anders aus als einer ohne - dieselbe
+      // Auskunft, die ein Dateibrowser ueber sein Ordnersymbol gibt.
+      icon: row.children.length && state.expanded.has(row.folder.id) ? 'folder-open' : 'folder',
+      managed: true,
+      depth: row.depth,
+      branch: row.children.length > 0,
+      open: state.expanded.has(row.folder.id),
+    })),
+  ];
+  const treeHasFolders = items.some((item) => item.managed);
+  browser.replaceChildren();
+  /* Die geteilte Zeilen-Grammatik statt einer nachgebauten: `.documents-folder-item`
+   * mass 44px min-height, 8px gap, 10px Radius und kappte den Namen mit Ellipse,
+   * waehrend `.list-row` 48 / 12 / 0 und `overflow-wrap: anywhere` fuehrt -
+   * `/documents` war die einzige Route der App mit NULL `.list-row`-Elementen
+   * (Critique 2026-08-13). Der Traeger ist jetzt `.row-carrier`, der die Flaeche
+   * und die Trennlinien per `+`-Kombinator stellt, statt sie hier nachzubauen. */
+  browser.insertAdjacentHTML('beforeend', items.map((item) => {
+    const active = String(state.folderId) === item.id;
+    /* DER PFEIL IST EIN EIGENER KNOPF, KEIN KLICK AUF DIE ZEILE. Aufklappen
+     * und Hineingehen sind zwei verschiedene Absichten: wer den Inhalt von
+     * "Wohnung" sehen will, klickt den Namen; wer nur wissen will, was
+     * darunter liegt, klappt auf, ohne die Ansicht rechts zu wechseln. In
+     * einen Knopf gelegt kann man das eine nicht ohne das andere.
+     *
+     * Ordner ohne Kinder bekommen einen leeren Platzhalter statt gar nichts -
+     * sonst springen die Namen einer Geschwisterreihe um die Pfeilbreite
+     * gegeneinander, je nachdem wer Kinder hat. Die festen Zeilen bekommen
+     * denselben Platz, sobald ein Baum da ist (folderRowLead). */
+    const lead = folderRowLead(item, treeHasFolders);
+    const twisty = lead === 'none' ? '' : (lead === 'toggle'
+      ? `<button class="documents-folder-item__twisty" type="button" data-folder-toggle="${esc(item.id)}"
+                 aria-expanded="${item.open ? 'true' : 'false'}"
+                 aria-label="${esc(item.open ? t('documents.folderCollapse', { name: item.name }) : t('documents.folderExpand', { name: item.name }))}">
+           <i data-lucide="chevron-right" aria-hidden="true"></i>
+         </button>`
+      : '<span class="documents-folder-item__twisty documents-folder-item__twisty--leaf" aria-hidden="true"></span>');
+
+    return `
+    <li class="list-row documents-folder-item ${active ? 'documents-folder-item--active' : ''} ${item.managed ? 'documents-folder-item--managed' : ''}"
+        style="--folder-depth:${item.depth}">
+      ${twisty}
+      <button class="documents-folder-item__select list-row__main--interactive" type="button" data-folder-select="${esc(item.id)}" aria-current="${active ? 'true' : 'false'}">
+        <span class="documents-folder-item__icon"><i data-lucide="${esc(item.icon)}" aria-hidden="true"></i></span>
+        <span class="list-row__name documents-folder-item__name" title="${esc(item.name)}">${esc(item.name)}</span>
+        ${showCounts ? `<span class="documents-folder-item__count">${counts.get(item.id) || 0}</span>` : ''}
+      </button>
+      ${item.managed && !readOnly() ? `
+      ${rowActionHtml({ icon: 'ellipsis', className: 'documents-folder-item__menu', label: t('documents.folderActionsFor', { name: item.name }), attrs: { 'data-folder-menu': item.id, title: t('documents.folderActionsFor', { name: item.name }), 'aria-haspopup': 'menu', 'aria-expanded': 'false' } })}` : ''}
+    </li>`;
+  }).join(''));
+  if (window.lucide) lucide.createIcons({ el: browser });
+
+  // Der Auslöser trägt den Ordner, in dem man steht - unterhalb Tablet ist er
+  // die einzige sichtbare Zeile der Auswahl.
+  const toggleLabel = _container?.querySelector('.documents-folder-browser__toggle-label');
+  if (toggleLabel) {
+    toggleLabel.textContent = items.find((i) => String(state.folderId) === i.id)?.name ?? items[0].name;
+  }
+  // Ein gewaehlter Ordner ist ein aktiver Filter: der Chip traegt den Aktivton.
+  _container?.querySelector('#documents-folder-toggle')
+    ?.toggleAttribute('data-folder-active', Boolean(state.folderId));
+}
+
+// Rand-Fade horizontal scrollender Leisten: geteilte has-fade-*-Konvention via
+// wireScrollFade (utils/ux.js, Audit F-06) — Re-Render triggert dessen
+// MutationObserver, daher hier keine manuellen Update-Aufrufe mehr.
+
+// --------------------------------------------------------
+// Kontext-Popover (Ordner- & Dokument-Aktionen)
+// Native Popover-API wie in den Kontakten: das Panel rendert im Top-Layer
+// (kein Clipping durch die Chip-Leiste/Sidebar) und bringt Light-Dismiss,
+// Escape und Fokus-Rückgabe mit. Nur Position und Pfeiltasten-Navigation
+// bleiben eigener Code.
+// --------------------------------------------------------
+
+let _contextMenu = null;
+
+function closeContextMenu() {
+  if (!_contextMenu) return;
+  const { el } = _contextMenu;
+  try { el.hidePopover(); } catch { /* war schon zu */ }
+}
+
+// `itemsHtml` liefert die <button role="menuitem" data-menu-action="…">-Einträge,
+// `onAction(action)` wird nach dem Schließen mit dem gewählten Wert aufgerufen.
+function openContextMenu(anchorBtn, itemsHtml, onAction) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'documents-context-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('popover', 'auto');
+  menu.insertAdjacentHTML('beforeend', itemsHtml);
+  document.body.appendChild(menu);
+  if (window.lucide) lucide.createIcons({ el: menu });
+
+  const items = () => Array.from(menu.querySelectorAll('[data-menu-action]'));
+
+  menu.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    const list = items();
+    if (!list.length) return;
+    const current = list.indexOf(document.activeElement);
+    let next;
+    if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = list.length - 1;
+    else if (e.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % list.length;
+    else next = current <= 0 ? list.length - 1 : current - 1;
+    list[next].focus();
+  });
+
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-menu-action]');
+    if (!item) return;
+    const action = item.dataset.menuAction;
+    closeContextMenu();
+    onAction(action);
+  });
+
+  // Aufräumen zentral am Schließen — egal ob per Auswahl, Escape, Klick
+  // daneben oder Scroll. Der Fokus geht an den Auslöser zurück.
+  // Der toggle-Event feuert ASYNCHRON: Öffnet ein zweiter Kebab sein Menü,
+  // bevor das Schließ-Event des ersten verarbeitet ist, zeigt _contextMenu
+  // bereits auf das neue Menü. Der verspätete Handler des alten darf dann
+  // weder die Registrierung nullen noch die geteilten window-Listener oder
+  // den Fokus anfassen — sonst wird das neue Menü unschließbar (Geister-
+  // Popover, Audit A2-13).
+  menu.addEventListener('toggle', (e) => {
+    if (e.newState === 'open') return;
+    anchorBtn.setAttribute('aria-expanded', 'false');
+    if (_contextMenu?.el === menu) {
+      window.removeEventListener('resize', closeContextMenu, true);
+      window.removeEventListener('scroll', closeContextMenu, true);
+      _contextMenu = null;
+      if (anchorBtn.isConnected) anchorBtn.focus();
+    }
+    menu.remove();
+  });
+
+  menu.showPopover();
+  positionContextMenu(menu, anchorBtn);
+  anchorBtn.setAttribute('aria-expanded', 'true');
+  _contextMenu = { el: menu, anchorBtn };
+  window.addEventListener('resize', closeContextMenu, true);
+  window.addEventListener('scroll', closeContextMenu, true);
+  items()[0]?.focus();
+}
+
+// Rechtsbündig unter dem Auslöser, mit Kipp-Logik nach oben und Rand-Klemmung,
+// damit das Panel am Viewport-Rand nicht abgeschnitten wird.
+function positionContextMenu(menu, anchorBtn) {
+  const r = anchorBtn.getBoundingClientRect();
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  let left = Math.max(8, r.right - mw);
+  left = Math.min(left, window.innerWidth - mw - 8);
+  let top = r.bottom + 4;
+  if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+}
+
+function openFolderMenu(folder, anchorBtn) {
+  // Alle vier Eintraege schreiben (Unterordner, Umbenennen, Verschieben,
+  // Loeschen) - bei `read` gibt es das Menue nicht.
+  if (readOnly()) return;
+  openContextMenu(anchorBtn, `
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="subfolder">
+      <i data-lucide="folder-plus" aria-hidden="true"></i><span>${t('documents.newSubfolder')}</span>
+    </button>
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="rename">
+      <i data-lucide="pencil" aria-hidden="true"></i><span>${t('documents.renameFolder')}</span>
+    </button>
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="move">
+      <i data-lucide="folder-input" aria-hidden="true"></i><span>${t('documents.moveFolder')}</span>
+    </button>
+    <div class="popover-menu__separator" role="separator"></div>
+    <button class="documents-context-menu__item documents-context-menu__item--danger" type="button" role="menuitem" data-menu-action="delete">
+      <i data-lucide="trash-2" aria-hidden="true"></i><span>${t('documents.deleteFolder')}</span>
+    </button>
+  `, async (action) => {
+    if (action === 'subfolder') openFolderModal({ parentId: folder.id });
+    else if (action === 'rename') await renameFolder(folder);
+    else if (action === 'move') await moveFolder(folder);
+    else if (action === 'delete') await deleteFolder(folder);
+  });
+}
+
+/**
+ * Ein Ordner zieht um.
+ *
+ * DIE AUSWAHL ZEIGT NICHT ALLE ORDNER, sondern nur die moeglichen: der Ordner
+ * selbst und sein ganzer Teilbaum fehlen, weil ein Ordner nicht in sich selbst
+ * ziehen kann. Der Server weist das ohnehin ab - eine Auswahl, die eine Absage
+ * anbietet, ist trotzdem eine schlechte Auswahl.
+ */
+async function moveFolder(folder) {
+  if (readOnly()) return;
+  const forbidden = folderSubtree(folder.id);
+  const options = [
+    { value: '', label: t('documents.folderRootLevel') },
+    ...visibleAllFolderRows()
+      .filter((row) => !forbidden.has(row.folder.id))
+      .map((row) => ({ value: String(row.folder.id), label: folderOptionLabel(row) })),
+  ];
+
+  const chosen = await selectModal(t('documents.moveFolderTo', { name: folder.name }), options);
+  if (chosen === null) return;
+  const owner = _container;
+  try {
+    await api.put(`/documents/folders/${folder.id}`, { parent_id: chosen === '' ? null : Number(chosen) });
+    window.yuvomi?.showToast(t('documents.folderMovedToast'), 'success');
+    // Der neue Elternteil wird aufgeklappt, sonst verschwindet der Ordner
+    // scheinbar - er sitzt dann in einem zugeklappten Zweig.
+    if (chosen !== '') state.expanded.add(Number(chosen));
+    persistExpandedFolders();
+    await Promise.all([loadFolders(), loadDocuments()]);
+    if (!stillShown(owner)) return;
+    renderAll();
+    refocusAfterRender();
+  } catch (err) {
+    reportError(err, { owner });
+  }
+}
+
+// Overflow-Menü einer Dokumentkarte/-zeile: Sekundäraktionen aus der Aktionszeile
+// (bearbeiten, archivieren, an DMS senden, löschen) — hält die Zeile auf zwei
+// Primäraktionen (Ansehen/Download) + Kebab begrenzt.
+function openDocumentMenu(doc, anchorBtn) {
+  // Ohne Verwaltungsrecht hat das Menue keinen Eintrag ausser „Ansehen" - dann
+  // gibt es den Kebab gar nicht (renderActions) und das Auge bleibt stehen.
+  if (!mayManage(doc)) return;
+  const archived = doc.status === 'archived';
+  const canPushDms = documentStorageBackend(doc) !== 'dms' && state.dmsAccounts.length > 0;
+  // ANSEHEN STEHT HIER, WENN DIE LEISTE ES NICHT ZEIGT. Die kompakte Zeile
+  // (unter 30rem) traegt kein Auge mehr - ein Tipp auf die Zeile oeffnet den
+  // Betrachter (Re-Critique 2026-09-25). Die Zeile ist aber kein Tab-Stopp;
+  // wer per Tastatur kommt, landet auf dem Kebab, und ohne diesen Eintrag
+  // waere das Dokument ohne Maus nicht zu oeffnen (Codex-Review zu PR #754).
+  const eye = anchorBtn.closest('[role="toolbar"]')?.querySelector('[data-action="view"]');
+  const viewShown = eye?.getClientRects().length > 0;
+  openContextMenu(anchorBtn, `
+    ${viewShown ? '' : `
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="view">
+      <i data-lucide="eye" aria-hidden="true"></i><span>${t('documents.viewAction')}</span>
+    </button>`}
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="edit">
+      <i data-lucide="pencil" aria-hidden="true"></i><span>${t('common.edit')}</span>
+    </button>
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="move">
+      <i data-lucide="folder-input" aria-hidden="true"></i><span>${t('documents.moveAction')}</span>
+    </button>
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="archive">
+      <i data-lucide="${archived ? 'archive-restore' : 'archive'}" aria-hidden="true"></i><span>${archived ? t('documents.restoreAction') : t('documents.archiveAction')}</span>
+    </button>
+    ${canPushDms ? `
+    <button class="documents-context-menu__item" type="button" role="menuitem" data-menu-action="push-dms">
+      <i data-lucide="upload" aria-hidden="true"></i><span>${t('documents.pushToDms')}</span>
+    </button>` : ''}
+    <div class="popover-menu__separator" role="separator"></div>
+    <button class="documents-context-menu__item documents-context-menu__item--danger" type="button" role="menuitem" data-menu-action="delete">
+      <i data-lucide="trash-2" aria-hidden="true"></i><span>${t('common.delete')}</span>
+    </button>
+  `, (action) => runDocumentAction(action, doc));
+}
+
+async function renameFolder(folder) {
+  if (readOnly()) return;
+  const newName = await promptModal(t('documents.renameFolder'), folder.name);
+  if (!newName || newName === folder.name) return;
+  const owner = _container;
+  try {
+    await api.put(`/documents/folders/${folder.id}`, { name: newName });
+    window.yuvomi?.showToast(t('documents.folderRenamedToast'), 'success');
+    // Dokumente mitladen: `folder_name` steckt im Server-Join und stünde sonst
+    // auf den Karten weiter mit dem alten Namen.
+    await Promise.all([loadFolders(), loadDocuments()]);
+    if (!stillShown(owner)) return;
+    renderAll();
+    refocusAfterRender();
+  } catch (err) {
+    reportError(err, { owner });
+  }
+}
+
+function folderDeleteChoice(folder, impact) {
+  const descendants = Math.max(0, Number(impact.removed_folders) - 1);
+  const documents = Math.max(0, Number(impact.documents));
+  const linkedRecordLabels = [
+    ['calendar', t('nav.calendar')],
+    ['housekeeping', t('nav.housekeeping')],
+    ['split_expenses', t('splitExpenses.title')],
+    ['tasks', t('nav.tasks')],
+    ['budget', t('nav.budget')],
+    ['inventory', t('nav.inventory')],
+  ];
+  const linkedRecords = linkedRecordLabels
+    .map(([key, label]) => ({ label, count: Math.max(0, Number(impact.linked_records?.[key] || 0)) }))
+    .filter(({ count }) => count > 0)
+    .map(({ label, count }) => `${label}: ${count}`)
+    .join(' · ');
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (value) => {
+      if (resolved) return;
+      resolved = true;
+      closeModal({ force: true });
+      resolve(value);
+    };
+
+    openSharedModal({
+      title: t('documents.deleteFolderConfirm', { name: folder.name }),
+      size: 'sm',
+      content: `
+        <p class="modal-confirm__detail">${esc(t('documents.deleteFolderImpact', {
+          documents,
+          folders: descendants,
+        }))}</p>
+        ${linkedRecords ? `
+          <p class="modal-confirm__detail">
+            ${esc(t('documents.deleteFolderLinkedRecords'))}<br>${esc(linkedRecords)}
+          </p>` : ''}
+        ${impact.can_delete_documents ? '' : `
+          <p class="modal-confirm__detail" id="documents-folder-delete-unavailable">
+            ${esc(t('documents.deleteFolderDocumentsUnavailable'))}
+          </p>`}
+        <div class="modal-actions modal-actions--stack">
+          <button type="button" class="btn btn--primary" id="documents-folder-delete-unfile">
+            ${esc(t('documents.deleteFolderKeepDocuments', { count: documents }))}
+          </button>
+          <button type="button" class="btn btn--danger" id="documents-folder-delete-documents"
+                  ${impact.can_delete_documents ? '' : 'disabled aria-describedby="documents-folder-delete-unavailable"'}>
+            ${esc(t('documents.deleteFolderWithDocuments', { count: documents }))}
+          </button>
+          <button type="button" class="btn btn--secondary" id="documents-folder-delete-cancel">${esc(t('common.cancel'))}</button>
+        </div>`,
+      onClose: () => finish(null),
+      onSave(panel) {
+        panel.querySelector('#documents-folder-delete-unfile')?.addEventListener('click', () => finish('unfile'));
+        panel.querySelector('#documents-folder-delete-documents')?.addEventListener('click', () => finish('delete'));
+        panel.querySelector('#documents-folder-delete-cancel')?.addEventListener('click', () => finish(null));
+      },
+    });
+  });
+}
+
+async function deleteFolder(folder) {
+  if (readOnly()) return;
+  const owner = _container;
+  let impact;
+  try {
+    const response = await api.get(`/documents/folders/${folder.id}/delete-impact`);
+    impact = response.data;
+  } catch (err) {
+    reportError(err, { owner });
+    return;
+  }
+
+  let choice;
+  if (impact.documents > 0 || !impact.can_delete_documents) {
+    choice = await folderDeleteChoice(folder, impact);
+  } else {
+    const descendants = Math.max(0, Number(impact.removed_folders) - 1);
+    const confirmed = await confirmModal(
+      t('documents.deleteFolderConfirm', { name: folder.name }),
+      {
+        danger: true,
+        confirmLabel: t('documents.deleteFolder'),
+        detail: t('documents.deleteFolderImpact', { folders: descendants, documents: 0 }),
+      },
+    );
+    choice = confirmed ? 'unfile' : null;
+  }
+  if (!choice) return;
+
+  const selectedSubtree = folderSubtree(folder.id);
+  if (choice === 'delete') {
+    scheduleFolderDeleteWithUndo({
+      state,
+      folderIds: selectedSubtree,
+      message: t('documents.folderDeletedWithDocumentsToast', { count: impact.documents }),
+      schedule: scheduleUndoableDelete,
+      requestDelete: ({ keepalive }) => (
+        commitFolderDeletion(folder, impact, choice, { keepalive })
+      ),
+      isViewActive: () => stillShown(owner),
+      applyResult: (result) => (
+        applyFolderDeleteResult(result, choice, selectedSubtree, { owner, showSuccess: false })
+      ),
+      handleError: (err) => handleFolderDeleteError(err, folder, { delayed: true, owner }),
+      // The server deletion has already succeeded at this point. A failed
+      // refresh must not restore records that no longer exist server-side.
+      handleApplyError: (err) => {
+        reportError(err, { owner });
+      },
+      render: () => {
+        persistExpandedFolders();
+        applyFilters();
+        renderAll();
+      },
+    });
+    return;
+  }
+
+  try {
+    const result = await commitFolderDeletion(folder, impact, choice);
+    if (await applyFolderDeleteResult(result, choice, selectedSubtree, { owner })) refocusAfterRender();
+  } catch (err) {
+    await handleFolderDeleteError(err, folder, { owner });
+  }
+}
+
+async function commitFolderDeletion(folder, impact, choice, { keepalive = false } = {}) {
+  const expectedSnapshot = choice === 'delete'
+    ? `&expected_snapshot=${encodeURIComponent(impact.snapshot)}`
+    : '';
+  const response = await api.delete(
+    `/documents/folders/${folder.id}?documents=${choice}`
+    + `&expected_documents=${impact.documents}&expected_folders=${impact.removed_folders}`
+    + expectedSnapshot,
+    { keepalive },
+  );
+  return response.data;
+}
+
+async function applyFolderDeleteResult(
+  result,
+  choice,
+  selectedSubtree,
+  { owner = null, showSuccess = true } = {},
+) {
+  const hasNonConcurrencyFailure = result.failed_documents
+    ?.some((failure) => failure.failure_stage !== 'concurrency');
+  if (result.folder_deleted === false && result.contents_changed && hasNonConcurrencyFailure) {
+    window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedWithFailuresToast'), 'warning');
+  } else if (result.folder_deleted === false && result.contents_changed) {
+    window.yuvomi?.showToast(t('documents.folderDeleteContentsChangedToast', {
+      deleted: result.deleted_documents,
+    }), 'warning');
+  } else if (result.folder_deleted === false) {
+    window.yuvomi?.showToast(t('documents.folderDeletePartialToast', {
+      deleted: result.deleted_documents,
+      failed: result.failed_documents?.length || 0,
+    }), 'warning');
+  } else if (showSuccess && choice === 'delete') {
+    window.yuvomi?.showToast(t('documents.folderDeletedWithDocumentsToast', { count: result.deleted_documents }), 'default');
+  } else if (showSuccess) {
+    window.yuvomi?.showToast(t('documents.folderDeletedToast'), 'default');
+  }
+  if (result.folder_deleted !== false && selectedSubtree.has(Number(state.folderId))) state.folderId = '';
+  const applied = await Promise.all([loadFolders(), loadDocuments()]);
+  if (stillShown(owner)) {
+    renderAll();
+    return true;
+  }
+  // VERLASSEN UND ZURUECK (#2005). Der Stand ist modulweit: ohne den Ordner
+  // ist er jetzt auch der der neu betretenen Seite, und die soll den
+  // geloeschten Ordner nicht weiter zeigen. Gezeichnet wird nur,
+  //  - wenn beide Antworten angenommen wurden - hat die neue Seite inzwischen
+  //    selbst neuer geladen (Status-Reiter), zeichnet sie das selbst;
+  //  - wenn ihr erster Aufbau fertig ist - vorher zeichnet der aus demselben Stand;
+  //  - mit ihrem Fokus: die Zeile, der Chip, auf dem sie steht, bleibt es.
+  // Die Rueckgabe sagt dem Aufrufer, dass der Fokus nicht ihm gehoert.
+  if (applied.every(Boolean) && _built === _container && stillShown(_container)) {
+    renderKeepingFocus(() => renderAll());
+  }
+  return false;
+}
+
+async function handleFolderDeleteError(err, folder, { delayed = false, owner = null } = {}) {
+  await handleFolderDeleteFailure({
+    err,
+    delayed,
+    translate: t,
+    showToast: (...args) => window.yuvomi?.showToast(...args),
+    refreshImpact: () => deleteFolder(folder),
+    reportOther: (error) => reportError(error, { owner }),
+  });
+}
+
+// `showSize` aus, wenn die Ansicht die Größe bereits in einer eigenen Spalte
+// führt (Listenzeile) — sonst stünde sie doppelt in derselben Zeile.
+function renderMeta(doc, { showSize = true } = {}) {
+  const labels = categoryLabels();
+  const categoryLabel = labels[doc.category] || doc.category;
+  // Der Ordner-Chip entfaellt, wenn der Ordner die Kategorie wiederholt, und im
+  // gewaehlten Ordner selbst (showsFolderChip, utils/document-facets.js).
+  const folderChip = showsFolderChip(doc, categoryLabel, state.folderId);
+  // DER ABLAUF STEHT VORN (Critique 2026-09-25, P1). Die Zeilen-Meta ist
+  // einzeilig und laesst hinten fallen, was nicht passt (documents.css,
+  // .document-row__meta) - als letztes Element war "Laeuft in 5 Tagen ab"
+  // bei 375px 0px sichtbar, genau die Angabe, die Handeln verlangt. Die
+  // Reihenfolge ist damit die Rangfolge: Ablauf, Art, Ablageort, Sichtbarkeit -
+  // letztere nur, wenn sie vom Standard abweicht (showsVisibility).
+  return `
+    ${expiryChipHtml(doc)}
+    <span><i data-lucide="${CATEGORY_ICONS[doc.category] || 'folder'}" aria-hidden="true"></i>${categoryLabel}</span>
+    ${folderChip ? `<span><i data-lucide="folder" aria-hidden="true"></i>${esc(doc.folder_name)}</span>` : ''}
+    ${hidesPrivacyControls('documents') || !showsVisibility(doc.visibility) ? '' : `<span><i data-lucide="${doc.visibility === 'private' ? 'lock' : 'user-check'}" aria-hidden="true"></i>${t(`documents.visibility.${doc.visibility}`)}</span>`}
+    ${showSize ? `<span>${formatFileSize(doc.file_size)}</span>` : ''}
+    ${storageBadgeHtml(doc)}
+  `;
+}
+
+// Kompaktes Vorschaubild (Issue #533): nur DMS-Dokumente mit vorhandenem Konto,
+// deren Provider Thumbnails liefert. Papra hat keinen Thumb-Endpoint -> gar nicht
+// erst anfragen, damit keine ins Leere laufenden 415-Requests entstehen.
+function docSupportsThumbnail(doc) {
+  return documentStorageBackend(doc) === 'dms'
+    && Boolean(doc.dms_account_id)
+    && doc.dms_provider === 'paperless';
+}
+
+// Icon-Slot einer Karte: Kategorie-Glyph, plus (bei Thumbnail-Support) ein Bild,
+// das nach erfolgreichem Laden das Glyph ersetzt. Schlägt das Laden fehl, bleibt
+// das Glyph stehen (Fallback auf die bisherige Darstellung). Lokale Bilder und
+// PDFs bringen ihr Bild erst mit wireLocalThumbs() - hier steht nur die Glyphe,
+// die es verdecken kann.
+function renderDocIconSlot(doc) {
+  const icon = `<i data-lucide="${CATEGORY_ICONS[doc.category] || 'file'}" aria-hidden="true"></i>`;
+  const dms = docSupportsThumbnail(doc);
+  if (!dms && !documentThumbKind(doc)) return icon;
+  const glyph = `<span class="document-thumb__glyph" data-thumb-icon>${icon}</span>`;
+  if (!dms) return glyph;
+  return glyph
+    + `<img class="document-thumb__img" data-thumb="clickable" src="/api/v1/documents/${doc.id}/thumbnail"`
+    + ` alt="" loading="lazy" width="42" height="42" hidden>`;
+}
+
+/* Der Rahmen eines Vorschaubilds, in Zeile (42px-Kachel) und Karte (grosse
+ * Flaeche oben). `data-local-thumb` meldet ihn bei wireLocalThumbs() an. */
+function renderThumbSlot(doc, className) {
+  const local = documentThumbKind(doc) ? ' data-local-thumb' : '';
+  return `<div class="${className} document-thumb"${local}>${renderDocIconSlot(doc)}</div>`;
+}
+
+/* IN DER LISTE STEHT DAS KATEGORIE-GLYPH, KEINE VORSCHAU (R18, 2026-10-07).
+ * Die Zeile zeigte dieselbe Vorschau wie die Karte, auf 42px: von einem Blatt
+ * blieb ein weisses Quadrat mit grauem Rauschen, neunmal untereinander. In
+ * der Liste liest man am Zeichen, WAS es ist (Medizin, Schule, Finanzen) -
+ * das Bild gehoert der Rasteransicht und dem Betrachter. Die Zeile laedt
+ * damit auch keine Vorschauen mehr. */
+function renderRowGlyph(doc) {
+  return `<div class="document-row__icon"><i data-lucide="${CATEGORY_ICONS[doc.category] || 'file'}" aria-hidden="true"></i></div>`;
+}
+
+/* HANDSCHRIFT DES MODULS (Critique 2026-09-25, Entscheidung 2): ein lokales
+ * Bild zeigt sich selbst, ein lokales PDF seine erste Seite. Geladen wird erst,
+ * wenn der Rahmen in die Naehe des Blicks kommt; was diese Seite schon einmal
+ * gerendert hat, steht beim naechsten Neuzeichnen (Filter, Suche, Ansicht)
+ * sofort wieder da. Speicher, Warteschlange und Grenzen: utils/document-thumbs.js. */
+function wireLocalThumbs(root) {
+  _thumbObserver?.disconnect();
+  _thumbObserver = null;
+  if (!_thumbs || _pageController?.signal.aborted) return;
+  const waiting = [];
+  root.querySelectorAll('[data-local-thumb]').forEach((slot) => {
+    const doc = documentForThumbSlot(slot);
+    if (!doc) return;
+    const known = _thumbs.peek(doc);
+    if (known) showLocalThumb(slot, known, { fresh: false });
+    else if (known === undefined) waiting.push(slot);
+  });
+  if (!waiting.length) return;
+  _thumbObserver = new IntersectionObserver((entries, observer) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      observer.unobserve(entry.target);
+      const doc = documentForThumbSlot(entry.target);
+      if (!doc) continue;
+      _thumbs.load(doc).then((url) => {
+        if (url) showLocalThumb(entry.target, url, { fresh: true });
+      });
+    }
+  }, { root: scrollRootOf(root), rootMargin: '240px 0px' });
+  waiting.forEach((slot) => _thumbObserver.observe(slot));
+}
+
+/* Der Vorlauf (rootMargin) wirkt nur am Wurzel-Element des Observers. Die
+ * Dokumentenseite scrollt nicht im Fenster, sondern in der Shell (am Desktop
+ * `.app-content`) - mit dem Fenster als Wurzel schnitte der Scroller den
+ * Vorlauf ab, und eine Karte laedt erst, wenn sie schon im Bild steht. */
+function scrollRootOf(el) {
+  for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+  }
+  return null;
+}
+
+function documentForThumbSlot(slot) {
+  const id = Number(slot.closest('[data-id]')?.dataset.id);
+  return state.allDocuments.find((doc) => doc.id === id) || null;
+}
+
+function showLocalThumb(slot, url, { fresh }) {
+  // Ein Rahmen, den ein Neuzeichnen inzwischen ersetzt hat, bekommt nichts mehr.
+  if (!slot.isConnected || slot.querySelector('.document-thumb__img')) return;
+  const img = document.createElement('img');
+  img.className = 'document-thumb__img';
+  img.alt = '';
+  img.decoding = 'async';
+  // Nur ein Bild, das gerade erst angekommen ist, blendet ein - eines aus dem
+  // Speicher stand schon da und soll beim Filtern nicht jedes Mal aufflackern.
+  if (fresh) img.dataset.thumbFresh = '';
+  img.src = url;
+  slot.append(img);
+  slot.querySelector('[data-thumb-icon]')?.setAttribute('hidden', '');
+  slot.classList.add('document-thumb--ready');
+}
+
+function fileTypeLabel(filename) {
+  const ext = String(filename || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return ext ? ext.toUpperCase() : '';
+}
+
+// Zeigt das geladene Thumbnail und blendet den Glyph-Fallback aus. Deckt auch den
+// Cache-Fall ab, in dem das Bild schon vor dem Listener-Bind fertig geladen ist.
+function wireThumbnails(root) {
+  root.querySelectorAll('img[data-thumb]').forEach((img) => {
+    const reveal = () => {
+      if (!img.naturalWidth) { img.remove(); return; }
+      img.hidden = false;
+      img.parentElement?.querySelector('[data-thumb-icon]')?.setAttribute('hidden', '');
+      // Erst wenn ein Thumbnail steht, signalisiert der Icon-Slot per Cursor/Hover,
+      // dass er (wie die ganze Karte) den Viewer öffnet. data-thumb-clickable grenzt
+      // die Karten-Thumbnails vom rein identifizierenden Picker-Thumbnail ab.
+      if (img.dataset.thumb === 'clickable') img.parentElement?.classList.add('document-thumb--ready');
+    };
+    if (img.complete) { reveal(); return; }
+    img.addEventListener('load', reveal, { once: true });
+    img.addEventListener('error', () => img.remove(), { once: true });
+  });
+}
+
+function uploadBackendLabel(backend) {
+  if (backend === 'webdav') return t('documents.storageWebdav');
+  if (backend === 'google_drive') return t('documents.storageGoogleDrive');
+  if (backend === 'local_folder') return t('documents.storageLocalFolder');
+  return t('documents.storageLocal');
+}
+
+function uploadTargetIcon(backend) {
+  if (backend === 'google_drive') return 'cloud-upload';
+  if (backend === 'webdav') return 'cloud';
+  if (backend === 'local_folder') return 'folder';
+  return 'database';
+}
+
+/**
+ * Ablauf-Chip auf der Zeile/Karte, gleiches Muster wie pantry.js#expiryBadge.
+ * Wann er steht und in welchem Ton, entscheidet expiryChipSpec()
+ * (utils/document-expiry.js) - dieselbe Regel, aus der der Viewer liest.
+ */
+/* ZWEI FASSUNGEN, EINE SICHTBAR (Critique 2026-09-25). In der schmalen Zeile
+ * kuerzte "Seit 10 Tagen abgelaufen" zu "Seit 10 Tagen abge..." - die Zahl
+ * blieb, die Aussage fiel. Unter 30rem Zeilen- bzw. 12rem Kartenbreite zeigt
+ * der Chip die Kurzform ("Abgelaufen", "Noch 5 Tage"); die Langform bleibt
+ * fuer Screenreader im Text und fuer den Zeiger im title (documents.css,
+ * .doc-badge__full). */
+function expiryChipHtml(doc) {
+  const spec = expiryChipSpec(dateStatus(doc.expires_at));
+  if (!spec) return '';
+  const full = esc(t(spec.key, spec.params));
+  const short = esc(t(spec.shortKey, spec.params));
+  return `<span class="doc-badge doc-badge--${spec.tone}" title="${full}"><i data-lucide="calendar-clock" aria-hidden="true"></i><span class="doc-badge__full">${full}</span><span class="doc-badge__short" aria-hidden="true">${short}</span></span>`;
+}
+
+/**
+ * Ablaufdatum in der Viewer-Meta - immer, wenn eines gesetzt ist, auch weit in
+ * der Zukunft ("Gueltig bis 13.04.2027"). Die Zeile schweigt bei "gueltig";
+ * ohne diese Angabe war das eingetragene Datum nach dem Speichern nur im
+ * Bearbeiten-Dialog wiederzufinden. formatDate() liest den Tagesschluessel als
+ * Wanduhrzeit (utils/timezone.js#zonedFields) - kein Umweg ueber einen
+ * Zeitpunkt, der je nach Zone auf den Vortag kippt.
+ */
+function expiryViewerHtml(doc) {
+  const spec = expiryViewerSpec(dateStatus(doc.expires_at));
+  if (!spec) return '';
+  const text = esc(t(spec.key, { date: formatDate(spec.dateKey) }));
+  const icon = '<i data-lucide="calendar-clock" aria-hidden="true"></i>';
+  return spec.tone
+    ? `<span class="doc-badge doc-badge--${spec.tone}">${icon}${text}</span>`
+    : `<span>${icon}${text}</span>`;
+}
+
+/* ORTSETIKETTEN SPRECHEN NEUTRAL, NICHT MIT EINER STATUSSTIMME (Critique
+ * 2026-09-25). Google Drive trug das Violett der App-Stimme, WebDAV das
+ * Erfolgs-Gruen - fuer eine Angabe, WO eine Datei liegt, nicht wie es ihr
+ * geht. Jetzt teilen sich alle Orte eine neutrale Kapsel und unterscheiden
+ * sich an Glyphe und Text. Farbe behaelt nur, was einen Zustand meldet: "DMS
+ * nicht verfuegbar" in Gefahr-Ton. */
+function storageBadgeHtml(doc) {
+  const backend = documentStorageBackend(doc);
+  if (backend === 'webdav') {
+    return `<span class="doc-badge doc-badge--webdav"><i data-lucide="server" aria-hidden="true"></i>${t('documents.storageWebdav')}</span>`;
+  }
+  if (backend === 'google_drive') {
+    return `<span class="doc-badge doc-badge--google-drive"><i data-lucide="cloud" aria-hidden="true"></i>${t('documents.storageGoogleDrive')}</span>`;
+  }
+  if (backend === 'dms' && !doc.dms_account_id) {
+    return `<span class="doc-badge doc-badge--unavailable"><i data-lucide="unplug" aria-hidden="true"></i>${t('documents.storageDmsUnavailable')}</span>`;
+  }
+  if (backend === 'dms') {
+    return `<span class="doc-badge doc-badge--dms"><i data-lucide="archive" aria-hidden="true"></i>${t('documents.storageDms')}</span>`;
+  }
+  // Folder-backed local documents carry a storage_key; they are a non-default
+  // target and earn a badge. The in-DB BLOB default (no key) stays badge-less so
+  // a badge remains a meaningful signal.
+  if (backend === 'local' && doc.storage_key) {
+    return `<span class="doc-badge doc-badge--folder"><i data-lucide="hard-drive" aria-hidden="true"></i>${t('documents.storageLocalFolder')}</span>`;
+  }
+  return '';
+}
+
+// Zwei Primäraktionen (Ansehen/Download) bleiben in der Zeile; alles Weitere
+// (bearbeiten, archivieren, DMS, löschen) liegt hinter dem Kebab-Overflow.
+// „Ansehen" wird für ALLE Typen gerendert — auch nicht darstellbare öffnen die
+// Detailansicht (mit Download-Fallback) und sind so per Tastatur erreichbar.
+//
+// EIN TAB-STOPP JE DOKUMENT (Critique 2026-09-25, Sam: 27 Tab-Stopps bei neun
+// Dokumenten). Die drei Aktionen sind eine Symbolleiste mit rovingem tabindex
+// (utils/roving-toolbar.js): Tab springt von Dokument zu Dokument und landet
+// auf „Ansehen", Pfeil links/rechts laeuft durch die Leiste. Sichtbar und
+// klickbar bleiben alle drei - versteckt wird nichts, nur die Tab-Kette kuerzer.
+//
+// DER KEBAB FOLGT DEM DOKUMENT, NICHT NUR DEM MODUL (#1265). Sein Menue traegt
+// nur Handlungen (Bearbeiten, Verschieben, Archivieren, An DMS senden,
+// Loeschen), und die nimmt der Server nur von der Person an, die das Dokument
+// angelegt hat, oder von einem Admin (mayManage). Fuer alle anderen - `read`
+// aufs Modul oder ein fremdes Dokument - gibt es ihn nicht; Ansehen und
+// Herunterladen sind Lesen und bleiben.
+function renderActions(doc) {
+  return `
+    ${rowActionHtml({ icon: 'eye', action: 'view', label: t('documents.viewNamed', { name: doc.name }), attrs: { 'data-id': doc.id, tabindex: '0', title: t('documents.viewAction') } })}
+    ${rowActionHtml({ icon: 'download', href: `/api/v1/documents/${doc.id}/download`, label: t('documents.downloadNamed', { name: doc.name }), attrs: { download: true, tabindex: '-1', title: t('documents.downloadAction') } })}
+    ${mayManage(doc) ? rowActionHtml({ icon: 'ellipsis', action: 'menu', label: t('common.moreActionsNamed', { name: doc.name }), attrs: { 'data-id': doc.id, tabindex: '-1', title: t('nav.more'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' } }) : ''}
+  `;
+}
+
+/**
+ * Kennzeichen einer Aktionsleiste OHNE Kebab. Die kompakte Zeile unter 30rem
+ * behaelt damit ihr Auge: dort raeumt documents.css es sonst weg, weil das
+ * Menue „Ansehen" fuehrt - ohne Menue waere die Zeile fuer die Tastatur zu.
+ */
+function readBarAttr(doc) {
+  return mayManage(doc) ? '' : ' data-read-bar';
+}
+
+// Auswahlkreis im Icon-Slot: im Auswahlmodus ersetzt er die Einzelaktionen,
+// damit Karte und Zeile nicht zwei konkurrierende Klickziele tragen.
+//
+// DER KREIS DER AUFGABEN STATT EINER NATIVEN CHECKBOX (R8 H14, Muster
+// der Aufgaben seit R7, `.select-circle` in layout.css): vorher stand hier ein Browser-Kaestchen auf einer
+// getoenten Kachel - die einzige ungestaltete Auswahl neben den Kontakten.
+// Ein Knopf mit `aria-pressed` und dem Dokumentnamen im Label; der Tipp
+// laeuft wie jeder Tipp auf die Karte durch `handleDocumentAction`.
+function renderSelectBox(doc) {
+  // Auswaehlen heisst hier: gleich verschieben, archivieren oder loeschen. Ein
+  // Dokument, das diese Person nicht verwalten darf, traegt keinen Kreis.
+  if (!state.selectMode || !mayManage(doc)) return '';
+  const on = state.selected.has(doc.id);
+  return `
+    <button type="button" class="select-circle${on ? ' select-circle--on' : ''}"
+            data-select-id="${doc.id}" aria-pressed="${on}"
+            aria-label="${esc(t('documents.selectDocument', { name: doc.name }))}">
+      <i data-lucide="check" class="select-circle__check" aria-hidden="true"></i>
+    </button>`;
+}
+
+/* DIE KARTE IST VORSCHAU, NAME, EINE META-ZEILE UND DIE LEISTE (Critique
+ * 2026-09-25). Mit der Vorschau aus Entscheidung 2 stand sie bei 451px, zwei
+ * Spalten bei 1280px und eine auf dem Telefon. Was ging: die Kopfzeile aus
+ * Dateityp und Datum (Datum und Groesse fuehrt die Listenansicht als eigene
+ * Spalte, den Typ zeigt die Vorschau selbst), der Dateiname als Ersatz einer
+ * fehlenden Beschreibung (er wiederholte Titel und Typ) und der Mindest-
+ * Leerraum dafuer. Die Beschreibung steht, wenn es eine gibt. Das Datum steht
+ * links neben der Leiste, solange die Karte breit genug ist (documents.css,
+ * .document-card__foot). */
+function renderGridCard(doc) {
+  const selected = state.selectMode && state.selected.has(doc.id);
+  return `
+    <article class="document-card${selected ? ' is-selected' : ''}" data-id="${doc.id}">
+      ${renderThumbSlot(doc, 'document-card__media')}
+      <div class="document-card__body">
+        <h2 class="document-card__title" title="${esc(doc.name)}">${esc(doc.name)}</h2>
+        ${doc.description ? `<p class="document-card__description">${esc(doc.description)}</p>` : ''}
+        <div class="document-card__meta">${renderMeta(doc)}</div>
+      </div>
+      <div class="document-card__foot">
+        <span class="document-card__date">${formatDate(doc.updated_at)}</span>
+        ${state.selectMode ? renderSelectBox(doc) : `<div class="document-card__actions" role="toolbar" aria-label="${esc(t('documents.actionsFor', { name: doc.name }))}"${readBarAttr(doc)}>${renderActions(doc)}</div>`}
+      </div>
+    </article>
+  `;
+}
+
+// Die Zeile trägt bewusst mehr als die Karte: Datum und Größe stehen als eigene
+// Spalten rechts. Vorher zeigte die Listenansicht kein Datum — der Wechsel von
+// Raster auf Liste nahm Information weg, statt Dichte zu gewinnen.
+function renderListItem(doc) {
+  const selected = state.selectMode && state.selected.has(doc.id);
+  return `
+    <article class="list-row document-row${selected ? ' is-selected' : ''}" data-id="${doc.id}">
+      ${state.selectMode && mayManage(doc) ? renderSelectBox(doc) : renderRowGlyph(doc)}
+      <div class="list-row__main document-row__body">
+        <h2 class="list-row__name document-row__title">${esc(doc.name)}</h2>
+        <div class="list-row__meta document-row__meta">${renderMeta(doc, { showSize: false })}</div>
+      </div>
+      <div class="document-row__stats">
+        <span class="document-row__date">${formatDate(doc.updated_at)}</span>
+        <span class="document-row__size">${formatFileSize(doc.file_size)}</span>
+      </div>
+      ${state.selectMode ? '' : `<div class="document-row__actions" role="toolbar" aria-label="${esc(t('documents.actionsFor', { name: doc.name }))}"${readBarAttr(doc)}>${renderActions(doc)}</div>`}
+    </article>
+  `;
+}
+
+/** Ein Tipp im Auswahlmodus: das Dokument in die Auswahl oder heraus. */
+function toggleDocumentSelection(card) {
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  // Der Tipp auf eine Karte ohne Kreis waehlt nichts aus (Besitzregel).
+  if (!mayManage(state.allDocuments.find((doc) => doc.id === id))) return;
+  const next = !state.selected.has(id);
+  if (next) state.selected.add(id);
+  else state.selected.delete(id);
+  const box = card.querySelector('[data-select-id]');
+  if (box) {
+    box.classList.toggle('select-circle--on', next);
+    box.setAttribute('aria-pressed', String(next));
+  }
+  card.classList.toggle('is-selected', next);
+  updateSelectUI();
+}
+
+function handleDocumentAction(e) {
+  // Im Auswahlmodus ist die ganze Karte/Zeile ein Umschalter - der Kreis ist
+  // die sichtbare Anzeige, nicht das einzige Ziel (Fitts' Law auf Touch).
+  if (state.selectMode) {
+    toggleDocumentSelection(e.target.closest('[data-id]'));
+    return;
+  }
+  const menuBtn = e.target.closest('[data-action="menu"]');
+  if (menuBtn) {
+    const doc = state.documents.find((item) => String(item.id) === String(menuBtn.dataset.id));
+    if (doc) openDocumentMenu(doc, menuBtn);
+    return;
+  }
+  // Klick auf Karte/Zeile (nicht auf einen Button/Link) → Viewer öffnen
+  if (!e.target.closest('[data-action]') && !e.target.closest('a') && !e.target.closest('.btn')) {
+    const card = e.target.closest('[data-id]');
+    if (card) {
+      const doc = state.documents.find((item) => String(item.id) === String(card.dataset.id));
+      if (doc) openDocumentViewer(doc);
+    }
+    return;
+  }
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const doc = state.documents.find((item) => String(item.id) === String(btn.dataset.id));
+  if (doc) runDocumentAction(btn.dataset.action, doc);
+}
+
+/** Was jedes Konto darf, das die Seite sieht. Alles andere fragt mayManage(). */
+const READ_SAFE_ACTIONS = new Set(['view']);
+
+async function runDocumentAction(action, doc) {
+  // POSITIVLISTE, zweite Linie hinter dem Markup: eine morgen ergaenzte
+  // Menue-Aktion ist ohne Verwaltungsrecht standardmaessig zu (Regel 2).
+  if (!READ_SAFE_ACTIONS.has(action) && !mayManage(doc)) return;
+  if (action === 'view') openDocumentViewer(doc);
+  if (action === 'edit') openDocumentModal(doc);
+  if (action === 'move') {
+    state.selected = new Set([doc.id]);
+    await moveSelected();
+    state.selected.clear();
+    return;
+  }
+  // Wie archiveSelected(): ein abgewiesener Schreibvorgang wird gemeldet,
+  // nicht als unbehandelte Rejection verschluckt, und die Liste bleibt, wie sie war.
+  if (action === 'archive') {
+    const owner = _container;
+    try {
+      await api.patch(`/documents/${doc.id}/archive`, { archived: doc.status !== 'archived' });
+      window.yuvomi?.showToast(doc.status === 'archived' ? t('documents.restoredToast') : t('documents.archivedToast'), 'success');
+      await loadDocuments();
+      if (!stillShown(owner)) return;
+      renderAll({ motion: true });
+    } catch (err) {
+      reportError(err, { owner });
+    }
+  }
+  if (action === 'push-dms') {
+    if (!state.dmsAccounts.length) return;
+    let accountId = state.dmsAccounts[0].id;
+    if (state.dmsAccounts.length > 1) {
+      // Bei mehreren DMS-Konten Ziel auswählen lassen (promise-basiertes Auswahl-Modal
+      // ohne Dirty-Check, Abbruch → null).
+      accountId = await selectModal(
+        t('documents.pushToDms'),
+        state.dmsAccounts.map((account) => ({ value: account.id, label: account.name })),
+      );
+      if (!accountId) return;
+    }
+    const owner = _container;
+    try {
+      await api.post('/documents/dms/push', { account_id: accountId, document_id: doc.id });
+      window.yuvomi?.showToast(t('documents.pushToDmsQueued'), 'success');
+    } catch (err) {
+      reportError(err, { owner });
+    }
+    return;
+  }
+  if (action === 'delete') deleteDocuments([doc]);
+}
+
+// Optimistisches Löschen mit 5-Sekunden-Undo, für Einzel- und Mehrfachauswahl.
+// Die Wiederherstellung hängt die Dokumente einfach zurück in `allDocuments` —
+// die Reihenfolge stellt applyFilters() über die aktive Sortierung wieder her
+// (früher wurde hier fest nach Namen sortiert, was die Datums-Sortierung des
+// Servers zerschoss).
+function deleteDocuments(docs) {
+  // Vor dem optimistischen Entfernen: sonst verschwaende die Karte, und der
+  // Server gaebe sie nach dem Rueckgaengig-Fenster mit einer Fehlermeldung zurueck.
+  docs = docs.filter(mayManage);
+  if (!docs.length) return;
+  const ids = new Set(docs.map((doc) => doc.id));
+  const owner = _container;
+  state.allDocuments = state.allDocuments.filter((doc) => !ids.has(doc.id));
+  applyFilters();
+  // In der Liste klappt die Zeile aus, die Nachbarn ruecken nach, erst dann
+  // steht die Liste ohne sie neu (der Zustand ist schon geaendert: ein
+  // Neuzeichnen, das dazwischenkommt, zeigt dasselbe Ergebnis ohne Bewegung).
+  // Im Raster haelt die Nachbarkarte die Zeilenhoehe - dort gleiten die
+  // Nachbarn in die Luecke (FLIP in redrawList).
+  const leaving = state.view === 'list'
+    ? [...(owner?.querySelectorAll('#documents-list .document-row[data-id]') ?? [])]
+      .filter((row) => ids.has(Number(row.dataset.id)))
+    : [];
+  Promise.all(leaving.map((row) => collapseRow(row))).then(() => {
+    if (stillShown(owner)) renderAll({ motion: true });
+  });
+
+  const restore = () => {
+    state.allDocuments = [...state.allDocuments, ...docs];
+    applyFilters();
+    renderAll({ motion: true });
+  };
+
+  const message = docs.length === 1
+    ? t('documents.deletedToast')
+    : t('documents.bulkDeletedToast', { count: docs.length });
+  scheduleUndoableDelete({
+    message,
+    commit: async ({ keepalive }) => {
+      // ALLE abwarten, auch wenn eines scheitert (Review zu #1994): sonst laedt
+      // die Seite nach, waehrend ein anderes Loeschen noch laeuft, und dessen
+      // Dokument kaeme zurueck. Gemeldet wird der erste Fehler.
+      const outcomes = await Promise.allSettled(docs.map((doc) => api.delete(`/documents/${doc.id}`, { keepalive })));
+      const failed = outcomes.find((outcome) => outcome.status === 'rejected');
+      if (failed) throw failed.reason;
+      // Seite inzwischen verlassen: die Löschung ist durch, aber es gibt nichts
+      // mehr zu zeichnen — kein Nachladen auf einen abgehängten Container.
+      if (keepalive || !stillShown(owner)) return;
+      await loadDocuments();
+      // Und noch einmal NACH dem Laden (Codex an #2001): waehrend des GET kann
+      // die Seite verlassen oder neu betreten worden sein.
+      if (!stillShown(owner)) return;
+      renderAll();
+    },
+    restore: (err) => {
+      if (!stillShown(owner)) return;
+      // "Gibt es nicht mehr": nicht zurueckstellen, was der Server nicht mehr
+      // zeigt - reportError laedt nach, und die Liste sagt, was steht.
+      if (err && isGone(err)) { reportError(err, { owner }); return; }
+      restore();
+      if (err) reportError(err, { owner });
+    },
+  });
+}
+
+// --------------------------------------------------------
+// Auswahl-Modus (opt-in Bulk) — folgt der Kontakte-Grammatik
+// --------------------------------------------------------
+
+function enterSelectMode() {
+  if (readOnly()) return;
+  state.selectMode = true;
+  state.selected.clear();
+  syncToolsMenu();
+  renderDocuments();
+  updateSelectUI();
+}
+
+function exitSelectMode() {
+  if (!state.selectMode) return;
+  state.selectMode = false;
+  state.selected.clear();
+  syncToolsMenu();
+  // Der Fokus stand in der Pille, die gleich verschwindet: zurueck an den
+  // Menue-Knopf, ueber den man hineingekommen ist - sonst faellt er auf <body>.
+  const refocus = Boolean(document.activeElement?.closest?.('.list-bulkbar'));
+  clearBulkPill();
+  renderDocuments();
+  if (refocus) _container.querySelector('.documents-tools-btn')?.focus();
+}
+
+/**
+ * Die Sammelaktionen der Auswahl - in der Pille der Shell (utils/bulk-pill.js)
+ * wie Aufgaben, Kontakte, Einkauf und Vorrat (Re-Critique 2026-09-27, R11 H4).
+ * Vorher stand hier eine eigene Leiste ueber der Liste: vier `.btn`-Knoepfe
+ * und ein gefuelltes rotes „Loeschen" auf einer getoenten Flaeche, die mobil
+ * auf zwei Zeilen umbrach und die Liste nach unten schob.
+ *
+ * DIE PILLE IST EINZEILIG, also traegt sie drei Kapseln wie in den Aufgaben:
+ * Verschieben, Loeschen und „Fertig" als sichtbaren Ausstieg. „Alle auswaehlen"
+ * und Archivieren stehen waehrend der Auswahl im Werkzeugmenue (syncToolsMenu).
+ * Loeschen fragt in der Pille und bleibt danach fuenf Sekunden rueckgaengig zu
+ * machen (deleteDocuments). Die Rueckfrage sagt dazu, dass es keinen Papierkorb
+ * gibt (`confirm.detail`) - der Satz stand in der alten Leiste und fiel beim
+ * Umzug in die Pille zuerst weg.
+ */
+function updateSelectUI() {
+  syncToolsMenu();
+  if (!state.selectMode || _container?.isConnected === false) { clearBulkPill(); return; }
+  const n = state.selected.size;
+  const actions = [];
+  if (n > 0) {
+    actions.push(
+      {
+        label: t('documents.moveAction'),
+        onClick: () => moveSelected(),
+      },
+      {
+        label: t('common.delete'),
+        ariaLabel: t('documents.bulkDeleteConfirm', { count: n }),
+        count: n,
+        danger: true,
+        confirm: { question: t('documents.bulkDeleteConfirm', { count: n }), detail: t('documents.bulkDeleteConfirmDetail') },
+        onClick: () => deleteSelected(),
+      },
+    );
+  }
+  actions.push({ label: t('documents.selectDone'), onClick: () => exitSelectMode() });
+  setBulkPill({ label: t('documents.selectCount', { count: n }), actions });
+}
+
+function selectedDocuments() {
+  return state.allDocuments.filter((doc) => state.selected.has(doc.id) && mayManage(doc));
+}
+
+function toggleSelectAll() {
+  const visible = filteredDocuments().filter(mayManage);
+  const allOn = visible.length > 0 && visible.every((doc) => state.selected.has(doc.id));
+  visible.forEach((doc) => (allOn ? state.selected.delete(doc.id) : state.selected.add(doc.id)));
+  renderDocuments();
+  updateSelectUI();
+}
+
+async function archiveSelected() {
+  const docs = selectedDocuments();
+  if (!docs.length) return;
+  // Die aktive Status-Ansicht bestimmt die Richtung: im Archiv wiederherstellen,
+  // sonst archivieren. Kein gemischter Zustand möglich, da beides nie zugleich sichtbar ist.
+  const archived = state.status === 'archived';
+  exitSelectMode();
+  const owner = _container;
+  try {
+    await Promise.all(docs.map((doc) => api.patch(`/documents/${doc.id}/archive`, { archived: !archived })));
+    window.yuvomi?.showToast(
+      archived
+        ? t('documents.bulkRestoredToast', { count: docs.length })
+        : t('documents.bulkArchivedToast', { count: docs.length }),
+      'success',
+    );
+    await loadDocuments();
+    if (!stillShown(owner)) return;
+    renderAll();
+  } catch (err) {
+    reportError(err, { owner });
+  }
+}
+
+async function moveSelected() {
+  const docs = selectedDocuments();
+  if (!docs.length) return;
+  const target = await selectModal(t('documents.moveToFolder'), [
+    { value: '', label: t('documents.noFolder') },
+    ...state.folders.map((folder) => ({ value: String(folder.id), label: folder.name })),
+  ]);
+  if (target === null) return;
+  exitSelectMode();
+  const owner = _container;
+  try {
+    await Promise.all(docs.map((doc) => api.put(`/documents/${doc.id}`, {
+      name: doc.name,
+      description: doc.description || null,
+      category: doc.category,
+      folder_id: target || null,
+      visibility: doc.visibility,
+      status: doc.status,
+      allowed_member_ids: doc.allowed_member_ids || [],
+    })));
+    window.yuvomi?.showToast(t('documents.bulkMovedToast', { count: docs.length }), 'success');
+    await loadDocuments();
+    if (!stillShown(owner)) return;
+    renderAll();
+    refocusAfterRender();
+  } catch (err) {
+    reportError(err, { owner });
+  }
+}
+
+/** Die Rueckfrage stellt die Pille (updateSelectUI); hier nur noch die Tat. */
+function deleteSelected() {
+  const docs = selectedDocuments();
+  if (!docs.length) return;
+  exitSelectMode();
+  deleteDocuments(docs);
+}
+
+/**
+ * Die Freigabe-Kaestchen: Haushaltsmitglieder und dazu, wer an diesem Dokument
+ * schon freigegeben ist (#1207). saveDocument() baut allowed_member_ids aus den
+ * angehakten Kaestchen - ein fehlendes Kaestchen entzoege beim Speichern den
+ * Zugriff. Namen bestehender Freigaben kommen aus dem Kontenverzeichnis.
+ */
+function memberOptions(selected = []) {
+  const selectedSet = new Set(selected.map(String));
+  const granted = selected
+    .map((id) => (state.directory ?? []).find((person) => Number(person.id) === Number(id)))
+    .filter(Boolean);
+  return withChosenPeople(state.members, granted).map((member) => `
+    <label class="document-member-option">
+      <input type="checkbox" value="${member.id}" ${selectedSet.has(String(member.id)) ? 'checked' : ''}>
+      <span>${esc(member.display_name)}</span>
+    </label>
+  `).join('');
+}
+
+/** Das Sichtbarkeitsfeld des Dokument-Dialogs. */
+function documentVisibilityFieldHtml(doc) {
+  return `<div class="form-group"${hidesPrivacyControls('documents') ? ' hidden' : ''}>
+            <label class="label" for="document-visibility">${t('documents.visibilityLabel')}</label>
+            <select class="input" id="document-visibility">
+              <option value="family" ${(doc?.visibility || DOCUMENT_DEFAULT_VISIBILITY) === 'family' ? 'selected' : ''}>${t('documents.visibility.family')}</option>
+              <option value="restricted" ${doc?.visibility === 'restricted' ? 'selected' : ''}>${t('documents.visibility.restricted')}</option>
+              <option value="private" ${doc?.visibility === 'private' ? 'selected' : ''}>${t('documents.visibility.private')}</option>
+            </select>
+          </div>`;
+}
+
+export const __test = {
+  memberOptions, loadMembers, documentVisibilityFieldHtml, openDocumentViewer,
+  // R8 H14: der Auswahlkreis als Programm (Markup und Tipp).
+  state, renderSelectBox, toggleDocumentSelection,
+  setContainerForTest(container, { built = false } = {}) {
+    _container = container;
+    if (built) _built = container;
+  },
+  loadMetaOptions, loadDocuments,
+  // #1265: Nur-lesen und Besitzregel. Die Suite faehrt Markup und Handler.
+  readOnly, mayManage, READ_SAFE_ACTIONS,
+  renderActions, renderGridCard, renderListItem, emptyStateFor,
+  documentsToolsMenuHtml, runDocumentAction, deleteDocuments,
+  openDocumentModal, openFolderModal, openFolderMenu, openDocumentMenu,
+  renameFolder, moveFolder, deleteFolder, enterSelectMode, toggleSelectAll,
+  archiveSelected, moveSelected, selectedDocuments, viewerDetailsHtml, saveDocument,
+  // #1909: die Fehlerwege der Seite (test:documents-errors).
+  linkDmsDocument, folderUploadFailureText,
+};
+
+function openDocumentModal(doc = null) {
+  // DER EINE RIEGEL fuer Hochladen und Bearbeiten: FAB, Leerzustand,
+  // Tastenkuerzel „n" (klickt den FAB), Menue und Stift im Betrachter enden
+  // hier. Anlegen braucht das Modulrecht, Bearbeiten dazu die Besitzregel.
+  if (doc ? !mayManage(doc) : readOnly()) return;
+  const isEdit = !!doc;
+  let modalPanel = null;
+
+  // Kontextbezogener Upload: ist im Browser ein echter Ordner gewählt, wird er
+  // im Modal vorausgewählt (weiterhin änderbar). „Alle Ordner"/„Kein Ordner"
+  // (leer bzw. __none) setzen keinen Zielordner.
+  const presetFolderId = (!isEdit && state.folderId && state.folderId !== '__none')
+    ? String(state.folderId)
+    : String(doc?.folder_id || '');
+
+  // Nur noch echte Sekundärfelder liegen im Akkordeon. Die Sichtbarkeit ist das
+  // beworbene Kernversprechen des Moduls („steuere, wer jede Datei sehen darf")
+  // und steht deshalb offen im Formular, nicht zugeklappt darunter.
+  const advancedOpen = isEdit && (!!doc.description || doc.status === 'archived');
+
+  const advancedFieldsHtml = `
+        <div class="form-group">
+          <label class="label" for="document-description">${t('documents.descriptionLabel')}</label>
+          <textarea class="input" id="document-description" rows="3" maxlength="5000">${esc(doc?.description || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="label" for="document-status">${t('documents.statusLabel')}</label>
+          <select class="input" id="document-status">
+            <option value="active" ${doc?.status !== 'archived' ? 'selected' : ''}>${t('documents.statusActive')}</option>
+            <option value="archived" ${doc?.status === 'archived' ? 'selected' : ''}>${t('documents.statusArchived')}</option>
+          </select>
+        </div>`;
+
+  // DAS ABLAUFDATUM STEHT OFFEN IM FORMULAR (Re-Critique 2026-09-25). Es treibt
+  // die Erinnerung, den Fristen-Filter und die Gueltigkeit im Betrachter und lag
+  // trotzdem hinter "Weitere Einstellungen". Die Erinnerungstage erscheinen erst
+  // mit einem Datum - ohne Datum gibt es nichts zu erinnern, und das Formular
+  // bleibt so kurz wie vorher. Der Huelle `.document-expiry-reminder` setzt
+  // keine display-Regel, damit `hidden` greift.
+  const expiryFieldsHtml = `
+        <div class="modal-grid modal-grid--2 document-expiry-grid">
+          <div class="form-group">
+            <label class="label" for="document-expires-at">${t('documents.expiresAtLabel')}</label>
+            <!-- Kanon-Datepicker statt eines nativen Datumsfelds (Re-Critique
+                 2026-09-28, A6 P2-5): .value liefert denselben ISO-Schluessel,
+                 das input-Ereignis feuert wie vorher. -->
+            <yuvomi-datepicker id="document-expires-at" type="date" label="${esc(t('documents.expiresAtLabel'))}" value="${esc(doc?.expires_at || '')}"></yuvomi-datepicker>
+          </div>
+          <div class="document-expiry-reminder" id="document-expiry-reminder" ${doc?.expires_at ? '' : 'hidden'}>
+            <div class="form-group">
+              <label class="label" for="document-expiry-reminder-days">${t('documents.expiryReminderLabel')}</label>
+              <input class="input" id="document-expiry-reminder-days" type="number" min="0" max="365" step="1"
+                     value="${esc(doc?.expiry_reminder_days ?? '')}" placeholder="${esc(t('documents.expiryReminderPlaceholder'))}">
+              <p class="document-form__hint">${t('documents.expiryReminderHint')}</p>
+            </div>
+          </div>
+        </div>`;
+
+  // Beim Anlegen kommt die Datei zuerst: sie ist das Objekt der Handlung und
+  // liefert den Namen. Beim Bearbeiten gibt es keine Datei, dort führt der Name.
+  //
+  // EIN WEG ZUR DATEIWAHL (Critique 2026-09-25, P2). Es waren vier: der
+  // Kopfknopf "Ordner hochladen", die Knoepfe "Dateien auswaehlen" und "Ordner
+  // auswaehlen" und die Drop-Zone - die selbst schon "hier ablegen oder
+  // klicken" sagte. Jetzt IST die Drop-Zone die Dateiwahl, der Ordner ein
+  // Nebenweg darunter, und es steht genau EIN Groessenhinweis da, der zum
+  // gewaehlten Modus spricht (`setSizeHint`). Der Nebenlink ist ein Knopf und
+  // kein <label>: er liegt ausserhalb der Drop-Zone, ist selbst fokussierbar
+  // und oeffnet den Picker im selben Klick - die Nutzeraktivierung bleibt.
+  const fileFieldHtml = `
+        <div class="form-group form-field">
+          <label class="label" for="document-file">${t('documents.fileLabel')}</label>
+          <label class="document-dropzone" id="document-dropzone" for="document-file">
+            <input class="sr-only" id="document-file" type="file" multiple
+                   ${state.allowedMimeTypes?.length ? `accept="${esc(state.allowedMimeTypes.join(','))}"` : ''}>
+            <span class="document-dropzone__icon">
+              <i data-lucide="file-up" aria-hidden="true"></i>
+            </span>
+            <span class="document-dropzone__title">${t('documents.dropzoneTitle')}</span>
+            <span class="document-dropzone__file" id="document-selected-file" hidden></span>
+          </label>
+          <input class="sr-only" id="document-folder-input" type="file" webkitdirectory tabindex="-1"
+                 aria-label="${esc(t('documents.folderUpload.chooseFolder'))}">
+          <div class="document-upload-meta">
+            <p class="document-form__hint" id="document-size-hint">${t('documents.fileHint', { size: effectiveUploadMb() })}</p>
+            <button type="button" class="document-folder-link" id="document-folder-choice" hidden>${t('documents.folderUpload.chooseFolder')}</button>
+          </div>
+          <p class="document-storage-target">
+            <i data-lucide="${uploadTargetIcon(state.activeUploadBackend)}" aria-hidden="true"></i>
+            <span>${t('documents.activeUploadTarget', {
+              target: uploadBackendLabel(state.activeUploadBackend),
+            })}</span>
+            ${state.isAdmin ? `<a class="document-storage-target__link" href="/settings/modules/documents?section=documents-storage" data-nav>${t('documents.storageSettingsLink')}</a>` : ''}
+          </p>
+          <section class="folder-upload-preview" id="document-folder-upload-preview" aria-live="polite" hidden></section>
+        </div>`;
+
+  openSharedModal({
+    title: isEdit ? t('documents.editTitle') : t('documents.newTitle'),
+    size: 'lg',
+    content: `
+      <form id="document-form" class="document-form">
+        ${isEdit ? '' : fileFieldHtml}
+        <div class="modal-grid modal-grid--2">
+          <div class="form-group">
+            <label class="label" for="document-name">${t('documents.nameLabel')}</label>
+            <input class="input" id="document-name" name="name" maxlength="200" value="${esc(doc?.name || '')}"
+                   ${isEdit ? 'required' : `placeholder="${esc(t('documents.namePlaceholder'))}"`}>
+            ${isEdit ? '' : `<p class="document-form__hint" id="document-name-hint">${t('documents.nameHint')}</p>`}
+          </div>
+          <div class="form-group">
+            <label class="label" for="document-category">${t('documents.categoryLabel')}</label>
+            <select class="input" id="document-category" aria-describedby="document-category-hint">
+              ${CATEGORIES.map((category) => `<option value="${category}" ${(doc?.category || 'other') === category ? 'selected' : ''}>${categoryLabels()[category]}</option>`).join('')}
+            </select>
+            <p class="document-form__hint" id="document-category-hint">${t('documents.categoryHint')}</p>
+          </div>
+          <div class="form-group">
+            <label class="label" for="document-folder">${t('documents.folderLabel')}</label>
+            <select class="input" id="document-folder" aria-describedby="document-folder-hint">
+              <option value="">${t('documents.noFolder')}</option>
+              ${state.folders.map((folder) => `<option value="${folder.id}" ${presetFolderId === String(folder.id) ? 'selected' : ''}>${esc(folder.name)}</option>`).join('')}
+            </select>
+            <p class="document-form__hint" id="document-folder-hint">${t('documents.folderHint')}</p>
+          </div>
+          ${documentVisibilityFieldHtml(doc)}
+        </div>
+        <div class="document-member-picker" id="document-member-picker">
+          <div class="label">${t('documents.allowedMembersLabel')}</div>
+          <div class="document-member-picker__grid">${memberOptions(doc?.allowed_member_ids || [])}</div>
+        </div>
+        ${expiryFieldsHtml}
+        ${advancedSection(advancedFieldsHtml, { open: advancedOpen })}
+        <div id="document-error" class="form-error" role="alert" hidden></div>
+        <div class="modal-panel__footer modal-panel__footer--plain">
+          <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
+          <button type="submit" class="btn btn--primary" id="document-submit">${isEdit ? t('common.save') : t('documents.uploadAction')}</button>
+        </div>
+      </form>
+    `,
+    onClose() {
+      requestFolderUploadCancel(modalPanel);
+    },
+    onSave(panel) {
+      modalPanel = panel;
+      const form = panel.querySelector('#document-form');
+      const expiresInput = panel.querySelector('#document-expires-at');
+      const reminderGroup = panel.querySelector('#document-expiry-reminder');
+      expiresInput.addEventListener('input', () => { reminderGroup.hidden = !expiresInput.value; });
+      const visibility = panel.querySelector('#document-visibility');
+      const picker = panel.querySelector('#document-member-picker');
+      const syncVisibility = () => { picker.hidden = visibility.value !== 'restricted'; };
+      visibility.addEventListener('change', syncVisibility);
+      syncVisibility();
+      bindDropzone(panel);
+      bindFolderUpload(panel);
+      form.addEventListener('submit', (event) => saveDocument(event, doc, panel));
+    },
+  });
+}
+
+function bindDropzone(panel) {
+  const dropzone = panel.querySelector('#document-dropzone');
+  holdDocumentAttachStyle(dropzone);
+  const input = panel.querySelector('#document-file');
+  const selected = panel.querySelector('#document-selected-file');
+  const nameField = panel.querySelector('#document-name');
+  if (!dropzone || !input || !selected) return;
+
+  // Bei mehreren Dateien trägt jede ihren eigenen Dateinamen; ein gemeinsames
+  // Namensfeld wäre dann sinnlos und wird ausgeblendet.
+  const syncSelectedFile = () => {
+    const files = Array.from(input.files || []);
+    selected.hidden = !files.length;
+    selected.textContent = files.length === 1
+      ? t('documents.selectedFileLabel', { name: files[0].name })
+      : files.length > 1
+        ? t('documents.selectedFilesLabel', { count: files.length })
+        : '';
+    const group = nameField?.closest('.form-group');
+    if (group) group.hidden = files.length > 1;
+  };
+
+  input.addEventListener('change', syncSelectedFile);
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropzone.classList.add('document-dropzone--active');
+    });
+  });
+  ['dragleave', 'drop'].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('document-dropzone--active');
+    });
+  });
+  dropzone.addEventListener('drop', (event) => {
+    if (input.disabled) return;
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (!files.length) return;
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+/**
+ * Der Fehler der Dateiwahl steht AN DER ABLAGE (Re-Critique 2026-10-17, P1).
+ *
+ * "Bitte waehle eine Datei aus." stand als Formularfehler am Fuss des Dialogs,
+ * mobil bei y=1086 von 844 - unsichtbar, und der Fokus blieb auf "Hochladen".
+ * Jetzt wie jedes Feld (reportFieldError): Meldung direkt unter der Ablage,
+ * rote Kante, Ablage in den Blick, Fokus in die Dateiwahl.
+ *
+ * Die Meldung haengt am Datei-Input, nicht am Label: er bekommt den Fokus, und
+ * der Screenreader liest sie dort ueber aria-describedby (Guide
+ * accessible-error-announcement: Zustand am fokussierten Feld, keine zweite
+ * Ansage per Alarm-Rolle). Platziert wird sie hinter der Ablage, weil der
+ * Input sr-only IN ihr liegt. Die naechste Dateiwahl raeumt den Fehler weg.
+ */
+function reportDropzoneError(form, message) {
+  const dropzone = form.querySelector('#document-dropzone');
+  const input = form.querySelector('#document-file');
+  if (!dropzone || !input) return false;
+  reportFieldError(dropzone, message, { focus: false, live: false });
+  // reportFieldError markiert, was es bekommt - hier das Label. Zustand und
+  // Beschreibung gehoeren an das Feld, das den Fokus bekommt.
+  dropzone.removeAttribute('aria-invalid');
+  const errorEl = dropzone.parentElement?.querySelector('.form-field__error');
+  const errorId = dropzone.getAttribute('aria-describedby');
+  dropzone.removeAttribute('aria-describedby');
+  if (errorEl && errorId) {
+    const ids = (input.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+    if (!ids.includes(errorId)) input.setAttribute('aria-describedby', [...ids, errorId].join(' '));
+  }
+  input.setAttribute('aria-invalid', 'true');
+  input.addEventListener('change', () => {
+    input.setAttribute('aria-invalid', 'false');
+    const rest = (input.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((id) => id && id !== errorId);
+    if (rest.length) input.setAttribute('aria-describedby', rest.join(' '));
+    else input.removeAttribute('aria-describedby');
+  }, { once: true });
+  input.focus({ preventScroll: true });
+  dropzone.scrollIntoView({ block: 'center' });
+  return false;
+}
+
+const FOLDER_UPLOAD_REASON_KEYS = {
+  'missing-relative-path': 'documents.folderUpload.reasonMissingPath',
+  'unsafe-path': 'documents.folderUpload.reasonUnsafePath',
+  'empty-file': 'documents.folderUpload.reasonEmptyFile',
+  'unsupported-type': 'documents.folderUpload.reasonUnsupportedType',
+  'too-large': 'documents.folderUpload.reasonTooLarge',
+  'name-too-long': 'documents.folderUpload.reasonNameTooLong',
+  'too-deep': 'documents.folderUpload.reasonTooDeep',
+  'parent-failed': 'documents.folderUpload.reasonParentFailed',
+  'rate-limited': 'documents.folderUpload.reasonRateLimited',
+};
+
+function folderUploadReason(reason) {
+  const key = FOLDER_UPLOAD_REASON_KEYS[reason];
+  return key ? t(key) : (reason || t('common.unknownError'));
+}
+
+/**
+ * Warum eine Datei oder ein Ordner beim Hochladen eines Ordners scheiterte.
+ * Ein Code der Planung hat seinen Satz; sonst sagt der gefangene Fehler den
+ * Satz der App (#1909). `reason` traegt dann den Text des Fehlers - der
+ * Server-Satz oder eine Entwicklermeldung - und wird nie gezeigt.
+ */
+function folderUploadFailureText(failure) {
+  const key = FOLDER_UPLOAD_REASON_KEYS[failure?.reason];
+  if (key) return t(key);
+  return failure?.error ? errorText(failure.error) : t('common.unknownError');
+}
+
+async function loadUploadConflictDocuments() {
+  const counterpartStatus = state.status === 'active' ? 'archived' : 'active';
+  const counterpart = await api.get(`/documents?status=${counterpartStatus}`);
+  const byId = new Map();
+  for (const doc of [...state.allDocuments, ...(counterpart.data || [])]) byId.set(doc.id, doc);
+  return [...byId.values()];
+}
+
+function folderUploadTargetId(form) {
+  const value = Number(form.querySelector('#document-folder')?.value);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function effectiveUploadMb() {
+  return Math.max(1, Math.floor((state.maxFileSize || maxUploadBytes()) / (1024 * 1024)));
+}
+
+function folderUploadChoiceOptions(value, firstValue, firstLabel, secondValue, secondLabel) {
+  return `
+    <option value="${firstValue}" ${value === firstValue ? 'selected' : ''}>${firstLabel}</option>
+    <option value="${secondValue}" ${value === secondValue ? 'selected' : ''}>${secondLabel}</option>`;
+}
+
+function folderUploadTreeHtml(plan) {
+  const rows = [
+    ...plan.folders.map((folder) => ({
+      path: folder.key,
+      depth: folder.key.split('/').length,
+      icon: folder.action === 'reuse' ? 'folder-check' : 'folder-plus',
+      label: folder.name,
+      status: folder.action === 'reuse' ? t('documents.folderUpload.willMerge') : t('documents.folderUpload.willCreate'),
+      kind: 'folder',
+    })),
+    ...plan.files.filter((file) => file.action !== 'reject').map((file) => ({
+      path: file.relativePath,
+      depth: file.relativePath.split('/').length,
+      icon: file.action === 'skip' ? 'file-x' : 'file-up',
+      label: file.uploadOriginalName,
+      status: file.action === 'skip' ? t('documents.folderUpload.willSkip') : t('documents.folderUpload.willUpload'),
+      kind: 'file',
+    })),
+  ].sort((a, b) => a.path.localeCompare(b.path, getLocale()) || (a.kind === 'folder' ? -1 : 1));
+
+  return `<ul class="folder-upload-tree" role="list" aria-label="${esc(t('documents.folderUpload.treeLabel'))}">
+    ${rows.map((row) => `
+      <li class="folder-upload-tree__item folder-upload-tree__item--${row.kind}" role="listitem"
+          style="--folder-upload-depth:${Math.min(row.depth - 1, 4)}"
+          data-upload-path="${esc(row.path)}">
+        <i data-lucide="${row.icon}" aria-hidden="true"></i>
+        <span class="folder-upload-tree__name">${esc(row.label)}</span>
+        <span class="folder-upload-tree__status">${esc(row.status)}</span>
+      </li>`).join('')}
+  </ul>`;
+}
+
+function renderFolderUploadPreview(panel) {
+  const upload = panel._folderUpload;
+  const form = panel.querySelector('#document-form');
+  const host = panel.querySelector('#document-folder-upload-preview');
+  if (!upload?.files?.length || !form || !host) {
+    if (host) host.hidden = true;
+    return null;
+  }
+
+  const plan = buildFolderUploadPlan(upload.files, {
+    folders: state.folders,
+    documents: upload.documents,
+    targetFolderId: folderUploadTargetId(form),
+    maxFileSize: state.maxFileSize || maxUploadBytes(),
+    allowedMimeTypes: state.allowedMimeTypes || [],
+    timestamp: upload.timestamp,
+    folderDefault: upload.folderDefault,
+    fileDefault: upload.fileDefault,
+    folderOverrides: upload.folderOverrides,
+  });
+  upload.plan = plan;
+  host.hidden = false;
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', `
+    <div class="folder-upload-preview__summary">
+      <strong>${esc(t('documents.folderUpload.previewTitle', { name: plan.rootName }))}</strong>
+      <span>${esc(t('documents.folderUpload.previewCounts', {
+        files: plan.counts.upload,
+        folders: plan.counts.createFolders,
+        rejected: plan.counts.rejected,
+      }))}</span>
+    </div>
+    ${folderUploadTreeHtml(plan)}
+    ${plan.folderConflicts.length ? `
+      <details class="folder-upload-preview__section" open>
+        <summary>${t('documents.folderUpload.folderConflictsTitle', { count: plan.folderConflicts.length })}</summary>
+        <label class="folder-upload-conflict__default">
+          <span>${t('documents.folderUpload.defaultResolution')}</span>
+          <select class="input" data-folder-conflict-default>
+            ${folderUploadChoiceOptions(upload.folderDefault, 'merge', t('documents.folderUpload.merge'), 'duplicate', t('documents.folderUpload.duplicate'))}
+          </select>
+        </label>
+        <div class="folder-upload-conflicts">
+          ${plan.folderConflicts.map((folder) => `
+            <label class="folder-upload-conflict">
+              <span>${esc(folder.key)}</span>
+              <select class="input" data-folder-conflict-key="${esc(folder.key)}">
+                ${folderUploadChoiceOptions(folder.resolution, 'merge', t('documents.folderUpload.merge'), 'duplicate', t('documents.folderUpload.duplicate'))}
+              </select>
+            </label>`).join('')}
+        </div>
+      </details>` : ''}
+    ${plan.fileConflicts.length ? `
+      <details class="folder-upload-preview__section" open>
+        <summary>${t('documents.folderUpload.fileConflictsTitle', { count: plan.fileConflicts.length })}</summary>
+        <label class="folder-upload-conflict__default">
+          <span>${t('documents.folderUpload.defaultResolution')}</span>
+          <select class="input" data-file-conflict-default>
+            ${folderUploadChoiceOptions(upload.fileDefault, 'skip', t('documents.folderUpload.skip'), 'duplicate', t('documents.folderUpload.duplicate'))}
+          </select>
+        </label>
+        <div class="folder-upload-conflicts">
+          ${plan.fileConflicts.map((file) => `
+            <div class="folder-upload-conflict">
+              <span>${esc(file.relativePath)}</span>
+              <span>${esc(file.resolution === 'skip'
+                ? t('documents.folderUpload.willSkip')
+                : t('documents.folderUpload.willUpload'))}</span>
+            </div>`).join('')}
+        </div>
+      </details>` : ''}
+    ${plan.rejected.length ? `
+      <details class="folder-upload-preview__section folder-upload-rejected" open>
+        <summary>${t('documents.folderUpload.rejectedTitle', { count: plan.rejected.length })}</summary>
+        <ul>
+          ${plan.rejected.map((file) => `<li><span>${esc(file.relativePath)}</span><span>${esc(folderUploadReason(file.reason))}</span></li>`).join('')}
+        </ul>
+      </details>` : ''}
+    <div class="folder-upload-progress" id="folder-upload-progress" aria-live="polite"></div>
+    <button class="btn btn--secondary" type="button" data-folder-upload-cancel hidden>${t('common.cancel')}</button>
+  `);
+  if (window.lucide) lucide.createIcons({ el: host });
+
+  const submit = panel.querySelector('#document-submit');
+  if (submit) submit.textContent = t('documents.folderUpload.uploadAction', { count: plan.counts.upload });
+  setSizeHint(panel, 'folder', plan);
+  return plan;
+}
+
+/**
+ * Der EINE Groessenhinweis unter der Drop-Zone, passend zum Modus.
+ *
+ * Dateien: welche Arten und wie gross. Ordner: die Grenze je Datei plus der
+ * Satz ueber leere Ordner. Hat die Vorschau Dateien wegen ihrer Groesse
+ * abgelehnt, sagt er stattdessen, dass ein Administrator die Grenze anheben
+ * kann - vorher stand dieser Satz als dritter Hinweis in der Vorschau.
+ */
+function setSizeHint(panel, mode, plan = null) {
+  const hint = panel.querySelector('#document-size-hint');
+  if (!hint) return;
+  const size = effectiveUploadMb();
+  const tooLarge = plan?.rejected?.some((file) => file.reason === 'too-large');
+  hint.textContent = mode !== 'folder'
+    ? t('documents.fileHint', { size })
+    : tooLarge
+      ? t('documents.folderUpload.adminLimitHint', { size })
+      : t('documents.folderUpload.limitHint', { size });
+}
+
+function canPickDirectory() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  const hasWebkitDirectory = 'webkitdirectory' in input;
+  if (hasWebkitDirectory) input.webkitdirectory = true;
+  return supportsDirectoryUpload({
+    hasWebkitDirectory: hasWebkitDirectory && input.webkitdirectory === true,
+    platform: navigator.userAgentData?.platform || navigator.platform || '',
+    userAgent: navigator.userAgent || '',
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+  });
+}
+
+function setFolderUploadControlsDisabled(panel, disabled) {
+  for (const selector of [
+    '#document-file',
+    '#document-folder-input',
+    '#document-folder-choice',
+    '#document-folder',
+    '[data-folder-conflict-default]',
+    '[data-file-conflict-default]',
+    '[data-folder-conflict-key]',
+  ]) {
+    panel.querySelectorAll(selector).forEach((control) => {
+      control.disabled = disabled;
+    });
+  }
+}
+
+function requestFolderUploadCancel(panel) {
+  const upload = panel?._folderUpload;
+  if (!upload?.running || upload.cancelled) return false;
+  upload.cancelled = true;
+  const cancel = panel.querySelector('[data-folder-upload-cancel]');
+  if (cancel) {
+    cancel.disabled = true;
+    cancel.setAttribute('aria-disabled', 'true');
+  }
+  return true;
+}
+
+function bindFolderUpload(panel) {
+  const form = panel.querySelector('#document-form');
+  const fileInput = panel.querySelector('#document-file');
+  const folderInput = panel.querySelector('#document-folder-input');
+  const folderChoice = panel.querySelector('#document-folder-choice');
+  const preview = panel.querySelector('#document-folder-upload-preview');
+  const selected = panel.querySelector('#document-selected-file');
+  const nameGroup = panel.querySelector('#document-name')?.closest('.form-group');
+  if (!form || !fileInput || !folderInput || !preview) return false;
+
+  panel._folderUpload = {
+    files: [],
+    documents: [],
+    timestamp: formatFolderUploadTimestamp(),
+    folderDefault: 'merge',
+    fileDefault: 'skip',
+    folderOverrides: {},
+    plan: null,
+    ready: false,
+    running: false,
+    cancelled: false,
+    completed: false,
+  };
+
+  // Kann der Browser keine Ordner waehlen, gibt es den Nebenweg nicht - statt
+  // eines gesperrten Knopfs mit einer Erklaerung, warum er nicht geht.
+  const directorySupported = canPickDirectory();
+  folderInput.disabled = !directorySupported;
+  if (folderChoice) folderChoice.hidden = !directorySupported;
+  folderChoice?.addEventListener('click', () => folderInput.click());
+
+  fileInput.addEventListener('change', () => {
+    if (panel._folderUpload.running) return;
+    if (!fileInput.files?.length) return;
+    folderInput.value = '';
+    panel._folderUpload.files = [];
+    panel._folderUpload.plan = null;
+    panel._folderUpload.ready = false;
+    preview.hidden = true;
+    setSizeHint(panel, 'files');
+    const submit = panel.querySelector('#document-submit');
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = t('documents.uploadAction');
+    }
+  });
+
+  folderInput.addEventListener('change', async () => {
+    if (panel._folderUpload.running) return;
+    const files = Array.from(folderInput.files || []);
+    if (!files.length) return;
+    fileInput.value = '';
+    panel._folderUpload.files = files;
+    panel._folderUpload.timestamp = formatFolderUploadTimestamp();
+    panel._folderUpload.folderOverrides = {};
+    panel._folderUpload.ready = false;
+    panel._folderUpload.completed = false;
+    const submit = panel.querySelector('#document-submit');
+    if (submit) submit.disabled = true;
+    if (nameGroup) nameGroup.hidden = true;
+    setSizeHint(panel, 'folder');
+    if (selected) {
+      const root = String(files[0].webkitRelativePath || '').split('/')[0];
+      selected.hidden = false;
+      selected.textContent = t('documents.folderUpload.selectedFolder', { name: root, count: files.length });
+    }
+    try {
+      panel._folderUpload.documents = await loadUploadConflictDocuments();
+      panel._folderUpload.ready = true;
+      renderFolderUploadPreview(panel);
+      if (submit) submit.disabled = false;
+    } catch (error) {
+      const formError = form.querySelector('#document-error');
+      formError.textContent = errorText(error);
+      formError.hidden = false;
+    }
+  });
+
+  form.querySelector('#document-folder')?.addEventListener('change', () => {
+    if (panel._folderUpload.running) return;
+    if (panel._folderUpload.files.length) renderFolderUploadPreview(panel);
+  });
+
+  preview.addEventListener('change', (event) => {
+    if (panel._folderUpload.running) return;
+    const target = event.target;
+    if (target.matches('[data-folder-conflict-default]')) {
+      panel._folderUpload.folderDefault = target.value;
+      panel._folderUpload.folderOverrides = {};
+    } else if (target.matches('[data-file-conflict-default]')) {
+      panel._folderUpload.fileDefault = target.value;
+    } else if (target.matches('[data-folder-conflict-key]')) {
+      panel._folderUpload.folderOverrides[target.dataset.folderConflictKey] = target.value;
+    } else {
+      return;
+    }
+    renderFolderUploadPreview(panel);
+  });
+
+  preview.addEventListener('click', (event) => {
+    if (event.target.closest('[data-folder-upload-close]')) closeModal({ force: true });
+    const cancel = event.target.closest('[data-folder-upload-cancel]');
+    if (cancel) requestFolderUploadCancel(panel);
+  });
+
+  return directorySupported;
+}
+
+function updateFolderUploadProgress(panel, event, completed, total) {
+  const host = panel.querySelector('#folder-upload-progress');
+  if (!host) return;
+  const path = event.item?.relativePath || event.item?.key || event.item?.name || '';
+  host.textContent = t('documents.folderUpload.progress', { current: completed, total, name: path });
+  const row = Array.from(panel.querySelectorAll('[data-upload-path]'))
+    .find((item) => item.dataset.uploadPath === path);
+  if (row) row.dataset.uploadStatus = event.status;
+}
+
+function renderFolderUploadResult(panel, plan, result) {
+  const host = panel.querySelector('#document-folder-upload-preview');
+  if (!host) return;
+  const failures = result.failed || [];
+  const outcome = folderUploadOutcome(result);
+  const heading = outcome.heading === 'cancelled'
+    ? t('documents.folderUpload.cancelled')
+    : outcome.heading === 'completedWithErrors'
+      ? t('documents.folderUpload.completedWithErrors')
+      : t('documents.folderUpload.completed');
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', `
+    <div class="folder-upload-result" role="status">
+      <h3>${heading}</h3>
+      <p>${t('documents.folderUpload.resultCounts', {
+        uploaded: result.uploaded.length,
+        skipped: result.skipped.length,
+        rejected: result.rejected.length,
+        failed: failures.length,
+      })}</p>
+      ${result.cancelled ? `<p>${t('documents.folderUpload.cancelledDetail')}</p>` : ''}
+      ${failures.length ? `
+        <section class="folder-upload-result__failures">
+          <h4>${t('documents.folderUpload.failedTitle')}</h4>
+          <ul>${failures.map((failure) => `
+            <li><span>${esc(failure.item?.relativePath || failure.item?.key || '')}</span><span>${esc(folderUploadFailureText(failure))}</span></li>`).join('')}</ul>
+        </section>` : ''}
+      ${plan.rejected.length ? `
+        <section class="folder-upload-result__failures">
+          <h4>${t('documents.folderUpload.rejectedTitle', { count: plan.rejected.length })}</h4>
+          <ul>${plan.rejected.map((file) => `<li><span>${esc(file.relativePath)}</span><span>${esc(folderUploadReason(file.reason))}</span></li>`).join('')}</ul>
+        </section>` : ''}
+      <button class="btn btn--primary" type="button" data-folder-upload-close>${t('common.close')}</button>
+    </div>`);
+}
+
+async function saveFolderUpload(panel, payload) {
+  const upload = panel._folderUpload;
+  if (!upload?.ready) throw new PageProblem(t('common.unknownError'));
+  const owner = _container;
+  const plan = renderFolderUploadPreview(panel);
+  if (!plan || (plan.counts.upload < 1 && plan.counts.createFolders < 1)) {
+    throw new PageProblem(t('documents.folderUpload.noUploadableFiles'));
+  }
+  upload.running = true;
+  upload.cancelled = false;
+  setFolderUploadControlsDisabled(panel, true);
+  const cancel = panel.querySelector('[data-folder-upload-cancel]');
+  if (cancel) {
+    cancel.hidden = false;
+    cancel.disabled = false;
+  }
+  const total = plan.counts.createFolders + plan.counts.upload;
+  let completed = 0;
+
+  let result;
+  try {
+    result = await executeFolderUploadPlan(plan, {
+      createFolder: async ({ name, parentId }) => {
+        const response = await api.post('/documents/folders', { name, parent_id: parentId });
+        return response.data;
+      },
+      uploadFile: async ({ file, folderId, name, originalName }) => api.post('/documents', {
+        ...payload,
+        folder_id: folderId,
+        name,
+        original_name: originalName,
+        content_data: await readFileAsDataUrl(file),
+      }),
+      onProgress: (event) => {
+        if (event.status === 'succeeded' || event.status === 'failed') completed += 1;
+        updateFolderUploadProgress(panel, event, completed, total);
+      },
+      shouldCancel: () => upload.cancelled,
+    });
+  } finally {
+    upload.running = false;
+  }
+
+  upload.completed = true;
+  renderFolderUploadResult(panel, plan, result);
+  try {
+    await runRateLimitedOperation(
+      () => Promise.all([loadFolders(), loadDocuments()]),
+    );
+    if (stillShown(owner)) renderAll();
+  } catch (refreshError) {
+    // The writes have already completed. A failed refresh must not turn a
+    // persisted upload into a reported upload failure.
+    console.warn('[Documents] Folder upload refresh failed:', refreshError);
+  }
+  const outcome = folderUploadOutcome(result);
+  const toast = outcome.toast === 'cancelled'
+    ? t('documents.folderUpload.cancelled')
+    : outcome.toast === 'completedWithErrors'
+      ? t('documents.folderUpload.completedWithErrors')
+      : t('documents.folderUpload.uploadedToast', { count: result.uploaded.length });
+  window.yuvomi?.showToast(toast, outcome.tone);
+  return result;
+}
+
+async function saveDocument(event, doc, panel) {
+  if (doc ? !mayManage(doc) : readOnly()) { event?.preventDefault?.(); return; }
+  event.preventDefault();
+  // Der Dialog dieser Handlung, vor jeder Anfrage gemerkt (reportError).
+  const modalContext = captureModalContext();
+  const owner = _container;
+  const form = event.target;
+  const error = form.querySelector('#document-error');
+  // Die Fußzeile mit dem Submit-Button wird beim Öffnen ans Panel gehoben
+  // (#543), liegt also außerhalb des Formular-DOM - deshalb über das Panel
+  // referenzieren. form.querySelector fände hier null, und submit.disabled
+  // würfe einen unbehandelten TypeError (→ generischer Fehler-Toast statt
+  // Speichern).
+  const submit = panel.querySelector('#document-submit');
+  error.hidden = true;
+  submit.disabled = true;
+  try {
+    const visibility = form.querySelector('#document-visibility').value;
+    const expiresAt = form.querySelector('#document-expires-at').value || null;
+    const payload = {
+      name: form.querySelector('#document-name').value.trim(),
+      description: form.querySelector('#document-description').value.trim() || null,
+      category: form.querySelector('#document-category').value,
+      folder_id: form.querySelector('#document-folder').value || null,
+      visibility,
+      status: form.querySelector('#document-status').value,
+      expires_at: expiresAt,
+      // Ohne Datum keine Erinnerung: das versteckte Feld darf keinen alten Wert mitschicken.
+      expiry_reminder_days: expiresAt && form.querySelector('#document-expiry-reminder-days').value !== ''
+        ? Number(form.querySelector('#document-expiry-reminder-days').value)
+        : null,
+      allowed_member_ids: visibility === 'restricted'
+        ? Array.from(form.querySelectorAll('.document-member-picker input:checked')).map((input) => Number(input.value))
+        : [],
+    };
+    if (doc) {
+      if (!payload.name) throw new PageProblem(t('common.required'));
+      await api.put(`/documents/${doc.id}`, payload);
+      window.yuvomi?.showToast(t('documents.savedToast'), 'success');
+    } else {
+      const folderFiles = Array.from(form.querySelector('#document-folder-input')?.files || []);
+      if (folderFiles.length) {
+        await saveFolderUpload(panel, payload);
+        return;
+      }
+      const files = Array.from(form.querySelector('#document-file').files || []);
+      if (!files.length) {
+        reportDropzoneError(form, t('documents.fileRequired'));
+        return;
+      }
+      const maxSize = state.maxFileSize || maxUploadBytes();
+      const tooBig = files.find((file) => file.size > maxSize);
+      if (tooBig) {
+        reportDropzoneError(form, t('documents.fileTooLargeNamed', { name: tooBig.name }));
+        return;
+      }
+
+      // Fortschritt sichtbar machen: das Einlesen einer mehrere MB großen Datei
+      // als Data-URL dauert spürbar, und bei Mehrfachauswahl erst recht. Ein
+      // stumm deaktivierter Knopf ließ das wie ein Hänger aussehen.
+      const originalLabel = submit.textContent;
+      for (const [index, file] of files.entries()) {
+        submit.textContent = files.length > 1
+          ? t('documents.uploadProgress', { current: index + 1, total: files.length })
+          : originalLabel;
+        // Der Name aus dem Feld gilt nur, wenn genau eine Datei hochgeladen wird;
+        // sonst trägt jede Datei ihren eigenen (das Feld ist dann ausgeblendet).
+        const name = files.length === 1 && payload.name
+          ? payload.name
+          : file.name.replace(/\.[^.]+$/, '');
+        await api.post('/documents', {
+          ...payload,
+          name,
+          original_name: file.name,
+          content_data: await readFileAsDataUrl(file),
+        });
+      }
+      submit.textContent = originalLabel;
+      window.yuvomi?.showToast(
+        files.length > 1
+          ? t('documents.bulkUploadedToast', { count: files.length })
+          : t('documents.uploadedToast'),
+        'success',
+      );
+    }
+    // Nur DIESEN Dialog: hat der Nutzer ihn waehrend des Speicherns geschlossen
+    // und einen anderen geoeffnet, bleibt der andere samt Eingaben offen (#1997).
+    closeModal({ force: true, context: modalContext });
+    await loadDocuments();
+    if (!stillShown(owner)) return;
+    renderAll({ motion: true });
+    refocusAfterRender();
+  } catch (err) {
+    // Das Dokument gibt es nicht mehr: der Dialog bearbeitet etwas Veraltetes,
+    // er geht zu, und die Liste kommt frisch.
+    if (isGone(err) && !isSelectedFolderGone(err)) {
+      reportError(err, { owner, dialog: modalContext });
+      return;
+    }
+    error.textContent = errorText(err);
+    error.hidden = false;
+    if (isSelectedFolderGone(err)) {
+      // Dieselbe Reihenfolge wie beim Oeffnen (openDocumentModal): die Liste.
+      await offerCurrentFolders(form.querySelector('#document-folder'), 'documents.noFolder',
+        (goneId) => state.folders.filter((folder) => String(folder.id) !== goneId)
+          .map((folder) => `<option value="${folder.id}">${esc(folder.name)}</option>`).join(''), owner);
+    }
+  } finally {
+    submit.disabled = panel._folderUpload?.completed === true;
+  }
+}
+
+/**
+ * Neuer Ordner, auf Wunsch unter einem bestimmten.
+ *
+ * `parentId` kommt aus dem Menue "Unterordner anlegen"; ohne Angabe steht die
+ * Auswahl auf dem gerade geoeffneten Ordner. DAS IST DER HAEUFIGE FALL und
+ * nicht die Wurzel: wer in "Wohnung" steht und einen Ordner anlegt, meint fast
+ * immer einen darin. Die Auswahl bleibt sichtbar, damit die Voreinstellung
+ * eine Ansage ist und keine Ueberraschung.
+ */
+function openFolderModal({ parentId = null } = {}) {
+  if (readOnly()) return;
+  const preselected = parentId ?? (Number.isInteger(Number(state.folderId)) && Number(state.folderId) > 0
+    ? Number(state.folderId)
+    : null);
+  const options = visibleAllFolderRows()
+    .map((row) => `<option value="${row.folder.id}" ${row.folder.id === preselected ? 'selected' : ''}>${esc(folderOptionLabel(row))}</option>`)
+    .join('');
+
+  openSharedModal({
+    title: t('documents.newFolderTitle'),
+    size: 'sm',
+    content: `
+      <form id="document-folder-form" class="document-form">
+        <div class="form-group">
+          <label class="label" for="document-folder-name">${t('documents.folderNameLabel')}</label>
+          <input class="input" id="document-folder-name" required maxlength="200" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="label" for="document-folder-parent">${t('documents.folderParentLabel')}</label>
+          <select class="input" id="document-folder-parent">
+            <option value="" ${preselected === null ? 'selected' : ''}>${esc(t('documents.folderRootLevel'))}</option>
+            ${options}
+          </select>
+        </div>
+        <div id="document-folder-error" class="form-error" role="alert" hidden></div>
+        <div class="modal-panel__footer modal-panel__footer--plain">
+          <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
+          <button type="submit" class="btn btn--primary">${t('common.add')}</button>
+        </div>
+      </form>
+    `,
+    onSave(panel) {
+      panel.querySelector('#document-folder-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const error = panel.querySelector('#document-folder-error');
+        const input = panel.querySelector('#document-folder-name');
+        const parentSelect = panel.querySelector('#document-folder-parent');
+        const parent = parentSelect.value ? Number(parentSelect.value) : null;
+        error.hidden = true;
+        const owner = _container;
+        // Der Dialog dieser Handlung, vor der Anfrage gemerkt (#1997).
+        const modalContext = captureModalContext();
+        try {
+          const res = await api.post('/documents/folders', { name: input.value.trim(), parent_id: parent });
+          // Der Elternteil wird aufgeklappt - ein neuer Ordner, den man nicht
+          // sieht, sieht aus wie einer, der nicht angelegt wurde.
+          if (parent !== null) {
+            state.expanded.add(parent);
+            persistExpandedFolders();
+          }
+          window.yuvomi?.showToast(t('documents.folderCreatedToast'), 'success');
+          // Den neuen Ordner waehlt nur die Seite, die ihn angelegt hat: nach
+          // "verlassen und zurueck" gehoert die Auswahl der neuen Seite (#2005).
+          if (stillShown(owner)) state.folderId = String(res.data?.id || '');
+          await loadFolders();
+          await loadDocuments();
+          // Nur diesen Dialog, nie einen inzwischen geoeffneten anderen (#1997).
+          closeModal({ force: true, context: modalContext });
+          if (!stillShown(owner)) return;
+          applyFilters();
+          renderAll();
+        } catch (err) {
+          error.textContent = errorText(err);
+          error.hidden = false;
+          if (isSelectedFolderGone(err)) {
+            // Dieselbe Reihenfolge wie beim Oeffnen: der Baum, eingerueckt.
+            await offerCurrentFolders(parentSelect, 'documents.folderRootLevel',
+              (goneId) => visibleAllFolderRows().filter((row) => String(row.folder.id) !== goneId)
+                .map((row) => `<option value="${row.folder.id}">${esc(folderOptionLabel(row))}</option>`).join(''), owner);
+          }
+        }
+      });
+    },
+  });
+}
+
+// --------------------------------------------------------
+// DMS Link Modal
+// --------------------------------------------------------
+
+function openDmsLinkModal() {
+  if (readOnly()) return;
+  if (!state.dmsAccounts.length) return;
+  openSharedModal({
+    title: t('documents.linkFromDms'),
+    size: 'md',
+    content: '<div id="dms-modal-root"></div>',
+    onSave(panel) {
+      const root = panel.querySelector('#dms-modal-root');
+      if (!root) return;
+
+      let selectedAccountId = state.dmsAccounts[0].id;
+
+      // ASN-Hinweis ist Paperless-spezifisch (Discussion #511): nur einblenden,
+      // wenn das aktive Konto ein Paperless-ngx ist (Papra kennt keine ASN).
+      const providerOf = (id) => state.dmsAccounts.find((a) => String(a.id) === String(id))?.provider;
+      const hint = document.createElement('p');
+      hint.className = 'form-hint dms-search-hint';
+      hint.textContent = t('documents.dmsAsnHint');
+      const syncHint = () => { hint.hidden = providerOf(selectedAccountId) !== 'paperless'; };
+
+      // Account selector — only render when multiple accounts exist
+      if (state.dmsAccounts.length > 1) {
+        const accountLabel = document.createElement('label');
+        accountLabel.className = 'label';
+        accountLabel.setAttribute('for', 'dms-account-select');
+        accountLabel.textContent = t('documents.dmsAccountLabel');
+
+        const accountSelect = document.createElement('select');
+        accountSelect.className = 'input dms-account-select';
+        accountSelect.id = 'dms-account-select';
+        for (const account of state.dmsAccounts) {
+          const option = document.createElement('option');
+          option.value = account.id;
+          option.textContent = account.name;
+          accountSelect.appendChild(option);
+        }
+
+        accountSelect.addEventListener('change', () => {
+          selectedAccountId = accountSelect.value;
+          syncHint();
+          // Re-run listing for the new account (empty query lists all documents).
+          runDmsSearch(input.value.trim());
+        });
+
+        root.append(accountLabel, accountSelect);
+      }
+
+      // Sichtbares Label statt Placeholder-only: der Placeholder verschwindet beim
+      // Tippen und ist kein Label-Ersatz für Screenreader. Das Feld selbst ist
+      // das geteilte Suchfeld (renderPageSearch, Komponenten-Kanon Runde 5); es
+      // traegt den Namen schon als eigenes <label>, die sichtbare Zeile darueber
+      // ist deshalb nur Beschriftung (aria-hidden), sonst hiesse das Feld doppelt.
+      const searchLabel = document.createElement('p');
+      searchLabel.className = 'label';
+      searchLabel.setAttribute('aria-hidden', 'true');
+      searchLabel.textContent = t('documents.dmsSearchLabel');
+
+      const searchHost = document.createElement('div');
+      searchHost.insertAdjacentHTML('beforeend', renderPageSearch({
+        id: 'dms-search',
+        label: t('documents.dmsSearchLabel'),
+        placeholder: t('documents.dmsSearchPlaceholder'),
+        clearLabel: t('common.searchClear'),
+      }));
+      const searchField = searchHost.firstElementChild;
+      const input = searchField.querySelector('#dms-search');
+
+      const results = document.createElement('ul');
+      results.id = 'dms-results';
+      results.className = 'dms-results';
+      results.setAttribute('aria-busy', 'false');
+
+      root.append(searchLabel, searchField, hint, results);
+      syncHint();
+
+      // Ein Netzwerk-/Serverfehler ist kein leeres Suchergebnis: der alte Code
+      // zeigte für beides „Keine Treffer im DMS", sodass ein toter DMS-Server wie
+      // ein leerer aussah. Fehler bekommen jetzt eigene Copy und einen Retry.
+      const showSearchError = (q) => {
+        results.replaceChildren();
+        const li = document.createElement('li');
+        li.className = 'dms-results__error';
+        li.setAttribute('role', 'alert');
+        const text = document.createElement('span');
+        text.textContent = t('documents.dmsSearchError');
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn--secondary btn--sm';
+        retry.textContent = t('common.retry');
+        retry.addEventListener('click', () => runDmsSearch(q));
+        li.append(text, retry);
+        results.appendChild(li);
+      };
+
+      const runDmsSearch = async (q) => {
+        results.setAttribute('aria-busy', 'true');
+        results.replaceChildren();
+        const loading = document.createElement('li');
+        loading.className = 'form-hint';
+        loading.textContent = t('documents.dmsSearching');
+        results.appendChild(loading);
+        try {
+          const res = await api.get(`/documents/dms/search?account_id=${selectedAccountId}&q=${encodeURIComponent(q)}`);
+          renderDmsResults(results, res.data, selectedAccountId);
+        } catch {
+          showSearchError(q);
+        } finally {
+          results.setAttribute('aria-busy', 'false');
+        }
+      };
+
+      // Leere Eingabe listet alle Dokumente (statt zu leeren), damit der Nutzer
+      // ohne exakte Suchbegriffe durchblättern kann (Issue #449) - auch nach
+      // dem Leeren-Knopf des Feldes.
+      wirePageSearch(root, { id: 'dms-search', delay: 300, onQuery: (q) => runDmsSearch(q.trim()) });
+      if (window.lucide) lucide.createIcons({ el: root });
+
+      // Beim Öffnen bereits die volle Dokumentliste zeigen.
+      runDmsSearch('');
+
+      setTimeout(() => input.focus(), 60);
+    },
+  });
+}
+
+function renderDmsResults(container, items, accountId) {
+  container.replaceChildren();
+  if (!items || !items.length) {
+    const li = document.createElement('li');
+    li.className = 'form-hint';
+    li.textContent = t('documents.dmsNoResults');
+    container.appendChild(li);
+    return;
+  }
+  const provider = state.dmsAccounts.find((a) => String(a.id) === String(accountId))?.provider;
+  const supportsThumb = provider === 'paperless';
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = 'dms-result';
+
+    // Vorschau (Issue #533, vergrößert in #536): Thumbnail der ersten Seite im
+    // Seitenformat statt als Briefmarke, mit Glyph-Fallback. Ein Klick öffnet die
+    // große Vorschau im Modal - erst dort entscheidet man, ob es das richtige
+    // Dokument ist. Ohne Thumbnail bleibt es beim Direktlink ins DMS.
+    const canOpen = /^https?:\/\//i.test(item.url || '');
+    let media;
+    if (supportsThumb) {
+      media = document.createElement('button');
+      media.type = 'button';
+      media.className = 'dms-result__media dms-result__media--action';
+      setMediaAffordance(media, t('documents.dmsPreviewOpen'));
+      media.addEventListener('click', () => {
+        const thumb = media.querySelector('img[data-thumb]');
+        if (thumb && !thumb.hidden) {
+          openDmsPreview({ item, src: thumb.src, canOpen, onLink: () => linkDmsDocument(item, accountId) });
+        } else if (canOpen) {
+          window.open(item.url, '_blank', 'noopener,noreferrer');
+        }
+      });
+    } else if (canOpen) {
+      media = document.createElement('a');
+      media.className = 'dms-result__media dms-result__media--link';
+      media.href = item.url;
+      media.target = '_blank';
+      media.rel = 'noopener noreferrer';
+      setMediaAffordance(media, t('documents.dmsOpenExternal'));
+    } else {
+      media = document.createElement('span');
+      media.className = 'dms-result__media';
+    }
+    media.insertAdjacentHTML('beforeend', `<span class="dms-result__glyph" data-thumb-icon><i data-lucide="file-text" aria-hidden="true"></i></span>`);
+    if (supportsThumb) {
+      const img = document.createElement('img');
+      img.className = 'dms-result__thumb';
+      img.dataset.thumb = '';
+      img.loading = 'lazy';
+      img.alt = '';
+      img.width = 72;
+      img.height = 96;
+      img.hidden = true;
+      img.src = `/api/v1/documents/dms/thumbnail?account_id=${encodeURIComponent(accountId)}&dms_document_id=${encodeURIComponent(item.id)}`;
+      // Ohne Thumbnail gibt es nichts zu vergrößern: die Kachel fällt auf den
+      // DMS-Direktlink zurück bzw. wird zur reinen Anzeige.
+      img.addEventListener('error', () => {
+        if (canOpen) setMediaAffordance(media, t('documents.dmsOpenExternal'));
+        else {
+          media.disabled = true;
+          media.removeAttribute('title');
+          media.removeAttribute('aria-label');
+        }
+      }, { once: true });
+      media.appendChild(img);
+    }
+    if (supportsThumb || canOpen) {
+      // Ein Lupen- bzw. Oeffnen-Symbol in der Ecke der Vorschau, dauerhaft
+      // sichtbar (R8 H14) - bis dahin tauchte es nur beim Ueberfahren auf.
+      const glyph = supportsThumb ? 'zoom-in' : 'external-link';
+      media.insertAdjacentHTML('beforeend', `<span class="dms-result__open" aria-hidden="true"><i data-lucide="${glyph}"></i></span>`);
+    }
+
+    const text = document.createElement('span');
+    text.className = 'dms-result__text';
+    const label = document.createElement('span');
+    label.className = 'dms-result__title';
+    label.textContent = item.title;
+    text.appendChild(label);
+    const typeLabel = fileTypeLabel(item.filename);
+    const sub = [item.filename, typeLabel].filter((v) => v && v !== item.title).join(' · ');
+    if (sub) {
+      const subEl = document.createElement('span');
+      subEl.className = 'dms-result__sub';
+      subEl.textContent = sub;
+      text.appendChild(subEl);
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn--primary btn--sm';
+    btn.textContent = t('documents.dmsLinkBtn');
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const ok = await linkDmsDocument(item, accountId);
+      if (!ok) btn.disabled = false;
+    });
+
+    li.append(media, text, btn);
+    container.appendChild(li);
+  }
+  if (window.lucide) lucide.createIcons({ el: container });
+  wireThumbnails(container);
+}
+
+// Titel und Screenreader-Label einer Vorschaukachel gemeinsam setzen - beide
+// beschreiben dieselbe Aktion und dürfen nie auseinanderlaufen.
+function setMediaAffordance(el, label) {
+  el.title = label;
+  el.setAttribute('aria-label', label);
+}
+
+// Verknüpft ein DMS-Dokument mit der Dokumentenliste. Gibt true bei Erfolg zurück,
+// damit der auslösende Button im Fehlerfall wieder bedienbar wird.
+async function linkDmsDocument(item, accountId) {
+  const modalContext = captureModalContext();
+  const owner = _container;
+  try {
+    // Feste, vorhersagbare Kategorie: früher erbte das verknüpfte Dokument
+    // stillschweigend das gerade aktive Filter-Chip, was nirgends stand.
+    // Anpassen geht danach über „Bearbeiten".
+    await api.post('/documents/dms/link', {
+      account_id: accountId,
+      dms_document_id: item.id,
+      category: 'other',
+      visibility: 'family',
+    });
+    // Nur den Verknuepfen-Dialog, nie einen inzwischen geoeffneten anderen (#1997).
+    closeModal({ force: true, context: modalContext });
+    await loadDocuments();
+    if (!stillShown(owner)) return true;
+    renderAll({ motion: true });
+    refocusAfterRender();
+    return true;
+  } catch (err) {
+    // Der Verknuepfen-Dialog zeigt einen veralteten Stand, wenn das Konto
+    // oder das Dokument im DMS fehlt: dann geht er zu.
+    reportError(err, { owner, dialog: modalContext });
+    return false;
+  }
+}
+
+// Große Vorschau über dem Auswahl-Modal (Issue #536): die Kachel in der Liste
+// bleibt kompakt, das Dokument wird trotzdem lesbar geprüft, bevor man verknüpft.
+// Bewusst kein zweites openModal - das Modal-System hält genau ein Overlay.
+function openDmsPreview({ item, src, canOpen, onLink }) {
+  const panel = document.querySelector('#shared-modal-overlay .modal-panel');
+  if (!panel) return;
+  const opener = document.activeElement;
+
+  const layer = document.createElement('div');
+  layer.className = 'dms-preview';
+  layer.setAttribute('role', 'dialog');
+  layer.setAttribute('aria-modal', 'true');
+  layer.setAttribute('aria-label', item.title);
+
+  const box = document.createElement('div');
+  box.className = 'dms-preview__panel';
+
+  const header = document.createElement('div');
+  header.className = 'dms-preview__header';
+  header.dataset.dialogActions = '';
+  const heading = document.createElement('p');
+  heading.className = 'dms-preview__title';
+  heading.textContent = item.title;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'dms-preview__close';
+  close.setAttribute('aria-label', t('common.close'));
+  close.insertAdjacentHTML('beforeend', '<i data-lucide="x" aria-hidden="true"></i>');
+  header.append(heading, close);
+
+  const figure = document.createElement('div');
+  figure.className = 'dms-preview__figure';
+  const img = document.createElement('img');
+  img.className = 'dms-preview__img';
+  img.src = src;
+  img.alt = '';
+  figure.appendChild(img);
+
+  const actions = document.createElement('div');
+  actions.className = 'dms-preview__actions';
+  actions.dataset.dialogActions = '';
+  if (canOpen) {
+    const open = document.createElement('a');
+    open.className = 'btn btn--secondary';
+    open.href = item.url;
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    open.textContent = t('documents.dmsOpenExternal');
+    actions.appendChild(open);
+  }
+  const link = document.createElement('button');
+  link.type = 'button';
+  link.className = 'btn btn--primary';
+  link.textContent = t('documents.dmsLinkBtn');
+  link.addEventListener('click', async () => {
+    link.disabled = true;
+    const ok = await onLink();
+    if (!ok) link.disabled = false;
+  });
+  actions.appendChild(link);
+
+  box.append(header, figure, actions);
+  layer.appendChild(box);
+
+  const dismiss = () => {
+    document.removeEventListener('keydown', onKey, true);
+    layer.remove();
+    opener?.focus?.();
+  };
+  // Wie bei Escape gilt fuer die Zurueck-Geste: sie schliesst zuerst die
+  // Vorschau, nicht die Auswahl darunter (#871).
+  attachOverlay(layer, dismiss);
+  // Capture-Phase: das Modal schließt auf Escape über einen Listener am document.
+  // Hier wird das Ereignis abgefangen, damit Escape zuerst nur die Vorschau
+  // schließt und nicht gleich die ganze Auswahl wegräumt.
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    dismiss();
+  };
+  document.addEventListener('keydown', onKey, true);
+  close.addEventListener('click', dismiss);
+  layer.addEventListener('click', (e) => { if (e.target === layer) dismiss(); });
+
+  panel.appendChild(layer);
+  if (window.lucide) lucide.createIcons({ el: layer });
+  close.focus();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new PageProblem(t('documents.fileReadError')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatFileSize(bytes) {
+  // Fehlende/unbekannte Größe (z. B. DMS-verknüpfte Dokumente) → „—" statt „0 KB",
+  // das wie ein leeres Dokument aussähe.
+  if (bytes == null) return '-';
+  if (!bytes) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// --------------------------------------------------------
+// Document Viewer
+// --------------------------------------------------------
+
+/**
+ * Was der Bearbeiten-Dialog zeigt und der Betrachter sonst nicht: Beschreibung,
+ * Sichtbarkeit samt freigegebenen Personen, Erinnerungs-Vorlauf und der
+ * Archiv-Status. Wer das Dokument verwalten darf, findet das hinter dem Stift.
+ * Fuer alle anderen - `read` aufs Modul oder ein fremdes Dokument - ist der
+ * Betrachter die Leseansicht (Regel 9 in utils/module-access.js): die Werte
+ * stehen dort, wo der Tipp ohnehin landet, mit den Beschriftungen des Dialogs.
+ * Name, Kategorie, Ordner, Groesse und Ablauf traegt die Meta-Zeile schon.
+ *
+ * Die Sichtbarkeit folgt derselben Haushaltsregel wie das Feld im Dialog
+ * (hidesPrivacyControls): wo es dort nicht steht, steht es hier nicht.
+ */
+function viewerDetailsHtml(doc) {
+  if (mayManage(doc)) return '';
+  const names = (doc.allowed_member_ids || [])
+    .map((id) => [...(state.directory ?? []), ...state.members].find((person) => Number(person.id) === Number(id))?.display_name)
+    .filter(Boolean);
+  const showsPrivacy = !hidesPrivacyControls('documents');
+  const rows = [
+    readRowHtml({ icon: 'align-left', label: t('documents.descriptionLabel'), value: doc.description || '', multiline: true }),
+    showsPrivacy
+      ? readRowHtml({ icon: doc.visibility === 'private' ? 'lock' : 'users', label: t('documents.visibilityLabel'), value: t(`documents.visibility.${doc.visibility || DOCUMENT_DEFAULT_VISIBILITY}`) })
+      : '',
+    showsPrivacy && doc.visibility === 'restricted'
+      ? readRowHtml({ icon: 'user-check', label: t('documents.allowedMembersLabel'), value: names.join(', ') })
+      : '',
+    doc.expires_at && doc.expiry_reminder_days != null
+      ? readRowHtml({ icon: 'bell', label: t('documents.expiryReminderLabel'), value: String(doc.expiry_reminder_days) })
+      : '',
+    doc.status === 'archived'
+      ? readRowHtml({ icon: 'archive', label: t('documents.statusLabel'), value: t('documents.statusArchived') })
+      : '',
+  ].join('');
+  // `.detail-view__rows` stellt den Abstand der geteilten Lesezeilen
+  // (detail-view.css), wie in den Leseansichten von Geburtstagen und Einkauf.
+  return rows.trim() ? `<div class="document-viewer__details detail-view__rows">${rows}</div>` : '';
+}
+
+function openDocumentViewer(doc) {
+  const categoryLabel = categoryLabels()[doc.category] || doc.category;
+  const previewUrl = `/api/v1/documents/${doc.id}/preview`;
+  const downloadUrl = `/api/v1/documents/${doc.id}/download`;
+  // Defense-in-Depth: nur http(s)-Deep-Links rendern, niemals javascript:/data:-Schemata
+  // (zusätzlich zur serverseitigen base_url-Validierung bei der DMS-Account-Anlage).
+  const externalUrl = documentStorageBackend(doc) === 'dms' && /^https?:\/\//i.test(doc.external_url || '')
+    ? doc.external_url
+    : '';
+
+  // pdf.js-Viewer hält Worker + Dokument im Speicher; beim Schließen freigeben.
+  let pdfTeardown = null;
+  // Der Fokus-Waechter des eingebauten PDF-Betrachters (keepFocusOutOfUnclickedPdf).
+  let releasePdfFocus = null;
+
+  // Teilen über das Teilen-Menü des Geräts (D#1014). Ob es geht, steht beim
+  // Öffnen fest - utils/web-share.js beantwortet Typ und Browser in einer
+  // Probe, ohne ein Byte zu laden. Nur dann wird die Datei geholt, und zwar
+  // im Hintergrund: der spätere Klick muss DIREKT in navigator.share() münden,
+  // ein await zwischen Klick und share() verbraucht auf iOS die transiente
+  // Nutzeraktivierung und das Teilen-Menü öffnet sich nicht. Wo Teilen nicht
+  // geht, steht kein toter Knopf (#962), sondern eine Zeile, die sagt warum;
+  // Download bleibt der Weg, der überall funktioniert. Die Zeile bekommt kein
+  // Teilen: dort zählt der Klick sofort, und die Datei erst zu holen hieße
+  // jede Zeile in den Speicher zu laden. Das ist die Form, die der Melder
+  // selbst vorgeschlagen hat.
+  const shareSupport = fileShareSupport(doc);
+  const shareAbort = new AbortController();
+  let shareFile = null;
+  // Der Ausloeser des Betrachters - fuer den Wechsel nach "Bearbeiten" (unten).
+  const opener = document.activeElement;
+  // Per Tastatur geoeffnet? Der Browser weiss es: er zeigt den Fokusring am
+  // Ausloeser nur dann. Ein alter Browser ohne den Selektor wirft - dann gilt
+  // "nein", und der Fokus-Waechter des PDFs nimmt nichts zurueck.
+  let openedByKeyboard = false;
+  try { openedByKeyboard = opener?.matches?.(':focus-visible') === true; } catch { /* Selektor unbekannt */ }
+
+  openSharedModal({
+    title: doc.name,
+    size: 'xl',
+    content: `
+      <div class="document-viewer" id="document-viewer-root">
+        <div class="document-viewer__meta">
+          ${/* SCHMAL IST DER META-BLOCK EINE ZEILE, DIE AUFKLAPPT (R17 Schritt 5,
+                Critique 2026-10-07 A6 P2). Gemessen 390x844: 172px Meta ueber
+                einem 460px hohen Dokument, davon 53px der Hinweis, warum Teilen
+                nicht geht. Der Knopf nennt die Kategorie und klappt Ordner,
+                Groesse, Ablauf, Hinweis und Lesezeilen auf; die Aktionen
+                daneben und ein Ablauf in Warnfarbe bleiben stehen. Ab 640px
+                ist er unsichtbar und alles steht da wie bisher
+                (documents.css). Der Hinweis selbst bleibt: SPEC.md (D#1014)
+                sagt ihn zu - er steht nur nicht mehr dauerhaft im Bild. */ ''}
+          <button type="button" class="btn btn--ghost btn--sm document-viewer__info-toggle"
+                  aria-expanded="false" aria-controls="document-viewer-root"
+                  aria-label="${t('common.showDetails')}" title="${t('common.showDetails')}">
+            <i data-lucide="${CATEGORY_ICONS[doc.category] || 'folder'}" aria-hidden="true"></i>
+            <span>${categoryLabel}</span>
+            <i data-lucide="chevron-down" class="document-viewer__info-chevron" aria-hidden="true"></i>
+          </button>
+          <span class="document-viewer__category"><i data-lucide="${CATEGORY_ICONS[doc.category] || 'folder'}" aria-hidden="true"></i>${categoryLabel}</span>
+          ${doc.folder_name && !folderRepeatsCategory(doc.folder_name, categoryLabel) ? `<span><i data-lucide="folder" aria-hidden="true"></i>${esc(doc.folder_name)}</span>` : ''}
+          <span>${formatFileSize(doc.file_size)}</span>
+          ${expiryViewerHtml(doc)}
+          <span class="document-viewer__actions">
+            ${externalUrl ? `
+            <a class="btn btn--ghost btn--sm doc-viewer__dms-link" href="${esc(externalUrl)}" target="_blank" rel="noopener noreferrer">
+              <i data-lucide="external-link" class="icon-md" aria-hidden="true"></i>
+              ${t('documents.dmsOpenExternal')}
+            </a>` : ''}
+            ${previewKind(doc.mime_type) === 'pdf' ? `
+            ${rowActionHtml({ icon: 'external-link', href: previewUrl, label: t('documents.openInTabNamed', { name: doc.name }), attrs: { target: '_blank', rel: 'noopener noreferrer', title: t('documents.viewerOpenInTab') } })}` : ''}
+            ${mayManage(doc) ? `
+            ${rowActionHtml({ icon: 'pencil', action: 'edit-document', label: t('common.editNamed', { name: doc.name }), attrs: { title: t('common.edit') } })}` : ''}
+            ${shareSupport === 'ok' ? `
+            ${rowActionHtml({ icon: 'share-2', action: 'share', label: t('documents.shareNamed', { name: doc.name }), attrs: { disabled: true, 'aria-busy': 'true', title: t('documents.sharePreparing') } })}` : ''}
+            <a class="btn btn--primary btn--icon btn--icon-sm" href="${downloadUrl}" download
+               title="${t('documents.downloadAction')}" aria-label="${t('documents.downloadAction')}">
+              <i data-lucide="download" class="icon-md" aria-hidden="true"></i>
+            </a>
+          </span>
+          ${shareSupport !== 'ok' ? `<p class="document-viewer__note">${t(SHARE_NOTE_KEYS[shareSupport])}</p>` : ''}
+        </div>
+        ${viewerDetailsHtml(doc)}
+        <div class="document-viewer__body" id="document-viewer-body">
+          ${renderViewerContent(doc, previewUrl, downloadUrl)}
+        </div>
+      </div>
+    `,
+    onClose() {
+      if (typeof pdfTeardown === 'function') pdfTeardown();
+      releasePdfFocus?.();
+      shareAbort.abort();
+      shareFile = null;
+    },
+    onSave(panel) {
+      if (window.lucide) window.lucide.createIcons({ el: panel });
+      if (shareSupport === 'ok') prepareShare(panel);
+      releasePdfFocus = keepFocusOutOfUnclickedPdf(panel, { keyboard: openedByKeyboard });
+      // Der Meta-Block klappt schmal auf und zu (documents.css blendet aus,
+      // was die Klasse nicht freigibt; ab 640px ist der Knopf unsichtbar).
+      const infoToggle = panel.querySelector('.document-viewer__info-toggle');
+      infoToggle?.addEventListener('click', () => {
+        const open = infoToggle.getAttribute('aria-expanded') !== 'true';
+        infoToggle.setAttribute('aria-expanded', String(open));
+        panel.querySelector('.document-viewer')?.classList.toggle('document-viewer--info-open', open);
+      });
+      // BEARBEITEN AUS DEM BETRACHTER (Re-Critique 2026-09-25, Alex). Kein
+      // eigenes closeModal(): openModal() ersetzt den offenen Dialog selbst -
+      // derselbe Weg wie jeder Modal-zu-Modal-Wechsel, und er haelt EINEN
+      // History-Marker (modal.js, #871). Den Fokus vorher an den Ausloeser des
+      // Betrachters zurueck: der neue Dialog merkt sich document.activeElement
+      // als seinen Ausloeser, und mobil stuende der Fokus sonst noch auf diesem
+      // Knopf, der mit der Schliessanimation aus dem DOM faellt - nach dem
+      // Speichern landete er dann auf der Seitenwurzel statt an der Zeile.
+      panel.querySelector('[data-action="edit-document"]')?.addEventListener('click', () => {
+        if (opener?.isConnected && opener !== document.body) opener.focus();
+        openDocumentModal(doc);
+      });
+      // PDFs ohne nativen Inline-Viewer (mobile Browser): mit pdf.js auf Canvas rendern
+      if (previewKind(doc.mime_type) === 'pdf' && !canRenderPdfNatively()) {
+        const container = panel.querySelector('[data-pdf-pages]');
+        pdfTeardown = renderPdfPages(container, previewUrl, doc, downloadUrl);
+      }
+      // Text-Dokumente: Inhalt asynchron laden
+      if (previewKind(doc.mime_type) === 'text') {
+        const body = panel.querySelector('#document-viewer-body');
+        fetch(previewUrl, { credentials: 'same-origin' })
+          .then((res) => res.text())
+          .then((text) => {
+            if (!body) return;
+            body.replaceChildren();
+            body.insertAdjacentHTML('beforeend', `<pre class="document-viewer__text">${esc(text)}</pre>`);
+          })
+          .catch(() => {
+            if (!body) return;
+            body.replaceChildren();
+            body.insertAdjacentHTML('beforeend', renderViewerUnsupported(doc));
+            if (window.lucide) window.lucide.createIcons({ el: body });
+          });
+      }
+    },
+  });
+
+  // Datei im Hintergrund holen; der Knopf wird erst frei, wenn sie da ist.
+  function prepareShare(panel) {
+    const btn = panel.querySelector('[data-action="share"]');
+    if (!btn) return;
+    fetch(downloadUrl, { credentials: 'same-origin', signal: shareAbort.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        shareFile = new File([blob], doc.original_name || doc.name, { type: doc.mime_type });
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        // Der Name ("<Dokument> teilen") steht schon; nur der Hinweis wechselt.
+        btn.title = t('documents.shareAction');
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        btn.remove();
+        panel.querySelector('.document-viewer__meta')
+          ?.insertAdjacentHTML('beforeend', `<p class="document-viewer__note">${t('documents.shareFailed')}</p>`);
+      });
+    // Kein await vor navigator.share(): canShare() ist synchron, die Datei
+    // liegt schon vor - der Aufruf gehört noch zur Nutzeraktivierung.
+    btn.addEventListener('click', () => {
+      if (!shareFile) return;
+      if (!navigator.canShare({ files: [shareFile] })) {
+        window.yuvomi?.showToast(t('documents.shareFailed'), 'danger');
+        return;
+      }
+      navigator.share({ files: [shareFile], title: doc.name }).catch((err) => {
+        // AbortError: das Teilen-Menü wurde ohne Auswahl geschlossen - kein Fehler.
+        if (err?.name === 'AbortError') return;
+        window.yuvomi?.showToast(t('documents.shareFailed'), 'danger');
+      });
+    });
+  }
+}
+
+const PDF_EMBED_FRAGMENT = '#toolbar=0&navpanes=0&view=Fit&zoom=page-fit';
+
+function renderViewerContent(doc, previewUrl, downloadUrl) {
+  const kind = previewKind(doc.mime_type);
+  if (kind === 'pdf') {
+    if (canRenderPdfNatively()) {
+      // Kein `sandbox` am PDF-iframe: Chromium verweigert die Initialisierung seines internen
+      // PDF-Viewers in sandboxed Frames und zeigt stattdessen "This page was blocked by Chrome".
+      // Die Auslieferung erfolgt same-origin als application/pdf mit nosniff, daher keine
+      // Skriptausführung im Frame.
+      //
+      // OHNE DIE FREMDE WERKZEUGLEISTE (R18, 2026-10-07): der eingebaute
+      // Betrachter von Chromium und Firefox liest die PDF-Open-Parameter im
+      // Fragment. `toolbar=0` nimmt seine Leiste (zweite Kopfzeile mit Zoom,
+      // Druck, Download in fremder Optik unter der eigenen), `navpanes=0` die
+      // Seitenleiste. SEITE EINPASSEN (R19, Critique 2026-10-16): `view=FitH`
+      // passte die Seite in die Breite, und am Desktop standen davon rund 44 %
+      // im Bild - eine Vorschau, die man erst scrollen muss. `view=Fit`
+      // (Chromium) und `zoom=page-fit` (pdf.js in Firefox) zeigen die ganze
+      // erste Seite; Lesen im Detail bleibt "In neuem Tab oeffnen". Safari kennt
+      // sie nicht - der Rueckfall ist der Stand davor. Zoom und Druck bleiben
+      // ueber "In neuem Tab oeffnen" (dort MIT Leiste: die Adresse traegt das
+      // Fragment nicht) und den Download der eigenen Leiste.
+      return `<iframe class="document-viewer__pdf" src="${previewUrl}${PDF_EMBED_FRAGMENT}" title="${esc(doc.name)}"></iframe>`;
+    }
+    // Mobile Browser (iOS Safari, Android Chrome) rendern PDFs in <iframe>/<embed> nicht inline.
+    // Platzhalter; das eigentliche Rendern via pdf.js läuft asynchron im onSave-Hook.
+    // Fokussierbare Region (role=region + tabindex) macht den Seitenstapel per Tastatur scrollbar.
+    // Ehrliche Semantik: der Canvas-Render ist grafisch (keine Textebene) -> ein sr-only-Hinweis
+    // verweist auf den vorlesbaren Weg (Meta-Leiste: "In neuem Tab öffnen"/Download), die
+    // Seiten-Canvases selbst sind aria-hidden. data-pdf-live kündigt Ladeende/Fehler an.
+    return `<div class="document-viewer__pdf-pages" data-pdf-pages tabindex="0" role="region" aria-label="${esc(doc.name)}">
+      <p class="sr-only" data-pdf-note>${t('documents.viewerPdfA11yNote')}</p>
+      <span class="sr-only" role="status" aria-live="polite" data-pdf-live></span>
+      <div class="document-viewer__pdf-indicator" data-pdf-indicator aria-hidden="true" hidden></div>
+      <div class="document-viewer__pdf-content" data-pdf-content>
+        <div class="document-viewer__loading" role="status">
+          <i data-lucide="loader-circle" class="document-viewer__spinner" aria-hidden="true"></i>
+          <span data-pdf-loading-text>${t('documents.viewerPdfLoading')}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+  if (kind === 'image') {
+    return `<img class="document-viewer__image" src="${previewUrl}" alt="${esc(doc.name)}"`
+      + ` loading="lazy">`;
+  }
+  if (kind === 'text') {
+    // Inhalt wird asynchron in onSave geladen; Platzhalter anzeigen
+    return `<div class="document-viewer__loading" role="status">
+      <i data-lucide="loader-circle" class="document-viewer__spinner" aria-hidden="true"></i>
+      ${esc(doc.original_name)}
+    </div>`;
+  }
+  // Nicht darstellbare Typen: Aktionen liegen in der Meta-Leiste (Download immer vorhanden)
+  return renderViewerUnsupported(doc);
+}
+
+// Gemeinsamer Empty-State: Icon + Titel + Hinweis. Deckt nicht darstellbare Typen und den
+// pdf.js-Renderfehler-Fallback ab. Die Aktionen (Download, für PDFs "In neuem Tab öffnen")
+// liegen in der Meta-Leiste des Viewers und sind immer sichtbar -> keine doppelten Buttons hier.
+// `alert` macht den Fehlerpfad als Live-Region für Screenreader hörbar.
+function renderViewerFallback(doc, { hint, icon = 'file-x', alert = false } = {}) {
+  return `
+    <div class="document-viewer__unsupported"${alert ? ' role="alert"' : ''}>
+      <span class="document-viewer__unsupported-icon">
+        <i data-lucide="${icon}" aria-hidden="true"></i>
+      </span>
+      <div class="document-viewer__unsupported-title">${esc(doc.original_name)}</div>
+      <div class="document-viewer__unsupported-hint">${hint}</div>
+    </div>
+  `;
+}
+
+function renderViewerUnsupported(doc) {
+  return renderViewerFallback(doc, { hint: t('documents.viewerDownloadHint') });
+}
+
+/**
+ * DER FOKUS BLEIBT IM DIALOG, SOLANGE NIEMAND INS PDF GEKLICKT HAT (#1511).
+ *
+ * WAS NICHT GEHT, zuerst: liegt der Fokus IM eingebauten PDF-Betrachter, kommt
+ * kein Tastendruck mehr hier an - Esc schliesst dann nicht. Der Betrachter ist
+ * ein eigener Prozess des Browsers (in Chromium eine interne Erweiterung im
+ * iframe); gemessen erreicht `keydown` weder dieses Dokument noch das Fenster
+ * des iframes, obwohl dessen Huelle same-origin ist. Das laesst sich von hier
+ * nicht abfangen, ohne den eingebauten Betrachter aufzugeben oder dem PDF den
+ * Fokus wieder wegzunehmen, den jemand ihm per Klick gegeben hat (dann gingen
+ * Markieren und Kopieren im PDF nicht mehr). Fuer diesen Fall bleibt der Weg
+ * hinaus: das X im Kopf und jeder Klick in den Dialog bringen Esc zurueck, und
+ * der Fokus kehrt beim Schliessen zum Ausloeser zurueck (beides gemessen).
+ *
+ * WAS GEHT: der Fokus muss dort gar nicht erst landen, wenn ihn niemand
+ * hingelegt hat. Gemessen nahm ihn sich der Betrachter SELBST, sobald die
+ * Vorschau scheiterte (eine Datei, die sich als PDF ausgibt und keines ist) -
+ * per Tastatur geoeffnet stand der Fokus danach im iframe, und Esc war tot,
+ * ohne dass man das PDF je beruehrt hatte. Dasselbe nach Tab von einer
+ * angeklickten leeren Stelle aus.
+ *
+ * Das Fenster meldet `blur`, wenn der Fokus in den iframe wechselt; ein Klick
+ * IM iframe ist von hier aus nicht zu sehen. Entschieden wird deshalb daran,
+ * womit der Nutzer gerade bedient - dieselbe Frage, die der Browser fuer
+ * `:focus-visible` stellt: wer zuletzt eine Taste gedrueckt hat, hat nicht ins
+ * PDF geklickt, und der Fokus geht zurueck an das Element, das ihn im Dialog
+ * zuletzt hatte (sonst an "Schliessen"). Wer zuletzt den Zeiger bewegt oder
+ * gedrueckt hat, behaelt den Fokus im PDF, ebenso wer mit dem Zeiger ueber
+ * dem iframe steht. Ein Klick wird damit nie zurueckgenommen; dafuer bleibt
+ * der Fall offen, dass sich der Betrachter den Fokus unter der Maus nimmt.
+ *
+ * `pointermove` zaehlt nur mit echter Bewegung: nach einem Layoutwechsel
+ * schickt der Browser eines fuer den ruhenden Zeiger nach, und das waere fuer
+ * jeden, dessen Maus irgendwo ueber der Seite liegt, "zuletzt der Zeiger".
+ *
+ * @param {HTMLElement} panel
+ * @param {object} [opts]
+ * @param {boolean} [opts.keyboard] - wurde der Betrachter per Tastatur geoeffnet
+ * @returns {() => void} haengt die Listener wieder ab
+ */
+function keepFocusOutOfUnclickedPdf(panel, { keyboard = false } = {}) {
+  const frame = panel?.querySelector?.('.document-viewer__pdf');
+  if (!frame || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {};
+
+  let onKeyboard = keyboard;
+  let lastInside = null;
+  let lastPoint = null;
+  // Nimmt sich der Betrachter den Fokus immer wieder, ist nach drei Runden
+  // Schluss - bis zur naechsten Eingabe des Nutzers.
+  let returned = 0;
+  const onFocusIn = (e) => { if (e.target !== frame) lastInside = e.target; };
+  const onKeyDown = () => { onKeyboard = true; returned = 0; };
+  const onPointerDown = () => { onKeyboard = false; returned = 0; };
+  const onPointerMove = (e) => {
+    const moved = lastPoint && (lastPoint.x !== e.screenX || lastPoint.y !== e.screenY);
+    lastPoint = { x: e.screenX, y: e.screenY };
+    if (moved) onKeyboard = false;
+  };
+  const onWindowBlur = () => {
+    if (document.activeElement !== frame) return;
+    if (!onKeyboard || frame.matches?.(':hover')) return;
+    if (returned >= 3) return;
+    returned += 1;
+    // Nicht im blur selbst: der Fokuswechsel ist dann noch nicht abgeschlossen.
+    setTimeout(() => {
+      if (document.activeElement !== frame || !frame.isConnected) return;
+      const target = lastInside?.isConnected ? lastInside : panel.querySelector('.modal-panel__close');
+      target?.focus?.();
+    }, 0);
+  };
+  panel.addEventListener('focusin', onFocusIn);
+  document.addEventListener('keydown', onKeyDown, true);
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('pointermove', onPointerMove, true);
+  window.addEventListener('blur', onWindowBlur);
+  return () => {
+    panel.removeEventListener('focusin', onFocusIn);
+    document.removeEventListener('keydown', onKeyDown, true);
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('pointermove', onPointerMove, true);
+    window.removeEventListener('blur', onWindowBlur);
+  };
+}
+
+// navigator.pdfViewerEnabled === true bedeutet, dass der Browser einen eingebauten
+// Inline-PDF-Viewer besitzt (Desktop Chrome/Firefox/Safari). Mobile Safari/Chrome melden
+// false; dort bleibt ein <iframe src=".pdf"> leer -> stattdessen pdf.js auf Canvas rendern.
+// Bei undefined (ältere Browser) konservativ pdf.js nutzen, das überall funktioniert.
+function canRenderPdfNatively() {
+  return navigator.pdfViewerEnabled === true;
+}
+
+// Maximal gleichzeitig gehaltene gerenderte Seiten-Canvases (LRU). Begrenzt den Speicher
+// auch bei sehr großen PDFs auf Mobilgeräten; nicht sichtbare Seiten fallen auf Platzhalter zurück.
+const PDF_MAX_RENDERED = 6;
+
+// Rendert ein PDF via gevendortem pdf.js seitenweise on demand (IntersectionObserver): nur
+// sichtbare/nahe Seiten werden auf Canvas gezeichnet, entfernte per LRU wieder freigegeben.
+// Gibt eine synchrone Teardown-Funktion zurück (Worker/Dokument freigeben, Observer trennen),
+// die beim Schließen des Modals aufgerufen wird. Fällt bei Fehlern auf Tab/Download zurück.
+function renderPdfPages(container, previewUrl, doc, downloadUrl) {
+  const state = { destroyed: false, pdf: null, observer: null, resizeObs: null, resizeTimer: null };
+  const teardown = () => {
+    state.destroyed = true;
+    if (state.observer) { state.observer.disconnect(); state.observer = null; }
+    if (state.resizeObs) { state.resizeObs.disconnect(); state.resizeObs = null; }
+    if (state.resizeTimer) { clearTimeout(state.resizeTimer); state.resizeTimer = null; }
+    if (state.pdf) { try { state.pdf.destroy(); } catch (e) { /* already gone */ } state.pdf = null; }
+  };
+  if (!container) return teardown;
+
+  // Live-Region + Slots aus der Markup-Vorlage (renderViewerContent).
+  const content = container.querySelector('[data-pdf-content]') || container;
+  const liveEl = container.querySelector('[data-pdf-live]');
+  const indicatorEl = container.querySelector('[data-pdf-indicator]');
+  const loadingTextEl = container.querySelector('[data-pdf-loading-text]');
+  // Nur der Modal-Body scrollt (kein verschachtelter Scroller): Observer misst gegen ihn.
+  const scrollRoot = container.closest('.modal-panel__body');
+
+  const showFallback = () => {
+    if (state.destroyed) return;
+    if (indicatorEl) indicatorEl.hidden = true;
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', renderViewerFallback(doc, {
+      hint: t('documents.viewerPdfFallbackHint'), icon: 'alert-triangle', alert: true,
+    }));
+    if (window.lucide) window.lucide.createIcons({ el: content });
+  };
+
+  (async () => {
+    try {
+      const pdfjs = await import('/vendor/pdfjs/pdf.min.mjs');
+      if (state.destroyed) return;
+      pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+      const loadingTask = pdfjs.getDocument({
+        url: previewUrl,
+        withCredentials: true,
+        // Kein eval/WASM: hält die App-CSP (script-src 'self') unangetastet.
+        isEvalSupported: false,
+        // Ohne diese Daten rendern PDFs mit nicht-eingebetteten Standard-Fonts
+        // (Helvetica/Times/Courier) ohne Text.
+        standardFontDataUrl: '/vendor/pdfjs/standard_fonts/',
+      });
+      // Fortschritt in die Ladeanzeige spiegeln (große/langsame Dateien).
+      loadingTask.onProgress = (progress) => {
+        if (state.destroyed || !loadingTextEl) return;
+        const total = progress && progress.total;
+        if (!total) return;
+        const pct = Math.min(100, Math.round((progress.loaded / total) * 100));
+        loadingTextEl.textContent = `${t('documents.viewerPdfLoading')} ${pct} %`;
+      };
+      const pdf = await loadingTask.promise;
+      if (state.destroyed) { try { pdf.destroy(); } catch (e) { /* noop */ } return; }
+      state.pdf = pdf;
+
+      // Breite erst nach dem nächsten Frame messen (Modal-Einblendung braucht ein Layout).
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (state.destroyed) return;
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      let renderWidth = Math.max(240, container.clientWidth || 600);
+
+      // Aspektverhältnis der ersten Seite als Default für alle Platzhalter (reserviert Scrollhöhe,
+      // wird beim tatsächlichen Rendern je Seite auf den echten Wert korrigiert).
+      const firstPage = await pdf.getPage(1);
+      if (state.destroyed) return;
+      const firstUnit = firstPage.getViewport({ scale: 1 });
+      const defaultRatio = firstUnit.width / firstUnit.height;
+
+      const wrappers = new Map();
+      const rendered = new Map();
+      const inFlight = new Set();
+      const failed = new Set();
+      const visible = new Set();
+      const order = [];
+
+      content.replaceChildren();
+      for (let n = 1; n <= pdf.numPages; n += 1) {
+        const wrap = document.createElement('div');
+        wrap.className = 'document-viewer__pdf-page';
+        wrap.dataset.page = String(n);
+        wrap.style.aspectRatio = String(defaultRatio);
+        // Rein grafisch (kein Textlayer) -> aria-hidden; die vorlesbare Alternative liegt im
+        // sr-only-Hinweis + Meta-Leiste. Der sichtbare Seitenindikator übernimmt "n von total".
+        wrap.setAttribute('aria-hidden', 'true');
+        wrappers.set(n, wrap);
+        content.appendChild(wrap);
+      }
+
+      const updateIndicator = () => {
+        if (!indicatorEl || !visible.size) return;
+        indicatorEl.textContent = t('documents.viewerPdfPageLabel', {
+          n: Math.min(...visible), total: pdf.numPages,
+        });
+      };
+
+      const renderPage = async (n) => {
+        if (state.destroyed || rendered.has(n) || inFlight.has(n) || failed.has(n)) return;
+        inFlight.add(n);
+        try {
+          const page = await pdf.getPage(n);
+          if (state.destroyed) return;
+          const unit = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: (renderWidth / unit.width) * dpr });
+          const canvas = document.createElement('canvas');
+          canvas.className = 'document-viewer__pdf-canvas';
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          if (state.destroyed) return;
+          const wrap = wrappers.get(n);
+          if (!wrap) return;
+          wrap.style.aspectRatio = String(unit.width / unit.height);
+          wrap.replaceChildren(canvas);
+          rendered.set(n, canvas);
+          order.push(n);
+          // LRU: entfernte Seiten auf Platzhalter zurücksetzen, Speicher freigeben.
+          while (order.length > PDF_MAX_RENDERED) {
+            const old = order.shift();
+            if (old === n || !rendered.has(old)) continue;
+            const oldWrap = wrappers.get(old);
+            if (oldWrap) oldWrap.replaceChildren();
+            rendered.delete(old);
+          }
+        } catch (e) {
+          // Eine einzelne fehlerhafte Seite: Inline-Fehlerzustand statt endlosem Shimmer,
+          // als fehlgeschlagen markieren (kein Retry-Loop beim Wieder-in-den-Blick-Scrollen).
+          if (state.destroyed) return;
+          failed.add(n);
+          const wrap = wrappers.get(n);
+          if (wrap) {
+            wrap.style.aspectRatio = '';
+            wrap.replaceChildren();
+            wrap.insertAdjacentHTML('beforeend',
+              `<div class="document-viewer__pdf-page-error">`
+              + `<i data-lucide="alert-triangle" aria-hidden="true"></i>`
+              + `<span>${t('documents.viewerPdfPageError')}</span></div>`);
+            if (window.lucide) window.lucide.createIcons({ el: wrap });
+          }
+        } finally {
+          inFlight.delete(n);
+        }
+      };
+
+      state.observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          const n = Number(entry.target.dataset.page);
+          if (entry.isIntersecting) { visible.add(n); renderPage(n); } else { visible.delete(n); }
+        }
+        updateIndicator();
+      }, { root: scrollRoot || null, rootMargin: '300px 0px' });
+      wrappers.forEach((wrap) => state.observer.observe(wrap));
+      renderPage(1);
+
+      // Sichtbaren Seitenindikator freischalten + Ladeende für Screenreader ankündigen.
+      if (indicatorEl) {
+        indicatorEl.hidden = false;
+        indicatorEl.textContent = t('documents.viewerPdfPageLabel', { n: 1, total: pdf.numPages });
+      }
+      if (liveEl) liveEl.textContent = t('documents.viewerPdfReady', { total: pdf.numPages });
+
+      // Rotation/Größenänderung: bei relevanter Breitenänderung sichtbare Seiten neu rendern.
+      state.resizeObs = new ResizeObserver(() => {
+        if (state.resizeTimer) clearTimeout(state.resizeTimer);
+        state.resizeTimer = setTimeout(() => {
+          if (state.destroyed) return;
+          const width = Math.max(240, container.clientWidth || 600);
+          if (Math.abs(width - renderWidth) < 40) return;
+          renderWidth = width;
+          order.length = 0;
+          rendered.forEach((canvas, n) => { const wrap = wrappers.get(n); if (wrap) wrap.replaceChildren(); });
+          rendered.clear();
+          const bounds = (scrollRoot || container).getBoundingClientRect();
+          wrappers.forEach((wrap, n) => {
+            const r = wrap.getBoundingClientRect();
+            if (r.bottom > bounds.top - 300 && r.top < bounds.bottom + 300) renderPage(n);
+          });
+        }, 150);
+      });
+      state.resizeObs.observe(container);
+    } catch (err) {
+      showFallback();
+    }
+  })();
+
+  return teardown;
+}

@@ -1,0 +1,669 @@
+// Locale-Guard für die App-Locales (public/locales/).
+//
+// Die Gegenstücke existierten längst für den Installer (test-installer-i18n.js)
+// und für die Pluralregeln (test-i18n-plural.js) - für den eigentlichen
+// Schlüsselabgleich der App gab es nur den manuellen i18n-auditor-Agent. Ein
+// Agent läuft, wenn jemand daran denkt; ein fehlender Schlüssel fällt sonst
+// erst dem Nutzer auf, weil t() den Schlüssel selbst zurückgibt und damit
+// „tasks.newTask" auf dem Button steht.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { keySetDiff, foreignReferenceVariants } from './i18n-plural-keys.js';
+
+const LOCALES_DIR = new URL('../public/locales/', import.meta.url);
+const I18N_PATH = new URL('../public/i18n.js', import.meta.url);
+const REFERENCE = 'de';
+
+/**
+ * SUPPORTED_LOCALES aus dem Quelltext von i18n.js lesen, statt die Liste hier zu
+ * doppeln. Als reine Funktion, damit der Test darunter sie mit einer Eingabe
+ * füttern kann, die im Repository (noch) nicht vorkommt.
+ *
+ * Der Leser greift jeden quotierten String ab, nicht eine Zeichenklasse. Bis
+ * 20.09.2026 stand hier `/'([a-z-]+)'/g` - nur Kleinbuchstaben. Ein Code mit
+ * Großbuchstaben, wie ihn BCP-47 für Schrift- und Regions-Subtags vorsieht
+ * (`zh-Hant`, `pt-BR`), fiel damit still aus LOCALES heraus, und LOCALES ist die
+ * Schleifenquelle jeder Schlüssel-, Platzhalter- und Pluralprüfung in dieser
+ * Datei: die Locale wäre nicht etwa falsch geprüft worden, sondern gar nicht.
+ *
+ * Eine Zeichenklasse, die aufzählt, was erlaubt ist, sagt zu allem Unbekannten
+ * stillschweigend nein. `[^']*` kann nichts verschlucken - was im Literal steht,
+ * kommt auch an. Steht dort einmal etwas, das keine Locale ist, wird die Suite
+ * laut falsch statt leise unvollständig, und das ist die bessere Richtung.
+ */
+function parseSupportedLocales(src) {
+  const match = src.match(/const SUPPORTED_LOCALES = \[([^\]]+)\]/);
+  assert.ok(match, 'SUPPORTED_LOCALES nicht in public/i18n.js gefunden');
+  return match[1].match(/'([^']*)'/g).map(s => s.slice(1, -1));
+}
+
+function supportedLocales() {
+  return parseSupportedLocales(readFileSync(I18N_PATH, 'utf8'));
+}
+
+function readLocale(locale) {
+  return readFileSync(new URL(`${locale}.json`, LOCALES_DIR), 'utf8');
+}
+
+/** Verschachteltes Objekt zu Dot-Notation abflachen - so löst t() auf. */
+function flatten(obj, prefix = '', out = new Map()) {
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, key, out);
+    else out.set(key, v);
+  }
+  return out;
+}
+
+/** Platzhalternamen einer Übersetzung: t() ersetzt ausschließlich {{name}}. */
+function placeholders(value) {
+  if (typeof value !== 'string') return new Set();
+  return new Set([...value.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)].map(m => m[1]));
+}
+
+const PLURAL_SUFFIX = /_(zero|one|two|few|many)$/;
+
+const LOCALES = supportedLocales();
+const reference = flatten(JSON.parse(readLocale(REFERENCE)));
+const referenceKeys = [...reference.keys()];
+
+// Beide Seiten werden als DATEINAME sortiert, nicht die eine als Code und die
+// andere als Dateiname: '-' (45) steht vor '.' (46), also sortiert 'zh-Hant'
+// nach 'zh', 'zh-Hant.json' aber vor 'zh.json'. Ein Subtag-Locale hätte diesen
+// Vergleich mit identischem Inhalt rot gemacht - ein deepEqual-Diff, der wie
+// eine fehlende Datei aussieht, obwohl nur zwei Sortierungen aufeinandertreffen.
+test('für jede unterstützte Locale existiert genau eine Locale-Datei', () => {
+  const files = readdirSync(LOCALES_DIR).filter(f => f.endsWith('.json')).sort();
+  assert.deepEqual(files, LOCALES.map(l => `${l}.json`).sort());
+});
+
+test('die Referenz-Locale trägt Schlüssel', () => {
+  assert.ok(referenceKeys.length > 1000, `de.json hat nur ${referenceKeys.length} Schlüssel`);
+});
+
+test('jede Locale trägt die vollständige Bestätigung für verwaiste Kalender-Overrides', () => {
+  const keys = [
+    'calendar.overrideOrphanConfirmTitle',
+    'calendar.overrideOrphanConfirmTitle_one',
+    'calendar.overrideOrphanConfirmDetail',
+    'calendar.overrideOrphanConfirmAction',
+  ];
+  for (const locale of LOCALES) {
+    const values = flatten(JSON.parse(readLocale(locale)));
+    for (const key of keys) {
+      assert.ok(typeof values.get(key) === 'string' && values.get(key).trim(),
+        `${locale}.json: ${key} fehlt oder ist leer`);
+    }
+    assert.ok(values.get(keys[0]).includes('{{count}}'), `${locale}.json: der Plural nennt count nicht`);
+    assert.ok(values.get(keys[1]).includes('{{count}}'), `${locale}.json: der Singular nennt count nicht`);
+  }
+});
+
+// Jede Locale trägt den Schlüsselsatz von de.json und darüber hinaus genau die
+// Pluralvarianten, die ihre Sprache braucht (#1473): `<key>_<kategorie>` ist
+// erlaubt, wenn de.json `<key>_one` hat und Intl.PluralRules(locale) die
+// Kategorie kennt - `_few` in cs.json ja, `_two` in cs.json nein. Die Regel steht
+// in test/i18n-plural-keys.js, weil test-frontend-audit.js denselben Abgleich
+// fährt. Bis #1473 galt „jede Locale trägt jede Variante" - dann trug de.json
+// `_few`, und weil de die Rückfall-Locale von t() ist, stand überall dort, wo eine
+// Sprache die Variante nicht hatte, der deutsche Text.
+test(`${REFERENCE}.json trägt nur Pluralvarianten, die das Deutsche selbst wählt`, () => {
+  assert.deepEqual(foreignReferenceVariants(reference, REFERENCE), [],
+    `${REFERENCE}.json trägt Varianten fremder Kategorien - sie gehören in die Sprachen, die sie wählen`);
+});
+
+for (const locale of LOCALES) {
+  if (locale === REFERENCE) continue;
+
+  test(`${locale}.json ist schlüsselidentisch zur Referenz ${REFERENCE}.json (plus eigene Pluralvarianten)`, () => {
+    const keys = flatten(JSON.parse(readLocale(locale)));
+    const { missing, extra } = keySetDiff(reference, keys, locale);
+    assert.deepEqual(missing, [], `${locale}.json fehlen Schlüssel: ${missing.slice(0, 20).join(', ')}`);
+    assert.deepEqual(extra, [], `${locale}.json hat überzählige Schlüssel: ${extra.slice(0, 20).join(', ')}`);
+  });
+
+  // Ein Platzhalter, den t() nicht befüllt, bleibt als rohes „{{color}}" im
+  // Text stehen; einer, der fehlt, macht den Satz unvollständig, ohne dass er
+  // beschädigt aussieht. Beides fällt beim Übersetzen nicht auf, weil die
+  // Zeile für sich gelesen plausibel ist.
+  //
+  // Pluralvarianten werden gegen den Basisschlüssel geprüft, nicht gegen die
+  // gleichnamige Referenzvariante: eine `_one`-Form darf {{count}} weglassen,
+  // weil die Eins schon im Wort steckt („Stündlich" statt „Alle 1 Stunden"),
+  // und darf ihn ebenso führen. Nur ein Platzhalter, den der Basisschlüssel
+  // gar nicht kennt, ist immer ein Tippfehler.
+  test(`${locale}.json nutzt dieselben Platzhalter wie die Referenz`, () => {
+    const keys = flatten(JSON.parse(readLocale(locale)));
+    const mismatches = [];
+    // Auch die Varianten, die nur diese Locale trägt (cs `_few`): sie stehen nicht
+    // in der Referenz und würden von einer Schleife über de.json nie erreicht.
+    const own = [...keys.keys()].filter(k => !reference.has(k) && PLURAL_SUFFIX.test(k))
+      .map(k => [k, undefined]);
+    for (const [key, refValue] of [...reference, ...own]) {
+      if (!keys.has(key)) continue;
+      const actual = placeholders(keys.get(key));
+      const variant = PLURAL_SUFFIX.test(key);
+      const allowed = variant
+        ? placeholders(reference.get(key.replace(PLURAL_SUFFIX, '')) ?? refValue)
+        : placeholders(refValue);
+      const missing = variant ? [] : [...allowed].filter(p => !actual.has(p));
+      const extra = [...actual].filter(p => !allowed.has(p));
+      if (missing.length || extra.length) {
+        mismatches.push(`${key}: fehlt {${missing.join(',')}} überzählig {${extra.join(',')}}`);
+      }
+    }
+    assert.deepEqual(mismatches, [], `${locale}.json:\n  ${mismatches.join('\n  ')}`);
+  });
+}
+
+// Die Dateien werden von Hand und von Skripten gepflegt. JSON.stringify(o, null, 2)
+// reserialisiert sie auf 2 Leerzeichen und erzeugt ein Diff über alle 3400 Zeilen,
+// in dem die eine echte Änderung nicht mehr zu finden ist.
+//
+// GEPRÜFT WIRD DIE GANZE DATEI, NICHT IHRE ZWEITE ZEILE. Die frühere Fassung las
+// genau eine Zeile je Locale und hieß trotzdem „alle Locale-Dateien sind mit 4
+// Leerzeichen eingerückt". Sie hätte die 2-Leerzeichen-Reserialisierung gefunden,
+// gegen die sie gebaut war - und übersah dabei acht Zeilen im inventory-Block, die
+// in ALLEN 24 Dateien ganz ohne Einrückung standen (Rückstand einer früheren
+// Einfügung, ab 2026-08-20 repariert). Folge war nicht bloß Unordnung: der
+// JSON-Round-Trip war damit nicht mehr verlustfrei, und wer die Locales einmal
+// über JSON.stringify schrieb, richtete die acht Zeilen ungewollt mit - 24 Dateien
+// mit fremdem Rauschen in einem Commit, der davon nichts wissen wollte.
+//
+// Die Zusicherung ist deshalb die schärfstmögliche und zugleich die einfachste:
+// die Datei IST, was `JSON.stringify(daten, null, 4) + '\n'` liefert. Das deckt
+// Einrückung, Zeilenumbrüche, den Schluss-Umbruch und die Zeichen-Escapes in einem
+// Satz - und macht das Ergänzen von Keys per Round-Trip wieder gefahrlos.
+test('jede Locale-Datei ist Zeile für Zeile 4-Leerzeichen-formatiert', () => {
+  const wrong = [];
+  for (const locale of LOCALES) {
+    const raw = readLocale(locale);
+    const canonical = `${JSON.stringify(JSON.parse(raw), null, 4)}\n`;
+    if (raw === canonical) continue;
+    // Den ORT nennen, nicht nur die Tatsache: ohne Zeilennummer steht man vor
+    // 4600 Zeilen und dem Satz „unterscheidet sich".
+    const a = raw.split('\n');
+    const b = canonical.split('\n');
+    const i = a.findIndex((line, n) => line !== b[n]);
+    wrong.push(`${locale}.json Zeile ${i + 1}: ${JSON.stringify(a[i])} statt ${JSON.stringify(b[i])}`);
+  }
+  assert.deepEqual(wrong, [], `nicht kanonisch 4-Leerzeichen-formatiert:\n  ${wrong.join('\n  ')}`);
+});
+
+test('alle Locale-Dateien enden mit einem Zeilenumbruch', () => {
+  const wrong = LOCALES.filter(l => !readLocale(l).endsWith('\n'));
+  assert.deepEqual(wrong, [], `ohne abschließenden Zeilenumbruch: ${wrong.join(', ')}`);
+});
+
+// EIN MODUL, EIN NAME - in jeder Sprache.
+//
+// Modulnamen leben an zwei Stellen: in `nav.*` (Sidebar, Tray, Kommandopalette,
+// Dokumenttitel, Dashboard-Widget-Kopf) und in
+// `settings.apiTokenScopeModules.*` (die Auswahlliste im Token-Dialog). Beide
+// Listen wurden getrennt gepflegt und waren getrennt gedriftet: der Token-
+// Dialog nannte die Startseite in 17 von 24 Sprachen „Dashboard", waehrend die
+// Navigation sie „Uebersicht" nennt, und die Haushaltshilfe hiess dort
+// „Haushalt". Kein Test konnte das sehen - beide Schluessel existierten, beide
+// waren uebersetzt, sie sagten nur Verschiedenes.
+//
+// Geprueft wird die SCHNITTMENGE, nicht eine Liste: `weather` und `family` sind
+// API-Scopes ohne eigene Route und haben deshalb keinen `nav`-Eintrag. Sie
+// fallen von selbst heraus, statt als benannte Ausnahme gepflegt zu werden -
+// und ein kuenftiger Scope, der eine Route bekommt, faellt automatisch unter
+// die Regel.
+test('jeder statisch geschriebene t()-Schlüssel steht auch in der Referenz-Locale', () => {
+  // Die Gegenrichtung zu allem anderen in dieser Datei: dort wird geprüft, dass
+  // die Locales untereinander deckungsgleich sind - hier, dass der CODE keinen
+  // Schlüssel benutzt, den es nirgends gibt. Ein solcher Aufruf fällt in keiner
+  // der anderen Prüfungen auf, weil er in KEINER Locale steht und die Dateien
+  // damit weiter identisch sind. Sichtbar wird er erst im Browser, wo t() den
+  // Schlüssel selbst zurückgibt: `settings.cancel` stand als Beschriftung auf
+  // einem Knopf, weil der Schlüssel `common.cancel` heißt (#672).
+  //
+  // Bewusst nur STATISCHE Aufrufe `t('a.b')`. Zusammengesetzte Schlüssel
+  // (`t(\`settings.oidcLinkError_${err}\`)`) lassen sich hier nicht auflösen;
+  // sie zu erraten hieße, Rauschen zu melden, und ein Guard, der Rauschen
+  // meldet, wird abgeschaltet statt befolgt.
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'vendor' || entry.name === 'locales') continue;
+      const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith('.js')) files.push(child);
+    }
+  };
+  walk(new URL('../public/', import.meta.url));
+
+  const offenders = [];
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    for (const match of source.matchAll(/\bt\(\s*(['"])([a-zA-Z0-9_.]+)\1/g)) {
+      const key = match[2];
+      if (reference.has(key)) continue;
+      // Ein Plural-Basisschlüssel darf über seine Varianten aufgelöst werden.
+      if (referenceKeys.some((k) => k.startsWith(`${key}_`) && PLURAL_SUFFIX.test(k))) continue;
+      const line = source.slice(0, match.index).split('\n').length;
+      offenders.push(`${file.pathname.split('/public/')[1]}:${line} → ${key}`);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `Diese t()-Aufrufe nennen einen Schlüssel, den de.json nicht kennt - im Browser `
+    + `steht dann der Schlüssel selbst in der Oberfläche:\n${offenders.join('\n')}`,
+  );
+});
+
+/**
+ * Die Rueckfrage "Aenderungen verwerfen?" hat zwei Knoepfe: links der Abbruch
+ * (`common.cancel`, die Vorgabe von confirmModal), rechts die Handlung. In ko,
+ * it und uk trugen beide dasselbe Wort (#1607 Punkt 7), in tr war das eine der
+ * Anfang des anderen - wer "Abbrechen | Abbrechen" liest, kann nicht wissen,
+ * welcher Knopf die Eingaben wegwirft.
+ *
+ * Geprueft wird jedes Label, das ein Aufrufer als `confirmLabel` NEBEN dem
+ * Vorgabe-Abbruch zeigt. Die Liste ist Handarbeit; ein neues Verwerfen-Label
+ * gehoert dazu. Was der Vergleich NICHT sieht: zwei verschiedene Woerter mit
+ * derselben Bedeutung (ru "Отмена" | "Отменить") - das bleibt Lesearbeit.
+ */
+const DISCARD_LABELS = ['modal.discardChanges', 'settings.permDiscard'];
+
+test('ein Verwerfen-Knopf heisst in keiner Sprache wie der Abbrechen-Knopf daneben', () => {
+  const fold = (value, locale) => String(value ?? '').trim().toLocaleLowerCase(locale);
+  const offenders = [];
+  for (const locale of LOCALES) {
+    const flat = flatten(JSON.parse(readLocale(locale)));
+    const cancel = fold(flat.get('common.cancel'), locale);
+    assert.ok(cancel, `${locale}.json: common.cancel fehlt`);
+    for (const key of DISCARD_LABELS) {
+      const discard = fold(flat.get(key), locale);
+      assert.ok(discard, `${locale}.json: ${key} fehlt`);
+      if (discard === cancel || discard.startsWith(`${cancel} `) || cancel.startsWith(`${discard} `)) {
+        offenders.push(`${locale}.json: ${key} = "${flat.get(key)}" neben common.cancel = "${flat.get('common.cancel')}"`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'beide Knoepfe der Rueckfrage sagen dasselbe');
+});
+
+/**
+ * Zwei Schluessel, die der Code fuer VERSCHIEDENE Zustaende waehlt, duerfen in
+ * keiner Sprache denselben Text tragen - sonst sieht der Leser einen Zustand,
+ * wo die Oberflaeche zwei unterscheidet.
+ *
+ * `dashboard.dueSoon` steht an einer Aufgabe, die MORGEN ab 22 Uhr und in
+ * weniger als 24 Stunden faellig ist, `dashboard.dueToday` an einer von heute
+ * (formatDueDate in pages/dashboard.js). en.json trug fuer beide "Due today",
+ * seit dem ersten Locale-Commit, und 18 weitere Sprachen hatten das uebernommen:
+ * die Kachel nannte ein Datum von morgen "heute faellig". Schluesselabgleich und
+ * Uebersetzungs-Ratchet sahen nichts - der Schluessel existierte und war
+ * uebersetzt, nur eben mit dem Text des Nachbarn.
+ *
+ * Die Liste ist Handarbeit und bewusst kurz: ein allgemeines "keine zwei
+ * Schluessel gleich" waere voller Fehlalarme (Knopf und Titel heissen oft zu
+ * Recht gleich). Ein Paar gehoert hierher, wenn EIN Codepfad zwischen beiden
+ * waehlt. Was der Vergleich NICHT sieht: zwei verschiedene Woerter mit derselben
+ * Bedeutung - das bleibt Lesearbeit.
+ */
+const DISTINCT_STATE_LABELS = [
+  ['dashboard.dueSoon', 'dashboard.dueToday'],
+];
+
+test('Labels fuer verschiedene Zustaende sind in keiner Sprache textgleich', () => {
+  const fold = (value, locale) => String(value ?? '').trim().toLocaleLowerCase(locale);
+  const offenders = [];
+  for (const locale of LOCALES) {
+    const flat = flatten(JSON.parse(readLocale(locale)));
+    for (const [a, b] of DISTINCT_STATE_LABELS) {
+      assert.ok(fold(flat.get(a), locale), `${locale}.json: ${a} fehlt`);
+      assert.ok(fold(flat.get(b), locale), `${locale}.json: ${b} fehlt`);
+      if (fold(flat.get(a), locale) !== fold(flat.get(b), locale)) continue;
+      offenders.push(`${locale}.json: ${a} = ${b} = "${flat.get(a)}"`);
+    }
+  }
+  assert.deepEqual(offenders, [], 'zwei Zustaende tragen denselben Text');
+});
+
+test('Modulnamen sind in nav und in den API-Token-Scopes wortgleich', () => {
+  const drift = [];
+  let compared = 0;
+  for (const locale of LOCALES) {
+    const keys = flatten(JSON.parse(readLocale(locale)));
+    for (const [key, value] of keys) {
+      const match = key.match(/^settings\.apiTokenScopeModules\.(\w+)$/);
+      if (!match) continue;
+      const navKey = `nav.${match[1]}`;
+      if (!keys.has(navKey)) continue;
+      compared++;
+      if (keys.get(navKey) !== value) {
+        drift.push(`${locale}: ${key} = ${JSON.stringify(value)}, ${navKey} = ${JSON.stringify(keys.get(navKey))}`);
+      }
+    }
+  }
+  // Reichweiten-Nachweis: ohne ihn meldet ein Guard, dessen Selektor ins Leere
+  // greift, fehlerfrei „keine Drift" ueber null verglichene Paare.
+  assert.ok(compared >= 12 * LOCALES.length,
+    `zu wenige Paare verglichen (${compared}) - greift der Selektor noch?`);
+  assert.deepEqual(drift, [], `Modulname driftet:\n  ${drift.join('\n  ')}`);
+});
+
+// Dritte Stelle desselben Namens: der Ordner, in dem die Belege der
+// Gemeinsamen Ausgaben landen. Er hiess in ELF von vierundzwanzig Sprachen
+// anders als das Modul - "Geteilte Ausgaben" gegen "Gemeinsame Ausgaben",
+// "Sdílené výdaje" gegen "Společné výdaje" - und keine der beiden Listen oben
+// sah ihn, weil er unter `documents.*` liegt statt unter `nav.*`.
+//
+// WAS DIESER GUARD SEIT v157 NICHT MEHR TUT: Daten schuetzen. Bis dahin war
+// der Anzeigename die Identitaet des Ordners, ein abweichender Name legte
+// also einen zweiten an - genau das musste v146 einmal aufraeumen. Diese
+// Aufgabe traegt jetzt `module_key` (services/document-folders.js), und eine
+// Umbenennung ist folgenlos. Geblieben ist der Grund, aus dem der Name
+// urspruenglich auffiel: zwei Woerter fuer dieselbe Sache verwirren, wenn die
+// Oberflaeche das Modul so und seinen Ordner anders nennt.
+//
+// Die Liste ist bewusst kurz und benannt statt einer Regel ueber alle
+// `documents.*Folder`: der Beleg-Ordner des Budgets heisst in JEDER Sprache
+// "Belege" und nicht "Budget", und auch der Ordner der Haushaltshilfe traegt
+// in neun Sprachen einen eigenen Namen. Eine mechanische Regel meldete diese
+// vierzig gewollten Abweichungen als Fehler. Aufgenommen wird ein Ordner
+// deshalb erst, wenn er den Modulnamen in allen Sprachen bereits traegt.
+const FOLDER_NAMED_LIKE_MODULE = [
+  ['splitExpenses.title', 'documents.splitExpensesFolder'],
+  // Der Inventar-Ordner kam dazu, als PR #837 `nav.inventory` ins Filipino
+  // uebersetzte und die drei uebrigen Stellen stehen liess.
+  ['inventory.title', 'documents.inventoryFolder'],
+  // Die Haushaltshilfe kam als dritte dazu: ihr Ordner hiess in zwoelf von
+  // vierundzwanzig Sprachen anders als das Modul - "Hausreinigung" gegen
+  // "Haushaltshilfe", "ハウスキーピング" gegen "家事" - und zwei davon,
+  // "HouseKeeping" (en) und "HázTartás" (hu), waren schlicht vertippt.
+  ['housekeeping.title', 'documents.housekeepingFolder'],
+];
+
+test('der Beleg-Ordner heisst wie das Modul, dessen Belege er traegt', () => {
+  const drift = [];
+  for (const locale of LOCALES) {
+    const keys = flatten(JSON.parse(readLocale(locale)));
+    for (const [titleKey, folderKey] of FOLDER_NAMED_LIKE_MODULE) {
+      const title = keys.get(titleKey);
+      const folder = keys.get(folderKey);
+      assert.ok(title, `${locale}: ${titleKey} fehlt`);
+      assert.ok(folder, `${locale}: ${folderKey} fehlt`);
+      if (title !== folder) {
+        drift.push(`${locale}: ${titleKey} ${JSON.stringify(title)}, Ordner ${JSON.stringify(folder)}`);
+      }
+    }
+  }
+  assert.deepEqual(drift, [],
+    `Der Beleg-Ordner traegt einen anderen Namen als das Modul:\n  ${drift.join('\n  ')}`);
+});
+
+// Zwei Listen, eine Wahrheit. Das Frontend traegt SUPPORTED_LOCALES als Literal
+// (public/i18n.js:13), der Server leitet seine Liste aus den DATEINAMEN ab
+// (server/utils/i18n.js, LOCALE_FILE_RE). Bis 20.09.2026 forderte sein Muster
+// genau zwei Kleinbuchstaben, waehrend `fil.json` drei hat: die Serverliste war
+// 23 statt 24 lang, `isSupportedLocale('fil')` war false, das Auswahlmenue
+// "Sprache gespeicherter Eintraege" bot Filipino trotzdem an (es baut seine
+// Optionen aus der FRONTEND-Liste), und das Speichern antwortete mit
+// "400 Ungueltige Sprache".
+//
+// Kein bestehender Guard sah das: der Test darueber vergleicht die Dateien mit
+// der Frontend-Liste, und die beiden stimmten ueberein. Gemessen wurde nur eine
+// Seite der Naht. Drei Zeilen unter dem Muster steht `{2,3}` fuer den
+// Sprachteil eines Regionscodes - die Erweiterung hat die Dateiliste damals
+// nicht mitgenommen.
+test('Server und Frontend kennen dieselben Sprachen', async () => {
+  const { getSupportedLocales, isSupportedLocale } = await import('../server/utils/i18n.js');
+  const frontend = [...LOCALES].sort();
+  const server = [...getSupportedLocales()].sort();
+  assert.deepEqual(server, frontend,
+    'Die Serverliste weicht von SUPPORTED_LOCALES ab. Eine Sprache, die die '
+    + 'Oberflaeche anbietet, der Server aber nicht kennt, wird beim Speichern '
+    + 'mit 400 abgewiesen.');
+
+  const abgewiesen = frontend.filter((locale) => !isSupportedLocale(locale));
+  assert.deepEqual(abgewiesen, [],
+    `isSupportedLocale() weist Sprachen ab, die die Oberflaeche anbietet: ${abgewiesen.join(', ')}`);
+});
+
+// Der Leser dieser Datei ist ihr eigener blinder Fleck. LOCALES speist jede
+// Schleife hier - fehlt ein Code in LOCALES, wird seine Datei nicht falsch
+// geprüft, sondern übersprungen, und die Suite meldet trotzdem grün. Die
+// bisherige Zeichenklasse `[a-z-]+` hätte genau das getan, sobald ein Code einen
+// Großbuchstaben trägt.
+//
+// Gemessen am 20.09.2026 gegen die alte Fassung, mit 'zh-Hant' in
+// SUPPORTED_LOCALES: stand die Datei zh-Hant.json daneben, wurde nur der
+// Dateilisten-Vergleich rot - mit einem Diff über Dateinamen, der auf die Datei
+// zeigt statt auf den Leser, und ohne dass eine einzige Schlüsselprüfung für
+// zh-Hant gelaufen wäre. Fehlte die Datei, war die volle Suite grün: die
+// Oberfläche hätte die Sprache angeboten, `isSupportedLocale` hätte sie
+// abgewiesen, und das Speichern wäre mit 400 gescheitert - derselbe Ausgang wie
+// bei `fil` in #1322, nur dass diesmal auch der Guard dafür nichts gesehen
+// hätte, weil er seine Frontend-Seite durch denselben Leser bezieht.
+//
+// Deshalb prüft dieser Test den Leser als Funktion, mit Eingaben, die im
+// Repository nicht vorkommen. Ein Test, der ihn nur auf den echten Bestand
+// anwendet, misst wenig: dort traegt einzig `pt-BR` (#1437) Grossbuchstaben,
+// und eine Schrift wie `zh-Hant` gar keiner.
+test('der Leser von SUPPORTED_LOCALES verschluckt keinen Code', () => {
+  const quelle = "const SUPPORTED_LOCALES = ['de', 'fil', 'zh-Hant', 'pt-BR', 'sr-Latn-RS'];";
+  assert.deepEqual(parseSupportedLocales(quelle),
+    ['de', 'fil', 'zh-Hant', 'pt-BR', 'sr-Latn-RS'],
+    'Ein Code mit Grossbuchstaben faellt aus der Liste, die jede Pruefung hier '
+    + 'durchlaeuft. Seine Locale-Datei wuerde dann ungeprueft bleiben.');
+
+  // Die echte Liste geht durch denselben Leser - unverändert und vollzählig.
+  assert.equal(LOCALES.length, new Set(LOCALES).size, 'doppelter Code in SUPPORTED_LOCALES');
+  assert.ok(LOCALES.includes('fil'), 'fil fehlt - der Code aus #1322');
+  assert.ok(LOCALES.includes('pt-BR'), 'pt-BR fehlt - der erste Code mit Region (#1437)');
+});
+
+// Die Serverliste entsteht aus DATEINAMEN, und das Muster dahinter hat dieselbe
+// Naht schon zweimal aufgerissen - beide Male, weil es den Bestand beschrieb
+// statt die Regel. `{2}` wies erst `fil-PH` als Region ab, dann verlor es
+// `fil.json` (#1322). Seit 20.09.2026 beschreibt es die BCP-47-Form: Sprache,
+// optional Schrift, optional Region.
+//
+// Geprueft wird hier `localeFromFileName`, nicht `getSupportedLocales()`: der
+// Bestand traegt bis auf `pt-BR.json` (#1437) nur Dateien der Form
+// `xx.json`/`xxx.json` und keine mit Schrift-Subtag, ein Test ueber die fertige
+// Liste liefe also an der Erweiterung vorbei und waere gruen, egal was das
+// Muster erlaubt. Der Test darunter haengt die
+// Funktion an ihren Aufrufer, damit dieser Zugriff keine zweite Wahrheit wird.
+test('ein Locale-Dateiname darf Schrift- und Regions-Subtags tragen', async () => {
+  const { localeFromFileName } = await import('../server/utils/i18n.js');
+
+  for (const [datei, code] of [
+    ['de.json', 'de'],
+    ['fil.json', 'fil'],
+    ['pt-BR.json', 'pt-BR'],
+    ['zh-Hant.json', 'zh-Hant'],
+    ['sr-Latn-RS.json', 'sr-Latn-RS'],
+  ]) {
+    assert.equal(localeFromFileName(datei), code,
+      `${datei} faellt aus der Serverliste. Die Oberflaeche wuerde die Sprache `
+      + 'anbieten und das Speichern mit 400 antworten - der Ausgang von #1322.');
+  }
+
+  // Die Gegenrichtung gehoert dazu: ein Muster, das alles durchlaesst, gaebe
+  // einer beliebigen Datei im Ordner den Rang einer Sprache. `de-de` steht
+  // hier fuer die Schreibweise - BCP-47 schreibt die Region gross, und zwei
+  // Schreibweisen derselben Sprache waeren zwei Eintraege in der Liste.
+  for (const datei of ['README.json', 'de.txt', 'de-de.json', 'zh-HANT.json',
+    'a.json', 'abcd.json', 'de-.json', '.json']) {
+    assert.equal(localeFromFileName(datei), null,
+      `${datei} wird als Sprache gezaehlt, obwohl es keine ist.`);
+  }
+});
+
+// Der Test darueber misst eine Funktion; dieser haelt sie an ihren Aufrufer.
+//
+// Gemessen wird der QUELLTEXT, und das ist hier nicht die bequeme, sondern die
+// einzige ehrliche Wahl. Die erste Fassung verglich getSupportedLocales() mit
+// dem, was localeFromFileName ueber denselben Ordner ergibt - und war gruen,
+// als getSupportedLocales() zur Gegenprobe ein eigenes, enges Muster bekam:
+// solange keine einzige Datei im Bestand einen Subtag traegt, liefern ein
+// weites und ein enges Muster dieselben 24 Codes. Der Vergleich konnte die
+// Frage gar nicht beantworten, die er stellte.
+//
+// Die Frage ist selbst eine Quelltextfrage: gibt es ZWEI Muster fuer einen
+// Locale-Dateinamen. Geprueft wird deshalb die Regel, nicht die Schreibweise
+// eines Aufrufs - ein escaptes `\.json` steht ausschliesslich in einem Regex,
+// der Dateinamen liest, waehrend die gewoehnliche Pfadbildung
+// (`${locale}.json`) ohne Backslash auskommt.
+test('es gibt nur EIN Muster fuer Locale-Dateinamen', () => {
+  const quelle = readFileSync(new URL('../server/utils/i18n.js', import.meta.url), 'utf8');
+  const muster = quelle.match(/\\\.json/g) ?? [];
+  assert.equal(muster.length, 1,
+    `server/utils/i18n.js traegt ${muster.length} Dateinamen-Muster statt einem. `
+    + 'Ein zweites laeuft an localeFromFileName vorbei und damit an dessen Test.');
+});
+
+// Der Realitaetsanker dazu: die Liste, die der Server wirklich ausliefert.
+test('die Serverliste traegt jede Locale-Datei des Ordners', async () => {
+  const { getSupportedLocales } = await import('../server/utils/i18n.js');
+  const dateien = readdirSync(LOCALES_DIR).filter(f => f.endsWith('.json')).length;
+  assert.equal(getSupportedLocales().length, dateien,
+    'Die Serverliste ist kuerzer als der Ordner - eine Datei faellt aus dem Muster.');
+  assert.ok(getSupportedLocales().includes('fil'), 'fil fehlt - der Code aus #1322');
+  assert.ok(getSupportedLocales().includes('pt-BR'), 'pt-BR fehlt - der erste Code mit Region (#1437)');
+});
+
+// CLAUDE.md: ueberall `-` statt Gedankenstrich, auch in UI-Texten (Kritik
+// 2026-09-25: 33 Werte in 21 Locales). Die Ausnahmen sind SPRACHREGELN, keine
+// Stilwahl, und stehen hier einzeln mit Grund - eine Allowlist, damit eine neue
+// Uebersetzung den Strich nicht still zurueckbringt.
+//  - zh: "——" ist der chinesische Gedankenstrich (破折号), ein eigenes
+//    Satzzeichen; ein Bindestrich ist im chinesischen Fliesstext kein Ersatz.
+//    Erlaubt ist nur die Doppelform, ein einzelner Strich bleibt ein Befund.
+//  - ru/uk tasks.subtaskDeleteDetail: der Strich steht fuer das ausgelassene
+//    Praedikat ("это — нет" = "das hier [laesst sich] nicht"); die Grammatik
+//    verlangt ihn dort, ein Bindestrich waere ein Fehler.
+const DASH_EXCEPTIONS = {
+  zh: { allLocale: /——/g },
+  ru: { keys: new Set(['tasks.subtaskDeleteDetail']) },
+  uk: { keys: new Set(['tasks.subtaskDeleteDetail']) },
+};
+
+test('kein Locale-Wert traegt einen Gedankenstrich ausser den begruendeten Sprachregeln', () => {
+  const hits = [];
+  for (const locale of LOCALES) {
+    const rule = DASH_EXCEPTIONS[locale] || {};
+    for (const [key, value] of flatten(JSON.parse(readLocale(locale)))) {
+      if (rule.keys?.has(key)) continue;
+      const rest = rule.allLocale ? value.replace(rule.allLocale, '') : value;
+      if (/[\u2013\u2014]/.test(rest)) hits.push(`${locale}: ${key}`);
+      // Der chinesische Strich steht ohne Leerzeichen zwischen den Zeichen.
+      if (rule.allLocale && / ——|—— /.test(value)) hits.push(`${locale}: ${key} (Leerzeichen am ——)`);
+    }
+  }
+  assert.deepEqual(hits, []);
+});
+
+test('jede Gedankenstrich-Ausnahme trifft einen Wert, der den Strich wirklich traegt', () => {
+  // Sonst ueberlebt eine Ausnahme ihren Anlass und deckt spaeter einen neuen Strich.
+  for (const [locale, rule] of Object.entries(DASH_EXCEPTIONS)) {
+    const values = flatten(JSON.parse(readLocale(locale)));
+    for (const key of rule.keys || []) {
+      assert.match(values.get(key) ?? '', /[\u2013\u2014]/, `${locale}: ${key}`);
+    }
+    if (rule.allLocale) {
+      assert.ok([...values.values()].some((v) => rule.allLocale.test(v)), `${locale}: keine Doppelform mehr`);
+      rule.allLocale.lastIndex = 0;
+    }
+  }
+});
+
+// Dasselbe fuer Texte, die NICHT aus einer Locale kommen: Template- und
+// String-Literale im Frontend-JS (Re-Critique 2026-09-28, F7). Gefunden: der
+// Halbgeviertstrich zwischen "Ueberfaellig" und Datum sowie zwischen "Heute"
+// und Uhrzeit in task-fields.js und als Leerwert im Dokumentspeicher-Blatt. Kommentare zaehlen hier nicht (die
+// liest kein Nutzer); was nach dem Schnitt bleibt, ist Code und Literal.
+test('kein String im Frontend-JS traegt einen Gedankenstrich', async () => {
+  const { withoutCommentsKeepingLines } = await import('./source-text.js');
+  const root = new URL('../public/', import.meta.url);
+  const files = readdirSync(root, { recursive: true })
+    .filter((f) => f.endsWith('.js') && !f.startsWith('vendor/'));
+  assert.ok(files.length > 100, `zu wenige Dateien gelesen: ${files.length}`);
+  const hits = [];
+  for (const file of files) {
+    const code = withoutCommentsKeepingLines(readFileSync(new URL(file, root), 'utf8'));
+    code.split('\n').forEach((line, i) => {
+      if (/[\u2013\u2014]/.test(line)) hits.push(`public/${file}:${i + 1}: ${line.trim().slice(0, 100)}`);
+    });
+  }
+  assert.deepEqual(hits, []);
+});
+
+// Re-Critique 2026-09-28 (A2 P3, R14 P12): das Datumsfeld zeigte im deutschen
+// UI "DD.MM.YYYY" - englische Buchstaben fuer Tag/Monat/Jahr. Die REIHENFOLGE
+// und die Trenner folgen weiter der Datumsformat-Einstellung (Region), die
+// BUCHSTABEN jetzt der UI-Sprache ("TT.MM.JJJJ" wie in Apples Systemfeldern).
+// Gefahren wird die echte i18n.js mit den echten Locale-Dateien.
+test('dateInputPlaceholder spricht die UI-Sprache, die Reihenfolge bleibt die der Einstellung', async () => {
+  const GLOBALS = ['localStorage', 'fetch', 'document', 'window', 'navigator', 'CustomEvent'];
+  const saved = new Map(GLOBALS.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  const store = new Map();
+  const define = (name, value) => Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+  define('localStorage', {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); },
+  });
+  define('fetch', async (url) => {
+    const file = String(url).replace(/^\/locales\//, '');
+    return { ok: true, json: async () => JSON.parse(readFileSync(new URL(`../public/locales/${file}`, import.meta.url), 'utf8')) };
+  });
+  define('document', { documentElement: { lang: '', dir: '' } });
+  define('window', { dispatchEvent: () => true });
+  define('navigator', { languages: ['de'], language: 'de' });
+  define('CustomEvent', class { constructor(type, init) { this.type = type; this.detail = init?.detail; } });
+  const i18n = await import('../public/i18n.js');
+  try {
+    store.set('yuvomi-locale', 'de');
+    await i18n.initI18n();
+    assert.equal(i18n.dateInputPlaceholder(), 'TT.MM.JJJJ', 'de, Einstellung dmy');
+    store.set('yuvomi-date-format', 'ymd');
+    assert.equal(i18n.dateInputPlaceholder(), 'JJJJ-MM-TT', 'de, Einstellung ymd: Reihenfolge aus der Einstellung');
+    store.set('yuvomi-date-format', 'dmy');
+    await i18n.setLocale('en');
+    assert.equal(i18n.dateInputPlaceholder(), 'DD.MM.YYYY', 'en behaelt seine Buchstaben');
+    await i18n.setLocale('fr');
+    assert.equal(i18n.dateInputPlaceholder(), 'JJ.MM.AAAA', 'fr: jour, mois, annee');
+
+    // #1847: niederlaendisch DD-MM-YYYY. Schreiben, Platzhalter, Kurzform und
+    // Eingabe muessen dasselbe Trennzeichen benutzen und sich umkehren lassen.
+    store.set('yuvomi-date-format', 'dmy_dash');
+    await i18n.setLocale('en');
+    assert.equal(i18n.dateInputPlaceholder(), 'DD-MM-YYYY', 'dmy_dash: Platzhalter');
+    assert.equal(i18n.formatDate('2026-03-05'), '05-03-2026', 'dmy_dash: Datum');
+    assert.equal(i18n.formatDayMonth('2026-03-05'), '05-03', 'dmy_dash: Tag und Monat');
+    assert.equal(i18n.getDateFormat(), 'dmy_dash', 'dmy_dash faellt nicht auf den Default zurueck');
+    assert.equal(i18n.parseDateInput('05-03-2026'), '2026-03-05', 'dmy_dash: Tag vor Monat');
+    assert.equal(i18n.parseDateInput('05032026'), '2026-03-05', 'dmy_dash: Ziffernfolge Tag vor Monat');
+  } finally {
+    await i18n.setLocale('de');
+    for (const [name, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete globalThis[name];
+    }
+  }
+});
+
+/* #1607: `calendar.timeSuffix` HAENGT AN EINER ZEIT MIT DOPPELPUNKT.
+ * Die Aufrufer schreiben `${formatTime(...)} ${timeSuffix()}`, also „18:00" +
+ * Zeitwort. Deutsch hat dafuer „Uhr". Koreanisch (시), Japanisch (時) und
+ * Chinesisch (时/點) haben ein Zaehlwort fuer die STUNDE, das an der Zahl klebt
+ * („18시") - hinter „18:00" ergibt es „18:00 시", zwei Schreibweisen in einer.
+ * Der koreanische Wert war genau das. */
+test('timeSuffix: kein Stunden-Zaehlwort hinter einer Uhrzeit mit Doppelpunkt', () => {
+  const HOUR_COUNTERS = /^[시時时點点]$/u;
+  for (const locale of readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json'))) {
+    const suffix = JSON.parse(readFileSync(new URL(locale, LOCALES_DIR), 'utf8')).calendar.timeSuffix;
+    assert.equal(typeof suffix, 'string', `${locale}: calendar.timeSuffix fehlt`);
+    assert.doesNotMatch(suffix.trim(), HOUR_COUNTERS, `${locale}: "18:00 ${suffix}" mischt zwei Schreibweisen`);
+  }
+});
