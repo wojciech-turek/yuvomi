@@ -1,0 +1,617 @@
+/**
+ * Modul: Personen-Auswahlen im Browser (#1207)
+ * Zweck: Eine Auswahl zeigt Haushaltsmitglieder - und dazu, wer an DIESEM
+ *        Datensatz schon steht (withChosenPeople()). Diese Suite rendert die
+ *        echten Seitenbausteine ueber den Browser-Loader und prueft das Markup,
+ *        nicht den Quelltext:
+ *          - Budget: der Zustaendigen-Picker erscheint auch mit nur einem
+ *            Mitglied, wenn eine Buchung schon Personal oder einen Gast nennt;
+ *          - Aufgaben: der Solo-Haushalt versteckt den Zustaendigen-Picker nur,
+ *            wenn wirklich nur eine Person in Frage kommt;
+ *          - Dienstplan: ein neues Formular bietet als Besitzer nur Mitglieder
+ *            und bestehende Plan-Besitzer an, nicht den Vorgabewert.
+ *        Dazu Formulare, deren fehlendes Feld beim Speichern einen gespeicherten
+ *        Wert aendern wuerde, und Anzeigen gespeicherter Verweise:
+ *          - Kalender: die Sichtbarkeit bleibt im Formular, auch wenn hoechstens
+ *            ein Mitglied gelistet ist;
+ *          - Dokumente: eine bestehende Freigabe fuer Personal oder einen Gast
+ *            bleibt als angehaktes Kaestchen stehen;
+ *          - Budget: der Zustaendigen-Filterchip nennt auch so jemanden;
+ *          - Dashboard: Dienstplan-Zeilen tragen die Namen aller Plan-Besitzer.
+ * Ausfuehren: npm run test:people-pickers
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
+globalThis.customElements = globalThis.customElements ?? { define() {}, get() {} };
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => { store.set(k, String(v)); },
+  removeItem: (k) => { store.delete(k); },
+  clear: () => store.clear(),
+};
+globalThis.document = globalThis.document ?? {
+  documentElement: { classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } } },
+};
+
+// Der Loader stubt die Mehrfachauswahl fuer die Seiten weg; diese Suite prueft
+// genau deren Markup und reicht deshalb die echte Komponente durch.
+const { renderUserMultiSelect } = await import('../public/components/user-multi-select.js');
+globalThis.__renderUserMultiSelect = renderUserMultiSelect;
+
+const { setHouseholdSize } = await import('../public/utils/household.js');
+const { __test: budget } = await import('../public/pages/budget.js');
+const { __test: tasks } = await import('../public/pages/tasks.js');
+const { __test: schedule } = await import('../public/pages/schedule.js');
+
+// Anna ist das einzige Mitglied; Clara ist Hauspersonal und steht nur an
+// einem gespeicherten Datensatz (die Datensaetze nennen die Farbe `color`).
+const ANNA = { id: 1, display_name: 'Anna', avatar_color: '#111111', username: 'anna' };
+const CLARA = { id: 3, display_name: 'Clara', color: '#333333', username: 'clara' };
+
+const checkboxIds = (html) => [...html.matchAll(/class="user-ms__checkbox" value="(\d+)"/g)].map((m) => Number(m[1]));
+const optionIds = (html) => [...html.matchAll(/<option value="(\d+)"/g)].map((m) => Number(m[1]));
+
+// --------------------------------------------------------------------------
+// Budget
+// --------------------------------------------------------------------------
+
+test('budget: one member and a stored staff responsible still show the picker and the handover', () => {
+  const html = budget.responsiblePickerHtml({ members: [ANNA], entry: { responsible_users: [CLARA] }, isEdit: true });
+  assert.deepEqual(checkboxIds(html), [ANNA.id, CLARA.id], 'the stored reference can be seen and removed');
+  assert.match(html, /id="bm-to-split"/, 'the handover to split expenses is offered for the stored responsible');
+});
+
+test('budget: one member and a new entry still ask no question', () => {
+  assert.equal(budget.responsiblePickerHtml({ members: [ANNA], entry: null, isEdit: false }), '');
+  assert.equal(budget.responsiblePickerHtml({ members: [ANNA], entry: { responsible_users: [] }, isEdit: true }), '');
+});
+
+// --------------------------------------------------------------------------
+// Aufgaben
+// --------------------------------------------------------------------------
+
+function assigneeGroup(html) {
+  const at = html.indexOf('data-ms-input="task_assigned"');
+  assert.ok(at > 0, 'the assignee picker is rendered');
+  const groupStart = html.lastIndexOf('<div class="form-group"', at);
+  const tag = html.slice(groupStart, html.indexOf('>', groupStart) + 1);
+  return { hidden: /\shidden(\s|>)/.test(tag), ids: checkboxIds(html.slice(groupStart)) };
+}
+
+test('tasks: a solo household still shows the assignee picker when a stored staff assignee is on the task', () => {
+  setHouseholdSize(1);
+  const html = tasks.renderModalContent({
+    task: { id: 9, title: 'Fenster', status: 'open', priority: 'none', visibility: 'all', assigned_to: CLARA.id, assigned_users: [CLARA] },
+    users: [ANNA],
+  });
+  const group = assigneeGroup(html);
+  assert.equal(group.hidden, false, 'the stored assignee can be seen and removed');
+  assert.deepEqual(group.ids.slice(0, 2), [ANNA.id, CLARA.id]);
+});
+
+test('tasks: a solo household keeps hiding the assignee picker when only one person is in question', () => {
+  setHouseholdSize(1);
+  assert.equal(assigneeGroup(tasks.renderModalContent({ task: null, users: [ANNA] })).hidden, true);
+});
+
+// Feldfolge des Aufgaben-Dialogs (Critique 2026-10-05, R16). Unter dem Titel
+// stand die Notiz samt Formatierleiste, die Faelligkeit mobil erst bei y=700
+// von 844; Wiederholung und Erinnerung standen offen unter dem Aufklapper,
+// 1455px Formular in 591px. Was eine Aufgabe ausmacht - wann, wer, wie
+// wichtig -, steht jetzt vor dem Freitext, und die beiden seltenen Abschnitte
+// liegen hinter "Weitere Einstellungen", SOLANGE sie leer sind.
+// Der Loader stubt Aufklapper und Wiederholung auf nichts; hier zaehlt gerade,
+// WO sie stehen, also bekommen beide ein erkennbares Markup.
+function withFormLandmarks(run) {
+  globalThis.__advancedSection = (inner, { hint = '' } = {}) => (
+    `<details class="form-advanced"><span class="form-advanced__hint">${hint}</span>${inner}</details>`);
+  globalThis.__renderRRuleFields = (prefix) => `<select id="${prefix}-rrule-freq"></select>`;
+  try { return run(); } finally {
+    delete globalThis.__advancedSection;
+    delete globalThis.__renderRRuleFields;
+  }
+}
+const taskDialog = (opts) => withFormLandmarks(() => tasks.renderModalContent(opts));
+
+function advancedRange(html) {
+  const start = html.indexOf('<details class="form-advanced"');
+  return [start, html.indexOf('</details>', start)];
+}
+const inAdvanced = (html, needle) => {
+  const [start, end] = advancedRange(html);
+  const at = html.indexOf(needle);
+  assert.ok(at > 0, `${needle} fehlt im Dialog`);
+  return at > start && at < end;
+};
+
+test('tasks: the dialog asks when, who and how important before the free-text note', () => {
+  setHouseholdSize(2);
+  const html = taskDialog({ task: null, users: [ANNA, CLARA] });
+  const order = ['id="task-title"', 'id="task-due-date"', 'id="task-due-time"', 'task_assigned', 'id="task-priority"', 'id="task-description"', '<details class="form-advanced"']
+    .map((needle) => html.indexOf(needle));
+  assert.ok(order.every((at) => at > 0), 'every field is in the dialog');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'title, due, assignee, priority, note, more settings');
+});
+
+test('tasks: an empty recurrence and an empty reminder wait behind "more settings"', () => {
+  setHouseholdSize(2);
+  const html = taskDialog({ task: null, users: [ANNA, CLARA] });
+  assert.equal(inAdvanced(html, 'id="task-rrule-freq"'), true);
+  assert.equal(inAdvanced(html, 'id="reminder-toggle"'), true);
+  assert.match(html, /form-advanced__hint">[^<]*rrule\.labelRepeat[^<]*reminders\.sectionTitle/,
+    'the hint names what moved behind the disclosure');
+});
+
+test('tasks: a set recurrence or reminder is never hidden behind the disclosure', () => {
+  setHouseholdSize(2);
+  const task = { id: 9, title: 'Muell', status: 'open', priority: 'none', visibility: 'all', due_date: '2026-10-09', recurrence_rule: 'FREQ=WEEKLY' };
+  const series = taskDialog({ task, users: [ANNA, CLARA] });
+  assert.equal(inAdvanced(series, 'id="task-rrule-freq"'), false, 'a series shows its rule');
+  assert.equal(inAdvanced(series, 'id="reminder-toggle"'), true, 'its empty reminder still waits');
+  const reminded = taskDialog({
+    task: { ...task, recurrence_rule: null }, users: [ANNA, CLARA],
+    reminder: { id: 1, remind_at: '2026-10-08T09:00:00.000Z' },
+  });
+  assert.equal(inAdvanced(reminded, 'id="reminder-toggle"'), false, 'a set reminder shows');
+  assert.equal(inAdvanced(reminded, 'id="task-rrule-freq"'), true);
+  assert.doesNotMatch(reminded, /form-advanced__hint">[^<]*reminders\.sectionTitle/, 'the hint only names what is behind it');
+});
+
+// Die Auswahl "wer hat es getan" beim Abhaken (#1205). Sie hat keinen eigenen
+// Dialog: sie ist ein zweites Ziel in der Zeile, und die ganze Entscheidung
+// liegt darin, WANN es ueberhaupt dasteht.
+const BEA = { id: 2, display_name: 'Bea', avatar_color: '#222222', username: 'bea' };
+const OPEN_TASK = { id: 7, title: 'Spuelmaschine', status: 'open' };
+
+test('tasks: the doer picker offers every member and carries the task in its panel id', () => {
+  setHouseholdSize(2);
+  tasks.state.users = [ANNA, BEA];
+  const html = tasks.renderDoerPicker(OPEN_TASK, false, false);
+  assert.match(html, /id="task-doer-7"/, 'das Panel traegt die Aufgabe, nicht der Eintrag');
+  assert.deepEqual([...html.matchAll(/data-action="pick-doer" data-id="(\d+)"/g)].map((m) => Number(m[1])),
+    [ANNA.id, BEA.id]);
+});
+
+test('tasks: a solo household never sees the doer picker', () => {
+  setHouseholdSize(1);
+  tasks.state.users = [ANNA];
+  assert.equal(tasks.renderDoerPicker(OPEN_TASK, false, false), '');
+});
+
+test('tasks: a household of two with only one known member still sees no doer picker', () => {
+  // Die Haushaltsgroesse sagt "zwei", die geladene Mitgliederliste kennt eine
+  // Person - ein Menue mit genau einem Eintrag beantwortet keine Frage.
+  setHouseholdSize(2);
+  tasks.state.users = [ANNA];
+  assert.equal(tasks.renderDoerPicker(OPEN_TASK, false, false), '');
+});
+
+test('tasks: a task that is already done or filed away offers no doer picker', () => {
+  // Benannt wird am UEBERGANG nach erledigt, und der ist hier vorbei. Ein
+  // Menue, das nichts mehr aendern kann, waere ein Versprechen ohne Deckung.
+  setHouseholdSize(2);
+  tasks.state.users = [ANNA, BEA];
+  assert.equal(tasks.renderDoerPicker(OPEN_TASK, true, false), '');
+  assert.equal(tasks.renderDoerPicker(OPEN_TASK, false, true), '');
+});
+
+// Mobil verlaesst die Personenwahl die Zeile (R9 M1, tasks.css) - sie bleibt
+// ueber Long-Press und Kontextmenue erreichbar (wireDoerContextMenu). Gemessen
+// wird die Geste an einer kleinen Liste mit Listener-Registry: ob das Panel
+// aufgeht, WANN, und ob der Klick danach die Zeile noch erreicht.
+function doerList() {
+  const listeners = {};
+  const panel = {
+    open: false, shown: 0,
+    matches(sel) { return sel === ':popover-open' && this.open; },
+    showPopover() { this.open = true; this.shown += 1; },
+  };
+  const card = { querySelector: (sel) => (sel.startsWith('.popover-menu') ? panel : null) };
+  const target = { closest: (sel) => (sel === '.task-card' ? card : null) };
+  const list = {
+    addEventListener(type, fn, opts) {
+      (listeners[type] ??= []).push({ fn, capture: opts === true || Boolean(opts?.capture) });
+    },
+  };
+  const fire = (type, extra = {}) => {
+    const ev = {
+      type, target, clientX: 10, clientY: 10, pointerType: 'touch', button: 0,
+      defaultPrevented: false, stopped: false,
+      preventDefault() { this.defaultPrevented = true; },
+      stopImmediatePropagation() { this.stopped = true; },
+      ...extra,
+    };
+    for (const { fn } of [...(listeners[type] ?? [])].sort((a, b) => Number(b.capture) - Number(a.capture))) {
+      if (ev.stopped) break;
+      fn(ev);
+    }
+    return ev;
+  };
+  return { list, panel, fire };
+}
+
+test('tasks: a long press on a row opens the doer menu after release and keeps the tap to itself', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  tasks.state.bulkSelectMode = false;
+  const { list, panel, fire } = doerList();
+  tasks.wireDoerContextMenu(list);
+
+  fire('pointerdown');
+  t.mock.timers.tick(600);
+  assert.equal(panel.shown, 0, 'waehrend des Drucks noch nicht - das Light-Dismiss schloesse es beim Loslassen');
+  fire('pointerup');
+  t.mock.timers.tick(1);
+  assert.equal(panel.shown, 1, 'nach dem Loslassen steht die Frage');
+  const click = fire('click');
+  assert.equal(click.defaultPrevented, true, 'der Klick des Drucks hakt nicht ab und oeffnet kein Detail');
+});
+
+test('tasks: a short tap, a scroll or a held mouse button never opens the doer menu', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  tasks.state.bulkSelectMode = false;
+  const { list, panel, fire } = doerList();
+  tasks.wireDoerContextMenu(list);
+
+  fire('pointerdown'); t.mock.timers.tick(200); fire('pointerup'); t.mock.timers.tick(600);
+  assert.equal(panel.shown, 0, 'ein Tipp ist ein Tipp');
+  assert.equal(fire('click').defaultPrevented, false, 'und sein Klick erreicht die Zeile');
+
+  fire('pointerdown'); fire('pointermove', { clientX: 40 }); t.mock.timers.tick(600); fire('pointerup'); t.mock.timers.tick(1);
+  assert.equal(panel.shown, 0, 'wer wischt oder scrollt, fragt nicht nach der Person');
+
+  fire('pointerdown', { pointerType: 'mouse' }); t.mock.timers.tick(600); fire('pointerup', { pointerType: 'mouse' }); t.mock.timers.tick(1);
+  assert.equal(panel.shown, 0, 'mit der Maus ist Halten Markieren - sie hat ihr Kontextmenue');
+});
+
+test('tasks: the context menu (right click, menu key) opens the same doer panel', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  tasks.state.bulkSelectMode = false;
+  const { list, panel, fire } = doerList();
+  tasks.wireDoerContextMenu(list);
+
+  const ev = fire('contextmenu');
+  assert.equal(ev.defaultPrevented, true, 'das Systemmenue weicht');
+  assert.equal(panel.shown, 1, 'ohne laufenden Druck (Menue-Taste) sofort');
+
+  panel.open = false;
+  fire('pointerdown', { pointerType: 'mouse', button: 2 });
+  fire('contextmenu');
+  assert.equal(panel.shown, 1, 'waehrend eines Rechtsklicks erst nach dem Loslassen');
+  fire('pointerup', { pointerType: 'mouse', button: 2 }); t.mock.timers.tick(1);
+  assert.equal(panel.shown, 2);
+  assert.equal(fire('click').defaultPrevented, false,
+    'ein Rechtsklick hinterlaesst keinen Riegel, der den naechsten echten Klick schluckt');
+});
+
+test('tasks: in select mode a long press selects, it does not ask for a person', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  tasks.state.bulkSelectMode = true;
+  try {
+    const { list, panel, fire } = doerList();
+    tasks.wireDoerContextMenu(list);
+    fire('pointerdown'); t.mock.timers.tick(600); fire('pointerup'); t.mock.timers.tick(1);
+    fire('contextmenu');
+    assert.equal(panel.shown, 0);
+  } finally {
+    tasks.state.bulkSelectMode = false;
+  }
+});
+
+// --------------------------------------------------------------------------
+// Dienstplan
+// --------------------------------------------------------------------------
+
+test('schedule: a new form does not offer its default owner when that account may not own a plan', () => {
+  // Das eigene Konto einer Hauskraft ohne Plan ist der Vorgabewert eines neuen
+  // Formulars (selectedOwner()) - POST /schedule/patterns lehnt es ab.
+  schedule.setOwnerContext({ users: [ANNA, CLARA], people: [ANNA], me: CLARA.id, mayManageOthers: false });
+  assert.deepEqual(optionIds(schedule.userOptions(CLARA.id)), []);
+});
+
+test('schedule: members and existing plan owners stay on offer', () => {
+  schedule.setOwnerContext({
+    users: [ANNA, CLARA], people: [ANNA], patterns: [{ id: 5, user_id: CLARA.id }], me: ANNA.id, mayManageOthers: true,
+  });
+  assert.deepEqual(optionIds(schedule.userOptions(ANNA.id)), [ANNA.id, CLARA.id]);
+});
+
+// --------------------------------------------------------------------------
+// Formulare, deren fehlendes Feld beim Speichern einen gespeicherten Wert
+// aendert, und Anzeigen, die Namen gespeicherter Verweise aufloesen
+// --------------------------------------------------------------------------
+
+const { __test: calendar } = await import('../public/pages/calendar.js');
+const { __test: documents } = await import('../public/pages/documents.js');
+const { __test: dashboard } = await import('../public/pages/dashboard.js');
+
+test('calendar: editing an event keeps its stored visibility in the form when at most one member is listed', () => {
+  // state.users (aus /family/members) ist hier leer - wie in jedem Haushalt,
+  // dessen Liste hoechstens ein Mitglied hat. Der Speicherpfad liest
+  // "#modal-visibility?.value || 'all'": fehlt das Feld, wird jeder private
+  // Termin beim Speichern fuer alle sichtbar.
+  const html = calendar.buildEventModalContent({
+    mode: 'edit',
+    event: {
+      id: 7, title: 'Arzt', start_datetime: '2030-05-01T10:00', end_datetime: '2030-05-01T11:00',
+      visibility: 'private', assigned_users: [CLARA],
+    },
+  });
+  const select = html.match(/<select[^>]*id="modal-visibility"[\s\S]*?<\/select>/);
+  assert.ok(select, 'the visibility field is part of the form');
+  assert.match(select[0], /<option value="private"\s+selected/, 'and it carries the stored value');
+});
+
+/** Die Seite laedt Mitglieder und Kontenverzeichnis ueber die echte loadMembers(). */
+async function loadDocumentPeople() {
+  globalThis.__apiStub = {
+    get: async (path) => {
+      if (path === '/family/members') return { data: [ANNA] };
+      if (path === '/auth/users') return { data: [ANNA, CLARA] };
+      return { data: null };
+    },
+  };
+  try {
+    await documents.loadMembers();
+  } finally {
+    delete globalThis.__apiStub;
+  }
+}
+
+test('documents: a stored grant for a non-member stays on offer and checked', async () => {
+  // Der Speicherpfad baut allowed_member_ids aus den angehakten Kaestchen:
+  // ein Kaestchen, das fehlt, entzieht beim Speichern den Zugriff.
+  await loadDocumentPeople();
+  const html = documents.memberOptions([CLARA.id]);
+  const boxes = [...html.matchAll(/<input type="checkbox" value="(\d+)"\s*(checked)?/g)].map((m) => [Number(m[1]), Boolean(m[2])]);
+  assert.deepEqual(boxes, [[ANNA.id, false], [CLARA.id, true]]);
+  assert.match(html, /<span>Clara<\/span>/, 'the grant is shown by name');
+});
+
+test('budget: the responsible filter chip names a stored non-member responsible', () => {
+  // Der Filter kommt aus dem Avatar-Stapel einer Buchung, die Clara nennt.
+  const entries = [{ id: 1, responsible_users: [CLARA] }];
+  assert.equal(budget.responsibleFilterName(CLARA.id, { members: [ANNA], entries }), 'Clara');
+  assert.equal(budget.responsibleFilterName(ANNA.id, { members: [ANNA], entries }), 'Anna');
+});
+
+test('documents: without stored grants only members are offered', async () => {
+  await loadDocumentPeople();
+  const html = documents.memberOptions([]);
+  assert.deepEqual([...html.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1])), [ANNA.id]);
+});
+
+test('dashboard: the schedule slice brings the names of every plan owner, and the tile shows them', async () => {
+  // Clara (Hauspersonal) hat einen bestehenden Plan; data.users der Kachel
+  // kommt aus der strengen Mitgliederliste und kennt sie nicht.
+  globalThis.__apiStub = {
+    get: async (path) => {
+      if (path.startsWith('/schedule/entries')) {
+        return { data: { entries: [{ user_id: CLARA.id, date_key: '2030-05-01', source: 'pattern', shift_type: { id: 1, name: 'Frueh', short_code: 'F', color: '#123456' } }] } };
+      }
+      if (path === '/schedule/shift-types') return { data: [{ id: 1 }] };
+      if (path === '/auth/users') return { data: [ANNA, CLARA] };
+      return { data: null };
+    },
+  };
+  try {
+    const slice = await dashboard.loadScheduleSlice('2030-05-01');
+    const html = dashboard.renderScheduleWidget(slice, [ANNA], '1x2');
+    assert.match(html, /class="schedule-widget-row__name">Clara</, 'the row of a stored plan owner carries a name');
+  } finally {
+    delete globalThis.__apiStub;
+  }
+});
+
+test('budget: the responsible filter chip keeps its name after a month change', () => {
+  // Der Filter wird am Avatar einer Buchung gesetzt, die Clara nennt. Im
+  // naechsten Monat nennt keine Buchung sie mehr, und die Mitgliederliste kennt
+  // sie nicht - der Filter bleibt aktiv, der Chip darf nicht leer werden.
+  const view = { members: [ANNA], entries: [{ id: 1, responsible_users: [CLARA] }], responsibleFilterId: null };
+  budget.toggleResponsibleFilter(view, CLARA.id);
+  view.entries = [{ id: 2, responsible_users: [ANNA] }];
+  assert.equal(view.responsibleFilterId, CLARA.id, 'the filter stays active');
+  assert.equal(budget.responsibleFilterLabel(view), 'Clara');
+  budget.toggleResponsibleFilter(view, CLARA.id);
+  assert.equal(view.responsibleFilterId, null, 'the same person again clears the filter');
+});
+
+const { __test: health } = await import('../public/pages/health.js');
+const BEN = { id: 2, display_name: 'Ben', avatar_color: '#222222', username: 'ben' };
+
+test('health: a signed-in account that is not a member sees its own name on the person switcher', async () => {
+  // Gelesen und geschrieben wird unter personId = eigenes Konto; die Liste aus
+  // /family/members kennt ein angemeldetes Konto, das kein Mitglied ist, nicht.
+  globalThis.__apiStub = { get: async (path) => (path === '/family/members' ? { data: [ANNA, BEN] } : { data: null }) };
+  try {
+    const view = { members: [], personId: null, meId: CLARA.id };
+    await health.loadHealthMembers(view, CLARA);
+    assert.equal(view.personId, CLARA.id);
+    const html = health.personSwitcherMarkup(view.members, view.personId, view.meId, { menuId: 'm', label: 'Person' });
+    assert.match(html, /class="health-person-switcher__name">Clara · health\.vitals\.you</, 'the switcher names the person whose data is shown');
+
+    const member = { members: [], personId: null, meId: ANNA.id };
+    await health.loadHealthMembers(member, ANNA);
+    assert.deepEqual(member.members.map((person) => person.id), [ANNA.id, BEN.id], 'a member is listed once, as before');
+  } finally {
+    delete globalThis.__apiStub;
+  }
+});
+
+const { setOtherReaders } = await import('../public/utils/household.js');
+
+/** Ist die form-group um das Feld mit diesem Merkmal verborgen? */
+function fieldGroupHidden(html, marker) {
+  const at = html.indexOf(marker);
+  assert.ok(at > 0, `the field ${marker} is rendered`);
+  const groupStart = html.lastIndexOf('<div class="form-group"', at);
+  const tag = html.slice(groupStart, html.indexOf('>', groupStart) + 1);
+  return /\shidden(\s|>)/.test(tag);
+}
+
+test('privacy: with one member, the protective fields stay while another account can read the module', () => {
+  // Ein Haushalt aus einem Mitglied und Personal, das Aufgaben, Dokumente und
+  // den Kalender lesen kann: ein neuer Eintrag ohne Sichtbarkeitsfeld bliebe
+  // bei "alle" und waere fuer das Personal lesbar.
+  setHouseholdSize(1);
+  const event = { id: 8, title: 'Arzt', start_datetime: '2030-05-01T10:00', end_datetime: '2030-05-01T11:00', visibility: 'all', assigned_users: [] };
+  const render = () => ({
+    task: tasks.renderModalContent({ task: null, users: [ANNA] }),
+    document: documents.documentVisibilityFieldHtml(null),
+    event: calendar.buildEventModalContent({ mode: 'edit', event }),
+  });
+  try {
+    setOtherReaders(['calendar', 'documents', 'tasks']);
+    let html = render();
+    assert.equal(fieldGroupHidden(html.task, 'id="task-visibility"'), false, 'task visibility');
+    assert.equal(fieldGroupHidden(html.task, 'id="task-locked"'), false, 'task lock');
+    assert.equal(fieldGroupHidden(html.document, 'id="document-visibility"'), false, 'document visibility');
+    assert.equal(fieldGroupHidden(html.event, 'id="modal-visibility"'), false, 'event visibility');
+
+    setOtherReaders([]);
+    html = render();
+    assert.equal(fieldGroupHidden(html.task, 'id="task-visibility"'), true, 'nobody else reads: task visibility hidden as before');
+    assert.equal(fieldGroupHidden(html.task, 'id="task-locked"'), true, 'task lock hidden as before');
+    assert.equal(fieldGroupHidden(html.document, 'id="document-visibility"'), true, 'document visibility hidden as before');
+    assert.equal(fieldGroupHidden(html.event, 'id="modal-visibility"'), true, 'event visibility hidden as before');
+  } finally {
+    setOtherReaders([]);
+  }
+});
+
+const { __test: icsSettings } = await import('../public/settings/pages/personal-calendar-subscriptions.js');
+
+test('settings: saving a calendar subscription keeps a stored assignee that is not on offer', () => {
+  // Die Optionen laden asynchron nach. Steht die gespeicherte Zuweisung nicht
+  // darunter - die Liste laedt noch, oder das Laden ist fehlgeschlagen -, zeigt
+  // die Auswahl "niemand", und Speichern von Name oder Farbe truege das ein.
+  const select = (value, ...ids) => ({ value, options: [{ value: '' }, ...ids.map((id) => ({ value: String(id) }))] });
+  assert.deepEqual(icsSettings.assigneePatch(select('', ANNA.id), CLARA.id), {},
+    'the field stays out of the request, so the server keeps the stored assignee');
+  assert.deepEqual(icsSettings.assigneePatch(select(String(CLARA.id), ANNA.id, CLARA.id), CLARA.id), { default_assignee_user_id: CLARA.id });
+  assert.deepEqual(icsSettings.assigneePatch(select('', ANNA.id, CLARA.id), CLARA.id), { default_assignee_user_id: null },
+    'removing an assignee who is on offer still works');
+  assert.deepEqual(icsSettings.assigneePatch(select(String(ANNA.id), ANNA.id), null), { default_assignee_user_id: ANNA.id });
+});
+
+// --------------------------------------------------------------------------
+// "Nur ich" mit zugewiesenen Personen - Aufgaben-Dialog
+//
+// Dieselbe Regel wie im Termin-Dialog (test:calendar-sync-target-hint): wer
+// zugewiesen ist, sieht einen privaten Eintrag nicht. Der Dialog sagt es und
+// laesst Zuweisung und Sichtbarkeit stehen. Das Markup kommt aus
+// `renderModalContent`, verdrahtet wird ueber `wireTaskForm` - ein Doppel, das
+// fuer jeden unbekannten Selektor `null` liefert, an dem die uebrigen
+// Verdrahtungen aussteigen.
+// --------------------------------------------------------------------------
+
+function taskVisibilityForm({ visibility = 'all', assigned = [], task = null } = {}) {
+  const html = tasks.renderModalContent({ task, users: [ANNA, BEN] });
+  const group = /<select class="input" id="task-visibility"[\s\S]*?<\/div>/.exec(html)?.[0];
+  assert.ok(group, 'the task dialog has a visibility select');
+  const el = (extra = {}) => ({
+    listeners: {},
+    addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+    fire(type) { for (const fn of this.listeners[type] ?? []) fn(); },
+    ...extra,
+  });
+  const details = { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
+  const nodes = {
+    '#task-visibility': el({ value: visibility }),
+    '.user-ms[data-ms-name="task_assigned"]': el(),
+  };
+  for (const [, id, hidden, key] of group.matchAll(/<p class="task-field-hint field-hint--warn" id="([\w-]+)" role="status"( hidden)?>[\s\S]*?<span>([^<]*)<\/span><\/p>/g)) {
+    nodes[`#${id}`] = el({ hidden: Boolean(hidden), textContent: key, closest: (sel) => (sel === 'details' ? details : null) });
+  }
+  const form = { nodes, details, assigned: [...assigned] };
+  globalThis.__getSelectedUserIds = () => form.assigned;
+  const panel = { querySelector: (sel) => nodes[sel] ?? null, querySelectorAll: () => [], addEventListener: () => {} };
+  tasks.wireTaskForm(panel, { task });
+  form.pick = (value) => { nodes['#task-visibility'].value = value; nodes['#task-visibility'].fire('change'); };
+  form.assign = async (ids) => {
+    form.assigned = ids;
+    nodes['.user-ms[data-ms-name="task_assigned"]'].fire('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  form.warn = (id) => {
+    assert.ok(nodes[id], `${id} is in the dialog markup`);
+    return nodes[id];
+  };
+  return form;
+}
+
+test('task dialog: "only me" with an assigned person says they will not see the entry', async () => {
+  const PRIVATE_ASSIGNED = '#task-visibility-private-warning';
+  const NOBODY = '#task-visibility-warning';
+  try {
+    const form = taskVisibilityForm({ assigned: [BEN.id] });
+    assert.equal(form.warn(PRIVATE_ASSIGNED).hidden, true, 'nothing to say while everyone sees it');
+    assert.equal(form.warn(PRIVATE_ASSIGNED).textContent, 'common.visibility.privateAssignedHint');
+
+    form.pick('private');
+    assert.equal(form.warn(PRIVATE_ASSIGNED).hidden, false, 'private with a person: the hint shows');
+    assert.equal(form.warn(NOBODY).hidden, true, 'the nobody-assigned warning is a different case');
+    assert.equal(form.details.attrs.open, '', 'the section the hint lives in opens');
+
+    await form.assign([]);
+    assert.equal(form.warn(PRIVATE_ASSIGNED).hidden, true, 'private with nobody: no hint');
+    await form.assign([BEN.id]);
+    assert.equal(form.warn(PRIVATE_ASSIGNED).hidden, false, 'assigning follows');
+
+    for (const value of ['assignees', 'all']) {
+      form.pick(value);
+      assert.equal(form.warn(PRIVATE_ASSIGNED).hidden, true, value);
+      assert.equal(form.warn(NOBODY).hidden, true, value);
+    }
+    assert.deepEqual(form.assigned, [BEN.id], 'the dialog warns, it does not clear the assignment');
+  } finally {
+    delete globalThis.__getSelectedUserIds;
+  }
+});
+
+test('task dialog: whoever created the entry does not count as an assigned person who cannot see it', async () => {
+  const PRIVATE_ASSIGNED = '#task-visibility-private-warning';
+  const vorher = tasks.state.currentUserId;
+  const TASK = { id: 5, title: 'Geschenk', status: 'open', priority: 'none', visibility: 'private' };
+  try {
+    // Neue Aufgabe: Ersteller ist das angemeldete Konto.
+    tasks.state.currentUserId = ANNA.id;
+    const own = taskVisibilityForm({ visibility: 'private', assigned: [ANNA.id] });
+    assert.equal(own.warn(PRIVATE_ASSIGNED).hidden, true, 'only the creator is assigned: no hint');
+    await own.assign([ANNA.id, BEN.id]);
+    assert.equal(own.warn(PRIVATE_ASSIGNED).hidden, false, 'creator plus another person: the hint shows');
+
+    // Bearbeiten: es zaehlt created_by der Aufgabe, nicht wer bearbeitet.
+    const foreign = taskVisibilityForm({ visibility: 'private', assigned: [ANNA.id], task: { ...TASK, created_by: BEN.id } });
+    assert.equal(foreign.warn(PRIVATE_ASSIGNED).hidden, false, 'the editor is assigned but did not create it: the hint shows');
+    tasks.state.currentUserId = BEN.id;
+    const theirs = taskVisibilityForm({ visibility: 'private', assigned: [ANNA.id], task: { ...TASK, created_by: ANNA.id } });
+    assert.equal(theirs.warn(PRIVATE_ASSIGNED).hidden, true, 'the creator is assigned, someone else edits: no hint');
+  } finally {
+    tasks.state.currentUserId = vorher;
+    delete globalThis.__getSelectedUserIds;
+  }
+});
+
+// R19 (Critique 2026-10-16, Termin-Dialog mobil 1,6 Bildschirme): der geteilte
+// Nachname steht nicht in jedem Chip. "Alex Johnson ... Linda Johnson" brauchte
+// bei 390px drei Chip-Zeilen; der Vorname reicht, wenn ALLE ihn teilen, und der
+// volle Name bleibt der zugaengliche Name des Chips.
+test('R19: tragen alle denselben Nachnamen, zeigt der Chip den Vornamen - der volle Name bleibt im Namen', async () => {
+  const { sharedSurname } = await import('../public/components/user-multi-select.js');
+  const family = [
+    { id: 1, display_name: 'Alex Johnson' }, { id: 2, display_name: 'Leo Johnson' }, { id: 3, display_name: 'Linda Johnson' },
+  ];
+  assert.equal(sharedSurname(family), 'Johnson');
+  assert.equal(sharedSurname([...family, { id: 4, display_name: 'Maria Silva' }]), '', 'wer anders heisst, unterscheidet - dann bleiben alle Namen voll');
+  assert.equal(sharedSurname([{ id: 1, display_name: 'Anna' }, { id: 2, display_name: 'Ben' }]), '', 'Vornamen allein haben keinen Nachnamen');
+  assert.equal(sharedSurname([family[0]]), '', 'eine Person allein kuerzt nichts');
+  const html = renderUserMultiSelect(family, [], 'x', 'calendar.assignedLabel');
+  assert.match(html, /<span class="user-ms__name">Alex<span class="sr-only"> Johnson<\/span><\/span>/);
+  const mixed = renderUserMultiSelect([...family, { id: 4, display_name: 'Maria Silva' }], [], 'x', 'calendar.assignedLabel');
+  assert.match(mixed, /<span class="user-ms__name">Alex Johnson<\/span>/);
+  assert.match(renderUserMultiSelect([{ id: 1, display_name: 'A <b> Johnson' }, { id: 2, display_name: 'B Johnson' }], [], 'x', 'l'),
+    /<span class="user-ms__name">A &lt;b&gt;<span class="sr-only"> Johnson<\/span>/, 'escaped');
+});

@@ -1,0 +1,913 @@
+import { api } from '/api.js';
+import { formatDate, formatTime, getLocale, t } from '/i18n.js';
+import { esc } from '/utils/html.js';
+import { weekStartIndex, weekdayOrder } from '/utils/date.js';
+import { bindInstantSwitch, settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
+import { wireTablist } from '/utils/tablist.js';
+import { attachSegmentIndicator } from '/utils/segment-indicator.js';
+import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
+
+// Wochenstart-Optionen; Labels aus dem bestehenden Kalender-i18n (kein neuer
+// Übersetzungsbedarf für die Wochentagsnamen).
+const WEEK_START_OPTIONS = [
+  { value: 'monday', labelKey: 'calendar.dayLongMonday' },
+  { value: 'sunday', labelKey: 'calendar.dayLongSunday' },
+  { value: 'saturday', labelKey: 'calendar.dayLongSaturday' },
+];
+const VALID_WEEK_STARTS = WEEK_START_OPTIONS.map((o) => o.value);
+const DAY_NAMES_SHORT = () => [
+  t('calendar.dayShortSunday'), t('calendar.dayShortMonday'), t('calendar.dayShortTuesday'),
+  t('calendar.dayShortWednesday'), t('calendar.dayShortThursday'), t('calendar.dayShortFriday'),
+  t('calendar.dayShortSaturday'),
+];
+
+// Sieben Mini-Zellen in der Reihenfolge des gewählten Wochenstarts; die erste
+// Zelle ist hervorgehoben, damit die Wahl sofort sichtbar wird.
+function weekStartPreviewHtml(weekStart) {
+  const names = DAY_NAMES_SHORT();
+  return weekdayOrder(weekStartIndex(weekStart)).map((idx, pos) => (
+    `<span class="week-start-preview__cell${pos === 0 ? ' week-start-preview__cell--start' : ''}">${esc(names[idx])}</span>`
+  )).join('');
+}
+
+function formatSyncTime(value) {
+  if (!value) return t('settings.holidayNeverSynced');
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return t('settings.holidayNeverSynced');
+  return t('settings.holidayLastSync', {
+    date: `${formatDate(date)} ${formatTime(date)}`.trim(),
+  });
+}
+
+const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
+
+function durationOptionLabel(minutes) {
+  return t('settings.calendarDurationMinutes', { count: minutes });
+}
+
+// Die per-user-Vorgaben für neue Termine (#497) sitzen in `personal-calendar`:
+// `calendar_default_reminders` und `calendar_default_assign_me` schreiben per
+// `cfgUserSet`, hinter diesem adminOnly-Blatt kam kein Mitglied an sie heran
+// (Critique 2026-07-27). Hier bleibt, was haushaltweit gilt.
+// Die Termin-Vorgaben stehen seit R10 im selben Blatt, unter "Fuer mich".
+const PERSONAL_CALENDAR_PATH = '/settings/modules/calendar?section=personal-calendar';
+// #965: ein Verweis auf externe ICS-Feeds (fuer Laender ohne eigene Liste)
+// gehoert bewusst NICHT hierher - dieses Blatt haelt sich per `test-frontend-
+// audit.js` ausdruecklich von jeder Erwaehnung des per-Nutzer-Abo-Blatts frei
+// (eigener Zustaendigkeitsbereich). Der Hinweis lebt stattdessen dort.
+
+function renderPage(container, preferences) {
+  const currentDuration = Number(preferences.calendar_default_duration) || 60;
+  const currentWeekStart = VALID_WEEK_STARTS.includes(preferences.week_start)
+    ? preferences.week_start
+    : 'monday';
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.calendarSectionEvents')}</h2>
+      <!-- Zeilen statt je einer Karte (R17, E9). Die Zeile heisst wie die
+           fruehere Karte ("Standard-Termindauer", der Suchtreffer); das Feld
+           darin hiess nur "Dauer". -->
+      <div class="row-carrier settings-group">
+        ${settingRowHtml({
+          label: t('settings.calendarDurationTitle'),
+          labelFor: 'calendar-default-duration',
+          description: t('settings.calendarDurationDescription'),
+          descriptionId: 'calendar-default-duration-hint',
+          control: `<select class="form-input" id="calendar-default-duration" aria-describedby="calendar-default-duration-hint">
+            ${DURATION_OPTIONS.map((m) => `<option value="${m}"${m === currentDuration ? ' selected' : ''}>${esc(durationOptionLabel(m))}</option>`).join('')}
+          </select>`,
+        })}
+      </div>
+      <p class="form-hint settings-group__footer">
+        ${t('settings.calendarPersonalDefaultsHint')}
+        <a href="${PERSONAL_CALENDAR_PATH}" id="calendar-personal-link">${t('settings.pageCalendarDefaults')}</a>
+      </p>
+    </section>
+
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.calendarSectionView')}</h2>
+      <div class="row-carrier settings-group">
+        <!-- Das Segment der Shell (.segmented, panel.css), wie das Theme -
+             genau einer von drei Werten gilt. -->
+        ${settingRowHtml({
+          stacked: true,
+          label: t('settings.weekStartTitle'),
+          labelId: 'week-start-label',
+          description: t('settings.weekStartDescription'),
+          control: `<div class="segmented settings-segmented" id="week-start-toggle" role="radiogroup" aria-labelledby="week-start-label">
+            ${WEEK_START_OPTIONS.map((o) => {
+              const on = o.value === currentWeekStart;
+              return `
+              <button type="button" class="segmented__item${on ? ' is-active' : ''}" role="radio"
+                data-tab-id="${o.value}" aria-checked="${on}" tabindex="${on ? '0' : '-1'}">
+                ${t(o.labelKey)}
+              </button>`;
+            }).join('')}
+          </div>
+          <div class="week-start-preview" id="week-start-preview" aria-hidden="true">
+            ${weekStartPreviewHtml(currentWeekStart)}
+          </div>`,
+        })}
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2 class="settings-section__title">${t('settings.sectionHolidays')}</h2>
+      <div class="settings-card">
+        <h3 class="settings-card__title">${t('settings.holidayTitle')}</h3>
+        <p class="settings-card-description">${t('settings.holidayDescription')}</p>
+
+        <form class="settings-form settings-form--compact" id="holidays-form" novalidate autocomplete="off">
+          ${/* EIN FORMULAR-DIALEKT (R19, Einstellungen B7): Land, Region,
+               Gruppe, die beiden Schalter und ihre Farben als Zeilen der
+               Gruppe statt Auswahlen unter ihren Etiketten. */ ''}
+          <div class="row-carrier settings-group">
+            ${settingRowHtml({
+              label: t('settings.holidayCountryLabel'), labelFor: 'holiday-country',
+              control: `<select class="form-input" id="holiday-country" disabled>
+                <option value="">${t('settings.holidayCountryPlaceholder')}</option>
+              </select>`,
+              extra: `<p class="form-hint" id="holiday-au-observance-hint" hidden>${t('settings.holidayAustraliaObservanceHint')}</p>`,
+            })}
+            ${settingRowHtml({
+              label: t('settings.holidaySubdivisionLabel'), labelFor: 'holiday-subdivision',
+              control: `<select class="form-input" id="holiday-subdivision" disabled>
+                <option value="">${t('settings.holidaySubdivisionNone')}</option>
+              </select>`,
+            })}
+            ${settingRowHtml({
+              label: t('settings.holidayGroupLabel'), labelFor: 'holiday-group',
+              description: t('settings.holidayGroupHint'),
+              attrs: { id: 'holiday-group-group', hidden: true },
+              control: `<select class="form-input" id="holiday-group" disabled>
+                <option value="">${t('settings.holidayGroupNone')}</option>
+              </select>`,
+            })}
+            ${settingSwitchRowHtml({
+              label: t('settings.holidayPublicLabel'),
+              checked: !!preferences.holiday_show_public,
+              attrs: { id: 'holiday-show-public', 'data-instant-save': true },
+            })}
+            ${settingRowHtml({
+              label: t('settings.holidayPublicColor'), labelFor: 'holiday-public-color',
+              attrs: { id: 'holiday-public-color-group', hidden: !preferences.holiday_show_public },
+              control: `<input class="form-input" type="color" id="holiday-public-color" value="${esc(preferences.holiday_public_color)}">`,
+            })}
+            ${settingSwitchRowHtml({
+              label: t('settings.holidaySchoolLabel'),
+              checked: !!preferences.holiday_show_school,
+              attrs: { id: 'holiday-show-school', 'data-instant-save': true },
+              extra: `<p class="form-hint" id="holiday-school-unavailable-hint" hidden>${t('settings.holidaySchoolUnavailable')}</p>`,
+            })}
+            ${settingRowHtml({
+              label: t('settings.holidaySchoolColor'), labelFor: 'holiday-school-color',
+              attrs: { id: 'holiday-school-color-group', hidden: !preferences.holiday_show_school },
+              control: `<input class="form-input" type="color" id="holiday-school-color" value="${esc(preferences.holiday_school_color)}">`,
+            })}
+          </div>
+          <div id="holidays-form-error" class="form-error" role="alert" hidden></div>
+          <div class="settings-form-actions">
+            <button type="submit" class="btn btn--primary">${t('settings.holidaySaveBtn')}</button>
+          </div>
+        </form>
+
+        <div class="settings-sync-info">
+          <span class="form-label" id="holiday-last-sync-label">
+            ${formatSyncTime(preferences.holiday_last_sync)}
+          </span>
+          <button type="button" class="btn btn--secondary btn--sm" id="holiday-sync-btn">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i>
+            ${t('settings.holidaySyncBtn')}
+          </button>
+        </div>
+      </div>
+    </section>
+  `);
+}
+
+function appendOptions(select, entries, selectedCode) {
+  for (const entry of entries) {
+    const option = document.createElement('option');
+    option.value = entry.isoCode;
+    option.textContent = entry.name;
+    option.selected = entry.isoCode === selectedCode;
+    select.appendChild(option);
+  }
+}
+
+/**
+ * Eine Auswahlliste in der UI-Sprache sortieren (#1723). Der Server sortiert
+ * nach dem Namen, den ER kennt; sobald die Seite die Namen uebersetzt oder in
+ * einer anderen Sprache anfragt, stimmt dessen Reihenfolge nicht mehr.
+ * Gibt eine neue Liste zurueck, die Eingabe bleibt unberuehrt.
+ */
+export function sortHolidayEntries(entries, locale = getLocale()) {
+  const list = Array.isArray(entries) ? [...entries] : [];
+  let compare = (a, b) => a.localeCompare(b);
+  try {
+    compare = new Intl.Collator([locale]).compare;
+  } catch {
+    // Eine Sprache, die Intl nicht annimmt, kostet die Feinheiten der Sortierung, nicht die Liste.
+  }
+  return list.sort((a, b) => compare(String(a?.name ?? ''), String(b?.name ?? '')));
+}
+
+/**
+ * Die Feiertagslaender in der UI-Sprache (#1723). Der Server liefert englische
+ * Namen (OpenHolidays ohne Sprachwunsch, dazu die lokal berechneten Laender),
+ * die Seite druckte sie in jeder Sprache so. Der Name entsteht hier aus dem
+ * ISO-Code, wie bei Sprachen (personal-appearance.js) und Waehrungen
+ * (currency.js); was Intl nicht benennen kann, behaelt den Namen des Servers.
+ * `fallback: 'none'` ist dafuer noetig: sonst gaebe `of()` fuer ein
+ * unbekanntes Land den Code zurueck und der Servername kaeme nie zum Zug.
+ * Alle uebrigen Felder (`schoolHolidays`) reisen mit.
+ */
+export function localizeHolidayCountries(countries, locale = getLocale()) {
+  let displayNames = null;
+  try {
+    displayNames = new Intl.DisplayNames([locale], { type: 'region', fallback: 'none' });
+  } catch {
+    // Ohne DisplayNames bleiben die Namen des Servers stehen.
+  }
+  const named = (Array.isArray(countries) ? countries : []).map((entry) => {
+    let name = null;
+    try {
+      name = displayNames?.of(entry.isoCode) || null;
+    } catch {
+      // `of()` wirft bei einem Code, der keine Region sein kann.
+    }
+    return name ? { ...entry, name } : { ...entry };
+  });
+  return sortHolidayEntries(named, locale);
+}
+
+export function shouldApplySubdivisionResponse({
+  requestId,
+  latestRequestId,
+  requestedCountry,
+  currentCountry,
+}) {
+  return requestId === latestRequestId && requestedCountry === currentCountry;
+}
+
+export function ensureHolidayLayerSelection({ showPublic, showSchool }) {
+  if (!showPublic && !showSchool) {
+    return { showPublic: true, showSchool: false };
+  }
+  return { showPublic, showSchool };
+}
+
+/**
+ * #965: die lokal berechneten Laender (US/CA/GB/AU/NZ, server-seitig ohne
+ * Datenquelle fuer Schulferien) tragen `schoolHolidays: false` im Land-
+ * Dropdown-Eintrag. Ohne Land oder ohne diesen Eintrag (jedes normale
+ * OpenHolidays-Land) gilt die Ebene als verfuegbar - das Flag ist eine
+ * Ausnahmemarkierung, keine Positivliste.
+ */
+export function countrySchoolHolidaysAvailable(countries, countryCode) {
+  if (!countryCode) return true;
+  const entry = Array.isArray(countries) ? countries.find((c) => c?.isoCode === countryCode) : null;
+  return entry?.schoolHolidays !== false;
+}
+
+/**
+ * #965: fuer ein Land ohne Schulferien-Quelle bleibt der Schalter ehrlich
+ * ausgegraut statt eine Ebene anzubieten, die beim Sync nur leer bliebe.
+ * Serverseitig bleibt der Sync selbst permissiv (ein gespeichertes
+ * holiday_show_school=1 synchronisiert fuer so ein Land einfach nichts) -
+ * diese Sperre ist reine UI-Ehrlichkeit, keine Validierung.
+ *
+ * DER HAKEN WIRD GEMERKT, NICHT NUR GELOESCHT (Review-Fund zu #965). Der
+ * Speichern-Pfad liest `showSchool.checked` woertlich aus dem Formular
+ * (holidayPreferenceData) - bliebe der Haken bei einem gesperrten Land
+ * stehen, wuerde ein Speichern holiday_show_school=1 fuer ein Land ohne
+ * Datenquelle festschreiben. Ihn nur zu loeschen hatte aber die andere
+ * Falle: ein Haushalt mit eingeschalteten Schulferien, der im Dropdown kurz
+ * zu den USA und wieder zurueck blaettert, verlor die Ebene beim naechsten
+ * Speichern, ohne den Schalter je beruehrt zu haben. Also: beim Sperren den
+ * Stand merken und den Haken loeschen, beim Entsperren wiederherstellen -
+ * ein bewusster Klick des Nutzers passiert nur im entsperrten Zustand und
+ * bleibt damit unangetastet.
+ */
+export function createSchoolAvailabilityUpdater({ showSchool, schoolColorGroup, schoolUnavailableHint }) {
+  let gemerkt = null;
+  return (countries, countryCode) => {
+    const available = countrySchoolHolidaysAvailable(countries, countryCode);
+    showSchool.disabled = !available;
+    schoolUnavailableHint.hidden = available;
+    if (!available) {
+      if (gemerkt === null) gemerkt = showSchool.checked;
+      showSchool.checked = false;
+      schoolColorGroup.hidden = true;
+    } else if (gemerkt !== null) {
+      showSchool.checked = gemerkt;
+      schoolColorGroup.hidden = !gemerkt;
+      gemerkt = null;
+    }
+    return available;
+  };
+}
+
+function isHolidayValueResolved(entries, persistedValue) {
+  return !persistedValue ||
+    (Array.isArray(entries) && entries.some((entry) => entry?.isoCode === persistedValue));
+}
+
+export function isHolidayCountryResolved(countries, persistedCountry) {
+  return isHolidayValueResolved(countries, persistedCountry);
+}
+
+export function applyHolidaySubdivisionSelection(discoveryState) {
+  discoveryState.subdivisionReady = true;
+}
+
+export function resolveHolidayLocation({
+  countryReady,
+  subdivisionReady,
+  selectedCountry,
+  selectedSubdivision,
+  persistedCountry,
+  persistedSubdivision,
+}) {
+  const country = countryReady
+    ? selectedCountry || null
+    : persistedCountry || null;
+  const subdivision = subdivisionReady
+    ? selectedSubdivision || null
+    : country === persistedCountry
+      ? persistedSubdivision || null
+      : null;
+
+  return { country, subdivision };
+}
+
+/**
+ * Welche Schulferien-Gruppe gespeichert wird. Solange die Gruppensuche fuer den
+ * gewaehlten Ort nicht bestaetigt ist (sie laeuft noch oder ist gescheitert),
+ * bleibt die gespeicherte Gruppe stehen: ein versteckter, leerer Picker ist
+ * keine Auskunft, dass es keine Gruppe gibt. Sonst loeschte ein kurzer
+ * Netzfehler beim naechsten Speichern still die gewaehlte Gemeinschaft, und alle
+ * belgischen Ferien-Regime kaemen zurueck (Review zu PR #1186). Die gespeicherte
+ * Gruppe gilt nur fuer den Ort, an dem sie gespeichert wurde.
+ */
+export function resolveHolidayGroup({
+  groupReady,
+  pickerShown,
+  selectedGroup,
+  location,
+  persistedCountry,
+  persistedSubdivision,
+  persistedGroup,
+}) {
+  if (!groupReady) {
+    const samePlace = location.country === (persistedCountry || null)
+      && location.subdivision === (persistedSubdivision || null);
+    return samePlace ? persistedGroup || null : null;
+  }
+  // Eine Gruppe gibt es unter einer Subdivision (CH-BE-VS) oder, bei einem Land
+  // ohne Subdivisionen, am Land selbst (BE-FR, D#1182) - dann steht der Picker
+  // sichtbar da, obwohl keine Region gewaehlt ist.
+  return (location.subdivision || pickerShown) ? selectedGroup || null : null;
+}
+
+export async function runHolidayDiscovery(load, onError) {
+  try {
+    return { ok: true, value: await load() };
+  } catch (error) {
+    onError(error);
+    return { ok: false, value: null };
+  }
+}
+
+export async function loadSubdivisions(
+  select,
+  countrySelect,
+  countryCode,
+  selectedCode,
+  requestState,
+) {
+  const requestId = ++requestState.latestRequestId;
+  const noneOption = document.createElement('option');
+  noneOption.value = '';
+  noneOption.textContent = t('settings.holidaySubdivisionNone');
+  select.replaceChildren(noneOption);
+  select.disabled = true;
+  if (!countryCode) return { selectedResolved: true };
+
+  try {
+    // `lang` ist die UI-Sprache: die Regionsnamen kommen vom Server, Intl kennt
+    // sie nicht (#1723). Der Pfad bleibt als Literal am Aufruf stehen, damit
+    // test:frontend-audit den Endpunkt dieses Blatts weiter sieht.
+    const response = await api.get(`/preferences/holidays/subdivisions/${countryCode}?lang=${encodeURIComponent(getLocale())}`);
+    if (!shouldApplySubdivisionResponse({
+      requestId,
+      latestRequestId: requestState.latestRequestId,
+      requestedCountry: countryCode,
+      currentCountry: countrySelect.value,
+    })) {
+      return null;
+    }
+
+    const subdivisions = Array.isArray(response?.data) ? response.data : [];
+    appendOptions(select, sortHolidayEntries(subdivisions), selectedCode);
+    select.disabled = subdivisions.length === 0;
+    return {
+      selectedResolved: isHolidayValueResolved(subdivisions, selectedCode),
+    };
+  } catch (error) {
+    if (shouldApplySubdivisionResponse({
+      requestId,
+      latestRequestId: requestState.latestRequestId,
+      requestedCountry: countryCode,
+      currentCountry: countrySelect.value,
+    })) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+/**
+ * Schulferien-Gruppen einer Subdivision laden und den Picker nur einblenden,
+ * wenn es mindestens zwei Regimes gibt (mehrsprachige Kantone, #434). Bei 0/1
+ * Gruppe bleibt er verborgen, weil keine Mehrdeutigkeit besteht.
+ * `countryLevel`: das Land fuehrt keine Subdivisionen, seine Gruppen haengen am
+ * Land selbst (Belgien, D#1182) - dann wird ohne Subdivision gefragt.
+ * @returns {Promise<boolean|null>} true = fuer diesen Ort bestaetigt (auch "keine
+ *   Gruppe"), false = gescheitert, null = durch eine neuere Anfrage ueberholt.
+ */
+/**
+ * Leert und verbirgt den Gruppen-Picker und ueberholt jede noch laufende
+ * Gruppensuche. Beim Landwechsel SOFORT, nicht erst nach der Regionssuche:
+ * sonst stuende waehrend einer langsamen Anfrage die Gruppe des alten Landes
+ * sichtbar und gueltig neben dem neuen Land (Review zu PR #1186).
+ * @returns {number} die neue Anfrage-Nummer
+ */
+function clearGroupPicker(select, groupContainer, requestState) {
+  const requestId = ++requestState.latestRequestId;
+  const noneOption = document.createElement('option');
+  noneOption.value = '';
+  noneOption.textContent = t('settings.holidayGroupNone');
+  select.replaceChildren(noneOption);
+  select.disabled = true;
+  groupContainer.hidden = true;
+  return requestId;
+}
+
+/**
+ * Soll nach der Regionssuche eines Landwechsels eine Gruppensuche starten?
+ * Nein, wenn inzwischen ein anderes Land gewaehlt ist oder die Antwort ueberholt
+ * wurde - der neuere Wechsel besitzt den Gruppenzustand. Und nein, wenn die
+ * Regionssuche gescheitert ist: dann haelt resolveHolidayLocation() den
+ * gespeicherten Ort, und eine Suche ohne Region wuerde "keine Gruppe"
+ * bestaetigen und die gespeicherte loeschen (Review zu PR #1186).
+ * Am Land gefragt wird nur fuer ein Land mit Schulferien-Quelle: die lokal
+ * berechneten Laender (US, CA, AU, NZ, BR, GB) fuehrt OpenHolidays nicht, eine
+ * Anfrage dort waere ein sicherer Fehlschlag (countrySchoolHolidaysAvailable()).
+ * @returns {{countryLevel: boolean}|null}
+ */
+export function groupLookupAfterSubdivisions({ discovery, requestedCountry, currentCountry, subdivisionCount, schoolHolidaysAvailable = true }) {
+  if (requestedCountry !== currentCountry) return null;
+  if (!discovery.ok || discovery.value === null) return null;
+  return { countryLevel: subdivisionCount === 0 && schoolHolidaysAvailable !== false };
+}
+
+async function loadGroups(
+  select,
+  groupContainer,
+  countryCode,
+  subdivisionCode,
+  selectedCode,
+  requestState,
+  { countryLevel = false } = {},
+) {
+  const requestId = clearGroupPicker(select, groupContainer, requestState);
+
+  if (!countryCode || (!subdivisionCode && !countryLevel)) return true;
+
+  try {
+    const response = subdivisionCode
+      ? await api.get(`/preferences/holidays/groups/${countryCode}/${subdivisionCode}`)
+      : await api.get(`/preferences/holidays/groups/${countryCode}`);
+    // Zwischenzeitlich neu gewählt → verworfene Antwort ignorieren.
+    if (requestId !== requestState.latestRequestId) return null;
+
+    const groups = Array.isArray(response?.data) ? response.data : [];
+    if (groups.length < 2) return true;
+
+    for (const g of groups) {
+      const option = document.createElement('option');
+      option.value = g.code;
+      option.textContent = g.name;
+      option.selected = g.code === selectedCode;
+      select.appendChild(option);
+    }
+    select.disabled = false;
+    groupContainer.hidden = false;
+    return true;
+  } catch {
+    // Gruppen sind optional – Picker bleibt verborgen. Gescheitert ist aber
+    // nicht "keine Gruppe": resolveHolidayGroup() haelt die gespeicherte fest.
+    return requestId === requestState.latestRequestId ? false : null;
+  }
+}
+
+function holidayPreferenceData(container, discoveryState) {
+  const location = resolveHolidayLocation({
+    countryReady: discoveryState.countryReady,
+    subdivisionReady: discoveryState.subdivisionReady,
+    selectedCountry: container.querySelector('#holiday-country')?.value || '',
+    selectedSubdivision: container.querySelector('#holiday-subdivision')?.value || '',
+    persistedCountry: discoveryState.persistedCountry,
+    persistedSubdivision: discoveryState.persistedSubdivision,
+  });
+
+  const groupEl = container.querySelector('#holiday-group');
+
+  return {
+    holiday_country: location.country,
+    holiday_subdivision: location.subdivision,
+    holiday_group: resolveHolidayGroup({
+      groupReady: discoveryState.groupReady,
+      pickerShown: container.querySelector('#holiday-group-group')?.hidden === false,
+      selectedGroup: groupEl?.value || '',
+      location,
+      persistedCountry: discoveryState.persistedCountry,
+      persistedSubdivision: discoveryState.persistedSubdivision,
+      persistedGroup: discoveryState.persistedGroup,
+    }),
+    holiday_show_public: container.querySelector('#holiday-show-public')?.checked ?? false,
+    holiday_show_school: container.querySelector('#holiday-show-school')?.checked ?? false,
+    holiday_public_color: container.querySelector('#holiday-public-color').value,
+    holiday_school_color: container.querySelector('#holiday-school-color').value,
+  };
+}
+
+/**
+ * Feiertage/Schulferien anzeigen: jeder Schalter speichert nur seinen eigenen
+ * Wert. Exportiert fuer test:settings-navigation (als Programm gemessen).
+ */
+export function bindHolidayLayerSwitches({
+  showPublic, showSchool, publicColorGroup, schoolColorGroup, save = savePreferences,
+}) {
+  bindInstantSwitch(showPublic, {
+    save: (on) => save({ holiday_show_public: on }),
+    savedMessage: t('settings.holidaySaved'),
+    onRevert: (on) => { publicColorGroup.hidden = !on; },
+  });
+  bindInstantSwitch(showSchool, {
+    save: (on) => save({ holiday_show_school: on }),
+    savedMessage: t('settings.holidaySaved'),
+    onRevert: (on) => { schoolColorGroup.hidden = !on; },
+  });
+}
+
+function bindWeekStart(container, preferences) {
+  const toggle = container.querySelector('#week-start-toggle');
+  const preview = container.querySelector('#week-start-preview');
+  if (!toggle) return;
+
+  let current = VALID_WEEK_STARTS.includes(preferences.week_start)
+    ? preferences.week_start
+    : 'monday';
+
+  const paintPreview = (value) => {
+    if (!preview) return;
+    preview.replaceChildren();
+    preview.insertAdjacentHTML('beforeend', weekStartPreviewHtml(value));
+  };
+
+  // Rollback per setActive() ruft onChange erneut auf - dieser Merker haelt
+  // den zweiten Aufruf davon ab, den alten Wert gleich wieder zu speichern.
+  let reverting = false;
+  // Geteilte gleitende Kapsel (Re-Critique 2026-09-27, D8).
+  attachSegmentIndicator(toggle);
+  const tablist = wireTablist(toggle, {
+    activeId: current,
+    activeClass: 'is-active',
+    mode: 'select',
+    onChange: async (value) => {
+      paintPreview(value); // optimistisch – Klick fühlt sich sofort an
+      if (reverting || value === current || !VALID_WEEK_STARTS.includes(value)) return;
+      const previous = current;
+      current = value;
+      try {
+        await savePreferences({ week_start: value });
+        // Parität zu date-format-changed/time-format-changed: erlaubt offenen
+        // Ansichten, den Wochenstart ohne Neuladen zu übernehmen.
+        window.dispatchEvent(new CustomEvent('week-start-changed', { detail: { weekStart: value } }));
+        window.yuvomi?.showToast(t('settings.weekStartSaved'), 'success');
+      } catch (error) {
+        current = previous;
+        reverting = true;
+        tablist.setActive(previous); // Rollback bei Fehler
+        reverting = false;
+        window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+      }
+    },
+  });
+}
+
+async function bindEvents(container, preferences) {
+  bindWeekStart(container, preferences);
+
+  container.querySelector('#calendar-personal-link')?.addEventListener('click', (event) => {
+    if (!window.yuvomi?.navigate) return;
+    event.preventDefault();
+    window.yuvomi.navigate(PERSONAL_CALENDAR_PATH);
+  });
+
+  // Instant-Save wie beim Wochenstart – ein einzelner Wert braucht keinen
+  // separaten Speichern-Button (vereinheitlicht die beiden Ansicht-Controls).
+  const durationSelect = container.querySelector('#calendar-default-duration');
+  let persistedDuration = durationSelect?.value;
+  durationSelect?.addEventListener('change', async () => {
+    const minutes = Number(durationSelect.value) || 60;
+    const previous = persistedDuration;
+    persistedDuration = durationSelect.value;
+    durationSelect.disabled = true;
+    try {
+      await savePreferences({ calendar_default_duration: minutes });
+      window.yuvomi?.showToast(t('settings.calendarDurationSaved'), 'success');
+    } catch (error) {
+      persistedDuration = previous;
+      durationSelect.value = previous; // Rollback bei Fehler
+      window.yuvomi?.showToast(error.message || t('common.errorGeneric'), 'danger');
+    } finally {
+      if (durationSelect.isConnected) durationSelect.disabled = false;
+    }
+  });
+
+  const form = container.querySelector('#holidays-form');
+  const countrySelect = container.querySelector('#holiday-country');
+  const subdivisionSelect = container.querySelector('#holiday-subdivision');
+  const groupSelect = container.querySelector('#holiday-group');
+  const groupGroup = container.querySelector('#holiday-group-group');
+  const showPublic = container.querySelector('#holiday-show-public');
+  const showSchool = container.querySelector('#holiday-show-school');
+  const publicColorGroup = container.querySelector('#holiday-public-color-group');
+  const schoolColorGroup = container.querySelector('#holiday-school-color-group');
+  const schoolUnavailableHint = container.querySelector('#holiday-school-unavailable-hint');
+  const auObservanceHint = container.querySelector('#holiday-au-observance-hint');
+  const syncButton = container.querySelector('#holiday-sync-btn');
+  const errorElement = container.querySelector('#holidays-form-error');
+  const subdivisionRequests = { latestRequestId: 0 };
+  const groupRequests = { latestRequestId: 0 };
+  let countriesData = [];
+
+  // Merken-und-Wiederherstellen fuer den Schulferien-Schalter, siehe
+  // createSchoolAvailabilityUpdater (Review-Fund zu #965).
+  const updateSchoolAvailability = createSchoolAvailabilityUpdater({
+    showSchool, schoolColorGroup, schoolUnavailableHint,
+  });
+  const applySchoolAvailability = (countryCode) => {
+    updateSchoolAvailability(countriesData, countryCode);
+    // #965 Review-Fund: Australiens Liste zeigt bewusst die echten
+    // Kalenderdaten - es gibt kein Bundesgesetz fuer Ersatztage, jeder
+    // Bundesstaat regelt eigene (Begruendung beim AU-Regelsatz im Server).
+    // Sichtbar wird das z. B. Weihnachten 2027 (Sa 25./So 26., waehrend die
+    // Bundesstaaten Mo/Di als Ersatztage beobachten) - ohne diese eine Zeile
+    // saehe das wie ein Rechenfehler aus, nicht wie eine Entscheidung.
+    auObservanceHint.hidden = countryCode !== 'AU';
+  };
+  const discoveryState = {
+    countryReady: false,
+    subdivisionReady: false,
+    persistedCountry: preferences.holiday_country || null,
+    persistedSubdivision: preferences.holiday_subdivision || null,
+    persistedGroup: preferences.holiday_group || null,
+    // Gruppensuche fuer den aktuellen Ort bestaetigt? Siehe resolveHolidayGroup().
+    groupReady: false,
+  };
+  const applyGroupResult = (result) => {
+    if (result !== null) discoveryState.groupReady = result;
+  };
+
+  const showDiscoveryError = (error) => {
+    errorElement.textContent = error.message || t('common.errorGeneric');
+    errorElement.hidden = false;
+  };
+
+  const updateSyncState = () => {
+    const location = resolveHolidayLocation({
+      countryReady: discoveryState.countryReady,
+      subdivisionReady: discoveryState.subdivisionReady,
+      selectedCountry: countrySelect.value,
+      selectedSubdivision: subdivisionSelect.value,
+      persistedCountry: discoveryState.persistedCountry,
+      persistedSubdivision: discoveryState.persistedSubdivision,
+    });
+    syncButton.disabled = !location.country;
+    syncButton.title = location.country ? '' : t('settings.holidayCountryRequired');
+  };
+  updateSyncState();
+
+  countrySelect.addEventListener('change', async () => {
+    errorElement.hidden = true;
+    const countryCode = countrySelect.value;
+    discoveryState.countryReady = true;
+    discoveryState.subdivisionReady = false;
+    discoveryState.groupReady = false;
+    clearGroupPicker(groupSelect, groupGroup, groupRequests);
+    updateSyncState();
+    applySchoolAvailability(countryCode);
+    const result = await runHolidayDiscovery(
+      () => loadSubdivisions(
+        subdivisionSelect,
+        countrySelect,
+        countryCode,
+        '',
+        subdivisionRequests,
+      ),
+      showDiscoveryError,
+    );
+    if (result.ok && result.value) {
+      discoveryState.subdivisionReady = result.value.selectedResolved;
+    }
+    // Land gewechselt → Subdivision zurückgesetzt. Ein Land ohne Subdivisionen
+    // bringt seine Gruppen selbst mit (D#1182).
+    const lookup = groupLookupAfterSubdivisions({
+      discovery: result,
+      requestedCountry: countryCode,
+      currentCountry: countrySelect.value,
+      subdivisionCount: subdivisionSelect.options.length - 1,
+      schoolHolidaysAvailable: countrySchoolHolidaysAvailable(countriesData, countryCode),
+    });
+    if (lookup) {
+      applyGroupResult(await loadGroups(groupSelect, groupGroup, countryCode, subdivisionSelect.value, '', groupRequests, lookup));
+    }
+    updateSyncState();
+  });
+
+  subdivisionSelect.addEventListener('change', async () => {
+    applyHolidaySubdivisionSelection(discoveryState);
+    updateSyncState();
+    // Subdivision gewechselt → passende Ferien-Gruppen neu laden, Auswahl zurück.
+    discoveryState.groupReady = false;
+    applyGroupResult(await loadGroups(groupSelect, groupGroup, countrySelect.value, subdivisionSelect.value, '', groupRequests));
+  });
+
+  groupSelect.addEventListener('change', () => {
+    updateSyncState();
+  });
+
+  showPublic.addEventListener('change', () => {
+    publicColorGroup.hidden = !showPublic.checked;
+  });
+  showSchool.addEventListener('change', () => {
+    schoolColorGroup.hidden = !showSchool.checked;
+  });
+  // DIE EBENEN SCHALTEN SOFORT (R15 A7 P1-1): ein Schalter verspricht
+  // sofortige Wirkung wie die Termindauer darueber; vorher warteten sie auf
+  // "Speichern" und gingen beim Blattwechsel still verloren. Land, Region,
+  // Gruppe und Farben bleiben im Formular - sie haengen aneinander.
+  bindHolidayLayerSwitches({ showPublic, showSchool, publicColorGroup, schoolColorGroup });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    errorElement.hidden = true;
+    try {
+      const preferenceData = holidayPreferenceData(container, discoveryState);
+      await savePreferences({
+        holiday_country: preferenceData.holiday_country,
+        holiday_subdivision: preferenceData.holiday_subdivision,
+        holiday_group: preferenceData.holiday_group,
+        holiday_show_public: preferenceData.holiday_show_public,
+        holiday_show_school: preferenceData.holiday_show_school,
+        holiday_public_color: preferenceData.holiday_public_color,
+        holiday_school_color: preferenceData.holiday_school_color,
+      });
+      discoveryState.persistedCountry = preferenceData.holiday_country;
+      discoveryState.persistedSubdivision = preferenceData.holiday_subdivision;
+      discoveryState.persistedGroup = preferenceData.holiday_group;
+      window.yuvomi?.showToast(t('settings.holidaySaved'), 'success');
+    } catch (error) {
+      errorElement.textContent = error.message || t('common.errorGeneric');
+      errorElement.hidden = false;
+    }
+  });
+
+  syncButton.addEventListener('click', async () => {
+    const currentPreferenceData = holidayPreferenceData(container, discoveryState);
+    if (!currentPreferenceData.holiday_country) {
+      window.yuvomi?.showToast(t('settings.holidayCountryRequired'), 'warning');
+      return;
+    }
+
+    const layerSelection = ensureHolidayLayerSelection({
+      showPublic: showPublic.checked,
+      showSchool: showSchool.checked,
+    });
+    showPublic.checked = layerSelection.showPublic;
+    showSchool.checked = layerSelection.showSchool;
+    publicColorGroup.hidden = !layerSelection.showPublic;
+    schoolColorGroup.hidden = !layerSelection.showSchool;
+
+    const preferenceData = holidayPreferenceData(container, discoveryState);
+    syncButton.disabled = true;
+    try {
+      await savePreferences({
+        holiday_country: preferenceData.holiday_country,
+        holiday_subdivision: preferenceData.holiday_subdivision,
+        holiday_group: preferenceData.holiday_group,
+        holiday_show_public: preferenceData.holiday_show_public,
+        holiday_show_school: preferenceData.holiday_show_school,
+        holiday_public_color: preferenceData.holiday_public_color,
+        holiday_school_color: preferenceData.holiday_school_color,
+      });
+      discoveryState.persistedCountry = preferenceData.holiday_country;
+      discoveryState.persistedSubdivision = preferenceData.holiday_subdivision;
+      discoveryState.persistedGroup = preferenceData.holiday_group;
+      const response = await api.post('/preferences/holidays/sync', {});
+      const lastSyncLabel = container.querySelector('#holiday-last-sync-label');
+      if (lastSyncLabel && response?.data?.last_sync) {
+        lastSyncLabel.textContent = formatSyncTime(response.data.last_sync);
+      }
+      window.yuvomi?.showToast(t('settings.holidaySynced'), 'success');
+    } catch (error) {
+      window.yuvomi?.showToast(error.message || t('settings.holidaySyncError'), 'danger');
+    } finally {
+      updateSyncState();
+    }
+  });
+
+  const countriesResult = await runHolidayDiscovery(
+    () => api.get('/preferences/holidays/countries'),
+    showDiscoveryError,
+  );
+  if (!countriesResult.ok || !container.isConnected) return;
+
+  const countries = localizeHolidayCountries(
+    Array.isArray(countriesResult.value?.data) ? countriesResult.value.data : [],
+  );
+  countriesData = countries;
+  appendOptions(
+    countrySelect,
+    countries,
+    preferences.holiday_country || '',
+  );
+  countrySelect.disabled = false;
+  discoveryState.countryReady = isHolidayCountryResolved(
+    countries,
+    preferences.holiday_country,
+  );
+  applySchoolAvailability(preferences.holiday_country || '');
+
+  if (!preferences.holiday_country) {
+    discoveryState.subdivisionReady = true;
+    discoveryState.groupReady = true;
+  } else if (discoveryState.countryReady) {
+    const subdivisionsResult = await runHolidayDiscovery(
+      () => loadSubdivisions(
+        subdivisionSelect,
+        countrySelect,
+        preferences.holiday_country,
+        preferences.holiday_subdivision || '',
+        subdivisionRequests,
+      ),
+      showDiscoveryError,
+    );
+    if (subdivisionsResult.ok && subdivisionsResult.value) {
+      discoveryState.subdivisionReady = subdivisionsResult.value.selectedResolved;
+    }
+    // Hat der Nutzer waehrend der Regionssuche schon ein anderes Land gewaehlt,
+    // gehoert der Gruppenzustand dessen Wechsel: keine Suche mehr fuer das
+    // gespeicherte Land starten, sie wuerde die neuere ueberholen (Review zu PR #1186).
+    const stillSavedCountry = countrySelect.value === preferences.holiday_country;
+    if (stillSavedCountry && preferences.holiday_subdivision) {
+      applyGroupResult(await loadGroups(
+        groupSelect,
+        groupGroup,
+        preferences.holiday_country,
+        preferences.holiday_subdivision,
+        preferences.holiday_group || '',
+        groupRequests,
+      ));
+    } else if (stillSavedCountry && subdivisionsResult.ok && subdivisionsResult.value && subdivisionSelect.options.length <= 1
+      && countrySchoolHolidaysAvailable(countriesData, preferences.holiday_country)) {
+      // Land ohne Subdivisionen (Belgien, D#1182): gespeicherte Gruppe am Land.
+      applyGroupResult(await loadGroups(
+        groupSelect,
+        groupGroup,
+        preferences.holiday_country,
+        '',
+        preferences.holiday_group || '',
+        groupRequests,
+        { countryLevel: true },
+      ));
+    } else if (stillSavedCountry && subdivisionsResult.ok && subdivisionsResult.value) {
+      // Land mit Subdivisionen, keine gewaehlt: bestaetigt ohne Gruppe.
+      discoveryState.groupReady = true;
+    }
+  }
+  updateSyncState();
+}
+
+export async function render(container, { user }) {
+  void user;
+  const preferences = await getPreferences();
+  renderPage(container, preferences);
+  await bindEvents(container, preferences);
+  window.lucide?.createIcons({ el: container });
+}

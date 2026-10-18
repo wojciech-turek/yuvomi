@@ -1,0 +1,737 @@
+/* ================================================================
+ * Detail-/Vorschauansicht (components/detail-view.js)
+ *
+ * Die Leseansicht einer bestehenden Entität. Sie erfindet nichts: Der
+ * Farbstreifen kommt aus dem alten Termin-Popup, die Metazeile aus
+ * `.calendar-meta-item`, Fußzeile und Buttons sind die des Modals. Neu ist nur
+ * der Wechsel selbst - die Karte wächst von Inhalts- auf Formularhöhe, statt zu
+ * springen.
+ *
+ * Geteilte Komponente, also in der Shell (index.html) eingebunden: Der Router
+ * lädt genau ein Seiten-CSS pro Seite, und diese Ansicht gehört mehreren.
+ * ================================================================ */
+
+/* --------------------------------------------------------
+ * Lesekörper
+ * -------------------------------------------------------- */
+
+.detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Farbstreifen: die Kalender-/Modulfarbe als schmale Kante oben. Bewusst eine
+ * eigene Fläche und keine dicke Seitenlinie - die verbietet DESIGN.md, und sie
+ * würde die Zeilen einrücken, die darunter ohnehin eine Icon-Spalte führen. */
+.detail-view__accent {
+  height: var(--space-0h);
+  border-radius: var(--radius-full);
+  background-color: var(--detail-accent, var(--active-module-accent, var(--color-accent)));
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------
+ * Der Kopf (detail-view.js `detailHeadEl`, Critique R18)
+ *
+ * Was die Entitaet AUSMACHT, steht ueber den Zeilen, die sie beschreiben: die
+ * Zeit in Worten, die Personen als Avatar mit Namen, beim Geburtstag das Bild
+ * und zwei Kennzahlen. Der Titel selbst bleibt in der Kopfzeile seines Rahmens
+ * (Blatt, Popover, Spalte) - alle drei tragen ihn in Title 3.
+ *
+ * Die Unterzeile steht eine Stufe ueber den Zeilenwerten (Subheadline in
+ * Primaertinte gegen Caption-Label und Wert darunter): sie ist die Antwort,
+ * derentwegen man die Ansicht oeffnet. Eine Haarlinie trennt Kopf und Zeilen -
+ * dieselbe wie zwischen Zeilen eines Traegers, keine neue Flaeche.
+ * -------------------------------------------------------- */
+.detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-block-end: var(--space-3);
+  border-block-end: var(--space-px) solid var(--color-border-subtle);
+}
+
+.detail-head__subtitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-secondary);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+  overflow-wrap: anywhere;
+}
+
+/* Der Farbpunkt: die Kalenderfarbe als Zeichen am Text statt als Streifen ueber
+ * dem Blatt. Er sitzt auf der Mittellinie der ersten Zeile (die Unterzeile
+ * richtet an der Grundlinie aus, der Punkt hebt sich um seine halbe Hoehe). */
+.detail-head__dot {
+  flex: 0 0 auto;
+  inline-size: var(--space-2h);
+  block-size: var(--space-2h);
+  border-radius: var(--radius-full);
+  background-color: var(--detail-accent, var(--active-module-accent, var(--color-accent)));
+  transform: translateY(var(--space-px));
+}
+
+/* Hoechstens zwei Kennzahlen, als ganze Woerter ("wird 41", "in 26 Tagen"):
+ * die Zahl laesst sich nicht aus dem Satz ihrer Sprache loesen. Title 3,
+ * tabellarisch; eine Haarlinie zwischen beiden. */
+.detail-head__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--type-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-head__fact + .detail-head__fact {
+  padding-inline-start: var(--space-3);
+  border-inline-start: var(--space-px) solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.detail-head__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detail-head__person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--type-secondary);
+  color: var(--color-text-primary);
+}
+
+/* 24px-Scheibe mit 11px-Initialen (Caption 2, die kleinste Textrolle): das
+ * Verhaeltnis von 0,46 liegt unter der Lesbarkeitsgrenze des Avatar-Stapels
+ * (<= 0,55, user-multi-select.js). Farbe und Tinte setzt die Komponente aus
+ * der Identitaetsfarbe der Person. */
+.detail-head__avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  font-size: var(--type-micro);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.detail-head__avatar img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.detail-head__name {
+  min-width: 0;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+  overflow-wrap: anywhere;
+}
+
+/* Mit Bild: mittig gestapelt wie eine Kontaktkarte - Bild, dann die Kennzahlen. */
+.detail-head--media {
+  align-items: center;
+  text-align: center;
+}
+
+.detail-head--media .detail-head__facts,
+.detail-head--media .detail-head__people {
+  justify-content: center;
+}
+
+.detail-head__media {
+  display: flex;
+  justify-content: center;
+}
+
+.detail-view__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* --------------------------------------------------------
+ * Metazeile: Icon · Label · Wert
+ * -------------------------------------------------------- */
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.detail-row__icon {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  /* Optische Grundlinie: das Icon sitzt auf der Höhe des Labels, nicht des
+   * Zeilenkastens - sonst hängt es bei mehrzeiligen Werten oben in der Luft. */
+  margin-top: var(--space-0h);
+}
+
+.detail-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-px);
+  min-width: 0;
+  flex: 1;
+  /* Werte nehmen ihre eigene Breite, nicht die der Zeile: Ein Badge oder Chip
+   * würde sonst über die ganze Karte gezogen und läse sich wie ein Fortschritts-
+   * balken. Langer Text bleibt davon unberührt - er läuft bis zum Rand und
+   * bricht dort um. */
+  align-items: flex-start;
+}
+
+.detail-row__label {
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+}
+
+.detail-row__value {
+  font-size: var(--type-body);
+  color: var(--color-text-primary);
+  /* Lange Werte (Orte, URLs) brechen um, statt die Karte zu sprengen. */
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+/* INFO-LISTEN-FORM (R19, Critique 2026-10-16: Inventar-Detail mobil 57px je
+ * Feld). Schmal steht eine Textzeile als Label vorn, Wert am Ende, in EINER
+ * Zeile - wie "Info" in den iOS-Einstellungen. Ein langer Wert bricht unter das
+ * Label, statt es zu verdraengen (flex-wrap), und steht dann am Ende seiner
+ * Zeile. Fliesstext (`--multiline`) und Knoten (Chips, Listen, Bild) bleiben
+ * untereinander. Opt-in je Leseansicht (`rowLayout: 'inline'`). */
+@media (max-width: 767px) {
+  .detail-view--inline-rows .detail-row--text:not(.detail-row--multiline) > .detail-row__text {
+    flex-flow: row wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: var(--space-3);
+  }
+
+  .detail-view--inline-rows .detail-row--text:not(.detail-row--multiline) .detail-row__label {
+    font-size: var(--type-body);
+    font-weight: var(--font-weight-regular);
+    color: var(--color-text-secondary);
+  }
+
+  .detail-view--inline-rows .detail-row--text:not(.detail-row--multiline) .detail-row__value {
+    margin-inline-start: auto;
+    text-align: end;
+  }
+
+  /* Das Icon steht auf der Mitte der einen Zeile, nicht auf dem Label darueber. */
+  .detail-view--inline-rows .detail-row--text:not(.detail-row--multiline) > .detail-row__icon {
+    margin-block-start: var(--space-0h);
+  }
+}
+
+/* Beschreibungen und andere Fließtexte: Zeilenumbrüche der Quelle behalten,
+ * damit eine notierte Adresse ihre Zeilen behält. */
+.detail-row--multiline .detail-row__value {
+  white-space: pre-wrap;
+  text-wrap: pretty;
+}
+
+/* Folgeaktion am Ende einer Zeile („In Maps oeffnen" an der Ort-Zeile,
+ * detail-view.js detailRowEl `action`). Leise und rechts, auf der Hoehe des
+ * Labels - der Wert bleibt Text, die Aktion ist ausdruecklich (#1110). */
+.detail-row__action {
+  flex-shrink: 0;
+  margin-block-start: calc(-1 * var(--space-1));
+  margin-inline-start: auto;
+}
+
+/* DER WERT WIRD NICHT ZERHACKT (R19, Critique 2026-10-16). Im 320px-Popover
+ * liess "In Maps oeffnen" dem Ort 130px, und `overflow-wrap: anywhere` brach
+ * "Zahnarztpraxi|s Mueller" mitten im Wort. Der Text beansprucht jetzt
+ * mindestens 10rem; passt die Aktion daneben nicht mehr, rueckt sie in eine
+ * eigene Zeile darunter (am Ende, wie zuvor). */
+.detail-row:has(> .detail-row__action) {
+  flex-wrap: wrap;
+}
+
+.detail-row:has(> .detail-row__action) > .detail-row__text {
+  flex: 1 1 10rem;
+}
+
+/* Benannte Gruppe von Metazeilen (`{ group, rows }`): Abschnittstitel wie in
+ * einer Kontaktkarte, darunter die Zeilen im selben Takt wie ungegliedert. */
+.detail-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.detail-group + .detail-group,
+.detail-row + .detail-group {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--space-px) solid var(--color-border-subtle);
+}
+
+.detail-group__title {
+  margin: 0;
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.detail-group__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Zeilen, die statt Text eine Gruppe tragen (Chips, Badges, Anhang). */
+.detail-chips.detail-row__value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --------------------------------------------------------
+ * Teilaufgaben
+ *
+ * Abhakbar, nicht nur lesbar (#671). Hier stand bis v1.78.0 die Annahme, die
+ * Leseansicht brauche keinen Schalter, weil "das die Liste tut, die sie ohnehin
+ * führt". Die Liste tut es - aber hinter einem eingeklappten Fortschrittsbalken,
+ * den ein Melder nicht als Zugang erkannt hat: er legte eine Teilaufgabe an, sah
+ * sie in der Detailansicht und kam nirgends mehr an sie heran. Ein Stand, der
+ * sichtbar ist, muss dort auch änderbar sein.
+ * -------------------------------------------------------- */
+
+.detail-subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detail-subtask {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  /* Button-Reset: die Zeile ist ein <button>, damit Tastatur und Screenreader
+     denselben Weg haben wie der Zeigefinger. */
+  width: 100%;
+  min-height: var(--target-base);
+  padding: var(--space-1) var(--space-2);
+  margin-inline: calc(var(--space-2) * -1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+/* Das Zeichen ist AUSGENOMMEN, statt seinen Hintergrund zurueckzuschreiben -
+ * dieselbe Bauart wie an den beiden Abhak-Zeichen in tasks.css. Hier stand eine
+ * Gegenregel (`--static:hover { background: none }`), und die ging nur deshalb
+ * gut, weil `--done` daneben zufaellig keinen Hintergrund setzt: sie traegt
+ * (0,2,0) und haette jede Zustandsfarbe geschlagen, so wie es an den anderen
+ * beiden Stellen tatsaechlich passiert ist (Review zu PR #1252). Eine Bauart,
+ * die nur an einer Stelle haelt, ist eine Bauart zu viel. */
+.detail-subtask:not(.detail-subtask--static):hover {
+  background: var(--color-surface-2);
+}
+
+.detail-subtask:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.detail-subtask:disabled {
+  cursor: progress;
+}
+
+/* Die Zeile als ZUSTANDSZEICHEN (#467): sie steht noch da und sagt, ob der
+ * Teilschritt erledigt ist, aber nichts an ihr lockt zum Tippen. `:disabled`
+ * daneben heisst in diesem Stylesheet etwas anderes - „gerade unterwegs" -,
+ * und ein <span> traegt es ohnehin nicht. Dieselbe Bauart wie
+ * `.subtask-item__checkbox--static` und `.task-status-btn--static`
+ * (public/styles/tasks.css). */
+.detail-subtask--static {
+  cursor: default;
+}
+
+.detail-subtask--done {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+/* Das Zeichen vor dem Teilschritt: ruhig, erledigt in Erfolgsfarbe. Bis
+ * 2026-09-26 zielten diese Regeln auf `i` - Lucide ersetzt das `<i>` aber
+ * durch `<svg>`, sie trafen also nie (Komponenten-Kanon, Regel dead-i). */
+.detail-subtask svg {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.detail-subtask--done svg {
+  color: var(--color-success);
+}
+
+/* Der Einstieg steht IN der Liste, nicht daneben: die Karte blendet ihre
+   Inline-Aktionen unter 640px aus, und ohne diesen Knopf gab es auf dem
+   Telefon keinen Weg zur ersten Teilaufgabe (#925). Gestrichelt und in
+   Sekundaerfarbe wie sein Gegenstueck in der aufgeklappten Kartenliste
+   (.subtask-item__add) - er ist eine Einladung, kein Teilschritt. */
+.detail-subtask--add {
+  /* Nach Inhalt breit, ohne den Negativrand der Zeilen: die Liste ist in der
+   * Detailzeile nur so breit wie ihr Inhalt, und `width: 100%` plus -8px Rand
+   * je Seite machte den Knopf 16px schmaler als seinen Text - "Teilaufgabe /
+   * hinzufuegen" brach auf 60px Hoehe um (Sichtpruefung 2026-09-26). */
+  width: auto;
+  margin-inline: 0;
+  /* EINE BUTTONFORM: die Kapsel (tokens.css, Sonde 3 der Dokument-Guards).
+   * Er ist kein Teilschritt, also keine Zeile der Liste, sondern ein Knopf
+   * nach Inhalt breit - wie die gestrichelte Kapsel `.list-tab__new` im
+   * Einkauf. Mit dem 10px-Radius der Zeilen stand er seit der Detailspalte
+   * ab 1280px (R10) als zweite Form im Dokument. Das Polster rueckt den Text
+   * aus der Rundung. */
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  border: var(--space-px) dashed var(--color-border);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.detail-subtask--add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: none;
+}
+
+.detail-subtask--add:hover svg {
+  color: var(--color-accent);
+}
+
+/* Die Eingabezeile, in die sich „Teilaufgabe hinzufuegen" verwandelt (A3
+ * P1-1, task-detail.js `subtaskComposer`): ein kanonisches Feld ueber die
+ * Breite der Liste, so hoch wie eine Teilaufgaben-Zeile. Enter oder der Knopf
+ * daneben legt an, der Fokus bleibt fuer die naechste. `[hidden]` braucht fuer Feld UND Knopf die
+ * eigene Regel, weil `display: flex` das Browser-`hidden` sonst sticht
+ * (gemessen: der Knopf stand ueber dem offenen Feld). */
+.detail-subtask-compose {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.detail-subtask-compose[hidden],
+.detail-subtask--add[hidden] {
+  display: none;
+}
+
+.detail-subtask-compose__input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--target-base);
+}
+
+/* Der sichtbare Absender (#1598): Enter allein reichte im Blatt nicht, und auf
+ * dem Telefon gab es sonst keinen Weg. Er behaelt seine Breite - das Feld gibt
+ * nach, nicht der Knopf. */
+.detail-subtask-compose__submit {
+  flex-shrink: 0;
+  min-height: var(--target-base);
+}
+
+/* --------------------------------------------------------
+ * Anhang
+ * -------------------------------------------------------- */
+
+/* Die Bildvorschau ist die Ausnahme von der Inhaltsbreite oben: Sie nutzt die
+ * ganze Karte, sonst stünde ein kleines Bild verloren am linken Rand. */
+.detail-attachment--image {
+  align-self: stretch;
+}
+
+.detail-attachment--image img {
+  width: 100%;
+  max-height: calc(var(--space-16) * 3);
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: var(--space-px) solid var(--color-border-subtle);
+}
+
+.detail-attachment--file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-base);
+  color: var(--active-module-accent, var(--color-accent));
+}
+
+/* Ein Anhang, den der Server diesem Betrachter nicht nennt (#1358): Zustand,
+ * kein Link - deshalb ohne Akzentfarbe. */
+.detail-attachment--locked {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-base);
+  color: var(--color-text-secondary);
+}
+
+/* --------------------------------------------------------
+ * Fußzeile: Objektaktionen
+ * -------------------------------------------------------- */
+
+/* Eine Aktion, die am Anfang steht (Löschen), schiebt den Rest ans Ende -
+ * dasselbe Muster wie in den Formular-Fußzeilen der Module. Logisch statt
+ * `margin-right`: in RTL steht der Anfang rechts. Am Ende, in der Daumenzone,
+ * steht mit `edit.primary` die Hauptaktion (detail-view.js, openAsSheet). */
+.detail-view__action--start {
+  margin-inline-end: auto;
+}
+
+/* --------------------------------------------------------
+ * Pane-Wechsel Detail ↔ Formular
+ * -------------------------------------------------------- */
+
+/* Höhenübergang der Karte. Die Klasse setzt detail-view.js nur für die Dauer
+ * des Wechsels, damit `height` sonst frei bleibt und das Sheet weiterhin auf
+ * Inhaltshöhe schrumpft.
+ *
+ * ENTSCHIEDEN, bitte nicht neu aufmachen: Ja, das animiert eine Layout-
+ * Eigenschaft, und ja, Linter melden das. Hier ist es gewollt. Es ist genau EIN
+ * Element, genau einmal pro Moduswechsel, 200 ms lang. Die üblichen Auswege
+ * scheiden aus: `transform: scaleY()` verzerrt den Inhalt, und
+ * `grid-template-rows` verlangte einen Umbau von `.modal-panel` (Flex-Spalte mit
+ * scrollendem Body), der jedes Modal der App beträfe. Der Sprung ohne Übergang
+ * wäre die einzige echte Alternative, und er lässt den Moduswechsel wie einen
+ * Seitenwechsel aussehen statt wie zwei Seiten derselben Karte.
+ *
+ * Wer diesen Übergang trotzdem entfernen will, entfernt auch die Regel unten im
+ * prefers-reduced-motion-Block und `withHeightTransition` in detail-view.js -
+ * die Funktion misst sonst zweimal die Panelhöhe für nichts. */
+.modal-panel--resizing {
+  transition: height var(--duration-md) var(--ease-out);
+}
+
+@keyframes detail-pane-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.detail-pane--enter {
+  animation: detail-pane-enter var(--duration-md) var(--ease-out);
+}
+
+/* --------------------------------------------------------
+ * Popover-Variante (ab 768px, mit Anker)
+ * -------------------------------------------------------- */
+
+.detail-popover {
+  position: fixed;
+  z-index: calc(var(--z-modal) - 1);
+  /* Das Termin-Popover haengt am <body>, nicht in `.calendar-page`, und erbte
+   * deren gleich breite Ziffern nicht (R19): Wiederholung "bis 31.12.",
+   * Erinnerungen und Zeiten standen proportional. */
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: calc(var(--space-16) * 4);
+  max-width: calc(var(--space-16) * 5);
+  /* Höhengrenze mit demselben Rand, den positionPopover() in detail-view.js
+   * einhält (POPOVER_MARGIN = 8px = --space-2). Die Leseansicht ist gegenüber
+   * dem alten Termin-Popup gewachsen - Wiederholung, Erinnerungen und
+   * Sichtbarkeit kamen hinzu. Ohne Grenze läuft die Karte auf einem kurzen
+   * Fenster unten aus dem Bild, und mit ihr die Fußzeile, in der „Bearbeiten"
+   * und „Löschen" stehen; es bliebe nur Escape. */
+  max-height: calc(var(--viewport-height) - 2 * var(--space-2));
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: var(--space-px) solid var(--glass-border-subtle);
+  border-radius: var(--radius-glass-card);
+  box-shadow: var(--glass-shadow-lg);
+  /* Dauer und Kurve einzeln, NICHT über --transition-*: Diese Tokens sind
+   * transition-Kurzformen („150ms ease") und brächten in einer animation-
+   * Kurzform eine zweite Timing-Funktion mit. Die Deklaration wäre ungültig und
+   * fiele stillschweigend auf animation: none zurück. */
+  animation: detail-pane-enter var(--duration-sm) var(--ease-out);
+}
+
+/* DER AUSGANG (Critique R18): die Karte blendete ein und war beim Schliessen
+ * in einem Frame weg. Jetzt die Grammatik des Popover-Menues: sie blendet aus
+ * und nimmt 4 % zurueck, zum Anker hin (`transform-origin` setzt
+ * positionPopover in detail-view.js), kuerzer als die Einfahrt und ohne noch
+ * einen Zeiger zu nehmen. detail-view.js nimmt den Knoten danach aus dem Baum.
+ * ZWEI KLASSEN IM SELEKTOR: der Ausgang muss die Einfahrt schlagen, gleich wo
+ * er steht (test:motion, Guard 1). */
+@keyframes detail-popover-out {
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+.detail-popover.detail-popover--closing {
+  animation: detail-popover-out var(--duration-xs) var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+/* Nur die Zeilen scrollen; Titel und Fußzeile bleiben stehen. Dieselbe
+ * Aufteilung, die .modal-panel im Sheet-Modus ohnehin hat. */
+.detail-popover > .detail-view {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+/* Groesse und Gewicht kommen aus der Rollenschicht (typography.css): Title 3,
+ * wie der Titel des Blatts und der Spalte (R18, vorher 17px). */
+.detail-popover__title {
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+
+/* Im Popover trägt die Karte die Trennlinie schon selbst nicht - die Fußzeile
+ * bekommt ihre eigene, damit die Aktionen vom Inhalt abgesetzt sind. */
+.detail-popover__footer {
+  border-top: var(--space-px) solid var(--glass-border-subtle);
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
+  gap: var(--space-2);
+}
+
+/* --------------------------------------------------------
+ * Bewegungsreduktion
+ * -------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-popover,
+  .detail-pane--enter {
+    animation: none;
+  }
+
+  /* Ohne Bewegung ist der Ausgang ein Schnitt: die Karte ist sofort weg. */
+  .detail-popover.detail-popover--closing {
+    animation: none;
+    opacity: 0;
+  }
+
+  .modal-panel--resizing {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------
+ * Präsentation: Detailspalte (Liste + Detail, utils/master-detail.js)
+ *
+ * Kopf und Fußzeile bringt die Spalte mit (layout.css, `.split-view__*`);
+ * hier nur der Innenabstand des Lese-Körpers, damit er mit Titel und
+ * Aktionen darüber fluchtet.
+ * -------------------------------------------------------- */
+.detail-view--in-pane {
+  display: flex;
+  flex-direction: column;
+  /* Die Ansicht fuellt die Spalte, damit ihr Fuss bei kurzem Inhalt unten an
+   * der Spalte steht und bei langem unten klebt (layout.css,
+   * `.split-view__detail-footer`). */
+  flex: 1 0 auto;
+}
+
+.detail-view--in-pane > .detail-view {
+  padding: var(--space-4) var(--space-5) 0;
+}
+
+/* EINE REIHE IM AUFGABEN-FUSS, IN JEDER BREITE (Re-Critique 2026-09-28, P8 /
+ * A3 P3-2; Re-Kritik 2026-10-17, P1).
+ *
+ * Der Fuss einer offenen Aufgabe brach auf dem Telefon auf zwei Reihen
+ * (gemessen 133px; "Aufgabe archivieren" allein 188px). Starten, Archivieren
+ * und Loeschen traten dort in EIN Mehr-Menue (task-detail.js,
+ * wireDetailMoreMenu); ihre Knoepfe bleiben verborgen im Fuss, weil das Menue
+ * sie ausloest. Am Desktop sollten "alle Aktionen passen" - seit Erledigen der
+ * volle Primaerknopf ist, stimmte das nicht mehr: in der Detailspalte brauchte
+ * der Fuss 756px (Spalte 670px bei 1440, hoechstens 744px), "Erledigen" war
+ * abgeschnitten, "Wer hat erledigt?" lag ausserhalb; im Blatt bei 834px brach
+ * er wieder auf zwei Reihen (133px). Eine Breitenschwelle haelt das nur fuer
+ * Deutsch, deshalb gilt das Mehr-Menue jetzt in JEDER Breite: Mehr,
+ * Bearbeiten, Erledigen und Wer, rund 360px. */
+.detail-view__footer:has(> .task-detail__more) > .task-detail__overflow {
+  display: none;
+}
+
+.detail-view__footer > .task-detail__more {
+  display: inline-flex;
+  /* Das Mehr-Menue nimmt den Platz von Loeschen am Anfang ein; Bearbeiten,
+   * Erledigen und Wer bilden die Gruppe am Ende, in der Daumenzone. */
+  order: -1;
+  margin-inline-end: auto;
+}
+
+@media (max-width: 639px) {
+  /* Erledigen ist in der Aufgabe der volle Primaerknopf (Ulas 2026-10-16,
+   * withPrimaryEdit `keepPrimary`); Bearbeiten steht davor als Stift ohne
+   * Wort: der Name bleibt fuer Screenreader und als Tooltip, der Fuss bleibt
+   * EINE Reihe. */
+  .detail-view__footer:has(> .task-detail__more) > #detail-view-edit > .btn__label {
+    position: absolute;
+    width: var(--space-px);
+    height: var(--space-px);
+    margin: calc(-1 * var(--space-px));
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .detail-view__footer:has(> .task-detail__more) > #detail-view-edit {
+    min-width: var(--target-base);
+    padding-inline: var(--space-2);
+  }
+}
+
+/* DER FUSS DES LESEBLATTS AUF DEM TELEFON (R17, E7). Mit Bearbeiten als
+ * Primaerknopf am Ende (`edit.primary`) stehen im Kontakt drei Aktionen im
+ * Fuss; "Als vCard exportieren" brach in 332px auf zwei Zeilen (Knopf 57px,
+ * Fuss 82 statt 73). Dieselbe Antwort wie in der schmalen Detailspalte
+ * (layout.css, `@container detail-pane`): ein leiser Knopf mit Icon zeigt nur
+ * das Icon, sein Name bleibt fuer Screenreader und als Tooltip. Loeschen und
+ * die Hauptaktion behalten ihr Wort bzw. ihre eigene Regel. */
+@media (max-width: 639px) {
+  .modal-panel > .detail-view__footer:has(> .btn--primary) > .btn--ghost:has(> svg, > i) > .btn__label {
+    position: absolute;
+    width: var(--space-px);
+    height: var(--space-px);
+    margin: calc(-1 * var(--space-px));
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .modal-panel > .detail-view__footer:has(> .btn--primary) > .btn--ghost:has(> svg, > i):has(> .btn__label) {
+    min-width: var(--target-base);
+    padding-inline: var(--space-2);
+  }
+}

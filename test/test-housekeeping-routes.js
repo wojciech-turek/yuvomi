@@ -1,0 +1,1903 @@
+/**
+ * Test: Housekeeping-Routen (Härtung)
+ * Zweck: End-to-End über den echten Router - die zuvor ungetesteten Kern-
+ *        Workflows: Worker-Anlage (Admin-Gate), Check-in/Check-out-Lifecycle
+ *        inkl. Tages-Doppelbuchungs-Guard und Besuchssumme, Bezahlen/Löschen,
+ *        Decay-Tasks-CRUD + Complete, Supply-Requests (koppelt Einkaufsartikel)
+ *        und Maintenance-Log. Die Billing-Mathematik liegt in test-housekeeping.js.
+ * Ausführen: node --experimental-sqlite --test test/test-housekeeping-routes.js
+ */
+
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
+process.env.DB_PATH = ':memory:';
+
+import test, { mock } from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+
+const dbmod = await import('../server/db.js');
+const { default: housekeepingRouter } = await import('../server/routes/housekeeping.js');
+const { default: tasksRouter } = await import('../server/routes/tasks.js');
+const { computeHourlyAmount } = await import('../server/services/housekeeping-billing.js');
+const { lockDocumentDeletes, unlockDocumentDeletes } = await import('../server/services/document-deletion-lock.js');
+const { householdTimeZone, utcToWall } = await import('../server/utils/timezone.js');
+const db = dbmod.get();
+
+const ADMIN = db.prepare(`INSERT INTO users (username, display_name, password_hash, role) VALUES ('admin','Admin','x','admin')`).run().lastInsertRowid;
+const MEMBER = db.prepare(`INSERT INTO users (username, display_name, password_hash, role) VALUES ('mem','Mem','x','member')`).run().lastInsertRowid;
+
+let actor = { id: ADMIN, role: 'admin' };
+const app = express();
+app.use(express.json());
+app.use((req, _res, next) => {
+  req.authUserId = actor.id;
+  req.authRole = actor.role;
+  req.session = { userId: actor.id, role: actor.role };
+  req.sessionModuleAccess = actor.moduleAccess ?? null;
+  req.authMethod = actor.authMethod;
+  req.authScopes = actor.authScopes ?? null;
+  next();
+});
+// Die Zahlungsaufgabe ist ein zweiter Weg an den bezahlten Besuch, deshalb
+// haengt der Aufgaben-Router mit im selben Server (GHSA-4p5w-5346-8598).
+app.use('/tasks-api', tasksRouter);
+app.use('/', housekeepingRouter);
+const server = app.listen(0, '127.0.0.1');
+const baseUrl = await new Promise((r) => server.on('listening', () => r(`http://127.0.0.1:${server.address().port}`)));
+
+async function call(method, path, { as, body } = {}) {
+  if (as) actor = as;
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let json = null;
+  try { json = await res.json(); } catch { /* 204/leer */ }
+  return { status: res.status, body: json };
+}
+
+const ADM = { id: ADMIN, role: 'admin' };
+const MEM = { id: MEMBER, role: 'member' };
+// Mitglied mit Housekeeping nur zum Lesen (#1135): GET kommt durch, Schreiben weist
+// die Modul-Middleware in server/index.js ab - die ist hier nicht montiert.
+const MEM_READ = { id: MEMBER, role: 'member', moduleAccess: { housekeeping: 'read' } };
+// API-Token nur mit housekeeping:read, dessen Nutzer (Admin) sonst schreiben duerfte.
+const TOKEN_READ = { id: ADMIN, role: 'admin', authMethod: 'api_token', authScopes: ['housekeeping:read'] };
+
+// --------------------------------------------------------------------------
+// Worker-Anlage: Admin-Gate + Validierung
+// --------------------------------------------------------------------------
+test('POST /worker: Nicht-Admin -> 403', async () => {
+  const r = await call('POST', '/worker', { as: MEM, body: { display_name: 'Putzhilfe', daily_rate: 50 } });
+  assert.equal(r.status, 403);
+});
+
+test('GET /workers: can_manage folgt derselben Grenze wie POST /worker (#1976-Nebenbefund)', async () => {
+  // Die Seite blendet "Profil anlegen" und den Stift an diesem Feld aus. Das
+  // Schreib-Gate fuer Modulrecht und Token-Scope haengt in server/index.js und
+  // ist hier nicht montiert; `can_manage` rechnet beide trotzdem selbst ein.
+  const faelle = [
+    [ADM, true, 'Admin'],
+    [MEM, false, 'Mitglied mit Schreibrecht am Modul'],
+    [MEM_READ, false, 'Mitglied mit Leserecht'],
+    [TOKEN_READ, false, 'Admin-Token mit nur housekeeping:read'],
+    [{ id: ADMIN, role: 'admin', moduleAccess: { housekeeping: 'read' } }, false, 'Admin, dem das Modul nur lesend zusteht'],
+  ];
+  for (const [as, erwartet, wer] of faelle) {
+    const r = await call('GET', '/workers', { as });
+    assert.equal(r.status, 200, wer);
+    assert.equal(r.body.can_manage, erwartet, `${wer}: can_manage`);
+  }
+  // Der Fall, um den es geht: Schreibrecht am Modul, kein Admin - der Server
+  // lehnt ab, also darf das Feld es nicht anbieten.
+  const post = await call('POST', '/worker', { as: MEM, body: { display_name: 'Probe', daily_rate: 0 } });
+  assert.equal(post.status, 403);
+});
+
+test('POST /worker: fehlender daily_rate -> 400', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Putzhilfe' } });
+  assert.equal(r.status, 400);
+});
+
+test('POST /worker: negativer daily_rate -> 400', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Putzhilfe', daily_rate: -5 } });
+  assert.equal(r.status, 400);
+});
+
+test('POST /worker: ungültiger Username -> 400', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Putzhilfe', daily_rate: 50, username: 'a b!' } });
+  assert.equal(r.status, 400);
+});
+
+let WORKER_ID;
+test('POST /worker: Admin legt Tages-Worker an -> 201 und erscheint in /workers', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Putzhilfe', daily_rate: 50, rate_type: 'daily' } });
+  assert.equal(r.status, 201);
+  const list = await call('GET', '/workers', { as: ADM });
+  assert.equal(list.body.data.length, 1);
+  WORKER_ID = list.body.data[0].id;
+  // Der angelegte Staff-Nutzer existiert (separater Login-Block ist in test-housekeeping.js geprüft).
+  const staff = db.prepare('SELECT role FROM users WHERE id = (SELECT user_id FROM housekeeping_workers WHERE id = ?)').get(WORKER_ID);
+  assert.equal(staff.role, 'member');
+});
+
+// Re-Critique 2026-09-28 (P9): ein neues Profil ohne eigene Farbwahl bekommt
+// die Vorgabe der geteilten Startpalette (utils/color.js USER_COLOR_DEFAULT),
+// nicht mehr #7C3AED - im Dark exakt die Flaeche des Primaerknopfs. Ein
+// bestehendes Profil behaelt beim Speichern ohne Farbfeld seine Farbe.
+test('POST /worker: neues Profil ohne Farbwahl -> Startpalette statt Markenviolett; Bestand bleibt', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily' } });
+  assert.equal(r.status, 201);
+  const row = db.prepare(`SELECT hw.id, hw.calendar_color, u.avatar_color FROM housekeeping_workers hw
+    JOIN users u ON u.id = hw.user_id WHERE u.display_name = 'Farbprobe'`).get();
+  assert.equal(row.calendar_color.toUpperCase(), '#0891B2');
+  assert.equal(row.avatar_color.toUpperCase(), '#0891B2');
+  db.prepare('UPDATE housekeeping_workers SET calendar_color = ? WHERE id = ?').run('#123456', row.id);
+  db.prepare('UPDATE users SET avatar_color = ? WHERE id = (SELECT user_id FROM housekeeping_workers WHERE id = ?)').run('#654321', row.id);
+  const u = await call('POST', '/worker', { as: ADM, body: { id: row.id, display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily' } });
+  assert.ok(u.status === 200 || u.status === 201, `status ${u.status}`);
+  const after = db.prepare(`SELECT hw.calendar_color, u.avatar_color FROM housekeeping_workers hw
+    JOIN users u ON u.id = hw.user_id WHERE hw.id = ?`).get(row.id);
+  assert.equal(after.calendar_color, '#123456', 'Kalenderfarbe des Bestands bleibt');
+  assert.equal(after.avatar_color, '#654321', 'Profilfarbe des Bestands bleibt');
+  // Kein DELETE-Weg fuer Profile: die Probe raeumt direkt ab, damit die
+  // Folgetests (ein Profil) unveraendert zaehlen.
+  const uid = db.prepare('SELECT user_id FROM housekeeping_workers WHERE id = ?').get(row.id).user_id;
+  db.prepare('DELETE FROM housekeeping_workers WHERE id = ?').run(row.id);
+  db.pragma('foreign_keys = OFF');
+  for (const tbl of ['contacts', 'birthdays']) db.prepare(`DELETE FROM ${tbl} WHERE family_user_id = ?`).run(uid);
+  db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+  db.pragma('foreign_keys = ON');
+});
+
+// --------------------------------------------------------------------------
+// Check-in / Check-out-Lifecycle
+// --------------------------------------------------------------------------
+let SESSION_ID;
+test('check-in: öffnet Session -> 201', async () => {
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: WORKER_ID, daily_rate: 50, extras: 10 } });
+  assert.equal(r.status, 201);
+  SESSION_ID = r.body.data.id;
+  assert.ok(SESSION_ID);
+});
+
+test('check-in: zweiter Check-in bei OFFENER Session -> 409', async () => {
+  // Der Name hiess bis #1138 "am selben Tag" und beschrieb damit die alte,
+  // zu weite Sperre. Gemessen hat er immer diesen Fall hier: die Session aus
+  // dem Test davor ist noch offen. Ueberlappende Sessions bleiben gesperrt.
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: WORKER_ID, daily_rate: 50 } });
+  assert.equal(r.status, 409);
+});
+
+test('check-in: unbekannter Worker -> 404', async () => {
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: 999999, daily_rate: 50 } });
+  assert.equal(r.status, 404);
+});
+
+test('check-out: schließt offene Session, Besuch erscheint mit total_amount = rate + extras', async () => {
+  const r = await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: WORKER_ID } });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.data.check_out, 'check_out gesetzt');
+  const visits = await call('GET', '/visits', { as: ADM });
+  const visit = visits.body.data.visits.find((v) => v.id === SESSION_ID);
+  assert.ok(visit, 'Besuch in Liste');
+  assert.equal(visit.total_amount, 60, 'daily_rate 50 + extras 10');
+});
+
+test('check-out: keine offene Session mehr -> 404', async () => {
+  const r = await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: WORKER_ID } });
+  assert.equal(r.status, 404);
+});
+
+test('check-in: nach dem Auschecken ist am selben Tag eine zweite Session erlaubt (#1138)', async () => {
+  // Geteilte Schicht, Pause mit Wiederaufnahme, zwei getrennte Besuche: die
+  // Sperre las vorher JEDE Session des Tages (`loadTodaySession`) und lehnte
+  // deshalb auch nach einem sauberen Auschecken mit 409 ab.
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: WORKER_ID, daily_rate: 40, extras: 0 } });
+  assert.equal(r.status, 201, 'die zweite Session des Tages wird angelegt');
+  const second = r.body.data.id;
+  assert.notEqual(second, SESSION_ID, 'es ist eine eigene Session, nicht die alte');
+
+  // Beide Sessions liegen am selben lokalen Tag und tragen ihre eigenen Daten.
+  const rows = db.prepare(
+    'SELECT id, check_in, check_out, daily_rate FROM housekeeping_work_sessions WHERE worker_id = ? ORDER BY id',
+  ).all(WORKER_ID);
+  assert.equal(rows.length, 2, 'zwei Sessions am selben Tag');
+  // Der Tag des Haushalts, nicht `check_in.slice(0, 10)` (der UTC-Tag): die
+  // Route rechnet "heute" in der Haushaltszone (`localDayContext`).
+  const householdDay = (iso) => utcToWall(iso, householdTimeZone(db))?.date;
+  assert.equal(householdDay(rows[0].check_in), householdDay(rows[1].check_in), 'derselbe Tag');
+  assert.ok(rows[0].check_out, 'die erste ist abgeschlossen');
+  assert.equal(rows[1].check_out, null, 'die zweite ist offen');
+  assert.equal(rows[0].daily_rate, 50, 'die erste behaelt ihren eigenen Satz');
+  assert.equal(rows[1].daily_rate, 40, 'die zweite ihren');
+});
+
+test('current_session traegt nur die OFFENE Session, today_session auch die geschlossene (#1133)', async () => {
+  // Solange beide Felder dieselbe Zeile lieferten, blieb ein Arbeiter nach dem
+  // Auschecken "eingecheckt" - und der Auscheck-Knopf im Frontend, der an
+  // current_session haengt, war dauerhaft tot.
+  const open = await call('GET', '/workers', { as: ADM });
+  const w = open.body.data.find((item) => item.id === WORKER_ID);
+  assert.ok(w.current_session, 'die zweite Session ist offen');
+  assert.equal(w.current_session.check_out, null);
+
+  const out = await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: WORKER_ID } });
+  assert.equal(out.status, 200);
+
+  const after = await call('GET', '/workers', { as: ADM });
+  const w2 = after.body.data.find((item) => item.id === WORKER_ID);
+  assert.equal(w2.current_session, null, 'ausgecheckt heisst: keine laufende Session');
+  assert.ok(w2.today_session, 'der Besuch von heute steht weiterhin');
+  assert.ok(w2.today_session.check_out, 'und zwar als abgeschlossener');
+});
+
+// --------------------------------------------------------------------------
+// Besuch bezahlen / löschen
+// --------------------------------------------------------------------------
+test('POST /visits/:id/pay: markiert bezahlt', async () => {
+  const r = await call('POST', `/visits/${SESSION_ID}/pay`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.data.paid_at, 'paid_at gesetzt');
+});
+
+// Ein bezahlter Besuch ist abgerechnet (GHSA-4p5w-5346-8598): Aendern, erneut
+// Bezahlen und Loeschen verlangen ab da den Admin - dieselbe Grenze wie beim
+// Anlegen des Arbeitsverhaeltnisses. Vorher bleibt der Zettel Mitgliedssache.
+test('bezahlter Besuch: Mitglied darf nicht mehr aendern, erneut bezahlen oder loeschen -> 403', async () => {
+  const before = db.prepare('SELECT daily_rate, extras, paid_at FROM housekeeping_work_sessions WHERE id = ?').get(SESSION_ID);
+  assert.ok(before.paid_at, 'Fixture: der Besuch ist bezahlt');
+
+  const put = await call('PUT', `/visits/${SESSION_ID}`, { as: MEM, body: { date: '2026-05-10', daily_rate: 99999, extras: 50000 } });
+  assert.equal(put.status, 403, `erwartet 403, bekommen ${put.status}`);
+  const pay = await call('POST', `/visits/${SESSION_ID}/pay`, { as: MEM });
+  assert.equal(pay.status, 403);
+  const del = await call('DELETE', `/visits/${SESSION_ID}`, { as: MEM });
+  assert.equal(del.status, 403);
+
+  const after = db.prepare('SELECT daily_rate, extras, paid_at FROM housekeeping_work_sessions WHERE id = ?').get(SESSION_ID);
+  assert.deepEqual(after, before, 'die abgerechnete Zeile ist unveraendert');
+});
+
+test('unbezahlter Besuch: Mitglied darf weiter pflegen (kein Rueckschritt fuer den Alltag)', async () => {
+  // Direkt eingefuegt: der Check-in kennt nur "heute", und heute ist schon belegt.
+  const openId = db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by, rate_type)
+    VALUES (?, '2026-06-01T09:00:00.000Z', '2026-06-01T12:00:00.000Z', 50, 0, ?, 'daily')
+  `).run(WORKER_ID, MEMBER).lastInsertRowid;
+
+  const put = await call('PUT', `/visits/${openId}`, { as: MEM, body: { date: '2026-06-01', daily_rate: 55, extras: 5 } });
+  assert.equal(put.status, 200, `erwartet 200, bekommen ${put.status} ${JSON.stringify(put.body)}`);
+  const del = await call('DELETE', `/visits/${openId}`, { as: MEM });
+  assert.equal(del.status, 200);
+});
+
+test('DELETE /visits/:id: entfernt Besuch (danach 404)', async () => {
+  const del = await call('DELETE', `/visits/${SESSION_ID}`, { as: ADM });
+  assert.equal(del.status, 200);
+  const get = await call('GET', `/visits/${SESSION_ID}`, { as: ADM });
+  assert.equal(get.status, 404);
+});
+
+// --------------------------------------------------------------------------
+// Decay-Tasks CRUD + Complete
+// --------------------------------------------------------------------------
+let DECAY_ID;
+test('POST /decay-tasks: gültig -> 201', async () => {
+  const r = await call('POST', '/decay-tasks', { as: ADM, body: { name: 'Kühlschrank', area: 'Küche', frequency_days: 30 } });
+  assert.equal(r.status, 201);
+  DECAY_ID = r.body.data.id;
+});
+
+test('POST /decay-tasks: frequency_days < 1 -> 400', async () => {
+  const r = await call('POST', '/decay-tasks', { as: ADM, body: { name: 'X', area: 'Y', frequency_days: 0 } });
+  assert.equal(r.status, 400);
+});
+
+test('PATCH /decay-tasks/:id: aktualisiert Feld', async () => {
+  const r = await call('PATCH', `/decay-tasks/${DECAY_ID}`, { as: ADM, body: { frequency_days: 14 } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.frequency_days, 14);
+});
+
+test('POST /decay-tasks/:id/complete: setzt last_completed', async () => {
+  const r = await call('POST', `/decay-tasks/${DECAY_ID}/complete`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.data.last_completed, 'last_completed gesetzt');
+});
+
+test('DELETE /decay-tasks/:id: löscht, danach 404', async () => {
+  const del = await call('DELETE', `/decay-tasks/${DECAY_ID}`, { as: ADM });
+  assert.equal(del.status, 200);
+  const again = await call('DELETE', `/decay-tasks/${DECAY_ID}`, { as: ADM });
+  assert.equal(again.status, 404);
+});
+
+// --------------------------------------------------------------------------
+// Supply-Requests (koppelt Einkaufsartikel) + Maintenance-Log
+// --------------------------------------------------------------------------
+test('POST /supply-requests: erzeugt Anfrage UND Einkaufsartikel', async () => {
+  const r = await call('POST', '/supply-requests', { as: ADM, body: { name: 'Spülmittel', quantity: '2' } });
+  assert.equal(r.status, 201);
+  const itemId = r.body.shopping_item_id;
+  assert.ok(itemId, 'shopping_item_id zurückgegeben');
+  const item = db.prepare('SELECT name FROM shopping_items WHERE id = ?').get(itemId);
+  assert.equal(item.name, 'Spülmittel', 'Einkaufsartikel angelegt');
+});
+
+test('POST /supply-requests: fehlender Name -> 400', async () => {
+  const r = await call('POST', '/supply-requests', { as: ADM, body: { quantity: '1' } });
+  assert.equal(r.status, 400);
+});
+
+test('POST /maintenance-log: gültig -> 201; fehlende description -> 400', async () => {
+  const ok = await call('POST', '/maintenance-log', { as: ADM, body: { description: 'Wasserhahn tropft' } });
+  assert.equal(ok.status, 201);
+  const bad = await call('POST', '/maintenance-log', { as: ADM, body: {} });
+  assert.equal(bad.status, 400);
+});
+
+// --------------------------------------------------------------------------
+// POST /worker: weitere Validierungszweige (kein Zustandswechsel -> 400)
+// --------------------------------------------------------------------------
+test('POST /worker: negativer hourly_rate -> 400', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Stundenkraft', daily_rate: 0, rate_type: 'hourly', hourly_rate: -1 } });
+  assert.equal(r.status, 400);
+});
+
+test('POST /worker: ungültiger rate_type -> 400', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'X', daily_rate: 10, rate_type: 'weekly' } });
+  assert.equal(r.status, 400);
+});
+
+// --------------------------------------------------------------------------
+// Lese-Handler: Summary / Work-Sessions / Visits (Filter + Monat-Validierung)
+// --------------------------------------------------------------------------
+test('GET /summary: ungültiger month -> 400', async () => {
+  const r = await call('GET', '/summary?month=abc', { as: ADM });
+  assert.equal(r.status, 400);
+});
+
+test('GET /summary: liefert current_session, default_daily_rate und summary', async () => {
+  const r = await call('GET', '/summary', { as: ADM });
+  assert.equal(r.status, 200);
+  // Nach der Lifecycle-Löschung ist keine Session offen.
+  assert.equal(r.body.data.current_session, null);
+  // default_daily_rate stammt vom angelegten Worker (daily_rate 50).
+  assert.equal(r.body.data.default_daily_rate, 50);
+  const s = r.body.data.summary;
+  assert.equal(typeof s.session_count, 'number');
+  assert.equal(typeof s.total_amount, 'number');
+});
+
+test('GET /work-sessions: ungültiger month -> 400', async () => {
+  const r = await call('GET', '/work-sessions?month=abc', { as: ADM });
+  assert.equal(r.status, 400);
+});
+
+test('GET /work-sessions: liefert Sessions-Array', async () => {
+  const r = await call('GET', '/work-sessions', { as: ADM });
+  assert.equal(r.status, 200);
+  assert.ok(Array.isArray(r.body.data));
+});
+
+test('GET /visits: ungültige worker_id -> 400', async () => {
+  const r = await call('GET', '/visits?worker_id=abc', { as: ADM });
+  assert.equal(r.status, 400);
+});
+
+test('GET /visits: ungültiger month -> 400', async () => {
+  const r = await call('GET', '/visits?month=abc', { as: ADM });
+  assert.equal(r.status, 400);
+});
+
+test('GET /visits: worker_id-Filter liefert month/visits/totals', async () => {
+  const r = await call('GET', `/visits?worker_id=${WORKER_ID}`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.ok(Array.isArray(r.body.data.visits));
+  assert.ok(r.body.data.totals && typeof r.body.data.totals.total === 'number');
+  assert.equal(typeof r.body.data.month, 'string');
+});
+
+test('GET /dashboard: liefert Kennzahlen-Shape', async () => {
+  const r = await call('GET', '/dashboard', { as: ADM });
+  assert.equal(r.status, 200);
+  const d = r.body.data;
+  assert.ok(Array.isArray(d.workers) && d.workers.length >= 1);
+  assert.ok(d.worker, 'erster Worker verfügbar');
+  assert.equal(typeof d.visits_this_month, 'number');
+  assert.equal(typeof d.pending_payments, 'number');
+  assert.equal(typeof d.paid_this_month, 'number');
+  assert.ok(Array.isArray(d.monthly_payments));
+  // R19 (Critique 2026-10-16): immer sechs aufeinanderfolgende Monate, auch
+  // ohne Zahlung - zwei Balken allein in 570px hatten keine Zeitachse.
+  assert.equal(d.monthly_payments.length, 6, 'sechs Monate, auch leere');
+  const months = d.monthly_payments.map((row) => row.month);
+  for (let i = 1; i < months.length; i++) {
+    const [y, m] = months[i - 1].split('-').map(Number);
+    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    assert.equal(months[i], next, `lueckenlos: ${months.join(', ')}`);
+  }
+  assert.ok(d.monthly_payments.every((row) => typeof row.total === 'number'), 'ein leerer Monat traegt 0');
+});
+
+// --------------------------------------------------------------------------
+// GET /decay-tasks: Dringlichkeits-Sortierung (overdue vor ok, rang-monoton)
+// --------------------------------------------------------------------------
+test('GET /decay-tasks: overdue vor ok, Rang monoton', async () => {
+  // Ein frisch erledigter Task (freq 30 -> Fälligkeit in Zukunft -> ok)
+  // und ein nie erledigter Task (kein last_completed -> overdue).
+  const okTask = await call('POST', '/decay-tasks', { as: ADM, body: { name: 'Fenster', area: 'Wohnzimmer', frequency_days: 30 } });
+  await call('POST', `/decay-tasks/${okTask.body.data.id}/complete`, { as: ADM });
+  await call('POST', '/decay-tasks', { as: ADM, body: { name: 'Ofen', area: 'Küche', frequency_days: 30 } });
+
+  const r = await call('GET', '/decay-tasks', { as: ADM });
+  assert.equal(r.status, 200);
+  const tasks = r.body.data;
+  assert.ok(tasks.length >= 2);
+  // Erster Task ist der überfällige.
+  assert.equal(tasks[0].urgency_status, 'overdue');
+  assert.equal(tasks[0].urgency, null, 'nie erledigt -> keine Dringlichkeitszahl');
+  // Rang overdue < today < ok ist über die gesamte Liste monoton.
+  const rank = { overdue: 0, today: 1, ok: 2 };
+  for (let i = 1; i < tasks.length; i += 1) {
+    assert.ok(rank[tasks[i - 1].urgency_status] <= rank[tasks[i].urgency_status], 'Rang-Sortierung monoton');
+  }
+  const okRow = tasks.find((t) => t.id === okTask.body.data.id);
+  assert.equal(okRow.urgency_status, 'ok', 'frisch erledigt (freq 30) -> ok');
+});
+
+// --------------------------------------------------------------------------
+// Payment-Tasks-Kopplung aktiviert (sync_config housekeeping_payment_tasks = '1')
+// Deckt createPaymentTask, updateVisitLinks (Event- + Aufgaben-Zweig) und den
+// payment_task-Zweig von POST /visits/:id/pay - Batch 4 lief bewusst ohne Setup.
+// --------------------------------------------------------------------------
+test('setup: Payment-Tasks aktivieren', () => {
+  db.prepare(`INSERT INTO sync_config (key, value) VALUES ('housekeeping_payment_tasks', '1')
+              ON CONFLICT(key) DO UPDATE SET value = '1'`).run();
+  const row = db.prepare(`SELECT value FROM sync_config WHERE key = 'housekeeping_payment_tasks'`).get();
+  assert.equal(row.value, '1');
+});
+
+// Check-in und Bearbeiten dieses Blocks laufen auf einer festen Uhr: 30.09.
+// um 00:19 in Berlin, einer Zone oestlich von UTC, kurz nach Mitternacht
+// (#1574). `check_in` ist ein Zeitpunkt, und seit #1543 behaelt ein neuer Tag
+// die Uhrzeit des Haushalts - der Besuch am 10.04. um 00:19 steht deshalb als
+// `2025-04-09T22:19Z` in der Tabelle. Auf der echten Uhr war der Test lokal
+// zwischen 00 und 02 Uhr MESZ rot und in der UTC-CI nie; die feste Uhr zeigt
+// den Fall zu jeder Stunde und in jeder Umgebung.
+const PAY_CLOCK = { zone: 'Europe/Berlin', now: '2026-09-29T22:19:00.000Z' };
+
+async function atPayClock(fn) {
+  const prevTz = process.env.TZ;
+  process.env.TZ = PAY_CLOCK.zone;
+  mock.timers.enable({ apis: ['Date'], now: new Date(PAY_CLOCK.now) });
+  try {
+    return await fn();
+  } finally {
+    mock.timers.reset();
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  }
+}
+
+let PAY_SESSION_ID;
+let PAYMENT_TASK_ID;
+test('check-in: erzeugt verknüpfte Bezahl-Aufgabe', () => atPayClock(async () => {
+  // Der Lifecycle-Besuch von oben wurde gelöscht -> heute wieder buchbar.
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: WORKER_ID, daily_rate: 50, extras: 0 } });
+  assert.equal(r.status, 201);
+  PAY_SESSION_ID = r.body.data.id;
+  const session = db.prepare('SELECT payment_task_id, calendar_event_id FROM housekeeping_work_sessions WHERE id = ?').get(PAY_SESSION_ID);
+  assert.ok(session.payment_task_id, 'payment_task_id gesetzt');
+  assert.ok(session.calendar_event_id, 'calendar_event_id gesetzt');
+  PAYMENT_TASK_ID = session.payment_task_id;
+  const task = db.prepare('SELECT title, status FROM tasks WHERE id = ?').get(PAYMENT_TASK_ID);
+  assert.ok(task.title.includes('Putzhilfe'), 'Aufgabentitel nennt den Worker');
+  assert.equal(task.status, 'open');
+}));
+
+test('GET /visits/:id: liefert Besuch inkl. payment_task-Felder', async () => {
+  const r = await call('GET', `/visits/${PAY_SESSION_ID}`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.id, PAY_SESSION_ID);
+  assert.equal(r.body.data.payment_task_status, 'open');
+  assert.ok(r.body.data.payment_task_title);
+  assert.equal(r.body.data.total_amount, 50);
+});
+
+test('PUT /visits/:id: Datum+Betrag aktualisiert Besuch, Aufgabe und Kalender-Event', () => atPayClock(async () => {
+  const r = await call('PUT', `/visits/${PAY_SESSION_ID}`, { as: ADM, body: { date: '2025-04-10', daily_rate: 80 } });
+  assert.equal(r.status, 200);
+  const session = db.prepare('SELECT daily_rate, check_in FROM housekeeping_work_sessions WHERE id = ?').get(PAY_SESSION_ID);
+  assert.equal(session.daily_rate, 80);
+  // Der Tag des Haushalts, nicht `check_in.slice(0, 10)`: das ist der UTC-Tag
+  // des Zeitpunkts, hier der 09.04.
+  assert.equal(utcToWall(session.check_in, householdTimeZone(db))?.date, '2025-04-10');
+  assert.equal(session.check_in, '2025-04-09T22:19:00.000Z', 'dieselbe Uhrzeit des Haushalts, 00:19');
+  // Aufgaben-Zweig von updateVisitLinks: due_date und Betrag in der Beschreibung.
+  const task = db.prepare('SELECT due_date, description FROM tasks WHERE id = ?').get(PAYMENT_TASK_ID);
+  assert.equal(task.due_date, '2025-04-10');
+  assert.ok(task.description.includes('80.00'), 'Beschreibung nennt neuen Betrag');
+  // Event-Zweig von updateVisitLinks: start_datetime auf das neue Datum.
+  const event = db.prepare('SELECT start_datetime FROM calendar_events WHERE id = (SELECT calendar_event_id FROM housekeeping_work_sessions WHERE id = ?)').get(PAY_SESSION_ID);
+  assert.equal(event.start_datetime, '2025-04-10');
+}));
+
+test('POST /visits/:id/pay: markiert verknüpfte Aufgabe als done', async () => {
+  const r = await call('POST', `/visits/${PAY_SESSION_ID}/pay`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.data.paid_at);
+  const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(PAYMENT_TASK_ID);
+  assert.equal(task.status, 'done', 'Bezahl-Aufgabe abgeschlossen');
+});
+
+// --------------------------------------------------------------------------
+// Zahlung zuruecknehmen (#1136): nur ein Admin, spiegelbildlich zu /pay. Beide
+// Rollen im Test - sonst waere ein Total-Admin-Gate ebenso gruen wie ein
+// fehlendes. Fixture: PAY_SESSION_ID ist bezahlt (April 2025), die Aufgabe done.
+// --------------------------------------------------------------------------
+const sessionRow = (id) => db.prepare('SELECT * FROM housekeeping_work_sessions WHERE id = ?').get(id);
+const taskRow = (id) => db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+
+test('can_mark_unpaid: nur fuer den Admin und nur bei bezahltem Besuch (#1136)', async () => {
+  const unpaidId = db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by, rate_type)
+    VALUES (?, '2025-04-11T09:00:00.000Z', '2025-04-11T12:00:00.000Z', 30, 0, ?, 'daily')
+  `).run(WORKER_ID, ADMIN).lastInsertRowid;
+  try {
+    const pick = (res, id) => res.body.data.visits.find((v) => v.id === id);
+
+    const adm = await call('GET', '/visits?month=2025-04', { as: ADM });
+    assert.equal(pick(adm, PAY_SESSION_ID).can_mark_unpaid, true, 'Admin, bezahlter Besuch');
+    assert.equal(pick(adm, unpaidId).can_mark_unpaid, false, 'Admin, unbezahlter Besuch: nichts zurueckzunehmen');
+
+    const mem = await call('GET', '/visits?month=2025-04', { as: MEM });
+    assert.equal(pick(mem, PAY_SESSION_ID).can_mark_unpaid, false, 'Mitglied, bezahlter Besuch');
+    assert.equal(pick(mem, unpaidId).can_mark_unpaid, false, 'Mitglied, unbezahlter Besuch');
+
+    const oneAdm = await call('GET', `/visits/${PAY_SESSION_ID}`, { as: ADM });
+    assert.equal(oneAdm.body.data.can_mark_unpaid, true, 'GET /visits/:id traegt das Feld ebenso');
+    const oneMem = await call('GET', `/visits/${PAY_SESSION_ID}`, { as: MEM });
+    assert.equal(oneMem.body.data.can_mark_unpaid, false);
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(unpaidId);
+  }
+});
+
+// #1135: Bearbeiten und Loeschen bietet die Seite nur an, wo der Server es
+// zugesteht. Die Felder lesen dieselbe Funktion wie die Schreibsperre; der
+// zweite Teil haelt fest, dass Feld und Route sich nicht widersprechen.
+test('can_edit/can_delete: Admin immer, Mitglied nur am unbezahlten Besuch - und die Routen sagen dasselbe (#1135)', async () => {
+  const unpaidId = db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by, rate_type)
+    VALUES (?, '2025-04-12T09:00:00.000Z', '2025-04-12T12:00:00.000Z', 30, 0, ?, 'daily')
+  `).run(WORKER_ID, ADMIN).lastInsertRowid;
+  try {
+    const pick = (res, id) => res.body.data.visits.find((v) => v.id === id);
+    const caps = (v) => ({ can_edit: v.can_edit, can_delete: v.can_delete });
+    const pays = (v) => ({ can_mark_paid: v.can_mark_paid, can_mark_unpaid: v.can_mark_unpaid });
+
+    const adm = await call('GET', '/visits?month=2025-04', { as: ADM });
+    assert.deepEqual(caps(pick(adm, PAY_SESSION_ID)), { can_edit: true, can_delete: true }, 'Admin, bezahlt');
+    assert.deepEqual(caps(pick(adm, unpaidId)), { can_edit: true, can_delete: true }, 'Admin, unbezahlt');
+
+    const mem = await call('GET', '/visits?month=2025-04', { as: MEM });
+    assert.deepEqual(caps(pick(mem, PAY_SESSION_ID)), { can_edit: false, can_delete: false }, 'Mitglied, bezahlt');
+    assert.deepEqual(caps(pick(mem, unpaidId)), { can_edit: true, can_delete: true }, 'Mitglied, unbezahlt');
+
+    const oneMem = await call('GET', `/visits/${PAY_SESSION_ID}`, { as: MEM });
+    assert.deepEqual(caps(oneMem.body.data), { can_edit: false, can_delete: false }, 'GET /visits/:id traegt die Felder ebenso');
+
+    // Nur-Lese-Modulrecht: auch am unbezahlten Besuch nichts, was die Middleware abwiese.
+    const readOnly = await call('GET', '/visits?month=2025-04', { as: MEM_READ });
+    assert.deepEqual(caps(pick(readOnly, unpaidId)), { can_edit: false, can_delete: false }, 'Mitglied nur lesend, unbezahlt');
+    const readOnlyOne = await call('GET', `/visits/${unpaidId}`, { as: MEM_READ });
+    assert.deepEqual(caps(readOnlyOne.body.data), { can_edit: false, can_delete: false });
+    assert.deepEqual(pays(pick(readOnly, unpaidId)), { can_mark_paid: false, can_mark_unpaid: false }, 'nur lesend: auch kein Bezahlen');
+
+    // Bezahlen: nur am unbezahlten Besuch, fuer jeden mit Schreibrecht.
+    assert.deepEqual(pays(pick(mem, unpaidId)), { can_mark_paid: true, can_mark_unpaid: false });
+    assert.deepEqual(pays(pick(mem, PAY_SESSION_ID)), { can_mark_paid: false, can_mark_unpaid: false });
+    assert.deepEqual(pays(pick(adm, PAY_SESSION_ID)), { can_mark_paid: false, can_mark_unpaid: true });
+
+    // Ein housekeeping:read-Token: auch als Admin keine Schreib-Aktion.
+    const token = await call('GET', '/visits?month=2025-04', { as: TOKEN_READ });
+    assert.deepEqual({ ...caps(pick(token, PAY_SESSION_ID)), ...pays(pick(token, PAY_SESSION_ID)) },
+      { can_edit: false, can_delete: false, can_mark_paid: false, can_mark_unpaid: false }, 'Lese-Token, bezahlt');
+    assert.deepEqual({ ...caps(pick(token, unpaidId)), ...pays(pick(token, unpaidId)) },
+      { can_edit: false, can_delete: false, can_mark_paid: false, can_mark_unpaid: false }, 'Lese-Token, unbezahlt');
+    const oneAdm = await call('GET', `/visits/${PAY_SESSION_ID}`, { as: ADM });
+    assert.deepEqual(caps(oneAdm.body.data), { can_edit: true, can_delete: true });
+
+    // Feld false -> Route 403, Feld true -> Route laesst durch.
+    const paidBefore = sessionRow(PAY_SESSION_ID);
+    const putPaid = await call('PUT', `/visits/${PAY_SESSION_ID}`, { as: MEM, body: { date: '2025-04-10', daily_rate: 1, extras: 0 } });
+    assert.equal(putPaid.status, 403);
+    assert.equal((await call('DELETE', `/visits/${PAY_SESSION_ID}`, { as: MEM })).status, 403);
+    assert.deepEqual(sessionRow(PAY_SESSION_ID), paidBefore, 'der bezahlte Besuch ist unveraendert');
+    const putOpen = await call('PUT', `/visits/${unpaidId}`, { as: MEM, body: { date: '2025-04-12', daily_rate: 35, extras: 0 } });
+    assert.equal(putOpen.status, 200, JSON.stringify(putOpen.body));
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(unpaidId);
+  }
+});
+
+test('POST /visits/:id/unpay: Mitglied -> 403, Besuch UND Zahlungsaufgabe unveraendert (#1136)', async () => {
+  const before = sessionRow(PAY_SESSION_ID);
+  const taskBefore = taskRow(PAYMENT_TASK_ID);
+  assert.ok(before.paid_at, 'Fixture: der Besuch ist bezahlt');
+  assert.equal(taskBefore.status, 'done', 'Fixture: die Zahlungsaufgabe ist abgehakt');
+
+  const r = await call('POST', `/visits/${PAY_SESSION_ID}/unpay`, { as: MEM });
+  assert.equal(r.status, 403, `erwartet 403, bekommen ${r.status}`);
+
+  assert.deepEqual(sessionRow(PAY_SESSION_ID), before, 'die abgerechnete Zeile ist unveraendert');
+  assert.deepEqual(taskRow(PAYMENT_TASK_ID), taskBefore, 'die Zahlungsaufgabe bleibt abgehakt');
+});
+
+test('POST /visits/:id/unpay: Admin setzt paid_at zurueck und oeffnet die Zahlungsaufgabe wieder (#1136)', async () => {
+  const r = await call('POST', `/visits/${PAY_SESSION_ID}/unpay`, { as: ADM });
+  assert.equal(r.status, 200, `erwartet 200, bekommen ${r.status} ${JSON.stringify(r.body)}`);
+  assert.equal(r.body.data.paid_at, null, 'Antwort: nicht mehr bezahlt');
+  assert.ok(r.body.summary, 'Antwort traegt die Monatssumme wie /pay');
+
+  assert.equal(sessionRow(PAY_SESSION_ID).paid_at, null, 'paid_at in der Zeile zurueckgesetzt');
+  assert.equal(taskRow(PAYMENT_TASK_ID).status, 'open', 'die Zahlungsaufgabe ist wieder offen');
+
+  // reconcilePaymentTasks() laeuft in GET /visits und bucht jede Zeile mit einer
+  // abgehakten Aufgabe als bezahlt. Bliebe die Aufgabe done, kaeme die Zahlung
+  // hier sofort zurueck.
+  const list = await call('GET', '/visits?month=2025-04', { as: ADM });
+  const visit = list.body.data.visits.find((v) => v.id === PAY_SESSION_ID);
+  assert.equal(visit.paid_at, null, 'der naechste Lesezugriff bucht die Zahlung nicht zurueck');
+  assert.equal(visit.payment_task_status, 'open');
+  assert.equal(visit.can_mark_unpaid, false, 'unbezahlt gibt es nichts mehr zurueckzunehmen');
+});
+
+test('POST /visits/:id/unpay: unbezahlter Besuch -> 200, nichts geaendert (#1136)', async () => {
+  const before = sessionRow(PAY_SESSION_ID);
+  const taskBefore = taskRow(PAYMENT_TASK_ID);
+  assert.equal(before.paid_at, null, 'Fixture: der Besuch ist unbezahlt');
+
+  const r = await call('POST', `/visits/${PAY_SESSION_ID}/unpay`, { as: ADM });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.paid_at, null);
+  assert.deepEqual(sessionRow(PAY_SESSION_ID), before, 'Zeile unveraendert');
+  assert.deepEqual(taskRow(PAYMENT_TASK_ID), taskBefore, 'Aufgabe unveraendert');
+});
+
+test('POST /visits/:id/unpay: unbekannte id -> 404, ungueltige id -> 400 (#1136)', async () => {
+  const missing = await call('POST', '/visits/999999/unpay', { as: ADM });
+  assert.equal(missing.status, 404);
+  const invalid = await call('POST', '/visits/abc/unpay', { as: ADM });
+  assert.equal(invalid.status, 400);
+});
+
+test('teardown: Payment-Tasks-Einstellung zurücksetzen', () => {
+  db.prepare(`UPDATE sync_config SET value = '0' WHERE key = 'housekeeping_payment_tasks'`).run();
+});
+
+// --------------------------------------------------------------------------
+// Stunden-Abrechnung (rate_type = hourly): Check-out berechnet den Betrag aus
+// der Dauer, PUT aus minutes_worked. Deckt die Stunden-Zweige, die der
+// Tagessatz-Lifecycle oben nicht berührt.
+// --------------------------------------------------------------------------
+let HOURLY_WORKER_ID;
+let HOURLY_SESSION_ID;
+test('POST /worker: Stundenkraft anlegen -> 201', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Stundenhilfe', daily_rate: 0, rate_type: 'hourly', hourly_rate: 30 } });
+  assert.equal(r.status, 201);
+  const list = await call('GET', '/workers', { as: ADM });
+  HOURLY_WORKER_ID = list.body.data.find((w) => w.display_name === 'Stundenhilfe').id;
+});
+
+test('check-in: Stundenkraft öffnet Session -> 201', async () => {
+  const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: HOURLY_WORKER_ID, daily_rate: 0 } });
+  assert.equal(r.status, 201);
+  HOURLY_SESSION_ID = r.body.data.id;
+});
+
+test('check-out: negative extras -> 400 (Session bleibt offen)', async () => {
+  const r = await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: HOURLY_WORKER_ID, extras: -1 } });
+  assert.equal(r.status, 400);
+});
+
+test('check-out: Stundenkraft übernimmt rate_type und minutes_worked', async () => {
+  const r = await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: HOURLY_WORKER_ID } });
+  assert.equal(r.status, 200);
+  const row = db.prepare('SELECT rate_type, hourly_rate, minutes_worked FROM housekeeping_work_sessions WHERE id = ?').get(HOURLY_SESSION_ID);
+  assert.equal(row.rate_type, 'hourly');
+  assert.equal(row.hourly_rate, 30);
+  assert.notEqual(row.minutes_worked, null, 'Dauer wurde erfasst');
+});
+
+test('PUT /visits/:id: Stundenkraft berechnet Betrag aus minutes_worked', async () => {
+  const r = await call('PUT', `/visits/${HOURLY_SESSION_ID}`, { as: ADM, body: { date: '2025-05-12', minutes_worked: 120 } });
+  assert.equal(r.status, 200);
+  const row = db.prepare('SELECT daily_rate, minutes_worked FROM housekeeping_work_sessions WHERE id = ?').get(HOURLY_SESSION_ID);
+  assert.equal(row.minutes_worked, 120);
+  // computeHourlyAmount als Orakel: 120 Min bei 30/h.
+  assert.equal(row.daily_rate, computeHourlyAmount(120, 30));
+});
+
+// ---------------------------------------------------------------------------
+// Datensprache und Outbound-Kopplung der Besuchs-Artefakte
+//
+// Die Oberfläche schickt Titel und Beschreibung übersetzt mit; diese Fallbacks
+// greifen für alles, was die API direkt anspricht. Sie standen fest auf
+// Englisch, obwohl die Texte in calendar_events/tasks landen und von dort in
+// API, ICS-Feed und Sync gehen - dieselbe Ursache wie #631/#632.
+// ---------------------------------------------------------------------------
+
+function setConfig(key, value) {
+  db.prepare(`
+    INSERT INTO sync_config (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value);
+}
+
+async function freshWorker(name) {
+  await call('POST', '/worker', {
+    as: ADM,
+    body: { username: name, display_name: name, password: 'secret123', daily_rate: 40 },
+  });
+  const list = await call('GET', '/workers', { as: ADM });
+  return list.body.data.find((w) => w.display_name === name).id;
+}
+
+let LOCALIZED_SESSION;
+
+test('Fallback-Titel folgen der Datensprache des Haushalts', async () => {
+  setConfig('language', 'de');
+  setConfig('date_format', 'dmy');
+  setConfig('currency', 'EUR');
+  setConfig('housekeeping_payment_tasks', '1');
+
+  const workerId = await freshWorker('Marta');
+  // Bewusst ohne event_title/payment_* - genau der Pfad eines API-Aufrufers.
+  const r = await call('POST', '/work-sessions/check-in', {
+    as: ADM,
+    body: { worker_id: workerId, daily_rate: 40, extras: 5, local_date: '2025-06-02' },
+  });
+  assert.equal(r.status, 201);
+  LOCALIZED_SESSION = r.body.data.id;
+
+  const row = db.prepare(`
+    SELECT calendar_event_id, payment_task_id FROM housekeeping_work_sessions WHERE id = ?
+  `).get(LOCALIZED_SESSION);
+
+  const event = db.prepare('SELECT title FROM calendar_events WHERE id = ?').get(row.calendar_event_id);
+  assert.equal(event.title, 'Haushaltshilfe: Marta');
+
+  const task = db.prepare('SELECT title, description FROM tasks WHERE id = ?').get(row.payment_task_id);
+  assert.equal(task.title, 'Marta für Haushaltshilfe bezahlen');
+  // Datum nach date_format, Betrag als Währung - wie der Client es schriebe.
+  assert.match(task.description, /02\.06\.2025/);
+  assert.match(task.description, /45/);
+});
+
+test('ohne gesetzte Sprache bleibt es beim englischen Bestandsverhalten', async () => {
+  db.prepare(`DELETE FROM sync_config WHERE key IN ('language', 'region')`).run();
+  // Sprache am Ende wiederherstellen: die Folgetests pruefen deutsche Texte, und
+  // ohne das schriebe updateVisitLinks die Beschreibung stillschweigend auf
+  // Englisch zurueck - der Test davor haette dann eine Zusicherung gemacht, die
+  // der naechste Aufruf widerlegt.
+
+  const workerId = await freshWorker('Nina');
+  const r = await call('POST', '/work-sessions/check-in', {
+    as: ADM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: '2025-06-03' },
+  });
+  const row = db.prepare('SELECT calendar_event_id FROM housekeeping_work_sessions WHERE id = ?').get(r.body.data.id);
+  const event = db.prepare('SELECT title FROM calendar_events WHERE id = ?').get(row.calendar_event_id);
+  assert.equal(event.title, 'Housekeeping: Nina');
+
+  setConfig('language', 'de');
+});
+
+test('ein verschobener Besuch wird zum Provider nachgezogen', async () => {
+  // Der Termin liegt bereits beim Provider: der Apple-Sync lädt jedes lokale
+  // Event ohne Kalenderzuordnung hoch und stellt die Zeile danach auf 'apple'.
+  // Ab da erreicht ihn nur noch outbound_dirty (#632).
+  setConfig('apple_caldav_url', 'https://caldav.icloud.com/');
+  const row = db.prepare('SELECT calendar_event_id FROM housekeeping_work_sessions WHERE id = ?').get(LOCALIZED_SESSION);
+  db.prepare(`
+    UPDATE calendar_events
+    SET external_source = 'apple', external_calendar_id = 'hk-test@oikos.local',
+        external_object_url = 'https://caldav.icloud.com/home/hk-test.ics', outbound_dirty = 0
+    WHERE id = ?
+  `).run(row.calendar_event_id);
+
+  const r = await call('PUT', `/visits/${LOCALIZED_SESSION}`, { as: ADM, body: { date: '2025-06-09', daily_rate: 40 } });
+  assert.equal(r.status, 200);
+
+  const event = db.prepare('SELECT start_datetime, outbound_dirty FROM calendar_events WHERE id = ?')
+    .get(row.calendar_event_id);
+  assert.equal(event.start_datetime, '2025-06-09');
+  assert.equal(event.outbound_dirty, 1, 'die Verschiebung muss den Provider erreichen');
+});
+
+test('im Nur-Lesen-Modus bleibt der verschobene Besuch gegen den Inbound geschützt', async () => {
+  // Ein schreibgeschützter Provider nimmt den Push nicht an - der Marker ist aber
+  // auch der Schutz davor, dass der Inbound das neue Datum überschreibt.
+  setConfig('google_refresh_token', 'token');
+  setConfig('google_readonly', '1');
+
+  const workerId = await freshWorker('Rita');
+  const created = await call('POST', '/work-sessions/check-in', {
+    as: ADM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: '2025-07-01' },
+  });
+  const row = db.prepare('SELECT calendar_event_id AS id FROM housekeeping_work_sessions WHERE id = ?')
+    .get(created.body.data.id);
+  db.prepare(`
+    UPDATE calendar_events
+    SET external_source = 'google', external_calendar_id = ?, outbound_dirty = 0 WHERE id = ?
+  `).run(`hk-ro-${row.id}@google`, row.id);
+
+  await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-07-08', daily_rate: 40 } });
+
+  const event = db.prepare('SELECT start_datetime, outbound_dirty FROM calendar_events WHERE id = ?').get(row.id);
+  assert.equal(event.start_datetime, '2025-07-08');
+  assert.equal(event.outbound_dirty, 1, 'ohne Marker überschriebe der nächste Inbound das alte Datum zurück');
+
+  db.prepare(`DELETE FROM sync_config WHERE key IN ('google_refresh_token', 'google_readonly')`).run();
+});
+
+test('ein gelöschter Besuch räumt die Kopie beim Provider mit ab', async () => {
+  const row = db.prepare('SELECT calendar_event_id FROM housekeeping_work_sessions WHERE id = ?').get(LOCALIZED_SESSION);
+  const before = db.prepare('SELECT COUNT(*) AS c FROM calendar_pending_deletions').get().c;
+
+  const r = await call('DELETE', `/visits/${LOCALIZED_SESSION}`, { as: ADM });
+  assert.equal(r.status, 200);
+
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM calendar_events WHERE id = ?').get(row.calendar_event_id).c,
+    0,
+    'lokal gelöscht',
+  );
+  assert.ok(
+    db.prepare('SELECT COUNT(*) AS c FROM calendar_pending_deletions').get().c > before,
+    'die Löschung beim Provider muss vorgemerkt sein, sonst bleibt der Termin dort stehen',
+  );
+});
+
+test('ein rein lokaler Besuch merkt nichts beim Provider vor', async () => {
+  const workerId = await freshWorker('Tomas');
+  const created = await call('POST', '/work-sessions/check-in', {
+    as: ADM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: '2025-06-04' },
+  });
+  const before = db.prepare('SELECT COUNT(*) AS c FROM calendar_pending_deletions').get().c;
+
+  await call('DELETE', `/visits/${created.body.data.id}`, { as: ADM });
+
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM calendar_pending_deletions').get().c,
+    before,
+    'ohne Provider-Zuordnung gibt es dort nichts zu löschen',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Die Zahlungsaufgabe als zweiter Weg (GHSA-4p5w-5346-8598). Verliess die Aufgabe
+// eines BEZAHLTEN Besuchs 'done', setzte syncHousekeepingPaymentStatus paid_at
+// zurueck, und danach waren Aendern und Loeschen des Besuchs wieder
+// Mitgliedssache. Beide Aufgaben-Wege - Formular (PUT) und Status (PATCH, auch
+// Checkbox, Swipe, Sammelaktion) - halten jetzt dieselbe Grenze wie die
+// Besuchsrouten. Beide Rollen im Test, sonst waere auch ein Total-Gate gruen.
+// ---------------------------------------------------------------------------
+
+// Das Mitglied checkt selbst ein: die Zahlungsaufgabe gehoert seit R20 nur der
+// eincheckenden Person und den Admins (`paymentTaskAudience`). Ein Mitglied,
+// das sie nicht sieht, bekaeme 404 statt 403 - und die Grenze unten waere
+// ungeprueft, obwohl genau dieses Mitglied sie anfassen kann.
+async function paidVisitWithTask(name, localDate) {
+  setConfig('housekeeping_payment_tasks', '1');
+  const workerId = await freshWorker(name);
+  const created = await call('POST', '/work-sessions/check-in', {
+    as: MEM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: localDate },
+  });
+  assert.equal(created.status, 201, `Fixture: Check-in ${created.status} ${JSON.stringify(created.body)}`);
+  const visitId = created.body.data.id;
+  const paid = await call('POST', `/visits/${visitId}/pay`, { as: ADM });
+  assert.equal(paid.status, 200);
+  const row = db.prepare('SELECT paid_at, payment_task_id FROM housekeeping_work_sessions WHERE id = ?').get(visitId);
+  assert.ok(row.paid_at, 'Fixture: der Besuch ist bezahlt');
+  assert.ok(row.payment_task_id, 'Fixture: der Besuch hat eine Zahlungsaufgabe');
+  return { visitId, taskId: row.payment_task_id };
+}
+
+const visitRow = (id) => db.prepare('SELECT paid_at, daily_rate, extras FROM housekeeping_work_sessions WHERE id = ?').get(id);
+const taskStatus = (id) => db.prepare('SELECT status FROM tasks WHERE id = ?').get(id).status;
+
+test('bezahlter Besuch: Mitglied oeffnet die Zahlungsaufgabe nicht wieder (PATCH status) -> 403', async () => {
+  const { visitId, taskId } = await paidVisitWithTask('Pia', '2025-07-01');
+  const before = visitRow(visitId);
+
+  const r = await call('PATCH', `/tasks-api/${taskId}/status`, { as: MEM, body: { status: 'open' } });
+  assert.equal(r.status, 403, `erwartet 403, bekommen ${r.status} ${JSON.stringify(r.body)}`);
+  assert.equal(taskStatus(taskId), 'done', 'die Aufgabe bleibt erledigt');
+  assert.deepEqual(visitRow(visitId), before, 'der Besuch bleibt bezahlt und unveraendert');
+
+  // Der eigentliche Schaden: ohne die Grenze gingen danach Aendern und Loeschen durch.
+  const put = await call('PUT', `/visits/${visitId}`, { as: MEM, body: { date: '2025-07-01', daily_rate: 99999, extras: 0 } });
+  assert.equal(put.status, 403);
+  const del = await call('DELETE', `/visits/${visitId}`, { as: MEM });
+  assert.equal(del.status, 403);
+  assert.deepEqual(visitRow(visitId), before);
+});
+
+test('bezahlter Besuch: Mitglied oeffnet die Zahlungsaufgabe nicht ueber das Formular (PUT) -> 403', async () => {
+  const { visitId, taskId } = await paidVisitWithTask('Rosa', '2025-07-02');
+  const before = visitRow(visitId);
+
+  const r = await call('PUT', `/tasks-api/${taskId}`, { as: MEM, body: { status: 'in_progress' } });
+  assert.equal(r.status, 403, `erwartet 403, bekommen ${r.status} ${JSON.stringify(r.body)}`);
+  assert.equal(taskStatus(taskId), 'done');
+  assert.deepEqual(visitRow(visitId), before);
+});
+
+test('bezahlter Besuch: ein Admin darf die Zahlungsaufgabe wieder oeffnen', async () => {
+  const { visitId, taskId } = await paidVisitWithTask('Sara', '2025-07-03');
+
+  const r = await call('PATCH', `/tasks-api/${taskId}/status`, { as: ADM, body: { status: 'open' } });
+  assert.equal(r.status, 200, `erwartet 200, bekommen ${r.status} ${JSON.stringify(r.body)}`);
+  assert.equal(taskStatus(taskId), 'open');
+  assert.equal(visitRow(visitId).paid_at, null, 'der Admin nimmt die Zahlung damit zurueck');
+});
+
+test('unbezahlter Besuch: Mitglied bewegt die Zahlungsaufgabe weiter frei', async () => {
+  setConfig('housekeeping_payment_tasks', '1');
+  const workerId = await freshWorker('Tina');
+  const created = await call('POST', '/work-sessions/check-in', {
+    as: MEM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: '2025-07-04' },
+  });
+  const visitId = created.body.data.id;
+  const { payment_task_id: taskId } = db.prepare('SELECT payment_task_id FROM housekeeping_work_sessions WHERE id = ?').get(visitId);
+  assert.ok(taskId, 'Fixture: der Besuch hat eine Zahlungsaufgabe');
+
+  const progress = await call('PATCH', `/tasks-api/${taskId}/status`, { as: MEM, body: { status: 'in_progress' } });
+  assert.equal(progress.status, 200, `erwartet 200, bekommen ${progress.status} ${JSON.stringify(progress.body)}`);
+  const done = await call('PATCH', `/tasks-api/${taskId}/status`, { as: MEM, body: { status: 'done' } });
+  assert.equal(done.status, 200, 'abhaken bleibt Mitgliedssache - es ist dasselbe wie Bezahlen');
+  assert.ok(visitRow(visitId).paid_at, 'abgehakt heisst bezahlt');
+});
+
+// --------------------------------------------------------------------------
+// Tage und Monate folgen der Haushaltszone, nicht der Zone des Servers
+// und nicht UTC.
+//
+// Die Uhr steht dafuer fest und die Zone ist ausdruecklich gesetzt: der
+// Unterschied existiert nur ein paar Stunden am Tages- bzw. Monatsrand, eine
+// Probe zur Tagesmitte waere in jeder Zone gruen. Die Maschinenzone darf das
+// Ergebnis nicht bestimmen, deshalb je eine Probe oestlich (Kiritimati, +14)
+// und westlich (Niue, -11) - die alte Rechnung in der Serverzone lag in UTC,
+// Europa und Amerika bei beiden daneben.
+// --------------------------------------------------------------------------
+function setHouseholdZone(zone) {
+  if (zone === null) {
+    db.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run();
+    return;
+  }
+  setConfig('household_timezone', zone);
+}
+
+async function atClock(isoInstant, fn) {
+  mock.timers.enable({ apis: ['Date'], now: new Date(isoInstant) });
+  try { return await fn(); } finally { mock.timers.reset(); }
+}
+
+async function decayTaskStatus({ zone, lastCompleted, now }) {
+  setHouseholdZone(zone);
+  const id = db.prepare(`
+    INSERT INTO housekeeping_decay_tasks (name, area, frequency_days, last_completed, created_by)
+    VALUES ('Zonenprobe', 'Flur', 7, ?, ?)
+  `).run(lastCompleted, ADMIN).lastInsertRowid;
+  try {
+    const r = await atClock(now, () => call('GET', '/decay-tasks', { as: ADM }));
+    assert.equal(r.status, 200);
+    return r.body.data.find((task) => task.id === id);
+  } finally {
+    db.prepare('DELETE FROM housekeeping_decay_tasks WHERE id = ?').run(id);
+    setHouseholdZone(null);
+  }
+}
+
+test('Dringlichkeit: der Faelligkeitstag ist ein Tag des Haushalts (oestlich von UTC)', async () => {
+  // Erledigt am 15.09. um 01:00 Kiritimati-Zeit, Rhythmus 7 Tage: faellig am
+  // 22.09. Gefragt am 21.09. um 23:00 Kiritimati-Zeit - noch nicht heute.
+  // In UTC (und jeder Zone bis +12) war es am 14.09. erledigt und am 21.09.
+  // faellig, also "heute".
+  const task = await decayTaskStatus({
+    zone: 'Pacific/Kiritimati',
+    lastCompleted: '2026-09-14T11:00:00.000Z',
+    now: '2026-09-21T09:00:00.000Z',
+  });
+  assert.equal(task.urgency_status, 'ok', 'faellig ist erst morgen, der 22.09. des Haushalts');
+  assert.equal(task.due_date, '2026-09-21T11:00:00.000Z', 'sieben Haushaltstage nach dem Erledigen, zur selben Uhrzeit');
+});
+
+test('Dringlichkeit: der Faelligkeitstag ist ein Tag des Haushalts (westlich von UTC)', async () => {
+  // Erledigt am 15.09. um 01:30 Niue-Zeit, faellig am 22.09.; gefragt am
+  // 21.09. um 23:30 Niue-Zeit. In UTC ist es da schon der 22.09.
+  const task = await decayTaskStatus({
+    zone: 'Pacific/Niue',
+    lastCompleted: '2026-09-15T12:30:00.000Z',
+    now: '2026-09-22T10:30:00.000Z',
+  });
+  assert.equal(task.urgency_status, 'ok');
+
+  const dueToday = await decayTaskStatus({
+    zone: 'Pacific/Niue',
+    lastCompleted: '2026-09-15T12:30:00.000Z',
+    now: '2026-09-22T11:30:00.000Z',
+  });
+  assert.equal(dueToday.urgency_status, 'today', 'eine Stunde spaeter beginnt der 22.09. in Niue');
+});
+
+// Ein Besuch am 01.10. um 00:30 Berliner Zeit ist in UTC noch der 30.09.
+//
+// Die Monatsgrenze liegt bewusst in einem vergangenen Jahr (#1574): andere
+// Tests dieser Suite checken zur echten Uhr ein und lassen ihre Besuche
+// stehen. Lag die Probe im Oktober 2026, kamen diese Besuche im ganzen Oktober
+// 2026 in dieselben Monatslisten, und die Suite war einen Monat lang rot - auch
+// in der UTC-CI. Ein Monat, den die echte Uhr nie wieder erreicht, bleibt
+// allein mit dem Besuch dieser Tests.
+const OCTOBER_VISIT_AT = '2024-09-30T22:30:00.000Z';
+
+function insertVisitAt(checkIn) {
+  return db.prepare(`
+    INSERT INTO housekeeping_work_sessions (check_in, check_out, daily_rate, extras, created_by)
+    VALUES (?, ?, 55, 0, ?)
+  `).run(checkIn, checkIn, ADMIN).lastInsertRowid;
+}
+
+test('Monatsgrenze: ein Besuch gehoert zum Monat des Haushalts, nicht zum UTC-Monat', async () => {
+  setHouseholdZone('Europe/Berlin');
+  const visitId = insertVisitAt(OCTOBER_VISIT_AT);
+  try {
+    const october = await call('GET', '/visits?month=2024-10', { as: ADM });
+    assert.equal(october.status, 200);
+    assert.deepEqual(october.body.data.visits.map((v) => v.id), [visitId], 'der Besuch steht im Oktober');
+    assert.equal(october.body.data.totals.total, 55);
+
+    const september = await call('GET', '/visits?month=2024-09', { as: ADM });
+    assert.equal(september.body.data.visits.some((v) => v.id === visitId), false, 'und nicht im September');
+
+    const sessions = await call('GET', '/work-sessions?month=2024-10', { as: ADM });
+    assert.deepEqual(sessions.body.data.map((v) => v.id), [visitId]);
+
+    const summary = await call('GET', '/summary?month=2024-10', { as: ADM });
+    assert.equal(summary.body.data.summary.session_count, 1);
+    assert.equal(summary.body.data.summary.total_amount, 55);
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    setHouseholdZone(null);
+  }
+});
+
+test('Monatsgrenze: ohne ?month= gilt der laufende Monat des Haushalts', async () => {
+  setHouseholdZone('Europe/Berlin');
+  // 01.10. 01:00 in Berlin, in UTC noch September.
+  const CLOCK = '2024-09-30T23:00:00.000Z';
+  const septemberTotal = (data) => data.monthly_payments.find((row) => row.month === '2024-09')?.total ?? 0;
+  const baseline = await atClock(CLOCK, () => call('GET', '/dashboard', { as: ADM }));
+  const visitId = insertVisitAt(OCTOBER_VISIT_AT);
+  try {
+    await atClock(CLOCK, async () => {
+      const visits = await call('GET', '/visits', { as: ADM });
+      assert.equal(visits.body.data.month, '2024-10');
+      assert.deepEqual(visits.body.data.visits.map((v) => v.id), [visitId]);
+
+      const summary = await call('GET', '/summary', { as: ADM });
+      assert.equal(summary.body.data.summary.month, '2024-10');
+      assert.equal(summary.body.data.summary.session_count, 1);
+
+      const dashboard = await call('GET', '/dashboard', { as: ADM });
+      assert.equal(dashboard.body.data.visits_this_month, 1, 'die Kachel zaehlt den Besuch im Oktober');
+      const chartRow = dashboard.body.data.monthly_payments.find((row) => row.month === '2024-10');
+      assert.equal(chartRow?.total, 55, 'die Monatsgrafik bucht ihn auf den Oktober');
+      assert.equal(septemberTotal(dashboard.body.data), septemberTotal(baseline.body.data),
+        'und nicht auf den September');
+    });
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    setHouseholdZone(null);
+  }
+});
+
+test('Monatsgrenze: eine am Monatsersten frueh erledigte Aufgabe zaehlt im neuen Monat', async () => {
+  setHouseholdZone('Europe/Berlin');
+  const id = db.prepare(`
+    INSERT INTO housekeeping_decay_tasks (name, area, frequency_days, last_completed, created_by)
+    VALUES ('Monatsprobe', 'Flur', 30, ?, ?)
+  `).run(OCTOBER_VISIT_AT, ADMIN).lastInsertRowid;
+  try {
+    const before = await atClock('2024-10-15T10:00:00.000Z', () => call('GET', '/dashboard', { as: ADM }));
+    assert.equal(before.body.data.finished_tasks_this_month, 1);
+  } finally {
+    db.prepare('DELETE FROM housekeeping_decay_tasks WHERE id = ?').run(id);
+    setHouseholdZone(null);
+  }
+});
+
+// Zonenlose Wanduhrzeit (`2024-09-30T23:30:00`) schreibt kein Codepfad, aber
+// `householdMonthOf` liest sie mit - Monatsgrafik und Uebersicht (#1451) ordnen
+// eine von Hand eingespielte Zeile deshalb nach der Uhr des Haushalts ein. Die
+// Monatslisten des Moduls verglichen dagegen nur als Text gegen die
+// UTC-Monatsgrenzen: '…T23:30:00' sortiert nach '…T22:00:00.000Z', der Besuch
+// vom 30.09. abends stand im Oktober - und in der Grafik derselben Seite im
+// September. Der Prozess laeuft bewusst in einer dritten Zone.
+async function withZonelessVisit({ zone, checkIn, now }, fn) {
+  const prevTz = process.env.TZ;
+  process.env.TZ = 'Asia/Tokyo';
+  setHouseholdZone(zone);
+  const visitId = insertVisitAt(checkIn);
+  try {
+    return await atClock(now, () => fn(visitId));
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    setHouseholdZone(null);
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  }
+}
+
+async function monthViews(monthValue) {
+  const visits = (await call('GET', `/visits?month=${monthValue}`, { as: ADM })).body.data;
+  const sessions = (await call('GET', `/work-sessions?month=${monthValue}`, { as: ADM })).body.data;
+  const summary = (await call('GET', `/summary?month=${monthValue}`, { as: ADM })).body.data.summary;
+  return {
+    visits: visits.visits.map((v) => v.id),
+    total: visits.totals.total,
+    sessions: sessions.map((v) => v.id),
+    count: summary.session_count,
+    amount: summary.total_amount,
+  };
+}
+
+test('Monatsgrenze: ein zonenloser Besuch am Letzten abends bleibt in seinem Monat (oestlich von UTC)', () => withZonelessVisit(
+  // 15.09.2024 12:00 in Berlin: der laufende Monat ist der September.
+  { zone: 'Europe/Berlin', checkIn: '2024-09-30T23:30:00', now: '2024-09-15T10:00:00.000Z' },
+  async (visitId) => {
+    assert.deepEqual(await monthViews('2024-09'),
+      { visits: [visitId], total: 55, sessions: [visitId], count: 1, amount: 55 },
+      'der Besuch vom 30.09. 23:30 steht im September');
+    assert.deepEqual(await monthViews('2024-10'),
+      { visits: [], total: 0, sessions: [], count: 0, amount: 0 },
+      'und nicht im Oktober');
+
+    const dashboard = (await call('GET', '/dashboard', { as: ADM })).body.data;
+    assert.equal(dashboard.visits_this_month, 1, 'die Kachel zaehlt ihn im laufenden September');
+    assert.equal(dashboard.pending_payments, 55, 'und fuehrt seinen Betrag als offen');
+    assert.equal(dashboard.monthly_payments.find((row) => row.month === '2024-09')?.total, 55,
+      'Vorbedingung: die Monatsgrafik bucht ihn laengst auf den September');
+  },
+));
+
+test('Monatsgrenze: ein zonenloser Besuch am Ersten frueh bleibt in seinem Monat (westlich von UTC)', () => withZonelessVisit(
+  // 15.10.2024 12:00 in Los Angeles. Der Oktober beginnt dort um 07:00 UTC -
+  // als Text liegt '2024-10-01T00:30:00' davor.
+  { zone: 'America/Los_Angeles', checkIn: '2024-10-01T00:30:00', now: '2024-10-15T19:00:00.000Z' },
+  async (visitId) => {
+    assert.deepEqual(await monthViews('2024-10'),
+      { visits: [visitId], total: 55, sessions: [visitId], count: 1, amount: 55 },
+      'der Besuch vom 01.10. 00:30 steht im Oktober');
+    assert.deepEqual(await monthViews('2024-09'),
+      { visits: [], total: 0, sessions: [], count: 0, amount: 0 },
+      'und nicht im September');
+
+    const dashboard = (await call('GET', '/dashboard', { as: ADM })).body.data;
+    assert.equal(dashboard.visits_this_month, 1);
+    assert.equal(dashboard.pending_payments, 55);
+    assert.equal(dashboard.monthly_payments.find((row) => row.month === '2024-10')?.total, 55,
+      'Vorbedingung: die Monatsgrafik bucht ihn laengst auf den Oktober');
+  },
+));
+
+test('Monatsgrenze: die Monatsgrafik behaelt einen zonenlosen Besuch am Ersten ihres aeltesten Monats', () => withZonelessVisit(
+  // Die Grafik reicht fuenf Monate zurueck: im Oktober bis zum Mai, und der
+  // beginnt in Los Angeles um 07:00 UTC.
+  { zone: 'America/Los_Angeles', checkIn: '2024-05-01T00:30:00', now: '2024-10-15T19:00:00.000Z' },
+  async () => {
+    // 30.04. 22:00 in Los Angeles: liegt im Rand des Fensters, gehoert aber
+    // in den April und damit nicht mehr in die Grafik.
+    const aprilId = insertVisitAt('2024-05-01T05:00:00.000Z');
+    try {
+      const dashboard = (await call('GET', '/dashboard', { as: ADM })).body.data;
+      assert.equal(dashboard.monthly_payments.find((row) => row.month === '2024-05')?.total, 55);
+      assert.equal(dashboard.monthly_payments.some((row) => row.month < '2024-05'), false,
+        'der Rand des Fensters bringt keinen aelteren Monat in die Grafik');
+    } finally {
+      db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(aprilId);
+    }
+  },
+));
+
+// --------------------------------------------------------------------------
+// Beleg eines Besuchs: Name UND Verknuepfung folgen dem Dokumentenrecht (#1358)
+// --------------------------------------------------------------------------
+// Der Besuch bleibt beim Quellmodul housekeeping, der Beleg ist aber eine Zeile
+// des Dokumente-Moduls. Name und ID gehen deshalb nur an, wer das Dokument
+// lesen darf - Modulachse (Mitgliedsrecht UND Token-Scope) plus Sichtbarkeit
+// des einzelnen Dokuments. Uebrig bleibt das housekeeping-eigene `has_receipt`.
+function insertDocument(name, visibility, createdBy) {
+  return db.prepare(`
+    INSERT INTO family_documents (name, category, visibility, original_name, mime_type, file_size, content_data, created_by)
+    VALUES (?, 'finance', ?, ?, 'text/plain', 1, 'x', ?)
+  `).run(name, visibility, `${name}.txt`, createdBy).lastInsertRowid;
+}
+
+function insertVisitWithReceipt(checkIn, documentId, { open = false, workerId = null } = {}) {
+  return db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by, receipt_document_id)
+    VALUES (?, ?, ?, 40, 0, ?, ?)
+  `).run(workerId, checkIn, open ? null : checkIn, ADMIN, documentId).lastInsertRowid;
+}
+
+function storedReceipt(visitId) {
+  return db.prepare('SELECT receipt_document_id FROM housekeeping_work_sessions WHERE id = ?').get(visitId).receipt_document_id;
+}
+
+const receiptOf = (session) => session && {
+  id: session.receipt_document_id,
+  has: session.has_receipt,
+  ...(Object.hasOwn(session, 'receipt_document_name') ? { name: session.receipt_document_name } : {}),
+};
+
+test('Beleg: Name und ID nur fuer wer das Dokument lesen darf - Liste und Einzelbericht (#1358)', async () => {
+  const familyDoc = insertDocument('Quittung Familie', 'family', ADMIN);
+  const privateDoc = insertDocument('Quittung privat', 'private', ADMIN);
+  const memberPrivateDoc = insertDocument('Quittung Mitglied', 'private', MEMBER);
+  const familyVisit = insertVisitWithReceipt('2026-05-12T10:00:00.000Z', familyDoc);
+  const privateVisit = insertVisitWithReceipt('2026-05-13T10:00:00.000Z', privateDoc);
+  const memberVisit = insertVisitWithReceipt('2026-05-14T10:00:00.000Z', memberPrivateDoc);
+  const visitIds = [familyVisit, privateVisit, memberVisit];
+  const receipts = async (as) => {
+    const list = await call('GET', '/visits?month=2026-05', { as });
+    assert.equal(list.status, 200);
+    const byId = new Map(list.body.data.visits.map((v) => [v.id, v]));
+    const sessions = await call('GET', '/work-sessions?month=2026-05', { as });
+    assert.equal(sessions.status, 200);
+    const sessionById = new Map(sessions.body.data.map((s) => [s.id, s]));
+    const out = { list: [], detail: [], sessions: [] };
+    for (const id of visitIds) {
+      const one = await call('GET', `/visits/${id}`, { as });
+      assert.equal(one.status, 200);
+      out.list.push(receiptOf(byId.get(id)));
+      out.detail.push(receiptOf(one.body.data));
+      out.sessions.push(receiptOf(sessionById.get(id)));
+    }
+    return out;
+  };
+  // `has` ist `null` ohne Dokumentenrecht: dann sagt der Besuch nicht einmal,
+  // DASS er einen Beleg hat (einheitlich mit Budget, Ausgaben, Inventar, Aufgaben).
+  const expect = (...seen) => {
+    const docs = [familyDoc, privateDoc, memberPrivateDoc];
+    const names = ['Quittung Familie', 'Quittung privat', 'Quittung Mitglied'];
+    const withName = seen.map((ok, i) => ({ id: ok ? docs[i] : null, has: true, name: ok ? names[i] : null }));
+    return { list: withName, detail: withName, sessions: withName.map(({ id, has }) => ({ id, has })) };
+  };
+  const expectNoRight = () => {
+    const none = [0, 1, 2].map(() => ({ id: null, has: null, name: null }));
+    return { list: none, detail: none, sessions: none.map(({ id, has }) => ({ id, has })) };
+  };
+  try {
+    assert.deepEqual(await receipts(ADM), expect(true, true, false),
+      'der Admin sieht, was er angelegt hat - ein fremdes privates Dokument nicht, Admin hin oder her');
+    assert.deepEqual(await receipts(MEM), expect(true, false, true),
+      'ein Mitglied sieht Familie und Eigenes, nicht das private des Admins');
+    assert.deepEqual(await receipts({ ...MEM, moduleAccess: { documents: 'read' } }), expect(true, false, true),
+      'Leserecht auf die Dokumente reicht');
+    assert.deepEqual(await receipts({ ...MEM, moduleAccess: { documents: 'none' } }), expectNoRight(),
+      'documents: none bekommt weder Namen noch ID noch den Hinweis, auch nicht fuer das eigene Dokument');
+    assert.deepEqual(await receipts(TOKEN_READ), expectNoRight(),
+      'ein Token ohne documents-Scope bekommt weder Namen noch ID noch den Hinweis');
+    assert.deepEqual(await receipts({ ...TOKEN_READ, authScopes: ['housekeeping:read', 'documents:read'] }), expect(true, true, false),
+      'mit documents:read liefert das Token, was sein Nutzer sieht');
+    assert.deepEqual(await receipts({ id: MEMBER, role: 'member', authMethod: 'api_token', authScopes: ['housekeeping:read', 'documents:read'] }),
+      expect(true, false, true), 'ein Mitglieds-Token mit documents:read sieht das fremde private Dokument trotzdem nicht');
+
+    db.prepare('INSERT INTO family_document_access (document_id, user_id) VALUES (?, ?)').run(privateDoc, MEMBER);
+    assert.deepEqual(await receipts(MEM), expect(true, true, true), 'eine Freigabe an das Mitglied macht den Beleg sichtbar');
+  } finally {
+    db.prepare(`DELETE FROM housekeeping_work_sessions WHERE id IN (${visitIds.map(() => '?').join(', ')})`).run(...visitIds);
+    db.prepare('DELETE FROM family_documents WHERE id IN (?, ?, ?)').run(familyDoc, privateDoc, memberPrivateDoc);
+  }
+});
+
+test('Beleg: jeder Serialisierer maskiert die ID - Arbeiter, Status, Dashboard, Check-out, Bezahlen, Bearbeiten (#1358)', async () => {
+  const privateDoc = insertDocument('Quittung privat', 'private', ADMIN);
+  const created = await call('POST', '/worker', { as: ADM, body: { display_name: 'Belegprobe', daily_rate: 40, rate_type: 'daily' } });
+  assert.equal(created.status, 201);
+  const workerId = created.body.data.id;
+  const visitId = insertVisitWithReceipt(new Date().toISOString(), privateDoc, { open: true, workerId });
+  const masked = { id: null, has: true };
+  try {
+    const workers = await call('GET', '/workers', { as: MEM });
+    const worker = workers.body.data.find((w) => w.id === workerId);
+    assert.equal(worker.current_session.id, visitId);
+    assert.deepEqual(receiptOf(worker.current_session), masked, 'current_session am Arbeiter');
+    assert.deepEqual(receiptOf(worker.today_session), masked, 'today_session am Arbeiter');
+
+    const summary = await call('GET', '/summary', { as: MEM });
+    assert.equal(summary.body.data.current_session.id, visitId);
+    assert.deepEqual(receiptOf(summary.body.data.current_session), masked, 'current_session in /summary');
+
+    const dashboard = await call('GET', '/dashboard', { as: MEM });
+    assert.equal(dashboard.body.data.last_visit.id, visitId);
+    assert.deepEqual(receiptOf(dashboard.body.data.last_visit), masked, 'last_visit im Dashboard');
+    const dashWorker = dashboard.body.data.workers.find((w) => w.id === workerId);
+    assert.deepEqual(receiptOf(dashWorker.current_session), masked, 'Arbeiter im Dashboard');
+
+    // Ohne Dokumentenrecht nicht einmal der Hinweis, dass es einen Beleg gibt.
+    const NONE_MEM = { ...MEM, moduleAccess: { documents: 'none' } };
+    const noneSummary = await call('GET', '/summary', { as: NONE_MEM });
+    assert.deepEqual(receiptOf(noneSummary.body.data.current_session), { id: null, has: null }, '/summary bei documents: none');
+    const noneDashboard = await call('GET', '/dashboard', { as: NONE_MEM });
+    assert.deepEqual(receiptOf(noneDashboard.body.data.last_visit), { id: null, has: null }, 'Dashboard bei documents: none');
+
+    const adminView = await call('GET', '/summary', { as: ADM });
+    assert.deepEqual(receiptOf(adminView.body.data.current_session), { id: privateDoc, has: true }, 'die Erstellerin sieht die ID');
+
+    const checkedOut = await call('POST', '/work-sessions/check-out', { as: MEM, body: { worker_id: workerId } });
+    assert.equal(checkedOut.status, 200);
+    assert.deepEqual(receiptOf(checkedOut.body.data), masked, 'Check-out-Antwort');
+
+    // Der Tag, den das Formular zeigt: der des Haushalts, nicht der UTC-Tag.
+    const date = utcToWall(checkedOut.body.data.check_in, householdTimeZone(db))?.date;
+    const edited = await call('PUT', `/visits/${visitId}`, { as: MEM, body: { date, daily_rate: 40, extras: 0 } });
+    assert.equal(edited.status, 200);
+    assert.deepEqual(receiptOf(edited.body.data), masked, 'PUT-Antwort');
+
+    const paid = await call('POST', `/visits/${visitId}/pay`, { as: MEM });
+    assert.equal(paid.status, 200);
+    assert.deepEqual(receiptOf(paid.body.data), masked, 'Bezahlen-Antwort');
+    assert.equal(storedReceipt(visitId), privateDoc, 'gespeichert bleibt der Beleg unberuehrt');
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    db.prepare('DELETE FROM family_documents WHERE id = ?').run(privateDoc);
+    db.prepare('DELETE FROM housekeeping_workers WHERE id = ?').run(workerId);
+  }
+});
+
+test('Beleg: wer den gespeicherten nicht sieht, kann ihn weder loesen noch ersetzen (#1358)', async () => {
+  // Regel 2 aus services/document-links.js: Entfernen kann man nur, was man
+  // sieht. Der Dialog schickt bei maskierter ID `null` zurueck - das heisst
+  // "behalten", nicht "loesen".
+  const privateDoc = insertDocument('Quittung privat', 'private', ADMIN);
+  const ownDoc = insertDocument('Eigene Quittung', 'private', MEMBER);
+  const visitId = insertVisitWithReceipt('2026-05-14T10:00:00.000Z', privateDoc);
+  const put = (as, extra) => call('PUT', `/visits/${visitId}`, {
+    as,
+    body: { date: '2026-05-14', daily_rate: 45, extras: 0, ...extra },
+  });
+  try {
+    assert.equal((await put(MEM, { receipt_document_id: null })).status, 200);
+    assert.equal(storedReceipt(visitId), privateDoc, 'null von einem, der den Beleg nicht sieht, behaelt ihn');
+    assert.equal((await put(MEM, { receipt_document_id: '' })).status, 200);
+    assert.equal(storedReceipt(visitId), privateDoc, 'ein leerer Wert ebenso');
+    assert.equal((await put(MEM, {})).status, 200);
+    assert.equal(storedReceipt(visitId), privateDoc, 'ein fehlendes Feld ebenso');
+    // KEIN ORAKEL: jede Zahl bekommt dieselbe Antwort, auch die richtige.
+    // Sonst liesse sich die maskierte ID raten - rowids sind fortlaufend, und
+    // 200 gegen 403 verriete den Treffer.
+    const replaced = await put(MEM, { receipt_document_id: ownDoc });
+    assert.equal(replaced.status, 403);
+    assert.equal(replaced.body.code, 403);
+    assert.equal(typeof replaced.body.error, 'string');
+    assert.equal(storedReceipt(visitId), privateDoc, 'ersetzen darf er ihn auch nicht');
+    const guessedRight = await put(MEM, { receipt_document_id: privateDoc });
+    assert.deepEqual({ status: guessedRight.status, body: guessedRight.body }, { status: 403, body: replaced.body },
+      'die richtig geratene ID antwortet genau wie eine falsche');
+    const guessedWrong = await put(MEM, { receipt_document_id: 999999 });
+    assert.deepEqual({ status: guessedWrong.status, body: guessedWrong.body }, { status: 403, body: replaced.body });
+    // Auch der Loeschzustand des unsichtbaren Belegs darf nicht durchscheinen.
+    lockDocumentDeletes([privateDoc]);
+    try {
+      const locked = await put(MEM, { receipt_document_id: privateDoc });
+      assert.deepEqual({ status: locked.status, body: locked.body }, { status: 403, body: replaced.body },
+        'im Loeschfenster weiter 403, nicht 409');
+      assert.equal((await put(MEM, { receipt_document_id: null })).status, 200, 'behalten fragt die Loeschsperre nicht');
+    } finally {
+      unlockDocumentDeletes([privateDoc]);
+    }
+    assert.equal(storedReceipt(visitId), privateDoc);
+
+    // Dieselbe Regel fuer die anderen Wege, auf denen der Beleg verborgen ist:
+    // ohne Dokumentenrecht, und ein Token ohne documents-Scope - dessen Nutzer
+    // (der Admin) den Beleg selbst angelegt hat und ihn sonst saehe.
+    for (const [label, as] of [
+      ['documents: none', { ...MEM, moduleAccess: { documents: 'none' } }],
+      ['Token nur housekeeping:write', { id: ADMIN, role: 'admin', authMethod: 'api_token', authScopes: ['housekeeping:write'] }],
+    ]) {
+      const right = await put(as, { receipt_document_id: privateDoc });
+      const wrong = await put(as, { receipt_document_id: ownDoc });
+      assert.equal(right.status, 403, `${label}: die richtige ID ist 403`);
+      assert.deepEqual({ status: right.status, body: right.body }, { status: wrong.status, body: wrong.body },
+        `${label}: richtige und falsche ID antworten gleich`);
+      assert.deepEqual(right.body, replaced.body, `${label}: und wie beim Mitglied ohne Sicht`);
+      assert.equal((await put(as, { receipt_document_id: null })).status, 200);
+      assert.equal(storedReceipt(visitId), privateDoc, `${label}: null behaelt den Beleg`);
+    }
+
+    // Wer ihn sieht, darf ihn loesen.
+    assert.equal((await put(ADM, { receipt_document_id: null })).status, 200);
+    assert.equal(storedReceipt(visitId), null, 'die Erstellerin loest ihn');
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    db.prepare('DELETE FROM family_documents WHERE id IN (?, ?)').run(privateDoc, ownDoc);
+  }
+});
+
+test('Beleg: eine neue Verknuepfung verlangt Dokumentenzugriff und Sichtbarkeit (#1358)', async () => {
+  const familyDoc = insertDocument('Quittung Familie', 'family', ADMIN);
+  const privateDoc = insertDocument('Quittung privat', 'private', ADMIN);
+  const ownDoc = insertDocument('Eigene Quittung', 'private', MEMBER);
+  const visitId = insertVisitWithReceipt('2026-05-15T10:00:00.000Z', null);
+  const put = (as, extra) => call('PUT', `/visits/${visitId}`, {
+    as,
+    body: { date: '2026-05-15', daily_rate: 45, extras: 0, ...extra },
+  });
+  try {
+    const noneMember = await put({ ...MEM, moduleAccess: { documents: 'none' } }, { receipt_document_id: familyDoc });
+    assert.equal(noneMember.status, 403, 'documents: none setzt keine ID');
+    assert.equal(noneMember.body.code, 403);
+    assert.equal(storedReceipt(visitId), null);
+
+    const token = await put({ id: ADMIN, role: 'admin', authMethod: 'api_token', authScopes: ['housekeeping:write'] },
+      { receipt_document_id: familyDoc });
+    assert.equal(token.status, 403, 'ein Token ohne documents-Scope setzt keine ID');
+    assert.equal(storedReceipt(visitId), null);
+
+    // KEIN ORAKEL auch beim neuen Verknuepfen: eine unbekannte oder geloeschte
+    // ID und ein Dokument im Loeschfenster antworten wie ein vorhandenes. Die
+    // Abweisung steht deshalb VOR Sichtbarkeit und Loeschsperre
+    // (assertDocumentLinkTargetsAvailable) - dahinter gaebe die unbekannte ID
+    // 200 und die gesperrte 409.
+    const deletedDoc = insertDocument('Quittung geloescht', 'family', ADMIN);
+    db.prepare('DELETE FROM family_documents WHERE id = ?').run(deletedDoc);
+    for (const [label, as, refused] of [
+      ['documents: none', { ...MEM, moduleAccess: { documents: 'none' } }, noneMember],
+      ['Token ohne documents-Scope', { id: ADMIN, role: 'admin', authMethod: 'api_token', authScopes: ['housekeeping:write'] }, token],
+    ]) {
+      const same = { status: refused.status, body: refused.body };
+      for (const id of [999999, deletedDoc]) {
+        const res = await put(as, { receipt_document_id: id });
+        assert.deepEqual({ status: res.status, body: res.body }, same, `${label}: ID ${id} antwortet wie ein vorhandenes Dokument`);
+      }
+      lockDocumentDeletes([familyDoc]);
+      try {
+        const locked = await put(as, { receipt_document_id: familyDoc });
+        assert.deepEqual({ status: locked.status, body: locked.body }, same, `${label}: im Loeschfenster weiter 403, nicht 409`);
+      } finally {
+        unlockDocumentDeletes([familyDoc]);
+      }
+      assert.equal(storedReceipt(visitId), null, `${label}: nichts verknuepft`);
+    }
+
+    assert.equal((await put(MEM, { receipt_document_id: privateDoc })).status, 200);
+    assert.equal(storedReceipt(visitId), null, 'ein fremdes privates Dokument wird nicht verknuepft');
+
+    assert.equal((await put(MEM, { receipt_document_id: ownDoc })).status, 200);
+    assert.equal(storedReceipt(visitId), ownDoc, 'ein eigenes Dokument schon');
+
+    assert.equal((await put(MEM, { receipt_document_id: null })).status, 200);
+    assert.equal(storedReceipt(visitId), null, 'und wer es sieht, loest es wieder');
+  } finally {
+    db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(visitId);
+    db.prepare('DELETE FROM family_documents WHERE id IN (?, ?, ?)').run(familyDoc, privateDoc, ownDoc);
+  }
+});
+
+test('ein umgefaerbter gespiegelter Besuch faellt aus dem Schnappschuss der Farb-Heilung (#1270)', async () => {
+  // Die Farbe der Betreuungskraft ist eine lokale Wahl. Stand der Termin im
+  // Schnappschuss, darf die Heilung ihn danach nicht mehr fassen - auch wenn
+  // der Server die COLOR-Zeile verwirft.
+  const workerId = await freshWorker('Heila');
+  const created = await call('POST', '/work-sessions/check-in', {
+    as: ADM,
+    body: { worker_id: workerId, daily_rate: 40, local_date: '2025-08-01' },
+  });
+  const { id } = db.prepare('SELECT calendar_event_id AS id FROM housekeeping_work_sessions WHERE id = ?')
+    .get(created.body.data.id);
+  db.prepare(`
+    UPDATE calendar_events
+    SET external_source = 'caldav', external_calendar_id = ?, color = '#111111', outbound_dirty = 0
+    WHERE id = ?
+  `).run(`hk-heal-${id}@test`, id);
+  const snapshot = () => JSON.parse(db.prepare("SELECT value FROM sync_config WHERE key = 'caldav_legacy_color_heal_snapshot_9'").get().value);
+  db.prepare("INSERT INTO sync_config (key, value) VALUES ('caldav_legacy_color_heal_snapshot_9', ?)")
+    .run(JSON.stringify({ [id]: '#111111' }));
+  try {
+    const r = await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-08-02', daily_rate: 40 } });
+    assert.equal(r.status, 200);
+    assert.notEqual(db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color, '#111111',
+      'Vorbedingung: der Besuch hat die Farbe der Betreuungskraft');
+    assert.deepEqual(snapshot(), {}, 'raus aus dem Schnappschuss');
+
+    // Ohne Farbwechsel bleibt ein Eintrag stehen.
+    const color = db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color;
+    db.prepare("UPDATE sync_config SET value = ? WHERE key = 'caldav_legacy_color_heal_snapshot_9'")
+      .run(JSON.stringify({ [id]: String(color).toLowerCase() }));
+    await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-08-03', daily_rate: 40 } });
+    assert.deepEqual(snapshot(), { [id]: String(color).toLowerCase() }, 'ohne Farbwechsel keine Wahl');
+  } finally {
+    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
+  }
+});
+
+// --------------------------------------------------------------------------
+// Besuch bearbeiten: der Tag ist der des HAUSHALTS (#1540)
+// --------------------------------------------------------------------------
+// `check_in` ist ein UTC-Instant. Das Formular zeigte `check_in.slice(0, 10)`,
+// den UTC-Tag, und `updateVisitLinks` legte Termin und Zahlungsaufgabe auf
+// denselben. Ein Besuch am 1. Oktober um 00:30 in Berlin (30.09. 22:30Z) sprang
+// beim Bearbeiten - auch wenn nur der Betrag geaendert wurde - auf den
+// 30. September; wer den Tag im Formular auf den 1. „korrigierte", schob den
+// Besuch selbst auf den 2. um 00:30. Der Tag im Formular ist jetzt der des
+// Haushalts, die Uhrzeit des Besuchs bleibt die des Haushalts.
+
+function seedLinkedVisit(workerId, checkIn, day) {
+  const eventId = db.prepare(`
+    INSERT INTO calendar_events (title, start_datetime, all_day, created_by, external_source)
+    VALUES ('Besuch', ?, 1, ?, 'local')
+  `).run(day, ADMIN).lastInsertRowid;
+  const taskId = db.prepare(`
+    INSERT INTO tasks (title, due_date, priority, category, status, created_by)
+    VALUES ('Zahlung', ?, 'medium', 'household', 'open', ?)
+  `).run(day, ADMIN).lastInsertRowid;
+  return db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, calendar_event_id, payment_task_id, created_by)
+    VALUES (?, ?, ?, 40, 0, ?, ?, ?)
+  `).run(workerId, checkIn, checkIn, eventId, taskId, ADMIN).lastInsertRowid;
+}
+
+function visitState(id) {
+  return db.prepare(`
+    SELECT hws.check_in, e.start_datetime AS event_day, t.due_date AS task_day
+    FROM housekeeping_work_sessions hws
+    JOIN calendar_events e ON e.id = hws.calendar_event_id
+    JOIN tasks t ON t.id = hws.payment_task_id
+    WHERE hws.id = ?
+  `).get(id);
+}
+
+async function inHouseholdZone(zone, fn) {
+  const prevTz = process.env.TZ;
+  process.env.TZ = 'America/New_York'; // Server-Prozess bewusst in einer dritten Zone
+  db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('household_timezone', ?)").run(zone);
+  try {
+    await fn();
+  } finally {
+    db.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run();
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  }
+}
+
+test('#1540 Besuch bearbeiten: nur den Betrag aendern laesst Tag und Uhrzeit des Haushalts stehen', () => inHouseholdZone('Europe/Berlin', async () => {
+  const workerId = await freshWorker('Nachtbesuch');
+  const id = seedLinkedVisit(workerId, '2026-09-30T22:30:00.000Z', '2026-10-01');
+  const r = await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-01', daily_rate: 40, extras: 5 } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(visitState(id), { check_in: '2026-09-30T22:30:00.000Z', event_day: '2026-10-01', task_day: '2026-10-01' });
+}));
+
+test('#1540 Besuch bearbeiten: ein neuer Tag behaelt die Uhrzeit des Haushalts, auch ueber die Zeitumstellung', () => inHouseholdZone('Europe/Berlin', async () => {
+  const workerId = await freshWorker('Umzug');
+  const id = seedLinkedVisit(workerId, '2026-09-30T22:30:00.000Z', '2026-10-01');
+  await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-05', daily_rate: 40 } });
+  assert.deepEqual(visitState(id), { check_in: '2026-10-04T22:30:00.000Z', event_day: '2026-10-05', task_day: '2026-10-05' });
+  // 26.10. ist nach der Umstellung: 00:30 MEZ ist 23:30Z am Vortag.
+  await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-26', daily_rate: 40 } });
+  assert.deepEqual(visitState(id), { check_in: '2026-10-25T23:30:00.000Z', event_day: '2026-10-26', task_day: '2026-10-26' });
+}));
+
+test('#1540 Besuch bearbeiten: Haushalt in UTC - unveraendert', () => inHouseholdZone('UTC', async () => {
+  const workerId = await freshWorker('Nullzone');
+  const id = seedLinkedVisit(workerId, '2026-09-30T22:30:00.000Z', '2026-09-30');
+  await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-09-30', daily_rate: 40, extras: 5 } });
+  assert.deepEqual(visitState(id), { check_in: '2026-09-30T22:30:00.000Z', event_day: '2026-09-30', task_day: '2026-09-30' });
+  await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-02', daily_rate: 40 } });
+  assert.deepEqual(visitState(id), { check_in: '2026-10-02T22:30:00.000Z', event_day: '2026-10-02', task_day: '2026-10-02' });
+}));
+
+test('#1540 ohne eingestellte Haushaltszone: der Tag, den das Formular zeigte, entscheidet (Review)', async () => {
+  // Ohne `household_timezone` liest die Oberflaeche die Zone des BROWSERS, der
+  // Server `TZ` bzw. die Systemzone - im Container meist UTC. Ein Besuch um
+  // 00:30 in Berlin steht im Formular am 1., auf der Server-Uhr am 30.09.
+  // Verglich der Server den eingereichten Tag mit SEINEM, hielt er ein reines
+  // Betragsupdate fuer einen neuen Tag und schob den Besuch um 24 Stunden.
+  // Das Formular schickt deshalb den Tag mit, den es vorbelegt hat.
+  const prevTz = process.env.TZ;
+  process.env.TZ = 'UTC';
+  db.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run();
+  try {
+    const workerId = await freshWorker('Ohnezone');
+    const id = seedLinkedVisit(workerId, '2026-09-30T22:30:00.000Z', '2026-10-01');
+    await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-01', original_date: '2026-10-01', daily_rate: 40, extras: 5 } });
+    assert.deepEqual(visitState(id), { check_in: '2026-09-30T22:30:00.000Z', event_day: '2026-10-01', task_day: '2026-10-01' },
+      'nur der Betrag geaendert: der Besuch bleibt, wo er war');
+    await call('PUT', `/visits/${id}`, { as: ADM, body: { date: '2026-10-05', original_date: '2026-10-01', daily_rate: 40 } });
+    assert.deepEqual(visitState(id), { check_in: '2026-10-04T22:30:00.000Z', event_day: '2026-10-05', task_day: '2026-10-05' },
+      'vier Tage spaeter, dieselbe Uhrzeit');
+  } finally {
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  }
+});
+
+// --------------------------------------------------------------------------
+// "Heute" der Haushaltshilfe ist der Tag des HAUSHALTS (#1556)
+// --------------------------------------------------------------------------
+// Check-in und Tagesabfrage lasen `local_date` und `timezone_offset_minutes`
+// von der Uhr des GERAETS und fielen ohne sie auf die Zone des Server-Prozesses
+// zurueck. Ein Geraet in New York legte den Check-in um 00:30 in Berlin auf den
+// Vortag und zeigte den Besuch von gestern Abend als heutigen. Und selbst ein
+// Geraet im Haushalt rechnete den GANZEN Tag mit dem Offset von JETZT: an den
+// Umstelltagen verschob das die Tagesgrenze um eine Stunde.
+
+async function atHouseholdClock({ zone, processTz, now }, fn) {
+  const prevTz = process.env.TZ;
+  process.env.TZ = processTz;
+  setHouseholdZone(zone);
+  setConfig(PAYMENT_TASKS_KEY, '1');
+  mock.timers.enable({ apis: ['Date'], now: new Date(now) });
+  try {
+    return await fn();
+  } finally {
+    mock.timers.reset();
+    db.prepare('DELETE FROM sync_config WHERE key = ?').run(PAYMENT_TASKS_KEY);
+    setHouseholdZone(null);
+    if (prevTz === undefined) delete process.env.TZ;
+    else process.env.TZ = prevTz;
+  }
+}
+
+const PAYMENT_TASKS_KEY = 'housekeeping_payment_tasks';
+
+async function todaySessionId(path, workerId) {
+  const r = await call('GET', path, { as: ADM });
+  assert.equal(r.status, 200, `${path}: ${r.status}`);
+  const list = r.body.data.workers ?? r.body.data;
+  return list.find((w) => w.id === workerId)?.today_session?.id ?? null;
+}
+
+// Ein Geraet in New York am 30.09. um 18:30 - in Berlin ist es schon der 1.10., 00:30.
+const NY_DEVICE = 'local_date=2026-09-30&timezone_offset_minutes=240';
+
+test('#1556 Check-in nach Mitternacht: Termin, Zahlungsaufgabe und "heute" folgen dem Haushalt, nicht dem Geraet', () => atHouseholdClock(
+  { zone: 'Europe/Berlin', processTz: 'America/New_York', now: '2026-09-30T22:30:00.000Z' },
+  async () => {
+    const workerId = await freshWorker('Mitternacht');
+    // Gestern Abend, 21:00 in Berlin.
+    seedLinkedVisit(workerId, '2026-09-30T19:00:00.000Z', '2026-09-30');
+    assert.equal(await todaySessionId(`/workers?${NY_DEVICE}`, workerId), null, 'Geraet in New York: gestern ist nicht heute');
+    assert.equal(await todaySessionId('/workers', workerId), null, 'ohne Parameter: nicht die Zone des Server-Prozesses');
+    assert.equal(await todaySessionId('/dashboard', workerId), null, 'Uebersicht: dieselbe Frage');
+
+    const r = await call('POST', '/work-sessions/check-in', {
+      as: ADM,
+      body: { worker_id: workerId, daily_rate: 40, local_date: '2026-09-30', timezone_offset_minutes: 240 },
+    });
+    assert.equal(r.status, 201);
+    assert.deepEqual(visitState(r.body.data.id), { check_in: '2026-09-30T22:30:00.000Z', event_day: '2026-10-01', task_day: '2026-10-01' });
+    assert.equal(await todaySessionId(`/workers?${NY_DEVICE}`, workerId), r.body.data.id, 'der neue Besuch ist der heutige');
+  },
+));
+
+test('#1556 Umstelltage: die Tagesgrenzen sind die des ganzen Haushaltstags, nicht der Offset von jetzt', async () => {
+  // 25.10.2026 hat 25 Stunden. Um 23:45 MEZ (Offset -60) begann der Tag noch in
+  // MESZ um 22:00Z des Vortags - der Besuch um 00:30 MESZ ist von heute.
+  await atHouseholdClock({ zone: 'Europe/Berlin', processTz: 'America/New_York', now: '2026-10-25T22:45:00.000Z' }, async () => {
+    const workerId = await freshWorker('Herbst');
+    const early = seedLinkedVisit(workerId, '2026-10-24T22:30:00.000Z', '2026-10-25');
+    assert.equal(await todaySessionId('/workers?local_date=2026-10-25&timezone_offset_minutes=-60', workerId), early);
+    assert.equal(await todaySessionId('/workers', workerId), early);
+  });
+  // 29.03.2026 hat 23 Stunden. Um 23:30 MESZ (Offset -120) begann der Tag noch in
+  // MEZ um 23:00Z des Vortags - der Besuch um 23:30 MEZ am 28. ist von gestern.
+  await atHouseholdClock({ zone: 'Europe/Berlin', processTz: 'America/New_York', now: '2026-03-29T21:30:00.000Z' }, async () => {
+    const workerId = await freshWorker('Fruehling');
+    seedLinkedVisit(workerId, '2026-03-28T22:30:00.000Z', '2026-03-28');
+    assert.equal(await todaySessionId('/workers?local_date=2026-03-29&timezone_offset_minutes=-120', workerId), null);
+    assert.equal(await todaySessionId('/workers', workerId), null);
+  });
+});
+
+test('#1556 ohne eingestellte Haushaltszone: die Zone der Oberflaeche entscheidet, auch am Umstelltag', async () => {
+  // Ohne `household_timezone` liest die Oberflaeche die Zone des Browsers, der
+  // Server `TZ` - im Container meist UTC. Die Oberflaeche schickt deshalb ihre
+  // Zone mit, und der Server rechnet den Tag darin.
+  await atHouseholdClock({ zone: null, processTz: 'UTC', now: '2026-10-25T22:45:00.000Z' }, async () => {
+    const workerId = await freshWorker('OhnezoneHerbst');
+    const early = seedLinkedVisit(workerId, '2026-10-24T22:30:00.000Z', '2026-10-25');
+    assert.equal(await todaySessionId('/workers?timezone=Europe%2FBerlin', workerId), early);
+    assert.equal(await todaySessionId('/dashboard?timezone=Europe%2FBerlin', workerId), early, 'die Uebersicht liest dieselbe Angabe (Review)');
+    // Eine unbekannte Zone wirft nicht, sie faellt auf die Uhr des Servers.
+    assert.equal(await todaySessionId('/workers?timezone=Mars%2FOlympus', workerId), null);
+  });
+  await atHouseholdClock({ zone: null, processTz: 'UTC', now: '2026-09-30T22:30:00.000Z' }, async () => {
+    const workerId = await freshWorker('OhnezoneNacht');
+    const r = await call('POST', '/work-sessions/check-in', { as: ADM, body: { worker_id: workerId, daily_rate: 40, timezone: 'Europe/Berlin' } });
+    assert.equal(r.status, 201);
+    assert.deepEqual(visitState(r.body.data.id), { check_in: '2026-09-30T22:30:00.000Z', event_day: '2026-10-01', task_day: '2026-10-01' });
+    await call('POST', '/work-sessions/check-out', { as: ADM, body: { worker_id: workerId } });
+    // Eine Oberflaeche aus dem Cache des Service Workers schickt noch Tag und
+    // Offset des Geraets. Ohne Haushaltszone ist das weiter die einzige Angabe
+    // ueber den Haushalt, die der Server hat.
+    const legacy = await call('POST', '/work-sessions/check-in', {
+      as: ADM,
+      body: { worker_id: workerId, daily_rate: 40, local_date: '2026-10-01', timezone_offset_minutes: -120 },
+    });
+    assert.equal(legacy.status, 201);
+    assert.equal(visitState(legacy.body.data.id).event_day, '2026-10-01');
+  });
+});
+
+// --------------------------------------------------------------------------
+// "Heute" und "zuletzt" lesen `check_in` als ZEITPUNKT, nicht als Text
+// --------------------------------------------------------------------------
+// In der Spalte stehen Schreibweisen nebeneinander: `toISOString()` mit
+// Millisekunden (Check-in, Bearbeiten), '…SSZ' ohne (scripts/seed-demo.js) und
+// - von Hand eingespielt - zonenlose Wanduhrzeit, die die Monatslisten seit
+// #1643 nach der Uhr des Haushalts einordnen. `loadTodaySession()` verglich
+// weiter als Text gegen die Tagesgrenzen, und jedes "die letzte" sortierte per
+// `ORDER BY check_in`: dieselbe Seite gab fuer denselben Besuch zwei Antworten.
+// Die Jahre liegen bewusst hinter allen anderen Zeilen dieser Datei, weil
+// `last_visit` und `current_session` ueber die ganze Tabelle lesen.
+function insertSessionAt(workerId, checkIn, { open = false } = {}) {
+  return db.prepare(`
+    INSERT INTO housekeeping_work_sessions (worker_id, check_in, check_out, daily_rate, extras, created_by)
+    VALUES (?, ?, ?, 40, 0, ?)
+  `).run(workerId, checkIn, open ? null : checkIn, ADMIN).lastInsertRowid;
+}
+
+async function withSessions(fn) {
+  const ids = [];
+  try {
+    return await fn((...args) => { const id = insertSessionAt(...args); ids.push(id); return id; });
+  } finally {
+    for (const id of ids) db.prepare('DELETE FROM housekeeping_work_sessions WHERE id = ?').run(id);
+  }
+}
+
+test('heute: ein zonenloser Besuch zaehlt an SEINEM Haushaltstag (oestlich von UTC)', () => atHouseholdClock(
+  // 15.07.2031 23:45 in Berlin. Der Tag reicht von 14.07. 22:00Z bis 15.07. 22:00Z.
+  { zone: 'Europe/Berlin', processTz: 'Asia/Tokyo', now: '2031-07-15T21:45:00.000Z' },
+  () => withSessions(async (insert) => {
+    const lateToday = await freshWorker('HeuteSpaet');
+    const lateYesterday = await freshWorker('GesternSpaet');
+    // 23:30 in Berlin, heute: als Text hinter dem Tagesende '…T22:00:00.000Z'.
+    const todayId = insert(lateToday, '2031-07-15T23:30:00');
+    // 23:30 in Berlin, gestern: als Text hinter dem Tagesanfang '2031-07-14T22:00:00.000Z'.
+    insert(lateYesterday, '2031-07-14T23:30:00');
+    assert.equal(await todaySessionId('/workers', lateToday), todayId, 'der Besuch von heute 23:30 ist von heute');
+    assert.equal(await todaySessionId('/dashboard', lateToday), todayId, 'Uebersicht: dieselbe Frage');
+    assert.equal(await todaySessionId('/workers', lateYesterday), null, 'der von gestern 23:30 nicht');
+    const visits = (await call('GET', '/visits?month=2031-07', { as: ADM })).body.data.visits;
+    assert.equal(visits.some((v) => v.id === todayId), true, 'Vorbedingung: die Monatsliste fuehrt ihn laengst');
+  }),
+));
+
+test('heute: ein zonenloser Besuch zaehlt an SEINEM Haushaltstag (westlich von UTC)', () => atHouseholdClock(
+  // 15.07.2031 01:00 in Los Angeles. Der Tag beginnt dort um 07:00Z.
+  { zone: 'America/Los_Angeles', processTz: 'Asia/Tokyo', now: '2031-07-15T08:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const earlyToday = await freshWorker('HeuteFrueh');
+    const earlyTomorrow = await freshWorker('MorgenFrueh');
+    // 00:30 in Los Angeles, heute: als Text vor dem Tagesanfang '…T07:00:00.000Z'.
+    const todayId = insert(earlyToday, '2031-07-15T00:30:00');
+    // 00:30 in Los Angeles, morgen: als Text vor dem Tagesende '2031-07-16T07:00:00.000Z'.
+    insert(earlyTomorrow, '2031-07-16T00:30:00');
+    assert.equal(await todaySessionId('/workers', earlyToday), todayId, 'der Besuch von heute 00:30 ist von heute');
+    assert.equal(await todaySessionId('/workers', earlyTomorrow), null, 'der von morgen 00:30 nicht');
+  }),
+));
+
+test('heute und zuletzt: die spaeteste Sitzung ist der spaeteste Zeitpunkt, nicht der groesste Text', () => atHouseholdClock(
+  { zone: 'Europe/Berlin', processTz: 'Asia/Tokyo', now: '2032-07-15T12:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const mixed = await freshWorker('Gemischt');
+    const seeded = await freshWorker('Saatform');
+    // 11:00 in Berlin (zonenlos) gegen 12:00 in Berlin (Instant): als Text ist '…T11' groesser als '…T10'.
+    const earlier = insert(mixed, '2032-07-15T11:00:00');
+    const later = insert(mixed, '2032-07-15T10:00:00.000Z');
+    assert.equal(await todaySessionId('/workers', mixed), later, 'today_session: der Besuch von 12:00, nicht der von 11:00');
+    const dashboard = (await call('GET', '/dashboard', { as: ADM })).body.data;
+    assert.equal(dashboard.last_visit.id, later, 'last_visit: ebenso');
+    const order = (list) => list.map((v) => v.id).filter((id) => id === earlier || id === later);
+    assert.deepEqual(order((await call('GET', '/visits?month=2032-07', { as: ADM })).body.data.visits), [later, earlier],
+      '/visits: spaetester zuerst');
+    assert.deepEqual(order((await call('GET', '/work-sessions?month=2032-07', { as: ADM })).body.data), [later, earlier],
+      '/work-sessions: spaetester zuerst');
+
+    // Dieselbe Sekunde in zwei Schreibweisen, beide von echten Schreibwegen:
+    // scripts/seed-demo.js schreibt '…SSZ', der Check-in '…SS.mmmZ' - 'Z' sortiert hinter '.'.
+    insert(seeded, '2032-07-15T09:00:00Z');
+    const sameSecond = insert(seeded, '2032-07-15T09:00:00.500Z');
+    assert.equal(await todaySessionId('/workers', seeded), sameSecond, 'eine halbe Sekunde spaeter ist spaeter');
+  }),
+));
+
+test('offene Sitzung: ohne Arbeiter gilt die zuletzt begonnene, auch bei gemischten Schreibweisen', () => atHouseholdClock(
+  { zone: 'Europe/Berlin', processTz: 'Asia/Tokyo', now: '2033-07-15T12:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const first = await freshWorker('OffenFrueh');
+    const second = await freshWorker('OffenSpaet');
+    insert(first, '2033-07-15T11:00:00', { open: true });               // 11:00 in Berlin
+    const later = insert(second, '2033-07-15T10:00:00.000Z', { open: true }); // 12:00 in Berlin
+    const summary = (await call('GET', '/summary', { as: ADM })).body.data;
+    assert.equal(summary.current_session.id, later);
+  }),
+));
+
+test('heute ohne eingestellte Haushaltszone: zonenlose Besuche liest dieselbe Uhr, die den Tag bestimmt (Review)', () => atHouseholdClock(
+  // Server in UTC, Oberflaeche in Los Angeles: es ist der 15.07.2031, 01:00.
+  // In der Zone des Servers gelesen waere 00:30 ein Zeitpunkt VOR dem
+  // Tagesanfang 07:00Z, und 00:30 von morgen laege noch vor dem Tagesende.
+  { zone: null, processTz: 'UTC', now: '2031-07-15T08:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const earlyToday = await freshWorker('OhnezoneHeuteFrueh');
+    const earlyTomorrow = await freshWorker('OhnezoneMorgenFrueh');
+    const todayId = insert(earlyToday, '2031-07-15T00:30:00');
+    insert(earlyTomorrow, '2031-07-16T00:30:00');
+    const zone = 'timezone=America%2FLos_Angeles';
+    assert.equal(await todaySessionId(`/workers?${zone}`, earlyToday), todayId, 'Zone der Oberflaeche: heute 00:30 ist von heute');
+    assert.equal(await todaySessionId(`/dashboard?${zone}`, earlyToday), todayId, 'Uebersicht des Moduls: dieselbe Frage');
+    assert.equal(await todaySessionId(`/workers?${zone}`, earlyTomorrow), null, 'morgen 00:30 nicht');
+    // Aelterer Client: nur Tag und Offset (Los Angeles im Sommer = +420 Minuten zu UTC).
+    const legacy = 'local_date=2031-07-15&timezone_offset_minutes=420';
+    assert.equal(await todaySessionId(`/workers?${legacy}`, earlyToday), todayId, 'Offset des Geraets: heute 00:30 ist von heute');
+    assert.equal(await todaySessionId(`/workers?${legacy}`, earlyTomorrow), null, 'Offset des Geraets: morgen 00:30 nicht');
+  }),
+));
+
+test('Umstellnacht: zwei zonenlose Besuche bleiben zwei Zeitpunkte - der spaetere ist der spaetere (Review)', () => atHouseholdClock(
+  // 26.03.2034, Berlin stellt um 02:00 auf Sommerzeit. Die einfache Umrechnung
+  // (`localToUTC`) legt 00:30 und 01:30 beide auf 23:30Z; den Gleichstand
+  // entschied die hoehere id - hier bewusst der FRUEHERE Besuch.
+  { zone: 'Europe/Berlin', processTz: 'Asia/Tokyo', now: '2034-03-26T10:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const workerId = await freshWorker('Umstellnacht');
+    const later = insert(workerId, '2034-03-26T01:30:00');
+    const earlier = insert(workerId, '2034-03-26T00:30:00');
+    assert.equal(await todaySessionId('/workers', workerId), later, 'today_session: 01:30, nicht 00:30');
+    assert.equal((await call('GET', '/dashboard', { as: ADM })).body.data.last_visit.id, later, 'last_visit: ebenso');
+    const order = (list) => list.map((v) => v.id).filter((id) => id === earlier || id === later);
+    assert.deepEqual(order((await call('GET', '/visits?month=2034-03', { as: ADM })).body.data.visits), [later, earlier], '/visits');
+    assert.deepEqual(order((await call('GET', '/work-sessions?month=2034-03', { as: ADM })).body.data), [later, earlier], '/work-sessions');
+  }),
+));
+
+test('Sekundenbruchteile: eine zonenlose Zeile behaelt ihren Zeitpunkt auf die Millisekunde (Review)', () => atHouseholdClock(
+  // Die Umrechner in utils/timezone.js rechneten den Bruchteil einer zonenlosen
+  // Zeile doppelt (#1658): '…T23:59:59.900' kam im UTC-Haushalt als 00:00:00.800 des
+  // Folgetags heraus - nicht mehr heute, nicht mehr in diesem Monat, und
+  // '…T10:00:00.600' galt als spaeter als '…T10:00:01.000Z'.
+  { zone: 'UTC', processTz: 'Asia/Tokyo', now: '2035-07-31T12:00:00.000Z' },
+  () => withSessions(async (insert) => {
+    const lastMoment = await freshWorker('LetzterMoment');
+    const fraction = await freshWorker('Bruchteil');
+    const edge = insert(lastMoment, '2035-07-31T23:59:59.900');
+    assert.equal(await todaySessionId('/workers', lastMoment), edge, 'today_session: 23:59:59.900 ist noch heute');
+    const inMonth = async (monthValue) => (await call('GET', `/visits?month=${monthValue}`, { as: ADM })).body.data.visits.some((v) => v.id === edge);
+    assert.equal(await inMonth('2035-07'), true, '/visits: und noch im Juli');
+    assert.equal(await inMonth('2035-08'), false, '/visits: nicht im August');
+
+    const earlier = insert(fraction, '2035-07-31T10:00:00.600');
+    const later = insert(fraction, '2035-07-31T10:00:01.000Z');
+    assert.notEqual(earlier, later);
+    assert.equal(await todaySessionId('/workers', fraction), later, 'today_session: 10:00:01.000 ist spaeter als 10:00:00.600');
+  }),
+));
+
+test('teardown: Server schließen', async () => {
+  await new Promise((r) => server.close(r));
+});

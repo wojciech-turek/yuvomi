@@ -1,0 +1,2002 @@
+import { NOTE_CATEGORY_NAME_MAX_LENGTH } from '../../public/utils/note-category-name.js';
+
+const noteInputProperties = {
+  title: { type: ['string', 'null'] },
+  content: { type: 'string' },
+  color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+  pinned: {
+    oneOf: [
+      { type: 'integer', enum: [0, 1] },
+      { type: 'boolean' },
+    ],
+  },
+  category_ids: { type: 'array', maxItems: 50, uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+};
+
+// Die Erinnerungsfelder spiegeln `validateReminder()` in
+// server/routes/birthdays.js; die Obergrenze ist 999 Wochen in Minuten.
+const BIRTHDAY_REMINDER_MAX_MINUTES = 999 * 10080;
+
+const birthdayInputProperties = {
+  name: { type: 'string', maxLength: 200 },
+  birth_date: { type: 'string', format: 'date' },
+  name_day: { type: ['string', 'null'], pattern: '^\\d{2}-\\d{2}$', description: 'Month and day (`MM-DD`), or null to clear it.' },
+  notes: { type: ['string', 'null'], maxLength: 5000 },
+  photo_data: { type: ['string', 'null'], description: 'A base64 image data URL (png, jpeg, webp, gif), or null to remove it.' },
+  reminder_offset: {
+    description: 'Lead time before 12:00 on the birthday in the household time zone. Whole minutes as a number or digit string (`"1440"` = one day before), `"custom"` to use `reminder_custom_amount` and `reminder_custom_unit`, `""` for no reminder and no calendar event, or null for the day itself. On update, a value equal to the one already stored is accepted unchanged even if it lies outside these rules, so older records stay editable.',
+    oneOf: [
+      { type: 'null' },
+      { type: 'string', enum: ['', 'custom'] },
+      { type: 'string', pattern: '^\\d{1,9}$' },
+      { type: 'integer', minimum: 0, maximum: BIRTHDAY_REMINDER_MAX_MINUTES },
+    ],
+  },
+  reminder_custom_amount: {
+    description: 'Amount for a custom lead time, 1-999. Empty or null means unset (counted as 1).',
+    oneOf: [
+      { type: 'null' },
+      { type: 'integer', minimum: 1, maximum: 999 },
+      { type: 'string', pattern: '^([1-9]\\d{0,2})?$' },
+    ],
+  },
+  reminder_custom_unit: {
+    description: 'Unit for a custom lead time. Empty or null means unset (counted as days).',
+    type: ['string', 'null'],
+    enum: ['minutes', 'hours', 'days', 'weeks', '', null],
+  },
+};
+
+const calendarOccurrenceProperties = {
+  series_id: { type: 'integer', minimum: 1 },
+  recurrence_id: { type: 'string', format: 'date' },
+  is_occurrence_override: { type: 'boolean' },
+  is_local_recurring_series: { type: 'boolean' },
+  can_override_occurrence: { type: 'boolean' },
+  can_detach_occurrence: { type: 'boolean', description: 'Legacy occurrence scopes for locally owned series that cannot use linked overrides, including outbound-synced and generated series.' },
+  assignment_owner_id: { type: 'integer', minimum: 1 },
+  attachment_owner_id: { type: 'integer', minimum: 1 },
+  reminder_owner_id: { type: 'integer', minimum: 1 },
+  reminder_anchor_start: { $ref: '#/components/schemas/CalendarDateOrDateTime' },
+};
+
+const calendarOccurrenceMutationProperties = {
+  title: { type: 'string', maxLength: 200 },
+  description: { type: ['string', 'null'], maxLength: 5000 },
+  start_datetime: { $ref: '#/components/schemas/CalendarDateOrDateTimeInput' },
+  end_datetime: {
+    oneOf: [
+      { $ref: '#/components/schemas/CalendarDateOrDateTimeInput' },
+      { type: 'null' },
+    ],
+  },
+  all_day: { type: 'boolean' },
+  location: { type: ['string', 'null'], maxLength: 200 },
+  color: { type: ['string', 'null'], pattern: '^#[0-9A-Fa-f]{6}$' },
+  icon: { type: 'string' },
+  assigned_to: {
+    oneOf: [
+      { type: 'integer', minimum: 1 },
+      {
+        type: 'array',
+        uniqueItems: true,
+        items: { type: 'integer', minimum: 1 },
+      },
+      { type: 'null' },
+    ],
+  },
+  visibility: { type: 'string', enum: ['all', 'assignees', 'private'] },
+  countdown: { type: 'boolean' },
+  attachment_name: { type: ['string', 'null'] },
+  attachment_data: {
+    type: ['string', 'null'],
+    description: 'A base64 data URL for a replacement attachment, or null to remove it.',
+  },
+  remove_attachment: { type: 'boolean' },
+  document_folder_name: { type: 'string' },
+  document_name: { type: 'string' },
+  document_description: { type: ['string', 'null'] },
+  reminder_offsets: {
+    type: 'array',
+    maxItems: 5,
+    uniqueItems: true,
+    items: { type: 'integer', minimum: 0 },
+  },
+};
+
+const calendarProviderTargetProperties = {
+  target_google_calendar_id: { type: ['string', 'null'], maxLength: 2048 },
+  target_caldav_account_id: { type: ['integer', 'null'], minimum: 1 },
+  target_caldav_calendar_url: { type: ['string', 'null'], maxLength: 2048 },
+  target_outlook_account_id: { type: ['integer', 'null'], minimum: 1 },
+  target_outlook_calendar_id: { type: ['string', 'null'], maxLength: 2048 },
+};
+
+export const schemas = {
+        CalendarImportInput: {
+          type: 'object',
+          description: 'Import an ICS document or URL into a household local calendar.',
+          properties: {
+            ics: { type: 'string', description: 'Raw ICS file text. Required when url is omitted.' },
+            url: { type: 'string', format: 'uri', description: 'Shared calendar URL. Required when ics is omitted.' },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$', description: 'Fallback event color for imported events without their own color.' },
+            local_calendar_id: { type: 'integer', minimum: 1, description: 'Target local calendar. Omit to use the default calendar.' },
+          },
+          oneOf: [{ required: ['ics'] }, { required: ['url'] }],
+        },
+        LocalCalendarCreateInput: {
+          type: 'object', required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+          },
+        },
+        LocalCalendarReorderInput: {
+          type: 'object', required: ['order'], properties: {
+            order: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+          },
+        },
+        LocalCalendarUpdateInput: {
+          type: 'object',
+          minProperties: 1,
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+            sort_order: { type: 'integer', minimum: 0 },
+          },
+        },
+        ApiError: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer' },
+            reason: { type: 'string' },
+            params: {
+              type: 'object',
+              additionalProperties: { type: 'integer' },
+              description: 'Only next to a `reason` whose cause carries a number (waste import and URL sources): the limit or status itself, e.g. `{ "limit_mb": 5 }`, so a client can put it into its own sentence instead of parsing `error`.',
+            },
+            storage_code: { $ref: '#/components/schemas/DocumentStorageErrorCode' },
+          },
+        },
+        CalendarOverrideOrphanConflict: {
+          type: 'object',
+          required: ['error', 'code', 'conflict', 'orphaned_override_count'],
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer', const: 409 },
+            conflict: { type: 'string', const: 'calendar_override_orphans' },
+            orphaned_override_count: { type: 'integer', minimum: 0 },
+          },
+        },
+        OutlookAutoSyncOverrideConflict: {
+          type: 'object',
+          required: ['error', 'code', 'conflict', 'linked_override_count'],
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer', const: 409 },
+            conflict: { type: 'string', const: 'outlook_auto_sync_overrides' },
+            linked_override_count: { type: 'integer', minimum: 1 },
+          },
+        },
+        NoteCategory: {
+          type: 'object',
+          required: ['id', 'name', 'scope', 'sort_order'],
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string', minLength: 1, maxLength: NOTE_CATEGORY_NAME_MAX_LENGTH },
+            scope: { type: 'string', enum: ['personal', 'household'] },
+            owner_user_id: { type: ['integer', 'null'] },
+            sort_order: { type: 'integer' },
+          },
+        },
+        Note: {
+          type: 'object',
+          required: ['id', 'content', 'pinned', 'categories'],
+          properties: {
+            id: { type: 'integer' },
+            title: { type: ['string', 'null'] },
+            content: { type: 'string' },
+            color: { type: 'string' },
+            pinned: { type: 'integer', enum: [0, 1] },
+            created_by: { type: ['integer', 'null'] },
+            creator_name: { type: ['string', 'null'] },
+            categories: { type: 'array', items: { $ref: '#/components/schemas/NoteCategory' } },
+          },
+        },
+        NoteCreateInput: {
+          type: 'object',
+          required: ['content'],
+          properties: noteInputProperties,
+        },
+        NoteUpdateInput: {
+          type: 'object',
+          properties: noteInputProperties,
+        },
+        BirthdayCreateInput: {
+          type: 'object',
+          required: ['name', 'birth_date'],
+          properties: birthdayInputProperties,
+        },
+        BirthdayUpdateInput: {
+          type: 'object',
+          properties: birthdayInputProperties,
+        },
+        NoteCategoryInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: NOTE_CATEGORY_NAME_MAX_LENGTH },
+            scope: { type: 'string', enum: ['personal', 'household'], default: 'personal' },
+          },
+        },
+        NoteCategoryRenameInput: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: NOTE_CATEGORY_NAME_MAX_LENGTH },
+          },
+        },
+        NoteCategoryReorderInput: {
+          type: 'object',
+          required: ['order'],
+          properties: {
+            order: { type: 'array', maxItems: 100, uniqueItems: true, items: { type: 'integer', minimum: 1 } },
+          },
+        },
+        NoteResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/Note' } },
+        },
+        NoteListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Note' } } },
+        },
+        NoteCategoryResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/NoteCategory' } },
+        },
+        NoteCategoryListResponse: {
+          type: 'object',
+          required: ['data', 'meta'],
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/NoteCategory' } },
+            meta: {
+              type: 'object',
+              required: ['can_manage_household'],
+              properties: { can_manage_household: { type: 'boolean' } },
+            },
+          },
+        },
+        NotificationChannel: {
+          type: 'object',
+          description: 'A Gotify or ntfy notification channel. Secrets are write-only and never returned.',
+          properties: {
+            id: { type: 'integer' },
+            provider: { type: 'string', enum: ['gotify', 'ntfy', 'webhook', 'email'] },
+            name: { type: 'string' },
+            enabled: { type: 'boolean' },
+            scope: { type: 'string', enum: ['household', 'user'] },
+            userId: { type: ['integer', 'null'] },
+            config: { type: 'object', additionalProperties: true },
+            secretSet: { type: 'boolean' },
+            lastTestAt: { type: ['string', 'null'], format: 'date-time' },
+            lastSuccessAt: { type: ['string', 'null'], format: 'date-time' },
+            lastError: { type: ['string', 'null'] },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        NotificationChannelInput: {
+          type: 'object',
+          required: ['provider', 'name', 'config'],
+          properties: {
+            provider: { type: 'string', enum: ['gotify', 'ntfy', 'webhook', 'email'] },
+            name: { type: 'string' },
+            enabled: { type: 'boolean' },
+            config: {
+              type: 'object',
+              description: 'Provider config. Gotify uses baseUrl and priority. ntfy uses baseUrl, topic, priority, and authType.',
+              additionalProperties: true,
+            },
+            secrets: {
+              type: 'object',
+              description: 'Write-only provider credentials. Omit fields to keep stored secrets on update.',
+              additionalProperties: true,
+            },
+            clearSecrets: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Explicit secret field names to clear.',
+            },
+          },
+        },
+        NotificationChannelResponse: {
+          type: 'object',
+          properties: { data: { $ref: '#/components/schemas/NotificationChannel' } },
+        },
+        NotificationChannelListResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/NotificationChannel' },
+            },
+          },
+        },
+        DocumentStorageErrorCode: {
+          type: 'string',
+          description: 'Stable machine-readable code for document-storage failures.',
+          enum: [
+            'DOCUMENT_STORAGE_INVALID_CONFIG',
+            'DOCUMENT_STORAGE_NOT_CONFIGURED',
+            'DOCUMENT_STORAGE_UPLOAD_FAILED',
+            'DOCUMENT_STORAGE_READ_FAILED',
+            'DOCUMENT_STORAGE_DELETE_FAILED',
+            'DOCUMENT_STORAGE_CLEANUP_FAILED',
+            'DOCUMENT_STORAGE_TOO_LARGE',
+            'DOCUMENT_STORAGE_CONNECTION_TEST_FAILED',
+            'DOCUMENT_STORAGE_CONFIG_PROTECTED',
+          ],
+        },
+        FamilyDocument: {
+          type: 'object',
+          description: 'A family document. storage_backend is authoritative; storage_provider remains for legacy client compatibility.',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            description: { type: ['string', 'null'] },
+            category: { type: ['string', 'null'] },
+            status: { type: 'string', enum: ['active', 'archived'] },
+            visibility: { type: 'string', enum: ['family', 'restricted', 'private'] },
+            original_name: { type: ['string', 'null'] },
+            mime_type: { type: ['string', 'null'] },
+            file_size: { type: ['integer', 'null'] },
+            storage_provider: {
+              type: 'string',
+              enum: ['local', 'external'],
+              description: 'Legacy compatibility field. local pairs with local; external pairs with webdav, google_drive, or dms.',
+            },
+            storage_backend: {
+              type: 'string',
+              enum: ['local', 'webdav', 'google_drive', 'dms'],
+              description: 'Authoritative location of the document bytes or DMS reference.',
+            },
+            storage_key: {
+              type: ['string', 'null'],
+              description: 'Relative path for folder/WebDAV storage, opaque Google Drive file ID, DMS reference, or null for an in-database BLOB.',
+            },
+            dms_account_id: { type: ['integer', 'null'] },
+            external_url: { type: ['string', 'null'], format: 'uri' },
+            folder_id: { type: ['integer', 'null'] },
+            folder_name: { type: ['string', 'null'] },
+            created_by: { type: 'integer' },
+            creator_name: { type: ['string', 'null'] },
+            creator_color: { type: ['string', 'null'] },
+            allowed_member_ids: { type: 'array', items: { type: 'integer' } },
+            expires_at: { type: ['string', 'null'], format: 'date', description: 'YYYY-MM-DD, e.g. a passport or permit expiry.' },
+            expiry_reminder_days: { type: ['integer', 'null'], description: 'Days before expires_at to remind, 0-365.' },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+          },
+          required: [
+            'id',
+            'name',
+            'status',
+            'visibility',
+            'storage_provider',
+            'storage_backend',
+            'allowed_member_ids',
+          ],
+        },
+        FamilyDocumentResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/FamilyDocument' },
+          },
+          required: ['data'],
+        },
+        FamilyDocumentsResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/FamilyDocument' },
+            },
+          },
+          required: ['data'],
+        },
+        DocumentOptionsResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                categories: { type: 'array', items: { type: 'string' } },
+                visibilities: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['family', 'restricted', 'private'] },
+                },
+                statuses: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['active', 'archived'] },
+                },
+                max_file_size: { type: 'integer' },
+                allowed_mime_types: { type: 'array', items: { type: 'string' } },
+                storage_providers: {
+                  type: 'array',
+                  description: 'Legacy provider values retained for compatibility.',
+                  items: { type: 'string', enum: ['local', 'external'] },
+                },
+                active_upload_backend: {
+                  type: 'string',
+                  enum: ['local', 'local_folder', 'webdav', 'google_drive'],
+                  description: 'Backend used for newly uploaded document files, including calendar attachments. "local" is the in-DB BLOB default, "local_folder" a mounted host folder, "webdav" a remote server, and "google_drive" the explicitly selected connected Drive account.',
+                },
+                is_admin: {
+                  type: 'boolean',
+                  description: 'Whether the current user is an admin. The client uses this to show deep links into the admin-only document settings only when they are actually reachable.',
+                },
+                dms_accounts: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      name: { type: 'string' },
+                      provider: { type: 'string', enum: ['paperless'] },
+                    },
+                    required: ['id', 'name', 'provider'],
+                  },
+                },
+              },
+              required: [
+                'categories',
+                'visibilities',
+                'statuses',
+                'max_file_size',
+                'allowed_mime_types',
+                'storage_providers',
+                'active_upload_backend',
+                'dms_accounts',
+              ],
+            },
+          },
+          required: ['data'],
+        },
+        DocumentStorageConfigRequest: {
+          type: 'object',
+          properties: {
+            selected_upload_backend: {
+              type: 'string',
+              enum: ['local', 'webdav', 'google_drive'],
+              description: 'Administrator-selected destination for future uploads. Connecting Google Drive does not change this value.',
+            },
+            enabled: { type: 'boolean' },
+            url: { type: ['string', 'null'], format: 'uri', description: 'HTTP(S) WebDAV server URL.' },
+            username: { type: ['string', 'null'] },
+            password: {
+              type: ['string', 'null'],
+              writeOnly: true,
+              description: 'WebDAV password. Empty and masked values preserve the stored password.',
+            },
+            path: { type: ['string', 'null'], description: 'Base path below the WebDAV server URL.' },
+            confirm_existing_access: {
+              type: 'boolean',
+              description: 'Required for connection changes while WebDAV documents exist.',
+            },
+            clear_password: {
+              type: 'boolean',
+              description: 'Explicitly remove the stored password. Rejected when existing WebDAV documents require it.',
+            },
+          },
+        },
+        DocumentStorageTestRequest: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            url: { type: ['string', 'null'], format: 'uri' },
+            username: { type: ['string', 'null'] },
+            password: { type: ['string', 'null'], writeOnly: true },
+            path: { type: ['string', 'null'] },
+            clear_password: { type: 'boolean' },
+          },
+        },
+        GoogleDriveStorageStatus: {
+          type: 'object',
+          description: 'Google Drive connection state. OAuth tokens, folder IDs, codes and raw provider payloads are never returned.',
+          properties: {
+            configured: { type: 'boolean' },
+            connected: { type: 'boolean' },
+            account_email: { type: ['string', 'null'], format: 'email' },
+            account_name: { type: ['string', 'null'] },
+            folder_name: { type: 'string' },
+            document_count: { type: 'integer', minimum: 0 },
+            last_test: { type: ['string', 'null'], format: 'date-time' },
+            last_error: { type: ['string', 'null'] },
+            can_disconnect: { type: 'boolean' },
+          },
+          required: [
+            'configured',
+            'connected',
+            'account_email',
+            'account_name',
+            'folder_name',
+            'document_count',
+            'last_test',
+            'last_error',
+            'can_disconnect',
+          ],
+        },
+        GoogleDriveStorageStatusResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/GoogleDriveStorageStatus' },
+          },
+          required: ['data'],
+        },
+        DocumentStorageStatus: {
+          type: 'object',
+          description: 'Combined document-storage selection, effective target, WebDAV configuration and Google Drive connection status. Secrets are never returned.',
+          properties: {
+            enabled: { type: 'boolean' },
+            configured: { type: 'boolean' },
+            selected_upload_backend: {
+              type: 'string',
+              enum: ['local', 'webdav', 'google_drive'],
+              description: 'Administrator-selected destination before the environment-managed local-folder override is applied.',
+            },
+            active_upload_backend: {
+              type: 'string',
+              enum: ['local', 'local_folder', 'webdav', 'google_drive'],
+            },
+            effective_target: {
+              type: ['string', 'null'],
+              description: 'Effective upload target: WebDAV URL, local folder path, Google Drive folder name, or null for the in-DB default.',
+            },
+            local_enabled: { type: 'boolean', description: 'Whether the local folder backend is enabled via env.' },
+            local_path: { type: 'string', description: 'Container path for the local folder backend.' },
+            webdav_document_count: { type: 'integer', minimum: 0 },
+            google_drive_document_count: { type: 'integer', minimum: 0 },
+            google_drive: { $ref: '#/components/schemas/GoogleDriveStorageStatus' },
+            last_test: { type: ['string', 'null'], format: 'date-time' },
+            last_error: { type: ['string', 'null'] },
+            url: { type: ['string', 'null'], format: 'uri' },
+            username: { type: ['string', 'null'] },
+            base_path: { type: 'string' },
+            password_configured: { type: 'boolean' },
+            env_controlled: {
+              type: 'object',
+              properties: {
+                enabled: { type: 'boolean' },
+                url: { type: 'boolean' },
+                username: { type: 'boolean' },
+                password: { type: 'boolean' },
+                path: { type: 'boolean' },
+              },
+              required: ['enabled', 'url', 'username', 'password', 'path'],
+            },
+          },
+          required: [
+            'enabled',
+            'configured',
+            'selected_upload_backend',
+            'active_upload_backend',
+            'effective_target',
+            'local_enabled',
+            'local_path',
+            'webdav_document_count',
+            'google_drive_document_count',
+            'google_drive',
+            'last_test',
+            'last_error',
+            'url',
+            'username',
+            'base_path',
+            'password_configured',
+            'env_controlled',
+          ],
+        },
+        DocumentStorageStatusResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/DocumentStorageStatus' },
+          },
+          required: ['data'],
+        },
+        DocumentStorageTestResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: { ok: { type: 'boolean', const: true } },
+              required: ['ok'],
+            },
+          },
+          required: ['data'],
+        },
+        // ZWEI SCHEMATA, weil Anfrage und Antwort nicht dieselbe Menge sind
+        // (#1364): eine Anfrage mit `Z` oder Offset wird in die Haushaltszone
+        // umgerechnet und kommt als Wanduhrzeit zurueck, ein aus einem
+        // Fremdkalender synchronisierter Termin behaelt dagegen seinen Instant
+        // samt Offset. Ein gemeinsames Schema hat beides als "normalized"
+        // beschrieben und damit das Abschneiden wie eine Umrechnung aussehen
+        // lassen.
+        CalendarDateOrDateTime: {
+          description: 'A calendar date or date-time as stored and returned. Events created or edited through the API or the app carry household wall-clock time; events that came in through calendar sync (CalDAV, Google, Outlook, ICS) keep the instant they arrived with, including its Z or numeric offset.',
+          oneOf: [
+            {
+              type: 'string',
+              format: 'date',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+              description: 'Date-only value in YYYY-MM-DD form.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$',
+              description: 'Yuvomi local wall-clock value in the household time zone, without offset.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:?\\d{2})$',
+              description: 'Instant with Z or a numeric offset, as stored for a synchronized event. Returned unchanged.',
+            },
+          ],
+        },
+        CalendarDateOrDateTimeInput: {
+          description: 'A calendar date or date-time accepted by calendar mutations. What is stored is household wall-clock time: a value without offset is taken as such, a value with Z or a numeric offset is converted into the household time zone.',
+          oneOf: [
+            {
+              type: 'string',
+              format: 'date',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+              description: 'Date-only value in YYYY-MM-DD form.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$',
+              description: 'Yuvomi local wall-clock value in the household time zone. Seconds and fractional seconds are optional and are dropped; stored as YYYY-MM-DDTHH:MM.',
+            },
+            {
+              type: 'string',
+              pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:?\\d{2})$',
+              description: 'UTC or numeric-offset input. Read as an instant and converted into household wall-clock time, stored as YYYY-MM-DDTHH:MM - 2026-09-21T16:00:00Z in a Europe/Berlin household becomes 2026-09-21T18:00. For an all-day event only the date counts: the value is stored as its YYYY-MM-DD date as sent, so a midnight-UTC start stays on its day west of UTC. In the hour a DST change repeats, two instants map to the same wall-clock time; the stored value cannot tell them apart, so one of the two reads back an hour off.',
+            },
+          ],
+        },
+        CalendarEvent: {
+          type: 'object',
+          description: 'Calendar event. New attachments use document URLs; attachment_data remains available for legacy stored blobs.',
+          properties: {
+            id: { type: 'integer' },
+            title: { type: 'string' },
+            color: {
+              type: ['string', 'null'],
+              description: 'The event\'s own colour as #RRGGBB, or null when it has none. Null is the normal state for an event nobody picked a colour for: it then borrows the colour of the first assigned member, and failing that cal_color. On PUT the field distinguishes two cases - omit it to leave the colour untouched, send null to deliberately clear it.',
+            },
+            cal_color: {
+              type: ['string', 'null'],
+              description: 'Inherited colour of the source calendar or ICS subscription, read-only. Applies to every event of that source and therefore says nothing about this one; it is the fallback below color and the assignee.',
+            },
+            local_calendar_id: {
+              type: ['integer', 'null'],
+              description: 'Resolved local calendar for an authored event; null for generated or externally synchronized events and events with a Google/CalDAV target. Omit on create to resolve to the default without storing it. Membership applies to a whole series, never a single occurrence.',
+            },
+            local_calendar_name: {
+              type: ['string', 'null'],
+              description: 'Display name of the local Yuvomi calendar, read-only.',
+            },
+            local_calendar_color: {
+              type: ['string', 'null'],
+              description: 'Colour of the local Yuvomi calendar, read-only. Used after event, assignee, and external source colours.',
+            },
+            attachment_name: { type: ['string', 'null'], description: 'Null when the event has no attachment or the caller may not read its document (see attachment_document_id).' },
+            attachment_mime: { type: ['string', 'null'], description: 'Null when the event has no attachment or the caller may not read its document (see attachment_document_id).' },
+            attachment_size: { type: ['integer', 'null'], description: 'Null when the event has no attachment or the caller may not read its document (see attachment_document_id).' },
+            attachment_document_id: {
+              type: ['integer', 'null'],
+              description: 'The attachment\'s document in the Documents module. Null unless the caller may read that document: access to the Documents module (for API tokens a `documents:read` scope) and the document\'s own visibility. Without it the event carries no attachment at all - id, URLs, name, MIME type and size are null.',
+            },
+            attachment_locked: {
+              type: ['boolean', 'null'],
+              description: 'True when the event has an attachment whose document the caller may not see (for example a private document of another member); it names nothing about that document, and such an attachment cannot be replaced or removed by this caller. False otherwise. Null without read access to the Documents module (for API tokens a `documents:read` scope).',
+            },
+            attachment_preview_url: { type: ['string', 'null'], description: 'Null whenever attachment_document_id is null.' },
+            attachment_download_url: { type: ['string', 'null'], description: 'Null whenever attachment_document_id is null.' },
+            attachment_data: {
+              type: ['string', 'null'],
+              description: 'Legacy attachment data URL. Null for attachments linked through attachment_document_id.',
+            },
+            ...calendarOccurrenceProperties,
+          },
+          required: [
+            'id',
+            'title',
+            'attachment_document_id',
+            'attachment_preview_url',
+            'attachment_download_url',
+            'attachment_data',
+          ],
+          additionalProperties: true,
+        },
+        CalendarEventResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/CalendarEvent' },
+          },
+          required: ['data'],
+        },
+        CalendarOccurrence: {
+          allOf: [
+            { $ref: '#/components/schemas/CalendarEvent' },
+            {
+              type: 'object',
+              properties: calendarOccurrenceProperties,
+              required: [
+                'series_id',
+                'recurrence_id',
+                'is_occurrence_override',
+                'is_local_recurring_series',
+                'can_override_occurrence',
+                'can_detach_occurrence',
+                'assignment_owner_id',
+                'attachment_owner_id',
+                'reminder_owner_id',
+                'reminder_anchor_start',
+              ],
+            },
+          ],
+        },
+        CalendarOccurrenceResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/CalendarOccurrence' },
+          },
+          required: ['data'],
+        },
+        CalendarOccurrenceOnlyMutation: {
+          type: 'object',
+          description: 'Editable fields for one occurrence. Omitted fields inherit their current or series value.',
+          properties: calendarOccurrenceMutationProperties,
+        },
+        CalendarOccurrenceFollowingMutation: {
+          type: 'object',
+          description: 'Editable fields for a successor series. Omitted fields inherit from the original series.',
+          properties: {
+            ...calendarOccurrenceMutationProperties,
+            ...calendarProviderTargetProperties,
+            recurrence_rule: { type: ['string', 'null'], maxLength: 300 },
+            confirmed_orphan_count: { type: 'integer', minimum: 0 },
+          },
+        },
+        CalendarEventsResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/CalendarEvent' },
+            },
+            from: { type: 'string', format: 'date' },
+            to: { type: 'string', format: 'date' },
+          },
+          required: ['data'],
+        },
+        HealthResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', example: 'ok' },
+            timestamp: { type: 'string', format: 'date-time' },
+          },
+          required: ['status', 'timestamp'],
+        },
+        VersionResponse: {
+          type: 'object',
+          properties: {
+            version: { type: 'string' },
+            app_name: { type: 'string' },
+            setup_required: { type: 'boolean' },
+            password_reset_enabled: {
+              type: 'boolean',
+              description: 'True when self-service password reset can actually deliver a mail '
+                + '(SMTP configured AND BASE_URL set) and there are passwords to reset at all '
+                + '(AUTH_ALLOW_PASSWORD_LOGIN not switched off). The login page gates the '
+                + '"forgot password" link on this flag so it is never a dead end.',
+            },
+          },
+          required: ['app_name', 'setup_required', 'password_reset_enabled'],
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            username: { type: 'string' },
+            display_name: { type: 'string' },
+            avatar_color: { type: 'string' },
+            avatar_data: { type: ['string', 'null'], description: 'PNG, JPEG, or WebP data URL.' },
+            role: { type: 'string', enum: ['admin', 'member'] },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            phone: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            birth_date: { type: ['string', 'null'], format: 'date' },
+            onboarding_pending: {
+              type: 'boolean',
+              description: 'Whether this account still needs the onboarding walkthrough. Derived from '
+                + 'the account, not from the browser, so a new device does not repeat it. '
+                + 'POST /auth/onboarding-seen clears it.',
+            },
+            sso_only: {
+              type: 'boolean',
+              description: 'Only present on GET /auth/users for administrators: the account carries no '
+                + 'password and can only be entered through SSO.',
+            },
+            sort_order: {
+              type: ['integer', 'null'],
+              description: 'Position in the household member order, or null: for a member that has not been '
+                + 'placed, and for every account that is no household member (staff, guest, deactivated).',
+            },
+            is_household_member: {
+              type: 'boolean',
+              description: 'Whether the account is a household member - the accounts GET /family/members '
+                + 'lists and the only ones the member order takes.',
+            },
+          },
+          required: ['id', 'username', 'display_name', 'avatar_color', 'role', 'family_role'],
+        },
+        FamilyMember: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            display_name: { type: 'string' },
+            avatar_color: { type: 'string' },
+            avatar_data: { type: ['string', 'null'], description: 'PNG, JPEG, or WebP data URL.' },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            phone: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            birth_date: { type: ['string', 'null'], format: 'date' },
+            created_at: { type: 'string', format: 'date-time' },
+            sort_order: {
+              type: ['integer', 'null'],
+              description: 'Position in the household member order (set with PATCH /family/members/reorder), '
+                + 'or null for a member that has not been placed. Placed members come first, by position; '
+                + 'unplaced ones after them, by display name.',
+            },
+          },
+          required: ['id', 'display_name', 'avatar_color', 'family_role'],
+        },
+        FamilyMemberReorderInput: {
+          type: 'object',
+          required: ['order'],
+          properties: {
+            order: {
+              type: 'array',
+              minItems: 1,
+              uniqueItems: true,
+              items: { type: 'integer', minimum: 1 },
+              description: 'The ids of all household members, in the wanted order.',
+            },
+          },
+        },
+        FamilyMembersResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/FamilyMember' },
+            },
+          },
+          required: ['data'],
+        },
+        LoginRequest: {
+          type: 'object',
+          properties: {
+            username: { type: 'string' },
+            password: { type: 'string' },
+          },
+          required: ['username', 'password'],
+        },
+        LoginResponse: {
+          type: 'object',
+          properties: {
+            user: { $ref: '#/components/schemas/User' },
+            csrfToken: { type: 'string' },
+          },
+          required: ['user', 'csrfToken'],
+        },
+        MeResponse: {
+          type: 'object',
+          properties: {
+            user: { $ref: '#/components/schemas/User' },
+            csrfToken: { type: 'string' },
+            gravatarAvailable: {
+              type: 'boolean',
+              description: 'Whether the calling account may use the one-time Gravatar import '
+                + '(`POST /api/v1/auth/me/avatar/gravatar`): true only when the operator set `GRAVATAR_BASE_URL` '
+                + 'and the account is a household member. The configured URL itself is never exposed.',
+            },
+            gravatarHost: {
+              type: ['string', 'null'],
+              description: 'Host name of the service the operator configured in `GRAVATAR_BASE_URL` '
+                + '(e.g. `gravatar.com` or a Libravatar mirror), so the account page can name where the hash goes. '
+                + 'Host name only - no scheme, port, path or credentials. `null` unless `gravatarAvailable` is true, '
+                + 'and `null` when the configured value is not a valid public https URL.',
+            },
+          },
+          required: ['user'],
+        },
+        SetupRequest: {
+          type: 'object',
+          properties: {
+            username: { type: 'string' },
+            display_name: { type: 'string' },
+            password: { type: 'string' },
+            language: {
+              type: 'string',
+              nullable: true,
+              description: 'Optional. Language code of a supported app locale (e.g. `de`, `pt`, `fil`). '
+                + 'Sets the household data language (the language of server-generated titles such as birthday events), '
+                + 'unless the automatic choice already yields it. Region, currency and date format are not derived from it. '
+                + 'Unsupported values are rejected with 400; omitted, null or empty keeps the previous behaviour.',
+            },
+            timezone: {
+              type: 'string',
+              nullable: true,
+              description: 'Optional. IANA time zone of the household (e.g. `Europe/Berlin`). '
+                + 'Unknown zones are rejected with 400; omitted, null or empty keeps the fallback to TZ, the system zone and UTC.',
+            },
+          },
+          required: ['username', 'display_name', 'password'],
+        },
+        PasswordChangeRequest: {
+          type: 'object',
+          properties: {
+            currentPassword: { type: 'string' },
+            newPassword: { type: 'string' },
+          },
+          required: ['currentPassword', 'newPassword'],
+        },
+        UserCreateRequest: {
+          type: 'object',
+          properties: {
+            username: { type: 'string' },
+            display_name: { type: 'string' },
+            password: { type: 'string', description: 'Required unless sso_only is true.' },
+            sso_only: {
+              type: 'boolean',
+              description: 'Create the account without a password, so it can only be entered through SSO. '
+                + 'Requires OIDC to be configured, and rejects a password sent alongside it. '
+                + 'Deliberately explicit rather than inferred from a missing password.',
+            },
+            avatar_color: { type: 'string' },
+            avatar_data: { type: ['string', 'null'], description: 'PNG, JPEG, or WebP data URL.' },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            system_admin: { type: 'boolean' },
+            phone: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            birth_date: { type: ['string', 'null'], format: 'date' },
+          },
+          required: ['username', 'display_name'],
+        },
+        UserUpdateRequest: {
+          type: 'object',
+          properties: {
+            username: { type: 'string' },
+            display_name: { type: 'string' },
+            password: { type: 'string', description: 'Write-only. Omit or leave empty to keep the current password.' },
+            sso_only: {
+              type: 'boolean',
+              description: 'Switch the account between having a password and entering only through SSO. '
+                + 'true clears the password; false requires a password to be sent with it, otherwise the '
+                + 'account would be left with no way in at all. Omit to leave unchanged.',
+            },
+            avatar_color: { type: 'string' },
+            avatar_data: { type: ['string', 'null'], description: 'PNG, JPEG, or WebP data URL. Use null to remove.' },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            system_admin: { type: 'boolean' },
+            phone: { type: ['string', 'null'] },
+            email: { type: ['string', 'null'] },
+            birth_date: { type: ['string', 'null'], format: 'date' },
+          },
+        },
+        ProfileUpdateRequest: {
+          type: 'object',
+          properties: {
+            display_name: { type: 'string' },
+            avatar_color: { type: 'string' },
+            avatar_data: { type: ['string', 'null'], description: 'PNG, JPEG, or WebP data URL. Use null to remove.' },
+          },
+        },
+        Invite: {
+          type: 'object',
+          description: 'A pending invitation. The token hash is never returned.',
+          properties: {
+            id: { type: 'integer' },
+            email: { type: ['string', 'null'] },
+            username: { type: ['string', 'null'], description: 'Pre-assigned username. When null, the invited person picks one.' },
+            display_name: { type: ['string', 'null'] },
+            role: { type: 'string', enum: ['admin', 'member'] },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            created_by: { type: ['integer', 'null'] },
+            expires_at: { type: 'integer', description: 'Unix epoch milliseconds. Invitations are valid for 7 days.' },
+            accepted_at: { type: ['string', 'null'], format: 'date-time' },
+            accepted_user_id: { type: ['integer', 'null'] },
+            revoked_at: { type: ['string', 'null'], format: 'date-time' },
+            created_at: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'role', 'family_role', 'expires_at', 'created_at'],
+        },
+        InviteCreateRequest: {
+          type: 'object',
+          properties: {
+            username: { type: 'string', description: 'Optional. When set, the invited person cannot choose a different one.' },
+            display_name: { type: 'string' },
+            email: { type: 'string', description: 'Required when send_email is true.' },
+            family_role: { type: 'string', enum: ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'] },
+            system_admin: { type: 'boolean', description: 'Only true grants the admin role; the value is taken from the invitation, never from the accept request.' },
+            send_email: { type: 'boolean', description: 'Send the invitation by email. Requires SMTP and BASE_URL; check email_sent in the response.' },
+          },
+        },
+        InviteCreateResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                invite: { $ref: '#/components/schemas/Invite' },
+                token: {
+                  type: 'string',
+                  description: 'Plaintext invite token. Returned here and only here - the database holds nothing but its hash, so a lost token cannot be recovered, only revoked and reissued.',
+                },
+                email_sent: {
+                  type: 'boolean',
+                  description: 'Whether the invitation email actually went out. False when send_email was not requested, SMTP or BASE_URL is missing, or delivery failed - the link must then be passed on by hand.',
+                },
+              },
+              required: ['invite', 'token', 'email_sent'],
+            },
+          },
+          required: ['data'],
+        },
+        InvitesResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                invites: { type: 'array', items: { $ref: '#/components/schemas/Invite' } },
+              },
+              required: ['invites'],
+            },
+          },
+          required: ['data'],
+        },
+        InvitePreviewResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                valid: { type: 'boolean' },
+                display_name: { type: ['string', 'null'] },
+                username: { type: ['string', 'null'] },
+              },
+              required: ['valid'],
+            },
+          },
+          required: ['data'],
+        },
+        InviteAcceptRequest: {
+          type: 'object',
+          properties: {
+            token: { type: 'string' },
+            password: { type: 'string', minLength: 8 },
+            username: { type: 'string', description: 'Ignored when the invitation already carries one.' },
+            display_name: { type: 'string', description: 'Ignored when the invitation already carries one.' },
+          },
+          required: ['token', 'password'],
+        },
+        ApiToken: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            token_prefix: { type: 'string' },
+            created_by: { type: 'integer' },
+            creator_name: { type: 'string' },
+            subject_user_id: { type: 'integer', description: 'Family member whose identity, role, permissions, and data ownership apply to token requests.' },
+            subject_name: { type: ['string', 'null'] },
+            scopes: {
+              type: ['array', 'null'],
+              items: { type: 'string' },
+              description: 'Permission allow-list of "module:read"/"module:write" entries. null means no scoping (full role-based access, e.g. legacy tokens). write implies read.',
+            },
+            expires_at: { type: ['string', 'null'], format: 'date-time' },
+            revoked_at: { type: ['string', 'null'], format: 'date-time' },
+            active: { type: 'boolean', description: 'Whether the token still signs in: not revoked and not past `expires_at`, judged by the server clock. Only a token with `active: false` can be removed.' },
+            last_used_at: { type: ['string', 'null'], format: 'date-time' },
+            created_at: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'name', 'token_prefix', 'created_by', 'subject_user_id', 'created_at'],
+        },
+        ApiTokenCreateRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            subject_user_id: { type: 'integer', minimum: 1, description: 'Optional family-member subject. Defaults to the administrator creating the token. Split-expense guests and wall displays are not eligible - neither can sign in, so neither may carry a credential beside its own.' },
+            scopes: {
+              type: ['array', 'null'],
+              items: { type: 'string' },
+              description: 'Optional permission allow-list of "module:read"/"module:write" entries (e.g. ["calendar:write","tasks:read"]). Omit or null for a full-access token. When set, must be non-empty and only contain known scopes. Enforced on both REST and MCP; write implies read.',
+            },
+            expires_at: { type: ['string', 'null'], format: 'date-time' },
+          },
+          required: ['name'],
+        },
+        ApiTokenCreateResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/ApiToken' },
+            token: { type: 'string' },
+          },
+          required: ['data', 'token'],
+        },
+        DmsAccount: {
+          type: 'object',
+          description: 'A configured DMS account. The api_token is never returned; use has_token to check whether one is stored.',
+          properties: {
+            id: { type: 'integer' },
+            provider: { type: 'string', enum: ['paperless'], description: 'DMS provider type' },
+            name: { type: 'string' },
+            base_url: { type: 'string', format: 'uri' },
+            created_at: { type: 'string', format: 'date-time' },
+            last_check: { type: ['string', 'null'], format: 'date-time' },
+            has_token: { type: 'boolean', description: 'Whether an API token is stored for this account' },
+          },
+          required: ['id', 'provider', 'name', 'base_url', 'created_at', 'has_token'],
+        },
+        DmsAccountsResponse: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/DmsAccount' } },
+          },
+          required: ['data'],
+        },
+        DmsAccountResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/DmsAccount' },
+          },
+          required: ['data'],
+        },
+        DmsAccountCreateRequest: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string', enum: ['paperless'] },
+            name: { type: 'string' },
+            base_url: { type: 'string', format: 'uri' },
+            api_token: { type: 'string', description: 'API token for authenticating with the DMS. Write-only; never returned in responses.' },
+          },
+          required: ['provider', 'name', 'base_url', 'api_token'],
+        },
+        DmsTestResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                ok: { type: 'boolean' },
+                status: { type: 'integer' },
+              },
+              required: ['ok', 'status'],
+            },
+          },
+          required: ['data'],
+        },
+        DmsSearchResult: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            title: { type: 'string' },
+            created: { type: 'string', format: 'date-time' },
+            filename: { type: ['string', 'null'] },
+            url: { type: 'string', format: 'uri' },
+          },
+          required: ['id', 'title'],
+        },
+        DmsSearchResponse: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/DmsSearchResult' } },
+          },
+          required: ['data'],
+        },
+        DmsLinkRequest: {
+          type: 'object',
+          properties: {
+            account_id: { type: 'integer' },
+            dms_document_id: { type: 'integer' },
+            category: { type: 'string', enum: ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'] },
+            visibility: { type: 'string', enum: ['family', 'restricted', 'private'] },
+          },
+          required: ['account_id', 'dms_document_id'],
+        },
+        DmsLinkResponse: {
+          type: 'object',
+          description: 'The created family_documents row. storage_provider is `external` and storage_backend is `dms` for linked DMS documents.',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'integer' },
+                name: { type: 'string' },
+                category: { type: ['string', 'null'] },
+                visibility: { type: 'string' },
+                storage_provider: { type: 'string', enum: ['external'] },
+                storage_backend: { type: 'string', enum: ['dms'] },
+                dms_account_id: { type: ['integer', 'null'] },
+                external_url: { type: ['string', 'null'], format: 'uri' },
+                created_at: { type: 'string', format: 'date-time' },
+              },
+              required: ['id', 'name', 'storage_provider', 'storage_backend'],
+            },
+          },
+          required: ['data'],
+        },
+        DmsPushRequest: {
+          type: 'object',
+          properties: {
+            account_id: { type: 'integer' },
+            document_id: { type: 'integer' },
+          },
+          required: ['account_id', 'document_id'],
+        },
+        DmsPushResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                taskId: { type: 'string' },
+              },
+              required: ['taskId'],
+            },
+          },
+          required: ['data'],
+        },
+        ExtensionModuleWidget: {
+          type: 'object',
+          description: 'Dashboard widget declared in a third-party module manifest.',
+          properties: {
+            id: { type: 'string', description: 'Namespaced widget id `<module-id>:<widget-id>`.' },
+            shortId: { type: 'string' },
+            entry: { type: 'string', description: 'Protected asset URL for the widget JavaScript entry.' },
+            label: { type: 'string' },
+            labelKey: { type: 'string', description: 'Short i18n key resolved under extensions.{moduleId}.* (from locales/{locale}.json).' },
+            icon: { type: 'string' },
+            defaultSize: { type: 'string' },
+            defaultVisible: { type: 'boolean' },
+            optionsSchema: {
+              type: ['object', 'null'],
+              additionalProperties: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['boolean', 'number', 'string', 'array'] },
+                  title: { type: 'string' },
+                  titleKey: { type: 'string', description: 'Short i18n key under extensions.{moduleId}.*' },
+                  format: { type: 'string' },
+                  enum: { type: 'array', items: { type: 'string' } },
+                  default: {},
+                },
+                required: ['type', 'title'],
+              },
+            },
+            moduleKey: { type: 'string', description: 'Permission module key, typically `ext:<module-id>`.' },
+          },
+          required: ['id', 'shortId', 'entry', 'label', 'icon', 'defaultSize', 'defaultVisible', 'moduleKey'],
+        },
+        ExtensionModuleCapabilities: {
+          type: ['object', 'null'],
+          description: 'Normalized capabilities block from module.json (null when not declared or module errored).',
+          properties: {
+            permissionModuleKey: { type: 'string' },
+            permissionModule: {
+              type: 'object',
+              properties: {
+                label: { type: 'string' },
+                icon: { type: 'string' },
+                labelKey: { type: 'string' },
+              },
+              required: ['label', 'icon'],
+            },
+            widgets: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ExtensionModuleWidget' },
+            },
+            apiPrefix: { type: 'string', description: 'Sidecar API prefix. Must be exactly `/api/extensions/<module-id>`.' },
+            scopeKey: { type: 'string', description: 'API token scope module key, typically `ext:<module-id>`.' },
+          },
+        },
+        ExtensionModule: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            version: { type: 'string' },
+            description: { type: 'string' },
+            icon: { type: 'string' },
+            accent: { type: 'string' },
+            enabled: { type: 'boolean' },
+            status: { type: 'string', enum: ['enabled', 'disabled', 'error'] },
+            error: { type: ['string', 'null'] },
+            route: {
+              type: ['object', 'null'],
+              properties: {
+                path: { type: 'string' },
+                entry: { type: 'string' },
+                style: { type: ['string', 'null'] },
+              },
+            },
+            settings: {
+              type: ['object', 'null'],
+              description: 'Optional settings sheet. sections controls visibility only; the module API enforces authorization.',
+              required: ['entry', 'sections'],
+              properties: {
+                entry: { type: 'string', description: 'Protected module asset URL for the settings JavaScript entry.' },
+                sections: {
+                  type: 'array', minItems: 1, maxItems: 2, uniqueItems: true,
+                  items: { type: 'string', enum: ['mine', 'household'] },
+                  description: 'mine is visible to members; household only to administrators. No default.',
+                },
+                labelKey: { type: ['string', 'null'] },
+              },
+            },
+            menu: {
+              type: 'object',
+              properties: {
+                show: { type: 'boolean' },
+                label: { type: 'string' },
+                labelKey: { type: 'string' },
+                icon: { type: 'string' },
+                order: { type: 'number' },
+              },
+            },
+            i18n: {
+              type: 'object',
+              description: 'Locale metadata scanned from locales/*.json in the module folder.',
+              properties: {
+                defaultLocale: { type: 'string', description: 'Fallback locale when the UI language is not shipped (default en).' },
+                availableLocales: { type: 'array', items: { type: 'string' }, description: 'Locale files present in the module.' },
+                coreLocales: { type: 'array', items: { type: 'string' }, description: 'All locales supported by Yuvomi core.' },
+              },
+            },
+            capabilities: { $ref: '#/components/schemas/ExtensionModuleCapabilities' },
+            manifestVersion: { type: 'integer', description: 'Manifest format version the module is written for (absent on errored modules).' },
+            entry: { type: 'string', description: 'Entry file relative to the module folder (absent on errored modules).' },
+            style: { type: ['string', 'null'], description: 'Stylesheet relative to the module folder, or null.' },
+            page: {
+              type: 'object',
+              description: 'Normalized page declaration (absent on errored modules).',
+              properties: {
+                composition: { type: 'string', enum: ['reading', 'data', 'dashboard', 'form', 'split', 'full'] },
+                width: { type: 'string', enum: ['reading', 'content', 'wide'] },
+                navigation: { type: 'string', enum: ['standard'] },
+                responsive: { type: 'string', enum: ['standard'] },
+              },
+            },
+            install: { $ref: '#/components/schemas/ExtensionModuleInstall' },
+          },
+          required: ['id', 'name', 'enabled', 'status'],
+        },
+        ExtensionModuleInstall: {
+          type: ['object', 'null'],
+          description: 'How the module was installed from Settings (read from `.yuvomi-install.json` in its folder) and whether an admin has approved it since. null when the folder was copied onto the server by hand. Only present in the admin listing (`GET /api/v1/modules?admin=1` by an admin) and in install responses.',
+          properties: {
+            source: { type: 'string', enum: ['zip', 'github'] },
+            url: { type: ['string', 'null'], description: 'GitHub repository URL.' },
+            ref: { type: ['string', 'null'], description: 'Branch, tag or commit that was downloaded.' },
+            commit: { type: ['string', 'null'], description: 'Commit SHA of the GitHub archive, when known.' },
+            path: { type: ['string', 'null'], description: 'Folder inside the archive the module came from.' },
+            installedAt: { type: ['string', 'null'], format: 'date-time' },
+            approved: { type: 'boolean', description: 'False after every install and replace; true once an admin enabled the module from a browser session. While false the module is disabled whatever the household switch says, so a restored or fresh database cannot turn on code nobody looked at. Stored in the module folder.' },
+            installedByName: { type: ['string', 'null'], description: 'Display name of the admin who installed it, resolved from the user id in the record; null when that account no longer exists. Only in the admin listing.' },
+          },
+          required: ['source', 'approved'],
+        },
+        ModuleInstallInfoResponse: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                writable: { type: 'boolean', description: 'False when the modules folder is read-only; installs then answer 503.' },
+                persistent: { type: ['boolean', 'null'], description: 'Best-effort guess whether the modules folder survives an update of the server. False when Yuvomi runs in a container and the folder is not on a volume or bind mount (installed modules would be lost with the next image update); null when it cannot be determined. The routes still answer when false; the Settings page then shows the manual way, like for a read-only folder.' },
+                webInstall: { type: 'boolean', description: 'Whether the operator switched installing from Settings on (`MODULES_ALLOW_WEB_INSTALL=true`). False by default; the install and delete routes then answer 403 `module_web_install_disabled`.' },
+                maxZipMb: { type: 'integer', description: 'Archive size limit in MB.' },
+              },
+              required: ['writable', 'persistent', 'webInstall', 'maxZipMb'],
+            },
+          },
+          required: ['data'],
+        },
+        ModuleInstallGithubRequest: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', maxLength: 2000, description: 'GitHub URL or `owner/repo`.' },
+            ref: { type: 'string', maxLength: 200, description: 'Branch, tag or commit; overrides the ref from the URL.' },
+            path: { type: 'string', maxLength: 500, description: 'Folder inside the repository that holds module.json. Overrides the folder of a tree URL; an empty string selects the repository root.' },
+            overwrite: { type: 'boolean', description: 'Replace an installed module with the same id.' },
+          },
+          required: ['url'],
+        },
+        ModuleInstallResponse: {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/ExtensionModule' },
+            replaced: { type: 'boolean', description: 'True when an installed module with the same id was replaced.' },
+            skipped: { type: 'array', items: { type: 'string' }, description: 'Files in the module folder that were not copied (not a web asset type, or a dotfile).' },
+          },
+          description: 'The module is disabled either way, after a fresh install and after a replace: `data.install.approved` is false until an admin enables it from a browser session.',
+          required: ['data', 'replaced', 'skipped'],
+        },
+        ModuleInstallError: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'integer' },
+            reason: { type: 'string', description: 'Stable machine-readable reason.' },
+            existing: {
+              type: 'object',
+              description: 'With `exists`: the installed module.',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                version: { type: 'string' },
+                install: { $ref: '#/components/schemas/ExtensionModuleInstall' },
+              },
+            },
+            incoming: {
+              type: 'object',
+              description: 'With `exists`: the module in the archive. A replace (retry with overwrite) always leaves the module disabled until it is approved again.',
+              properties: { id: { type: 'string' }, name: { type: 'string' }, version: { type: 'string' } },
+            },
+            candidates: {
+              type: 'array',
+              description: 'With `multiple`: the modules found in the archive.',
+              items: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                  id: { type: ['string', 'null'] },
+                  name: { type: ['string', 'null'] },
+                  version: { type: ['string', 'null'] },
+                },
+                required: ['path'],
+              },
+            },
+            resetAt: { type: 'string', format: 'date-time', description: 'With `rate_limited` from GitHub, when GitHub names a time: when to try again (from `retry-after` for its secondary limit, otherwise from `x-ratelimit-reset`). Left out when GitHub names none.' },
+          },
+          required: ['error', 'code'],
+        },
+        ModulesListResponse: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/ExtensionModule' } },
+          },
+          required: ['data'],
+        },
+        ModuleEnableRequest: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+          },
+          required: ['enabled'],
+        },
+        WasteType: {
+          type: 'object',
+          required: ['id', 'name', 'icon', 'color', 'archived', 'sort_order'],
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+            icon: { type: 'string' },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+            archived: { type: 'integer', enum: [0, 1] },
+            sort_order: { type: 'integer' },
+            created_by: { type: ['integer', 'null'] },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+          },
+        },
+        WasteTypeInput: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', maxLength: 100 },
+            icon: { type: 'string', maxLength: 60 },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+            archived: { type: 'boolean' },
+            sort_order: { type: 'integer' },
+          },
+        },
+        WasteSchedule: {
+          type: 'object',
+          required: ['id', 'type_id', 'recurrence_kind', 'anchor_date', 'interval', 'active'],
+          properties: {
+            id: { type: 'integer' },
+            type_id: { type: 'integer' },
+            recurrence_kind: { type: 'string', enum: ['weekly', 'monthly_fixed_day', 'monthly_ordinal_weekday'] },
+            anchor_date: { type: 'string', format: 'date' },
+            interval: { type: 'integer', minimum: 1 },
+            weekdays: {
+              type: ['string', 'null'],
+              description: 'Comma-separated RRULE BYDAY codes (e.g. "MO,TH") for recurrence_kind=weekly; exactly ONE code (e.g. "MO") for recurrence_kind=monthly_ordinal_weekday. Null for monthly_fixed_day.',
+            },
+            month_day: {
+              type: ['integer', 'null'],
+              description: 'recurrence_kind=monthly_fixed_day: a day-of-month (1-31), or -1 for the last day. recurrence_kind=monthly_ordinal_weekday: the ORDINAL POSITION of the chosen weekday - -1 (last) or 1-4 (nth), reusing this same column for a different meaning (#1063 Phase 9). Null for weekly.',
+            },
+            valid_until: { type: ['string', 'null'], format: 'date' },
+            active: { type: 'integer', enum: [0, 1], description: '0 = paused; contributes no occurrences until reactivated.' },
+            created_by: { type: ['integer', 'null'] },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+          },
+        },
+        WasteScheduleInput: {
+          type: 'object',
+          properties: {
+            type_id: { type: 'integer' },
+            recurrence_kind: { type: 'string', enum: ['weekly', 'monthly_fixed_day', 'monthly_ordinal_weekday'] },
+            anchor_date: { type: 'string', format: 'date' },
+            interval: { type: 'integer', minimum: 1 },
+            weekdays: {
+              description: 'weekly: an array of BYDAY codes, e.g. ["MO","TH"]. monthly_ordinal_weekday: a single code string, e.g. "MO".',
+              oneOf: [
+                { type: 'array', items: { type: 'string', enum: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] } },
+                { type: 'string', enum: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] },
+              ],
+            },
+            month_day: {
+              type: 'integer',
+              description: 'monthly_fixed_day: 1-31 or -1. monthly_ordinal_weekday: the ordinal position, -1 (last) or 1-4 (nth).',
+            },
+            valid_until: { type: ['string', 'null'], format: 'date' },
+            active: { type: 'boolean' },
+          },
+        },
+        WasteScheduleOverride: {
+          type: 'object',
+          required: ['id', 'schedule_id', 'original_date'],
+          properties: {
+            id: { type: 'integer' },
+            schedule_id: { type: 'integer' },
+            original_date: { type: 'string', format: 'date' },
+            replacement_date: { type: ['string', 'null'], format: 'date', description: 'null means this occurrence is explicitly skipped.' },
+            note: { type: ['string', 'null'] },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+          },
+        },
+        WasteScheduleOverrideInput: {
+          type: 'object',
+          properties: {
+            replacement_date: { type: ['string', 'null'], format: 'date', description: 'A date to move this occurrence to, or null to skip it.' },
+            note: { type: ['string', 'null'] },
+          },
+        },
+        WasteOneOffPickup: {
+          type: 'object',
+          required: ['id', 'type_id', 'date'],
+          properties: {
+            id: { type: 'integer' },
+            type_id: { type: 'integer' },
+            date: { type: 'string', format: 'date' },
+            note: { type: ['string', 'null'] },
+            created_by: { type: ['integer', 'null'] },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+          },
+        },
+        WasteOneOffPickupInput: {
+          type: 'object',
+          properties: {
+            type_id: { type: 'integer' },
+            date: { type: 'string', format: 'date' },
+            note: { type: ['string', 'null'] },
+          },
+        },
+        WasteOccurrenceOrigin: {
+          type: 'object',
+          required: ['kind', 'moved'],
+          properties: {
+            kind: { type: 'string', enum: ['schedule', 'one_off', 'import'] },
+            schedule_id: { type: 'integer' },
+            one_off_id: { type: 'integer' },
+            source_id: { type: 'integer', description: 'Present when kind is "import".' },
+            source_name: { type: ['string', 'null'], description: 'Present when kind is "import".' },
+            original_summary: { type: ['string', 'null'], description: 'The imported event\'s own SUMMARY text; present when kind is "import".' },
+            original_date: { type: ['string', 'null'], format: 'date' },
+            moved: { type: 'boolean' },
+          },
+        },
+        WasteOccurrence: {
+          type: 'object',
+          required: ['key', 'date_key', 'type_id', 'moved', 'coalesced', 'origins', 'deep_link'],
+          properties: {
+            key: { type: 'string' },
+            date_key: { type: 'string', format: 'date' },
+            type_id: { type: 'integer' },
+            type_name: { type: ['string', 'null'] },
+            type_icon: { type: ['string', 'null'] },
+            type_color: { type: ['string', 'null'] },
+            type_sort_order: { type: 'integer' },
+            moved: { type: 'boolean' },
+            coalesced: { type: 'boolean', description: 'true when more than one origin (e.g. a schedule and a one-off) supplies this same date.' },
+            origins: { type: 'array', items: { $ref: '#/components/schemas/WasteOccurrenceOrigin' } },
+            deep_link: { type: 'string', description: 'Stable "?type=<id>&date=<YYYY-MM-DD>" deep-link target.' },
+          },
+        },
+        WasteNextPerTypeEntry: {
+          type: 'object',
+          required: ['type', 'next'],
+          properties: {
+            type: { $ref: '#/components/schemas/WasteType' },
+            next: {
+              oneOf: [{ $ref: '#/components/schemas/WasteOccurrence' }, { type: 'null' }],
+            },
+          },
+        },
+        WasteTypeListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteType' } } },
+        },
+        WasteTypeResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/WasteType' } },
+        },
+        WasteScheduleListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteSchedule' } } },
+        },
+        WasteScheduleResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/WasteSchedule' } },
+        },
+        WasteScheduleOverrideResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/WasteScheduleOverride' } },
+        },
+        WasteOneOffPickupListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteOneOffPickup' } } },
+        },
+        WasteOneOffPickupResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { $ref: '#/components/schemas/WasteOneOffPickup' } },
+        },
+        WasteOccurrenceListResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteOccurrence' } } },
+        },
+        WasteNextPerTypeResponse: {
+          type: 'object',
+          required: ['data'],
+          properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteNextPerTypeEntry' } } },
+        },
+        WasteSource: {
+          type: 'object',
+          required: ['id', 'kind', 'name', 'version', 'created_at', 'updated_at'],
+          properties: {
+            id: { type: 'integer' },
+            kind: { type: 'string', enum: ['file', 'url'] },
+            name: { type: 'string' },
+            content_hash: { type: 'string', description: 'sha256 of the ICS text behind the currently committed snapshot.' },
+            version: { type: 'integer', description: 'Bumped on every committed (re)import; the concurrency guard for reimport/commit.' },
+            coverage_start: { type: ['string', 'null'], format: 'date' },
+            coverage_end: { type: ['string', 'null'], format: 'date' },
+            last_import_at: { type: ['string', 'null'], format: 'date-time' },
+            last_success_at: { type: ['string', 'null'], format: 'date-time', description: 'Only updated on a successful commit; a failed attempt never clears it.' },
+            last_error: { type: ['string', 'null'], description: 'The English message of the last failed attempt, for logs and API consumers. Omitted for a caller without module write access, like url.' },
+            last_error_reason: { type: ['string', 'null'], description: 'The case of the last failed attempt (#1909): the same reason a manual refresh answers with (waste_source_fetch_http_status, waste_source_fetch_too_large, waste_source_fetch_blocked, waste_source_fetch_unreachable, waste_source_fetch_no_events, or the reason of a failed import). null when the attempt failed without a typed case, or before the first failure recorded after #1909. Omitted together with last_error.' },
+            last_error_params: { type: ['object', 'null'], description: 'The numbers of that case (status, limit_mb), as the refresh answer carries them in params. Omitted together with last_error.' },
+            needs_refresh: { type: 'boolean', description: 'true when this source has no mapped pickup on or after today (invariant #6) - derived, not stored.' },
+            url: { type: 'string', description: 'kind=url only. A credential: omitted entirely for a caller without module write access, never merely masked.' },
+            refresh_interval_minutes: { type: 'integer', description: 'kind=url only. Bounded 60-43200 (hourly to monthly).' },
+            next_attempt_at: { type: ['string', 'null'], format: 'date-time', description: 'kind=url only. null while needs_mapping is set - the scheduler skips the source until a reviewed refresh.' },
+            consecutive_failures: { type: 'integer', description: 'kind=url only. Drives exponential backoff; reset to 0 on any successful fetch.' },
+            needs_mapping: { type: 'boolean', description: 'kind=url only. Content changed but could not auto-commit (an unmapped label or unresolved blocking diagnostic); resolved only by a reviewed refresh.' },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        WasteSourceDetail: {
+          allOf: [
+            { $ref: '#/components/schemas/WasteSource' },
+            { type: 'object', properties: { mappings: { type: 'array', items: { $ref: '#/components/schemas/WasteSourceMapping' } } } },
+          ],
+        },
+        WasteSourceRenameInput: {
+          type: 'object', required: ['name'], properties: { name: { type: 'string', maxLength: 150 } },
+        },
+        WasteSourceMapping: {
+          type: 'object',
+          required: ['id', 'source_id', 'original_label', 'normalized_label', 'ignored'],
+          properties: {
+            id: { type: 'integer' },
+            source_id: { type: 'integer' },
+            original_label: { type: 'string' },
+            normalized_label: { type: 'string' },
+            type_id: { type: ['integer', 'null'] },
+            ignored: { type: 'boolean' },
+          },
+        },
+        WasteSourceMappingUpdateInput: {
+          type: 'object',
+          properties: {
+            type_id: { type: 'integer', description: 'Required unless ignored is true.' },
+            ignored: { type: 'boolean', default: false },
+          },
+        },
+        WasteImportDiagnostic: {
+          type: 'object',
+          required: ['severity', 'code', 'message'],
+          properties: {
+            severity: { type: 'string', enum: ['info', 'blocking'] },
+            code: { type: 'string', enum: ['skipped_unparsable', 'cancelled_excluded', 'missing_uid_fallback', 'duplicate_instance', 'unsupported_rdate', 'unbounded_recurrence'] },
+            message: { type: 'string' },
+            count: { type: 'integer' },
+            event_key: { type: 'string', description: 'Present on a "blocking" diagnostic; pass it back in skip_event_keys on commit to exclude the affected event and unblock the rest of the file.' },
+          },
+        },
+        WasteImportLabel: {
+          type: 'object',
+          required: ['normalized_label', 'original_label', 'count'],
+          properties: {
+            normalized_label: { type: 'string' },
+            original_label: { type: 'string' },
+            count: { type: 'integer' },
+            sample_summary: { type: ['string', 'null'] },
+            suggested_type_id: { type: ['integer', 'null'], description: 'A same-name (case-insensitive) match against an existing type; a convenience default only, never applied on its own.' },
+            remembered_type_id: { type: ['integer', 'null'], description: 'The type this label was mapped to on the source\'s last commit, on a re-import preview.' },
+            remembered_ignored: { type: 'boolean' },
+          },
+        },
+        WasteImportPreview: {
+          type: 'object',
+          required: ['digest', 'coverage', 'counts', 'diagnostics', 'labels'],
+          properties: {
+            digest: { type: 'string', description: 'sha256 of what this preview shows (candidates/labels/diagnostics), not of the raw ICS bytes; pass it back as preview_digest on commit. A URL source may be re-fetched between preview and commit - this digest still matches as long as the parsed result is unchanged.' },
+            source_id: { type: ['integer', 'null'], description: 'null for a fresh import preview.' },
+            expected_version: { type: ['integer', 'null'], description: 'The source\'s current version, for a re-import preview; pass it back as expected_version on commit.' },
+            coverage: {
+              type: 'object',
+              properties: { start: { type: ['string', 'null'], format: 'date' }, end: { type: ['string', 'null'], format: 'date' } },
+            },
+            counts: {
+              type: 'object',
+              properties: { events: { type: 'integer' }, candidates: { type: 'integer' }, distinct_labels: { type: 'integer' } },
+            },
+            diagnostics: { type: 'array', items: { $ref: '#/components/schemas/WasteImportDiagnostic' } },
+            labels: { type: 'array', items: { $ref: '#/components/schemas/WasteImportLabel' } },
+          },
+        },
+        WasteImportPreviewInput: {
+          type: 'object', required: ['ics'],
+          properties: { ics: { type: 'string', description: 'The raw ICS file text.' } },
+        },
+        WasteImportPreviewResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteImportPreview' } },
+        },
+        WasteImportMappingDecision: {
+          type: 'object',
+          required: ['normalized_label'],
+          description: 'Exactly one of type_id / new_type / ignored must be set. One decision is required per distinct label reported by the preview.',
+          properties: {
+            normalized_label: { type: 'string' },
+            type_id: { type: 'integer' },
+            new_type: { $ref: '#/components/schemas/WasteTypeInput' },
+            ignored: { type: 'boolean' },
+          },
+        },
+        WasteImportCommitInput: {
+          type: 'object',
+          required: ['ics', 'mappings'],
+          properties: {
+            ics: { type: 'string', description: 'The raw ICS file text (re-parsed on commit; never trusts a client-supplied candidate list).' },
+            name: { type: 'string', maxLength: 150, description: 'Required for a fresh import (POST /import/commit); defaults to the existing name on a re-import.' },
+            mappings: { type: 'array', items: { $ref: '#/components/schemas/WasteImportMappingDecision' } },
+            skip_event_keys: { type: 'array', items: { type: 'string' }, description: 'Blocking-diagnostic event_key values explicitly acknowledged and excluded.' },
+            preview_digest: { type: 'string', description: 'The digest returned by the matching preview; a mismatch (the parsed content actually changed since that preview) is refused with 409.' },
+            expected_version: { type: 'integer', description: 'Required on a re-import commit; the source\'s version as last seen in a preview (409 on mismatch).' },
+          },
+        },
+        WasteImportDiff: {
+          type: 'object',
+          required: ['added', 'changed', 'removed', 'coalesced'],
+          properties: {
+            added: { type: 'integer' }, changed: { type: 'integer' }, removed: { type: 'integer' },
+            coalesced: { type: 'integer', description: 'Informational: how many accepted pickups land on a date a manual schedule/one-off (or another source) already provides for the same type.' },
+          },
+        },
+        WasteImportCommitResult: {
+          type: 'object',
+          required: ['source', 'diff'],
+          properties: { source: { $ref: '#/components/schemas/WasteSource' }, diff: { $ref: '#/components/schemas/WasteImportDiff' } },
+        },
+        WasteImportCommitResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteImportCommitResult' } },
+        },
+        WasteSourceListResponse: {
+          type: 'object', required: ['data'], properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteSource' } } },
+        },
+        WasteSourceDetailResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteSourceDetail' } },
+        },
+        WasteSourceMappingResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteSourceMapping' } },
+        },
+        WasteUrlSourceCreateInput: {
+          type: 'object',
+          required: ['name', 'url'],
+          properties: {
+            name: { type: 'string', maxLength: 150 },
+            url: { type: 'string', description: 'https:// only by default; http:// is accepted only under the operator opt-in WASTE_SOURCE_ALLOW_PRIVATE_NETWORK.' },
+            refresh_interval_minutes: { type: 'integer', default: 1440, description: 'Bounded 60-43200 (hourly to monthly).' },
+          },
+        },
+        WasteUrlSourceRefreshResult: {
+          type: 'object',
+          required: ['source', 'outcome'],
+          properties: {
+            source: { $ref: '#/components/schemas/WasteSource' },
+            outcome: {
+              type: 'string',
+              enum: ['committed', 'unchanged', 'needs_mapping', 'error'],
+              description: 'committed: every label had a remembered decision, applied via the same atomic path as a file re-import. unchanged: a conditional GET reported no change (304). needs_mapping: content changed but at least one label (or blocking diagnostic) has no remembered decision - see source.needs_mapping and the preview field. error: the fetch failed - see reason for its class and source.last_error for the stored message (source.last_error_reason keeps the same class for a later read).',
+            },
+            reason: {
+              type: 'string',
+              enum: ['waste_source_fetch_http_status', 'waste_source_fetch_too_large', 'waste_source_fetch_blocked', 'waste_source_fetch_unreachable', 'waste_source_fetch_no_events', 'waste_source_url_invalid', 'waste_source_url_not_https'],
+              description: 'Only with outcome=error: the class of the failed fetch. http_status: the other side answered, but not with a success (params.status). too_large: the response exceeds the upload limit (params.limit_mb). blocked: a private or blocked address. unreachable: everything else (DNS, refused or reset connection, TLS, timeout, a redirect that is not followed). no_events: the other side answered with a success, but without a single calendar entry (a maintenance or login page, an empty calendar) - nothing is applied and the imported pickups stay (#1938). url_invalid / url_not_https: the stored URL no longer passes validation. Stored with the source as last_error_reason (and last_error_params) since #1909.',
+            },
+            params: { type: 'object', additionalProperties: { type: 'integer' }, description: 'Only with a reason that carries a number: `{ "status": 404 }` or `{ "limit_mb": 5 }`.' },
+            diff: { $ref: '#/components/schemas/WasteImportDiff' },
+            preview: { $ref: '#/components/schemas/WasteImportPreview' },
+          },
+        },
+        WasteUrlSourceCreateResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteUrlSourceRefreshResult' } },
+        },
+        WasteUrlSourceRefreshResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteUrlSourceRefreshResult' } },
+        },
+        WasteReminderSetting: {
+          type: 'object',
+          required: ['type_id', 'enabled', 'offset_days', 'delivery_time'],
+          properties: {
+            type_id: { type: 'integer' },
+            type_name: { type: 'string', description: 'Only present on GET (list); PUT\'s response is scoped to the one type_id already in the URL.' },
+            enabled: { type: 'boolean' },
+            offset_days: { type: 'integer', description: 'Lead time before the pickup, in days. Bounded 0-14.' },
+            delivery_time: { type: 'string', description: 'Household-local HH:MM the reminder is delivered at.' },
+          },
+        },
+        WasteReminderSettingsListResponse: {
+          type: 'object', required: ['data'], properties: { data: { type: 'array', items: { $ref: '#/components/schemas/WasteReminderSetting' } } },
+        },
+        WasteReminderSettingUpdateInput: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean', default: false },
+            offset_days: { type: 'integer', default: 1 },
+            delivery_time: { type: 'string', default: '08:00' },
+          },
+        },
+        WasteReminderSettingResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteReminderSetting' } },
+        },
+        WasteFeedStatus: {
+          type: 'object',
+          nullable: true,
+          properties: {
+            token: { type: 'string' },
+            url: { type: 'string', description: 'Public, unauthenticated .ics URL. Rotates when regenerated.' },
+            type_ids: {
+              type: 'array', items: { type: 'integer' }, nullable: true,
+              description: 'Optional type selection. null (default) means every active type.',
+            },
+          },
+        },
+        WasteFeedStatusResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteFeedStatus' } },
+        },
+        WasteFeedTypeSelectionInput: {
+          type: 'object',
+          required: ['type_ids'],
+          properties: {
+            type_ids: {
+              type: 'array', items: { type: 'integer' }, nullable: true,
+              description: 'Waste type ids to include, or null to include every active type again.',
+            },
+          },
+        },
+        WasteMappingProfileEntry: {
+          type: 'object',
+          required: ['pattern', 'type_name'],
+          properties: {
+            pattern: { type: 'string', description: 'Normalized source label this pattern matches.' },
+            type_name: { type: 'string' },
+          },
+        },
+        WasteMappingProfile: {
+          type: 'object',
+          required: ['version', 'mappings'],
+          properties: {
+            version: { type: 'integer', enum: [1] },
+            source_name: { type: 'string', description: 'Only present on export, informational only.' },
+            mappings: { type: 'array', items: { $ref: '#/components/schemas/WasteMappingProfileEntry' } },
+          },
+        },
+        WasteMappingProfileExportResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteMappingProfile' } },
+        },
+        WasteMappingProfileImportPreviewInput: {
+          type: 'object', required: ['profile'], properties: { profile: { $ref: '#/components/schemas/WasteMappingProfile' } },
+        },
+        WasteMappingProfilePreviewEntry: {
+          type: 'object',
+          required: ['pattern', 'type_name', 'status'],
+          properties: {
+            pattern: { type: 'string' },
+            type_name: { type: 'string' },
+            mapping_id: { type: 'integer', nullable: true },
+            original_label: { type: 'string', nullable: true },
+            resolved_type_id: { type: 'integer', nullable: true },
+            status: {
+              type: 'string',
+              enum: ['applicable', 'unchanged', 'unmatched_pattern', 'unmatched_type', 'ambiguous_type'],
+              description: 'applicable: will be applied on commit. unchanged: source mapping already matches. unmatched_pattern: no mapping in this source has this pattern. unmatched_type: no waste type in this household has this name. ambiguous_type: more than one waste type shares this name and none of them is the mapping\'s own current type - never guessed at, resolve the name collision (rename one of the types) before this entry can apply.',
+            },
+          },
+        },
+        WasteMappingProfilePreview: {
+          type: 'object',
+          required: ['source_id', 'entries', 'applicable_count', 'profile_digest'],
+          properties: {
+            source_id: { type: 'integer' },
+            entries: { type: 'array', items: { $ref: '#/components/schemas/WasteMappingProfilePreviewEntry' } },
+            applicable_count: { type: 'integer' },
+            profile_digest: { type: 'string', description: 'Pass back unchanged on commit; a mismatch means the profile changed since this preview.' },
+          },
+        },
+        WasteMappingProfileImportPreviewResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteMappingProfilePreview' } },
+        },
+        WasteMappingProfileImportCommitInput: {
+          type: 'object',
+          required: ['profile', 'profile_digest'],
+          properties: {
+            profile: { $ref: '#/components/schemas/WasteMappingProfile' },
+            profile_digest: { type: 'string' },
+          },
+        },
+        WasteMappingProfileImportCommitResult: {
+          type: 'object',
+          required: ['applied_count', 'entries'],
+          properties: {
+            applied_count: { type: 'integer' },
+            entries: { type: 'array', items: { $ref: '#/components/schemas/WasteMappingProfilePreviewEntry' } },
+          },
+        },
+        WasteMappingProfileImportCommitResponse: {
+          type: 'object', required: ['data'], properties: { data: { $ref: '#/components/schemas/WasteMappingProfileImportCommitResult' } },
+        },
+};

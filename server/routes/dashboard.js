@@ -1,0 +1,1396 @@
+/**
+ * Modul: Dashboard
+ * Zweck: Aggregierter Endpoint - liefert Daten aller Dashboard-Widgets in einem Request
+ * Abhängigkeiten: express, server/db.js
+ */
+
+import { createLogger } from '../logger.js';
+import express from 'express';
+import { hydrateNotesWithCategories } from '../services/note-categories.js';
+import * as db from '../db.js';
+import { hydrateBirthdayOccurrences } from '../services/birthdays.js';
+import { getEventsOverlappingDays, getUpcomingEvents } from '../services/calendar-event-reader.js';
+import { taskScopeWhere, taskCategoryWhere, categoryBindings, normalizeCategoryFilter } from '../services/task-scope.js';
+import { getCountdowns } from '../services/countdowns.js';
+import { listQuickLinksFor } from './quick-links.js';
+import {
+  asksHouseholdAudience, householdAudienceAnswer, householdAudienceShows, householdVisibleWhere, visibilityWhere,
+} from '../services/visibility.js';
+import { resolveBudgetMode } from '../services/budget-visibility.js';
+import { hiddenModulesFor, requestHasCapability } from '../permissions.js';
+import { birthdaysSwitchedOff, modulesLeftOut } from '../services/household-modules.js';
+import { documentViewer } from '../services/document-links.js';
+import { householdMemberSql, memberOrderSql, memberPositionSql } from '../services/household-members.js';
+import { FastingError, getFastingDashboardState } from '../services/fasting.js';
+import { openBalancesForUser } from '../services/split-expenses.js';
+import { NUTRIENT_KEYS, nutritionSummaryFor } from '../services/health-nutrition.js';
+import { emptyPantryExpiring, pantryExpiringSlice } from '../services/pantry-expiring.js';
+import { finishedVisitsInMonth, latestVisit } from '../services/housekeeping-month.js';
+import { householdTimeZone, utcToWall, todayKey, shiftDateKey } from '../utils/timezone.js';
+import { isAdminUser, serializeEvents } from './calendar/helpers.js';
+import { getOccurrences as getWasteOccurrences } from '../services/waste-store.js';
+import { scheduleData } from '../services/schedule.js';
+import { isAdminRequest } from '../middleware/require-admin.js';
+import { activeCatalog, ledgerBalanceSql } from '../services/rewards.js';
+import { moneyParams, moneyReader, moneyVisibleSql } from '../services/reward-money.js';
+import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL } from '../services/meal-cook.js';
+import { clampEventLimit } from '../../public/utils/dashboard-event-limit.js';
+
+const log = createLogger('Dashboard');
+
+/**
+ * WAS EIN GESPERRTES MODUL LIEFERT — und warum das hier steht und nicht in
+ * fünfzehn verstreuten Zweigen.
+ *
+ * Diese Route filterte jede Zeile über `visibilityWhere`, also über die
+ * ZEILEN-Privatsphäre (all/assignees/private). Die zweite Achse fehlte: die
+ * Modulrechte pro Rolle und Mitglied (#467). Ein Kind, dem der Kalender auf
+ * `none` steht, bekam über /dashboard weiterhin Termintitel, Beschreibung, Ort
+ * und Anhangsnamen geliefert — die App fiel nicht auf, weil der Browser die
+ * Kachel über `canSeeWidget` ausblendet, aber die Daten lagen auf der Leitung,
+ * im Netzwerk-Tab und im Service-Worker-Cache. Die SPEC sagt zu #467
+ * „Enforcement is server-side"; für diesen Endpoint stimmte das nicht.
+ *
+ * DIE PFAD-MIDDLEWARE KANN ES NICHT ÜBERNEHMEN. Der Guard in server/index.js
+ * schlägt den Pfad in scopes.js nach; /dashboard ergibt den Schlüssel
+ * `dashboard`, und der ist kein Permissions-Modul. Der Guard lässt die Anfrage
+ * also immer durch — er kennt keinen Endpunkt, der ein Dutzend Module auf
+ * einmal ausliefert. Genau deshalb muss die Route selbst aussortieren.
+ *
+ * ALS TABELLE UND NICHT ALS FALLUNTERSCHEIDUNG JE ZWEIG: welcher Teil der
+ * Antwort zu welchem Modul gehört, ist die eigentliche Aussage dieses Fixes,
+ * und sie gehört an EINE Stelle, an der sie sich lesen und prüfen lässt. Wer
+ * ein Feld hinzufügt, sieht hier, dass es eine Modulzuordnung braucht.
+ *
+ * Der Wert ist jeweils die LEERE Fassung, nicht das fehlende Feld: die Antwort
+ * behält damit ihre Form (`/api/v1` ist zugesagte Oberfläche für Drittmodule),
+ * und kein Client stolpert über ein undefined, wo er eine Liste erwartet. Es
+ * ist dieselbe Fassung, die auch der Fehlerpfad jedes Blocks schreibt.
+ */
+const DENIED_PAYLOAD = Object.freeze({
+  // Geburtstage gehören zum Kalender-Modul, nicht zu einem eigenen — dieselbe
+  // Zuordnung wie in PERMISSION_MODULES (navIds) und im Client (NAV_TO_MODULE).
+  calendar: () => ({ upcomingEvents: [], familyEvents: [], weekEvents: [], ...emptyBirthdays() }),
+  tasks: () => ({
+    urgentTasks: [], openTaskCount: 0, overdueTaskCount: 0,
+    memberTodayTasks: [], tasksDoneToday: 0, wallTasks: [],
+  }),
+  meals: () => ({ todayMeals: [] }),
+  notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0 }),
+  shopping: () => ({ shoppingLists: [], shoppingOpenCount: 0, shoppingOpenLists: 0 }),
+  // Der Monat bleibt stehen: er ist keine Budgetzahl, sondern der Zeitraum, auf
+  // den die Kachel beschriftet ist — und er steht ohnehin im Kalender.
+  // Geteilte Ausgaben gehoeren zum Budget-Modul (server/scopes.js fuehrt
+  // `split-expenses` als zweiten Praefix von `budget`).
+  budget: ({ month }) => ({ budget: emptyBudget(month), splitBalance: emptySplitBalance() }),
+  rewards: () => ({ rewards: { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] } }),
+  health: () => ({
+    health: {
+      hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0,
+      nextDose: null, lowStockCount: 0,
+    },
+    fasting: emptyFastingWidget(),
+    nutrition: emptyNutritionWidget(),
+  }),
+  housekeeping: () => ({
+    housekeeping: {
+      configured: false, present: false, presentSince: null, workerName: null,
+      visitsThisMonth: 0, unpaidAmount: 0, lastVisit: null,
+    },
+  }),
+  // Die zwei Felder des Heute-Blatts (Critique 23.09.2026, P1). Eigene Namen
+  // statt `waste`/`schedule`: unter diesen Namen legt der Browser die Slices
+  // der Kacheln ab (`ensureWasteSlice`, `ensureScheduleSlice`), und ein
+  // gleichnamiges Feld hier liesse sie nie mehr laden.
+  waste: () => ({ wastePickups: [] }),
+  schedule: () => ({ myShiftsToday: [] }),
+  // Vorrat „läuft bald ab": Chargennamen sind Haushaltsdaten des Moduls pantry.
+  pantry: () => ({ pantryExpiring: emptyPantryExpiring() }),
+});
+
+/**
+ * Die leere Fassung der GANZEN Antwort: jedes Modul aus `DENIED_PAYLOAD`, dazu
+ * die Schluessel, die keinem Modul gehoeren. Von ihr aus baut die
+ * Haushaltsfassung (`householdAudienceAnswer`) - was die Wand nicht zeichnet,
+ * bleibt in genau dieser Form stehen.
+ *
+ * `shoppingTile` fehlt hier, und das ist seine leere Fassung: das Feld gibt es
+ * nur bei einer Listen-Auswahl, und ein Konto ohne den Einkauf bekommt es nie.
+ */
+function emptyAnswer(context) {
+  const empty = { users: [], countdowns: [], countdownTotal: 0, quicklinks: [] };
+  for (const build of Object.values(DENIED_PAYLOAD)) Object.assign(empty, build(context));
+  return empty;
+}
+
+/**
+ * Die leere Fassung der Geburtstags-Kachel. Eigene Funktion, weil sie zwei
+ * Wege hat: das entzogene Kalender-RECHT nimmt sie mit (oben), der
+ * Haushaltsschalter `birthdays` nimmt sie allein (#1660, siehe die Route).
+ */
+function emptyBirthdays() {
+  return { birthdays: [], birthdayCount: 0, birthdayTotal: 0, birthdaySoonCount: 0 };
+}
+
+/** Wie viele beendete Termine von heute ausserhalb des Deckels mitkommen (#1449). */
+const ENDED_TODAY_POOL = 20;
+
+/** Wie viele noch kommende Termine die Familienkarte je Mitglied bekommt (#1449):
+ * der naechste eigene heute, einer danach fuer „als Naechstes", und Raum fuer
+ * gemeinsame, die die Karte in einer eigenen Zeile zeigt. */
+const FAMILY_AHEAD_PER_MEMBER = 6;
+
+function emptyFastingWidget() {
+  return {
+    settings: { clock_mode: 'auto', zone_mode: 'timer' },
+    active: null,
+    lastCompleted: null,
+  };
+}
+
+/**
+ * Die leere Naehrwert-Bilanz: kein Ziel, nichts gegessen.
+ *
+ * `target: null` ist hier die richtige leere Fassung und nicht ein Ziel aus
+ * Nullen - "kein Ziel gesetzt" und "Ziel 0" sind zwei verschiedene Aussagen
+ * (#1326), und die Kachel sagt bei der ersten "kein Ziel" statt "0 von 0".
+ */
+function emptyNutritionWidget() {
+  const totals = {};
+  for (const key of NUTRIENT_KEYS) totals[key] = 0;
+  return { date: null, target: null, totals, entryCount: 0 };
+}
+
+function emptySplitBalance() {
+  return { net: [], positions: [] };
+}
+
+function emptyBudget(month) {
+  return {
+    month,
+    income: 0,
+    expenses: 0,
+    balance: 0,
+    entryCount: 0,
+    topExpenseCategory: null,
+    topExpenseAmount: 0,
+    topExpenses: [],
+    savingsGoal: null,
+  };
+}
+
+const ASSIGNED_USERS_SQL = `(
+  SELECT json_group_array(json_object(
+    'id', u.id, 'display_name', u.display_name, 'color', u.avatar_color,
+    'avatar_data', u.avatar_data
+  ))
+  FROM task_assignments ta JOIN users u ON u.id = ta.user_id
+  WHERE ta.task_id = t.id
+) AS assigned_users_json`;
+
+function addAssignedUsers(task) {
+  task.assigned_users = task.assigned_users_json ? JSON.parse(task.assigned_users_json) : [];
+  delete task.assigned_users_json;
+  return task;
+}
+
+/**
+ * Die Felder eines Termins, die der Wochenstreifen braucht: Tag(e), Farbe nach
+ * der Regel aus public/utils/event-color.js und der Titel fuer den
+ * Tagesnamen - der Geburtstag mit den Feldern, aus denen der Browser ihn
+ * uebersetzt (#524).
+ */
+function weekEventFields(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    start_datetime: event.start_datetime,
+    end_datetime: event.end_datetime ?? null,
+    all_day: event.all_day ? 1 : 0,
+    color: event.color ?? null,
+    cal_color: event.cal_color ?? null,
+    assigned_to: event.assigned_to ?? null,
+    assigned_users: (event.assigned_users ?? []).map((user) => ({
+      id: user.id, display_name: user.display_name, color: user.color,
+    })),
+    birthday_name: event.birthday_name ?? null,
+    birthday_date: event.birthday_date ?? null,
+    birthday_event_kind: event.birthday_event_kind ?? null,
+  };
+}
+
+/** So viele Titel je Mitglied und Zustand reisen mit; die Zahlen daneben sind ungekappt. */
+const WALL_TASKS_PER_MEMBER = 6;
+
+/**
+ * Die Aufgaben von heute je Mitglied, MIT TITEL, fuer die Wand (#1817).
+ *
+ * WARUM EINE EIGENE LESUNG. `urgentTasks` ist haushaltsweit auf fuenf gekappt -
+ * daraus laesst sich nicht lesen, was unter einer einzelnen Person steht.
+ * `memberTodayTasks` ist ungekappt, traegt aber nur eine Zahl.
+ *
+ * NUR `visibility = 'all'`, UND DAS IST NICHT DIE BETRACHTER-REGEL. Jede andere
+ * Aufgabenabfrage dieser Route haengt `visibilityWhere(..., '@me')` an: sie
+ * zeigt, was die angemeldete Person sehen darf. Ein Wandtablett ist keine
+ * Person - es haengt in der Kueche, und der Wandmodus laesst sich aus jeder
+ * Sitzung oeffnen. Eine Aufgabe auf "nur Zugewiesene" oder privat steht deshalb
+ * auf keiner Wand, auch nicht, wenn die Wand aus der Sitzung der zugewiesenen
+ * Person geoeffnet wurde. `'all'` ist eine Teilmenge dessen, was jeder
+ * Betrachter ohnehin sieht; die Lesung gibt also nichts frei, was der
+ * Betrachter nicht schon hat, und ein gekoppeltes Display erreicht sie nur
+ * ueber `dashboard:read` + `tasks:read` wie den Rest der Antwort.
+ *
+ * "HEUTE" FUER EINE PERSON: offen ist, was heute oder frueher faellig ist -
+ * dieselbe Menge, die `memberTodayTasks` zaehlt und die das Programm links als
+ * "ueberfaellig" fuehrt. Erledigt ist, was heute faellig war, und dazu, was
+ * ueberfaellig war und HEUTE abgehakt wurde: sonst verschwaende eine Aufgabe
+ * von gestern beim Abhaken von der Wand, statt ihren Haken zu bekommen. Der Tag
+ * einer Erledigung ist der des HAUSHALTS (`completed_at` ist ein UTC-Zeitpunkt).
+ * Mit dem Tageswechsel faellt beides von selbst heraus.
+ *
+ * MEHRERE ZUGEWIESENE: die Aufgabe steht unter jeder von ihnen, wie
+ * `memberTodayTasks` sie zaehlt.
+ *
+ * @returns {{user_id: number, open_count: number, done_count: number,
+ *            open: {id: number, title: string, due_date: string}[],
+ *            done: {id: number, title: string}[]}[]}
+ */
+function wallTasksByMember(d, { today, zone, now, categoryAnd = '', categoryBinds = {} }) {
+  // Grobe Vorauswahl in SQL (48 Stunden decken jede Zone), der Tag selbst wird
+  // unten in der Haushaltszone entschieden.
+  const since = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const rows = d.prepare(`
+    SELECT ta.user_id AS user_id, t.id, t.title, t.status, t.due_date, tc.completed_at
+    FROM tasks t
+    JOIN task_assignments ta ON ta.task_id = t.id
+    LEFT JOIN task_completions tc ON tc.task_id = t.id
+    WHERE t.archived_at IS NULL
+      AND t.visibility = 'all'
+      AND t.due_date IS NOT NULL AND t.due_date <= @today
+      AND ${taskScopeWhere('t', { bind: '@today' })}${categoryAnd}
+      AND (t.status != 'done' OR t.due_date = @today OR tc.completed_at >= @since)
+    ORDER BY
+      t.due_date ASC,
+      t.due_time IS NULL ASC, t.due_time ASC,
+      CASE t.priority
+        WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
+        WHEN 'low' THEN 3 ELSE 4
+      END ASC,
+      t.id ASC
+  `).all({ today, since, ...categoryBinds });
+
+  const byMember = new Map();
+  for (const row of rows) {
+    const isDone = row.status === 'done';
+    if (isDone && row.due_date !== today
+      && utcToWall(row.completed_at, zone)?.date !== today) continue;
+    let entry = byMember.get(row.user_id);
+    if (!entry) {
+      entry = { user_id: row.user_id, open_count: 0, done_count: 0, open: [], done: [] };
+      byMember.set(row.user_id, entry);
+    }
+    if (isDone) {
+      entry.done_count += 1;
+      if (entry.done.length < WALL_TASKS_PER_MEMBER) entry.done.push({ id: row.id, title: row.title });
+    } else {
+      entry.open_count += 1;
+      if (entry.open.length < WALL_TASKS_PER_MEMBER) {
+        entry.open.push({ id: row.id, title: row.title, due_date: row.due_date });
+      }
+    }
+  }
+  return [...byMember.values()];
+}
+
+/**
+ * `?shopping_list=` als Liste von Listen-Ids (#1818): einzeln oder mehrfach
+ * angegeben, nur positive ganze Zahlen, ohne Doppelte, hoechstens 50 - dieselbe
+ * Form und Grenze wie `notes_category` und wie die gespeicherten Optionen
+ * (preferences.js). Alles andere faellt weg, nie ein Fehler.
+ */
+export function normalizeShoppingListFilter(raw) {
+  if (raw === undefined || raw === null) return [];
+  return [...new Set(
+    (Array.isArray(raw) ? raw : [raw])
+      .filter((value) => typeof value === 'string' && /^[1-9]\d{0,14}$/.test(value))
+      .map(Number),
+  )].slice(0, 50);
+}
+
+const router = express.Router();
+
+/**
+ * GET /api/v1/dashboard
+ * Liefert aggregierte Daten für alle Dashboard-Widgets.
+ * Jedes Widget-Objekt hat ein eigenes `error`-Feld falls die Abfrage fehlschlägt -
+ * so bricht ein fehlerhaftes Widget nicht das gesamte Dashboard.
+ *
+ * Response: {
+ *   upcomingEvents: CalendarEvent[],   // Nächste 5 Termine (`events_limit`: 8 oder 12)
+ *   familyEvents:   CalendarEvent[],   // Termine je Mitglied fuer die Familienkarte (#1449)
+ *   weekEvents:     WeekEvent[],       // Termine, die die Woche ab heute berühren (schlank)
+ *   urgentTasks:    Task[],            // High/Urgent mit Fälligkeit ≤ 48h
+ *   todayMeals:     Meal[],            // Mahlzeiten für heute
+ *   pinnedNotes:    Note[],            // Angepinnte Notizen (max. 3)
+ *   users:          User[],            // Alle User (für Avatar-Farben)
+ *   memberTodayTasks: {user_id, open_count}[], // Heute fällige/überfällige offene Aufgaben je Mitglied
+ *   tasksDoneToday: number,            // Heute fällige, bereits erledigte Aufgaben
+ *   wallTasks:      {user_id, open_count, done_count, open: {id,title,due_date}[], done: {id,title}[]}[], // Haushaltssichtbare Aufgaben von heute je Mitglied (#1817)
+ *   countdowns:     Countdown[]        // Als Countdown markierte Termine + Aufgaben (#647)
+ *   quicklinks:      QuickLink[]        // Haushaltslinks der Kachelreihe (#469)
+ * }
+ */
+router.get('/', (req, res) => {
+  try {
+  const d = db.get();
+  const result = {};
+  const userId = req.authUserId || req.session.userId;
+
+  /* WIDGET-OPTIONEN KOMMEN ALS QUERY-PARAMETER, NICHT AUS DEM GESPEICHERTEN
+   * LAYOUT (#814). Der Server kennt die Widget-Ids bewusst nicht - sie gehören
+   * dem Frontend, und ein neues Widget soll keine Backend-Änderung kosten. Er
+   * speichert `options` deshalb nur als Form und versteht hier ausschliesslich
+   * die zwei Achsen, die er ohnehin abfragen kann.
+   *
+   * SIE WIRKEN AUF DIE GANZE ÜBERSICHT, nicht auf eine Kachel. Aufgaben stehen
+   * hier an vier Stellen (Liste, Kennzahl, „heute dran" je Mitglied, das
+   * Kopfband) und Termine an dreien; würde eine Auswahl nur die Liste
+   * einschränken, stünden zwei Zeilen unter einer Kachel, die sieben sagt -
+   * derselbe Fehler wie in #647, eine Ebene höher.
+   *
+   * Und sie wirken VOR der Deckelung, weil jede dieser Abfragen ihr eigenes
+   * LIMIT trägt.
+   *
+   * AUSGENOMMEN SIND DIE COUNTDOWNS (#647), und zwar bewusst: dort steht keine
+   * Aufgabe, weil sie in einer Liste vorkommt, sondern weil jemand sie
+   * ausdrücklich markiert hat. Eine Kategorie-Auswahl, die eine markierte
+   * Aufgabe wieder verschwinden lässt, nähme eine Entscheidung zurück, die
+   * jemand ausdrücklich getroffen hat. */
+  const taskCategories = normalizeCategoryFilter(req.query.tasks_category);
+  const taskCategoryFragment = taskCategoryWhere('t', taskCategories, { named: 'cat' });
+  const taskCategoryAnd = taskCategoryFragment ? ` AND ${taskCategoryFragment}` : '';
+  const taskCategoryBinds = categoryBindings(taskCategories, 'cat');
+  const noteCategories = [...new Set(
+    (Array.isArray(req.query.notes_category) ? req.query.notes_category : [req.query.notes_category])
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
+  )].slice(0, 50);
+  const noteCategoryBinds = Object.fromEntries(noteCategories.map((id, index) => [`note_category_${index}`, id]));
+  // Ein EXISTS je Auswahl ist absichtlich AND. Die Sichtbarkeitsbedingung im
+  // Unterselect verhindert, dass erratene IDs fremder persoenlicher Kategorien
+  // verraten, an welchen geteilten Notizen sie haengen.
+  const noteCategoryAnd = noteCategories.map((_id, index) => `
+    AND EXISTS (
+      SELECT 1
+      FROM note_category_assignments nca
+      JOIN note_categories nc ON nc.id = nca.category_id
+      WHERE nca.note_id = n.id
+        AND nc.id = @note_category_${index}
+        AND (nc.scope = 'household' OR nc.owner_user_id = @me)
+    )
+  `).join('');
+  /* FUER WEN DIE ANTWORT IST (#1817). `audience=household` fragt die Fassung
+   * fuer eine GETEILTE FLAECHE ab - die Wand. Dort gilt nicht „was darf die
+   * angemeldete Person sehen", sondern „was darf jeder sehen": Aufgaben und
+   * Termine nur mit Sichtbarkeit `all`, Termine aus ICS-Abos nur aus geteilten.
+   * Wer die Wand aus seiner eigenen Sitzung oeffnet, stellt damit nicht seine
+   * privaten Zeilen in die Kueche.
+   *
+   * DURCHGESETZT WIRD ES HIER, AM LESER, nicht im Browser: was die Antwort
+   * nicht traegt, liegt auch nicht im Speicher des Tabletts. Der Parameter
+   * VERENGT nur - die Haushaltsfassung ist eine Teilmenge dessen, was dieselbe
+   * Person ohnehin bekaeme -, er braucht deshalb kein eigenes Recht.
+   *
+   * UND SIE TRAEGT NUR, WAS DIE WAND ZEICHNET. Welche Schluessel das sind,
+   * steht als Allowlist an einer Stelle (`HOUSEHOLD_AUDIENCE_SHOWS` in
+   * services/visibility.js); alles andere kommt in der leeren Fassung einer
+   * Modulsperre - Notizen, Budget, geteilte Ausgaben, Schnellzugriffe,
+   * Countdowns, der offene Lohn der Haushaltshilfe, und was nur dem Betrachter
+   * gilt (Dosen, die eigene Schicht, wartende Freigaben: „2 zu bestaetigen"
+   * und „Eisen 20:00" standen aus der Sitzung eines Mitglieds in der Kueche).
+   * Durchgesetzt wird es am Ende der Route (`householdAudienceAnswer`); ein
+   * Modul, von dem die Wand nichts zeichnet, wird vorher gar nicht gelesen
+   * (`leftOut` unten).
+   *
+   * Die normale Uebersicht derselben Sitzung fragt ohne ihn und bleibt
+   * persoenlich. */
+  const householdAudience = asksHouseholdAudience(req.query);
+  const taskVisibleSql = householdAudience
+    ? householdVisibleWhere('t')
+    : visibilityWhere('t', 'task_assignments', 'task_id', '@me');
+  // `mine` ist die Auslegung des Kalendermoduls: zugewiesen an mich.
+  // EIN DISPLAY HAT KEIN "MIR" (#1808): es folgt der Vorgabe des Haushalts, sein
+  // Browser schickt deren Option mit, und dem Display-Konto weist nie jemand
+  // einen Termin zu (#1207) - das Tablett stuende leer da. Gelesen wird die
+  // Option deshalb HIER als "alle", statt sie beim Speichern der Vorgabe zu
+  // streichen: dieselbe Vorgabe gilt auch fuer Mitglieder, und dort stimmt sie.
+  // DIESELBE ANTWORT GILT FUER JEDE WAND (#1817): mit `audience=household` gibt
+  // es kein "mich", auch nicht aus der Sitzung eines Mitglieds.
+  const eventsAssignedTo = req.query.events_scope === 'mine' && req.authMethod !== 'display' && !householdAudience
+    ? userId : null;
+  /* GEBURTSTAGE IM TERMIN-WIDGET (#927). Wer sie auf der Uebersicht schon als
+   * eigene Kachel stehen hat, las sie zweimal - einmal bei den Geburtstagen,
+   * einmal zwischen den naechsten Terminen. Abwaehlbar ist deshalb der EINE
+   * Ort, an dem sie mitlaufen, statt dass die Kachel danebensteht.
+   *
+   * NICHT UEBERNOMMEN WIRD DER FILTER DES KALENDERMODULS, obwohl die Anfrage
+   * dorthin zeigte: der Ebenen-Schalter dort liegt im localStorage und gilt
+   * fuer das Geraet, die Widget-Optionen liegen in den Einstellungen und gelten
+   * fuer das Konto. Ein Wert an zwei Orten mit zwei Reichweiten waere die
+   * teurere Antwort - am Wandtablet haette das Abwaehlen am Telefon gewirkt
+   * oder eben nicht, je nachdem, welchen der beiden man liest.
+   *
+   * Der Standard bleibt „mit Geburtstagen": ein Filter wirkt nur, wo jemand ihn
+   * gesetzt hat. Der Parameter reist deshalb nur in seiner einen Richtung. */
+  // Den Haushaltsschalter (#1660) kennt der geteilte Leser selbst: sind die
+  // Geburtstage abgeschaltet, laufen sie nicht mit, was immer hier steht.
+  const includeBirthdays = req.query.events_birthdays !== 'hide';
+  // Wie viele Kommende die Kachel listet (#1680): 5, 8 oder 12 aus einer
+  // Allowlist, die der Browser mit dieser Route teilt. Alles andere - fehlend,
+  // leer, `7`, `500`, `abc`, doppelt angegeben - ist die Vorgabe fuenf.
+  const eventsLimit = clampEventLimit(req.query.events_limit);
+
+  const now = new Date();
+
+  // Lokaler Datums-/Wochentagsschlüssel: die Fälligkeit einer Dosis hängt am lokalen
+  // Kalendertag (nicht UTC), sonst driftet die days_mask westlich von UTC um einen Tag.
+  // Konvention wie public/utils/health-meds.js: Montag = 0 … Sonntag = 6.
+  //
+  // Dieser Schlüssel gilt für ALLES, was der Nutzer als Kalendertag eingegeben hat -
+  // Mahlzeitendatum, Fälligkeiten, Budget-Monat. Bis 2026-08-18 zog sich die Route
+  // daneben ein zweites `todayStr` aus `toISOString()`, also den UTC-Tag, und verglich
+  // ihn mit lokal gespeicherten Werten. Östlich von UTC lieferte das Dashboard dadurch
+  // in den frühen Morgenstunden die Mahlzeiten des VORTAGS (in CEST zwischen 00:00 und
+  // 02:00), westlich davon am späten Abend die von morgen; am Monatsersten traf es
+  // zusätzlich den Budget-Monat. Die CI läuft in UTC, wo beide Schlüssel gleich sind -
+  // deshalb war der Fehler dort nie zu sehen (CLAUDE.md führt genau diese Falle).
+  //
+  // Seit #829 ist "lokal" nicht mehr die Zone des Containers, sondern die des
+  // HAUSHALTS (sync_config `household_timezone`, Rueckfall `TZ`). Der Unterschied
+  // zaehlt genau dann, wenn beide auseinanderfallen - und `TZ` ist auf Umbrel,
+  // TrueNAS oder Unraid nichts, was ein Nutzer erreicht. Datum, Uhrzeit und
+  // Wochentag kommen deshalb aus EINER Ablesung dieser einen Zone; drei getrennte
+  // Ableitungen waeren drei Gelegenheiten, an einer Tagesgrenze auseinanderzulaufen.
+  const householdWall = utcToWall(now.toISOString(), householdTimeZone(d));
+  const todayLocalKey = householdWall?.date
+    ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // Wochentag aus dem Schluessel statt aus `now`: `getDay()` laese die Zone des
+  // Containers und widerspraeche dem Tag darüber, sobald die beiden abweichen.
+  const localWeekdayIdx = (new Date(`${todayLocalKey}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const currentMonth = todayLocalKey.slice(0, 7);
+  const deadline48h = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+
+  // Modulrechte des Betrachters (#467, siehe DENIED_PAYLOAD oben). Gelesen aus
+  // dem, was die Auth-Schicht schon aufgelöst hat: null für Admins und für
+  // unbeschränkte Mitglieder. Was gesperrt ist, steht vor der ersten Abfrage
+  // fest und wird gar nicht erst geholt - ein nachgelagerter Filter hätte die
+  // Daten erst gelesen und dann weggeworfen.
+  //
+  // Dazu die Scopes eines API-Tokens: `dashboard:read` öffnet die Übersicht,
+  // nicht die Module darin. Eine Kachel, deren Modul das Token nicht lesen darf,
+  // kommt in derselben leeren Fassung wie bei einer Rollensperre.
+  const denied = hiddenModulesFor(req, Object.keys(DENIED_PAYLOAD));
+  // UND DER HAUSHALTSSCHALTER (#1660, docs/DECISIONS.md 11). Bis dahin fragte
+  // diese Stelle nur nach Rechten und Scopes: ein haushaltsweit abgeschaltetes
+  // Modul lieferte seine Termine, Aufgaben, Buchungen und Medikamente weiter
+  // aus, und nur der Browser liess die Kachel weg. Abschalten ist keine Sperre -
+  // die eigenen Routen des Moduls bleiben offen -, aber was der Server
+  // ungefragt in eine gemischte Antwort legt, folgt dem Schalter. Beide Achsen
+  // in EINEM Set, damit jede Abfrage unten dieselbe Frage stellt; die leere
+  // Fassung ist dieselbe wie bei einer Sperre, die Form der Antwort bleibt.
+  const leftOut = modulesLeftOut(d, denied);
+  // Die dritte Achse (#1817): ein Modul, von dem die Haushaltsfassung keinen
+  // Schluessel traegt, wird gar nicht erst gelesen. Im SELBEN Set, damit jede
+  // Abfrage unten weiter eine einzige Frage stellt. Abgeleitet aus der
+  // Allowlist und nicht als zweite Liste gefuehrt - die Regel selbst setzt das
+  // Ende der Route durch (`householdAudienceAnswer`), das hier spart nur die
+  // Abfragen, deren Ergebnis dort ohnehin leer herauskaeme.
+  if (householdAudience) {
+    for (const [key, build] of Object.entries(DENIED_PAYLOAD)) {
+      if (!Object.keys(build({ month: currentMonth })).some(householdAudienceShows)) leftOut.add(key);
+    }
+  }
+  for (const key of leftOut) Object.assign(result, DENIED_PAYLOAD[key]?.({ month: currentMonth }));
+  const allows = (moduleKey) => !leftOut.has(moduleKey);
+  // Dasselbe fuer die Schluessel, die keinem Modul gehoeren (Countdowns,
+  // Schnellzugriffe, die Auswahl der Einkaufs-Kachel).
+  const wants = (key) => !householdAudience || householdAudienceShows(key);
+  // GEBURTSTAGE HABEN ZWEI WEGE. Als RECHT gehoeren sie zum Kalender (siehe
+  // DENIED_PAYLOAD), als SCHALTER sind sie ein eigenes Modul - dieselbe
+  // Unterscheidung wie bei den Erinnerungen (reminder-origins.js). Ein
+  // abgeschalteter Kalender nimmt einem Haushalt mit eingeschalteten
+  // Geburtstagen die Kachel deshalb nicht weg; die leere Fassung, die der
+  // Kalender-Eintrag oben eben geschrieben hat, ueberschreibt der Block unten.
+  const birthdaysLeftOut = denied.has('calendar') || birthdaysSwitchedOff(d);
+  if (birthdaysLeftOut) Object.assign(result, emptyBirthdays());
+
+  // Anstehende Termine (nächste 5, 8 oder 12, ab jetzt).
+  // Geteilte Logik mit /calendar/upcoming: expandiert wiederkehrende Serien,
+  // sodass auch Termine erscheinen, deren Master-Start in der Vergangenheit liegt.
+  if (allows('calendar')) try {
+    // Der Deckel (fuenf, auf Wunsch 8 oder 12, #1680) zaehlt nur, was noch kommt (#1449); beendete Termine
+    // von heute kommen ausserhalb mit - die Kachel zeigt sie zurueckgetreten,
+    // das Heute-Blatt laesst sie weg. Welche beendet sind, entscheidet der
+    // Browser an der Uhr: ein Termin endet auch zwischen zwei Abrufen.
+    result.upcomingEvents = serializeEvents(getUpcomingEvents(d, {
+      userId, limit: eventsLimit, fromToday: true, assignedTo: eventsAssignedTo, includeBirthdays,
+      keepEndedToday: ENDED_TODAY_POOL, household: householdAudience,
+    }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) });
+  } catch (err) {
+    log.error('upcomingEvents error:', err.message);
+    result.upcomingEvents = [];
+  }
+
+  /* DIE WOCHE FUER DEN STREIFEN des Kalender-Widgets (2x1). Eigene Frage neben
+   * der Liste darueber: dort „was beginnt als Naechstes", hier „was findet an
+   * den sieben Tagen ab heute statt" - auch was vorgestern begann und noch
+   * laeuft (getEventsOverlappingDays).
+   *
+   * IMMER MITGELIEFERT, nicht nur auf Anfrage: der Anpassen-Modus schaltet die
+   * Groesse als Vorschau um, ohne neu zu laden, und ein Streifen ohne Daten
+   * hiesse dort „leere Woche" - ein plausibles Falsches. Die Kosten haelt die
+   * Form klein: nur, was ein Punkt oder ein Band braucht, ohne Beschreibung,
+   * Ort und Anhaenge.
+   *
+   * Dieselben Filter wie die Liste (Sichtbarkeit, „nur meine", Geburtstage)
+   * und dieselbe Modulsperre ueber DENIED_PAYLOAD. Das Fenster hat einen Tag
+   * Rand je Seite; welcher Tag ein Termin ist, entscheidet der Browser in
+   * seiner Anzeigezone und klammert dort auf die sieben. */
+  if (allows('calendar')) try {
+    result.weekEvents = serializeEvents(getEventsOverlappingDays(d, {
+      userId, fromKey: shiftDateKey(todayLocalKey, -1), days: 9,
+      assignedTo: eventsAssignedTo, includeBirthdays, household: householdAudience,
+    }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) })
+      .map(weekEventFields);
+  } catch (err) {
+    log.error('weekEvents error:', err.message);
+    result.weekEvents = [];
+  }
+
+  // Offene Aufgaben: Sortierung in SQL (overdue zuerst, dann Fälligkeit, dann Priorität).
+  // Faithful translation of the previous JS comparator:
+  //   1. overdue (due_sort < now) before not-overdue
+  //   2. within a group: earlier due date/time first; undated tasks last (NULLS LAST)
+  //   3. ties broken by priority rank (urgent=0..none=4)
+  // due_sort = due_date + due_time, falling back to 23:59:59 when only a date is set,
+  // and NULL when there is no due_date at all.
+  if (allows('tasks')) try {
+    // Lokal, nicht UTC: verglichen wird gegen `due_date || 'T' || due_time`, und
+    // beide stehen als lokale Eingabewerte in der DB. Ein UTC-Zeitstempel verschob
+    // die Grenze „überfällig" um den Zonen-Offset.
+    const nowIso = `${todayLocalKey}T${householdWall?.time
+      ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`}`;
+    result.urgentTasks = d.prepare(`
+      SELECT t.*, u.display_name AS assigned_name, u.avatar_color AS assigned_color,
+        ${ASSIGNED_USERS_SQL},
+        CASE WHEN t.due_date IS NULL THEN NULL
+             ELSE t.due_date || 'T' || COALESCE(t.due_time, '23:59:59')
+        END AS __due_sort
+      FROM tasks t
+      LEFT JOIN users u ON t.assigned_to = u.id
+      WHERE t.status != 'done'
+        -- Abgelegtes gehört nicht in „Heute auf einen Blick" (#688): eine
+        -- archivierte Aufgabe ist aus dem Lauf genommen, und wer sie von hier aus
+        -- öffnete, fand sie in der Liste nicht wieder.
+        AND t.archived_at IS NULL
+        AND ${taskScopeWhere('t', { bind: '@today' })}
+        AND ${taskVisibleSql}${taskCategoryAnd}
+      ORDER BY
+        CASE WHEN __due_sort IS NOT NULL AND __due_sort < @now THEN 0 ELSE 1 END ASC,
+        __due_sort IS NULL ASC,
+        __due_sort ASC,
+        CASE t.priority
+          WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
+          WHEN 'low' THEN 3 ELSE 4
+        END ASC
+      LIMIT 5
+    `).all({ now: nowIso, me: userId, today: todayLocalKey, ...taskCategoryBinds }).map(({ __due_sort, ...task }) => addAssignedUsers(task));
+  } catch (err) {
+    log.error('urgentTasks error:', err.message);
+    result.urgentTasks = [];
+  }
+
+  // ZÄHLSTÄNDE FÜR DIE KENNZAHL-KACHELN.
+  //
+  // Sie lassen sich NICHT aus den Listen oben ableiten: `urgentTasks` schneidet
+  // bei 5 ab und `shoppingLists` bei drei Listen mit offenen Posten. Wer daraus
+  // zählte, zeigte auf der Kachel „5 offen", solange zwölf offen sind - eine
+  // Zahl, die genau bis zu ihrer Obergrenze stimmt, ist die gefährlichste Sorte.
+  // Sichtbarkeit wie überall: der Betrachter zählt nur, was er sehen darf.
+  if (allows('tasks')) try {
+    result.openTaskCount = d.prepare(`
+      SELECT COUNT(*) AS n FROM tasks t
+      WHERE t.status != 'done' AND t.archived_at IS NULL
+        AND ${taskScopeWhere('t', { bind: '@today' })}
+        AND ${taskVisibleSql}${taskCategoryAnd}
+    `).get({ me: userId, today: todayLocalKey, ...taskCategoryBinds }).n;
+  } catch (err) {
+    log.error('openTaskCount error:', err.message);
+    result.openTaskCount = null;
+  }
+
+  // Überfällig ist die Zweitzeile der Aufgaben-Kachel: „7 offen" allein sagt
+  // nicht, ob etwas brennt.
+  if (allows('tasks')) try {
+    result.overdueTaskCount = d.prepare(`
+      SELECT COUNT(*) AS n FROM tasks t
+      WHERE t.status != 'done' AND t.archived_at IS NULL
+        AND t.due_date IS NOT NULL AND t.due_date < @today
+        AND ${taskScopeWhere('t', { bind: '@today' })}
+        AND ${taskVisibleSql}${taskCategoryAnd}
+    `).get({ today: todayLocalKey, me: userId, ...taskCategoryBinds }).n;
+  } catch (err) {
+    log.error('overdueTaskCount error:', err.message);
+    result.overdueTaskCount = null;
+  }
+
+  /* WELCHE EINKAUFSLISTEN DIE KACHEL ZEIGT (#1818, aus D#1624). `shopping_list`
+   * nennt eine Auswahl von Listen-Ids; ohne den Parameter bleibt alles, wie es
+   * war.
+   *
+   * DIE AUSWAHL GILT NUR DER KACHEL, und zwar an der Quelle: sie fuellt ein
+   * EIGENES Feld der Antwort (`shoppingTile`) und laesst `shoppingLists`,
+   * `shoppingOpenCount` und `shoppingOpenLists` unberuehrt. Anders als bei
+   * Aufgaben und Notizen, wo eine Auswahl die ganze Uebersicht meint: der
+   * Einkauf spricht ausserhalb der Kachel als ZAHL ("n offen" im Heute-Blatt,
+   * an der Wand, in der Navigation), und die liest dieselben Daten. Die erste
+   * Fassung filterte die geteilten Felder - das Wandtablet eines Haushalts,
+   * dessen Vorgabe eine Liste waehlt, zeigte "1 offen" bei vierzehn. Kein
+   * Leser der ungefilterten Felder haengt jetzt von einer Kachel-Option ab,
+   * und der Parameter aendert keine Zahl der Navigation.
+   *
+   * In der Kachel wirkt die Auswahl VOR der Deckelung und auf Liste UND Zahl:
+   * eine Kachel, die eine Liste zeigt und ueber allen "23" zaehlt,
+   * widerspraeche sich.
+   *
+   * GEPRUEFT WIRD GEGEN DIE TABELLE, nicht nur die Form. Eine Liste, die es
+   * nicht (mehr) gibt, faellt aus der Auswahl; bleibt KEINE uebrig, gilt die
+   * Anfrage als ungefiltert - derselbe Satz wie bei den anderen Kacheln: keine
+   * Auswahl heisst "alle". So macht eine geloeschte Liste in einer gespeicherten
+   * Anordnung die Kachel weder leer noch kaputt, und Unsinn (`abc`, `-1`, eine
+   * erfundene Id) antwortet wie gar kein Parameter. Listen-Ids sind
+   * AUTOINCREMENT, eine geloeschte Id kehrt nie als andere Liste zurueck.
+   *
+   * RECHTE: Einkaufslisten haben keine Zeilen-Sichtbarkeit, das Modul ist ganz
+   * sichtbar oder gar nicht. Die Auswahl wird deshalb NUR gelesen, wenn das
+   * Modul fuer diese Person offen ist - sonst bleibt es bei der leeren Fassung
+   * von oben, was immer der Parameter nennt. */
+  let shoppingSelection = null;
+  if (allows('shopping')) try {
+    const wanted = normalizeShoppingListFilter(req.query.shopping_list);
+    if (wanted.length) {
+      const existing = d.prepare(
+        `SELECT id FROM shopping_lists WHERE id IN (${wanted.map(() => '?').join(', ')})`,
+      ).all(...wanted).map((row) => row.id);
+      if (existing.length) shoppingSelection = existing;
+    }
+  } catch (err) {
+    log.error('shopping selection error:', err.message);
+  }
+  const shoppingMarks = shoppingSelection ? shoppingSelection.map(() => '?').join(', ') : '';
+  const shoppingBinds = shoppingSelection ?? [];
+
+  if (allows('shopping')) try {
+    const row = d.prepare(`
+      SELECT COUNT(*) AS items, COUNT(DISTINCT si.list_id) AS lists
+      FROM shopping_items si WHERE si.is_checked = 0
+    `).get();
+    result.shoppingOpenCount = row.items;
+    result.shoppingOpenLists = row.lists;
+  } catch (err) {
+    log.error('shoppingOpenCount error:', err.message);
+    result.shoppingOpenCount = null;
+    result.shoppingOpenLists = 0;
+  }
+
+  // Heutiges Essen (gefiltert nach haushaltweiten Mahlzeit-Typ-Einstellungen)
+  if (allows('meals')) try {
+    const ALL_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
+    const prefRow = d.prepare('SELECT value FROM sync_config WHERE key = ?').get('visible_meal_types');
+    const visibleTypes = prefRow
+      ? prefRow.value.split(',').filter((t) => ALL_MEAL_TYPES.includes(t))
+      : ALL_MEAL_TYPES;
+    const placeholders = visibleTypes.map(() => '?').join(', ');
+    result.todayMeals = d.prepare(`
+      SELECT m.*,
+             -- Wie im Planer (#1059): ob das verknuepfte Rezept ein Bild hat,
+             -- entscheidet die Kachel ohne Nachfrage - eigenes zuerst, sonst das
+             -- des Providers.
+             r.provider_has_image AS recipe_has_image,
+             (r.image_data IS NOT NULL) AS recipe_has_own_image,
+             -- Wer kocht (#1679): Name, Farbe und Bild neben der Mahlzeit, aus
+             -- derselben Quelle wie im Planer.${MEAL_COOK_COLUMNS_SQL}
+      FROM meals m
+      LEFT JOIN recipes r ON r.id = m.recipe_id
+      ${MEAL_COOK_JOIN_SQL}
+      WHERE m.date = ?
+        AND m.meal_type IN (${placeholders})
+      ORDER BY
+        CASE m.meal_type
+          WHEN 'breakfast' THEN 0
+          WHEN 'lunch'     THEN 1
+          WHEN 'dinner'    THEN 2
+          WHEN 'snack'     THEN 3
+        END
+    `).all(todayLocalKey, ...visibleTypes);
+  } catch (err) {
+    log.error('todayMeals error:', err.message);
+    result.todayMeals = [];
+  }
+
+  // Neueste Notizen (gepinnte zuerst, dann aktuellste)
+  if (allows('notes')) try {
+    result.pinnedNotes = d.prepare(`
+      SELECT n.*, u.display_name AS author_name, u.avatar_color AS author_color
+      FROM notes n
+      LEFT JOIN users u ON n.created_by = u.id
+      WHERE 1 = 1 ${noteCategoryAnd}
+      ORDER BY n.pinned DESC, n.updated_at DESC
+      -- FUENF, WEIL DIE KACHEL ZWEI HOCH SEIN DARF - dieselbe Korrektur, die
+      -- die Geburtstage oben schon bekommen haben und bei der die Notizen
+      -- uebersehen wurden. Der Schnitt stand auf drei und war damit die
+      -- Obergrenze fuer JEDE Kachelgroesse; die Notizkachel startet ab Werk auf
+      -- 1x2, hat also Platz fuer fuenf Zeilen und bekam trotzdem nur drei
+      -- geliefert. Wie viele wirklich erscheinen, entscheidet die Kachel
+      -- (listRowCap in public/pages/dashboard.js) - der Server liefert nur
+      -- den Vorrat fuer die groesste Fassung.
+      LIMIT 5
+    `).all({ me: userId, ...noteCategoryBinds });
+    result.pinnedNotes = hydrateNotesWithCategories(d, result.pinnedNotes, userId);
+    /* `pinnedNotes` HEISST SO, IST ES ABER NICHT: die Liste sortiert Gepinntes
+     * nach vorn und schneidet bei drei ab - sie filtert nicht. Fuer die Vorschau
+     * ist das richtig (sie zeigt, was oben liegt), als ZAHL war es zweimal
+     * falsch: ein Haushalt ohne einen einzigen Pin las "3 angepinnt", einer mit
+     * fuenf Pins ebenfalls "3" (Codex-Review zu PR #754). Die Kennzahlkachel
+     * braucht deshalb eine eigene, echte Zahl. */
+    result.pinnedNotesCount = d.prepare(`
+      SELECT COUNT(*) AS n FROM notes n
+      WHERE n.pinned = 1 ${noteCategoryAnd}
+    `).get({ me: userId, ...noteCategoryBinds }).n;
+    /* UND DIE MENGE, AUS DER DIE VORSCHAU SCHOEPFT - fuer die Badge und das
+     * „+N weitere" der Kachel. `pinnedNotesCount` ist dafuer die falsche Zahl:
+     * die Vorschau fuellt nach den angehefteten mit den neuesten auf, eine Badge
+     * „1" ueber drei Karten waere derselbe Widerspruch wie vorher die „3" bei
+     * fuenf angehefteten. Derselbe Kategoriefilter wie Liste und Pin-Zahl
+     * (#814: Filter vor Schnitt UND Zahl). */
+    result.notesTotal = d.prepare(`
+      SELECT COUNT(*) AS n FROM notes n
+      WHERE 1 = 1 ${noteCategoryAnd}
+    `).get({ me: userId, ...noteCategoryBinds }).n;
+  } catch (err) {
+    log.error('pinnedNotes error:', err.message);
+    result.pinnedNotes = [];
+    result.pinnedNotesCount = 0;
+    result.notesTotal = 0;
+  }
+
+  // Einkaufslisten mit offenen Artikeln (max. 3 Listen, je bis zu 6 offene Items).
+  // Immer ueber ALLE Listen - was ausserhalb der Kachel vom Einkauf spricht,
+  // liest dieses Feld und die beiden Zaehler oben.
+  const shoppingItemsOf = (listId) => d.prepare(`
+    SELECT id, name, quantity, is_checked
+    FROM shopping_items
+    WHERE list_id = ? AND is_checked = 0
+    ORDER BY id ASC
+    LIMIT 6
+  `).all(listId);
+  if (allows('shopping')) try {
+    const lists = d.prepare(`
+      SELECT sl.id, sl.name,
+        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id AND si.is_checked = 0) AS open_count,
+        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id) AS total_count
+      FROM shopping_lists sl
+      WHERE (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id AND si.is_checked = 0) > 0
+      ORDER BY sl.updated_at DESC
+      LIMIT 3
+    `).all();
+    for (const list of lists) list.items = shoppingItemsOf(list.id);
+    result.shoppingLists = lists;
+  } catch (err) {
+    log.error('shoppingLists error:', err.message);
+    result.shoppingLists = [];
+  }
+
+  // DIE FASSUNG DER KACHEL (#1818), nur bei einer Auswahl. Die gewaehlten
+  // Listen stehen da, AUCH OHNE OFFENES: wer eine Liste auf die Uebersicht
+  // holt, will sie antippen, um den ersten Artikel einzutragen - genau dann
+  // waere sie sonst verschwunden. Listen mit Offenem zuerst, damit der Deckel
+  // von drei keine volle Liste hinter einer leeren versteckt; darin wie bisher
+  // die zuletzt geaenderte.
+  //
+  // `listCount` zaehlt JEDE gewaehlte Liste, die es gibt - auch die ohne
+  // Offenes. Daraus rechnet die Kachel "+n weitere Listen": eine gewaehlte
+  // Liste, die der Deckel abschneidet, ist so als "+1" da und fehlt nie stumm.
+  //
+  // Scheitert die Abfrage, fehlt das Feld, und die Kachel zeigt alle Listen.
+  if (shoppingSelection && wants('shoppingTile')) try {
+    const lists = d.prepare(`
+      SELECT sl.id, sl.name,
+        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id AND si.is_checked = 0) AS open_count,
+        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id) AS total_count
+      FROM shopping_lists sl
+      WHERE sl.id IN (${shoppingMarks})
+      ORDER BY (open_count > 0) DESC, sl.updated_at DESC
+      LIMIT 3
+    `).all(...shoppingBinds);
+    for (const list of lists) list.items = shoppingItemsOf(list.id);
+    const openCount = d.prepare(`
+      SELECT COUNT(*) AS items FROM shopping_items si
+      WHERE si.is_checked = 0 AND si.list_id IN (${shoppingMarks})
+    `).get(...shoppingBinds).items;
+    result.shoppingTile = { lists, openCount, listCount: shoppingSelection.length };
+  } catch (err) {
+    log.error('shoppingTile error:', err.message);
+  }
+
+  // Alle User (für Avatar-Farben in Widgets)
+  try {
+    result.users = d.prepare(
+      `SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, ${memberPositionSql('u')} AS sort_order FROM users u
+       WHERE ${householdMemberSql('u')}
+       ORDER BY ${memberOrderSql('u')}`
+    ).all();
+  } catch (err) {
+    result.users = [];
+  }
+
+  /* DIE FAMILIENKARTE HAT EIGENE TERMINE (#1449). Sie lieh sich die Liste der
+   * Termin-Kachel: fuenf Kommende fuer den ganzen Haushalt und deren „nur
+   * meine". An einem vollen Tag fiel so der Abendtermin eines Kindes heraus,
+   * und mit „nur meine" standen alle anderen als „heute frei" da. Hier fragt
+   * deshalb jedes Mitglied fuer sich: was heute war (die beendeten, damit
+   * „fuer heute durch" von „frei" zu unterscheiden ist) und die naechsten
+   * kommenden.
+   *
+   * „NUR MEINE" GILT HIER NICHT - die Karte zeigt jedes Mitglied, das ist ihr
+   * Zweck (Empfehlung in #1449). Sichtbarkeit und abgewaehlte Geburtstage
+   * gelten wie ueberall: der Betrachter sieht nur, was er sehen darf. */
+  if (allows('calendar')) try {
+    const seen = new Set();
+    const merged = [];
+    for (const member of result.users) {
+      for (const event of getUpcomingEvents(d, {
+        userId, limit: FAMILY_AHEAD_PER_MEMBER, fromToday: true, assignedTo: member.id, includeBirthdays,
+        keepEndedToday: ENDED_TODAY_POOL, household: householdAudience,
+      })) {
+        const key = `${event.id}@${event.start_datetime}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(event);
+      }
+    }
+    merged.sort((a, b) => String(a.start_datetime).localeCompare(String(b.start_datetime)));
+    result.familyEvents = serializeEvents(merged, { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) });
+  } catch (err) {
+    log.error('familyEvents error:', err.message);
+    result.familyEvents = [];
+  }
+
+  if (!birthdaysLeftOut) try {
+    // family_user_color: die Identitaetsfarbe des verknuepften Mitglieds. Das
+    // Widget zeigt Familien-Geburtstage damit in derselben Farbsprache wie die
+    // Familien-Kachel; Kontakte ohne Verknuepfung bleiben NULL und behalten im
+    // Frontend die neutrale Modul-Toenung (Etappe 4, Critique 2026-08-17).
+    const rows = d.prepare(`
+      SELECT b.*, u.avatar_color AS family_user_color
+        FROM birthdays b
+        LEFT JOIN users u ON u.id = b.family_user_id
+       ORDER BY b.name COLLATE NOCASE ASC
+    `).all();
+    const hydrated = rows
+      .flatMap((row) => hydrateBirthdayOccurrences(d, row))
+      .sort((a, b) => a.days_until - b.days_until
+        || a.name.localeCompare(b.name)
+        || a.kind.localeCompare(b.kind));
+
+    /* DIE ZAHL FUERS NAV-BADGE, UNGEDECKELT (#868).
+     *
+     * Sie darf NICHT aus `result.birthdays` abgeleitet werden: die Liste ist
+     * gleich auf fuenf geschnitten, und das ist der Vorrat der KACHEL, keine
+     * Aussage ueber den Bestand. Ein Haushalt mit sieben Geburtstagen in drei
+     * Tagen bekaeme sonst beim Start eine Fuenf am Nav-Ziel und nach dem
+     * ersten Besuch der Seite eine Sieben - dieselbe Frage, zwei Antworten.
+     *
+     * Der Schnitt bei DREI Tagen ist derselbe wie im Browser
+     * (`BIRTHDAY_BADGE_DAYS` in public/utils/nav-badges.js); ein Guard haelt
+     * beide zusammen. */
+    result.birthdaySoonCount = hydrated.filter((b) => (b.days_until ?? 9999) <= 3).length;
+
+    result.birthdays = hydrated
+      // FUENF, WEIL DIE KACHEL ZWEI HOCH SEIN DARF. Der Schnitt stand auf drei
+      // und war damit die Obergrenze fuer JEDE Kachelgroesse: in der
+      // 1x2-Standardgroesse blieb darunter rund ein Drittel der Karte leer, weil
+      // der Server gar nicht mehr hergab. Wie viele Zeilen wirklich erscheinen,
+      // entscheidet die Kachel (`listRowCap` in public/pages/dashboard.js) - der
+      // Server liefert nur den Vorrat fuer die groesste Fassung.
+      .slice(0, 5);
+    result.birthdayCount = rows.length;
+    // Die Liste zaehlt ANLAESSE (Geburtstag und Namenstag je eine Zeile),
+    // `birthdayCount` die Personen. Badge und „+N weitere" der Kachel brauchen
+    // die Menge, aus der die Liste geschnitten ist - sonst stimmt der Rest nur,
+    // solange niemand einen Namenstag hat.
+    result.birthdayTotal = hydrated.length;
+  } catch (err) {
+    log.error('birthdays error:', err.message);
+    result.birthdays = [];
+    result.birthdayCount = 0;
+    result.birthdayTotal = 0;
+    result.birthdaySoonCount = 0;
+  }
+
+  // Countdowns (#647): Termine und Aufgaben, die jemand als Countdown markiert
+  // hat, in EINER nach Nähe sortierten Liste. `todayLocalKey` und nicht der
+  // UTC-Tag: „noch 1 Tag" gegenüber „heute" entscheidet sich am Kalendertag des
+  // Betrachters, und westlich von UTC ist der ein anderer.
+  //
+  // DER EINZIGE TEIL DER ANTWORT, DER ZWEI MODULEN GEHÖRT, und deshalb steht
+  // seine Sperre nicht als Zeile in DENIED_PAYLOAD, sondern als Argument: wem
+  // der Kalender entzogen ist, dem fallen die Termin-Countdowns heraus und die
+  // Aufgaben-Countdowns bleiben. Ein Alles-oder-nichts hätte die Kachel schon
+  // beim Sperren EINES der beiden Module verschwinden lassen - dieselbe Falle,
+  // die der haushaltweite Modulschalter im Review zu PR #793 gestellt hat. Die
+  // Gesamtzahl entsteht in `getCountdowns` hinter demselben Filter, damit
+  // Schnitt und Zahl dieselbe Menge meinen.
+  if (wants('countdowns')) try {
+    const countdowns = getCountdowns(d, {
+      userId,
+      todayKey: todayLocalKey,
+      hiddenModules: denied,
+    });
+    result.countdowns = countdowns.items;
+    // Wie `birthdayCount` neben `birthdays`: die Liste ist der Vorrat für die
+    // größte Kachelfassung, die Zahl ist die Wahrheit über den Bestand.
+    result.countdownTotal = countdowns.total;
+  } catch (err) {
+    log.error('countdowns error:', err.message);
+    result.countdowns = [];
+    result.countdownTotal = 0;
+  }
+
+  // Schnellzugriffe (#469): die Kachelreihe kommt mit der Uebersichts-Antwort
+  // mit, statt einen zweiten Request beim Seitenaufbau zu kosten - es ist eine
+  // kurze Liste, die genau hier gebraucht wird.
+  //
+  // KEINE ZEILE IN DENIED_PAYLOAD, und das ist kein Vergessen: ein Schnellzugriff
+  // gehoert keinem Modul (siehe PERMISSION_WIDGETS). Die Achse, die er hat, ist
+  // geteilt gegen privat, und die setzt `listQuickLinksFor` ueber die anfragende
+  // Person durch - eine fremde private Kachel liegt also auch dann nicht auf der
+  // Leitung, wenn der Browser sie nie zeichnen wuerde.
+  if (wants('quicklinks')) try {
+    result.quicklinks = listQuickLinksFor(userId, req.authRole === 'admin');
+  } catch (err) {
+    log.error('quick links error:', err.message);
+    result.quicklinks = [];
+  }
+
+  if (allows('budget')) try {
+    const from = `${currentMonth}-01`;
+    const to = `${currentMonth}-31`;
+    // Persönlich/geteilt (#476/#505): im personal-Modus zeigt das Dashboard-Widget
+    // das eigene Budget (owner_id = me), sonst das gesamte Haushaltsbudget.
+    const ownerClause = resolveBudgetMode(d) === 'personal' ? ' AND owner_id = ?' : '';
+    const ownerParams = ownerClause ? [userId] : [];
+
+    const totals = d.prepare(`
+      SELECT
+        SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,
+        SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS expenses,
+        SUM(amount) AS balance,
+        COUNT(*) AS entry_count
+      FROM budget_entries
+      -- Erwartete, noch unbestaetigte Buchungen zaehlen nicht mit (#637), wie in
+      -- Uebersicht, Statistik, Plan und Kontostand.
+      WHERE date BETWEEN ? AND ?${ownerClause} AND is_pending = 0
+    `).get(from, to, ...ownerParams);
+
+    // Die drei groessten Ausgabenkategorien, nicht nur die groesste: die hohe
+    // Budget-Kachel (1x2) fuellt damit ihre Hoehe mit Inhalt statt mit einem
+    // leeren Band ueber der Fusszeile (Critique 2026-09-23). Die erste bleibt
+    // zusaetzlich als `topExpenseCategory`/`topExpenseAmount` stehen - die
+    // flache Kachel und aeltere Clients lesen genau diese beiden Felder.
+    const topExpenses = d.prepare(`
+      SELECT category, SUM(amount) AS amount
+      FROM budget_entries
+      WHERE amount < 0 AND date BETWEEN ? AND ?${ownerClause} AND is_pending = 0
+      GROUP BY category
+      ORDER BY ABS(SUM(amount)) DESC
+      LIMIT 3
+    `).all(from, to, ...ownerParams);
+    const topExpense = topExpenses[0];
+
+    // Monats-Sparziel (Budgetplan #468): eigener Guard, damit ältere/Minimal-DBs
+    // ohne budget_plans-Tabelle die Budget-Aggregation nicht scheitern lassen.
+    let savingsGoal = null;
+    try {
+      const goalRow = d.prepare("SELECT amount FROM budget_plans WHERE category = '__savings__'").get();
+      if (goalRow) savingsGoal = Math.round(goalRow.amount * 100) / 100;
+    } catch { /* Tabelle fehlt (Legacy/Test) → kein Sparziel */ }
+
+    result.budget = {
+      month: currentMonth,
+      income: totals?.income || 0,
+      expenses: Math.abs(totals?.expenses || 0),
+      balance: totals?.balance || 0,
+      entryCount: totals?.entry_count || 0,
+      topExpenseCategory: topExpense?.category || null,
+      topExpenseAmount: Math.abs(topExpense?.amount || 0),
+      topExpenses: topExpenses.map((row) => ({ category: row.category, amount: Math.abs(row.amount || 0) })),
+      savingsGoal,
+    };
+  } catch (err) {
+    log.error('budget error:', err.message);
+    result.budget = {
+      month: currentMonth,
+      income: 0,
+      expenses: 0,
+      balance: 0,
+      entryCount: 0,
+      topExpenseCategory: null,
+      topExpenseAmount: 0,
+      topExpenses: [],
+    };
+  }
+
+  // Geteilte Ausgaben: was der Betrachter offen hat (Kennzahl „Ausgleich
+  // offen"). Keine eigene Abfrage - die Salden kommen aus derselben Funktion wie
+  // die Ausgleichs-Ansicht des Moduls, damit Uebersicht und Modul nie zwei
+  // Zahlen fuer dieselbe Schuld zeigen (und ein Fix wie #1445 beide heilt).
+  // Ein Split-Gast erreicht /dashboard gar nicht (Gate in server/index.js).
+  if (allows('budget')) try {
+    const householdCurrency = d.prepare("SELECT value FROM sync_config WHERE key = 'currency'").get()?.value || 'EUR';
+    result.splitBalance = openBalancesForUser(d, userId, { householdCurrency });
+  } catch (err) {
+    log.error('split balance error:', err.message);
+    result.splitBalance = emptySplitBalance();
+  }
+
+  /* BELOHNUNGEN: FORTSCHRITT STATT RANGLISTE (Critique 2026-09-23, Persona Emma).
+   *
+   * Hier stand eine Top-5-Rangliste nach Punkten, fuer jeden Betrachter gleich.
+   * Ein Kind las darin "1 Leo 60 / 2 Emma 30": Wettbewerb unter Geschwistern
+   * statt des eigenen Wegs zur Praemie. Die Antwort teilt jetzt nach der Frage,
+   * die das Modul selbst stellt - wer darf FREIGEBEN (isAdminRequest, dieselbe
+   * Pruefung wie PATCH /rewards/redemptions) -, nicht nach `family_role`:
+   *
+   *   approver - jedes teilnehmende Mitglied, nach NAMEN (kein Platz), dazu alle
+   *              offenen Anfragen;
+   *   self     - wer nicht freigibt, aber selbst sammelt: NUR die eigene Zeile,
+   *              die eigenen offenen Anfragen und die zuletzt verdienten Punkte.
+   *              Die Geschwister gehen gar nicht erst ueber die Leitung - eine
+   *              Rangliste im Netzwerk-Tab ist dieselbe Rangliste;
+   *   family   - wer weder freigibt noch sammelt (Wandtablett, Grosseltern):
+   *              alle nach Namen, ohne fremde Anfragen.
+   *
+   * `catalog` ist die Zielliste fuer den Balken; welche Praemie das Ziel ist,
+   * entscheidet public/utils/reward-goal.js, dieselbe Regel wie auf der Seite. */
+  if (allows('rewards')) try {
+    const MEMBER_FILTER = householdMemberSql('u');
+    const members = d.prepare(`
+      SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.family_role,
+             ${memberPositionSql('u')} AS sort_order,
+             ${ledgerBalanceSql('points', 'u.id')} AS balance
+      FROM users u
+      JOIN reward_participants rp ON rp.user_id = u.id AND rp.enabled = 1
+      WHERE ${MEMBER_FILTER}
+      ORDER BY ${memberOrderSql('u')}
+    `).all();
+    const approver = isAdminRequest(req);
+    const own = members.find((m) => m.id === Number(userId));
+    const view = approver ? 'approver' : own ? 'self' : 'family';
+    const standings = view === 'self' ? [own] : members;
+    // Dieselben Personen wie die Liste darueber (#1207): eine alte
+    // Einschreibung von Personal oder Gast bleibt stehen, zaehlt aber nicht.
+    const participantCount = members.length;
+    // `pending` BLEIBT DIE ZAHL DER PRAEMIEN-ANFRAGEN. Geld-Anfragen (#1734)
+    // stehen daneben in `moneyPending`, damit ein Client, der das alte Feld
+    // liest, nichts anderes darin findet. Wer was zaehlt, sagen die Zweige: wer
+    // freigibt, ist Admin und darf jede lesen; wer selbst sammelt, zaehlt nur
+    // die eigenen; die Sicht `family` (Wandtablett, Grosseltern) bekommt bei den
+    // Praemien 0. Geld selbst zeigt die Kachel nicht - weder Saldo noch Buchung.
+    const countPending = (kindSql) => (view === 'approver'
+      ? d.prepare(`SELECT COUNT(*) AS n FROM reward_redemptions WHERE status = 'pending' AND ${kindSql}`).get().n
+      : view === 'self'
+        ? d.prepare(`SELECT COUNT(*) AS n FROM reward_redemptions WHERE status = 'pending' AND user_id = ? AND ${kindSql}`).get(userId).n
+        : 0);
+    const pending = countPending("kind = 'reward'");
+    // DER EIGENE GELD-ZAEHLER HAENGT NICHT AN DER PUNKTE-TEILNAHME. Ein Kind mit
+    // Taschengeldkonto, das keine Punkte sammelt, faellt in die Sicht `family`
+    // und bekam hier 0, obwohl seine Einzahlung offen war (Review zu #1745).
+    // Gezaehlt wird ueber dasselbe Praedikat wie an den Geld-Routen: Admins
+    // alle, ein Mitglied die eigenen, ein Display keine.
+    const reader = moneyReader(req);
+    const moneyPending = d.prepare(`
+      SELECT COUNT(*) AS n FROM reward_redemptions r
+      WHERE r.status = 'pending' AND r.kind != 'reward' AND ${moneyVisibleSql(reader, 'r.user_id')}
+    `).get(moneyParams(reader)).n;
+    // Wer selbst sammelt, sieht seine letzten Gutschriften - verdient oder
+    // geschenkt. Einloesungen und Rueckbuchungen sind kein "verdient".
+    //
+    // UND EINE ZURUECKGENOMMENE GUTSCHRIFT AUCH NICHT (#1607). Seit das
+    // Wiederoeffnen gegenbucht statt zu loeschen, bleibt die earn-Zeile im
+    // Ledger stehen. Hier stuende sie sonst weiter als "zuletzt verdient",
+    // obwohl die Aufgabe wieder offen ist - der vollstaendige Verlauf mit
+    // beiden Zeilen gehoert auf die Belohnungsseite, diese Liste zeigt nur,
+    // was gilt. Die Gegenbuchung zeigt auf ihre Gutschrift (`reverses_id`) und
+    // nicht nur auf dieselbe Aufgabe: wird die Aufgabe geloescht, verlieren
+    // beide Zeilen ihre task_id, und ein Vergleich darueber traefe nie mehr.
+    const ownRecent = own && (view === 'self' || members.length === 1)
+      ? d.prepare(`
+          SELECT delta, type, reason, created_at FROM reward_ledger l
+          WHERE user_id = ? AND delta > 0 AND type IN ('earn', 'bonus') AND l.unit = 'points'
+            AND NOT EXISTS (SELECT 1 FROM reward_ledger r WHERE r.reverses_id = l.id)
+          ORDER BY created_at DESC, id DESC
+          LIMIT 3
+        `).all(userId)
+      : [];
+    const catalog = activeCatalog(d).map((c) => ({ id: c.id, name: c.name, cost: c.cost, remaining: c.remaining }));
+    result.rewards = { view, me: userId, standings, participantCount, pending, moneyPending, catalog, recent: ownRecent };
+  } catch (err) {
+    log.error('rewards error:', err.message);
+    result.rewards = { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] };
+  }
+
+  // Gesundheit: heute fällige Dosen der EIGENEN Medikamente (private wie familiensichtbare)
+  // plus Nachbestell-Hinweis. Das Dashboard ist strikt persönlich: fremde Medikamente
+  // erscheinen nie, auch nicht mit visibility='family' (Issue #592); geteilte Medikamente
+  // bleiben der Health-Seite vorbehalten. Fälligkeit inline berechnet (days_mask, Zeitraum,
+  // Log-Status), da public/utils/health-meds.js browser-Pfade importiert und serverseitig
+  // nicht ladbar ist.
+  if (allows('health')) {
+    try {
+      const meds = d.prepare(`
+      SELECT id, name, stock_qty, refill_threshold
+      FROM medications
+      WHERE active = 1 AND user_id = ?
+      `).all(userId);
+      const scheduleStmt = d.prepare(`
+      SELECT time_of_day, days_mask, start_date, end_date
+      FROM medication_schedules
+      WHERE medication_id = ? AND active = 1
+      `);
+      const logStmt = d.prepare(`
+      SELECT status FROM medication_logs
+      WHERE medication_id = ? AND substr(scheduled_at, 1, 10) = ? AND substr(scheduled_at, 12, 5) = ?
+      ORDER BY id DESC LIMIT 1
+      `);
+      let dosesTotal = 0;
+      let dosesTaken = 0;
+      let dosesSkipped = 0;
+      let lowStockCount = 0;
+      let nextDose = null;
+      for (const med of meds) {
+        if (med.stock_qty != null && Number.isFinite(Number(med.stock_qty))) {
+          const stock = Number(med.stock_qty);
+          const thr = med.refill_threshold != null && Number.isFinite(Number(med.refill_threshold))
+            ? Number(med.refill_threshold)
+            : null;
+          if (stock <= 0 || (thr != null && stock <= thr)) lowStockCount += 1;
+        }
+        for (const s of scheduleStmt.all(med.id)) {
+          if (s.start_date && todayLocalKey < s.start_date) continue;
+          if (s.end_date && todayLocalKey > s.end_date) continue;
+          const mask = s.days_mask;
+          const matches = mask === null || mask === undefined
+            ? true
+            : (Number(mask) & (1 << localWeekdayIdx)) !== 0;
+          if (!matches) continue;
+          dosesTotal += 1;
+          const time = s.time_of_day || '00:00';
+          const logRow = logStmt.get(med.id, todayLocalKey, time);
+          if (logRow?.status === 'taken') dosesTaken += 1;
+          else if (logRow?.status === 'skipped') dosesSkipped += 1;
+          else if (!nextDose || time < nextDose.time) nextDose = { name: med.name, time };
+        }
+      }
+      result.health = {
+        hasMeds: meds.length > 0,
+        dosesTotal,
+        dosesTaken,
+        dosesSkipped,
+        nextDose,
+        lowStockCount,
+      };
+    } catch (err) {
+      log.error('health error:', err.message);
+      result.health = { hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0, nextDose: null, lowStockCount: 0 };
+    }
+
+    try {
+      result.fasting = getFastingDashboardState(d, { id: userId });
+    } catch (err) {
+      if (err instanceof FastingError && err.status === 403) result.fasting = emptyFastingWidget();
+      else {
+        log.error('fasting error:', err.message);
+        result.fasting = null;
+      }
+    }
+
+    try {
+      // Der Tag kommt aus `todayKey()` und damit aus der HAUSHALTSZONE. Der
+      // Rest dieser Route rechnet ihren lokalen Tag ebenso; ein
+      // `toISOString().slice(0, 10)` stuende hier abends westlich von UTC auf
+      // dem Folgetag und zeigte eine leere Bilanz neben einem vollen Tagebuch.
+      result.nutrition = nutritionSummaryFor(d, userId, userId, todayKey(d));
+    } catch (err) {
+      log.error('nutrition error:', err.message);
+      result.nutrition = emptyNutritionWidget();
+    }
+  }
+
+  // Haushaltshilfe: Anwesenheitsstatus (offene Sitzung), Besuche im laufenden Monat,
+  // offener Zahlbetrag und letzter Besuch — ein kompakter Status statt einer Liste.
+  if (allows('housekeeping')) try {
+    // "Die zuletzt begonnene" und "der letzte Besuch" sind der spaeteste
+    // ZEITPUNKT, nicht der groesste Text von `check_in` - dieselbe Regel wie im
+    // Modul (`latestVisit`), sonst nennt die Kachel einen anderen Besuch als
+    // die Modulseite.
+    const hkZone = householdTimeZone(d);
+    const openSession = latestVisit(d, hkZone, 'check_out IS NULL');
+    const openWorker = openSession?.worker_id ? d.prepare(`
+      SELECT u.display_name AS worker_name
+      FROM housekeeping_workers hw
+      LEFT JOIN users u ON u.id = hw.user_id
+      WHERE hw.id = ?
+    `).get(openSession.worker_id) : null;
+    // Der Monat des HAUSHALTS, nicht der UTC-Monat von `check_in` (#1451):
+    // `substr(check_in, 1, 7)` zaehlte einen Besuch am Ersten um 00:30 in
+    // Berlin in den Vormonat - dieselbe Regel wie im Modul (#1387).
+    const month = finishedVisitsInMonth(d, currentMonth, hkZone);
+    const lastRow = latestVisit(d, hkZone, 'check_out IS NOT NULL');
+    const anyRow = d.prepare('SELECT 1 FROM housekeeping_work_sessions LIMIT 1').get()
+      || d.prepare('SELECT 1 FROM housekeeping_workers LIMIT 1').get();
+    result.housekeeping = {
+      configured: Boolean(anyRow),
+      present: Boolean(openSession),
+      presentSince: openSession?.check_in || null,
+      workerName: openWorker?.worker_name || null,
+      visitsThisMonth: month.visits,
+      // Der offene Lohn ist Geld (R20): ohne `housekeeping_view_amounts` -
+      // so starten neue Kinderkonten - kommt er als `null`, wie im Modul.
+      unpaidAmount: requestHasCapability(d, req, 'housekeeping_view_amounts') ? month.unpaid : null,
+      lastVisit: lastRow?.check_in || null,
+    };
+  } catch (err) {
+    log.error('housekeeping error:', err.message);
+    result.housekeeping = { configured: false, present: false, presentSince: null, workerName: null, visitsThisMonth: 0, unpaidAmount: 0, lastVisit: null };
+  }
+
+  // Abfuhr fuer das Heute-Blatt: heute (Tonne raus) und morgen (heute Abend
+  // rausstellen). Dieselbe Aufloesung wie Kachel, Modul und Kalender
+  // (`getOccurrences`, invariant #3: nie doppelt), nur das Zwei-Tage-Fenster
+  // und nur die Felder, die eine Zeile braucht. Die Typ-Auswahl der Kachel
+  // gilt hier nicht: die Zeile spricht nur, wenn die Kachel NICHT sichtbar ist.
+  if (allows('waste')) try {
+    const tomorrow = shiftDateKey(todayLocalKey, 1);
+    result.wastePickups = getWasteOccurrences(d, { from: todayLocalKey, to: tomorrow })
+      .map((o) => ({
+        date_key: o.date_key,
+        type_id: o.type_id,
+        type_name: o.type_name,
+        type_icon: o.type_icon,
+        type_color: o.type_color,
+        deep_link: o.deep_link,
+      }));
+  } catch (err) {
+    log.error('wastePickups error:', err.message);
+    result.wastePickups = [];
+  }
+
+  // Die EIGENE Schicht von heute - nicht die des Haushalts, die zeigt die
+  // Schichtplan-Kachel. Freie Tage sind keine Zeile: „frei" ist die Abwesenheit
+  // eines Programmpunkts, kein Programmpunkt.
+  if (allows('schedule')) try {
+    result.myShiftsToday = scheduleData(todayLocalKey, todayLocalKey, userId).entries
+      .filter((entry) => entry.shift_type && !entry.is_free)
+      .map((entry) => ({
+        date_key: entry.date_key,
+        source: entry.source,
+        crosses_midnight: entry.crosses_midnight,
+        shift_type: {
+          id: entry.shift_type.id,
+          name: entry.shift_type.name,
+          short_code: entry.shift_type.short_code ?? null,
+          start_time: entry.shift_type.start_time ?? null,
+          end_time: entry.shift_type.end_time ?? null,
+          color: entry.shift_type.color ?? null,
+          icon: entry.shift_type.icon ?? null,
+        },
+      }));
+  } catch (err) {
+    log.error('myShiftsToday error:', err.message);
+    result.myShiftsToday = [];
+  }
+
+  // Vorrat „läuft bald ab" (Critique 2026-09-23): Chargen mit abgelaufenem oder
+  // bald erreichtem MHD, haushaltsweit wie der Vorrat selbst (kein
+  // Eigentuemer-Gate, siehe routes/pantry.js). Der Tag ist `todayLocalKey`, also
+  // derselbe Haushaltstag wie fuer Mahlzeiten und Aufgaben dieser Antwort. Ein
+  // Fehler setzt `null` - die Kachel zeigt dann „erneut versuchen" statt einer
+  // leeren Liste, die „nichts laeuft ab" behaupten wuerde.
+  if (allows('pantry')) try {
+    result.pantryExpiring = pantryExpiringSlice(d, todayLocalKey);
+  } catch (err) {
+    log.error('pantryExpiring error:', err.message);
+    result.pantryExpiring = null;
+  }
+
+  // „Heute dran"-Karte: pro Mitglied die Zahl der heute fälligen oder über-
+  // fälligen offenen Aufgaben. Eigene Aggregation statt Zählung aus urgentTasks,
+  // dessen 5er-Limit die Zahlen je Mitglied verfälschen würde. Sichtbarkeit wie
+  // überall: der Betrachter zählt nur, was er sehen darf.
+  if (allows('tasks')) try {
+    result.memberTodayTasks = d.prepare(`
+      SELECT ta.user_id AS user_id, COUNT(*) AS open_count
+      FROM tasks t JOIN task_assignments ta ON ta.task_id = t.id
+      WHERE t.status != 'done' AND t.archived_at IS NULL
+        AND t.due_date IS NOT NULL AND t.due_date <= @today
+        AND ${taskScopeWhere('t', { bind: '@today' })}
+        AND ${taskVisibleSql}${taskCategoryAnd}
+      GROUP BY ta.user_id
+    `).all({ today: todayLocalKey, me: userId, ...taskCategoryBinds });
+  } catch (err) {
+    log.error('memberTodayTasks error:', err.message);
+    result.memberTodayTasks = [];
+  }
+
+  // Die Wand nennt die Aufgaben beim Namen (#1817), siehe `wallTasksByMember`.
+  if (allows('tasks')) try {
+    result.wallTasks = wallTasksByMember(d, {
+      today: todayLocalKey,
+      zone: householdTimeZone(d),
+      now,
+      categoryAnd: taskCategoryAnd,
+      categoryBinds: taskCategoryBinds,
+    });
+  } catch (err) {
+    log.error('wallTasks error:', err.message);
+    result.wallTasks = [];
+  }
+
+  // „Alles erledigt"-Zustand des Tagesprogramms: nur mit der Zahl heute fälliger,
+  // bereits erledigter Aufgaben lässt sich „alles geschafft" von „heute stand nie
+  // etwas an" unterscheiden - die offene Liste allein kann das nicht.
+  if (allows('tasks')) try {
+    result.tasksDoneToday = d.prepare(`
+      SELECT COUNT(*) AS n FROM tasks t
+      WHERE t.status = 'done' AND t.archived_at IS NULL
+        AND t.due_date = @today
+        AND ${taskScopeWhere('t', { bind: '@today' })}
+        AND ${taskVisibleSql}${taskCategoryAnd}
+    `).get({ today: todayLocalKey, me: userId, ...taskCategoryBinds }).n;
+  } catch (err) {
+    log.error('tasksDoneToday error:', err.message);
+    result.tasksDoneToday = 0;
+  }
+
+  // DIE HAUSHALTSFASSUNG (#1817): von der leeren Fassung aus, nur was die Wand
+  // zeichnet. Hier, hinter jeder Abfrage - ein Block, den jemand oben ergaenzt,
+  // erreicht die Wand erst ueber die Allowlist.
+  res.json(householdAudience ? householdAudienceAnswer(result, emptyAnswer({ month: currentMonth })) : result);
+  } catch (err) {
+    log.error('Critical error:', err.message);
+    res.status(500).json({ error: 'Dashboard could not be loaded.', code: 500 });
+  }
+});
+
+export default router;

@@ -1,0 +1,88 @@
+/**
+ * Komponente: Markdown-Formatierungsleiste (.md-toolbar)
+ * Die Leiste ueber jedem Textfeld, dessen Inhalt als Markdown gelesen wird -
+ * Notizen und Aufgaben-Notizen (#731). Global eingebunden wie die anderen
+ * geteilten Komponenten (.sub-tab, .list-row), weil sie zu keiner Seite
+ * gehoert; Verhalten und Beschriftungen in /utils/markdown-toolbar.js.
+ */
+
+/* EINE ZEILE, DIE SCROLLT (Critique 2026-10-05, R16). Die Leiste brach um:
+ * zwoelf 48px-Knoepfe in 332px waren drei Reihen und 162px vor dem Textfeld,
+ * dem sie dient. Sie laeuft jetzt einzeilig; was nicht passt, liegt hinter dem
+ * Rand-Fade (`wireScrollFade`, filter-chip.css `.has-fade-end`) und kommt per
+ * Wisch oder Pfeiltaste. Sichtbar wird sie erst mit dem Fokus im Feld
+ * (utils/markdown-toolbar.js) - deshalb die [hidden]-Regel darunter: eine
+ * Autorenregel mit `display` schluege sonst das UA-`[hidden]`. */
+.md-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1.5px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background-color: var(--color-surface-2);
+}
+
+.md-toolbar[hidden] {
+  display: none;
+}
+
+.md-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Das Feld behaelt seine oberen Ecken, solange die Leiste nicht darueber steht. */
+.md-toolbar:not([hidden]) + .form-input,
+.md-toolbar:not([hidden]) + .input {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.md-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Nicht schrumpfen: bei 12 Buttons in einem ~340px-Modal scrollt die Leiste,
+   * statt die Buttons unter die Fingergröße zu quetschen. */
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  font-size: var(--text-sm);
+  padding: 0;
+}
+
+/* Touch: volle 44px-Targets (iOS-Minimum, --target-base) */
+@media (pointer: coarse) {
+  .md-toolbar__btn {
+    width: var(--target-base);
+    height: var(--target-base);
+  }
+}
+
+.md-toolbar__btn:hover {
+  background-color: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.md-toolbar__sep {
+  flex: 0 0 auto;
+  width: 1px;
+  background-color: var(--color-border);
+  margin: var(--space-1) var(--space-1);
+  cursor: default;
+}
+
+.md-toolbar__sep:hover {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+}

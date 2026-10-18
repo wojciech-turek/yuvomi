@@ -1,0 +1,2362 @@
+/**
+ * Model primitives for linked local recurrence overrides (#975).
+ *
+ * The route layer deliberately consumes these small, dependency-free helpers so
+ * every occurrence mutation applies the same ownership and eligibility rules.
+ */
+
+import { endsBeforeStart, hasAnyOccurrence, parseRRule } from './recurrence.js';
+import {
+  ASSIGNED_USERS_SQL, expandRecurringEvents, MAX_EXPANSION_ITERATIONS, seriesReadingZone,
+} from './calendar-events.js';
+import {
+  dropInheritedEventReminders, eventAuthorId, fanOutEventReminders,
+} from './event-reminder-fanout.js';
+import {
+  hasExplicitZone, householdTimeZone, shiftDateKey, storedDayDiffersFromSeriesDay, storedToInstantMsPrecise,
+} from '../utils/timezone.js';
+import { createLogger } from '../logger.js';
+import { applyDocumentAccess, attachmentAccessMode, eventAudienceChanged } from './document-access.js';
+
+const log = createLogger('CalendarOccurrenceOverrides');
+
+export const OVERRIDE_FIELDS = Object.freeze([
+  'title',
+  'description',
+  'start_datetime',
+  'end_datetime',
+  'all_day',
+  'location',
+  'color',
+  'icon',
+  'assignments',
+  'visibility',
+  'countdown',
+  'attachment',
+  'reminders',
+]);
+
+const OVERRIDE_FIELD_SET = new Set(OVERRIDE_FIELDS);
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export class CalendarOccurrenceError extends Error {
+  constructor(message, {
+    status = 400,
+    code = 'invalid_override_fields',
+    conflict = null,
+    orphanedOverrideCount = null,
+  } = {}) {
+    super(message);
+    this.name = 'CalendarOccurrenceError';
+    this.status = status;
+    this.code = code;
+    if (conflict) this.conflict = conflict;
+    if (orphanedOverrideCount !== null) {
+      this.orphanedOverrideCount = orphanedOverrideCount;
+    }
+  }
+}
+
+/** Internal two-phase signal: storage copies must be staged before the write transaction. */
+export class CalendarAttachmentCloneRequiredError extends Error {
+  constructor(requests) {
+    super('Independent attachment copies must be staged before detaching recurrence owners.');
+    this.name = 'CalendarAttachmentCloneRequiredError';
+    this.requests = requests;
+  }
+}
+
+function invalidOverrideFields(message) {
+  return new CalendarOccurrenceError(message, {
+    status: 400,
+    code: 'invalid_override_fields',
+  });
+}
+
+function invalidRecurrenceIdentity(message, { status = 400 } = {}) {
+  return new CalendarOccurrenceError(message, {
+    status,
+    code: 'invalid_recurrence_id',
+  });
+}
+
+/**
+ * Parses the persisted closed override vocabulary into canonical order of first
+ * appearance. Empty, partial, or unknown metadata cannot identify an override.
+ */
+export function parseOverrideFields(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw invalidOverrideFields('overridden_fields must be a non-empty JSON array.');
+  }
+
+  let fields;
+  try {
+    fields = JSON.parse(value);
+  } catch {
+    throw invalidOverrideFields('overridden_fields must be valid JSON.');
+  }
+  if (!Array.isArray(fields) || fields.length === 0) {
+    throw invalidOverrideFields('overridden_fields must be a non-empty JSON array.');
+  }
+
+  const unique = [];
+  for (const field of fields) {
+    if (typeof field !== 'string' || !OVERRIDE_FIELD_SET.has(field)) {
+      throw invalidOverrideFields('overridden_fields contains an unsupported field.');
+    }
+    if (!unique.includes(field)) unique.push(field);
+  }
+  return unique;
+}
+
+export function isLinkedOccurrence(row) {
+  const hasIdentity = Number.isInteger(Number(row?.recurrence_parent_id))
+    && Number(row.recurrence_parent_id) > 0
+    && typeof row.recurrence_id === 'string'
+    && row.recurrence_id.trim() !== ''
+    && typeof row.overridden_fields === 'string'
+    && row.overridden_fields.trim() !== '';
+  if (!hasIdentity) return false;
+  try {
+    parseOverrideFields(row.overridden_fields);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function seriesIdFor(row) {
+  return isLinkedOccurrence(row) ? Number(row.recurrence_parent_id) : row?.id ?? null;
+}
+
+export function recurrenceIdFor(row) {
+  if (isLinkedOccurrence(row)) return row.recurrence_id;
+  if (!row?.recurrence_rule) return null;
+  if (typeof row.recurrence_identity === 'string' && row.recurrence_identity.trim() !== '') {
+    return row.recurrence_identity;
+  }
+  return typeof row.start_datetime === 'string' ? row.start_datetime.slice(0, 10) : null;
+}
+
+function isDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function exactLookupIterationLimit(master, recurrenceId) {
+  const start = new Date(`${master.start_datetime.slice(0, 10)}T00:00:00Z`).getTime();
+  const requested = new Date(`${recurrenceId}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || requested < start) return 1;
+  const calendarDays = Math.floor((requested - start) / 86400000);
+  return Math.min(calendarDays + 2, MAX_EXPANSION_ITERATIONS);
+}
+
+/**
+ * Expands one original recurrence slot without applying the master's EXDATEs.
+ * The displayed child start is deliberately irrelevant to this lookup.
+ *
+ * `householdZone`: in ihr liest die Expansion einen zonenlosen Start neben
+ * einer `tzid` (#1993). Dieselbe Zone wie beim Lesen des Kalenders, sonst
+ * verfehlt die Suche das Vorkommen, das der Kalender gezeigt hat.
+ */
+export function baseOccurrenceFor(master, recurrenceId, householdZone = null) {
+  if (!master?.recurrence_rule || !isDateKey(recurrenceId)) {
+    throw invalidRecurrenceIdentity('recurrence_id must identify a recurring series date.');
+  }
+
+  // EIN TAG LUFT AUF BEIDEN SEITEN, und zwar seit #985: das Fenster [from, to]
+  // wird in UTC-Tagen gefuehrt, die Expansionsschleife laeuft bei einer Serie,
+  // deren lokaler und UTC-Tag auseinandergehen, aber auf dem LOKALEN Datum.
+  // Ein Punktfenster [recurrenceId, recurrenceId] verfehlt das gesuchte
+  // Vorkommen dann um genau einen Tag - `while (currentDate <= to)` bricht ab,
+  // bevor es entsteht. Gemessen an der Tokio-Probe in test-ics-export.js:
+  // Master 07.01. 08:00 Tokio = 06.01. 23:00 UTC, gesucht `2026-01-07`, die
+  // Schleife steht bei diesem Vorkommen auf dem lokalen `2026-01-08`.
+  // Mehr als ein Tag kann es nicht sein: weiter als um einen Kalendertag
+  // koennen UTC und Ortszeit nicht auseinanderliegen. Die AUSWAHL bleibt exakt -
+  // gefiltert wird unveraendert auf `recurrence_identity === recurrenceId`, das
+  // groessere Fenster liefert nur die Kandidaten.
+  const occurrences = expandRecurringEvents(
+    [master],
+    shiftDateKey(recurrenceId, -1),
+    shiftDateKey(recurrenceId, 1),
+    new Map(),
+    {
+      includeRecurrenceIdentity: true,
+      maxIterations: exactLookupIterationLimit(master, recurrenceId),
+      householdZone,
+    },
+  );
+  const occurrence = occurrences.find((candidate) => candidate.recurrence_identity === recurrenceId);
+  if (!occurrence) {
+    throw invalidRecurrenceIdentity('recurrence_id is not an occurrence of this series.');
+  }
+  return occurrence;
+}
+
+function assertOccurrenceSlotCanBeMutated(database, seriesId, recurrenceId) {
+  const state = database.prepare(`
+    SELECT
+      EXISTS(
+        SELECT 1 FROM calendar_event_exceptions
+        WHERE event_id = ? AND exception_date = ?
+      ) AS excluded,
+      EXISTS(
+        SELECT 1 FROM calendar_events
+        WHERE recurrence_parent_id = ? AND recurrence_id = ?
+      ) AS has_linked_child
+  `).get(seriesId, recurrenceId, seriesId, recurrenceId);
+  if (state.excluded && !state.has_linked_child) {
+    throw invalidRecurrenceIdentity(
+      'recurrence_id identifies an excluded slot without a linked occurrence.',
+    );
+  }
+}
+
+const OVERRIDE_PROPERTIES = Object.freeze({
+  title: ['title'],
+  description: ['description'],
+  start_datetime: ['start_datetime'],
+  end_datetime: ['end_datetime'],
+  all_day: ['all_day'],
+  location: ['location'],
+  color: ['color'],
+  icon: ['icon'],
+  assignments: [
+    'assigned_to', 'assigned_name', 'assigned_color', 'assigned_users_json', 'assigned_users',
+  ],
+  visibility: ['visibility'],
+  countdown: ['countdown'],
+  attachment: [
+    'attachment_name', 'attachment_mime', 'attachment_size', 'attachment_data',
+    'attachment_document_id', 'attachment_preview_url', 'attachment_download_url',
+  ],
+  reminders: [],
+});
+
+function copyMarkedProperties(target, child, fields) {
+  for (const field of fields) {
+    for (const property of OVERRIDE_PROPERTIES[field]) {
+      if (Object.hasOwn(child, property)) target[property] = child[property];
+    }
+  }
+}
+
+function loadOccurrenceMasters(database, parentIds) {
+  if (parentIds.length === 0) return [];
+  const placeholders = parentIds.map(() => '?').join(',');
+  return database.prepare(`
+    SELECT e.*,
+           u_assigned.display_name AS assigned_name,
+           u_assigned.avatar_color AS assigned_color,
+           ${ASSIGNED_USERS_SQL}
+    FROM calendar_events e
+    LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
+    WHERE e.id IN (${placeholders})
+  `).all(...parentIds);
+}
+
+/**
+ * Composes one linked replacement from its current series defaults and the
+ * child's explicit override markers.
+ */
+export function resolveOccurrence(database, child, master = null) {
+  if (!isLinkedOccurrence(child)) {
+    throw invalidRecurrenceIdentity('The event is not a linked occurrence override.');
+  }
+
+  const parentId = Number(child.recurrence_parent_id);
+  if (master && Number(master.id) !== parentId) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not match the linked occurrence.');
+  }
+  const hasAssignmentProjection = master
+    && Object.hasOwn(master, 'assigned_name')
+    && Object.hasOwn(master, 'assigned_color')
+    && Object.hasOwn(master, 'assigned_users_json');
+  const parent = hasAssignmentProjection ? master : loadOccurrenceMasters(database, [parentId])[0];
+  if (!parent) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not exist.', { status: 404 });
+  }
+  if (Number(parent.id) !== parentId) {
+    throw invalidRecurrenceIdentity('The recurrence parent does not match the linked occurrence.');
+  }
+
+  const fields = parseOverrideFields(child.overridden_fields);
+  const base = baseOccurrenceFor(parent, child.recurrence_id, seriesReadingZone(database, parent));
+  const resolved = {
+    ...base,
+    id: child.id,
+    recurrence_parent_id: parentId,
+    recurrence_id: child.recurrence_id,
+    recurrence_identity: child.recurrence_id,
+    overridden_fields: child.overridden_fields,
+  };
+  copyMarkedProperties(resolved, child, fields);
+
+  const ownsAssignments = fields.includes('assignments');
+  const ownsAttachment = fields.includes('attachment');
+  const ownsReminders = fields.includes('reminders');
+  return {
+    ...resolved,
+    series_id: Number(parent.id),
+    recurrence_id: child.recurrence_id,
+    is_occurrence_override: true,
+    is_recurring_instance: 1,
+    assignment_owner_id: ownsAssignments ? Number(child.id) : Number(parent.id),
+    attachment_owner_id: ownsAttachment ? Number(child.id) : Number(parent.id),
+    reminder_owner_id: ownsReminders ? Number(child.id) : Number(parent.id),
+    reminder_anchor_start: ownsReminders ? resolved.start_datetime : parent.start_datetime,
+  };
+}
+
+/**
+ * Resolves a mixed row set while loading every referenced parent once.
+ * Reader orchestration may supply a projection-aware loader; the authoritative
+ * merge and recurrence model remain here regardless of row shape.
+ */
+export function resolveEventRows(database, rows, { loadMasters = loadOccurrenceMasters } = {}) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const parentIds = [...new Set(rows
+    .filter(isLinkedOccurrence)
+    .map((row) => Number(row.recurrence_parent_id)))];
+  if (parentIds.length === 0) return rows;
+
+  const masters = loadMasters(database, parentIds);
+  const mastersById = new Map(masters.map((master) => [Number(master.id), master]));
+  return rows.map((row) => {
+    if (!isLinkedOccurrence(row)) return row;
+    try {
+      return resolveOccurrence(database, row, mastersById.get(Number(row.recurrence_parent_id)));
+    } catch (error) {
+      if (!(error instanceof CalendarOccurrenceError)
+          || error.code !== 'invalid_recurrence_id') throw error;
+      log.warn('Linked calendar occurrence is no longer reachable; serving it standalone.', {
+        eventId: row.id,
+        recurrenceParentId: row.recurrence_parent_id,
+        recurrenceId: row.recurrence_id,
+        error: error.message,
+      });
+      return {
+        ...row,
+        recurrence_parent_id: null,
+        recurrence_id: null,
+        overridden_fields: null,
+        recurrence_rule: null,
+        series_id: Number(row.id),
+        is_occurrence_override: false,
+        occurrence_override_unreachable: true,
+        assignment_owner_id: Number(row.id),
+        attachment_owner_id: Number(row.id),
+        reminder_owner_id: Number(row.id),
+        reminder_anchor_start: row.start_datetime,
+      };
+    }
+  });
+}
+
+/** Loads linked replacements by series owner and their displayed overlap. */
+export function loadLinkedOverrides(database, parentIds, from = null, to = null) {
+  const ids = [...new Set((parentIds ?? [])
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return [];
+
+  const where = [`recurrence_parent_id IN (${ids.map(() => '?').join(',')})`];
+  const params = [...ids];
+  if (from) {
+    where.push('DATE(COALESCE(end_datetime, start_datetime)) >= DATE(?)');
+    params.push(from);
+  }
+  if (to) {
+    where.push('DATE(start_datetime) <= DATE(?)');
+    params.push(to);
+  }
+  return database.prepare(`
+    SELECT * FROM calendar_events
+    WHERE ${where.join('\n      AND ')}
+    ORDER BY start_datetime ASC, id ASC
+  `).all(...params);
+}
+
+const schemaColumnsByDatabase = new WeakMap();
+
+function tableColumns(database, table) {
+  let databaseCache = schemaColumnsByDatabase.get(database);
+  if (!databaseCache) {
+    databaseCache = new Map();
+    schemaColumnsByDatabase.set(database, databaseCache);
+  }
+  if (!databaseCache.has(table)) {
+    databaseCache.set(
+      table,
+      new Set(database.prepare(`PRAGMA table_info(${table})`).all().map((entry) => entry.name)),
+    );
+  }
+  return databaseCache.get(table);
+}
+
+function hasColumn(database, table, column) {
+  return tableColumns(database, table).has(column);
+}
+
+function configuredOutlookWritableTargets(database) {
+  const requiredColumns = [
+    ['outlook_accounts', 'id'],
+    ['outlook_accounts', 'auto_sync_calendar_id'],
+    ['outlook_accounts', 'owner_user_id'],
+    ['outlook_calendar_selection', 'account_id'],
+    ['outlook_calendar_selection', 'calendar_id'],
+    ['outlook_calendar_selection', 'enabled'],
+    ['outlook_calendar_selection', 'can_edit'],
+    ['calendar_events', 'visibility'],
+    ['calendar_events', 'created_by'],
+    ['event_assignments', 'event_id'],
+    ['event_assignments', 'user_id'],
+  ];
+  if (!requiredColumns.every(([table, column]) => hasColumn(database, table, column))) return [];
+  // needs_reauth ist nur vorübergehend: ein Reconnect darf die Serie nicht
+  // unbemerkt mit verknüpften Einzelausnahmen an ein beschreibbares Ziel senden.
+  return database.prepare(`
+    SELECT a.id, a.owner_user_id, a.auto_sync_calendar_id, c.calendar_id
+    FROM outlook_accounts a
+    JOIN outlook_calendar_selection c ON c.account_id = a.id
+    WHERE a.auto_sync_calendar_id IS NOT NULL AND a.owner_user_id IS NOT NULL
+      AND c.enabled = 1 AND c.can_edit = 1
+  `).all();
+}
+
+function hasConfiguredOutlookAutoSyncTarget(database, row, assignments,
+  targets = configuredOutlookWritableTargets(database)) {
+  if (!row || row.external_source !== 'local') return false;
+  const assignedIds = assignments === undefined
+    ? canonicalIds(assignmentIds(database, row.id))
+    : canonicalIds(assignments);
+  const assigned = new Set(assignedIds.map(Number));
+  return targets.some((target) => {
+    const calendarId = Number(row.target_outlook_account_id) === Number(target.id)
+      ? row.target_outlook_calendar_id
+      : target.auto_sync_calendar_id;
+    return calendarId === target.calendar_id && (
+      row.visibility === 'all'
+      || Number(row.created_by) === Number(target.owner_user_id)
+      || (row.visibility === 'assignees' && assigned.has(Number(target.owner_user_id)))
+    );
+  });
+}
+
+function hasLocalSeriesOrigin(row) {
+  return !!row?.recurrence_rule
+    && row.external_source === 'local'
+    && row.external_calendar_id == null
+    && row.calendar_ref_id == null
+    && row.subscription_id == null
+    && row.external_object_url == null
+    && row.recurrence_parent_id == null;
+}
+
+function structurallyIneligible(row) {
+  return !row?.recurrence_rule
+    || row.external_source !== 'local'
+    || row.external_calendar_id != null
+    || row.calendar_ref_id != null
+    || row.subscription_id != null
+    || row.external_object_url != null
+    || row.target_google_calendar_id != null
+    || row.target_caldav_account_id != null
+    || row.target_caldav_calendar_url != null
+    || row.target_outlook_account_id != null
+    || row.target_outlook_calendar_id != null
+    || row.recurrence_parent_id != null;
+}
+
+/** Classifies distinct persisted masters with shared schema and ownership queries. */
+export function classifyLocalSeriesBatch(database, rows) {
+  const masters = [...new Map((rows ?? [])
+    .filter((row) => row && Number.isInteger(Number(row.id)))
+    .map((row) => [Number(row.id), row])).values()];
+  const result = new Map(masters.map((row) => [
+    Number(row.id),
+    !hasLocalSeriesOrigin(row)
+      ? { eligible: false, reason: 'ineligible_series', local: false }
+      : null,
+  ]));
+  const candidates = masters.filter((row) => result.get(Number(row.id)) === null);
+  if (candidates.length === 0) return result;
+
+  const ids = candidates.map((row) => Number(row.id));
+  const placeholders = ids.map(() => '?').join(',');
+  const disqualified = new Set();
+  const generatedOwnerColumns = [
+    ['birthdays', 'calendar_event_id'],
+    ['birthdays', 'name_day_calendar_event_id'],
+    ['housekeeping_work_sessions', 'calendar_event_id'],
+  ].filter(([table, column]) => hasColumn(database, table, column));
+  if (generatedOwnerColumns.length > 0) {
+    const unions = generatedOwnerColumns.map(([table, column]) =>
+      `SELECT ${column} AS event_id FROM ${table} WHERE ${column} IN (${placeholders})`);
+    const params = generatedOwnerColumns.flatMap(() => ids);
+    for (const row of database.prepare(unions.join('\nUNION\n')).all(...params)) {
+      disqualified.add(Number(row.event_id));
+    }
+  }
+  if (hasColumn(database, 'outlook_event_links', 'event_id')) {
+    for (const row of database.prepare(`
+      SELECT DISTINCT event_id FROM outlook_event_links
+      WHERE event_id IN (${placeholders})
+    `).all(...ids)) disqualified.add(Number(row.event_id));
+  }
+
+  const autoSyncTargets = configuredOutlookWritableTargets(database);
+  if (autoSyncTargets.length > 0) {
+    const assignments = new Map();
+    for (const row of database.prepare(`
+      SELECT event_id, user_id FROM event_assignments
+      WHERE event_id IN (${placeholders})
+    `).all(...ids)) {
+      if (!assignments.has(Number(row.event_id))) assignments.set(Number(row.event_id), []);
+      assignments.get(Number(row.event_id)).push(Number(row.user_id));
+    }
+    for (const row of candidates) {
+      if (hasConfiguredOutlookAutoSyncTarget(database, row,
+        assignments.get(Number(row.id)) ?? [], autoSyncTargets)) {
+        disqualified.add(Number(row.id));
+      }
+    }
+  }
+
+  for (const row of candidates) {
+    const eligible = !structurallyIneligible(row) && !disqualified.has(Number(row.id));
+    result.set(Number(row.id), {
+      eligible,
+      reason: eligible ? null : 'ineligible_series',
+      local: true,
+    });
+  }
+  return result;
+}
+
+/** Classifies persisted series ownership independently of the requesting actor. */
+export function classifyLocalSeries(database, row) {
+  if (!row || !Number.isInteger(Number(row.id))) {
+    return { eligible: false, reason: 'ineligible_series' };
+  }
+  const { eligible, reason } = classifyLocalSeriesBatch(database, [row]).get(Number(row.id));
+  return { eligible, reason };
+}
+
+/** Local origin is independent of whether the provider can carry linked overrides. */
+export function isLocallyOwnedSeries(database, row) {
+  return classifyLocalSeriesBatch(database, [row]).get(Number(row?.id))?.local === true;
+}
+
+function actorCanSeeSeries(database, row, actorId) {
+  // Visibility deliberately has no admin bypass (#474). Occurrence mutations
+  // must use the same policy as the whole-series routes that loaded the row.
+  if (Number(row.created_by) === Number(actorId) || row.visibility === 'all') return true;
+  if (row.visibility !== 'assignees') return false;
+  return !!database.prepare(`
+    SELECT 1 FROM event_assignments WHERE event_id = ? AND user_id = ?
+  `).get(row.id, actorId);
+}
+
+/** Builds request-local capability metadata once per distinct recurring master. */
+export function buildRecurrenceCapabilityMap(database, events, {
+  actorId = null,
+} = {}) {
+  const mastersById = new Map();
+  for (const event of events ?? []) {
+    const linked = event?.is_occurrence_override === true || isLinkedOccurrence(event);
+    if (!linked && !event?.recurrence_rule) continue;
+    const seriesId = Number(event.series_id ?? seriesIdFor(event));
+    if (!Number.isInteger(seriesId) || seriesId < 1) continue;
+    if (!linked && Number(event.id) === seriesId) mastersById.set(seriesId, event);
+    else if (!mastersById.has(seriesId)) mastersById.set(seriesId, null);
+  }
+  const missing = [...mastersById].filter(([, master]) => !master).map(([id]) => id);
+  if (missing.length > 0) {
+    const loaded = database.prepare(`
+      SELECT * FROM calendar_events WHERE id IN (${missing.map(() => '?').join(',')})
+    `).all(...missing);
+    for (const master of loaded) mastersById.set(Number(master.id), master);
+  }
+
+  const masters = [...mastersById.values()].filter(Boolean);
+  const classifications = classifyLocalSeriesBatch(database, masters);
+  // Provider write access can change outside our configuration endpoints. A
+  // linked series must never fall back to the standalone+EXDATE workflow: that
+  // workflow cannot remove or replace an existing linked child.
+  const legacyCandidates = masters.filter((master) => {
+    const classification = classifications.get(Number(master.id));
+    return classification?.local && !classification.eligible;
+  }).map((master) => Number(master.id));
+  const linkedParents = new Set(legacyCandidates.length === 0 ? [] : database.prepare(`
+    SELECT DISTINCT recurrence_parent_id FROM calendar_events
+    WHERE recurrence_parent_id IN (${legacyCandidates.map(() => '?').join(',')})
+  `).all(...legacyCandidates).map((row) => Number(row.recurrence_parent_id)));
+  const capabilities = new Map();
+  for (const [seriesId, master] of mastersById) {
+    if (!master) continue;
+    const classification = classifications.get(seriesId)
+      ?? { eligible: false, reason: 'ineligible_series' };
+    capabilities.set(seriesId, {
+      master,
+      isLocalRecurringSeries: classification.local === true,
+      canOverrideOccurrence: classification.eligible
+        && actorCanSeeSeries(database, master, actorId),
+      canDetachOccurrence: classification.local === true && !classification.eligible
+        && !linkedParents.has(seriesId)
+        && actorCanSeeSeries(database, master, actorId),
+    });
+  }
+  return capabilities;
+}
+
+/** Returns structural eligibility; route visibility supplies actor authorization. */
+export function isEligibleLocalSeries(database, row, actorId) {
+  const classification = classifyLocalSeries(database, row);
+  if (!classification.eligible) return classification;
+  if (!actorCanSeeSeries(database, row, actorId)) {
+    return { eligible: false, reason: 'not_authorized' };
+  }
+  return classification;
+}
+
+const SCALAR_OVERRIDE_FIELDS = Object.freeze([
+  'title', 'description', 'start_datetime', 'end_datetime', 'all_day', 'location',
+  'color', 'icon', 'visibility', 'countdown',
+]);
+
+let fallbackTransactionId = 0;
+
+function runTransaction(database, work) {
+  if (typeof database.transaction === 'function') return database.transaction(work)();
+  // node:sqlite fixtures do not expose better-sqlite3's transaction helper.
+  // SAVEPOINT preserves identical atomicity and remains valid inside an outer
+  // transaction, unlike a raw BEGIN/COMMIT fallback.
+  const savepoint = `calendar_occurrence_${++fallbackTransactionId}`;
+  database.exec(`SAVEPOINT ${savepoint}`);
+  try {
+    const result = work();
+    database.exec(`RELEASE SAVEPOINT ${savepoint}`);
+    return result;
+  } catch (error) {
+    database.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    database.exec(`RELEASE SAVEPOINT ${savepoint}`);
+    throw error;
+  }
+}
+
+function loadSeriesForMutation(database, seriesId, actorId, isAdmin, authorizeActor = true) {
+  const id = Number(seriesId);
+  const master = Number.isInteger(id) && id > 0
+    ? database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(id)
+    : null;
+  if (!master) {
+    throw new CalendarOccurrenceError('Calendar series not found.', {
+      status: 404,
+      code: 'calendar_series_not_found',
+    });
+  }
+  const eligibility = authorizeActor
+    ? isEligibleLocalSeries(database, master, actorId)
+    : classifyLocalSeries(database, master);
+  if (!eligibility.eligible) {
+    const unauthorized = eligibility.reason === 'not_authorized';
+    throw new CalendarOccurrenceError(
+      unauthorized ? 'Not authorized.' : 'This calendar series cannot use occurrence overrides.',
+      {
+        status: unauthorized ? 403 : 400,
+        code: eligibility.reason,
+      },
+    );
+  }
+  return master;
+}
+
+function normalizeScalar(field, value) {
+  if (field === 'all_day' || field === 'countdown') return value ? 1 : 0;
+  if (['description', 'end_datetime', 'location', 'color'].includes(field)) return value || null;
+  if (field === 'local_calendar_id') return value == null ? null : Number(value);
+  return value;
+}
+
+function assertValidEffectiveInterval(values) {
+  if (!values.end_datetime) return;
+  const start = wallTimeMs(values.start_datetime);
+  const end = wallTimeMs(values.end_datetime);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    throw new CalendarOccurrenceError(
+      'end_datetime must not precede the effective start_datetime.',
+      { status: 400, code: 'invalid_occurrence_interval' },
+    );
+  }
+}
+
+function sameScalar(left, right) {
+  return (left ?? null) === (right ?? null);
+}
+
+function orderedIds(values) {
+  return [...new Set((values ?? [])
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value > 0))];
+}
+
+function canonicalIds(values) {
+  return orderedIds(values).sort((left, right) => left - right);
+}
+
+function canonicalOffsets(values) {
+  return [...new Set((values ?? [])
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value >= 0))]
+    .sort((left, right) => left - right);
+}
+
+function assignmentIds(database, eventId) {
+  return database.prepare(`
+    SELECT user_id FROM event_assignments
+    WHERE event_id = ?
+    ORDER BY user_id
+  `).all(eventId).map((row) => Number(row.user_id));
+}
+
+function assignmentPrimary(row, ids) {
+  const stored = Number(row?.assigned_to);
+  return ids.includes(stored) ? stored : (ids[0] ?? null);
+}
+
+function loadProjectedEvent(database, eventId) {
+  return database.prepare(`
+    SELECT e.*,
+           u_assigned.display_name AS assigned_name,
+           u_assigned.avatar_color AS assigned_color,
+           ${ASSIGNED_USERS_SQL}
+    FROM calendar_events e
+    LEFT JOIN users u_assigned ON u_assigned.id = e.assigned_to
+    WHERE e.id = ?
+  `).get(eventId);
+}
+
+function sameNumberSet(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+const ATTACHMENT_PROPERTIES = Object.freeze([
+  'attachment_name', 'attachment_mime', 'attachment_size', 'attachment_data',
+  'attachment_document_id',
+]);
+
+function attachmentValues(source) {
+  const result = {};
+  for (const property of ATTACHMENT_PROPERTIES) result[property] = source?.[property] ?? null;
+  return result;
+}
+
+function sameAttachment(left, right) {
+  return ATTACHMENT_PROPERTIES.every((property) => sameScalar(left[property], right[property]));
+}
+
+function attachmentDocumentExists(database, documentId) {
+  return Number(documentId) > 0
+    && hasColumn(database, 'family_documents', 'id')
+    && Boolean(database.prepare('SELECT 1 FROM family_documents WHERE id = ?').get(documentId));
+}
+
+function detachedAttachmentCloneRequests(database, children, master) {
+  const sourceDocumentId = Number(master.attachment_document_id);
+  if (!attachmentDocumentExists(database, sourceDocumentId)) return [];
+  return children
+    .filter((child) => !parseOverrideFields(child.overridden_fields).includes('attachment'))
+    .map((child) => ({
+      owner: 'detached',
+      childId: Number(child.id),
+      sourceDocumentId,
+      attachment: attachmentValues(master),
+    }));
+}
+
+function independentAttachmentValues(database, cloned, sourceDocumentId, claimedDocumentIds) {
+  // `null`: der Aufrufer verweigert die Kopie (#1358 - ohne Sicht auf das
+  // Quelldokument oder ohne Dokumente-Schreibrecht). Der Nachfolger bekommt
+  // dann keinen Anhang, das Original bleibt an der urspruenglichen Serie.
+  if (cloned === null) return attachmentValues(null);
+  const values = attachmentValues(cloned);
+  const documentId = Number(values.attachment_document_id);
+  if (!Number.isInteger(documentId)
+      || documentId < 1
+      || documentId === Number(sourceDocumentId)
+      || claimedDocumentIds.has(documentId)
+      || !attachmentDocumentExists(database, documentId)) {
+    throw new Error('Attachment clone callback must create a distinct document row.');
+  }
+  claimedDocumentIds.add(documentId);
+  return values;
+}
+
+/**
+ * Das Anhang-Dokument folgt dem Termin, soweit `mayWiden(documentId)` das
+ * zugesteht - der Aufrufer reicht es als `mayWidenAttachment` herein: `true`
+ * (Dokumente schreiben, das Dokument sehen UND verwalten, #1358) gleicht voll
+ * ab, `ATTACHMENT_NARROW_ONLY` (in diesem Schreiben neu hochgeladen) verengt
+ * nur. Ohne Urteil bleibt das Dokument unangetastet (#1443): `applyDocumentAccess()`.
+ *
+ * Und nur, wenn sich das Publikum aendert (#1443): `before` ist, wer den Termin
+ * vor diesem Speichern sah (`{ visibility, userIds }`, `null` ohne Vorzustand).
+ * Bleibt es gleich, bleibt das Dokument - ausser der Anhang ist in diesem
+ * Speichern neu gesetzt (`attachmentSet`). Eine Kopie (Split, Abloesen) zaehlt
+ * nicht als neu gesetzt: sie traegt schon die Rechte ihrer Quelle.
+ */
+function syncOwnedAttachmentAccess(database, documentId, visibility, userIds, mayWiden = () => false, {
+  before = null, attachmentSet = false,
+} = {}) {
+  if (!attachmentSet && !eventAudienceChanged(before, { visibility, userIds })) return;
+  if (!documentId
+      || !hasColumn(database, 'family_documents', 'visibility')
+      || !hasColumn(database, 'family_document_access', 'document_id')
+      || !hasColumn(database, 'family_document_access', 'user_id')) return;
+  const documentVisibility = visibility === 'private'
+    ? 'private'
+    : visibility === 'assignees'
+      ? 'restricted'
+      : 'family';
+  applyDocumentAccess(database, documentId, {
+    visibility: documentVisibility,
+    userIds,
+    ...attachmentAccessMode(mayWiden(documentId)),
+  });
+}
+
+/**
+ * Ein Termin-Zeitwert auf der WANDUHR-Achse: die zonenlose Ortszeit wird als
+ * UTC gelesen, damit sich zwei Wanduhrzeiten voneinander abziehen lassen, ohne
+ * dass eine DST-Grenze dazwischen die Rechnung verbiegt.
+ *
+ * Das ist genau das Richtige fuer start_datetime/end_datetime (Reihenfolge
+ * pruefen, eine Serie um ganze Tage verschieben) und genau das FALSCHE fuer
+ * alles, was einen Zeitpunkt meint. Der Erinnerungs-Vergleich laeuft deshalb
+ * auf der anderen Achse: der Anker durch `reminderAnchorInstantMs()`, die
+ * Zeile durch `remindAtInstantMs()` (#1291), und ihre Verschiebung beim
+ * Verschieben des Termins durch `reminderShiftMs()` (#1300).
+ */
+function wallTimeMs(value) {
+  const raw = String(value ?? '');
+  const normalized = raw.includes('T') ? raw : `${raw}T09:00:00`;
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized);
+  return Date.parse(zoned ? normalized : `${normalized}Z`);
+}
+
+/**
+ * Derselbe Terminbeginn auf der ZEITPUNKT-Achse: die Wanduhrzeit des Haushalts
+ * in echte Millisekunden seit Epoch, DST des jeweiligen Tages eingerechnet.
+ *
+ * Ein reines Datum (ganztaegig) zaehlt als 09:00 Ortszeit - dieselbe Annahme,
+ * die `reminderStartValue()` in public/pages/calendar.js trifft, damit Server
+ * und Dialog denselben Anker haben.
+ *
+ * GELESEN WIRD MIT `storedToInstantMsPrecise()`, NICHT `storedToInstantMs()`
+ * (#1300). Die einfache Fassung rechnet ueber `localToUTC()`, und das bildet
+ * rund um eine DST-Grenze ein ganzes Wanduhr-Band auf denselben Zeitpunkt ab:
+ * 00:30 und 01:30 am 29.03.2026 ergeben in Europe/Berlin beide 23:30Z. Hier
+ * wird die Differenz zweier solcher Anker auf `remind_at` addiert - aus einer
+ * echten Verschiebung um eine Stunde wuerde damit eine Verschiebung um null,
+ * und der Vorlauf waechse still mit.
+ *
+ * @param {string} anchorStart  start_datetime des Vorkommens (Wanduhrzeit)
+ * @param {string} tz           IANA-Zone aus householdTimeZone()
+ * @returns {number} ms seit Epoch, oder NaN bei unlesbarem Wert
+ */
+function reminderAnchorInstantMs(anchorStart, tz) {
+  const raw = String(anchorStart ?? '');
+  const normalized = raw.includes('T') ? raw : `${raw}T09:00:00`;
+  return storedToInstantMsPrecise(normalized, tz) ?? NaN;
+}
+
+/**
+ * Die andere Seite desselben Vergleichs: `reminders.remind_at` als Zeitpunkt.
+ *
+ * Die Spalte ist naiv-UTC - ein zonenloser Wert IST die UTC-Zeit, ein Wert mit
+ * eigener Zone (ueber `PUT /api/v1/reminders` moeglich, der Validator laesst
+ * `Z` und Offset durch) ist der Zeitpunkt, der er ist. Dieselbe Regel wie
+ * `parseRemindAtAsUtc()` in public/utils/reminder-offset.js.
+ *
+ * Die Rechnung ist dieselbe wie in `wallTimeMs()`, die Bedeutung nicht: dort
+ * ist das angehaengte "Z" eine Notluege, damit sich zwei Wanduhrzeiten abziehen
+ * lassen, hier benennt es die Zone, in der die Zeile wirklich steht. Genau
+ * diese zwei Bedeutungen unter einem Namen waren #1291 - darum bekommt die
+ * Erinnerungs-Seite einen eigenen.
+ *
+ * @param {string} value  Wert aus reminders.remind_at
+ * @returns {number} ms seit Epoch, oder NaN bei unlesbarem Wert
+ */
+function remindAtInstantMs(value) {
+  const raw = String(value ?? '');
+  const normalized = raw.includes('T') ? raw : `${raw}T09:00:00`;
+  return Date.parse(hasExplicitZone(normalized) ? normalized : `${normalized}Z`);
+}
+
+function shiftedDateTimeLike(value, shiftMs) {
+  const shifted = new Date(wallTimeMs(value) + shiftMs).toISOString();
+  const source = String(value);
+  if (DATE_ONLY_RE.test(source)) return shifted.slice(0, 10);
+  const local = shifted.slice(0, /T\d{2}:\d{2}:\d{2}/.test(source) ? 19 : 16);
+  return /Z$/.test(source) ? `${local}Z` : local;
+}
+
+/**
+ * Der Abstand zweier Terminanker auf der ZEITPUNKT-Achse: das Mass, um das eine
+ * Erinnerung mitwandert, wenn ihr Termin verschoben wird.
+ *
+ * NICHT `wallTimeMs()`, obwohl beide Anker Wanduhrzeiten sind (#1300). Der
+ * Wanduhr-Abstand zaehlt Kalendertage, der echte zaehlt Sekunden, und ueber
+ * einer DST-Grenze gehen beide um den Zonenversatz auseinander: zwischen dem
+ * 20.03. und dem 20.07. liegen in Europe/Berlin 122 Wanduhr-Tage, aber nur 121
+ * Tage und 23 Stunden. Auf `remind_at` addiert - eine Spalte, die einen
+ * Zeitpunkt meint - verschob diese Stunde den Vorlauf: aus 60 Minuten wurden 0,
+ * die Erinnerung lag auf dem Terminbeginn. Weil "zum Startzeitpunkt" ein
+ * gueltiges Preset ist, sah das gewollt aus und hat sich nie gemeldet.
+ *
+ * Fuer `start_datetime` bleibt `shiftedDateTimeLike()` oben richtig: eine Serie
+ * um ganze Tage zu schieben heisst, die Wanduhrzeit zu behalten.
+ *
+ * @param {string} sourceAnchor  alter start_datetime (Wanduhrzeit)
+ * @param {string} targetAnchor  neuer start_datetime (Wanduhrzeit)
+ * @param {string} tz  IANA-Zone; der Aufrufer loest sie EINMAL auf (siehe
+ *        `reminderState()`), statt sie hier je Aufruf zu holen
+ * @returns {number} ms, oder NaN wenn ein Anker unlesbar ist
+ */
+function reminderShiftMs(sourceAnchor, targetAnchor, tz) {
+  return reminderAnchorInstantMs(targetAnchor, tz) - reminderAnchorInstantMs(sourceAnchor, tz);
+}
+
+/**
+ * Eine verschobene Erinnerungszeile: `remind_at` als Zeitpunkt gelesen, um
+ * `shiftMs` bewegt und in der Form zurueckgeschrieben, in der sie ankam.
+ */
+function shiftedRemindAt(remindAt, shiftMs) {
+  const shifted = new Date(remindAtInstantMs(remindAt) + shiftMs).toISOString();
+  return /Z$/.test(String(remindAt)) ? shifted : shifted.slice(0, 19);
+}
+
+function firstSlotSeriesChanges(master, selected, changes) {
+  const normalized = { ...changes };
+  const slotShift = wallTimeMs(master.start_datetime) - wallTimeMs(selected.start_datetime);
+  for (const field of ['start_datetime', 'end_datetime']) {
+    if (!Object.hasOwn(changes, field) || changes[field] === null) continue;
+    if (Number.isFinite(slotShift)) {
+      const shifted = shiftedDateTimeLike(changes[field], slotShift);
+      const representationChanged = DATE_ONLY_RE.test(String(master[field] ?? ''))
+        !== DATE_ONLY_RE.test(String(changes[field]));
+      normalized[field] = !representationChanged
+          && wallTimeMs(shifted) === wallTimeMs(master[field])
+        ? master[field]
+        : shifted;
+    }
+  }
+  return normalized;
+}
+
+/**
+ * Der Erinnerungszustand eines Termins als Vorlaeufe - die Form, in der sich
+ * ein Vorkommen und seine Serie vergleichen lassen.
+ *
+ * BEIDE SEITEN LIEGEN AUF DER ZEITPUNKT-ACHSE (#1291). Der Anker ist eine
+ * Wanduhrzeit und muss dafuer umgerechnet werden, `remind_at` ist bereits ein
+ * Zeitpunkt. Lief der Anker durch `wallTimeMs()`, stand in `offsetMs` nicht der
+ * Vorlauf, sondern `Vorlauf + Zonenoffset`, und der Zonenoffset wechselt an der
+ * DST-Grenze: 60 Minuten Vorlauf in der Sommerzeit und 120 in der Winterzeit
+ * ergaben in Europe/Berlin beide 180. `sameReminderState()` meldete sie als
+ * gleich, und der Aufrufer loescht bei "gleich" die Erinnerungen des Kindes -
+ * die abweichende Erinnerung verschwand still.
+ *
+ * DIE ZONE KOMMT VON AUSSEN - DIE REGEL FUER DEN GANZEN ERINNERUNGSPFAD DIESER
+ * DATEI. `householdTimeZone()` ist ein `SELECT` auf `sync_config` plus eine
+ * `Intl`-Pruefung, und diese Helfer stehen in Schleifen: `refreshInheritedChild()`
+ * laeuft ueber JEDES Kind einer Serie, und `reminderState()` wird paarweise
+ * gerufen. Wer die Zone innen holt, bezahlt sie je Aufruf statt je Vorgang.
+ * Deshalb loest der aeusserste Aufrufer sie einmal auf und reicht sie durch -
+ * `reminderShiftMs()`, `shiftOwnedReminders()`, `copyReminderState()`,
+ * `copyResolvedReminderState()`, `replaceReminders()` und `remindAtForOffset()`
+ * halten sich alle daran.
+ *
+ * @param {object} database
+ * @param {number} eventId
+ * @param {string} anchorStart  start_datetime, Wanduhrzeit in der Haushaltszone
+ * @param {string} tz  IANA-Zone aus `householdTimeZone(database)`
+ */
+function reminderState(database, eventId, anchorStart, tz) {
+  const anchor = reminderAnchorInstantMs(anchorStart, tz);
+  if (!Number.isFinite(anchor)) return [];
+  return database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY created_by, assigned_from, remind_at, dismissed
+  `).all(eventId).map((row) => ({
+    offsetMs: anchor - remindAtInstantMs(row.remind_at),
+    dismissed: Number(row.dismissed),
+    createdBy: Number(row.created_by),
+    assignedFrom: row.assigned_from === null ? null : Number(row.assigned_from),
+  }));
+}
+
+function sameReminderState(left, right) {
+  return left.length === right.length && left.every((row, index) => {
+    const other = right[index];
+    return row.offsetMs === other.offsetMs
+      && row.dismissed === other.dismissed
+      && row.createdBy === other.createdBy
+      && row.assignedFrom === other.assignedFrom;
+  });
+}
+
+/**
+ * Der Erinnerungszeitpunkt fuer einen Vorlauf, als naiv-UTC - dieselbe Form,
+ * die der Dialog fuer den ganzen Termin schreibt (`reminderTimesFromOffsets()`
+ * in public/pages/calendar.js) und die die Zustellung gegen die aktuelle
+ * UTC-Zeit haelt (`remind_at <= now`, server/services/notifications.js).
+ *
+ * DER ANKER IST EIN ZEITPUNKT, KEINE WANDUHRZEIT (#1291). Bis hierher lief der
+ * Beginn durch `wallTimeMs()`, das die zonenlose Ortszeit als UTC liest: in
+ * einem Haushalt auf UTC+2 wurde aus "09:00 minus 60 Minuten" die Zeile
+ * `08:00:00`, gelesen als 08:00 UTC und damit 10:00 Ortszeit - eine Stunde NACH
+ * dem Beginn. Westlich von UTC kam die Erinnerung um den Offset zu frueh, in
+ * einem UTC-Haushalt stimmte sie, weshalb es lange nicht aufgefallen ist.
+ */
+function remindAtForOffset(anchorStart, offset, tz) {
+  const anchor = reminderAnchorInstantMs(anchorStart, tz);
+  const result = new Date(anchor - offset * 60000).toISOString();
+  return /Z$/.test(String(anchorStart)) ? result : result.slice(0, 19);
+}
+
+function replaceAssignments(database, eventId, userIds) {
+  const before = assignmentIds(database, eventId);
+  database.prepare('DELETE FROM event_assignments WHERE event_id = ?').run(eventId);
+  const insert = database.prepare(`
+    INSERT OR IGNORE INTO event_assignments (event_id, user_id) VALUES (?, ?)
+  `);
+  for (const userId of userIds) insert.run(eventId, userId);
+  const removed = before.filter((userId) => !userIds.includes(userId));
+  dropInheritedEventReminders(database, eventId, removed);
+  const authorId = eventAuthorId(database, eventId);
+  if (authorId !== null) fanOutEventReminders(database, eventId, authorId, { dropDerivedWhenOwn: true });
+}
+
+function replaceReminders(database, eventId, actorId, anchorStart, offsets, tz) {
+  database.prepare(`
+    DELETE FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND created_by = ?
+  `).run(eventId, actorId);
+  const insert = database.prepare(`
+    INSERT INTO reminders (entity_type, entity_id, remind_at, created_by)
+    VALUES ('event', ?, ?, ?)
+  `);
+  for (const offset of offsets) {
+    insert.run(eventId, remindAtForOffset(anchorStart, offset, tz), actorId);
+  }
+}
+
+/**
+ * Die Erinnerungen einer Serie auf ein Vorkommen kopieren - um den Abstand der
+ * beiden Anker verschoben, damit jede Zeile ihren Vorlauf behaelt (#1300).
+ */
+function copyReminderState(database, sourceId, targetId, sourceAnchor, targetAnchor, tz) {
+  const shift = reminderShiftMs(sourceAnchor, targetAnchor, tz);
+  if (!Number.isFinite(shift)) return;
+  const insert = database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, ?, ?, ?, ?)
+  `);
+  for (const row of database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders WHERE entity_type = 'event' AND entity_id = ?
+  `).all(sourceId)) {
+    insert.run(
+      targetId,
+      shiftedRemindAt(row.remind_at, shift),
+      row.dismissed,
+      row.created_by,
+      row.assigned_from,
+    );
+  }
+}
+
+function pruneInheritedRemindersToAssignments(database, eventId, userIds) {
+  const effective = new Set(userIds.map(Number));
+  const removedRecipients = database.prepare(`
+    SELECT DISTINCT created_by FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
+  `).all(eventId)
+    .map((row) => Number(row.created_by))
+    .filter((userId) => !effective.has(userId));
+  dropInheritedEventReminders(database, eventId, removedRecipients);
+}
+
+/**
+ * Creates or updates one local replacement and its EXDATE in one transaction.
+ * `changes` is already validated route data; omitted properties retain the
+ * existing replacement value or continue inheriting from the master.
+ */
+export function upsertOccurrenceOverride(database, {
+  mayWidenAttachment = () => false,
+  seriesId,
+  recurrenceId,
+  actorId,
+  isAdmin = false,
+  changes = {},
+  assignments,
+  attachment,
+  createAttachment,
+  reminderOffsets: requestedReminderOffsets,
+}) {
+  return runTransaction(database, () => {
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
+    const base = baseOccurrenceFor(master, recurrenceId, householdTimeZone(database));
+    assertOccurrenceSlotCanBeMutated(database, master.id, recurrenceId);
+    const existing = database.prepare(`
+      SELECT * FROM calendar_events
+      WHERE recurrence_parent_id = ? AND recurrence_id = ?
+    `).get(master.id, recurrenceId);
+    const current = existing ? resolveOccurrence(database, existing, master) : base;
+    const existingFields = existing ? parseOverrideFields(existing.overridden_fields) : [];
+    const materialized = { ...current };
+    for (const field of SCALAR_OVERRIDE_FIELDS) {
+      if (Object.hasOwn(changes, field)) {
+        materialized[field] = normalizeScalar(field, changes[field]);
+      }
+    }
+    assertValidEffectiveInterval(materialized);
+
+    const baseAssignments = canonicalIds(assignmentIds(database, master.id));
+    const currentAssignments = existingFields.includes('assignments')
+      ? canonicalIds(assignmentIds(database, existing.id))
+      : baseAssignments;
+    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
+    const effectiveAssignments = assignments === undefined
+      ? currentAssignments
+      : requestedAssignments;
+    const basePrimary = assignmentPrimary(master, baseAssignments);
+    const currentPrimary = existingFields.includes('assignments')
+      ? assignmentPrimary(existing, currentAssignments)
+      : basePrimary;
+    const effectivePrimary = requestedAssignments === undefined
+      ? currentPrimary
+      : requestedAssignments[0] ?? null;
+
+    const baseAttachment = attachmentValues(master);
+    const currentAttachment = existingFields.includes('attachment')
+      ? attachmentValues(existing)
+      : baseAttachment;
+    const createdAttachment = typeof createAttachment === 'function'
+      ? createAttachment()
+      : attachment;
+    const effectiveAttachment = createdAttachment === undefined
+      ? currentAttachment
+      : attachmentValues(createdAttachment);
+
+    const remindersWereOwned = existingFields.includes('reminders');
+
+    const scalarDifferences = new Set(SCALAR_OVERRIDE_FIELDS.filter((field) =>
+      !sameScalar(materialized[field], base[field])
+    ));
+    const assignmentsDiffer = !sameNumberSet(
+      canonicalIds(effectiveAssignments),
+      baseAssignments,
+    ) || effectivePrimary !== basePrimary;
+    const remindersMayDiffer = remindersWereOwned
+      || requestedReminderOffsets !== undefined
+      || assignmentsDiffer;
+    const attachmentDiffers = !sameAttachment(effectiveAttachment, baseAttachment);
+    let fields = OVERRIDE_FIELDS.filter((field) =>
+      scalarDifferences.has(field)
+      || (field === 'assignments' && assignmentsDiffer)
+      || (field === 'attachment' && attachmentDiffers)
+      || (field === 'reminders' && remindersMayDiffer)
+    );
+    if (fields.length === 0) {
+      if (existing) {
+        deleteEventReminders(database, [existing.id]);
+        database.prepare('DELETE FROM calendar_events WHERE id = ?').run(existing.id);
+        database.prepare(`
+          DELETE FROM calendar_event_exceptions
+          WHERE event_id = ? AND exception_date = ?
+        `).run(master.id, recurrenceId);
+      }
+      return { event: base, restored: true };
+    }
+
+    const overriddenFields = JSON.stringify(fields);
+    let childId;
+    if (existing) {
+      database.prepare(`
+        UPDATE calendar_events
+        SET title = ?, description = ?, start_datetime = ?, end_datetime = ?,
+            all_day = ?, location = ?, color = ?, icon = ?, assigned_to = ?,
+            visibility = ?, countdown = ?, attachment_name = ?,
+            attachment_mime = ?, attachment_size = ?, attachment_data = ?,
+            attachment_document_id = ?, recurrence_parent_id = ?, recurrence_id = ?,
+            overridden_fields = ?, local_calendar_id = ?
+        WHERE id = ?
+      `).run(
+        materialized.title,
+        materialized.description ?? null,
+        materialized.start_datetime,
+        materialized.end_datetime ?? null,
+        materialized.all_day ? 1 : 0,
+        materialized.location ?? null,
+        materialized.color ?? null,
+        materialized.icon ?? 'calendar',
+        assignmentsDiffer ? effectivePrimary : (materialized.assigned_to ?? null),
+        materialized.visibility ?? 'all',
+        materialized.countdown ? 1 : 0,
+        effectiveAttachment.attachment_name,
+        effectiveAttachment.attachment_mime,
+        effectiveAttachment.attachment_size,
+        effectiveAttachment.attachment_data,
+        effectiveAttachment.attachment_document_id,
+        master.id,
+        recurrenceId,
+        overriddenFields,
+        master.local_calendar_id ?? null,
+        existing.id,
+      );
+      childId = existing.id;
+    } else {
+      childId = database.prepare(`
+        INSERT INTO calendar_events (
+          title, description, start_datetime, end_datetime, all_day, location,
+          color, icon, assigned_to, created_by, external_source, recurrence_rule,
+          visibility, countdown, attachment_name, attachment_mime, attachment_size,
+          attachment_data, attachment_document_id, recurrence_parent_id,
+          recurrence_id, overridden_fields, local_calendar_id, series_authored
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        materialized.title,
+        materialized.description ?? null,
+        materialized.start_datetime,
+        materialized.end_datetime ?? null,
+        materialized.all_day ? 1 : 0,
+        materialized.location ?? null,
+        materialized.color ?? null,
+        materialized.icon ?? 'calendar',
+        assignmentsDiffer ? effectivePrimary : (materialized.assigned_to ?? null),
+        master.created_by,
+        materialized.visibility ?? 'all',
+        materialized.countdown ? 1 : 0,
+        effectiveAttachment.attachment_name,
+        effectiveAttachment.attachment_mime,
+        effectiveAttachment.attachment_size,
+        effectiveAttachment.attachment_data,
+        effectiveAttachment.attachment_document_id,
+        master.id,
+        recurrenceId,
+        overriddenFields,
+        master.local_calendar_id ?? null,
+      ).lastInsertRowid;
+    }
+
+    replaceAssignments(database, childId, effectiveAssignments);
+    const reminderZone = householdTimeZone(database);
+    if (remindersWereOwned) {
+      shiftOwnedReminders(
+        database,
+        childId,
+        current.start_datetime,
+        materialized.start_datetime,
+        reminderZone,
+      );
+    } else if (remindersMayDiffer) {
+      deleteEventReminders(database, [childId]);
+      copyReminderState(
+        database,
+        master.id,
+        childId,
+        master.start_datetime,
+        materialized.start_datetime,
+        reminderZone,
+      );
+    }
+    if (requestedReminderOffsets !== undefined) {
+      replaceReminders(
+        database,
+        childId,
+        actorId,
+        materialized.start_datetime,
+        canonicalOffsets(requestedReminderOffsets),
+        reminderZone,
+      );
+    }
+    if (remindersMayDiffer) {
+      pruneInheritedRemindersToAssignments(database, childId, effectiveAssignments);
+    }
+    if (remindersMayDiffer) fanOutEventReminders(database, childId, master.created_by, { dropDerivedWhenOwn: true });
+
+    if (remindersMayDiffer && sameReminderState(
+      reminderState(database, childId, materialized.start_datetime, reminderZone),
+      reminderState(database, master.id, master.start_datetime, reminderZone),
+    )) {
+      deleteEventReminders(database, [childId]);
+      fields = fields.filter((field) => field !== 'reminders');
+      if (fields.length === 0) {
+        database.prepare('DELETE FROM calendar_events WHERE id = ?').run(childId);
+        if (existing) {
+          database.prepare(`
+            DELETE FROM calendar_event_exceptions
+            WHERE event_id = ? AND exception_date = ?
+          `).run(master.id, recurrenceId);
+        }
+        return { event: base, restored: true };
+      }
+      database.prepare('UPDATE calendar_events SET overridden_fields = ? WHERE id = ?')
+        .run(JSON.stringify(fields), childId);
+    }
+
+    database.prepare(`
+      INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
+      VALUES (?, ?)
+    `).run(master.id, recurrenceId);
+    const child = loadProjectedEvent(database, childId);
+    if (attachmentDiffers) {
+      syncOwnedAttachmentAccess(
+        database,
+        child.attachment_document_id,
+        child.visibility,
+        effectiveAssignments,
+        mayWidenAttachment,
+        {
+          before: { visibility: current.visibility, userIds: currentAssignments },
+          attachmentSet: createdAttachment !== undefined
+            && !sameAttachment(effectiveAttachment, currentAttachment),
+        },
+      );
+    }
+    return { event: resolveOccurrence(database, child, master), restored: false };
+  });
+}
+
+function deleteEventReminders(database, eventIds) {
+  const ids = [...new Set(eventIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return;
+  database.prepare(`
+    DELETE FROM reminders
+    WHERE entity_type = 'event' AND entity_id IN (${ids.map(() => '?').join(',')})
+  `).run(...ids);
+}
+
+function previousDateKey(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function recurrenceIsEmptyAtAnchor(source, householdZone) {
+  const start = String(source.start_datetime ?? '');
+  // Dieselbe Zonenfrage wie die Expansion, ueber denselben Leser (#1993).
+  const utcDiffersFromLocal = storedDayDiffersFromSeriesDay(start, source.tzid, householdZone);
+  if (!hasAnyOccurrence(start, source.recurrence_rule, { utcDiffersFromLocal })) return true;
+  // Ein Nachfolger, dessen Regel vor seinem eigenen Start endet (#1607). Nur
+  // hier, wo eine Folgeserie GESCHRIEBEN wird - nicht in `hasAnyOccurrence`,
+  // das auch Lesepfade fragen.
+  return !utcDiffersFromLocal && endsBeforeStart(start, source.recurrence_rule);
+}
+
+export function assertSuccessorHasOccurrence(source, householdZone) {
+  if (recurrenceIsEmptyAtAnchor(source, householdZone)) {
+    throw new CalendarOccurrenceError(
+      'The successor recurrence rule has no occurrence on or after its start date.',
+      { status: 400, code: 'empty_successor_series' },
+    );
+  }
+}
+
+function remainingCountRule(master, recurrenceId, householdZone = null) {
+  const count = parseRRule(master.recurrence_rule)?.count ?? null;
+  if (count === null) return master.recurrence_rule;
+  const occurrences = expandRecurringEvents(
+    [master],
+    master.start_datetime.slice(0, 10),
+    recurrenceId,
+    new Map(),
+    {
+      includeRecurrenceIdentity: true,
+      maxIterations: exactLookupIterationLimit(master, recurrenceId),
+      householdZone,
+    },
+  );
+  const selectedIndex = occurrences.findIndex((row) => row.recurrence_identity === recurrenceId);
+  if (selectedIndex < 0) {
+    throw invalidRecurrenceIdentity(
+      'The validated recurrence_id could not be indexed within the bounded series reach.',
+    );
+  }
+  return String(master.recurrence_rule).replace(/COUNT=\d+/i, `COUNT=${count - selectedIndex}`);
+}
+
+function truncateRuleBefore(rule, recurrenceId) {
+  const raw = String(rule ?? '').replace(/^RRULE:/, '');
+  const kept = raw.split(';').filter((segment) =>
+    !/^UNTIL=/i.test(segment) && !/^COUNT=/i.test(segment)
+  );
+  return [...kept, `UNTIL=${previousDateKey(recurrenceId).replaceAll('-', '')}`].join(';');
+}
+
+function linkedChildren(database, seriesId, fromRecurrenceId = null) {
+  if (fromRecurrenceId) {
+    return database.prepare(`
+      SELECT * FROM calendar_events
+      WHERE recurrence_parent_id = ? AND recurrence_id >= ?
+      ORDER BY recurrence_id, id
+    `).all(seriesId, fromRecurrenceId);
+  }
+  return database.prepare(`
+    SELECT * FROM calendar_events
+    WHERE recurrence_parent_id = ?
+    ORDER BY recurrence_id, id
+  `).all(seriesId);
+}
+
+/** Deletes one original slot while leaving the master's EXDATE in place. */
+export function deleteOccurrence(database, {
+  seriesId,
+  recurrenceId,
+  actorId,
+  isAdmin = false,
+}) {
+  return runTransaction(database, () => {
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
+    baseOccurrenceFor(master, recurrenceId, householdTimeZone(database));
+    const child = database.prepare(`
+      SELECT id FROM calendar_events
+      WHERE recurrence_parent_id = ? AND recurrence_id = ?
+    `).get(master.id, recurrenceId);
+    if (child) {
+      deleteEventReminders(database, [child.id]);
+      database.prepare('DELETE FROM calendar_events WHERE id = ?').run(child.id);
+    }
+    database.prepare(`
+      INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
+      VALUES (?, ?)
+    `).run(master.id, recurrenceId);
+    return { eventId: Number(master.id), recurrenceId };
+  });
+}
+
+/** Truncates immediately before an original slot, or deletes from the first slot. */
+export function truncateSeries(database, {
+  seriesId,
+  recurrenceId,
+  actorId,
+  isAdmin = false,
+}) {
+  return runTransaction(database, () => {
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
+    const selected = baseOccurrenceFor(master, recurrenceId, householdTimeZone(database));
+    const futureChildren = linkedChildren(database, master.id, recurrenceId);
+    if (selected.is_series_start) {
+      const allChildren = linkedChildren(database, master.id);
+      deleteEventReminders(database, [master.id, ...allChildren.map((row) => row.id)]);
+      database.prepare('DELETE FROM calendar_events WHERE id = ?').run(master.id);
+      return { wholeSeries: true, eventId: Number(master.id) };
+    }
+
+    deleteEventReminders(database, futureChildren.map((row) => row.id));
+    database.prepare(`
+      DELETE FROM calendar_events
+      WHERE recurrence_parent_id = ? AND recurrence_id >= ?
+    `).run(master.id, recurrenceId);
+    const recurrenceRule = truncateRuleBefore(master.recurrence_rule, recurrenceId);
+    database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+      .run(recurrenceRule, master.id);
+    return { wholeSeries: false, eventId: Number(master.id), recurrenceRule };
+  });
+}
+
+function insertSeriesRow(database, source) {
+  return Number(database.prepare(`
+    INSERT INTO calendar_events (
+      title, description, start_datetime, end_datetime, all_day, location,
+      color, icon, assigned_to, created_by, external_source, recurrence_rule,
+      visibility, countdown, attachment_name, attachment_mime, attachment_size,
+      attachment_data, attachment_document_id, tzid, target_google_calendar_id,
+      target_caldav_account_id, target_caldav_calendar_url,
+      target_outlook_account_id, target_outlook_calendar_id, local_calendar_id, series_authored
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(
+    source.title,
+    source.description ?? null,
+    source.start_datetime,
+    source.end_datetime ?? null,
+    source.all_day ? 1 : 0,
+    source.location ?? null,
+    source.color ?? null,
+    source.icon ?? 'calendar',
+    source.assigned_to ?? null,
+    source.created_by,
+    source.recurrence_rule,
+    source.visibility ?? 'all',
+    source.countdown ? 1 : 0,
+    source.attachment_name ?? null,
+    source.attachment_mime ?? null,
+    source.attachment_size ?? null,
+    source.attachment_data ?? null,
+    source.attachment_document_id ?? null,
+    source.tzid ?? null,
+    source.target_google_calendar_id ?? null,
+    source.target_caldav_account_id ?? null,
+    source.target_caldav_calendar_url ?? null,
+    source.target_outlook_account_id ?? null,
+    source.target_outlook_calendar_id ?? null,
+    source.local_calendar_id ?? null,
+  ).lastInsertRowid);
+}
+
+function scalarDifferencesFromBase(values, base, limitedTo = SCALAR_OVERRIDE_FIELDS) {
+  return limitedTo.filter((field) => !sameScalar(values[field], base[field]));
+}
+
+function refreshReparentedChild(database, child, oldResolved, successor, successorAssignments, tz, mayWidenAttachment = () => false) {
+  database.prepare('UPDATE calendar_events SET local_calendar_id = ? WHERE id = ?').run(successor.local_calendar_id ?? null, child.id);
+  let newBase;
+  try {
+    newBase = baseOccurrenceFor(successor, child.recurrence_id, tz);
+  } catch {
+    throw new CalendarOccurrenceError(
+      'A linked occurrence cannot belong to the successor recurrence rule.',
+      { status: 400, code: 'invalid_successor_override' },
+    );
+  }
+  const oldFields = parseOverrideFields(child.overridden_fields);
+  const values = { ...newBase };
+  for (const field of oldFields) {
+    if (SCALAR_OVERRIDE_FIELDS.includes(field)) values[field] = oldResolved[field];
+  }
+
+  const fields = scalarDifferencesFromBase(values, newBase, oldFields.filter((field) =>
+    SCALAR_OVERRIDE_FIELDS.includes(field)
+  ));
+  const effectiveAssignments = oldFields.includes('assignments')
+    ? canonicalIds(assignmentIds(database, child.id))
+    : successorAssignments;
+  const childPrimary = assignmentPrimary(child, effectiveAssignments);
+  const successorPrimary = assignmentPrimary(successor, successorAssignments);
+  if (!sameNumberSet(effectiveAssignments, successorAssignments)
+      || childPrimary !== successorPrimary) fields.push('assignments');
+  const effectiveAttachment = oldFields.includes('attachment')
+    ? attachmentValues(child)
+    : attachmentValues(successor);
+  if (!sameAttachment(effectiveAttachment, attachmentValues(successor))) fields.push('attachment');
+  if (oldFields.includes('reminders')) {
+    const childState = reminderState(database, child.id, oldResolved.start_datetime, tz);
+    const seriesState = reminderState(database, successor.id, successor.start_datetime, tz);
+    if (!sameReminderState(childState, seriesState)) {
+      fields.push('reminders');
+      shiftOwnedReminders(
+        database,
+        child.id,
+        oldResolved.start_datetime,
+        values.start_datetime,
+        tz,
+      );
+    } else {
+      deleteEventReminders(database, [child.id]);
+    }
+  }
+  const orderedFields = OVERRIDE_FIELDS.filter((field) => fields.includes(field));
+
+  if (orderedFields.length === 0) {
+    deleteEventReminders(database, [child.id]);
+    database.prepare('DELETE FROM calendar_events WHERE id = ?').run(child.id);
+    database.prepare(`
+      DELETE FROM calendar_event_exceptions
+      WHERE event_id = ? AND exception_date = ?
+    `).run(successor.id, child.recurrence_id);
+    return true;
+  }
+
+  database.prepare(`
+    UPDATE calendar_events
+    SET title = ?, description = ?, start_datetime = ?, end_datetime = ?,
+        all_day = ?, location = ?, color = ?, icon = ?, assigned_to = ?,
+        visibility = ?, countdown = ?, attachment_name = ?, attachment_mime = ?,
+        attachment_size = ?, attachment_data = ?, attachment_document_id = ?,
+        recurrence_parent_id = ?, overridden_fields = ?
+    WHERE id = ?
+  `).run(
+    values.title,
+    values.description ?? null,
+    values.start_datetime,
+    values.end_datetime ?? null,
+    values.all_day ? 1 : 0,
+    values.location ?? null,
+    values.color ?? null,
+    values.icon ?? 'calendar',
+    orderedFields.includes('assignments') ? child.assigned_to : successor.assigned_to,
+    values.visibility ?? 'all',
+    values.countdown ? 1 : 0,
+    effectiveAttachment.attachment_name,
+    effectiveAttachment.attachment_mime,
+    effectiveAttachment.attachment_size,
+    effectiveAttachment.attachment_data,
+    effectiveAttachment.attachment_document_id,
+    successor.id,
+    JSON.stringify(orderedFields),
+    child.id,
+  );
+  const assignmentsBefore = canonicalIds(assignmentIds(database, child.id));
+  replaceAssignments(database, child.id, effectiveAssignments);
+  if (orderedFields.includes('attachment')) {
+    syncOwnedAttachmentAccess(
+      database,
+      effectiveAttachment.attachment_document_id,
+      values.visibility,
+      effectiveAssignments,
+      mayWidenAttachment,
+      { before: { visibility: oldResolved.visibility, userIds: assignmentsBefore } },
+    );
+  }
+  return true;
+}
+
+/** Splits a series at one original slot and reparents all later override state. */
+export function splitSeries(database, {
+  mayWidenAttachment = () => false,
+  seriesId,
+  recurrenceId,
+  actorId,
+  isAdmin = false,
+  changes = {},
+  assignments,
+  attachment,
+  createAttachment,
+  cloneAttachment,
+  cloneDetachedAttachment,
+  reminderOffsets: requestedReminderOffsets,
+  confirmedOrphanCount,
+}) {
+  return runTransaction(database, () => {
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin);
+    const seriesZone = householdTimeZone(database);
+    const selectedBase = baseOccurrenceFor(master, recurrenceId, seriesZone);
+    assertOccurrenceSlotCanBeMutated(database, master.id, recurrenceId);
+    if (selectedBase.is_series_start) {
+      const normalizedChanges = firstSlotSeriesChanges(master, selectedBase, changes);
+      assertValidEffectiveInterval({ ...master, ...normalizedChanges });
+      const result = updateSeriesWithOverrides(database, {
+        seriesId,
+        actorId,
+        isAdmin,
+        changes: normalizedChanges,
+        assignments,
+        attachment,
+        createAttachment,
+        cloneDetachedAttachment,
+        mayWidenAttachment,
+        reminderOffsets: requestedReminderOffsets,
+        confirmedOrphanCount,
+      });
+      return { series: result.series, wholeSeries: true };
+    }
+
+    const children = linkedChildren(database, master.id, recurrenceId);
+    const resolvedById = new Map(children.map((row) => [
+      Number(row.id),
+      resolveOccurrence(database, row, master),
+    ]));
+    const selectedChild = children.find((row) => row.recurrence_id === recurrenceId);
+    const selectedResolved = selectedChild
+      ? resolvedById.get(Number(selectedChild.id))
+      : selectedBase;
+    const successorValues = { ...selectedResolved };
+    for (const field of SCALAR_OVERRIDE_FIELDS) {
+      if (Object.hasOwn(changes, field)) successorValues[field] = normalizeScalar(field, changes[field]);
+    }
+    for (const field of [
+      'local_calendar_id',
+      'target_google_calendar_id',
+      'target_caldav_account_id',
+      'target_caldav_calendar_url',
+      'target_outlook_account_id',
+      'target_outlook_calendar_id',
+    ]) {
+      if (Object.hasOwn(changes, field)) successorValues[field] = changes[field] ?? null;
+    }
+    successorValues.recurrence_rule = Object.hasOwn(changes, 'recurrence_rule')
+      && changes.recurrence_rule !== master.recurrence_rule
+      ? changes.recurrence_rule
+      : remainingCountRule(master, recurrenceId, seriesZone);
+    successorValues.recurrence_parent_id = null;
+    successorValues.recurrence_id = null;
+    successorValues.overridden_fields = null;
+    successorValues.created_by = master.created_by;
+
+    const selectedFields = selectedChild ? parseOverrideFields(selectedChild.overridden_fields) : [];
+    const requestedAssignments = assignments === undefined ? undefined : orderedIds(assignments);
+    const selectedAssignments = selectedFields.includes('assignments')
+      ? canonicalIds(assignmentIds(database, selectedChild.id))
+      : canonicalIds(assignmentIds(database, master.id));
+    const successorAssignments = requestedAssignments === undefined
+      ? selectedAssignments
+      : requestedAssignments;
+    successorValues.assigned_to = requestedAssignments === undefined
+      ? selectedFields.includes('assignments')
+        ? assignmentPrimary(selectedChild, successorAssignments)
+        : assignmentPrimary(master, successorAssignments)
+      : requestedAssignments[0] ?? null;
+
+    assertValidEffectiveInterval(successorValues);
+    assertSuccessorHasOccurrence(successorValues, seriesZone);
+    const futureChildren = children.filter((child) =>
+      !selectedChild || Number(child.id) !== Number(selectedChild.id));
+    const orphans = classifyOrphans(
+      futureChildren,
+      successorValues,
+      hasOutboundTarget(successorValues)
+        || hasConfiguredOutlookAutoSyncTarget(database, successorValues, successorAssignments),
+      seriesZone,
+    );
+    const confirmationSupplied = confirmedOrphanCount !== undefined;
+    if ((orphans.length > 0 || confirmationSupplied)
+        && confirmedOrphanCount !== orphans.length) {
+      throw orphanConflict(orphans.length);
+    }
+    const orphanIds = new Set(orphans.map((child) => Number(child.id)));
+    const futureExceptions = database.prepare(`
+      SELECT exception_date FROM calendar_event_exceptions
+      WHERE event_id = ? AND exception_date >= ?
+      ORDER BY exception_date
+    `).all(master.id, recurrenceId);
+    const transferableExceptions = futureExceptions.filter((exception) =>
+      exception.exception_date !== recurrenceId);
+
+    const inheritedDocumentId = !selectedFields.includes('attachment')
+      ? Number(master.attachment_document_id)
+      : null;
+    const inheritedDocumentExists = attachmentDocumentExists(database, inheritedDocumentId);
+    const detachedCloneRequests = detachedAttachmentCloneRequests(database, orphans, master);
+    const cloneRequests = [];
+    const successorInheritsDocument = createAttachment === undefined
+      && attachment === undefined
+      && inheritedDocumentExists;
+    if (successorInheritsDocument && typeof cloneAttachment !== 'function') {
+      cloneRequests.push({
+        owner: 'successor',
+        sourceDocumentId: inheritedDocumentId,
+        attachment: attachmentValues(master),
+      });
+    }
+    if (detachedCloneRequests.length > 0 && typeof cloneDetachedAttachment !== 'function') {
+      cloneRequests.push(...detachedCloneRequests);
+    }
+    if (cloneRequests.length > 0) {
+      throw new CalendarAttachmentCloneRequiredError(cloneRequests);
+    }
+    const claimedDocumentIds = new Set([
+      Number(master.attachment_document_id),
+      ...children.map((child) => Number(child.attachment_document_id)),
+    ].filter((documentId) => Number.isInteger(documentId) && documentId > 0));
+    const createdAttachment = typeof createAttachment === 'function'
+      ? createAttachment()
+      : attachment;
+    const clonedAttachment = createdAttachment === undefined && inheritedDocumentExists
+      ? independentAttachmentValues(
+          database,
+          cloneAttachment(inheritedDocumentId),
+          inheritedDocumentId,
+          claimedDocumentIds,
+        )
+      : undefined;
+    const successorAttachment = createdAttachment === undefined
+      ? selectedFields.includes('attachment')
+        ? attachmentValues(selectedChild)
+        : attachmentValues(clonedAttachment ?? master)
+      : attachmentValues(createdAttachment);
+    Object.assign(successorValues, successorAttachment);
+
+    // Die Zone des Haushalts einmal je Vorgang, nicht je Kind: siehe die Regel
+    // am Docblock von `reminderState()`.
+    const reminderZone = householdTimeZone(database);
+    for (const child of orphans) {
+      materializeDetachedChild(database, child, master, {
+        cloneDetachedAttachment,
+        claimedDocumentIds,
+        tz: reminderZone,
+        mayWidenAttachment,
+      });
+    }
+    database.prepare('UPDATE calendar_events SET recurrence_rule = ? WHERE id = ?')
+      .run(truncateRuleBefore(master.recurrence_rule, recurrenceId), master.id);
+    const successorId = insertSeriesRow(database, successorValues);
+    replaceAssignments(database, successorId, successorAssignments);
+    const reminderSource = selectedFields.includes('reminders') ? selectedChild : master;
+    copyResolvedReminderState(database, {
+      sourceEventId: reminderSource.id,
+      targetEventId: successorId,
+      sourceAnchor: selectedFields.includes('reminders')
+        ? selectedResolved.start_datetime
+        : master.start_datetime,
+      targetAnchor: successorValues.start_datetime,
+      tz: reminderZone,
+    });
+    if (requestedReminderOffsets !== undefined) {
+      replaceReminders(
+        database,
+        successorId,
+        actorId,
+        successorValues.start_datetime,
+        canonicalOffsets(requestedReminderOffsets),
+        reminderZone,
+      );
+    }
+    fanOutEventReminders(database, successorId, master.created_by, { dropDerivedWhenOwn: true });
+    const insertException = database.prepare(`
+      INSERT OR IGNORE INTO calendar_event_exceptions (event_id, exception_date)
+      VALUES (?, ?)
+    `);
+    for (const exception of transferableExceptions) {
+      insertException.run(successorId, exception.exception_date);
+    }
+    database.prepare(`
+      DELETE FROM calendar_event_exceptions
+      WHERE event_id = ? AND exception_date >= ?
+    `).run(master.id, recurrenceId);
+    database.prepare(`
+      UPDATE calendar_events SET recurrence_parent_id = ?
+      WHERE recurrence_parent_id = ? AND recurrence_id >= ?
+    `).run(successorId, master.id, recurrenceId);
+
+    const successor = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(successorId);
+    syncOwnedAttachmentAccess(
+      database,
+      successor.attachment_document_id,
+      successor.visibility,
+      successorAssignments,
+      mayWidenAttachment,
+      {
+        // Verglichen wird mit dem Publikum, dem das Dokument bisher folgte: dem
+        // des Serientermins, wenn er den Anhang selbst trug, sonst dem des
+        // Serienkopfs - eine geerbte Kopie folgt einem engeren Termin (Review #1443).
+        before: selectedFields.includes('attachment')
+          ? { visibility: selectedResolved.visibility, userIds: selectedAssignments }
+          : { visibility: master.visibility, userIds: canonicalIds(assignmentIds(database, master.id)) },
+        attachmentSet: createdAttachment !== undefined,
+      },
+    );
+    for (const child of children) {
+      if (orphanIds.has(Number(child.id))) continue;
+      if (selectedChild && Number(child.id) === Number(selectedChild.id)) {
+        deleteEventReminders(database, [child.id]);
+        database.prepare('DELETE FROM calendar_events WHERE id = ?').run(child.id);
+        database.prepare(`
+          DELETE FROM calendar_event_exceptions
+          WHERE event_id = ? AND exception_date = ?
+        `).run(successorId, recurrenceId);
+        continue;
+      }
+      refreshReparentedChild(
+        database,
+        { ...child, recurrence_parent_id: successorId },
+        resolvedById.get(Number(child.id)),
+        successor,
+        successorAssignments,
+        reminderZone,
+        mayWidenAttachment,
+      );
+    }
+    return {
+      series: loadProjectedEvent(database, successorId),
+      wholeSeries: false,
+      orphanedOverrideCount: orphans.length,
+    };
+  });
+}
+
+const SERIES_UPDATE_FIELDS = Object.freeze([
+  ...SCALAR_OVERRIDE_FIELDS,
+  'local_calendar_id',
+  'recurrence_rule',
+  'target_google_calendar_id',
+  'target_caldav_account_id',
+  'target_caldav_calendar_url',
+  'target_outlook_account_id',
+  'target_outlook_calendar_id',
+]);
+
+function hasOutboundTarget(row) {
+  return row.target_google_calendar_id != null
+    || row.target_caldav_account_id != null
+    || row.target_caldav_calendar_url != null
+    || row.target_outlook_account_id != null
+    || row.target_outlook_calendar_id != null;
+}
+
+function orphanConflict(count) {
+  return new CalendarOccurrenceError(
+    'Edited occurrences no longer fit this recurrence rule.',
+    {
+      status: 409,
+      code: 'calendar_override_orphans',
+      conflict: 'calendar_override_orphans',
+      orphanedOverrideCount: count,
+    },
+  );
+}
+
+function classifyOrphans(children, proposed, detachAll, householdZone = null) {
+  if (detachAll) return children;
+  return children.filter((child) => {
+    try {
+      baseOccurrenceFor(proposed, child.recurrence_id, householdZone);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+/**
+ * Wie `copyReminderState()`, nur fuer den aufgeloesten Zustand eines Kindes:
+ * die geerbten Zeilen des Ziels werden ersetzt, die eigenen bleiben.
+ *
+ * Der Riegel auf `shift` steht VOR dem Loeschen, nicht erst vor dem Einfuegen
+ * (#1300): ein unlesbarer Anker heisst "diese Kopie ueberspringen", und ein
+ * Loeschen ohne die nachfolgende Kopie liesse das Ziel schlechter zurueck, als
+ * es war. Bis #1300 fehlte er hier ganz, waehrend `copyReminderState()` ihn
+ * hatte - dieselbe Rechnung, zwei verschiedene Antworten auf denselben Fall.
+ */
+function copyResolvedReminderState(database, {
+  sourceEventId,
+  targetEventId,
+  sourceAnchor,
+  targetAnchor,
+  tz,
+}) {
+  const shift = reminderShiftMs(sourceAnchor, targetAnchor, tz);
+  if (!Number.isFinite(shift)) return;
+  const rows = database.prepare(`
+    SELECT remind_at, dismissed, created_by, assigned_from
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+    ORDER BY id
+  `).all(sourceEventId);
+  const targetOwn = new Set(database.prepare(`
+    SELECT DISTINCT created_by
+    FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NULL
+  `).all(targetEventId).map((row) => Number(row.created_by)));
+  const targetAssignees = new Set(assignmentIds(database, targetEventId).map(Number));
+  database.prepare(`
+    DELETE FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ? AND assigned_from IS NOT NULL
+  `).run(targetEventId);
+  const insert = database.prepare(`
+    INSERT INTO reminders
+      (entity_type, entity_id, remind_at, dismissed, created_by, assigned_from)
+    VALUES ('event', ?, ?, ?, ?, ?)
+  `);
+  for (const row of rows) {
+    const createdBy = Number(row.created_by);
+    if (targetOwn.has(createdBy)) continue;
+    if (row.assigned_from !== null && !targetAssignees.has(createdBy)) continue;
+    insert.run(
+      targetEventId,
+      shiftedRemindAt(row.remind_at, shift),
+      row.dismissed,
+      createdBy,
+      row.assigned_from,
+    );
+  }
+}
+
+function materializeDetachedChild(database, child, master, {
+  cloneDetachedAttachment,
+  claimedDocumentIds,
+  tz,
+  mayWidenAttachment = () => false,
+} = {}) {
+  const fields = parseOverrideFields(child.overridden_fields);
+  const resolved = resolveOccurrence(database, child, master);
+  const effectiveAssignments = fields.includes('assignments')
+    ? canonicalIds(assignmentIds(database, child.id))
+    : canonicalIds(assignmentIds(database, master.id));
+  if (!fields.includes('assignments')) {
+    replaceAssignments(database, child.id, effectiveAssignments);
+  }
+  if (!fields.includes('reminders')) {
+    copyResolvedReminderState(database, {
+      sourceEventId: master.id,
+      targetEventId: child.id,
+      sourceAnchor: master.start_datetime,
+      targetAnchor: resolved.start_datetime,
+      tz,
+    });
+  }
+  fanOutEventReminders(database, child.id, master.created_by, { dropDerivedWhenOwn: true });
+  const inheritsAttachment = !fields.includes('attachment')
+    && attachmentDocumentExists(database, resolved.attachment_document_id);
+  const detachedAttachment = inheritsAttachment
+    ? independentAttachmentValues(
+        database,
+        cloneDetachedAttachment(child.id, Number(resolved.attachment_document_id)),
+        resolved.attachment_document_id,
+        claimedDocumentIds,
+      )
+    : attachmentValues(resolved);
+  database.prepare(`
+    UPDATE calendar_events
+    SET title = ?, description = ?, start_datetime = ?, end_datetime = ?,
+        all_day = ?, location = ?, color = ?, icon = ?, assigned_to = ?,
+        visibility = ?, countdown = ?, attachment_name = ?, attachment_mime = ?,
+        attachment_size = ?, attachment_data = ?, attachment_document_id = ?,
+        recurrence_parent_id = NULL, recurrence_id = NULL, overridden_fields = NULL
+    WHERE id = ?
+  `).run(
+    resolved.title,
+    resolved.description ?? null,
+    resolved.start_datetime,
+    resolved.end_datetime ?? null,
+    resolved.all_day ? 1 : 0,
+    resolved.location ?? null,
+    resolved.color ?? null,
+    resolved.icon ?? 'calendar',
+    resolved.assigned_to ?? null,
+    resolved.visibility ?? 'all',
+    resolved.countdown ? 1 : 0,
+    detachedAttachment.attachment_name,
+    detachedAttachment.attachment_mime,
+    detachedAttachment.attachment_size,
+    detachedAttachment.attachment_data,
+    detachedAttachment.attachment_document_id,
+    child.id,
+  );
+  if (inheritsAttachment) {
+    syncOwnedAttachmentAccess(
+      database,
+      detachedAttachment.attachment_document_id,
+      resolved.visibility,
+      effectiveAssignments,
+      mayWidenAttachment,
+      // Die Kopie traegt die Rechte der Quelle, und die folgte dem Serienkopf:
+      // abgeglichen wird, wenn der abgeloeste Termin ein anderes Publikum hat
+      // als der Serienkopf (Review #1443).
+      { before: { visibility: master.visibility, userIds: canonicalIds(assignmentIds(database, master.id)) } },
+    );
+  }
+}
+
+function applySeriesChanges(database, seriesId, changes) {
+  const entries = SERIES_UPDATE_FIELDS
+    .filter((field) => Object.hasOwn(changes, field))
+    .map((field) => [field, normalizeScalar(field, changes[field])]);
+  if (entries.length === 0) return;
+  database.prepare(`
+    UPDATE calendar_events
+    SET ${entries.map(([field]) => `${field} = ?`).join(', ')}
+    WHERE id = ?
+  `).run(...entries.map(([, value]) => value), seriesId);
+}
+
+/**
+ * Die eigenen Erinnerungen eines Termins mitnehmen, wenn er verschoben wird.
+ *
+ * Verschoben wird um den Abstand der beiden Anker auf der Zeitpunkt-Achse: der
+ * Vorlauf bleibt, die Uhrzeit darf sich aendern (#1300).
+ *
+ * DER RIEGEL FRAGT DEN ANKER, NICHT DAS ERGEBNIS. Gespart werden soll die
+ * Abfrage in dem Fall, der in der Kinderschleife von `updateSeriesWithOverrides()`
+ * der haeufige ist: der Termin hat sich gar nicht bewegt, weil nur Titel oder
+ * Farbe geaendert wurden. Dafuer taugt allein ein UNVERAENDERTER Anker als
+ * Merkmal. `shift === 0` war das falsche: die Umrechnung ist an einer
+ * DST-Grenze nicht eindeutig, und dann liefert eine echte Verschiebung
+ * ebenfalls 0 - der Termin bewegte sich, die Erinnerung nicht, und ihr Vorlauf
+ * wuchs still um eine Stunde. Bleibt `shift` heute 0, obwohl der Anker sich
+ * geaendert hat, schreibt die Schleife dieselben Zeitpunkte zurueck; das kostet
+ * eine Abfrage und behauptet nichts Falsches.
+ */
+function shiftOwnedReminders(database, eventId, oldAnchor, newAnchor, tz) {
+  if (String(oldAnchor ?? '') === String(newAnchor ?? '')) return;
+  const shift = reminderShiftMs(oldAnchor, newAnchor, tz);
+  if (!Number.isFinite(shift)) return;
+  const rows = database.prepare(`
+    SELECT id, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+  `).all(eventId);
+  const update = database.prepare('UPDATE reminders SET remind_at = ? WHERE id = ?');
+  for (const row of rows) {
+    update.run(shiftedRemindAt(row.remind_at, shift), row.id);
+  }
+}
+
+/**
+ * Die Erinnerungen eines Termins mitnehmen, den ein Anbieter verschoben hat
+ * (#1377) - die EINE Stelle fuer jeden Inbound (Google, CalDAV, Apple, ICS-Abo).
+ *
+ * Bis hierher schrieben die Inbounds `start_datetime` neu und liessen
+ * `reminders.remind_at` stehen. Die Zustellung haelt den absoluten Zeitpunkt
+ * gegen die Uhr, also kam "1 Stunde vorher" nach einer Verschiebung in Google
+ * zur alten Zeit - bei einem nach vorn gezogenen Termin erst nach seinem Beginn.
+ *
+ * DIE VERSCHIEBUNG IST DIESELBE WIE IN YUVOMI: `shiftOwnedReminders()`, also der
+ * Abstand der beiden Anker auf der Zeitpunkt-Achse (#1300), fuer jede Zeile des
+ * Termins - eigene und geerbte (#921). Ganztag rechnet ueber denselben Anker
+ * (09:00 der Haushaltszone), eine Serie haengt ihre Erinnerungen am Master, und
+ * ein eingelesenes Einzelvorkommen ist eine eigene Zeile mit eigener ID.
+ *
+ * DER ZUSTELLSTAND FOLGT DEM DIALOG, NICHT DER SERIEN-ROUTE. Ein eingelesener
+ * Termin wird in Yuvomi ueber den Einzeltermin-Weg verschoben, und dort schreibt
+ * der Dialog die Erinnerungen frisch (`PUT /reminders`), `fanOutEventReminders()`
+ * behandelt eine andere Uhrzeit ebenso als neue Auskunft. Deshalb meldet sich
+ * eine schon zugestellte oder weggeklickte Erinnerung wieder, wenn sie in die
+ * Zukunft wandert. Landet sie in der Vergangenheit, bleibt ihr Stand: eine
+ * zweite Meldung zu einem Zeitpunkt, der vorbei ist, waere keine Auskunft mehr.
+ *
+ * WIEDER SCHARF WIRD NUR, WAS SICH BEWEGT HAT - gemessen am Zeitpunkt der Zeile
+ * vor und nach dem Verschieben, nicht am Start-String. Ein Anbieter darf
+ * denselben Beginn anders schreiben (`10:00Z` als `12:00+02:00`, mit oder ohne
+ * Sekunden); der Riegel oben laesst das durch, und ohne diesen Vergleich kam
+ * eine schon zugestellte Erinnerung ein zweites Mal, obwohl nichts verschoben
+ * wurde (Review-Befund nach #1386).
+ *
+ * Synchron und ohne eigene Transaktion: die Inbounds rufen es direkt nach ihrem
+ * UPDATE, ohne Yield-Punkt dazwischen.
+ *
+ * @param {object} database
+ * @param {number} eventId
+ * @param {string} oldStart  start_datetime vor dem Inbound
+ * @param {string} newStart  start_datetime, wie der Inbound ihn geschrieben hat
+ * @param {{ tz?: string, nowMs?: number }} [options]
+ */
+export function followInboundStartChange(database, eventId, oldStart, newStart, {
+  tz,
+  nowMs = Date.now(),
+} = {}) {
+  if (String(oldStart ?? '') === String(newStart ?? '')) return;
+  const settledRows = database.prepare(`
+    SELECT id, remind_at FROM reminders
+    WHERE entity_type = 'event' AND entity_id = ?
+      AND (pushed_at IS NOT NULL OR dismissed = 1)
+  `);
+  const before = new Map(settledRows.all(eventId)
+    .map((row) => [row.id, remindAtInstantMs(row.remind_at)]));
+  shiftOwnedReminders(database, eventId, oldStart, newStart, tz ?? householdTimeZone(database));
+  const rearm = database.prepare(
+    'UPDATE reminders SET pushed_at = NULL, dismissed = 0 WHERE id = ?'
+  );
+  for (const row of settledRows.all(eventId)) {
+    const instant = remindAtInstantMs(row.remind_at);
+    if (instant !== before.get(row.id) && instant > nowMs) rearm.run(row.id);
+  }
+}
+
+function refreshInheritedChild(database, child, oldResolved, updatedMaster, tz, mayWidenAttachment = () => false) {
+  const fields = parseOverrideFields(child.overridden_fields);
+  const newBase = baseOccurrenceFor(updatedMaster, child.recurrence_id, tz);
+  const values = { ...newBase };
+  for (const field of fields) {
+    if (SCALAR_OVERRIDE_FIELDS.includes(field)) values[field] = oldResolved[field];
+  }
+  const ownsAssignments = fields.includes('assignments');
+  const ownsAttachment = fields.includes('attachment');
+  const assignmentsBefore = canonicalIds(assignmentIds(database, child.id));
+  const effectiveAssignments = ownsAssignments
+    ? assignmentsBefore
+    : canonicalIds(assignmentIds(database, updatedMaster.id));
+  if (!ownsAssignments) {
+    replaceAssignments(database, child.id, effectiveAssignments);
+  }
+  if (fields.includes('reminders')) {
+    shiftOwnedReminders(
+      database,
+      child.id,
+      oldResolved.start_datetime,
+      values.start_datetime,
+      tz,
+    );
+  }
+  const effectiveAttachment = ownsAttachment
+    ? attachmentValues(child)
+    : attachmentValues(updatedMaster);
+
+  database.prepare(`
+    UPDATE calendar_events
+    SET title = ?, description = ?, start_datetime = ?, end_datetime = ?,
+        all_day = ?, location = ?, color = ?, icon = ?, assigned_to = ?,
+        visibility = ?, countdown = ?, attachment_name = ?, attachment_mime = ?,
+        attachment_size = ?, attachment_data = ?, attachment_document_id = ?
+    WHERE id = ?
+  `).run(
+    values.title,
+    values.description ?? null,
+    values.start_datetime,
+    values.end_datetime ?? null,
+    values.all_day ? 1 : 0,
+    values.location ?? null,
+    values.color ?? null,
+    values.icon ?? 'calendar',
+    ownsAssignments ? child.assigned_to : (updatedMaster.assigned_to ?? null),
+    values.visibility ?? 'all',
+    values.countdown ? 1 : 0,
+    effectiveAttachment.attachment_name,
+    effectiveAttachment.attachment_mime,
+    effectiveAttachment.attachment_size,
+    effectiveAttachment.attachment_data,
+    effectiveAttachment.attachment_document_id,
+    child.id,
+  );
+  if (ownsAttachment) {
+    syncOwnedAttachmentAccess(
+      database,
+      effectiveAttachment.attachment_document_id,
+      values.visibility,
+      effectiveAssignments,
+      mayWidenAttachment,
+      { before: { visibility: oldResolved.visibility, userIds: assignmentsBefore } },
+    );
+  }
+}
+
+/** Applies a whole-series update with exact-count orphan confirmation. */
+export function updateSeriesWithOverrides(database, {
+  mayWidenAttachment = () => false,
+  seriesId,
+  actorId,
+  isAdmin = false,
+  changes = {},
+  assignments,
+  attachment,
+  createAttachment,
+  cloneDetachedAttachment,
+  reminderOffsets: requestedReminderOffsets,
+  confirmedOrphanCount,
+  applyUpdate,
+  authorizeActor = true,
+}) {
+  return runTransaction(database, () => {
+    const master = loadSeriesForMutation(database, seriesId, actorId, isAdmin, authorizeActor);
+    const current = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(master.id);
+    const proposed = { ...current };
+    for (const field of SERIES_UPDATE_FIELDS) {
+      if (Object.hasOwn(changes, field)) proposed[field] = normalizeScalar(field, changes[field]);
+    }
+    const children = linkedChildren(database, master.id);
+    const resolvedById = new Map(children.map((child) => [
+      Number(child.id),
+      resolveOccurrence(database, child, current),
+    ]));
+    const currentAssignments = canonicalIds(assignmentIds(database, master.id));
+    const proposedAssignments = assignments === undefined
+      ? currentAssignments
+      : orderedIds(assignments);
+    const detachAll = (!hasOutboundTarget(current) && hasOutboundTarget(proposed))
+      || (!hasConfiguredOutlookAutoSyncTarget(database, current, currentAssignments)
+        && hasConfiguredOutlookAutoSyncTarget(database, proposed, proposedAssignments));
+    const orphans = classifyOrphans(children, proposed, detachAll, householdTimeZone(database));
+    const confirmationSupplied = confirmedOrphanCount !== undefined;
+    if ((orphans.length > 0 || confirmationSupplied)
+        && confirmedOrphanCount !== orphans.length) {
+      throw orphanConflict(orphans.length);
+    }
+
+    const detachedCloneRequests = detachedAttachmentCloneRequests(database, orphans, current);
+    if (detachedCloneRequests.length > 0 && typeof cloneDetachedAttachment !== 'function') {
+      throw new CalendarAttachmentCloneRequiredError(detachedCloneRequests);
+    }
+    const claimedDocumentIds = new Set([
+      Number(current.attachment_document_id),
+      ...children.map((child) => Number(child.attachment_document_id)),
+    ].filter((documentId) => Number.isInteger(documentId) && documentId > 0));
+
+    // Die Zone des Haushalts einmal je Vorgang, nicht je Kind: die Schleife
+    // unten laeuft ueber jedes Kind der Serie (siehe `reminderState()`).
+    const reminderZone = householdTimeZone(database);
+    for (const child of orphans) {
+      materializeDetachedChild(database, child, current, {
+        cloneDetachedAttachment,
+        claimedDocumentIds,
+        tz: reminderZone,
+        mayWidenAttachment,
+      });
+    }
+    if (typeof applyUpdate === 'function') applyUpdate(database, current);
+    else applySeriesChanges(database, master.id, changes);
+    if (Object.hasOwn(changes, 'local_calendar_id')) {
+      database.prepare('UPDATE calendar_events SET local_calendar_id = ? WHERE recurrence_parent_id = ?')
+        .run(changes.local_calendar_id ?? null, master.id);
+    }
+    const updatedAnchor = database.prepare(
+      'SELECT start_datetime FROM calendar_events WHERE id = ?'
+    ).get(master.id).start_datetime;
+    shiftOwnedReminders(database, master.id, current.start_datetime, updatedAnchor, reminderZone);
+    if (assignments !== undefined) {
+      const userIds = orderedIds(assignments);
+      database.prepare('UPDATE calendar_events SET assigned_to = ? WHERE id = ?')
+        .run(userIds[0] ?? null, master.id);
+      replaceAssignments(database, master.id, userIds);
+    }
+    const createdAttachment = typeof createAttachment === 'function'
+      ? createAttachment()
+      : attachment;
+    if (createdAttachment !== undefined) {
+      const values = attachmentValues(createdAttachment);
+      database.prepare(`
+        UPDATE calendar_events
+        SET attachment_name = ?, attachment_mime = ?, attachment_size = ?,
+            attachment_data = ?, attachment_document_id = ?
+        WHERE id = ?
+      `).run(
+        values.attachment_name,
+        values.attachment_mime,
+        values.attachment_size,
+        values.attachment_data,
+        values.attachment_document_id,
+        master.id,
+      );
+    }
+    if (requestedReminderOffsets !== undefined) {
+      const anchor = database.prepare('SELECT start_datetime FROM calendar_events WHERE id = ?')
+        .get(master.id).start_datetime;
+      replaceReminders(
+        database,
+        master.id,
+        actorId,
+        anchor,
+        canonicalOffsets(requestedReminderOffsets),
+        reminderZone,
+      );
+      fanOutEventReminders(database, master.id, master.created_by, { dropDerivedWhenOwn: true });
+    }
+    const updated = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(master.id);
+    if (createdAttachment !== undefined) {
+      syncOwnedAttachmentAccess(
+        database,
+        updated.attachment_document_id,
+        updated.visibility,
+        canonicalIds(assignmentIds(database, master.id)),
+        mayWidenAttachment,
+        { before: { visibility: current.visibility, userIds: currentAssignments }, attachmentSet: true },
+      );
+    }
+    const orphanIds = new Set(orphans.map((child) => Number(child.id)));
+    for (const child of children) {
+      if (!orphanIds.has(Number(child.id))) {
+        refreshInheritedChild(
+          database,
+          child,
+          resolvedById.get(Number(child.id)),
+          updated,
+          reminderZone,
+          mayWidenAttachment,
+        );
+      }
+    }
+
+    // A deleted or detached slot stays suppressed even if a temporary rule
+    // cannot reach it; a later rule change must not resurrect the master slot.
+
+    return {
+      series: loadProjectedEvent(database, master.id),
+      orphanedOverrideCount: orphans.length,
+    };
+  });
+}

@@ -1,0 +1,4171 @@
+/**
+ * Modul: Einstellungen (Settings)
+ * Zweck: Styles für die Settings-Seite
+ * Abhängigkeiten: tokens.css, layout.css
+ */
+
+/* --------------------------------------------------------
+ * Modul-Akzent
+ * -------------------------------------------------------- */
+.settings-page { --module-accent: var(--module-settings); }
+
+/* --------------------------------------------------------
+   Seiten-Layout
+   -------------------------------------------------------- */
+
+/* Die Seite polstert nichts: der Kopf (.page-toolbar) ist full-bleed und
+ * rueckt ueber --page-inline-pad selbst ein, der Koerper traegt dieselbe Kante
+ * (#577, Vertrag in tokens.css). Bis 2026-09-26 lag hier `.page` mit 16/32/40px
+ * Polster und eigener Breite - der geteilte Kopf haette darin doppelt
+ * eingerueckt. */
+.settings-page__body {
+  padding-block: var(--space-4) var(--space-8);
+  padding-inline: var(--page-inline-pad);
+}
+
+@media (min-width: 1024px) {
+  .settings-page__body {
+    padding-block-start: var(--space-8);
+  }
+}
+
+/* --------------------------------------------------------
+   Responsive Settings Shell
+   -------------------------------------------------------- */
+
+.settings-shell {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.settings-shell__navigation,
+.settings-shell__content {
+  min-width: 0;
+}
+
+.settings-shell__navigation {
+  padding: var(--space-3);
+  /* Randlose Karte auf dem Grouped-Grund (tokens.css, Kasten-in-Kasten). */
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-shell__navigation-group + .settings-shell__navigation-group {
+  margin-top: var(--space-5);
+}
+
+/* --------------------------------------------------------
+   Blatt-Suche in der Navigation
+   -------------------------------------------------------- */
+
+/* Das geteilte Suchfeld der Shell (renderPageSearch, gefuellte Kapsel) - bis
+ * 2026-09-26 ein eigenes `form-input`, dessen Platzhalter im 196px-Traeger
+ * abgeschnitten stand (Critique A7). Hier nur der Abstand; das Aussehen
+ * gehoert page-search.css. */
+.settings-shell__navigation-search {
+  margin-bottom: var(--space-3);
+}
+
+.settings-shell__navigation-status {
+  margin: 0 var(--space-2) var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Die Trefferliste ersetzt die Domaenengruppen: ohne sie fehlt der Ort, daher
+   traegt jeder Treffer seine Domaene als zweite Zeile - in derselben Spalte wie
+   das Label, damit ein langer Name das Icon nicht verdraengt. */
+/* Spezifischer als die Basisregel des Links weiter unten: das Icon gehoert auf
+   die Hoehe des Labels, nicht in die Mitte zwischen Label und Domaene. */
+.settings-shell__navigation-results .settings-shell__navigation-result {
+  align-items: flex-start;
+}
+
+.settings-shell__navigation-result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-shell__navigation-result-domain {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.settings-shell__navigation-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-2) var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+.settings-shell__navigation-group--active .settings-shell__navigation-heading {
+  color: var(--color-accent);
+}
+
+/* ── DIE MARKE EINES BLATTES ──
+ * Drei Orte zeigen dieselbe Liste (Seitenleiste, mobile Uebersicht,
+ * Desktop-Uebersicht), also tragen sie dieselbe Marke - je in ihrer Groesse.
+ * Wer ein Modul nennt, bekommt `vivid-mark` dazu und traegt dessen Ton im
+ * Vollton; wer keines nennt, bleibt auf dieser neutralen Grundform stehen.
+ * Die Zuordnung steht im `module`-Feld der Registry, die Regel in DESIGN.md
+ * (Colors, Vollton-Regel). */
+.settings-shell__navigation-link-icon {
+  display: grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  flex: 0 0 auto;
+  border-radius: var(--radius-xs);
+}
+
+/* SEIT R19 TRAEGT JEDE MARKE `.vivid-mark` (shell.js createLeafMark): die
+ * neutrale Grundform unten ist entfallen, Konfiguration ohne Modul steht im
+ * Grau der Einstellungen. Was folgt, ist die Geschichte der Mulde:
+ * Die neutrale Grundform galt nur, WO keine Marke sie traegt: `.vivid-mark`
+ * steht in layout.css, diese Datei laedt danach, und bei gleicher Spezifitaet
+ * gewinnt die spaetere - die Marke waere eine Klasse ohne Wirkung.
+ *
+ * `--color-fill-well`, NICHT `--color-surface-2`. Die Gegenform stand auf der
+ * naechsthoeheren Flaeche statt auf der Well-Stufe, und im Light-Theme ist das
+ * keine Flaeche: #FBFAF7 auf dem Zeilengrund #FFFFFF ergibt gemessen 1.04:1,
+ * auf dem tatsaechlichen Grund 1.01:1 - unsichtbar. Im Dark trug dieselbe Regel,
+ * die zwoelf Modulblaetter aus v2.22.0 standen also hell als vier farbige
+ * Kacheln neben 25 nackten Glyphen und dunkel als 29 gleichwertige Zeilen.
+ * Ein Licht/Dunkel-Paritaetsbruch, und die Vollton-Regel benennt fuer ihre
+ * neutrale Gegenrichtung ausdruecklich `--color-fill-well`. */
+.settings-shell__navigation-link-icon-glyph {
+  width: var(--space-4);
+  height: var(--space-4);
+}
+
+/* EINE Spalte, die schrumpfen darf. Ohne `minmax(0, 1fr)` war die Spalte
+ * implizit `auto` und so breit wie das laengste Wort: die Sync-Links massen
+ * 226px im 196px-Traeger, und `overflow: hidden` am Panel schnitt
+ * „Kontakt-Synchronisatio" und „Dokumentenmanageme" ab (Critique A7). Das
+ * Silbentrennen uebernimmt der Link darunter. */
+.settings-shell__navigation-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+}
+
+.settings-shell__navigation-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  min-height: var(--target-md);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+@media (hover: hover) {
+  .settings-shell__navigation-link:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+  }
+}
+
+.settings-shell__navigation-link--active {
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-leaf-header__title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+/* Nach der Leaf-Navigation erhält der Titel programmatisch den Fokus
+ * (tabIndex=-1 + focus()), damit Screenreader/Tastatur in die neue Seite
+ * springen. Er ist ein Region-Fokus-Ziel, kein interaktives Element — daher
+ * kein sichtbarer Fokusring (gleiche Behandlung wie .app-content/#main-content). */
+.settings-leaf-header__title:focus,
+.settings-leaf-header__title:focus-visible {
+  outline: none;
+}
+
+.settings-leaf-header__description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  line-height: var(--line-height-relaxed);
+}
+
+/* --------------------------------------------------------
+   Die Wurzel: EINE gruppierte Liste aller Blaetter (2026-09-26)
+
+   In jeder Breite dieselbe Liste - Bereiche als Abschnittsueberschriften,
+   ihre Blaetter in EINEM Traeger je Abschnitt (Zeilenlisten-Regel,
+   tokens.css). Mobil gab es davor eine eigene Bereichsebene (vier Zeilen, dann
+   eine Bereichsseite mit 88px-Zeilen); sie ist entfallen, Deep-Links springen
+   auf den Abschnitt (shell.js, revealOverviewSection). Was mobil anders ist,
+   steht im Media-Block darunter: niedrigere Zeilen, kleinere Marke, keine
+   Beschreibung - Apples Einstellungen.
+   -------------------------------------------------------- */
+
+.settings-overview {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.settings-overview__status {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.settings-overview__section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  /* Der Deep-Link-Sprung landet unter dem klebenden Kopf, nicht darunter
+   * versteckt: angedockt bleibt die Bar-Zeile stehen (Such-Icon, 44/48px
+   * plus ihr Polster). */
+  scroll-margin-block-start: calc(var(--target-base) + var(--space-8));
+}
+
+/* Der Bereichs-Titel steht auf dem Grund, seine Blaetter liegen im Traeger
+ * darunter. Vorher trennten Haarlinien die Bereiche auf dem Grund - eine
+ * Liste ohne Rand, an dem sie als ein Objekt fassbar waere. */
+.settings-overview__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-lg);
+}
+
+.settings-overview__heading-icon {
+  width: var(--space-5);
+  height: var(--space-5);
+  color: var(--module-settings);
+}
+
+.settings-overview__list {
+  display: grid;
+  background: var(--color-surface-work);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.settings-overview__row {
+  display: grid;
+  grid-template-columns: var(--target-md) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  min-height: var(--target-lg);
+  padding: var(--space-2) var(--space-4);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* Rahmenbreite aus --space-px: Token-Disziplin dieser Datei (Guard
+ * `settings.css haelt Zeilenlaenge, Token-Disziplin und keine toten Regeln`).
+ * Die Linie haengt am SICHTBAREN Vorgaenger: eine weggefilterte Zeile
+ * (`hidden`) darf keine Doppellinie und keine Linie an der Oberkante lassen. */
+.settings-overview__row:not([hidden]) ~ .settings-overview__row:not([hidden]) {
+  border-top: var(--space-px) solid var(--color-border-subtle);
+}
+
+/* Nur am echten Zeiger (R18); den Druck quittiert der Press-Baustein (list-row.css). */
+@media (hover: hover) {
+  .settings-overview__row:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.settings-overview__row-mark {
+  display: grid;
+  place-items: center;
+  width: var(--target-md);
+  height: var(--target-md);
+  border-radius: var(--radius-sm);
+}
+
+.settings-overview__row-mark-glyph {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.settings-overview__row-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-overview__row-title {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-overview__row-description {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-snug);
+}
+
+/* Der Ort eines Options-Treffers (Suche): das Blatt, in dem die Option steht.
+ * Anders als die Beschreibung bleibt er auch mobil stehen - ohne ihn waere
+ * „Farbe" ein Treffer ohne Adresse. */
+.settings-overview__row-context {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-snug);
+}
+
+.settings-overview__row-chevron {
+  width: var(--space-4);
+  height: var(--space-4);
+  color: var(--color-text-tertiary);
+}
+
+/* MOBIL die Zeile der Systemeinstellungen: 44/48px hoch (`--target-base`
+ * waechst am Finger mit), 32px-Marke, nur der Name. Die Beschreibung trug die
+ * Zeile auf 88px und liess 5,5 Zeilen im ersten Bildschirm (Critique A7); sie
+ * steht weiter im Blatt-Kopf und bleibt in der Suche durchsuchbar. Der Titel
+ * faellt auf das Normalgewicht, wie Apples Zeilen - fett war er nur, um sich
+ * von der Beschreibung abzusetzen. */
+@media (max-width: 767px) {
+  .settings-overview {
+    gap: var(--space-5);
+  }
+
+  .settings-overview__section {
+    gap: var(--space-2);
+  }
+
+  .settings-overview__heading {
+    font-size: var(--text-base);
+  }
+
+  .settings-overview__row {
+    grid-template-columns: var(--target-sm) minmax(0, 1fr) auto;
+    min-height: var(--target-base);
+    padding-block: var(--space-1);
+  }
+
+  .settings-overview__row-mark {
+    width: var(--target-sm);
+    height: var(--target-sm);
+  }
+
+  .settings-overview__row-mark-glyph {
+    width: var(--icon-lg);
+    height: var(--icon-lg);
+  }
+
+  .settings-overview__row-title {
+    font-weight: var(--font-weight-regular);
+  }
+
+  .settings-overview__row-description {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------
+   Die angesprungene Option (Suchtreffer, shell.js revealSettingsOption)
+
+   Der Traeger der Option leuchtet kurz im Akzent-Ton auf und blendet dann
+   aus: der Blick soll die Stelle finden, ohne dass sie danach anders aussieht
+   als ihre Nachbarn. Der Fokus liegt dabei schon im Bedienelement - die
+   Markierung ist fuer das Auge, der Fokus fuer Tastatur und Screenreader.
+   -------------------------------------------------------- */
+
+.settings-search-target {
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--color-accent) var(--tint-state), transparent);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--color-accent) var(--tint-state), transparent);
+}
+
+.settings-search-target--fading {
+  background-color: transparent;
+  box-shadow: 0 0 0 var(--space-1) transparent;
+  transition:
+    background-color var(--transition-slow),
+    box-shadow var(--transition-slow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-search-target--fading {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------
+   Rueckweg im Blatt (mobil)
+
+   Der Kopf traegt auf einem Blatt nur „< Einstellungen" und klebt - der
+   Rueckweg scrollt nicht mehr mit weg (shell.js, renderToolbar). Ab 768px
+   fuehrt der Breadcrumb zurueck; ein Rueckweg pro Viewport (Audit A2-25a).
+   Die Regel darunter haelt zugleich die Titelhierarchie: auf einem Blatt ist
+   der Blatt-Titel die einzige sichtbare Hauptueberschrift (test:typography).
+   -------------------------------------------------------- */
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .settings-page--leaf .settings-shell-header {
+    display: none;
+  }
+}
+
+/* AB 1024px TRAEGT DER KOPF EINES BLATTS DEN MODULNAMEN (D8, Critique
+ * 2026-10-16): Siegel und Titel wie in jedem Modul, der Rueckweg ist dort
+ * die Seitenleiste. Darunter ist der Kopf der Rueckweg allein. */
+.settings-toolbar__module-title {
+  margin: 0;
+}
+
+@media (max-width: 1023px) {
+  .settings-toolbar__module-title {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .settings-shell-header .settings-toolbar__back {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-breadcrumb { display: none; }
+}
+
+/* Die Suche der Wurzel traegt keine eigene Breite und Stelle mehr
+ * (Re-Critique 2026-09-27, D4): sie ist der Center-Slot hinter dem Titel,
+ * Breite `--page-search-width` aus page-search.css; mobil macht die Shell sie
+ * zum Icon (layout.css, Kopfregel mobil Regel 4). */
+
+.settings-toolbar__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-base);
+  /* Die Treffflaeche reicht bis an die Kante, das Zeichen steht auf der
+   * Fluchtlinie des Inhalts (Apples Zurueck-Knopf). */
+  margin-inline-start: calc(-1 * var(--space-2));
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-full);
+  color: var(--color-accent);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-toolbar__back-icon {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  flex: 0 0 auto;
+}
+
+.settings-toolbar__back:hover,
+.settings-breadcrumb__link:hover {
+  color: var(--color-accent);
+}
+
+/* Stand rund 1000 Zeilen weiter unten, getrennt von allem, was den Breadcrumb
+   sonst betrifft - inklusive des `display: none` direkt darüber. */
+.settings-breadcrumb {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--space-px) solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.settings-breadcrumb__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-md);
+  padding-inline: var(--space-1);
+  margin-inline: calc(var(--space-1) * -1);
+  border-radius: var(--radius-full);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.settings-breadcrumb__link:hover {
+  background: var(--color-surface-raised);
+}
+
+.settings-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.settings-breadcrumb__item,
+.settings-breadcrumb__separator {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.settings-breadcrumb__item--current {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Der frühere Mobile-Override auf `.settings-breadcrumb__link` ist ersatzlos
+   weg: unter 768px ist der ganze Breadcrumb `display: none` (siehe oben), das
+   Touch-Target existierte dort also nie. */
+
+.settings-leaf {
+  min-width: 0;
+}
+
+/* DER BLATTWECHSEL BLENDET (R14, A7 P3; shell.js renderLeafContent). Nur
+ * Deckkraft - das Blatt steht, wo es stehen wird; unter reduzierter Bewegung
+ * nimmt die globale Sperre (reset.css) die Dauer auf 0. */
+@keyframes settings-sheet-enter {
+  from { opacity: 0; }
+}
+
+.settings-sheet-enter {
+  animation: settings-sheet-enter var(--duration-md) var(--ease-out);
+}
+
+.settings-leaf-header {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+/* Der Abstand oben gilt dem Breadcrumb darueber; mobil ist der ausgeblendet
+ * und der Rueckweg steht im Kopf - das Blatt beginnt direkt unter ihm. */
+@media (max-width: 767px) {
+  .settings-leaf-header { margin-top: 0; }
+}
+
+/* MOBIL HOECHSTENS DREI ZEILEN VORSPANN (Critique 2026-10-05, R16; R20). Die
+ * Blattbeschreibung lief im Kalender-Blatt ueber vier Zeilen (77px) vor dem
+ * ersten Schalter; sie zaehlt auf, was im Blatt steht, und genau das tun
+ * darunter die Sprungmarken und die Abschnittstitel. Blaetter mit Marken
+ * blenden sie ganz aus (unten). Zwei Zeilen schnitten in drei Blaettern ohne
+ * Marken die Aussage ab (Re-Critique 2026-10-17 a5 P3): "Dieses Geraet" verlor
+ * "alles, was nur fuer dieses Geraet gilt", Benachrichtigungen und Aufgaben je
+ * den Satzschluss. Drei Zeilen tragen alle Beschreibungen ohne Marken
+ * ungekuerzt (gemessen 390px, de); die Grenze bleibt fuer laengere Locales. */
+@media (max-width: 767px) {
+  .settings-leaf-header__description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+  }
+}
+
+/* --------------------------------------------------------
+   Sprungmarken am Blattanfang (R16)
+
+   Nur in Blaettern mit mehr als drei Abschnitten (registry.js,
+   settingsSheetJumpTargets). EINE Zeile, die scrollt: umgebrochen kosteten
+   fuenf Marken mobil drei Reihen - vor dem ersten Schalter, den sie
+   erreichbar machen sollen. Die Marken sind die geteilten Chips
+   (filter-chip.css), hier als Links.
+   -------------------------------------------------------- */
+.settings-sheet-jump {
+  margin-bottom: var(--space-4);
+}
+
+.settings-sheet-jump__list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
+  margin: 0;
+  /* Luft fuer den Fokusring, den `overflow` sonst kappte. */
+  padding: var(--space-1);
+  margin-inline: calc(var(--space-1) * -1);
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.settings-sheet-jump__list::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-sheet-jump__list > li {
+  flex: 0 0 auto;
+}
+
+.settings-sheet-jump__link {
+  text-decoration: none;
+}
+
+/* AB 768px BRECHEN DIE MARKEN UM (R20, Re-Critique 2026-10-17 a5 P3). Die
+ * eine scrollende Zeile ist eine Telefonregel (dort kosteten fuenf Marken drei
+ * Reihen); am Desktop schnitt sie im Kalender-Blatt zwei von sechs Marken an
+ * der Kante ab - ohne sichtbare Leiste, die zeigt, dass es weitergeht
+ * (gemessen 999px Inhalt in 660px bei 1280). Dort ist Platz fuer eine zweite
+ * Reihe. */
+@media (min-width: 768px) {
+  .settings-sheet-jump__list {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+/* Bis die Abschnitte stehen, haelt die Zeile nur ihren Platz (shell.js,
+ * syncJumpLabels): die Marken heissen wie die Ueberschriften darunter. */
+.settings-sheet-jump--pending {
+  visibility: hidden;
+}
+
+/* MOBIL STEHEN DIE MARKEN FUER DIE BESCHREIBUNG (R16, Gesamtpruefung). Beides
+ * zaehlt auf, was im Blatt steht; zusammen schoben sie den ersten Schalter des
+ * Kalender-Blatts von y=517 auf 580 - der eine Messwert der Critique, der
+ * schlechter wurde. Im Blatt mit Marken ist die Beschreibung mobil nur noch
+ * im Baum (geclippt wie `.sr-only`, reset.css), und der Kopf haelt den
+ * kleineren Abstand. Ein Blatt ohne Marken behaelt seine (hoechstens drei) Zeilen. */
+@media (max-width: 767px) {
+  .settings-leaf-header--jump { margin-bottom: var(--space-4); }
+
+  .settings-leaf-header--jump .settings-leaf-header__description {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* --------------------------------------------------------
+   Ein Blatt je Modul (Re-Critique 2026-09-27, S1)
+
+   Statuszeile oben, dann die Reichweiten "Fuer mich" und "Fuer den Haushalt".
+   Jeder Abschnitt ist ein frueheres Blatt in seinem eigenen Traeger
+   (shell.js, renderLeafContent).
+   -------------------------------------------------------- */
+
+/* Die Reichweite ist ein Gruppenkopf, keine weitere Karte: ruhig, auf dem
+ * Grund, mit Luft darueber - die Abschnitte darunter tragen ihre eigenen
+ * Titel. Der zweite Kopf haelt mehr Abstand, damit "Fuer den Haushalt" als
+ * neue Gruppe liest und nicht als letzte Karte der ersten. */
+.settings-scope + .settings-scope {
+  margin-top: var(--space-8);
+}
+
+/* Groesse und Gewicht kommen aus der Rolle (typography.css, Stufenleiter des
+ * Einstellungsblatts): die Reichweite steht eine Stufe UEBER den Abschnitten,
+ * die sie gliedert. Bis R16 stand sie in 16px Sekundaertext und war damit die
+ * kleinste Ueberschrift des Blatts. */
+.settings-scope__title {
+  margin: 0 0 var(--space-4) var(--space-1);
+  color: var(--color-text-primary);
+}
+
+.settings-sheet-section {
+  min-width: 0;
+  /* Sprungziel von `?section=`: nicht unter den klebenden Kopf. */
+  scroll-margin-block-start: calc(var(--target-base) + var(--space-8));
+}
+
+/* Die letzte Karte eines Abschnitts haelt den Abschnittsabstand der Seite
+ * (.settings-section), nicht zusaetzlich den der Karte. */
+.settings-sheet-section > .settings-section:last-child {
+  margin-bottom: var(--space-6);
+}
+
+/* Zustand des Moduls: ein Zeichen fuer alle, der Weg zum Schalter nur fuer
+ * Admins (Nur-lesen-Regel). Eine Zeile im Traeger wie Apples Kopfzeile in
+ * "Einstellungen > App" - der Schalter selbst lebt in Aktive Module. */
+.settings-sheet-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  min-height: var(--target-lg);
+  margin-bottom: var(--space-6);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-work);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-sheet-status__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.settings-sheet-status__icon {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex: 0 0 auto;
+}
+
+.settings-sheet-status--on .settings-sheet-status__icon {
+  color: var(--color-success-ink);
+}
+
+.settings-sheet-status--off .settings-sheet-status__icon {
+  color: var(--color-text-tertiary);
+}
+
+.settings-sheet-status__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-md);
+  padding-inline: var(--space-2);
+  margin-inline-end: calc(-1 * var(--space-2));
+  border-radius: var(--radius-full);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  transition: background-color var(--transition-fast);
+}
+
+.settings-sheet-status__link:hover {
+  background: var(--color-surface-hover);
+}
+
+.settings-sheet-status__link-icon {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.settings-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-4) 0;
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+}
+
+.settings-setting-row__copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-setting-row__label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-setting-row__description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-snug);
+}
+
+.settings-setting-row__control {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------
+   Gruppierte Zeilen (Critique 2026-10-07, R17 E9)
+
+   EIN Traeger je Abschnitt statt einer Karte je Option - die Form, die
+   "Aktive Module" schon hatte. Flaeche, Radius, Schatten und die Haarlinien
+   zwischen den Zeilen kommen aus `.row-carrier` (list-row.css); hier steht
+   nur die Zeile: Label links, Bedienelement rechts, ein Hinweis nur zu dieser
+   Zeile als Sekundaerzeile unter dem Label, ein Hinweis zur ganzen Gruppe als
+   Fusszeile darunter auf dem Grund (wie Apples Gruppenfuss).
+
+   Die Zeile bleibt in JEDER Breite zweispaltig: gestapelt war ein Auswahlfeld
+   mit dem Wert "5 Minuten" mobil 326px breit. Lange Labels brechen um, das
+   Bedienelement behaelt seine Breite und ist bei der halben Traegerbreite
+   gedeckelt (`cqi` - der Traeger ist ein Container, list-row.css).
+   -------------------------------------------------------- */
+.settings-group {
+  /* Das Blatt steht schon im Lesemass (.settings-shell__content). */
+  max-width: none;
+  margin-bottom: var(--space-3);
+}
+
+/* KEINE KARTE IN DER KARTE (R19): steht eine Zeilengruppe IN einer Karte
+ * (Konto: Kontaktdaten, Passwort), traegt die Karte die Flaeche - die Gruppe
+ * legt ihren eigenen Grund, Schatten und Radius ab und fluchtet mit dem
+ * Kartentext; die Haarlinien zwischen den Zeilen bleiben. */
+.settings-card .row-carrier.settings-group {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.settings-card .settings-group > .settings-setting-row {
+  padding-inline: 0;
+}
+
+/* Dasselbe fuer die Schalterzeile (R19): ihr Polster sitzt am `label.toggle-row`
+ * und an der Sekundaerzeile, nicht an der Zeile - in der Karte fluchten beide
+ * mit dem Kartentext wie jede andere Zeile. */
+.settings-card .settings-group > .settings-setting-row--switch > .toggle-row,
+.settings-card .settings-group > .settings-setting-row--switch > .settings-setting-row__description,
+.settings-card .settings-group > .settings-setting-row--switch > .form-hint,
+.settings-card .settings-group > .settings-setting-row--switch > .form-error {
+  padding-inline: 0;
+}
+
+.settings-group > .settings-setting-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-4);
+  min-height: var(--target-lg);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 0;
+}
+
+/* DIE SEKUNDAERZEILE LAEUFT UNTER BEIDEN SPALTEN. In der Label-Spalte allein
+ * stand ein Hinweis mobil auf 160px und machte die Zeile bis 304px hoch
+ * (gemessen am ersten Wurf); der Textblock gibt seine Kinder deshalb ans
+ * Raster der Zeile ab: Label und Bedienelement in Zeile 1, alles Weitere
+ * (Hinweis, Fehlerzeile) darunter ueber die volle Breite. */
+.settings-group > .settings-setting-row:not(.settings-setting-row--stacked) > .settings-setting-row__copy {
+  display: contents;
+}
+
+.settings-group > .settings-setting-row > .settings-setting-row__copy > * {
+  grid-column: 1 / -1;
+}
+
+.settings-group > .settings-setting-row:not(.settings-setting-row--stacked) > .settings-setting-row__copy > .settings-setting-row__label {
+  grid-area: 1 / 1;
+  align-self: center;
+}
+
+.settings-group > .settings-setting-row:not(.settings-setting-row--stacked) > .settings-setting-row__control {
+  grid-area: 1 / 2;
+}
+
+.settings-group .settings-setting-row__label {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  /* Neben einem Bedienelement bleibt dem Label mobil die halbe Zeile: ein
+   * langes Wort trennt an der Silbe, statt das Bedienelement zu quetschen. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.settings-group .settings-setting-row__description {
+  max-width: 50ch;
+  padding-bottom: var(--space-1);
+}
+
+.settings-group .settings-setting-row__control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-inline-size: 50cqi;
+}
+
+/* DIE AUSWAHL IN DER ZEILE IST RANDLOS (R18, 2026-10-07). Hier stand ihre
+ * Breitenregel; sie traegt jetzt die geteilte Form der Formularzeile
+ * (`.form-row__control > select.form-input`, layout.css): Wert in
+ * Sekundaerfarbe, rechtsbuendig, dahinter das Zeichen. Die Zeile ist eine
+ * `.settings-setting-row.form-row` (settings/components.js). Bis dahin sass am
+ * Zeilenende ein Kasten mit Kontur, 143 bis 360px breit je nach Wert. */
+
+/* Ein Kurzfeld (Zahl) traegt die Breite seines Werts, nicht die der Zeile. Es
+ * steht in seinem eigenen <form>, damit Enter es absendet. */
+.settings-row-form {
+  display: contents;
+}
+
+.settings-group .settings-setting-row__control input.form-input[type="number"] {
+  inline-size: 6rem;
+  max-inline-size: 100%;
+  text-align: end;
+}
+
+/* EIN TEXTFELD NIMMT DIE HALBE ZEILE (Re-Kritik 2026-10-17). Ohne Breite blieb
+ * es bei seiner Vorgabe von 20 Zeichen: am Desktop 201px in einer 680px-Zeile,
+ * eine E-Mail-Adresse oder WebDAV-Adresse lief darin ab dem 25. Zeichen weg.
+ * Es fuellt jetzt die Deckelung der Bedienspalte (50cqi). Nur als einziges
+ * Kind - steht ein Knopf daneben, teilen sich beide die Spalte wie bisher. */
+.settings-group .settings-setting-row__control > input.form-input:only-child:is([type="text"], [type="email"], [type="tel"], [type="url"], [type="password"], [type="search"], :not([type])) {
+  inline-size: 50cqi;
+  max-inline-size: 100%;
+}
+
+/* Fehlerzeile und verborgene Zusatzhinweise einer Zeile stehen im Textblock. */
+.settings-group .settings-setting-row__copy > .form-error,
+.settings-group .settings-setting-row__copy > .form-hint {
+  margin: 0;
+}
+
+/* Ein Wert ohne Bedienelement (Nur-lesen: "Automatisch (Europe/Berlin)"). */
+.settings-setting-row__value {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  text-align: end;
+}
+
+/* Was ein Blatt NACHTRAEGLICH an die Zeile haengt (der Zonen-Hinweis an der
+ * Zeitzone, #1607), nimmt die ganze Breite unter Text und Bedienelement. */
+.settings-group > .settings-setting-row > :not(.settings-setting-row__copy):not(.settings-setting-row__control):not(.toggle-row) {
+  grid-column: 1 / -1;
+}
+
+/* GESTAPELT: ein Segment oder eine Chip-Gruppe steht neben keinem Label - bei
+ * 390px braucht das Design-Segment allein 300px. Das Bedienelement nimmt die
+ * Zeile unter dem Text. */
+.settings-group > .settings-setting-row--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+}
+
+.settings-group > .settings-setting-row--stacked > .settings-setting-row__control {
+  display: block;
+  max-inline-size: none;
+}
+
+/* Eine Zeile, deren Bedienelement fuer sich spricht (das Design-Segment unter
+ * der Abschnittsueberschrift "Design"): der Textblock ist leer. */
+.settings-group .settings-setting-row__copy:empty {
+  display: none;
+}
+
+/* DIE SCHALTERZEILE: `label.toggle-row` IST die Zeile (Trefferflaeche ueber die
+ * ganze Breite), ihr Polster wird das der Gruppe. Die Sekundaerzeile steht
+ * darunter und haelt die Spalte des Schalters frei. */
+.settings-group > .settings-setting-row--switch {
+  display: block;
+  padding: 0;
+}
+
+.settings-group > .settings-setting-row--switch > .toggle-row {
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-radius: 0;
+}
+
+.settings-group .toggle-row--switch .toggle-row__label {
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.settings-group > .settings-setting-row--switch > .settings-setting-row__description,
+.settings-group > .settings-setting-row--switch > .form-hint,
+.settings-group > .settings-setting-row--switch > .form-error {
+  margin: calc(-1 * var(--space-1)) 0 0;
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+/* Der Fokusring der Schalterzeile laege sonst unter dem Beschnitt des Traegers. */
+.settings-group > .settings-setting-row--switch > .toggle-row--switch:has(input:focus-visible) {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* Vorspann und Zwischentitel einer Gruppe stehen wie ihr Fuss auf dem Grund,
+ * in der Flucht des Zeilentexts. */
+.settings-page .settings-group__lead {
+  margin: 0 var(--space-4) var(--space-3);
+}
+
+.settings-group__title {
+  margin: var(--space-4) var(--space-4) var(--space-2);
+}
+
+/* DER GRUPPENFUSS: auf dem Grund, in der Flucht des Zeilentexts. */
+.settings-page .settings-group__footer {
+  margin: 0 var(--space-4) var(--space-5);
+}
+
+.settings-group + .settings-group__footer {
+  margin-top: calc(-1 * var(--space-1));
+}
+
+.settings-group__footer + .settings-group__footer {
+  margin-top: calc(-1 * var(--space-3));
+}
+
+.settings-disclosure {
+  overflow: hidden;
+  /* Randlose Karte auf dem Grouped-Grund (tokens.css, Kasten-in-Kasten). */
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-work);
+}
+
+.settings-disclosure__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--target-lg);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+}
+
+.settings-disclosure__trigger:hover {
+  background: var(--color-surface-hover);
+}
+
+.settings-disclosure__icon {
+  width: var(--space-5);
+  height: var(--space-5);
+  flex: 0 0 auto;
+  transition: transform var(--transition-fast);
+}
+
+.settings-disclosure__trigger[aria-expanded='true'] .settings-disclosure__icon {
+  transform: rotate(180deg);
+}
+
+.settings-disclosure__panel {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* ORTSSUCHE IM STANDORTFORMULAR (R20, settings/weather-location.js). Feld und
+ * Knopf teilen eine Zeile, die Treffer stehen als Liste darunter: Name in
+ * Primaerfarbe, Region und Land als Sekundaerzeile - wie die Ortsauswahl in
+ * Apple Wetter. Jeder Treffer ist ein Knopf ueber die volle Breite. */
+.weather-place__search {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.weather-place__search > .form-input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.weather-place__search > .btn {
+  flex: 0 0 auto;
+}
+
+.weather-place__current {
+  margin: var(--space-2) 0 0;
+}
+
+.weather-place__results {
+  /* Der Text der Treffer fluchtet mit dem Etikett "Ort"; die Trefferflaeche
+   * (Hover) ragt um das Polster der Knoepfe in den Kartenrand. */
+  margin: var(--space-2) calc(-1 * var(--space-3)) 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.weather-place__results > li + li {
+  border-top: var(--space-px) solid var(--color-border);
+  margin-inline: var(--space-3);
+}
+
+.weather-place__results > li + li > .weather-place__option {
+  margin-inline: calc(-1 * var(--space-3));
+  inline-size: calc(100% + 2 * var(--space-3));
+}
+
+.weather-place__option {
+  display: grid;
+  gap: var(--space-0h);
+  inline-size: 100%;
+  min-block-size: var(--target-lg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: start;
+  color: var(--color-text-primary);
+}
+
+@media (hover: hover) {
+  .weather-place__option:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.weather-place__name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.weather-place__meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* "Koordinaten von Hand" steht unter der Gruppe, mit Abstand zur Ortungszeile. */
+.weather-manual {
+  margin-block: var(--space-3);
+}
+
+.settings-status-summary {
+  --settings-status-tone: var(--module-settings);
+  --settings-status-bg: var(--color-surface-work);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: var(--space-px) solid color-mix(in srgb, var(--settings-status-tone) 22%, var(--color-border-subtle));
+  border-radius: var(--radius-md);
+  background: var(--settings-status-bg);
+}
+
+.settings-status-summary--neutral {
+  --settings-status-tone: var(--module-settings);
+  --settings-status-bg: var(--color-surface-work);
+}
+
+.settings-status-summary--success {
+  --settings-status-tone: var(--color-success);
+  --settings-status-bg: color-mix(in srgb, var(--color-success) var(--tint-wash), var(--color-surface-work));
+}
+
+.settings-status-summary--warning {
+  --settings-status-tone: var(--color-warning);
+  --settings-status-bg: color-mix(in srgb, var(--color-warning) var(--tint-wash), var(--color-surface-work));
+}
+
+.settings-status-summary--danger {
+  --settings-status-tone: var(--color-danger);
+  --settings-status-bg: color-mix(in srgb, var(--color-danger) var(--tint-wash), var(--color-surface-work));
+}
+
+.settings-status-summary__title,
+.settings-status-summary__status {
+  margin: 0;
+}
+
+.settings-status-summary__title {
+  color: var(--color-text-primary);
+  font-size: var(--text-base);
+}
+
+.settings-status-summary__status,
+.settings-status-summary__details {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.settings-status-summary__details {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+  list-style: disc;
+}
+
+/* Details tragen Server-URLs: umbrechen statt den Container aufspannen. */
+.settings-status-summary__details li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-status-summary__action {
+  margin-top: var(--space-2);
+}
+
+/* `-ink`, nicht `--color-danger`: der Fehlertext steht auf --color-danger-light
+   und traf dort 4,45:1 - unter AA, gemessen von Sonde 2 (light/mobile). Die
+   Signalfarbe ist für die FLÄCHE gebaut, das Ink-Token für den Text darauf
+   (tokens.css §Ink). Auf weissem Grund bleibt es korrekt (6,89:1), die Regel
+   gilt also unabhängig davon, wo die Zeile landet - genau wie bei `.form-error`
+   in layout.css, dem Vorbild, das diese Stelle als einzige nicht mitmachte. */
+.settings-inline-error {
+  margin: 0;
+  color: var(--color-danger-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-retry-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: var(--space-px) solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-light);
+}
+
+/* Der Wiederholen-Knopf gehört dem Kasten, nicht dem Modul.
+ *
+ * Als `.btn--secondary` trug er `--active-module-accent` - in den Einstellungen
+ * #677079, auf der Tönung 4,16:1. Der Kontrast ist der messbare Teil des
+ * Befunds; der andere ist die Aussage: ein Modulakzent behauptet Zugehörigkeit
+ * zum Modul, und ein „Erneut versuchen" IN einer Fehlermeldung gehört zu ihr.
+ * Die Sekundärform (transparent, Rand) bleibt - getauscht wird nur, aus welcher
+ * Quelle sie ihre Farbe nimmt. */
+.settings-retry-state__button {
+  color: var(--color-danger-ink);
+  /* --tint-hint ist die Stufe für Kanten (tokens.css 6b), nicht eine Zahl nach
+     Augenmass: der Rand deutet die Knopfform an, er trägt sie nicht. */
+  border-color: color-mix(in srgb, var(--color-danger-ink) var(--tint-hint), transparent);
+}
+
+.settings-retry-state__button:hover {
+  background-color: color-mix(in srgb, var(--color-danger-ink) var(--tint-state), transparent);
+  border-color: var(--color-danger-ink);
+}
+
+/* --------------------------------------------------------
+   Liste + Detail ab der Split-Schwelle (Re-Critique 2026-09-27, S3)
+
+   Unter der Schwelle ist die Wurzel die gruppierte Liste und ein Blatt steht
+   allein (mobil mit Zurueck im Kopf, ab 768px mit Breadcrumb) - die
+   Push-Navigation. Ab der Schwelle steht die Liste als Seitenleiste links
+   (~320px) und das Blatt rechts im Lesemass; die Wurzel waehlt dann das erste
+   Blatt vor (shell.js, preselectSheet), statt dieselbe Liste ein zweites Mal
+   ueber 1156px zu ziehen (A8 P1-1: Titel und Chevron 1100px auseinander).
+
+   DIE ABFRAGE MISST DIE MODULFLAECHE (`.settings-page`), nicht den Viewport:
+   dieselbe Regel wie der Liste-+-Detail-Baustein (layout.css, module-surface).
+   `@container` kann keine Variable lesen - das Literal ist
+   `--layout-split-threshold` aus tokens.css, und test:settings-navigation
+   haelt beide gleich. Ob die Seitenleiste steht, liest die Shell an ihrer
+   gerechneten Darstellung ab (kein zweites `matchMedia`).
+   -------------------------------------------------------- */
+
+.settings-page {
+  container: settings-surface / inline-size;
+  /* Die Listenspur der Einstellungen: schmaler als die des Bausteins
+   * (--layout-list-min 420px), weil sie nur Namen traegt, keine
+   * zweizeiligen Datensaetze - Apples Systemeinstellungen fuehren ~320px. */
+  --settings-list-width: var(--layout-nav-list);
+}
+
+.settings-shell {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* Blatt und Wurzel-Liste lesen im Lesemass (DESIGN.md, Breitenregel):
+ * vorher lief die Wurzel ueber 1156px, ein Blatt ueber 912px. */
+.settings-shell__content {
+  max-inline-size: var(--layout-reading);
+}
+
+.settings-shell__navigation { display: none; }
+
+@media (min-width: 1024px) {
+  /* Die Grundform der Seitenleiste; sichtbar wird sie erst an der Schwelle. */
+  .settings-shell__navigation {
+    position: sticky;
+    top: calc(var(--settings-head-block, 0px) + var(--space-4) + var(--safe-area-inset-top));
+    align-self: start;
+  }
+}
+
+@container settings-surface (min-width: 65rem) {
+  .settings-shell {
+    grid-template-columns: var(--settings-list-width) minmax(0, 1fr);
+    max-inline-size: var(--content-max-width);
+    margin-inline: auto;
+  }
+
+  /* `block`, nicht `flex`: die Gruppen stapeln ueber `margin-top`. Die Liste
+   * scrollt fuer sich, wenn sie hoeher ist als das Fenster. */
+  .settings-shell__navigation {
+    display: block;
+    position: sticky;
+    top: calc(var(--settings-head-block, 0px) + var(--space-4) + var(--safe-area-inset-top));
+    /* Minus `--shell-tail`: die klebende Liste endet ueber dem, was unten
+     * fest steht (Installationsbanner), wie jede klebende Spalte. Minus
+     * `--settings-head-block`: oben klebt der Kopf (shell.js, watchHeadBlock). */
+    max-height: calc(var(--viewport-height) - var(--settings-head-block, 0px) - var(--space-8) - var(--shell-tail, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Die Suche bleibt an der Listenkante stehen, wenn die Liste scrollt: ein
+   * Streifen im Grund der Leiste, ueber den Polsterrand der Leiste gezogen. */
+  .settings-shell__navigation-search {
+    position: sticky;
+    top: calc(-1 * var(--space-3));
+    z-index: 1;
+    margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) var(--space-3);
+    padding: var(--space-3);
+    background: var(--color-surface-raised);
+  }
+
+  /* Der Ort steht links markiert - der Breadcrumb waere derselbe Weg ein
+   * zweites Mal, und der Blatt-Titel beginnt auf der Hoehe der Suche. */
+  .settings-breadcrumb { display: none; }
+
+  .settings-leaf-header { margin-top: 0; }
+}
+
+@media (max-width: 1023px) {
+  .settings-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Die Zweispaltigkeit auf Tablets ist mit dem Träger entfallen: eine gruppierte
+ * Liste ist EINE Spalte - nebeneinander gestellt bräuchte jede Zeile wieder
+ * ihren eigenen Rand und wäre damit wieder eine Karte pro Zeile. */
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-shell__navigation-link,
+  .settings-overview__row,
+  .settings-breadcrumb__link,
+  .settings-module-row,
+  .settings-module-move,
+  .settings-disclosure__icon,
+  .settings-sheet-status__link {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------
+   Banner (Erfolg / Fehler nach OAuth-Callback)
+   -------------------------------------------------------- */
+
+.settings-banner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-banner--success {
+  background: var(--color-success-light);
+  color: var(--color-success-ink);
+  border: var(--space-px) solid var(--color-success);
+}
+
+.settings-banner--error {
+  background: var(--color-danger-light);
+  color: var(--color-danger-ink);
+  border: var(--space-px) solid var(--color-danger);
+}
+
+.settings-banner--info {
+  background: var(--color-info-light);
+  color: var(--color-info-ink);
+  border: var(--space-px) solid var(--color-info);
+}
+
+/* --------------------------------------------------------
+   Sections
+   -------------------------------------------------------- */
+
+.settings-section {
+  margin-bottom: var(--space-8);
+}
+
+.settings-section__title {
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-3) var(--space-1);
+}
+
+/* --------------------------------------------------------
+   Cards
+   -------------------------------------------------------- */
+
+.settings-card {
+  background-color: var(--color-surface-work);
+  /* Randlose Karte auf dem Grouped-Grund (tokens.css, Kasten-in-Kasten). */
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  position: relative;
+}
+
+@media (min-width: 1024px) {
+  .settings-card {
+    padding: var(--space-5);
+  }
+}
+
+.settings-card--hidden {
+  display: none;
+}
+
+.settings-card__title {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-primary);
+}
+
+.settings-pwa-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-pwa-card__icon {
+  width: var(--target-base);
+  height: var(--target-base);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--module-settings);
+  background: var(--color-surface-2);
+}
+
+.settings-pwa-card__icon svg {
+  width: 50%;
+  height: 50%;
+}
+
+.settings-pwa-card__body {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------
+   Avatar
+   -------------------------------------------------------- */
+
+.settings-avatar {
+  width: var(--target-base);
+  height: var(--target-base);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-on-accent);
+  flex-shrink: 0;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Initialen auf einer frei gewählten Hintergrundfarbe: weiß war fix, und auf
+   hellen Tönen ergab das gemessene 3,5:1 und 2,8:1 (Critique 2026-07-27).
+   `prefersInkText()` in `/utils/contrast.js` entscheidet je Farbe; das Token
+   ist laut tokens.css:104 genau dafür da. */
+.settings-avatar--ink,
+.perm-chip__avatar--ink {
+  color: var(--color-ink-on-bright);
+}
+
+.settings-avatar--sm {
+  width: 32px;
+  height: 32px;
+  font-size: var(--text-sm);
+}
+
+.settings-avatar--lg {
+  width: 72px;
+  height: 72px;
+  font-size: var(--text-2xl);
+}
+
+.settings-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-avatar-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-avatar-button {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.settings-avatar-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Tastatur-Fokus braucht einen echten Ring (Audit F-10) — der frühere
+ * Schatten+Lift allein war als Fokus-Indikator nicht verlässlich sichtbar. */
+.settings-avatar-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.settings-avatar-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.settings-avatar-action {
+  width: var(--target-md);
+  height: var(--target-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.settings-avatar-action:hover,
+.settings-avatar-action:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+
+.settings-avatar-action--danger:hover,
+.settings-avatar-action--danger:focus-visible {
+  color: var(--color-danger-ink);
+  border-color: var(--color-danger);
+  background: var(--color-danger-light);
+}
+
+/* Gesperrt, aber erreichbar (wie `.btn[aria-disabled]` in layout.css): der
+   Gravatar-Knopf ohne gespeicherte Adresse und waehrend des Abrufs bleibt in
+   der Tab-Ordnung, die Hinweiszeile darunter nennt den Grund. Keine Opazitaet
+   auf dem Icon, sondern die gedeckte Farbe; Hover und Fokus heben nichts an. */
+.settings-avatar-action[aria-disabled='true'],
+.settings-avatar-action[aria-disabled='true']:hover,
+.settings-avatar-action[aria-disabled='true']:focus-visible {
+  color: var(--color-text-tertiary);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  cursor: not-allowed;
+}
+
+.settings-avatar-action i,
+.settings-avatar-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-profile-editor {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-profile-editor__fields {
+  min-width: 0;
+}
+
+.settings-name-color-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.settings-name-color-row__name {
+  min-width: 0;
+}
+
+.settings-color-field {
+  align-items: center;
+}
+
+/* Die Zielgröße kommt aus dem Token, nicht aus einer Zahl. Hier standen 44px
+ * fest verdrahtet - das ist exakt der ZEIGER-Wert von --target-base, eingefroren
+ * bevor er den Finger kannte: das Token wächst unter `@media (hover: none)` auf
+ * --target-lg, die Kopie hier nicht. Gemessen 44x45 am Finger gegen ein Minimum
+ * von 48, und zwar freistehend (nächstes Zielzentrum 161px, die Spacing-Ausnahme
+ * greift also nicht).
+ *
+ * Warum nicht die Trefferfläche per ::before dehnen wie .weather-widget__refresh:
+ * das geht hier technisch nicht. `<input type="color">` ist ein replaced element
+ * und rendert keine Pseudo-Elemente. Die Wahl bestand also gar nicht - und sie
+ * wäre auch inhaltlich falsch gewesen: bei einem Farbfeld IST die sichtbare
+ * Fläche die Funktion, anders als bei einem Icon in einem dichten Widget.
+ *
+ * Der Platz kostet nichts Nennenswertes: die Zeile ist
+ * `minmax(0, 1fr) auto`, die 4px gehen bei 375px zu ~1,4 % vom Namensfeld ab. */
+.settings-color-button {
+  width: var(--target-base);
+  height: var(--target-base);
+  padding: var(--space-0h);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.settings-color-button::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-color-button::-webkit-color-swatch {
+  border: none;
+  border-radius: var(--radius-full);
+}
+
+.settings-color-button::-moz-color-swatch {
+  border: none;
+  border-radius: var(--radius-full);
+}
+
+@media (max-width: 639px) {
+  .settings-profile-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-avatar-editor {
+    align-items: flex-start;
+  }
+
+  .settings-avatar-action {
+    width: var(--target-lg);
+    height: var(--target-lg);
+  }
+}
+
+/* --------------------------------------------------------
+   Formulare
+   -------------------------------------------------------- */
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-form--compact {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--space-px) solid var(--color-border);
+}
+
+.settings-form-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* DER SPEICHERN-KNOPF SITZT RECHTS IM KARTENFUSS (R17, E8). Gemessen standen
+ * drei Plaetze nebeneinander: 99px linksbuendig (die meisten Karten), 612px
+ * vollbreit ("Passwort speichern" - der Knopf lag nackt in der Flex-Spalte
+ * des Formulars) und rechts klebend im Blatt "Rechte" (`.perm-actions`). Eine
+ * Aktionszeile mit Primaerknopf schliesst jetzt rechts ab, der Primaerknopf
+ * steht im MARKUP zuletzt (Tab-Folge = Bild, kein `order`), Nebenaktionen
+ * davor - dieselbe Ordnung wie im Dialogfuss. Eine Zeile nur aus
+ * Nebenaktionen (Test senden, Export) bleibt am Anfang: sie schliesst nichts
+ * ab. */
+.settings-form-actions:has(> .btn--primary) {
+  justify-content: flex-end;
+}
+
+/* Feldgruppe innerhalb eines Formulars (z. B. Kontaktdaten im Konto-Blatt).
+   Der native Rahmen fällt weg; die Legende muss sich von den Feld-Labels
+   abheben, sonst liest man gleichrangige Beschriftungen statt einer Gruppe. */
+.settings-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.settings-fieldset__legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.form-error {
+  font-size: var(--text-sm);
+  color: var(--color-danger-ink);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-light);
+  border-radius: var(--radius-sm);
+}
+
+/* `.form-hint` samt `--success`/`--danger` steht seit 2026-09-24 in
+   layout.css: fast jedes Modul benutzt sie, und dieses Blatt laedt nur auf
+   den Einstellungen. Hier bleibt nur ihre Zeilenlaenge weiter unten. */
+
+/* Gesperrte Eingabefelder sahen aus wie bediente: es gab keine
+   :disabled-Regel, und `admin-backup.js` half sich mit einem hartkodierten
+   `style.opacity = '0.6'` für die env-gesteuerten Felder. Die Regel dafür
+   stand bis 2026-10-08 hier (`.settings-page .form-input:disabled`, opacity
+   0.6) und steht jetzt für die ganze App an der Feldhaut in layout.css
+   (`.input:disabled, .form-input:disabled`) - sie gilt weiter für jedes
+   gesperrte Feld der Fläche, auch für die, die ein Blatt während eines
+   laufenden Requests sperrt. */
+
+/* Fließtext lief in Settings über die volle Content-Spalte: bei 1440px
+   gemessene 794-896px (Critique 2026-07-27). Ziel sind 65-75 Zeichen, damit
+   das Auge den nächsten Zeilenanfang wiederfindet.
+
+   Der Wert ist gemessen, nicht geschätzt: `1ch` ist die Breite der Ziffer 0
+   und bei Plus Jakarta Sans mit 10,25px deutlich breiter als ein
+   Durchschnittszeichen deutschen Satztextes (6,7px bei 14px Schriftgrad). Die
+   verbreitete 65ch-Faustregel ergäbe hier 104 Zeichen; 50ch sind 512px und
+   damit rund 76.
+
+   Auf die Settings-Fläche begrenzt: `.form-hint` steht global in
+   layout.css und wird in fast jedem Modul benutzt, deren Spalten hier
+   niemand gemessen hat. */
+.settings-page .form-hint,
+.settings-page .settings-card-description,
+.settings-page .settings-leaf-header__description {
+  max-width: 50ch;
+}
+
+.form-input--color {
+  padding: var(--space-1) var(--space-2);
+  height: 44px;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------
+   Sync-Karten
+   -------------------------------------------------------- */
+
+/* `settings-sync-header`, `settings-sync-logo` und `settings-sync-info__name`
+   sind mitgegangen: dieselbe Klasse Leiche, 31 Zeilen. */
+
+.settings-sync-info__status {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-0h);
+}
+
+.settings-sync-info__status--connected {
+  color: var(--color-success);
+}
+
+.settings-sync-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Synchronization-by-data-type leaves (calendar · contacts · reminders) */
+/* minmax(0, 1fr) statt der impliziten max-content-Spalte: Konto-URLs sind ein
+   einziges unumbrechbares Token; ohne die Deckelung wächst die Spalte darüber
+   hinaus und schiebt die Aktionsleiste mobil aus dem Viewport. */
+.settings-sync-accounts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.settings-providers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.settings-provider {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-provider__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-provider__name {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.settings-provider__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-px) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  background: var(--color-surface-work);
+  color: var(--color-text-secondary);
+}
+
+/* "Verbunden" trägt einen Success-Ton; die neutralen Zustände ("Nicht verbunden",
+   "Nicht konfiguriert") bleiben grau - kein Fehler, nur noch nicht eingerichtet. */
+.settings-provider__badge--connected {
+  background: var(--color-success-light);
+  color: var(--color-success-ink);
+}
+
+/* Eigenständige Statuszeile am Kopf eines Provider-Panels (ersetzt die zuvor
+   doppelte "Google Drive"-Überschrift; die Disclosure benennt den Anbieter). */
+.settings-provider__status {
+  display: flex;
+}
+
+/* Ruhiger Info-/Führungshinweis - bewusst KEINE amber Warnbox, damit Hinweise
+   nicht als zweite Warnung neben der echten Backup-Warnung stapeln. */
+.settings-provider-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-snug);
+}
+
+.settings-provider-note svg {
+  flex: 0 0 auto;
+}
+
+.settings-provider-note a {
+  color: var(--active-module-accent, var(--color-accent));
+  text-decoration: underline;
+}
+
+/* Der Aktivierungs-Hinweis darf etwas mehr Präsenz haben (primärer Text),
+   bleibt aber im ruhigen Ton der Note. */
+.settings-provider-note--hint {
+  color: var(--color-text-primary);
+}
+
+.settings-legacy-badge {
+  background: var(--color-warning-light);
+  color: var(--color-warning-ink);
+}
+
+.settings-legacy-hint {
+  color: var(--color-text-secondary);
+}
+
+/* --------------------------------------------------------
+   Familienmitglieder
+   -------------------------------------------------------- */
+
+/* Die Liste liegt in der Karte und traegt deshalb `.row-divided` (list-row.css):
+ * Haarlinien zwischen den Zeilen, keine zweite Flaeche (R14, A7 P2-4 - die
+ * Zeilen standen vorher mit 12px Luft und ohne Trennung untereinander). */
+.settings-members {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+
+.settings-member__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-member__name {
+  display: block;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-member__meta {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+
+/* Der Griff der Haushaltsreihenfolge (#1644). Derselbe Gedanke wie der Griff
+ * der Einkaufszeile (list-row.css, `.list-row__drag`): schmal, aber hoch - die
+ * Zieh-Achse ist vertikal, also braucht er seine Flaeche in der Hoehe, und auf
+ * 375px kostete ein 48er-Quadrat Namensbreite. Die negative Marge nimmt auf
+ * beiden Seiten den Zeilenabstand zurueck: die Greifflaeche bleibt, der Name
+ * verliert nur die Breite des Zeichens. `touch-action: none`, sonst nimmt der
+ * Browser die Geste als Seiten-Scroll und der Zug endet, bevor er beginnt. */
+.settings-member__drag {
+  cursor: grab;
+  touch-action: none;
+  width: auto;
+  min-width: 0;
+  min-height: var(--target-md);
+  padding-inline: var(--space-1);
+  margin-inline: calc(-1 * var(--space-2));
+}
+
+/* Der freigehaltene Platz einer Zeile ohne Position: dieselbe Box, nichts zu
+ * sehen und nichts zu greifen. */
+.settings-member__drag--none {
+  visibility: hidden;
+  cursor: default;
+  touch-action: auto;
+}
+
+.settings-member.sortable-chosen .settings-member__drag {
+  cursor: grabbing;
+}
+
+.settings-member.sortable-ghost {
+  opacity: 0.4;
+}
+
+.settings-member.sortable-chosen {
+  background: color-mix(in srgb, var(--active-module-accent, var(--color-accent)) var(--tint-state), var(--color-surface));
+}
+
+.settings-member.sortable-drag {
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-glass-inner);
+}
+
+/* Ein ehemaliges Konto (#1381) tritt zurueck, bleibt aber lesbar: der Name in
+ * der Sekundaerfarbe, die Marke steht als Text in der Meta-Zeile. */
+.settings-member--former .settings-member__name {
+  color: var(--color-text-secondary);
+}
+
+/* Anlegen ist ein ruhiger Knopf unter der Liste, kein violetter Balken ueber
+ * die volle Breite (R14, A7 P2-4); das Formular kommt als Blatt-Dialog. */
+.settings-add-btn {
+  align-self: flex-start;
+}
+
+/* Einladen und Anlegen nebeneinander unter der Mitgliederliste (R19). */
+.settings-member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* DIE EIGENE ZEILE (R19): "Ich" hinter dem eigenen Namen, leise wie die
+ * Meta-Zeile - wie "(Ich)" in der Familienfreigabe. */
+.settings-member__self {
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.settings-token-output {
+  padding: var(--space-3);
+  /* Inset-Well statt Kasten in der Karte (tokens.css). */
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-fill-well);
+}
+
+/* Eingabe und Kopieren nebeneinander (wie der WebDAV-Reveal-Button). */
+.settings-token-output__row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.settings-token-output__row .form-input { flex: 1; min-width: 0; }
+.settings-token-output__row .btn { flex-shrink: 0; }
+
+@media (max-width: 767px) {
+  .settings-token-output__row { flex-wrap: wrap; }
+  .settings-token-output__row .form-input { flex-basis: 100%; }
+}
+
+/* API-Token Scope-Auswahl */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  color: var(--color-text-primary);
+}
+
+.api-token-scopes {
+  margin-top: var(--space-3);
+  /* Inset-Well statt Kasten in der Karte (tokens.css). */
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-fill-well);
+  overflow: hidden;
+}
+
+.api-token-scopes__head,
+.api-token-scopes__row {
+  display: grid;
+  grid-template-columns: 1fr 4.5rem 4.5rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.api-token-scopes__head {
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.api-token-scopes__head span:not(:first-child),
+.api-token-scopes__cell {
+  text-align: center;
+  justify-self: center;
+}
+
+.api-token-scopes__row:not(:last-child) {
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+}
+
+.api-token-scopes__name {
+  color: var(--color-text-primary);
+}
+
+.api-token-scopes__cell {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------
+   Backup Management
+   -------------------------------------------------------- */
+
+.settings-backup-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-backup-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.settings-backup-card--danger .settings-backup-card__icon {
+  background: var(--color-warning-light, var(--color-surface-2));
+  color: var(--color-warning-ink, var(--color-text-primary));
+}
+
+.settings-backup-card__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.settings-backup-card__body {
+  min-width: 0;
+}
+
+.settings-backup-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 148px;
+  padding: var(--space-5);
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-backup-dropzone:hover,
+.settings-backup-dropzone--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.settings-backup-dropzone svg {
+  width: 28px;
+  height: 28px;
+}
+
+.settings-backup-dropzone span {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.settings-backup-dropzone small {
+  font-size: var(--text-sm);
+}
+
+.settings-backup-file {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-code-block {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-fill-well);
+  /* Inset-Well statt Kasten in der Karte (tokens.css). */
+  border: none;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+@media (max-width: 639px) {
+  .settings-backup-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------
+   Eigenes Modul hinzufuegen (settings/pages/modules-install.js)
+   Die Karten sind die des Backups (Icon, Dropzone, Dateizeile); neu sind nur
+   das Ergebnis, die Wahl zwischen mehreren Modulen eines Archivs und die
+   Liste der uebersprungenen Dateien.
+   -------------------------------------------------------- */
+
+.settings-module-install__result:not(:empty) {
+  margin-top: var(--space-4);
+}
+
+.settings-module-candidates {
+  min-width: 0;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  border: none;
+}
+
+.settings-module-candidates__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-module-candidate {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: var(--target-lg);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+@media (hover: hover) {
+  .settings-module-candidate:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.settings-module-candidate:has(input:checked) {
+  box-shadow: inset 0 0 0 1.5px var(--color-accent);
+}
+
+.settings-module-candidate input[type="radio"] {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.settings-module-candidate__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.settings-module-install__skipped {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-5);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+/* Der Breadcrumb-Block ist zu den übrigen Breadcrumb-Regeln gewandert.
+   `.settings-breadcrumb__current` ist ersatzlos weg: `shell.js:375` erzeugt
+   `settings-breadcrumb__item--current`, die Klasse gab es nie im Markup. */
+
+/* Hier standen drei nie verdrahtete Systeme: Inline-Help-Tooltips,
+   Status-Badges und ein Empty-State, zusammen 143 Zeilen. Keine ihrer
+   Klassen kam je im Markup vor - gebaut, nie angeschlossen
+   (Critique 2026-07-27). `settings-info-value--*` und
+   `settings-status-summary--*` sehen aehnlich verwaist aus, werden aber
+   in components.js dynamisch zusammengesetzt und bleiben. */
+
+/* --------------------------------------------------------
+   Segment in einer Einstellungskarte (Theme, Wochenstart)
+
+   Das Segment der Shell (.segmented, panel.css) - Well, erhabene Pille, Ton
+   nur in der Tinte. Bis 2026-09-26 stand hier ein eigenes `.theme-toggle`:
+   drei getrennte Rahmenknoepfe mit 8px Abstand und transparentem Grund, also
+   keine Leiste, sondern drei Knoepfe (Critique A7, Komponenten-Kanon). Hier
+   steht nur noch die Geometrie: die Leiste nimmt die Kartenbreite bis zu
+   einer lesbaren Grenze, die Segmente teilen sie gleich, wie in Apples
+   Einstellungen.
+   -------------------------------------------------------- */
+
+.settings-segmented {
+  display: flex;
+  width: 100%;
+  max-width: 32rem;
+}
+
+.settings-segmented .segmented__item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------
+   Wochenstart-Vorschau (Kalender-Einstellungen)
+   -------------------------------------------------------- */
+
+.week-start-preview {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  max-width: 340px;
+}
+
+.week-start-preview__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) 0;
+  border-radius: var(--radius-xs);
+  border: var(--space-px) solid var(--color-border);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.week-start-preview__cell--start {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* --------------------------------------------------------
+   Meal-Type-Toggles
+   -------------------------------------------------------- */
+
+/* Schalter und Namen der vier Slots (#1058) stehen seit R19 als gruppierte
+   Zeilen (`.settings-group`, oben) - die eigenen Abstaende der frueheren
+   Karte sind entfallen. */
+
+/* Die Schalterzeile `.toggle-row` stand hier und ist 2026-08-28 nach
+   layout.css gezogen. GRUND, gemessen: `settings.css` wird nur auf der
+   Einstellungsroute geladen (eine Page-CSS je Seite). Das Primitiv gilt aber
+   app-weit - „ein Schalter, eine Form" -, und als der Kalender es fuer sein
+   Filter-Blatt benutzte, kam das Markup ohne sein CSS an: neun Zeilen liefen
+   inline ineinander, die Farbscheiben waren unsichtbar. Eine geteilte Form,
+   deren Regeln in einem Modul-Stylesheet wohnen, ist nur dort eine Form. */
+
+/* --------------------------------------------------------
+   Chip-Gruppe einer Zeile (Mehrfachauswahl, z. B. Standard-Erinnerungen)
+
+   Die Chips sind die geteilten `.filter-chip` mit `aria-pressed`
+   (filter-chip.css). Bis R17 stand hier eine eigene Pille mit einer
+   16px-Checkbox darin (`.reminder-preset`) - neben `role="switch"`-Schaltern
+   eine zweite Form fuer "an/aus" (Critique 2026-10-07, E9).
+   -------------------------------------------------------- */
+.settings-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --------------------------------------------------------
+   Abmelden
+   -------------------------------------------------------- */
+
+.settings-logout-btn {
+  width: 100%;
+}
+
+/* --------------------------------------------------------
+   Generischer Category-Manager (.cat-*): siehe
+   public/styles/category-manager.css — global verlinkt, damit die
+   Component auch ausserhalb der Settings-Seite (Budget, Contacts,
+   Tasks, Einkauf seit Audit F-15) korrekt gestylt ist.
+   -------------------------------------------------------- */
+
+/* --------------------------------------------------------
+   Backup Scheduler Info Grid
+   -------------------------------------------------------- */
+
+.settings-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-info-grid--divided {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--space-px) solid var(--color-border);
+}
+
+.settings-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: var(--space-px) solid var(--color-border);
+}
+
+.settings-info-row:last-of-type {
+  border-bottom: none;
+}
+
+.settings-info-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-info-value {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+.settings-info-value--success {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-info-value--danger {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.settings-info-value code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+}
+
+/* Klartext zuerst, technischer Beleg darunter (Backup-Zeitplan). */
+.settings-info-value__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.document-storage-status {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--space-px) solid var(--color-border);
+}
+
+/* display:flex schlägt das UA-[hidden] bei gleicher Spezifität - die
+ * Sichtbarkeitssteuerung (nur bei aktivem WebDAV) braucht den Guard. */
+.settings-document-storage-warning[hidden] { display: none !important; }
+
+.settings-document-storage-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-light);
+  color: var(--color-warning-ink);
+  font-size: var(--text-sm);
+}
+
+.settings-document-storage-warning svg {
+  flex: 0 0 auto;
+}
+
+.settings-document-storage-success {
+  color: var(--color-success);
+}
+
+.settings-document-storage-error {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------
+   WebDAV Backup Card helpers
+   -------------------------------------------------------- */
+
+.settings-webdav-form {
+  margin-top: var(--space-4);
+}
+
+/* Schmales Zahlen-Eingabefeld (z.B. „Anzahl behalten", max. 2 Stellen) */
+.settings-input--compact {
+  max-width: 8ch;
+}
+
+/* Aktions-Reihe mit reduziertem Abstand nach oben */
+.settings-form-actions--tight {
+  margin-top: var(--space-2);
+}
+
+/* Die eigene Schalterleiste der WebDAV-Formulare ist entfallen (R19): der
+ * Schalter ist eine Zeile der Gruppe (settingSwitchRowHtml) wie jede andere. */
+
+/* Die Betreuer-Auswahl im Mitglied-Dialog: eine Chip-Gruppe mit eigenem
+ * Etikett, keine Zeile - sie steht ueber den Zeilen des Dialogs (R19). */
+.settings-member-caregivers {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+/* Password-Eingabe mit Reveal-Button nebeneinander */
+.settings-webdav-pw-wrap {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.settings-webdav-pw-wrap .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-webdav-reveal-btn {
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------
+   CalDAV Components
+   -------------------------------------------------------- */
+
+.settings-card-description {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+/* Der Konten-Leerzustand ist seit Block 2 die geteilte .empty-state--compact
+ * (layout.css). */
+
+/* Die Karte IST das Konto: ein Rahmen um alles, was zu ihm gehört - Status,
+   Adressbücher, Aktionen. Genau eine Rahmenebene; die Statuszeile darin wird
+   zur Kopfzeile (siehe unten), nicht zur zweiten Fläche. */
+.caldav-account-item {
+  min-width: 0;
+  padding: var(--space-4);
+  /* Bewusst Flächen-, keine Glas-Tokens: --glass-border-subtle ist weiß-
+     transparent und damit auf der weißen .settings-card unsichtbar - genau
+     dieser Rahmen soll aber die Grenze des Kontos tragen.
+     Die Farbe wird aus der Tinte gemischt statt aus --color-border genommen:
+     im Dark Mode ist --color-border dunkler als die Kartenfläche und damit
+     praktisch unsichtbar (gemessen 1.06:1). Der Mix läuft in beiden Themes in
+     die richtige Richtung. */
+  border: var(--space-px) solid color-mix(in srgb, var(--color-text-primary) 22%, var(--color-surface-raised));
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+}
+
+/* Statuszeile innerhalb einer Kontokarte: Kopfzeile statt eigener Fläche. */
+.caldav-account-item .settings-status-summary {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* Aufklapp-Block ebenso: die geteilte Komponente bringt Rahmen und Fläche mit,
+   in der Kontokarte ist sie ein Abschnitt, keine zweite Karte. */
+.caldav-account-item .settings-disclosure {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border: 0;
+  border-top: var(--space-px) solid var(--color-border);
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
+.caldav-account-item .settings-disclosure__trigger {
+  padding-inline: 0;
+  padding-block: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+}
+
+.caldav-account-item .settings-disclosure__trigger:hover {
+  background: var(--color-surface-hover);
+}
+
+.caldav-account-item .settings-disclosure__panel {
+  padding: 0;
+}
+
+/* Der Zustand wandert von der Fläche in die Zeile: getönter Punkt plus
+   getönter Text. Neutral bleibt bewusst ungetönt - „noch nie synchronisiert"
+   ist keine Meldung, sondern ein Ausgangszustand. */
+.caldav-account-item .settings-status-summary--success .settings-status-summary__status,
+.caldav-account-item .settings-status-summary--warning .settings-status-summary__status,
+.caldav-account-item .settings-status-summary--danger .settings-status-summary__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--settings-status-tone);
+}
+
+.caldav-account-item .settings-status-summary--success .settings-status-summary__status::before,
+.caldav-account-item .settings-status-summary--warning .settings-status-summary__status::before,
+.caldav-account-item .settings-status-summary--danger .settings-status-summary__status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.caldav-calendars-details {
+  margin: var(--space-3) 0;
+  border-top: var(--space-px) solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+/* Aufklapp-Zeile ist eine Trefferfläche wie die Zeilen darunter: --target-lg.
+   Kein display:flex - das entfernt in Chrome den Disclosure-Marker. */
+.caldav-calendars-summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  min-height: var(--target-lg);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+/* Dieselbe Hover-Fläche wie die Zeilen darunter - zwei Hover-Farben in einer
+   Liste lesen sich wie zwei verschiedene Listen. */
+.caldav-calendars-summary:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.caldav-calendars-list,
+.google-calendars-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-google-calendars {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+/* Serverseitige Einschränkung, keine Fehlermeldung: der Hinweis steht als Text
+   unter der Kontozeile, nicht als Warnton auf der Karte - die Verbindung ist ja
+   in Ordnung (#677). */
+.caldav-reminder-note {
+  margin-top: var(--space-3);
+}
+
+/* EINE Zeilen-Grammatik fuer die Sync-Auswahl, nicht zwei (#732). Die
+   ICS-Abos standen als nackte `.settings-member` daneben: ohne Zeilenflaeche,
+   ohne Mindesthoehe, mit anderem Innenabstand - dieselbe Aufgabe (was kommt in
+   diesen Haushalt?) in zwei Handschriften, was der Melder als Erstes auffiel.
+   Die Regel steht hier einmal; `--sync-row` holt sie sich, statt sie
+   nachzubauen. Sie traegt nur die Geometrie: `.settings-member` wird auch von
+   Familie und API-Tokens genutzt, und die duerfen davon nichts abbekommen. */
+.caldav-calendar-item,
+.caldav-reminder-item,
+.settings-member--sync-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+  min-height: var(--target-lg);
+}
+
+/* Der Zeiger gehoert nur den Zeilen, die als Ganzes schalten. Eine ICS-Zeile
+   tut das nicht - dort handeln die Knoepfe, und ein Zeigefinger ueber der
+   ganzen Zeile verspraeche einen Klick, den es nicht gibt. */
+.caldav-calendar-item,
+.caldav-reminder-item {
+  cursor: pointer;
+}
+
+.caldav-calendar-item:hover,
+.caldav-reminder-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.caldav-calendar-checkbox,
+.caldav-reminder-checkbox,
+.google-calendar-checkbox,
+.cardav-addressbook-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.caldav-reminder-module {
+  flex: 1;
+  min-width: 0;
+}
+
+.caldav-calendar-color {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Zwei Zeilen statt Ellipse: der Name entscheidet, welche Kontakte im Haushalt
+   landen. Eine Ellipse rettet nur der title-Tooltip - den es auf Touch nicht
+   gibt, also genau auf dem Hauptgerät der Zielgruppe nicht. */
+.caldav-calendar-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Mobil wächst die Zeile mit dem Namen - hier entscheidet der Nutzer, welche
+   Kontakte in den Haushalt wandern, und ein `title`-Tooltip existiert auf Touch
+   nicht. Erst ab Tablet, wo die Zeile ohnehin breit ist, wird auf zwei Zeilen
+   gekappt. Mit Quellzeile nie kappen, sonst verschwindet die URL, die genau
+   dort unterscheiden soll. */
+@media (min-width: 768px) {
+  .caldav-calendar-name:not(:has(.caldav-calendar-source)) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Adressbuch-Zeile: der Name darf jetzt umbrechen, die Zeile wächst mit. */
+.caldav-calendar-item {
+  align-items: flex-start;
+  padding-block: var(--space-3);
+}
+
+.caldav-calendar-item .cardav-addressbook-checkbox,
+.caldav-calendar-item .caldav-calendar-checkbox {
+  margin-top: 2px;
+}
+
+/* Sammelschalter über der Adressbuchliste: rechtsbündig und leichter als die
+   Zeilen darunter - er ordnet die Liste, er ist nicht ihr Hauptinhalt. */
+.caldav-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+/* Formular-Fußnote: gilt dem ganzen Dialog, nicht einem Feld. */
+.settings-form-note {
+  margin: 0 0 var(--space-4);
+}
+
+/* Gescheiterte Adressbuch-Zeile: der Fehler steht dort, wo er entstanden ist.
+   Kein Seitenstreifen - die Tönung der Fläche trägt die Markierung. */
+.caldav-calendar-item--failed {
+  background-color: color-mix(in srgb, var(--color-danger) var(--tint-wash), transparent);
+}
+
+.caldav-calendar-error {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+/* Zweite Zeile unter dem Namen: die Adressbuch-URL, klein und gedeckt. */
+.caldav-calendar-source {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Standard-Zuweisung pro Kalenderzeile (#459): rechtsbündig, gedeckelt. */
+.caldav-calendar-assignee {
+  flex-shrink: 0;
+  max-width: 40%;
+  padding: var(--space-1) var(--space-2);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-work);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.caldav-calendar-assignee:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.caldav-account-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--space-px) solid var(--color-border);
+}
+
+/* Schmale Viewports: die lange Wartungsaktion nimmt eine eigene Zeile, damit
+   „Trennen" nicht allein auf der letzten Zeile landet und dort zum optischen
+   Anker der Kartenfuß wird - die destruktivste Aktion bekäme sonst die
+   prominenteste Position. */
+@media (max-width: 639px) {
+  .caldav-account-actions .btn--sm:first-child {
+    flex: 1 0 100%;
+  }
+}
+
+/* --------------------------------------------------------
+   Third-party Modules
+   -------------------------------------------------------- */
+
+/* EIN Träger, Zeilen per Haarlinie (Zeilenlisten-Regel, §2). Vorher trug jede
+ * Modulzeile ihre eigene Karte und die Trennung lag im `gap` der Liste - die
+ * Bauart, die in einer langen Liste Schattenstreifen erzeugt und „jedes davon
+ * ist ein eigenes Objekt" sagt, wo die Gruppe gemeint ist. Sonde 7 hat sie
+ * gefunden, als die Settings-Blätter zum ersten Mal unter die Sonden kamen.
+ * Fläche, Radius, Schatten und die Trennlinien kommen aus `.row-carrier`
+ * (list-row.css) - hier steht nur noch, dass die Zeilen stapeln. */
+.settings-modules-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-mobile-nav-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.settings-navigation-panel {
+  padding-block: var(--space-4) var(--space-6);
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+}
+
+.settings-navigation-panel:first-child {
+  padding-top: 0;
+}
+
+.settings-navigation-panel:last-child {
+  border-bottom: 0;
+}
+
+.settings-navigation-panel__title {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-primary);
+}
+
+.settings-mobile-nav-slot {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  /* Randlose Karte auf dem Grouped-Grund (tokens.css, Kasten-in-Kasten). */
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.settings-mobile-nav-slot__label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Größe und Weight kommen aus der kompakten Titelrolle in typography.css;
+ * hier nur noch die Farbe. */
+.settings-navigation-group__title {
+  color: var(--color-text-secondary);
+}
+
+.settings-navigation-groups {
+  display: grid;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.settings-navigation-group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-navigation-group__title {
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+}
+
+/* Flächenlos: die Fläche gehört dem Träger. Kante und Radius stehen bewusst
+ * nicht mehr hier - `.row-carrier > * + *` setzt die Haarlinie, und ein Radius
+ * je Zeile wäre wieder die Karte, die gerade entfallen ist. */
+/* Fuenf Spalten: Griff, Pfeile, Symbol, Text, Ausblenden. Kurzzeitig waren es
+   sechs, solange der haushaltweite Schalter hier stand; seit er auf
+   `modules-active` wohnt, traegt eine Zeile genau ein Bedienelement am Ende.
+   Auf dem anderen Blatt greift `--fixed` mit seinen drei Spalten. */
+.settings-module-row {
+  display: grid;
+  grid-template-columns: var(--target-base) var(--target-base) var(--target-base) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  transition: background-color var(--transition-fast);
+}
+
+.settings-module-row:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.settings-module-row--fixed {
+  grid-template-columns: var(--target-base) minmax(0, 1fr) auto;
+}
+
+.settings-module-row--dragging {
+  opacity: 0.6;
+}
+
+.settings-module-drag {
+  display: grid;
+  place-items: center;
+  width: var(--target-base);
+  height: var(--target-base);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: grab;
+}
+
+.settings-module-drag:hover,
+.settings-module-move:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+}
+
+.settings-module-drag:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* AUSBLENDEN IST EIN KNOPF, KEIN SCHALTER (#673).
+   Er sieht aus wie der Griff und die Pfeile daneben. Seit der Haushalts-Schalter
+   auf `modules-active` wohnt (Critique 2026-08-16), steht er als einziges
+   Bedienelement am Zeilenende - die Abgrenzung, die diese Form urspruenglich
+   leisten musste, hat die Struktur uebernommen. */
+.settings-module-hide {
+  display: grid;
+  place-items: center;
+  width: var(--target-base);
+  height: var(--target-base);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* `:not([aria-pressed='true'])` ist nicht Zierrat, sondern eine gemessene
+   Korrektur: `:hover:not(:disabled)` hat die Spezifitaet 0,3,0 und schlug damit
+   `[aria-pressed='true']` mit 0,2,0. Sobald der Zeiger auf einem gedrueckten
+   Knopf lag, waren Toenung UND Akzentfarbe weg und der Zustand haengte am
+   24px-Glyph allein. */
+.settings-module-hide:hover:not(:disabled):not([aria-pressed='true']) {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-state), transparent);
+  color: var(--color-text-primary);
+}
+
+/* Gedrueckt = ausgeblendet. Der Zustand traegt Farbe, weil er sonst nur am
+   Symbol haengt und ein durchgestrichenes Auge klein ist. */
+.settings-module-hide[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-surface), transparent);
+  color: var(--color-accent);
+}
+
+/* Eine Sprosse hoeher auf der Toenungsskala - der Zustand liegt bereits auf
+   einer getoenten Flaeche (tokens.css, `--tint-raised`). */
+.settings-module-hide[aria-pressed='true']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-raised), transparent);
+}
+
+.settings-module-hide:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* EINE AUSGEBLENDETE ZEILE IST AUFGERAEUMT, NICHT GESPERRT (Critique 2026-08-16).
+   Hier stand `opacity: 0.6` auf Symbol und Titel - genau das, was DESIGN.md
+   verbietet ("einen Zustand nicht ueber opacity auf dem eigenen Inhalt zeigen,
+   sondern eine Sprosse der Toenungsskala steigen"). Gemessen fiel das
+   Modulsymbol damit auf 2,79:1 und riss die 3:1-Grenze fuer Bedienelemente, der
+   Titel landete bei 4,52:1 - dem knappsten Wert der Seite, ausgerechnet auf der
+   Beschriftung, die der einzige Weg zurueck ist. Der Zustand liegt jetzt am
+   TRAEGER statt am Inhalt: die Zeile toent, der Text bleibt voll lesbar. */
+.settings-module-row--hidden {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-wash), transparent);
+}
+
+/* Der Hover der Zeile (0,2,0) schlug den Zustand (0,1,0) und ersetzte die
+   Toenung durch eine deckende Flaeche - gemessen fiel der Chip dabei von 4,25
+   auf 4,00:1 und der Knopf-Glyph auf 3,54:1, und der Zustand "ausgeblendet"
+   verschwand genau dann, wenn der Zeiger auf ihm lag. Dieselbe Kollision hatte
+   der Knopf eine Ebene tiefer; sie hier zu uebersehen, war der eigentliche
+   Fehler. Der Hover steigt jetzt eine Sprosse der Toenungsskala, statt sie zu
+   ueberschreiben. */
+.settings-module-row--hidden:hover {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-state), transparent);
+}
+
+/* „AUSGEBLENDET" IST EINE MELDUNG, UND EINE MELDUNG TRAEGT KEINE FLAECHE.
+ *
+ * Hier stand eine Akzent-Toenung mit `--tint-ink`-Schrift derselben Farbe, und
+ * der Kommentar davor erzaehlte die Vorgeschichte: die pure Akzentfarbe lag auf
+ * ihrer eigenen blassen Fuellung bei 4,25:1 (light) und 3,86:1 (dark), also
+ * unter AA, und die Antwort war damals die naechste Sprosse der Toenungsskala.
+ *
+ * Die Skalen-Regel (v2.23.0) beantwortet die Frage eine Ebene hoeher: ein
+ * Etikett nennt seinen Ton EINMAL. „Ausgeblendet" meldet einen Zustand, und
+ * Meldungen tragen ihren Ton in der Schrift - hier ist der Zustand nicht einmal
+ * gefaehrlich oder dringend, also bleibt auch die Schrift zurueckgenommen. Der
+ * ganze Kontrastkampf faellt mit der Flaeche weg, gegen die er gefuehrt wurde. */
+.settings-module-row__title .settings-module-status--hidden {
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+/* Kind der Kueche: Symbol und Beschriftung links, Ausblenden rechts - dieselbe
+   Ordnung wie in der Elternzeile. Vorher lagen sie vertauscht, und dieselben
+   zwei Entscheidungen tauschten innerhalb einer aufgeklappten Karte die Seite. */
+.settings-module-kitchen__child-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-module-kitchen__child-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Ein einzeln ausgeblendetes Kind toent SEINE Zeile - nicht die der Gruppe.
+   Bis zur Review lief der Zustand ueber `closest('.settings-module-row')` und
+   landete damit auf der Kuechenzeile: ein verstecktes Rezepte-Modul toente die
+   ganze Kueche und haengte ihr den Chip an, obwohl die Gruppe sichtbar blieb.
+   Dieselbe Sprosse der Toenungsskala wie bei einer ganzen Zeile, eine Ebene
+   tiefer angewandt. */
+.settings-module-kitchen__child-row--hidden {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-wash), transparent);
+  border-radius: var(--radius-sm);
+}
+
+/* Ist die ganze Kueche versteckt, toent die Zeile bereits - das Kind darf seine
+   Toenung dann nicht obendraufsetzen, sonst liest eine vollstaendig versteckte
+   Kueche zwei Sprossen dunkler als jede andere versteckte Zeile. */
+.settings-module-row--hidden .settings-module-kitchen__child-row--hidden {
+  background: transparent;
+}
+
+/* Unterhalb der Lesebreite bricht die Kindzeile um, statt ihren Knopf zu
+   quetschen: gemessen schrumpfte er bei 200% Wurzelschrift auf 38px Breite und
+   riss damit sein Beruehrungsziel. Ein Container-Query, kein Viewport-Breakpoint
+   - was hier zaehlt, ist die Breite des aufgeklappten Felds, und die haengt auch
+   an der Schriftgroesse. */
+.settings-module-kitchen__children {
+  container-type: inline-size;
+}
+
+/* Auf `Aktive Module` tragen die Kinder Schalter am Zeilenende (2026-09-26).
+ * Die Kuechenzeile hat dort keine eigene Schalterspalte (sie IST ihre vier
+ * Kinder): der Aufklapper nimmt deren leere Spur samt Rasterluecke mit und
+ * laesst sein rechtes Polster fallen, damit die Kind-Schalter an derselben
+ * Kante enden wie die Schalter der Nachbarzeilen statt 28px davor. */
+.settings-module-row--fixed .settings-module-kitchen__children {
+  padding-inline-end: 0;
+  margin-inline-end: calc(-1 * var(--space-3));
+}
+
+@container (max-width: 260px) {
+  .settings-module-kitchen__child-row {
+    flex-wrap: wrap;
+  }
+
+  .settings-module-kitchen__child-row > :first-child {
+    flex-basis: 100%;
+  }
+
+  .settings-module-kitchen__child-row .settings-module-hide {
+    margin-inline-start: auto;
+  }
+}
+
+/* Die Klasse gab es seit dem Umbau der Kuechenzeile, eine Regel dazu nie: das
+   Symbol stand dadurch UEBER der Beschriftung statt daneben, in allen vier
+   Kindern (Assessment B, 2026-08-16). Fuer Adminnen fiel es nie auf, weil dort
+   `label.toggle-row` mit eigenem Flex rendert. */
+.settings-module-kitchen__child {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Der Gruppen-Knopf der Kueche fuellt die letzte Rasterspalte nicht, `auto`
+   kollabierte dort auf 0 - gemessen stand er 42px rechts der Augenspalte aller
+   anderen Zeilen. Er wird deshalb in dieselbe Spur gezwungen. */
+.settings-module-row--kitchen > .settings-module-hide {
+  grid-column: 5;
+  justify-self: center;
+}
+
+.settings-module-move-buttons {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.settings-module-move {
+  display: grid;
+  place-items: center;
+  width: var(--target-base);
+  height: var(--target-base);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.settings-module-move:disabled {
+  opacity: 0.35;
+}
+
+.settings-module-row__icon {
+  display: grid;
+  place-items: center;
+  width: var(--target-base);
+  height: var(--target-base);
+  border-radius: var(--radius-md);
+  --seal-accent: var(--module-row-accent, var(--color-accent));
+}
+
+/* Das Zeichen fuellt die Scheibe - es TAT das schon, aber aus Versehen: das
+ * SVG hatte kein eigenes Mass und nahm deshalb die Breite dieser Box. Seit
+ * #949 bringt jedes Modulzeichen sein Grundmass mit (24, wie der
+ * Lucide-Rueckfall), damit es in einer flexiblen Zeile nicht mehr ausufert.
+ * Diese Zeile schreibt fest, was hier vorher zufaellig herauskam. */
+.settings-module-row__icon .module-glyph {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.settings-module-row__body {
+  min-width: 0;
+}
+
+.settings-module-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--color-text-primary);
+}
+
+.settings-module-row__title span {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.settings-module-status {
+  padding: var(--space-0h) var(--space-2);
+  border-radius: var(--radius-full);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Ein gruenes „Aktiviert" gibt es nicht mehr: das Statuswort steht nur fuer die
+   Abweichung (aus, Fehler, nicht im Menue), der Schalter sagt „an" allein
+   (Komponenten-Kanon 2026-09-26, modules-active.js statusChipHtml). */
+.settings-module-status--disabled {
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+
+.settings-module-status--error {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) var(--tint-surface), transparent);
+}
+
+/* `--pyamortiza-accent` als erster Fallback war ein projektfremder Name: die
+   Variable existiert nirgends im Baum, der Ausdruck fiel immer auf
+   `--color-accent` zurück. Ersatzlos weg. */
+.settings-module-row__title .settings-module-origin {
+  padding: var(--space-0h) var(--space-2);
+  border-radius: var(--radius-full);
+  font-weight: var(--font-weight-semibold);
+  /* „EXTERN" / „EINGEBAUT" IST EINE SACHANGABE, KEINE IDENTITAET.
+   *
+   * Hier stand Akzent-Text auf akzent-getoenter Flaeche, mit einer
+   * Kontrastbegruendung im Kommentar (der rohe Akzent scheiterte bei 3,99:1
+   * dark, weil der Grund eine Toenung DERSELBEN Farbe war). Die Skalen-Regel
+   * loest den Fall auf: die Zuordnung, die dieses Etikett nennt, ist keine
+   * Identitaet mit eigener Farbe - sie sagt, WOHER ein Modul kommt, so wie ein
+   * Versionsetikett sagt, WANN. Neutral, und der Kontrastkampf entfaellt. */
+  background: var(--color-fill-well);
+  color: var(--color-text-primary);
+}
+
+.settings-module-row__toggle {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* Ein loeschbares Drittmodul traegt am Zeilenende zusaetzlich seinen
+   Mehr-Knopf (modules-active.js, Loeschen als Eintrag darin): eine vierte
+   Spalte hinter dem Schalter, auf jeder Breite. */
+.settings-module-row--fixed.settings-module-row--menu {
+  grid-template-columns: var(--target-base) minmax(0, 1fr) auto auto;
+}
+
+/* Die Details eines Drittmoduls sind eine eigene Rasterzeile unter der
+   Titelzeile, von der Textspalte bis zum Zeilenende. Im Textblock bekamen sie
+   auf dem Telefon nur dessen Spalte (127px bei 375px), Werte wurden
+   abgeschnitten, und Schalter und Mehr-Knopf schwebten auf halber Hoehe
+   der aufgeklappten Zeile. So bleiben beide neben dem Titel. */
+.settings-module-row__details {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+/* Quelle (URL @ ref) und Ordner sind lange Woerter ohne Trennstelle; eine
+   lange Beschreibung trennt dagegen an Silben (test:typography W1). */
+.settings-module-row__details .settings-info-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+@media (max-width: 639px) {
+  .settings-module-row--fixed.settings-module-row--menu {
+    grid-template-columns: var(--target-base) minmax(0, 1fr) auto auto;
+  }
+
+  .settings-module-row--menu .settings-module-row__actions {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  /* Auf dem Telefon zaehlt jede Spalte: die Details nehmen auch die des
+     Symbols mit. */
+  .settings-module-row__details {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 639px) {
+  .settings-mobile-nav-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-module-drag {
+    display: none;
+  }
+
+  .settings-module-row {
+    grid-template-columns: var(--target-base) minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .settings-module-row--fixed {
+    grid-template-columns: var(--target-base) minmax(0, 1fr) auto;
+  }
+
+  /* Der Ausblenden-Knopf steht auf dem Telefon vor dem Schalter, in derselben
+     Zeile wie der Titel; die Pfeile bleiben darunter. */
+  .settings-module-hide {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .settings-module-move-buttons {
+    grid-column: 3;
+    grid-row: 2;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .settings-module-row__icon {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .settings-module-row__body {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .settings-module-row__toggle {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    padding-inline: var(--space-2);
+  }
+
+  /* HIER STAND EINE REGEL, DIE NIEMANDEN MEHR TRIFFT (Audit 2026-08-16, P0).
+     Sie versteckte auf dem Telefon den Schalter gesperrter Zeilen - der ist
+     wirkungslos, also kostete er nur Platz. Sie hing an `--fixed`, und das
+     heisst woertlich "drei Rasterspalten": als das neue Blatt `modules-active`
+     genau das brauchte, verschwanden dort ALLE elf Schalter unter 640px.
+     Auf `--locked` umgehaengt traf sie nichts mehr - gesperrte Zeilen stehen
+     nur auf dem Navigationsblatt, und das rendert seit dem Split gar keine
+     Schalter. Eine Regel ohne Traeger ist keine Zusicherung, sondern eine
+     Notiz; deshalb steht hier die Notiz und nicht die Regel. */
+
+  /* Die Kuechenzeile spannte ihren Text hier ueber die Steuerspalten, damit das
+     aufgeklappte Feld die volle Breite bekommt - der Gruppen-Knopf lag dadurch
+     44px DARAUF, und in der Ausweichposition neben den Pfeilen las er sich als
+     drittes Sortier-Bedienelement (beide Zustaende gemessen, 2026-08-16). Sie
+     endet jetzt wie jede andere Zeile vor der Knopfspalte: das Feld ist etwas
+     schmaler, dafuer steht das Auge der Kueche dort, wo alle Augen stehen. */
+  .settings-module-row--kitchen .settings-module-row__body {
+    grid-column: 2 / 3;
+  }
+
+  .settings-module-row--kitchen .settings-module-move-buttons {
+    grid-column: 3;
+    justify-content: flex-end;
+  }
+
+  /* Die Desktop-Regel setzt den Gruppen-Knopf in Spalte 5. Hier gibt es nur
+     drei; ohne diese Zeile erzeugte er eine implizite fuenfte und stand 48px
+     neben der Augenspalte (gemessen 2026-08-16). */
+  .settings-module-row--kitchen > .settings-module-hide {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: stretch;
+  }
+
+  /* Das aufgeklappte Feld darf die Knopfspalte mitbenutzen: sein Text endet
+     sonst nach 118px und die vier Kind-Knoepfe schrumpfen auf 19-24px, also
+     unter jedes Beruehrungsziel. Der Ausbruch ist genau eine Spalte breit.
+     NUR auf dem Navigationsblatt (`--kitchen`): auf `Aktive Module` hat die
+     Kuechenzeile keine Knopfspalte, und seit die Kinder Schalter am
+     Zeilenende tragen (2026-09-26), schob der Ausbruch sie 44px ueber den
+     Kartenrand hinaus. */
+  .settings-module-row--kitchen .settings-module-kitchen__children {
+    margin-inline-end: calc(-1 * (var(--target-base) + var(--space-3)));
+  }
+}
+
+/* ── DMS accounts ─────────────────────────────────────────── */
+
+.dms-account-list {
+  list-style: none;
+  margin: 0 0 var(--space-4) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dms-account-empty {
+  padding: var(--space-2) 0;
+}
+
+.dms-account-meta {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Rollen & Rechte (Permissions-Matrix, #467) ───────────────────────────── */
+
+.settings-section__intro {
+  margin: calc(var(--space-2) * -1) 0 var(--space-4);
+  max-width: 60ch;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Modus-Umschalter (Rolle / Mitglied): der Kanon-Umschalter `.segmented`
+ * (panel.css) samt `.settings-segmented`; hier steht nur sein Abstand zur
+ * Subjekt-Auswahl darunter (R14). */
+.perm-mode {
+  margin-bottom: var(--space-4);
+}
+
+/* Subjekt-Auswahl (Rollen-/Mitglieder-Chips) */
+.perm-subjects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.perm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-md);
+  padding: var(--space-1) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-work);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.perm-chip:hover { border-color: var(--color-accent); color: var(--color-text-primary); }
+
+.perm-chip.is-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.perm-chip__avatar {
+  display: inline-grid;
+  place-items: center;
+  /* 24px, nicht 22px (#1607): zwei Hangul- oder Han-Zeichen sind bei 12px
+   * Schrift zusammen 24px breit und liefen in der 22px-Scheibe ueber den Rand. */
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  color: var(--color-text-on-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.perm-chip__avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.perm-chip__badge {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Matrix */
+.perm-matrix__head { margin-bottom: var(--space-4); }
+
+.perm-matrix__subject {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.perm-matrix__hint {
+  margin: var(--space-1) 0 0;
+  max-width: 60ch;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.perm-empty { padding: var(--space-6) 0; }
+
+/* Legende der Icon-Segmente (Re-Critique 2026-09-27, A7 P2-13): am breiten
+ * Zeiger-Viewport tragen die Segmente nur ihr Icon, der Klartext stand allein
+ * im Tooltip. Wo die Segmente ihr Wort selbst zeigen (schmal oder Finger,
+ * Media-Query unten), faellt die Legende weg - sie waere dort die zweite
+ * Beschriftung derselben Knoepfe. */
+.perm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Je Abschnitt eine Gruppe mit eigener Ueberschrift: dasselbe Icon heisst am
+ * Modul „Lesen", am Widget „Verfuegbar" und an einer Faehigkeit „Erlaubt". */
+.perm-legend__group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.perm-legend__scope {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.perm-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.perm-legend__item svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex: none;
+}
+
+/* Fokussierte Spalte: Label und Control nah beieinander statt breit gestreckt. */
+.perm-matrix { max-width: 640px; }
+
+/* Abweichungs-Überblick: die Form einer Rolle auf einen Blick. */
+.perm-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-3);
+}
+
+.perm-summary--full {
+  align-items: center;
+  color: var(--color-success);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.perm-summary__lead {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.perm-summary__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.perm-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-work);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.perm-summary__dot { width: 7px; height: 7px; border-radius: var(--radius-full); flex-shrink: 0; }
+
+/* Liste: Modul-Gruppen, jede mit eingerückten Widgets darunter. */
+.perm-list {
+  /* Inset-Well statt Kasten in der Karte (tokens.css). */
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-fill-well);
+  overflow: hidden;
+}
+
+.perm-modgroup + .perm-modgroup { border-top: var(--space-px) solid var(--color-border); }
+
+.perm-modgroup__widgets {
+  padding-inline-start: var(--space-8);
+  padding-bottom: var(--space-1);
+}
+
+.perm-modgroup__widgets .perm-row--widget { border-top: var(--space-px) solid var(--color-border-subtle); }
+
+.perm-modgroup__capabilities {
+  margin-block: 0 var(--space-3);
+  margin-inline: var(--space-8) var(--space-3);
+  border-block: var(--space-px) solid var(--color-border-subtle);
+}
+
+.perm-modgroup__capabilities-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.perm-modgroup__capabilities-title svg { width: var(--icon-md); height: var(--icon-md); }
+.perm-row--capability { padding: var(--space-3); }
+.perm-row--capability .perm-seg__opt { display: inline-flex; gap: var(--space-1); padding-inline: var(--space-3); }
+.perm-row--capability .perm-seg__label { display: inline; font-size: var(--text-xs); }
+
+.perm-modgroup--general .perm-modgroup__general-title {
+  padding: var(--space-3) var(--space-4) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+
+.perm-row.is-locked { opacity: 0.5; }
+
+.perm-row__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.perm-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Widget-Zeilen leiser als Module (kleineres Icon, sekundäre Farbe). */
+.perm-row--widget { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.perm-row--widget .perm-row__label { color: var(--color-text-secondary); }
+.perm-row__wicon { width: 15px !important; height: 15px !important; color: var(--color-text-tertiary) !important; }
+
+.perm-row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.perm-row__hint {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.perm-row__hint--warn { color: var(--color-warning); }
+
+/* Icon-Segment mit gleitender Aktiv-Pille. Optionen gleich breit; die Pille
+   (thumb) wandert per translateX zur aktiven Position. */
+.perm-seg {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: var(--space-0h);
+  background: var(--color-surface-raised);
+  border: var(--space-px) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+}
+
+.perm-seg[data-disabled="true"] { opacity: 0.55; }
+
+.perm-seg__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / var(--seg-count, 3));
+  border-radius: var(--radius-full);
+  /* Der gleitende Daumen IST das aktive Segment. Er trug bis zur Re-Critique
+   * 2026-09-28 die Segment-Sprache der Shell (erhabene Surface-Pille, Modulton
+   * in der Tinte) - und war damit praktisch unsichtbar: gemessen weiss auf
+   * rgb(251,251,253) = 1,03:1, in Dark sogar DUNKLER als das Segment, und der
+   * Modulton der Einstellungen ist neutral, also trug auch die Tinte nichts
+   * (1,2:1 gegen das inaktive Glyph). Die Matrix ist die Aufgabe mit den
+   * groessten sozialen Folgen (was darf das Kind) und steht am Zeiger nur als
+   * Icon - die Label-Verlust-Regel verlangt getoente Flaeche PLUS gefuelltes
+   * Glyph (layout.css, Filled Variant), beides im App-Akzent.
+   *
+   * Die KANTE traegt den Kontrast: eine Toenung allein erreicht die 3:1 gegen
+   * das Segment nie (24 %: 1,41 hell / 1,28 dunkel), der Akzent als Kante
+   * 5,86 hell / 4,61 dunkel (nachgerechnet in test-permission-sheet-ui.js). Als
+   * inset-Schatten, damit sie den Daumen nicht vergroessert. Nie die Kante
+   * allein - Flaeche und Glyph sagen den Zustand mit. */
+  background: color-mix(in srgb, var(--color-accent) var(--tint-surface), var(--color-surface));
+  box-shadow: inset 0 0 0 1.5px var(--color-accent);
+  transform: translateX(calc(var(--seg-index, 0) * 100%));
+  transition: transform var(--duration-lg) var(--ease-out);
+  pointer-events: none;
+}
+
+/* DIE LABEL-VERLUST-REGEL (Runde 6, Phase 3b), hier im umgekehrten Fall: das
+ * Label faellt auf dem BREITEN Viewport (siehe .perm-seg__label). Damit ist das
+ * Segment dort ein Icon-Ziel und traegt `--target-base` in beiden Richtungen -
+ * vorher blieben 34x30 uebrig, also unter jedem Zielmass, das die App kennt.
+ * Segmente stehen aneinander; die Spacing-Ausnahme aus WCAG 2.5.8 greift fuer
+ * sie gerade nicht. */
+.perm-seg__opt {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--target-base);
+  min-height: var(--target-base);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.perm-seg__opt:disabled { cursor: not-allowed; }
+/* Die Fläche liefert der gleitende Daumen; das Glyph darauf trägt die Tinte -
+ * dieselbe Mischung wie jedes andere aktive Segment, aber im APP-Akzent statt
+ * im Modulton: der der Einstellungen ist neutral und hob das aktive Glyph nur
+ * 1,2:1 vom inaktiven ab (Re-Critique 2026-09-28, A7 P1-1). */
+.perm-seg__opt.is-active {
+  color: color-mix(in srgb, var(--color-accent) var(--tint-ink), var(--color-text-primary));
+}
+
+/* Am Zeiger traegt der Tooltip den Klartext; unter 768px wird er sichtbar. */
+.perm-seg__label { display: none; }
+
+.perm-seg__opt:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.perm-actions {
+  position: sticky;
+  /* Ueber der Tab-Kapsel, nicht unter ihr: seit der Inhalt bis zur
+   * Unterkante laeuft, klebte `bottom: 0` hinter dem Glas (Kopfregel mobil,
+   * 2026-09-26). `--nav-tail` ist 0, wo keine Leiste steht. */
+  bottom: var(--nav-tail);
+  z-index: var(--z-sticky, 10);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* Umbruch statt Quetschen - Begruendung an `.modal-panel__footer`
+   * (layout.css, #872). Die Schmalregel weiter unten setzt ihn nicht mehr,
+   * sie gibt der Statuszeile dort nur noch ihre eigene Zeile. */
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding: var(--space-3) 0;
+  background: var(--color-bg);
+  border-top: var(--space-px) solid var(--color-border-subtle);
+}
+
+.perm-actions__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: auto;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.perm-adminnote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  /* Randlose Karte auf dem Grouped-Grund (tokens.css, Kasten-in-Kasten). */
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+}
+
+.perm-adminnote p { margin: 0; font-size: var(--text-sm); }
+
+/* Rechtevergabe war die schlechteste Touch-Fläche in Settings - bei der Aufgabe
+   mit den größten sozialen Folgen (Critique 2026-07-27): 32px-Chips,
+   32px-Modusumschalter und 34x30px-Segmente, deren Klartext nur im `title`
+   stand. Gestapelt statt segmentiert: der Name bekommt seine eigene Zeile, die
+   Stufen darunter die volle Breite - mit Wort, nicht nur mit Symbol.
+
+   Die Grenze ist bewusst nicht der Mobile-Breakpoint: iPad Portrait ist
+   768px, dort galt die kompakte Icon-Variante wieder (gemessen bei 820px: 59
+   Segmente à 34x30px, Label `display: none`). Touch endet nicht bei 767px.
+   `pointer: coarse` deckt zusätzlich das Tablet im Querformat, wo der
+   Viewport breiter als Desktop ist, der Finger aber derselbe bleibt. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .perm-legend { display: none; }
+
+  .perm-modgroup__widgets { padding-inline-start: var(--space-4); }
+  .perm-modgroup__capabilities { margin-inline-start: var(--space-4); }
+
+  .perm-chip { min-height: var(--target-base); }
+
+  .perm-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  /* Der Name darf jetzt umbrechen: er teilt die Zeile mit nichts mehr. */
+  .perm-row__name {
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .perm-seg {
+    display: grid;
+    grid-template-columns: repeat(var(--seg-count, 3), 1fr);
+    width: 100%;
+  }
+
+  /* Icon über Wort: nebeneinander passen vier Stufen ("Erben" kommt im
+     Mitglieds-Modus dazu) bei 390px nicht in eine Zeile. */
+  /* Hier traegt das Segment sein Label wieder - es ist kein Icon-Ziel mehr und
+   * gibt die quadratische Mindestbreite an die Rasterspalte ab. */
+  .perm-seg__opt {
+    grid-auto-flow: row;
+    align-content: center;
+    gap: var(--space-0h);
+    min-width: 0;
+    min-height: var(--target-base);
+    padding: var(--space-1) var(--space-0h);
+  }
+
+  .perm-seg__label {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  /* Zwei Buttons plus Statuszeile passen bei 390px nicht nebeneinander. Die
+     ERLAUBNIS zum Umbruch steht seit #872 in der Basisregel und gilt in jeder
+     Breite; hier bleibt nur der GRUND: die Statuszeile nimmt sich eine eigene
+     Zeile, statt sich zwischen die Knoepfe zu draengen. */
+  .perm-actions__status {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  /* Klebend nur, solange etwas ungespeichert ist (Re-Critique 2026-09-28,
+   * A7 P2-5): vorher 73px dauerhaft ueber der 76px-Kapsel, auch mit gesperrtem
+   * „Speichern", und im ersten Bild lag er auf dem Rollen-Hinweis. Ohne
+   * Aenderung steht der Fuss am Ende der Liste - „Zuruecksetzen" bleibt dort
+   * erreichbar. `is-dirty` setzt updateSaveState(), derselbe Weg, der
+   * „Speichern" freigibt. */
+  .perm-actions:not(.is-dirty) {
+    position: static;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .perm-chip,
+  .perm-seg__opt,
+  .perm-seg__thumb { transition: none; }
+}
+
+/* --------------------------------------------------------
+   [hidden] durchsetzen
+   -------------------------------------------------------- */
+
+/* Das UA-`[hidden] { display: none }` hat Spezifitaet (0,1,0) - genau so viel
+   wie jede Layoutklasse dieser Datei, die `display` setzt. Wer spaeter im
+   Stylesheet steht, gewinnt, und das ist hier fast immer die Klasse. Gefunden
+   an `.settings-form` (display:flex): das WebDAV-Formular blieb nach
+   `form.hidden = true` sichtbar, also stand ein leeres Formular unter einer
+   Fehlermeldung, dessen Speichern-Button eine bestehende Verbindung
+   ueberschrieben haette.
+
+   Die Regel gilt fuer die gesamte Settings-Flaeche statt fuer eine Liste
+   einzelner Klassen, damit das naechste `hidden` nicht dieselbe Falle stellt.
+   Dasselbe Muster steht in budget.css:86, calendar.css:596 und
+   documents.css:140 - dort jeweils punktuell. */
+.settings-page [hidden] { display: none !important; }
+
+/* --------------------------------------------------------
+   Auf anderen Geraeten abmelden (#1354, #1423)
+
+   Hinweis, Statuszeile und Knopfreihe standen ohne Abstand untereinander:
+   der Status las sich als vierte Zeile des Hinweises, und der Fokusring des
+   Knopfes lag auf dem Statustext. Die Abstaende folgen dem `.settings-form` der
+   Nachbarkarten (--space-3 vor der Aktion), zwischen zwei Hinweiszeilen der
+   kleinere Schritt. Die Statuszeile bekommt ihren nur mit Text - leer bleibt
+   sie eine Live-Region ohne Hoehe und ohne Leerraum.
+   -------------------------------------------------------- */
+.settings-sessions__status:not(:empty),
+.settings-sessions__error {
+  margin-top: var(--space-2);
+  margin-bottom: 0;
+}
+
+.settings-sessions__actions {
+  margin-top: var(--space-3);
+}
+
+/* --------------------------------------------------------
+   Zwei-Faktor-Anmeldung (#672)
+
+   Der QR-Code steht auf einer eigenen weissen Flaeche, nicht auf der
+   Kartenfarbe: ein Scanner braucht den Kontrast, und im dunklen Erscheinungs-
+   bild waere die Karte selbst dunkel. Das Bild bleibt deshalb in jedem
+   Farbschema auf Weiss.
+
+   Die Abstaende der Karte folgen "Andere Geraete" (#1427): Hinweis und Knopf
+   standen mit 0 px untereinander, der Fokusring des Knopfes lag auf dem
+   Hinweis. Jede Zeile nach der ersten bekommt den kleineren Schritt, die
+   Knopfreihe und das Formular der Rueckfrage den der `.settings-form`-Karten.
+   Eine leere Statuszeile bleibt eine Live-Region ohne Leerraum.
+   -------------------------------------------------------- */
+.settings-2fa__note:not(:empty) {
+  margin-top: var(--space-2);
+  margin-bottom: 0;
+}
+
+.settings-2fa__actions,
+.settings-2fa__form {
+  margin-top: var(--space-3);
+}
+
+.settings-2fa__steps {
+  /* Der Reset nimmt Listen ihre Marker. Hier gehoeren sie zurueck: die beiden
+     Schritte haben eine Reihenfolge, und ohne Ziffern stehen sie als zwei
+     lose Zeilen da, die man auch andersherum lesen koennte. */
+  list-style: decimal;
+  margin: var(--space-2) 0 var(--space-4);
+  padding-left: var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.settings-2fa__qr {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: #ffffff;
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.settings-2fa__qr img {
+  display: block;
+  width: 222px;
+  height: 222px;
+}
+
+.settings-2fa__secret {
+  margin: var(--space-1) 0 var(--space-4);
+}
+
+.settings-2fa__secret code {
+  display: inline-block;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-fill-well);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  /* Das Geheimnis wird abgetippt - Zeilenumbruch statt waagerechtem Scrollen. */
+  overflow-wrap: anywhere;
+}
+
+/* Der Code ist eine kurze Ziffernfolge; ein Feld ueber die volle Breite
+   suggeriert einen Satz. */
+.settings-2fa__code {
+  max-width: 12ch;
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-label);
+}
+
+.settings-2fa__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-2fa__status--on {
+  color: var(--color-success-ink);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-2fa__status svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Die Wiederherstellungscodes stehen zweispaltig, damit zehn Zeilen nicht die
+   halbe Seite fuellen und der Blick sie als EINEN Block erfasst. */
+.settings-2fa__codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11ch, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-4);
+  padding: var(--space-4);
+  list-style: none;
+  background: var(--color-fill-well);
+  border-radius: var(--radius-md);
+}
+
+.settings-2fa__codes code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  user-select: all;
+}
+
+/* Uebersicht: wer im Haushalt hat den zweiten Faktor (#672). */
+.settings-2fa__members {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* In der Gruppe (R17, E9) ist die Liste eine eigene Zeile: die Haarlinie des
+ * Traegers trennt sie vom Schalter, also kein eigener Abstand und keine Linie
+ * ueber dem ersten Mitglied; ohne Mitglieder gibt es die Zeile nicht. */
+.settings-2fa__row > .settings-2fa__members {
+  margin: 0;
+}
+
+.settings-2fa__row .settings-2fa__member:first-child {
+  border-top: 0;
+}
+
+.settings-group > .settings-2fa__row:has(> .settings-2fa__members:empty) {
+  display: none;
+}
+
+.settings-2fa__member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: var(--space-px) solid var(--color-border-subtle);
+}
+
+.settings-2fa__member:first-child {
+  border-top: none;
+}
+
+.settings-2fa__member-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.settings-2fa__member-icon--on  { color: var(--color-success); }
+.settings-2fa__member-icon--off { color: var(--color-text-tertiary); }
+
+.settings-2fa__member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-2fa__member-state {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Das Symbol der Vorsorge-Art steht VOR dem Namen, nicht darueber: Lucide
+ * rendert ein block-SVG, und `.list-row__name` ist ein Block - ohne diese
+ * Regel stand das Symbol auf einer eigenen Zeile (Sichtpruefung 2026-09-26). */
+.settings-prevention-type__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Ein Knopf, der ein Icon neben seinem eigenen Icon+Label zeigt (z.B. den
+ * Icon-Picker-Trigger) - war inline style="", Tokens waren richtig, nur nicht
+ * am richtigen Ort (Review #1256, modules-health.js). */
+.settings-icon-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+}
+
+/* --------------------------------------------------------
+ * Zuweisung nachtragen: Rückfrage mit Einzelliste (#1307)
+ *
+ * Umgezogene Termine stehen einzeln zur Wahl, je Zeile Titel, Datum mit
+ * Kalender und "von X zu Y". Die Liste scrollt in sich, damit die Knöpfe
+ * auch bei vielen Terminen sichtbar bleiben.
+ * -------------------------------------------------------- */
+
+.backfill-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.backfill-review__part {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.backfill-review__heading {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.backfill-moved__all {
+  margin-bottom: var(--space-2);
+}
+
+.backfill-moved__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.backfill-moved__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: var(--target-md);
+  padding: var(--space-2) var(--space-1);
+  cursor: pointer;
+}
+
+.backfill-moved__item + .backfill-moved__item {
+  border-top: var(--space-px) solid var(--color-border-subtle);
+}
+
+.backfill-moved__item input[type="checkbox"] {
+  width: var(--space-5);
+  height: var(--space-5);
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.backfill-moved__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.backfill-moved__title {
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.backfill-moved__meta,
+.backfill-moved__change {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* Die Sprungmarke zum Blatt (R20, settings/shell.js createSheetSkipLink)
+ * gilt nur, wo ein Blatt NEBEN der Leiste steht. Auf der Uebersicht gibt es
+ * keins - dort waere sie ein Stopp, der nirgends hinfuehrt. Schmal steht die
+ * Leiste beim Blatt ohnehin nicht da. */
+.settings-page:not(.settings-page--leaf) .settings-shell__skip {
+  display: none;
+}

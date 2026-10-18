@@ -1,0 +1,819 @@
+/**
+ * Modul: Kontakte (Contacts)
+ * Zweck: Styles für Kontaktliste, Kategorie-Chips, Kontakt-Karte, Modal
+ * Abhängigkeiten: tokens.css, layout.css
+ */
+
+/* --------------------------------------------------------
+ * Modul-Akzent
+ * --c-accent: der kohärente Modul-Ton (Blau). Der Router setzt
+ * --active-module-accent global; Fallback ist die Modul-Farbe selbst
+ * (NICHT --color-accent, sonst schlägt globales Violett durch — DESIGN §2).
+ * -------------------------------------------------------- */
+.contacts-page {
+  --module-accent: var(--module-contacts);
+  --c-accent: var(--active-module-accent, var(--module-contacts));
+}
+
+/* --------------------------------------------------------
+ * Seiten-Layout
+ * -------------------------------------------------------- */
+.contacts-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* Full-bleed-Root (Issue #577): Content-Spalte über --page-inline-pad auf den
+   * direkten Kindern, damit das Chrome des Kopfes bis zur Shell-Kante läuft. */
+  /* overflow:clip inside overflow:auto (.app-content) triggers iOS WebKit blank-screen on scroll.
+   * overflow:hidden provides identical clipping without the compositor bug. */
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .contacts-page { height: 100%; }
+}
+
+/* --------------------------------------------------------
+ * Toolbar: Suche + Filter + Neu
+ * -------------------------------------------------------- */
+/* Struktur (Flex/Padding/Sticky/3px-Streifen) kommt aus .page-toolbar
+ * (Canonical Page Head) in layout.css — hier nur noch Contacts-Spezifika. */
+/* Toolbar search uses the shared .page-search control (page-search.css);
+ * .page-toolbar__center handles its placement. No module visual needed. */
+
+/* --------------------------------------------------------
+ * Kategorie-Filter (horizontal scroll)
+ *
+ * DIE REIHE STEHT IM PORT (Kopfregel mobil, 2026-09-26). Sie ist das erste
+ * Kind von `#contacts-list`, traegt `.page-chip-row` (layout.css: waagerechter
+ * Scroller, Fokusluft, kein sticky) und scrollt mit der Liste weg. Fest ueber
+ * dem Port kostete sie dauerhaft 65px - der Port begann bei y179 statt 114,
+ * und kein Kopf-Kollaps holte sie zurueck (A8). Mit ihr gingen der Trennstrich
+ * (er trennte festes Chrome vom Scroller, den es hier nicht mehr gibt), das
+ * eigene Seitenpolster (die Reihe steht in der Inhaltsspalte des Ports, die
+ * es schon traegt) und die Desktop-Kappung, die genau dieses Polster
+ * gegenrechnete.
+ * -------------------------------------------------------- */
+.contacts-filters:empty {
+  display: none;
+}
+
+/* AM ZEIGERGERAET BRICHT DIE REIHE UM (R10 L8, A5 P2-6). Eine Maus hat keine
+ * waagerechte Geste: in der 424px-Listenspur standen bei 1440 nur vier von
+ * zehn Chips sichtbar, der Rest hinter einem Scroller ohne Balken. Mit nur
+ * belegten Kategorien (contacts.js) sind es wenige, und die passen in zwei
+ * Reihen. Am Finger bleibt der Querscroller - dort ist Wischen die Geste. */
+@media (hover: hover) and (pointer: fine) {
+  .contacts-filters {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+/* Die Reihe endet an der Lesekante wie die Gruppen darunter: im Port ist sie
+ * so breit wie der Port (1156px bei 1440), die Traeger aber kappen aufs
+ * Lesemass (list-row.css). Ohne eigenes Polster rechnet die Kappung nichts
+ * mehr gegen (vgl. die Liste in layout.css, „NICHT in dieser Liste"). */
+.page-measure--narrow .contacts-filters {
+  max-width: var(--page-measure, none);
+}
+
+/* ER TRÄGT `.filter-chip` (Critique 2026-08-13). Hier stand ein Nachbau, der
+ * zehn seiner vierzehn Deklarationen zeichengleich mit der geteilten Regel
+ * teilte - und in den übrigen vier war er nicht anders, sondern schlechter:
+ * `transition: all` hatte die geteilte Regel ausdrücklich abgeschafft (sie
+ * zieht implizit Layout-Eigenschaften mit), und `min-height: 30px` war ein
+ * hartkodierter Wert weit unter `--target-lg` - gemessen fiel der Chip am
+ * Desktop auf 31px, während jeder andere Filterchip der App 48px hoch ist.
+ * Der Aktivzustand war ohnehin Zeichen für Zeichen dieselbe Regel, nur mit
+ * `--c-accent` statt `--module-accent` - und `--c-accent` löst laut Kopf
+ * dieser Datei genau darauf auf.
+ *
+ * Was BLEIBT, ist der Seitenraum: der Aktivzustand ließ kurze Labels wie
+ * „Alle" bei `--space-3` fast kreisrund wirken (#569). */
+.contact-filter-chip {
+  padding-inline: var(--space-4);
+}
+
+/* --------------------------------------------------------
+ * Kontaktliste
+ * -------------------------------------------------------- */
+.contacts-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-inline: var(--page-inline-pad);
+}
+
+/* Ein Träger pro Kategorie (Zeilenlisten-Regel, tokens.css): die Zeilen lagen
+ * vorher direkt auf dem Grouped-Grund und hatten damit keinen Rand, an dem das
+ * Auge die Gruppe als EIN Objekt fasst. Der Versal-Sektionskopf bleibt bewusst
+ * ausserhalb - er sitzt sticky auf dem Grund, wie in Apples Kontakten. */
+.contact-group {
+  margin-bottom: var(--space-4);
+}
+
+/* Der Traeger ist `.row-carrier` (list-row.css) - hier standen seine vier
+ * Deklarationen ein zweites Mal. Die Klasse steht am Element, diese Regel
+ * bleibt als Ankerpunkt fuer die Kategorie-Toene darunter. */
+
+/* DER TON EINER KATEGORIE KOMMT AUS DEN DATEN, nicht mehr aus sieben Regeln
+ * `.contact-group--<key>` (Migration 152). Die Gruppe setzt `--cat` und
+ * `--cat-ink` inline; ohne kuratierten Ton bleibt beides ungesetzt und die
+ * Marke neutral - das ist die Aussage, nicht ihr Fehlen.
+ *
+ * WARUM DIE LISTE WEG MUSSTE: ein Selektor auf den Kategorie-Schluessel trifft
+ * per Konstruktion nur die SEED-Kategorien. Seit #357 legt der Haushalt eigene
+ * an, und die fielen alle auf den Modulton zurueck - im Demo-Haushalt sahen
+ * „Familie" und „Dienstleistungen" deshalb gleich aus. Eine Farbe, die zwei
+ * Dinge meint, ist keine (Vollton-Regel, DESIGN.md Colors). Dieselbe Bauart,
+ * die dieselbe Regel schon zweimal eingeholt hat: was ueber einen NAMEN laeuft,
+ * deckt N Namen ab, nicht die Regel. */
+
+.contact-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  padding: var(--space-4) var(--space-1) var(--space-2);
+  background-color: var(--color-bg);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+.contact-cat-icon {
+  flex-shrink: 0;
+}
+
+/* DIE POLSTERUNG GEHÖRT DER ZEILE, NICHT DEM KNOPF DARIN. Sie stand bis
+ * Etappe 5 in `.contact-item__open` (16px, mobil 12px) und die Zeile selbst
+ * hatte oben und unten gar keine - dadurch bekam die Textspalte 24px
+ * Innenabstand und die 48px-Bedienzone daneben null. Gemessen bei 390x844:
+ * 43,7px Text plus 24 = 67,7px, während jede geschnittene Liste der App auf
+ * 48 + 2x8 = 64 steht. Das ist kein Zufallsunterschied, sondern die Rechnung
+ * von `.list-row`: die Polsterung muss BEIDE Spalten umschließen, sonst
+ * bestimmt die höhere allein. Mit ihr an der Zeile: 64px, wie Einkauf,
+ * Vorrat, Rezepte, Budget und die Hauswirtschaft. */
+/* SIE TRAEGT `.list-row` (Critique 2026-08-13, P2). Fuenf der sechs
+ * Deklarationen standen zeichengleich in list-row.css, und die sechste - die
+ * Haarlinie ueber den +-Kombinator - stand dort ebenfalls, nur am TRAEGER
+ * (`.row-carrier > * + *`). Der Traeger heisst hier `.contact-group__list` und
+ * war seinerseits ein Nachbau von `.row-carrier`, Wert fuer Wert: Flaeche,
+ * Radius, Schatten, overflow. Beide tragen die geteilten Klassen jetzt mit.
+ *
+ * Was BLEIBT: der kleinere Abstand - seit dem Folgelauf aber nicht mehr als
+ * eigener Wert hier, sondern als benannte Stufe `.list-row--tight`
+ * (list-row.css). Links steht ein Avatar, kein Bedienelement, und die 12px der
+ * geteilten Zeile schoben den Namen sichtbar von ihm weg; das ist eine Rolle,
+ * die auch die naechste Bildliste haben wird, keine Eigenheit der Kontakte. */
+
+.contact-item:hover {
+  background-color: var(--color-surface-2);
+}
+
+/* --------------------------------------------------------
+ * Auswahl-Modus (opt-in Bulk)
+ *
+ * DIE LEISTE IST ENTFALLEN (Critique 2026-08-13). Hier standen `.contacts-
+ * selectbar` und ihre zwei Kinder: eine umbrechende Leiste im Fluss der Seite,
+ * die im Auswahlmodus rund 120px Chrome über die Liste schob. Die Sammelaktion
+ * ist jetzt die geteilte Pille in der unteren Shell-Zone (utils/bulk-pill.js) -
+ * derselbe Baustein, dieselbe Sprache und dieselbe Rückfrage wie in Einkauf und
+ * Vorrat. Was von der Auswahl hier bleibt, ist die ZEILE: ihre Checkbox, ihre
+ * Tönung und der Griff, der im Auswahlmodus weicht.
+ * -------------------------------------------------------- */
+
+.contact-item__select {
+  cursor: pointer;
+}
+
+/* Familien-Kontakte sind einzeln nicht loeschbar und damit nicht waehlbar:
+ * der Kreis tritt zurueck, statt eine Wahl anzubieten, die es nicht gibt.
+ * Der Kreis selbst (`.select-circle`) ist ein Shell-Baustein in layout.css. */
+.contact-item__select .select-circle:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.contact-item--selected {
+  background-color: color-mix(in srgb, var(--c-accent) var(--tint-state), transparent);
+}
+
+/* Im Auswahlmodus treten FAB und mobile Kapsel ab - die Regel steht seit R20
+ * in der Shell (layout.css, "Der Auswahlmodus nimmt der Shell ihre Bedienung
+ * ab"), einmal fuer jede Seite mit `.app-page.is-selecting`. */
+
+/* Öffnen/Bearbeiten: echte, fokussierbare Schaltfläche (Tastatur/Screenreader).
+ *
+ * DER KNOPF-RESET UND DIE ZIELGRÖSSE STEHEN NICHT MEHR HIER, sondern kommen
+ * aus `.list-row__main--interactive` (list-row.css) - der Baustein für genau
+ * diesen Fall: „die Textspalte IST die primäre Zeilenaktion". Der Vorrat trägt
+ * ihn seit der Küchen-Zusammenführung, die Kontakte hatten dieselben sieben
+ * Deklarationen zeichengleich daneben stehen.
+ *
+ * WAS DER UMZUG DER POLSTERUNG KOSTET, und es ist derselbe Preis, den der
+ * Vorrat schon zahlt: die 8px oben und unten gehören jetzt der Zeile und sind
+ * nicht mehr Teil der Klickfläche. Der Knopf hält seine Zielgröße stattdessen
+ * über `min-height` - 40px am Zeiger, 48px am Finger. */
+.contact-item__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.contact-item__open:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset-inset);
+  border-radius: var(--radius-md);
+}
+
+/* Der Chevron ist entfallen (Redesign Runde 6, Phase 1). Er stand als letztes
+ * Kind des Öffnen-Knopfes, während die Zeilenaktionen als Geschwister daneben
+ * liegen - optisch landete er damit in der Zeilenmitte und versprach
+ * Navigation, wo die Knöpfe daneben etwas anderes liefern.
+ *
+ * REGEL, nicht Einzelfall: ein Chevron entfällt, WO eine Zeile eigene Aktionen
+ * trägt. Eine Zeile ohne Aktionen darf ihn behalten - dort ist Öffnen das
+ * Einzige, was sie tut. Gehalten von `eine Zeile mit eigenen Aktionen
+ * verspricht keine Navigation` (test:frontend-audit). */
+
+.contact-item__icon {
+  width: var(--target-md);
+  height: var(--target-md);
+  border-radius: var(--radius-full);
+  /* Haut aus .vivid-mark (layout.css), aber nur mit kuratiertem Ton - sonst
+   * neutral. Begruendung an den Kategorie-Toenen oben. */
+  --seal-accent: var(--cat, var(--color-fill-well));
+  color: var(--cat-ink, var(--color-text-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: var(--text-lg);
+}
+
+/* Verknüpfte Haushaltsmitglieder: das Bild oder die Initialen des Menschen, in
+ * SEINER Farbe. Fläche und Tinte kommen inline aus den Daten (die Begründung
+ * steht an `contactAvatar` in contacts.js), deshalb trägt diese Variante
+ * bewusst KEIN `.vivid-mark`: dessen Tinte ist die gemessene für kuratierte
+ * Töne, und eine frei gewählte Avatarfarbe braucht die gerechnete.
+ *
+ * Hier stand bis 2026-08-18 `--cat: var(--c-accent)`, also der Modul-Ton -
+ * dieselbe Scheibe für jedes Mitglied, während dieselben Menschen zwei Klicks
+ * weiter ihre eigene trugen. */
+/* Kontakte ohne Konto: Initialen auf neutraler Flaeche (R19) - statt des
+ * Kategoriezeichens. Die Personenfarbe gehoert den Haushaltsmitgliedern
+ * (oben); ein ausgedachter Ton je Kontakt waere eine zweite Farbsprache. */
+.contact-item__icon--initials {
+  --seal-accent: var(--color-fill-well);
+  background-color: var(--color-fill-well);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.contact-card .contact-item__icon--initials {
+  font-size: var(--text-xl);
+}
+
+.contact-item__icon--member {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.contact-item__icon--member img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact-item__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Hoechstens zwei Zeilen, dann Ellipse: die Titelregel (typography.css, R19). */
+
+/* Meta: Telefon zuerst, darf nicht schrumpfen; E-Mail füllt den Rest und wird
+ * bei Bedarf gekürzt — die Telefonnummer bleibt so immer vollständig sichtbar. */
+.contact-item__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+  min-width: 0;
+}
+
+.contact-item__meta-phone {
+  flex-shrink: 0;
+  white-space: nowrap;
+  /* Stabile Ziffernbreite: mildert den Rohwert→formatiert-Reflow beim ersten
+     Paint (progressive enhancement), v. a. bei internationalen Nummern. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Strukturtrenner, kein deaktivierter Zustand: --color-text-disabled (#D1D0CB)
+ * lag bei 1.54:1 und ließ Telefon und E-Mail optisch ineinanderlaufen. Tertiary
+ * bleibt eine Stufe unter dem Meta-Text (secondary) und ist als schmales
+ * Glyph zurückhaltend genug. */
+.contact-item__meta-sep {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.contact-item__meta-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* In der schmalen Zeile faellt die E-Mail GANZ, samt Trenner: „+49 231
+ * 4452210 · pr…" trug null Information mehr als die Nummer allein, kostete
+ * aber die Zeile ihren Atem (Critique 2026-08-27, P3). Die Telefonnummer ist
+ * die handlungsleitende Angabe (der Anrufen-Knopf steht daneben); die Mail
+ * steht vollstaendig im Detail. Steht hinter den Basisregeln - bei gleicher
+ * Spezifitaet gewinnt sonst die Basis (DESIGN.md, Media-Block-Don't). */
+@container list-rows (max-width: 26rem) {
+  .contact-item__meta-sep,
+  .contact-item__meta-email {
+    display: none;
+  }
+}
+
+.contact-item__actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  align-items: center;
+}
+
+/* Zeilen-Aktionen (Anrufen/Mehr) nutzen die geteilte .row-action-Grammatik aus
+ * layout.css (Audit F1). Anrufen trägt row-action--success (grün, semantisch);
+ * der tel:-Link braucht nur noch text-decoration: none. */
+.contact-item__actions .row-action[href] {
+  text-decoration: none;
+}
+
+/* Das „Mehr"-Menue der Zeile ist seit der Re-Kritik 2026-09-28 der geteilte
+ * Baustein `.popover-menu` (utils/popover-menu.js, Stil in layout.css): der
+ * Eigenbau hier - Panel, Eintrag, Danger-Eintrag - trug `role="menu"` ohne
+ * Menue-Bedienung. Nichts davon braucht noch eine eigene Regel. */
+
+/* --------------------------------------------------------
+ * Modal: Kategorie-Vorschau + Footer
+ * -------------------------------------------------------- */
+.contacts-cat-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.contacts-cat-select__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target-md);
+  height: var(--target-md);
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  --seal-accent: var(--cat, var(--color-fill-well));
+  color: var(--cat-ink, var(--color-text-secondary));
+}
+
+.contacts-cat-select .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Vor- und Nachname sind ein Feldpaar (#535): die Legende trägt die
+   Pflicht-Markierung für beide zusammen ("Name *"), die Einzel-Labels bleiben
+   unmarkiert - Pflicht ist die Gruppe, nicht jedes Feld. */
+.contact-modal__name-group {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  min-width: 0;
+}
+
+/* Die Legende steht über zwei Feld-Labels und muss sich von ihnen abheben,
+   sonst liest man drei gleichrangige Beschriftungen statt einer Gruppe. */
+.contact-modal__name-group > legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.contact-modal__name-grid {
+  margin-bottom: 0;
+}
+
+/* Gestapelt (eine Spalte) stehen die beiden Felder dichter beieinander, und die
+   Gruppe rückt vom nächsten Feld ab - sonst liest sich das Paar loser als seine
+   Trennung zur Kategorie. */
+@container modal-body (max-width: 480px) {
+  .contact-modal__name-grid {
+    gap: var(--space-1);
+  }
+
+  .contact-modal__name-group {
+    margin-bottom: var(--space-6);
+  }
+}
+
+/* Modal-Footer (ersetzt Inline-Styles). */
+.contact-modal__footer {
+  border: none;
+  padding: 0;
+  margin-top: var(--space-4);
+}
+
+/* Eine Aktionsgruppe IN der Fusszeile ist selbst eine Knopfzeile und braucht
+ * dieselbe Erlaubnis (#872): fuer die Fusszeile ist sie EIN Flex-Item, also
+ * unteilbar - ohne eigenen Umbruch laeuft sie als Ganzes ueber. */
+.contact-modal__footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* --------------------------------------------------------
+ * Mobile-Feinschliff
+ * -------------------------------------------------------- */
+@media (max-width: 767px) {
+  .contact-item__open {
+    gap: var(--space-2);
+  }
+
+  /* HIER STANDEN 36 HARTKODIERTE PIXEL, und sie haben eine fremde Begründung
+   * falsch gemacht: `birthdays.css` beruft sich darauf, dass „Kontakte, das
+   * Nachbarmodul derselben Familie, ihr Zeilenbild seit jeher auf
+   * `--target-md` tragen" - am Telefon, wo diese Regel griff, waren es 36 statt
+   * 40. Die beiden Zeilen derselben Familie standen also genau dort
+   * auseinander, wo die Begründung sie zusammen sah. Der Wert ist ersatzlos
+   * weg: --target-md kostet die Zeile nichts, ihre Höhe kommt aus Text und
+   * Bedienzone, nicht aus dem 40px-Bild. */
+}
+
+/* ================================================================
+ * vCard-Import: Auswahl-Vorstufe (Modal). Spiegelt die bd-import-
+ * Grammatik der Geburtstage, aber contacts-scoped (Page-CSS lädt
+ * pro Seite nur ein Stylesheet) und mit dem Kontakte-Modulakzent.
+ * ================================================================ */
+.vcard-import__intro {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}
+
+.vcard-import__bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: var(--space-1);
+}
+
+.vcard-import__toggle {
+  background: none;
+  border: none;
+  padding: var(--space-1) var(--space-2);
+  color: var(--module-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+/* Text auf primary, sobald die Hover-Flaeche steht - siehe .btn--ghost:hover
+ * und .modal-panel__action:hover. Auf #EBEBF0 lag der Modul-Akzent hier bei
+ * 4,37 (light) und 4,46 (dark), beides unter AA fuer 14px. */
+.vcard-import__toggle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.vcard-import__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 48vh;
+  overflow-y: auto;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 0 var(--space-1);
+}
+
+.vcard-import-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--target-base);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.vcard-import-row:hover,
+.vcard-import-row:focus-within {
+  background: var(--color-surface-hover);
+}
+
+.vcard-import-row input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--module-accent);
+  cursor: pointer;
+}
+
+.vcard-import-row__name {
+  flex: 1 1 auto;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vcard-import-row__detail {
+  flex: none;
+  max-width: 40%;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vcard-import-row__bday {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--module-birthdays, var(--module-accent));
+}
+
+/* Das Icon selbst: Lucide ersetzt das `<i>` durch ein `<svg>` mit 24px aus
+ * seinen Attributen - die fruehere Regel `.vcard-import-row__bday i` griff nie,
+ * und die Torte stand 6px ueber ihren 18px-Rahmen hinaus. */
+.vcard-import-row__bday svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+/* Schon vorhanden: Zuruecknehmen-Muster (tokens.css, #1230) statt
+ * `opacity: 0.72`. Das Badge sagt den Zustand; auf der vertieften Flaeche
+ * nimmt es die naechste Stufe, sonst verschwaende seine Pille im Grund. */
+/* Auch unter Zeiger und Fokus: `.vcard-import-row:hover`/`:focus-within`
+ * (0-2-0) setzten sonst die Hover-Flaeche einer neuen Zeile (#1230). */
+.vcard-import-row--exists,
+.vcard-import-row--exists:hover,
+.vcard-import-row--exists:focus-within {
+  background: var(--color-surface-receded);
+}
+
+.vcard-import-row--exists .vcard-import-row__detail {
+  color: var(--color-text-receded);
+}
+
+.vcard-import-row--exists .vcard-import-row__badge {
+  background: var(--color-surface-3);
+}
+
+.vcard-import-row__badge {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-2);
+  padding: var(--space-0h) var(--space-2);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.vcard-import__skipped {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* Mehrwert-Editor im Kontakt-Modal (Audit R2, A2-11): Wert + optionales Label
+ * je Zeile, Entfernen als row-action; das Label bleibt schmal. */
+.contact-mv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.contact-mv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  /* Inline-Padding + negatives Margin: Platz für den Aktiv-Ton, ohne die
+     Spalten zu verschieben. */
+  padding-inline: var(--space-1);
+  margin-inline: calc(var(--space-1) * -1);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+/* Aktive Telefonzeile: dezenter Ton verankert den (geteilten) Hint an der Zeile,
+   auf die er sich bezieht. Kein Side-Stripe - flächiger Ton. */
+.contact-mv-row--active {
+  background: var(--color-surface-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-mv-row { transition: none; }
+}
+
+.contact-mv-add {
+  margin-top: var(--space-2);
+}
+
+/* Telefon-Tipphilfe (AsYouType-Vorschau / Plausibilitäts-Hinweis). Rein visuell,
+   nie blockierend; leer, solange kein Telefonfeld aktiv ist. Groesse und die
+   gedaempfte Farbe der Vorschau bringt `.form-hint` (layout.css, global) mit;
+   hier stehen nur Abstand, Mindesthoehe und der Warnton. */
+.contact-phone-hint {
+  margin-top: var(--space-2);
+  min-height: 1.25em; /* kein Sprung, wenn der Hinweis erscheint/verschwindet */
+}
+
+.contact-phone-hint__warn {
+  color: var(--color-warning);
+}
+
+/* --------------------------------------------------------
+   Detailansicht: antippbare Werte
+
+   Eine Zeile je Gruppe (Telefon, Mail, Adresse), darin je ein Wert pro Zeile.
+   Der Wert IST die Aktion - anrufen, mailen, Karte öffnen -, deshalb liegt die
+   Trefferfläche auf dem Link und nicht auf einem zusätzlichen Icon daneben.
+   -------------------------------------------------------- */
+.contact-detail__values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.contact-detail__value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Volle Zeilenhöhe als Trefferfläche: Auf dem Smartphone steht hier die
+   häufigste Handlung der ganzen Seite, und Telefonnummern liegen dicht
+   untereinander. --target-base ist dasselbe Maß, das die Detailansicht für
+   Kopf- und Fußzeilen-Aktionen nutzt. */
+/* DER WERT STEHT IN TEXTFARBE, DAS ZEICHEN DAVOR IM MODULTON (Critique
+ * 2026-10-05, R16). Die Links standen im Kontakt-Rosa (gemessen
+ * rgb(206,42,99)) - im selben Blatt wie "Loeschen" in rgb(215,0,21): zwei
+ * Rottoene, von denen einer "anrufen" und einer "weg damit" hiess. Dass der
+ * Wert eine Handlung ist, sagt jetzt das Zeichen der Zeile (Telefon, Brief,
+ * Stecknadel, Globus) im Modulton und die Unterstreichung unter dem Zeiger. */
+.contact-detail__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-base);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.detail-row:has(.contact-detail__link) > .detail-row__icon {
+  color: var(--module-contacts, var(--color-accent));
+}
+
+.contact-detail__link:hover,
+.contact-detail__link:focus-visible {
+  text-decoration: underline;
+}
+
+/* Das Label der Nummer ("mobil", "Arbeit") ordnet ein, ohne mit dem Wert zu
+   konkurrieren - es steht daneben, nicht darüber, weil die Zeile sonst bei drei
+   Nummern zu einem Block aus sechs Zeilen wird. */
+.contact-detail__sub {
+  font-size: var(--type-caption);
+  color: var(--color-text-tertiary);
+}
+
+/* --------------------------------------------------------
+   Liste + Detail (Breitenregel, DESIGN.md; utils/master-detail.js)
+
+   Die Geometrie gehoert der Shell (`.split-view` in layout.css) - hier stehen
+   nur, was die Kontakte in der Spalte ANDERS tragen: die Karte oben im Detail,
+   die Suche im Kopf und die Auswahl-Markierung im Auswahlmodus.
+   -------------------------------------------------------- */
+
+/* Die Karte oben in der Detailspalte (A5 P1-1): Bild, Organisation und die
+   Schnellaktionen, wie Apples Kontakte sie ueber die Felder stellen. Das Bild
+   ist dasselbe wie in der Zeile, nur groesser. */
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5) var(--space-4);
+  text-align: center;
+}
+
+/* Im Blatt (R9 M12) traegt der Blattkopf schon den Namen und sein Polster -
+   die Karte beginnt dort ohne eigenen Luftraum darueber, sonst stuende das
+   Monogramm eine halbe Daumenbreite tiefer als in der Spalte. */
+.contact-card--sheet {
+  padding: 0 0 var(--space-4);
+}
+
+.contact-card .contact-item__icon {
+  width: calc(var(--target-md) * 2);
+  height: calc(var(--target-md) * 2);
+  font-size: var(--text-2xl);
+}
+
+.contact-card .contact-cat-icon {
+  width: var(--icon-xl);
+  height: var(--icon-xl);
+}
+
+.contact-card__sub {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.contact-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-block-start: var(--space-1);
+}
+
+/* Kachel mit Icon ueber dem Wort - die Schnellaktion der Systemapps. Sie
+   liegt in der Karte der Detailspalte und ist deshalb ein Inset-Well
+   (Kasten-in-Kasten-Vokabular, tokens.css), keine getoente Flaeche: eine
+   Toenung des Modultons unter Schrift derselben Farbe sagte ihn zweimal blass
+   (Skalen-Regel). Den Ton traegt das Icon, wie der Link in den Zeilen darunter
+   (`.contact-detail__link`); das Wort bleibt Primaertext. */
+.contact-card__action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: calc(var(--target-lg) * 2);
+  min-height: calc(var(--target-lg) + var(--space-4));
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--color-fill-well);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  transition: background-color var(--transition-fast);
+}
+
+.contact-card__action:hover {
+  background-color: color-mix(in srgb, var(--color-text-primary) var(--tint-wash), var(--color-fill-well));
+}
+
+.contact-card__action-icon {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  color: var(--module-contacts, var(--color-accent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-card__action { transition: none; }
+}
+
+/* Im Auswahlmodus markiert die Flaeche das ABGEHAKTE (`--selected`), nicht die
+   Zeile, deren Kontakt rechts steht - beide Toene gleichzeitig laesen sich wie
+   zwei Haken. Das Detail bleibt stehen; nur seine Markierung schweigt. */
+.contacts-page.is-selecting .contact-item.is-selected:not(.contact-item--selected) {
+  background-color: transparent;
+}
+
+/* DIE SUCHE BLEIBT SCHMALER ALS DIE LISTE, DIE SIE FILTERT - seit der
+   Re-Critique 2026-09-27 (D4) ohne eigene Regel: page-search.css gibt jeder
+   Kopfsuche `--page-search-width` (320px), und die Listenbahn ist nie
+   schmaler als `--layout-list-min` minus ihr Polster (356px). Hier stand eine
+   @container-Kappung auf die Bahnbreite (424px bei 1440), die gegen die
+   Shell-Regel (0,2,1) ohnehin nicht mehr ankam. test-contacts-list-detail.js
+   haelt die Ungleichung. */

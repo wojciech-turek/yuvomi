@@ -1,0 +1,151 @@
+/* --------------------------------------------------------
+   Modul: Erinnerungen (Reminders)
+   Zweck: Bell-Badge in der Navigation, Reminder-Toast-Styling
+   -------------------------------------------------------- */
+
+/* Bell-Badge: Rote Zahl über dem Bell-Icon */
+.nav-item--reminder {
+  position: relative;
+}
+
+.reminder-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--color-priority-urgent);
+  /* Dieselbe Falle wie beim Akzent: --color-priority-urgent ist im Light ein
+   * tiefes Rot, im Dark ein helles Rosé. Weiss trug dort 1,90:1 auf der Zahl
+   * im Badge. */
+  color: var(--color-ink-on-vivid);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Reminder-Toast: Bell-Icon + Textblock */
+.toast--reminder {
+  gap: var(--space-2, 8px);
+  padding-right: var(--space-2, 8px);
+}
+
+/* HIER STAND `.toast__reminder-icon`, und es steht mit Absicht nichts mehr an
+ * seiner Stelle: das Herkunfts-Siegel der Meldung braucht keine eigene Regel.
+ * Form, Groesse, Material und Tinte kommen vollstaendig vom geteilten
+ * .module-seal-Baustein (layout.css); den Ton pro Meldung setzt reminders.js
+ * inline aus der Herkunft der Zeile. Hier stand „samt seiner --vivid-Variante":
+ * die brauchte der Toast als einzige umgekehrte Flaeche der App, seit dem
+ * 2026-08-17 steht ihr Vollton aber in der Basisregel und die Variante ist
+ * gestrichen.
+ *
+ * DIE VORIGE FASSUNG WAR EINE GLOCKE IN --module-reminders, in jeder Meldung
+ * dieselbe: sie sagte, DASS etwas faellig ist, nie WORAUS. Und sie war
+ * unlesbar - der Erinnerungs-Violett lag auf dem Toast-Grund bei 1,84:1 und
+ * damit unter der 3:1 der Grafikschwelle, in beiden Themes, weil der Toast
+ * damals in beiden die Umkehrung der Seite war (seit R16 ist er in beiden
+ * dunkel, `--toast-bg`). */
+
+.toast__reminder-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--space-0h);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.toast__reminder-text {
+  cursor: pointer;
+}
+
+button.toast__reminder-text:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-xs);
+}
+
+.toast__reminder-text strong {
+  font-size: var(--text-xs, 0.75rem);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  opacity: 0.7;
+}
+
+.toast__reminder-text span {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reminder-Abschnitt in Modals */
+.reminder-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4, 16px);
+  margin-top: var(--space-4, 16px);
+}
+
+.reminder-section__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-3, 12px);
+}
+
+.reminder-section__title {
+  color: var(--color-text-primary);
+}
+
+/* Die Hinweiszeile im gesperrten Abschnitt gehoert zum SCHALTER UEBER IHR.
+   Groesse und Farbe bringt `.task-field-hint` (tasks.css) mit - dieselbe Rolle
+   soll nicht zweimal verschieden aussehen -, aber der Abstand nach unten
+   gehoert diesem Abschnitt: ohne ihn steht das Label "Erinnern" direkt am Satz
+   und liest sich als dessen Beschriftung (im Browser gemessen). Nur der EINE
+   abweichende Wert steht hier, nicht der ganze Satz noch einmal. */
+.reminder-section .task-field-hint {
+  margin-bottom: var(--space-3);
+}
+
+/* Die gesperrten Felder dieses Abschnitts traegt seit 2026-10-08 die
+   allgemeine Regel `.input:disabled, .form-input:disabled` (layout.css, an
+   der Feldhaut). Hier stand `opacity: 0.6`, absichtlich auf den Abschnitt
+   begrenzt, weil ein Bild fuer die ganze App "eine eigene Entscheidung" war -
+   sie ist gefallen, und eine zweite Regel hier waere ein zweites Aussehen
+   fuer denselben Zustand. */
+
+.reminder-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.reminder-fields .modal-grid {
+  align-items: end;
+}
+
+/* „Erinnerung hinzufuegen" ist eine Aktion unter der Liste, keine Zeile von
+ * ihr: in der Spalte zog `align-items: stretch` den Knopf auf die volle
+ * Breite des Dialogs und liess ihn lauter wirken als „Speichern". */
+.reminder-fields > .btn {
+  align-self: flex-start;
+}
+
+.reminder-custom {
+  margin-top: var(--space-3);
+}
+
+.reminder-custom[hidden] {
+  display: none !important;
+}

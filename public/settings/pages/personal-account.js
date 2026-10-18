@@ -1,0 +1,1076 @@
+import { api, auth } from '/api.js';
+import {
+  isDateInputValid,
+  parseDateInput,
+  t,
+} from '/i18n.js';
+import { esc } from '/utils/html.js';
+import { initials } from '/utils/initials.js';
+import { confirmModal, reportFieldError, reportFieldErrors } from '/components/modal.js';
+import { errorSentence } from '/utils/friendly-error.js';
+import { prefersInkText } from '/utils/contrast.js';
+import { settingRowHtml } from '/settings/components.js';
+
+function avatarHtml(user, className = 'settings-avatar') {
+  const safeName = esc(user?.display_name || '');
+  const fallback = esc(initials(user?.display_name, '?'));
+  const background = esc(user?.avatar_color) || 'var(--color-accent)';
+  const inkClass = prefersInkText(user?.avatar_color) ? ' settings-avatar--ink' : '';
+  return `
+    <div class="${className}${inkClass}" style="background:${background}" title="${safeName}">
+      ${user?.avatar_data ? `<img src="${esc(user.avatar_data)}" alt="${safeName}" loading="lazy">` : fallback}
+    </div>
+  `;
+}
+
+/**
+ * Gravatar ist ein einmaliger Import, kein Anbieter: der Server holt das Bild
+ * zur GESPEICHERTEN Adresse und legt es wie einen Upload in avatar_data ab.
+ * Deshalb zaehlt hier die geladene Adresse, nicht das Eingabefeld - was im
+ * Feld steht, kennt der Server noch nicht.
+ * @param {{ email?: string|null }|null|undefined} user
+ * @returns {boolean}
+ */
+// Dieselbe Regel wie memberEmail() auf dem Server (singleAddress in
+// member-email.js): GENAU eine Adresse, kein Trenner, kein zweites @. Eine
+// Liste aus CardDAV ("a@x, b@y") steht zwar im Feld, aber der Server weist sie
+// als no_email ab - der Knopf soll dann gar nicht erst aktiv sein.
+export function hasSavedEmail(user) {
+  const raw = typeof user?.email === 'string' ? user.email.trim() : '';
+  if (!raw || /[,;\s]/.test(raw)) return false;
+  const at = raw.indexOf('@');
+  return at > 0 && raw.indexOf('@', at + 1) === -1;
+}
+
+/**
+ * Der Bild-Editor. Den Gravatar-Knopf gibt es nur, wenn der Server ihn
+ * anbietet (`gravatarAvailable` aus GET /auth/me: der Betreiber hat
+ * GRAVATAR_BASE_URL gesetzt, und das Konto ist ein Haushaltsmitglied). Sonst
+ * steht er gar nicht erst da - kein Knopf, der erst nach dem Klick mit 404
+ * sagt, dass es ihn nicht gibt.
+ * @param {object} user
+ * @param {{ gravatarAvailable?: boolean }} [options]
+ */
+function avatarEditorHtml(user, { gravatarAvailable = false } = {}) {
+  const gravatarReady = hasSavedEmail(user);
+  return `
+    <div class="settings-avatar-editor">
+      <button type="button" class="settings-avatar-button" id="profile-avatar-preview" aria-label="${t('settings.profilePictureLabel')}">
+        ${avatarHtml(user, 'settings-avatar settings-avatar--lg')}
+      </button>
+      <input class="sr-only" type="file" id="profile-avatar-file" accept="image/png,image/jpeg,image/webp" aria-label="${t('settings.profilePictureLabel')}" aria-describedby="profile-error" tabindex="-1">
+      <div class="settings-avatar-actions">
+        <button type="button" class="settings-avatar-action" id="profile-avatar-edit" aria-label="${t('settings.profilePictureLabel')}" title="${t('settings.profilePictureLabel')}">
+          <i data-lucide="edit-2" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="settings-avatar-action settings-avatar-action--danger" id="profile-avatar-remove" aria-label="${t('settings.profilePictureRemove')}" title="${t('settings.profilePictureRemove')}">
+          <i data-lucide="trash-2" aria-hidden="true"></i>
+        </button>
+        ${gravatarAvailable ? `<button type="button" class="settings-avatar-action" id="profile-avatar-gravatar" aria-label="${t('settings.gravatarUse')}" title="${t('settings.gravatarUse')}" aria-describedby="profile-gravatar-hint"${gravatarReady ? '' : ' aria-disabled="true"'}>
+          <i data-lucide="cloud-download" aria-hidden="true"></i>
+        </button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Die Hinweiszeile unter dem Bild-Editor: ohne gespeicherte Adresse nennt sie
+ * den Grund, warum der Gravatar-Knopf gesperrt ist; mit Adresse NENNT sie die
+ * Adresse, die gehasht wird - sie steht auf einer Kontaktkarte, die auch andere
+ * Mitglieder bearbeiten koennen - und sagt, was den Server beim Klick verlaesst
+ * (nur ein Hash der Adresse und die Server-IP) und WOHIN: zu dem Dienst, den
+ * der Betreiber eingetragen hat. `host` ist dessen Hostname aus GET /auth/me
+ * (`gravatarHost`), nie ein fester Name - mit einem Libravatar-Spiegel waere
+ * "erreicht gravatar.com" eine falsche Aussage. Ohne Host (die Basis-URL ist
+ * falsch gesetzt, der Klick meldet das) nennt der Satz keinen Dienst.
+ *
+ * Reiner Text, nie HTML: er geht nur ueber textContent auf die Seite
+ * (fillGravatarHint), deshalb hier kein esc() - das ergaebe `&amp;` im Satz.
+ * @param {{ email?: string|null }|null|undefined} user
+ * @param {string} [host]
+ * @returns {string}
+ */
+function gravatarHintText(user, host = '') {
+  if (!hasSavedEmail(user)) return t('settings.gravatarNeedsEmail');
+  const email = user.email.trim();
+  return host
+    ? t('settings.gravatarHint', { email, host })
+    : t('settings.gravatarHintUnnamed', { email });
+}
+
+/**
+ * Das leere Element der Hinweiszeile - nur, wenn der Knopf angeboten wird.
+ * Gefuellt wird es erst in bindEvents() ueber fillGravatarHint().
+ * @param {boolean} gravatarAvailable
+ * @returns {string}
+ */
+function gravatarHintHtml(gravatarAvailable) {
+  return gravatarAvailable ? '<p class="form-hint" id="profile-gravatar-hint"></p>' : '';
+}
+
+/**
+ * Schreibt den Hinweis als Text in das Element. Die Adresse kommt aus einer
+ * Kontaktkarte und darf `<` oder `&` enthalten; sie erscheint woertlich.
+ * @param {{ textContent: string }|null|undefined} element
+ * @param {{ email?: string|null }|null|undefined} user
+ */
+function fillGravatarHint(element, user, host = '') {
+  if (element) element.textContent = gravatarHintText(user, host);
+}
+
+/** Mindestlaenge des neuen Passworts, wie server/auth.js (Zeichen der NFC-Form). */
+const PASSWORD_MIN_LENGTH = 8;
+
+/**
+ * Was am Passwortformular fehlt oder nicht passt, als `[feld, schluessel]` -
+ * alle Probleme zugleich, damit reportFieldErrors sie an ihre Felder stellt.
+ * @returns {Array<['current'|'next'|'confirm', string]>}
+ */
+function passwordProblems(current, next, confirm) {
+  const problems = [];
+  if (!current) problems.push(['current', 'common.required']);
+  if (!next) problems.push(['next', 'common.required']);
+  else if (next.normalize('NFC').length < PASSWORD_MIN_LENGTH) problems.push(['next', 'settings.passwordTooShort']);
+  if (!confirm) problems.push(['confirm', 'common.required']);
+  else if (next !== confirm) problems.push(['confirm', 'settings.passwordMismatch']);
+  return problems;
+}
+
+/** Die Absage des Servers, die ans Feld "Aktuelles Passwort" gehoert, oder null. */
+function passwordRefusalKey(err) {
+  return err?.data?.reason === 'wrong_password' ? 'settings.currentPasswordWrong' : null;
+}
+
+/** Eine Adresse mit genau einem @ und Text davor und danach (wie server/routes/email.js). */
+function isEmailAddress(value) {
+  return /^[^\s@]+@[^\s@]+$/.test(value);
+}
+
+function showError(element, message) {
+  if (!element) return;
+  element.textContent = message || t('common.errorGeneric');
+  element.hidden = false;
+}
+
+function clearError(element) {
+  if (!element) return;
+  element.textContent = '';
+  element.hidden = true;
+}
+
+function setAvatarPreview(container, user) {
+  const preview = container.querySelector('#profile-avatar-preview');
+  if (!preview) return;
+  preview.replaceChildren();
+  preview.insertAdjacentHTML(
+    'beforeend',
+    avatarHtml(user, 'settings-avatar settings-avatar--lg'),
+  );
+  window.lucide?.createIcons({ el: preview });
+}
+
+const SETTINGS_NOTICE_KEY = 'yuvomi:settings:notice';
+
+// Einmaliger Zugriffs-Hinweis: wurde ein Mitglied von einem unzulässigen Blatt
+// hierher umgeleitet, hinterlässt der Controller eine Notiz, die wir genau
+// einmal konsumieren und als barrierefreien Banner anzeigen.
+function consumeAccessNotice() {
+  let notice = null;
+  try {
+    notice = sessionStorage.getItem(SETTINGS_NOTICE_KEY);
+    if (notice) sessionStorage.removeItem(SETTINGS_NOTICE_KEY);
+  } catch {
+    return null;
+  }
+  return notice === 'accessRedirected' ? t('settings.accessRedirected') : null;
+}
+
+/**
+ * Karte für die Verknüpfung mit dem Single-Sign-on-Konto (#832).
+ *
+ * Ohne sie bekam ein Nutzer, dessen IdP-Kontoname zufällig einem bestehenden
+ * Yuvomi-Konto entspricht, bei der ersten SSO-Anmeldung ein zweites Konto -
+ * gleicher Name, angehängte Ziffer, leere Daten. Zusammengeführt wird hier,
+ * angemeldet: erst die Sitzung und dann der Provider belegen, dass beide Konten
+ * derselben Person gehören.
+ *
+ * Ausgeblendet, solange kein OIDC konfiguriert ist - eine Karte, die von einer
+ * Anmeldeart spricht, die es hier nicht gibt, erklärt nichts.
+ */
+function oidcCardHtml(state, notice) {
+  if (!state?.enabled) return '';
+
+  return `
+    <div class="settings-card">
+      <h3 class="settings-card__title">${t('settings.oidcLinkTitle')}</h3>
+      ${notice ? `<p class="${notice.kind === 'error' ? 'form-error' : 'form-hint'}" role="${notice.kind === 'error' ? 'alert' : 'status'}">${esc(notice.text)}</p>` : ''}
+      ${state.linked ? `
+        <p class="form-hint">${state.provider
+          ? t('settings.oidcLinkedWithProvider', { provider: state.provider })
+          : t('settings.oidcLinked')}</p>
+        ${state.can_unlink
+          ? `<button type="button" class="btn btn--danger-outline" id="oidc-unlink">${t('settings.oidcUnlink')}</button>`
+          : `<p class="form-hint">${t('settings.oidcUnlinkNeedsPassword')}</p>`}
+      ` : `
+        <p class="form-hint">${t('settings.oidcLinkHint')}</p>
+        <button type="button" class="btn btn--secondary" id="oidc-link">${t('settings.oidcLink')}</button>
+      `}
+      <div id="oidc-error" class="form-error" role="alert" hidden></div>
+    </div>
+  `;
+}
+
+/**
+ * Rückmeldung des Verknüpfungs-Laufs. Der Provider schickt den Browser zurück
+ * auf diese Seite, nicht in einen fetch - der Ausgang steht deshalb in der
+ * Adresszeile und wird beim Lesen entfernt, damit ein Neuladen ihn nicht
+ * wiederholt.
+ */
+function consumeOidcNotice() {
+  const params = new URLSearchParams(location.search);
+  const ok     = params.get('oidc_linked');
+  const err    = params.get('oidc_link_error');
+  if (!ok && !err) return null;
+
+  params.delete('oidc_linked');
+  params.delete('oidc_link_error');
+  const query = params.toString();
+  history.replaceState(null, '', location.pathname + (query ? `?${query}` : ''));
+
+  if (ok) return { kind: 'ok', text: t('settings.oidcLinkSuccess') };
+  const known = ['already_linked', 'sub_taken'].includes(err);
+  return {
+    kind: 'error',
+    text: known ? t(`settings.oidcLinkError_${err}`) : t('settings.oidcLinkErrorGeneric'),
+  };
+}
+
+/**
+ * Zwei-Faktor-Anmeldung (#672).
+ *
+ * Drei Zustaende in einer Karte: aus, in Einrichtung, an. Die Einrichtung wird
+ * bewusst nicht in einen Dialog gelegt - der QR-Code will nebenher offen
+ * bleiben, waehrend man in einer zweiten App den Code abliest.
+ *
+ * @param {{ enabled: boolean, pending: boolean, recovery_remaining: number, required: boolean }|null} state
+ * @returns {string}
+ */
+export function twoFactorCardHtml(state) {
+  if (!state) return '';
+
+  const body = state.enabled
+    ? `
+      <p class="form-hint settings-2fa__status settings-2fa__status--on">
+        <i data-lucide="shield-check" aria-hidden="true"></i>
+        <span>${t('settings.twoFactorActive')}</span>
+      </p>
+      <p class="form-hint settings-2fa__note">${t('settings.twoFactorRecoveryLeft', { count: state.recovery_remaining })}</p>
+      ${state.recovery_remaining === 0
+        ? `<p class="form-error settings-2fa__note" role="status">${t('settings.twoFactorNoRecoveryLeft')}</p>`
+        : ''}
+      <div class="settings-form-actions settings-2fa__actions">
+        <button type="button" class="btn btn--secondary" id="two-factor-regenerate">${t('settings.twoFactorNewCodes')}</button>
+        ${state.required
+          ? ''
+          : `<button type="button" class="btn btn--danger-outline" id="two-factor-disable">${t('settings.twoFactorDisable')}</button>`}
+      </div>
+      ${state.required ? `<p class="form-hint settings-2fa__note">${t('settings.twoFactorRequiredByHousehold')}</p>` : ''}
+    `
+    : `
+      <p class="form-hint">${t('settings.twoFactorHint')}</p>
+      ${state.required ? `<p class="form-error settings-2fa__note" role="status">${t('settings.twoFactorRequiredSetUpNow')}</p>` : ''}
+      <div class="settings-form-actions settings-2fa__actions">
+        <button type="button" class="btn btn--primary" id="two-factor-start">${t('settings.twoFactorSetUp')}</button>
+      </div>
+    `;
+
+  return `
+    <div class="settings-card" id="two-factor-card">
+      <h3 class="settings-card__title">${t('settings.twoFactorTitle')}</h3>
+      ${body}
+      <div id="two-factor-error" class="form-error settings-2fa__note" role="alert" hidden></div>
+    </div>
+  `;
+}
+
+/**
+ * Der Einrichtungsschritt: QR-Bild, Geheimnis zum Abtippen, Code-Eingabe.
+ * @param {HTMLElement} card
+ * @param {{ secret: string, uri: string, qr: string }} setup
+ */
+function renderTwoFactorSetup(card, setup) {
+  card.replaceChildren();
+  // Das Geheimnis wird in Vierergruppen gezeigt: 32 Zeichen am Stueck tippt
+  // niemand fehlerfrei ab, und abtippen muss, wer die Kamera nicht nutzen kann.
+  const grouped = setup.secret.replace(/(.{4})/g, '$1 ').trim();
+
+  card.insertAdjacentHTML('beforeend', `
+    <h3 class="settings-card__title">${t('settings.twoFactorTitle')}</h3>
+    <ol class="settings-2fa__steps">
+      <li>${t('settings.twoFactorStepScan')}</li>
+      <li>${t('settings.twoFactorStepEnter')}</li>
+    </ol>
+    <div class="settings-2fa__qr">
+      <img src="${esc(setup.qr)}" alt="${esc(t('settings.twoFactorQrAlt'))}" width="222" height="222">
+    </div>
+    <p class="form-hint">${t('settings.twoFactorManualHint')}</p>
+    <p class="settings-2fa__secret"><code>${esc(grouped)}</code></p>
+    <form id="two-factor-enable-form" class="settings-form" novalidate>
+      <div class="form-group form-field">
+        <label class="form-label" for="two-factor-code">${t('settings.twoFactorCodeLabel')}</label>
+        <input class="form-input settings-2fa__code" type="text" id="two-factor-code"
+               inputmode="numeric" autocomplete="one-time-code" spellcheck="false"
+               maxlength="8" required aria-describedby="two-factor-error">
+      </div>
+      <div id="two-factor-error" class="form-error" role="alert" hidden></div>
+      <div class="settings-form-actions">
+        <button type="button" class="btn btn--secondary" id="two-factor-cancel">${t('common.cancel')}</button>
+        <button type="submit" class="btn btn--primary">${t('settings.twoFactorConfirm')}</button>
+      </div>
+    </form>
+  `);
+  window.lucide?.createIcons({ el: card });
+  card.querySelector('#two-factor-code')?.focus();
+}
+
+/**
+ * Die Wiederherstellungscodes. Sie stehen genau hier und genau einmal - danach
+ * kennt der Server nur noch ihre Hashes. Deshalb kein beilaeufiger Hinweis,
+ * sondern ein eigener Schritt, den man bestaetigen muss.
+ *
+ * @param {HTMLElement} card
+ * @param {string[]} codes
+ * @param {() => void} onDone
+ */
+function renderRecoveryCodes(card, codes, onDone) {
+  card.replaceChildren();
+  card.insertAdjacentHTML('beforeend', `
+    <h3 class="settings-card__title">${t('settings.twoFactorRecoveryTitle')}</h3>
+    <p class="form-hint">${t('settings.twoFactorRecoveryLead')}</p>
+    <ul class="settings-2fa__codes">
+      ${codes.map((code) => `<li><code>${esc(code)}</code></li>`).join('')}
+    </ul>
+    <div class="settings-form-actions settings-2fa__actions">
+      <button type="button" class="btn btn--secondary" id="two-factor-copy">${t('settings.twoFactorCopyCodes')}</button>
+      <button type="button" class="btn btn--secondary" id="two-factor-download">${t('settings.twoFactorDownloadCodes')}</button>
+      <button type="button" class="btn btn--primary" id="two-factor-done">${t('settings.twoFactorCodesSaved')}</button>
+    </div>
+    <p class="form-hint settings-2fa__note" id="two-factor-copy-status" role="status"></p>
+  `);
+
+  const status = card.querySelector('#two-factor-copy-status');
+
+  card.querySelector('#two-factor-copy')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(codes.join('\n'));
+      status.textContent = t('settings.twoFactorCopied');
+    } catch {
+      // Ohne Zwischenablage-Recht bleibt der sichtbare Text der Weg - die Codes
+      // stehen ja oben. Ein Fehlerbanner waere hier groesser als das Problem.
+      status.textContent = t('settings.twoFactorCopyFailed');
+    }
+  });
+
+  card.querySelector('#two-factor-download')?.addEventListener('click', () => {
+    const blob = new Blob([`${codes.join('\n')}\n`], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'yuvomi-recovery-codes.txt';
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+
+  card.querySelector('#two-factor-done')?.addEventListener('click', onDone);
+}
+
+/**
+ * Fragt einen zweiten Faktor ab, bevor eine Handlung ihn verlangt (Abschalten,
+ * neue Codes). Bewusst kein Passwort: OIDC-Konten haben keins, und gegen eine
+ * gekaperte Sitzung hilft nur der Faktor selbst.
+ *
+ * @param {HTMLElement} card
+ * @param {{ title: string, lead: string, confirm: string, danger?: boolean }} texts
+ * @param {(code: string) => Promise<void>} onConfirm
+ * @param {() => void} onCancel
+ */
+function askForCode(card, texts, onConfirm, onCancel) {
+  card.replaceChildren();
+  card.insertAdjacentHTML('beforeend', `
+    <h3 class="settings-card__title">${esc(texts.title)}</h3>
+    <p class="form-hint">${esc(texts.lead)}</p>
+    <form id="two-factor-confirm-form" class="settings-form settings-2fa__form" novalidate>
+      <div class="form-group form-field">
+        <label class="form-label" for="two-factor-confirm-code">${t('settings.twoFactorCodeOrRecoveryLabel')}</label>
+        <input class="form-input settings-2fa__code" type="text" id="two-factor-confirm-code"
+               inputmode="text" autocomplete="one-time-code" spellcheck="false"
+               maxlength="24" required aria-describedby="two-factor-error">
+      </div>
+      <div id="two-factor-error" class="form-error" role="alert" hidden></div>
+      <div class="settings-form-actions">
+        <button type="button" class="btn btn--secondary" id="two-factor-cancel">${t('common.cancel')}</button>
+        <button type="submit" class="btn ${texts.danger ? 'btn--danger' : 'btn--primary'}">${esc(texts.confirm)}</button>
+      </div>
+    </form>
+  `);
+
+  const form  = card.querySelector('#two-factor-confirm-form');
+  const input = card.querySelector('#two-factor-confirm-code');
+  const error = card.querySelector('#two-factor-error');
+  input.focus();
+
+  card.querySelector('#two-factor-cancel')?.addEventListener('click', onCancel);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    clearError(error);
+    const code = input.value.trim();
+    if (!code) {
+      reportFieldError(input, t('settings.twoFactorCodeMissing'));
+      return;
+    }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await onConfirm(code);
+    } catch (err) {
+      button.disabled = false;
+      // Ein falscher Code gehoert ans Feld, alles andere (Bremse, Haushaltspflicht)
+      // an die Karte.
+      if (err?.data?.reason === 'invalid_code') reportFieldError(input, twoFactorErrorText(err));
+      else showError(error, twoFactorErrorText(err));
+      input.select();
+    }
+  });
+}
+
+/**
+ * Karte "Auf anderen Geraeten abmelden" (#1354, #1423). Hinweis, Status und
+ * Knopfreihe tragen eigene Klassen fuer ihren Abstand (settings.css): ohne ihn
+ * las sich der Status als vierte Zeile des Hinweises, und der Fokusring des
+ * Knopfes lag auf dem Statustext. Die Statuszeile bleibt LEER im Markup - erst
+ * ihr Text gibt ihr den Abstand (`:not(:empty)`), sonst stuende Leerraum da.
+ * @returns {string}
+ */
+export function otherSessionsCardHtml() {
+  return `
+      <div class="settings-card settings-sessions">
+        <h3 class="settings-card__title">${t('settings.otherSessionsTitle')}</h3>
+        <p class="form-hint">${t('settings.otherSessionsHint')}</p>
+        <p class="form-hint settings-sessions__status" id="logout-others-status" role="status"></p>
+        <div id="logout-others-error" class="form-error settings-sessions__error" role="alert" hidden></div>
+        <div class="settings-form-actions settings-sessions__actions">
+          <button type="button" class="btn btn--danger-outline" id="logout-others-btn">${t('settings.otherSessionsButton')}</button>
+        </div>
+      </div>`;
+}
+
+/**
+ * Fehlertext fuer "Auf anderen Geraeten abmelden" (#1354). Ein 429 heisst nur
+ * "zu schnell geklickt" - dann sagt die Seite, dass Warten hilft, statt einen
+ * Fehlschlag zu melden, nach dem man es gleich wieder versucht.
+ *
+ * @param {{ status?: number }} err
+ * @returns {string}
+ */
+export function logoutOthersErrorText(err) {
+  if (err?.status === 429) return t('settings.otherSessionsTooManyAttempts');
+  return t('settings.otherSessionsError');
+}
+
+/**
+ * Grund -> Schluessel fuer den Gravatar-Abruf (POST /auth/me/avatar/gravatar).
+ * Der Server nennt den Grund in `reason`; jede Antwort, die er geben kann,
+ * steht hier, damit die Seite nie am englischen Text haengt. `no_email` ist
+ * derselbe Satz wie die Hinweiszeile: die Adresse fehlt, speichern hilft.
+ * Die Schluessel stehen in Anfuehrungszeichen, weil test:api die 403-Gruende
+ * (not_a_household_member) woertlich in der Seite sucht, die sie liest.
+ */
+export const GRAVATAR_REASON_KEYS = Object.freeze({
+  'no_email':               'settings.gravatarNeedsEmail',
+  'gravatar_disabled':      'settings.gravatarErrorDisabled',
+  'gravatar_not_found':     'settings.gravatarErrorNotFound',
+  'gravatar_unreachable':   'settings.gravatarErrorUnreachable',
+  'gravatar_too_large':     'settings.gravatarErrorTooLarge',
+  'gravatar_not_image':     'settings.gravatarErrorNotImage',
+  'gravatar_rate_limited':  'settings.gravatarErrorRateLimited',
+  'gravatar_stale':         'settings.gravatarErrorStale',
+  'not_a_household_member': 'settings.gravatarErrorNotMember',
+});
+
+/**
+ * Fehlertext fuer den Gravatar-Abruf. Ein 429 ohne `reason` (etwa vom
+ * allgemeinen Limit davor) liest sich ebenfalls als "zu oft", nicht als
+ * Fehlschlag; alles Unbekannte faellt auf den Servertext zurueck.
+ * `host` ist der Dienst, den die Saetze nennen (`gravatarHost` aus /auth/me).
+ * @param {{ status?: number, data?: { reason?: string }, message?: string }} err
+ * @param {string} [host]
+ * @returns {string}
+ */
+export function gravatarErrorText(err, host = '') {
+  const key = GRAVATAR_REASON_KEYS[err?.data?.reason];
+  if (key) return host ? t(key, { host }) : t(key);
+  if (err?.status === 429) return t('settings.gravatarErrorRateLimited');
+  return err?.message || t('common.errorGeneric');
+}
+
+/**
+ * Uebersetzt einen Fehler der 2FA-Routen. Der Server nennt den Grund in
+ * `reason`, damit die Oberflaeche nicht am englischen Text hangeln muss.
+ * @param {any} err
+ * @returns {string}
+ */
+function twoFactorErrorText(err) {
+  if (err?.status === 429) return t('settings.twoFactorTooManyAttempts');
+  const reason = err?.data?.reason;
+  if (reason === 'invalid_code') return t('settings.twoFactorInvalidCode');
+  if (reason === 'required')     return t('settings.twoFactorRequiredByHousehold');
+  if (reason === 'not_enabled')  return t('settings.twoFactorNotEnabled');
+  return err?.message || t('settings.twoFactorGenericError');
+}
+
+/**
+ * Haengt die Karte an ihre Schaltflaechen. Jeder Schritt zeichnet die Karte neu,
+ * statt Felder ein- und auszublenden - so gibt es zu jedem Zeitpunkt genau eine
+ * sichtbare Handlung und keinen halb ausgefuellten Zwischenstand.
+ *
+ * @param {HTMLElement} container
+ * @param {() => Promise<void>} reload
+ */
+function bindTwoFactorEvents(container, reload) {
+  const card = container.querySelector('#two-factor-card');
+  if (!card) return;
+  const error = card.querySelector('#two-factor-error');
+
+  card.querySelector('#two-factor-start')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    clearError(error);
+    button.disabled = true;
+    try {
+      const { data } = await auth.setupTwoFactor();
+      renderTwoFactorSetup(card, data);
+      bindSetupForm(card, reload);
+    } catch (err) {
+      button.disabled = false;
+      showError(error, twoFactorErrorText(err));
+    }
+  });
+
+  card.querySelector('#two-factor-disable')?.addEventListener('click', () => {
+    askForCode(card, {
+      title:   t('settings.twoFactorDisableTitle'),
+      lead:    t('settings.twoFactorDisableLead'),
+      confirm: t('settings.twoFactorDisable'),
+      danger:  true,
+    }, async (code) => {
+      await auth.disableTwoFactor(code);
+      await reload();
+    }, () => { reload(); });
+  });
+
+  card.querySelector('#two-factor-regenerate')?.addEventListener('click', () => {
+    askForCode(card, {
+      title:   t('settings.twoFactorNewCodes'),
+      lead:    t('settings.twoFactorNewCodesLead'),
+      confirm: t('settings.twoFactorNewCodes'),
+    }, async (code) => {
+      const { data } = await auth.regenerateRecoveryCodes(code);
+      renderRecoveryCodes(card, data.recovery_codes, () => { reload(); });
+    }, () => { reload(); });
+  });
+}
+
+/**
+ * Das Formular des Einrichtungsschritts.
+ * @param {HTMLElement} card
+ * @param {() => Promise<void>} reload
+ */
+function bindSetupForm(card, reload) {
+  const form  = card.querySelector('#two-factor-enable-form');
+  const input = card.querySelector('#two-factor-code');
+  const error = card.querySelector('#two-factor-error');
+
+  card.querySelector('#two-factor-cancel')?.addEventListener('click', () => { reload(); });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    clearError(error);
+    const code = input.value.trim();
+    if (!code) {
+      reportFieldError(input, t('settings.twoFactorCodeMissing'));
+      return;
+    }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const { data } = await auth.enableTwoFactor(code);
+      renderRecoveryCodes(card, data.recovery_codes, () => { reload(); });
+    } catch (err) {
+      button.disabled = false;
+      // Ein falscher Code gehoert ans Feld, alles andere (Bremse, Haushaltspflicht)
+      // an die Karte.
+      if (err?.data?.reason === 'invalid_code') reportFieldError(input, twoFactorErrorText(err));
+      else showError(error, twoFactorErrorText(err));
+      input.select();
+    }
+  });
+}
+
+function renderPage(container, user, refreshFailed, accessNotice, oidcState, oidcNotice, twoFactorState, gravatarAvailable = false) {
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
+    ${accessNotice ? `
+      <div class="settings-banner settings-banner--info" role="status">${esc(accessNotice)}</div>
+    ` : ''}
+
+    ${refreshFailed ? `
+      <div class="settings-card">
+        <p class="form-error" role="alert">${t('settings.loadError')}</p>
+        <div class="settings-form-actions">
+          <button type="button" class="btn btn--secondary" id="account-retry">${t('settings.retry')}</button>
+        </div>
+      </div>
+    ` : ''}
+
+    <section class="settings-section">
+      ${/* "Mein Konto" unter dem Blatt "Konto" benennt keine Ebene, es
+            wiederholt sie (Keine-sichtbare-Titelwiederholung-Regel, DESIGN.md;
+            Critique 2026-10-16: drei Ueberschriften vor dem ersten Feld). Die
+            Ueberschrift bleibt fuer die Gliederung, unsichtbar. */ ''}
+      <h2 class="settings-section__title sr-only">${t('settings.sectionAccount')}</h2>
+
+      <div class="settings-card">
+        <h3 class="settings-card__title">${t('settings.profileCardTitle')}</h3>
+        <form id="profile-form" class="settings-form" novalidate>
+          <div class="settings-profile-editor">
+            ${avatarEditorHtml(user, { gravatarAvailable })}
+            ${/* NAME, FARBE UND BENUTZERNAME ALS ZEILEN (Re-Kritik 2026-10-17):
+                 sie standen als Felder unter Etiketten neben dem Bild, die
+                 Kontaktdaten darunter schon als Zeilen - zwei Dialekte in einer
+                 Karte. Der Kopf mit Bild bleibt; daneben dieselbe Zeilengruppe.
+                 Der Benutzername ist nicht aenderbar und steht als Wert, nicht
+                 als gesperrtes Feld. */ ''}
+            <div class="settings-profile-editor__fields row-carrier settings-group">
+              ${settingRowHtml({
+                label: t('settings.displayNameLabel'), labelFor: 'profile-display-name', field: true,
+                control: `<input class="form-input" type="text" id="profile-display-name" maxlength="128" value="${esc(user?.display_name || '')}" autocomplete="name" aria-describedby="profile-error" required>`,
+              })}
+              ${settingRowHtml({
+                label: t('settings.colorLabel'), labelFor: 'profile-avatar-color',
+                control: `<input class="settings-color-button" type="color" id="profile-avatar-color" value="${esc(user?.avatar_color || '')}" aria-describedby="profile-error">`,
+              })}
+              ${settingRowHtml({
+                label: t('settings.usernameLabel'), labelId: 'profile-username-label',
+                description: t('settings.usernameFixedHint'), descriptionId: 'profile-username-hint',
+                control: `<span class="settings-setting-row__value" id="profile-username" aria-labelledby="profile-username-label" aria-describedby="profile-username-hint">@${esc(user?.username || '')}</span>`,
+              })}
+            </div>
+          </div>
+          ${gravatarHintHtml(gravatarAvailable)}
+          ${/* KONTAKTDATEN ALS ZEILEN (R19, Einstellungen B7): Telefon, E-Mail und
+               Geburtstag standen als drei gestapelte Felder (zwei davon im
+               Raster) unter ihrer Legende. Jetzt eine Gruppe im Zeilen-Dialekt
+               der Einstellungen - Etikett links, Feld rechts. */ ''}
+          <fieldset class="settings-fieldset">
+            <legend class="settings-fieldset__legend">${t('settings.contactDetailsLegend')}</legend>
+            <div class="row-carrier settings-group">
+              ${settingRowHtml({
+                label: t('settings.memberPhoneLabel'), labelFor: 'profile-phone',
+                control: `<input class="form-input" type="tel" id="profile-phone" value="${esc(user?.phone || '')}" autocomplete="tel" aria-describedby="profile-error">`,
+              })}
+              ${settingRowHtml({
+                label: t('settings.memberEmailLabel'), labelFor: 'profile-email', field: true,
+                control: `<input class="form-input" type="email" id="profile-email" value="${esc(user?.email || '')}" autocomplete="email" aria-describedby="profile-error">`,
+              })}
+              ${settingRowHtml({
+                label: t('settings.memberBirthDateLabel'), labelFor: 'profile-birth-date', field: true,
+                control: `<yuvomi-datepicker type="date" id="profile-birth-date" value="${esc(user?.birth_date || '')}" aria-describedby="profile-error"></yuvomi-datepicker>`,
+              })}
+            </div>
+            <p class="form-hint settings-group__footer">${t('settings.memberContactBirthdayHint')}</p>
+          </fieldset>
+          <div id="profile-error" class="form-error" role="alert" hidden></div>
+          <div class="settings-form-actions">
+            <button type="submit" class="btn btn--primary">${t('common.save')}</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h3 class="settings-card__title">${t('settings.changePassword')}</h3>
+        <form id="password-form" class="settings-form" novalidate>
+          <div class="row-carrier settings-group">
+            ${settingRowHtml({
+              label: t('settings.currentPasswordLabel'), labelFor: 'current-password', field: true,
+              control: '<input class="form-input" type="password" id="current-password" autocomplete="current-password" aria-describedby="password-error" required>',
+            })}
+            ${settingRowHtml({
+              label: t('settings.newPasswordLabel'), labelFor: 'new-password', field: true,
+              control: '<input class="form-input" type="password" id="new-password" autocomplete="new-password" minlength="8" aria-describedby="password-error" required>',
+            })}
+            ${settingRowHtml({
+              label: t('settings.confirmPasswordLabel'), labelFor: 'confirm-password', field: true,
+              control: '<input class="form-input" type="password" id="confirm-password" autocomplete="new-password" minlength="8" aria-describedby="password-error" required>',
+            })}
+          </div>
+          <div id="password-error" class="form-error" role="alert" hidden></div>
+          <div class="settings-form-actions">
+            <button type="submit" class="btn btn--primary">${t('settings.savePassword')}</button>
+          </div>
+        </form>
+      </div>
+
+      ${twoFactorCardHtml(twoFactorState)}
+
+      ${oidcCardHtml(oidcState, oidcNotice)}
+
+      ${otherSessionsCardHtml()}
+    </section>
+
+    <section class="settings-section">
+      <button class="btn btn--danger-outline settings-logout-btn" id="logout-btn">${t('settings.logout')}</button>
+    </section>
+  `);
+}
+
+/**
+ * Verknüpfen und Lösen (#832).
+ *
+ * Der Start ist ein POST und keine Verlinkung: als GET genügte ein
+ * untergeschobener Link, um das Konto eines Angreifers an die fremde Sitzung zu
+ * heften. Die Antwort trägt die Adresse des Providers, dorthin geht der Browser
+ * danach selbst.
+ */
+function bindOidcEvents(container) {
+  const error = container.querySelector('#oidc-error');
+
+  container.querySelector('#oidc-link')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    clearError(error);
+    button.disabled = true;
+    try {
+      const { url } = await api.post('/auth/oidc/link/start', {});
+      if (url) location.href = url;
+      else throw new Error('missing url');
+    } catch (err) {
+      button.disabled = false;
+      showError(error, err?.message || t('settings.oidcLinkErrorGeneric'));
+    }
+  });
+
+  container.querySelector('#oidc-unlink')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    clearError(error);
+    button.disabled = true;
+    try {
+      await api.delete('/auth/oidc/link');
+      location.reload();
+    } catch (err) {
+      button.disabled = false;
+      showError(error, err?.message || t('settings.oidcLinkErrorGeneric'));
+    }
+  });
+}
+
+function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
+  bindOidcEvents(container);
+  const profileError = container.querySelector('#profile-error');
+  const avatarFile = container.querySelector('#profile-avatar-file');
+  const displayName = container.querySelector('#profile-display-name');
+  const avatarColor = container.querySelector('#profile-avatar-color');
+
+  const updatePreview = () => {
+    setAvatarPreview(container, {
+      display_name: displayName?.value || user?.display_name,
+      avatar_color: avatarColor?.value || user?.avatar_color,
+      avatar_data: profileState.avatarData,
+    });
+  };
+
+  container.querySelector('#profile-avatar-preview')?.addEventListener('click', () => avatarFile?.click());
+  container.querySelector('#profile-avatar-edit')?.addEventListener('click', () => avatarFile?.click());
+  displayName?.addEventListener('input', updatePreview);
+  avatarColor?.addEventListener('input', updatePreview);
+
+  avatarFile?.addEventListener('change', async () => {
+    clearError(profileError);
+    const file = avatarFile.files?.[0];
+    // Das Feld ist ein Transportmittel, kein Zustand - sofort leeren, wie
+    // beim Kachelbild (`quick-links-manager.js`). Bleibt der Dateiname
+    // stehen, feuert `change` beim nächsten Griff zu DERSELBEN Datei nicht
+    // mehr, und „nochmal anders zuschneiden" täte gar nichts.
+    avatarFile.value = '';
+    try {
+      const { pickCroppedImage } = await import('/utils/avatar-crop.js');
+      const avatarData = await pickCroppedImage(file);
+      if (avatarData === undefined) return; // abgebrochen: bisheriges Bild bleibt
+      profileState.avatarData = avatarData;
+      updatePreview();
+    } catch (error) {
+      showError(profileError, error.message);
+    }
+  });
+
+  container.querySelector('#profile-avatar-remove')?.addEventListener('click', () => {
+    profileState.avatarData = null;
+    if (avatarFile) avatarFile.value = '';
+    updatePreview();
+  });
+
+  // Gravatar holen. Der Server speichert das Bild selbst (wie PATCH /me/profile
+  // es taete), darum ist nach der Antwort nichts mehr zu sichern: Vorschau und
+  // Seitenleiste ziehen mit, das Formular bleibt, wie es war - ein Klick auf
+  // diesen Knopf ist kein `input` und weckt den Verlassen-Schutz nicht
+  // (dirty-guard.js). Gesperrt per aria-disabled statt disabled, damit der
+  // Knopf per Tastatur erreichbar bleibt und die Hinweiszeile den Grund nennt.
+  const gravatarButton = container.querySelector('#profile-avatar-gravatar');
+  const gravatarHint   = container.querySelector('#profile-gravatar-hint');
+  let gravatarBusy = false;
+  const syncGravatarButton = () => {
+    fillGravatarHint(gravatarHint, user, gravatarHost);
+    if (!gravatarButton) return;
+    if (hasSavedEmail(user) && !gravatarBusy) gravatarButton.removeAttribute('aria-disabled');
+    else gravatarButton.setAttribute('aria-disabled', 'true');
+  };
+  // Die Hinweiszeile kommt leer aus dem HTML und wird hier zum ersten Mal
+  // gefuellt - als Text, damit die Adresse woertlich dasteht.
+  syncGravatarButton();
+  const labelGravatarButton = (label) => {
+    gravatarButton.setAttribute('aria-label', label);
+    gravatarButton.title = label;
+  };
+  gravatarButton?.addEventListener('click', async () => {
+    if (gravatarBusy || !hasSavedEmail(user)) return;
+    clearError(profileError);
+    gravatarBusy = true;
+    gravatarButton.setAttribute('aria-disabled', 'true');
+    labelGravatarButton(t('settings.gravatarFetching'));
+    try {
+      // Die Adresse, die der Hinweis nennt: hat sie sich auf dem Server
+      // inzwischen geaendert, sagt die Route 409 statt eine fremde zu hashen.
+      const { data } = await api.post('/auth/me/avatar/gravatar', { email: user.email.trim() }) ?? {};
+      if (data) {
+        Object.assign(user, data);
+        profileState.avatarData = data.avatar_data ?? null;
+        updatePreview();
+        window.dispatchEvent(new CustomEvent('yuvomi:profile-changed', { detail: {
+          display_name: data.display_name,
+          avatar_color: data.avatar_color,
+          avatar_data: data.avatar_data ?? null,
+        } }));
+      }
+      window.yuvomi?.showToast(t('settings.gravatarDone'), 'success');
+    } catch (error) {
+      // EINE Stelle sagt den Fehler an: die Fehlerzeile des Formulars
+      // (role="alert"), wie bei jedem anderen Fehler dieser Karte. Ein Toast
+      // daneben liesse die Vorlesehilfe denselben Satz zweimal sprechen. Die
+      // Zeile liegt unter den Kontaktfeldern - auf dem Telefon eine
+      // Bildschirmhoehe unter dem Knopf -, deshalb wird sie in den Blick
+      // geholt statt verdoppelt ('nearest': steht sie schon da, bewegt sich nichts).
+      showError(profileError, gravatarErrorText(error, gravatarHost));
+      profileError?.scrollIntoView?.({ block: 'nearest' });
+    } finally {
+      gravatarBusy = false;
+      labelGravatarButton(t('settings.gravatarUse'));
+      syncGravatarButton();
+    }
+  });
+
+  const profileForm = container.querySelector('#profile-form');
+  profileForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    clearError(profileError);
+
+    // FEHLER AM FELD, NICHT IN DER BROWSER-BLASE (Re-Critique 2026-10-17):
+    // das Formular traegt `novalidate`, alle Meldungen stehen zugleich an
+    // ihren Zeilen, der Fokus geht aufs erste (reportFieldErrors).
+    const birthDatePicker = container.querySelector('#profile-birth-date');
+    const birthDateRaw = birthDatePicker?.value || '';
+    const emailInput = container.querySelector('#profile-email');
+    const emailValue = emailInput?.value.trim() || '';
+    if (reportFieldErrors([
+      !displayName.value.trim() && [displayName, t('common.required')],
+      emailValue && !isEmailAddress(emailValue) && [emailInput, t('common.emailInvalid')],
+      !isDateInputValid(birthDateRaw) && [birthDatePicker, t('settings.memberBirthDateInvalid')],
+    ])) return;
+
+    const submitButton = profileForm.querySelector('[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      const response = await auth.updateProfile({
+        display_name: displayName.value.trim(),
+        avatar_color: avatarColor.value,
+        avatar_data: profileState.avatarData,
+        phone: container.querySelector('#profile-phone')?.value.trim() || null,
+        email: container.querySelector('#profile-email')?.value.trim() || null,
+        birth_date: parseDateInput(birthDateRaw) || null,
+      });
+      if (response?.user) {
+        Object.assign(user, response.user);
+        profileState.avatarData = response.user.avatar_data ?? null;
+        updatePreview();
+        // Eine eben gespeicherte Adresse schaltet den Gravatar-Knopf frei und
+        // steht ab jetzt im Hinweis.
+        syncGravatarButton();
+        // Die Kontozeile der Seitenleiste zeigt Name und Avatar (router.js,
+        // syncSidebarAccount) und zieht mit, ohne dass die Shell neu baut.
+        window.dispatchEvent(new CustomEvent('yuvomi:profile-changed', { detail: {
+          display_name: response.user.display_name,
+          avatar_color: response.user.avatar_color,
+          avatar_data: response.user.avatar_data ?? null,
+        } }));
+      }
+      window.yuvomi?.showToast(t('settings.profileSavedToast'), 'success');
+    } catch (error) {
+      if (error?.data?.reason === 'email_in_use') reportFieldError(emailInput, t('common.emailInUse'));
+      else showError(profileError, errorSentence(error));
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  const passwordForm = container.querySelector('#password-form');
+  passwordForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const passwordError = container.querySelector('#password-error');
+    clearError(passwordError);
+
+    const currentInput = container.querySelector('#current-password');
+    const newInput = container.querySelector('#new-password');
+    const confirmInput = container.querySelector('#confirm-password');
+    const currentPassword = currentInput.value;
+    const newPassword = newInput.value;
+    const confirmPassword = confirmInput.value;
+    const inputs = { current: currentInput, next: newInput, confirm: confirmInput };
+    if (reportFieldErrors(passwordProblems(currentPassword, newPassword, confirmPassword)
+      .map(([field, key]) => [inputs[field], t(key)]))) return;
+
+    const submitButton = passwordForm.querySelector('[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await api.patch('/auth/me/password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      passwordForm.reset();
+      window.yuvomi?.showToast(t('settings.passwordSavedToast'), 'success');
+    } catch (error) {
+      // Ein falsches aktuelles Passwort ist ein 400 mit Grund (server/auth.js),
+      // kein 401 mehr: die Sitzung bleibt, die Eingaben auch, und der Satz
+      // steht am Feld. Alles andere sagt die Karte, nie im Text des Servers.
+      const atField = passwordRefusalKey(error);
+      if (atField) {
+        reportFieldError(currentInput, t(atField));
+        currentInput.select?.();
+      } else {
+        showError(passwordError, errorSentence(error));
+      }
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  // Auf anderen Geraeten abmelden (#1354). Der Knopf wird waehrend des Requests
+  // nicht `disabled`: ein fokussierter Knopf, der deaktiviert wird, verliert den
+  // Fokus, und das Modal hat ihn gerade erst dorthin zurueckgegeben.
+  const logoutOthersButton = container.querySelector('#logout-others-btn');
+  let logoutOthersBusy = false;
+  logoutOthersButton?.addEventListener('click', async () => {
+    if (logoutOthersBusy) return;
+    const status = container.querySelector('#logout-others-status');
+    const errorBox = container.querySelector('#logout-others-error');
+    const confirmed = await confirmModal(t('settings.otherSessionsConfirm'), {
+      confirmLabel: t('settings.otherSessionsButton'),
+      detail: t('settings.otherSessionsConfirmDetail'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    logoutOthersBusy = true;
+    logoutOthersButton.setAttribute('aria-disabled', 'true');
+    clearError(errorBox);
+    if (status) status.textContent = '';
+    try {
+      const { ended = 0 } = await auth.logoutOthers() ?? {};
+      if (status) {
+        status.textContent = ended > 0
+          ? t('settings.otherSessionsEnded', { count: ended })
+          : t('settings.otherSessionsNone');
+      }
+    } catch (error) {
+      showError(errorBox, logoutOthersErrorText(error));
+    } finally {
+      logoutOthersBusy = false;
+      logoutOthersButton.removeAttribute('aria-disabled');
+      if (!container.contains(document.activeElement)) logoutOthersButton.focus({ preventScroll: true });
+    }
+  });
+
+  container.querySelector('#logout-btn')?.addEventListener('click', async () => {
+    try {
+      await auth.logout();
+    } finally {
+      window.yuvomi?.clearSession?.();
+      window.yuvomi?.navigate('/login');
+    }
+  });
+}
+
+export async function render(container, { user }) {
+  let currentUser = user || {};
+  let refreshFailed = false;
+  // Ohne frische Antwort kein Gravatar-Knopf: ob der Betreiber ihn
+  // eingeschaltet hat, weiss nur der Server.
+  let gravatarAvailable = false;
+  // Der Dienst, den Hinweis und Fehlersaetze nennen: der Hostname, den der
+  // Server aus der Basis-URL des Betreibers ableitet. Nie ein fester Name.
+  let gravatarHost = '';
+
+  try {
+    const response = await auth.me();
+    if (response?.user && user) Object.assign(user, response.user);
+    else if (response?.user) currentUser = response.user;
+    gravatarAvailable = response?.gravatarAvailable === true;
+    gravatarHost = gravatarAvailable && typeof response?.gravatarHost === 'string' ? response.gravatarHost : '';
+  } catch {
+    refreshFailed = true;
+  }
+
+  const accessNotice = consumeAccessNotice();
+  const oidcNotice   = consumeOidcNotice();
+
+  // Ein Ausfall dieser Abfrage darf die Kontoseite nicht kosten: ohne Stand
+  // bleibt die Karte weg, alles andere bleibt bedienbar.
+  let oidcState = null;
+  try {
+    oidcState = await api.get('/auth/oidc/link');
+  } catch {
+    oidcState = null;
+  }
+
+  // Dasselbe fuer den zweiten Faktor (#672).
+  let twoFactorState = null;
+  try {
+    twoFactorState = (await auth.getTwoFactor())?.data ?? null;
+  } catch {
+    twoFactorState = null;
+  }
+
+  try {
+    renderPage(container, currentUser, refreshFailed, accessNotice, oidcState, oidcNotice, twoFactorState, gravatarAvailable);
+    bindEvents(container, currentUser, {
+      avatarData: currentUser?.avatar_data ?? null,
+    }, { gravatarHost });
+    bindTwoFactorEvents(container, () => render(container, { user: currentUser }));
+    container.querySelector('#account-retry')?.addEventListener('click', () => {
+      render(container, { user: currentUser });
+    });
+    window.lucide?.createIcons({ el: container });
+  } catch (error) {
+    container.replaceChildren();
+    throw error;
+  }
+}
+
+// Der Avatar als Programm (test:initials): welche Zeichen ohne Bild auf der
+// Scheibe stehen.
+export const __test = { avatarHtml, avatarEditorHtml, gravatarHintText, gravatarHintHtml, fillGravatarHint, passwordProblems, passwordRefusalKey, isEmailAddress };

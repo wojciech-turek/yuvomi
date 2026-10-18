@@ -1,0 +1,578 @@
+import { op, jsonBody, idParam } from '../helpers.js';
+
+export function documentsPaths() {
+  return withCaseReasons({
+    '/api/v1/documents/meta/options': {
+      get: op({
+        summary: 'Get family document options',
+        tag: 'Documents',
+        description: 'Returns supported categories, visibility modes, statuses, legacy storage providers, the active upload backend, file size limit and MIME types.',
+        responses: {
+          200: {
+            description: 'Document metadata options',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DocumentOptionsResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/config': {
+      get: op({
+        summary: 'Get document-storage configuration',
+        tag: 'Documents',
+        admin: true,
+        description: 'Returns the selected and effective upload destinations, local-folder override, WebDAV configuration and secret-free Google Drive status. Environment-controlled WebDAV fields are reported individually. Passwords and OAuth tokens are never returned.',
+        responses: {
+          200: {
+            description: 'Effective document-storage status',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DocumentStorageStatusResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      put: op({
+        summary: 'Update document-storage configuration',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Updates the explicit upload destination and any DB-backed WebDAV fields not controlled by environment variables. Sending only `selected_upload_backend` leaves WebDAV fields unchanged. Google Drive must be connected before selection, and a successful OAuth callback never changes the selector. When WebDAV documents exist, connection changes require `confirm_existing_access: true` and a successful read check against an existing object. Use `clear_password: true` to explicitly remove a stored password.',
+        requestBody: jsonBody('#/components/schemas/DocumentStorageConfigRequest'),
+        responses: {
+          200: {
+            description: 'Updated effective document-storage status',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DocumentStorageStatusResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          409: { description: 'Protected configuration change rejected', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/test': {
+      post: op({
+        summary: 'Test WebDAV document storage',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Tests the effective hybrid configuration with a temporary PUT/GET/DELETE roundtrip in the target folder without persisting supplied connection fields.',
+        requestBody: jsonBody('#/components/schemas/DocumentStorageTestRequest'),
+        responses: {
+          200: {
+            description: 'Connection roundtrip succeeded',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DocumentStorageTestResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          502: { description: 'Connection roundtrip failed', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/google-drive/auth': {
+      get: op({
+        summary: 'Start Google Drive document-storage OAuth',
+        tag: 'Documents',
+        admin: true,
+        description: 'Creates a Drive-specific OAuth state value and redirects to Google with the least-privilege `drive.file` scope. Calendar OAuth state and tokens are not reused.',
+        responses: {
+          302: { description: 'Redirect to Google OAuth consent' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          502: { description: 'Google Drive OAuth is not configured' },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/google-drive/callback': {
+      get: op({
+        summary: 'Complete Google Drive document-storage OAuth',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Validates Drive-specific OAuth state and candidate credentials before replacing stored Drive tokens, then redirects to the Documents storage settings. A successful callback does not select Drive for uploads.',
+        responses: {
+          302: { description: 'Redirect to Documents storage settings with drive_ok or drive_error' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/google-drive/test': {
+      post: op({
+        summary: 'Test Google Drive document storage',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Runs a temporary create, read, verify and delete roundtrip in the private Yuvomi/Documents folder.',
+        responses: {
+          200: {
+            description: 'Connection roundtrip succeeded',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DocumentStorageTestResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          502: { description: 'Connection roundtrip failed', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+        },
+      }),
+    },
+    '/api/v1/documents/storage/google-drive/disconnect': {
+      delete: op({
+        summary: 'Disconnect Google Drive document storage',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Deletes only Yuvomi\'s local Drive token state. It does not revoke shared Google credentials. Disconnection is blocked while Drive is selected or Drive-backed documents exist.',
+        responses: {
+          200: {
+            description: 'Google Drive disconnected',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/GoogleDriveStorageStatusResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { description: 'Drive is selected or Drive-backed documents still exist', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+        },
+      }),
+    },
+    '/api/v1/documents/folders': {
+      get: op({ summary: 'List document folders', tag: 'Documents' }),
+      post: op({
+        summary: 'Create document folder',
+        tag: 'Documents',
+        stateChanging: true,
+        requestBody: jsonBody(null),
+        responses: {
+          201: { description: 'Document folder created' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          409: { description: 'Sibling name conflict or the parent folder is in an active deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/folders/{id}': {
+      put: op({
+        summary: 'Rename or move document folder',
+        tag: 'Documents',
+        params: [idParam()],
+        stateChanging: true,
+        requestBody: jsonBody(null),
+        responses: {
+          200: { description: 'Document folder updated' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Folder not found' },
+          409: { description: 'Sibling name conflict or the folder is in an active deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      delete: op({
+        summary: 'Delete a document folder subtree',
+        tag: 'Documents',
+        stateChanging: true,
+        description: 'Deletes the folder and all subfolders. `documents=unfile` keeps every document row and clears its folder link, including documents hidden from the caller, while reporting only the visible unfile count. `documents=delete` requires the opaque HMAC snapshot from the latest delete-impact response; the token binds exact folder identities and the document and collateral-link identities visible to the caller. The route then sequentially deletes visible document content and rows while locking the previewed identities, subtree targets and new document links. Documents hidden from the caller are never deleted, locked or reported in either mode: they keep their row and lose only their folder link, as with `documents=unfile`, so the answer is the same with and without them. Destructive deletion is rejected before the first storage operation: first with 409 `FOLDER_CONTENT_CHANGED` if the previewed visible identities changed, then with 403 `FOLDER_DOCUMENTS_NOT_MANAGEABLE` if a non-admin does not own every visible document. `documents=unfile` is not blocked by a single-document deletion in progress, only by an overlapping folder deletion. A 207 response distinguishes storage, database-row and concurrent-content failures while retaining the folder subtree; it names only documents visible to the caller.',
+        params: [
+          idParam(),
+          {
+            name: 'documents',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['unfile', 'delete'], default: 'unfile' },
+          },
+          {
+            name: 'expected_documents',
+            in: 'query',
+            required: false,
+            description: 'Visible document count from the latest delete-impact response. A mismatch rejects the request before deletion.',
+            schema: { type: 'integer', minimum: 0 },
+          },
+          {
+            name: 'expected_folders',
+            in: 'query',
+            required: false,
+            description: 'Folder count from the latest delete-impact response. A mismatch rejects the request before deletion.',
+            schema: { type: 'integer', minimum: 0 },
+          },
+          {
+            name: 'expected_snapshot',
+            in: 'query',
+            required: false,
+            description: 'Identity-bound snapshot from the latest delete-impact response. Required when documents=delete; a mismatch rejects the request before deletion.',
+            schema: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+          },
+        ],
+        responses: {
+          200: { description: 'Folder subtree deleted' },
+          207: { description: 'Some documents were deleted, but storage failures or a concurrent content change left the folder subtree in place' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { description: 'documents=delete only: the subtree holds a visible document the caller may not manage (reason FOLDER_DOCUMENTS_NOT_MANAGEABLE). Checked after the snapshot comparison; hidden documents never cause it.' },
+          404: { description: 'Folder not found' },
+          409: { description: 'Folder contents changed after the impact preview or the subtree overlaps an active deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/folders/{id}/delete-impact': {
+      get: op({
+        summary: 'Preview the impact of deleting a document folder subtree',
+        tag: 'Documents',
+        description: 'Returns the visible document count, exact folder count, affected-record counts grouped by module, an opaque HMAC snapshot bound to the folder identities and the visible document and collateral-link identities (changes to hidden documents or hidden records never change it), and `can_delete_documents`: whether the caller may delete every document they can see (always true for an admin). `linked_records` counts, per module, only records the caller can see there; a module the caller may not read (member right or token scope; shared expenses follow `budget`) is `null`, not zero. Hidden documents change nothing in this response - neither a count nor `can_delete_documents` reveals them; a destructive `DELETE` leaves them in place and only clears their folder link.',
+        params: [idParam()],
+        responses: {
+          200: { description: 'Folder deletion impact' },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Folder not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents': {
+      get: op({
+        summary: 'List family documents',
+        tag: 'Documents',
+        params: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['active', 'archived'], default: 'active' },
+          },
+          {
+            name: 'category',
+            in: 'query',
+            required: false,
+            schema: {
+              type: 'string',
+              enum: ['medical', 'school', 'identity', 'insurance', 'finance', 'home', 'vehicle', 'legal', 'travel', 'pets', 'warranty', 'taxes', 'work', 'other'],
+            },
+          },
+          {
+            name: 'expiring',
+            in: 'query',
+            required: false,
+            description: 'Only documents whose expires_at is within the next N days or already past. An invalid value is silently skipped (no filter applied), same as an invalid status/category.',
+            schema: { type: 'integer', minimum: 0 },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Visible family documents',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/FamilyDocumentsResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      post: op({
+        summary: 'Upload family document',
+        tag: 'Documents',
+        stateChanging: true,
+        description: 'Stores a document using the active upload backend (`local`, `webdav`, or `google_drive`) with family, restricted, or private visibility. File content is sent as a base64 data URL in `content_data`. An environment-managed local folder may override the selected destination. Filing: `folder_id` targets an existing folder; `folder_key` names the system folder a module files its receipts in (`budget`, `tasks`, `splitExpenses`, `inventory`, `housekeeping`, `calendarItems`) and is what identifies it, while `folder_name` is only the label used if that folder still has to be created. Sending `folder_name` alone still works and matches on the name, which is what two clients in different languages used to file into two separate folders.',
+        requestBody: jsonBody(null),
+        responses: {
+          201: {
+            description: 'Document created',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/FamilyDocumentResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          502: { description: 'Document-storage operation failed', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/{id}': {
+      put: op({
+        summary: 'Update family document metadata',
+        tag: 'Documents',
+        params: [idParam()],
+        stateChanging: true,
+        description: 'Updates name, description, category, status, visibility and allowed member IDs. Only the owner or an admin can update a document.',
+        requestBody: jsonBody(null),
+        responses: {
+          200: {
+            description: 'Document metadata updated',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/FamilyDocumentResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Document not found' },
+          409: { description: 'Document is part of an active folder deletion batch' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      delete: op({
+        summary: 'Delete family document',
+        tag: 'Documents',
+        params: [idParam()],
+        stateChanging: true,
+        description: 'Deletes a document. Only the owner or an admin can delete it.',
+        responses: {
+          204: { description: 'Document deleted' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Document not found' },
+          409: { description: 'Document is part of an active folder deletion batch' },
+          502: { description: 'Remote document deletion failed; the database row remains', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/{id}/archive': {
+      patch: op({
+        summary: 'Archive or restore family document',
+        tag: 'Documents',
+        params: [idParam()],
+        stateChanging: true,
+        documentDeleteConflict: true,
+        description: 'Archives the document by default. Send `{ "archived": false }` to restore it to active status.',
+        requestBody: jsonBody(null),
+      }),
+    },
+    '/api/v1/documents/{id}/preview': {
+      get: op({
+        summary: 'Preview family document file',
+        tag: 'Documents',
+        params: [idParam()],
+        description: 'Returns inline bytes for supported previewable document types.',
+        responses: {
+          200: {
+            description: 'Document preview bytes',
+            content: {
+              'application/octet-stream': {
+                schema: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Document not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/{id}/download': {
+      get: op({
+        summary: 'Download family document file',
+        tag: 'Documents',
+        params: [idParam()],
+        responses: {
+          200: {
+            description: 'Document file bytes',
+            content: {
+              'application/octet-stream': {
+                schema: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { description: 'Document not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/accounts': {
+      get: op({
+        summary: 'List DMS accounts',
+        tag: 'Documents',
+        admin: true,
+        description: 'Returns configured DMS accounts without the api_token. Each item includes `has_token` to indicate whether a token is stored.',
+        responses: {
+          200: {
+            description: 'DMS accounts',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsAccountsResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+      post: op({
+        summary: 'Create DMS account',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        requestBody: jsonBody('#/components/schemas/DmsAccountCreateRequest'),
+        responses: {
+          201: {
+            description: 'DMS account created',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsAccountResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          409: { description: 'An account with this base_url already exists' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/accounts/{id}': {
+      delete: op({
+        summary: 'Delete DMS account',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        params: [idParam('id', 'DMS account ID')],
+        responses: {
+          204: { description: 'DMS account deleted' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'DMS account not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/accounts/{id}/test': {
+      post: op({
+        summary: 'Test DMS account connection',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        params: [idParam('id', 'DMS account ID')],
+        responses: {
+          200: {
+            description: 'Connection test result',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsTestResponse' } } },
+          },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/search': {
+      get: op({
+        summary: 'Search documents in a DMS account',
+        tag: 'Documents',
+        admin: true,
+        params: [
+          {
+            name: 'account_id',
+            in: 'query',
+            required: true,
+            schema: { type: 'integer' },
+            description: 'DMS account ID to search in',
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Search query string. When empty, all documents in the DMS account are listed.',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'DMS search results',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsSearchResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'DMS account not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/link': {
+      post: op({
+        summary: 'Link a DMS document to the family document library',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Creates a family_documents entry with legacy storage_provider `external` and storage_backend `dms`, pointing to a document already stored in the DMS.',
+        requestBody: jsonBody('#/components/schemas/DmsLinkRequest'),
+        responses: {
+          201: {
+            description: 'Document linked',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsLinkResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'DMS document not found in the remote system' },
+          409: { description: 'Document is already linked' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/dms/push': {
+      post: op({
+        summary: 'Push a document to a DMS account',
+        tag: 'Documents',
+        admin: true,
+        stateChanging: true,
+        description: 'Uploads a document with storage_backend `local`, `webdav`, or `google_drive` to the specified DMS account. Only storage_backend `dms` means the document is already stored in the DMS. Returns a task ID for async tracking.',
+        requestBody: jsonBody('#/components/schemas/DmsPushRequest'),
+        responses: {
+          202: {
+            description: 'Push task accepted',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DmsPushResponse' } } },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          403: { $ref: '#/components/responses/Forbidden' },
+          404: { description: 'Document or DMS account not found' },
+          500: { $ref: '#/components/responses/InternalServerError' },
+        },
+      }),
+    },
+    '/api/v1/documents/{id}/thumbnail': {
+      get: op({ summary: 'Fetch the thumbnail of a document', tag: 'Documents', params: [idParam()], description: 'Subject to the same visibility rules as the document itself.' }),
+    },
+    '/api/v1/documents/dms/thumbnail': {
+      get: op({ summary: 'Fetch a thumbnail from the connected DMS', tag: 'Documents', description: 'Proxies the image from Paperless/Papra so the browser never needs the DMS credentials.' }),
+    },
+  });
+}
+
+// #1909: die Faelle, die ein Nutzer erreicht, tragen einen `reason` neben dem
+// englischen `error` - je Operation der Satz, der sie nennt.
+const FOLDER_GONE = '`documents_folder_not_found` (404, the folder does not exist)';
+const SELECTED_FOLDER_GONE = '`documents_selected_folder_not_found` (400, the chosen parent or target folder does not exist)';
+const FOLDER_TREE = '`documents_folder_exists` (409, a sibling has this name), `documents_folder_too_deep` (400, `params.limit` is the maximum depth)';
+const DOCUMENT_GONE = '`documents_document_not_found` (404, the document does not exist or is not visible to the caller)';
+const STORAGE_FAILED = '`documents_storage_failed` (502, the storage backend failed)';
+const FILE_CASES = '`documents_file_type_not_allowed`, `documents_file_content_mismatch`, `documents_file_empty` (400), `documents_storage_failed` (502, the storage backend failed)';
+const CASE_REASONS = {
+  '/api/v1/documents/folders': { post: `${SELECTED_FOLDER_GONE}, ${FOLDER_TREE}` },
+  '/api/v1/documents/folders/{id}': {
+    put: `${FOLDER_GONE}, ${SELECTED_FOLDER_GONE}, ${FOLDER_TREE}`,
+    delete: FOLDER_GONE,
+  },
+  '/api/v1/documents/folders/{id}/delete-impact': { get: FOLDER_GONE },
+  '/api/v1/documents': { post: `${SELECTED_FOLDER_GONE}, ${FILE_CASES}` },
+  '/api/v1/documents/{id}': {
+    put: `${DOCUMENT_GONE}, ${SELECTED_FOLDER_GONE}`,
+    delete: `${DOCUMENT_GONE}, \`documents_storage_failed\` (502)`,
+  },
+  '/api/v1/documents/{id}/archive': { patch: DOCUMENT_GONE },
+  '/api/v1/documents/storage/config': {
+    get: STORAGE_FAILED,
+    put: STORAGE_FAILED,
+  },
+  '/api/v1/documents/storage/test': { post: STORAGE_FAILED },
+  '/api/v1/documents/{id}/preview': { get: STORAGE_FAILED },
+  '/api/v1/documents/{id}/download': { get: STORAGE_FAILED },
+  '/api/v1/documents/dms/link': {
+    post: '`dms_account_not_found` (404), `dms_document_not_found` (404, gone in the DMS), `dms_document_already_linked` (409), `dms_unreachable` (502)',
+  },
+  '/api/v1/documents/dms/push': {
+    post: `\`dms_account_not_found\` (404), ${DOCUMENT_GONE}, \`dms_document_already_stored\` (400), \`documents_storage_failed\` (502, reading the document failed), \`dms_unreachable\` (502)`,
+  },
+};
+
+function withCaseReasons(paths) {
+  for (const [path, operations] of Object.entries(CASE_REASONS)) {
+    for (const [method, reasons] of Object.entries(operations)) {
+      const operation = paths[path]?.[method];
+      if (!operation) throw new Error(`openapi documents: ${method} ${path} is not documented`);
+      const note = `A refusal a user can reach carries a \`reason\` next to \`error\` (#1909): ${reasons}.`;
+      operation.description = operation.description ? `${operation.description}\n\n${note}` : note;
+    }
+  }
+  return paths;
+}
