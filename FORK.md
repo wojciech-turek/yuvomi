@@ -7,12 +7,16 @@ this file describes what is different here.
 ## What changed compared to upstream
 
 - `deploy/hetzner/`: Docker Compose + Caddy deployment, bootstrap and update scripts,
-  setup guide (start there).
-- `.github/workflows/deploy.yml` runs `deploy/hetzner/update.sh` on the server after each build.
+  setup guide (start there). Deploys run from the Mac (`deploy.sh` + git hooks), so GitHub
+  holds no key to the server.
 - `.github/workflows/home-image.yml` builds this fork's image to
-  `ghcr.io/wojciech-turek/yuvomi`. Upstream's publish, Umbrel, Claude review and
-  Dependabot workflows were removed: they push to upstream's registries or need
-  upstream's secrets. Dependency updates arrive by merging upstream.
+  `ghcr.io/wojciech-turek/yuvomi`.
+- Upstream's other workflows stay in place, because upstream's tests read them and deleting
+  them would conflict with every upstream change to them. `docker-publish.yml` and
+  `umbrel-publish.yml` each got one `if: github.repository == 'ulsklyc/yuvomi'` line so
+  they never publish from here; the Claude workflows skip themselves without
+  `CLAUDE_CODE_OAUTH_TOKEN`. Dependabot and `FUNDING.yml` were removed: dependency
+  updates arrive by merging upstream.
 
 ## Pulling in upstream releases
 
