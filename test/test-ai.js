@@ -293,17 +293,21 @@ test('meal ingredient suggestions: recipe, then last time, pantry marked, nothin
 
 // ---------------------------------------------------------------- pantry photo
 
+// A buffer that starts like a JPEG (FF D8 FF), long enough to pass the size floor.
+const JPEG_BODY = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 1)]).toString('base64');
+
 test('pantry photo: only real images of sane size are accepted', () => {
-  const body = 'A'.repeat(4000);
-  assert.deepEqual(parsePhotoDataUrl(`data:image/jpeg;base64,${body}`), { mediaType: 'image/jpeg', data: body });
-  assert.equal(parsePhotoDataUrl(`data:image/gif;base64,${body}`), null);
+  assert.deepEqual(parsePhotoDataUrl(`data:image/jpeg;base64,${JPEG_BODY}`), { mediaType: 'image/jpeg', data: JPEG_BODY });
+  assert.equal(parsePhotoDataUrl(`data:image/png;base64,${JPEG_BODY}`), null, 'the bytes must match the claimed type');
+  assert.equal(parsePhotoDataUrl(`data:image/jpeg;base64,${'A'.repeat(4000)}`), null, 'not image bytes');
+  assert.equal(parsePhotoDataUrl(`data:image/gif;base64,${JPEG_BODY}`), null);
   assert.equal(parsePhotoDataUrl('data:image/png;base64,AAAA'), null, 'too small to be a photo');
   assert.equal(parsePhotoDataUrl('https://example.com/a.jpg'), null);
 });
 
 test('pantry photo: switched off answers with a reason, never a model call', async () => {
   await call('PUT', '/ai/config', { features: { pantry_photo: false } });
-  const r = await call('POST', '/pantry/photo-scan', { image: `data:image/jpeg;base64,${'A'.repeat(4000)}` });
+  const r = await call('POST', '/pantry/photo-scan', { image: `data:image/jpeg;base64,${JPEG_BODY}` });
   assert.equal(r.status, 409);
   assert.equal(r.body.reason, 'ai_disabled');
   assert.equal(db.prepare("SELECT COUNT(*) AS c FROM ai_usage WHERE feature = 'pantry_photo'").get().c, 0);
@@ -381,4 +385,11 @@ test('autocomplete knows common Polish groceries before the household has histor
   assert.equal(r.body.data[0]?.category, 'Haushalt');
   const pom = await call('GET', '/shopping/suggestions?q=pomar');
   assert.ok(pom.body.data.some((s) => s.name === 'Pomarańcze'), 'diacritic-free typing finds Polish names');
+});
+
+test('memory sentences match regardless of punctuation and case', async () => {
+  const { addMemory } = await import('../server/ai/memory.js');
+  const a = addMemory({ text: 'Lubimy ostre jedzenie', topic: 'meals' });
+  const b = addMemory({ text: 'lubimy OSTRE jedzenie.', topic: 'meals', source: 'answer' });
+  assert.equal(a.id, b.id);
 });

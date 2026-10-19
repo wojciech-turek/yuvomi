@@ -13,6 +13,7 @@ import { nameKey } from '../utils/name-key.js';
 import { localCategory } from './shopping-category-guess.js';
 import { claude } from '../ai/index.js';
 import { PANTRY_UNITS } from '../../public/utils/pantry-units.js';
+import { dataUrlContentMatches } from '../utils/file-signature.js';
 
 export const MAX_PHOTO_BYTES = 4_500_000;
 const MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -26,6 +27,8 @@ export function parsePhotoDataUrl(value) {
   if (!m || !MEDIA_TYPES.has(m[1])) return null;
   const bytes = Math.floor((m[2].length * 3) / 4);
   if (bytes < 1000 || bytes > MAX_PHOTO_BYTES) return null;
+  // The bytes must really be the image type the data URL claims.
+  if (!dataUrlContentMatches(String(value))) return null;
   return { mediaType: m[1], data: m[2] };
 }
 

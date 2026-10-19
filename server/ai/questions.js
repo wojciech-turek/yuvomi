@@ -10,9 +10,8 @@
  */
 
 import * as db from '../db.js';
-import { nameKey } from '../utils/name-key.js';
 import { claude } from './index.js';
-import { addMemory, listMemories, memoryContext, TOPICS } from './memory.js';
+import { addMemory, listMemories, memoryContext, sentenceKey, TOPICS } from './memory.js';
 import { historyBlock } from './household-insights.js';
 
 const MAX_OPTIONS = 4;
@@ -143,11 +142,11 @@ export async function learnFromHistory() {
     schema: LEARN_SCHEMA,
     maxTokens: 400,
   });
-  const knownKeys = new Set(listMemories().map((m) => nameKey(m.text)));
+  const knownKeys = new Set(listMemories().map((m) => sentenceKey(m.text)));
   const stored = [];
   for (const s of (out?.sentences ?? []).slice(0, 3)) {
     const text = String(s.text ?? '').trim();
-    if (!text || knownKeys.has(nameKey(text))) continue;
+    if (!text || knownKeys.has(sentenceKey(text))) continue;
     stored.push(addMemory({ topic: s.topic, text, source: 'learned' }));
   }
   return stored;

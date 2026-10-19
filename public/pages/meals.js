@@ -2692,8 +2692,8 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
   // ohne Zutaten bleibt der Abschnitt offen wie bisher: dort IST er die Arbeit.
   const ingCount = isEdit ? (meal.ingredients?.length ?? 0) : 0;
   const ingFieldsHtml = `
-      <div class="ingredient-suggest" id="ingredient-suggest" aria-live="polite" hidden></div>
       <div class="ingredient-list" id="ingredient-list">${ingRows}</div>
+      <div class="ingredient-suggest" id="ingredient-suggest" aria-live="polite" hidden></div>
       <button class="btn btn--secondary add-ingredient-btn" id="add-ingredient-btn" type="button">
         <i data-lucide="plus" class="icon-md" aria-hidden="true"></i>
         ${t('meals.addIngredient')}

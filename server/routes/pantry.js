@@ -22,6 +22,7 @@ import { syncPantryExpiryReminder, resolvePantryAccess } from '../services/pantr
 import { todayKey as householdToday } from '../utils/timezone.js';
 import { mayReadModule } from '../permissions.js';
 import { scanPantryPhoto, parsePhotoDataUrl } from '../services/pantry-photo.js';
+import { dataUrlContentMatches } from '../utils/file-signature.js';
 import { sendAiError } from '../ai/http.js';
 import { nameKey } from '../utils/name-key.js';
 
@@ -325,7 +326,7 @@ router.delete('/locations/:locId', (req, res) => {
 // --------------------------------------------------------
 router.post('/photo-scan', async (req, res) => {
   try {
-    const image = parsePhotoDataUrl(req.body?.image);
+    const image = dataUrlContentMatches(String(req.body?.image ?? '')) ? parsePhotoDataUrl(req.body?.image) : null;
     if (!image) return res.status(400).json({ error: 'Send one JPEG, PNG or WebP photo under 4.5 MB.', code: 400, reason: 'pantry_photo_invalid' });
     const items = await scanPantryPhoto({ image, userId: req.authUserId });
     res.json({ data: { items } });

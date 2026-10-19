@@ -325,10 +325,6 @@ export async function render(container) {
       className: 'pantry-search page-toolbar__center page-search--field',
     })}
     ${readOnly() ? '' : `<div class="page-toolbar__actions">
-      <button type="button" class="btn btn--secondary btn--icon page-tools-btn" id="pantry-photo-btn" hidden
-              aria-label="${esc(t('pantry.photoAdd'))}" title="${esc(t('pantry.photoAdd'))}">
-        <i data-lucide="camera" class="icon-md" aria-hidden="true"></i>
-      </button>
       ${pageToolsMenuHtml({
         id: 'pantry-tools-menu',
         label: t('common.moreActions'),
@@ -343,6 +339,10 @@ export async function render(container) {
         // umbenennen, sortieren, loeschen) im 403.
         items: [{ action: 'manage-locations', label: t('pantry.manageLocations'), icon: 'map-pin' }],
       })}
+      <button type="button" class="btn btn--secondary btn--icon page-tools-btn" id="pantry-photo-btn" hidden
+              aria-label="${esc(t('pantry.photoAdd'))}" title="${esc(t('pantry.photoAdd'))}">
+        <i data-lucide="camera" class="icon-md" aria-hidden="true"></i>
+      </button>
     </div>`}`);
 
   // DIE CHIPREIHE STEHT IM SCROLLPORT (Kopfregel mobil, Regel 3): als erstes

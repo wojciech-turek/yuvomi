@@ -8,6 +8,8 @@
 import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
+import { rowMenuHtml } from '/utils/row-action.js';
+import { installPopoverMenus } from '/utils/popover-menu.js';
 import { createInlineError, createRetryState, settingRowHtml, settingSwitchRowHtml, bindInstantSwitch } from '/settings/components.js';
 
 const FEATURES = ['shopping_smart', 'meal_ingredients', 'pantry_photo', 'meal_ideas', 'nudges', 'questions'];
@@ -50,9 +52,13 @@ function memoryListHtml(memories) {
     <li class="ai-memory-item" data-id="${m.id}">
       <span class="ai-memory-item__topic">${esc(topicLabel(m.topic))}</span>
       <span class="ai-memory-item__text">${esc(m.text)}</span>
-      <button type="button" class="btn btn--ghost btn--icon" data-delete-memory="${m.id}" aria-label="${esc(t('common.delete'))}" title="${esc(t('common.delete'))}">
-        <i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>
-      </button>
+      <div class="row-actions">
+        ${rowMenuHtml({
+          id: `ai-memory-menu-${m.id}`,
+          label: t('common.moreActionsNamed', { name: m.text }),
+          items: [{ action: 'delete-memory', icon: 'trash-2', label: t('common.delete'), danger: true, attrs: { 'data-delete-memory': m.id } }],
+        })}
+      </div>
     </li>`).join('')}</ul>`;
 }
 
@@ -148,6 +154,7 @@ function renderPage(container, cfg, memories) {
     </section>
   `);
   window.lucide?.createIcons({ el: container });
+  installPopoverMenus(container);
 
   const form = container.querySelector('#ai-form');
   const errorHost = container.querySelector('#ai-error');
@@ -240,6 +247,7 @@ function renderPage(container, cfg, memories) {
     memoryHost.replaceChildren();
     memoryHost.insertAdjacentHTML('beforeend', memoryListHtml(res.data ?? []));
     window.lucide?.createIcons({ el: memoryHost });
+    installPopoverMenus(memoryHost);
   };
   container.querySelector('#ai-memory-form').addEventListener('submit', async (event) => {
     event.preventDefault();

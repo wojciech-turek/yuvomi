@@ -34,7 +34,8 @@ export function splitSteps(notes) {
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (paragraphs.length >= 2) return paragraphs;
   // One block: sentences, grouped so a step is not a three-word fragment.
-  const sentences = paragraphs[0].split(/(?<=[.!?])\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ0-9])/u);
+  // Sentences end at . ! or ? (no lookbehind: Safari 14.1 is the floor).
+  const sentences = (paragraphs[0].match(/[^.!?]+(?:[.!?]+|$)/g) ?? [paragraphs[0]]).map((x) => x.trim()).filter(Boolean);
   const steps = [];
   for (const s of sentences) {
     if (steps.length && steps.at(-1).length < 60) steps[steps.length - 1] += ` ${s}`;

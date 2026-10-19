@@ -20,6 +20,11 @@ export const MAX_TEXT = 300;
 /** How many sentences one prompt carries at most. */
 const CONTEXT_LIMIT = 60;
 
+/** Same sentence regardless of case, diacritics, spacing and punctuation. */
+export function sentenceKey(text) {
+  return nameKey(text).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim();
+}
+
 export function listMemories({ activeOnly = false } = {}) {
   return db.get().prepare(`
     SELECT id, topic, text, source, active, created_by, created_at, updated_at
@@ -39,8 +44,8 @@ export function getMemory(id) {
 export function addMemory({ topic = 'household', text, source = 'manual', userId = null }) {
   const clean = String(text ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_TEXT);
   if (!clean) throw new Error('empty memory');
-  const key = nameKey(clean);
-  const existing = db.get().prepare('SELECT id, text FROM ai_memories').all().find((m) => nameKey(m.text) === key);
+  const key = sentenceKey(clean);
+  const existing = db.get().prepare('SELECT id, text FROM ai_memories').all().find((m) => sentenceKey(m.text) === key);
   if (existing) {
     db.get().prepare(`UPDATE ai_memories SET active = 1, topic = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`)
       .run(TOPICS.includes(topic) ? topic : 'household', existing.id);

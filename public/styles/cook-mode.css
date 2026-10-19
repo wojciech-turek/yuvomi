@@ -158,8 +158,10 @@
   cursor: pointer;
 }
 
-.cook-mode__ing:hover {
-  background: var(--color-surface-hover);
+@media (hover: hover) {
+  .cook-mode__ing:hover {
+    background: var(--color-surface-hover);
+  }
 }
 
 .cook-mode__ing-qty {
@@ -192,7 +194,7 @@
 
 .cook-mode__step {
   margin: 0;
-  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.6rem);
+  font-size: var(--text-3xl);
   line-height: 1.35;
   max-inline-size: 34ch;
   text-wrap: pretty;
@@ -306,6 +308,12 @@
 
   .cook-mode__navbtn {
     min-inline-size: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cook-mode__step {
+    font-size: var(--text-4xl);
   }
 }
 

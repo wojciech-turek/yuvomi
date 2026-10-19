@@ -1722,6 +1722,10 @@
   border-radius: var(--radius-md);
 }
 
+.ingredient-suggest[hidden] {
+  display: none;
+}
+
 .ingredient-suggest__label {
   margin: 0;
   font-size: var(--text-sm);
@@ -1775,4 +1779,36 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* MEAL IDEAS (fork, 2026-10-19): three quiet cards in the ideas dialog. */
+.meal-ideas {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.meal-idea {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  padding: var(--space-3) var(--space-4);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.meal-idea__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.meal-idea__why {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.meal-idea__ingredients {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }

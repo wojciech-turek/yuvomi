@@ -1116,6 +1116,10 @@
   padding-top: var(--space-2);
 }
 
+.shopping-predictions[hidden] {
+  display: none;
+}
+
 .shopping-predictions__label {
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
@@ -1135,9 +1139,11 @@
   cursor: pointer;
 }
 
-.shopping-predictions__chip:hover {
-  border-style: solid;
-  background: var(--color-surface-hover);
+@media (hover: hover) {
+  .shopping-predictions__chip:hover {
+    border-style: solid;
+    background: var(--color-surface-hover);
+  }
 }
 
 .shopping-predictions__chip:disabled {
