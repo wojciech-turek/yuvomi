@@ -99,6 +99,7 @@ import rewardsRouter from './routes/rewards.js';
 import permissionsRouter from './routes/permissions.js';
 import changelogRouter from './routes/changelog.js';
 import mcpRouter from './mcp/server.js';
+import aiRouter from './routes/ai.js';
 import scheduleRouter from './routes/schedule.js';
 import scheduleFeedRouter from './routes/schedule-feed.js';
 import schedulePreferencesRouter from './routes/schedule-preferences.js';
@@ -737,6 +738,7 @@ app.use('/api/v1/pantry', pantryRouter);
 app.use('/api/v1/inventory', inventoryRouter);
 // Kreislauf-Zustand der vier Küchen-Tabs in einer Abfrage (utils/kitchen-tabs.js).
 app.use('/api/v1/kitchen', kitchenRouter);
+app.use('/api/v1/ai', aiRouter);
 app.use('/api/v1/calendar', calendarRouter);
 app.use('/api/v1/notes', notesRouter);
 app.use('/api/v1/quick-links', quickLinksRouter);

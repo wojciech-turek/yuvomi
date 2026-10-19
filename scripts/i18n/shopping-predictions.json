@@ -1,0 +1,14 @@
+{
+  "shopping.predictionsLabel": {
+    "en": "Probably running low:",
+    "pl": "Pewnie się kończy:"
+  },
+  "shopping.predictionsWhy": {
+    "en": "You buy this about every {{every}} days; last time {{since}} days ago.",
+    "pl": "Kupujecie to mniej więcej co {{every}} dni, ostatnio {{since}} dni temu."
+  },
+  "shopping.predictionsHide": {
+    "en": "Hide for today",
+    "pl": "Ukryj na dziś"
+  }
+}

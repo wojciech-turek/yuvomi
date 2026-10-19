@@ -729,5 +729,6 @@ Der erste Lauf lieferte zwei Ursachen für 39 × 2 × 2 Zustände. Erstens: `res
 ## Kitchen helpers and AI (this fork)
 
 ```bash
+npm run test:ai                    # AI foundation: Polish name keys, purchase rhythm statistics, Polish keyword aisles, Claude/Jev clients with fakes (no network), AI settings admin gate and key secrecy, feature switches and monthly cap, household memory, purchase log on tick/untick, ranked autocomplete, remembered hand categories, predictions gate
 npm run test:cook-steps            # Cook mode: recipe notes split into steps (numbered lines, bullets, paragraphs, sentences), Polish/English timers ("15-20 minut", "1 godz.", "2 hours"), timer display
 ```

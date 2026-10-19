@@ -1280,6 +1280,7 @@ function renderListContent(container) {
           <i data-lucide="corner-down-left" class="icon-lg" aria-hidden="true"></i>
         </button>
       </form>
+      <div class="shopping-predictions" id="shopping-predictions" hidden></div>
     </div>`}
 
     <!-- Die Sammelaktions-Leiste stand hier als statischer Block über der
@@ -1318,6 +1319,7 @@ function renderListContent(container) {
   if (window.lucide) window.lucide.createIcons({ el: content });
   wireAutocomplete(container);
   wireQuickAdd(container);
+  loadPredictions(container);
   syncQuickAddDisclosure(container, false);
 }
 
@@ -1687,6 +1689,7 @@ function applyAutocompleteSuggestion(container, el) {
 
   // Was hier ins Kategoriefeld kommt, hat niemand gewaehlt (siehe reviveTickedItem).
   quickAddCategoryChosen = false;
+  quickAddFromSuggestion = true;
 
   // STEHT DER NAME ABGEHAKT AUF DIESER LISTE, MEINT DIE WAHL DIESE ZEILE (#1816).
   // Das Formular zeigt dann IHRE Werte, nicht die des juengsten Namensvetters
@@ -1781,6 +1784,81 @@ function wireAutocomplete(container) {
 
   input.addEventListener('blur', () => {
     setTimeout(() => { dropdown.hidden = true; }, 150);
+  });
+}
+
+// --------------------------------------------------------
+// "Probably running low" (fork, 2026-10-19)
+// Chips under the quick-add field for items whose usual buying rhythm says
+// they are due again (GET /shopping/predictions: statistics on the purchase
+// log, no model call, empty unless AI shopping help is on). One tap adds the
+// item to this list in its usual aisle; "hide" keeps the row away until
+// tomorrow on this device.
+// --------------------------------------------------------
+const PREDICTIONS_HIDDEN_KEY = 'yuvomi-shopping-predictions-hidden';
+
+function predictionsHiddenToday() {
+  try { return localStorage.getItem(PREDICTIONS_HIDDEN_KEY) === todayKey(); } catch { return false; }
+}
+
+async function loadPredictions(container) {
+  const box = container.querySelector('#shopping-predictions');
+  if (!box || predictionsHiddenToday()) return;
+  let items = [];
+  try {
+    items = (await api.get('/shopping/predictions')).data ?? [];
+  } catch {
+    return;
+  }
+  const open = new Set(state.items.filter((i) => !i.is_checked).map((i) => i.name.toLowerCase()));
+  const categories = new Set(state.categories.map((c) => c.name));
+  items = items.filter((i) => !open.has(i.name.toLowerCase())).slice(0, 6);
+  if (!items.length || !box.isConnected) return;
+
+  box.replaceChildren();
+  box.insertAdjacentHTML('beforeend', `
+    <span class="shopping-predictions__label">${esc(t('shopping.predictionsLabel'))}</span>
+    ${items.map((i, idx) => `
+      <button type="button" class="shopping-predictions__chip" data-idx="${idx}"
+              title="${esc(t('shopping.predictionsWhy', { every: i.everyDays, since: i.sinceDays }))}">
+        <i data-lucide="plus" class="icon-sm" aria-hidden="true"></i>${esc(i.name)}
+      </button>`).join('')}
+    <button type="button" class="shopping-predictions__hide" aria-label="${esc(t('shopping.predictionsHide'))}"
+            title="${esc(t('shopping.predictionsHide'))}">
+      <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
+    </button>`);
+  box.hidden = false;
+  window.lucide?.createIcons({ el: box });
+
+  box.addEventListener('click', async (e) => {
+    if (e.target.closest('.shopping-predictions__hide')) {
+      try { localStorage.setItem(PREDICTIONS_HIDDEN_KEY, todayKey()); } catch { /* hidden for this view only */ }
+      box.hidden = true;
+      return;
+    }
+    const chip = e.target.closest('.shopping-predictions__chip');
+    if (!chip || chip.disabled) return;
+    const item = items[Number(chip.dataset.idx)];
+    const known = item.category && categories.has(item.category);
+    chip.disabled = true;
+    try {
+      const data = await api.post(`/shopping/${state.activeListId}/items`, {
+        name: item.name,
+        quantity: item.quantity ?? null,
+        category: known ? item.category : DEFAULT_CATEGORY_NAME,
+        category_source: known ? 'suggestion' : 'default',
+      });
+      acknowledgeOwnChange(data);
+      state.items.push(data.data);
+      updateItemsList(container);
+      updateListCounter(state.activeListId, 1, 0);
+      renderTabs(container);
+      chip.remove();
+      if (!box.querySelector('.shopping-predictions__chip')) box.hidden = true;
+    } catch (err) {
+      chip.disabled = false;
+      reportError(err, container);
+    }
   });
 }
 
@@ -1915,6 +1993,8 @@ function syncQuickAddDisclosure(container, open) {
  */
 function resetQuickAddCategory(catSelect) {
   quickAddCategoryChosen = false;
+  quickAddFromSuggestion = false;
+  quickAddCategoryGuessed = false;
   if ([...catSelect.options].some((o) => o.value === DEFAULT_CATEGORY_NAME)) {
     catSelect.value = DEFAULT_CATEGORY_NAME;
   }
@@ -1927,6 +2007,18 @@ function resetQuickAddCategory(catSelect) {
  * Zuruecksetzen und jeder Uebernahme aus einem Vorschlag.
  */
 let quickAddCategoryChosen = false;
+
+/** The category came with an autocomplete pick (not chosen, not guessed). */
+let quickAddFromSuggestion = false;
+/** The category was guessed while typing (/shopping/category-guess). */
+let quickAddCategoryGuessed = false;
+
+/** Who set the category field, as POST /:listId/items expects it (fork). */
+function quickAddCategorySource() {
+  if (quickAddCategoryChosen) return 'hand';
+  if (quickAddFromSuggestion || quickAddCategoryGuessed) return 'suggestion';
+  return 'default';
+}
 
 function wireQuickAdd(container) {
   const form = container.querySelector('#quick-add-form');
@@ -1944,6 +2036,37 @@ function wireQuickAdd(container) {
   });
 
   container.querySelector('#item-cat-select')?.addEventListener?.('change', () => { quickAddCategoryChosen = true; });
+
+  // THE AISLE FILLS ITSELF while the name is typed (fork, 2026-10-19): a pause
+  // asks the server, which answers from the household's own history and Polish
+  // keywords first and only then, if AI is on, from a model. A hand choice in
+  // the field stops it for this item.
+  const guessInput = container.querySelector('#item-name-input');
+  const guessSelect = container.querySelector('#item-cat-select');
+  let guessTimer = null;
+  let guessSeq = 0;
+  guessInput?.addEventListener?.('input', () => {
+    quickAddFromSuggestion = false;
+    clearTimeout(guessTimer);
+    if (quickAddCategoryChosen || !guessSelect) return;
+    const typed = guessInput.value.trim();
+    if (typed.length < 3) {
+      if (quickAddCategoryGuessed) resetQuickAddCategory(guessSelect);
+      return;
+    }
+    guessTimer = setTimeout(async () => {
+      const seq = ++guessSeq;
+      try {
+        const res = await api.get(`/shopping/category-guess?name=${encodeURIComponent(typed)}`);
+        if (seq !== guessSeq || quickAddCategoryChosen || quickAddFromSuggestion || guessInput.value.trim() !== typed) return;
+        const cat = res.data?.category;
+        if (cat && [...guessSelect.options].some((o) => o.value === cat)) {
+          guessSelect.value = cat;
+          quickAddCategoryGuessed = true;
+        }
+      } catch { /* no guess: the field keeps what it shows */ }
+    }, 450);
+  });
 
   // EIN ABSENDEN ZUR ZEIT. Enter zweimal schnell hintereinander schickte sonst
   // zweimal: das erste holt die abgehakte Zeile zurueck, das zweite findet sie
@@ -1978,7 +2101,7 @@ function wireQuickAdd(container) {
         // ein Satz sagt, was aus der Eingabe geworden ist.
         window.yuvomi.showToast(t('shopping.itemBackToast', { name: revive.name }), 'info');
       } else {
-        const data = await api.post(`/shopping/${state.activeListId}/items`, { name, quantity, category });
+        const data = await api.post(`/shopping/${state.activeListId}/items`, { name, quantity, category, category_source: quickAddCategorySource() });
         acknowledgeOwnChange(data);
         state.items.push(data.data);
         // Einfügen in DOM ohne komplettes Re-Render

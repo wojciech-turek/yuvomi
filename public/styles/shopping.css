@@ -1104,3 +1104,55 @@
  * umverteilt statt es aufzulösen, ist genau die Sorte Regel, die die nächste
  * Änderung teuer macht.
  * -------------------------------------------------------- */
+
+/* "PROBABLY RUNNING LOW" (fork, 2026-10-19): one quiet row under the quick-add
+ * field. Chips look like suggestions, not like list rows: outlined, muted text,
+ * the plus says what a tap does. */
+.shopping-predictions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.shopping-predictions__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.shopping-predictions__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: 32px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.shopping-predictions__chip:hover {
+  border-style: solid;
+  background: var(--color-surface-hover);
+}
+
+.shopping-predictions__chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.shopping-predictions__hide {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}

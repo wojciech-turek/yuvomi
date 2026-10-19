@@ -224,7 +224,7 @@ test('die Blaetter verteilen sich wie beschlossen auf drei Bereiche, je Modul ei
   // Dazu "Eigenes Modul hinzufuegen" (modules-install): Drittmodule zu
   // installieren ist eine Handlung im Modul-Bereich, kein Modul - deshalb ein
   // Blatt ohne `module`, aber in derselben Domaene.
-  assert.deepEqual(perDomain, { personal: 5, admin: 8, modules: 16 });
+  assert.deepEqual(perDomain, { personal: 5, admin: 9, modules: 16 }); // admin-ai (fork, 2026-10-19)
   assert.deepEqual(SETTINGS_DOMAINS.map((domain) => domain.id), ['personal', 'admin', 'modules']);
   // Jedes Blatt haengt an einem existierenden Bereich, jeder Abschnitt an
   // einem existierenden Blatt, und kein Blatt ist leer.

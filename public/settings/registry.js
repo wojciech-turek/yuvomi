@@ -306,6 +306,21 @@ export const SETTINGS_SECTIONS = freezeEntries([
     loader: () => import('/settings/pages/admin-immich.js'),
   },
   {
+    // AI help (fork, 2026-10-19): switch, keys the browser never sees, model,
+    // monthly limit, feature switches, usage and the household memory.
+    id: 'admin-ai',
+    sheetId: 'admin-ai',
+    scope: 'household',
+    labelKey: 'settings.pageAi',
+    descriptionKey: 'settings.pageAiDescription',
+    options: [
+      'ai.anthropicKey',
+      'ai.memoryTitle',
+    ],
+    adminOnly: true,
+    loader: () => import('/settings/pages/admin-ai.js'),
+  },
+  {
     // Der Haushalts-Standardstandort des Wetters - eine haushaltweite Quelle;
     // das Gegenstueck je Mitglied ist `personal-weather` im Konto.
     id: 'admin-weather',
@@ -761,6 +776,7 @@ export const SETTINGS_LEAVES = freezeEntries([
   { id: 'admin-system', domainId: 'admin', path: '/settings/admin/system', labelKey: 'settings.pageSystem', descriptionKey: 'settings.pageSystemDescription', icon: 'info' },
   { id: 'admin-api', domainId: 'admin', path: '/settings/admin/api', labelKey: 'settings.pageApiAccess', descriptionKey: 'settings.pageApiAccessDescription', icon: 'key-round' },
   { id: 'admin-integrations', domainId: 'admin', path: '/settings/admin/integrations', labelKey: 'settings.pageIntegrations', descriptionKey: 'settings.pageIntegrationsDescription', icon: 'plug' },
+  { id: 'admin-ai', domainId: 'admin', path: '/settings/admin/ai', labelKey: 'settings.pageAi', descriptionKey: 'settings.pageAiDescription', icon: 'sparkles' },
   // Module - in der Reihenfolge der Seitenleiste ohne eigene Anordnung
   // (settingsSheetsForDomain sortiert nach Gruppe und Haushalts-Reihenfolge).
   { id: 'modules-active', domainId: 'modules', path: '/settings/modules/active', labelKey: 'settings.pageActiveModules', descriptionKey: 'settings.pageActiveModulesDescription', icon: 'toggle-right' },

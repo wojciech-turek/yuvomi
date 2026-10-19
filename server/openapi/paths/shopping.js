@@ -31,9 +31,16 @@ export function shoppingPaths() {
         description: 'Contract change (#1103): response items are now objects { name, category, quantity } instead of '
           + 'plain name strings (string[] before), and the list is ordered by most recently used first instead of alphabetically. '
           + 'Category and quantity come from the most recent item row with that name - the latest statement about '
-          + 'how the household files the article today.',
+          + 'how the household files the article today. Since 2026-10-19 (fork) names are ranked by the purchase log '
+          + '(bought often and recently first), matching ignores Polish diacritics and also matches the start of any word.',
         tag: 'Shopping',
       }),
+    },
+    '/api/v1/shopping/category-guess': {
+      get: op({ summary: 'Guess the aisle for an item name (hand picks, history, keywords, then AI if enabled)', tag: 'Shopping' }),
+    },
+    '/api/v1/shopping/predictions': {
+      get: op({ summary: 'Items that are probably due again, from the purchase rhythm (empty unless AI shopping help is on)', tag: 'Shopping' }),
     },
     '/api/v1/shopping/versions': {
       get: op({

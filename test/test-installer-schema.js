@@ -168,6 +168,8 @@ const INTENTIONALLY_NOT_IN_INSTALLER = {
     'SSRF-Opt-in fuer Benachrichtigungskanaele; der Kanal wird in der App angelegt und das '
     + 'Formular nennt den Schalter, wenn es eine private Adresse ablehnt.',
   IMMICH_API_KEY: 'Geheimnis, das in der App gesetzt und dort auch getestet wird.',
+  ANTHROPIC_API_KEY: 'AI key (fork): set and tested in the app under Settings > AI.',
+  TYPESAFE_API_KEY: 'Optional Jev key (fork): set and tested in the app under Settings > AI.',
   IMMICH_SCREENSAVER_ALBUM_ID: 'Optionale Album-Einschränkung, in der App wählbar.',
   // Ab Werk AUS (leer = nichts geht hinaus, kein Knopf): fuer jede vom Wizard
   // erzeugte Installation ist "nicht gesetzt" der richtige Wert. Einschalten

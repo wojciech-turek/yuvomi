@@ -23,6 +23,12 @@ import { isHouseholdMember } from '../services/household-members.js';
 import { buildShoppingListMail } from '../services/shopping-mail.js';
 import { householdTimeZone, utcToWall } from '../utils/timezone.js';
 import { mayReadModule, mayWriteModule } from '../permissions.js';
+import { runExternalJob } from '../utils/restore-state.js';
+import { refuseWhileRestoring } from '../middleware/restore-gate.js';
+import { nameKey, matchesPrefix } from '../utils/name-key.js';
+import { localCategory, guessCategory, rememberCategory, rememberedCategory } from '../services/shopping-category-guess.js';
+import { groupPurchases, weight, dueItems } from '../ai/shopping-stats.js';
+import { featureOn } from '../ai/settings.js';
 
 const log = createLogger('Shopping');
 
@@ -395,32 +401,122 @@ router.get('/suggestions', (req, res) => {
   try {
     const q = (req.query.q ?? '').trim();
     if (q.length < 1) return res.json({ data: [] });
-
-    const names = db.get().prepare(`
-      SELECT name, MAX(created_at) AS latest, MAX(id) AS latest_id FROM shopping_items
-      WHERE name LIKE ? COLLATE NOCASE
-      GROUP BY name
-      ORDER BY latest DESC, latest_id DESC
-      LIMIT 8
-    `).all(`${q}%`);
-
-    const mostRecent = db.get().prepare(`
-      SELECT category, quantity FROM shopping_items
-      WHERE name = ?
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `);
-    const data = names.map((r) => {
-      const recent = mostRecent.get(r.name);
-      return { name: r.name, category: recent?.category ?? null, quantity: recent?.quantity ?? null };
-    });
-
-    res.json({ data });
+    res.json({ data: rankedSuggestions(q) });
   } catch (err) {
     log.error('suggestions error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }
 });
+
+/**
+ * RANKED BY WHAT THE HOUSEHOLD BUYS (fork, 2026-10-19). The purchase log
+ * (shopping_purchases) weighs every ticked item by recency, so "mleko" bought
+ * twice a week ranks above "mascarpone" bought once in spring. Names that were
+ * on a list but never ticked still appear, below them, newest first - the
+ * behaviour #1103 introduced. Matching ignores case and Polish diacritics
+ * ("zolty" finds "żółty ser") and also matches the start of any word ("ser"
+ * finds "żółty ser"), whole-name matches first. Category and quantity come from
+ * the newest row; a category the household picked by hand for that name wins.
+ */
+function rankedSuggestions(q, limit = 8) {
+  const qKey = nameKey(q);
+  if (!qKey) return [];
+  const now = Date.now();
+  const yearAgo = new Date(now - 365 * 86_400_000).toISOString();
+  const byKey = new Map();
+
+  const purchases = db.get().prepare(
+    'SELECT name, name_key, category, quantity, purchased_at FROM shopping_purchases WHERE purchased_at >= ?',
+  ).all(yearAgo);
+  for (const g of groupPurchases(purchases).values()) {
+    if (!matchesPrefix(g.key, qKey)) continue;
+    byKey.set(g.key, { name: g.name, category: g.category, quantity: g.quantity, score: 1 + weight(g.times, now) });
+  }
+  const items = db.get().prepare(
+    'SELECT name, category, quantity, created_at FROM shopping_items ORDER BY created_at DESC, id DESC LIMIT 3000',
+  ).all();
+  items.forEach((it, idx) => {
+    const key = nameKey(it.name);
+    if (!key || byKey.has(key) || !matchesPrefix(key, qKey)) return;
+    // Below every bought name, newest first.
+    byKey.set(key, { name: it.name, category: it.category, quantity: it.quantity, score: 1 / (2 + idx) });
+  });
+
+  return [...byKey.entries()]
+    .map(([key, e]) => ({ ...e, whole: key.startsWith(qKey), category: rememberedCategory(key)?.category ?? e.category }))
+    .sort((a, b) => (Number(b.whole) - Number(a.whole)) || (b.score - a.score))
+    .slice(0, limit)
+    .map((e) => ({ name: e.name, category: e.category ?? null, quantity: e.quantity ?? null }));
+}
+
+// --------------------------------------------------------
+// GET /api/v1/shopping/category-guess?name=… (fork, 2026-10-19)
+// The aisle for a name nobody sorted yet, for the quick-add field to prefill
+// while typing. Local knowledge first (hand picks, history, Polish keywords);
+// a model (Jev, else Haiku) only when the AI feature is on and nothing local
+// knows the name. Response: { data: { category, source } | null }
+// --------------------------------------------------------
+router.get('/category-guess', refuseWhileRestoring, async (req, res) => {
+  try {
+    const name = String(req.query.name ?? '').trim();
+    if (name.length < 2 || name.length > MAX_TITLE) return res.json({ data: null });
+    let guess = localCategory(name);
+    if (!guess) {
+      try {
+        guess = await guessCategory(name, { userId: req.authUserId });
+      } catch {
+        // AI unavailable (limit, key, network): no guess, the field keeps its default.
+        guess = null;
+      }
+    }
+    res.json({ data: guess ? { category: guess.category, source: guess.source } : null });
+  } catch (err) {
+    log.error('category-guess error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
+// GET /api/v1/shopping/predictions (fork, 2026-10-19)
+// "Probably needed": items whose usual buying rhythm says they are due again
+// and that are not open on any list. Pure statistics on the purchase log, no
+// model call. Empty unless the household switched on AI shopping help.
+// Response: { data: { name, category, quantity, everyDays, sinceDays }[] }
+// --------------------------------------------------------
+router.get('/predictions', (_req, res) => {
+  try {
+    if (!featureOn('shopping_smart')) return res.json({ data: [] });
+    const now = Date.now();
+    const purchases = db.get().prepare(
+      'SELECT name, name_key, category, quantity, purchased_at FROM shopping_purchases WHERE purchased_at >= ?',
+    ).all(new Date(now - 365 * 86_400_000).toISOString());
+    const open = new Set(db.get().prepare('SELECT name FROM shopping_items WHERE is_checked = 0').all().map((r) => nameKey(r.name)));
+    const data = dueItems(groupPurchases(purchases), now, open).map(({ name, category, quantity, everyDays, sinceDays }) => ({
+      name, category: rememberedCategory(nameKey(name))?.category ?? category ?? null, quantity: quantity ?? null, everyDays, sinceDays,
+    }));
+    res.json({ data });
+  } catch (err) {
+    log.error('predictions error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
+/** Appends a ticked item to the purchase log. */
+function logPurchase(item, userId) {
+  const key = nameKey(item.name);
+  if (!key) return;
+  db.get().prepare(`
+    INSERT INTO shopping_purchases (item_id, name, name_key, category, quantity, list_id, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(item.id, item.name, key, item.category, item.quantity, item.list_id, userId ?? null);
+}
+
+/** An untick within two days takes the purchase back (a mis-tap, not a return). */
+function unlogPurchase(itemId) {
+  db.get().prepare(`
+    DELETE FROM shopping_purchases WHERE item_id = ? AND purchased_at >= ?
+  `).run(itemId, new Date(Date.now() - 2 * 86_400_000).toISOString());
+}
 
 // --------------------------------------------------------
 // PATCH /api/v1/shopping/items/:itemId
@@ -638,6 +734,15 @@ router.patch('/items/:itemId', (req, res) => {
           WHERE id = ?
         `).run(is_checked ? 1 : 0, name.trim(), quantity ?? null, category, vNotes.value, vUrl.value,
           priceCents ?? null, storeId ?? null, targetListId, req.params.itemId);
+
+        // Purchase log (fork): a tick is a purchase, an untick takes it back.
+        if (!item.is_checked && is_checked) {
+          logPurchase({ id: item.id, name: name.trim(), category, quantity: quantity ?? null, list_id: targetListId }, req.authUserId);
+        } else if (item.is_checked && !is_checked) {
+          unlogPurchase(item.id);
+        }
+        // Moving an item to another aisle by hand teaches the name's aisle.
+        if (category !== item.category) rememberCategory(name.trim(), category, 'hand');
 
         // Kategoriewechsel heißt Positionswechsel: die Handsortierung zählt je
         // Kategorie (#678), der alte Rang gilt in der neuen Nachbarschaft nicht.
@@ -1095,7 +1200,21 @@ router.post('/:listId/items', (req, res) => {
     // direkter API-Aufruf).
     const validNames = validCategoryNames();
     const defaultCat = (validNames.includes('Sonstiges') ? 'Sonstiges' : validNames.at(-1)) ?? 'Sonstiges';
-    const requestedCat = req.body.category || defaultCat;
+    // WHO CHOSE THE CATEGORY (fork, 2026-10-19). The quick-add field says
+    // `category_source`: 'hand' (picked in the field - remembered for this
+    // name), 'suggestion' (carried by an autocomplete pick) or 'default' (left
+    // as it was). Only 'default' lets Yuvomi sort the item itself; a request
+    // without the field keeps the old behaviour.
+    const categorySource = ['hand', 'suggestion', 'default'].includes(req.body.category_source) ? req.body.category_source : null;
+    let requestedCat = req.body.category || defaultCat;
+    let autoSorted = false;
+    if (categorySource === 'default' && requestedCat === defaultCat && typeof req.body.name === 'string') {
+      const local = localCategory(req.body.name);
+      if (local && validNames.includes(local.category)) {
+        requestedCat = local.category;
+        autoSorted = true;
+      }
+    }
 
     const vName  = str(req.body.name, 'Name', { max: MAX_TITLE });
     const vQty   = str(req.body.quantity, 'Menge', { max: MAX_SHORT, required: false });
@@ -1114,6 +1233,30 @@ router.post('/:listId/items', (req, res) => {
       .prepare('SELECT * FROM shopping_items WHERE id = ?')
       .get(result.lastInsertRowid);
     res.status(201).json({ data: item, list_change });
+    if (categorySource === 'hand') rememberCategory(item.name, item.category, 'hand');
+    // Nothing local knew the name: ask the model after answering, and move the
+    // item if nobody touched its category meanwhile. The list's version bump
+    // makes every open list (this one too) reload it into its new aisle.
+    if (categorySource === 'default' && !autoSorted && item.category === defaultCat && featureOn('shopping_smart')) {
+      const listId = req.params.listId;
+      runExternalJob(async () => {
+        const guess = await guessCategory(item.name, { userId: req.authUserId });
+        if (!guess || guess.category === defaultCat) return;
+        withListChange(listId, () => db.get().transaction(() => {
+          const moved = db.get()
+            .prepare('UPDATE shopping_items SET category = ? WHERE id = ? AND category = ?')
+            .run(guess.category, item.id, defaultCat);
+          // A new aisle means the end of that aisle (#678), as for a hand move.
+          if (moved.changes) {
+            db.get().prepare(`
+              UPDATE shopping_items SET sort_order = COALESCE((
+                SELECT MAX(sort_order) FROM shopping_items WHERE list_id = ? AND category = ? AND id != ?
+              ), 0) + 1 WHERE id = ?
+            `).run(listId, guess.category, item.id, item.id);
+          }
+        })());
+      }).catch((err) => log.warn('category guess failed:', err?.code || err?.message || err));
+    }
     // Gehört die Liste zu einer gespiegelten CalDAV-Liste, wandert der neue
     // Artikel gleich mit (#831) - sonst hinge er bis zum nächsten Sync-Intervall
     // fest, während Umbenennen und Abhaken sofort hinausgehen.

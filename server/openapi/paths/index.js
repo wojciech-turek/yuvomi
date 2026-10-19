@@ -28,6 +28,7 @@ import { housekeepingPaths } from './housekeeping.js';
 import { wastePaths } from './waste.js';
 import { modulesPaths } from './modules.js';
 import { pushPaths } from './push.js';
+import { aiPaths } from './ai.js';
 import { notificationsPaths } from './notifications.js';
 import { healthPaths } from './health.js';
 import { schedulePaths } from './schedule.js';
@@ -68,6 +69,7 @@ export function buildPaths() {
     ...wastePaths(),
     ...modulesPaths(),
     ...pushPaths(),
+    ...aiPaths(),
     ...notificationsPaths(),
     ...healthPaths(),
     ...schedulePaths(),

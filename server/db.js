@@ -29,6 +29,7 @@ import { setRestoreRunning, activeWriters, restoreWaitTimeoutMs, waitUntilIdle }
 import { decodeHtmlEntities } from './utils/html-entities.js';
 import { toE164, defaultCountryFromConfig } from './utils/phone.js';
 import { todayKey } from './utils/timezone.js';
+import { nameKey } from './utils/name-key.js';
 import { addMonthsClamped, liftToAnchorDay } from './utils/interval-date.js';
 
 const log = createLogger('DB');
@@ -11007,6 +11008,81 @@ const MIGRATIONS = [
         clear.run(task.id);
         if (creatorPays) assign.run(task.id, creator.id);
         assignAdmins.run(task.id);
+      }
+    },
+  },
+  {
+    version: 251,
+    description: 'AI: usage log, household memory, purchase log and learned shopping categories',
+    // FOUNDATION FOR THE AI FEATURES (fork, 2026-10-19).
+    // - ai_usage: every model call with tokens and cost; the monthly cap reads it.
+    // - ai_memories: what the household told Yuvomi or Yuvomi learned ("we don't eat
+    //   pork", "Saturday is shopping day"); fed into prompts, editable in settings.
+    // - shopping_purchases: append-only log of ticked items. The list itself forgets
+    //   (DELETE /:listId/items/checked removes rows), so without this log nothing
+    //   could learn how often the household buys what. Backfilled from items that
+    //   are ticked right now.
+    // - shopping_category_memory: the aisle the household uses for a name; a hand
+    //   choice ('hand') always beats a guess ('history', 'jev', 'llm').
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS ai_usage (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          feature       TEXT    NOT NULL,
+          provider      TEXT    NOT NULL,
+          model         TEXT    NOT NULL,
+          input_count   INTEGER NOT NULL DEFAULT 0, -- prompt tokens
+          output_count  INTEGER NOT NULL DEFAULT 0, -- answer tokens
+          usd           REAL    NOT NULL DEFAULT 0,
+          user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
+
+        CREATE TABLE IF NOT EXISTS ai_memories (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          topic      TEXT    NOT NULL DEFAULT 'household' CHECK(topic IN ('household', 'meals', 'shopping')),
+          text       TEXT    NOT NULL,
+          source     TEXT    NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'answer', 'learned')),
+          active     INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+          updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS shopping_purchases (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_id      INTEGER,
+          name         TEXT    NOT NULL,
+          name_key     TEXT    NOT NULL,
+          category     TEXT,
+          quantity     TEXT,
+          list_id      INTEGER REFERENCES shopping_lists(id) ON DELETE SET NULL,
+          user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          purchased_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_shopping_purchases_key ON shopping_purchases(name_key, purchased_at);
+        CREATE INDEX IF NOT EXISTS idx_shopping_purchases_item ON shopping_purchases(item_id);
+
+        CREATE TABLE IF NOT EXISTS shopping_category_memory (
+          name_key   TEXT PRIMARY KEY,
+          category   TEXT NOT NULL,
+          source     TEXT NOT NULL CHECK(source IN ('hand', 'history', 'jev', 'llm')),
+          confidence REAL,
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+      `);
+      const ticked = database.prepare(
+        'SELECT id, name, category, quantity, list_id, updated_at FROM shopping_items WHERE is_checked = 1',
+      ).all();
+      const insert = database.prepare(`
+        INSERT INTO shopping_purchases (item_id, name, name_key, category, quantity, list_id, purchased_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of ticked) {
+        const key = nameKey(row.name);
+        if (!key) continue;
+        insert.run(row.id, row.name, key, row.category, row.quantity, row.list_id, row.updated_at);
       }
     },
   },

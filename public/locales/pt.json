@@ -754,7 +754,10 @@
         "itemStateChecked": "marcado",
         "tickedSection": "Marcados",
         "itemBackToast": "«{{name}}» está de novo na lista.",
-        "itemStateOpen": "não marcado"
+        "itemStateOpen": "não marcado",
+        "predictionsLabel": "Probably running low:",
+        "predictionsWhy": "You buy this about every {{every}} days; last time {{since}} days ago.",
+        "predictionsHide": "Hide for today"
     },
     "meals": {
         "ingredientCount_one": "{{count}} ingrediente",
@@ -3214,7 +3217,9 @@
         "weatherPlaceTooShort": "Escreve pelo menos dois caracteres.",
         "weatherPlaceNotFound": "Não foi encontrado nenhum local com este nome. Acrescenta o país, p. ex. «Viana, Portugal».",
         "weatherPlaceUnavailable": "A pesquisa de locais não está acessível agora. Tenta de novo daqui a pouco ou introduz as coordenadas à mão.",
-        "weatherManualTitle": "Coordenadas à mão"
+        "weatherManualTitle": "Coordenadas à mão",
+        "pageAi": "AI",
+        "pageAiDescription": "Smart help for meals, shopping and the pantry, with your own API key and a monthly limit."
     },
     "login": {
         "tagline": "Bem-vindo de volta ao teu planeador familiar.",
@@ -6440,5 +6445,45 @@
         "timerAria": "Timer {{label}}, {{left}} left. Tap to cancel.",
         "timerDoneAria": "Timer {{label}} is done. Tap to dismiss.",
         "loadError": "Could not open this meal in cook mode. Check the connection and try again."
+    },
+    "ai": {
+        "enabledLabel": "AI help",
+        "enabledHint": "Off by default. When on, Yuvomi sends only what a feature needs to Anthropic (USA): product, meal and recipe names, photos you choose to send, and the sentences in the memory below. Never health or budget data.",
+        "anthropicKey": "Anthropic API key",
+        "anthropicKeyHint": "From console.anthropic.com. Leave empty to keep the saved key.",
+        "jevKey": "Jev API key (optional)",
+        "jevKeyHint": "TypeSafe's Jev sorts new shopping items into aisles in a fraction of a second. Without it, Haiku does the same, a little slower.",
+        "smartModel": "Model for bigger jobs",
+        "smartModelHint": "Photos and meal ideas. Quick jobs always use Haiku 5.5.",
+        "modelSonnet": "Sonnet 5.5 (better)",
+        "modelHaiku": "Haiku 5.5 (cheaper, faster)",
+        "cap": "Monthly limit (USD)",
+        "capHint": "When this amount is used up, AI pauses until the next month.",
+        "test": "Test connection",
+        "testOk": "The connection works.",
+        "testNothing": "Add an API key first.",
+        "testClaudeFail": "Anthropic did not answer ({{reason}}).",
+        "testJevFail": "Jev did not answer ({{reason}}).",
+        "saved": "AI settings saved.",
+        "featuresTitle": "Features",
+        "featureShopping": "Shopping: aisles and running-low hints",
+        "featureMealIngredients": "Meals: suggested ingredients",
+        "featurePantryPhoto": "Pantry: add from a photo",
+        "featureMealIdeas": "Meals: ideas for empty days",
+        "featureNudges": "A heads-up when something matters",
+        "featureQuestions": "Occasional questions that teach the memory",
+        "usageTitle": "This month",
+        "usageLine": "{{used}} of {{cap}} used.",
+        "usageNone": "No AI calls yet this month.",
+        "memoryTitle": "What Yuvomi knows about you",
+        "memoryHint": "Short sentences Yuvomi uses when it suggests meals and shopping. Add your own or answer Yuvomi's questions. No health information.",
+        "memoryEmpty": "Nothing yet. For example: \"We don't eat pork\" or \"Saturday is our shopping day\".",
+        "memoryAddPlaceholder": "Add a sentence",
+        "memoryTopic": "Topic",
+        "memoryAdd": "Add",
+        "memoryDeleted": "Sentence removed.",
+        "topicHousehold": "Home",
+        "topicMeals": "Meals",
+        "topicShopping": "Shopping"
     }
 }

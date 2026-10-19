@@ -420,6 +420,7 @@ const PAGE_MODULES = [
   '/settings/pages/admin-displays.js',
   '/settings/pages/admin-backup.js',
   '/settings/pages/admin-weather.js',
+  '/settings/pages/admin-ai.js',
   '/settings/pages/admin-immich.js',
   '/settings/pages/admin-system.js',
 ];

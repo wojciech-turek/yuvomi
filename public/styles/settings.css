@@ -4169,3 +4169,49 @@
 .settings-page:not(.settings-page--leaf) .settings-shell__skip {
   display: none;
 }
+
+/* AI settings (fork, 2026-10-19): usage lines and the household memory. */
+.ai-usage-list,
+.ai-memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ai-usage-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.ai-memory-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--space-px) solid var(--color-border-subtle);
+}
+
+.ai-memory-item__topic {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+}
+
+.ai-memory-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.ai-memory-add input {
+  flex: 1 1 220px;
+}

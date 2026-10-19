@@ -890,7 +890,10 @@
         "itemStateChecked": "odhaczone",
         "tickedSection": "Odhaczone",
         "itemBackToast": "„{{name}}” jest znowu na liście.",
-        "itemStateOpen": "nieodhaczone"
+        "itemStateOpen": "nieodhaczone",
+        "predictionsLabel": "Pewnie się kończy:",
+        "predictionsWhy": "Kupujecie to mniej więcej co {{every}} dni, ostatnio {{since}} dni temu.",
+        "predictionsHide": "Ukryj na dziś"
     },
     "meals": {
         "randomizeSuccess_few": "Zaplanowano {{count}} posiłki.",
@@ -3432,7 +3435,9 @@
         "weatherPlaceTooShort": "Wpisz co najmniej dwa znaki.",
         "weatherPlaceNotFound": "Nie znaleziono miejsca o tej nazwie. Dodaj kraj, np. „Opole, Polska”.",
         "weatherPlaceUnavailable": "Wyszukiwanie miejsc jest teraz niedostępne. Spróbuj ponownie za chwilę albo wpisz współrzędne ręcznie.",
-        "weatherManualTitle": "Współrzędne ręcznie"
+        "weatherManualTitle": "Współrzędne ręcznie",
+        "pageAi": "AI",
+        "pageAiDescription": "Inteligentna pomoc przy posiłkach, zakupach i spiżarni, z własnym kluczem API i miesięcznym limitem."
     },
     "login": {
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",
@@ -6754,5 +6759,45 @@
         "timerAria": "Minutnik {{label}}, zostało {{left}}. Dotknij, aby anulować.",
         "timerDoneAria": "Minutnik {{label}} skończył odliczanie. Dotknij, aby zamknąć.",
         "loadError": "Nie udało się otworzyć tego posiłku w trybie gotowania. Sprawdź połączenie i spróbuj ponownie."
+    },
+    "ai": {
+        "enabledLabel": "Pomoc AI",
+        "enabledHint": "Domyślnie wyłączona. Po włączeniu Yuvomi wysyła do Anthropic (USA) tylko to, czego potrzebuje dana funkcja: nazwy produktów, posiłków i przepisów, zdjęcia, które sami wyślecie, oraz zdania z pamięci poniżej. Nigdy danych o zdrowiu ani budżecie.",
+        "anthropicKey": "Klucz API Anthropic",
+        "anthropicKeyHint": "Z console.anthropic.com. Zostaw puste, aby zachować zapisany klucz.",
+        "jevKey": "Klucz API Jev (opcjonalnie)",
+        "jevKeyHint": "Jev od TypeSafe przydziela nowe produkty do działów w ułamku sekundy. Bez niego robi to Haiku, trochę wolniej.",
+        "smartModel": "Model do większych zadań",
+        "smartModelHint": "Zdjęcia i pomysły na posiłki. Szybkie zadania zawsze wykonuje Haiku 5.5.",
+        "modelSonnet": "Sonnet 5.5 (lepszy)",
+        "modelHaiku": "Haiku 5.5 (tańszy, szybszy)",
+        "cap": "Miesięczny limit (USD)",
+        "capHint": "Po wykorzystaniu tej kwoty AI wstrzymuje się do następnego miesiąca.",
+        "test": "Sprawdź połączenie",
+        "testOk": "Połączenie działa.",
+        "testNothing": "Najpierw dodaj klucz API.",
+        "testClaudeFail": "Anthropic nie odpowiedział ({{reason}}).",
+        "testJevFail": "Jev nie odpowiedział ({{reason}}).",
+        "saved": "Zapisano ustawienia AI.",
+        "featuresTitle": "Funkcje",
+        "featureShopping": "Zakupy: działy i podpowiedzi, co się kończy",
+        "featureMealIngredients": "Posiłki: proponowane składniki",
+        "featurePantryPhoto": "Spiżarnia: dodawanie ze zdjęcia",
+        "featureMealIdeas": "Posiłki: pomysły na puste dni",
+        "featureNudges": "Przypomnienie, gdy coś jest ważne",
+        "featureQuestions": "Od czasu do czasu pytania, które uczą pamięć",
+        "usageTitle": "W tym miesiącu",
+        "usageLine": "Wykorzystano {{used}} z {{cap}}.",
+        "usageNone": "W tym miesiącu nie było jeszcze zapytań do AI.",
+        "memoryTitle": "Co Yuvomi o was wie",
+        "memoryHint": "Krótkie zdania, z których Yuvomi korzysta, proponując posiłki i zakupy. Dopisz własne albo odpowiadaj na pytania Yuvomi. Bez informacji o zdrowiu.",
+        "memoryEmpty": "Na razie nic. Na przykład: „Nie jemy wieprzowiny” albo „Zakupy robimy w soboty”.",
+        "memoryAddPlaceholder": "Dodaj zdanie",
+        "memoryTopic": "Temat",
+        "memoryAdd": "Dodaj",
+        "memoryDeleted": "Usunięto zdanie.",
+        "topicHousehold": "Dom",
+        "topicMeals": "Posiłki",
+        "topicShopping": "Zakupy"
     }
 }

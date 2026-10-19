@@ -1,0 +1,162 @@
+{
+  "settings.pageAi": {
+    "en": "AI",
+    "pl": "AI"
+  },
+  "settings.pageAiDescription": {
+    "en": "Smart help for meals, shopping and the pantry, with your own API key and a monthly limit.",
+    "pl": "Inteligentna pomoc przy posiłkach, zakupach i spiżarni, z własnym kluczem API i miesięcznym limitem."
+  },
+  "ai.enabledLabel": {
+    "en": "AI help",
+    "pl": "Pomoc AI"
+  },
+  "ai.enabledHint": {
+    "en": "Off by default. When on, Yuvomi sends only what a feature needs to Anthropic (USA): product, meal and recipe names, photos you choose to send, and the sentences in the memory below. Never health or budget data.",
+    "pl": "Domyślnie wyłączona. Po włączeniu Yuvomi wysyła do Anthropic (USA) tylko to, czego potrzebuje dana funkcja: nazwy produktów, posiłków i przepisów, zdjęcia, które sami wyślecie, oraz zdania z pamięci poniżej. Nigdy danych o zdrowiu ani budżecie."
+  },
+  "ai.anthropicKey": {
+    "en": "Anthropic API key",
+    "pl": "Klucz API Anthropic"
+  },
+  "ai.anthropicKeyHint": {
+    "en": "From console.anthropic.com. Leave empty to keep the saved key.",
+    "pl": "Z console.anthropic.com. Zostaw puste, aby zachować zapisany klucz."
+  },
+  "ai.jevKey": {
+    "en": "Jev API key (optional)",
+    "pl": "Klucz API Jev (opcjonalnie)"
+  },
+  "ai.jevKeyHint": {
+    "en": "TypeSafe's Jev sorts new shopping items into aisles in a fraction of a second. Without it, Haiku does the same, a little slower.",
+    "pl": "Jev od TypeSafe przydziela nowe produkty do działów w ułamku sekundy. Bez niego robi to Haiku, trochę wolniej."
+  },
+  "ai.smartModel": {
+    "en": "Model for bigger jobs",
+    "pl": "Model do większych zadań"
+  },
+  "ai.smartModelHint": {
+    "en": "Photos and meal ideas. Quick jobs always use Haiku 5.5.",
+    "pl": "Zdjęcia i pomysły na posiłki. Szybkie zadania zawsze wykonuje Haiku 5.5."
+  },
+  "ai.modelSonnet": {
+    "en": "Sonnet 5.5 (better)",
+    "pl": "Sonnet 5.5 (lepszy)"
+  },
+  "ai.modelHaiku": {
+    "en": "Haiku 5.5 (cheaper, faster)",
+    "pl": "Haiku 5.5 (tańszy, szybszy)"
+  },
+  "ai.cap": {
+    "en": "Monthly limit (USD)",
+    "pl": "Miesięczny limit (USD)"
+  },
+  "ai.capHint": {
+    "en": "When this amount is used up, AI pauses until the next month.",
+    "pl": "Po wykorzystaniu tej kwoty AI wstrzymuje się do następnego miesiąca."
+  },
+  "ai.test": {
+    "en": "Test connection",
+    "pl": "Sprawdź połączenie"
+  },
+  "ai.testOk": {
+    "en": "The connection works.",
+    "pl": "Połączenie działa."
+  },
+  "ai.testNothing": {
+    "en": "Add an API key first.",
+    "pl": "Najpierw dodaj klucz API."
+  },
+  "ai.testClaudeFail": {
+    "en": "Anthropic did not answer ({{reason}}).",
+    "pl": "Anthropic nie odpowiedział ({{reason}})."
+  },
+  "ai.testJevFail": {
+    "en": "Jev did not answer ({{reason}}).",
+    "pl": "Jev nie odpowiedział ({{reason}})."
+  },
+  "ai.saved": {
+    "en": "AI settings saved.",
+    "pl": "Zapisano ustawienia AI."
+  },
+  "ai.featuresTitle": {
+    "en": "Features",
+    "pl": "Funkcje"
+  },
+  "ai.featureShopping": {
+    "en": "Shopping: aisles and running-low hints",
+    "pl": "Zakupy: działy i podpowiedzi, co się kończy"
+  },
+  "ai.featureMealIngredients": {
+    "en": "Meals: suggested ingredients",
+    "pl": "Posiłki: proponowane składniki"
+  },
+  "ai.featurePantryPhoto": {
+    "en": "Pantry: add from a photo",
+    "pl": "Spiżarnia: dodawanie ze zdjęcia"
+  },
+  "ai.featureMealIdeas": {
+    "en": "Meals: ideas for empty days",
+    "pl": "Posiłki: pomysły na puste dni"
+  },
+  "ai.featureNudges": {
+    "en": "A heads-up when something matters",
+    "pl": "Przypomnienie, gdy coś jest ważne"
+  },
+  "ai.featureQuestions": {
+    "en": "Occasional questions that teach the memory",
+    "pl": "Od czasu do czasu pytania, które uczą pamięć"
+  },
+  "ai.usageTitle": {
+    "en": "This month",
+    "pl": "W tym miesiącu"
+  },
+  "ai.usageLine": {
+    "en": "{{used}} of {{cap}} used.",
+    "pl": "Wykorzystano {{used}} z {{cap}}."
+  },
+  "ai.usageNone": {
+    "en": "No AI calls yet this month.",
+    "pl": "W tym miesiącu nie było jeszcze zapytań do AI."
+  },
+  "ai.memoryTitle": {
+    "en": "What Yuvomi knows about you",
+    "pl": "Co Yuvomi o was wie"
+  },
+  "ai.memoryHint": {
+    "en": "Short sentences Yuvomi uses when it suggests meals and shopping. Add your own or answer Yuvomi's questions. No health information.",
+    "pl": "Krótkie zdania, z których Yuvomi korzysta, proponując posiłki i zakupy. Dopisz własne albo odpowiadaj na pytania Yuvomi. Bez informacji o zdrowiu."
+  },
+  "ai.memoryEmpty": {
+    "en": "Nothing yet. For example: \"We don't eat pork\" or \"Saturday is our shopping day\".",
+    "pl": "Na razie nic. Na przykład: „Nie jemy wieprzowiny” albo „Zakupy robimy w soboty”."
+  },
+  "ai.memoryAddPlaceholder": {
+    "en": "Add a sentence",
+    "pl": "Dodaj zdanie"
+  },
+  "ai.memoryTopic": {
+    "en": "Topic",
+    "pl": "Temat"
+  },
+  "ai.memoryAdd": {
+    "en": "Add",
+    "pl": "Dodaj"
+  },
+  "ai.memoryDeleted": {
+    "en": "Sentence removed.",
+    "pl": "Usunięto zdanie."
+  },
+  "ai.topicHousehold": {
+    "en": "Home",
+    "pl": "Dom"
+  },
+  "ai.topicMeals": {
+    "en": "Meals",
+    "pl": "Posiłki"
+  },
+  "ai.topicShopping": {
+    "en": "Shopping",
+    "pl": "Zakupy"
+  }
+}
