@@ -6735,5 +6735,24 @@
         "labelHint": "Pomaga później rozpoznać, o które urządzenie chodzi.",
         "submit": "Sparuj",
         "failed": "Ten kod parowania jest nieprawidłowy."
+    },
+    "cook": {
+        "open": "Gotuj",
+        "title": "Tryb gotowania: {{title}}",
+        "eyebrow": "Tryb gotowania",
+        "close": "Zamknij tryb gotowania",
+        "ingredients": "Składniki",
+        "noIngredients": "Ten przepis nie ma jeszcze składników.",
+        "noSteps": "Ten przepis nie ma kroków. Dopisz je w notatkach przepisu, każdy w osobnej linii.",
+        "prev": "Wstecz",
+        "next": "Dalej",
+        "done": "Gotowe",
+        "stepOf": "Krok {{n}} z {{total}}",
+        "upNext": "Potem:",
+        "startTimer": "Minutnik {{label}}",
+        "timerDone": "Gotowe!",
+        "timerAria": "Minutnik {{label}}, zostało {{left}}. Dotknij, aby anulować.",
+        "timerDoneAria": "Minutnik {{label}} skończył odliczanie. Dotknij, aby zamknąć.",
+        "loadError": "Nie udało się otworzyć tego posiłku w trybie gotowania. Sprawdź połączenie i spróbuj ponownie."
     }
 }

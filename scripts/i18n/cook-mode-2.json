@@ -1,0 +1,6 @@
+{
+  "cook.loadError": {
+    "en": "Could not open this meal in cook mode. Check the connection and try again.",
+    "pl": "Nie udało się otworzyć tego posiłku w trybie gotowania. Sprawdź połączenie i spróbuj ponownie."
+  }
+}

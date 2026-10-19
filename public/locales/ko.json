@@ -6421,5 +6421,24 @@
         "labelHint": "나중에 어떤 기기인지 알아보는 데 도움이 됩니다.",
         "submit": "페어링",
         "failed": "이 페어링 코드는 유효하지 않습니다."
+    },
+    "cook": {
+        "open": "Cook",
+        "title": "Cook mode: {{title}}",
+        "eyebrow": "Cook mode",
+        "close": "Close cook mode",
+        "ingredients": "Ingredients",
+        "noIngredients": "This recipe has no ingredients yet.",
+        "noSteps": "This recipe has no steps. Add them in the recipe's notes, one per line.",
+        "prev": "Back",
+        "next": "Next",
+        "done": "Done",
+        "stepOf": "Step {{n}} of {{total}}",
+        "upNext": "Next:",
+        "startTimer": "Timer {{label}}",
+        "timerDone": "Time's up",
+        "timerAria": "Timer {{label}}, {{left}} left. Tap to cancel.",
+        "timerDoneAria": "Timer {{label}} is done. Tap to dismiss.",
+        "loadError": "Could not open this meal in cook mode. Check the connection and try again."
     }
 }

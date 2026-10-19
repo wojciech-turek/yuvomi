@@ -51,6 +51,10 @@ export const DISPLAY_SCOPES = Object.freeze([
   // die ohnehin haushaltweit gilt. Ohne sie fragte die Uebersicht bei jedem
   // Laden und bekam 403 (im Browser gemessen).
   'weather:read',
+  // Kitchen (fork decision, 2026-10-19): the household wants cook mode on the
+  // kitchen iPad, so the wall may READ meals and recipes. Still no write scope:
+  // cook mode stores nothing.
+  'meals:read',
 ]);
 
 /**

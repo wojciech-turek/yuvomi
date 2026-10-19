@@ -62,6 +62,11 @@
  *          Eingabefelder, keine Auswahl-Ebene davor.
  *    Was eine davon reisst, gehoert nicht hierher, sondern in die App.
  *
+ *    COOK MODE (fork, 2026-10-19) is the one deliberate exception to (a): the
+ *    "Gotuj" button on today's meal opens the full-screen cook view
+ *    (components/cook-mode.js). It still meets (b)-(d): it reads the recipe,
+ *    writes nothing, keeps its timers on this device and is built for wet hands.
+ *
  * ── WARUM DIE ATTRIBUTE AN DER WURZEL HAENGEN ─────────────────────────────
  *
  * Der Modus blendet Sidebar und Tab-Leiste aus, und beide sind Shell-Elemente

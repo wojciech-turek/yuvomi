@@ -1212,7 +1212,7 @@ test('der Hinweis in den Einstellungen nennt genau die Bereiche, die ein Display
   // steht absichtlich als Literal da: kommt ein Scope dazu oder faellt einer
   // weg, wird dieser Fall rot und fragt, ob docs/SPEC.md (Display Accounts) und
   // der CHANGELOG die neue Menge nennen. Der Hinweis selbst zieht von allein nach.
-  const BEREICHE = ['calendar', 'tasks', 'rewards', 'weather'];
+  const BEREICHE = ['calendar', 'tasks', 'rewards', 'weather', 'meals'];
   const { DISPLAY_AREA_MODULES } = await import('../server/display-scopes.js');
 
   const liste = await admin('GET', '/displays');

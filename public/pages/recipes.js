@@ -4,6 +4,7 @@
  */
 
 import { api } from '/api.js';
+import { openCookMode } from '/components/cook-mode.js';
 import { t, formatDate, formatDateInput, parseDateInput, isDateInputValid } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
 import { openModal as openSharedModal, closeModal as closeSharedModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender, captureModalContext, isModalContextCurrent, isOwnModalOpen } from '/components/modal.js';
@@ -1204,6 +1205,22 @@ function fillRecipeDetail(detail, recipe) {
   // scanbar und auf 393px ohne fünf konkurrierende Bedienelemente.
   const detailActions = document.createElement('div');
   detailActions.className = 'recipe-detail__actions';
+
+  // GOTUJ (cook mode): the full-screen kitchen view. It writes nothing, so it
+  // stands for every reader, the wall tablet included - as long as the recipe
+  // has something to cook from. Its own listener, not a `data-action`: it is
+  // not one of the page's write paths.
+  if (ingredients.length || recipe.notes?.trim()) {
+    const cook = document.createElement('button');
+    cook.className = 'btn btn--secondary';
+    cook.type = 'button';
+    cook.insertAdjacentHTML('beforeend', '<i data-lucide="chef-hat" class="icon-sm" aria-hidden="true"></i>');
+    const cookLabel = document.createElement('span');
+    cookLabel.textContent = t('cook.open');
+    cook.appendChild(cookLabel);
+    cook.addEventListener('click', () => openCookMode({ title: recipe.title, ingredients, notes: recipe.notes }));
+    detailActions.appendChild(cook);
+  }
 
   // „In den Essensplan" legt eine Mahlzeit an - ohne Schreibrecht entfaellt
   // der Knopf (Regel 2), der Riegel dazu steht in planRecipe().

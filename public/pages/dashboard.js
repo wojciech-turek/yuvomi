@@ -5,6 +5,7 @@
  */
 
 import { api, auth } from '/api.js';
+import { openCookForMeal } from '/components/cook-mode.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { canSeeWidget, moduleAccess, navModuleAccess, canUseFasting } from '/permissions.js';
 import { todaySheetContext, collectSourceRows, composeTodaySheet, codaAllowed, speakingSourceIds } from '/utils/today-sheet.js';
@@ -1372,6 +1373,8 @@ function buildTodayProgram(data, { includeTasks = true, includeCalendar = true, 
       who: mealCookPerson(highlights.meal, data?.users),
       priority: 80,
       open: false,
+      // Cook mode on the kitchen wall: the meal's recipe, or the meal itself.
+      cook: { mealId: highlights.meal.id ?? null, recipeId: highlights.meal.recipe_id ?? null, date: highlights.meal.date ?? null },
     });
   }
 
@@ -5793,6 +5796,13 @@ function renderWallRow(row) {
   const time = row.timeLabel
     ? `<span class="wall-row__time${row.overdue ? ' wall-row__time--overdue' : ''}">${esc(row.timeLabel)}${end}</span>`
     : '';
+  // GOTUJ on the wall: cook mode is the one full-screen view the wall may open.
+  // It reads, writes nothing and stays on this device (wall-mode.js, rule 4).
+  const cook = row.kind === 'meal' && row.cook?.mealId
+    ? `<button type="button" class="wall-row__cook" data-cook-meal="${esc(String(row.cook.mealId))}"
+        data-cook-recipe="${esc(String(row.cook.recipeId ?? ''))}" data-cook-date="${esc(row.cook.date ?? '')}">
+        <i data-lucide="chef-hat" aria-hidden="true"></i><span>${esc(t('cook.open'))}</span></button>`
+    : '';
   return `
     <li class="wall-row wall-row--${esc(row.tone)}">
       <span class="module-seal wall-row__seal">${programRowGlyph(row)}</span>
@@ -5800,7 +5810,7 @@ function renderWallRow(row) {
         <span class="wall-row__title">${esc(row.title)}</span>
         <span class="wall-row__sub">${esc(sub)}</span>
       </span>
-      ${time}
+      ${time}${cook}
     </li>`;
 }
 
@@ -6365,6 +6375,11 @@ function wireWallExit(container, rerender, signal) {
 
   container.addEventListener('click', (event) => {
     if (event.target.closest('#wall-exit')) leave();
+    const cookBtn = event.target.closest('.wall-row__cook');
+    if (cookBtn) {
+      openCookForMeal({ mealId: cookBtn.dataset.cookMeal, recipeId: cookBtn.dataset.cookRecipe, date: cookBtn.dataset.cookDate })
+        .catch(() => window.yuvomi?.showToast(t('cook.loadError'), 'danger'));
+    }
   }, { signal });
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') leave();

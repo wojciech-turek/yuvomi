@@ -1,0 +1,18 @@
+{
+  "cook.open": { "en": "Cook", "pl": "Gotuj" },
+  "cook.title": { "en": "Cook mode: {{title}}", "pl": "Tryb gotowania: {{title}}" },
+  "cook.eyebrow": { "en": "Cook mode", "pl": "Tryb gotowania" },
+  "cook.close": { "en": "Close cook mode", "pl": "Zamknij tryb gotowania" },
+  "cook.ingredients": { "en": "Ingredients", "pl": "Składniki" },
+  "cook.noIngredients": { "en": "This recipe has no ingredients yet.", "pl": "Ten przepis nie ma jeszcze składników." },
+  "cook.noSteps": { "en": "This recipe has no steps. Add them in the recipe's notes, one per line.", "pl": "Ten przepis nie ma kroków. Dopisz je w notatkach przepisu, każdy w osobnej linii." },
+  "cook.prev": { "en": "Back", "pl": "Wstecz" },
+  "cook.next": { "en": "Next", "pl": "Dalej" },
+  "cook.done": { "en": "Done", "pl": "Gotowe" },
+  "cook.stepOf": { "en": "Step {{n}} of {{total}}", "pl": "Krok {{n}} z {{total}}" },
+  "cook.upNext": { "en": "Next:", "pl": "Potem:" },
+  "cook.startTimer": { "en": "Timer {{label}}", "pl": "Minutnik {{label}}" },
+  "cook.timerDone": { "en": "Time's up", "pl": "Gotowe!" },
+  "cook.timerAria": { "en": "Timer {{label}}, {{left}} left. Tap to cancel.", "pl": "Minutnik {{label}}, zostało {{left}}. Dotknij, aby anulować." },
+  "cook.timerDoneAria": { "en": "Timer {{label}} is done. Tap to dismiss.", "pl": "Minutnik {{label}} skończył odliczanie. Dotknij, aby zamknąć." }
+}

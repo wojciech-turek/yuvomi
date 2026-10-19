@@ -5922,6 +5922,23 @@ button.today-cockpit__more--link {
   color: var(--color-text-secondary);
 }
 
+/* GOTUJ on the wall: one large target beside today's meal (cook-mode.js). */
+.wall-row__cook {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 56px;
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-size: var(--wall-row-sub);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* DAS ENDE WEICHT, WO DIE ZEILE ZU SCHMAL IST (#1698). Auf dem Wandtablet
  * nimmt „9:30 PM - 11:30 PM" 161 von 617px Zeilenbreite. Auf einer Flaeche
  * unter Tablettbreite - jemand hat den Schalter auf dem Telefon erwischt -

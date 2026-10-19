@@ -89,6 +89,7 @@ const APP_SHELL = [
   '/styles/documents.css',
   '/styles/settings.css',
   '/styles/recipes.css',
+  '/styles/cook-mode.css',
   '/styles/pantry.css',
   '/styles/inventory.css',
   '/styles/detail-view.css',
@@ -106,6 +107,7 @@ const APP_SHELL = [
   // also gehoert er in die Shell, nicht zu den Seitenmodulen. Der
   // Precache-Guard sah diese Import-Form bis #944 nicht.
   '/components/datepicker.js',
+  '/components/cook-mode.js',
   '/components/detail-view.js',
   '/components/document-attach.js',
   '/components/health-fasting-insights.js',
@@ -123,6 +125,7 @@ const APP_SHELL = [
   '/utils/color.js',
   '/utils/contact-name.js',
   '/utils/contrast.js',
+  '/utils/cook-steps.js',
   '/utils/countdown.js',
   '/utils/dashboard-event-limit.js',
   '/utils/dashboard-layout-hint.js',
