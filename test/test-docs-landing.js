@@ -1865,19 +1865,39 @@ function siteTokenBlocks(css) {
   return blocks;
 }
 
-/** Werte der App: `--_family-*` hell (erster Treffer) und dunkel (alle weiteren, muessen gleich sein). */
+/*
+ * TAFLA (2026-10-19, DESIGN.md Direction Contract): die App hat die neun
+ * Familientoene aus dem Chrome genommen - jedes --_family-* in tokens.css zeigt
+ * auf Tinte-2. Die Webseite behaelt sie als EIGENE Illustrationspalette (eine
+ * Seite, die Module nebeneinander zeigt, braucht einen Ton je Familie), auf
+ * dem letzten Stand der App eingefroren. Verglichen wird site.css deshalb mit
+ * dieser Tabelle; die Zuordnung Modul -> Familie kommt weiter aus tokens.css,
+ * und die App muss ihre Familien weiter auf Tinte-2 halten (sonst kehrte der
+ * Regenbogen ins Chrome zurueck, ohne dass die Seite es merkt).
+ */
+const SITE_FAMILY_PALETTE = Object.freeze({
+  overview: { light: '#6C3AED', dark: '#A78BFA' },
+  time: { light: '#00668F', dark: '#4CB8F0' },
+  work: { light: '#157F3D', dark: '#4ADE80' },
+  kitchen: { light: '#C2410C', dark: '#FB923C' },
+  money: { light: '#0F766E', dark: '#2DD4BF' },
+  people: { light: '#CE2A63', dark: '#FB7185' },
+  health: { light: '#9E1E88', dark: '#DB60CB' },
+  records: { light: '#42587E', dark: '#7E9BCC' },
+  neutral: { light: '#677079', dark: '#94A3B8' },
+});
+
+/** Die Familien der App (alle Tinte-2) -> die eingefrorene Palette der Seite. */
 function appFamilies(tokens) {
   const fam = {};
-  for (const m of tokens.matchAll(/--_family-([a-z]+):\s*(#[0-9A-Fa-f]{6})\b/g)) {
-    (fam[m[1]] ||= []).push(m[2].toUpperCase());
-  }
-  const out = {};
+  for (const m of tokens.matchAll(/--_family-([a-z]+):\s*([^;]+);/g)) (fam[m[1]] ||= []).push(m[2].trim());
   for (const [name, values] of Object.entries(fam)) {
-    const dark = [...new Set(values.slice(1))];
-    assert.equal(dark.length, 1, `tokens.css: --_family-${name} hat in den Dark-Bloecken verschiedene Werte (${dark.join(', ')})`);
-    out[name] = { light: values[0], dark: dark[0] };
+    assert.ok(values.every((v) => v === 'var(--_neutral-600)'),
+      `tokens.css: --_family-${name} traegt wieder einen eigenen Ton (${values.join(', ')}) - Tafla haelt das Chrome neutral`);
   }
-  return out;
+  assert.deepEqual(Object.keys(fam).sort(), Object.keys(SITE_FAMILY_PALETTE).sort(),
+    'tokens.css und die Palette der Seite kennen verschiedene Familien');
+  return SITE_FAMILY_PALETTE;
 }
 
 /** `--module-<name>: var(--_family-<fam>)` aus tokens.css. */
@@ -1960,9 +1980,12 @@ test('der Farb-Guard erkennt den Schaden, gegen den er gebaut ist', () => {
   // Ein Modul in der falschen Familie.
   assert.match(colourDrift(css.replace('--m-notes: var(--f-records);', '--m-notes: var(--f-work);'), tokens).join('\n'),
     /--m-notes: Seite --f-work, App --_family-records/);
-  // Die App zieht einen Familienton um, die Seite nicht.
-  assert.match(colourDrift(css, tokens.replace('--_family-kitchen:  #C2410C', '--_family-kitchen:  #C2410D')).join('\n'),
+  // Die Seite verlaesst ihre eingefrorene Palette.
+  assert.match(colourDrift(css.replace('--f-kitchen: #C2410C;', '--f-kitchen: #C2410D;'), tokens).join('\n'),
     /--f-kitchen \(light\)/);
+  // Die App holt einen Familienton ins Chrome zurueck.
+  assert.throws(() => colourDrift(css, tokens.replace('--_family-kitchen:  var(--_neutral-600);', '--_family-kitchen:  #C2410C;')),
+    /--_family-kitchen traegt wieder einen eigenen Ton/);
   // Nur EINER der beiden Dark-Zwillinge wird nachgezogen.
   const i = css.indexOf('@media (prefers-color-scheme: dark)');
   const oneTwin = css.slice(0, i) + css.slice(i).replace('--f-people: #FB7185;', '--f-people: #F472B6;');

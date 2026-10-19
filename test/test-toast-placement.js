@@ -930,6 +930,14 @@ test('#1917: unter einem modalen Dialog zaehlen die Sperrzonen nicht', () => {
  * Grund nie heller als --color-surface-raised, und Schrift und Tinten halten
  * ihren Kontrast gegen den opaken Token UND gegen die 90-%-Glasmischung ueber
  * der Buehne und ueber reinem Weiss (einem Foto darunter).
+ *
+ * TAFLA (2026-10-19) schaerft die Zusage, statt sie zu lockern: der Toast ist
+ * in BEIDEN Themes eine dunkle Schale (Luminanz unter 0,05 - nie eine helle
+ * Pille), dunkel eine Stufe UEBER der Karte (#3A3631, damit er als Schicht
+ * liest) und nie heller als die hoechste Tafla-Flaeche --color-raised (#423D37).
+ * Die alte Obergrenze --color-surface-raised ist mit Tafla zur Fill-Stufe
+ * geworden (#36322D) und lag damit unter der Karte-plus-eins, die die Spec
+ * verlangt. Neu im Paar: die Aktion "Cofnij" (--toast-action) haelt 4,5.
  */
 function tokenScopes() {
   const css = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
@@ -974,15 +982,20 @@ const over = (top, under, alpha) => top.map((v, i) => Math.round(v * alpha + und
 test('A1 P2-2: der Toast ist im Dunkeln nicht die hellste Flaeche, und alles darauf bleibt lesbar', () => {
   for (const [theme, scope] of Object.entries(tokenScopes())) {
     const bg = rgb(resolveHex(scope, '--_toast-bg'));
+    assert.ok(luminance(bg) < 0.05,
+      `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) ist keine dunkle Schale mehr`);
     if (theme !== 'light') {
-      const raised = rgb(resolveHex(scope, '--_color-surface-raised'));
+      const raised = rgb(resolveHex(scope, '--_color-raised'));
+      const card = rgb(resolveHex(scope, '--_color-surface'));
       assert.ok(luminance(bg) <= luminance(raised) + 1e-9,
-        `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) ist heller als --color-surface-raised`);
+        `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) ist heller als --color-raised`);
+      assert.ok(luminance(bg) > luminance(card),
+        `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) liest nicht als Schicht ueber der Karte`);
     }
     const stage = rgb(resolveHex(scope, '--_neutral-100'));
     const grounds = { opak: bg, 'Glas ueber der Buehne': over(bg, stage, 0.9), 'Glas ueber Weiss': over(bg, [255, 255, 255], 0.9) };
     for (const [where, ground] of Object.entries(grounds)) {
-      const need = [['--_toast-text', 4.5], ['--_toast-text-secondary', 4.5], ['--_shell-danger-ink', 4.5], ['--_shell-success-ink', 3]];
+      const need = [['--_toast-text', 4.5], ['--_toast-text-secondary', 4.5], ['--_toast-action', 4.5], ['--_shell-danger-ink', 4.5], ['--_shell-success-ink', 3]];
       for (const [token, min] of need) {
         const ratio = contrast(rgb(resolveHex(scope, token)), ground);
         assert.ok(ratio >= min, `${theme}, ${where}: ${token} nur ${ratio.toFixed(2)}:1`);

@@ -1280,7 +1280,10 @@ test('R18: die umgestellten Inhaltsklassen der Uebersicht stehen auf der Lese-Le
   const { eachRule } = await import('./css-rules.js');
   const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-  const LADDER = { '--type-card-title': '1.0625rem', '--type-secondary': '0.9375rem', '--type-caption': '0.8125rem', '--text-xs': '0.75rem' };
+  // Tafla (2026-10-19): die Leiter faellt auf die iPhone-Skala - Sekundaer-
+  // und Mikrostufe stehen auf der Footnote (13). Die Klassen bleiben auf
+  // ihren Rollen-Tokens; die Werte darunter sind jetzt 17/13/13/13.
+  const LADDER = { '--type-card-title': '1.0625rem', '--type-secondary': '0.8125rem', '--type-caption': '0.8125rem', '--text-xs': '0.8125rem' };
   for (const [token, value] of Object.entries(LADDER)) {
     assert.match(tokens, new RegExp(`${token}:\\s*${value.replace('.', '\\.')};`), `${token} ist ${value}`);
   }
