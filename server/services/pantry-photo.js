@@ -71,7 +71,8 @@ export async function scanPantryPhoto({ image, userId = null }) {
     ].join(' '),
     text: 'Co jest na tym zdjęciu? Wypisz produkty do spiżarni.',
     schema: SCHEMA,
-    maxTokens: 2500,
+    // Sonnet keeps adaptive thinking; its tokens count toward this limit.
+    maxTokens: 8000,
   });
 
   const existing = db.get().prepare('SELECT id, name, unit, location_id FROM pantry_items').all();

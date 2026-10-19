@@ -73,7 +73,8 @@ export async function mealIdeas({ date, mealType, userId = null }) {
       pantry.length ? `W spiżarni: ${pantry.join(', ')}` : '',
     ].filter(Boolean).join('\n'),
     schema: SCHEMA,
-    maxTokens: 2500,
+    // Sonnet keeps adaptive thinking; its tokens count toward this limit.
+    maxTokens: 8000,
   });
   const byTitle = new Map(recipes.map((r) => [nameKey(r.title), r.id]));
   return (out?.ideas ?? []).slice(0, 3).map((idea) => ({
