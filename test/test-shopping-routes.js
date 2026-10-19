@@ -68,7 +68,9 @@ test('GET /suggestions: Präfix liefert distinct Namen', async () => {
   await call('POST', `/${list}/items`, { name: 'Bananen' }); // Duplikat → DISTINCT
   const r = await call('GET', '/suggestions?q=Ban');
   assert.equal(r.status, 200);
-  assert.equal(r.body.data.length, 1);
+  // Fork (2026-10-19): the Polish starter list adds "Banany" below the
+  // household's own names; the household's name still comes once and first.
+  assert.equal(r.body.data.filter((s) => s.name === 'Bananen').length, 1);
   assert.equal(r.body.data[0].name, 'Bananen');
 });
 
@@ -82,7 +84,8 @@ test('GET /suggestions: sortiert nach zuletzt verwendet, nicht alphabetisch (#11
   await call('POST', `/${list}/items`, { name: 'Zwiebeln' });
   const r = await call('GET', '/suggestions?q=Z');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.data.map((s) => s.name), ['Zwiebeln', 'Zucchini']);
+  // Fork: starter-list names (e.g. "Ziemniaki") follow the household's own.
+  assert.deepEqual(r.body.data.map((s) => s.name).slice(0, 2), ['Zwiebeln', 'Zucchini']);
 });
 
 test('GET /suggestions: trägt Kategorie + Menge der zuletzt verwendeten Zeile mit (#1103)', async () => {

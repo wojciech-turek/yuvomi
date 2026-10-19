@@ -36,6 +36,20 @@ Setup details: [`deploy/hetzner/README.md`](deploy/hetzner/README.md). Fork note
       Add to Home Screen → Auto-Lock Never → Guided Access
 - [ ] Try task priorities (none / low / medium / high / urgent)
 
+## Turn on AI (built 2026-10-19)
+
+- [ ] Settings → Dom → AI: paste the Anthropic API key (console.anthropic.com), switch "Pomoc AI" on,
+      press "Sprawdź połączenie". Monthly limit defaults to $5; expected use is about $1-3.
+- [ ] Optional: TypeSafe Jev key in the same place (fast aisle sorting; without it Haiku does it)
+- [ ] Add a few sentences under "Co Yuvomi o was wie" (diet, dislikes, shopping day), or press
+      "Zadaj pytanie teraz" and answer on the dashboard
+- [ ] Both iPhones: allow notifications in the home-screen app (for the 17:30 heads-up)
+
+What it does: cook mode (recipes and the wall tablet), aisle guessing and "Pewnie się kończy"
+chips in shopping, ingredient suggestions when entering a meal (one tap to the shopping list),
+"Podpowiedz posiłek" ideas, pantry from a photo, one daily heads-up (rules only, no tokens),
+and a weekly question plus learned habits that grow the memory.
+
 ## Backups
 
 - [ ] Hetzner Storage Box with WebDAV → fill `WEBDAV_BACKUP_*` in the server's `.env`
@@ -46,12 +60,15 @@ Setup details: [`deploy/hetzner/README.md`](deploy/hetzner/README.md). Fork note
 - [ ] Photo carousel on the wall iPad without running Immich (today the screensaver only
       reads Immich). Options: photos uploaded into Yuvomi, or a shared iCloud album.
       Start from `public/components/photo-screensaver.js` and `server/routes/screensaver.js`.
-- [ ] Own visual design. Keep it in separate override files (and modules, see `MODULES.md`)
-      so upstream merges stay easy; see `DESIGN.md` for upstream's design rules.
+- [ ] Own visual design (we no longer merge upstream, so core styles can change directly;
+      `DESIGN.md` still describes the rules the tests enforce).
+- [ ] Kitchen tablet "Brakuje" button: add to the shopping list from the wall (needs one display
+      write route for shopping items).
+- [ ] Remove the 24 unused locales (only pl and en matter) once nothing depends on them.
 - [ ] Optional: SMTP (password reset emails), see `EMAIL_*` in `.env`
 
 ## Maintenance
 
-- Upstream update: `git fetch upstream --tags && git merge vX.Y.Z` → push to `main`
-  → GitHub builds the image, the pre-push hook deploys it.
-- Use a regular merge for PRs into `main`, not squash, so the upstream history stays intact.
+- Developed independently since 2026-10-19 (no upstream merges, see FORK.md).
+- Push to `main` → GitHub builds the image → the pre-push hook deploys it from the Mac.
+- New UI strings: `node scripts/i18n-add.mjs scripts/i18n/<file>.json` (pl + en, others get en).

@@ -19,7 +19,11 @@ because the test suite enforces them.
   `if: github.repository == 'ulsklyc/yuvomi'`; the Claude workflows skip themselves without a token.
 - Cook mode (`public/components/cook-mode.js`): full-screen recipe view with steps, timers and
   a screen that stays awake, also on the kitchen wall tablet (which may now read meals and recipes).
-- AI features (in progress): see TODO.md.
+- AI (`server/ai/`, Settings → AI): off until an admin enables it with an Anthropic key; Haiku 5.5
+  for quick work, Sonnet 5.5 for photos and meal ideas, never Opus; optional TypeSafe Jev for aisle
+  decisions; a monthly cost cap and usage log; household memory (`ai_memories`) that grows from
+  answers and weekly learning; purchase log (`shopping_purchases`) for buying rhythms; a daily
+  heads-up from rules only. See TODO.md for what each feature does.
 
 ## Translations
 

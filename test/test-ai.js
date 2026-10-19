@@ -374,3 +374,11 @@ test('schedule: the daily heads-up runs once per day, after 17:30 household time
   assert.deepEqual(await runAiTick(new Date('2026-10-20T16:00:00Z')), { skipped: 'disabled' });
   await call('PUT', '/ai/config', { enabled: true });
 });
+
+test('autocomplete knows common Polish groceries before the household has history', async () => {
+  const r = await call('GET', '/shopping/suggestions?q=papier toal');
+  assert.equal(r.body.data[0]?.name, 'Papier toaletowy');
+  assert.equal(r.body.data[0]?.category, 'Haushalt');
+  const pom = await call('GET', '/shopping/suggestions?q=pomar');
+  assert.ok(pom.body.data.some((s) => s.name === 'Pomarańcze'), 'diacritic-free typing finds Polish names');
+});

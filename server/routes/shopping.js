@@ -29,6 +29,7 @@ import { nameKey, matchesPrefix } from '../utils/name-key.js';
 import { localCategory, guessCategory, rememberCategory, rememberedCategory } from '../services/shopping-category-guess.js';
 import { groupPurchases, weight, dueItems } from '../ai/shopping-stats.js';
 import { featureOn } from '../ai/settings.js';
+import { PL_GROCERIES } from '../services/pl-groceries.js';
 
 const log = createLogger('Shopping');
 
@@ -441,6 +442,13 @@ function rankedSuggestions(q, limit = 8) {
     // Below every bought name, newest first.
     byKey.set(key, { name: it.name, category: it.category, quantity: it.quantity, score: 1 / (2 + idx) });
   });
+  // The starter list fills in what the household has not used yet, below all
+  // of its own names (fork, 2026-10-19).
+  for (const g of PL_GROCERIES) {
+    const key = nameKey(g.name);
+    if (byKey.has(key) || !matchesPrefix(key, qKey)) continue;
+    byKey.set(key, { name: g.name, category: g.category, quantity: null, score: 0 });
+  }
 
   return [...byKey.entries()]
     .map(([key, e]) => ({ ...e, whole: key.startsWith(qKey), category: rememberedCategory(key)?.category ?? e.category }))
