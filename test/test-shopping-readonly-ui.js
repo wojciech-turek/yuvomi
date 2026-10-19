@@ -701,10 +701,15 @@ test('Vorrat bei `read`: die Zeile zeigt die Menge, traegt aber weder Stepper no
   const knoten = (modules) => withAccess(modules, () => pantry.rowEl(knapp()));
   const zeile = async (modules) => (await knoten(modules)).outerHTML;
 
+  // TAFLA (2026-10-19): die ruhende Zeile traegt keinen Warenkorb mehr - "was
+  // knapp ist, auf die Liste" steht fuer ALLE in der Karte "Wymaga uwagi", und
+  // deren Knopf fragt das Recht des EINKAUFS (Regel 8, Test "Vorrat: die Karte
+  // Wymaga uwagi …" unten). Bei `read` bleibt der Zeile damit nur der Tipp in
+  // die Leseansicht.
   const lesend = await zeile(NUR_VORRAT_LESEN);
   assert.doesNotMatch(lesend, /pantry-stepper/, 'Plus und Minus endeten im 403 und sprangen zurueck');
-  assert.deepEqual(aktionen(await knoten(NUR_VORRAT_LESEN)), ['details', 'to-shopping'],
-    'der Tipp bleibt und fuehrt in die Leseansicht; der Warenkorb gehoert dem Einkauf');
+  assert.deepEqual(aktionen(await knoten(NUR_VORRAT_LESEN)), ['details'],
+    'der Tipp bleibt und fuehrt in die Leseansicht');
   for (const action of aktionen(await knoten(NUR_VORRAT_LESEN))) {
     assert.ok(pantry.READ_SAFE_ACTIONS.has(action), `${action} steht im Markup, aber nicht in der Positivliste`);
   }
@@ -712,19 +717,40 @@ test('Vorrat bei `read`: die Zeile zeigt die Menge, traegt aber weder Stepper no
   assert.match(lesend, /pantry-row__quantity/, 'die Menge bleibt als Zeichen');
   assert.match(lesend, /pantry-badge/, 'der Status bleibt als Zeichen');
   assert.match(lesend, /swipe-row--static/, 'ohne Geste kein Wisch-Chevron');
-  assert.match(lesend, /pantry-row__cart"/, 'der Warenkorb folgt dem EINKAUF (Regel 8) und bleibt');
+  assert.doesNotMatch(lesend, /pantry-row__cart"|list-row__actions/, 'ruhend kein Warenkorb und keine Bedienzone');
 
   const beides = await zeile(NUR_LESEN);
   assert.doesNotMatch(beides, /pantry-row__cart"/);
   assert.deepEqual(aktionen(await knoten(NUR_LESEN)), ['details']);
   assert.doesNotMatch(beides, /list-row__actions/, 'eine leere Bedienzone naehme dem Namen nur die Breite');
 
+  // Mit Schreibrecht klappt der Tipp auf; darunter Stepper, "Na listę" (der
+  // knappe Artikel, mit Einkaufsrecht) und "Edytuj".
   const gegen = await zeile(VORRAT_VOLL);
-  assert.deepEqual(aktionen(await knoten(VORRAT_VOLL)), ['edit', 'to-shopping', 'decrease', 'increase'],
-    'Gegenfall: mit Schreibrecht stehen Bearbeiten und Stepper');
+  assert.deepEqual(aktionen(await knoten(VORRAT_VOLL)), ['expand', 'decrease', 'increase', 'to-shopping', 'edit'],
+    'Gegenfall: mit Schreibrecht stehen Aufklappen, Stepper, Na liste und Bearbeiten');
   assert.match(gegen, /pantry-stepper/);
   assert.match(gegen, /common\.edit/);
   assert.doesNotMatch(gegen, /swipe-row--static/);
+});
+
+/* Die Karte "Wymaga uwagi" (Tafla) traegt den Uebertrag fuer alles Knappe. Ihr
+ * Knopf schreibt in den EINKAUF und steht deshalb nach dessen Recht - auch bei
+ * `pantry: read` (Regel 8), und nie ohne `shopping: write`. */
+test('Vorrat: die Karte „Wymaga uwagi" bietet den Uebertrag nur mit Schreibrecht auf den Einkauf', async () => {
+  const karte = (modules) => withAccess(modules, () => {
+    vorratZustand([knapp()]);
+    pantry.state.onList = null;
+    return pantry.attentionEl()?.outerHTML ?? '';
+  });
+  try {
+    assert.match(await karte(NUR_VORRAT_LESEN), /data-action="attention-add"|pantry\.attentionAdd/,
+      'pantry: read + shopping: write - der Uebertrag gehoert dem Einkauf und bleibt');
+    assert.doesNotMatch(await karte(NUR_LESEN), /pantry\.attentionAdd/, 'ohne Einkaufsrecht endete er im 403');
+    assert.match(await karte(NUR_LESEN), /pantry\.attentionLow/, 'der Zustand selbst bleibt sichtbar');
+  } finally {
+    vorratZustand([]);
+  }
 });
 
 test('Vorrat bei `read`: ein stehen gebliebener Stepper-Knoten schickt keinen PATCH', async () => {
@@ -813,7 +839,13 @@ test('Vorrat bei `read`: kein Anlegen, kein einladender Leerzustand, keine Lager
   assert.match(lesend, /pantry\.emptyTitle/, 'der Zustand bleibt');
   assert.doesNotMatch(lesend, /pantry\.emptyAction|pantry\.emptyDescription|emptyHint\.pantry/,
     'Knopf, Beschreibung und Hinweis laden zu einer Handlung ein');
-  assert.match(await leer(VORRAT_VOLL), /pantry\.emptyAction/, 'Gegenfall');
+  // TAFLA "Pusty stan": kein CTA-Knopf mehr, auch mit Schreibrecht - das
+  // globale + legt an, und der Vorrat behaelt als einzige Ausnahme seine
+  // Kamera-Karte (drawList haengt sie unter den Zustand). Gegenfall ist damit
+  // die einladende Beschreibung.
+  const voll = await leer(VORRAT_VOLL);
+  assert.match(voll, /pantry\.emptyDescription/, 'Gegenfall');
+  assert.doesNotMatch(voll, /pantry\.emptyAction/, 'kein Knopf im Leerzustand (Tafla)');
 
   // Der Verwalter: als Programm (kein Dialog) und am Ausloeser im Kopf.
   const verwalter = async (modules) => {

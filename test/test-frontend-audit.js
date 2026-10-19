@@ -3686,10 +3686,17 @@ test('die Küchen-Listen teilen eine Zeilen-Grammatik', () => {
   }
 
   const pantryCss = read('../public/styles/pantry.css');
-  const slot = pantryCss.match(/\.pantry-row__cart-slot\s*\{([^}]*)\}/)?.[1] ?? '';
-  assert.match(slot, /width:\s*var\(--target-lg\)/,
-    'wo ein Warenkorb liegt, muss der Slot die volle .row-action-Breite tragen');
-  assert.match(slot, /flex-shrink:\s*0/, 'der Slot darf nicht schrumpfen');
+  /* TAFLA (2026-10-19): der Warenkorb ("Na listę") steht nicht mehr in der
+   * ruhenden Zeile neben dem Stepper, sondern im aufgeklappten Teil darunter
+   * (`.pantry-row__expand`, pantry.js rowEl). Die Breitenrechnung des Slots
+   * (volle .row-action-Breite, nicht schrumpfen) galt der engen Bedienzone
+   * NEBEN dem Namen - die gibt es nicht mehr. Zugesichert wird jetzt, wo er
+   * steht, und weiter, dass ein leerer Slot nichts belegt. */
+  const pantrySrc = read('../public/pages/pantry.js');
+  assert.match(pantrySrc, /controls\.appendChild\(cartSlot\)/,
+    'der Warenkorb-Slot steht in den Bedienelementen der aufgeklappten Zeile');
+  assert.match(pantrySrc, /more\.className = 'list-row__actions pantry-row__expand'/,
+    'die Bedienzone ist der aufgeklappte Teil, nicht ein Streifen neben dem Namen');
   /* HIER STAND „pantry.js muss den Slot IMMER rendern, auch ohne Warenkorb -
    * sonst springt der Stepper je Zeile". Am gerenderten Dokument nachgemessen
    * (390x844, 12 Zeilen, 5 mit Warenkorb): die linke Kante des Minus-Knopfs
@@ -5875,44 +5882,34 @@ test('die Bedienzone der Vorratszeile traegt keinen Text', () => {
     '.list-rows muss abfragbarer Container sein - ein Container kann sich selbst nicht abfragen');
   assert.match(rows, /container-name:\s*list-rows/, 'der Container braucht einen Namen');
 
-  // Der Stepper hat genau zwei Kinder, und beide sind Knoepfe.
-  assert.match(pantryJs, /stepper\.append\(minus,\s*plus\)/,
-    'in den Stepper gehoeren nur die beiden Knoepfe - ein Wert dazwischen macht seine Breite vom Text abhaengig');
-  /* UEBER DEN REGELSCANNER, NICHT UEBER EIN REGEX AUF DER DATEI: die Begruendung
-   * fuer den Umzug steht als KOMMENTAR in pantry.css und nennt den alten
-   * Selektor beim Namen. Ein `doesNotMatch` auf dem Dateitext las diesen
-   * Kommentar als Regel und meldete den Verstoss, den er beschreibt. */
+  /* TAFLA (2026-10-19): die Zusage bleibt - neben dem Namen steht KEINE
+   * Bedienung, deren Breite am Text haengt -, ihre Form ist eine andere. Bis
+   * hierher war der Stepper zwei nackte Knoepfe neben dem Namen und die Menge
+   * stand in der Metazeile, weil ein Wert zwischen den Knoepfen die Zeile auf
+   * 89px trieb. Jetzt traegt die RUHENDE Zeile nur Name, Statuswort und
+   * Mengen-Pille; der Stepper ("Ilość i stepper": − Menge +) steht im
+   * aufgeklappten Teil auf einer eigenen Zeile, die Namensbreite haengt also
+   * nicht an ihm. Der Wert zwischen den Knoepfen ist dort Absicht und traegt
+   * eine Mindestbreite, damit die Kapsel beim Steppen nicht springt. */
+  assert.match(pantryJs, /stepper\.append\(minus,\s*value,\s*plus\)/,
+    'der Stepper ist − Menge + (Tafla), und er steht im aufgeklappten Teil');
+  assert.match(pantryJs, /controls\.appendChild\(stepper\)/);
+  assert.match(pantryJs, /more\.hidden = !expanded/, 'ruhend ist der aufgeklappte Teil zu');
   const pantryRules = [...eachRule(pantryCss)];
-  const valueRule = pantryRules.find((r) => /\.pantry-stepper__value/.test(r.selector));
-  assert.equal(valueRule, undefined,
-    'das Wertfeld ist in die Metazeile gezogen; kaeme es zurueck, waere die Zusage still gebrochen');
+  const valueRule = pantryRules.find((r) => r.selector.trim() === '.pantry-stepper__value');
+  assert.match(valueRule?.body ?? '', /min-inline-size:/, 'der Wert traegt eine Mindestbreite');
+  assert.match(valueRule?.body ?? '', /tabular-nums/, 'und Tabellenziffern - sonst springt die Kapsel');
   const wrapping = pantryRules.filter((r) => /\.pantry-stepper\b/.test(r.selector) && /flex-wrap:\s*wrap/.test(r.body));
   assert.deepEqual(wrapping.map((r) => r.selector), [],
-    'der Stepper darf nicht mehr umbrechen - der Umbruch war der Hoehentreiber der Zeile');
+    'der Stepper darf nicht umbrechen');
 
-  // Und die Menge steht wirklich in der Metazeile, nicht nur nicht mehr im
-  // Stepper: ohne diese Zeile waere sie ersatzlos verschwunden und der Guard
-  // trotzdem gruen.
+  // Die Menge der RUHENDEN Zeile ist die Pille; der Stepper schreibt sie fort.
   assert.match(pantryJs, /quantity\.className = 'pantry-row__quantity'/,
-    'die Menge braucht einen eigenen Knoten in der Metazeile - der Stepper aktualisiert ihn');
-  assert.match(pantryJs, /meta\.appendChild\(quantity\)/,
-    'die Menge haengt in der Metazeile');
+    'die Menge braucht einen eigenen Knoten - der Stepper aktualisiert ihn');
   assert.match(pantryJs, /row\.querySelector\('\.pantry-row__quantity'\)/,
-    'refreshRowQuantity muss den neuen Knoten treffen, sonst friert die Anzeige beim Steppen ein');
-
-  /* WEGLASSEN STATT ABSCHNEIDEN. Auf einer Zeile mit Warenkorb bleiben 168px
-   * statt 220px, und „1 Flasche · MHD 23.12.2027" braucht 182px - mit Ellipse
-   * stand da „MHD 23.12….". Das MHD braucht dafuer einen EIGENEN Knoten; als
-   * Teil einer zusammengefuegten Zeichenkette kann CSS es nicht weglassen. */
-  assert.match(pantryJs, /expiry\.className = 'pantry-row__expiry'/,
-    'das MHD braucht einen eigenen Knoten, sonst kann es nur abgeschnitten statt weggelassen werden');
-  assert.match(pantryJs, /expiry\.textContent = ` · \$\{t\('pantry\.bestBefore'/,
-    'das Trennzeichen gehoert IN den Knoten - sonst bleibt beim Weglassen ein einsames Mittelpunkt-Zeichen stehen');
-  assert.match(
-    pantryCss,
-    /@container list-rows \(max-width:[^)]+\)\s*\{\s*\.pantry-row:has\(\.pantry-row__cart\):has\(\.pantry-stepper\) \.pantry-row__expiry\s*\{\s*display:\s*none/,
-    'das MHD faellt auf der schmalen Zeile MIT Warenkorb UND Stepper weg - an der Traegerbreite, nicht am Viewport; ohne Stepper (Lesezeile) ist Platz (#1682)',
-  );
+    'refreshRowQuantity muss den Knoten treffen, sonst friert die Anzeige beim Steppen ein');
+  assert.match(pantryJs, /row\.querySelector\('\.pantry-stepper__value'\)/,
+    'und den Wert im Stepper');
 
   // Eine Variable, zwei Zeigerklassen: die Knopfgroesse wechselt mit der
   // Zeigerfaehigkeit und wird nicht doppelt gepflegt.
@@ -10059,7 +10056,9 @@ test('audited profile, birthday, navigation, and budget controls meet mobile tou
   // 40px am Zeiger wie in Notizen, Inventar und Dokumenten, am Finger
   // --target-base (48px) ueber die `(hover: none)`-Regel der Variante.
   assert.match(read('../public/pages/contacts.js'), /class="filter-chip filter-chip--sm contact-filter-chip/);
-  assert.match(read('../public/pages/pantry.js'), /class="filter-chip filter-chip--sm\$\{chip\.id === state\.filter/);
+  // Tafla: die Ortsreihe des Vorrats ist dieselbe Filterchip-Klasse (36 im
+  // Bild, das volle --sm-Ziel am Finger), gewaehlt ueber `active`.
+  assert.match(read('../public/pages/pantry.js'), /class="filter-chip filter-chip--sm\$\{active \? ' filter-chip--active' : ''\}"/);
   assert.match(read('../public/styles/filter-chip.css'), /\.filter-chip\s*\{[\s\S]*min-height:\s*var\(--target-lg\)/);
   assert.match(read('../public/styles/filter-chip.css'), /@media \(hover: none\)\s*\{\s*\.filter-chip--sm\s*\{\s*min-height:\s*var\(--target-base\)/);
   assert.doesNotMatch(contacts, /\.contact-filter-chip\s*\{[^}]*min-height/);
