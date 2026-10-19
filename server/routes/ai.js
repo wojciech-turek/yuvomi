@@ -15,6 +15,7 @@ import { sendAiError } from '../ai/http.js';
 import { publicSettings, updateSettings, aiSettings } from '../ai/settings.js';
 import { usageSummary } from '../ai/usage.js';
 import { listMemories, addMemory, updateMemory, deleteMemory, getMemory, TOPICS, MAX_TEXT } from '../ai/memory.js';
+import { openQuestion, answerQuestion, dismissQuestion, generateQuestion, learnFromHistory } from '../ai/questions.js';
 
 const router = express.Router();
 const log = createLogger('AI');
@@ -161,6 +162,54 @@ router.delete('/memories/:id', (req, res) => {
     res.status(204).end();
   } catch (err) {
     sendAiError(res, err, 'DELETE /memories/:id');
+  }
+});
+
+// --------------------------------------------------------
+// Questions that teach the memory (fork, 2026-10-19)
+// GET  /api/v1/ai/questions/open          -> { data: question | null }
+// POST /api/v1/ai/questions/:id/answer    { option: number } -> { data: { question, memory } }
+// POST /api/v1/ai/questions/:id/dismiss
+// POST /api/v1/ai/questions/ask-now       admin: ask a new question now (and learn), instead of waiting for Sunday
+// --------------------------------------------------------
+router.get('/questions/open', (_req, res) => {
+  try {
+    res.json({ data: aiSettings().enabled ? openQuestion() : null });
+  } catch (err) {
+    sendAiError(res, err, 'GET /questions/open');
+  }
+});
+
+router.post('/questions/:id/answer', (req, res) => {
+  try {
+    const id = Number.parseInt(req.params.id, 10);
+    const option = Number(req.body?.option);
+    if (!Number.isInteger(option) || option < 0) return res.status(400).json({ error: 'Choose an answer.', code: 400 });
+    const result = answerQuestion(id, option, req.authUserId);
+    if (!result) return res.status(404).json({ error: 'This question is no longer open.', code: 404 });
+    if (result.invalid) return res.status(400).json({ error: 'Unknown answer.', code: 400 });
+    res.json({ data: result });
+  } catch (err) {
+    sendAiError(res, err, 'POST /questions/:id/answer');
+  }
+});
+
+router.post('/questions/:id/dismiss', (req, res) => {
+  try {
+    if (!dismissQuestion(Number.parseInt(req.params.id, 10))) return res.status(404).json({ error: 'This question is no longer open.', code: 404 });
+    res.status(204).end();
+  } catch (err) {
+    sendAiError(res, err, 'POST /questions/:id/dismiss');
+  }
+});
+
+router.post('/questions/ask-now', requireAdmin, async (_req, res) => {
+  try {
+    const learned = await learnFromHistory();
+    const question = await generateQuestion();
+    res.json({ data: { question: question ?? openQuestion(), learned: learned.length } });
+  } catch (err) {
+    sendAiError(res, err, 'POST /questions/ask-now');
   }
 });
 

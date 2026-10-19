@@ -1,0 +1,54 @@
+{
+  "ai.questionLabel": {
+    "en": "A question from Yuvomi",
+    "pl": "Pytanie od Yuvomi"
+  },
+  "ai.questionSkip": {
+    "en": "Skip",
+    "pl": "Pomiń"
+  },
+  "ai.questionRemembered": {
+    "en": "Noted: {{text}}",
+    "pl": "Zapamiętane: {{text}}"
+  },
+  "ai.questionThanks": {
+    "en": "Thanks, noted.",
+    "pl": "Dzięki, zapamiętane."
+  },
+  "ai.pushNoPlanTitle": {
+    "en": "Nothing planned for tomorrow",
+    "pl": "Na jutro nic nie zaplanowano"
+  },
+  "ai.pushNoPlanBody": {
+    "en": "Tap for three ideas that fit what you like and have at home.",
+    "pl": "Dotknij, a Yuvomi podpowie trzy pomysły z tego, co lubicie i macie w domu."
+  },
+  "ai.pushRunningLowTitle": {
+    "en": "Probably running low",
+    "pl": "Pewnie się kończy"
+  },
+  "ai.pushRunningLowBody": {
+    "en": "{{items}}. Tap to put them on the list.",
+    "pl": "{{items}}. Dotknij, aby dodać do listy."
+  },
+  "ai.pushQuestionTitle": {
+    "en": "Yuvomi has a question",
+    "pl": "Yuvomi ma pytanie"
+  },
+  "ai.pushQuestionBody": {
+    "en": "One tap, and the suggestions get better.",
+    "pl": "Jedno dotknięcie, a podpowiedzi będą trafniejsze."
+  },
+  "ai.askNow": {
+    "en": "Ask a question now",
+    "pl": "Zadaj pytanie teraz"
+  },
+  "ai.askNowDone": {
+    "en": "There is a new question on the dashboard.",
+    "pl": "Na pulpicie czeka nowe pytanie."
+  },
+  "ai.askNowNone": {
+    "en": "No new question right now; the memory may already cover the basics.",
+    "pl": "Na razie brak nowego pytania; pamięć może już obejmować podstawy."
+  }
+}

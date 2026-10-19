@@ -113,6 +113,12 @@ export function mealsPaths() {
         },
       }),
     },
+    '/api/v1/meals/ideas': {
+      post: op({ summary: 'Three meal ideas for one slot from the household memory, recent meals, recipes and pantry (AI)', tag: 'Meals', stateChanging: true, requestBody: jsonBody(null) }),
+    },
+    '/api/v1/meals/ingredient-suggestions': {
+      post: op({ summary: 'Suggest ingredients for a meal title (recipe, earlier meal, or AI if enabled), each marked in_pantry', tag: 'Meals', stateChanging: true, requestBody: jsonBody(null) }),
+    },
     '/api/v1/meals/apply-plan': {
       post: op({
         summary: 'Apply a set of planned meals at once',

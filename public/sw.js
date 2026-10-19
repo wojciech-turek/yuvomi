@@ -107,6 +107,7 @@ const APP_SHELL = [
   // also gehoert er in die Shell, nicht zu den Seitenmodulen. Der
   // Precache-Guard sah diese Import-Form bis #944 nicht.
   '/components/datepicker.js',
+  '/components/ai-question.js',
   '/components/cook-mode.js',
   '/components/detail-view.js',
   '/components/document-attach.js',
@@ -207,6 +208,7 @@ const APP_SHELL = [
   '/utils/overlay-history.js',
   '/utils/overlay-host.js',
   '/utils/dialog-surface.js',
+  '/utils/photo-resize.js',
   '/utils/page-layout.js',
   '/utils/page-lifecycle.js',
   '/utils/page-search.js',

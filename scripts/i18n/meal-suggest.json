@@ -1,0 +1,38 @@
+{
+  "meals.suggestLoading": {
+    "en": "Looking for ingredients…",
+    "pl": "Szukam składników…"
+  },
+  "meals.suggestTitle": {
+    "en": "Suggested ingredients",
+    "pl": "Proponowane składniki"
+  },
+  "meals.suggestFromRecipe": {
+    "en": "from the recipe",
+    "pl": "z przepisu"
+  },
+  "meals.suggestFromHistory": {
+    "en": "from last time",
+    "pl": "z ostatniego razu"
+  },
+  "meals.suggestFromAi": {
+    "en": "suggested by AI",
+    "pl": "propozycja AI"
+  },
+  "meals.suggestInPantry": {
+    "en": "in the pantry",
+    "pl": "w spiżarni"
+  },
+  "meals.suggestAdd": {
+    "en": "Add ticked",
+    "pl": "Dodaj zaznaczone"
+  },
+  "meals.suggestDismiss": {
+    "en": "Not now",
+    "pl": "Nie teraz"
+  },
+  "meals.toShoppingListAction": {
+    "en": "Add to shopping list",
+    "pl": "Na listę zakupów"
+  }
+}

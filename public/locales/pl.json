@@ -1000,7 +1000,25 @@
         "deleteMealNamed": "Usuń {{title}}",
         "dragHandle": "Przeciągnij {{title}} na inny dzień",
         "openRecipeNamed": "Otwórz przepis na {{title}}",
-        "viewRecipeNamed": "Zobacz przepis na {{title}}"
+        "viewRecipeNamed": "Zobacz przepis na {{title}}",
+        "suggestLoading": "Szukam składników…",
+        "suggestTitle": "Proponowane składniki",
+        "suggestFromRecipe": "z przepisu",
+        "suggestFromHistory": "z ostatniego razu",
+        "suggestFromAi": "propozycja AI",
+        "suggestInPantry": "w spiżarni",
+        "suggestAdd": "Dodaj zaznaczone",
+        "suggestDismiss": "Nie teraz",
+        "toShoppingListAction": "Na listę zakupów",
+        "ideasMenu": "Podpowiedz posiłek",
+        "ideasTitle": "Pomysły na posiłek",
+        "ideasDay": "Dzień",
+        "ideasMeal": "Posiłek",
+        "ideasAsk": "Pokaż pomysły",
+        "ideasLoading": "Myślę o tym, co lubicie i macie w domu…",
+        "ideasNone": "Tym razem brak pomysłów. Spróbuj ponownie albo zaplanuj ręcznie.",
+        "ideasFailed": "Nie udało się pobrać pomysłów. Sprawdź połączenie i spróbuj ponownie.",
+        "ideasPlan": "Zaplanuj"
     },
     "calendar": {
         "searchOpen": "Szukaj wydarzeń",
@@ -6302,7 +6320,21 @@
             "bag_few": "torebki",
             "bag_many": "torebek",
             "bag_other": "torebki"
-        }
+        },
+        "photoAdd": "Dodaj ze zdjęcia",
+        "photoReading": "Czytam zdjęcie…",
+        "photoNothing": "Nie rozpoznano produktów na zdjęciu. Spróbuj bliżej i przy lepszym świetle.",
+        "photoCap": "Miesięczny limit AI jest wykorzystany. Administrator może go podnieść w Ustawienia > AI.",
+        "photoOff": "Dodawanie ze zdjęcia jest wyłączone albo brakuje klucza API. Zobacz Ustawienia > AI.",
+        "photoFailed": "Nie udało się odczytać zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
+        "photoReviewTitle": "Co jest na zdjęciu",
+        "photoReviewHint": "Odznacz to, co się nie zgadza, i popraw nazwy lub ilości. Nic nie zostanie zapisane, dopóki nie dodasz.",
+        "photoLocation": "Gdzie to jest?",
+        "photoNoLocation": "Bez miejsca",
+        "photoKeep": "Dodaj: {{name}}",
+        "photoMerges": "już jest w spiżarni, ilość zostanie dodana",
+        "photoApply": "Dodaj do spiżarni",
+        "photoAdded": "Spiżarnia zaktualizowana: nowe {{added}}, uzupełnione {{merged}}."
     },
     "inventory": {
         "title": "Inwentarz",
@@ -6798,6 +6830,19 @@
         "memoryDeleted": "Usunięto zdanie.",
         "topicHousehold": "Dom",
         "topicMeals": "Posiłki",
-        "topicShopping": "Zakupy"
+        "topicShopping": "Zakupy",
+        "questionLabel": "Pytanie od Yuvomi",
+        "questionSkip": "Pomiń",
+        "questionRemembered": "Zapamiętane: {{text}}",
+        "questionThanks": "Dzięki, zapamiętane.",
+        "pushNoPlanTitle": "Na jutro nic nie zaplanowano",
+        "pushNoPlanBody": "Dotknij, a Yuvomi podpowie trzy pomysły z tego, co lubicie i macie w domu.",
+        "pushRunningLowTitle": "Pewnie się kończy",
+        "pushRunningLowBody": "{{items}}. Dotknij, aby dodać do listy.",
+        "pushQuestionTitle": "Yuvomi ma pytanie",
+        "pushQuestionBody": "Jedno dotknięcie, a podpowiedzi będą trafniejsze.",
+        "askNow": "Zadaj pytanie teraz",
+        "askNowDone": "Na pulpicie czeka nowe pytanie.",
+        "askNowNone": "Na razie brak nowego pytania; pamięć może już obejmować podstawy."
     }
 }

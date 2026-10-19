@@ -5,7 +5,7 @@
  */
 
 import { api } from '/api.js';
-import { openModal as openSharedModal, closeModal as closeSharedModal, selectModal, confirmModal, askOverModal, advancedSection, wireBlurValidation, reportFieldError, reportFieldErrors, refocusAfterRender, swapFieldsKeepingDirtyBase } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal as closeSharedModal, captureModalContext, selectModal, confirmModal, askOverModal, advancedSection, wireBlurValidation, reportFieldError, reportFieldErrors, refocusAfterRender, swapFieldsKeepingDirtyBase } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete, wireScrollFade } from '/utils/ux.js';
 import { t, formatDate, formatDayMonth, formatDateInput, parseDateInput, isDateInputValid } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
@@ -22,7 +22,7 @@ import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
 import { pageToolsMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
-import { mealTypeList, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
+import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
 import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
 import { toDecimalString, breaksOffAtSeparator, toStoredNumber } from '/utils/money.js';
 import { mayWritePath } from '/utils/module-access.js';
@@ -679,6 +679,7 @@ function mealsToolsMenuHtml() {
     id: 'meals-tools-menu',
     label: t('common.moreActions'),
     items: [
+      { action: 'meal-ideas', label: t('meals.ideasMenu'), icon: 'sparkles' },
       { action: 'randomize-plan', label: t('meals.randomizePlan'), icon: 'shuffle' },
       { action: 'toggle-rail', label: t('meals.showRecipes'), icon: 'panel-right', checked: true },
     ],
@@ -764,6 +765,115 @@ export async function render(container, { user }) {
   findPageFab('fab-new-meal')?.addEventListener('click', () => {
     const firstType = state.visibleMealTypes[0] ?? 'lunch';
     openMealModal({ mode: 'create', date: today, mealType: firstType });
+  });
+
+  wireMealIdeas(container, today);
+}
+
+// --------------------------------------------------------
+// Meal ideas (fork, 2026-10-19)
+// "Podpowiedz posiłek" in the tools menu, and the daily heads-up's link
+// (/meals?ideas=YYYY-MM-DD): three ideas for one slot from the household
+// memory, recent meals, recipes and pantry. Planning one is the ordinary
+// POST /meals; the saved-toast then offers the shopping list.
+// --------------------------------------------------------
+async function wireMealIdeas(container, today) {
+  const entry = container.querySelector('[data-action="meal-ideas"]');
+  let ready = false;
+  try {
+    ready = Boolean((await api.get('/ai/status')).data?.features?.meal_ideas);
+  } catch { ready = false; }
+  if (!ready || readOnly()) {
+    // No idea service here: the entry goes rather than leading nowhere.
+    (entry?.closest('[role="menuitem"], li') ?? entry)?.remove();
+    return;
+  }
+  entry?.addEventListener('click', () => openIdeasModal(today));
+  const asked = new URLSearchParams(location.search).get('ideas');
+  if (asked && /^\d{4}-\d{2}-\d{2}$/.test(asked)) openIdeasModal(asked);
+}
+
+function openIdeasModal(date) {
+  const types = state.visibleMealTypes.length ? state.visibleMealTypes : ['lunch', 'dinner'];
+  const defaultType = ['lunch', 'dinner'].find((tp) => types.includes(tp)) ?? types[0];
+  const days = Array.from({ length: 7 }, (_, i) => addLocalDays(todayKey(), i));
+  if (!days.includes(date)) days.unshift(date);
+  const content = `
+    <div class="form-group">
+      <label class="form-label" for="ideas-date">${esc(t('meals.ideasDay'))}</label>
+      <select class="form-input" id="ideas-date">${days.map((d) => `<option value="${d}"${d === date ? ' selected' : ''}>${esc(formatDate(d))}</option>`).join('')}</select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="ideas-type">${esc(t('meals.ideasMeal'))}</label>
+      <select class="form-input" id="ideas-type">${types.map((tp) => `<option value="${tp}"${tp === defaultType ? ' selected' : ''}>${esc(mealTypeLabel(tp))}</option>`).join('')}</select>
+    </div>
+    <div class="meal-ideas" id="meal-ideas" aria-live="polite"></div>
+    <div class="modal-panel__footer modal-panel__footer--plain">
+      <button class="btn btn--secondary" type="button" data-ideas="close">${esc(t('common.cancel'))}</button>
+      <button class="btn btn--primary" type="button" data-ideas="ask">${esc(t('meals.ideasAsk'))}</button>
+    </div>`;
+  openSharedModal({
+    title: t('meals.ideasTitle'),
+    content,
+    size: 'md',
+    onSave(panel) {
+      const out = panel.querySelector('#meal-ideas');
+      let ideas = [];
+      const show = (html) => { out.replaceChildren(); out.insertAdjacentHTML('beforeend', html); window.lucide?.createIcons({ el: out }); };
+      panel.querySelector('[data-ideas="close"]').addEventListener('click', () => closeSharedModal({ force: true }));
+      panel.querySelector('[data-ideas="ask"]').addEventListener('click', async (e) => {
+        const button = e.currentTarget;
+        button.disabled = true;
+        show(`<p class="form-hint">${esc(t('meals.ideasLoading'))}</p>`);
+        try {
+          const res = await api.post('/meals/ideas', { date: panel.querySelector('#ideas-date').value, meal_type: panel.querySelector('#ideas-type').value });
+          ideas = res.data?.ideas ?? [];
+          if (!ideas.length) { show(`<p class="form-hint">${esc(t('meals.ideasNone'))}</p>`); return; }
+          show(ideas.map((idea, i) => `
+            <article class="meal-idea">
+              <h3 class="meal-idea__title">${esc(idea.title)}</h3>
+              <p class="meal-idea__why">${esc(idea.why)}</p>
+              ${idea.ingredients.length ? `<p class="meal-idea__ingredients">${esc(idea.ingredients.map((ing) => ing.name).join(', '))}</p>` : ''}
+              <button type="button" class="btn btn--secondary" data-plan="${i}">${esc(t('meals.ideasPlan'))}</button>
+            </article>`).join(''));
+        } catch (err) {
+          const reason = err?.data?.reason;
+          show(`<p class="form-hint">${esc(reason === 'ai_cap_reached' ? t('pantry.photoCap') : t('meals.ideasFailed'))}</p>`);
+        } finally {
+          button.disabled = false;
+        }
+      });
+      out.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-plan]');
+        if (!btn) return;
+        const idea = ideas[Number(btn.dataset.plan)];
+        if (!idea) return;
+        btn.disabled = true;
+        const context = captureModalContext();
+        try {
+          const res = await api.post('/meals', {
+            date: panel.querySelector('#ideas-date').value,
+            meal_type: panel.querySelector('#ideas-type').value,
+            title: idea.title,
+            recipe_id: idea.recipe_id ?? null,
+            ingredients: idea.ingredients.map(({ name, quantity, category }) => ({ name, quantity, category })),
+          });
+          closeSharedModal({ force: true, context });
+          await loadWeek(state.currentWeek);
+          renderWeekGrid();
+          refocusAfterRender();
+          const created = res.data;
+          if (created?.id && idea.ingredients.length && mayTransferMealToShopping(created.id)) {
+            window.yuvomi?.showToast(t('meals.mealSaved'), 'success', 8000, { label: t('meals.toShoppingListAction'), onClick: () => transferMeal(created.id) });
+          } else {
+            window.yuvomi?.showToast(t('meals.mealSaved'), 'success');
+          }
+        } catch (err) {
+          btn.disabled = false;
+          window.yuvomi?.showToast(errorSentence(err), 'danger');
+        }
+      });
+    },
   });
 }
 
@@ -2161,6 +2271,8 @@ function openMealModal(opts) {
         if (btn) btn.closest('.ingredient-row').remove();
       });
 
+      wireIngredientSuggestions(panel, ingList);
+
       // Einkaufslisten-Transfer. Ohne Liste steht hier statt des toten
       // Auswahlfelds die geteilte Antwort samt Ausweg - `beforeLeave` schließt
       // das Modal, sonst bliebe es über dem Einkaufs-Tab stehen.
@@ -2580,6 +2692,7 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
   // ohne Zutaten bleibt der Abschnitt offen wie bisher: dort IST er die Arbeit.
   const ingCount = isEdit ? (meal.ingredients?.length ?? 0) : 0;
   const ingFieldsHtml = `
+      <div class="ingredient-suggest" id="ingredient-suggest" aria-live="polite" hidden></div>
       <div class="ingredient-list" id="ingredient-list">${ingRows}</div>
       <button class="btn btn--secondary add-ingredient-btn" id="add-ingredient-btn" type="button">
         <i data-lucide="plus" class="icon-md" aria-hidden="true"></i>
@@ -2677,6 +2790,7 @@ async function saveModal(overlay) {
   ])) return;
 
   const ingredients = collectModalIngredients(overlay);
+  let createdWithIngredients = null;
 
   saveBtn.disabled    = true;
   saveBtn.textContent = '…';
@@ -2687,6 +2801,7 @@ async function saveModal(overlay) {
     if (mode === 'create') {
       const res     = await api.post('/meals', { date, meal_type, title, notes, recipe_url, recipe_id, cook_user_id, ingredients, repeat_weekly, repeat_until });
       state.meals.push(res.data);
+      createdWithIngredients = ingredients.length > 0 ? res.data : null;
     } else {
       if (scope === 'series') {
         // Ganze Serie: Template + alle Instanzen inkl. Zutaten serverseitig aktualisieren.
@@ -2724,7 +2839,18 @@ async function saveModal(overlay) {
     renderWeekGrid();
     // Das Ergebnis, nicht der Dialogtitel: „Mahlzeit hinzufügen" als
     // Erfolgsmeldung liest sich wie eine Aufforderung (R16).
-    window.yuvomi?.showToast(mode === 'create' ? t('meals.mealSaved') : t('meals.mealUpdated'), 'success');
+    // ONE TAP TO THE SHOPPING LIST (fork, 2026-10-19): a new meal with
+    // ingredients offers to put them on the list right from this toast,
+    // through the same transfer (list choice, undo) as the meal card.
+    if (createdWithIngredients && mayTransferMealToShopping(createdWithIngredients.id)) {
+      const created = createdWithIngredients;
+      window.yuvomi?.showToast(t('meals.mealSaved'), 'success', 8000, {
+        label: t('meals.toShoppingListAction'),
+        onClick: () => transferMeal(created.id),
+      });
+    } else {
+      window.yuvomi?.showToast(mode === 'create' ? t('meals.mealSaved') : t('meals.mealUpdated'), 'success');
+    }
   } catch (err) {
     // Der Satz der App, nie der Text des Servers (#1909): ein inzwischen
     // geloeschtes Rezept nennt der Server `meals_selected_recipe_not_found`.
@@ -2732,6 +2858,94 @@ async function saveModal(overlay) {
     saveBtn.disabled    = false;
     saveBtn.textContent = state.modal?.mode === 'edit' ? t('common.save') : t('common.add');
   }
+}
+
+// --------------------------------------------------------
+// Ingredient suggestions in the meal dialog (fork, 2026-10-19)
+// A pause after typing the meal (or leaving the field) asks
+// POST /meals/ingredient-suggestions - the recipe, the last time this meal was
+// cooked, or Haiku when AI is on. The answer is a row of chips, ticked except
+// what the pantry already has; "Add ticked" turns them into ingredient rows.
+// Nothing is added on its own, and the panel stays away once rows exist.
+// --------------------------------------------------------
+function wireIngredientSuggestions(panel, ingList) {
+  const box = panel.querySelector('#ingredient-suggest');
+  const titleInput = panel.querySelector('#modal-title');
+  if (!box || !titleInput || !ingList) return;
+  let timer = null;
+  let seq = 0;
+  let lastTitle = '';
+  let offered = [];
+  const hasRows = () => [...ingList.querySelectorAll('.ingredient-row__name')].some((i) => i.value.trim());
+
+  const hide = () => { box.hidden = true; box.replaceChildren(); offered = []; };
+  const show = (html) => {
+    box.replaceChildren();
+    box.insertAdjacentHTML('beforeend', html);
+    box.hidden = false;
+    window.lucide?.createIcons({ el: box });
+  };
+
+  const renderChoices = (source, ingredients) => {
+    offered = ingredients;
+    const from = { recipe: t('meals.suggestFromRecipe'), history: t('meals.suggestFromHistory'), ai: t('meals.suggestFromAi') }[source] ?? '';
+    show(`
+      <p class="ingredient-suggest__label">${esc(t('meals.suggestTitle'))}${from ? ` <span>${esc(from)}</span>` : ''}</p>
+      <div class="ingredient-suggest__chips">
+        ${ingredients.map((ing, i) => `
+          <button type="button" class="ingredient-suggest__chip" data-idx="${i}" aria-pressed="${ing.in_pantry ? 'false' : 'true'}">
+            <i data-lucide="check" class="icon-sm ingredient-suggest__tick" aria-hidden="true"></i>
+            <span>${esc(ing.name)}</span>${ing.quantity ? ` <span class="ingredient-suggest__qty">${esc(ing.quantity)}</span>` : ''}
+            ${ing.in_pantry ? `<span class="ingredient-suggest__have">${esc(t('meals.suggestInPantry'))}</span>` : ''}
+          </button>`).join('')}
+      </div>
+      <div class="ingredient-suggest__actions">
+        <button type="button" class="btn btn--secondary" data-suggest="add">${esc(t('meals.suggestAdd'))}</button>
+        <button type="button" class="btn btn--ghost" data-suggest="dismiss">${esc(t('meals.suggestDismiss'))}</button>
+      </div>`);
+  };
+
+  const ask = async () => {
+    const title = titleInput.value.trim();
+    if (title.length < 3 || title === lastTitle || hasRows()) return;
+    lastTitle = title;
+    const mine = ++seq;
+    const recipeId = Number(panel.querySelector('#modal-recipe-id')?.value) || undefined;
+    show(`<p class="ingredient-suggest__label">${esc(t('meals.suggestLoading'))}</p>`);
+    try {
+      const res = await api.post('/meals/ingredient-suggestions', { title, recipe_id: recipeId });
+      if (mine !== seq || !box.isConnected) return;
+      const { source, ingredients = [] } = res.data ?? {};
+      if (!ingredients.length || hasRows()) { hide(); return; }
+      renderChoices(source, ingredients);
+    } catch {
+      if (mine === seq) hide();
+    }
+  };
+
+  box.addEventListener('click', (e) => {
+    const chip = e.target.closest('.ingredient-suggest__chip');
+    if (chip) {
+      chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true'));
+      return;
+    }
+    const act = e.target.closest('[data-suggest]')?.dataset.suggest;
+    if (act === 'dismiss') { hide(); return; }
+    if (act !== 'add') return;
+    const chosen = [...box.querySelectorAll('.ingredient-suggest__chip[aria-pressed="true"]')]
+      .map((c) => offered[Number(c.dataset.idx)])
+      .filter(Boolean);
+    const tmp = document.createElement('div');
+    tmp.insertAdjacentHTML('beforeend', chosen.map((ing) => ingredientRowHTML({
+      name: ing.name, quantity: ing.quantity ?? '', category: ing.category, categories: mealCategories(),
+    })).join(''));
+    ingList.append(...tmp.children);
+    if (window.lucide) lucide.createIcons({ el: ingList });
+    hide();
+  });
+
+  titleInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(ask, 900); });
+  titleInput.addEventListener('change', () => { clearTimeout(timer); ask(); });
 }
 
 function collectModalIngredients(overlay) {

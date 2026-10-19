@@ -12,6 +12,10 @@ import { addDays, mealWeekday, datesForTemplateInRange } from '../services/meal-
 import { todayKey } from '../utils/timezone.js';
 import { mayWriteModule } from '../permissions.js';
 import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL, cookField, cookForNewOccurrence, cookRefusal } from '../services/meal-cook.js';
+import { suggestIngredients } from '../services/meal-ingredient-suggest.js';
+import { mealIdeas } from '../services/meal-ideas.js';
+import { sendAiError } from '../ai/http.js';
+import { AiError } from '../ai/errors.js';
 
 const log = createLogger('Meals');
 
@@ -464,6 +468,55 @@ router.post('/', (req, res) => {
  * (Discussion #1380), und nennt die uebrigen in `skipped`.
  * Response: 201 { data: Meal[] } bzw. mit skip_occupied { data, skipped }
  */
+// --------------------------------------------------------
+// POST /api/v1/meals/ingredient-suggestions (fork, 2026-10-19)
+// Body: { title: string, recipe_id?: number }
+// Ingredients for a meal someone is entering: from its recipe, from the last
+// time the household cooked it, or (AI feature on) drafted by Haiku. Each says
+// `in_pantry` so the dialog can leave those unticked. An AI failure (limit,
+// key, network) answers with no suggestions and `unavailable`, never an error
+// the dialog would have to show: the manual rows are always there.
+// Response: { data: { source: 'recipe'|'history'|'ai'|null, ingredients: [...], unavailable?: string } }
+// --------------------------------------------------------
+router.post('/ingredient-suggestions', async (req, res) => {
+  try {
+    const title = String(req.body?.title ?? '').trim();
+    if (!title || title.length > MAX_TITLE) return res.status(400).json({ error: 'Title is required.', code: 400 });
+    const recipeId = Number.isInteger(req.body?.recipe_id) ? req.body.recipe_id : null;
+    try {
+      const data = await suggestIngredients({ title, recipeId, userId: req.authUserId });
+      res.json({ data });
+    } catch (err) {
+      if (!(err instanceof AiError)) throw err;
+      res.json({ data: { source: null, ingredients: [], unavailable: err.code } });
+    }
+  } catch (err) {
+    log.error('POST /ingredient-suggestions error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
+// POST /api/v1/meals/ideas (fork, 2026-10-19)
+// Body: { date: 'YYYY-MM-DD', meal_type: 'breakfast'|'lunch'|'dinner'|'snack' }
+// Three ideas for one slot from the household memory, recent meals, its
+// recipes and the pantry. Nothing is planned here; the dialog plans the idea
+// a person picks with the ordinary POST /meals. AI feature meal_ideas.
+// Response: { data: { ideas: { title, why, recipe_id, ingredients }[] } }
+// --------------------------------------------------------
+router.post('/ideas', async (req, res) => {
+  const date = String(req.body?.date ?? '');
+  const mealType = String(req.body?.meal_type ?? '');
+  if (!DATE_RE.test(date)) return res.status(400).json({ error: 'A date is required.', code: 400 });
+  if (!['breakfast', 'lunch', 'dinner', 'snack'].includes(mealType)) return res.status(400).json({ error: 'Unknown meal.', code: 400 });
+  try {
+    const ideas = await mealIdeas({ date, mealType, userId: req.authUserId });
+    res.json({ data: { ideas } });
+  } catch (err) {
+    sendAiError(res, err, 'POST /ideas');
+  }
+});
+
 router.post('/apply-plan', (req, res) => {
   try {
     const assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];

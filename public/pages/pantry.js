@@ -14,6 +14,7 @@ import { readRowHtml, readRowHintEl } from '/utils/read-row.js';
 import {
   openModal as openSharedModal,
   closeModal as closeSharedModal,
+  captureModalContext,
   advancedSection,
   wireBlurValidation,
   reportFieldError,
@@ -36,6 +37,7 @@ import { DEFAULT_CATEGORY_NAME, categoryLabel } from '/utils/shopping-categories
 import { locationLabel } from '/utils/pantry-locations.js';
 import { setBulkPill, clearBulkPill } from '/utils/bulk-pill.js';
 import { PANTRY_UNITS, normalizePantryQuantity, pantryUnitStep, pantryQuantityLabel } from '/utils/pantry-units.js';
+import { photoToJpegDataUrl } from '/utils/photo-resize.js';
 import {
   PANTRY_FILTERS,
   daysUntil,
@@ -323,6 +325,10 @@ export async function render(container) {
       className: 'pantry-search page-toolbar__center page-search--field',
     })}
     ${readOnly() ? '' : `<div class="page-toolbar__actions">
+      <button type="button" class="btn btn--secondary btn--icon page-tools-btn" id="pantry-photo-btn" hidden
+              aria-label="${esc(t('pantry.photoAdd'))}" title="${esc(t('pantry.photoAdd'))}">
+        <i data-lucide="camera" class="icon-md" aria-hidden="true"></i>
+      </button>
       ${pageToolsMenuHtml({
         id: 'pantry-tools-menu',
         label: t('common.moreActions'),
@@ -409,6 +415,7 @@ export async function render(container) {
 
   installPopoverMenus(toolbar);
   toolbar.querySelector('[data-action="manage-locations"]')?.addEventListener('click', openLocationManager);
+  wirePhotoButton(toolbar.querySelector('#pantry-photo-btn'));
   fab.addEventListener('click', () => openItemModal('create'));
 
   filters.addEventListener('click', (e) => {
@@ -1671,6 +1678,117 @@ async function openLocationManager() {
     },
     // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
     // Loeschen. Das Element entsteht je Oeffnen neu und geht mit dem Overlay.
+  });
+}
+
+// --------------------------------------------------------
+// Add from a photo (fork, 2026-10-19)
+// The camera button appears when AI is on for the pantry. A photo of a
+// cupboard or fridge comes back as a draft list; nothing is stored until the
+// person checks the list and taps "Add to the pantry".
+// --------------------------------------------------------
+async function wirePhotoButton(btn) {
+  if (!btn) return;
+  try {
+    const status = await api.get('/ai/status');
+    if (!status.data?.features?.pantry_photo || !btn.isConnected) return;
+  } catch {
+    return;
+  }
+  btn.hidden = false;
+  window.lucide?.createIcons({ el: btn });
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = 'image/*';
+  picker.setAttribute('capture', 'environment');
+  picker.hidden = true;
+  btn.after(picker);
+  btn.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', async () => {
+    const file = picker.files?.[0];
+    picker.value = '';
+    if (!file) return;
+    btn.disabled = true;
+    window.yuvomi?.showToast(t('pantry.photoReading'), 'default', 6000);
+    try {
+      const image = await photoToJpegDataUrl(file);
+      const res = await api.post('/pantry/photo-scan', { image });
+      const items = res.data?.items ?? [];
+      if (!items.length) {
+        window.yuvomi?.showToast(t('pantry.photoNothing'), 'warning');
+        return;
+      }
+      openPhotoReview(items);
+    } catch (err) {
+      const reason = err?.data?.reason;
+      const key = reason === 'ai_cap_reached' ? 'pantry.photoCap'
+        : (reason === 'ai_disabled' || reason === 'ai_not_configured') ? 'pantry.photoOff'
+        : 'pantry.photoFailed';
+      window.yuvomi?.showToast(t(key), 'danger');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function openPhotoReview(items) {
+  const unitOptions = (selected) => PANTRY_UNITS
+    .map((u) => `<option value="${esc(u)}"${u === selected ? ' selected' : ''}>${esc(unitLabel(u))}</option>`).join('');
+  const locationOptions = ['<option value="">' + esc(t('pantry.photoNoLocation')) + '</option>']
+    .concat(state.locations.map((loc) => `<option value="${loc.id}">${esc(locationLabel(loc.name))}</option>`)).join('');
+  const rows = items.map((item, i) => `
+    <div class="pantry-photo-row${item.sure ? '' : ' pantry-photo-row--unsure'}" data-idx="${i}">
+      <input type="checkbox" class="pantry-photo-row__pick" id="pp-pick-${i}" ${item.sure ? 'checked' : ''}
+             aria-label="${esc(t('pantry.photoKeep', { name: item.name }))}">
+      <input type="text" class="form-input pantry-photo-row__name" value="${esc(item.name)}" aria-label="${esc(t('common.nameLabel'))}">
+      <input type="number" class="form-input pantry-photo-row__qty" value="${esc(String(item.quantity))}" min="0" step="any" inputmode="decimal" aria-label="${esc(t('pantry.quantityLabel'))}">
+      <select class="form-input pantry-photo-row__unit" aria-label="${esc(t('pantry.unitLabel'))}">${unitOptions(item.unit)}</select>
+      ${item.existing_id ? `<span class="pantry-photo-row__note">${esc(t('pantry.photoMerges'))}</span>` : ''}
+    </div>`).join('');
+  const content = `
+    <p class="form-hint">${esc(t('pantry.photoReviewHint'))}</p>
+    <div class="form-group">
+      <label class="form-label" for="pantry-photo-location">${esc(t('pantry.photoLocation'))}</label>
+      <select class="form-input" id="pantry-photo-location">${locationOptions}</select>
+    </div>
+    <div class="pantry-photo-rows">${rows}</div>
+    <div class="modal-panel__footer modal-panel__footer--plain">
+      <button class="btn btn--secondary" type="button" data-photo="cancel">${esc(t('common.cancel'))}</button>
+      <button class="btn btn--primary" type="button" data-photo="apply">${esc(t('pantry.photoApply'))}</button>
+    </div>`;
+  openSharedModal({
+    title: t('pantry.photoReviewTitle'),
+    content,
+    size: 'md',
+    onSave: (panel) => {
+      panel.querySelector('[data-photo="cancel"]').addEventListener('click', () => closeSharedModal({ force: true }));
+      panel.querySelector('[data-photo="apply"]').addEventListener('click', async (e) => {
+        const button = e.currentTarget;
+        const locationId = Number(panel.querySelector('#pantry-photo-location').value) || null;
+        const chosen = [...panel.querySelectorAll('.pantry-photo-row')]
+          .filter((row) => row.querySelector('.pantry-photo-row__pick').checked)
+          .map((row) => ({
+            name: row.querySelector('.pantry-photo-row__name').value.trim(),
+            quantity: Number(row.querySelector('.pantry-photo-row__qty').value) || 1,
+            unit: row.querySelector('.pantry-photo-row__unit').value,
+            location_id: locationId,
+            category: items[Number(row.dataset.idx)]?.category ?? null,
+          }))
+          .filter((item) => item.name);
+        if (!chosen.length) { closeSharedModal({ force: true }); return; }
+        button.disabled = true;
+        const context = captureModalContext();
+        try {
+          const res = await api.post('/pantry/photo-scan/apply', { items: chosen });
+          closeSharedModal({ force: true, context });
+          await loadPantry();
+          window.yuvomi?.showToast(t('pantry.photoAdded', { added: res.data?.added ?? 0, merged: res.data?.merged ?? 0 }), 'success');
+        } catch (err) {
+          button.disabled = false;
+          window.yuvomi?.showToast(err?.message || t('common.errorGeneric'), 'danger');
+        }
+      });
+    },
   });
 }
 

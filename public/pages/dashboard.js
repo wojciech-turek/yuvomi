@@ -6,6 +6,7 @@
 
 import { api, auth } from '/api.js';
 import { openCookForMeal } from '/components/cook-mode.js';
+import { mountAiQuestion } from '/components/ai-question.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { canSeeWidget, moduleAccess, navModuleAccess, canUseFasting } from '/permissions.js';
 import { todaySheetContext, collectSourceRows, composeTodaySheet, codaAllowed, speakingSourceIds } from '/utils/today-sheet.js';
@@ -6908,6 +6909,11 @@ export async function render(container, { user, signal: routeSignal = null } = {
     user, t, api, wall: wallMode,
     before: container.querySelector('#dashboard-shell'),
     toast: (message, type) => window.yuvomi?.showToast(message, type),
+  });
+  // Yuvomi's question of the week (fork, 2026-10-19), beside the shell like the
+  // zone prompt: the shell is refilled with data, the card stays.
+  mountAiQuestion(container.querySelector('.dashboard'), {
+    api, wall: wallMode, before: container.querySelector('#dashboard-shell'),
   });
 
   // Ein Neuaufbau AUS DER SEITE HERAUS laeuft nicht durch renderPage() im

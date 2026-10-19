@@ -1,0 +1,58 @@
+{
+  "pantry.photoAdd": {
+    "en": "Add from a photo",
+    "pl": "Dodaj ze zdjęcia"
+  },
+  "pantry.photoReading": {
+    "en": "Reading the photo…",
+    "pl": "Czytam zdjęcie…"
+  },
+  "pantry.photoNothing": {
+    "en": "No products recognised in this photo. Try closer, with more light.",
+    "pl": "Nie rozpoznano produktów na zdjęciu. Spróbuj bliżej i przy lepszym świetle."
+  },
+  "pantry.photoCap": {
+    "en": "The monthly AI limit is used up. An admin can raise it in Settings > AI.",
+    "pl": "Miesięczny limit AI jest wykorzystany. Administrator może go podnieść w Ustawienia > AI."
+  },
+  "pantry.photoOff": {
+    "en": "Adding from a photo is switched off or has no API key. See Settings > AI.",
+    "pl": "Dodawanie ze zdjęcia jest wyłączone albo brakuje klucza API. Zobacz Ustawienia > AI."
+  },
+  "pantry.photoFailed": {
+    "en": "Could not read the photo. Check the connection and try again.",
+    "pl": "Nie udało się odczytać zdjęcia. Sprawdź połączenie i spróbuj ponownie."
+  },
+  "pantry.photoReviewTitle": {
+    "en": "What's in the photo",
+    "pl": "Co jest na zdjęciu"
+  },
+  "pantry.photoReviewHint": {
+    "en": "Untick what is wrong and fix names or amounts. Nothing is saved until you add it.",
+    "pl": "Odznacz to, co się nie zgadza, i popraw nazwy lub ilości. Nic nie zostanie zapisane, dopóki nie dodasz."
+  },
+  "pantry.photoLocation": {
+    "en": "Where is it?",
+    "pl": "Gdzie to jest?"
+  },
+  "pantry.photoNoLocation": {
+    "en": "No place",
+    "pl": "Bez miejsca"
+  },
+  "pantry.photoKeep": {
+    "en": "Add {{name}}",
+    "pl": "Dodaj: {{name}}"
+  },
+  "pantry.photoMerges": {
+    "en": "already in the pantry, the amount is added",
+    "pl": "już jest w spiżarni, ilość zostanie dodana"
+  },
+  "pantry.photoApply": {
+    "en": "Add to the pantry",
+    "pl": "Dodaj do spiżarni"
+  },
+  "pantry.photoAdded": {
+    "en": "Pantry updated: {{added}} new, {{merged}} topped up.",
+    "pl": "Spiżarnia zaktualizowana: nowe {{added}}, uzupełnione {{merged}}."
+  }
+}

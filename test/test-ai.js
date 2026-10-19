@@ -26,6 +26,8 @@ const { guard } = await import('../server/ai/usage.js');
 const { memoryContext } = await import('../server/ai/memory.js');
 const { default: aiRouter } = await import('../server/routes/ai.js');
 const { default: shoppingRouter } = await import('../server/routes/shopping.js');
+const { default: pantryRouter } = await import('../server/routes/pantry.js');
+const { parsePhotoDataUrl } = await import('../server/services/pantry-photo.js');
 
 db.prepare("INSERT INTO users(username, display_name, password_hash, role) VALUES ('admin', 'Wojtek', 'x', 'admin')").run();
 db.prepare("INSERT INTO users(username, display_name, password_hash, role) VALUES ('ola', 'Ola', 'x', 'member')").run();
@@ -36,6 +38,7 @@ app.use(express.json());
 app.use((req, _res, next) => { req.authUserId = role === 'admin' ? 1 : 2; req.authRole = role; next(); });
 app.use('/ai', aiRouter);
 app.use('/shopping', shoppingRouter);
+app.use('/pantry', pantryRouter);
 const server = app.listen(0, '127.0.0.1');
 const baseUrl = await new Promise((r) => server.on('listening', () => r(`http://127.0.0.1:${server.address().port}`)));
 test.after(() => server.close());
@@ -261,4 +264,113 @@ test('predictions stay empty until the household switches shopping help on', asy
   assert.ok(names.includes('Chleb'), 'every 4 days, last 4 days ago: due');
   assert.ok(!names.includes('Masło'), 'every 7 days, last 3 days ago: not yet');
   assert.equal(r.body.data.find((p) => p.name === 'Chleb').everyDays, 4);
+});
+
+// ---------------------------------------------------------------- meals
+
+test('meal ingredient suggestions: recipe, then last time, pantry marked, nothing invented without AI', async () => {
+  const { suggestIngredients } = await import('../server/services/meal-ingredient-suggest.js');
+  const recipe = db.prepare("INSERT INTO recipes (title, created_by) VALUES ('Leczo', 1)").run().lastInsertRowid;
+  db.prepare("INSERT INTO recipe_ingredients (recipe_id, name, quantity, category) VALUES (?, 'Papryka', '3 szt.', 'Obst & Gemüse'), (?, 'Kiełbasa', '300 g', 'Sonstiges')").run(recipe, recipe);
+  const fromRecipe = await suggestIngredients({ title: 'leczo', allowAi: false });
+  assert.equal(fromRecipe.source, 'recipe');
+  assert.deepEqual(fromRecipe.ingredients.map((i) => i.name), ['Papryka', 'Kiełbasa']);
+  assert.equal(fromRecipe.ingredients[1].category, 'Fleisch & Fisch', 'a catch-all category is replaced by the keyword guess');
+
+  const meal = db.prepare("INSERT INTO meals (date, meal_type, title, created_by) VALUES ('2026-10-01', 'dinner', 'Leczo', 1)").run().lastInsertRowid;
+  db.prepare("INSERT INTO meal_ingredients (meal_id, name, quantity, category) VALUES (?, 'Cukinia', '1', 'Obst & Gemüse'), (?, 'Cebula', '2', 'Obst & Gemüse')").run(meal, meal);
+  db.prepare("INSERT INTO pantry_items (name, quantity, unit) VALUES ('Cebula', 3, 'pcs')").run();
+  const fromHistory = await suggestIngredients({ title: '  LECZO ', allowAi: false });
+  assert.equal(fromHistory.source, 'history', 'what we cooked last time beats the recipe of the same name');
+  assert.deepEqual(fromHistory.ingredients.map((i) => [i.name, i.in_pantry]), [['Cukinia', false], ['Cebula', true]]);
+
+  const linked = await suggestIngredients({ title: 'Leczo', recipeId: recipe, allowAi: false });
+  assert.equal(linked.source, 'recipe', 'a linked recipe beats history');
+
+  const unknown = await suggestIngredients({ title: 'Coś nowego', allowAi: false });
+  assert.deepEqual(unknown, { source: null, ingredients: [] });
+});
+
+// ---------------------------------------------------------------- pantry photo
+
+test('pantry photo: only real images of sane size are accepted', () => {
+  const body = 'A'.repeat(4000);
+  assert.deepEqual(parsePhotoDataUrl(`data:image/jpeg;base64,${body}`), { mediaType: 'image/jpeg', data: body });
+  assert.equal(parsePhotoDataUrl(`data:image/gif;base64,${body}`), null);
+  assert.equal(parsePhotoDataUrl('data:image/png;base64,AAAA'), null, 'too small to be a photo');
+  assert.equal(parsePhotoDataUrl('https://example.com/a.jpg'), null);
+});
+
+test('pantry photo: switched off answers with a reason, never a model call', async () => {
+  await call('PUT', '/ai/config', { features: { pantry_photo: false } });
+  const r = await call('POST', '/pantry/photo-scan', { image: `data:image/jpeg;base64,${'A'.repeat(4000)}` });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.reason, 'ai_disabled');
+  assert.equal(db.prepare("SELECT COUNT(*) AS c FROM ai_usage WHERE feature = 'pantry_photo'").get().c, 0);
+  const bad = await call('POST', '/pantry/photo-scan', { image: 'not a photo' });
+  assert.equal(bad.status, 400);
+});
+
+test('pantry photo apply: new items are added, matching ones topped up', async () => {
+  db.prepare("INSERT INTO pantry_items (name, quantity, unit) VALUES ('Ryż', 1, 'pkg')").run();
+  const r = await call('POST', '/pantry/photo-scan/apply', { items: [
+    { name: 'ryż', quantity: 2, unit: 'pkg' },
+    { name: 'Passata pomidorowa', quantity: 3, unit: 'jar' },
+  ] });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.data, { added: 1, merged: 1 });
+  assert.equal(db.prepare("SELECT quantity FROM pantry_items WHERE name = 'Ryż'").get().quantity, 3);
+  assert.equal(db.prepare("SELECT unit FROM pantry_items WHERE name = 'Passata pomidorowa'").get().unit, 'jar');
+  assert.equal((await call('POST', '/pantry/photo-scan/apply', { items: [] })).status, 400);
+});
+
+// ---------------------------------------------------------------- questions, heads-up, schedule
+
+test('answering a question stores its memory sentence; dismissing closes it', async () => {
+  const insert = db.prepare('INSERT INTO ai_questions (topic, question, options_json) VALUES (?, ?, ?)');
+  const id = insert.run('meals', 'Czy jecie ryby?', JSON.stringify([
+    { label: 'Tak, chętnie', memory: 'Lubimy ryby.' },
+    { label: 'Nie', memory: 'Nie jemy ryb.' },
+  ])).lastInsertRowid;
+  const open = await call('GET', '/ai/questions/open');
+  assert.deepEqual(open.body.data.options, ['Tak, chętnie', 'Nie'], 'labels only, not the sentences behind them');
+  assert.equal((await call('POST', `/ai/questions/${id}/answer`, { option: 5 })).status, 400);
+  const answer = await call('POST', `/ai/questions/${id}/answer`, { option: 1 });
+  assert.equal(answer.status, 200);
+  assert.equal(answer.body.data.memory.text, 'Nie jemy ryb.');
+  assert.equal(answer.body.data.memory.source, 'answer');
+  assert.equal((await call('POST', `/ai/questions/${id}/answer`, { option: 0 })).status, 404, 'answered once');
+  const id2 = insert.run('shopping', 'Gdzie robicie zakupy?', JSON.stringify([{ label: 'Biedronka', memory: 'Zakupy robimy w Biedronce.' }, { label: 'Różnie', memory: '' }])).lastInsertRowid;
+  assert.equal((await call('POST', `/ai/questions/${id2}/dismiss`)).status, 204);
+  assert.equal((await call('GET', '/ai/questions/open')).body.data, null);
+});
+
+test('heads-up: nothing planned for tomorrow, but only for households that plan', async () => {
+  const { pickNudge } = await import('../server/ai/nudges.js');
+  const features = { nudges: true, shopping_smart: true };
+  db.prepare('DELETE FROM meals').run();
+  assert.equal(pickNudge({ today: '2026-10-19', features }), null, 'a household that does not plan is not nagged');
+  const add = db.prepare("INSERT INTO meals (date, meal_type, title, created_by) VALUES (?, 'lunch', 'Obiad', 1)");
+  for (const d of ['2026-10-15', '2026-10-17', '2026-10-19']) add.run(d);
+  const nudge = pickNudge({ today: '2026-10-19', features });
+  assert.equal(nudge.kind, 'no-plan');
+  assert.equal(nudge.url, '/meals?ideas=2026-10-20');
+  assert.ok(nudge.title && nudge.body, 'fixed, translated sentences');
+  add.run('2026-10-20');
+  assert.notEqual(pickNudge({ today: '2026-10-19', features })?.kind, 'no-plan');
+  assert.equal(pickNudge({ today: '2026-10-19', features: { nudges: false, shopping_smart: true } }), null, 'switched off');
+});
+
+test('schedule: the daily heads-up runs once per day, after 17:30 household time', async () => {
+  const { runAiTick, wallClock } = await import('../server/ai/scheduler.js');
+  db.prepare("INSERT INTO sync_config (key, value) VALUES ('household_timezone', 'Europe/Warsaw') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+  assert.deepEqual(wallClock(new Date('2026-10-19T15:45:00Z'), 'Europe/Warsaw'), { hour: 17, minute: 45, weekday: 'Mon' });
+  db.prepare("DELETE FROM sync_config WHERE key IN ('ai_nudge_last_day', 'ai_weekly_last')").run();
+  assert.deepEqual(await runAiTick(new Date('2026-10-19T14:00:00Z')), {}, '16:00 in Warsaw: too early');
+  const first = await runAiTick(new Date('2026-10-19T15:45:00Z'));
+  assert.ok(first.daily, 'ran at 17:45');
+  assert.deepEqual(await runAiTick(new Date('2026-10-19T16:30:00Z')), {}, 'not twice the same day');
+  await call('PUT', '/ai/config', { enabled: false });
+  assert.deepEqual(await runAiTick(new Date('2026-10-20T16:00:00Z')), { skipped: 'disabled' });
+  await call('PUT', '/ai/config', { enabled: true });
 });

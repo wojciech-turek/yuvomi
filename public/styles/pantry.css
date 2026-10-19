@@ -530,3 +530,37 @@
 .pantry-swipe::after {
   display: none;
 }
+
+/* ADD FROM A PHOTO (fork, 2026-10-19): the review list of drafts. Unsure
+ * guesses start unticked and read quieter. */
+.pantry-photo-rows {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.pantry-photo-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 5rem 9rem;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pantry-photo-row--unsure .pantry-photo-row__name {
+  color: var(--color-text-secondary);
+}
+
+.pantry-photo-row__note {
+  grid-column: 2 / -1;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+@media (max-width: 639px) {
+  .pantry-photo-row {
+    grid-template-columns: auto minmax(0, 1fr) 4.5rem;
+  }
+
+  .pantry-photo-row__unit {
+    grid-column: 2 / -1;
+  }
+}

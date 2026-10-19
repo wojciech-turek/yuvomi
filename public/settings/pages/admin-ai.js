@@ -142,6 +142,9 @@ function renderPage(container, cfg, memories) {
         </select>
         <button class="btn btn--secondary" type="submit">${esc(t('ai.memoryAdd'))}</button>
       </form>
+      <div class="settings-form-actions">
+        <button class="btn btn--ghost" id="ai-ask-now" type="button">${esc(t('ai.askNow'))}</button>
+      </div>
     </section>
   `);
   window.lucide?.createIcons({ el: container });
@@ -212,6 +215,20 @@ function renderPage(container, cfg, memories) {
       toast(t('ai.testOk'), 'success');
     } catch (error) {
       errorHost.replaceChildren(createInlineError(error.message || t('common.errorGeneric')));
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  container.querySelector('#ai-ask-now').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const res = await api.post('/ai/questions/ask-now', {});
+      await redrawMemory();
+      toast(res.data?.question ? t('ai.askNowDone') : t('ai.askNowNone'), res.data?.question ? 'success' : 'default');
+    } catch (error) {
+      toast(error.message || t('common.errorGeneric'), 'danger');
     } finally {
       button.disabled = false;
     }

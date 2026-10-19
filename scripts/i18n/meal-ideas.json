@@ -1,0 +1,38 @@
+{
+  "meals.ideasMenu": {
+    "en": "Suggest a meal",
+    "pl": "Podpowiedz posiłek"
+  },
+  "meals.ideasTitle": {
+    "en": "Meal ideas",
+    "pl": "Pomysły na posiłek"
+  },
+  "meals.ideasDay": {
+    "en": "Day",
+    "pl": "Dzień"
+  },
+  "meals.ideasMeal": {
+    "en": "Meal",
+    "pl": "Posiłek"
+  },
+  "meals.ideasAsk": {
+    "en": "Show ideas",
+    "pl": "Pokaż pomysły"
+  },
+  "meals.ideasLoading": {
+    "en": "Thinking about what you like and have at home…",
+    "pl": "Myślę o tym, co lubicie i macie w domu…"
+  },
+  "meals.ideasNone": {
+    "en": "No ideas this time. Try again or plan by hand.",
+    "pl": "Tym razem brak pomysłów. Spróbuj ponownie albo zaplanuj ręcznie."
+  },
+  "meals.ideasFailed": {
+    "en": "Could not get ideas. Check the connection and try again.",
+    "pl": "Nie udało się pobrać pomysłów. Sprawdź połączenie i spróbuj ponownie."
+  },
+  "meals.ideasPlan": {
+    "en": "Plan this",
+    "pl": "Zaplanuj"
+  }
+}

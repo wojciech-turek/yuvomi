@@ -11086,6 +11086,26 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 252,
+    description: 'AI: questions Yuvomi asks the household to learn its preferences',
+    // One open question at a time, with ready answers; each answer carries the
+    // memory sentence it becomes, so answering costs no model call (fork, 2026-10-19).
+    up: `
+      CREATE TABLE IF NOT EXISTS ai_questions (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic        TEXT    NOT NULL DEFAULT 'household' CHECK(topic IN ('household', 'meals', 'shopping')),
+        question     TEXT    NOT NULL,
+        options_json TEXT    NOT NULL,
+        status       TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'answered', 'dismissed')),
+        answer       TEXT,
+        answered_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        answered_at  TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_questions_status ON ai_questions(status, created_at);
+    `,
+  },
 ];
 
 /**

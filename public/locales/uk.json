@@ -984,7 +984,25 @@
         "deleteMealNamed": "Видалити {{title}}",
         "dragHandle": "Перетягнути {{title}} на інший день",
         "openRecipeNamed": "Відкрити рецепт {{title}}",
-        "viewRecipeNamed": "Переглянути рецепт {{title}}"
+        "viewRecipeNamed": "Переглянути рецепт {{title}}",
+        "suggestLoading": "Looking for ingredients…",
+        "suggestTitle": "Suggested ingredients",
+        "suggestFromRecipe": "from the recipe",
+        "suggestFromHistory": "from last time",
+        "suggestFromAi": "suggested by AI",
+        "suggestInPantry": "in the pantry",
+        "suggestAdd": "Add ticked",
+        "suggestDismiss": "Not now",
+        "toShoppingListAction": "Add to shopping list",
+        "ideasMenu": "Suggest a meal",
+        "ideasTitle": "Meal ideas",
+        "ideasDay": "Day",
+        "ideasMeal": "Meal",
+        "ideasAsk": "Show ideas",
+        "ideasLoading": "Thinking about what you like and have at home…",
+        "ideasNone": "No ideas this time. Try again or plan by hand.",
+        "ideasFailed": "Could not get ideas. Check the connection and try again.",
+        "ideasPlan": "Plan this"
     },
     "calendar": {
         "searchOpen": "Пошук подій",
@@ -6302,7 +6320,21 @@
             "bag_few": "пакети",
             "bag_many": "пакетів",
             "bag_other": "пакета"
-        }
+        },
+        "photoAdd": "Add from a photo",
+        "photoReading": "Reading the photo…",
+        "photoNothing": "No products recognised in this photo. Try closer, with more light.",
+        "photoCap": "The monthly AI limit is used up. An admin can raise it in Settings > AI.",
+        "photoOff": "Adding from a photo is switched off or has no API key. See Settings > AI.",
+        "photoFailed": "Could not read the photo. Check the connection and try again.",
+        "photoReviewTitle": "What's in the photo",
+        "photoReviewHint": "Untick what is wrong and fix names or amounts. Nothing is saved until you add it.",
+        "photoLocation": "Where is it?",
+        "photoNoLocation": "No place",
+        "photoKeep": "Add {{name}}",
+        "photoMerges": "already in the pantry, the amount is added",
+        "photoApply": "Add to the pantry",
+        "photoAdded": "Pantry updated: {{added}} new, {{merged}} topped up."
     },
     "inventory": {
         "title": "Інвентар",
@@ -6798,6 +6830,19 @@
         "memoryDeleted": "Sentence removed.",
         "topicHousehold": "Home",
         "topicMeals": "Meals",
-        "topicShopping": "Shopping"
+        "topicShopping": "Shopping",
+        "questionLabel": "A question from Yuvomi",
+        "questionSkip": "Skip",
+        "questionRemembered": "Noted: {{text}}",
+        "questionThanks": "Thanks, noted.",
+        "pushNoPlanTitle": "Nothing planned for tomorrow",
+        "pushNoPlanBody": "Tap for three ideas that fit what you like and have at home.",
+        "pushRunningLowTitle": "Probably running low",
+        "pushRunningLowBody": "{{items}}. Tap to put them on the list.",
+        "pushQuestionTitle": "Yuvomi has a question",
+        "pushQuestionBody": "One tap, and the suggestions get better.",
+        "askNow": "Ask a question now",
+        "askNowDone": "There is a new question on the dashboard.",
+        "askNowNone": "No new question right now; the memory may already cover the basics."
     }
 }

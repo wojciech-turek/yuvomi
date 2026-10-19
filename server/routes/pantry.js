@@ -21,6 +21,9 @@ import { normalizePantryUnit, normalizePantryQuantity } from '../../public/utils
 import { syncPantryExpiryReminder, resolvePantryAccess } from '../services/pantry-reminders.js';
 import { todayKey as householdToday } from '../utils/timezone.js';
 import { mayReadModule } from '../permissions.js';
+import { scanPantryPhoto, parsePhotoDataUrl } from '../services/pantry-photo.js';
+import { sendAiError } from '../ai/http.js';
+import { nameKey } from '../utils/name-key.js';
 
 const log = createLogger('Pantry');
 const router = express.Router();
@@ -313,6 +316,72 @@ router.delete('/locations/:locId', (req, res) => {
 // zwar vor der Listensuche, damit ein 404 keine Listen-ID bestaetigt.
 // Response: { data: { added, merged, skipped } }
 // --------------------------------------------------------
+// --------------------------------------------------------
+// POST /api/v1/pantry/photo-scan (fork, 2026-10-19)
+// Body: { image: 'data:image/jpeg;base64,…' } (the browser shrinks it first)
+// A photo of a cupboard or fridge becomes DRAFT items for a person to check;
+// nothing is stored here. AI must be on (feature pantry_photo).
+// Response: { data: { items: { name, quantity, unit, category, sure, existing_id }[] } }
+// --------------------------------------------------------
+router.post('/photo-scan', async (req, res) => {
+  try {
+    const image = parsePhotoDataUrl(req.body?.image);
+    if (!image) return res.status(400).json({ error: 'Send one JPEG, PNG or WebP photo under 4.5 MB.', code: 400, reason: 'pantry_photo_invalid' });
+    const items = await scanPantryPhoto({ image, userId: req.authUserId });
+    res.json({ data: { items } });
+  } catch (err) {
+    sendAiError(res, err, 'POST /photo-scan');
+  }
+});
+
+// --------------------------------------------------------
+// POST /api/v1/pantry/photo-scan/apply (fork, 2026-10-19)
+// Body: { items: { name, quantity, unit, location_id?, category? }[] }
+// Stores the checked drafts in one transaction. An item whose name, unit and
+// place match an existing one without a best-before date adds to its amount;
+// everything else becomes a new item.
+// Response: { data: { added: number, merged: number } }
+// --------------------------------------------------------
+router.post('/photo-scan/apply', (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.items) ? req.body.items : null;
+    if (!list || !list.length || list.length > 100) return res.status(400).json({ error: 'Send between 1 and 100 items.', code: 400 });
+    const prepared = [];
+    for (const raw of list) {
+      const { values, errors } = validateItemFields({ name: raw?.name, quantity: raw?.quantity, unit: raw?.unit, location_id: raw?.location_id ?? null, category: raw?.category ?? null });
+      if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+      prepared.push(values);
+    }
+    const userId = req.authUserId || req.session?.userId || null;
+    const result = db.get().transaction(() => {
+      let added = 0;
+      let merged = 0;
+      const existing = db.get().prepare('SELECT id, name, unit, location_id, quantity FROM pantry_items WHERE expires_on IS NULL').all();
+      for (const v of prepared) {
+        const match = existing.find((e) => nameKey(e.name) === nameKey(v.name) && e.unit === v.unit && (e.location_id ?? null) === (v.location_id ?? null));
+        if (match) {
+          const quantity = Math.round((Number(match.quantity ?? 0) + Number(v.quantity)) * 1000) / 1000;
+          db.get().prepare('UPDATE pantry_items SET quantity = ? WHERE id = ?').run(quantity, match.id);
+          match.quantity = quantity;
+          merged++;
+        } else {
+          const info = db.get().prepare(`
+            INSERT INTO pantry_items (name, quantity, unit, location_id, category, expires_on, min_quantity, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?)
+          `).run(v.name, v.quantity, v.unit, v.location_id, v.category, userId);
+          existing.push({ id: info.lastInsertRowid, name: v.name, unit: v.unit, location_id: v.location_id, quantity: v.quantity });
+          added++;
+        }
+      }
+      return { added, merged };
+    })();
+    res.status(201).json({ data: result });
+  } catch (err) {
+    log.error('POST /photo-scan/apply error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
 router.post('/import-shopping', (req, res) => {
   try {
     if (!mayReadModule(req, 'shopping')) {

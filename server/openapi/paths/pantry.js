@@ -33,6 +33,12 @@ export function pantryPaths() {
         requestBody: jsonBody(null),
       }),
     },
+    '/api/v1/pantry/photo-scan': {
+      post: op({ summary: 'Read a photo of a cupboard or fridge into draft pantry items (AI, nothing stored)', tag: 'Pantry', stateChanging: true, requestBody: jsonBody(null) }),
+    },
+    '/api/v1/pantry/photo-scan/apply': {
+      post: op({ summary: 'Store checked draft pantry items, merging into matching existing items', tag: 'Pantry', stateChanging: true, requestBody: jsonBody(null) }),
+    },
     '/api/v1/pantry/{itemId}': {
       put: op({ summary: 'Replace pantry item', tag: 'Pantry', params: [idParam('itemId', 'Item ID')], stateChanging: true, requestBody: jsonBody(null) }),
       patch: op({ summary: 'Partially update pantry item', tag: 'Pantry', params: [idParam('itemId', 'Item ID')], stateChanging: true, requestBody: jsonBody(null) }),

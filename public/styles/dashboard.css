@@ -7232,3 +7232,40 @@ button.today-cockpit__more--link {
  * weder Umbruch noch Ellipse an den umgestellten Klassen.
  * Guard: test-dashboard-clarity.js (die genannten Klassen stehen auf
  * Leiter-Tokens). */
+
+/* YUVOMI'S QUESTION (fork, 2026-10-19): one quiet card above the dashboard. */
+.ai-question {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.ai-question__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+
+.ai-question__text {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ai-question__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ai-question__done {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
