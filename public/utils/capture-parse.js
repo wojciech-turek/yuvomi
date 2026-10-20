@@ -435,6 +435,30 @@ function parseItem(segment) {
   return { name: s, quantity: null, unit: null, amountText: null, hasUnit: false };
 }
 
+/**
+ * After an amount Polish puts the noun in the genitive ("2 mleka", "500 g
+ * masła"). The list wants the name the household would write on its own
+ * ("Mleko", "Masło"), which is also the name the shop's aisles are learned
+ * under. A small table of the everyday cases; everything else stays as typed.
+ * Keys are folded (no diacritics, lower case); values keep their diacritics.
+ */
+const NOMINATIVE = {
+  mleka: 'mleko', masla: 'masło', jajek: 'jajka', jaj: 'jajka', chleba: 'chleb', bulek: 'bułki',
+  maki: 'mąka', cukru: 'cukier', soli: 'sól', ziemniakow: 'ziemniaki', pomidorow: 'pomidory',
+  ogorkow: 'ogórki', jablek: 'jabłka', bananow: 'banany', cytryn: 'cytryny', cebuli: 'cebula',
+  marchewki: 'marchewka', papryki: 'papryka', sera: 'ser', jogurtow: 'jogurty', jogurtu: 'jogurt',
+  smietany: 'śmietana', wody: 'woda', soku: 'sok', kawy: 'kawa', herbaty: 'herbata', ryzu: 'ryż',
+  makaronu: 'makaron', kaszy: 'kasza', piwa: 'piwo', wina: 'wino', szynki: 'szynka',
+  kurczaka: 'kurczak', miesa: 'mięso', parowek: 'parówki', pieluch: 'pieluchy', chusteczek: 'chusteczki',
+};
+
+/** "masła" -> "masło" when it is the first word after an amount; else unchanged. */
+function nominative(name) {
+  const [first, ...rest] = name.trim().split(/\s+/);
+  const hit = NOMINATIVE[fold(first ?? '')];
+  return hit ? [hit, ...rest].join(' ') : name;
+}
+
 // ── Assembly ────────────────────────────────────────────────────────────────
 
 function emptyResult(type) {
@@ -738,7 +762,7 @@ function parse(text, { now = new Date(), members = [], type, weekStart = 1 }) {
       const clean = remainder(text, tokens, s, e);
       if (!clean) continue;
       const item = parseItem(clean);
-      const name = upperFirst(item.name.trim());
+      const name = upperFirst((item.quantity != null ? nominative(item.name) : item.name).trim());
       if (!name) continue;
       items.push({ name, quantity: item.quantity, unit: item.unit });
       if (item.amountText) {

@@ -79,16 +79,20 @@ test('amounts: "2 mleka" is shopping with quantity, never a time', () => {
   const r = p('2 mleka');
   assert.equal(r.type, 'shopping');
   assert.equal(r.time, null);
-  assert.deepEqual(r.items, [{ name: 'Mleka', quantity: 2, unit: null }]);
+  assert.deepEqual(r.items, [{ name: 'Mleko', quantity: 2, unit: null }]);
   assert.deepEqual(r.tokens, [{ kind: 'amount', text: '2', value: { quantity: 2, unit: null } }]);
 });
 
 test('amounts with units, decimals and multipliers', () => {
-  assert.deepEqual(p('500 g mąki').items, [{ name: 'Mąki', quantity: 500, unit: 'g' }]);
+  assert.deepEqual(p('500 g mąki').items, [{ name: 'Mąka', quantity: 500, unit: 'g' }]);
+  // After an amount the genitive becomes the list name the household writes.
+  assert.equal(p('500 g masła').items[0].name, 'Masło');
+  assert.equal(p('2 kostki masła', { type: 'shopping' }).items[0].name, 'Kostki masła', 'unknown first words stay as typed');
+  assert.equal(p('mleka').items.length ? p('mleka').items[0].name : 'Mleka', 'Mleka', 'without an amount nothing is changed');
   const r = p('1,5 kg ziemniaków, chleb x2, 3 szt. jajka, 2x masło');
   assert.equal(r.type, 'shopping');
   assert.deepEqual(r.items, [
-    { name: 'Ziemniaków', quantity: 1.5, unit: 'kg' },
+    { name: 'Ziemniaki', quantity: 1.5, unit: 'kg' },
     { name: 'Chleb', quantity: 2, unit: null },
     { name: 'Jajka', quantity: 3, unit: 'szt' },
     { name: 'Masło', quantity: 2, unit: null },

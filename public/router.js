@@ -2507,7 +2507,10 @@ function dockFabAsGhost(fab, slot) {
   if (captureTypeForRoute(topLevelSection(routerState.currentPath || location.pathname)) !== 'auto') return false;
   // Hoechstens zwei Geisterkreise im Kopf (spec-components „Nagłówek"): traegt
   // er schon zwei (Suche, Werkzeuge), bleibt das „Neu" im Erfassen-Blatt.
-  const shown = [...slot.children].filter((el) => !el.hidden && el.getClientRects().length);
+  // Gezaehlt wird im GANZEN Kopf (die Suche steht oft im Center-Slot).
+  const toolbar = slot.closest('.page-toolbar') ?? slot;
+  const shown = [...toolbar.querySelectorAll('.btn--icon, .page-search:not(.page-search--field)')]
+    .filter((el) => !el.hidden && !el.closest('[hidden], [popover]') && el.getClientRects().length);
   if (shown.length >= 2) return false;
   fab.classList.add('page-fab--ghost');
   syncFabName(fab);
