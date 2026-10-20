@@ -1476,7 +1476,8 @@
         "checkConflict": "تم تغيير الملاحظة في هذه الأثناء. سيتم إعادة تحميلها.",
         "pinnedState": "مثبتة",
         "checklistDone": "منجز",
-        "checklistOpen": "مفتوح"
+        "checklistOpen": "مفتوح",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "عريض (Ctrl+B)",

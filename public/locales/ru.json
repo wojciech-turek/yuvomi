@@ -1402,7 +1402,8 @@
         "checkConflict": "Заметка была изменена. Она будет загружена заново.",
         "pinnedState": "Закреплена",
         "checklistDone": "Выполнено",
-        "checklistOpen": "Открыто"
+        "checklistOpen": "Открыто",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Жирный (Ctrl+B)",

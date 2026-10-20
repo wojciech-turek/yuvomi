@@ -1,0 +1,554 @@
+/**
+ * Tafla module pages: the shared building blocks
+ * Purpose: ONE vocabulary for the pages behind Więcej (Notatki, Urodziny,
+ *          Kontakty, Dokumenty, Zdrowie, Sprzątanie, Szukaj ...): the inset
+ *          grouped list and its row, the preview tile, the status pill, the
+ *          neutral initial disc, the E1 hero card and the pill buttons.
+ *
+ * Spec: "Lista grupowana + wiersz", "Kafelek podglądu", "Status pill",
+ * "Chipy" (design brief, spec-components.json). Dziś draws the same shapes
+ * with its own `.day-*` classes in dashboard.css (that sheet only loads on
+ * the start page); this sheet is global so every module page can use them.
+ *
+ * Geometry (iPhone): rows 48 / 64, padded 0 16; a 28 leading slot + 12 gap
+ * puts every title at x=56 inside its card, and the hairlines are inset to
+ * the same column. Group header outside the card: 17/600 ink + count 17/400
+ * ink-2, 8 above the card, 24 between groups (the page's gap).
+ *
+ * Colour: ink on white cards; violet only on what acts (primary, secondary,
+ * plain verbs); status is a word in a tinted pill, shown only when it calls
+ * for action and never down a whole list. Person colour comes from
+ * person-color.js (`.person-disc`); people WITHOUT an account get the
+ * neutral `.initial-disc`.
+ */
+
+/* --------------------------------------------------------
+ * Group: header + card
+ * -------------------------------------------------------- */
+
+.inset-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.inset-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.inset-group__count {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+/* A plain-language footer under a card: 13/400 ink-2, two lines at most. */
+.inset-group__foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.inset-group__foot svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-block-start: 1px;
+}
+
+/* --------------------------------------------------------
+ * The card and its rows
+ * -------------------------------------------------------- */
+
+.inset-card {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.inset-card > li {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+}
+
+.inset-row {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 64px;
+  margin: 0;
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-align: start;
+  text-decoration: none;
+}
+
+.inset-row--single {
+  min-block-size: 48px;
+}
+
+button.inset-row,
+a.inset-row {
+  cursor: pointer;
+}
+
+/* The ring sits inside the row: the card clips everything outside it. */
+.inset-row:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+/* Hairlines between rows, inset to the title column (x=56). */
+.inset-card > li + li::before,
+.inset-card > .inset-row + .inset-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  button.inset-row:hover,
+  a.inset-row:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+button.inset-row:active,
+a.inset-row:active {
+  background: var(--color-fill);
+}
+
+.inset-row__lead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 28px;
+  color: var(--color-text-secondary);
+}
+
+.inset-row__lead svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.inset-row__body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* A line that carries a trailing aside (a date on the title line, a disc on
+ * the meta line). */
+.inset-row__line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.inset-row__title {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
+}
+
+.inset-row__meta {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.inset-row__aside {
+  flex: none;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.inset-row__trail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.inset-row__value {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Money and counts that ARE the answer stay ink. */
+.inset-row__value--ink {
+  color: var(--color-text-primary);
+}
+
+.inset-row__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-ink-3);
+}
+
+.inset-row__chevron svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 2;
+}
+
+/* Done or past rows step back: the title goes to ink-2. */
+.inset-row--quiet .inset-row__title {
+  color: var(--color-text-secondary);
+}
+
+/* A plain verb as the last row of a card ("Dodaj prośbę"): 48 tall, accent. */
+.inset-row--action,
+.inset-row--action .inset-row__lead {
+  color: var(--color-accent);
+}
+
+/* --------------------------------------------------------
+ * Status pill: a WORD on its tint
+ * -------------------------------------------------------- */
+
+.status-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  block-size: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+}
+
+.status-pill--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning);
+}
+
+.status-pill--danger {
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
+}
+
+.status-pill--success {
+  background: var(--color-success-tint);
+  color: var(--color-success);
+}
+
+/* --------------------------------------------------------
+ * Neutral initial disc: people without an account (birthdays, contacts)
+ * -------------------------------------------------------- */
+
+.initial-disc {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: 1;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.initial-disc img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* --------------------------------------------------------
+ * Preview tiles ("Kafelek podglądu"): 2-up, min 96 tall
+ * -------------------------------------------------------- */
+
+.preview-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.preview-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  min-block-size: 96px;
+  margin: 0;
+  padding: var(--space-4);
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+
+.preview-tile__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: 20px;
+  color: var(--color-text-secondary);
+}
+
+.preview-tile__top svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.preview-tile__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.preview-tile__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.preview-tile__note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------
+ * Hero card (E1): the one thing on the page that matters now
+ * -------------------------------------------------------- */
+
+.hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-e1);
+}
+
+.hero-card__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.hero-card__eyebrow svg {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.hero-card__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.hero-card__sub {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.hero-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.hero-card__meta svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.hero-card__divider {
+  block-size: 0.5px;
+  margin: 0;
+  border: 0;
+  background: var(--color-separator);
+}
+
+/* --------------------------------------------------------
+ * Pill buttons: one primary per screen, secondary, plain, ghost circle
+ * -------------------------------------------------------- */
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill-btn svg {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  stroke-width: 2.25;
+}
+
+.pill-btn--primary {
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+}
+
+.pill-btn--secondary {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.pill-btn--plain {
+  padding: 0;
+}
+
+.pill-btn--block {
+  inline-size: 100%;
+  min-block-size: 52px;
+}
+
+.pill-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pill-btn {
+    transition: transform var(--duration-xs) var(--ease-out);
+  }
+
+  .pill-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* A 36 ghost circle on a 44 hit (row call buttons, header-less tools). */
+.ghost-circle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: calc((var(--target-base) - 36px) / -2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ghost-circle__disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+}
+
+.ghost-circle__disc svg {
+  inline-size: 20px;
+  block-size: 20px;
+}

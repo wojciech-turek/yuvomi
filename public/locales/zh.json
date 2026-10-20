@@ -1256,7 +1256,8 @@
         "checkConflict": "便签已被修改，将重新加载。",
         "pinnedState": "已置顶",
         "checklistDone": "已完成",
-        "checklistOpen": "待处理"
+        "checklistOpen": "待处理",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "加粗 (Ctrl+B)",

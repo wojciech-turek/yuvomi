@@ -1256,7 +1256,8 @@
         "checkConflict": "A jegyzet időközben megváltozott. Újratöltjük.",
         "pinnedState": "Kitűzve",
         "checklistDone": "Kész",
-        "checklistOpen": "Nyitott"
+        "checklistOpen": "Nyitott",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Félkövér (Ctrl+B)",

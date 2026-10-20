@@ -156,3 +156,46 @@ export function housekeepingSinceLabel(since) {
   const time = formatTime(since);
   return zonedDateKey(since) === todayKey() ? time : `${relativeDateLabel(since)}, ${time}`;
 }
+
+// ---------------------------------------------------------------------------
+// Tafla row dates (2026-10-20): the short forms the module pages put in rows.
+// Same technique as above - keys of the household zone, the name from the UTC
+// noon of that key - so a row and its header never land on neighbouring days.
+// ---------------------------------------------------------------------------
+
+/** "27 paź" / "Oct 27" / "27. Okt." - day and short month, the year only when
+ *  it is not the running one. Takes a date key or an instant. */
+export function shortDayMonth(value) {
+  const day = value ? zonedDateKey(value) : '';
+  const noon = dayKeyNoonUtc(day);
+  if (!Number.isFinite(noon)) return '';
+  const options = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+  if (day.slice(0, 4) !== todayKey().slice(0, 4)) options.year = 'numeric';
+  return new Intl.DateTimeFormat(getLocale(), options).format(new Date(noon));
+}
+
+/** "wt 27 paź" - short weekday in front of `shortDayMonth`, for a day that
+ *  lies ahead (a past day never gets a weekday, see relativeDateLabel). */
+export function shortWeekdayDayMonth(value) {
+  const day = value ? zonedDateKey(value) : '';
+  const noon = dayKeyNoonUtc(day);
+  if (!Number.isFinite(noon)) return '';
+  const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: 'short', timeZone: 'UTC' })
+    .format(new Date(noon)).replace(/\.$/, '');
+  return `${weekday} ${shortDayMonth(day)}`;
+}
+
+/** When something was last touched, as a row says it: the time today,
+ *  "wczoraj", then `shortDayMonth`. Lower case, because it stands in a row
+ *  next to a title, not at the start of a sentence. */
+export function pastDateLabel(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const day = zonedDateKey(value);
+  if (!day) return '';
+  const today = todayKey();
+  if (day === today) {
+    return /T\d/.test(String(value)) ? formatTime(value) : t('common.today').toLocaleLowerCase(getLocale());
+  }
+  if (day === addLocalDays(today, -1)) return t('common.yesterday').toLocaleLowerCase(getLocale());
+  return shortDayMonth(day);
+}

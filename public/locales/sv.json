@@ -1256,7 +1256,8 @@
         "checkConflict": "Anteckningen har ändrats under tiden. Den laddas om.",
         "pinnedState": "Fäst",
         "checklistDone": "Klart",
-        "checklistOpen": "Öppet"
+        "checklistOpen": "Öppet",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Fet (Ctrl+B)",

@@ -1256,7 +1256,8 @@
         "checkConflict": "Not bu arada değişti. Yeniden yüklenecek.",
         "pinnedState": "Sabitlenmiş",
         "checklistDone": "Tamamlandı",
-        "checklistOpen": "Açık"
+        "checklistOpen": "Açık",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Kalın (Ctrl+B)",

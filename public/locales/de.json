@@ -1272,7 +1272,8 @@
         "checkConflict": "Die Notiz wurde inzwischen geändert. Sie wird neu geladen.",
         "pinnedState": "Angepinnt",
         "checklistDone": "Erledigt",
-        "checklistOpen": "Offen"
+        "checklistOpen": "Offen",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Fett (Strg+B)",

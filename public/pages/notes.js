@@ -36,33 +36,22 @@ import {
 } from '/utils/note-category-picker.js';
 import { NOTE_CATEGORY_NAME_MAX_LENGTH } from '/utils/note-category-name.js';
 import { isNavModuleReadOnly } from '/permissions.js';
+import { personDisc } from '/utils/person-color.js';
+import { initials } from '/utils/initials.js';
+import { pastDateLabel } from '/utils/day-label.js';
 
 // --------------------------------------------------------
 // Konstanten
 // --------------------------------------------------------
 
-// Gedämpfte Sticker-Palette. Die frühere Material-Primär-Palette
-// (#FFEB3B/#80DEEA/#CE93D8 …) las wie eine billigere App (Critique P3).
-// Seit dem HIG-Rollout tragen diese Werte die Karte nicht mehr als Vollfläche,
-// sondern nur noch als 16-%-Tönung darauf (siehe .note-card in notes.css) -
-// die Lesbarkeit hängt damit an keiner dieser Farben mehr, auch nicht an
-// Alt-Hex-Werten ausserhalb der Palette. Die Palette bleibt trotzdem gedämpft:
-// bei 16 % soll sie eine leise Ordnungshilfe sein, kein Signal.
+// Die Sticker-Palette. Seit Tafla (2026-10-20) faerbt sie keine Karte mehr -
+// eine Notiz behaelt ihre gespeicherte Farbe (Alt-Daten, andere Clients), eine
+// neue bekommt die erste. Farbe hat in Tafla drei Aufgaben (Handeln, Person,
+// Zustand), ein Zettelton ist keine davon.
 const NOTE_COLORS = [
   '#EFE3BE', '#E7D2A9', '#D2DEC6', '#C7DED9',
   '#CAD8E4', '#D8D0E2', '#EBD1C2', '#FBFAF7',
 ];
-
-const NOTE_COLOR_NAMES = () => ({
-  '#EFE3BE': t('notes.colorYellow'),
-  '#E7D2A9': t('notes.colorAmber'),
-  '#D2DEC6': t('notes.colorGreen'),
-  '#C7DED9': t('notes.colorTeal'),
-  '#CAD8E4': t('notes.colorBlue'),
-  '#D8D0E2': t('notes.colorPurple'),
-  '#EBD1C2': t('notes.colorOrange'),
-  '#FBFAF7': t('notes.colorWhite'),
-});
 
 // --------------------------------------------------------
 // State
@@ -245,7 +234,7 @@ export async function render(container, { user, signal }) {
   // waehrend das Raster daneben weiterlaeuft, oder das Raster auf zwei bis drei
   // Spalten stutzen. Kopf und Koerper enden deshalb beide an der Nutzbreite.
   container.insertAdjacentHTML('beforeend', `
-    <div class="notes-page app-page app-page--full" data-composition="full">
+    <div class="notes-page app-page app-page--reading" data-composition="reading">
       <div class="page-toolbar page-toolbar--title-tools notes-toolbar">
         <h1 class="page-toolbar__title">${t('notes.title')}</h1>
         ${renderPageSearch({ id: 'notes-search', label: t('notes.searchPlaceholder'), placeholder: t('notes.searchPlaceholder'), value: state.filterQuery, clearLabel: t('common.searchClear'), className: 'notes-toolbar__search page-toolbar__center' })}
@@ -409,7 +398,11 @@ function renderFilters() {
     || state.filterCategoryIds.includes(Number(category.id))
   ));
 
-  row.hidden = creators.length < 2 && filterCategories.length === 0;
+  // TAFLA (2026-10-20): the author filter starts at THREE authors. With two
+  // adults the disc on a row already says whose note it is (person rule), and
+  // "Wszystkie / Wojtek / Mariola" was a row of chips that repeated it.
+  const showCreators = creators.length >= 3;
+  row.hidden = !showCreators && filterCategories.length === 0;
   row.removeAttribute('aria-hidden');
   delete row.dataset.pending;
   const focused = row.contains(document.activeElement) ? document.activeElement : null;
@@ -430,7 +423,7 @@ function renderFilters() {
     return chip;
   };
 
-  if (creators.length >= 2) {
+  if (showCreators) {
     const group = document.createElement('div');
     group.className = 'notes-filter-group';
     group.setAttribute('role', 'group');
@@ -549,35 +542,28 @@ function drawGrid(grid) {
     return;
   }
 
-  // Angepinnte Notizen standen schon immer vorn, aber ohne sichtbare Grenze:
-  // die Trennung war nur aus dem Ring an der Karte zu erschließen. Zwei
-  // Abschnittsköpfe machen die bestehende Sortierung lesbar. Sie erscheinen
-  // nur, wenn es tatsächlich beide Gruppen gibt.
+  // TAFLA (2026-10-20): PINNED AS TILES, THE REST AS ROWS. The masonry of
+  // sticky notes became two groups the eye can read at once: "Przypięte" as
+  // 2-up preview tiles (title + two lines), then "Ostatnie" as one grouped
+  // list of 64 rows (title, date, one-line preview, the author's disc when
+  // it is someone else's note). The order is the server's (pinned first,
+  // then the most recently changed).
+  //
+  // Every group has a header, so a note's title is always an h3 under the
+  // group's h2 (R8 H15: no skipped level).
   const pinned = visible.filter((n) => n.pinned);
   const rest   = visible.filter((n) => !n.pinned);
-  // EIN LISTEN-GRUPPENKOPF (D8, Critique 2026-10-16): „Angepinnt" stand als
-  // 20px-Abschnittstitel ueber den Karten - eine Stufe, die DESIGN.md dem
-  // Titel einer Flaeche gibt, nicht der Gruppe in einer Liste. Jetzt das
-  // Versal-Mikro-Label aus list-row.css wie in Aufgaben und Kontakten.
-  const heading = (label) => `<h2 class="notes-group__title list-group__title">${label}</h2>`;
-
-  // Der Notiztitel ist eine echte Ueberschrift (R8 H15), eine Ebene unter
-  // dem, was darueber steht: unter den Gruppenkoepfen (h2) ein h3, sonst
-  // direkt unter dem Seitentitel (h1) ein h2 - keine uebersprungene Ebene.
-  //
-  // JEDE GRUPPE BEGINNT EINE EIGENE ZEILE (R19, Critique 2026-10-16). Seit
-  // R17 reihte sich der Kopf "Weitere Notizen" in die angebrochene letzte
-  // Zeile der angepinnten ein, und seine Karten liefen darunter ab Spalte 1
-  // weiter - bei 1440 stand "Buchempfehlungen" unter "WLAN & Smart Home", als
-  // gehoerte sie dazu. Die Koepfe spannen wieder ueber alle Spalten; die
-  // Luecke daneben ist der Preis der eindeutigen Gruppe (Apple Notizen
-  // trennt "Angepinnt" ebenso). Mit grid-lanes (notes.css) entfaellt sie.
-  const grouped = Boolean(pinned.length && rest.length);
-  const card = (n) => renderNoteCard(n, { headingLevel: grouped ? 3 : 2 });
-  const html = grouped
-    ? heading(t('notes.groupPinned')) + pinned.map(card).join('')
-      + heading(t('notes.groupOthers')) + rest.map(card).join('')
-    : visible.map(card).join('');
+  const head = (id, label, count) => `<h2 class="inset-group__head notes-group__title" id="${id}">${esc(label)}<span class="inset-group__count">${count}</span></h2>`;
+  const html = [
+    pinned.length ? `<section class="inset-group notes-group" aria-labelledby="notes-head-pinned">
+      ${head('notes-head-pinned', t('notes.groupPinned'), pinned.length)}
+      <div class="preview-tiles notes-tiles">${pinned.map((n) => renderNoteCard(n, { headingLevel: 3, variant: 'tile' })).join('')}</div>
+    </section>` : '',
+    rest.length ? `<section class="inset-group notes-group" aria-labelledby="notes-head-recent">
+      ${head('notes-head-recent', t('notes.groupRecent'), rest.length)}
+      <ul class="inset-card notes-list">${rest.map((n) => renderNoteCard(n, { headingLevel: 3, variant: 'row' })).join('')}</ul>
+    </section>` : '',
+  ].join('');
 
   grid.replaceChildren();
   grid.insertAdjacentHTML('beforeend', html);
@@ -641,67 +627,106 @@ export function noteName(note) {
   return line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line;
 }
 
-function renderNoteCard(note, { headingLevel = 2 } = {}) {
-  // KEINE INITIALEN AUF EINER 16px-SCHEIBE (Initialen-Schwelle-Regel).
-  //
-  // Hier standen bis zuletzt zwei Buchstaben auf einer 16-%-Waschung - unter der
-  // 20px-Schwelle, ab der die Regel Text überhaupt erlaubt, und direkt neben dem
-  // ausgeschriebenen Namen, den sie abkürzten. Die Scheibe trägt ihre Identität
-  // jetzt so, wie die Regel es vorsieht: als Farbe allein, im Vollton. Der Name
-  // steht unverändert daneben, es geht also nichts verloren.
-  //
-  // Die Zettelfarbe darüber bleibt beim gemessenen 16-%-Rezept - sie ist eine
-  // ganze Inhaltsfläche, und für die gilt die User-Farben-Regel weiter.
-  const avatarColor = note.creator_color || AVATAR_FALLBACK_COLOR;
+/**
+ * The text a tile or row previews: the first lines of the note without
+ * Markdown marks (headings, list bullets, check boxes, emphasis, link
+ * targets). The title is not repeated when the note has none - then the
+ * first line IS the name (noteName) and the preview starts after it.
+ */
+export function notePreviewLines(note, max = 2) {
+  const lines = String(note?.content || '').split('\n')
+    .map((l) => l
+      .replace(/^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s*)/, '')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // Emphasis only as a pair of marks around words: "Dom_Oli_Wojtka" keeps
+      // its underscores, "**ważne**" loses its stars.
+      .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
+      .replace(/(^|[^\p{L}\p{N}])[*_](\S(?:.*?\S)?)[*_](?![\p{L}\p{N}])/gu, '$1$2')
+      .trim())
+    .filter(Boolean);
+  const body = String(note?.title || '').trim() ? lines : lines.slice(1);
+  return body.slice(0, max);
+}
 
-  return `
-    <div class="note-card ${note.pinned ? 'note-card--pinned' : ''}"
-         data-id="${note.id}"
-         style="--note-color:${esc(note.color)};">
-      ${/* DIE KARTE OEFFNET SELBST (R9 M13, A6 P2-6). Der Oeffnen-Knopf sass
-          * als dritter 44px-Kreis in der Fusszeile, neben Nadel und Loeschen -
-          * mobil trug jede Karte damit drei Bedienkreise und war 248px hoch.
-          * Er bleibt der Tastatur- und Vorleseweg (die Karte selbst ist ein
-          * Div), liegt aber jetzt unsichtbar UEBER der ganzen Karte: der
-          * Fokusring umrahmt die Karte, ein Tipp irgendwo darauf trifft ihn,
-          * und Nadel, Loeschen und Checklisten-Haken liegen darueber
-          * (notes.css, z-index). */ ''}
-      <button type="button" class="note-card__open" data-action="open" data-id="${note.id}"
-              aria-label="${esc(t('notes.openNamed', { name: noteName(note) }))}"></button>
-      ${pinMarkup(note)}
-      ${/* ECHTE UEBERSCHRIFT STATT `div` (R8 H15): die Ueberschriften-
-          * Navigation eines Screenreaders fand bis dahin keine einzige Notiz.
-          * Die Optik traegt allein die Klasse (typography.css, notes.css);
-          * `reset.css` nimmt den UA-Rand, die Groesse setzt die Rolle. */ ''}
-      ${note.title ? `<h${headingLevel === 3 ? 3 : 2} class="note-card__title">${esc(note.title)}</h${headingLevel === 3 ? 3 : 2}>` : ''}
-      <div class="note-card__content">${renderMarkdownLight(note.content, CHECKLIST_OPTS())}</div>
-      ${(note.categories || []).length ? `<div class="note-card__categories" role="group" aria-label="${t('noteCategories.categories')}">
-        ${note.categories.map(renderCategoryBadge).join('')}
-      </div>` : ''}
-      <div class="note-card__footer">
-        <div class="note-card__creator">
-          <span class="note-card__avatar"
-                style="--avatar-color:${esc(avatarColor)};">
-            ${note.creator_avatar
-              ? `<img src="${esc(note.creator_avatar)}" alt="${esc(note.creator_name || '')}" loading="lazy">`
-              : ''}
-          </span>
-          <span>${esc(note.creator_name || '')}</span>
-        </div>
-        <div class="note-card__actions">
-          ${/* LOESCHEN IM MEHR-KNOPF (R18, D6, Critique 2026-10-16): der
-              * Papierkorb stand offen auf jeder Karte - die lauteste Farbe
-              * der Wand gehoerte der seltensten Handlung. */ ''}
-          ${readOnly() ? '' : rowMenuHtml({
+/** The author's disc - only on someone else's note (Tafla person rule). */
+function creatorDisc(note) {
+  const own = state.user && Number(note.created_by) === Number(state.user.id);
+  if (own || !note.creator_name) return '';
+  return personDisc(
+    { id: note.created_by, avatar_color: note.creator_color || AVATAR_FALLBACK_COLOR },
+    { text: initials(note.creator_name), label: note.creator_name },
+  );
+}
+
+/**
+ * One note, as a pinned TILE or a list ROW (Tafla, 2026-10-20).
+ *
+ * The note itself stays the open-button (R9 M13): an invisible button lies
+ * over the whole tile or row, so a tap anywhere opens it and the focus ring
+ * frames it. Pin and the row menu stay in the markup for pointer devices
+ * (they lie above the open-button); on touch they step aside - pinning lives
+ * in the editor, deleting in the reader's footer, and a row carries no "⋯"
+ * on a phone (spec "Lista grupowana + wiersz").
+ *
+ * No sticky-note colour any more: the note colour is kept in the data but no
+ * longer paints the card (Tafla: colour only for acting, people and state).
+ */
+function renderNoteCard(note, { headingLevel = 2, variant = 'row' } = {}) {
+  const level = headingLevel === 3 ? 3 : 2;
+  const title = String(note.title || '').trim();
+  const name = noteName(note);
+  const preview = notePreviewLines(note, variant === 'tile' ? 2 : 3);
+  const tag = variant === 'tile' ? 'div' : 'li';
+  const categories = (note.categories || []).length
+    ? `<span class="note-card__categories" role="group" aria-label="${esc(t('noteCategories.categories'))}">${note.categories.map(renderCategoryBadge).join('')}</span>`
+    : '';
+  const actions = `
+      <div class="note-card__actions">
+        ${readOnly() ? '' : rowMenuHtml({
     id: `note-menu-${note.id}`,
-    label: t('common.moreActionsNamed', { name: noteName(note) }),
+    label: t('common.moreActionsNamed', { name }),
     className: 'note-card__more',
     items: [{ action: 'delete', id: note.id, icon: 'trash-2', label: t('common.delete'), danger: true }],
   })}
-        </div>
-      </div>
-    </div>
-  `;
+      </div>`;
+  const open = `<button type="button" class="note-card__open" data-action="open" data-id="${note.id}"
+              aria-label="${esc(t('notes.openNamed', { name }))}"></button>`;
+  // ECHTE UEBERSCHRIFT STATT `div` (R8 H15): the heading navigation of a
+  // screen reader finds every note.
+  const heading = `<h${level} class="note-card__title">${esc(title || name)}</h${level}>`;
+
+  if (variant === 'tile') {
+    return `
+    <div class="note-card note-card--tile preview-tile${note.pinned ? ' note-card--pinned' : ''}" data-id="${note.id}">
+      ${open}
+      <span class="preview-tile__top"><i data-lucide="${noteGlyph(note)}" aria-hidden="true"></i>${creatorDisc(note)}</span>
+      <span class="preview-tile__body">
+        ${heading}
+        ${preview.length ? `<span class="note-card__preview preview-tile__note">${esc(preview.join('\n'))}</span>` : ''}
+      </span>
+      ${pinMarkup(note)}
+      ${actions}
+    </div>`;
+  }
+
+  return `
+    <${tag} class="note-card note-card--row inset-row${note.pinned ? ' note-card--pinned' : ''}" data-id="${note.id}">
+      ${open}
+      <span class="inset-row__lead"><i data-lucide="${noteGlyph(note)}" aria-hidden="true"></i></span>
+      <span class="inset-row__body">
+        <span class="inset-row__line">${heading}<span class="inset-row__aside">${esc(pastDateLabel(note.updated_at || note.created_at))}</span></span>
+        ${preview.length || categories || creatorDisc(note) ? `<span class="inset-row__line">
+          <span class="note-card__preview inset-row__meta">${esc(preview.join(', '))}</span>${categories}${creatorDisc(note)}
+        </span>` : ''}
+      </span>
+      ${pinMarkup(note)}
+      ${actions}
+    </${tag}>`;
+}
+
+/** A checklist reads as a list, everything else as a page of notes. */
+function noteGlyph(note) {
+  return /^\s*[-*+]\s+\[[ xX]\]/m.test(String(note?.content || '')) ? 'list-checks' : 'notepad-text';
 }
 
 // --------------------------------------------------------
@@ -858,7 +883,7 @@ function openNoteReadModal(note) {
     title: note.title && note.title.trim() ? note.title : t('notes.viewNote'),
     size: 'lg',
     content: `
-    <div class="note-modal" data-view="read" data-note-id="${note.id}" style="--note-color:${esc(note.color)};">
+    <div class="note-modal" data-view="read" data-note-id="${note.id}">
       <div class="note-read-view" data-pane="read" tabindex="-1">
         ${renderNoteReadHtml(note.content, { live: true, categories: note.categories || [] })}
       </div>
@@ -878,17 +903,14 @@ function openNoteModal({ mode, note = null }) {
   }
   const isEdit      = mode === 'edit';
   const selColor    = (isEdit ? note.color : null) || NOTE_COLORS[0];
-  // Bestehende Notizen können Farben außerhalb der Palette tragen (Alt-Daten,
-  // frühere Paletten). Die aktuelle Farbe wird dann als eigener Swatch
-  // vorangestellt: sonst wäre nichts selektiert und die Radio-Gruppe hätte
-  // keinen Tastatur-Einstieg (kein tabindex="0" im Roving-Muster).
-  const swatchColors = NOTE_COLORS.includes(selColor) ? NOTE_COLORS : [selColor, ...NOTE_COLORS];
+  // Tafla (2026-10-20): no colour picker any more - a note keeps the colour
+  // it has (old data, other clients), a new one gets the first of the palette.
   // Bestehende Notizen öffnen im Lese-Modus (#507); neue direkt im Editor.
   const initialView = isEdit ? 'read' : 'edit';
   let editorClosed = false;
 
   const content = `
-    <div class="note-modal" data-view="${initialView}"${isEdit ? ` data-note-id="${note.id}"` : ''} style="--note-color:${esc(selColor)};">
+    <div class="note-modal" data-view="${initialView}"${isEdit ? ` data-note-id="${note.id}"` : ''}>
       <div class="note-mode-switch" role="tablist" aria-label="${t('notes.modeSwitchLabel')}">
         <button type="button" id="note-tab-read" class="sub-tab${initialView === 'read' ? ' sub-tab--active' : ''}"
                 role="tab" aria-selected="${initialView === 'read' ? 'true' : 'false'}"
@@ -932,27 +954,13 @@ function openNoteModal({ mode, note = null }) {
     ${renderCategoryEditor(isEdit ? (note.categories || []).map((category) => category.id) : [])}
     ${advancedSection(`
       <div class="form-group">
-        <label class="form-label" id="note-color-label">${t('notes.colorLabel')}</label>
-        <div class="note-color-picker" role="radiogroup" aria-labelledby="note-color-label">
-          ${swatchColors.map((c) => `
-            <div class="note-color-swatch ${c === selColor ? 'note-color-swatch--active' : ''}"
-                 data-color="${esc(c)}"
-                 style="background-color:${esc(c)};border:2px solid ${c === NOTE_COLORS[7] ? 'var(--color-border)' : esc(c)};"
-                 role="radio"
-                 tabindex="${c === selColor ? '0' : '-1'}"
-                 aria-checked="${c === selColor ? 'true' : 'false'}"
-                 aria-label="${esc(NOTE_COLOR_NAMES()[c] ?? t('notes.colorCurrent'))}"></div>
-          `).join('')}
-        </div>
-      </div>
-      <div class="form-group">
         <label class="toggle">
           <input type="checkbox" id="note-pinned" ${isEdit && note.pinned ? 'checked' : ''}>
           <span class="toggle__track"></span>
           <span>${t('notes.pinnedLabel')}</span>
         </label>
       </div>`,
-      { open: isEdit && (!!note.pinned || (!!note.color && note.color !== NOTE_COLORS[0])) })}
+      { open: isEdit && !!note.pinned })}
       </div>
 
       <div class="modal-panel__footer modal-panel__footer--plain note-modal__footer">
@@ -1044,10 +1052,8 @@ function openNoteModal({ mode, note = null }) {
           b.tabIndex = on ? 0 : -1;
         });
         if (view === 'read') {
-          // Live-Spiegelung: Farbe aus dem aktiven Swatch, Inhalt frisch gerendert
-          // — Lesemodus zeigt ungespeicherte Änderungen.
-          const c = panel.querySelector('.note-color-swatch--active')?.dataset.color;
-          if (c) noteModal.style.setProperty('--note-color', c);
+          // Live-Spiegelung: Inhalt frisch gerendert - der Lesemodus zeigt
+          // ungespeicherte Änderungen.
           syncHeaderTitle();
           readPane.replaceChildren();
           // Bedienbar nur, solange der Lesemodus den gespeicherten Stand zeigt:
@@ -1121,37 +1127,6 @@ function openNoteModal({ mode, note = null }) {
       if (initialView === 'read') {
         setTimeout(() => panel.querySelector('.note-mode-switch .sub-tab--active')?.focus(), 80);
       }
-
-      // Farb-Swatch: Auswahl + ARIA + Keyboard (Roving Tabindex)
-      function selectSwatch(target) {
-        panel.querySelectorAll('.note-color-swatch').forEach((s) => {
-          s.classList.remove('note-color-swatch--active');
-          s.setAttribute('aria-checked', 'false');
-          s.setAttribute('tabindex', '-1');
-        });
-        target.classList.add('note-color-swatch--active');
-        target.setAttribute('aria-checked', 'true');
-        target.setAttribute('tabindex', '0');
-      }
-      panel.querySelectorAll('.note-color-swatch').forEach((sw) => {
-        sw.addEventListener('click', () => { selectSwatch(sw); sw.focus(); });
-        sw.addEventListener('keydown', (e) => {
-          const swatches = [...panel.querySelectorAll('.note-color-swatch')];
-          const idx = swatches.indexOf(sw);
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            const next = swatches[(idx + 1) % swatches.length];
-            selectSwatch(next); next.focus();
-          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            const prev = swatches[(idx - 1 + swatches.length) % swatches.length];
-            selectSwatch(prev); prev.focus();
-          } else if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            selectSwatch(sw);
-          }
-        });
-      });
 
       // Formatierungs-Toolbar (geteilt mit den Aufgaben-Notizen, #731)
       const textarea = panel.querySelector('#note-content');
@@ -1395,7 +1370,7 @@ function openNoteModal({ mode, note = null }) {
         const saveBtn = saveButton;
         const title   = panel.querySelector('#note-title').value.trim() || null;
         const cnt     = panel.querySelector('#note-content').value.trim();
-        const color   = panel.querySelector('.note-color-swatch--active')?.dataset.color || NOTE_COLORS[0];
+        const color   = selColor;
         const pinned  = panel.querySelector('#note-pinned').checked ? 1 : 0;
         const category_ids = [...panel.querySelectorAll('input[name="note-category"]:checked')]
           .map((input) => Number(input.value));

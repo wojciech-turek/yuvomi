@@ -1329,7 +1329,8 @@
         "checkConflict": "Poznámka byla mezitím změněna. Bude znovu načtena.",
         "pinnedState": "Připnuto",
         "checklistDone": "Hotovo",
-        "checklistOpen": "Otevřeno"
+        "checklistOpen": "Otevřeno",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Tučné (Ctrl+B)",

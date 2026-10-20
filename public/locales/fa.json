@@ -1272,7 +1272,8 @@
         "checkConflict": "یادداشت در این میان تغییر کرده است. دوباره بارگذاری می‌شود.",
         "pinnedState": "سنجاق‌شده",
         "checklistDone": "انجام‌شده",
-        "checklistOpen": "باز"
+        "checklistOpen": "باز",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "توپر (Ctrl+B)",

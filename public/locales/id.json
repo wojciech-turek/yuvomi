@@ -1272,7 +1272,8 @@
         "checkConflict": "Catatan telah berubah sementara itu. Catatan akan dimuat ulang.",
         "pinnedState": "Disematkan",
         "checklistDone": "Selesai",
-        "checklistOpen": "Terbuka"
+        "checklistOpen": "Terbuka",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Tebal (Ctrl+B)",

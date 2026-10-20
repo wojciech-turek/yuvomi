@@ -1272,7 +1272,8 @@
         "checkConflict": "그 사이에 메모가 변경되었습니다. 다시 불러옵니다.",
         "pinnedState": "고정됨",
         "checklistDone": "완료",
-        "checklistOpen": "미완료"
+        "checklistOpen": "미완료",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "굵게 (Ctrl+B)",

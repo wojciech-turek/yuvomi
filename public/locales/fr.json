@@ -1256,7 +1256,8 @@
         "checkConflict": "La note a été modifiée entre-temps. Elle va être rechargée.",
         "pinnedState": "Épinglée",
         "checklistDone": "Terminé",
-        "checklistOpen": "Ouvert"
+        "checklistOpen": "Ouvert",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Gras (Ctrl+B)",

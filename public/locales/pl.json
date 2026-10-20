@@ -1418,7 +1418,8 @@
         "checkConflict": "Notatka została w międzyczasie zmieniona. Zostanie ponownie wczytana.",
         "pinnedState": "Przypięta",
         "checklistDone": "Zrobione",
-        "checklistOpen": "Otwarte"
+        "checklistOpen": "Otwarte",
+        "groupRecent": "Ostatnie"
     },
     "markdown": {
         "bold": "Pogrubienie (Ctrl+B)",

@@ -1256,7 +1256,8 @@
         "checkConflict": "नोट इस बीच बदल गया है। इसे फिर से लोड किया जाएगा।",
         "pinnedState": "पिन किया गया",
         "checklistDone": "पूर्ण",
-        "checklistOpen": "खुला"
+        "checklistOpen": "खुला",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "बोल्ड (Ctrl+B)",

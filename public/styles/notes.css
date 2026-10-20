@@ -1,7 +1,7 @@
 /**
  * Modul: Pinnwand / Notizen (Notes)
- * Zweck: Styles für Masonry-Grid, Sticky-Note-Karten, Modal
- * Abhängigkeiten: tokens.css, layout.css
+ * Zweck: Styles für die Notizliste (Kacheln + Zeilen, Tafla) und den Dialog
+ * Abhängigkeiten: tokens.css, layout.css, inset-list.css
  */
 
 /* --------------------------------------------------------
@@ -76,7 +76,7 @@
 }
 
 /* --------------------------------------------------------
- * Masonry-Grid
+ * Filter und Liste
  * -------------------------------------------------------- */
 /* Ersteller- und Kategorie-Filter: die Chipreihe im Scrollport
  * (`.page-chip-row`, layout.css) - das erste Kind von `.notes-scroll`, sie
@@ -143,151 +143,144 @@
   border-inline-start: var(--space-px) solid var(--color-border-subtle);
 }
 
+/* TAFLA (2026-10-20): ZWEI GRUPPEN STATT DES MASONRY-RASTERS.
+ * "Przypięte" als Vorschaukacheln (2 je Zeile, `.preview-tiles` aus
+ * inset-list.css), "Ostatnie" als EINE gruppierte Liste mit 64er-Zeilen
+ * (`.inset-card` / `.inset-row`). Das Raster mit bis zu vier Spalten und
+ * Masonry-Packing ist gegangen: eine Liste liest man von oben nach unten,
+ * ein Zettelfeld musste man absuchen. Die Seite steht im Lesemass
+ * (`app-page--reading`), Kopf und Liste enden an derselben Kante. */
 .notes-grid {
-  /* Scroll + Einrückung liegen jetzt auf .notes-scroll; hier bleibt nur das
-   * Raster selbst (Guard: bewusst CSS-Grid, keine CSS-Columns). */
-  padding-top: var(--space-4);
-  /* Nur der eigene Abstand. Die Reserve fuer den FAB (hier stand 96px) rechnet
-   * die Shell als Nachlauf an `.notes-scroll` (`--shell-tail`: Tab-Kapsel,
-   * FAB, Sammelpille; layout.css) - doppelt gerechnet endete die letzte
-   * Kartenreihe mobil 116px ueber der Kapsel (Kopfregel mobil, 2026-09-26). */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-top: var(--space-2);
+  /* Nur der eigene Abstand; die Reserve fuer Kapsel und + rechnet die Shell
+   * als Nachlauf an `.notes-scroll` (--shell-tail, layout.css). */
   padding-bottom: var(--space-6);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  align-items: start;
-  gap: var(--space-3);
 }
 
-/* Abschnittsköpfe („Angepinnt" / „Weitere Notizen") spannen über alle Spalten,
- * wie der Leerzustand. Groesse/Gewicht kamen hier als eigene Kopie derselben
- * Section-Title-Rolle, die u-section-title zentral fuehrt (Polish-Batch,
- * PLAN.md #7) - jetzt im Markup, hier bleibt nur Layout/Farbe. */
-.notes-group__title {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-.notes-group__title:not(:first-child) {
-  margin-top: var(--space-4);
-}
-
-/* Lade-Zustand: Grid aufheben, damit die geteilte Skeleton-Liste
- * (Flex-Spalte) full-width erscheint — eine Lade-Sprache über alle Module. */
 .notes-grid[aria-busy="true"] {
   display: block;
 }
 
-@container notes-page (min-width: 520px) {
-  .notes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Breiter Schirm: drei, dann vier Kacheln je Zeile - die Kachel bleibt dabei
+ * mindestens so breit wie auf dem Telefon. */
+@container notes-page (min-width: 600px) {
+  .notes-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-@container notes-page (min-width: 720px) {
-  .notes-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@container notes-page (min-width: 1200px) {
-  .notes-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-
-.notes-grid > .empty-state {
-  grid-column: 1 / -1;
-}
-
-/* Progressive Enhancement: echtes Masonry-Packing ohne ragged Zeilen-Lücken,
- * sobald der Browser natives CSS-Masonry unterstützt. Baseline bleibt das
- * getestete, overflow-sichere Grid (minmax(0,1fr)); nicht-unterstützende
- * Browser sehen exakt das bisherige Verhalten — kein JS, kein Multicol,
- * kein Intrinsic-Width-Risiko. */
-@supports (grid-template-rows: masonry) {
-  .notes-grid { grid-template-rows: masonry; }
-}
-
-/* DER NAME, UNTER DEM MASONRY KOMMT (R19, Guide css-layout §8): die
- * Spezifikation heisst inzwischen "grid lanes" (`display: grid-lanes`, Safari
- * 26.4); `grid-template-rows: masonry` war der fruehere Prototyp. Die Spalten
- * bleiben die der Container-Abfragen, die Gruppenkoepfe spannen ueber alle
- * Bahnen und trennen die Gruppen. Der Lade-Zustand (`aria-busy`, oben) schlaegt
- * die Regel per Spezifitaet. */
-@supports (display: grid-lanes) {
-  .notes-grid { display: grid-lanes; }
+@container notes-page (min-width: 900px) {
+  .notes-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* --------------------------------------------------------
- * Notiz-Karte
+ * Notiz: Kachel oder Zeile
  * -------------------------------------------------------- */
-/* Die Zettelfarbe ist eine frei gewählte NUTZERFARBE. Sie trug hier bis
- * Runde 3 die ganze Karte als Vollfläche, mit einer zur Laufzeit gerechneten
- * Textfarbe (getReadableTextColor) - die einzige Stelle der App, an der eine
- * ungemessene Nutzerfarbe eine Inhaltsfläche trug, und im Dark-Theme ein Feld
- * heller Pastellblöcke. Jetzt gilt das gemessene 16-%-Rezept (DESIGN.md,
- * User-Farben-Regel): 16 % Zettelfarbe auf der Kartenfläche, Text immer
- * --color-text-primary. Der Zettel bleibt unterscheidbar, die Lesbarkeit hängt
- * nicht mehr an der gewählten Farbe - auch nicht bei Alt-Daten ausserhalb der
- * Palette. Randlos wie jede Karte dieser Welt. */
-/* DIE SCHEIBE UNTER DEN KARTEN-AKTIONEN, ALS BENANNTE STUFE.
- *
- * Hier stand `--color-overlay-light` - der MODAL-SCRIM der App (tokens.css),
- * und app-weit das einzige Bedienelement mit gefuellter Ruheflaeche; kein
- * anderer Icon-Knopf unter 472 Knoepfen auf acht Routen tut das (Critique
- * 2026-08-13). Er stand auf keiner Sprosse der Toenungsskala und komponierte
- * mit einer frei gewaehlten Nutzerfarbe, sein Ergebnis war also nicht im
- * Voraus gemessen - was die User-Farben-Regel ausdruecklich verlangt.
- *
- * Die Scheibe hat trotzdem eine Aufgabe: am Finger stehen die drei Knoepfe
- * dauerhaft ueber dem Notiztext, und ohne Flaeche waere das Icon auf Schrift
- * gelegt. Sie bleibt also - aber als benannte Stufe aus der TINTE der Karte
- * statt als Scrim. Das ist zugleich der Richtungsfehler des Scrims behoben:
- * 35 % Schwarz auf einer dunklen Karte machte die Scheibe DUNKLER als ihren
- * Grund, `--color-text-primary` kippt mit dem Theme und liegt in beiden
- * Themes auf der richtigen Seite. */
+/* Keine Zettelfarbe mehr (Tafla): weisse Karte, Tinte. Die Notiz selbst ist
+ * der Oeffnen-Knopf (`.note-card__open` liegt unsichtbar darueber, R9 M13);
+ * Nadel und Mehr-Knopf liegen eine Ebene hoeher und erscheinen nur am Zeiger
+ * (am Finger: Anheften im Editor, Loeschen im Fuss der Leseansicht). */
 .note-card {
-  --note-action-bg: color-mix(in srgb, var(--color-text-primary) var(--tint-state), transparent);
-  --note-action-bg-hover: color-mix(in srgb, var(--color-text-primary) var(--tint-surface), transparent);
-  min-width: 0;
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  cursor: pointer;
   position: relative;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-  background: color-mix(in srgb, var(--note-color, transparent) var(--tint-surface), var(--color-surface));
+  min-width: 0;
+  cursor: pointer;
   color: var(--color-text-primary);
-  border: none;
-  box-shadow: var(--shadow-sm);
 }
 
-.note-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+.note-card__title {
+  margin: 0;
+  color: inherit;
+  overflow-wrap: anywhere;
 }
 
-/* EINE KARTENHAUT (Critique 2026-10-16). Angepinnt trug die Karte einen
- * 2px-Ring, den staerkeren Schatten und eine Nadel auf eigener Scheibe - eine
- * zweite Haut neben der normalen. Den Zustand sagen jetzt die Nadel in voller
- * Tinte (statt tertiaer) und die Gruppe „Angepinnt" darueber; Flaeche,
- * Schatten und Nadelgroesse sind fuer beide gleich. */
+.note-card__title,
+.note-card__content,
+.note-card__preview {
+  unicode-bidi: plaintext;
+}
 
+/* In der Zeile ist der Titel eine Zeile mit Auslassung, in der Kachel auch. */
+.note-card--row .note-card__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-card--tile .note-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Die Vorschau der Kachel: zwei Zeilen, so wie der Text sie umbricht. */
+.note-card--tile .note-card__preview {
+  white-space: pre-line;
+}
+
+.note-card__categories {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1);
+  max-width: 50%;
+  overflow: hidden;
+}
+
+.note-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  white-space: nowrap;
+}
+
+.note-category-badge__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-category-badge svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex: 0 0 auto;
+}
+
+/* Die Leseansicht zeigt Kategorien umbrechend. */
+.note-read__categories .note-category-badge {
+  white-space: normal;
+}
+
+.note-card__content {
+  font-size: var(--type-body);
+  line-height: var(--line-height-relaxed);
+  color: inherit;
+  word-break: break-word;
+}
+
+/* Die Nadel: ein Bedienelement am Zeiger, oben am Ende der Kachel/Zeile. */
 .note-card__pin {
   position: absolute;
-  top: var(--space-2);
-  inset-inline-end: var(--space-2);
+  top: var(--space-1);
+  inset-inline-end: var(--space-1);
   width: var(--target-base);
   height: var(--target-base);
   border-radius: var(--radius-full);
-  background: var(--note-action-bg);
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* DAUERHAFT SICHTBAR, RUHIG (Re-Critique 2026-09-27, D7; ignore.md): die
-   * Nadel erschien vorher erst beim Ueberfahren der Karte - am Tablet und am
-   * Trackpad gibt es dieses Ueberfahren nicht verlaesslich. Ohne Flaeche und
-   * in der Tertiaerfarbe steht sie still da; angepinnt traegt sie Flaeche und
-   * volle Tinte (Regel darunter), das ist der Zustand. */
   background: transparent;
-  color: var(--color-text-tertiary);
+  color: var(--color-ink-3);
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -299,7 +292,7 @@
 
 .note-card--pinned .note-card__pin {
   pointer-events: auto;
-  color: inherit;
+  color: var(--color-text-secondary);
 }
 
 .note-card--pinned .note-card__pin svg {
@@ -308,25 +301,16 @@
 
 .note-card__pin:not(.note-card__pin--static):hover,
 .note-card__pin:not(.note-card__pin--static):focus-visible {
-  background: var(--note-action-bg-hover);
-  color: inherit;
+  background: var(--color-fill);
+  color: var(--color-text-primary);
 }
 
-/* ZUSTANDSZEICHEN STATT KNOPF (#1265 P1, dieselbe Bauart wie
- * `.task-status-btn--static` in tasks.css). Bei `notes: read` bleibt die Nadel
- * einer angepinnten Notiz stehen - sie traegt eine Auskunft, die sonst nur noch
- * aus einer Gruppenueberschrift zu erschliessen waere, und die erscheint erst,
- * wenn es beide Gruppen gibt. Sie ist dann ein `span role="img"`, und diese
- * Regel nimmt ihr, was ein Bedienelement ausmacht: den Zeiger, die
- * Trefferflaeche des `::before` und die Hover-Quittung (per `:not()` oben, wie
- * in tasks.css - eine Gegenregel `--static:hover { background: none }` haette
- * nur gewirkt, solange keine Farbe dazwischenkommt).
- *
- * ZWEI SELEKTOREN, WEIL DIE KASKADE ES VERLANGT. `.note-card--pinned
- * .note-card__pin` (zwei Klassen) setzt `pointer-events: auto`; eine einzelne
- * Klasse verliert dagegen. Die zweite Zeile hat dieselbe Spezifitaet wie die
- * Ueberschreibung und steht DANACH - ohne sie finge das Zeichen die Klicks ab,
- * mit denen die Karte sich oeffnet. */
+/* ZUSTANDSZEICHEN STATT KNOPF (#1265 P1): bei `notes: read` bleibt die Nadel
+ * einer angepinnten Notiz als Zeichen stehen und faengt keine Klicks. Zwei
+ * Selektoren, weil `.note-card--pinned .note-card__pin` (zwei Klassen)
+ * `pointer-events: auto` setzt. In Tafla sagt die Gruppe "Przypięte" den
+ * Zustand schon - das Zeichen bleibt fuer den Screenreader im Baum, sichtbar
+ * nur am Zeiger wie der Knopf. */
 .note-card__pin--static,
 .note-card--pinned .note-card__pin--static {
   cursor: default;
@@ -335,74 +319,6 @@
 
 .note-card__pin--static::before {
   content: none;
-}
-
-.note-card__title {
-  margin-bottom: var(--space-1);
-  color: inherit;
-  padding-inline-end: var(--target-base);
-  overflow-wrap: anywhere;
-}
-
-.note-card__title,
-.note-card__content {
-  unicode-bidi: plaintext;
-}
-
-.note-card__categories {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
-.note-category-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  max-width: 100%;
-  padding: var(--space-0h) var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-fill-well);
-  color: var(--color-text-secondary);
-}
-
-.note-category-badge__name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.note-category-badge svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  flex: 0 0 auto;
-}
-
-.note-card__content {
-  font-size: var(--type-body);
-  line-height: var(--line-height-relaxed);
-  color: inherit;
-  word-break: break-word;
-  /* Renderer emittiert jetzt Blockstruktur (<p>/<ul>/<h*>) + explizite <br>,
-   * daher normal statt pre-wrap — sonst doppelte Umbrüche/Whitespace. */
-  white-space: normal;
-  /* Vorschau-Höhe deckeln: eine lange Notiz sprengte sonst das Raster und
-   * verdrängte alle anderen Zettel aus dem Blickfeld. Der volle Text steht
-   * einen Klick entfernt im Lese-Modus. */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 12;
-  line-clamp: 12;
-  overflow: hidden;
-}
-
-.note-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: var(--space-px) solid var(--color-border-subtle);
 }
 
 .note-category-editor__choices {
@@ -542,54 +458,13 @@
   .note-category-editor__create > .btn { width: 100%; }
 }
 
-.note-card__creator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-}
-
-/* DIE SCHEIBE IST DER PUNKT IN SEINER GRÖSSTEN FORM - ALSO VOLLTON.
- *
- * Hier stand das gemessene 16-%-Rezept mit Primärtext darauf, und die
- * Begründung dafür war eine Kontrastrechnung: der 70-%-Ink-Mix bricht an den
- * Enden der Helligkeitsachse (weiss/light 1.92:1, schwarz/dark 1.97:1). Die
- * Rechnung stimmt bis heute - sie beantwortet nur eine Frage, die sich nicht
- * mehr stellt. Auf dieser 16px-Scheibe steht seit der Initialen-Schwelle-Regel
- * gar kein Text mehr (notes.js), und die Identitätsfarben-Regel benennt die
- * Scheibe ausdrücklich als „den Dot in seiner grössten Form, keine Fläche".
- * Eine Waschung war hier die letzte Nutzerfarbe der App, die ihre Identität
- * blass nannte.
- *
- * Wo Text auf einer Nutzerfarbe nötig IST, löst das inzwischen
- * `getReadableTextColor` - fünf Bauteile fahren so (user-multi-select,
- * seal-pair, contacts, rewards, Dashboard). */
-.note-card__avatar {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--avatar-color, var(--color-accent));
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.note-card__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .note-card__actions {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
 
-/* Der Mehr-Knopf (R18, D6) ist die geteilte `.row-action`; auf der Karte
+/* Der Mehr-Knopf (R18, D6) ist die geteilte `.row-action`; auf der Notiz
  * steht er im Mass der Nadel. */
 .note-card__more {
   width: var(--target-base);
@@ -598,11 +473,17 @@
   min-height: var(--target-base);
 }
 
-/* DIE KARTE IST DER OEFFNEN-KNOPF (R9 M13). Der Knopf liegt unsichtbar ueber
- * der ganzen Karte - ein Tipp irgendwo darauf oeffnet, und der Fokusring
- * umrahmt die Karte statt eines 44px-Kreises in der Fusszeile. Was auf der
- * Karte selbst bedienbar bleibt (Nadel, Loeschen, Checklisten-Haken, Links),
- * liegt eine Ebene darueber. */
+/* In der Zeile stehen Nadel und Mehr-Knopf nebeneinander am Ende, mittig. */
+.note-card--row .note-card__pin {
+  top: 50%;
+  inset-inline-end: calc(var(--space-2) + var(--target-base));
+  transform: translateY(-50%);
+}
+
+/* DIE NOTIZ IST DER OEFFNEN-KNOPF (R9 M13). Der Knopf liegt unsichtbar ueber
+ * der ganzen Kachel oder Zeile - ein Tipp irgendwo darauf oeffnet, und der
+ * Fokusring umrahmt sie. Was darauf bedienbar bleibt (Nadel, Mehr-Knopf,
+ * Links), liegt eine Ebene darueber. */
 .note-card__open {
   position: absolute;
   inset: 0;
@@ -618,7 +499,7 @@
 
 .note-card__open:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 .note-card__pin {
@@ -632,39 +513,79 @@
   z-index: 1;
 }
 
-/* DER TITEL IST NICHT KLEINER ALS DER TEXT (R9 M13, A6 P2-6). Die geteilte
- * Kompaktrolle (typography.css) setzte ihn auf 15px ueber 17px Fliesstext -
- * die Ueberschrift las sich als Nebensatz. Hier traegt er die Rolle, die
- * `.u-card-title` ueberall sonst traegt; das Gewicht unterscheidet ihn. */
-.note-card .note-card__title {
-  font-size: var(--type-card-title);
-  line-height: var(--line-height-snug);
+/* Auf der Notiz liegt der Mehr-Knopf am Ende: in der Kachel unten, in der
+ * Zeile mittig neben der Nadel. */
+.note-card > .note-card__actions {
+  position: absolute;
+  inset-block-end: var(--space-1);
+  inset-inline-end: var(--space-1);
 }
 
-/* MOBIL PASST MEHR ALS ZWEI NOTIZEN AUF DEN SCHIRM (R9 M13).
- *
- * Gemessen 390x844 vorher: Karten 221-276px, rund 2,3 Notizen je Screen - 12
- * Zeilen Vorschau und eine 57px-Fusszeile mit drei Kreisen. Jetzt: Vorschau
- * drei Zeilen - weiter in der Bodyrolle (test-typography: Notiz-Fliesstext
- * bleibt 17px), nur mit dem Zeilenabstand des Fliesstexts statt des weiten -,
- * und die Fusszeile nur so hoch wie ihre Schrift -
- * der Loeschen-Knopf behaelt seine volle Trefflaeche und haengt sie per
- * negativem Rand in die Polsterung, statt die Zeile damit hochzudruecken
- * („kompakt aussehen, voll treffen", tokens.css). */
+.note-card--row > .note-card__actions {
+  inset-block: 0;
+  inset-inline-end: var(--space-2);
+}
+
+/* Der Inhalt liegt UNTER dem Oeffnen-Knopf nicht im Weg: Text faengt keine
+ * Klicks, sie gehen an den Knopf darueber. */
+.note-card > .preview-tile__top,
+.note-card > .preview-tile__body,
+.note-card > .inset-row__lead,
+.note-card > .inset-row__body {
+  pointer-events: none;
+}
+
+/* DER TITEL IST NICHT KLEINER ALS DER TEXT (R9 M13): Body 17, in der Kachel
+ * 600, in der Zeile 400 (Tafla-Zeile). */
+.note-card .note-card__title {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.note-card--tile .note-card__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.note-card--row .note-card__title {
+  font-weight: var(--font-weight-regular);
+}
+
+/* Platz fuer Nadel und Mehr-Knopf, solange sie sichtbar sind (am Zeiger). */
+@media (hover: hover) {
+  .note-card--row:has(.note-card__actions .note-card__more) {
+    padding-inline-end: calc(var(--space-2) + 2 * var(--target-base));
+  }
+
+  .note-card--row:not(:has(.note-card__actions .note-card__more)):has(button.note-card__pin) {
+    padding-inline-end: calc(var(--space-2) + var(--target-base));
+  }
+
+  .note-card--row:not(:has(.note-card__actions .note-card__more)) .note-card__pin {
+    inset-inline-end: var(--space-2);
+  }
+
+  .note-card--tile .preview-tile__top {
+    padding-inline-end: var(--target-base);
+  }
+}
+
+/* AM FINGER KEINE NADEL UND KEIN "⋯" auf der Notiz (Tafla, spec "Lista
+ * grupowana + wiersz": on touch there is no ⋯). Anheften steht im Editor
+ * ("Weitere Einstellungen"), Loeschen im Fuss der Leseansicht. */
+@media (hover: none) {
+  .note-card__pin,
+  .note-card__actions {
+    display: none;
+  }
+}
+
 @media (max-width: 639px) {
   .note-card__content {
     line-height: var(--line-height-base);
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-  }
-
-  .note-card__footer {
-    margin-top: var(--space-1);
-    padding-top: var(--space-1);
   }
 
   .note-card__more {
-    margin-block: calc((var(--space-6) - var(--target-base)) / 2);
+    margin-block: 0;
   }
 }
 
@@ -722,23 +643,12 @@
   }
 }
 
-/* LESEANSICHT: DER DIALOGKOERPER TRAEGT DIE ZETTELFARBE (R18, 2026-10-07).
- *
- * Bis dahin stand das gerenderte Markdown in einem KASTEN: getoente Flaeche,
- * 12px Radius und eine Kante in 50 % der Notizfarbe. Bei einem roten oder
- * rosa Zettel war das ein rosa Kasten mit roetlicher Kante direkt ueber dem
- * roten "Loeschen" im Fuss - die Form einer Fehlermeldung.
- *
- * Jetzt ist der Zettel der Koerper selbst: die Ansicht zieht sich mit
- * negativem Rand ueber die Polsterung von `.modal-panel__body` (--space-4,
- * layout.css) bis an Kopf- und Fusslinie, ohne Kante und ohne Radius. Die
- * FARBE ist dieselbe wie vorher (--note-color zu --tint-surface ueber der
- * Tafel) - Text bleibt --color-text-primary, die Kontrastrechnung der
- * Zettelfarben gilt unveraendert. Weisse Notizen ergeben keinen Tint. */
+/* LESEANSICHT (R18, 2026-10-07; Tafla 2026-10-20). Der Text steht direkt im
+ * Dialogkoerper, ohne Kasten. Bis Tafla trug dieser Koerper die Zettelfarbe
+ * (16 % ueber der Tafel); seit die Notizen keine Zettelfarbe mehr zeigen, ist
+ * er die weisse Flaeche des Dialogs wie jeder andere. */
 .note-read-view {
-  margin: calc(-1 * var(--space-4));
-  padding: var(--space-4);
-  background: color-mix(in srgb, var(--note-color, transparent) var(--tint-surface), transparent);
+  margin: 0;
 }
 
 /* EIN WEG ZUM BEARBEITEN. In der Leseansicht standen zwei: der Reiter
@@ -776,30 +686,3 @@
 @media (prefers-reduced-motion: reduce) {
   .note-pane--enter { animation: none; }
 }
-
-/* Farb-Auswahl */
-.note-color-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.note-color-swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  position: relative;
-  cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-
-.note-color-swatch::before {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: var(--radius-full);
-}
-
-.note-color-swatch:hover       { transform: scale(1.15); }
-.note-color-swatch--active     { border-color: var(--color-text-primary); transform: scale(1.1); }

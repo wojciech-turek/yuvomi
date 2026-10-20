@@ -1256,7 +1256,8 @@
         "checkConflict": "メモはその間に変更されました。再読み込みします。",
         "pinnedState": "ピン留め済み",
         "checklistDone": "完了",
-        "checklistOpen": "未完了"
+        "checklistOpen": "未完了",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "太字 (Ctrl+B)",

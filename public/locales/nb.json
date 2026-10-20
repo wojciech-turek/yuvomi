@@ -1256,7 +1256,8 @@
         "checkConflict": "Notatet har endret seg i mellomtiden. Det vil bli lastet på nytt.",
         "pinnedState": "Festet",
         "checklistDone": "Ferdig",
-        "checklistOpen": "Åpen"
+        "checklistOpen": "Åpen",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Fet (Ctrl+B)",

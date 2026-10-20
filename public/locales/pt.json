@@ -1256,7 +1256,8 @@
         "checkConflict": "A nota foi alterada entretanto. Ela será recarregada.",
         "pinnedState": "Fixada",
         "checklistDone": "Concluído",
-        "checklistOpen": "Aberto"
+        "checklistOpen": "Aberto",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Negrito (Ctrl+B)",

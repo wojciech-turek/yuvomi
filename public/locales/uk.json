@@ -1402,7 +1402,8 @@
         "checkConflict": "Нотатку тим часом змінено. Її буде завантажено знову.",
         "pinnedState": "Закріплена",
         "checklistDone": "Виконано",
-        "checklistOpen": "Відкрито"
+        "checklistOpen": "Відкрито",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Жирний (Ctrl+B)",

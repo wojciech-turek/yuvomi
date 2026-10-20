@@ -1256,7 +1256,8 @@
         "checkConflict": "De notitie is intussen gewijzigd. Deze wordt opnieuw geladen.",
         "pinnedState": "Vastgezet",
         "checklistDone": "Klaar",
-        "checklistOpen": "Open"
+        "checklistOpen": "Open",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Vet (Ctrl+B)",

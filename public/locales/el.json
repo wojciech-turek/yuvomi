@@ -1256,7 +1256,8 @@
         "checkConflict": "Η σημείωση άλλαξε στο μεταξύ. Θα φορτωθεί ξανά.",
         "pinnedState": "Καρφιτσωμένη",
         "checklistDone": "Ολοκληρώθηκε",
-        "checklistOpen": "Ανοιχτό"
+        "checklistOpen": "Ανοιχτό",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Έντονο (Ctrl+B)",

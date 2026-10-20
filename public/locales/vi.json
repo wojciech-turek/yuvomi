@@ -1256,7 +1256,8 @@
         "checkConflict": "Ghi chú đã thay đổi trong lúc này. Ghi chú sẽ được tải lại.",
         "pinnedState": "Đã ghim",
         "checklistDone": "Hoàn thành",
-        "checklistOpen": "Mở"
+        "checklistOpen": "Mở",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "In đậm (Ctrl+B)",
