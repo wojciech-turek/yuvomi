@@ -7612,7 +7612,7 @@ a.day-now__lead {
   block-size: 56px;
   border-radius: var(--radius-sm);
   background: var(--color-fill);
-  color: var(--color-border-control);
+  color: var(--color-text-secondary);
 }
 
 .day-now--dinner .day-now__plate {
