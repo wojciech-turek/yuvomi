@@ -8114,6 +8114,30 @@ test('text/surface token pairs meet WCAG AA 4.5:1 in both themes', () => {
   }
 });
 
+// TAFLA (Rollout-Schritt 0): EIN Violett, und es kommt nur ueber die Tokens.
+// Die Stimme hat in tokens.css ihre Rollen (--color-accent als Text,
+// --color-btn-primary / --color-accent-fill als Flaeche, --color-accent-tint,
+// --color-accent-pressed, --shadow-accent-glow, --cook-accent, --toast-action).
+// Ein Violett-Literal in einem Stylesheet waere eine zweite Quelle, die beim
+// naechsten Theme- oder Rollenwechsel nicht mitzieht - genau so stand die
+// Flieder-Pille im Dark. Geprueft werden die Deklarationen (Kommentare duerfen
+// Messwerte nennen); offline.html spiegelt die Tokens bewusst als Literal.
+test('Tafla: Violett kommt nur ueber die Akzent-Tokens, nie als Literal im Stylesheet', () => {
+  const VIOLET = /#(?:6C3AED|7C52F2|B49CFF|5A2BD6|6A42E0|C6B4FF|F0EBFD|3A3249|A78BFA|7C3AED|8B5CF6|C4B5FD)\b|rgba?\(\s*(?:108,\s*58,\s*237|124,\s*82,\s*242|180,\s*156,\s*255)\b/i;
+  const offenders = [];
+  let scanned = 0;
+  for (const file of readdirSync(new URL('../public/styles/', import.meta.url)).filter((n) => n.endsWith('.css'))) {
+    if (file === 'tokens.css') continue;
+    scanned += 1;
+    const css = read(`../public/styles/${file}`).replace(/\/\*[\s\S]*?\*\//g, '');
+    css.split('\n').forEach((line, i) => {
+      if (VIOLET.test(line)) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+    });
+  }
+  assert.ok(scanned >= 30, `nur ${scanned} Stylesheets gelesen`);
+  assert.deepEqual(offenders, [], 'Violett gehoert in tokens.css (--color-accent*, --color-btn-primary)');
+});
+
 // TAFLA: die Grafikpaare der Spezifikation (WCAG 1.4.11, 3:1) - der Ring des
 // Pruefkreises und jede Feldkante auf den Gruenden, auf denen sie stehen, die
 // violette Fuellung als Form (gecheckter Kreis, +) auf Grund und Karte, und

@@ -8847,7 +8847,8 @@ textarea::placeholder {
 
 /* Die FLAECHEN-Rolle der Stimme, nicht der Text-Akzent: die Bahn traegt einen
  * weissen Knopf wie der Primaerknopf sein weisses Label. Hell derselbe Wert
- * wie --color-accent (6,06:1); dunkel #7C3AED statt #A78BFA (5,70 statt 2,72). */
+ * wie --color-accent (6,06:1); dunkel #7C52F2 (Tafla, 4,83:1) statt des
+ * Text-Akzents #B49CFF (2,1). */
 .toggle input:checked + .toggle__track {
   background-color: var(--color-btn-primary);
 }
