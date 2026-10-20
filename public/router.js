@@ -45,6 +45,7 @@ import { buildHelpRows } from '/utils/help.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { wirePaletteCombobox } from '/utils/palette-combobox.js';
 import { triggerPageFab, syncFabName, fabActionLabel } from '/utils/fab.js';
+import { createCapturePlus, openCaptureSheet, captureTypeForRoute, forgetCaptureCache } from '/components/capture-sheet.js';
 import { hasLeaveGuard, mayLeave } from '/utils/leave-guard.js';
 import { createUpdateFlow, isUserBusy } from '/utils/app-update.js';
 import { createStartHandoff } from '/utils/start-handoff.js';
@@ -55,7 +56,7 @@ import {
   pushOverlay, dropOverlay, whenHistorySettled, hasOpenOverlay,
 } from '/utils/overlay-history.js';
 import {
-  applyNavBadges, setNavBadge, resetNavBadges, navBadgeRoutes,
+  applyNavBadges, setNavBadge, resetNavBadges, navBadgeRoutes, navBadgeCount,
   moduleCountsFrom, navBadgeCountsFrom,
 } from '/utils/nav-badges.js';
 import { isNewerVersion, displayVersion, releasesNewForMe, pendingUpdateFor } from '/utils/version.js';
@@ -1250,7 +1251,29 @@ function primeNavBadges(data) {
   // Ein anstehender Geburtstag ist eine Nachricht, kein Alarm (Valenz siehe
   // nav-badges.js).
   setNavBadge('/birthdays', counts['/birthdays'], undefined, 'accent');
+  // Tafla: der Punkt an „Kuchnia" heisst „etwas laeuft in hoechstens drei
+  // Tagen ab". `pantryExpiring.items` ist nach Ablaufdatum sortiert, also
+  // reicht ein Blick auf die vorderste Zeile. Den Namen schreibt
+  // kitchenNavAriaLabel() (der Kuechen-Knopf benennt sein Ziel selbst).
+  setKitchenExpiringDot(data?.pantryExpiring?.items);
 }
+
+/** Wie viele Tage ein Vorratsartikel hoechstens noch haben darf, um „heute" zu zaehlen. */
+const KITCHEN_DOT_DAYS = 3;
+
+function setKitchenExpiringDot(items) {
+  if (!Array.isArray(items)) return;
+  const soon = items.filter((item) => Number.isFinite(item?.days_left) && item.days_left <= KITCHEN_DOT_DAYS).length;
+  setNavBadge('kitchen', soon);
+  const path = routerState.currentPath || location.pathname;
+  document.querySelectorAll('#kitchen-btn, #sidebar-kitchen-nav')
+    .forEach((el) => el.setAttribute('aria-label', kitchenNavAriaLabel(path)));
+}
+// Die Kuechenleiste holt /kitchen/summary ohnehin; sie meldet den Stand hierher.
+window.addEventListener('yuvomi:kitchen-expiring', (e) => {
+  const count = Number(e.detail?.count) || 0;
+  setKitchenExpiringDot(count > 0 ? [{ days_left: 0 }] : []);
+});
 
 /**
  * Ein Modul hat etwas geaendert, das gezaehlt wird.
@@ -2074,6 +2097,22 @@ function renderAppShell(container) {
     sidebarSearch.addEventListener('click', () => _openSearch?.());
     sidebarLogoActions.appendChild(sidebarSearch);
   }
+  // Am Zeigergeraet steht das Erfassen hier statt neben der Kapsel: dasselbe
+  // Blatt, derselbe Name („Dodaj").
+  if (!isMinimalNav) {
+    const sidebarAdd = document.createElement('button');
+    sidebarAdd.type = 'button';
+    sidebarAdd.className = 'nav-sidebar__tool nav-sidebar__add';
+    sidebarAdd.setAttribute('aria-label', t('capture.add'));
+    sidebarAdd.setAttribute('title', t('capture.add'));
+    sidebarAdd.setAttribute('aria-haspopup', 'dialog');
+    const addIcon = document.createElement('i');
+    addIcon.dataset.lucide = 'plus';
+    addIcon.setAttribute('aria-hidden', 'true');
+    sidebarAdd.appendChild(addIcon);
+    sidebarAdd.addEventListener('click', () => openCaptureFromShell());
+    sidebarLogoActions.appendChild(sidebarAdd);
+  }
   sidebarToggle.classList.add('nav-sidebar__tool');
   sidebarLogoActions.appendChild(sidebarToggle);
   sidebarLogo.appendChild(sidebarLogoActions);
@@ -2165,13 +2204,17 @@ function renderAppShell(container) {
 
   bottomNav.appendChild(bottomItems);
 
-  // Gleitender Tab-Indikator — Geschwister von bottomItems, überlebt replaceChildren auf items
+  // Gleitender Tab-Indikator. TAFLA: er liegt IN der Kapsel, zwischen ihrem
+  // Glas und den Tabs - die Pille ist deckend (--color-accent-tint), und als
+  // Geschwister der Kapsel malte sie ueber Zeichen und Label (die Kapsel ist
+  // durch ihren backdrop-filter ein eigener Stapelkontext). Ein Neuaufbau der
+  // Tabs (rebuildNavigation) haengt ihn wieder an.
   if (!isMinimalNav) {
     const tabIndicator = document.createElement('div');
     tabIndicator.className = 'nav-bottom__indicator';
     tabIndicator.setAttribute('aria-hidden', 'true');
     tabIndicator.style.opacity = '0';
-    bottomNav.appendChild(tabIndicator);
+    bottomItems.prepend(tabIndicator);
   }
 
   const searchOverlay = document.createElement('div');
@@ -2276,6 +2319,9 @@ function renderAppShell(container) {
   // Sichtbar ändert das nichts: der Stapel ist `position: fixed` und trägt
   // `--z-toast`, seine Lage kommt aus der Regel, nicht aus der Reihenfolge.
   const shellNodes = [skipLink, sidebar, main, fabLayer, bottomStack, bottomNav];
+  // TAFLA: das abgesetzte + (globales Erfassen) - auf jeder Seite dasselbe,
+  // nie umgedeutet. Gast und Wandtablett erfassen nichts.
+  if (!isMinimalNav) shellNodes.push(createCapturePlus({ onOpen: () => openCaptureFromShell() }));
   if (backdrop)   shellNodes.push(backdrop);
   if (moreSheet)  shellNodes.push(moreSheet);
   shellNodes.push(searchOverlay, routeAnnouncer);
@@ -2411,11 +2457,11 @@ function adoptPageFab() {
  *     ohne Primäraktion.
  */
 function dockFabIntoToolbar(fab) {
-  if (!isDesktopViewport()) return false;
   if (fab.closest('.page-fab-group')) return false;
   const main = document.getElementById('main-content');
   const slot = main?.querySelector('.page-toolbar__actions');
   if (!slot) return false;
+  if (!isDesktopViewport()) return dockFabAsGhost(fab, slot);
   const label = fab.dataset.dockLabel;
   if (!label) return false;
 
@@ -2443,6 +2489,64 @@ function dockFabIntoToolbar(fab) {
   return true;
 }
 
+/**
+ * TAFLA: AM TELEFON WIRD DER SEITEN-FAB EIN GEISTERKREIS IM KOPF.
+ *
+ * Unten rechts steht jetzt das globale + (nie umgedeutet). Was eine Seite
+ * bisher auf ihren FAB legte, bleibt erreichbar:
+ *   - Seiten, deren Sache das Erfassen-Blatt selbst kennt (Zadania, Kalendarz,
+ *     Zakupy, Posiłki, Notatki), bekommen ihren Typ dort vorgewaehlt - ein
+ *     zweites Plus im Kopf waere dieselbe Aktion zweimal. Ihr volles Formular
+ *     steht im Blatt als „Pełny formularz".
+ *   - alle anderen (Kontakte, Budżet, Dokumenty, Przepisy …) tragen ihr
+ *     „Neu" als 36pt-Geisterkreis (44 Treffer) im Kopf, ohne Wort.
+ * Ohne Kopf-Platz bleibt der Knopf unsichtbar in der Ebene (layout.css) und
+ * per Kurzbefehl und Blatt erreichbar.
+ */
+function dockFabAsGhost(fab, slot) {
+  if (captureTypeForRoute(topLevelSection(routerState.currentPath || location.pathname)) !== 'auto') return false;
+  // Hoechstens zwei Geisterkreise im Kopf (spec-components „Nagłówek"): traegt
+  // er schon zwei (Suche, Werkzeuge), bleibt das „Neu" im Erfassen-Blatt.
+  // Gezaehlt wird im GANZEN Kopf (die Suche steht oft im Center-Slot).
+  const toolbar = slot.closest('.page-toolbar') ?? slot;
+  const shown = [...toolbar.querySelectorAll('.btn--icon, .page-search:not(.page-search--field)')]
+    .filter((el) => !el.hidden && !el.closest('[hidden], [popover]') && el.getClientRects().length);
+  if (shown.length >= 2) return false;
+  fab.classList.add('page-fab--ghost');
+  syncFabName(fab);
+  slot.appendChild(fab);
+  markFabShortcut(fab);
+  return true;
+}
+
+/**
+ * Das volle Formular der Seite als Weg im Erfassen-Blatt: ihr FAB, wo er
+ * gerade steht (Ebene, Kopf). Nicht bei Nur-lesen, nicht der Erfassen-Knopf
+ * der Uebersicht selbst.
+ */
+function currentPageAction() {
+  if (document.documentElement.hasAttribute('data-module-readonly')) return null;
+  const fab = document.querySelector('#fab-layer .page-fab, #main-content .page-fab');
+  if (!fab || fab.hidden || fab.id === 'fab-main' || fab.closest('.page-fab-group')) return null;
+  const label = fabActionLabel(fab);
+  if (!label) return null;
+  return { label, run: () => fab.click() };
+}
+
+/** Das globale Erfassen mit dem Typ der Seite vorgewaehlt. */
+function openCaptureFromShell() {
+  const path = topLevelSection(routerState.currentPath || location.pathname);
+  openCaptureSheet({ context: captureTypeForRoute(path), pageAction: currentPageAction() });
+}
+
+// Gespeichert: die Zahlen an den Nav-Zielen ziehen nach, und steht die Seite
+// des Typs (oder Dziś) offen, zeichnet sie sich neu.
+window.addEventListener('yuvomi:captured', (e) => {
+  invalidateModuleCounts();
+  const path = routerState.currentPath;
+  if (path && (path === '/' || path === e.detail?.route)) refreshCurrentRoute();
+});
+
 /** Macht den 'n'-Chord am FAB sichtbar bzw. vorlesbar - schwebend wie angedockt. */
 function markFabShortcut(fab) {
   fab.setAttribute('aria-keyshortcuts', 'n');
@@ -2464,7 +2568,7 @@ function isDesktopViewport() {
 function undockFabFromToolbar(fab) {
   const layer = document.getElementById('fab-layer');
   if (!layer) return false;
-  fab.classList.remove('btn', 'btn--primary', 'page-fab--docked');
+  fab.classList.remove('btn', 'btn--primary', 'page-fab--docked', 'page-fab--ghost');
   fab.querySelector('.toolbar-new-btn__label')?.remove();
   syncFabName(fab);
   layer.replaceChildren(fab.closest('.page-fab-group') ?? fab);
@@ -2490,17 +2594,15 @@ function wireFabDockingBoundary() {
   const query = window.matchMedia?.('(min-width: 1024px)');
   if (!query?.addEventListener) return;
   query.addEventListener('change', () => {
-    const docked = document.querySelector('#main-content .page-fab--docked');
-    if (docked && !isDesktopViewport()) {
-      undockFabFromToolbar(docked);
-      return;
-    }
-    if (!docked && isDesktopViewport()) {
-      const floating = document.querySelector('#fab-layer .page-fab');
-      // Der schwebende Knopf haengt in der Shell-Ebene, `dockFabIntoToolbar`
-      // sucht ihn aber unter `#main-content` - hier also direkt anbieten.
-      if (floating) dockFabIntoToolbar(floating);
-    }
+    // Beide Formen im Kopf (Desktop: beschriftet, Telefon: Geisterkreis)
+    // gehoeren einer Seite der jeweils anderen Seite der Grenze - zurueck in
+    // die Ebene und neu andocken, in der Form, die jetzt gilt.
+    const docked = document.querySelector('#main-content .page-fab--docked, #main-content .page-fab--ghost');
+    if (docked) undockFabFromToolbar(docked);
+    const floating = document.querySelector('#fab-layer .page-fab');
+    // Der schwebende Knopf haengt in der Shell-Ebene, `dockFabIntoToolbar`
+    // sucht ihn aber unter `#main-content` - hier also direkt anbieten.
+    if (floating) dockFabIntoToolbar(floating);
   });
 }
 
@@ -2547,10 +2649,56 @@ const _toolbarHandles = new WeakMap();
  * das Modulzeichen (aus MODULE_ICON); der Kopf legt ohne `sealIcon` keines an. */
 function wireToolbar(el) {
   const handle = wireCollapsingHeader(el);
+  // Tafla: der Rueckweg geschobener Seiten (hinter Więcej) gehoert zum Kopf.
+  syncPageBack(el);
   // Der erste Handle gewinnt: `wireCollapsingHeader` ist idempotent und liefert
   // beim zweiten Anlauf ein wirkungsloses Paar zurueck. Wer das eintraegt,
   // ueberschreibt genau das `destroy()`, um das es hier geht.
   if (handle && !_toolbarHandles.has(el)) _toolbarHandles.set(el, handle);
+}
+
+/**
+ * Liegt die Route hinter „Więcej" (kein eigener Tab)? Dann ist sie eine
+ * GESCHOBENE Seite (Tafla, spec-navigation.txt): ihr Kopf traegt einen
+ * Rueckweg, und die Kapsel steht minimiert. Dieselbe Frage, die den
+ * Mehr-Knopf aktiv macht (updateNav).
+ */
+function isPushedRoute(rawPath = routerState.currentPath || location.pathname) {
+  const path = topLevelSection(rawPath);
+  const scope = routerState.currentUser?.access_scope;
+  if (!routerState.currentUser || scope === 'display' || scope === 'split_guest') return false;
+  return secondaryMobileItems().some((item) => (
+    item.navId === 'kitchen' ? isKitchenRoute(path) : item.path === path
+  ));
+}
+
+/**
+ * Der 36pt-Rueckweg im Kopf einer geschobenen Seite (Tafla: „Wróć: Więcej").
+ * Er oeffnet das Mehr-Blatt - den Ort, von dem die Seite kam. Nur im ersten
+ * Kopf der Seite und nur unter 1024px (layout.css); am Desktop fuehrt die
+ * Seitenleiste.
+ */
+function syncPageBack(toolbar) {
+  const main = document.getElementById('main-content');
+  if (!toolbar || !main || toolbar !== main.querySelector('.page-toolbar')) return;
+  if (toolbar.classList.contains('page-toolbar--in-group')) return;
+  const existing = toolbar.querySelector(':scope > .page-back');
+  if (!isPushedRoute()) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'page-back';
+  back.setAttribute('aria-label', t('nav.backTo', { section: t('nav.more') }));
+  const icon = document.createElement('i');
+  icon.dataset.lucide = 'chevron-left';
+  icon.setAttribute('aria-hidden', 'true');
+  back.appendChild(icon);
+  back.addEventListener('click', () => document.getElementById('more-btn')?.click());
+  toolbar.prepend(back);
+  window.lucide?.createIcons({ el: back });
 }
 
 function unwireToolbar(el) {
@@ -4292,7 +4440,22 @@ async function disableFailedThirdPartyModule(moduleId) {
  * Farbwechsel beim Tabwechsel sendete dieselbe Botschaft wie ein Modulwechsel
  * (Critique 2026-07-29). */
 
+/**
+ * Tafla: the five destinations of the tab capsule carry their own glyphs
+ * (spec-navigation.txt) - Dziś a sun, Zadania a ticked circle, Kuchnia a pot,
+ * Więcej a grid. Sidebar and capsule read the same map, so a destination looks
+ * the same in both. Every other module keeps its MODULE_ICON.
+ */
+const TAB_ICON = Object.freeze({
+  dashboard: 'sun',
+  calendar: 'calendar',
+  tasks: 'circle-check-big',
+  kitchen: 'cooking-pot',
+  more: 'layout-grid',
+});
+
 function navItemEl({ path, navHref, label, icon, module: mod, accent, navId }) {
+  icon = TAB_ICON[navId ?? mod] ?? icon;
   const a = document.createElement('a');
   a.href = navHref ?? path;
   a.dataset.route = path;
@@ -4334,7 +4497,7 @@ function kitchenNavButtonEl() {
   iconWrap.className = 'nav-item__icon-wrap';
   const well = document.createElement('div');
   well.className = 'nav-item__icon-well';
-  well.appendChild(moduleIconEl(MODULE_ICON.kitchen, 'nav-item__icon'));
+  well.appendChild(moduleIconEl(TAB_ICON.kitchen, 'nav-item__icon'));
   iconWrap.appendChild(well);
 
   const label = document.createElement('span');
@@ -4371,7 +4534,7 @@ function moreNavButtonEl() {
   iconWrap.className = 'nav-item__icon-wrap';
   const well = document.createElement('div');
   well.className = 'nav-item__icon-well';
-  well.appendChild(moduleIconEl('more-horizontal', 'nav-item__icon'));
+  well.appendChild(moduleIconEl(TAB_ICON.more, 'nav-item__icon'));
   iconWrap.appendChild(well);
 
   const label = document.createElement('span');
@@ -4527,22 +4690,18 @@ function positionSidebarIndicator() {
   });
 }
 
-// Seitliche Luft zur Slot-Kante und Maximalbreite der Aktiv-Kapsel. Eine
-// slot-breite Pille lief im ersten/letzten Tab bis an die Bar-Kante, wo ihre
-// Rundung gekappt wurde (#569-Nachtrag); begrenzt bleibt sie eine Kapsel hinter
-// dem Icon statt einer randlosen Kachel.
-const TAB_INDICATOR_INSET = 4;
-const TAB_INDICATOR_MAX_WIDTH = 64;
-
 /**
  * Positioniert den gleitenden Indikator in der mobilen Tab-Bar.
  *
- * Vertikal an der Icon-Well ausgerichtet (nicht über die ganze Bar-Höhe), damit
- * die Label-Grundlinie frei bleibt und die Kapsel weder in die Safe-Area noch
- * an die Bar-Kante läuft.
+ * TAFLA (spec-navigation.txt): die aktive Pille umfasst Zeichen UND Label - sie
+ * ist so gross wie der aktive Tab (48 hoch, so breit wie sein Label plus 8pt
+ * je Seite). Die Kapsel haelt 4pt seitlich und 8pt oben/unten Polster, die
+ * Pille steht damit konzentrisch in ihrer Rundung und nie an ihrer Kante
+ * (der Befund aus #569 bleibt geloest, nur aus der Geometrie der Kapsel statt
+ * einer Kappung). Minimiert traegt das Ziel seine Pille selbst (layout.css).
  */
 function positionTabIndicator() {
-  const nav = document.querySelector('.nav-bottom');
+  const nav = document.querySelector('.nav-bottom__items');
   const indicator = nav?.querySelector('.nav-bottom__indicator');
   if (!indicator || !nav) return;
   const active = document.querySelector(
@@ -4554,19 +4713,13 @@ function positionTabIndicator() {
   }
   const nr = nav.getBoundingClientRect();
   const ar = active.getBoundingClientRect();
-  const well = active.querySelector('.nav-item__icon-well');
-  const wr = well ? well.getBoundingClientRect() : ar;
-  const width = Math.max(
-    wr.width,
-    Math.min(ar.width - TAB_INDICATOR_INSET * 2, TAB_INDICATOR_MAX_WIDTH),
-  );
   // clientTop: der Indikator sitzt in der Padding-Box der Bar, das Rect an der
   // Border-Kante - ohne den Abzug sitzt die Kapsel 1px zu tief.
-  const top = wr.top - nr.top - nav.clientTop;
-  const left = ar.left - nr.left + (ar.width - width) / 2;
+  const top = ar.top - nr.top - nav.clientTop;
+  const left = ar.left - nr.left - nav.clientLeft;
   placeNavIndicator(indicator, () => {
-    indicator.style.width = `${width}px`;
-    indicator.style.height = `${wr.height}px`;
+    indicator.style.width = `${ar.width}px`;
+    indicator.style.height = `${ar.height}px`;
     indicator.style.transform = `translate(${left}px, ${top}px)`;
     indicator.style.opacity = '';
   });
@@ -4647,13 +4800,15 @@ function kitchenSectionLabel(path) {
 }
 
 function kitchenNavAriaLabel(path) {
+  // Der Punkt am Ziel (Tafla) steht nur im Bild; gesagt wird er hier.
+  const dot = navBadgeCount('kitchen') > 0 ? `, ${t('nav.kitchenExpiringSoon')}` : '';
   if (isKitchenRoute(path)) {
-    return t('nav.kitchenActiveLabel', { section: kitchenSectionLabel(path) });
+    return t('nav.kitchenActiveLabel', { section: kitchenSectionLabel(path) }) + dot;
   }
   // Inaktiv das Ziel offenlegen: der Küche-Tab führt zur zuletzt besuchten
   // Sektion (Meals/Recipes/Shopping). Ohne diese Ansage ist für Screenreader-
   // und Tastatur-Nutzer nicht vorhersagbar, wohin der Tab navigiert.
-  return t('nav.kitchenGoLabel', { section: kitchenSectionLabel(path) });
+  return t('nav.kitchenGoLabel', { section: kitchenSectionLabel(path) }) + dot;
 }
 
 /**
@@ -4690,7 +4845,7 @@ function setMoreButtonState(moreBtn, activeSecondary) {
 
   const moreBtnLabel = moreBtn.querySelector('.nav-item__label');
   if (moreBtnLabel) moreBtnLabel.textContent = t('nav.more');
-  replaceNavIcon(moreBtn, '.nav-item__icon', 'more-horizontal');
+  replaceNavIcon(moreBtn, '.nav-item__icon', TAB_ICON.more);
 }
 
 function updateNav(rawPath) {
@@ -4703,6 +4858,8 @@ function updateNav(rawPath) {
   // /settings/personal/notifications fand "Mehr" dann kein Ziel und stand
   // ohne Aktivzustand da. Idempotent - ein schon gekuerzter Pfad bleibt.
   const path = topLevelSection(rawPath);
+  // Geschobene Seiten (hinter Więcej) stehen mit minimierter Kapsel (Tafla).
+  navMinimizer?.pin?.(isPushedRoute(path));
   const kitchenDestination = currentKitchenDestination();
   document.querySelectorAll('[data-route]').forEach((el) => {
     if (el.dataset.navId === 'kitchen' && kitchenDestination) {
@@ -4961,6 +5118,8 @@ function forgetSessionState() {
   // Der Layout-Hinweis des Dashboards gehoert derselben Sitzung: ohne ihn sagt
   // das Skelett am geteilten Tablett das Raster des Vorgaengers voraus.
   forgetLayoutHint();
+  // Haushalt und KI-Stand des Erfassens gehoeren derselben Sitzung.
+  forgetCaptureCache();
   // Gemerkte Scrollstände gehören zur Sitzung: der nächste Nutzer am selben
   // Gerät soll nicht auf den Positionen des vorigen landen.
   forgetScrollPositions();
@@ -5010,7 +5169,8 @@ window.addEventListener('auth:expired', () => {
  */
 function dropBadgesForRemovedRoutes() {
   for (const route of navBadgeRoutes()) {
-    if (!document.querySelector(`.nav-sidebar [data-route="${route}"], .nav-bottom [data-route="${route}"]`)) {
+    const attr = route.startsWith('/') ? 'data-route' : 'data-nav-id';
+    if (!document.querySelector(`.nav-sidebar [${attr}="${route}"], .nav-bottom [${attr}="${route}"]`)) {
       setNavBadge(route, 0);
     }
   }
@@ -5055,7 +5215,8 @@ function rebuildNavigation({ updateLabels = true } = {}) {
   }
   if (bottomItems) {
     const moreBtn = bottomItems.querySelector('#more-btn') ?? moreNavButtonEl();
-    bottomItems.replaceChildren(...buildBottomNavItems(moreBtn));
+    const indicator = bottomItems.querySelector('.nav-bottom__indicator');
+    bottomItems.replaceChildren(...(indicator ? [indicator] : []), ...buildBottomNavItems(moreBtn));
     requestAnimationFrame(() => positionTabIndicator());
   }
   if (moreSheet) {
@@ -5342,6 +5503,9 @@ window.yuvomi = {
   // Uebersicht mobil, Re-Critique 2026-09-27 A1 P2-6) - dasselbe Overlay wie
   // Seitenleiste, Mehr-Blatt und Cmd-K.
   openSearch: () => _openSearch?.(),
+  // Das globale Erfassen (Tafla) - fuer die Pille „Dodaj" der Uebersicht am
+  // Desktop; dasselbe Blatt wie das + neben der Kapsel.
+  openCapture: () => openCaptureFromShell(),
   showToast,
   friendlyError,
   setThemeColor,

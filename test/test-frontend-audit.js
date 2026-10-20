@@ -2847,12 +2847,13 @@ test('Sidebar-Pille: EIN Material in hell und dunkel - Akzent-Toenung, Akzent-Ra
   const glass = read('../public/styles/glass.css');
   const tokens = read('../public/styles/tokens.css');
   const body = cssRuleBody(glass, '.nav-sidebar__indicator');
-  assert.match(body, /background:\s*color-mix\(in srgb, var\(--color-accent\) var\(--sidebar-indicator-tint\), var\(--glass-bg-card\)\)/,
-    'die Toenung kommt aus --sidebar-indicator-tint');
-  assert.match(body, /border:\s*1px solid color-mix\(in srgb, var\(--color-accent\) var\(--sidebar-indicator-rim-tint\), transparent\)/,
-    'der Rand ist Akzent-Tint, kein Glas-Weiss');
+  // TAFLA (2026-10-19, spec-navigation „iPad in the hand"): die Pille der
+  // Seitenleiste ist dieselbe deckende Akzent-Toenung wie die der Tab-Kapsel -
+  // ein Aktivzustand in beiden Navigationen, ohne Rand und Schatten.
+  assert.match(body, /background:\s*var\(--color-accent-tint\)/, 'die Toenung ist der Token des Vertrags');
+  assert.match(body, /border:\s*0/, 'kein Rand');
+  assert.match(body, /box-shadow:\s*none/, 'kein Schatten');
   assert.doesNotMatch(body, /--glass-border-subtle|--glass-shadow-sm/, 'kein Weissrand und kein Weissring mehr');
-  assert.match(body, /var\(--sidebar-indicator-shadow\)/);
   const shadows = [...tokens.matchAll(/--_sidebar-indicator-shadow:\s*([^;]+);/g)].map((m) => m[1]);
   assert.equal(shadows.length, 3, 'hell plus beide Dark-Pfade setzen den Schatten');
   for (const value of shadows) {
@@ -3011,7 +3012,8 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   const focusRule = cssRuleBody(layout, '.nav-bottom .nav-item:focus-visible');
   const pressedWellRule = cssRuleBody(layout, '.nav-bottom .nav-item:active .nav-item__icon-well');
 
-  assert.match(indicatorSurfaceRule, /inset-inline:\s*var\(--space-1\)/);
+  // Tafla: die Pille IST der aktive Tab (Zeichen und Label), kein Einzug.
+  assert.match(indicatorSurfaceRule, /inset:\s*0/);
   assert.doesNotMatch(indicatorRule, /transition:[^;]*\bwidth\b/);
   // Gesucht ist die REGEL, die das aktive Tab-Bar-Label faerbt, nicht ihre
   // Selektorliste: die Erweiterung um die Sidebar (Runde 6, Phase 3) haette
@@ -3031,10 +3033,11 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   // der App mit dem Zimmer (Eine-Stimme-Regel, DESIGN.md). Der Ink-Mix bleibt,
   // seine Begruendung haengt an der getoenten Flaeche darunter, nicht daran,
   // WELCHE Farbe sie toent.
-  assert.match(
-    activeNavLabelRule,
-    /color:\s*color-mix\(\s*in srgb,\s*var\(--color-accent\)\s*70%,\s*var\(--color-text-primary\)\s*\)/,
-  );
+  // TAFLA: Zeichen UND Label in der Stimme auf der deckenden Akzent-Toenung.
+  // Der 70-%-Mix war die Antwort auf eine durchscheinende Toenung ueber Glas;
+  // das Token-Paar --color-accent auf --color-accent-tint haelt AA ohne ihn
+  // (#6C3AED auf #F0EBFD 6,1:1, dunkel #B49CFF auf #3A3249 6,0:1).
+  assert.match(activeNavLabelRule, /color:\s*var\(--color-accent\)/);
   assert.match(
     activeNavLabelRule,
     /font-weight:\s*var\(--font-weight-semibold\)/,
@@ -3042,16 +3045,13 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   // Fokusring liegt AUSSEN um die Icon-Well (nicht innen ins Item) — so ist er
   // für Tastatur-/Sehbeeinträchtigte klar zu orten statt hinter Icon+Label zu
   // verschwinden.
-  assert.match(focusRule, /outline:\s*none/);
-  const focusWellRule = cssRuleBody(layout, '.nav-bottom .nav-item:focus-visible .nav-item__icon-well');
-  // Breite und Offset kommen aus den geteilten Fokus-Tokens (tokens.css §7b),
-  // vorher aus --space-0h. Die FARBE wich frueher ab (--item-module-accent: ein
-  // Nav-Item zeigt auf SEIN Modul); mit der Eine-Stimme-Regel ist die Ausnahme
-  // entfallen - ein Fokusring, der pro Tab die Farbe wechselt, macht aus einer
-  // Tastatur-Affordanz fuenf.
-  assert.match(focusWellRule, /outline:\s*var\(--focus-ring-width\)\s+solid\s+var\(--focus-ring-color\)/);
-  assert.match(focusWellRule, /outline-offset:\s*var\(--focus-ring-offset\)/);
-  assert.match(focusWellRule, /--focus-ring-color:\s*var\(--color-accent\)/);
+  // TAFLA: der Ring liegt um den ganzen Tab (die Pille umfasst Zeichen und
+  // Label), innen an der Tabkante, damit ihn die Rundung der Kapsel nicht
+  // beschneidet. Breite und Offset aus den Fokus-Tokens (tokens.css §7b), die
+  // Farbe ist die Stimme - EIN Ring fuer alle Ziele (Eine-Stimme-Regel).
+  assert.match(focusRule, /outline:\s*var\(--focus-ring-width\)\s+solid\s+var\(--focus-ring-color\)/);
+  assert.match(focusRule, /outline-offset:\s*var\(--focus-ring-offset-inset\)/);
+  assert.match(focusRule, /--focus-ring-color:\s*var\(--color-accent\)/);
   assert.match(pressedWellRule, /transform:\s*translateY\(var\(--space-px\)\) scale\(0\.96\)/);
   assert.doesNotMatch(layout, /(^|\n)\.nav-item:active\s*\{[\s\S]*?transform:/);
   assert.doesNotMatch(layout, /\.nav-bottom \.nav-item:active\s*\{[\s\S]*?transform:/);
@@ -3060,7 +3060,7 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   // Kante der gleitenden Pille).
   assert.match(
     glass,
-    /\.nav-bottom__indicator\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--color-accent\)/,
+    /\.nav-bottom__indicator\s*\{[\s\S]*?background:\s*var\(--color-accent-tint\)/,
   );
   assert.doesNotMatch(indicatorSurfaceGlass, /background:/);
   assert.match(
@@ -3144,15 +3144,14 @@ test('bottom-nav labels wrap to two lines instead of clipping across locales', (
   assert.deepEqual(offenders, [], `bottom-bar nav labels over 24 chars need a shorter canonical label:\n${offenders.join('\n')}`);
 });
 
-test('bottom-nav icon-well fills the 44x44 touch-comfort zone', () => {
+test('bottom-nav target fills the 44x44 touch-comfort zone', () => {
   const layout = read('../public/styles/layout.css');
   const tokens = read('../public/styles/tokens.css');
-  const wellRule = cssRuleBody(layout, '.nav-bottom .nav-item__icon-well');
-
-  // Sichtbares Well: 44 breit × 40 hoch (kein 32px-Streifen mehr).
-  assert.match(wellRule, /width:\s*var\(--target-base\)/);
-  assert.match(wellRule, /height:\s*var\(--target-md\)/);
-  assert.doesNotMatch(wellRule, /height:\s*var\(--target-sm\)/);
+  // TAFLA: das Ziel ist der ganze Tab (Zeichen UND Label, die Pille umfasst
+  // beide) - mindestens 44 breit und 48 hoch; die Mulde ist entfallen.
+  const itemRule = cssRuleBody(layout, '.nav-bottom .nav-item');
+  assert.match(itemRule, /min-width:\s*var\(--target-base\)/);
+  assert.match(itemRule, /min-height:\s*var\(--space-12\)/);
 
   // Bar-Höhe innerhalb der iOS/Android-Norm (≥60px exkl. Safe-Area).
   assert.match(tokens, /--nav-height-mobile:\s*6[0-4]px/);
@@ -3244,12 +3243,13 @@ test('mobile bottom navigation avoids clipped Android labels and sparse icon spa
   const iconWellRule = cssRuleBody(layout, '.nav-bottom .nav-item__icon-well');
   const labelRule = cssRuleBody(layout, '.nav-item__label');
 
-  assert.match(navItemRule, /padding-block:\s*var\(--space-0h\)/);
-  assert.match(iconWellRule, /width:\s*var\(--target-base\)/);
-  // Well 44×40 (--target-md) füllt die Komfortzone besser als das alte 44×32.
-  assert.match(iconWellRule, /height:\s*var\(--target-md\)/);
+  // Tafla: der Tab traegt 4pt oben/unten, das Zeichen steht ohne Mulde; die
+  // Labels duerfen zweizeilig umbrechen (Regel am Bar-Label), statt zu kappen.
+  assert.match(navItemRule, /padding:\s*var\(--space-1\) 0/);
   assert.match(iconWellRule, /border-radius:\s*var\(--radius-full\)/);
   assert.match(labelRule, /line-height:\s*1\.2/);
+  const barLabel = cssRuleBody(layout, '.nav-bottom .nav-item__label');
+  assert.match(barLabel, /-webkit-line-clamp:\s*2/, 'lange Sprachen brechen auf zwei Zeilen um');
 });
 
 /**
@@ -4587,25 +4587,26 @@ test('der FAB weicht der Zeile, statt eine Gasse zu reservieren', () => {
   // Der eingesetzte FAB rechnet aus der Kapselgeometrie, nicht aus --fab-gap:
   // er soll in der Bar-Zeile ZENTRIERT sitzen, und das haengt an der Barhoehe
   // und an seiner eigenen Groesse.
+  // TAFLA: das globale + steht NEBEN der Kapsel und zentriert sich auf ihr.
   assert.match(
     tokens,
-    /--fab-offset-bottom:\s*calc\([^;]*var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)[^;]*--fab-size[^;]*\)/s,
-    'der eingesetzte FAB zentriert sich aus der GEMESSENEN Kapselhoehe (Fallback --nav-height-mobile) und --fab-size'
+    /--fab-offset-bottom:\s*calc\([^;]*var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)[^;]*--capture-size[^;]*\)/s,
+    'das + zentriert sich aus der GEMESSENEN Kapselhoehe (Fallback --nav-height-mobile) und --capture-size'
   );
   // Dieselbe Hoehe fuer den hinteren Abstand: mit zweizeiligen Labels (el,
   // fil) waechst die Kapsel auf 72px, und mit der Sollhoehe sass der Knopf
   // 16/8px statt mittig (Nav-Polish 2026-10-15).
   assert.match(
     tokens,
-    /--nav-fab-inset:\s*calc\(\(var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)\s*-\s*var\(--fab-size\)\)\s*\/\s*2\)/,
-    'der hintere FAB-Abstand rechnet aus derselben gemessenen Kapselhoehe'
+    /--nav-fab-inset:\s*calc\(\(var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)\s*-\s*var\(--capture-size\)\)\s*\/\s*2\)/,
+    'der Abstand des + rechnet aus derselben gemessenen Kapselhoehe'
   );
-  // Und die Kapsel macht ihm denselben Platz frei, aus derselben Groesse -
-  // sonst stuende der Knopf halb auf dem letzten Tab.
+  // Und die Zone haelt ihm seinen Platz frei, aus derselben Groesse - sonst
+  // stuende die Kapsel unter dem Knopf.
   assert.match(
     layout,
-    /\.nav-bottom__items\s*\{[^}]*padding-inline-end:\s*calc\(var\(--fab-size\)/,
-    'die Nav-Kapsel muss ihr hinteres Ende aus --fab-size freihalten'
+    /\.nav-bottom\s*\{[^}]*padding-inline:[^;]*var\(--capture-size\)/,
+    'die Zone muss das + aus --capture-size freihalten'
   );
   // PADDING, NICHT MARGE - seit 2026-08-12, und der Wechsel ist eine Korrektur
   // der Invariante, nicht des Mechanismus. Die Marge verkuerzte den Scrollport um
@@ -4724,11 +4725,11 @@ test('jede CSS-Ausblendung des FAB nullt seinen Nachlauf', () => {
   const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
   for (const file of readdirSync(styleDir).filter((f) => f.endsWith('.css'))) {
-    for (const { selector, body } of eachRule(read(`../public/styles/${file}`))) {
+    for (const { selector, body, at = [] } of eachRule(read(`../public/styles/${file}`))) {
       const trifftFab = /\.page-fab\b|#fab-new-item\b/.test(selector);
       const nurHidden = /\.page-fab\[hidden\]|#fab-new-item\[hidden\]/.test(selector);
       if (trifftFab && /display:\s*none/.test(body) && !nurHidden) {
-        versteckt.push({ file, selector: norm(selector) });
+        versteckt.push({ file, selector: norm(selector), compact: at.some((a) => /max-width:\s*1023px/.test(a)) });
       }
       if (/--fab-safe-zone:\s*0/.test(body)) nullt.push({ file, selector: norm(selector) });
     }
@@ -4746,7 +4747,12 @@ test('jede CSS-Ausblendung des FAB nullt seinen Nachlauf', () => {
   // Teilzeichenkette gepruefet: `body:has(.toolbar-new-btn:not([hidden]))` steckt in
   // `body:has(.toolbar-new-btn:not([hidden])) #fab-layer .page-fab`, und
   // `#fab-layer #fab-new-item` steckt in `body:has(#fab-layer #fab-new-item)`.
-  const ohnePaar = versteckt.filter(({ file, selector }) => !nullt.some((z) =>
+  // TAFLA: unter 1024px steht die Zone schon am Token auf 0 (tokens.css, der
+  // FAB sass dort in der Kapsel; heute schwebt dort keiner mehr). Eine Regel,
+  // die den Seiten-FAB NUR in dieser Breite ausblendet, ist damit gepaart.
+  const tokensCss = read('../public/styles/tokens.css');
+  const zoneZeroCompact = /@media\s*\(max-width:\s*1023px\)\s*\{\s*:root\s*\{[^}]*--fab-safe-zone:\s*0px/.test(tokensCss);
+  const ohnePaar = versteckt.filter(({ file, selector, compact }) => !(compact && zoneZeroCompact) && !nullt.some((z) =>
     z.file === file && (selector.includes(z.selector) || z.selector.includes(selector))));
 
   assert.deepEqual(ohnePaar.map((x) => `${x.file}: ${x.selector}`), [],
@@ -5963,7 +5969,8 @@ test('die Küchen-Tab-Leiste trägt den Zustand des Kreislaufs', () => {
     'der aktive Tab darf kein Badge tragen - sonst veraltet es bei jeder eigenen Mutation');
 
   // Das aria-label ERSETZT den Tab-Namen, es ergänzt ihn nicht.
-  for (const [tabKey, stateKey] of [['nav.shopping', 'nav.shoppingOpen'], ['nav.pantry', 'nav.pantryAttention']]) {
+  // Tafla: Spiżarnia meldet nur noch „laeuft bald ab" (Punkt, keine Zahl).
+  for (const [tabKey, stateKey] of [['nav.shopping', 'nav.shoppingOpen'], ['nav.pantry', 'nav.kitchenExpiringSoon']]) {
     assert.ok(tabs.includes(`\${t('${tabKey}')}: \${t('${stateKey}'`),
       `${stateKey} muss den Tabnamen voranstellen, sonst hört ein Screenreader nur die Zahl`);
   }
@@ -6737,8 +6744,10 @@ test('dashboard polish keeps one page heading and native quick-action controls',
 
   assert.equal((dashboard.match(/<h1\b/g) || []).length, 1, 'dashboard must expose one h1');
   assert.match(dashboard, /<h2 class="dashboard-overview__title(?: dashboard-overview__title--\$\{greetingPeriod\(\)\})?"/);
-  assert.match(dashboard, /<button type="button" class="fab-action"/);
-  assert.doesNotMatch(dashboard, /class="fab-action"[^>]*role="button"/);
+  // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnet das
+  // Erfassen-Blatt (components/capture-sheet.js), und dort sind es echte Knoepfe.
+  assert.doesNotMatch(dashboard, /class="fab-action"/);
+  assert.match(read('../public/components/capture-sheet.js'), /btn\.type = 'button';\s*btn\.className = 'capture-plus';/);
   assert.doesNotMatch(dashboard, /<button class="fab-action__btn"/);
   assert.match(css, /\.dashboard-icon-btn\s*\{[\s\S]*width:\s*var\(--target-lg\);[\s\S]*height:\s*var\(--target-lg\)/);
   // width/height müssen INNERHALB derselben .dashboard-icon-btn-Regel liegen
@@ -7136,16 +7145,18 @@ test('phase 4 keeps More bottom-nav identity stable while exposing active sectio
 
   assert.match(routerSource, /t\('nav\.moreActiveLabel',\s*\{\s*section:\s*activeSecondary\.label\s*\}\)/);
   assert.match(routerSource, /moreBtnLabel\.textContent\s*=\s*t\('nav\.more'\)/);
-  assert.match(routerSource, /replaceNavIcon\(moreBtn,\s*'\.nav-item__icon',\s*'more-horizontal'\)/);
+  // TAFLA: „Więcej" ist ein Ziel (das Verzeichnis aller Bereiche), kein
+  // Ueberlauf mehr - es fuehrt das Raster (spec-navigation.txt, TAB_ICON).
+  assert.match(routerSource, /replaceNavIcon\(moreBtn,\s*'\.nav-item__icon',\s*TAB_ICON\.more\)/);
+  assert.match(routerSource, /more:\s*'layout-grid'/);
   assert.doesNotMatch(routerSource, /const\s+moreIcon\s*=\s*activeSecondary\s*\?\s*activeSecondary\.icon/);
   assert.doesNotMatch(routerSource, /moreBtnLabel\.textContent\s*=\s*moreLabel/);
 
-  // More nutzt den eindeutigen Overflow-Glyph, nicht das mehrdeutige 3×3-Raster.
-  // Der Aufbau laeuft seit 2026-08-17 ueber `moduleIconEl` statt ueber einen
-  // eigenen NAV_ICONS-Zugriff je Bau-Stelle; geprueft wird weiter der NAME.
+  // Der Aufbau laeuft seit 2026-08-17 ueber `moduleIconEl`; geprueft wird der
+  // NAME - seit Tafla das Raster aus TAB_ICON, nicht das mehrdeutige 2x2.
   const navIcons = read('../public/nav-icons.js');
-  assert.match(navIcons, /'more-horizontal':\s*\[/);
-  assert.match(routerSource, /moduleIconEl\('more-horizontal',\s*'nav-item__icon'\)/);
+  assert.match(navIcons, /'layout-grid':\s*\[/);
+  assert.match(routerSource, /moduleIconEl\(TAB_ICON\.more,\s*'nav-item__icon'\)/);
   assert.doesNotMatch(routerSource, /grid-2x2/);
 });
 
@@ -8357,11 +8368,8 @@ test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrun
     // ohne Kante und im Hover mit --color-border-control - keine Kartenkante mehr.
     // `.cal-search` stand hier bis D1 (2026-10-16): die aufgedeckte Leiste der
     // Kalendersuche ist entfallen, das Feld steht im Kopf.
-    // Die Icon-Form der Kopfsuche (D1): ohne Fokus und ohne Begriff ist die
-    // Huelle ein Knopf in der Kopf-Icon-Haut (Ring wie `.btn--secondary`), das
-    // Feld darin traegt weder Kante noch Grund. Mit Fokus wird sie wieder Feld.
-    ['.page-toolbar .page-search:not(.page-search--field):not(:focus-within):not(:has(input:not(:placeholder-shown)))', 'Icon-Form der Kopfsuche; ein Knopf in der Kopf-Icon-Haut, kein Feld (ausser --field, R19)'],
-    ['.section-toolbar .page-search:not(:focus-within):not(:has(input:not(:placeholder-shown)))', 'Icon-Form der Abschnittssuche; derselbe Knopf'],
+    // Die Icon-Form der Kopfsuche stand hier bis Tafla (2026-10-19): sie ist
+    // seither ein Geisterkreis ohne jede Kante (--fill im 44er Ziel).
     ['.search-overlay__header', 'Kopf des Such-Overlays; Trennlinie zur Trefferliste'],
     // `.search-overlay__panel` stand hier bis R18 (2026-10-07): die Palette traegt
     // seither die Glaskante der schwebenden Flaechen (--glass-border), keine
@@ -16199,8 +16207,14 @@ test('die Sidebar zeigt die Modultoene als Legende', () => {
   const iconRule = [...eachRule(layout)].find(({ selector }) =>
     selector.trim() === '.nav-sidebar .nav-item__icon');
   assert.ok(iconRule, '.nav-sidebar .nav-item__icon fehlt - die Legende hat keinen Traeger mehr');
-  assert.match(iconRule.body, /color:\s*var\(--item-module-accent/,
-    'das Sidebar-Zeichen traegt den Ton SEINES Moduls (Legende, DESIGN.md „Colors")');
+  // TAFLA (2026-10-19): die Legende ist entfallen - Module verlassen den
+  // Rahmen (KIT.md „Colour discipline", spec-navigation „monochrome glyphs").
+  // Die Zeichen stehen in ink-2; der Ort des Modultons ist abgeschafft, nicht
+  // verlegt (Personenfarben tragen jetzt die Unterscheidung, wo Menschen
+  // gemeint sind).
+  assert.match(iconRule.body, /color:\s*var\(--color-text-secondary\)/,
+    'das Sidebar-Zeichen ist einfarbig (Tafla)');
+  assert.doesNotMatch(iconRule.body, /--item-module-accent/, 'kein Modulton an der Leiste');
   // Und der aktive Eintrag gewinnt die Stimme zurueck: eine Zeile, die als
   // Ganzes violett ist, deren Icon aber allein seine Familienfarbe behielte,
   // liest sich als „nicht mitgemeint".
@@ -16381,8 +16395,10 @@ test('die Tab-Bar zeigt dieselbe Legende wie die Sidebar', () => {
   const wellRule = [...eachRule(layout)].find(({ selector }) =>
     selector.trim() === '.nav-bottom .nav-item__icon-well');
   assert.ok(wellRule, '.nav-bottom .nav-item__icon-well fehlt - die mobile Legende hat keinen Traeger');
-  assert.match(wellRule.body, /color:\s*var\(--item-module-accent,\s*var\(--color-text-tertiary\)\)/,
-    'das Tab-Zeichen traegt den Ton SEINES Moduls; wer keines hat („Mehr"), bleibt tertiaer');
+  // TAFLA: das Tab-Zeichen steht in Tinte (es erbt sie vom Tab), nie im
+  // Modulton - Module verlassen den Rahmen.
+  assert.match(wellRule.body, /color:\s*inherit/, 'das Tab-Zeichen erbt die Tinte des Tabs');
+  assert.doesNotMatch(wellRule.body, /--item-module-accent/, 'kein Modulton an der Kapsel');
   // Aktiv gewinnt die Stimme, genau wie in der Sidebar - und zwar ueber die
   // gemeinsame Regel fuer beide Leisten.
   const activeWell = [...eachRule(layout)].find(({ selector }) =>
@@ -20914,8 +20930,10 @@ test('R17 E12: die deutsche Oberflaeche nennt die Startseite ueberall "Uebersich
     }
   };
   walk(de, '');
-  assert.deepEqual(hits, [], 'die Navigation heisst "Übersicht" - kein zweites Wort fuer dieselbe Seite, kein unuebersetzter Fachbegriff');
-  assert.equal(de.nav.dashboard, 'Übersicht');
+  assert.deepEqual(hits, [], 'kein zweites Wort fuer dieselbe Seite, kein unuebersetzter Fachbegriff');
+  // TAFLA (2026-10-19): die Startseite heisst in jeder Sprache „Heute" (pl Dziś).
+  assert.equal(de.nav.dashboard, 'Heute');
+  assert.equal(de.dashboard.title, 'Heute');
   assert.equal(de.settings.pageIntegrations, 'Fotos und Wetter', 'das Blatt nennt, was es traegt');
   assert.equal(de.settings.pageFamilyRoles, 'Mitglieder', 'nicht "Familie und Rollen" neben "Rollen und Rechte"');
 });

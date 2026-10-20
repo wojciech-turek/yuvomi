@@ -44,7 +44,7 @@
         "errorDetails": "기술 세부 정보",
         "pageFailedTitle": "지금은 {{page}}을(를) 열 수 없습니다",
         "pageFailedHint": "다른 모든 영역은 계속 작동합니다.",
-        "toOverview": "개요로 이동",
+        "toOverview": "오늘로 이동",
         "errorGeneric": "오류가 발생했습니다.",
         "updateAvailable": "업데이트가 있습니다 - 최신 버전을 사용하려면 페이지를 새로고침하세요.",
         "titleRequired": "제목은 필수입니다",
@@ -104,7 +104,7 @@
         "transferUndone": "쇼핑 목록에서 삭제했습니다."
     },
     "nav": {
-        "dashboard": "개요",
+        "dashboard": "오늘",
         "tasks": "할 일",
         "calendar": "캘린더",
         "meals": "식단",
@@ -151,7 +151,9 @@
         "rewards": "보상",
         "pantry": "재고",
         "inventory": "소지품",
-        "schedule": "근무표"
+        "schedule": "근무표",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "search": {
         "emptyHint": "입력해서 영역으로 이동하거나 새로 만드세요. 2자부터는 내 항목도 찾을 수 있고, 단어의 일부로도 됩니다.",
@@ -170,7 +172,7 @@
         "createTaskNamed": "“{{title}}”을(를) 할 일로 만들기"
     },
     "dashboard": {
-        "title": "개요",
+        "title": "오늘",
         "greetingMorning": "좋은 아침이에요, {{name}}님",
         "greetingDay": "안녕하세요, {{name}}님",
         "greetingEvening": "좋은 저녁이에요, {{name}}님",
@@ -2277,7 +2279,7 @@
             "housekeeping": "가사 도우미",
             "weather": "날씨",
             "family": "가족",
-            "dashboard": "개요",
+            "dashboard": "오늘",
             "search": "검색",
             "inventory": "소지품",
             "waste": "쓰레기 수거"
@@ -3574,7 +3576,7 @@
         "new": "새 항목 만들기",
         "searchCalendar": "캘린더 검색",
         "help": "단축키",
-        "goDash": "대시보드",
+        "goDash": "오늘",
         "calToday": "오늘로 이동",
         "calPrev": "이전 기간",
         "calNext": "다음 기간",
@@ -6646,5 +6648,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

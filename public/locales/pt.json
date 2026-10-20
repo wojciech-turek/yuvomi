@@ -44,7 +44,7 @@
         "errorDetails": "Detalhes técnicos",
         "pageFailedTitle": "Não é possível abrir {{page}} agora",
         "pageFailedHint": "Todas as outras áreas continuam a funcionar.",
-        "toOverview": "Ir para o painel",
+        "toOverview": "Ir para Hoje",
         "errorGeneric": "Ocorreu um erro.",
         "updateAvailable": "Atualização disponível - recarregue a página para obter a versão mais recente.",
         "titleRequired": "Título é obrigatório",
@@ -104,7 +104,7 @@
         "transferUndone": "Removido da lista de compras."
     },
     "nav": {
-        "dashboard": "Painel",
+        "dashboard": "Hoje",
         "tasks": "Tarefas",
         "calendar": "Calendário",
         "meals": "Refeições",
@@ -151,10 +151,12 @@
         "rewards": "Recompensas",
         "pantry": "Despensa",
         "inventory": "Inventário",
-        "schedule": "Turnos"
+        "schedule": "Turnos",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Painel",
+        "title": "Hoje",
         "greetingMorning": "Bom dia, {{name}}",
         "greetingDay": "Boa tarde, {{name}}",
         "greetingEvening": "Boa noite, {{name}}",
@@ -2123,7 +2125,7 @@
             "housekeeping": "Faxina",
             "weather": "Meteorologia",
             "family": "Família",
-            "dashboard": "Painel",
+            "dashboard": "Hoje",
             "search": "Pesquisar",
             "inventory": "Inventário",
             "waste": "Recolha de lixo"
@@ -3831,7 +3833,7 @@
     "shortcuts": {
         "goKitchen": "Cozinha",
         "goCal": "Calendário",
-        "goDash": "Painel",
+        "goDash": "Hoje",
         "calToday": "Ir para hoje",
         "calPrev": "Período anterior",
         "calNext": "Período seguinte",
@@ -6646,5 +6648,57 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "shoppingCount_many": "{{count}} items",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

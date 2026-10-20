@@ -135,7 +135,7 @@ test('Vorrat auf `none`: alle vier Vorratszahlen entfallen, der Einkauf bleibt',
   clearModuleDenials(KID);
   denyModules(KID, ['pantry']);
   const data = await summaryAs(KID);
-  assert.deepEqual(data.pantry, { attention: 0, expired: 0, low: 0, out: 0 }, 'die Form bleibt, die Zahlen gehen');
+  assert.deepEqual(data.pantry, { attention: 0, expired: 0, low: 0, out: 0, expiring: 0 }, 'die Form bleibt, die Zahlen gehen');
   assert.equal(data.shopping.open, 1, 'der Einkauf bleibt');
   clearModuleDenials(KID);
 });
@@ -146,7 +146,7 @@ test('Beide gesperrt: die Antwort behält ihre Form und meldet nichts', async ()
   const data = await summaryAs(KID);
   assert.deepEqual(data, {
     shopping: { open: 0 },
-    pantry: { attention: 0, expired: 0, low: 0, out: 0 },
+    pantry: { attention: 0, expired: 0, low: 0, out: 0, expiring: 0 },
   }, 'kein fehlendes Feld - die Leiste liest sie ohne Fallunterscheidung');
   clearModuleDenials(KID);
 });
@@ -179,4 +179,20 @@ test('Die /api/v1-Modulsperre kann diesen Endpoint gar nicht abdecken', async ()
   const access = buildSessionModuleAccess(resolvePermissions(db, kid));
   assert.equal(access.shopping, 'none', 'gesperrt ist, was die Route zählt');
   clearModuleDenials(KID);
+});
+
+// Tafla (2026-10-19): der Warnpunkt an „Spiżarnia" und am Tab „Kuchnia" heisst
+// „laeuft in hoechstens drei Tagen ab" - leere Artikel zaehlen nicht mit.
+test('Tafla: `expiring` zaehlt, was in hoechstens drei Tagen ablaeuft und noch da ist', async () => {
+  db.prepare(`
+    INSERT INTO pantry_items (name, quantity, expires_on)
+    VALUES ('Jogurt', 1, '2099-01-12'), ('Ser', 1, '2099-01-20'), ('Pusty', 0, '2099-01-11')
+  `).run();
+  clearModuleDenials(KID);
+  actor = KID;
+  const res = await fetch(`${base}?today=2099-01-10`);
+  assert.equal(res.status, 200);
+  const { data } = await res.json();
+  assert.equal(data.pantry.expiring, 1, 'Jogurt (in zwei Tagen) ja, Ser (in zehn) nein, Pusty ist leer');
+  db.prepare("DELETE FROM pantry_items WHERE name IN ('Jogurt', 'Ser', 'Pusty')").run();
 });

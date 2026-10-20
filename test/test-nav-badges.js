@@ -125,10 +125,15 @@ async function freshModule(routes = ['/tasks'], pageRoutes = []) {
 
 // --------------------------------------------------------
 
-test('eine gesetzte Zahl erscheint am Nav-Ziel', async () => {
+// TAFLA (2026-10-19, spec-navigation.txt): das Ziel traegt einen 6pt-Punkt
+// „wartet heute auf dich", keine Ziffer. Die Menge steht im Namen des Ziels.
+test('eine gesetzte Zahl erscheint am Nav-Ziel als Punkt ohne Ziffer', async () => {
   const nav = await freshModule();
   nav.setNavBadge('/tasks', 3);
-  assert.equal(nav.badgeText('/tasks'), '3');
+  assert.equal(nav.badgeCount('/tasks'), 1, 'ein Punkt am Ziel');
+  assert.equal(nav.badgeText('/tasks'), '', 'keine Ziffer in der Leiste');
+  const item = document.querySelectorAll('[data-route="/tasks"]')[0];
+  assert.match(item.querySelectorAll('.nav-badge')[0].className, /\bnav-badge--dot\b/);
 });
 
 test('die Zahl ueberlebt einen Neuaufbau der Navigation (#868)', async () => {
@@ -140,10 +145,10 @@ test('die Zahl ueberlebt einen Neuaufbau der Navigation (#868)', async () => {
   nav.setNavBadge('/tasks', 3);
 
   nav.rebuild();
-  assert.equal(nav.badgeText('/tasks'), null, 'der Neuaufbau hat die Navigation frisch gebaut');
+  assert.equal(nav.badgeCount('/tasks'), 0, 'der Neuaufbau hat die Navigation frisch gebaut');
 
   nav.applyNavBadges();
-  assert.equal(nav.badgeText('/tasks'), '3', 'die gemerkte Zahl ist wieder da');
+  assert.equal(nav.badgeCount('/tasks'), 1, 'der gemerkte Punkt ist wieder da');
 });
 
 test('null entfernt das Badge, statt eine Null hinzuschreiben', async () => {
@@ -167,15 +172,13 @@ test('ein zweites Setzen ersetzt das Badge, es sammelt sich nichts an', async ()
   nav.setNavBadge('/tasks', 3);
   nav.setNavBadge('/tasks', 4);
   assert.equal(nav.badgeCount('/tasks'), 1, 'genau ein Badge am Ziel');
-  assert.equal(nav.badgeText('/tasks'), '4');
 });
 
-test('ab hundert steht 99+ statt einer dreistelligen Zahl', async () => {
+test('auch hundert bleiben ein Punkt - die Menge steht nur im Namen', async () => {
   const nav = await freshModule();
-  nav.setNavBadge('/tasks', 100);
-  assert.equal(nav.badgeText('/tasks'), '99+');
-  nav.setNavBadge('/tasks', 99);
-  assert.equal(nav.badgeText('/tasks'), '99');
+  nav.setNavBadge('/tasks', 100, (count) => `Aufgaben, ${count} ueberfaellig`);
+  assert.equal(nav.badgeText('/tasks'), '');
+  assert.equal(nav.label('/tasks'), 'Aufgaben, 100 ueberfaellig');
 });
 
 test('die Ansage steht im Namen des ZIELS, nicht im Badge', async () => {
@@ -221,7 +224,7 @@ test('dasselbe Ziel in Seitenleiste UND Tab-Bar bekommt beide Badges', async () 
   const items = document.querySelectorAll('[data-route="/tasks"]');
   assert.equal(items.length, 2);
   for (const item of items) {
-    assert.equal(item.querySelectorAll('.nav-badge')[0]?.textContent, '5');
+    assert.equal(item.querySelectorAll('.nav-badge').length, 1);
   }
 });
 
@@ -244,7 +247,7 @@ test('das Badge haengt am Icon, nicht am ganzen Nav-Eintrag', async () => {
   const item = document.querySelectorAll('[data-route="/tasks"]')[0];
   const wrap = item.querySelectorAll('.nav-item__icon-wrap')[0];
   assert.ok(wrap, 'die Icon-Huelle wurde nachgeruestet');
-  assert.ok(wrap.children.some((c) => c.className === 'nav-badge'),
+  assert.ok(wrap.children.some((c) => c.className.split(/\s+/).includes('nav-badge')),
     'das Badge liegt in der Huelle');
   assert.ok(wrap.children.some((c) => c.className === 'nav-item__icon'),
     'und das Icon ist mit hineingewandert, nicht ersetzt worden');
@@ -351,7 +354,7 @@ test('nur die Navigation bekommt die Zahl, nicht jeder Link mit dieser Route', a
   const nav = await freshModule(['/tasks'], ['/tasks', '/tasks']);
   nav.setNavBadge('/tasks', 3, (count) => `Aufgaben, ${count} ueberfaellig`);
 
-  assert.equal(nav.badgeText('/tasks'), '3', 'das Nav-Ziel traegt die Zahl');
+  assert.equal(nav.badgeCount('/tasks'), 1, 'das Nav-Ziel traegt den Punkt');
 
   for (const index of [0, 1]) {
     const fremd = nav.pageItem(index);

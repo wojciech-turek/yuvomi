@@ -198,13 +198,18 @@ test('(4) die Suche nimmt mobil ihre Icon-Form auch in einem Wrapper-Slot', () =
   assert.match(rule.selector, /\.page-toolbar\s+\.page-search/);
   assert.ok(rule.at.some((a) => /max-width:\s*767px/.test(a)),
     'die Kopfregel gilt unter --bp-tablet (768), nicht erst unter 640');
-  // D1 (Critique 2026-10-16): die Lupe traegt die EINE Haut der Kopf-Icon-
-  // Knoepfe - den Ring von `.btn--secondary` (1.5px --color-border), rund -,
-  // statt nackt neben beringtem Filter und „..." zu stehen.
-  assert.match(decl(rule.body, 'border') ?? '', /^1\.5px solid var\(--color-border\)$/, 'Ring der Kopf-Icon-Haut an der Huelle');
+  // D1 (Critique 2026-10-16) / Tafla (2026-10-19): die Lupe traegt die EINE
+  // Haut der Kopf-Icon-Knoepfe - seit Tafla den Geisterkreis (36pt --fill im
+  // 44er Ziel, kein Ring, Tinte statt Stimme), statt anders neben Filter und
+  // „..." zu stehen.
+  assert.equal(decl(rule.body, 'border'), '0', 'kein Ring');
   assert.equal(decl(rule.body, 'border-radius'), 'var(--radius-full)', 'rund wie die Icon-Knoepfe daneben');
+  assert.equal(decl(rule.body, 'background-color'), 'var(--color-fill)', 'die Flaeche des Geisterkreises');
+  assert.equal(decl(rule.body, 'background-clip'), 'content-box', '36pt sichtbar im 44er Ziel');
   const glyph = rules(layoutCss).find((r) => /\.page-toolbar\s+\.page-search(?::not\(\.page-search--field\))?:not\(:focus-within\)[^,]*\.page-search__icon/.test(r.selector));
-  assert.equal(glyph && decl(glyph.body, 'color'), 'var(--color-accent)', 'das Zeichen in der Tinte von btn--secondary');
+  assert.equal(glyph && decl(glyph.body, 'color'), 'var(--color-text-primary)', 'das Zeichen in Tinte - nie violett');
+  const ghost = rules(layoutCss).find((r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && r.selector === '.page-toolbar .btn--icon' && decl(r.body, 'background-color'));
+  assert.equal(decl(ghost?.body ?? '', 'background-color'), 'var(--color-fill)', 'dieselbe Haut fuer Werkzeug- und Filterknopf');
   const wrapper = rules(layoutCss).filter((r) => r.selector.includes(':has(> .page-search:only-child')
     && decl(r.body, 'flex') === '0 0 auto');
   assert.equal(wrapper.length, 1, 'ein Slot, der nur die Suche traegt, schrumpft mit ihr');
@@ -574,45 +579,47 @@ test('"Mehr" ist auf einem Einstellungsblatt sofort aktiv, auch nach dem Kaltsta
     'beim Kaltstart wird das Ziel erst nach dem Rendern der Seite markiert');
 });
 
-// R19 (Critique 2026-10-16, Persona Casey): DIE TABS STEHEN STILL. Ohne FAB
-// verteilten sich die fuenf Tabs auf die volle Kapsel (62 gegen 73px bei
-// 390px) - jeder Wechsel auf einen Budget-Reiter ohne Neu-Aktion, nach
-// Belohnungen oder in die Einstellungen schob die Ziele unter dem Daumen.
-// Re-Kritik 2026-10-17: R19 kuerzte dafuer die Kapsel ohne Knopf (8-334
-// statt 8-382px) - linksbuendig vor einem Loch, und ihr Ende sprang je Reiter.
-// Jetzt steht die Reserve immer: Kapsel, Tabs und Knopfplatz bleiben stehen.
-test('Re-Kritik: die FAB-Reserve der Kapsel steht immer - Kapselbreite und Tabs springen nicht je Seite oder Reiter', () => {
+// R19 (Critique 2026-10-16, Persona Casey): DIE TABS STEHEN STILL - Kapsel
+// und Tabs springen nicht je Seite oder Reiter. Seit Tafla (2026-10-19) steht
+// das + NEBEN der Kapsel: den Platz haelt die ZONE frei, und keine Regel fragt,
+// ob eine Seite einen eigenen Knopf hat.
+test('Tafla: das + steht neben der Kapsel - die Zone haelt seinen Platz, immer', () => {
   const all = rules(layoutCss);
   const conditional = all.filter((r) => r.selector.endsWith('.nav-bottom__items') && /page-fab|fab-holding/.test(r.selector));
   assert.deepEqual(conditional.map((r) => r.selector), [], 'keine Kapselregel fragt, ob die Seite einen FAB hat');
-  const reserve = all.find((r) => !r.at.length && r.selector.trim() === '.nav-bottom__items' && decl(r.body, 'padding-inline-end'));
-  assert.match(decl(reserve?.body ?? '', 'padding-inline-end') ?? '', /^calc\(var\(--fab-size\) \+ var\(--nav-fab-inset\)\)$/,
-    'die Reserve ist der Knopf plus sein Abstand zur Kante');
-  // Eine eigene Breite hat seit R20 nur die minimierte Pille (Test darunter);
-  // ohne Knopf bekommt die Kapsel keine.
+  const [zone] = topLevel(layoutCss, '.nav-bottom');
+  assert.match(decl(zone.body, 'padding-inline') ?? '',
+    /^var\(--nav-capsule-inset\) calc\(var\(--nav-capsule-inset\) \+ var\(--capture-size\) \+ var\(--nav-capture-gap\)\)$/,
+    'die Zone haelt hinten das + und seine Fuge frei (390pt: Kapsel 12-318, + 326-378)');
+  const tokens = read('../public/styles/tokens.css');
+  assert.match(tokens, /--capture-size:\s*52px;/, 'das + ist 52pt');
+  assert.match(tokens, /--nav-bar-gutter:\s*var\(--space-3\);/, '12pt vom Rand');
+  const capture = read('../public/styles/capture.css');
+  const [plus] = topLevel(capture, '.capture-plus');
+  assert.equal(decl(plus.body, 'inset-inline-end'), 'var(--nav-capsule-inset)', 'das + steht an derselben Kante wie die Gruppe');
+  assert.equal(decl(plus.body, 'bottom'), 'var(--fab-offset-bottom)', 'mittig auf der Kapsel');
   assert.ok(!all.some((r) => r.selector.endsWith('.nav-bottom__items') && !r.selector.includes('nav-bottom--minimized')
-    && decl(r.body, 'inline-size')), 'keine eigene Breite der Kapsel ohne Knopf');
+    && decl(r.body, 'inline-size')), 'keine eigene Breite der Kapsel ausser minimiert');
 });
 
-// R19 (Entscheidung Ulas 2026-10-16): DIE KAPSEL MINIMIERT BEIM LESEN.
-test('R19: die Kapsel minimiert beim Abwaertsscrollen - flacher, ohne Labels, Ziele und Zone bleiben', () => {
+// R19 (Entscheidung Ulas 2026-10-16) / Tafla: DIE KAPSEL MINIMIERT BEIM LESEN
+// zu einer 48pt hohen Kapsel aus Zeichen - alle Ziele bleiben, die Labels gehen.
+test('R19/Tafla: die Kapsel minimiert beim Abwaertsscrollen - 48pt, nur Zeichen, Ziele und Zone bleiben', () => {
   const all = rules(layoutCss);
   const tokens = read('../public/styles/tokens.css');
-  assert.match(tokens, /--nav-height-minimized:\s*calc\(var\(--target-base\) \+ var\(--space-2\)\);/,
-    'minimiert ist die Kapsel ein Ziel hoch plus Luft - die Tabs behalten ihre Trefferflaeche');
+  assert.match(tokens, /--nav-height-minimized:\s*var\(--space-12\);/, 'minimiert ist die Kapsel 48pt hoch');
   const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a));
   const capsule = all.find((r) => compact(r) && r.selector === '.nav-bottom--minimized:not(:focus-within) .nav-bottom__items');
   assert.equal(capsule && decl(capsule.body, 'min-height'), 'var(--nav-height-minimized)');
+  assert.match(decl(capsule.body, 'margin-block') ?? '', /var\(--nav-height-mobile\) - var\(--nav-height-minimized\)/,
+    'sie schrumpft um ihre Mitte - die Zone darunter bleibt gleich hoch (kein Layout-Shift)');
   const label = all.find((r) => compact(r) && r.selector === '.nav-bottom--minimized:not(:focus-within) .nav-item__label');
   assert.ok(label, 'die Labels blenden minimiert aus');
   assert.equal(decl(label.body, 'opacity'), '0');
   assert.equal(decl(label.body, 'display'), null, 'unsichtbar, nicht entfernt - der Name des Tabs bleibt im Baum');
   assert.equal(decl(label.body, 'visibility'), null);
-  const fab = all.find((r) => compact(r) && r.selector.startsWith('html.nav-minimized') && r.selector.includes('.page-fab-group')
-    && !r.selector.includes('rtl'));
-  assert.match(decl(fab?.body ?? '', 'translate') ?? '', /var\(--nav-fab-shift\) var\(--nav-fab-shift\)/,
-    'der FAB rueckt konzentrisch nach - per translate, ohne Layout');
-  assert.ok(all.some((r) => r.selector.includes('rtl') && r.selector.includes('nav-minimized')), 'auch unter dir=rtl');
+  const plus = all.find((r) => compact(r) && r.selector.startsWith('html.nav-minimized') && r.selector.includes('.capture-plus'));
+  assert.ok(plus && decl(plus.body, '--capture-scale'), 'das + schrumpft mit (per transform, ohne Layout)');
   const calm = all.filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a))
     && r.selector.includes('.nav-bottom__items') && r.selector.includes('.nav-item__label'));
   assert.ok(calm.some((r) => decl(r.body, 'transition') === 'none'), 'reduzierte Bewegung: Zustandswechsel ohne Gleiten');
@@ -622,29 +629,29 @@ test('R19: die Kapsel minimiert beim Abwaertsscrollen - flacher, ohne Labels, Zi
   assert.doesNotMatch(router, /!navMinimizer\)/, 'ein vorhandener Minimierer darf eine neue Kapsel nicht ausschliessen');
   assert.match(router, /function updateNav\(rawPath\) \{\n[^\n]*\n\s*navMinimizer\?\.expand\(\);/,
     'jeder Seitenwechsel beginnt mit ausgefahrener Kapsel');
+  assert.match(router, /navMinimizer\?\.pin\?\.\(isPushedRoute\(path\)\)/,
+    'geschobene Seiten (hinter Więcej) stehen mit minimierter Kapsel');
 });
 
-// R20 (Entscheidung Ulas 2026-10-17, iOS 26): MINIMIERT IST DIE KAPSEL EINE PILLE.
-test('R20: minimiert schrumpft die Kapsel an ihrer Startkante auf das aktive Ziel, ohne Layout-Shift', () => {
+// Tafla (spec-navigation.txt, chrome.py --mini): minimiert bleiben ALLE Ziele
+// stehen, je 48 breit - die R20-Pille (nur das aktive Ziel) ist entfallen.
+test('Tafla: minimiert bleiben alle Ziele sichtbar, die Breite gleitet gemessen', () => {
   const all = rules(layoutCss);
   const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a));
   const find = (sel, prop = null) => all.find((r) => compact(r) && r.selector === sel && (!prop || decl(r.body, prop)));
-  const pill = find('.nav-bottom--minimized:not(:focus-within) .nav-bottom__items', 'inline-size');
-  assert.equal(decl(pill?.body ?? '', 'inline-size'), 'var(--nav-pill-width, 100%)', 'die Kapsel wird nicht zur Pille');
-  const start = all.find((r) => compact(r) && r.selector === '.nav-bottom__items' && decl(r.body, 'margin-inline'));
-  assert.match(decl(start?.body ?? '', 'margin-inline') ?? '', /^max\(0px, \(100% - var\(--nav-capsule-max\)\) \/ 2\) auto$/,
-    'die Startkante steht nicht fest - eine Pille mit auto-Raendern zentrierte sich');
-  const frozen = find(':is(.nav-bottom--minimized, .nav-bottom--settling) .nav-item');
-  assert.equal(decl(frozen?.body ?? '', 'flex'), 'none', 'die Tabs schrumpfen mit (und wandern) - auch auf dem Rueckweg');
-  const others = find('.nav-bottom--minimized:not(:focus-within) .nav-item:not(.nav-item--pill)');
-  assert.equal(decl(others?.body ?? '', 'visibility'), 'hidden', 'ausgeblendete Tabs nehmen noch Treffer');
-  const moved = find('.nav-bottom--minimized:not(:focus-within) .nav-item--pill');
-  assert.match(decl(moved?.body ?? '', 'translate') ?? '', /var\(--nav-pill-shift/, 'das aktive Ziel wandert per translate');
+  const capsule = find('.nav-bottom--minimized:not(:focus-within) .nav-bottom__items', 'inline-size');
+  assert.equal(decl(capsule?.body ?? '', 'inline-size'), 'var(--nav-mini-width, 100%)');
+  const item = find('.nav-bottom--minimized:not(:focus-within) .nav-item');
+  assert.equal(decl(item?.body ?? '', 'flex'), 'none');
+  assert.equal(decl(item?.body ?? '', 'inline-size'), 'var(--space-12)', 'jedes Ziel 48 breit');
+  assert.ok(!all.some((r) => r.selector.includes('nav-bottom--minimized') && decl(r.body, 'visibility') === 'hidden'),
+    'kein Ziel verschwindet minimiert');
+  assert.ok(!all.some((r) => /nav-item--pill/.test(r.selector)), 'die Pille aus R20 ist entfallen');
   const tr = find('.nav-bottom .nav-bottom__items', 'transition');
   assert.match(decl(tr?.body ?? '', 'transition') ?? '', /inline-size/, 'die Breite gleitet (und schlaegt glass.css per Spezifitaet)');
   const calm = all.filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)) && r.selector.includes('.nav-bottom .nav-item,'));
-  assert.ok(calm.some((r) => decl(r.body, 'transition') === 'none'), 'reduzierte Bewegung: die Pille entsteht ohne Gleiten');
-  assert.match(read('../public/utils/ux.js'), /if \(minimized\) measureNavPill\(nav\);/, 'gemessen wird nicht an der ausgefahrenen Kapsel');
+  assert.ok(calm.some((r) => decl(r.body, 'transition') === 'none'), 'reduzierte Bewegung: ohne Gleiten');
+  assert.match(read('../public/utils/ux.js'), /if \(minimized\) measureNavMini\(nav\);/, 'gemessen wird an der ausgefahrenen Kapsel');
 });
 
 // R20 (Re-Critique 2026-10-17): der Bereichskopf der Gesundheit blieb beim Lesen

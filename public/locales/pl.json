@@ -46,7 +46,7 @@
         "errorDetails": "Szczegóły techniczne",
         "pageFailedTitle": "Nie można teraz otworzyć strony {{page}}",
         "pageFailedHint": "Wszystkie pozostałe sekcje działają dalej.",
-        "toOverview": "Do pulpitu",
+        "toOverview": "Przejdź do Dziś",
         "errorGeneric": "Wystąpił błąd.",
         "updateAvailable": "Dostępna aktualizacja - odśwież stronę, aby uzyskać najnowszą wersję.",
         "titleRequired": "Tytuł jest wymagany",
@@ -106,10 +106,10 @@
         "transferUndone": "Usunięto z listy zakupów."
     },
     "nav": {
-        "dashboard": "Pulpit",
+        "dashboard": "Dziś",
         "tasks": "Zadania",
         "calendar": "Kalendarz",
-        "meals": "Jedzenie",
+        "meals": "Posiłki",
         "shopping": "Zakupy",
         "notes": "Notatki",
         "contacts": "Kontakty",
@@ -159,7 +159,9 @@
         "rewards": "Nagrody",
         "pantry": "Spiżarnia",
         "inventory": "Inwentarz",
-        "schedule": "Grafik"
+        "schedule": "Grafik",
+        "kitchenExpiringSoon": "coś się kończy",
+        "backTo": "Wróć: {{section}}"
     },
     "search": {
         "emptyHint": "Pisz, aby przejść do obszaru lub coś utworzyć. Od 2 znaków znajdziesz też swoje wpisy, nawet po fragmentach słów.",
@@ -178,7 +180,7 @@
         "createTaskNamed": "Utwórz „{{title}}” jako zadanie"
     },
     "dashboard": {
-        "title": "Pulpit",
+        "title": "Dziś",
         "greetingMorning": "Dzień dobry, {{name}}",
         "greetingDay": "Cześć, {{name}}",
         "greetingEvening": "Dobry wieczór, {{name}}",
@@ -210,7 +212,7 @@
         "eventsChip": "{{count}} wydarzenie dzisiaj",
         "eventsChipPlural": "{{count}} wydarzenia dzisiaj",
         "todayMealChip": "Dzisiaj: {{title}}",
-        "loadError": "Nie udało się w pełni załadować pulpitu.",
+        "loadError": "Nie udało się w pełni załadować ekranu Dziś.",
         "weatherRefresh": "Odśwież pogodę",
         "weatherRefreshTitle": "Odśwież",
         "weatherUpdated": "Pogoda zaktualizowana",
@@ -384,7 +386,7 @@
         "customizeTitle": "Dostosuj widżety",
         "customizeReset": "Resetuj",
         "customizeDone": "Gotowe",
-        "customizeSaved": "Twój pulpit został zapisany - inni zachowują swój.",
+        "customizeSaved": "Twój widok Dziś został zapisany - inni zachowują swój.",
         "customizeMoveUp": "Przesuń w górę",
         "customizeMoveDown": "Przesuń w dół",
         "overdueTasksChip": "{{count}} przeterminowane zadanie",
@@ -1355,7 +1357,7 @@
         "empty": "Brak kategorii.",
         "personal": "Osobiste",
         "household": "Domowe",
-        "deleteDetail": "Kategoria zostanie usunięta ze wszystkich notatek i filtrów pulpitu. Same notatki pozostaną bez zmian.",
+        "deleteDetail": "Kategoria zostanie usunięta ze wszystkich notatek i filtrów ekranu Dziś. Same notatki pozostaną bez zmian.",
         "widgetHint": "Po wybraniu wielu kategorii wyświetlane są tylko notatki należące do wszystkich z nich. Bez wyboru wyświetlane są wszystkie notatki.",
         "permissionLabel": "Zarządzaj domowymi kategoriami notatek",
         "searchPlaceholder": "Wyszukaj lub utwórz kategorię...",
@@ -2429,7 +2431,7 @@
         "apiTokenScopeModules": {
             "tasks": "Zadania",
             "shopping": "Zakupy",
-            "meals": "Jedzenie",
+            "meals": "Posiłki",
             "calendar": "Kalendarz",
             "schedule": "Grafik",
             "notes": "Notatki",
@@ -2441,7 +2443,7 @@
             "housekeeping": "Sprzątanie",
             "weather": "Pogoda",
             "family": "Rodzina",
-            "dashboard": "Pulpit",
+            "dashboard": "Dziś",
             "search": "Szukaj",
             "inventory": "Inwentarz",
             "waste": "Odbiór odpadów"
@@ -2951,7 +2953,7 @@
         "permRoleLegend": "Te uprawnienia dotyczą wszystkich członków z tą rolą rodzinną, chyba że członek ma własny wyjątek.",
         "permMemberLegend": "Te wyjątki dotyczą tylko tego członka i mają pierwszeństwo przed domyślnymi ustawieniami roli.",
         "permModulesHeading": "Moduły",
-        "permWidgetsHeading": "Widżety pulpitu",
+        "permWidgetsHeading": "Kafelki ekranu Dziś",
         "permAccessNone": "Brak dostępu",
         "permAccessRead": "Tylko do odczytu",
         "permAccessWrite": "Pełny",
@@ -3784,7 +3786,7 @@
         "new": "Utwórz nowy wpis",
         "searchCalendar": "Przeszukaj kalendarz",
         "help": "Skróty klawiszowe",
-        "goDash": "Pulpit",
+        "goDash": "Dziś",
         "calToday": "Przejdź do dziś",
         "calPrev": "Poprzedni okres",
         "calNext": "Następny okres",
@@ -6972,5 +6974,58 @@
         "repeatWeekly": "co tydzień",
         "repeatMonthly": "co miesiąc",
         "repeatYearly": "co rok"
+    },
+    "capture": {
+        "add": "Dodaj",
+        "title": "Szybkie dodawanie",
+        "fieldLabel": "Co dodać? Napisz albo podyktuj",
+        "placeholder": "Co dodać?",
+        "typeGroup": "Typ wpisu",
+        "parseLabel": "Rozpoznany wpis",
+        "type": {
+            "auto": "Auto",
+            "task": "Zadanie",
+            "event": "Wydarzenie",
+            "shopping": "Zakupy",
+            "meal": "Posiłek",
+            "note": "Notatka"
+        },
+        "recognized": "rozpoznane automatycznie",
+        "hint": "Napisz np. „jutro 18 fryzjer” albo „mleko, jajka, masło”.",
+        "photoLabel": "Dodaj ze zdjęcia",
+        "primary": {
+            "auto": "Dodaj",
+            "task": "Dodaj do Zadań",
+            "event": "Dodaj do Kalendarza",
+            "shopping": "Dodaj do Zakupów",
+            "shoppingMany": "Dodaj {{count}} do Zakupów",
+            "meal": "Dodaj do Posiłków",
+            "note": "Zapisz notatkę"
+        },
+        "fullForm": "Pełny formularz: {{action}}",
+        "shoppingCount": "{{count}} produktów",
+        "shoppingCount_one": "{{count}} produkt",
+        "shoppingCount_few": "{{count}} produkty",
+        "shoppingCount_many": "{{count}} produktów",
+        "saved": {
+            "task": "Dodano do Zadań",
+            "event": "Dodano do Kalendarza",
+            "shoppingOne": "Dodano do Zakupów",
+            "shoppingMany": "Dodano do Zakupów: {{count}}",
+            "meal": "Dodano do Posiłków",
+            "note": "Zapisano notatkę"
+        },
+        "tokenDate": "Kiedy: {{value}}. Usuń",
+        "tokenTime": "Godzina: {{value}}. Usuń",
+        "tokenPerson": "Kto: {{value}}. Usuń",
+        "noShoppingList": "Nie ma jeszcze listy zakupów.",
+        "saveFailed": "Nie udało się zapisać. Tekst został w polu.",
+        "undoFailed": "Nie udało się cofnąć.",
+        "nothingWritable": "Tutaj nie możesz niczego dodać.",
+        "menu": {
+            "label": "Dodaj ze zdjęcia",
+            "pantryPhoto": "Zdjęcie spiżarni",
+            "document": "Dokument"
+        }
     }
 }
