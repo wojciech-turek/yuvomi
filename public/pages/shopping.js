@@ -1868,6 +1868,8 @@ function wireAutocomplete(container) {
     autocompleteTimeout = setTimeout(async () => {
       try {
         const data = await api.get(`/shopping/suggestions?q=${encodeURIComponent(q)}`);
+        // The field moved on (sent, cleared, retyped): this answer is stale.
+        if (input.value.trim() !== q) return;
         const suggestions = data.data ?? [];
         if (!suggestions.length) { dropdown.hidden = true; return; }
 
@@ -2259,6 +2261,10 @@ function wireQuickAdd(container) {
       nameInput.value = '';
       qtyInput.value  = '';
       resetQuickAddCategory(catSelect);
+      // The suggestions belonged to the name that was just sent.
+      clearTimeout(autocompleteTimeout);
+      const dropdown = container.querySelector('#autocomplete-dropdown');
+      if (dropdown) dropdown.hidden = true;
       // Erfolgs-Feedback auf dem +-Button (DOM-API, kein innerHTML)
       _flashAddBtn(form.querySelector('.quick-add__btn'));
       nameInput.focus();
