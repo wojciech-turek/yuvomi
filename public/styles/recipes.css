@@ -1062,7 +1062,8 @@ button.recipe-detail__ingredient-match:hover {
     border-radius: 0;
   }
 
-  .modal-panel.modal-panel--recipe::before {
+  .modal-panel.modal-panel--recipe::before,
+  .modal-panel.modal-panel--recipe::after {
     content: none;
   }
 }
