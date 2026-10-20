@@ -711,9 +711,11 @@
  * ein `span`, den niemand antippen kann, hat keinen Handler. Guard: test:motion
  * ("keine Animation an einer Zustandsklasse"). */
 
+/* Tafla: erledigt ist violett, nicht gruen ("Done is violet") - die
+ * Fuellrolle des Akzents, damit Weiss darauf auch im Dark 4,5:1 haelt. */
 .task-status-btn--done::after {
-  border-color: var(--color-success);
-  background-color: var(--color-success);
+  border-color: var(--color-btn-primary);
+  background-color: var(--color-btn-primary);
 }
 
 .task-status-btn--in_progress {
@@ -725,9 +727,10 @@
 }
 
 .task-status-btn__check {
-  width: 12px;
-  height: 12px;
-  color: var(--color-ink-on-vivid);
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+  color: var(--color-on-accent);
   display: none;
   position: absolute;
   z-index: 1;
@@ -830,113 +833,6 @@
   text-decoration-color: var(--color-text-secondary);
 }
 
-/* EINE ZEILE, UND SIE BRICHT NICHT UM.
- *
- * Hier stand `flex-wrap: wrap` mit 12px Gap. Das war der Höhentreiber der
- * Aufgabenliste, nicht die Polsterung: acht mögliche Elemente (Priorität, zwei
- * Daten, Wiederholung, Anhang, Sichtbarkeit, Kategorie, bis zu vier Etiketten)
- * ergaben je nach Aufgabe zwei bis drei Metazeilen, und benachbarte Zeilen
- * waren damit verschieden hoch - das Auge findet in einer Liste ohne festen
- * Takt keinen Rhythmus mehr.
- *
- * WAS ÜBERLÄUFT, IST ENTSCHIEDEN, NICHT ZUFÄLLIG: Priorität und Fälligkeit
- * schrumpfen nicht (`flex-shrink: 0` unten), das Etikett schon - es trägt seine
- * eigene Ellipse (`.list-row__tag`/`.task-tag`) und den „+N"-Marker daneben.
- * Deshalb ist die Reihenfolge im Markup die Rangfolge: was hinten steht, gibt
- * zuerst nach. Ein Abschnitt ohne Ellipse käme in dieser Zeile nicht vor.
- *
- * Warum nicht einfach weniger rendern: die Auswahl trifft schon renderTaskCard
- * (zwei Daten, doppelte Kategorie, ein Etikett statt drei). Diese Regel hält
- * den Takt auch dann, wenn eine Aufgabe alles gleichzeitig trägt. */
-.task-card__meta {
-  display: flex;
-  align-items: center;
-  /* 4px, nicht 8: die Elemente der Zeile sind Pillen mit eigener Polsterung und
-   * eigener Fläche - zwischen zwei Chips liest sich der Abstand optisch als das
-   * Doppelte. Gemessen war es die letzten 3px, die eine Zeile mit Priorität,
-   * Fälligkeit UND Wiederholungs-Glyphe (231px auf 228px) noch überlaufen
-   * liessen. */
-  gap: var(--space-1);
-  flex-wrap: nowrap;
-  min-width: 0;
-  overflow: hidden;
-  /* DIE ZEILE TRAEGT IHRE HOEHE, NICHT DER GROESSTE CHIP DARIN.
-   *
-   * Bis 2026-08-18 war das Prioritaets-Etikett mit seiner Fuellung, seiner
-   * Kante und seiner geerbten Zeilenhoehe das hoechste Element hier (23,63px)
-   * und bestimmte damit den Abstand zwischen Titel und Metazeile. Ohne die
-   * Fuellung (Skalen-Regel) blieb die Zeile beim Etikett stehen: 22,8px, und
-   * die Zielzentren von Titel und Tag ruckten von 23,56 auf 23,15px zusammen -
-   * unter die 24px, die WCAG 2.5.8 fuer zwei untermassige Ziele verlangt.
-   * Sonde 4 der Dokument-Guards hat genau das gemeldet.
-   *
-   * Die Hoehe gehoert deshalb der ZEILE. 25px setzt den Abstand auf 24,25px
-   * (gemessen, 1440x900, de) und haelt ihn auch fuer Zeilen ohne Etikett und
-   * ohne Tag, wo die Metazeile bisher noch flacher war - eine Zusicherung, die
-   * es vorher gar nicht gab, weil sie an einem Chip hing, der fehlen darf. */
-  min-height: 25px;
-}
-
-.task-card__meta > .priority-badge,
-.task-card__meta > .due-date {
-  flex-shrink: 0;
-}
-
-/* DAS ETIKETT GIBT NACH, UND ZWAR MIT ELLIPSE.
- *
- * Ohne diese Regel klippte der `overflow: hidden` der Metazeile das Chip mitten
- * im Wort ab: gemessen bei 390px stand „drin" statt „dringend" und bei einer
- * langen Fälligkeit („Überfällig - 11.08.2026") blieb vom Etikett ein 1px
- * breiter Splitter stehen. `.list-row__tag` trägt seine Ellipse seit jeher,
- * `.task-tag` hatte sie nie - sie brauchte sie auch nie, solange die Zeile
- * umbrach.
- *
- * `min-width` statt reinem `flex-shrink`: unter etwa vier Zeichen sagt ein
- * Etikett nichts mehr, und dann ist der „+N"-Marker daneben die ehrlichere
- * Auskunft. Der Marker selbst schrumpft nie - er ist zwei bis drei Zeichen breit
- * und ist genau die Stelle, an der steht, dass etwas fehlt. */
-.task-card__meta > .task-tag {
-  flex: 0 1 auto;
-  /* 24px, WEIL DIE ZEILE PLATZ HAT. Ein Etikett, das anfassbar ist (der
-   * Filter-Tag setzt den Filter), darf die Spacing-Ausnahme von WCAG 2.5.8 nur
-   * nehmen, wenn es sie BRAUCHT - sitzt es in einer Zeile, die ihm die vollen
-   * 24px liesse, ist die Ausnahme eine Ausrede. Sonde 4 der Dokument-Guards
-   * misst genau das („nimmt die Spacing-Ausnahme, obwohl sein Traeger Platz
-   * laesst"). Die 23px kamen aus Schriftgroesse plus Polsterung und waren nie
-   * gesetzt, sondern uebrig geblieben. */
-  min-height: 24px;
-  align-items: center;
-  min-width: 3.5rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* DAS ETIKETT IST EINE FRAGE DER BREITE, NICHT DES GERÄTS - deshalb der
-   * Container und nicht der Viewport: massgeblich ist, was die ZEILE hat.
-   *
-   * GEMESSEN, NICHT GESCHÄTZT (390px, de, Demo-Haushalt): der Textspalte
-   * bleiben 258px, „• Dringend" belegt 88px und „Heute fällig" mit Glyphe
-   * 110px - mit Abständen 214px. Für ein Etikett bleiben 44px, und darunter
-   * beginnt es zu klippen: gemessen stand „drin…" statt „dringend", und in der
-   * Nachbarzeile schnitt der Überlauf das FÄLLIGKEITSDATUM an („11.08.202|6").
-   * Ein angeschnittenes Datum ist schlimmer als ein fehlendes Etikett.
-   *
-   * Das englische Mockup traf die Grenze nicht: „Urgent" und „Aug 13" sind
-   * zusammen 60px kürzer als ihre deutschen Entsprechungen. Die Zeile hängt
-   * damit an der längsten Locale, nicht an der Referenz-Locale. */
-  display: none;
-}
-
-@container list-rows (min-width: 420px) {
-  .task-card__meta > .task-tag {
-    display: block;
-  }
-}
-
-.task-card__meta > .task-tag--more {
-  flex-shrink: 0;
-  min-width: 0;
-}
-
 .task-card__inline-action {
   width: var(--target-base);
   height: var(--target-base);
@@ -950,183 +846,455 @@
   color: var(--color-text-primary);
 }
 
-@media (max-width: 639px) {
-  .task-card__main {
-    gap: var(--space-2);
-    /* Der Takt der Liste entsteht aus Polsterung UND Metazeile. Die Metazeile
-     * bricht seit dem Schnitt nicht mehr um (siehe .task-card__meta), damit
-     * trägt die Polsterung die Höhe allein: 12px oben und unten ergaben 71px
-     * je Zeile, 8px ergeben 58px - bei unveränderter Zielgröße, weil die
-     * Trefferfläche des Titels an --list-row-pad hängt und mitwandert. */
-    --list-row-pad: var(--space-2);
-  }
-
-  /* DER MEHR-KNOPF BLEIBT AUCH AUF DEM TELEFON (R18, D6). Hier stand bis
-   * 2026-10-16 `display: none` aus der Zeit der drei Inline-Knoepfe (Titel auf
-   * ~115px). Seit R18 ist es EIN Knopf; versteckt blieb nur Wischen und das
-   * Detail - und "nur per Geste" schliesst D6 aus. Die Breite holt die Zeile
-   * mit dem Rezept des Griffs zurueck: schmal, aber hoch (Raster unten). */
+/* ── TAFLA: DIE AUFGABENZEILE (2026-10-20, spec "Lista grupowana + wiersz") ──
+ *
+ * Eine Zeile auf jeder Breite, kein Raster mehr: 28er-Spalte fuer den Kreis
+ * (seine 44er Trefferflaeche haengt ueber), 12 Luft, damit jeder Titel bei
+ * x=56 steht; Titel 17 und eine Metazeile 13 in Tinte-2, 4 darunter; hinten
+ * nur Fahne und Personenscheibe (20). Zweizeilig 64 hoch, ohne Metazeile 48.
+ * Was die R9-Mobilregel (Raster, Stapel in der Metazeile) loeste - den Platz
+ * des Titels -, loest jetzt das Weglassen: kein Prioritaetswort, kein
+ * Avatar-Stapel, auf Touch kein Mehr-Knopf und kein Griff.
+ * Guard: test-mobile-room-work.js ("Tafla: die Aufgabenzeile"). */
+.tasks-page .task-card__main {
+  --list-row-pad: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: var(--space-2) var(--space-4);
 }
 
-/* MOBIL GEHOERT DIE ZEILE DEM TITEL (R9 M1, Re-Critique 2026-09-27 A3 P1-1).
- *
- * Gemessen 390x844 vorher: Titelkoerper 182 von 358px, 7 von 12 Titeln
- * abgeschnitten. Die Breite ging an vier Dinge, und jedes gibt hier etwas ab:
- *   - die Personenwahl „Wer hat erledigt?" (44px + Abstand) verlaesst die
- *     Zeile - sie lebt im Detail und im Kontextmenue/Long-Press
- *     (tasks.js, wireDoerContextMenu);
- *   - der Statuskreis zeichnet 20px und hielt dafuer eine 48px-BOX; die Box
- *     wird 32px, die Trefflaeche bleibt ueber das zentrierte ::before 48px
- *     (Rezept „kompakt aussehen, voll treffen", tokens.css) und reicht damit
- *     in die Zeilenpolsterung;
- *   - der Personenstapel zieht aus der Endspalte in die Metazeile: ein Raster
- *     statt der Flexzeile, der Koerper wird `display: contents`, und der
- *     Titel spannt ueber beide Spalten.
- * Ergebnis: Titel 282 von 358px, Metazeile endet vor dem Stapel mit Ellipse.
- * Ab 640px bleibt alles, wie es war - dort stoert die Personenwahl nicht. */
-@media (max-width: 639px) {
-  .task-card__main {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: var(--space-2);
-    row-gap: 0;
-  }
+.tasks-page .task-card--single > .task-card__main {
+  min-block-size: 48px;
+}
 
-  .task-card__main > .task-status-btn,
-  .task-card__main > .select-circle {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-  }
+/* Der Kreis IST die 28er-Spalte; seine Trefflaeche (--target-base, 44 am
+ * Zeiger, 48 am Finger) haengt zentriert ueber (`::before`) - "kompakt
+ * aussehen, voll treffen" -, damit sie die Zeile nicht hoeher macht als 48.
+ * Der Ring selbst: list-row.css. */
+.tasks-page .task-card__main > .task-status-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+}
 
-  .task-card__main > .task-status-btn {
-    width: calc(var(--space-5) + var(--space-3));
-  }
+.tasks-page .task-card__main > .task-status-btn::before {
+  inset: auto;
+  inset-block-start: calc((100% - var(--target-base)) / 2);
+  inset-inline-start: calc((100% - var(--target-base)) / 2);
+}
 
-  .task-card__main > .task-status-btn::before {
-    inset-inline-start: calc((100% - var(--target-base)) / 2);
-  }
+.tasks-page .task-card__main > .select-circle {
+  flex: none;
+  margin-inline: calc((28px - var(--target-base)) / 2);
+}
 
-  .task-card__main > .task-card__body {
-    display: contents;
-  }
+.tasks-page .task-card__main > .task-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
-  /* Die Trefferflaeche waechst hier per Polster, nicht per ::before: die
-   * Ellipse (`overflow: hidden`) beschneidet das ::before auf die Textzeile,
-   * und der Titel mass 267x20 bei 8px leerem Zeilenpolster darueber (Sonde 4
-   * der Dokument-Guards). Der Rand hebt das Polster wieder auf - der Text
-   * bleibt, wo er stand; unten endet die Flaeche an der Metazeile. */
-  .task-card__main .task-card__title {
-    grid-column: 2 / -1;
-    grid-row: 1;
-    padding-block-start: var(--list-row-pad, var(--space-3));
-    padding-block-end: var(--space-0h);
-    margin-block-start: calc(-1 * var(--list-row-pad, var(--space-3)));
-    margin-block-end: 0;
-  }
+.tasks-page .task-card__main .task-card__title {
+  line-height: var(--type-body-lh);
+}
 
-  .task-card__main .task-card__meta {
-    grid-column: 2;
-    grid-row: 2;
-  }
+/* EINE Metazeile in Worten, die mit Ellipse endet (R9 M1 bleibt: kein harter
+ * Schnitt). Pille und Zeichen schrumpfen nicht, der Text gibt nach. */
+.task-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
 
-  .task-card__main:not(:has(> .avatar-stack)) .task-card__meta {
-    grid-column: 2 / -1;
-  }
+.task-card__meta-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-inline-end: calc(var(--space-1) * -1);
+  stroke-width: 1.75;
+}
 
-  .task-card__main > .avatar-stack {
-    grid-column: 3;
-    grid-row: 2;
-    align-self: center;
-  }
+.task-card__meta-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  /* Der Griff der Handordnung bekommt eine eigene Endspalte ueber beide
-   * Zeilen. Ohne sie fiele er als viertes Rasterkind in eine dritte Zeile und
-   * machte jede Zeile doppelt so hoch; Titel und Metazeile enden dafuer vor
-   * ihm statt unter ihm. Die Regeln haengen am Griff selbst (:has), damit
-   * Zeilen ohne Griff - anderes Gruppieren, Auswahlmodus, nur lesen - ihr
-   * Raster behalten. */
-  /* Auch in einer Gruppe mit nur einer Zeile: list-row.css macht den Griff
-   * dort nur unsichtbar (.swipe-row:only-child), seine Spalte bleibt - sonst
-   * stuenden Avatare und Faelligkeit der Einzelzeile 42px weiter rechts als in
-   * jeder anderen Gruppe (Re-Critique 2026-10-17, A2). */
-  .task-card__main:has(> .list-row__drag) {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-  }
+.task-card__glyph {
+  flex: none;
+  display: flex;
+  color: var(--color-text-secondary);
+}
 
-  .task-card__main:has(> .list-row__drag) .task-card__title {
-    grid-column: 2 / 4;
-  }
+.task-card__glyph svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.75;
+}
 
-  .task-card__main:has(> .list-row__drag):not(:has(> .avatar-stack)) .task-card__meta {
-    grid-column: 2 / 4;
-  }
+/* Status als WORT in einer getoenten Pille (spec "Status pill"): "zaległe"
+ * (danger), in der Kategorie-Gruppierung auch "dziś"/"jutro"/"pojutrze"
+ * (warning). Nie als blosse Farbe, nie die ganze Liste hinunter. */
+.status-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  block-size: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+}
 
-  .task-card__main > .list-row__drag {
-    grid-column: 4;
-    grid-row: 1 / span 2;
-  }
+.status-pill--danger {
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
+}
 
-  /* DER MEHR-KNOPF (R18, D6) bekommt dieselbe Endspalte ueber beide Zeilen
-   * wie der Griff - und dasselbe Mass: schmal, aber hoch (list-row.css,
-   * `.list-row__drag`). Ein 48er-Quadrat kostete den Titel 14px mehr; die
-   * Trefferflaeche bleibt ueber die volle Zeilenhoehe 34x58, also ueber dem
-   * Touch-Minimum. Steht ein Griff daneben, rueckt der eine Spalte weiter. */
-  .task-card__main:has(> .row-action--more) {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-  }
+.status-pill--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning);
+}
 
-  .task-card__main:has(> .row-action--more) .task-card__title,
-  .task-card__main:has(> .row-action--more):not(:has(> .avatar-stack)) .task-card__meta {
-    grid-column: 2 / 4;
-  }
+/* Hinten: die Fahne (Hoch/Dringend) in Tinte, dann die Person. */
+.task-card__trail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 
-  .task-card__main > .row-action--more {
-    grid-column: 4;
-    grid-row: 1 / span 2;
-    width: auto;
-    min-width: 0;
-    height: auto;
-    align-self: stretch;
-    min-height: var(--target-md);
-    padding-inline: var(--space-2);
-    /* Gleiche Kante wie der Titel: das Polster der Zeile gehoert hier zur
-     * Trefferflaeche, der Knopf reicht bis an ihren Rand. */
-    margin-block: calc(-1 * var(--list-row-pad, var(--space-3)));
-    border-radius: var(--radius-md);
-  }
+.task-card__flag {
+  display: flex;
+  color: var(--color-text-primary);
+}
 
-  .swipe-row:not(:only-child) .task-card__main:has(> .row-action--more):has(> .list-row__drag) {
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
-  }
+.task-card__flag svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.75;
+}
 
-  .task-card__main > .row-action--more ~ .list-row__drag {
-    grid-column: 5;
+/* AUF TOUCH KEIN MEHR-KNOPF UND KEIN GRIFF (spec "Lista grupowana": "On touch
+ * there is no ⋯ and no drag handle"). Bearbeiten, Unteraufgabe und Ablegen
+ * stehen im Detailblatt, das ein Tipp auf die Zeile oeffnet; abhaken bleibt
+ * Kreis und Wisch. Am Zeiger (Maus, Trackpad) bleiben beide Knoepfe - dort
+ * sind sie der Tastatur- und Zeigerweg. */
+@media (hover: none) {
+  .tasks-page .task-card__main > .row-action--more,
+  .tasks-page .task-card__main > .list-row__drag {
+    display: none;
   }
 
   /* Ein Long-Press ist hier eine Frage nach der Person, kein Markieren und
    * kein Systemmenue fuer den Titeltext. */
-  .task-card__main {
+  .tasks-page .task-card__main {
     -webkit-touch-callout: none;
     user-select: none;
   }
 }
 
-/* DIE METAZEILE ENDET MIT ELLIPSE, NICHT MIT EINEM SCHNITT (R9 M1). Gemessen
- * stand „Überfällig - 24.0" hart abgeschnitten da: die Faelligkeit schrumpfte
- * nie (`flex-shrink: 0` oben), und `text-overflow` greift am Flex-Chip nicht.
- * Jetzt gibt sie nach - mit winzigem Gewicht, damit ein Etikett daneben
- * zuerst bis auf seine Mindestbreite nachgibt (die Rangfolge von oben bleibt)
- * - und ihr Label traegt die Ellipse. */
-.task-card__meta > .due-date {
-  flex-shrink: 0.01;
+/* Die Gruppe: Kopf ausserhalb der Karte (17/600, Zahl 17/400 Tinte-2), die
+ * Karte flach (Tafla: gruppierte Listen ohne Schatten), Haarlinien 0,5 und
+ * auf x=56 eingerueckt. Zaleg­łe sagt sein Wort in der Gefahrenfarbe. */
+.tasks-page .task-group > .list-group__title {
+  padding: 0 var(--space-4);
+}
+
+.tasks-page .task-group .list-group__count {
+  margin-inline-start: 0;
+  font-size: var(--type-body);
+  color: var(--color-text-secondary);
+}
+
+.tasks-page .task-group--overdue > .list-group__title .list-group__toggle {
+  color: var(--color-danger);
+}
+
+/* Offen ohne Winkel (das Artboard zeigt keinen); zugeklappt zeigt er, dass
+ * die Gruppe mehr hat - der Kopf bleibt in jedem Zustand der Knopf (#812). */
+.tasks-page .task-group .list-group__chevron:not(.list-group__chevron--collapsed) {
+  display: none;
+}
+
+.tasks-page .task-group .list-group__toggle {
+  min-height: var(--target-base);
+  margin-block: calc((var(--type-body-lh) - var(--target-base)) / 2);
+}
+
+.tasks-page .task-group > .row-carrier {
+  box-shadow: none;
+}
+
+.tasks-page .task-group > .row-carrier > .swipe-row + .swipe-row {
+  border-top: 0;
+}
+
+.tasks-page .task-group > .row-carrier > .swipe-row + .swipe-row > .task-card::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  z-index: 2;
+}
+
+/* "Na dziś wszystko" - der leere Korb Dziś mit dem, was als Naechstes kommt. */
+.tasks-today-done {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.tasks-today-done__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-inline: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
+}
+
+.tasks-today-done__check svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+
+.tasks-today-done__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
 }
 
-.due-date__label {
-  min-width: 0;
+.tasks-today-done__title {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tasks-today-done__next {
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+/* ── "Czyje zadania": das neutrale Segment (spec "Segmented control") ──
+ * 36 hoch auf --color-fill, 2 Innenabstand, die gewaehlte Stelle als
+ * erhabene Kapsel (--color-raised, E1), 13/600; die Zahl 13/400 Tinte-2.
+ * Nie violett. Jede Stelle traegt 44 Trefferhoehe (sie haengt ueber). */
+.tasks-who {
+  display: flex;
+  block-size: 36px;
+  padding: 2px;
+  margin-block-end: var(--space-6);
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  max-width: var(--page-measure, var(--content-max-width-narrow));
+}
+
+.tasks-who[hidden] {
+  display: none;
+}
+
+/* In Liste + Detail steht das Segment ueber der LISTE, nicht ueber beiden
+ * Spalten - dieselbe Breitenformel wie die Listenspalte (layout.css,
+ * `.split-view`). */
+.tasks-page--split .tasks-who {
+  max-width: clamp(var(--layout-list-min), 40%, var(--layout-list-max));
+}
+
+.tasks-who__seg {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  block-size: var(--target-base);
+  margin-block: calc((32px - var(--target-base)) / 2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tasks-who__thumb {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  block-size: 32px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.tasks-who__seg[aria-pressed='true'] > .tasks-who__thumb {
+  background: var(--color-raised);
+  box-shadow: var(--shadow-e1);
+  color: var(--color-text-primary);
+}
+
+.tasks-who__count {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.tasks-who__chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.tasks-who__seg:focus-visible {
+  outline: none;
+}
+
+.tasks-who__seg:focus-visible > .tasks-who__thumb {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tasks-who__thumb {
+    transition: background-color var(--duration-sm) var(--ease-spring), color var(--duration-sm) var(--ease-spring);
+  }
+}
+
+.tasks-who__menu-count {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Leere Zustaende (spec "Pusty stan") ── kein Kasten: eine zentrierte
+ * Spalte bis 320 breit, 64 unter dem Kopf; Zeichen 32 Tinte-3, eine Zeile
+ * 22/600, eine Zeile 17 Tinte-2, dann die Startvorschlaege. */
+.tasks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-inline-size: 20rem;
+  margin: var(--space-16, 64px) auto 0;
+  text-align: center;
+}
+
+.tasks-empty__glyph {
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.tasks-empty__glyph svg {
+  width: 32px;
+  height: 32px;
+  stroke-width: 1.75;
+}
+
+.tasks-empty__glyph--done {
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
+}
+
+.tasks-empty__glyph--done svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
+}
+
+.tasks-empty__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tasks-empty__text {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.tasks-empty__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+}
+
+/* Startvorschlag im Stil des KI-Chips: 36 sichtbar, 44 Trefferhoehe. */
+.tasks-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  block-size: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.tasks-chip::before {
+  content: '';
+  position: absolute;
+  inset: calc((36px - var(--target-base)) / 2) 0;
+}
+
+.tasks-chip svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.25;
+}
+
+.tasks-quiet-empty {
+  margin: var(--space-8) 0 0;
+  text-align: center;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
 }
 
 /* ── PRIORITAET: EINE RANGMARKE, KEIN GETOENTES FELD ──

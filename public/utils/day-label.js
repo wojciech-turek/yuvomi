@@ -156,3 +156,86 @@ export function housekeepingSinceLabel(since) {
   const time = formatTime(since);
   return zonedDateKey(since) === todayKey() ? time : `${relativeDateLabel(since)}, ${time}`;
 }
+
+/*
+ * DER EINE RELATIVE TAG (Tafla, 2026-10-20). Zadania und Kalendarz nennen
+ * einen Tag so, wie man ihn im Haushalt sagt: "dziś", "jutro", "pojutrze",
+ * bis sechs Tage voraus der Wochentag, danach "za N dni" - und zurueck
+ * "wczoraj", "N dni temu". Klein geschrieben, weil das Wort in einem Satz,
+ * einer Pille oder hinter einem Punkt steht; ein Kopf setzt den ersten
+ * Buchstaben selbst gross (`capitalizeFirst`).
+ *
+ * Gerechnet wird wie in `relativeDateLabel` auf den KEYS der Haushaltszone
+ * (`dayKeyNoonUtc`), der Name des Wochentags kommt aus demselben UTC-Mittag.
+ */
+
+/** Ganze Tage von `today` bis `dayKey` (negativ: vergangen); NaN fuer Unlesbares. */
+export function daysFromToday(dayKey, today = todayKey()) {
+  return Math.round((dayKeyNoonUtc(String(dayKey ?? '').slice(0, 10)) - dayKeyNoonUtc(today)) / 86400000);
+}
+
+function weekdayName(dayKey, style = 'long') {
+  const noon = dayKeyNoonUtc(String(dayKey).slice(0, 10));
+  if (!Number.isFinite(noon)) return '';
+  return new Intl.DateTimeFormat(getLocale(), { weekday: style, timeZone: 'UTC' }).format(new Date(noon))
+    .replace(/\.$/, '');
+}
+
+/** Der erste Buchstabe gross, in der Sprache der App ("środa" -> "Środa"). */
+export function capitalizeFirst(text) {
+  const s = String(text ?? '');
+  return s ? s[0].toLocaleUpperCase(getLocale()) + s.slice(1) : s;
+}
+
+/**
+ * Der Tag als Wort, relativ zu heute:
+ *   0 "dziś", 1 "jutro", 2 "pojutrze", 3-6 der Wochentag ("piątek"),
+ *   ab 7 "za 9 dni"; -1 "wczoraj", davor "3 dni temu".
+ * @param {string} dayKey 'YYYY-MM-DD'
+ * @returns {string} klein geschrieben; '' fuer Unlesbares
+ */
+export function relativeDayWord(dayKey, today = todayKey()) {
+  const days = daysFromToday(dayKey, today);
+  if (!Number.isFinite(days)) return '';
+  if (days === 0) return t('calendar.relDay.today');
+  if (days === 1) return t('calendar.relDay.tomorrow');
+  if (days === 2) return t('calendar.relDay.dayAfterTomorrow');
+  if (days === -1) return t('calendar.relDay.yesterday');
+  if (days < 0) return t('calendar.relDay.daysAgo', { count: -days });
+  if (days <= WEEKDAY_LABEL_DAYS) return weekdayName(dayKey, 'long').toLocaleLowerCase(getLocale());
+  return t('calendar.relDay.inDays', { count: days });
+}
+
+/**
+ * Das kurze Datum in Worten: "śr 21 paź" (mit Wochentag) oder "4 lis"
+ * (ohne), das Jahr nur, wenn es nicht das laufende ist ("4 sty 2027").
+ * Ohne die Punkte, die manche Sprachen an Kurzformen haengen.
+ */
+export function shortDayLabel(dayKey, { weekday = true, today = todayKey() } = {}) {
+  const key = String(dayKey ?? '').slice(0, 10);
+  const noon = dayKeyNoonUtc(key);
+  if (!Number.isFinite(noon)) return '';
+  const date = new Date(noon);
+  const part = (opts) => new Intl.DateTimeFormat(getLocale(), { ...opts, timeZone: 'UTC' }).format(date).replace(/\.$/, '');
+  const bits = [];
+  if (weekday) bits.push(part({ weekday: 'short' }));
+  bits.push(part({ day: 'numeric' }), part({ month: 'short' }));
+  if (key.slice(0, 4) !== today.slice(0, 4)) bits.push(key.slice(0, 4));
+  return bits.join(' ');
+}
+
+/**
+ * Der Kopf eines Tages in der Kalenderliste: das relative Wort, wo es eines
+ * gibt ("Dziś", "Jutro", "Pojutrze", "Wczoraj"), dahinter Wochentag und Datum
+ * ("wtorek 20 paź"); sonst der Wochentag vorn ("Piątek") und das Datum
+ * dahinter ("23 paź").
+ * @returns {{ lead: string, rest: string, relative: boolean }}
+ */
+export function listDayHeading(dayKey, today = todayKey()) {
+  const days = daysFromToday(dayKey, today);
+  const date = shortDayLabel(dayKey, { weekday: false, today });
+  if (days >= -1 && days <= 2) {
+    return { lead: capitalizeFirst(relativeDayWord(dayKey, today)), rest: `${weekdayName(dayKey, 'long')} ${date}`, relative: true };
+  }
+  return { lead: capitalizeFirst(weekdayName(dayKey, 'long')), rest: date, relative: false };
+}

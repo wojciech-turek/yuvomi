@@ -45,11 +45,11 @@ import { isNavModuleReadOnly } from '/permissions.js';
 import { pathAccess } from '/utils/module-access.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import { zonedDateKey } from '/utils/timezone.js';
-import { historyDayLabel } from '/utils/day-label.js';
+import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel, capitalizeFirst } from '/utils/day-label.js';
 import {
   FALLBACK_CATEGORY, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
   isArchived, canEditTaskDefinition, catLabel, normalizeTagList,
-  docMime, docHref, docIcon, formatDueDate, seriesDoneText,
+  docMime, docHref, docIcon, seriesDoneText,
 } from '/utils/task-fields.js';
 
 // --------------------------------------------------------
@@ -874,14 +874,37 @@ function taskReminderSummary(reminders) {
 }
 
 /**
+ * Die Faelligkeit in den Worten der Tafla-Zeile (pages/tasks.js `taskWhen`),
+ * ausfuehrlicher, weil hier Platz ist: "Zaległe · od pt 16 paź", "Dziś · do
+ * 19:00", "Pojutrze · czw 22 paź", "wt 4 lis · za 15 dni". Der relative Tag
+ * kommt aus dem EINEN Helfer (utils/day-label.js), das Datum aus dem Key.
+ */
+function dueWords(task) {
+  const due = String(task.due_date ?? '').slice(0, 10);
+  if (!due) return '';
+  const time = /^\d{2}:\d{2}/.test(String(task.due_time ?? '')) ? t('tasks.dueBy', { time: formatTime(String(task.due_time).slice(0, 5)) }) : '';
+  const days = daysFromToday(due);
+  const finished = task.status === 'done' || isArchived(task);
+  if (!finished && days < 0) {
+    return [capitalizeFirst(t('tasks.overduePill')),
+      days === -1 ? t('tasks.overdueSinceYesterday') : t('tasks.overdueSince', { date: shortDayLabel(due) })].join(' · ');
+  }
+  if (days >= 0 && days <= 2) {
+    return [capitalizeFirst(relativeDayWord(due)), days === 2 ? shortDayLabel(due) : '', time].filter(Boolean).join(' · ');
+  }
+  const parts = [shortDayLabel(due), time];
+  if (days > 6) parts.push(relativeDayWord(due));
+  return parts.filter(Boolean).join(' · ');
+}
+
+/**
  * Der Kopf der Aufgaben-Leseansicht (components/detail-view.js
  * `detailHeadEl`): wann sie faellig ist, in den Worten der Liste ("Heute
  * faellig", "Ueberfaellig · 11.08."), und wer sie hat - als Avatare mit Namen.
  */
 function taskDetailHead(task) {
-  const due = formatDueDate(task.due_date, task.due_time, task.status === 'done' || isArchived(task));
   return {
-    subtitle: due?.label ?? '',
+    subtitle: dueWords(task),
     subtitleLabel: t('tasks.dueDateLabel'),
     people: task.assigned_users ?? [],
     peopleLabel: t('tasks.assignedLabel'),

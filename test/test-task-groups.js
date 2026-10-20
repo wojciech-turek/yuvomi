@@ -334,10 +334,16 @@ test('der Start-Badge reicht formatDate den Datums-Key, nicht ein Date', (t) => 
   // `formatDate` rechnet ein Date in die Anzeigezone um. Der i18n-Stub gibt
   // zurueck, was er bekommt - der Key muss also unveraendert ankommen.
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-01T12:00:00Z') });
+  // Tafla (2026-10-20): das Datum steht in Worten ("wt 20 paź"), gebaut von
+  // `shortDayLabel` aus dem KEY (UTC-Mittag des Kalendertags) - die Zusage
+  // bleibt, dass kein Date der Geraete-Zone dazwischen liegt: es ist der 20.
   withZones('Europe/Berlin', 'Pacific/Honolulu', () => {
     const html = tasks.renderTaskCard({ ...START_TASK, start_date: '2026-10-20' });
-    assert.ok(html.includes('tasks.startsOn{"date":"2026-10-20"}'),
-      `formatDate bekommt den Key, erhalten: ${/tasks\.startsOn[^<]*/.exec(html)?.[0]}`);
+    // Der Text der Metazeile geht durch esc(): die Anfuehrungszeichen des
+    // i18n-Stubs stehen als &quot; im Markup.
+    const label = /tasks\.startsOn\{(?:"|&quot;)date(?:"|&quot;):(?:"|&quot;)(.*?)(?:"|&quot;)\}/.exec(html)?.[1] ?? '';
+    assert.match(label, /(?:^|\D)20(?:\D|$)/, `der Starttag aus dem Key, erhalten: ${label}`);
+    assert.doesNotMatch(label, /(?:^|\D)19(?:\D|$)/, `nicht der Vortag der Anzeigezone: ${label}`);
   });
 });
 
@@ -512,4 +518,111 @@ test('Teilaufgabe: Knopf und Feld verstecken sich wirklich - display: flex stich
     && /display:\s*none/.test(r.body));
   assert.ok(hides('.detail-subtask--add[hidden]'), 'der Knopf verschwindet, solange das Feld offen ist');
   assert.ok(hides('.detail-subtask-compose[hidden]'), 'das Feld verschwindet, solange es zu ist');
+});
+
+// ── Tafla (2026-10-20): Zeitkoerbe, Zeile, "Czyje zadania" ───────────────────
+// Die Vorgabe der Liste sind die Zeitkoerbe Zaległe · Dziś · Jutro · Ten
+// tydzień · Później · Bez terminu (Artboard Zadania); "Ten tydzień" sind die
+// Tage zwei bis sechs voraus. Erledigtes steht in einem eigenen Korb am Ende.
+
+test('Tafla: die Zeitkoerbe in ihrer Reihenfolge, Erledigtes am Ende', () => {
+  const groups = tasks.groupBy([
+    task({ id: 1, due_date: inTagen(-2) }),
+    task({ id: 2, due_date: heute() }),
+    task({ id: 3, due_date: inTagen(1) }),
+    task({ id: 4, due_date: inTagen(2) }),
+    task({ id: 5, due_date: inTagen(6) }),
+    task({ id: 6, due_date: inTagen(7) }),
+    task({ id: 7, due_date: null }),
+    task({ id: 8, due_date: inTagen(-1), status: 'done' }),
+  ], 'due');
+  assert.deepEqual(groups.map((g) => [g.id, g.tasks.map((x) => x.id)]), [
+    ['overdue', [1]], ['today', [2]], ['tomorrow', [3]], ['thisWeek', [4, 5]], ['later', [6]], ['noDate', [7]], ['done', [8]],
+  ], 'zwei bis sechs Tage voraus sind "Ten tydzień", ab sieben "Później"; erledigt ist nie "zaległe"');
+  assert.deepEqual(tasks.DUE_BUCKETS, ['overdue', 'today', 'tomorrow', 'thisWeek', 'later', 'noDate', 'done']);
+  assert.equal(tasks.state.groupMode, 'due', 'die Zeitkoerbe sind die Vorgabe');
+});
+
+test('Tafla: das Wann der Zeile haengt am Korb, ueberfaellig ist eine Pille', () => {
+  const overdue = tasks.taskWhen(task({ due_date: inTagen(-3) }), 'overdue');
+  assert.equal(overdue.pill?.tone, 'danger');
+  assert.equal(overdue.pill?.text, 'tasks.overduePill');
+  assert.match(overdue.text, /^tasks\.overdueSince/, '"od pt 16 paź" - seit wann');
+  assert.equal(tasks.taskWhen(task({ due_date: inTagen(-1) }), 'overdue').text, 'tasks.overdueSinceYesterday');
+  // Im Korb Dziś sagt der Kopf den Tag - die Zeile nur die Uhrzeit.
+  const today = tasks.taskWhen(task({ due_date: heute(), due_time: '19:00' }), 'today');
+  assert.equal(today.pill, null);
+  assert.match(today.text, /^tasks\.dueBy/);
+  assert.equal(tasks.taskWhen(task({ due_date: heute() }), 'today').text, '', 'ohne Uhrzeit kein Wann');
+  // Nach Kategorie gruppiert traegt das Baldige sein Wort als Pille.
+  const soon = tasks.taskWhen(task({ due_date: inTagen(1) }), null);
+  assert.equal(soon.pill?.tone, 'warning');
+  // Erledigt: kein Status-Wort mehr.
+  assert.equal(tasks.taskWhen(task({ due_date: inTagen(-3), status: 'done' }), 'done').pill, null);
+});
+
+test('Tafla: die Zeile zeigt die Kategorie als #tag, keine Prioritaetsworte, die Fahne nur bei Hoch/Dringend', () => {
+  const meta = tasks.taskMetaHtml(task({ category: 'household', due_date: inTagen(3) }), { bucket: 'thisWeek' });
+  assert.match(meta, /#/, 'die Kategorie steht als #tag im Text');
+  assert.doesNotMatch(meta, /priority/);
+  assert.equal(tasks.taskTrailHtml(task({ priority: 'medium' })), '', 'mittel und niedrig: keine Fahne');
+  assert.match(tasks.taskTrailHtml(task({ priority: 'urgent' })), /data-lucide="flag"/);
+});
+
+test('Tafla: die Personenregel der Zeile - eigene ohne Scheibe, fremde mit Initial, geteilte mit Razem', () => {
+  const prev = { id: tasks.state.currentUserId, users: tasks.state.users };
+  tasks.state.currentUserId = 2;
+  tasks.state.users = [{ id: 1, display_name: 'Wojtek', avatar_color: '#2563EB' }, { id: 2, display_name: 'Mariola', avatar_color: '#DB2777' }];
+  try {
+    const [w, m] = tasks.state.users;
+    assert.equal(tasks.taskTrailHtml(task({ assigned_users: [m] })), '', 'die eigene Aufgabe traegt keine Scheibe');
+    const fremd = tasks.taskTrailHtml(task({ assigned_users: [w] }));
+    assert.match(fremd, /person-disc/);
+    assert.match(fremd, />W<\/span>/, 'das Initial der anderen Person');
+    assert.match(tasks.taskTrailHtml(task({ assigned_users: [w, m] })), /person-disc--razem/, 'geteilt: die Razem-Scheibe');
+    assert.equal(tasks.taskTrailHtml(task({ assigned_users: [] })), '', 'niemandem zugewiesen: nichts');
+  } finally {
+    tasks.state.currentUserId = prev.id;
+    tasks.state.users = prev.users;
+  }
+});
+
+test('Tafla: "Czyje zadania" teilt die Liste - Moje, die andere Person, Razem', () => {
+  const prev = { id: tasks.state.currentUserId, users: tasks.state.users, tasks: tasks.state.tasks, who: tasks.state.who, search: tasks.state.searchQuery };
+  tasks.state.currentUserId = 2;
+  tasks.state.users = [{ id: 1, display_name: 'Wojtek Turek' }, { id: 2, display_name: 'Mariola' }];
+  tasks.state.searchQuery = '';
+  const w = { id: 1, display_name: 'Wojtek Turek' };
+  const m = { id: 2, display_name: 'Mariola' };
+  tasks.state.tasks = [
+    task({ id: 1, assigned_users: [m] }), task({ id: 2, assigned_users: [w] }),
+    task({ id: 3, assigned_users: [w, m] }), task({ id: 4, assigned_users: [] }),
+  ];
+  try {
+    assert.ok(tasks.whoAvailable(), 'zwei Mitglieder, ein Mensch schaut: das Segment steht');
+    const ids = (who) => tasks.state.tasks.filter((x) => tasks.matchesWho(x, who)).map((x) => x.id);
+    assert.deepEqual(ids('mine'), [1], 'Moje: nur fuer mich');
+    assert.deepEqual(ids('u:1'), [2], 'die andere Person: nur fuer sie');
+    assert.deepEqual(ids('together'), [3], 'Razem: mehr als eine Person');
+    assert.deepEqual(ids('all'), [1, 2, 3, 4], 'Wszystkie: auch Niemandem-Zugewiesenes');
+    const segments = tasks.whoSegments();
+    assert.deepEqual(segments.map((s) => s.who), ['all', 'mine', 'u:1', 'together'], 'hoechstens vier Stellen');
+    assert.equal(segments[2].label, 'Wojtek', 'die Person beim Vornamen');
+    assert.deepEqual(segments.map((s) => s.count), [null, 1, 1, 1]);
+    // Ab mehr als drei Mitgliedern stehen die Personen in einem Menue.
+    tasks.state.users = [...tasks.state.users, { id: 3, display_name: 'Ania' }, { id: 4, display_name: 'Kuba' }];
+    assert.deepEqual(tasks.whoSegments().map((s) => s.who), ['all', 'mine', 'people', 'together']);
+  } finally {
+    Object.assign(tasks.state, { currentUserId: prev.id, users: prev.users, tasks: prev.tasks, who: prev.who, searchQuery: prev.search });
+  }
+});
+
+test('Tafla: "Na dziś wszystko" nur, wenn Dziś leer ist und spaeter etwas kommt', () => {
+  const now = tasks.taskSortNow();
+  const later = tasks.groupBy([task({ id: 1, title: 'Umówić przegląd auta', due_date: inTagen(3) })], 'due');
+  const html = tasks.todayDoneHtml(later, now);
+  assert.match(html, /tasks\.todayAllDone/);
+  assert.match(html, /tasks\.todayNext\{[^}]*Umówić przegląd auta/, 'und was als Naechstes kommt');
+  assert.equal(tasks.todayDoneHtml(tasks.groupBy([task({ due_date: heute() })], 'due'), now), '', 'mit Heutigem kein Abschluss');
+  assert.equal(tasks.todayDoneHtml(tasks.groupBy([task({ due_date: null })], 'due'), now), '', 'ohne Spaeteres keiner');
 });
