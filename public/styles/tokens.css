@@ -1793,18 +1793,21 @@
    * Abhaengige (Zone, Nachlauf, Mehr-Blatt, Toasts, Banner) rechnet ueber
    * --nav-bottom-height mit. */
   --nav-height-mobile: 64px;
-  /* Minimiert beim Lesen (R19, iOS-26-Muster, utils/ux.js watchNavMinimize):
-   * ohne Labels, ein Ziel hoch plus 4px Luft je Seite. Touch 56px (Ziel 48,
-   * der FAB sitzt mit 4px konzentrisch), Zeiger 52px. Die Zone darunter
-   * (--nav-bottom-height) rechnet weiter mit der ausgefahrenen Hoehe. */
-  --nav-height-minimized: calc(var(--target-base) + var(--space-2));
-  /* Schwebende Kapsel (Liquid Glass): Zone = Kapsel + 8px Luft oben und unten.
-   * Die Kapsel ist MINDESTENS --nav-height-mobile hoch und waechst mit
+  /* Tafla (spec-navigation.txt): minimiert beim Lesen ist die Kapsel 48 hoch,
+   * nur Zeichen, alle Ziele bleiben (40 hohe Ziele in 4px Polster). Die Zone
+   * darunter (--nav-bottom-height) rechnet weiter mit der ausgefahrenen Hoehe. */
+  --nav-height-minimized: var(--space-12);
+  /* Tafla: die Kapsel schwebt 20pt ueber der Unterkante (390x844: y 760-824).
+   * Auf einem iPhone mit Home-Indikator (34pt Safe-Area) rueckt sie so weit
+   * hoch, dass der Indikator frei bleibt - dieselbe Lage wie die iOS-26-Leiste. */
+  --nav-capsule-bottom: max(var(--space-5), calc(var(--safe-area-inset-bottom) - var(--space-3)));
+  /* Die Zone: Kapsel + 8pt Luft darueber + ihr Abstand zur Unterkante. Die
+   * Kapsel ist MINDESTENS --nav-height-mobile hoch und waechst mit
    * umbrechenden Labels (lange Sprachen, enge Geraete). Ihre echte Hoehe misst
    * die Shell und setzt sie als --nav-capsule-height an die Wurzel
    * (watchNavCapsuleHeight() in utils/ux.js, Review zu #1475); ohne Messung
    * gilt die Token-Hoehe. Guard: test:mobile-chrome. */
-  --nav-bottom-height: calc(var(--nav-capsule-height, var(--nav-height-mobile)) + var(--space-4) + var(--safe-area-inset-bottom));
+  --nav-bottom-height: calc(var(--nav-capsule-height, var(--nav-height-mobile)) + var(--space-2) + var(--nav-capsule-bottom));
   /* Sichtbare Fensterhoehe (#1276). `dvh` kennt Chrome erst ab 108 und Safari
    * ab 15.4; aeltere Browser verwerfen jede Deklaration damit. Ein vh-Zwilling
    * davor (`height: 100vh; height: 100dvh`) rettet nur eine Deklaration OHNE
@@ -1966,8 +1969,8 @@
    * mit zweizeiligen Labels (el, fil) waechst die Kapsel auf 72px, und der
    * Knopf sass mit der Sollhoehe 16/8px statt mittig (Nav-Polish 2026-10-15). */
   --fab-offset-bottom: calc(
-    var(--safe-area-inset-bottom) + var(--space-2) +
-    (var(--nav-capsule-height, var(--nav-height-mobile)) - var(--fab-size)) / 2
+    var(--nav-capsule-bottom) +
+    (var(--nav-capsule-height, var(--nav-height-mobile)) - var(--capture-size)) / 2
   );
   /* Basis ist der SCHWEBENDE Fall (Desktop, keine Bottom-Nav). Wo die Leiste
    * existiert, faellt die Zone auf 0 - siehe den Block unter --bp-desktop.
@@ -1999,20 +2002,36 @@
    * FAB, der an ihrem hinteren Ende sitzt - liefen die auseinander, stuende
    * der Knopf halb daneben. */
   --nav-capsule-max: 560px;
+  /* Tafla: das abgesetzte + (globales Erfassen) rechts der Kapsel - 52pt,
+   * 8pt Fuge (390x844: Kapsel x 12-318, + x 326-378). */
+  --capture-size: 52px;
+  --nav-capture-gap: var(--space-2);
+  /* Strich der Tab-Zeichen (24pt): ruhend 1.75, aktiv 2.25 statt Fuellung. */
+  --tab-icon-stroke: 1.75;
+  --tab-icon-stroke-active: 2.25;
+  /* Der Punkt „wartet heute auf dich" an einem Nav-Ziel (nav-badges.js). */
+  --nav-dot-size: 6px;
+  /* Tafla-Geisterkreis im Kopf (Rueckweg, Werkzeuge, Seiten-„Neu"): 36pt
+   * sichtbar in einer --target-base grossen Trefferflaeche. */
+  --ghost-circle: 36px;
+  --ghost-circle-inset: calc((var(--target-base) - var(--ghost-circle)) / 2);
   /* Der seitliche Rand der Bar-Zone. Er steht hier und nicht als Literal in
    * layout.css, weil ZWEI Dinge ihn brauchen: die Zone selbst und der Inset
    * unten, aus dem der eingesetzte FAB seine Position rechnet. Sie liefen
    * einmal auseinander (Zone --space-2, Inset --space-3) - der Knopf sass
    * daraufhin 8 statt 4px von der Kapselkante und ragte links in den letzten
    * Tab. */
-  --nav-bar-gutter: var(--space-2);
-  --nav-capsule-inset: max(var(--nav-bar-gutter), calc((100% - var(--nav-capsule-max)) / 2));
+  --nav-bar-gutter: var(--space-3);
+  /* Kapsel und + stehen als GRUPPE: am Telefon 12pt vom Rand, breiter
+   * zentriert (Kapsel hoechstens --nav-capsule-max). Eine Quelle fuer die Zone
+   * (.nav-bottom) und das + (.capture-plus), die sonst auseinanderliefen. */
+  --nav-capsule-inset: max(var(--nav-bar-gutter), calc((100% - var(--nav-capsule-max) - var(--capture-size) - var(--nav-capture-gap)) / 2));
   /* Abstand des FAB zur Kapselkante, an allen drei Seiten derselbe: die halbe
    * Differenz aus Kapselhoehe und Knopf - dieselbe Rechnung, die
    * --fab-offset-bottom fuer oben und unten macht. Hinten stand ein festes
    * --space-1, gemessen 4px gegen 6px oben/unten (Touch, --fab-size 48px);
    * der Knopf sass nicht konzentrisch in der Rundung (Nav-Polish 2026-10-15). */
-  --nav-fab-inset: calc((var(--nav-capsule-height, var(--nav-height-mobile)) - var(--fab-size)) / 2);
+  --nav-fab-inset: calc((var(--nav-capsule-height, var(--nav-height-mobile)) - var(--capture-size)) / 2);
 
   /* --------------------------------------------------------
    * 13. Sidebar

@@ -1943,9 +1943,11 @@ test('R18: der FAB steht ueber den Wechsel, poppt nur ohne Vorgaenger, und seine
   assert.doesNotMatch(router, /fab-holding|releaseFabHold/, 'kein Halten der Reserve mehr');
 
   assert.match(ruleBodies('layout.css', 'html.fab-steady .page-fab').join(';'), /animation:\s*none/);
-  const reserve = [...eachRule(css('layout.css'))].find((r) => /padding-inline-end:\s*calc\(var\(--fab-size\)/.test(r.body) && /\.nav-bottom__items/.test(r.selector));
-  assert.ok(reserve, 'die FAB-Reserve der Kapsel fehlt');
-  assert.equal(reserve.selector.trim(), '.nav-bottom__items', 'die Reserve haengt an keiner Bedingung - sie steht auch im Aufbau');
+  // Tafla: das + steht NEBEN der Kapsel, den Platz haelt die Zone - ohne
+  // Bedingung, also auch waehrend des Aufbaus.
+  const reserve = [...eachRule(css('layout.css'))].find((r) => /padding-inline:[^;]*var\(--capture-size\)/.test(r.body) && /\.nav-bottom\b/.test(r.selector));
+  assert.ok(reserve, 'die Reserve fuer das + fehlt');
+  assert.equal(reserve.selector.trim(), '.nav-bottom', 'die Reserve haengt an keiner Bedingung - sie steht auch im Aufbau');
   // Kaltstart: die Einfahrt gibt es weiter.
   assert.match(ruleBodies('layout.css', '.page-fab').join(';'), /animation:\s*fab-in var\(--duration-xl\) var\(--ease-out\) backwards/);
 });

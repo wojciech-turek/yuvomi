@@ -44,7 +44,7 @@
         "errorDetails": "Mga teknikal na detalye",
         "pageFailedTitle": "Hindi mabuksan ang {{page}} ngayon",
         "pageFailedHint": "Gumagana pa rin ang lahat ng iba pang bahagi.",
-        "toOverview": "Pumunta sa Pangkalahatang-tanaw",
+        "toOverview": "Pumunta sa Ngayon",
         "errorGeneric": "May naganap na error.",
         "updateAvailable": "May update - i-load muli ang pahina para makuha ang pinakabagong bersyon.",
         "titleRequired": "Kailangan ang pamagat",
@@ -104,7 +104,7 @@
         "transferUndone": "Inalis sa listahan ng pamimili."
     },
     "nav": {
-        "dashboard": "Pangkalahatang-tanaw",
+        "dashboard": "Ngayon",
         "tasks": "Mga Gawain",
         "calendar": "Kalendaryo",
         "meals": "Mga Pagkain",
@@ -151,7 +151,9 @@
         "rewards": "Mga Gantimpala",
         "pantry": "Paminggalan",
         "inventory": "Imbentaryo",
-        "schedule": "Iskedyul ng shift"
+        "schedule": "Iskedyul ng shift",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "search": {
         "emptyHint": "Mag-type para pumunta sa isang bahagi o gumawa ng bago. Mula 2 karakter, makikita mo rin ang iyong mga entry, pati sa bahagi ng salita.",
@@ -170,7 +172,7 @@
         "createTaskNamed": "Gawing gawain ang “{{title}}”"
     },
     "dashboard": {
-        "title": "Pangkalahatang-tanaw",
+        "title": "Ngayon",
         "greetingMorning": "Magandang umaga, {{name}}",
         "greetingDay": "Magandang hapon, {{name}}",
         "greetingEvening": "Magandang gabi, {{name}}",
@@ -2301,7 +2303,7 @@
             "housekeeping": "Gawaing-bahay",
             "weather": "Panahon",
             "family": "Pamilya",
-            "dashboard": "Pangkalahatang-tanaw",
+            "dashboard": "Ngayon",
             "search": "Paghahanap",
             "inventory": "Imbentaryo",
             "waste": "Koleksyon ng basura"
@@ -3575,7 +3577,7 @@
         "new": "Gumawa ng bagong entry",
         "searchCalendar": "Maghanap sa kalendaryo",
         "help": "Mga keyboard shortcut",
-        "goDash": "Dashboard",
+        "goDash": "Ngayon",
         "calToday": "Pumunta sa ngayon",
         "calPrev": "Nakaraang yugto",
         "calNext": "Susunod na yugto",
@@ -6647,5 +6649,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

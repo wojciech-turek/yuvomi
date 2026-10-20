@@ -46,10 +46,6 @@
 // Route → { count, label }. `label` ist eine Funktion, siehe oben.
 const badges = new Map();
 
-// Ab hier zeigt das Badge „99+". Zweistellig ist die Zahl noch eine Zahl;
-// dreistellig ist sie ein Balken neben dem Icon.
-const MAX_VISIBLE = 99;
-
 /**
  * Ab wie vielen Tagen Naehe ein Geburtstag ans Nav-Ziel gehoert.
  *
@@ -99,11 +95,26 @@ function iconWrap(navItem) {
  */
 const NAV_SCOPES = '.nav-sidebar, .nav-bottom';
 
+/* Ein Ziel ohne eigene Route - die Kuechen-Taste fuehrt zur zuletzt offenen
+ * Kuechenseite - wird ueber seine Nav-Id angesprochen (`kitchen`). Routen
+ * beginnen mit `/`, Nav-Ids nie; beide Namensraeume kreuzen sich nicht. */
 function navTargets(route) {
+  const selector = route.startsWith('/') ? `[data-route="${route}"]` : `[data-nav-id="${route}"]`;
   return [...document.querySelectorAll(NAV_SCOPES)]
-    .flatMap((scope) => [...scope.querySelectorAll(`[data-route="${route}"]`)]);
+    .flatMap((scope) => [...scope.querySelectorAll(selector)]);
 }
 
+/**
+ * TAFLA: EIN PUNKT, KEINE ZAHL (spec-navigation.txt, 2026-10-19).
+ *
+ * Das Ziel traegt nur noch einen 6pt-Akzentpunkt, der „hier wartet heute
+ * etwas auf dich" sagt - Zadania ueberfaellig, Kuchnia laeuft ab, Wiecej hat
+ * etwas im Eingang. Die Menge steht weiter im Namen des Ziels („Zadania,
+ * 1 zaległe"), damit VoiceOver sie hoert; sichtbar war die Ziffer ein zweiter
+ * Ton in der Leiste, und „99+" eine Zahl, die niemand abarbeitet. Die Valenz
+ * (`tone`) bleibt als Parameter fuer Aufrufer stehen, faerbt aber nicht mehr:
+ * die Leiste spricht mit EINER Stimme (Akzent).
+ */
 function paint(route, entry) {
   navTargets(route).forEach((navItem) => {
     navItem.querySelectorAll('.nav-badge').forEach((el) => el.remove());
@@ -113,18 +124,11 @@ function paint(route, entry) {
 
     if (!entry || !(entry.count > 0)) return;
 
-    const badge = document.createElement('span');
-    // Die VALENZ gehoert zur Zahl (Critique 2026-08-27): Danger ist der
-    // Default und meint eine gerissene Frist (ueberfaellige Aufgaben).
-    // Ein anstehender Geburtstag ist eine Nachricht (accent, dieselbe
-    // Begruendung wie der Update-Punkt: „eine Nachricht, kein Alarm"), eine
-    // ablaufende Inventar-Frist eine Warnung. Drei Aussagen in einem
-    // Alarm-Rot erzogen dazu, das Rot zu ueberblaettern.
-    badge.className = `nav-badge${entry.tone ? ` nav-badge--${entry.tone}` : ''}`;
+    const dot = document.createElement('span');
+    dot.className = 'nav-badge nav-badge--dot';
     // Die Ansage steht im Namen des Ziels - siehe Modulkopf.
-    badge.setAttribute('aria-hidden', 'true');
-    badge.textContent = entry.count > MAX_VISIBLE ? `${MAX_VISIBLE}+` : String(entry.count);
-    iconWrap(navItem).appendChild(badge);
+    dot.setAttribute('aria-hidden', 'true');
+    iconWrap(navItem).appendChild(dot);
   });
 }
 
@@ -161,6 +165,11 @@ export function applyNavBadges() {
 /** Welche Routen gerade eine gemerkte Zahl tragen. */
 export function navBadgeRoutes() {
   return [...badges.keys()];
+}
+
+/** Die gemerkte Menge an einem Ziel (0 ohne Eintrag) - fuer Namen, die ein anderer Ort schreibt. */
+export function navBadgeCount(route) {
+  return badges.get(route)?.count ?? 0;
 }
 
 /**

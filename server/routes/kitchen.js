@@ -46,14 +46,14 @@ const router = express.Router();
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Nichts zu melden - dieselbe Form, nur ohne Zahlen.
-const EMPTY_PANTRY = Object.freeze({ attention: 0, expired: 0, low: 0, out: 0 });
+const EMPTY_PANTRY = Object.freeze({ attention: 0, expired: 0, low: 0, out: 0, expiring: 0 });
 
 /**
  * GET /api/v1/kitchen/summary?today=YYYY-MM-DD
  *
  * Response: { data: {
  *   shopping: { open },
- *   pantry:   { attention, expired, low, out },
+ *   pantry:   { attention, expired, low, out, expiring },
  * } }
  *
  * `attention` = abgelaufen ODER leer ODER fast leer, ohne Doppelzählung. Die drei
@@ -96,9 +96,12 @@ router.get('/summary', (req, res) => {
         SUM(CASE WHEN (expires_on IS NOT NULL AND expires_on < ?)
                    OR quantity <= 0
                    OR (min_quantity IS NOT NULL AND quantity <= min_quantity)
-                 THEN 1 ELSE 0 END) AS attention
+                 THEN 1 ELSE 0 END) AS attention,
+        SUM(CASE WHEN expires_on IS NOT NULL AND quantity > 0
+                  AND expires_on <= date(?, '+3 days')
+                 THEN 1 ELSE 0 END) AS expiring
       FROM pantry_items
-    `).get(today, today);
+    `).get(today, today, today);
 
     res.json({
       data: {
@@ -108,6 +111,9 @@ router.get('/summary', (req, res) => {
           expired: pantry.expired ?? 0,
           low: pantry.low ?? 0,
           out: pantry.out_of_stock ?? 0,
+          // Tafla: laeuft in hoechstens drei Tagen ab (abgelaufene eingeschlossen)
+          // - der Warnpunkt am Segment Spiżarnia und am Tab Kuchnia.
+          expiring: pantry.expiring ?? 0,
         } : { ...EMPTY_PANTRY },
       },
     });

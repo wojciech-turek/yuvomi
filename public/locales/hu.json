@@ -44,7 +44,7 @@
         "errorDetails": "Technikai részletek",
         "pageFailedTitle": "A(z) {{page}} oldal most nem nyitható meg",
         "pageFailedHint": "Minden más rész tovább működik.",
-        "toOverview": "Az áttekintéshez",
+        "toOverview": "Ugrás: Ma",
         "errorGeneric": "Hiba történt.",
         "updateAvailable": "Frissítés elérhető - frissítse az oldalt a legújabb verzióhoz.",
         "titleRequired": "A cím megadása kötelező",
@@ -104,7 +104,7 @@
         "transferUndone": "Eltávolítva a bevásárlólistáról."
     },
     "nav": {
-        "dashboard": "Áttekintés",
+        "dashboard": "Ma",
         "tasks": "Feladatok",
         "calendar": "Naptár",
         "meals": "Ételek",
@@ -151,10 +151,12 @@
         "rewards": "Jutalmak",
         "pantry": "Készlet",
         "inventory": "Leltár",
-        "schedule": "Műszakbeosztás"
+        "schedule": "Műszakbeosztás",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Áttekintés",
+        "title": "Ma",
         "greetingMorning": "Jó reggelt, {{name}}",
         "greetingDay": "Jó napot, {{name}}",
         "greetingEvening": "Jó estét, {{name}}",
@@ -2235,7 +2237,7 @@
             "housekeeping": "Háztartás",
             "weather": "Időjárás",
             "family": "Család",
-            "dashboard": "Áttekintés",
+            "dashboard": "Ma",
             "search": "Keresés",
             "inventory": "Leltár",
             "waste": "Hulladékgyűjtés"
@@ -3564,7 +3566,7 @@
         "new": "Új bejegyzés létrehozása",
         "searchCalendar": "Keresés a naptárban",
         "help": "Billentyűparancsok",
-        "goDash": "Vezérlőpult",
+        "goDash": "Ma",
         "calToday": "Ugrás a mai napra",
         "calPrev": "Előző időszak",
         "calNext": "Következő időszak",
@@ -6647,5 +6649,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

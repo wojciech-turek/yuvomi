@@ -44,7 +44,7 @@
         "errorDetails": "Technische details",
         "pageFailedTitle": "De pagina {{page}} kan nu niet worden geopend",
         "pageFailedHint": "Alle andere onderdelen blijven werken.",
-        "toOverview": "Naar het overzicht",
+        "toOverview": "Naar Vandaag",
         "errorGeneric": "Er is een fout opgetreden.",
         "updateAvailable": "Update beschikbaar - herlaad de pagina voor de nieuwste versie.",
         "titleRequired": "Titel is verplicht",
@@ -104,7 +104,7 @@
         "transferUndone": "Van de boodschappenlijst verwijderd."
     },
     "nav": {
-        "dashboard": "Overzicht",
+        "dashboard": "Vandaag",
         "tasks": "Taken",
         "calendar": "Agenda",
         "meals": "Maaltijden",
@@ -151,10 +151,12 @@
         "rewards": "Beloningen",
         "pantry": "Voorraad",
         "inventory": "Inventaris",
-        "schedule": "Dienstrooster"
+        "schedule": "Dienstrooster",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Overzicht",
+        "title": "Vandaag",
         "greetingMorning": "Goedemorgen, {{name}}",
         "greetingDay": "Goedemiddag, {{name}}",
         "greetingEvening": "Goedenavond, {{name}}",
@@ -2235,7 +2237,7 @@
             "housekeeping": "Huishouden",
             "weather": "Weer",
             "family": "Familie",
-            "dashboard": "Overzicht",
+            "dashboard": "Vandaag",
             "search": "Zoeken",
             "inventory": "Inventaris",
             "waste": "Afvalinzameling"
@@ -3564,7 +3566,7 @@
         "new": "Nieuwe vermelding aanmaken",
         "searchCalendar": "Agenda doorzoeken",
         "help": "Sneltoetsen",
-        "goDash": "Dashboard",
+        "goDash": "Vandaag",
         "calToday": "Naar vandaag",
         "calPrev": "Vorige periode",
         "calNext": "Volgende periode",
@@ -6647,5 +6649,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

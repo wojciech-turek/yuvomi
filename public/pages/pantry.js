@@ -1709,26 +1709,40 @@ async function wirePhotoButton(btn) {
     picker.value = '';
     if (!file) return;
     btn.disabled = true;
-    window.yuvomi?.showToast(t('pantry.photoReading'), 'default', 6000);
     try {
-      const image = await photoToJpegDataUrl(file);
-      const res = await api.post('/pantry/photo-scan', { image });
-      const items = res.data?.items ?? [];
-      if (!items.length) {
-        window.yuvomi?.showToast(t('pantry.photoNothing'), 'warning');
-        return;
-      }
-      openPhotoReview(items);
-    } catch (err) {
-      const reason = err?.data?.reason;
-      const key = reason === 'ai_cap_reached' ? 'pantry.photoCap'
-        : (reason === 'ai_disabled' || reason === 'ai_not_configured') ? 'pantry.photoOff'
-        : 'pantry.photoFailed';
-      window.yuvomi?.showToast(t(key), 'danger');
+      await scanPantryPhoto(file);
     } finally {
       btn.disabled = false;
     }
   });
+}
+
+/**
+ * Reads one photo into the draft list and opens the review. Exported for the
+ * global capture (components/capture-sheet.js): its long-press menu picks the
+ * photo itself (the file dialog needs the tap's user gesture), opens this page
+ * and hands the file over - the review needs the page's locations.
+ * @param {File} file
+ */
+export async function scanPantryPhoto(file) {
+  if (!file) return;
+  window.yuvomi?.showToast(t('pantry.photoReading'), 'default', 6000);
+  try {
+    const image = await photoToJpegDataUrl(file);
+    const res = await api.post('/pantry/photo-scan', { image });
+    const items = res.data?.items ?? [];
+    if (!items.length) {
+      window.yuvomi?.showToast(t('pantry.photoNothing'), 'warning');
+      return;
+    }
+    openPhotoReview(items);
+  } catch (err) {
+    const reason = err?.data?.reason;
+    const key = reason === 'ai_cap_reached' ? 'pantry.photoCap'
+      : (reason === 'ai_disabled' || reason === 'ai_not_configured') ? 'pantry.photoOff'
+      : 'pantry.photoFailed';
+    window.yuvomi?.showToast(t(key), 'danger');
+  }
 }
 
 function openPhotoReview(items) {
