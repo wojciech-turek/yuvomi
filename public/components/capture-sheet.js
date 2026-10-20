@@ -519,7 +519,6 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
   let parse = null;
   let saving = false;
   let shoppingAsked = false;
-  const hasPhotoMenu = (await photoActions()).length > 0;
   // Die Slot-Namen des Haushalts („Kolacja" oder ein eigenes Wort).
   ensureMealTypeNames?.();
   let stopKeyboardWatch = () => {};
@@ -543,7 +542,7 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
       <p class="sr-only" id="capture-status" role="status" aria-live="polite"></p>
       <p class="capture-sheet__error" id="capture-error" role="alert"></p>
       <div class="capture-sheet__footer">
-        ${hasPhotoMenu ? `<button type="button" class="capture-sheet__camera" id="capture-camera" aria-label="${esc(t('capture.photoLabel'))}" aria-haspopup="menu"><i data-lucide="camera" aria-hidden="true"></i></button>` : ''}
+        <button type="button" class="capture-sheet__camera" id="capture-camera" hidden aria-label="${esc(t('capture.photoLabel'))}" aria-haspopup="menu"><i data-lucide="camera" aria-hidden="true"></i></button>
         <button type="button" class="capture-sheet__save" id="capture-save" disabled>${esc(t('capture.primary.auto'))}</button>
       </div>
       ${pageAction ? `<button type="button" class="capture-sheet__full" id="capture-full">${esc(t('capture.fullForm', { action: pageAction.label }))}</button>` : ''}
@@ -772,9 +771,13 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
     });
     saveBtn.addEventListener('click', save);
 
-    panel.querySelector('#capture-camera')?.addEventListener('click', (e) => {
+    // Der Kamera-Kreis erscheint, sobald feststeht, dass es einen Bild-Weg gibt -
+    // das Blatt wartet nicht darauf (der KI-Status ist ein Abruf).
+    const camera = panel.querySelector('#capture-camera');
+    camera?.addEventListener('click', (e) => {
       openCaptureMenu(e.currentTarget, { before: () => closeModal({ force: true }) });
     });
+    photoActions().then((actions) => { if (camera?.isConnected) camera.hidden = actions.length === 0; });
     panel.querySelector('#capture-full')?.addEventListener('click', async () => {
       await closeModal({ force: true });
       pageAction?.run();

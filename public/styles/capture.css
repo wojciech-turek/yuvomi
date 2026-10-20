@@ -440,6 +440,10 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
   cursor: pointer;
 }
 
+.capture-sheet__camera[hidden] {
+  display: none;
+}
+
 .capture-sheet__camera svg {
   width: var(--space-5);
   height: var(--space-5);
