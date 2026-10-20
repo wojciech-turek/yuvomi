@@ -8,7 +8,7 @@
  */
 
 import { api } from '/api.js';
-import { t, getNumberFormat, formatDate } from '/i18n.js';
+import { t, getNumberFormat, formatDate, getLocale } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
 import { readRowHtml, readRowHintEl } from '/utils/read-row.js';
 import {
@@ -22,7 +22,7 @@ import {
 } from '/components/modal.js';
 import { renderKitchenTabsBar } from '/utils/kitchen-tabs.js';
 import { resolveShoppingTarget, announceTransfer, mayTransferPantryToShopping } from '/utils/kitchen-transfer.js';
-import { mayWritePath } from '/utils/module-access.js';
+import { mayWritePath, pathAccess } from '/utils/module-access.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { pageToolsMenuHtml, installPopoverMenus } from '/utils/popover-menu.js';
@@ -39,7 +39,6 @@ import { setBulkPill, clearBulkPill } from '/utils/bulk-pill.js';
 import { PANTRY_UNITS, normalizePantryQuantity, pantryUnitStep, pantryQuantityLabel } from '/utils/pantry-units.js';
 import { photoToJpegDataUrl } from '/utils/photo-resize.js';
 import {
-  PANTRY_FILTERS,
   daysUntil,
   matchesPantryFilter,
   pantryExpiryPhrase,
@@ -51,6 +50,8 @@ import {
 let _container = null;
 /** Handle des geteilten Suchfelds (setValue/clear), gesetzt in render(). */
 let _search = null;
+/** Die Kamera-Karte samt Dateiwaehler - ein Knoten, der jeden Neuaufbau ueberlebt. */
+let _photoSlot = null;
 
 const state = {
   items: [],
@@ -60,6 +61,13 @@ const state = {
   lists: null,
   query: '',
   filter: 'all',
+  /** Tafla: welcher Ort gezeigt wird - 'all', eine Lagerort-id oder 'none'. */
+  place: 'all',
+  /** Tafla: die eine aufgeklappte Zeile (Stepper, Na liste, Bearbeiten). */
+  expanded: null,
+  /** Namen (klein) der offenen Einkaufsartikel - fuer "schon auf der Liste".
+   *  null, solange unbekannt oder ohne Leserecht auf den Einkauf. */
+  onList: null,
   /** Einmal pro Render eingefroren: sonst könnte ein über Mitternacht offener
    *  Tab Zeilen unterschiedlich bewerten, je nachdem wann sie gezeichnet wurden. */
   todayKey: todayKey(),
@@ -166,11 +174,55 @@ function expiryBadge(item) {
   };
 }
 
-function stockBadge(item) {
-  const { out, low } = pantryItemStatus(item, state.todayKey);
-  if (out) return { tone: 'danger', text: t('pantry.badgeOut') };
-  if (low) return { tone: 'warning', text: t('pantry.badgeLow') };
+/**
+ * Tafla: ab hier gilt ein Termin als "mija" - drei Tage, wie die Statusregel
+ * im Spec ("expires within 3 days"). `soon` in pantry-status.js bleibt bei
+ * sieben Tagen: das ist die Frage der Dashboard-Kachel und des Desktop-Panels.
+ */
+const ATTENTION_DAYS = 3;
+
+/** "dziś" / "jutro" / "za 2 dni" - das Wort fuer einen Termin in `days` Tagen. */
+function expiryWord(days) {
+  if (days === 0) return t('pantry.pillToday');
+  if (days === 1) return t('pantry.pillTomorrow');
+  return t('pantry.pillInDays', { count: days });
+}
+
+/**
+ * DAS EINE STATUSWORT DER ZEILE (Tafla, "Status pill"): als Wort in einer
+ * getoenten Pille und nur, wenn es etwas zu tun gibt. Abgelaufen ist das
+ * einzige Rot der Seite; leer, bald faellig und knapp sind Amber. Steht beides
+ * an (knapp UND bald faellig), gewinnt die Frist - sie wartet nicht.
+ * @returns {{ tone: 'danger'|'warning', text: string } | null}
+ */
+function statusPill(item) {
+  const status = pantryItemStatus(item, state.todayKey);
+  const days = item.expires_on ? daysUntil(item.expires_on, state.todayKey) : null;
+  if (days != null && days < 0) return { tone: 'danger', text: t('pantry.pillExpired') };
+  if (days != null && days <= ATTENTION_DAYS) return { tone: 'warning', text: expiryWord(days) };
+  if (status.out) return { tone: 'warning', text: t('pantry.pillOut') };
+  if (status.low) return { tone: 'warning', text: t('pantry.pillLow') };
   return null;
+}
+
+/** Faellt der Artikel in "Termin mija" (abgelaufen oder in hoechstens drei Tagen)? */
+function expiresSoon(item) {
+  if (!item.expires_on) return false;
+  return daysUntil(item.expires_on, state.todayKey) <= ATTENTION_DAYS;
+}
+
+/** Das Zeichen der Zeile: das Icon der Einkaufskategorie (Nabial -> milk). */
+function categoryIcon(item) {
+  return state.categories.find((c) => c.name === item.category)?.icon || 'package';
+}
+
+/** "Mleko i jajka" - die Namen als Aufzaehlung der Oberflaechensprache. */
+function joinNames(names) {
+  try {
+    return new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(names);
+  } catch {
+    return names.join(', ');
+  }
 }
 
 // --------------------------------------------------------
@@ -222,11 +274,19 @@ function visibleItems() {
   // „Fast leer", waehrend die Zeile ihn noch dort zeigt.
   return state.items.map(withIntent).filter((item) => {
     if (!matchesPantryFilter(item, state.filter, state.todayKey)) return false;
+    if (!inPlace(item)) return false;
     if (!q) return true;
     return item.name?.toLowerCase().includes(q)
       || item.notes?.toLowerCase().includes(q)
       || (item.location_name && locationLabel(item.location_name).toLowerCase().includes(q));
   });
+}
+
+/** Liegt der Artikel am gewaehlten Ort der Ortsreihe? */
+function inPlace(item) {
+  if (state.place === 'all') return true;
+  if (state.place === 'none') return item.location_id == null;
+  return item.location_id === state.place;
 }
 
 /**
@@ -274,6 +334,7 @@ export async function render(container) {
   state.todayKey = todayKey();
   // Frische Seite: die Chip-Leiste darf beim ersten Zeichnen wieder scrollen.
   _scrolledFilter = null;
+  state.expanded = null;
   // Deep-Link der Dashboard-Kachel „Läuft bald ab" (`?filter=expired|soon`).
   // Trifft der Chip gerade nichts, setzt die Chip-Leiste ohnehin auf „Alle"
   // zurück - ein veralteter Link endet nie in einer leeren Liste.
@@ -298,68 +359,48 @@ export async function render(container) {
   live.setAttribute('aria-live', 'polite');
 
   // Kanonischer Kopf, Gruppen-Variante (siehe .page-toolbar--in-group in
-  // layout.css): Suche im __center-Slot, Lagerort-Verwaltung im __actions-Slot -
-  // dieselbe Slot-Ordnung wie in den drei Geschwister-Tabs.
+  // layout.css): Suche im __center-Slot, Lagerort-Verwaltung im __actions-Slot.
+  // TAFLA: am Telefon steht der Kopf nur, solange gesucht wird - der Einstieg
+  // ist die Lupe vorn in der Ortsreihe (pantry.css, `.pantry-page--searching`).
+  // Am Zeiger bleibt das Feld stehen wie bisher.
   const toolbar = document.createElement('div');
   // Kein --narrow (Re-Critique 2026-09-27, D3): der Kuechenkopf gehoert der
-  // Kuechen-Leiste und endet an ihrer Kante wie in den drei Geschwister-Tabs -
-  // sonst sprang die angedockte Primaeraktion beim Tabwechsel zwischen
-  // Lesemass (x 865) und Leistenkante (x 1288). Test: test-meals.js (D3).
-  toolbar.className = 'page-toolbar page-toolbar--in-group';
+  // Kuechen-Leiste und endet an ihrer Kante wie in den drei Geschwister-Tabs.
+  toolbar.className = 'page-toolbar page-toolbar--in-group pantry-toolbar';
   // Die Suche IST der Center-Slot (Re-Critique 2026-09-27, D4): Breite und
   // Stelle traegt page-search.css, wie in Dokumenten - kein Wrapper.
   toolbar.insertAdjacentHTML('beforeend', `
     ${renderPageSearch({
       id: 'pantry-search',
-      // Label und Placeholder aus demselben Key: „Vorrat durchsuchen" benennt
-      // das Feld vollständig, wie in notes/contacts/documents. Ein eigener
-      // Label-Key wäre ein Schlüssel über 23 Locales ohne zusätzliche Aussage.
       label: t('pantry.searchPlaceholder'),
       placeholder: t('pantry.searchPlaceholder'),
       value: state.query,
       clearLabel: t('common.searchClear'),
-      // FELD STATT LUPE AUCH MOBIL (R20, Re-Critique 2026-10-17 a2 P2-4):
-      // die Zeile unter der Kuechen-Leiste trug nur Lupe und Ortsnadel, 65px
-      // fuer zwei Icons. Wie bei den Rezepten (R19) fuellt das Feld die Zeile,
-      // die Lagerorte bleiben daneben.
+      // Ein Feld, keine Lupe: am Telefon oeffnet die Lupe der Ortsreihe genau
+      // diese Zeile, und dann soll getippt werden koennen.
       className: 'pantry-search page-toolbar__center page-search--field',
     })}
     ${readOnly() ? '' : `<div class="page-toolbar__actions">
       ${pageToolsMenuHtml({
         id: 'pantry-tools-menu',
         label: t('common.moreActions'),
-        // KUECHENKOPF (Kopfregel mobil, 2026-09-26): die Verwaltung steht im
-        // EINEN Werkzeugmenue. Mit einem einzigen Eintrag wird daraus der
-        // direkte Knopf (pageToolsMenuHtml, R16): "Lagerorte verwalten" mit
-        // map-pin wie im Inventar - "archive" war dasselbe Zeichen wie der
-        // Vorrat-Tab darueber (A4, P3). Kommt ein zweiter Eintrag dazu, ist es
-        // von selbst wieder das Menue.
+        // KUECHENKOPF: die Verwaltung steht im EINEN Werkzeugmenue; mit einem
+        // einzigen Eintrag wird daraus der direkte Knopf (pageToolsMenuHtml).
         // Regel 7 in utils/module-access.js: der AUFRUFER nimmt den Ausloeser
-        // weg. Bei `pantry: read` endete jede Handlung im Verwalter (anlegen,
-        // umbenennen, sortieren, loeschen) im 403.
+        // weg. Bei `pantry: read` endete jede Handlung im Verwalter im 403.
         items: [{ action: 'manage-locations', label: t('pantry.manageLocations'), icon: 'map-pin' }],
       })}
-      <button type="button" class="btn btn--secondary btn--icon page-tools-btn" id="pantry-photo-btn" hidden
-              aria-label="${esc(t('pantry.photoAdd'))}" title="${esc(t('pantry.photoAdd'))}">
-        <i data-lucide="camera" class="icon-md" aria-hidden="true"></i>
-      </button>
     </div>`}`);
 
-  // DIE CHIPREIHE STEHT IM SCROLLPORT (Kopfregel mobil, Regel 3): als erstes
-  // Kind von #pantry-list scrollt sie mit der Liste weg, statt dauerhaft 60px
-  // ueber dem Port zu belegen (A8: fix bis y181). renderList() ersetzt nur,
-  // was HINTER ihr steht.
+  // DIE ORTSREIHE STEHT IM SCROLLPORT (Kopfregel mobil, Regel 3): als erstes
+  // Kind von #pantry-list scrollt sie mit der Liste weg. renderList() ersetzt
+  // nur, was HINTER ihr steht.
   const filters = document.createElement('div');
   filters.className = 'page-chip-row pantry-filters';
   filters.id = 'pantry-filters';
   filters.setAttribute('role', 'group');
-  filters.setAttribute('aria-label', t('common.filters'));
+  filters.setAttribute('aria-label', t('pantry.placesLabel'));
   filters.hidden = true;
-
-  // Hier stand der Slot für die Sammelaktions-Leiste. Sie ist seit Etappe 5
-  // eine Pille in der unteren Shell-Zone (utils/bulk-pill.js) und braucht in
-  // dieser Seite gar keinen Platz mehr - weder im Scroller, wo sie bis
-  // 2026-07-30 wegscrollte, noch darüber, wo sie eine Zeile kostete.
 
   const list = document.createElement('div');
   list.className = 'list-scroller page-scrollport pantry-list';
@@ -367,6 +408,12 @@ export async function render(container) {
   list.setAttribute('aria-busy', 'true');
   list.append(filters);
   list.insertAdjacentHTML('beforeend', renderSkeletonList({ rows: 6, lines: 2 }));
+
+  // "Dodaj ze zdjęcia" (Tafla: Kamera-Karte statt Kopf-Knopf). Ein Knoten fuer
+  // die ganze Seite: drawList() haengt ihn bei jedem Neuaufbau wieder ein, damit
+  // der Dateiwaehler, den wirePhotoButton() daneben legt, verdrahtet bleibt.
+  // Nur mit Schreibrecht - ein Foto legt Vorratsartikel an.
+  _photoSlot = readOnly() ? null : photoCardEl();
 
   const fab = document.createElement('button');
   fab.className = 'page-fab';
@@ -377,11 +424,8 @@ export async function render(container) {
   fab.insertAdjacentHTML('beforeend', '<i data-lucide="plus" aria-hidden="true"></i>');
 
   // DAS NEBENPANEL „IM BLICK" (Re-Critique 2026-09-27, A4 P1 / R10 L4): am
-  // Desktop steht neben der Liste fest, was bald ablaeuft oder knapp wird -
-  // dieselben drei Fragen wie die Filterchips, nur ohne dass man sie stellen
-  // muss. Unter der Schwelle blendet es CSS aus; dort tragen die Chips die
-  // Frage. Liste und Panel teilen einen Koerper, weil ein Container sich
-  // selbst nicht umstellen kann (die Abfrage steht an `.pantry-page`).
+  // Desktop steht neben der Liste fest, was bald ablaeuft. Unter der Schwelle
+  // blendet CSS es aus; dort traegt die Karte "Wymaga uwagi" die Frage.
   const body = document.createElement('div');
   body.className = 'pantry-body';
   const watch = document.createElement('aside');
@@ -397,36 +441,39 @@ export async function render(container) {
 
   if (window.lucide) window.lucide.createIcons({ el: container });
 
-  // Geteilter Baustein statt eigenem Input (utils/page-search.js): Lupe,
-  // Leeren-Knopf, `<label for>` und die mobilen Eingabe-Attribute liegen dort
-  // einmal. Der Vorrat baute sie privat nach und hatte keines davon; die
-  // Beschriftung trug der Placeholder, der beim Tippen verschwindet.
-  // Die Debounce (Default 200ms) ist hier der eigentliche Gewinn: renderList()
-  // zeichnet die gesamte Liste neu, vorher bei jedem Tastendruck.
-  // Handle im Modul halten: der Zurücksetzen-Pfad des Treffer-Leerzustands
-  // braucht `clear()`, nicht nur `input.value = ''`.
+  // Geteilter Baustein statt eigenem Input (utils/page-search.js).
   _search = wirePageSearch(toolbar, {
     id: 'pantry-search',
     onQuery: (value) => {
       state.query = value.trim();
+      page.classList.toggle('pantry-page--searching', Boolean(state.query) || page.contains(document.activeElement));
       renderList();
     },
   });
+  wireSearchToggle(page, toolbar);
 
   installPopoverMenus(toolbar);
   toolbar.querySelector('[data-action="manage-locations"]')?.addEventListener('click', openLocationManager);
-  wirePhotoButton(toolbar.querySelector('#pantry-photo-btn'));
+  if (_photoSlot) wirePhotoButton(_photoSlot.querySelector('#pantry-photo-btn'));
   fab.addEventListener('click', () => openItemModal('create'));
 
   filters.addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-filter]');
+    if (e.target.closest('[data-action="search"]')) { openSearch(); return; }
+    const chip = e.target.closest('[data-place], [data-filter]');
     if (!chip) return;
-    state.filter = chip.dataset.filter;
+    // Ein Statusfilter (Deep-Link) steht als gewaehlte Chip vorn; ein Tipp
+    // hebt ihn auf. Ein Ort waehlt den Ort.
+    if (chip.dataset.filter) state.filter = 'all';
+    else state.place = chip.dataset.place === 'all' || chip.dataset.place === 'none'
+      ? chip.dataset.place
+      : Number(chip.dataset.place);
+    state.expanded = null;
     renderFilters();
     renderList();
   });
 
   list.addEventListener('click', onListClick);
+  wireLongPress(list);
   watch.addEventListener('click', onWatchClick);
 
   try {
@@ -438,6 +485,38 @@ export async function render(container) {
 
   renderFilters();
   renderList();
+  refreshOnList();
+}
+
+/** Die Lupe der Ortsreihe: oeffnet den Suchkopf und setzt den Cursor hinein. */
+function openSearch() {
+  const page = _container?.querySelector('.pantry-page');
+  if (!page) return;
+  page.classList.add('pantry-page--searching');
+  _search?.input.focus();
+}
+
+/**
+ * Der Suchkopf geht am Telefon wieder zu, sobald er leer den Fokus verliert;
+ * Esc leert ihn und gibt den Fokus an die Lupe zurueck.
+ */
+function wireSearchToggle(page, toolbar) {
+  const input = _search?.input;
+  if (!input) return;
+  input.addEventListener('blur', () => {
+    // Der Leeren-Knopf liegt im selben Kopf: ein Tipp darauf ist kein Verlassen.
+    setTimeout(() => {
+      if (!state.query && !toolbar.contains(document.activeElement)) page.classList.remove('pantry-page--searching');
+    }, 0);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || (!input.value && !page.classList.contains('pantry-page--searching'))) return;
+    _search.clear();
+    state.query = '';
+    page.classList.remove('pantry-page--searching');
+    renderList();
+    _container?.querySelector('.pantry-search-toggle')?.focus();
+  });
 }
 
 /**
@@ -458,9 +537,8 @@ function renderLoadError(list, err) {
 }
 
 /**
- * Filter-Chips. Ein Zustand ohne Treffer bekommt keine Chip: eine Chip, die
- * garantiert auf eine leere Liste führt, ist eine Sackgasse. Bleibt nur „Alle"
- * übrig, entfällt die Zeile ganz - eine einzelne Chip filtert nichts.
+ * Die Ortsreihe (Tafla). Ein Ort ohne Artikel bekommt keine Chip: eine Chip,
+ * die garantiert auf eine leere Liste führt, ist eine Sackgasse.
  */
 /**
  * Zuletzt ins Sichtfeld geholter Filter. Ohne dieses Gedächtnis rief jeder
@@ -480,69 +558,92 @@ function renderFilters() {
   const bar = _container?.querySelector('#pantry-filters');
   if (!bar) return { wasReset: false };
 
-  // Kanten-Anriss der Chip-Leiste. Sie scrollt horizontal (gemessen 135px
-  // Überhang bei 393px, 208px bei 320px), blendet ihre Scrollbar per CSS aus
-  // und hatte damit NULL Affordanz: der vierte Filter „Fast leer" begann bei
-  // x=394 in einem 393px-Viewport und existierte für Mobilnutzer nicht
-  // (Critique 2026-07-30). wireScrollFade setzt die geteilten has-fade-*-
-  // Klassen aus filter-chip.css - dasselbe Werkzeug, das das Wochenboard und
-  // die Kontakte-Filter schon nutzen. Einmal binden; der MutationObserver
-  // deckt die replaceChildren-Rerenders darunter ab.
+  // Kanten-Anriss der Chip-Leiste: sie scrollt horizontal und blendet ihre
+  // Scrollbar aus. wireScrollFade setzt die geteilten has-fade-*-Klassen aus
+  // filter-chip.css. Einmal binden; der MutationObserver deckt die Rerenders.
   if (!bar.dataset.fadeWired) {
     bar.dataset.fadeWired = 'true';
     wireScrollFade(bar);
   }
 
-  const counts = pantryFilterCounts(state.items.map(withIntent), state.todayKey);
-  const active = PANTRY_FILTERS.filter((key) => counts[key] > 0);
+  const items = state.items.map(withIntent);
+  const counts = pantryFilterCounts(items, state.todayKey);
 
-  // Der aktive Filter hat gerade seinen letzten Treffer verloren → zurück auf Alle.
-  const previousFilter = state.filter;
-  if (state.filter !== 'all' && !active.includes(state.filter)) state.filter = 'all';
-  const wasReset = state.filter !== previousFilter;
+  // Der aktive Statusfilter (Deep-Link) hat seinen letzten Treffer verloren → zurück auf Alle.
+  const previous = `${state.filter}:${state.place}`;
+  if (state.filter !== 'all' && !(counts[state.filter] > 0)) state.filter = 'all';
+
+  // TAFLA: die Reihe waehlt den ORT ("Wszystko · Lodówka 9 · Zamrażarka 2").
+  // Die drei Statusfragen (abgelaufen, bald, knapp) beantwortet jetzt die Karte
+  // "Wymaga uwagi" oben in der Liste, ohne dass man sie stellen muss. Ein Ort
+  // ohne Artikel bekommt keine Chip - sie fuehrte garantiert ins Leere.
+  const byPlace = new Map();
+  for (const item of items) {
+    const key = item.location_id ?? 'none';
+    byPlace.set(key, (byPlace.get(key) ?? 0) + 1);
+  }
+  const places = state.locations
+    .filter((loc) => byPlace.get(loc.id))
+    .map((loc) => ({ id: String(loc.id), label: locationLabel(loc.name), count: byPlace.get(loc.id) }));
+  if (byPlace.get('none')) places.push({ id: 'none', label: t('pantry.unlocated'), count: byPlace.get('none') });
+
+  // Der gewaehlte Ort hat seinen letzten Artikel verloren → zurück auf Wszystko.
+  if (state.place !== 'all' && !places.some((p) => p.id === String(state.place))) state.place = 'all';
+  const wasReset = `${state.filter}:${state.place}` !== previous;
 
   // replaceChildren zerstört den fokussierten Chip; ohne Rettung landet der
   // Tastatur-Fokus auf <body> und der Tab-Weg beginnt wieder ganz oben.
   const hadFocus = bar.contains(document.activeElement);
 
   bar.replaceChildren();
-  if (!active.length || !state.items.length) {
+  if (!state.items.length) {
     bar.hidden = true;
     return { wasReset };
   }
   bar.hidden = false;
 
-  const labels = {
-    expired: { key: 'pantry.filterExpired', icon: 'circle-alert' },
-    soon: { key: 'pantry.filterSoon', icon: 'clock' },
-    low: { key: 'pantry.filterLow', icon: 'package-open' },
-  };
+  const chipHtml = ({ attr, value, label, count, active }) => `
+    <button type="button" class="filter-chip filter-chip--sm${active ? ' filter-chip--active' : ''}"
+            ${attr}="${esc(value)}" aria-pressed="${active}">
+      ${active ? '<i data-lucide="check" class="icon-sm" aria-hidden="true"></i>' : ''}
+      <span>${esc(label)}</span>
+      ${count != null ? `<span class="filter-chip__count">${count}</span>` : ''}
+    </button>`;
 
-  const chips = [{ id: 'all', label: t('pantry.filterAll'), icon: 'boxes', count: null }];
-  for (const key of active) {
-    chips.push({ id: key, label: t(labels[key].key), icon: labels[key].icon, count: counts[key] });
+  const statusLabels = { expired: 'pantry.filterExpired', soon: 'pantry.filterSoon', low: 'pantry.filterLow' };
+  const chips = [];
+  // Ein Statusfilter steht nur, wenn ein Link ihn gesetzt hat: gewaehlt, vorn,
+  // und ein Tipp hebt ihn auf.
+  if (state.filter !== 'all') {
+    chips.push(chipHtml({ attr: 'data-filter', value: state.filter, label: t(statusLabels[state.filter]), count: counts[state.filter], active: true }));
+  }
+  chips.push(chipHtml({ attr: 'data-place', value: 'all', label: t('pantry.placeAll'), count: null, active: state.place === 'all' && state.filter === 'all' }));
+  for (const place of places) {
+    chips.push(chipHtml({ attr: 'data-place', value: place.id, label: place.label, count: place.count, active: String(state.place) === place.id }));
   }
 
-  bar.insertAdjacentHTML('beforeend', chips.map((chip) => `
-    <button type="button" class="filter-chip filter-chip--sm${chip.id === state.filter ? ' filter-chip--active' : ''}"
-            data-filter="${esc(chip.id)}" aria-pressed="${chip.id === state.filter}">
-      <i data-lucide="${esc(chip.icon)}" class="icon-sm" aria-hidden="true"></i>
-      <span>${esc(chip.label)}</span>
-      ${chip.count != null ? `<span class="filter-chip__count">${chip.count}</span>` : ''}
-    </button>`).join(''));
+  // Die Lupe steht VORN: hinten laege sie bei vier Orten hinter dem Rand der
+  // waagrecht scrollenden Reihe. Am Zeiger steht das Suchfeld im Kopf, dort
+  // blendet pantry.css sie aus.
+  bar.insertAdjacentHTML('beforeend', `
+    <button type="button" class="pantry-search-toggle" data-action="search"
+            aria-label="${esc(t('pantry.searchPlaceholder'))}">
+      <i data-lucide="search" class="icon-md" aria-hidden="true"></i>
+    </button>
+    ${chips.join('')}`);
 
   if (window.lucide) window.lucide.createIcons({ el: bar });
 
   const activeChip = bar.querySelector('.filter-chip--active');
   if (hadFocus) activeChip?.focus({ preventScroll: true });
 
-  // Die Chip-Leiste scrollt horizontal; ein aktiver Chip außerhalb des
-  // Sichtfelds nimmt der Liste ihre wichtigste Erklärung ("warum sehe ich nur
-  // drei Artikel?"). Aber NUR beim echten Wechsel - sonst kämpft jeder ±-Tap
-  // gegen die Scrollposition, die der Nutzer gerade selbst gesetzt hat.
-  if (_scrolledFilter !== state.filter) {
-    activeChip?.scrollIntoView({ inline: 'center', block: 'nearest' });
-    _scrolledFilter = state.filter;
+  // Ein gewaehlter Ort ausserhalb des Sichtfelds nimmt der Liste ihre
+  // Erklaerung ("warum sehe ich nur drei Artikel?"). Aber NUR beim echten
+  // Wechsel - sonst kaempft jeder Schritt gegen die Scrollposition.
+  const selection = `${state.filter}:${state.place}`;
+  if (_scrolledFilter !== selection) {
+    if (state.place !== 'all' || state.filter !== 'all') activeChip?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    _scrolledFilter = selection;
   }
 
   return { wasReset };
@@ -649,6 +750,9 @@ function drawList(list) {
 
   if (!state.items.length) {
     list.appendChild(emptyStateEl());
+    // Die eine Ausnahme der Tafla-Leerzustaende: der Vorrat behaelt seinen
+    // Kamera-Einstieg - ein Foto vom Regal ist der schnellste erste Bestand.
+    if (_photoSlot) list.appendChild(_photoSlot);
     if (window.lucide) window.lucide.createIcons({ el: list });
     return;
   }
@@ -656,22 +760,25 @@ function drawList(list) {
   const items = visibleItems();
   // Filtern und Suchen ändern die Liste, ohne dass sich der Fokus bewegt -
   // ohne Ansage bleibt die neue Trefferzahl für Screenreader unsichtbar.
-  if (state.filter !== 'all' || state.query) {
+  if (state.filter !== 'all' || state.query || state.place !== 'all') {
     announce(t('pantry.resultCount', { count: items.length }));
   }
 
   if (!items.length) {
-    // Dieselbe .empty-state-Grammatik wie der leere Vorrat: davor stand hier ein
-    // nackter Satz in einer großen Leere, direkt neben einem reich gestalteten
-    // Nachbarzustand - und ohne Ausweg (Critique P2).
     list.appendChild(noResultsEl());
     if (window.lucide) window.lucide.createIcons({ el: list });
     return;
   }
 
-  // Die Sammelaktions-Leiste hängt jetzt im Slot ÜBER dem Scroller
-  // (renderBulkBar oben), nicht mehr als erstes Kind der Liste - dort scrollte
-  // sie weg, obwohl sie die ganze gefilterte Liste betrifft.
+  // TAFLA: oben, was Aufmerksamkeit braucht, dann der Kamera-Einstieg, dann die
+  // Orte. Beides nur in der ungefilterten Ansicht - wer sucht oder einen Ort
+  // gewaehlt hat, fragt etwas anderes.
+  const overview = !state.query && state.filter === 'all' && state.place === 'all';
+  if (overview) {
+    const attention = attentionEl();
+    if (attention) list.appendChild(attention);
+    if (_photoSlot) list.appendChild(_photoSlot);
+  }
 
   for (const group of groupedItems(items)) {
     const section = document.createElement('section');
@@ -680,10 +787,9 @@ function drawList(list) {
     section.className = 'list-group pantry-group';
 
     if (group.label) {
+      // Tafla-Gruppenkopf: Name 17/600 und Zahl, Satzschreibung, kein Icon.
       const heading = document.createElement('h2');
       heading.className = 'list-group__title';
-      heading.insertAdjacentHTML('beforeend',
-        `<i data-lucide="${esc(group.icon || 'package')}" class="icon-sm" aria-hidden="true"></i>`);
       const name = document.createElement('span');
       name.textContent = group.label;
       const count = document.createElement('span');
@@ -700,8 +806,233 @@ function drawList(list) {
     list.appendChild(section);
   }
 
+  // Die Lagerort-Verwaltung am Ende der Liste: am Telefon steht der Kopf mit
+  // ihrem Knopf nur waehrend der Suche (pantry.css). Regel 7: nur mit
+  // Schreibrecht.
+  if (!readOnly()) {
+    const footer = document.createElement('div');
+    footer.className = 'pantry-footer';
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'pantry-footer__manage';
+    manage.dataset.action = 'manage-locations';
+    manage.textContent = t('pantry.manageLocations');
+    footer.appendChild(manage);
+    list.appendChild(footer);
+  }
+
   wirePantrySwipe(list);
   if (window.lucide) window.lucide.createIcons({ el: list });
+}
+
+// --------------------------------------------------------
+// Karte „Wymaga uwagi" (Tafla)
+// --------------------------------------------------------
+
+/**
+ * Was zuerst gebraucht wird, in EINER Karte oben in der Liste: "Termin mija"
+ * (abgelaufen oder in hoechstens drei Tagen, nach Datum) und "Kończy się" (an
+ * oder unter dem eigenen Mindestbestand, oder leer). Sie ersetzt die drei
+ * Statusfilter als Einstieg: die Frage stellt sich, ohne dass man sie stellt.
+ * Ohne Anlass gibt es die Karte nicht.
+ */
+function attentionGroups(items) {
+  const expiring = items.filter(expiresSoon)
+    .sort((a, b) => String(a.expires_on).localeCompare(String(b.expires_on)));
+  const low = items.filter((item) => {
+    const status = pantryItemStatus(item, state.todayKey);
+    return status.low || status.out;
+  });
+  return { expiring, low };
+}
+
+function attentionEl() {
+  const { expiring, low } = attentionGroups(state.items.map(withIntent));
+  if (!expiring.length && !low.length) return null;
+
+  const card = document.createElement('section');
+  card.className = 'pantry-attention';
+  card.id = 'pantry-attention';
+  card.setAttribute('aria-labelledby', 'pantry-attention-title');
+
+  const title = document.createElement('h2');
+  title.className = 'pantry-attention__title';
+  title.id = 'pantry-attention-title';
+  title.textContent = t('pantry.watchLabel');
+  card.appendChild(title);
+
+  if (expiring.length) {
+    const part = document.createElement('div');
+    part.className = 'pantry-attention__part';
+    const heading = document.createElement('h3');
+    heading.className = 'pantry-attention__heading';
+    heading.textContent = t('pantry.attentionExpiring');
+    const rows = document.createElement('ul');
+    rows.className = 'pantry-attention__rows';
+    for (const item of expiring) {
+      const li = document.createElement('li');
+      // Ein Tipp holt die Zeile in der Liste ins Bild und klappt sie auf -
+      // dort steht, was man mit dem Artikel tun kann.
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pantry-attention__row';
+      btn.dataset.attentionId = String(item.id);
+      const name = document.createElement('span');
+      name.className = 'pantry-attention__name';
+      name.textContent = item.name;
+      btn.appendChild(name);
+      const pill = statusPill(item);
+      if (pill) btn.appendChild(pillEl(pill));
+      li.appendChild(btn);
+      rows.appendChild(li);
+    }
+    part.append(heading, rows);
+    card.appendChild(part);
+  }
+
+  if (low.length) {
+    if (expiring.length) {
+      const rule = document.createElement('div');
+      rule.className = 'pantry-attention__rule';
+      rule.setAttribute('aria-hidden', 'true');
+      card.appendChild(rule);
+    }
+    const part = document.createElement('div');
+    part.className = 'pantry-attention__part';
+    const heading = document.createElement('h3');
+    heading.className = 'pantry-attention__heading';
+    heading.textContent = t('pantry.attentionLow');
+
+    // Was schon auf einer offenen Einkaufsliste steht, braucht keinen zweiten
+    // Eintrag - die Karte sagt es, statt es anzubieten. Ohne Wissen ueber die
+    // Liste (kein Leserecht, noch nicht geladen) gilt alles als offen; der
+    // Server ueberspringt Doppelte ohnehin.
+    const onList = state.onList;
+    const isOnList = (item) => Boolean(onList?.has(String(item.name).trim().toLowerCase()));
+    const missing = low.filter((item) => !isOnList(item));
+    const already = low.filter(isOnList);
+
+    const body = document.createElement('div');
+    body.className = 'pantry-attention__low';
+    const text = document.createElement('div');
+    text.className = 'pantry-attention__text';
+    const names = document.createElement('span');
+    names.className = 'pantry-attention__names';
+    names.textContent = joinNames((missing.length ? missing : low).map((i) => i.name));
+    text.appendChild(names);
+    if (already.length) {
+      const note = document.createElement('span');
+      note.className = 'pantry-attention__note';
+      const noteText = document.createElement('span');
+      noteText.className = 'pantry-attention__note-text';
+      noteText.textContent = missing.length
+        ? t('pantry.attentionOnList', { names: joinNames(already.map((i) => i.name)) })
+        : t('pantry.attentionAllOnList');
+      note.appendChild(noteText);
+      note.insertAdjacentHTML('beforeend', '<i data-lucide="check" class="icon-sm" aria-hidden="true"></i>');
+      text.appendChild(note);
+    }
+    body.appendChild(text);
+
+    // Der Uebertrag schreibt in den EINKAUF: gefragt wird dessen Recht (#1265).
+    if (missing.length && mayTransferPantryToShopping()) {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'btn pantry-attention__add';
+      add.dataset.action = 'attention-add';
+      add.textContent = t('pantry.attentionAdd', { count: missing.length });
+      body.appendChild(add);
+    }
+    part.append(heading, body);
+    card.appendChild(part);
+  }
+  return card;
+}
+
+/** Zeichnet die Karte an Ort und Stelle neu (nach einem Schritt oder Uebertrag). */
+function refreshAttention() {
+  const list = _container?.querySelector('#pantry-list');
+  const current = list?.querySelector(':scope > #pantry-attention');
+  const overview = !state.query && state.filter === 'all' && state.place === 'all';
+  if (!list || !overview || !state.items.length) return;
+  const fresh = attentionEl();
+  if (current && fresh) current.replaceWith(fresh);
+  else if (current) current.remove();
+  else if (fresh) {
+    const chipRow = list.querySelector(':scope > #pantry-filters');
+    if (chipRow) chipRow.after(fresh);
+    else list.prepend(fresh);
+  }
+  if (fresh && window.lucide) window.lucide.createIcons({ el: fresh });
+}
+
+/**
+ * Welche Namen stehen offen auf einer Einkaufsliste? Fuer den Satz "… już na
+ * liście" der Karte. Nur mit Leserecht auf den Einkauf, und nur wenn es
+ * ueberhaupt etwas Knappes gibt - sonst fragt die Seite nichts.
+ */
+async function refreshOnList() {
+  const anyLow = state.items.some((item) => {
+    const status = pantryItemStatus(withIntent(item), state.todayKey);
+    return status.low || status.out;
+  });
+  if (!anyLow || pathAccess('/shopping') === 'none' || window.yuvomi?.isModuleDisabled?.('shopping')) {
+    state.onList = null;
+    return;
+  }
+  try {
+    const lists = (await api.get('/shopping')).data ?? [];
+    state.lists = lists;
+    const names = new Set();
+    const answers = await Promise.all(lists.map((list) => api.get(`/shopping/${list.id}/items`).catch(() => null)));
+    for (const res of answers) {
+      for (const item of res?.data ?? []) {
+        if (!item.is_checked) names.add(String(item.name).trim().toLowerCase());
+      }
+    }
+    state.onList = names;
+  } catch {
+    state.onList = null;
+  }
+  refreshAttention();
+}
+
+/** Ein Statuswort als getoente Pille. */
+function pillEl(pill) {
+  const el = document.createElement('span');
+  el.className = `pantry-badge pantry-badge--${pill.tone}`;
+  el.textContent = pill.text;
+  return el;
+}
+
+/** Die Kamera-Karte: "Dodaj ze zdjęcia", wartet auf wirePhotoButton(). */
+function photoCardEl() {
+  const slot = document.createElement('div');
+  slot.className = 'pantry-photo-slot';
+  // Gebaut wie die Gruppen der Liste (DOM statt Markup-String): die Karte
+  // steht in derselben Spalte und nimmt dasselbe Lesemass.
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'pantry-photo-card';
+  card.id = 'pantry-photo-btn';
+  card.hidden = true;
+  const glyph = document.createElement('span');
+  glyph.className = 'pantry-photo-card__glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  glyph.insertAdjacentHTML('beforeend', '<i data-lucide="camera" class="icon-lg"></i>');
+  const text = document.createElement('span');
+  text.className = 'pantry-photo-card__text';
+  const title = document.createElement('span');
+  title.className = 'pantry-photo-card__title';
+  title.textContent = t('pantry.photoAdd');
+  const hint = document.createElement('span');
+  hint.className = 'pantry-photo-card__hint';
+  hint.textContent = t('pantry.photoCardHint');
+  text.append(title, hint);
+  card.append(glyph, text);
+  card.insertAdjacentHTML('beforeend', '<i data-lucide="chevron-right" class="icon-md pantry-photo-card__chevron" aria-hidden="true"></i>');
+  slot.appendChild(card);
+  return slot;
 }
 
 // --------------------------------------------------------
@@ -810,17 +1141,22 @@ function onWatchClick(e) {
  * und der Nutzer suchte den Fehler beim Suchbegriff.
  */
 function noResultsEl() {
-  // Der geteilte Leerzustand einer leeren Suche (R19): Begriff und Filter als
-  // Chips, EIN Knopf hebt beide auf.
+  // Der geteilte Leerzustand einer leeren Suche (R19): Begriff, Statusfilter
+  // und Ort als Chips, EIN Knopf hebt alles auf.
   const filters = state.filter !== 'all'
     ? [t({ expired: 'pantry.filterExpired', soon: 'pantry.filterSoon', low: 'pantry.filterLow' }[state.filter])]
     : [];
+  if (state.place !== 'all') {
+    const loc = state.locations.find((l) => l.id === state.place);
+    filters.push(loc ? locationLabel(loc.name) : t('pantry.unlocated'));
+  }
   return searchEmptyEl({
     query: state.query,
     filters,
     onReset: () => {
       state.query = '';
       state.filter = 'all';
+      state.place = 'all';
       // clear() versteckt zugleich den Leeren-Knopf des geteilten Suchfelds;
       // ein blankes `value = ''` ließe ihn über dem leeren Feld stehen.
       _search?.clear();
@@ -832,43 +1168,50 @@ function noResultsEl() {
 }
 
 function emptyStateEl() {
-  // Bei `read` nur der Zustand (Regel 9): Beschreibung („Trage ein ...") und
-  // Hinweis (Artikel aus dem Einkauf uebernehmen) laden beide zu einer
-  // Handlung ein, die es dann nicht gibt.
+  // TAFLA "Pusty stan": kein Kasten, kein Knopf - das globale + legt an. Die
+  // eine Ausnahme ist die Kamera-Karte, die drawList() darunter haengt.
+  // Bei `read` nur der Zustand (Regel 9): die Beschreibung ("Zapisz, co masz
+  // w domu …") laedt zu einer Handlung ein, die es dann nicht gibt.
   const ro = readOnly();
   return emptyStateComponentEl({
     icon: 'archive',
     title: t('pantry.emptyTitle'),
     description: ro ? undefined : t('pantry.emptyDescription'),
-    hint: ro ? undefined : t('emptyHint.pantry'),
-    action: ro ? null : {
-      label: t('pantry.emptyAction'),
-      icon: 'plus',
-      onClick: () => openItemModal('create'),
-    },
+    className: 'pantry-empty',
   });
 }
 
-/** Eine Vorratszeile. */
+/**
+ * Eine Vorratszeile (Tafla, 56pt).
+ *
+ * ZU: Zeichen der Kategorie · Name · hoechstens EIN Statuswort · Mengen-Pille.
+ * Kein Stepper, kein Warenkorb, kein Griff in der ruhenden Zeile - die Liste
+ * liest sich wie ein Regal, nicht wie ein Bedienfeld.
+ *
+ * AUF: ein Tipp klappt darunter auf, was man mit dem Artikel tut - Termin und
+ * Ort als Fussnote, der Stepper (− Menge +), "Na listę" bei knappen Artikeln
+ * und "Edytuj" (dort auch Loeschen). Loeschen bleibt zusaetzlich der Wisch zum
+ * Zeilenende, Bearbeiten zusaetzlich der lange Druck (wireLongPress).
+ *
+ * BEI `read`: kein Aufklappen. Der Tipp oeffnet die Leseansicht (Regel 9); was
+ * knapp ist, traegt die Karte "Wymaga uwagi" auf die Liste - ihr Knopf fragt
+ * das Recht des EINKAUFS, nicht dieses.
+ */
 function rowEl(item) {
   const status = pantryItemStatus(item, state.todayKey);
 
   // DIE ZEILE LAESST SICH WEGWISCHEN (R16 Schritt 2b, Kuechenregel in
-  // DESIGN.md: Loeschen = Wisch mobil + ein fester Ort am Desktop). Der Vorrat
-  // war der letzte Kuechen-Reiter ohne die Geste; Loeschen stand nur im
-  // Dialogfuss. Das `li` ist die Buehne (`.swipe-row`) mit dem Reveal-Panel am
+  // DESIGN.md): das `li` ist die Buehne (`.swipe-row`) mit dem Reveal-Panel am
   // Zeilenende, die Zeile selbst liegt als `div` darin. Nur EINE Seite: am
-  // Zeilenanfang gibt es im Vorrat nichts Positives zu erledigen. Stepper und
-  // Warenkorb sind Ausnahmezone (wirePantrySwipe, `ignore`) - wer dort tippt
-  // und dabei rutscht, loescht nichts.
+  // Zeilenanfang gibt es im Vorrat nichts Positives zu erledigen.
   const ro = readOnly();
+  const expanded = !ro && state.expanded === item.id;
   const wrap = document.createElement('li');
   // `.swipe-row--static`: ohne Geste auch kein Wisch-Chevron (layout.css).
   wrap.className = ro ? 'swipe-row swipe-row--static pantry-swipe' : 'swipe-row pantry-swipe';
   wrap.dataset.swipeId = String(item.id);
   // Nur-lesen: die Buehne bleibt (Zeilenschluessel fuer Neuzeichnen und
-  // Auffrischung), das Loeschen-Panel entfaellt - es verspraeche ein DELETE,
-  // das im 403 endet (Regel 3 in utils/module-access.js).
+  // Auffrischung), das Loeschen-Panel entfaellt (Regel 3).
   if (!ro) {
     wrap.insertAdjacentHTML('beforeend', `
     <div class="swipe-reveal swipe-reveal--delete swipe-reveal--trailing" aria-hidden="true">
@@ -878,185 +1221,93 @@ function rowEl(item) {
   }
 
   const li = document.createElement('div');
-  // Geteilte Zeilen-Grammatik (styles/list-row.css). Ohne --reserve-end: der
-  // Warenkorb sitzt nicht mehr an der Zeilenkante, sondern in einem festen Slot
-  // am Anfang der Bedienzone (siehe unten).
-  li.className = 'list-row pantry-row';
+  li.className = expanded ? 'list-row pantry-row pantry-row--open' : 'list-row pantry-row';
   li.dataset.id = String(item.id);
   if (status.out) li.classList.add('pantry-row--out');
 
-  // Klickfläche: öffnet das Bearbeiten-Formular. Die Stepper-Buttons daneben
-  // sind eigene Stops und dürfen nicht durchschlagen.
-  // BEWUSST kein aria-label: es hätte den Namen aus dem Inhalt überschrieben
-  // und damit genau die Information verschluckt, die sehende Nutzer auf einen
-  // Blick bekommen - „Vor 2 Tagen abgelaufen", „Fast leer", das MHD. Ein
-  // Screenreader hörte nur „Bearbeiten: Milch" (Critique P1, WCAG 1.3.1/4.1.2).
-  // Stattdessen trägt der Inhalt den Namen, und die Aktion kommt als sr-only
-  // Zusatz ans Ende.
+  // Die ganze Zeile ist EIN Knopf. BEWUSST kein aria-label: der Inhalt (Name,
+  // Statuswort, Menge) ist der Name - ein Label hätte genau das verschluckt
+  // (Critique P1, WCAG 1.3.1/4.1.2). Mit Schreibrecht klappt er auf
+  // (`aria-expanded`), bei `read` oeffnet er die Leseansicht.
   const main = document.createElement('button');
   main.type = 'button';
   main.className = 'list-row__main list-row__main--interactive pantry-row__main';
-  // Bei `read` oeffnet derselbe Tipp die Leseansicht (Regel 9) - unter einem
-  // eigenen Namen, damit die Positivliste im Handler ihn durchlaesst.
-  main.dataset.action = ro ? 'details' : 'edit';
+  main.dataset.action = ro ? 'details' : 'expand';
+  if (!ro) {
+    main.setAttribute('aria-expanded', String(expanded));
+    main.setAttribute('aria-controls', `pantry-row-more-${item.id}`);
+  }
 
-  // Name und Status in EINER Zeile: das Badge qualifiziert den Artikel, es ist
-  // keine eigene Information. Auf einer eigenen Zeile wuchs jede betroffene
-  // Zeile um ~25px, während rechts neben dem Namen Platz frei blieb.
+  const glyph = document.createElement('span');
+  glyph.className = 'pantry-row__glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  glyph.insertAdjacentHTML('beforeend', `<i data-lucide="${esc(categoryIcon(item))}" class="icon-lg"></i>`);
+  main.appendChild(glyph);
+
+  // Name und Statuswort in EINER Zeile: das Wort qualifiziert den Artikel.
   const headline = document.createElement('span');
   headline.className = 'pantry-row__headline';
-
   const name = document.createElement('span');
   name.className = 'list-row__name';
   name.textContent = item.name;
   headline.appendChild(name);
-
-  // DIE BADGES SIND EIN PAAR, ALSO EIN KNOTEN (Critique 2026-08-13).
-  // Ohne ihn entscheidet die Restbreite, WIE VIELE von ihnen umbrechen: gemessen
-  // stand „Vollmilch" mit „Läuft heute ab" in Zeile zwei und „Fast leer" in
-  // Zeile drei, also 109,5px gegen 86,3px derselben Liste mit zwei Badges
-  // nebeneinander. Was zusammen gelesen wird, bricht zusammen um.
-  const badges = [expiryBadge(item), stockBadge(item)].filter(Boolean);
-  if (badges.length) {
-    const wrap = document.createElement('span');
-    wrap.className = 'pantry-row__badges';
-    for (const badge of badges) {
-      const el = document.createElement('span');
-      el.className = `pantry-badge pantry-badge--${badge.tone}`;
-      el.textContent = badge.text;
-      wrap.appendChild(el);
-    }
-    headline.appendChild(wrap);
+  const pill = statusPill(item);
+  if (pill) {
+    const badges = document.createElement('span');
+    badges.className = 'pantry-row__badges';
+    badges.appendChild(pillEl(pill));
+    headline.appendChild(badges);
   }
   main.appendChild(headline);
 
-  // Meta-Zeile trägt nur, was hier orientiert. Die Kategorie steht bewusst NICHT
-  // darin: sie ordnet die Einkaufsliste nach Supermarkt-Gängen, für "was habe
-  // ich und wie lange noch" sagt sie nichts - und als dritter Teil kürzte sie
-  // das MHD weg ("MHD 24.02.2027 · Ba…"). Sie bleibt im Formular sichtbar.
-  // Das MHD steht VOR dem Lagerort: die Zeile ellipsiert am Ende, und bei einem
-  // langen Ortsnamen fiel sonst genau das Kerndatum weg - dieselbe Trunkierung,
-  // gegen die die Kategorie hier schon gewichen ist (Critique, Riley-Fund).
-  // DIE MENGE FÜHRT DIE META-ZEILE, sie steht nicht mehr zwischen den Knöpfen.
-  //
-  // Bis zum 12.08.2026 sass sie im Stepper und rückte unter 30rem Trägerbreite
-  // ÜBER die beiden Knöpfe (`flex-wrap` an .pantry-stepper). Das gab dem Namen
-  // die Breite, die er braucht, kostete aber rund 25px Höhe in JEDER Zeile:
-  // gemessen 89,4px bei 390x844, die höchste Zeile der App nach dem Budget.
-  //
-  // Der Umzug kostet KEINEN Pixel Breite. Der umgebrochene Stepper war bereits
-  // exakt so breit wie seine Knopfzeile (100px), und ohne den Wert ist er es
-  // weiterhin - die Bedienzone bleibt gleich breit, der Name behält seine
-  // 168px. Was wegfällt, ist nur die zweite Zeile.
-  //
-  // UND DER EINKAUF MACHT ES SEIT JEHER SO: `.list-row__meta` trägt dort
-  // `item.quantity`. Zwei Tabs derselben Küchenleiste schrieben dieselbe Angabe
-  // an zwei Orte.
-  //
-  // Sie steht VORN, obwohl das MHD dahinter dadurch seitlich wandert, wenn sich
-  // die Menge ändert: die Menge ist die Frage, die eine Vorratsliste
-  // beantwortet, und die Zeile ellipsiert am Ende. Hinten stünde sie genau
-  // dort, wo bei langem Ortsnamen gekappt wird.
-  const meta = document.createElement('span');
-  meta.className = 'list-row__meta';
+  // DIE MENGE ALS PILLE AM ZEILENENDE (Tafla "Ilość i stepper"). Ein eigener
+  // Knoten: refreshRowQuantity() schreibt ihn bei jedem Schritt fort.
   const quantity = document.createElement('span');
   quantity.className = 'pantry-row__quantity';
   quantity.textContent = quantityText(item);
-  meta.appendChild(quantity);
+  main.appendChild(quantity);
 
-  /* MHD und Lagerort sind EIGENE Knoten, keine zusammengefügte Zeichenkette.
-   *
-   * Grund ist die Regel gleich daneben (pantry.css): auf einer schmalen Zeile
-   * MIT Warenkorb bleiben 168px statt 220px, und dort passt das MHD nicht mehr.
-   * Weggelassen wird es dann, nicht abgeschnitten - ein halbes Datum
-   * („MHD 23.12….") ist keine Angabe, sondern sieht aus wie ein Fehler. Damit
-   * CSS das entscheiden kann, muss es ein eigenes Element sein.
-   *
-   * Das Trennzeichen steht IM Knoten, sonst bliebe es beim Weglassen als
-   * einsames „·" zurück. */
-  if (item.expires_on) {
-    const expiry = document.createElement('span');
-    expiry.className = 'pantry-row__expiry';
-    expiry.textContent = ` · ${t('pantry.bestBefore', { date: formatDate(item.expires_on) })}`;
-    meta.appendChild(expiry);
-  }
-  // Im gefilterten (flachen) Modus trägt die Meta-Zeile den Lagerort, den sonst
-  // die Gruppen-Überschrift zeigt.
-  if (state.filter !== 'all') {
-    const place = document.createElement('span');
-    place.className = 'pantry-row__place';
-    place.textContent = ` · ${item.location_name ? locationLabel(item.location_name) : t('pantry.unlocated')}`;
-    meta.appendChild(place);
-  }
-  main.appendChild(meta);
-
-  // Was der Button tut - nur für Screenreader, am Ende des Namens. Bei `read`
-  // waere „Bearbeiten" ein Versprechen, das der Tipp nicht haelt; dort sagt
-  // der geteilte Zusatz, dass die Zeile ihre Details zeigt (#1682).
+  // Bei `read` sagt der geteilte Zusatz, dass die Zeile ihre Details zeigt (#1682).
+  if (ro) main.appendChild(readRowHintEl());
+  li.appendChild(main);
   if (ro) {
-    main.appendChild(readRowHintEl());
-  } else {
-    const action = document.createElement('span');
-    action.className = 'sr-only';
-    action.textContent = t('common.edit');
-    main.appendChild(action);
-  }
-
-  // Warenkorb und Stepper bilden EINE Gruppe: als getrennte Flex-Kinder brach
-  // nur der Stepper um und der Warenkorb blieb allein oben rechts stehen - der
-  // Umbruch sah nach Fehler aus statt nach Absicht. Als Gruppe wandert die
-  // ganze Bedienung geschlossen in die zweite Zeile.
-  //
-  // Die Gruppe steht VOR dem Namen - im DOM wie visuell. Rechts unten sitzt der
-  // FAB, und dort lagen zuvor sämtliche „+"-Buttons in seiner Spalte: ein
-  // Fehltap öffnete das Anlegen-Formular statt die Menge zu erhöhen (Critique).
-  // Nur die CSS-Reihenfolge zu drehen hätte Lese- und Fokusabfolge entkoppelt,
-  // deshalb wandert der Knoten selbst. Jeder Button trägt den Artikelnamen im
-  // Label, die Tab-Folge bleibt also auch ohne vorangehenden Namen eindeutig.
-  const actions = document.createElement('div');
-  actions.className = 'list-row__actions';
-
-  // Der Warenkorb sitzt am ANFANG der Bedienzone, nicht an der rechten
-  // Zeilenkante.
-  //
-  // Vorher lag er dort absolut positioniert - und damit genau in der Ecke, die
-  // der FAB besetzt: gemessen 87% Überdeckung im Ruhezustand bei 393px, der
-  // höchste Einzelwert des Moduls (Critique 2026-07-30). Ein Fehltap dort schickt
-  // einen Artikel auf die Einkaufsliste des ganzen Haushalts.
-  //
-  // Was jetzt in der FAB-Ecke liegt, ist der Stepper-„+". Ein abgefangener Tap
-  // dort ändert keine Daten, sondern öffnet das Anlegen-Formular, das man mit Esc
-  // schließt. Der Tausch ist bewusst: dieselbe Restüberdeckung, aber auf der
-  // harmlosen Aktion statt auf der folgenreichen.
-  //
-  // Der Slot ist IMMER da, auch ohne Warenkorb. Sonst wäre die Bedienzone in
-  // jeder Zeile anders breit und die Minus-Buttons stünden pro Zeile woanders -
-  // genau der Grund, aus dem der Knopf ursprünglich an die Zeilenkante wanderte.
-  const cartSlot = document.createElement('div');
-  cartSlot.className = 'pantry-row__cart-slot';
-  // Der Warenkorb schreibt in den EINKAUF, gefragt wird also dessen Recht
-  // (#1265, Regel 1 in utils/module-access.js). Der Slot bleibt trotzdem.
-  if ((status.out || status.low) && mayTransferPantryToShopping()) cartSlot.appendChild(cartEl(item));
-  actions.appendChild(cartSlot);
-
-  // Nur-lesen: KEIN Stepper (Regel 2). Die Menge steht als Zeichen in der
-  // Meta-Zeile; Plus und Minus aenderten sie optimistisch, der PATCH endete im
-  // 403, und die Zeile sprang zurueck. Die Bedienzone traegt dann nur noch den
-  // Warenkorb-Slot - und entfaellt ganz, wenn auch der Einkauf nicht
-  // beschreibbar ist: eine leere Zone naehme dem Namen nur die Breite.
-  if (ro) {
-    li.appendChild(main);
-    if (mayTransferPantryToShopping()) li.appendChild(actions);
     wrap.appendChild(li);
     return wrap;
   }
 
-  // Die Zeichen in --icon-md (R20, Re-Critique 2026-10-17 a2 P3): als
-  // --icon-sm (12px, Inline-Marker) standen sie in der 48px-Flaeche wie Staub;
-  // 16px ist das Mass jeder Knopf-Glyphe. Die Haut bleibt ruhig (pantry.css).
+  // ---- Der aufgeklappte Teil ------------------------------------------------
+  // `.list-row__actions` ist die geteilte Bedienzone; hier steht sie als
+  // eigene Zeile unter dem Namen statt daneben (pantry.css, flex-basis 100%).
+  const more = document.createElement('div');
+  more.className = 'list-row__actions pantry-row__expand';
+  more.id = `pantry-row-more-${item.id}`;
+  more.hidden = !expanded;
+
+  // Termin und - in der flachen Filteransicht - der Ort als Fussnote. Die
+  // Zeile selbst traegt nur das Statuswort; das Datum steht hier.
+  const facts = [];
+  if (item.expires_on) facts.push(t('pantry.bestBefore', { date: formatDate(item.expires_on) }));
+  // In der Ortsgruppe nennt der Kopf den Ort schon; in der flachen Liste nicht.
+  if (state.filter !== 'all') facts.push(item.location_name ? locationLabel(item.location_name) : t('pantry.unlocated'));
+  if (facts.length) {
+    const factsEl = document.createElement('p');
+    factsEl.className = 'pantry-row__facts';
+    const expiry = document.createElement('span');
+    expiry.className = 'pantry-row__expiry';
+    expiry.textContent = facts.join(' · ');
+    factsEl.appendChild(expiry);
+    more.appendChild(factsEl);
+  }
+
+  const controls = document.createElement('div');
+  controls.className = 'pantry-row__controls';
+
+  // Der Stepper: − Menge +, jede Seite ein volles Ziel (pantry.css).
+  // BEWUSST keine eigene Live-Region je Zeile - die Ansage uebernimmt die eine
+  // geteilte Region der Seite (#pantry-live).
   const stepper = document.createElement('div');
   stepper.className = 'pantry-stepper';
-  const step = pantryUnitStep(item.unit);
+  stepper.dataset.step = String(pantryUnitStep(item.unit));
 
   const minus = document.createElement('button');
   minus.type = 'button';
@@ -1066,12 +1317,10 @@ function rowEl(item) {
   minus.setAttribute('aria-label', `${t('pantry.decrease')}: ${item.name}`);
   minus.insertAdjacentHTML('beforeend', '<i data-lucide="minus" class="icon-md" aria-hidden="true"></i>');
 
-  // Der Wert steht in der Meta-Zeile (siehe dort). BEWUSST keine eigene
-  // Live-Region je Zeile: bei 60 Artikeln wären das 60 Live-Regionen, und
-  // Screenreader behandeln eine solche Wolke unzuverlässig. Die Ansage
-  // übernimmt die eine geteilte Region der Seite (#pantry-live) - sie ist auch
-  // der Grund, aus dem der Wert nicht neben den Knöpfen stehen MUSS, um die
-  // Änderung zu melden.
+  const value = document.createElement('span');
+  value.className = 'pantry-stepper__value';
+  value.setAttribute('aria-hidden', 'true');
+  value.textContent = quantityText(item);
 
   const plus = document.createElement('button');
   plus.type = 'button';
@@ -1080,16 +1329,28 @@ function rowEl(item) {
   plus.setAttribute('aria-label', `${t('pantry.increase')}: ${item.name}`);
   plus.insertAdjacentHTML('beforeend', '<i data-lucide="plus" class="icon-md" aria-hidden="true"></i>');
 
-  stepper.dataset.step = String(step);
-  stepper.append(minus, plus);
-  actions.appendChild(stepper);
+  stepper.append(minus, value, plus);
+  controls.appendChild(stepper);
 
-  // Name zuerst, Bedienung danach: eine Vorratsliste wird nach Namen gescannt,
-  // nicht nach Zahlen. Vorher las sich die Zeile „− 500 g + Naturjoghurt" und
-  // damit gegen die Leserichtung und gegen alle drei Geschwistermodule, die
-  // ausnahmslos mit dem Namen führen. Nebeneffekt: die Namenskante steht jetzt
-  // von selbst, statt mit der Stepper-Breite zu wandern (Critique 2026-07-29).
-  li.append(main, actions);
+  // "Na listę" nur bei knappen oder leeren Artikeln, und nur mit Schreibrecht
+  // auf den EINKAUF (#1265). Der Slot wird bei jedem Schritt als Ganzes
+  // getauscht (refreshRowQuantity) - der Knopf kommt und geht mit der Menge.
+  const cartSlot = document.createElement('span');
+  cartSlot.className = 'pantry-row__cart-slot';
+  // Steht der Name schon offen auf einer Einkaufsliste, gibt es nichts anzubieten.
+  const onList = Boolean(state.onList?.has(String(item.name).trim().toLowerCase()));
+  if ((status.out || status.low) && !onList && mayTransferPantryToShopping()) cartSlot.appendChild(cartEl(item));
+  controls.appendChild(cartSlot);
+
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'pantry-row__edit';
+  edit.dataset.action = 'edit';
+  edit.textContent = t('common.edit');
+  controls.appendChild(edit);
+
+  more.appendChild(controls);
+  li.appendChild(more);
   wrap.appendChild(li);
   return wrap;
 }
@@ -1101,12 +1362,13 @@ function rowEl(item) {
  */
 function wirePantrySwipe(list) {
   // Regel 3 in utils/module-access.js: bei Nur-lesen bleibt die VERDRAHTUNG
-  // aus, samt Wisch-Hinweis. Ein Riegel in `run` kaeme zu spaet - die Zeile
-  // waere schon weggewischt, bevor jemand fragt.
+  // aus, samt Wisch-Hinweis.
   if (readOnly()) return null;
   const optionen = {
     card: '.pantry-row',
-    ignore: '.pantry-stepper, .pantry-row__cart',
+    // Der aufgeklappte Teil ist Ausnahmezone: wer am Stepper tippt und dabei
+    // rutscht, loescht nichts.
+    ignore: '.pantry-row__expand, .pantry-stepper, .pantry-row__cart',
     trailing: {
       reveal: '.swipe-reveal--delete',
       run: (row) => {
@@ -1120,16 +1382,63 @@ function wirePantrySwipe(list) {
   return optionen;
 }
 
-/** Kontextuelle Einkaufs-Aktion einer Zeile; nur bei leeren/knappen Artikeln. */
+/** "Na listę": die Einkaufs-Aktion der aufgeklappten Zeile, nur bei knappen Artikeln. */
 function cartEl(item) {
   const cart = document.createElement('button');
   cart.type = 'button';
-  cart.className = 'row-action pantry-row__cart';
+  cart.className = 'pantry-row__cart';
   cart.dataset.action = 'to-shopping';
   cart.setAttribute('aria-label', `${t('common.toShoppingList')}: ${item.name}`);
-  cart.title = t('common.toShoppingList');
-  cart.insertAdjacentHTML('beforeend', '<i data-lucide="shopping-cart" class="icon-md" aria-hidden="true"></i>');
+  cart.textContent = t('pantry.toListShort');
   return cart;
+}
+
+/**
+ * LANGER DRUCK = BEARBEITEN (Tafla, Gesten statt Knoepfe): am Finger oeffnet
+ * ein Druck von 450 ms ohne Bewegung den Editor. Derselbe Weg steht als
+ * "Edytuj" in der aufgeklappten Zeile - die Geste ist eine Abkuerzung, nie der
+ * einzige Zugang. Der Klick danach wird verschluckt, sonst klappte die Zeile
+ * zusaetzlich auf.
+ */
+const LONG_PRESS_MS = 450;
+function wireLongPress(list) {
+  if (!list?.addEventListener || list.dataset.longPressWired) return;
+  list.dataset.longPressWired = '1';
+  let timer = null;
+  let start = null;
+  let fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  list.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' || readOnly()) return;
+    const main = e.target.closest?.('.pantry-row__main');
+    if (!main) return;
+    fired = false;
+    start = { x: e.clientX, y: e.clientY };
+    cancel();
+    timer = setTimeout(() => {
+      timer = null;
+      const row = main.closest('.pantry-row[data-id]');
+      const item = state.items.find((i) => i.id === Number(row?.dataset.id));
+      if (!item) return;
+      fired = true;
+      vibrate(12);
+      openItemModal('edit', item);
+    }, LONG_PRESS_MS);
+  });
+  list.addEventListener('pointermove', (e) => {
+    if (timer && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) cancel();
+  });
+  list.addEventListener('pointerup', cancel);
+  list.addEventListener('pointercancel', cancel);
+  list.addEventListener('contextmenu', (e) => {
+    if (e.target.closest?.('.pantry-row__main') && (timer || fired)) e.preventDefault();
+  });
+  list.addEventListener('click', (e) => {
+    if (!fired) return;
+    fired = false;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }, true);
 }
 
 // --------------------------------------------------------
@@ -1137,8 +1446,24 @@ function cartEl(item) {
 // --------------------------------------------------------
 
 function onListClick(e) {
+  // Die Karte "Wymaga uwagi": ein Artikel darin holt seine Zeile ins Bild.
+  const attention = e.target.closest('[data-attention-id]');
+  if (attention) { revealItem(Number(attention.dataset.attentionId)); return; }
+
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
+
+  // Zwei Knoepfe ausserhalb einer Zeile: der Uebertrag der Karte (fragt das
+  // Recht des Einkaufs selbst, sendToShopping) und die Lagerort-Verwaltung am
+  // Listenende (openLocationManager fragt das Schreibrecht).
+  if (btn.dataset.action === 'attention-add') {
+    const { low } = attentionGroups(state.items.map(withIntent));
+    const missing = low.filter((item) => !state.onList?.has(String(item.name).trim().toLowerCase()));
+    sendToShopping(missing, btn);
+    return;
+  }
+  if (btn.dataset.action === 'manage-locations') { openLocationManager(); return; }
+
   const row = btn.closest('.pantry-row[data-id]');
   if (!row) return;
   const item = state.items.find((i) => i.id === Number(row.dataset.id));
@@ -1150,10 +1475,48 @@ function onListClick(e) {
   if (readOnly() && !READ_SAFE_ACTIONS.has(btn.dataset.action)) return;
 
   if (btn.dataset.action === 'details') { openItemReadModal(item); return; }
+  if (btn.dataset.action === 'expand') { toggleExpanded(item.id); return; }
   if (btn.dataset.action === 'edit') { openItemModal('edit', item); return; }
   if (btn.dataset.action === 'to-shopping') { sendToShopping([item], btn); return; }
   if (btn.dataset.action === 'increase') { adjustQuantity(item, +1, row); return; }
   if (btn.dataset.action === 'decrease') { adjustQuantity(item, -1, row); }
+}
+
+/**
+ * Klappt eine Zeile auf oder zu - an Ort und Stelle, ohne Neuaufbau: die Liste
+ * behaelt ihren Scrollstand, der Fokus bleibt auf dem Zeilenknopf. Es ist
+ * immer hoechstens EINE Zeile offen.
+ */
+function toggleExpanded(id) {
+  const next = state.expanded === id ? null : id;
+  const setOpen = (rowId, open) => {
+    const row = _container?.querySelector(`.pantry-row[data-id="${rowId}"]`);
+    if (!row) return;
+    row.classList.toggle('pantry-row--open', open);
+    row.querySelector('.pantry-row__main')?.setAttribute('aria-expanded', String(open));
+    const more = row.querySelector('.pantry-row__expand');
+    if (!more) return;
+    if (open) {
+      more.hidden = false;
+      expandIn(more);
+    } else {
+      more.hidden = true;
+    }
+  };
+  if (state.expanded != null) setOpen(state.expanded, false);
+  state.expanded = next;
+  if (next != null) setOpen(next, true);
+}
+
+/** Holt die Zeile eines Artikels ins Bild und klappt sie auf (Karte "Wymaga uwagi"). */
+function revealItem(id) {
+  const item = state.items.find((i) => i.id === id);
+  if (!item) return;
+  if (readOnly()) { openItemReadModal(withIntent(item)); return; }
+  if (state.expanded !== id) toggleExpanded(id);
+  const row = _container?.querySelector(`.pantry-row[data-id="${id}"]`);
+  row?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  row?.querySelector('.pantry-row__main')?.focus({ preventScroll: true });
 }
 
 /**
@@ -1285,8 +1648,11 @@ function liveRow(id, fallback) {
 }
 
 function refreshRowQuantity(row, item) {
+  // Zwei Stellen zeigen die Menge: die Pille der Zeile und der Wert im Stepper.
   const value = row.querySelector('.pantry-row__quantity');
   if (value) value.textContent = quantityText(item);
+  const stepValue = row.querySelector('.pantry-stepper__value');
+  if (stepValue) stepValue.textContent = quantityText(item);
   announce(`${item.name}: ${quantityText(item)}`);
 
   const minus = row.querySelector('[data-action="decrease"]');
@@ -1304,17 +1670,18 @@ function refreshRowQuantity(row, item) {
   const status = pantryItemStatus(item, state.todayKey);
   row.classList.toggle('pantry-row--out', status.out);
 
-  // Bestands-Badge und Einkaufs-Aktion hängen an der Menge und müssen mitgehen.
-  // Der Warenkorb-Slot wird als GANZES getauscht, nicht der Knopf darin: der Slot
-  // hält die Breite der Bedienzone konstant, auch wenn er leer ist.
+  // Statuswort und "Na listę" hängen an der Menge und müssen mitgehen. Getauscht
+  // werden nur der Zeilenknopf und der Slot von "Na listę" - nie der Stepper,
+  // auf dem gerade der Finger (oder der Fokus) liegt.
   const fresh = rowEl(item);
   row.querySelector('.pantry-row__main')?.replaceWith(fresh.querySelector('.pantry-row__main'));
   row.querySelector('.pantry-row__cart-slot')?.replaceWith(fresh.querySelector('.pantry-row__cart-slot'));
 
   if (window.lucide) window.lucide.createIcons({ el: row });
-  // Das Panel spricht von denselben Mengen: ein Schritt, der einen Artikel
-  // unter den Mindestbestand bringt, gehoert sofort unter „Fast leer".
+  // Panel und Karte sprechen von denselben Mengen: ein Schritt, der einen
+  // Artikel unter den Mindestbestand bringt, gehoert sofort unter "Kończy się".
   renderWatch();
+  refreshAttention();
 }
 
 // --------------------------------------------------------
@@ -1385,6 +1752,8 @@ async function sendToShopping(items, btn) {
     // nimmt - er sitzt in der Zeile direkt neben „Menge erhöhen", und die beiden
     // bedeuten das Gegenteil voneinander (Critique 2026-07-30).
     announceTransfer({ message, addedIds });
+    // Die Karte "Wymaga uwagi" sagt danach "już na liście" statt erneut anzubieten.
+    refreshOnList();
   } catch (err) {
     window.yuvomi?.showToast(err.data?.error ?? t('common.errorGeneric'), 'danger');
   } finally {
@@ -1691,7 +2060,9 @@ async function wirePhotoButton(btn) {
   if (!btn) return;
   try {
     const status = await api.get('/ai/status');
-    if (!status.data?.features?.pantry_photo || !btn.isConnected) return;
+    // Die Karte haengt erst nach dem Laden der Liste im Dokument (drawList) -
+    // gefragt wird deshalb, ob sie noch die Karte DIESER Seite ist.
+    if (!status.data?.features?.pantry_photo || !_photoSlot?.contains(btn)) return;
   } catch {
     return;
   }
@@ -1782,6 +2153,9 @@ function openPhotoReview(items) {
           const res = await api.post('/pantry/photo-scan/apply', { items: chosen });
           closeSharedModal({ force: true, context });
           await loadPantry();
+          renderFilters();
+          renderList({ motion: true });
+          refocusAfterRender();
           window.yuvomi?.showToast(t('pantry.photoAdded', { added: res.data?.added ?? 0, merged: res.data?.merged ?? 0 }), 'success');
         } catch (err) {
           button.disabled = false;
@@ -1835,4 +2209,12 @@ export const __test = {
   itemReadHtml,
   emptyStateEl,
   openLocationManager,
+  // Tafla: Statuswort, Karte "Wymaga uwagi", Ortsreihe und Aufklappen
+  // (test-pantry-ux.js).
+  statusPill,
+  attentionGroups,
+  attentionEl,
+  renderFilters,
+  toggleExpanded,
+  refreshOnList,
 };
