@@ -358,7 +358,11 @@ export async function openCaptureMenu(anchor, { before } = {}) {
   const menu = document.createElement('div');
   menu.className = 'popover-menu capture-menu';
   menu.id = 'capture-menu';
-  menu.setAttribute('popover', 'auto');
+  // `manual`, nicht `auto`: das Menue oeffnet MITTEN in einem Druck (Langdruck),
+  // und das Loslassen auf dem + zaehlte als Klick daneben - ein auto-Popover
+  // schloss sich damit im selben Augenblick. Geschlossen wird unten selbst:
+  // Druck daneben, Esc, Wahl eines Eintrags.
+  menu.setAttribute('popover', 'manual');
   menu.setAttribute('role', 'menu');
   menu.setAttribute('aria-label', t('capture.menu.label'));
   for (const action of actions) {
@@ -391,10 +395,19 @@ export async function openCaptureMenu(anchor, { before } = {}) {
       e.preventDefault();
       const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
       items[next]?.focus();
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') e.preventDefault();
+      menu.hidePopover?.();
     }
   });
+  // Ein Druck daneben schliesst - erst NACH dem Druck, der das Menue oeffnete.
+  const outside = (e) => {
+    if (!menu.contains(e.target)) menu.hidePopover?.();
+  };
+  setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
   menu.addEventListener('toggle', (e) => {
     if (e.newState === 'closed') {
+      document.removeEventListener('pointerdown', outside, true);
       menu.remove();
       if (_menu === menu) _menu = null;
       if (anchor?.isConnected && !document.querySelector('dialog[open]')) anchor.focus({ preventScroll: true });

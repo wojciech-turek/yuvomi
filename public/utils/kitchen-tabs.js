@@ -27,13 +27,23 @@ const TABS = () => [
   { route: '/recipes',  labelKey: 'nav.recipes',  icon: 'book-text'     },
 ].filter(({ route }) => !window.yuvomi?.isModuleDisabled(route.slice(1)));
 
+/* TAFLA: Kuchnia merkt sich den letzten Abschnitt ueber den Start der App
+ * hinaus (spec-navigation „the control remembers the last segment") - eine
+ * installierte App beginnt jede Sitzung neu, und `sessionStorage` vergass ihn.
+ * Die Sitzung schreibt weiter (renderSubTabs), das Geraet merkt ihn dazu. */
+function rememberKitchenRoute(route) {
+  try { localStorage.setItem(KITCHEN_STORAGE_KEY, route); } catch { /* privates Fenster */ }
+}
+
 export function getLastKitchenRoute() {
-  try {
-    const stored = sessionStorage.getItem(KITCHEN_STORAGE_KEY);
-    if (KITCHEN_ROUTES.includes(stored) && !window.yuvomi?.isModuleDisabled(stored.slice(1))) {
-      return stored;
-    }
-  } catch { /* ignore */ }
+  for (const store of ['sessionStorage', 'localStorage']) {
+    try {
+      const stored = globalThis[store]?.getItem(KITCHEN_STORAGE_KEY);
+      if (KITCHEN_ROUTES.includes(stored) && !window.yuvomi?.isModuleDisabled(stored.slice(1))) {
+        return stored;
+      }
+    } catch { /* ignore */ }
+  }
   const first = ['meals', 'shopping', 'pantry', 'recipes'].find((m) => !window.yuvomi?.isModuleDisabled(m));
   return first ? `/${first}` : '/meals';
 }
@@ -244,6 +254,7 @@ function syncToLocation() {
 /** Tipp auf einen Tab: Zahlen und Kapsel ziehen sofort, die Seite folgt. */
 function onTabChosen(route) {
   _activeRoute = route;
+  rememberKitchenRoute(route);
   applyBadges(_lastSummary);
   placeIndicator({ glide: true });
   // Abgelehnt loest das Promise sofort auf, angenommen nach dem Render - beide
@@ -254,6 +265,7 @@ function onTabChosen(route) {
 export function renderKitchenTabsBar(container, activeRoute) {
   container.classList.add('has-kitchen-tabs');
   _activeRoute = activeRoute;
+  rememberKitchenRoute(activeRoute);
 
   const tabs = TABS();
   // Nur innerhalb der Kueche bleibt die Leiste stehen. Wer von aussen kommt,
