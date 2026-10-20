@@ -7609,6 +7609,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     findPageFab('fab-main')?.remove();
   } else {
     initFab(signal);
+    // Die Popover-Menues der Seite (Werkzeuge, Kachelgroesse) - bis Tafla
+    // verdrahtete sie wireNewMenu() mit, das mit dem Speed-Dial entfallen ist.
+    installPopoverMenus(container);
   }
 
   // SELBSTHEILUNG STATT RETRY-KNOPF. Am Wandtablet drueckt niemand auf
