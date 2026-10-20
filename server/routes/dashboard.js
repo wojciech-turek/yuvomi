@@ -35,6 +35,7 @@ import { activeCatalog, ledgerBalanceSql } from '../services/rewards.js';
 import { moneyParams, moneyReader, moneyVisibleSql } from '../services/reward-money.js';
 import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL } from '../services/meal-cook.js';
 import { clampEventLimit } from '../../public/utils/dashboard-event-limit.js';
+import { nameKey } from '../utils/name-key.js';
 
 const log = createLogger('Dashboard');
 
@@ -70,12 +71,12 @@ const log = createLogger('Dashboard');
 const DENIED_PAYLOAD = Object.freeze({
   // Geburtstage gehören zum Kalender-Modul, nicht zu einem eigenen — dieselbe
   // Zuordnung wie in PERMISSION_MODULES (navIds) und im Client (NAV_TO_MODULE).
-  calendar: () => ({ upcomingEvents: [], familyEvents: [], weekEvents: [], ...emptyBirthdays() }),
+  calendar: () => ({ upcomingEvents: [], familyEvents: [], weekEvents: [], planEvents: [], ...emptyBirthdays() }),
   tasks: () => ({
     urgentTasks: [], openTaskCount: 0, overdueTaskCount: 0,
-    memberTodayTasks: [], tasksDoneToday: 0, wallTasks: [],
+    memberTodayTasks: [], tasksDoneToday: 0, wallTasks: [], planTasks: [],
   }),
-  meals: () => ({ todayMeals: [] }),
+  meals: () => ({ todayMeals: [], tomorrowMeals: [], dinnerPlan: null }),
   notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0 }),
   shopping: () => ({ shoppingLists: [], shoppingOpenCount: 0, shoppingOpenLists: 0 }),
   // Der Monat bleibt stehen: er ist keine Budgetzahl, sondern der Zeitraum, auf
@@ -87,7 +88,7 @@ const DENIED_PAYLOAD = Object.freeze({
   health: () => ({
     health: {
       hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0,
-      nextDose: null, lowStockCount: 0,
+      nextDose: null, lowStockCount: 0, doses: [],
     },
     fasting: emptyFastingWidget(),
     nutrition: emptyNutritionWidget(),
@@ -302,6 +303,130 @@ function wallTasksByMember(d, { today, zone, now, categoryAnd = '', categoryBind
   return [...byMember.values()];
 }
 
+/** How many task rows the day plan carries at most (open and done together). */
+const PLAN_TASK_CAP = 80;
+
+/**
+ * The tasks of the Tafla day plan ("Plan dnia", 2026-10-19).
+ *
+ * `urgentTasks` stops at five and `wallTasks` reads only household-visible
+ * rows, so neither can carry a day plan that is checked off item by item. This
+ * reads what the viewer may see (`taskVisibleSql`, the same rule as the rest of
+ * this answer): every open task due tomorrow or earlier (overdue included), and
+ * every task finished today - due today, or ticked today whatever its date -,
+ * so a ticked row moves into "Wcześniej" instead of disappearing. The day of a
+ * completion is the household's (`completed_at` is a UTC instant).
+ *
+ * `meta` is the first line of the description, short, as the row's quiet second
+ * line ("cukiernia Lajkonik"); the description itself stays in the task.
+ */
+function planTasksFor(d, {
+  today, tomorrow, zone, now, visibleSql, me, categoryAnd = '', categoryBinds = {},
+}) {
+  const since = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const rows = d.prepare(`
+    SELECT t.id, t.title, t.status, t.priority, t.due_date, t.due_time, t.description,
+           t.is_recurring, t.recurrence_rule, t.locked, t.created_by,
+           (SELECT MAX(tc.completed_at) FROM task_completions tc WHERE tc.task_id = t.id) AS completed_at,
+           ${ASSIGNED_USERS_SQL}
+    FROM tasks t
+    WHERE t.archived_at IS NULL
+      AND ${taskScopeWhere('t', { bind: '@today' })}
+      AND ${visibleSql}${categoryAnd}
+      AND (
+        (t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date <= @tomorrow)
+        OR (t.status = 'done' AND (t.due_date = @today OR EXISTS (
+          SELECT 1 FROM task_completions tc WHERE tc.task_id = t.id AND tc.completed_at >= @since
+        )))
+      )
+    ORDER BY t.due_date ASC, t.due_time IS NULL ASC, t.due_time ASC, t.id ASC
+    LIMIT ${PLAN_TASK_CAP * 2}
+  `).all({ today, tomorrow, since, me, ...categoryBinds });
+  const out = [];
+  for (const row of rows) {
+    const task = addAssignedUsers(row);
+    if (task.status === 'done' && task.due_date !== today
+      && utcToWall(task.completed_at, zone)?.date !== today) continue;
+    const firstLine = String(task.description ?? '').split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+    delete task.description;
+    task.meta = firstLine.replace(/^[#>*\-\s]+/, '').slice(0, 80);
+    out.push(task);
+    if (out.length >= PLAN_TASK_CAP) break;
+  }
+  return out;
+}
+
+/** The fields one row of the day plan or of "Jutro" needs from an event. */
+function planEventFields(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    start_datetime: event.start_datetime,
+    end_datetime: event.end_datetime ?? null,
+    all_day: event.all_day ? 1 : 0,
+    location: event.location ?? null,
+    icon: event.icon ?? null,
+    cal_name: event.cal_name ?? null,
+    source_calendar_name: event.source_calendar_name ?? null,
+    assigned_users: (event.assigned_users ?? []).map((user) => ({
+      id: user.id, display_name: user.display_name, color: user.color, avatar_data: user.avatar_data ?? null,
+    })),
+    birthday_name: event.birthday_name ?? null,
+    birthday_date: event.birthday_date ?? null,
+    birthday_event_kind: event.birthday_event_kind ?? null,
+  };
+}
+
+/**
+ * Tonight's dinner against the pantry and the shopping list, for the meter on
+ * the Teraz card ("Masz 5 z 6 · brakuje śmietanki").
+ *
+ * The ingredients are the meal's own, else its recipe's. "Have" means the
+ * pantry has it in stock (the same prefix rule as the ingredient suggestions:
+ * "pomidory" covers "pomidory w puszce"); a missing one already open on a
+ * shopping list says so, so the card does not offer to add it twice. Without
+ * the pantry module there is nothing to compare against and no meter.
+ *
+ * @returns {{meal_id: number, total: number, have: number, missing: string[], on_list: string[]}|null}
+ */
+function dinnerPlanFor(d, meal, { pantry = true, shopping = true } = {}) {
+  if (!meal || !pantry) return null;
+  let rows = d.prepare('SELECT name FROM meal_ingredients WHERE meal_id = ? ORDER BY id').all(meal.id);
+  if (!rows.length && meal.recipe_id) {
+    rows = d.prepare('SELECT name FROM recipe_ingredients WHERE recipe_id = ? ORDER BY id').all(meal.recipe_id);
+  }
+  const names = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const name = String(row.name ?? '').trim();
+    const key = nameKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    names.push({ name, key });
+  }
+  if (!names.length) return null;
+  const covers = (keys, key) => keys.some((k) => k === key || key.startsWith(`${k} `) || k.startsWith(`${key} `));
+  const pantryKeys = d.prepare('SELECT name FROM pantry_items WHERE quantity IS NULL OR quantity > 0').all()
+    .map((r) => nameKey(r.name)).filter(Boolean);
+  const listKeys = shopping
+    ? d.prepare('SELECT name FROM shopping_items WHERE is_checked = 0').all().map((r) => nameKey(r.name)).filter(Boolean)
+    : [];
+  const missing = [];
+  const onList = [];
+  for (const { name, key } of names) {
+    if (covers(pantryKeys, key)) continue;
+    if (covers(listKeys, key)) onList.push(name);
+    else missing.push(name);
+  }
+  return {
+    meal_id: meal.id,
+    total: names.length,
+    have: names.length - missing.length - onList.length,
+    missing,
+    on_list: onList,
+  };
+}
+
 /**
  * `?shopping_list=` als Liste von Listen-Ids (#1818): einzeln oder mehrfach
  * angegeben, nur positive ganze Zahlen, ohne Doppelte, hoechstens 50 - dieselbe
@@ -338,6 +463,11 @@ const router = express.Router();
  *   wallTasks:      {user_id, open_count, done_count, open: {id,title,due_date}[], done: {id,title}[]}[], // Haushaltssichtbare Aufgaben von heute je Mitglied (#1817)
  *   countdowns:     Countdown[]        // Als Countdown markierte Termine + Aufgaben (#647)
  *   quicklinks:      QuickLink[]        // Haushaltslinks der Kachelreihe (#469)
+ *   planTasks:      Task[]             // Day plan: open tasks due <= tomorrow, tasks finished today (Tafla)
+ *   planEvents:     PlanEvent[]        // Day plan and "Jutro": every event of today and tomorrow (Tafla)
+ *   tomorrowMeals:  Meal[]             // "Jutro": tomorrow's meals (Tafla)
+ *   dinnerPlan:     {meal_id, total, have, missing, on_list}|null // Teraz meter for tonight's dinner (Tafla)
+ *   health.doses:   {medication_id, schedule_id, name, time, status, log_id, taken_at}[] // own doses of today
  * }
  */
 router.get('/', (req, res) => {
@@ -567,6 +697,22 @@ router.get('/', (req, res) => {
     result.weekEvents = [];
   }
 
+  /* TODAY AND TOMORROW FOR THE DAY PLAN (Tafla, 2026-10-19). `upcomingEvents`
+   * stops at five and skips what ended, `weekEvents` carries no place: the day
+   * plan lists every event of today (the ended ones collapse into "Wcześniej")
+   * and "Jutro" the first of tomorrow, with place and people. Same visibility,
+   * birthday and "only mine" rules as the list above; never for the wall. */
+  if (allows('calendar') && !householdAudience) try {
+    result.planEvents = serializeEvents(getEventsOverlappingDays(d, {
+      userId, fromKey: todayLocalKey, days: 2,
+      assignedTo: eventsAssignedTo, includeBirthdays, household: false, limit: 120,
+    }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) })
+      .map(planEventFields);
+  } catch (err) {
+    log.error('planEvents error:', err.message);
+    result.planEvents = [];
+  }
+
   // Offene Aufgaben: Sortierung in SQL (overdue zuerst, dann Fälligkeit, dann Priorität).
   // Faithful translation of the previous JS comparator:
   //   1. overdue (due_sort < now) before not-overdue
@@ -733,9 +879,24 @@ router.get('/', (req, res) => {
           WHEN 'snack'     THEN 3
         END
     `).all(todayLocalKey, ...visibleTypes);
+    // Tomorrow's meals for "Jutro" (Tafla, 2026-10-19): the same reading one
+    // day on - the plan's peek names tomorrow's dinner.
+    if (!householdAudience) {
+      result.tomorrowMeals = d.prepare(`
+        SELECT m.id, m.date, m.meal_type, m.title, m.recipe_id, m.cook_user_id,${MEAL_COOK_COLUMNS_SQL}
+        FROM meals m
+        ${MEAL_COOK_JOIN_SQL}
+        WHERE m.date = ? AND m.meal_type IN (${placeholders})
+        ORDER BY CASE m.meal_type WHEN 'breakfast' THEN 0 WHEN 'lunch' THEN 1 WHEN 'dinner' THEN 2 ELSE 3 END
+      `).all(shiftDateKey(todayLocalKey, 1), ...visibleTypes);
+      const dinner = result.todayMeals.find((meal) => meal.meal_type === 'dinner') ?? null;
+      result.dinnerPlan = dinnerPlanFor(d, dinner, { pantry: allows('pantry'), shopping: allows('shopping') });
+    }
   } catch (err) {
     log.error('todayMeals error:', err.message);
-    result.todayMeals = [];
+    result.todayMeals = result.todayMeals ?? [];
+    result.tomorrowMeals = [];
+    result.dinnerPlan = null;
   }
 
   // Neueste Notizen (gepinnte zuerst, dann aktuellste)
@@ -846,7 +1007,7 @@ router.get('/', (req, res) => {
   // Alle User (für Avatar-Farben in Widgets)
   try {
     result.users = d.prepare(
-      `SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, ${memberPositionSql('u')} AS sort_order FROM users u
+      `SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.family_role, ${memberPositionSql('u')} AS sort_order FROM users u
        WHERE ${householdMemberSql('u')}
        ORDER BY ${memberOrderSql('u')}`
     ).all();
@@ -1164,12 +1325,12 @@ router.get('/', (req, res) => {
       WHERE active = 1 AND user_id = ?
       `).all(userId);
       const scheduleStmt = d.prepare(`
-      SELECT time_of_day, days_mask, start_date, end_date
+      SELECT id, time_of_day, days_mask, start_date, end_date
       FROM medication_schedules
       WHERE medication_id = ? AND active = 1
       `);
       const logStmt = d.prepare(`
-      SELECT status FROM medication_logs
+      SELECT id, status, taken_at FROM medication_logs
       WHERE medication_id = ? AND substr(scheduled_at, 1, 10) = ? AND substr(scheduled_at, 12, 5) = ?
       ORDER BY id DESC LIMIT 1
       `);
@@ -1178,6 +1339,10 @@ router.get('/', (req, res) => {
       let dosesSkipped = 0;
       let lowStockCount = 0;
       let nextDose = null;
+      // Every dose of today on its own (Tafla day plan, 2026-10-19): the plan
+      // ticks a dose as "Wzięte" through the health routes, so it needs the
+      // medication, the schedule and the log row, if the scheduler wrote one.
+      const doses = [];
       for (const med of meds) {
         if (med.stock_qty != null && Number.isFinite(Number(med.stock_qty))) {
           const stock = Number(med.stock_qty);
@@ -1200,8 +1365,18 @@ router.get('/', (req, res) => {
           if (logRow?.status === 'taken') dosesTaken += 1;
           else if (logRow?.status === 'skipped') dosesSkipped += 1;
           else if (!nextDose || time < nextDose.time) nextDose = { name: med.name, time };
+          doses.push({
+            medication_id: med.id,
+            schedule_id: s.id,
+            name: med.name,
+            time,
+            status: logRow?.status ?? 'pending',
+            log_id: logRow?.id ?? null,
+            taken_at: logRow?.taken_at ?? null,
+          });
         }
       }
+      doses.sort((a, b) => a.time.localeCompare(b.time) || a.name.localeCompare(b.name));
       result.health = {
         hasMeds: meds.length > 0,
         dosesTotal,
@@ -1209,10 +1384,11 @@ router.get('/', (req, res) => {
         dosesSkipped,
         nextDose,
         lowStockCount,
+        doses,
       };
     } catch (err) {
       log.error('health error:', err.message);
-      result.health = { hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0, nextDose: null, lowStockCount: 0 };
+      result.health = { hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0, nextDose: null, lowStockCount: 0, doses: [] };
     }
 
     try {
@@ -1381,6 +1557,24 @@ router.get('/', (req, res) => {
   } catch (err) {
     log.error('tasksDoneToday error:', err.message);
     result.tasksDoneToday = 0;
+  }
+
+  // The day plan's tasks (Tafla, 2026-10-19), see `planTasksFor`. Personal by
+  // design: the wall reads `wallTasks` and never gets this list.
+  if (allows('tasks') && !householdAudience) try {
+    result.planTasks = planTasksFor(d, {
+      today: todayLocalKey,
+      tomorrow: shiftDateKey(todayLocalKey, 1),
+      zone: householdTimeZone(d),
+      now,
+      visibleSql: taskVisibleSql,
+      me: userId,
+      categoryAnd: taskCategoryAnd,
+      categoryBinds: taskCategoryBinds,
+    });
+  } catch (err) {
+    log.error('planTasks error:', err.message);
+    result.planTasks = [];
   }
 
   // DIE HAUSHALTSFASSUNG (#1817): von der leeren Fassung aus, nur was die Wand

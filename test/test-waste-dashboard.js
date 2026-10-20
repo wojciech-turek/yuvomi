@@ -37,19 +37,22 @@ test('das Waste-Widget ist im Modul/Dispatch verdrahtet und der Refresh-Carry-ov
   const text = src();
   assert.match(text, /waste:\s*'waste'/, 'MODULE_FOR_WIDGET kennt das Modul hinter dem Widget nicht');
   assert.match(text, /waste:\s*\(size\)\s*=>\s*renderWasteWidget/, 'widgetById hat keinen Eintrag fuer waste, oder reicht die Groesse nicht durch');
-  const carryOvers = [...text.matchAll(/fresh\.waste\s*=\s*data\.waste;/g)];
-  assert.equal(carryOvers.length, 2,
-    `fresh.waste = data.waste; muss an beiden Refresh-Stellen stehen (reloadIfQueryChanged UND `
-    + `refreshDashboardData), sonst faellt die Kachel bei einem stillen Refresh auf ihren Leerzustand `
-    + `zurueck - gefunden: ${carryOvers.length}`);
+  // TAFLA (2026-10-19): Dziś zeichnet die Kachel nicht mehr und laedt ihren
+  // Slice nicht; die Abfuhr spricht dort ueber `wastePickups` der Antwort -
+  // heute im Plan, morgen (heute Abend rausstellen) in „Jutro". Ein stiller
+  // Refresh nimmt die Antwort als Ganzes, ohne Slice von gestern.
+  const refresh = text.slice(text.indexOf('async function refreshDashboardData'), text.indexOf('const refreshTimerId'));
+  assert.doesNotMatch(refresh, /fresh\.waste\s*=\s*data\.waste;/);
+  const plan = readFileSync(new URL('../public/utils/today-plan.js', import.meta.url), 'utf8');
+  assert.match(plan, /data\?\.wastePickups/, 'Plan und Jutro lesen die Abfuhr aus der Antwort');
 });
 
-test('ensureWasteSlice() ist idempotent und respektiert die Modul-Abschaltung, wie ensureScheduleSlice()', () => {
-  const text = src();
-  const fn = text.slice(text.indexOf('async function ensureWasteSlice'), text.indexOf('async function ensureWasteSlice') + 1200);
-  assert.match(fn, /if \(data\.waste !== undefined\) return;/, 'die Slice muss sich nur einmal laden, wie der Schedule-Slice');
-  assert.match(fn, /isModuleDisabled\('waste'\)/, 'ein abgeschaltetes Modul darf keinen Request ausloesen');
-  assert.match(fn, /data\.waste = null;/, 'ein Ladefehler muss den expliziten Fehler-Sentinel setzen, nicht das Widget verstecken');
+test('Dziś fragt die Abfuhr nur bei eingeschaltetem Modul (frueher ensureWasteSlice)', () => {
+  // TAFLA (2026-10-19): der Slice der Kachel ist fort; dieselbe Zusage gilt
+  // fuer Plan und Jutro - ein abgeschaltetes Modul spricht nicht.
+  const plan = readFileSync(new URL('../public/utils/today-plan.js', import.meta.url), 'utf8');
+  assert.match(plan, /if \(!off\('waste'\)\) \{\s*const today = /, 'der Plan fragt das Modul');
+  assert.match(plan, /if \(!off\('waste'\)\) \{\s*const pickups = /, 'Jutro fragt das Modul');
 });
 
 // -------------------------------------------------------------------------
@@ -75,22 +78,11 @@ test('openWidgetOptions() traegt einen eigenen Zweig fuer waste mit einer Typ-Ch
     'keine Auswahl muss "alle" bedeuten (leere Liste waere ein leeres Widget fuer wer nur den Dialog oeffnete), wie bei den Aufgaben-Kategorien');
 });
 
-test('ensureWasteSlice() filtert nach der Typ-Option, "alle" bleibt die Vorgabe ohne Auswahl', () => {
-  const text = src();
-  const start = text.indexOf('async function ensureWasteSlice');
-  const fn = text.slice(start, start + 1200);
-  assert.match(fn, /widgetConfig\.find\(\(w\) => w\.id === 'waste'\)\?\.options\?\.types/,
-    'der Slice muss die eigene Widget-Option lesen, nicht nur die rohe API-Antwort durchreichen');
-  assert.match(fn, /selectedTypes\?\.length \? items\.filter/,
-    'eine LEERE Auswahl darf nicht filtern (das waere ein leeres Widget) - nur eine NICHT-leere Auswahl schraenkt ein');
-});
 
-test('ein geaenderter Typ-Filter verwirft den gecachten Waste-Slice, statt den alten Stand zu behalten (dashboardQuery traegt ihn nicht mit)', () => {
-  const text = src();
-  const occurrences = [...text.matchAll(/wasteOptionsChanged|wasteOptionsBeforeUndo/g)];
-  assert.ok(occurrences.length >= 4,
-    `alle vier Persist-/Reset-/Undo-Pfade muessen den Waste-Slice bei einer Optionsaenderung invalidieren, sonst zeigt die Kachel den alten Filterstand bis zum naechsten vollen Seitenaufbau (gefunden: ${occurrences.length})`);
-});
+// TAFLA (2026-10-19): die Typ-Option filtert nur die Kachel, die Dziś nicht
+// mehr zeichnet - Plan und Jutro nennen jede Abholung (wie zuvor schon das
+// Heute-Blatt, das die Option nie las). Die beiden Guards zum Filtern und
+// Verwerfen des Kachel-Slices sind deshalb mit dem Slice gegangen.
 
 test('das Waste-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen, wie schedule/housekeeping', () => {
   assert(widgetsUtil.WIDGET_IDS.includes('waste'), 'WIDGET_IDS fehlt waste');

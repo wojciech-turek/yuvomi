@@ -1,28 +1,34 @@
 /**
  * Modul: Dashboard - Bedienung und Barrierefreiheit im gerenderten Dokument
  * Zweck: Was die Critique vom 2026-09-23 am lebenden Dashboard gemessen hat,
- *        hier als Programm gefahren statt als Textguard:
- *          (1) der Aktualisieren-Knopf der Wetterkarte ist erreichbar - er lag
- *              UNTER dem Widget-Kopf (z-index 2 gegen 1), elementFromPoint traf
- *              an seinem Zentrum den Kopf, und Sonde 4 (test-document-guards.js)
- *              ueberspringt verdeckte Ziele stillschweigend,
- *          (2) das Raster hat eine eigene h2, und keine Widget-Ueberschrift
- *              traegt die Badge-Zahl im Namen,
- *          (3) im Anpassen-Modus bleibt der Fokus nach jeder Geste auf der
- *              Flaeche, und die Zustandswechsel werden angesagt,
+ *        hier als Programm gefahren statt als Textguard. Seit Tafla
+ *        (2026-10-19) ist die Uebersicht „Dziś" - ein Plan statt eines
+ *        Kachelrasters; die Fragen sind dieselben geblieben, gemessen wird an
+ *        dem, was an die Stelle der Kacheln trat:
+ *          (1) die Ziele von Dziś (Haken im Plan, Profil im Kopf, „Dostosuj
+ *              Dziś") sind an ihrem Zentrum das oberste Element und tragen
+ *              44/48px - Sonde 4 (test-document-guards.js) ueberspringt
+ *              verdeckte Ziele stillschweigend,
+ *          (2) jeder Abschnitt nennt sich nach einer eigenen h3 unter der h2
+ *              des Kopfs, und keine Ueberschrift traegt eine Zahl im Namen
+ *              (der Zaehler des Plans steht daneben, nicht darin),
+ *          (3) „Dostosuj Dziś" per Tastatur: der Fokus bleibt nach jeder Geste
+ *              auf dem Bedienelement, das Umordnen wird angesagt, „Gotowe"
+ *              gibt den Fokus an den Knopf zurueck,
  *          (4) die Startknoepfe des Wand-Timers ruhen sichtbar, und der erste
  *              Tipp auf eine schlafende Wand weckt nur,
- *          (5) die Kopf-Knoepfe halten am Touch-Tablet (1180px) die Fingergroesse
- *              - das Kriterium ist die Zeigerfaehigkeit, nicht die Breite,
  *          (4b) das Wecken verschiebt die Startknoepfe nicht (der zweite Tipp
  *              traefe sonst einen anderen),
- *          (6) die Wieder-Einblenden-Chips messen am Zeiger dieselben 40px wie
- *              jedes andere Bedienelement des Anpassen-Modus.
+ *          (5) die Knoepfe von Dziś halten am Touch-Tablet (1180px) die
+ *              Fingergroesse - das Kriterium ist die Zeigerfaehigkeit, nicht
+ *              die Breite,
+ *          (6) Griffe und Schalter in „Dostosuj Dziś" messen am Zeiger die
+ *              Zielgroesse, nicht nur ihre Zeichnung.
  * Ausfuehren: npm run test:dashboard-a11y-browser (haengt an test:document-guards)
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startHarness, openPage, gotoRoute, settle, clickPastDeadTime, DEVICES, enterDashboardWall } from './document-guards-harness.js';
+import { startHarness, openPage, gotoRoute, settle, DEVICES, enterDashboardWall } from './document-guards-harness.js';
 
 let harness;
 before(async () => { harness = await startHarness(); });
@@ -41,12 +47,19 @@ const WEATHER = {
   },
 };
 
+/* Die Abschnitte von Dziś in einer festen Reihenfolge, dazu zwei
+ * Vorschaukacheln - damit das Blatt etwas umzuordnen hat. */
 const LAYOUT = [
-  { id: 'weather', visible: true, size: '2x1', order: 0 },
-  { id: 'birthdays', visible: true, size: '1x1', order: 1 },
-  { id: 'notes', visible: true, size: '1x1', order: 2 },
-  { id: 'clock', visible: true, size: '1x1', order: 3 },
+  { id: 'today-weather', visible: true, size: '1x1', order: 0 },
+  { id: 'today-shopping', visible: true, size: '1x1', order: 1 },
+  { id: 'today-tomorrow', visible: true, size: '1x1', order: 2 },
+  { id: 'today-question', visible: true, size: '1x1', order: 3 },
+  { id: 'today-soon', visible: true, size: '1x1', order: 4 },
+  { id: 'notes', visible: true, size: '1x1', order: 5 },
+  { id: 'budget', visible: true, size: '1x1', order: 6 },
 ];
+
+const CUSTOMIZE = '[data-day-action="customize"]';
 
 /** Seite mit festem Layout und einer Wetterantwort, die nicht vom Netz abhaengt. */
 async function dashboardPage({ device = 'desktop', viewport = null } = {}) {
@@ -61,11 +74,10 @@ async function dashboardPage({ device = 'desktop', viewport = null } = {}) {
   await page.evaluate(async (layout) => {
     const { api } = await import('/api.js');
     await api.put('/preferences', { dashboard_widgets: layout });
-    localStorage.setItem('yuvomi-dash-customize-hint', '1');
     localStorage.setItem('yuvomi:fabSeen:dashboard', '5');
   }, LAYOUT);
   await gotoRoute(page, '/');
-  await page.waitForSelector('#dashboard-widget-grid .widget-wrapper');
+  await page.waitForSelector(`[data-today] ${CUSTOMIZE}`);
   return page;
 }
 
@@ -91,115 +103,122 @@ async function hitArea(page, selector) {
   });
 }
 
-/** Der Text des Ansagers - er setzt verzoegert (50ms), also kurz warten. */
-async function announced(page) {
+/** Der Text der Live-Region im Blatt - sie setzt sofort, kurz warten schadet nicht. */
+async function sheetAnnounced(page) {
   await new Promise((r) => { setTimeout(r, 150); });
-  return page.$eval('#route-announcer', (el) => el.textContent.trim());
+  return page.$eval('.day-sheet [data-sheet-live]', (el) => el.textContent.trim());
 }
 
-test('(1) der Aktualisieren-Knopf der Wetterkarte liegt nicht unter dem Kopf', async () => {
+async function openSheet(page) {
+  await page.focus(CUSTOMIZE);
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.day-sheet [data-section-list]');
+  await settle(page);
+}
+
+test('(1) die Ziele von Dziś liegen frei und tragen die Zielgroesse', async () => {
   for (const device of ['desktop', 'mobile']) {
     const page = await dashboardPage({ device });
-    await page.waitForSelector('#weather-refresh-btn');
-    const area = await hitArea(page, '#weather-refresh-btn');
-    assert.equal(area.covered, false, `${device}: das Zentrum des Knopfs trifft ${area.by}, nicht den Knopf`);
     const min = device === 'mobile' ? 48 : 44;
-    assert.ok(area.w >= min && area.h >= min,
-      `${device}: Trefferflaeche ${area.w}x${area.h}, verlangt ${min} (Box ${area.box.w}x${area.box.h})`);
+    const targets = [CUSTOMIZE, '.day-head__me'];
+    // Ein offener Haken, nicht einer aus dem zugeklappten „Wcześniej".
+    const check = '[data-today] .day-plan .day-card > .day-row .day-check';
+    if (await page.$(check)) targets.push(check);
+    assert.ok(targets.length === 3, `${device}: Reichweite - der Plan im Seed hat keinen Haken`);
+    for (const sel of targets) {
+      const area = await hitArea(page, sel);
+      assert.equal(area.covered, false, `${device} ${sel}: das Zentrum trifft ${area.by}, nicht das Ziel`);
+      assert.ok(area.w >= min && area.h >= min,
+        `${device} ${sel}: Trefferflaeche ${area.w}x${area.h}, verlangt ${min} (Box ${area.box.w}x${area.box.h})`);
+    }
     await page.close();
   }
 });
 
-test('(2) das Raster hat eine eigene h2, die Widget-Ueberschriften keine Zahl im Namen', async () => {
+test('(2) jeder Abschnitt nennt sich nach seiner h3, keine Ueberschrift traegt eine Zahl', async () => {
   const page = await dashboardPage({ device: 'mobile' });
   const tree = await page.evaluate(() => {
-    const grid = document.querySelector('#dashboard-widget-grid');
-    const all = [...document.querySelectorAll('main h1, main h2, main h3')];
-    // Die letzte h2 VOR dem Raster ist die, unter der seine h3 haengen.
-    const parentH2 = all.filter((h) => h.tagName === 'H2'
-      && (h.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING)).pop();
+    const root = document.querySelector('[data-today]');
     const name = (h) => {
       const clone = h.cloneNode(true);
       clone.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
       return clone.textContent.replace(/\s+/g, ' ').trim();
     };
+    const sections = [...root.querySelectorAll('section.day-section')];
+    const h2 = root.querySelector('h2');
     return {
-      parent: parentH2 ? { text: name(parentH2), labels: grid.getAttribute('aria-labelledby') === parentH2.id } : null,
-      h3: [...grid.querySelectorAll('h3')].map(name),
-      badges: grid.querySelectorAll('.widget__badge').length,
-      wrappers: grid.querySelectorAll('.widget-wrapper').length,
-      wrappersWithHeading: [...grid.querySelectorAll('.widget-wrapper')].filter((w) => w.querySelector('h3')).length,
+      h2: h2 ? name(h2) : null,
+      sections: sections.length,
+      named: sections.map((s) => {
+        const id = s.getAttribute('aria-labelledby');
+        const h = id ? document.getElementById(id) : null;
+        return { id, ok: !!h && h.tagName === 'H3' && s.contains(h), label: s.getAttribute('aria-label') };
+      }),
+      h3: [...root.querySelectorAll('h3')].map(name),
+      h3BeforeH2: [...root.querySelectorAll('h3')].some((h) => h2 && (h.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING)),
     };
   });
-  assert.ok(tree.parent, 'es gibt eine h2 vor dem Raster');
-  assert.equal(tree.parent.text, 'Widgets', `die Widgets haengen unter „${tree.parent.text}"`);
-  assert.ok(tree.parent.labels, 'und das Raster nennt sich nach ihr');
-  assert.ok(tree.badges > 0, 'Reichweite: mindestens eine Kachel traegt eine Badge-Zahl');
-  assert.equal(tree.wrappersWithHeading, tree.wrappers, 'jede Kachel hat eine Ueberschrift');
+  assert.ok(tree.h2, 'der Kopf traegt eine h2 (die Begruessung)');
+  assert.equal(tree.h3BeforeH2, false, 'keine h3 steht vor der h2 des Kopfs');
+  assert.ok(tree.sections >= 2, `Reichweite: nur ${tree.sections} Abschnitt(e)`);
+  const unnamed = tree.named.filter((s) => !s.ok && !s.label);
+  assert.deepEqual(unnamed, [], 'Abschnitte ohne eigene h3 und ohne Namen');
   const withDigits = tree.h3.filter((n) => /\d/.test(n));
   assert.deepEqual(withDigits, [], 'Ueberschriften mit einer Zahl im zugaenglichen Namen');
   await page.close();
 });
 
-test('(3) Anpassen per Tastatur: der Fokus bleibt, die Wechsel werden angesagt', async () => {
+test('(3) „Dostosuj Dziś" per Tastatur: der Fokus bleibt, das Umordnen wird angesagt', async () => {
   const page = await dashboardPage({ device: 'desktop' });
   const active = () => page.evaluate(() => {
     const el = document.activeElement;
     return {
       body: el === document.body || !el,
-      id: el?.id ?? '',
-      size: el?.getAttribute('data-widget-size-preset'),
-      widget: el?.getAttribute('data-widget-id') ?? el?.closest('[data-widget-id]')?.getAttribute('data-widget-id'),
-      hide: el?.getAttribute('data-widget-hide'),
-      show: el?.getAttribute('data-widget-show'),
-      pressed: el?.getAttribute('aria-pressed'),
+      action: el?.getAttribute('data-day-action') ?? '',
+      grip: el?.hasAttribute('data-grip') ?? false,
+      sw: el?.getAttribute('data-switch') ?? '',
+      checked: el?.getAttribute('aria-checked'),
+      section: el?.closest('[data-section-id]')?.getAttribute('data-section-id') ?? '',
     };
   });
+  const sheetOrder = () => page.$$eval('.day-sheet [data-section-list] [data-section-id]', (els) => els.map((el) => el.dataset.sectionId));
 
-  await page.focus('#dashboard-customize-btn');
-  await page.keyboard.press('Enter');
-  await page.waitForSelector('.widget-edit-controls');
+  await openSheet(page);
+  const before = await sheetOrder();
+  assert.ok(before.length >= 3, `Reichweite: das Blatt fuehrt ${before.length} Abschnitte`);
+
+  // Der zweite Abschnitt rueckt per Pfeiltaste nach oben.
+  const second = before[1];
+  await page.focus(`.day-sheet [data-section-id="${second}"] [data-grip]`);
+  await page.keyboard.press('ArrowUp');
   let a = await active();
-  // Seit R8 (H2) gibt es im Anpassen-Modus kein X mehr: der Einstieg weicht der
-  // Leiste, und der Fokus geht an ihren ersten Ausgang.
-  assert.equal(a.id, 'dashboard-customize-cancel', `nach „Anpassen" liegt der Fokus auf ${JSON.stringify(a)}`);
+  assert.equal(a.grip, true, `nach dem Umordnen liegt der Fokus auf ${JSON.stringify(a)}`);
+  assert.equal(a.section, second, 'und zwar auf dem Griff des bewegten Abschnitts');
+  assert.equal((await sheetOrder())[0], second, 'der Abschnitt steht jetzt oben');
+  assert.match(await sheetAnnounced(page), /1/, 'die neue Stelle wird angesagt');
 
-  // Eine Groesse, die die Geburtstagskachel gerade NICHT hat.
-  const target = await page.$eval('.widget-wrapper[data-widget-id="birthdays"]',
-    (w) => w.querySelector('[data-widget-size-preset][aria-pressed="false"]').getAttribute('data-widget-size-preset'));
-  await page.focus(`.widget-wrapper[data-widget-id="birthdays"] [data-widget-size-preset="${target}"]`);
-  await page.keyboard.press('Enter');
+  // Ein Schalter per Leertaste: der Zustand wechselt, der Fokus bleibt.
+  const target = (await sheetOrder())[1];
+  await page.focus(`.day-sheet [data-switch="${target}"]`);
+  const was = await page.$eval(`.day-sheet [data-switch="${target}"]`, (el) => el.getAttribute('aria-checked'));
+  await page.keyboard.press('Space');
   a = await active();
-  assert.equal(a.size, target, `nach der Groessenwahl liegt der Fokus auf ${JSON.stringify(a)}`);
-  assert.equal(a.widget, 'birthdays');
-  assert.equal(a.pressed, 'true', 'und der Knopf traegt jetzt den gewaehlten Zustand');
-  assert.match(await announced(page), /Geburtstage: Größe/, 'die Groessenaenderung wird angesagt');
+  assert.equal(a.sw, target, `nach dem Schalten liegt der Fokus auf ${JSON.stringify(a)}`);
+  assert.notEqual(a.checked, was, 'der Schalter traegt den neuen Zustand');
 
-  await page.focus('.widget-wrapper[data-widget-id="birthdays"] [data-widget-hide]');
-  await page.keyboard.press('Enter');
+  // Die Seite hinter dem Blatt zeichnet neu - der Fokus bleibt trotzdem im Blatt.
+  await settle(page);
   a = await active();
-  assert.equal(a.body, false, 'nach dem Ausblenden faellt der Fokus nicht auf <body>');
-  assert.ok(a.hide || a.show, `sondern auf den naechsten Ausblenden- oder den Einblenden-Knopf: ${JSON.stringify(a)}`);
-  assert.equal(await page.$('.widget-wrapper[data-widget-id="birthdays"]'), null, 'Reichweite: die Kachel ist weg');
-  assert.match(await announced(page), /Geburtstage ausgeblendet/);
+  assert.equal(a.body, false, 'das Neuzeichnen von Dziś hat den Fokus auf <body> geworfen');
 
-  await page.focus('[data-widget-show="birthdays"]');
+  // „Gotowe" schliesst und gibt den Fokus an den Knopf zurueck.
+  assert.ok(await page.$('.modal-panel #modal-header-action'), 'Reichweite: das Blatt hat seinen Fertig-Knopf im Kopf');
+  await page.focus('#modal-header-action');
   await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !document.querySelector('.day-sheet'));
+  await settle(page);
   a = await active();
-  assert.equal(a.body, false, 'nach dem Einblenden faellt der Fokus nicht auf <body>');
-  assert.match(await announced(page), /Geburtstage eingeblendet/);
-
-  // Die Groesse der Geburtstagskachel ist geaendert: Abbrechen fragt erst nach (H2).
-  await page.focus('#dashboard-customize-cancel');
-  await page.keyboard.press('Enter');
-  await page.waitForSelector('#confirm-modal-ok');
-  assert.ok(await page.$('.widget-edit-controls'), 'vor der Antwort ist nichts verworfen');
-  // Ein Klick in den ersten 350 ms eines Dialogs verpufft (armPointerDeadTime).
-  await clickPastDeadTime(page, '#confirm-modal-ok');
-  await page.waitForFunction(() => !document.querySelector('.widget-edit-controls'));
-  await page.waitForFunction(() => !document.querySelector('.modal-overlay'));
-  a = await active();
-  assert.equal(a.id, 'dashboard-customize-btn', `nach „Abbrechen" liegt der Fokus auf ${JSON.stringify(a)}`);
+  assert.equal(a.action, 'customize', `nach „Gotowe" liegt der Fokus auf ${JSON.stringify(a)}`);
   await page.close();
 });
 
@@ -244,7 +263,8 @@ test('(4) Wand-Timer: sichtbar in Ruhe, der erste Tipp auf die schlafende Wand w
   assert.ok(await page.evaluate(() => localStorage.getItem('yuvomi-wall-timer')), 'der zweite Tipp startet');
   assert.equal(await page.$eval('.wall__timer', (el) => el.getAttribute('role')), 'timer',
     'die tickende Anzeige ist keine Live-Region');
-  assert.match(await announced(page), /Küchentimer läuft/, 'der Start wird angesagt');
+  await new Promise((r) => { setTimeout(r, 150); });
+  assert.match(await page.$eval('#route-announcer', (el) => el.textContent.trim()), /Küchentimer läuft/, 'der Start wird angesagt');
 
   await page.evaluate(() => {
     localStorage.removeItem('yuvomi-wall-timer');
@@ -256,7 +276,7 @@ test('(4b) das Wecken verschiebt die Startknoepfe nicht - auch nicht am grossen 
   // Der Fall aus (4) an der Breite, an der er gemessen wurde: am Telefon hat der
   // Fuss keinen Ueberschuss zu verteilen, am Wandbildschirm schon.
   const page = await dashboardPage({ device: 'desktop', viewport: { width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false } });
-  await page.click('#dashboard-wall-enter');
+  await enterDashboardWall(page);
   await page.waitForSelector('.wall [data-wall-timer-start]');
   await settle(page);
   const lefts = () => page.$$eval('[data-wall-timer-start]', (els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
@@ -269,30 +289,33 @@ test('(4b) das Wecken verschiebt die Startknoepfe nicht - auch nicht am grossen 
   await page.close();
 });
 
-test('(5) die Kopf-Knoepfe halten am Touch-Tablet die Fingergroesse', async () => {
+test('(5) die Knoepfe von Dziś halten am Touch-Tablet die Fingergroesse', async () => {
   const page = await dashboardPage({
     device: 'mobile',
     viewport: { width: 1180, height: 820, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
   });
   await gotoRoute(page, '/');
-  await page.waitForSelector('#dashboard-customize-btn');
+  await page.waitForSelector(CUSTOMIZE);
   const touch = await page.evaluate(() => matchMedia('(hover: none)').matches && innerWidth >= 1024);
   assert.ok(touch, 'Reichweite: ein Touch-Geraet ueber 1024px Breite');
-  for (const sel of ['#dashboard-customize-btn', '#dashboard-wall-enter']) {
+  for (const sel of [CUSTOMIZE, '.day-head__me']) {
     const area = await hitArea(page, sel);
     assert.ok(area.w >= 48 && area.h >= 48, `${sel}: ${area.w}x${area.h} am Finger, verlangt 48`);
   }
   await page.close();
 });
 
-test('(6) die Wieder-Einblenden-Chips messen am Zeiger 40px wie ihre Nachbarn', async () => {
+test('(6) Griffe und Schalter in „Dostosuj Dziś" messen am Zeiger die Zielgroesse', async () => {
   const page = await dashboardPage({ device: 'desktop' });
   assert.equal(DEVICES.desktop.hasTouch, false, 'Reichweite: Zeigergeraet');
-  await page.click('#dashboard-customize-btn');
-  await page.waitForSelector('.widget-restore-chip');
-  const heights = await page.$$eval('.widget-restore-chip', (els) => els.map((el) => el.getBoundingClientRect().height));
-  assert.ok(heights.length > 0, 'Reichweite: es gibt ausgeblendete Widgets');
-  const low = heights.filter((h) => h < 40);
-  assert.deepEqual(low, [], 'Chips unter der Zielgroesse des Zeigers (--target-md)');
+  await openSheet(page);
+  const boxes = await page.$$eval('.day-sheet [data-grip], .day-sheet [data-switch], .day-sheet [data-sheet-action]',
+    (els) => els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { what: el.dataset.switch ? `switch ${el.dataset.switch}` : el.dataset.sheetAction ?? 'grip', w: r.width, h: r.height };
+    }));
+  assert.ok(boxes.length >= 6, `Reichweite: ${boxes.length} Bedienelemente im Blatt`);
+  const low = boxes.filter((b) => b.h < 44 || b.w < 44).map((b) => `${b.what} ${Math.round(b.w)}x${Math.round(b.h)}`);
+  assert.deepEqual(low, [], 'Bedienelemente unter der Zielgroesse des Zeigers (--target-base)');
   await page.close();
 });

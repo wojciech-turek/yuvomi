@@ -586,6 +586,7 @@ test('„Als Vorgabe fuer alle" holt die Antwort neu, wenn sich die Abfrage geae
   assert.ok(before < saved, 'der alte Pfad muss gelesen sein, bevor savedWidgetConfig ueberschrieben wird');
   assert.ok(saved < reload && reload < rebuild, 'erst speichern, dann neu holen, dann zeichnen');
   // Derselbe Ablauf wie beim Speichern - der Zwilling, an dem die Luecke auffiel.
-  const persist = functionBody(pageSource, 'async function persistWidgetConfig(nextConfig)');
+  // Seit Tafla (2026-10-19) speichert „Dostosuj Dziś" ueber persistTodayLayout.
+  const persist = functionBody(pageSource, 'function persistTodayLayout(nextConfig)');
   assert.match(persist, /await reloadIfQueryChanged\(previousQuery\);\s*rebuildDashboard\(widgetConfig\);/);
 });

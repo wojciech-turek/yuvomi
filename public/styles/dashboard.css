@@ -7233,39 +7233,1389 @@ button.today-cockpit__more--link {
  * Guard: test-dashboard-clarity.js (die genannten Klassen stehen auf
  * Leiter-Tokens). */
 
-/* YUVOMI'S QUESTION (fork, 2026-10-19): one quiet card above the dashboard. */
-.ai-question {
-  display: grid;
+/* --------------------------------------------------------
+ * DZIŚ (Tafla, 2026-10-19)
+ *
+ * The start page is one checkable day plan, not a widget board: header, the
+ * Teraz card, "Plan dnia", then the sections in the person's order. Markup in
+ * components/today-view.js, rules in DESIGN.md "Tafla". Everything here runs on
+ * the Tafla tokens (tokens.css): four type sizes, the 8-pt grid, radius 20 for
+ * cards, one violet voice, person colours only on discs and edges.
+ * -------------------------------------------------------- */
+
+.dashboard--today {
+  --day-gutter: var(--space-4);
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+
+.day-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.day-head__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  min-height: var(--type-footnote-lh);
+}
+
+.day-head__date {
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+/* The avatar is the way to the profile: 36 visual, --target-base hit (44 at
+ * the pointer, 48 at the finger), hanging into the lines above and below so
+ * the date line keeps its 18. */
+.day-head__me {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: calc((var(--target-base) - var(--type-footnote-lh)) / -2) calc(var(--space-1) * -1) calc((var(--target-base) - var(--type-footnote-lh)) / -2) 0;
+  border-radius: var(--radius-full);
+  text-decoration: none;
+}
+
+.day-head__greeting {
+  margin: 0;
+  font-size: var(--type-large-title);
+  line-height: var(--type-large-title-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.day-head__weather {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-head__weather svg {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+/* DIE KOMPAKTE HOEHENKLASSE (DESIGN.md, „Die Chrome-Regel"): unter 500px
+ * Fensterhoehe faellt der Kopf auf seine Datumszeile; Gruss und Wetter treten
+ * aus dem Bild, bleiben aber im Dokument - der Gruss ist die h2 der Seite. */
+@media (max-height: 499px) {
+  .day-head__greeting,
+  .day-head__weather {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* ── Person discs ───────────────────────────────────────── */
+
+.day-disc {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--disc-tint, var(--color-fill));
+  color: var(--disc-ink, var(--color-text-secondary));
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-footnote); line-height: 20px; }
+.day-disc--24 { inline-size: 24px; block-size: 24px; font-size: var(--type-footnote); line-height: 24px; }
+.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-body); line-height: 36px; }
+
+.day-disc--photo img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* "Razem": the two people's colours split on the diagonal - the one gradient
+ * Tafla allows besides the scroll-edge fade. */
+.day-disc--razem {
+  background: linear-gradient(135deg, var(--disc-a) 0 50%, var(--disc-b) 50% 100%);
+}
+
+/* ── Buttons, pills, chips ──────────────────────────────── */
+
+.day-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.day-btn svg {
+  inline-size: 20px;
+  block-size: 20px;
+  stroke-width: 2.25;
+}
+
+.day-btn--primary {
+  min-inline-size: 120px;
+  background: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+}
+
+.day-btn--secondary {
+  flex: 1;
+  min-inline-size: 0;
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+/* On the hearth the secondary is the card itself, not a second tint. */
+.day-btn--on-hearth {
+  background: var(--color-surface);
+}
+
+.day-btn--plain {
+  padding: 0;
+  color: var(--color-accent);
+}
+
+/* A plain verb in an 18-tall line keeps its --target-base hit area by hanging
+ * over it. */
+.day-btn--compact {
+  margin: calc((var(--target-base) - var(--type-footnote-lh)) / -2) 0;
+}
+
+.day-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .day-btn {
+    transition: transform var(--duration-xs) var(--ease-out);
+  }
+
+  .day-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+.day-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  block-size: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.day-pill--danger {
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
+}
+
+.day-pill--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning);
+}
+
+/* Chips are 36 visual, --target-base hit: the hit area reaches above and
+ * below (4 at the pointer, 6 at the finger). */
+.day-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  block-size: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.day-chip::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--target-base) - 36px) / -2) 0;
+}
+
+.day-chip svg {
+  inline-size: 14px;
+  block-size: 14px;
+  stroke-width: 2.25;
+}
+
+.day-chip--accent {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+/* ── Teraz ──────────────────────────────────────────────── */
+
+.day-now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   padding: var(--space-4);
-  border: var(--space-px) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-e1);
+}
+
+/* Tonight's dinner is the one thing that sits on the hearth. */
+.day-now--dinner {
+  background: var(--color-hearth);
+}
+
+.day-now__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+
+button.day-now__lead,
+a.day-now__lead {
+  cursor: pointer;
+}
+
+.day-now__text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.day-now__eyebrow {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
+.day-now__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.day-now__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-now__meta > span:last-child {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The running timer is the card's one hero number: rounded numerals. */
+.day-now__clock {
+  font-family: var(--font-rounded);
+  font-size: var(--type-large-title);
+  line-height: var(--type-large-title-lh);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The plate: where a recipe photo goes, else a quiet glyph. White on the
+ * hearth, the fill on a white card. */
+.day-now__plate {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: var(--radius-sm);
+  background: var(--color-fill);
+  color: var(--color-border-control);
+}
+
+.day-now--dinner .day-now__plate {
+  background: var(--color-surface);
+}
+
+.day-now__plate svg {
+  inline-size: 28px;
+  block-size: 28px;
+  stroke-width: 1.5;
+}
+
+.day-now__plate img,
+.day-now__plate-img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.day-now__plate--glyph {
+  color: var(--color-text-secondary);
+}
+
+.day-now__meter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-now__meter > span:last-child {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-meter {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  inline-size: 96px;
+}
+
+.day-meter__seg {
+  flex: 1;
+  block-size: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-primary);
+}
+
+.day-meter__seg--missing {
+  background: var(--color-warning);
+}
+
+.day-now__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-block-start: var(--space-1);
+}
+
+.day-now__then {
+  margin: 0;
+  padding-block-start: var(--space-3);
+  box-shadow: inset 0 0.5px 0 var(--color-separator);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── The end of the day: "Dzień ogarnięty" ──────────────── */
+
+.day-closed {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-e1);
+}
+
+.day-closed__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.day-closed__check {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  /* A soft bloom around the check - the peak of the day. */
+  box-shadow: 0 0 28px 8px color-mix(in srgb, var(--color-btn-primary) 40%, transparent);
+}
+
+.day-closed__check svg {
+  position: relative;
+  inline-size: 22px;
+  block-size: 22px;
+  stroke-width: 2.5;
+}
+
+.day-closed__text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.day-closed__title {
+  margin: 0;
+  font-family: var(--font-rounded);
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-closed__sub {
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day-closed__tomorrow {
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--space-4);
+  padding: var(--space-3) 0 var(--space-1);
+  box-shadow: inset 0 0.5px 0 var(--color-separator);
+}
+
+.day-closed__label {
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.day-closed__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day-closed__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 48px;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.day-closed__row + .day-closed__row {
+  box-shadow: inset 0 0.5px 0 var(--color-separator);
+}
+
+/* The person edge: a 3pt bar in the person colour (violet for together). */
+.day-closed__row--edge::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: calc(var(--space-4) * -1);
+  inline-size: 3px;
+  background: var(--edge);
+}
+
+.day-closed__when {
+  flex: none;
+  inline-size: 80px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.day-closed__what {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Sections and grouped lists ─────────────────────────── */
+
+.day-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.day-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.day-section__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-section__count {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.day-card {
+  overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
-.ai-question__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
+.day-list {
   margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-accent);
+  padding: 0;
+  list-style: none;
 }
 
-.ai-question__text {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ai-question__options {
+/* One row of the plan: 28 leading slot + 12 gap puts every title at 56, and
+ * the hairlines are inset to the same column. */
+.day-row {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: 0 var(--space-4);
+}
+
+.day-row--single {
+  min-block-size: 48px;
+}
+
+.day-card > li + li::before,
+.day-list--earlier > li::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.day-row__glyph {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  inline-size: 28px;
+  color: var(--color-text-secondary);
+}
+
+.day-row__glyph svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.day-row__main {
+  flex: 1;
+  min-inline-size: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+
+button.day-row__main,
+a.day-row__main {
+  cursor: pointer;
+}
+
+.day-row__main:focus-visible,
+.day-check:focus-visible,
+.day-earlier__toggle:focus-visible,
+.day-more__link:focus-visible,
+.day-link-row:focus-visible,
+.day-tile:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+.day-row__body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.day-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-primary);
+}
+
+.day-row__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.day-row__meta-icon {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-inline-end: calc(var(--space-1) * -1);
+}
+
+.day-row__meta-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day-row__trail {
+  flex: none;
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
-.ai-question__done {
-  margin: 0;
+.day-row__time {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
   color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.day-row__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.day-row__chevron svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 2;
+}
+
+/* Done and past rows step back: the title goes to ink-2. */
+.day-row--done .day-row__title,
+.day-row--past .day-row__title,
+.day-row--quiet .day-row__title {
+  color: var(--color-text-secondary);
+}
+
+/* ── The check circle (spec "Kółko odhaczania") ─────────── */
+
+.day-check {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: 0 calc((var(--target-base) - 28px) / -2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-on-accent);
+  cursor: pointer;
+}
+
+.day-check:disabled {
+  cursor: default;
+}
+
+.day-check__ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
+}
+
+.day-check__ring svg {
+  inline-size: 14px;
+  block-size: 14px;
+  stroke-width: 2.5;
+  opacity: 0;
+}
+
+.day-check--done .day-check__ring {
+  background: var(--color-btn-primary);
+  box-shadow: none;
+}
+
+.day-check--done .day-check__ring svg {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .day-check__ring {
+    transition: background-color var(--duration-sm) var(--ease-out), box-shadow var(--duration-sm) var(--ease-out);
+  }
+
+  .day-row__title {
+    transition: color var(--duration-sm) var(--ease-out);
+  }
+
+  /* The tick is drawn, then one bloom - the row folds into "Wcześniej"
+   * after the hold (pages/dashboard.js). */
+  .day-row--ticking .day-check__ring svg {
+    stroke-dasharray: 24;
+    animation: day-tick-draw var(--duration-md) var(--ease-out) var(--duration-xs) both;
+  }
+
+  .day-row--ticking .day-check__ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-accent-tint);
+    animation: day-tick-bloom var(--duration-2xl) var(--ease-out) both;
+    z-index: -1;
+  }
+}
+
+@keyframes day-tick-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes day-tick-bloom {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(1.8); opacity: 0; }
+}
+
+/* ── "Wcześniej" ────────────────────────────────────────── */
+
+.day-earlier {
+  position: relative;
+}
+
+.day-earlier__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  block-size: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.day-earlier__lead {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  inline-size: 28px;
+  color: var(--color-text-quaternary);
+}
+
+.day-earlier__label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-earlier__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.day-earlier__lead svg,
+.day-earlier__chevron svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.day-earlier__toggle[aria-expanded="true"] .day-earlier__chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Links inside cards ─────────────────────────────────── */
+
+.day-more__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-4) 0 56px;
+  color: var(--color-accent);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.day-more__link span {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.day-more__link svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 2;
+}
+
+.day-more {
+  position: relative;
+}
+
+.day-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: 0 var(--space-4);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+/* ── Pytanie tygodnia ───────────────────────────────────── */
+
+.day-question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-e1);
+}
+
+.day-question__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--type-footnote-lh);
+}
+
+.day-question__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.day-question__label svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.day-question__text,
+.day-question__done {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.day-question__text {
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-question__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-block-start: var(--space-2);
+}
+
+/* After an answer the card is one line naming what changed; after three
+ * seconds it fades and goes (pages/dashboard.js sets the class, then removes
+ * the card). */
+.day-question--leaving {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .day-question--settled {
+    transition: opacity var(--duration-lg) var(--ease-out);
+  }
+}
+
+/* ── Preview tiles ("Kafelek podglądu") ─────────────────── */
+
+.day-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.day-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  min-block-size: 96px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.day-tile__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.day-tile__label svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.day-tile__label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-tile__value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-tile__note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-ext__body {
+  padding: var(--space-4);
+}
+
+/* ── Empty: "Zacznij tutaj" ─────────────────────────────── */
+
+.day-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-inline-size: 20rem;
+  margin: var(--space-8) auto 0;
+  text-align: center;
+}
+
+.day-empty__glyph {
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.day-empty__glyph svg {
+  inline-size: 32px;
+  block-size: 32px;
+}
+
+.day-empty__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-empty__text {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-empty__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+}
+
+/* ── "Dostosuj Dziś" ────────────────────────────────────── */
+
+.day-foot {
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Skeleton ───────────────────────────────────────────── */
+
+.day-skeleton__title {
+  inline-size: 70%;
+  block-size: var(--type-large-title-lh);
+  border-radius: var(--radius-xs);
+}
+
+.day-skeleton__card {
+  block-size: 214px;
+  border-radius: var(--radius-lg);
+}
+
+.day-skeleton__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.day-skeleton__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  block-size: 64px;
+  padding: 0 var(--space-4);
+}
+
+.day-skeleton__dot {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: var(--radius-full);
+}
+
+/* ── The customise sheet ────────────────────────────────── */
+
+.modal-panel:has(.day-sheet) {
+  background: var(--color-bg);
+}
+
+.day-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-block-end: var(--space-4);
+}
+
+.day-sheet__hint {
+  margin: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-sheet__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.day-sheet__heading {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day-sheet__card {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.day-sheet__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 48px;
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+}
+
+.day-sheet__row + .day-sheet__row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.day-sheet__row--dragging {
+  z-index: 1;
+  background: var(--color-raised);
+  box-shadow: var(--shadow-e2);
+}
+
+.day-sheet__grip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: 0 calc((var(--target-base) - 28px) / -2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-quaternary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.day-sheet__spacer {
+  flex: none;
+  inline-size: 28px;
+}
+
+.day-sheet__glyph {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  inline-size: 28px;
+  color: var(--color-text-secondary);
+}
+
+.day-sheet__grip svg,
+.day-sheet__glyph svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.day-sheet__name {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.day-sheet__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.day-sheet__note,
+.day-sheet__footnote {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-sheet__footnote {
+  margin: 0;
+  padding: var(--space-2) var(--space-4) 0;
+}
+
+.day-sheet__value {
+  flex: none;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.day-sheet__action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.day-sheet__action .day-sheet__title {
+  flex: 1;
+}
+
+.day-sheet__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.day-sheet__chevron svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 2;
+}
+
+/* The iOS switch: 51x31 track in a --target-base hit box. */
+.day-switch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  inline-size: 51px;
+  block-size: var(--target-base);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.day-switch__track {
+  position: relative;
+  display: block;
+  inline-size: 51px;
+  block-size: 31px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 1px var(--color-separator);
+}
+
+.day-switch__knob {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 27px;
+  block-size: 27px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-on-accent);
+  box-shadow: var(--shadow-e1);
+}
+
+.day-switch[aria-checked="true"] .day-switch__track {
+  background: var(--color-btn-primary);
+  box-shadow: none;
+}
+
+.day-switch[aria-checked="true"] .day-switch__knob {
+  inset-inline-start: 22px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .day-switch__track,
+  .day-switch__knob {
+    transition: background-color var(--duration-sm) var(--ease-out), inset-inline-start var(--duration-sm) var(--ease-out);
+  }
 }

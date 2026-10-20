@@ -713,24 +713,35 @@ export async function clickPastDeadTime(page, selector, options = {}) {
 }
 
 /**
- * Den Wand-Modus der Uebersicht so einschalten, wie es auf DIESER Breite geht.
+ * Klicken auf einen Knopf, den die Seite gerade neu zeichnen kann.
  *
- * Seit R19 (Entscheidung Ulas 2026-10-16) stehen Anpassen und Wand-Modus unter
- * 768px als Eintraege EINES Menues (`.dashboard-tools-btn`); `#dashboard-wall-enter`
- * bleibt im Baum, ist dort aber `display: none` - und `page.click()` wirft auf
- * einem Knoten ohne Box. Ab 768px steht der Knopf wie bisher. Der Helfer geht
- * den Weg, den ein Finger geht, und laesst den Handler dahinter unveraendert
- * (der Menueeintrag klickt den Knopf, dashboard.js).
+ * Dziś zeichnet sich nach der ersten Antwort noch einmal, wenn die Extras
+ * (offene Frage, Vorhersagen, Dokumente) nachkommen. Zwischen `waitForSelector`
+ * und `click` liegt dann ein Neuaufbau, und Puppeteer klickt einen Knoten, den
+ * es nicht mehr gibt („Node is detached from document"). Ein Finger trifft
+ * einfach den neuen Knopf an derselben Stelle - der Helfer tut dasselbe und
+ * fragt den Selektor neu, statt den alten Griff zu halten.
+ */
+export async function clickLive(page, selector, { tries = 4, ...options } = {}) {
+  for (let i = 0; ; i += 1) {
+    await page.waitForSelector(selector, { visible: true, ...options });
+    try {
+      await page.click(selector);
+      return;
+    } catch (err) {
+      if (i + 1 >= tries || !/detached|not clickable|no node/i.test(String(err?.message))) throw err;
+    }
+  }
+}
+
+/**
+ * Den Wand-Modus der Uebersicht so einschalten, wie ein Finger es tut.
+ *
+ * TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (Abschnitt
+ * „Więcej"), nicht mehr als Knopf im Kopf der Uebersicht. Der Helfer geht den
+ * Weg ueber das Blatt und laesst den Handler dahinter unveraendert.
  */
 export async function enterDashboardWall(page) {
-  await page.waitForSelector('#dashboard-wall-enter');
-  const viaMenu = await page.$eval('#dashboard-wall-enter', (el) => el.getClientRects().length === 0);
-  if (!viaMenu) {
-    await page.click('#dashboard-wall-enter');
-    return;
-  }
-  await page.click('.dashboard-tools-btn');
-  const item = '#dashboard-tools-menu [data-action="dashboard-wall"]';
-  await page.waitForSelector(item, { visible: true });
-  await page.click(item);
+  await clickLive(page, '[data-day-action="customize"]', { timeout: 15000 });
+  await clickLive(page, '.day-sheet [data-sheet-action="wall"]');
 }

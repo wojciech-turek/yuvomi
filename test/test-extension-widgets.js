@@ -72,8 +72,11 @@ test('normalizeDashboardConfigWithExtensions inserts a missing first id at 0, no
   const cfg = ext.normalizeDashboardConfigWithExtensions([
     { id: 'calendar', visible: true, order: 0, size: '1x2' },
   ]);
-  assert.equal(cfg[0].id, 'tasks');
-  assert.notEqual(cfg[cfg.length - 1].id, 'tasks');
+  // Seit Tafla (2026-10-19) fuehren die Dziś-Abschnitte die Liste; die erste
+  // fehlende Id ist 'today-weather', und 'tasks' steht weiter vor 'calendar'.
+  assert.equal(cfg[0].id, 'today-weather');
+  assert.notEqual(cfg[cfg.length - 1].id, 'today-weather');
+  assert.ok(cfg.findIndex((w) => w.id === 'tasks') < cfg.findIndex((w) => w.id === 'calendar'));
 });
 
 test('selectThirdPartyModuleList keeps the previous list when the request fails', () => {

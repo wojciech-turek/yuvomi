@@ -1918,16 +1918,15 @@ test('die Widget-Optionen sind auch am ausgeblendeten Widget erreichbar (#814)',
   assert.ok(optionIds.some((id) => coveredIds.includes(id)),
     'kein Options-Widget ist ab Werk ausgeblendet - dann ist diese Regel gegenstandslos geworden');
 
-  // Die Ablage der ausgeblendeten Widgets traegt den Knopf.
-  const tray = source.match(/function renderHiddenWidgetsTray[\s\S]*?\n}/);
-  assert.ok(tray, 'renderHiddenWidgetsTray nicht gefunden');
-  assert.match(tray[0], /data-widget-options=/,
-    'die Ablage bietet keine Optionen an - am ausgeblendeten Widget waeren sie unerreichbar');
-
-  // Und sie werden auch verdrahtet: die Ablage liegt AUSSERHALB des Grids, ein
-  // `grid.querySelectorAll` faende sie nicht.
-  assert.match(source, /container\.querySelectorAll\('\[data-widget-options\]'\)/,
-    'die Optionen-Knoepfe der Ablage bekommen keinen Listener');
+  // TAFLA (2026-10-19): Kachelraster und Ablage sind fort; Dziś zeigt die
+  // Aufgaben und Termine selbst. Ihre Filter wirken weiter auf den ganzen
+  // Plan - also bietet „Dostosuj Dziś" sie an (Abschnitt „Więcej"), und die
+  // Zeilen oeffnen dieselben Dialoge.
+  assert.match(source, /filters: \['tasks', 'calendar'\]\.filter\(/,
+    'das Blatt bietet die Filter von Aufgaben und Kalender an');
+  assert.match(source, /onFilter: editTodayFilter/, 'und verdrahtet sie');
+  assert.match(source, /async function editTodayFilter\(id\) \{[\s\S]*?openWidgetOptions\(id, current\)/,
+    'mit demselben Dialog wie frueher an der Kachel');
 });
 
 test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () => {
@@ -1947,8 +1946,9 @@ test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () 
   assert.deepEqual(withoutGlance, [],
     'Kacheln und Kopfband muessen in EINEM PUT gehen - sonst schreibt ein Fehlschlag die Haelfte:\n  '
     + withoutGlance.join('\n  '));
-  assert.match(source, /function cancelDashboardConfig\(\)[\s\S]{0,200}?glanceVisible = savedGlanceVisible/,
-    'Abbrechen stellt das Kopfband nicht zurueck');
+  // TAFLA (2026-10-19): kein Abbrechen mehr - „Dostosuj Dziś" speichert jede
+  // Aenderung sofort. Der Wert reist im selben PUT wie die Anordnung weiter
+  // (oben), damit ein spaeterer Kopfband-Leser ihn nicht verliert.
   // SEIT #827 IST "STANDARD" DIE VORGABE DES HAUSHALTS, nicht mehr der
   // Auslieferungszustand: Zuruecksetzen loescht den eigenen Stand und uebernimmt,
   // was der Server daraufhin zurueckmeldet. Das Kopfband muss diesen Weg
@@ -1959,14 +1959,8 @@ test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () 
     'Zuruecksetzen muss BEIDE eigenen Werte loeschen - sonst folgt die Haelfte weiter dem alten Stand');
   assert.match(source, /glanceVisible = previousGlance/,
     'Rueckgaengig nimmt das Kopfband nicht mit zurueck');
-  assert.match(source, /previousGlance !== glanceVisible/,
-    'wurde NUR das Kopfband umgeschaltet, muss der Toast trotzdem Rueckgaengig anbieten');
-
-  // Im Bearbeiten-Modus bleibt das Kopfband stehen, auch ausgeblendet und auch
-  // ohne Inhalt - sonst waere der Schalter, der es zurueckholt, nur sichtbar
-  // solange es ohnehin da ist.
-  assert.match(source, /\(glanceVisible \|\| isCustomizing\)/,
-    'ausgeblendet verschwindet das Kopfband auch im Bearbeiten-Modus');
+  // Das Kopfband selbst zeichnet Dziś nicht mehr (Tafla) - das Cockpit
+  // bleibt fuer die Wand, und dort gilt weiter: ohne Inhalt faellt es weg.
   assert.match(source, /!parts\.length && !editing/,
     'ohne Inhalt faellt das Kopfband auch im Bearbeiten-Modus weg');
   assert.match(source, /data-glance-show/,
@@ -22123,14 +22117,15 @@ test('R20: der Auswahlmodus nimmt Kapsel, FAB und Wisch-Pfeil weg, die ganze Zei
 test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Initialen frei', () => {
   const dash = read('../public/pages/dashboard.js');
   assert.match(dash, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
-  const enter = dash.slice(dash.indexOf("querySelector('#dashboard-wall-enter')?.addEventListener('click'"));
+  // TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (enterWallFromToday).
+  const enter = dash.slice(dash.indexOf('function enterWallFromToday('));
   assert.match(enter.slice(0, 200), /_wallFocusIntent = 'enter'/, 'der Start merkt sich, wohin der Fokus soll');
   const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function renderWallWeather('));
   assert.match(wall, /captureRebuildFocus\(/, 'der stille Neuaufbau nimmt den Fokus mit');
   assert.match(wall, /takeWallFocusIntent\('enter'\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
   const leave = dash.slice(dash.indexOf('function wireWallExit('), dash.indexOf('function wireWallExit(') + 400);
   assert.match(leave, /_wallFocusIntent = 'leave'/, 'der Ausstieg merkt sich den Rueckweg');
-  assert.match(dash, /takeWallFocusIntent\('leave'\) \? \['#dashboard-wall-enter', '\.dashboard-tools-btn'\]/, 'nach Esc steht er auf dem Knopf, der die Wand wieder oeffnet');
+  assert.match(dash, /if \(takeWallFocusIntent\('leave'\)\) restoreFocusAfterRebuild\(container, \['\[data-day-action="customize"\]'\]\)/, 'nach Esc steht er auf „Dostosuj Dziś", dem Weg, der die Wand wieder oeffnet');
 
   const timer = read('../public/components/wall-timer.js');
   assert.match(timer, /role="group" aria-labelledby="wall-timer-presets-label"/, 'die sichtbare Zeile ist der Name der Gruppe');

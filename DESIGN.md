@@ -3802,6 +3802,36 @@ ohne Gesamtzahl (die Termine, bei fuenf geschnitten) traegt keine Badge: eine Za
 ihre eigene Obergrenze nennt, ist keine Auskunft. Die Badge ist `aria-hidden`, dieselbe Zahl
 steht als sr-only-Satz hinter der h3 - sonst hiesse die Ueberschrift „Geburtstage 5".
 
+### Dziś: der Tag als ein Plan (Tafla, entschieden 2026-10-19)
+Die Startseite ist ausserhalb des Wand-Modus kein Kachelraster mehr, sondern EIN Plan
+(`public/utils/today-plan.js` rechnet, `public/components/today-view.js` zeichnet):
+
+- **Kopf**: Datum (Footnote 600, ink-2), Gruss (Large Title), Wetterzeile, rechts der eigene
+  Avatar als Weg in die Einstellungen. Keine Werkzeugknoepfe im Kopf.
+- **Teraz-Karte** (E1, Radius 20) nach fester Rangfolge: laufender Timer > eigener oder
+  gemeinsamer Termin binnen 60 min > das Abendessen ab 15:00 bis zwei Stunden danach (auf
+  `--color-hearth`, Teller, Zutaten-Meter „Masz 5 z 6", primaer „Gotuj", sekundaer „Dopisz") >
+  das Naechste mit Uhrzeit binnen drei Stunden > „Wolny wieczór". Ist alles erledigt, steht an
+  ihrer Stelle „Dzień ogarnięty" (Rundschrift) mit einem Blick auf morgen.
+- **Plan dnia**: Aufgaben, Termine, eigene Dosen (Haken = „Wzięte"), Abfuhr und die Zeilen des
+  Beitrags-Vertrags in EINER Liste - Ueberfaelliges zuerst mit „zaległe", dann nach Uhrzeit,
+  dann ohne Uhrzeit. Was vorbei ist, faltet sich in die Zeile „Wcześniej" (in der Karte, oben,
+  klappt an Ort und Stelle auf). Der Zaehler „3 z 9" zaehlt nur Abhakbares.
+- **Personenregel**: eigene Zeilen ohne Kreis, die einer anderen Person mit ihrem Initial in
+  ihrer Personenfarbe (`personToken()`, `public/utils/person-color.js`), gemeinsame mit dem
+  diagonal geteilten Razem-Kreis. Keine Familienkarte bei zwei Erwachsenen: die Kreise sagen
+  schon, wer was tut; „Jutro" ersetzt sie (erst ab drei Erwachsenen bietet „Dostosuj Dziś" sie an).
+- **Abschnitte** in der Reihenfolge der Person: Zakupy, Jutro, Pytanie tygodnia, Wkrótce und
+  optionale Vorschaukacheln (Kafelek podglądu, zwei je Zeile; eine Kachel ohne Aussage faellt
+  weg). Sie liegen in derselben persoenlichen Anordnung wie frueher die Kacheln
+  (`dashboard_widgets`, Ids `today-*`), damit Vorgabe des Haushalts, Zuruecksetzen und jede
+  gespeicherte Anordnung weiter gelten.
+- **„Dostosuj Dziś"** ist ein Dialog, der jede Aenderung sofort speichert - darum kein
+  „Abbrechen" und kein Verlassen-Schutz. Dort stehen auch die Filter von Aufgaben und
+  Kalender (sie verengen den ganzen Plan), Vorgabe/Zuruecksetzen und der Wand-Modus.
+
+Das Tagesprogramm darunter gilt seitdem fuer die Wand.
+
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
 `--radius-xl` und `--shadow-lg`, Zeilen als Haarlinien, je Zeile ein Siegel fuer den Raum,
