@@ -299,9 +299,13 @@ function tomorrowWhat(row) {
   return [row.timeLabel && row.kind === 'event' ? row.timeLabel : '', row.title].filter(Boolean).join(' ');
 }
 
-function edgeStyle(row) {
-  if (row.who?.kind === 'person') return ` style="--edge: ${personToken(row.who.person).ink}"`;
-  if (row.who?.kind === 'razem') return ' style="--edge: var(--color-accent)"';
+/* The person edge of the Jutro peek, like a calendar row: everyone's own
+ * colour - the viewer's too, it is a calendar edge, not a disc -, violet for
+ * together, nothing for an unassigned row. */
+function edgeOf(row) {
+  const people = (row.people ?? []).filter((p) => p?.id != null);
+  if (people.length === 1) return personToken(people[0]).ink;
+  if (people.length > 1) return 'var(--color-accent)';
   return '';
 }
 
@@ -315,7 +319,7 @@ function renderClosed(state) {
         <p class="day-closed__label">${esc(t('today.tomorrow'))}</p>
         <ul class="day-closed__list">
           ${rows.map((row) => `
-          <li class="day-closed__row${row.who?.kind && row.who.kind !== 'none' ? ' day-closed__row--edge' : ''}"${edgeStyle(row)}>
+          <li class="day-closed__row${edgeOf(row) ? ' day-closed__row--edge' : ''}"${edgeOf(row) ? ` style="--edge: ${edgeOf(row)}"` : ''}>
             <span class="day-closed__when">${esc(row.kind === 'event' ? row.timeLabel : row.kind === 'meal' ? t('today.dinnerShort') : '')}</span>
             <span class="day-closed__what">${esc(row.kind === 'meal' ? row.meal?.title ?? row.title : row.title)}</span>
           </li>`).join('')}
@@ -401,7 +405,7 @@ function renderPlan(state) {
     : '';
   return `
     <section class="day-section day-plan" aria-labelledby="day-plan-title">
-      <div class="day-section__head">
+      <div class="day-section__head${state.closed ? ' sr-only' : ''}">
         <h3 class="day-section__title" id="day-plan-title">${esc(t('today.planTitle'))}</h3>
         ${count}
       </div>
