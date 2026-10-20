@@ -47,6 +47,11 @@ const MODULE_ACCENT = {
 };
 
 const WIDGET_LABEL_KEYS = {
+  'today-weather': 'today.customizeWeather',
+  'today-shopping': 'today.shoppingTitle',
+  'today-tomorrow': 'today.tomorrow',
+  'today-question': 'today.questionTitle',
+  'today-soon': 'today.soonTitle',
   tasks: 'nav.tasks',
   calendar: 'nav.calendar',
   meals: 'nav.meals',

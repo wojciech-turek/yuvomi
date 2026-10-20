@@ -75,6 +75,15 @@ export const PERMISSION_MODULES = Object.freeze([
 // es sich z. B. für einzelne Mitglieder ausblenden, ohne Gesundheit ganz zu
 // sperren (#467).
 export const PERMISSION_WIDGETS = Object.freeze([
+  // Tafla Dziś (2026-10-20): the start page's own sections are lockable like
+  // any tile. Zakupy belongs to its module; Jutro, Wkrótce, the weekly question
+  // and the weather line gather from several sources, so they carry no module
+  // (each row inside still checks its own module).
+  { id: 'today-weather',  module: null },
+  { id: 'today-shopping', module: 'shopping' },
+  { id: 'today-tomorrow', module: null },
+  { id: 'today-question', module: null },
+  { id: 'today-soon',     module: null },
   { id: 'tasks',        module: 'tasks' },
   { id: 'calendar',     module: 'calendar' },
   { id: 'meals',        module: 'meals' },

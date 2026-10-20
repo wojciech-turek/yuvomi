@@ -433,7 +433,7 @@ test('jedes Dashboard-Widget ist sperrbar und in der Rechte-UI benannt', () => {
     /const WIDGET_LABEL_KEYS = \{([^}]+)\}/,
   )
     .split('\n')
-    .map((line) => line.trim().match(/^([a-z_]+):/i)?.[1])
+    .map((line) => line.trim().match(/^'?([a-z_-]+)'?:/i)?.[1])
     .filter(Boolean);
 
   const permissionIds = PERMISSION_WIDGETS.map((w) => w.id);
