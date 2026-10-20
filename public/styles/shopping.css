@@ -517,21 +517,22 @@
     bottom: calc(var(--nav-bottom-height) + var(--shopping-addbar-gap));
     z-index: var(--z-sticky, 20);
     max-width: none;
-    background-color: var(--color-surface);
+    background-color: var(--color-raised);
     box-shadow: 0 0 0 0.5px var(--color-border), var(--shadow-e2);
   }
 
   /* Nothing inside `.app-content` may blur (glass.css, the iOS blank-screen
-   * guard), so the bar gets the scroll-edge fade of the Tafla bottom stack
-   * instead: from 32 above it the list fades into the paper, and the bar's
-   * chrome tone sits on that. */
-  .shopping-addbar::before {
+   * guard), so the bottom gets the scroll-edge fade of the Tafla bottom stack
+   * instead: from 32 above the bar the list fades into the paper, and the bar
+   * sits on that. The fade belongs to the page, not to the bar - a pseudo
+   * inside the bar's stacking context would paint over its own surface. */
+  .shopping-page:has(.shopping-addbar)::after {
     content: '';
     position: absolute;
-    z-index: -1;
-    inset-inline: calc(-1 * var(--space-4));
-    inset-block-start: calc(-1 * var(--space-8));
-    inset-block-end: calc(-1 * (var(--nav-bottom-height) + var(--shopping-addbar-gap)));
+    z-index: calc(var(--z-sticky, 20) - 1);
+    inset-inline: 0;
+    bottom: 0;
+    block-size: calc(var(--nav-bottom-height) + var(--shopping-addbar-gap) + var(--shopping-addbar-height) + var(--space-8));
     background: linear-gradient(to bottom,
       color-mix(in srgb, var(--color-bg) 0%, transparent) 0,
       color-mix(in srgb, var(--color-bg) 92%, transparent) var(--space-8),
@@ -543,7 +544,7 @@
     bottom: calc(var(--addbar-keyboard, 0px) + var(--space-2));
   }
 
-  .shopping-addbar.shopping-addbar--typing::before {
+  .shopping-page:has(.shopping-addbar--typing)::after {
     display: none;
   }
 
