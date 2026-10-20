@@ -3498,7 +3498,11 @@
         "importSubmit": "{{count}} ekle",
         "importSuccess": "{{count}} doğum günü eklendi.",
         "importNothingSelected": "Lütfen en az bir kişi seçin.",
-        "importSelected": "{{count}} kişi seçildi"
+        "importSelected": "{{count}} kişi seçildi",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Hatırlatıcı",

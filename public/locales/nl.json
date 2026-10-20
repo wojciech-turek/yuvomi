@@ -3459,7 +3459,11 @@
         "importSubmit": "{{count}} toevoegen",
         "importSuccess": "{{count}} verjaardagen toegevoegd.",
         "importNothingSelected": "Selecteer minstens één contact.",
-        "importSelected": "{{count}} contacten geselecteerd"
+        "importSelected": "{{count}} contacten geselecteerd",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Geen maaltijd",

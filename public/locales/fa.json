@@ -3475,7 +3475,11 @@
         "importSubmit": "افزودن {{count}}",
         "importSuccess": "{{count}} تولد افزوده شد.",
         "importNothingSelected": "لطفاً حداقل یک مخاطب انتخاب کنید.",
-        "importSelected": "{{count}} مخاطب انتخاب شد"
+        "importSelected": "{{count}} مخاطب انتخاب شد",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "بدون وعده",

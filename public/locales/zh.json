@@ -3498,7 +3498,11 @@
         "importSubmit": "添加 {{count}}",
         "importSuccess": "已添加 {{count}} 个生日。",
         "importNothingSelected": "请至少选择一个联系人。",
-        "importSelected": "已选择 {{count}} 个联系人"
+        "importSelected": "已选择 {{count}} 个联系人",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "提醒",

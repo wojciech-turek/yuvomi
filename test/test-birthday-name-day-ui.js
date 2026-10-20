@@ -119,9 +119,10 @@ test('name-day countdown says today and tomorrow instead of "in 0/1 days"', () =
 });
 
 test('birthday and name-day countdowns pass a plural count, never a bare days number', () => {
+  // Tafla: the birthday countdown stands on the nearest row (next: true).
   const html = birthdays.birthdayItemHtml({
     id: 9, name: 'Tom', birth_date: '1990-10-06', next_birthday: '2026-10-06', next_age: 36, days_until: 10,
-  });
+  }, { next: true });
   assert.match(html, /birthdays\.inDays\{&quot;count&quot;:10\}/);
   assert.doesNotMatch(html + nameDayRow(5), /&quot;days&quot;/);
 });
@@ -227,12 +228,18 @@ test('R19: die Liste gruppiert nach Monat und hebt den naechsten hervor', async 
   try {
     const row = (id, next) => ({ id, name: `P${id}`, next_birthday: next, days_until: id * 10, next_age: 30, birth_date: '1990-01-01' });
     const html = birthdays.__test.birthdayListHtml([row(1, '2026-11-02'), row(2, '2026-11-20'), row(3, '2027-02-08')]);
-    const heads = [...html.matchAll(/<h2 class="list-group__title birthdays-month">([^<]*)<\/h2>/g)].map((m) => m[1]);
+    // Tafla: a month is a group of the inset list - head "Listopad 2" outside
+    // the card, the count as its own span.
+    const heads = [...html.matchAll(/<h2 class="inset-group__head birthdays-month">([^<]*)<span class="inset-group__count">\d+<\/span><\/h2>/g)].map((m) => m[1]);
     assert.equal(heads.length, 2, `ein Kopf je Monat: ${heads.join(', ')}`);
     assert.ok(html.indexOf(heads[1]) > html.indexOf('data-id="2"'), 'der zweite Kopf steht vor dem Februar, nach beiden Novembern');
     assert.equal((html.match(/birthday-item--next/g) ?? []).length, 1, 'genau einer ist der naechste');
     assert.ok(html.indexOf('birthday-item--next') < html.indexOf('data-id="2"'), 'und zwar der erste');
   } finally { restore(); }
-  const css = readFileSync(new URL('../public/styles/birthdays.css', import.meta.url), 'utf8');
-  assert.match(css, /\.birthday-item--next \.birthday-chip \{[^}]*--module-accent/, 'der Countdown des naechsten im Modulton');
+  // Tafla: the nearest one's countdown is a word in the warning pill - the
+  // only status pill in the list (no module tone any more).
+  const next = birthdays.birthdayItemHtml({ id: 1, name: 'P1', next_birthday: '2026-11-02', days_until: 10, next_age: 30 }, { next: true });
+  assert.match(next, /class="status-pill status-pill--warning birthday-chip/, 'der Countdown des naechsten als Pille');
+  assert.doesNotMatch(birthdays.birthdayItemHtml({ id: 2, name: 'P2', next_birthday: '2026-11-20', days_until: 20, next_age: 30 }), /status-pill/,
+    'die anderen Zeilen tragen das Datum, keine Pille');
 });

@@ -21,7 +21,9 @@ import { openDetailView } from '/components/detail-view.js';
 // mit den Geburtstags-Texten fuellt. Zwei Namen, die sich nur in der
 // Gross-Schreibung unterscheiden, waeren im Modul nicht auseinanderzuhalten.
 import { emptyStateHTML as sharedEmptyStateHTML, emptyHintHTML, searchEmptyHTML } from '/utils/empty-state.js';
-import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { personToken } from '/utils/person-color.js';
+import { shortWeekdayDayMonth, relativeDateLabel } from '/utils/day-label.js';
 import {
   renderAppPage,
   renderPageHeader,
@@ -35,6 +37,10 @@ let state = {
   birthdays: [],
   query: '',
   loading: true,
+  // Tafla: what the hero card can link to - notes and open tasks that name
+  // the nearest person. Loaded once with the list; empty when the modules are
+  // off or not visible to this person.
+  related: { notes: [], tasks: [] },
 };
 let _container = null;
 // Liste + Detail (R10 L5): ab der Schwelle steht rechts der gewaehlte
@@ -309,38 +315,31 @@ function countdownChip(birthday) {
 }
 
 /**
- * DIE PERSON SCHLAEGT DIE LISTE, IN DER SIE STEHT.
+ * DIE PERSON SCHLAEGT DIE LISTE, IN DER SIE STEHT - in Tafla (2026-10-20) als
+ * 28er-Scheibe in der Zeile.
  *
- * `.birthday-avatar--fallback` verspricht seit 2026-08-18 „wer verknuepft ist,
- * traegt seine Mitgliedsfarbe" - eingeloest war das nur auf der Uebersichts-
- * kachel. Auf der Modulseite sass jedes Haushaltsmitglied auf derselben
- * neutralen Scheibe wie eine Tante ohne Zugang (Identitaetsfarben-Regel,
- * DESIGN.md).
- *
- * Reihenfolge: ein Bild, das FUER DIESEN EINTRAG hinterlegt wurde, ist die
- * genaueste Auskunft und gewinnt; danach kommt das Profilbild des Mitglieds,
- * danach seine Farbe mit den Initialen. Wer zu niemandem im Haushalt gehoert,
- * bleibt neutral - er hat keine Identitaetsfarbe, und genau das soll die
- * Scheibe sagen.
- *
- * Die Tinte kommt aus `getReadableTextColor`: eine Avatarfarbe ist frei
- * gewaehlt, ihre Helligkeit damit unbestimmt - dieselbe Rechnung wie in den
- * Kontakten.
+ * Reihenfolge: ein Bild, das FUER DIESEN EINTRAG hinterlegt wurde, gewinnt;
+ * danach das Profilbild des Mitglieds, danach sein Initial in seiner
+ * PERSONENFARBE (person-color.js: Tinte auf Toenung, AA-gemessen statt einer
+ * zur Laufzeit gerechneten Textfarbe). Wer zu niemandem im Haushalt gehoert,
+ * bleibt NEUTRAL (`.initial-disc`, Fill + Tinte-2): nur Haushaltsmitglieder
+ * tragen eine Personenfarbe.
  */
 function photoAvatar(birthday, extraClass = '') {
+  const label = esc(birthday.name);
   if (birthday.photo_data) {
-    return `<img class="birthday-avatar ${extraClass}" src="${birthday.photo_data}" alt="${esc(birthday.name)}">`;
+    return `<img class="birthday-avatar initial-disc ${extraClass}" src="${birthday.photo_data}" alt="${label}">`;
   }
   if (birthday.family_user_id && birthday.family_avatar_data) {
-    return `<img class="birthday-avatar ${extraClass}" src="${esc(birthday.family_avatar_data)}" alt="${esc(birthday.name)}">`;
+    return `<img class="birthday-avatar initial-disc ${extraClass}" src="${esc(birthday.family_avatar_data)}" alt="${label}">`;
   }
   if (birthday.family_user_id) {
-    const color = birthday.family_avatar_color || AVATAR_FALLBACK_COLOR;
     const name = birthday.family_display_name || birthday.name;
-    return `<span class="birthday-avatar birthday-avatar--fallback ${extraClass}"
-      style="background-color:${esc(color)};color:${getReadableTextColor(color)}">${esc(initials(name, '?'))}</span>`;
+    const { ink, tint } = personToken({ id: birthday.family_user_id, avatar_color: birthday.family_avatar_color || AVATAR_FALLBACK_COLOR });
+    return `<span class="birthday-avatar birthday-avatar--fallback birthday-avatar--member initial-disc ${extraClass}"
+      style="background-color:${tint};color:${ink}">${esc(initials(name, '?'))}</span>`;
   }
-  return `<span class="birthday-avatar birthday-avatar--fallback ${extraClass}">${esc(initials(birthday.name, '?'))}</span>`;
+  return `<span class="birthday-avatar birthday-avatar--fallback initial-disc ${extraClass}">${esc(initials(birthday.name, '?'))}</span>`;
 }
 
 function sortByProximity(list) {
@@ -358,9 +357,62 @@ function filteredBirthdays() {
 }
 
 async function loadData() {
-  const res = await api.get('/birthdays');
+  const [res] = await Promise.all([api.get('/birthdays'), loadRelated()]);
   state.birthdays = res.data ?? [];
   updateBirthdayBadge();
+}
+
+/**
+ * Notes and open tasks for the hero card's links (Tafla). Best effort: a
+ * module that is off, hidden or failing simply contributes nothing.
+ */
+async function loadRelated() {
+  const get = async (path, key) => {
+    if (moduleAccess(key) === 'none') return [];
+    try { return (await api.get(path)).data ?? []; } catch { return []; }
+  };
+  const [notes, tasks] = await Promise.all([get('/notes', 'notes'), get('/tasks', 'tasks')]);
+  state.related = {
+    notes: Array.isArray(notes) ? notes : [],
+    tasks: (Array.isArray(tasks) ? tasks : []).filter((task) => task.status !== 'done' && !task.archived_at),
+  };
+}
+
+/** Lower case without diacritics: "Mamę" and "mame" are the same word here. */
+function fold(text) {
+  return String(text ?? '').toLocaleLowerCase(getLocale()).normalize('NFD').replace(/\p{M}+/gu, '');
+}
+
+/**
+ * Word stems of a name that survive Polish declension well enough: "Mama" ->
+ * "mam" (mamy, mamie), "Tomek" -> "tom" (Tomka), "Oli" stays. Words under
+ * three letters say nothing.
+ */
+export function nameStems(name) {
+  return fold(name).split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 3)
+    .map((word) => (word.length >= 5 ? word.slice(0, -2) : word.length === 4 ? word.slice(0, -1) : word));
+}
+
+const startsWord = (text, stem) => fold(text).split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(stem));
+
+/**
+ * The note and the open task that belong to a birthday, if there are any: a
+ * note whose title names the person (every stem of the name), an open task
+ * due before the day whose title names any of them. Conservative on purpose -
+ * a wrong link on the one card that matters is worse than none.
+ */
+export function relatedForBirthday(birthday, related = state.related) {
+  const stems = nameStems(birthday?.name);
+  if (!stems.length) return { note: null, task: null };
+  const note = (related.notes ?? [])
+    .filter((n) => stems.every((stem) => startsWord(n.title || String(n.content || '').split('\n')[0], stem)))
+    .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null;
+  const until = String(birthday.next_birthday ?? '');
+  const task = (related.tasks ?? [])
+    .filter((tk) => stems.some((stem) => startsWord(tk.title, stem)))
+    .filter((tk) => !tk.due_date || !until || String(tk.due_date).slice(0, 10) <= until)
+    .sort((a, b) => String(a.due_date ?? '9999').localeCompare(String(b.due_date ?? '9999')))[0] ?? null;
+  return { note, task };
 }
 
 /**
@@ -380,6 +432,26 @@ function updateBirthdayBadge() {
   setNavBadge('/birthdays', countBirthdaysSoon(state.birthdays), undefined, 'accent');
 }
 
+/** Countdown as a row word ("za 8 dni", "dzisiaj") or an eyebrow ("Za 8 dni"). */
+function countdownWord(days, { capital = false } = {}) {
+  const text = countdownLabel(days);
+  const locale = getLocale();
+  return capital
+    ? text.charAt(0).toLocaleUpperCase(locale) + text.slice(1)
+    : text.charAt(0).toLocaleLowerCase(locale) + text.slice(1);
+}
+
+/**
+ * One birthday as a Tafla row (2026-10-20): the 28 disc (neutral, or the
+ * member's person colour), the name, the meta line (note · "kończy 60"), and
+ * at the end the date ("wt 3 lis") - or, for the NEAREST birthday only, its
+ * countdown as a word in a pill ("za 8 dni"), with the date moved into the
+ * meta line. Status is never repeated down the list.
+ *
+ * The row stays a swipe row with the shared `.list-row` grammar: tap opens
+ * (editor, or the reader at `calendar: read`), swipe edits/deletes, and on a
+ * pointer device the "⋯" menu carries both.
+ */
 export function birthdayItemHtml(birthday, { next = false } = {}) {
   const chip = countdownChip(birthday);
   const isToday = chip.mod === 'today';
@@ -390,44 +462,23 @@ export function birthdayItemHtml(birthday, { next = false } = {}) {
       + `${esc(formatDate(birthday.next_name_day))} · ${esc(t('birthdays.celebratesNameDay'))}`
       + '</span>'
     : '';
-  // Wischbedienung (Redesign Runde 4, C-2): auf Touch tragen die beiden
-  // Richtungen, was bis dahin zwei Icon-Knoepfe in jeder Zeile trugen - in
-  // einer Grouped-Liste die lauteste Stelle des Bildschirms. Auf
-  // Zeigergeraeten bleiben die Knoepfe, dort gibt es keine Geste.
-  // Bei `calendar: read` faellt BEIDES weg: die zwei Reveal-Flaechen unter der
-  // Zeile und die zwei Knoepfe daran. Sie tragen dieselben zwei Handlungen -
-  // bearbeiten und loeschen -, und keine davon ist ein Zustand, der ohne sie
-  // unlesbar wuerde. Eine Reveal-Flaeche ohne Geste waere ausserdem eine
-  // Ankuendigung fuer eine Bedienung, die es nicht gibt.
-  //
-  // DIE ZEILE TRAEGT IHRE AUSKUNFT NICHT GANZ (#1348). Die Notiz blendet
-  // birthdays.css unter 560px Traegerbreite aus, mit Namenstag schon unter
-  // 840px - „wer die Notiz sucht, oeffnet den Eintrag". Mit Schreibrecht ist
-  // das der Editor (Wisch nach vorn, Stift). Bei `read` wird deshalb die
-  // Textspalte selbst zum Knopf, und er oeffnet die Leseansicht
-  // (`openBirthdayReadModal`) - ohne ihn waere die Notiz auf dem Telefon
-  // unerreichbar, obwohl Lesen genau das ist, was `read` erlaubt.
-  //
-  // SEIT R8 (H8) AUCH MIT SCHREIBRECHT: dort blieb die Spalte ein `div`, ein
-  // Tipp auf die Zeile tat nichts, und der Wisch-Chevron am Zeilenende las
-  // sich nach HIG als Disclosure. Jetzt oeffnet derselbe Knopf den Editor -
-  // `openBirthdayModal` entscheidet nach Recht zwischen Editor und
-  // Leseansicht, wie in Agenda und Kontakten. Nur-Lesende haben ohnehin
-  // `.swipe-row--static` und damit keinen Chevron. Gebaut wie
-  // die Kontaktzeile (`.contact-item__open`): `.list-row__main--interactive`
-  // bringt Knopf-Reset und Zielgroesse mit. Deshalb ist die Metazeile ein
-  // `span` - in einem `button` steht nur Phrasing-Inhalt.
+  const when = shortWeekdayDayMonth(birthday.next_birthday);
+  const age = Number.isInteger(birthday.next_age) && birthday.next_age > 0 ? t('birthdays.turnsAge', { age: birthday.next_age }) : '';
+  // The meta line: what the person is to us (the entry's note), then the age.
+  // The nearest row carries the date here, because its end holds the pill.
+  const metaParts = [next ? when : '', birthday.notes || '', age].filter(Boolean);
   const ro = readOnly();
   const hauptspalte = `
         <strong class="list-row__name birthday-item__name">
           ${esc(birthday.name)}${isToday ? CAKE_SVG : ''}
         </strong>
         <span class="list-row__meta birthday-item__meta${hasNameDay ? ' birthday-item__meta--with-name-day' : ''}">
-          <span class="birthday-chip birthday-chip--${chip.mod}">${esc(chip.label)}</span>
-          <span class="birthday-item__when">${esc(ageMeta(birthday))}</span>
+          <span class="birthday-item__when">${esc(metaParts.join(' · '))}</span>
           ${nameDayMeta}
-          ${birthday.notes ? `<span class="birthday-item__notes">${esc(birthday.notes)}</span>` : ''}
         </span>`;
+  const trail = next
+    ? `<span class="status-pill status-pill--warning birthday-chip birthday-chip--${chip.mod}">${esc(countdownWord(birthday.days_until))}</span>`
+    : `<span class="birthday-item__date">${esc(when)}</span>`;
   return `
     <div class="swipe-row${ro ? ' swipe-row--static' : ''}" data-swipe-id="${birthday.id}">
       ${ro ? '' : `
@@ -439,15 +490,12 @@ export function birthdayItemHtml(birthday, { next = false } = {}) {
         <i data-lucide="trash-2" class="icon-md"></i>
         <span>${t('common.delete')}</span>
       </div>`}
-    <article class="list-row birthday-item ${isToday ? 'birthday-item--today' : ''}${next && !isToday ? ' birthday-item--next' : ''}" data-id="${birthday.id}" data-md-id="${birthday.id}">
+    <article class="list-row birthday-item ${isToday ? 'birthday-item--today' : ''}${next ? ' birthday-item--next' : ''}" data-id="${birthday.id}" data-md-id="${birthday.id}">
       <div class="birthday-item__media">${photoAvatar(birthday)}</div>
       <button type="button" class="list-row__main list-row__main--interactive" data-open="${birthday.id}" data-md-focus>${hauptspalte}${ro ? readRowHintHtml() : ''}</button>
+      <div class="birthday-item__trail">${trail}</div>
       ${ro ? '' : `
       <div class="row-actions birthday-item__actions">
-${/* EIN MEHR-KNOPF (Entscheidung 2026-10-07, utils/row-action.js): der
-             Tipp auf die Zeile oeffnet den Editor schon, Stift und Papierkorb
-             standen trotzdem in jeder Zeile. Beide sind jetzt Eintraege mit
-             Wort; Wischen bleibt der Zusatzweg. */ ''}
         ${rowMenuHtml({
           id: `birthday-menu-${birthday.id}`,
           label: t('common.moreActionsNamed', { name: birthday.name }),
@@ -461,26 +509,74 @@ ${/* EIN MEHR-KNOPF (Entscheidung 2026-10-07, utils/row-action.js): der
     </div>`;
 }
 
+/** "Październik", or "Styczeń 2027" when the month lies in another year. */
+function monthHeading(key) {
+  const [year, month] = [key.slice(0, 4), key.slice(5, 7)];
+  if (year !== todayKey().slice(0, 4)) return formatMonthYear(year, month);
+  const name = new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(year), Number(month) - 1, 15)));
+  return name.charAt(0).toLocaleUpperCase(getLocale()) + name.slice(1);
+}
+
 /**
- * MONATSGRUPPEN UND DER NAECHSTE (R19, Critique 2026-10-16). Die Liste war
- * eine flache Folge, in der "in 16 Tagen" und "in 330 Tagen" gleich laut
- * standen. Jetzt traegt jeder Monat einen Kopf ("November 2026", wie die
- * Gruppenkoepfe der Aufgaben IN der Liste), und der naechste Geburtstag
- * (`birthday-item--next`) hebt seinen Countdown im Modulton hervor - die
- * Antwort auf die Frage, mit der man die Seite oeffnet.
+ * The hero card (E1) for the nearest birthday: "Za 8 dni", the name, the date
+ * with the age, and - when the household already prepared something - the
+ * open task that names the person and the note with gift ideas. Hidden while
+ * searching (then the list answers the question).
+ */
+export function birthdayHeroHtml(birthday) {
+  if (!birthday) return '';
+  const { note, task } = relatedForBirthday(birthday);
+  const longDate = birthday.next_birthday
+    ? new Intl.DateTimeFormat(getLocale(), { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+      .format(new Date(`${String(birthday.next_birthday).slice(0, 10)}T12:00:00Z`))
+    : '';
+  const age = Number.isInteger(birthday.next_age) && birthday.next_age > 0 ? t('birthdays.heroAge', { age: birthday.next_age }) : '';
+  const taskDue = task?.due_date ? relativeDateLabel(String(task.due_date).slice(0, 10)).toLocaleLowerCase(getLocale()) : '';
+  const taskLine = task ? `
+      <a class="hero-card__meta birthday-hero__task" href="/tasks?open=${encodeURIComponent(task.id)}">
+        <i data-lucide="circle-check" aria-hidden="true"></i>
+        <span>${esc([task.title, taskDue, t('birthdays.heroInTasks')].filter(Boolean).join(' · '))}</span>
+      </a>` : '';
+  const noteLink = note ? `
+      <a class="pill-btn pill-btn--secondary birthday-hero__note" href="/notes?open=${encodeURIComponent(note.id)}">
+        <i data-lucide="gift" aria-hidden="true"></i><span>${esc(t('birthdays.heroGiftIdeas'))}</span>
+      </a>` : '';
+  return `
+    <article class="hero-card birthday-hero" aria-label="${esc(t('birthdays.heroLabel'))}">
+      <div class="birthday-hero__head">
+        <p class="hero-card__eyebrow"><i data-lucide="cake" aria-hidden="true"></i><span>${esc(countdownWord(birthday.days_until, { capital: true }))}</span></p>
+        <div class="birthday-hero__titles">
+          <h2 class="hero-card__title">${esc(birthday.name)}</h2>
+          <p class="hero-card__sub">${esc([longDate, age].filter(Boolean).join(' · '))}</p>
+        </div>
+      </div>
+      ${taskLine}
+      ${noteLink}
+    </article>`;
+}
+
+/**
+ * MONATSGRUPPEN UND DER NAECHSTE (R19; Tafla 2026-10-20). Jeder Monat ist eine
+ * Gruppe der gruppierten Liste: Kopf "Listopad 2" ausserhalb, die Zeilen in
+ * EINER weissen Karte. Der naechste Geburtstag (`birthday-item--next`) traegt
+ * seinen Countdown als Wort in der Pille - die Antwort auf die Frage, mit der
+ * man die Seite oeffnet; die Heldenkarte darueber sagt es gross.
  * @param {Array} list nach Naehe sortiert (sortByProximity)
  * @returns {string}
  */
 function birthdayListHtml(list) {
-  let month = '';
-  return list.map((birthday, i) => {
+  const groups = [];
+  for (const [i, birthday] of list.entries()) {
     const key = String(birthday.next_birthday ?? '').slice(0, 7);
-    const head = key && key !== month
-      ? `<h2 class="list-group__title birthdays-month">${esc(formatMonthYear(key.slice(0, 4), key.slice(5, 7)))}</h2>`
-      : '';
-    if (key) month = key;
-    return head + birthdayItemHtml(birthday, { next: i === 0 });
-  }).join('');
+    if (!groups.length || groups.at(-1).key !== key) groups.push({ key, rows: [] });
+    groups.at(-1).rows.push(birthdayItemHtml(birthday, { next: i === 0 }));
+  }
+  return groups.map(({ key, rows }) => `
+    <section class="inset-group birthdays-group">
+      ${key ? `<h2 class="inset-group__head birthdays-month">${esc(monthHeading(key))}<span class="inset-group__count">${rows.length}</span></h2>` : ''}
+      <div class="inset-card birthdays-card">${rows.join('')}</div>
+    </section>`).join('');
 }
 
 function emptyStateHtml() {
@@ -551,7 +647,7 @@ function drawList(host, { repaint = false } = {}) {
   }
 
   host.replaceChildren();
-  host.insertAdjacentHTML('beforeend', birthdayListHtml(list));
+  host.insertAdjacentHTML('beforeend', (state.query.trim() ? '' : birthdayHeroHtml(list[0])) + birthdayListHtml(list));
 
   if (window.lucide) window.lucide.createIcons({ el: host });
   // Der Nudge-Hinweis gehoert zur GESTE und steht deshalb in deren Verdrahtung:
@@ -679,7 +775,7 @@ function renderPage() {
           content: `
             <div class="split-view birthdays-split">
               <div class="split-view__list birthdays-split__list">
-                <div class="row-carrier birthdays-list" id="birthdays-list"></div>
+                <div class="birthdays-list" id="birthdays-list"></div>
               </div>
               ${splitViewDetailHtml({
                 id: 'birthdays',
@@ -746,6 +842,14 @@ function bindEvents() {
  * zusaetzliche Wege.
  */
 async function onListClick(e) {
+  // The hero card's links (task, gift-idea note) stay real links - a new tab
+  // works - and a plain tap goes through the router instead of a reload.
+  const link = e.target.closest('.birthday-hero a[href]');
+  if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && window.yuvomi?.navigate) {
+    e.preventDefault();
+    window.yuvomi.navigate(link.getAttribute('href'));
+    return;
+  }
   const open = e.target.closest('[data-open]');
   if (open) {
     // Ab der Schwelle waehlt der Tipp aus (Detailspalte), darunter oeffnet er
@@ -1492,7 +1596,7 @@ export async function render(container, { signal } = {}) {
  * verdrahtet werden, und was der Leerzustand anbietet.
  */
 export const __test = {
-  birthdayListHtml,
+  birthdayListHtml, birthdayHeroHtml, relatedForBirthday,
   birthdayItemHtml, emptyStateHtml, importActionHtml, wireBirthdaySwipe,
   readOnly, state,
   // Der Weg zur Leseansicht (#1348): wohin ein Tipp fuehrt und welcher Dialog

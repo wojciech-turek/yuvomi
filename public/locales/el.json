@@ -3498,7 +3498,11 @@
         "importSubmit": "Προσθήκη {{count}}",
         "importSuccess": "Προστέθηκαν {{count}} γενέθλια.",
         "importNothingSelected": "Επιλέξτε τουλάχιστον μία επαφή.",
-        "importSelected": "Επιλέχθηκαν {{count}} επαφές"
+        "importSelected": "Επιλέχθηκαν {{count}} επαφές",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Υπενθύμιση",

@@ -3459,7 +3459,11 @@
         "importSubmit": "Legg til {{count}}",
         "importSuccess": "{{count}} fødselsdager lagt til.",
         "importNothingSelected": "Vennligst velg minst én kontakt.",
-        "importSelected": "{{count}} kontakter valgt"
+        "importSelected": "{{count}} kontakter valgt",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Intet måltid",

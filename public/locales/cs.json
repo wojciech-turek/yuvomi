@@ -4262,7 +4262,11 @@
         "importSubmit": "Přidat {{count}}",
         "importSuccess": "Přidáno narozenin: {{count}}.",
         "importNothingSelected": "Vyberte alespoň jeden kontakt.",
-        "importSelected": "Vybráno kontaktů: {{count}}"
+        "importSelected": "Vybráno kontaktů: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "rrule": {
         "freqNone": "Bez opakování",

@@ -3814,7 +3814,11 @@
         "importSubmit": "إضافة {{count}}",
         "importSuccess": "تمت إضافة {{count}} عيد ميلاد.",
         "importNothingSelected": "يرجى اختيار جهة اتصال واحدة على الأقل.",
-        "importSelected": "تم تحديد {{count}} جهة اتصال"
+        "importSelected": "تم تحديد {{count}} جهة اتصال",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "تذكير",

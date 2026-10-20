@@ -3708,7 +3708,11 @@
         "importSubmit": "Добавить {{count}}",
         "importSuccess": "Добавлено дней рождения: {{count}}.",
         "importNothingSelected": "Выберите хотя бы один контакт.",
-        "importSelected": "Выбрано контактов: {{count}}"
+        "importSelected": "Выбрано контактов: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Напоминание",

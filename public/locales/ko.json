@@ -3475,7 +3475,11 @@
         "importSubmit": "{{count}}개 추가",
         "importSuccess": "생일 {{count}}개를 추가했습니다.",
         "importNothingSelected": "연락처를 하나 이상 선택하세요.",
-        "importSelected": "연락처 {{count}}개 선택됨"
+        "importSelected": "연락처 {{count}}개 선택됨",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "식사 없음",

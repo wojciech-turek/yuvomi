@@ -3475,7 +3475,11 @@
         "importSubmit": "Tambahkan {{count}}",
         "importSuccess": "{{count}} ulang tahun ditambahkan.",
         "importNothingSelected": "Pilih setidaknya satu kontak.",
-        "importSelected": "{{count}} kontak dipilih"
+        "importSelected": "{{count}} kontak dipilih",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Tanpa waktu makan",

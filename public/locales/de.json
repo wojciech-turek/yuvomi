@@ -3475,7 +3475,11 @@
         "importSubmit": "{{count}} übernehmen",
         "importSuccess": "{{count}} Geburtstage übernommen.",
         "importNothingSelected": "Bitte mindestens einen Kontakt auswählen.",
-        "importSelected": "{{count}} Kontakte ausgewählt"
+        "importSelected": "{{count}} Kontakte ausgewählt",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Keine Mahlzeit",

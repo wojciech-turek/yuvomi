@@ -3459,7 +3459,11 @@
         "importSubmit": "Thêm {{count}}",
         "importSuccess": "Đã thêm {{count}} sinh nhật.",
         "importNothingSelected": "Vui lòng chọn ít nhất một liên hệ.",
-        "importSelected": "Đã chọn {{count}} liên hệ"
+        "importSelected": "Đã chọn {{count}} liên hệ",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Không có bữa ăn",

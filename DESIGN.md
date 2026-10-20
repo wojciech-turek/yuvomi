@@ -3889,6 +3889,16 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   than on the old card). Guards moved: R19 masonry -> "two groups", note colour on card/reader ->
   "no note colour", D8 group head -> `.inset-group__head`, M13 compact card -> "row with one-line
   preview, no circles on touch", R20 placeholder -> remembered per device.
+- **Urodziny**: the nearest birthday is an E1 hero card ("Za 7 dni", name 22/600, "wtorek,
+  27 października · 60. urodziny"); when the household already prepared something it links the
+  open task whose title names the person (due before the day) and the note with gift ideas (title
+  names the person) - matched on declension-tolerant name stems, conservative on purpose. Below,
+  one inset group per month ("Listopad 2"), 64 rows with a 28 disc (neutral `.initial-disc`; only
+  a household member gets the person colour, no runtime text colour any more), meta "note ·
+  kończy 35", the date at the end ("wt 3 lis"), and ONE warning pill ("za 7 dni") on the nearest
+  row only. On touch the row's "⋯" leaves the picture (tap opens the editor, delete is in it,
+  swipe stays). Guards moved: R19 module-tone countdown -> pill on the nearest, carrier ->
+  `.inset-card` per month, D6 -> "no ⋯ on touch, the row itself opens".
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

@@ -3498,7 +3498,11 @@
         "importSubmit": "Lägg till {{count}}",
         "importSuccess": "{{count}} födelsedagar tillagda.",
         "importNothingSelected": "Välj minst en kontakt.",
-        "importSelected": "{{count}} kontakter valda"
+        "importSelected": "{{count}} kontakter valda",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Påminnelse",

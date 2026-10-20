@@ -3498,7 +3498,11 @@
         "importSubmit": "Aggiungi {{count}}",
         "importSuccess": "{{count}} compleanni aggiunti.",
         "importNothingSelected": "Seleziona almeno un contatto.",
-        "importSelected": "{{count}} contatti selezionati"
+        "importSelected": "{{count}} contatti selezionati",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Promemoria",

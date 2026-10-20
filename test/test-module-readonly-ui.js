@@ -2409,7 +2409,10 @@ test('Geburtstagszeile mit `calendar: read`: beide Handlungen weg, die Auskunft 
     // Nichts davon war ein Zustand, der ohne die Knoepfe unlesbar wuerde - die
     // Zeile traegt ihre Auskunft selbst, und sie ist wirklich gerendert.
     assert.match(html, /Oma Erna/);
-    assert.match(html, /birthdays\.inDays/);
+    // Tafla: the countdown word stands on the NEAREST row only (and in the
+    // hero card); every other row says the date.
+    assert.match(birthdays.birthdayItemHtml(geburtstag(), { next: true }), /birthdays\.inDays/);
+    assert.match(html, /birthday-item__date/);
     assert.match(html, /birthdays\.turnsAge/);
     assert.match(html, /Mag Kuchen/);
     assert.match(html, /data-id="9"/);

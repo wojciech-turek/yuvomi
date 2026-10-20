@@ -3749,7 +3749,11 @@
         "importSubmit": "Додати {{count}}",
         "importSuccess": "Додано днів народження: {{count}}.",
         "importNothingSelected": "Виберіть принаймні один контакт.",
-        "importSelected": "Вибрано контактів: {{count}}"
+        "importSelected": "Вибрано контактів: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "onboarding": {
         "step1Title": "Ласкаво просимо до {{name}}",

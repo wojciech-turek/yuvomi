@@ -3498,7 +3498,11 @@
         "importSubmit": "Añadir {{count}}",
         "importSuccess": "{{count}} cumpleaños añadidos.",
         "importNothingSelected": "Selecciona al menos un contacto.",
-        "importSelected": "{{count}} contactos seleccionados"
+        "importSelected": "{{count}} contactos seleccionados",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Recordatorio",

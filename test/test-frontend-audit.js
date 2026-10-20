@@ -6842,9 +6842,12 @@ test('hardening keeps Birthday rows on one line with extreme localized content',
   // Teil des Nachbaus, der dieser Liste das Lesemass gekostet hat. Geprueft
   // wird deshalb die UEBERNAHME plus die Zusicherung an ihrem einen Ort, und
   // dass der eigene Container-Name daneben ausdruecklich stehen bleibt.
-  assert.match(read('../public/pages/birthdays.js'), /class="row-carrier birthdays-list"/,
-    'die Liste traegt den geteilten Traeger, statt ihn nachzubauen');
-  assert.match(cssRuleBody(read('../public/styles/list-row.css'), '.row-carrier'), /container-type:\s*inline-size/,
+  // Tafla (2026-10-20): the cards are the MONTH GROUPS now - each one the
+  // shared inset card (inset-list.css), not a rebuilt surface - and the list
+  // host is a plain column that owns the container itself.
+  assert.match(read('../public/pages/birthdays.js'), /<div class="inset-card birthdays-card">/,
+    'jede Monatsgruppe traegt die geteilte Karte, statt sie nachzubauen');
+  assert.match(cssRuleBody(birthdays, '.birthdays-list'), /container-type:\s*inline-size/,
     'ohne Container am Traeger fragt der Query ins Leere und die Notiz bliebe fuer immer aus');
   assert.match(cssRuleBody(birthdays, '.birthdays-list'), /container-name:\s*birthdays-list list-rows/,
     'beide Namen ausdruecklich - sonst gewinnt der spaeter geladene und der andere ist lautlos tot');
@@ -21922,14 +21925,21 @@ test('die offene Auswahlliste traegt Flaeche und Farbschema des Themes (#2022)',
  * Guard-Ebene: Struktur (Stylesheet und Quelltext); der Browserlauf liegt im
  * Handoff (impl-G3).
  * ──────────────────────────────────────────────────────────────────────────── */
-test('D6: der Mehr-Knopf der Geburtstagszeile steht auch auf Touch - kein Wegklappen per Geste', () => {
+test('D6/Tafla: am Finger traegt die Geburtstagszeile kein "⋯" - Bearbeiten bleibt ein Tipp, nicht nur eine Geste', () => {
+  // D6 (2026-10-16) liess den Mehr-Knopf auf Touch stehen, damit Bearbeiten
+  // nicht NUR per Wischgeste ging. Tafla (spec "Lista grupowana + wiersz": on
+  // touch there is no ⋯) nimmt ihn aus dem Bild; die Absicht von D6 haelt
+  // weiter, weil ein Tipp auf die Zeile den Editor oeffnet (Loeschen steht
+  // darin) - geprueft unten. Weg nur per clip-path, nie aus dem Fokusbaum.
   const css = read('../public/styles/birthdays.css');
-  const hides = [...eachRule(css)].filter(({ selector, body }) => /\.birthday-item__actions(?![\w-])/.test(selector)
-    && /clip-path\s*:\s*inset|display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0\b/.test(body))
-    .map(({ selector, at }) => `${at.join(' ')} ${selector}`.trim());
-  assert.deepEqual(hides, [], 'birthdays.css versteckt den Mehr-Knopf - auf Touch bliebe nur Wischen (R18/D6)');
-  assert.match(read('../public/pages/birthdays.js'), /rowMenuHtml\(\{\s*id: `birthday-menu-\$\{birthday\.id\}`/,
-    'die Zeile traegt den geteilten Mehr-Knopf');
+  const touch = [...eachRule(css)].filter(({ selector, at }) => /\.birthday-item__actions(?![\w-])/.test(selector)
+    && at.some((a) => /hover:\s*none/.test(a)));
+  assert.ok(touch.some(({ body }) => /clip-path\s*:\s*inset\(50%\)/.test(body)), 'am Finger aus dem Bild');
+  assert.ok(!touch.some(({ body }) => /display\s*:\s*none|visibility\s*:\s*hidden/.test(body)), 'aber im Fokusbaum');
+  const page = read('../public/pages/birthdays.js');
+  assert.match(page, /rowMenuHtml\(\{\s*id: `birthday-menu-\$\{birthday\.id\}`/, 'am Zeiger traegt die Zeile den geteilten Mehr-Knopf');
+  assert.match(page, /<button type="button" class="list-row__main list-row__main--interactive" data-open="\$\{birthday\.id\}" data-md-focus>/,
+    'die Zeile selbst oeffnet - Bearbeiten ist kein versteckter Weg');
 });
 
 test('D6: eine Zeile mit sichtbarem Mehr-Knopf zeigt keinen Wisch-Chevron', () => {

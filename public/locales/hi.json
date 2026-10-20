@@ -3498,7 +3498,11 @@
         "importSubmit": "{{count}} जोड़ें",
         "importSuccess": "{{count}} जन्मदिन जोड़े गए।",
         "importNothingSelected": "कृपया कम से कम एक संपर्क चुनें।",
-        "importSelected": "{{count}} संपर्क चुने गए"
+        "importSelected": "{{count}} संपर्क चुने गए",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "अनुस्मारक",

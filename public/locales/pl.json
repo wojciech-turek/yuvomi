@@ -3681,7 +3681,11 @@
         "importSubmit": "Dodaj {{count}}",
         "importSuccess": "Dodano urodziny: {{count}}.",
         "importNothingSelected": "Wybierz co najmniej jeden kontakt.",
-        "importSelected": "Wybrano kontakty: {{count}}"
+        "importSelected": "Wybrano kontakty: {{count}}",
+        "heroAge": "{{age}}. urodziny",
+        "heroInTasks": "jest w zadaniach",
+        "heroGiftIdeas": "Pomysły na prezent",
+        "heroLabel": "Najbliższe urodziny"
     },
     "recipes": {
         "mealTypeNone": "Brak posiłku",

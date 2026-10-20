@@ -3498,7 +3498,11 @@
         "importSubmit": "{{count}} 件を追加",
         "importSuccess": "{{count}} 件の誕生日を追加しました。",
         "importNothingSelected": "少なくとも 1 件の連絡先を選択してください。",
-        "importSelected": "{{count}} 件の連絡先を選択"
+        "importSelected": "{{count}} 件の連絡先を選択",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "リマインダー",

@@ -3459,7 +3459,11 @@
         "importSubmit": "{{count}} hozzáadása",
         "importSuccess": "{{count}} születésnap hozzáadva.",
         "importNothingSelected": "Válassz ki legalább egy névjegyet.",
-        "importSelected": "{{count}} névjegy kiválasztva"
+        "importSelected": "{{count}} névjegy kiválasztva",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Nincs étkezés",

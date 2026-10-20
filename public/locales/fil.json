@@ -3475,7 +3475,11 @@
         "importSubmit": "Idagdag ang {{count}}",
         "importSuccess": "{{count}} kaarawan ang naidagdag.",
         "importNothingSelected": "Pumili ng kahit isang kontak.",
-        "importSelected": "{{count}} kontak ang napili"
+        "importSelected": "{{count}} kontak ang napili",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Walang pagkain",
