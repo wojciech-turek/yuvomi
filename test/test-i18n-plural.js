@@ -274,6 +274,10 @@ const PLURAL_EXCEPTIONS = {
   'dashboard.healthRefill': 'NO_NOUN',
   'health.labs.abnormalBadge': 'NO_NOUN',
   'subscriptions.activeCount': 'NO_NOUN',
+  // Tafla Posiłki (2026-10-19): "2 do kupienia", "2 na liście" - auf die Zahl
+  // folgt kein Substantiv, pl/en sind numerusneutral.
+  'meals.meterMissing': 'NO_NOUN',
+  'meals.meterListedCount': 'NO_NOUN',
 
   // --- Zahl in Klammern / hinter Doppelpunkt ------------------------------
   'category.errorInUse': 'PARENTHETICAL',

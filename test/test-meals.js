@@ -1849,7 +1849,12 @@ test('Mahlzeit-Dialog: Name zuerst auf jedem Weg, Mahlzeitart als Chips wie im R
   assert(/class="filter-chip meal-type-chip filter-chip--active" role="radio"\s+data-meal-type="lunch" aria-checked="true" tabindex="0"/.test(html),
     'der gewaehlte Chip ist aktiv und der eine Tab-Halt');
   assert(/<input type="hidden" id="modal-type" value="lunch">/.test(html), 'das versteckte Feld traegt den Wert fuer Speichern und Dirty-Check');
-  assert((html.match(/aria-checked="true"/g) ?? []).length === 1, 'genau einer gewaehlt');
+  // Tafla (2026-10-19): das Blatt traegt weitere aria-checked-Gruppen (die
+  // Tag-Chips und den Schalter "Dopisz brakujące do listy") - gezaehlt werden
+  // deshalb nur die Mahlzeit-Chips.
+  assert((html.match(/data-meal-type="\w+" aria-checked="true"/g) ?? []).length === 1, 'genau einer gewaehlt');
+  assert((html.match(/class="meal-sheet__day[^"]*" role="radio" data-date="[\d-]+"\s+aria-checked="true"/g) ?? []).length === 1,
+    'Tafla: genau ein Tag gewaehlt');
   assert(/onSave\(panel\) \{\s*wireMealTypeChips\(panel\);/.test(mealsSource), 'die Chips werden beim Oeffnen verdrahtet');
   assert(/openMealModal\(\{ mode: 'create', date: btn\.dataset\.date, mealType: btn\.dataset\.type, fromSlot: true \}\)/.test(mealsSource),
     'der Slot-Knopf sagt, dass er aus dem Slot kommt');
@@ -1929,6 +1934,121 @@ test('R19: die Rezeptsuche ist mobil ein Feld, keine Lupe in einer eigenen Zeile
     }
   }
   assert(phone.some((r) => /\.page-toolbar \.page-search\.page-search--field/.test(r.selector) && /flex:\s*1 1 auto/.test(r.body)), 'das Feld fuellt die Zeile');
+});
+
+// --------------------------------------------------------
+// Tafla (2026-10-19): die Woche am Telefon und das Blatt "Dodaj posiłek"
+// --------------------------------------------------------
+
+/** Gleichheit ueber JSON - dieser Lauf hat nur das schlichte assert(). */
+function gleich(actual, expected, msg) {
+  assert(JSON.stringify(actual) === JSON.stringify(expected), `${msg ?? 'ungleich'}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
+}
+
+/** Faehrt fn mit einem vorbereiteten Plan-Zustand und raeumt ihn danach zurueck. */
+function mitTaflaPlan(patch, fn) {
+  const s = mealsUi.state;
+  const vorher = { ...s };
+  Object.assign(s, { lists: [], listedKeys: new Set(), pantry: null, recipes: [], meals: [], members: [], ideasReady: false, pastOpen: false, userId: 1, visibleMealTypes: ['breakfast', 'lunch', 'dinner', 'snack'] }, patch);
+  try { return fn(); } finally { Object.assign(s, vorher); }
+}
+
+test('Tafla: der Zaehler zaehlt das Rezept gegen den Vorrat - Diakritika und Wortanfang wie am Server', () => {
+  const recipe = { id: 5, title: 'Spaghetti', ingredients: [
+    { name: 'Makaron spaghetti' }, { name: 'Cebula' }, { name: 'Śmietanka 30%' }, { name: 'Passata pomidorowa' },
+  ] };
+  const meal = { id: 1, recipe_id: 5, title: 'Spaghetti', ingredients: [{ name: 'Śmietanka 30%', on_shopping_list: 1 }] };
+  mitTaflaPlan({ recipes: [recipe], pantry: [
+    { name: 'Makaron Spaghetti', quantity: 2 }, { name: 'cebula', quantity: 3 }, { name: 'Passata', quantity: 0 },
+  ] }, () => {
+    const rows = mealsUi.ingredientMeter(meal);
+    assert(rows && rows.length === 4, 'das Rezept fuehrt: vier Zutaten, nicht die eine eigene der Mahlzeit');
+    gleich(rows.map((r) => r.have), [true, true, false, false], 'Gross/klein egal; leerer Vorrat zaehlt nicht');
+    assert(rows[2].listed && !rows[3].listed, 'die Sahne steht (on_shopping_list) auf der Liste, die Passata nicht');
+  });
+  mitTaflaPlan({ recipes: [recipe], pantry: null }, () => {
+    gleich(mealsUi.ingredientMeter(meal), null, 'ohne lesbaren Vorrat kein Zaehler - statt eines, der alles als fehlend zeigt');
+  });
+});
+
+test('Tafla: die Zeile unter dem Zaehler nennt, was fehlt, und sagt "na liście", wenn alles drauf ist', () => {
+  const r = (have, listed = false, name = 'X') => ({ name, have, listed });
+  gleich(mealsUi.meterCaption([r(true), r(true)]).text, 'meals.meterAll');
+  const listed = mealsUi.meterCaption([r(true), r(false, true, 'Śmietanka')]);
+  assert(listed.done && listed.text.includes('meals.meterHave') && listed.text.includes('meals.meterOneListed'), listed.text);
+  const missing = mealsUi.meterCaption([r(true), r(false), r(false)]);
+  assert(!missing.done && missing.text.includes('meals.meterMissing'), missing.text);
+});
+
+test('Tafla: der Wochenbereich traegt keinen Gedankenstrich (Projektregel), auch wenn Intl einen liefert', () => {
+  const vorher = globalThis.__locale;
+  try {
+    for (const locale of ['pl', 'en', 'de']) {
+      globalThis.__locale = locale;
+      for (const monday of ['2026-10-19', '2026-10-26']) {
+        const label = mealsUi.weekRangeLabel(monday);
+        assert(!/[–—]/.test(label), `${locale} ${monday}: ${label}`);
+        assert(/\d/.test(label), `${locale} ${monday}: ${label}`);
+      }
+    }
+  } finally {
+    globalThis.__locale = vorher;
+  }
+});
+
+test('Tafla: die Telefon-Woche zeigt die Kolacja von heute als Herd-Karte mit Gotuj und leere Plaetze als "+ Typ"', () => {
+  const today = todayKey();
+  const monday = mealsUi.getMondayOf(today);
+  const dinner = { id: 7, date: today, meal_type: 'dinner', title: 'Spaghetti <bolognese>', cook_user_id: 2, cook_name: 'Ola', ingredients: [] };
+  const lunch = { id: 8, date: today, meal_type: 'lunch', title: 'Zupa', notes: 'z wczoraj', ingredients: [] };
+  mitTaflaPlan({ currentWeek: monday, meals: [dinner, lunch] }, () => {
+    const html = mealsUi.phoneBodyHtml();
+    assert(/class="meals-hero" data-meal-id="7"/.test(html), 'die heutige Kolacja ist der Held');
+    assert(/data-action="phone-cook" data-meal-id="7"/.test(html), 'mit "Gotuj", das den Kochmodus oeffnet');
+    assert(html.includes('Spaghetti &lt;bolognese&gt;') && !html.includes('<bolognese>'), 'der Titel ist escaped');
+    assert(html.includes('meals.heroCook{&quot;name&quot;:&quot;Ola&quot;}'), 'wer kocht, steht mit Namen da (nicht der Betrachter)');
+    assert(/data-action="add-meal" data-date="[\d-]+" data-type="snack"/.test(html), 'leere Plaetze laden zum Anlegen ein');
+    assert(html.includes('z wczoraj'), 'die Notiz steht als Metazeile');
+    assert(!/meal-card__drag|grip-vertical|meal-card__type/.test(html), 'kein Ziehgriff und kein Typ-Vorsatz in der Telefon-Woche');
+    assert(!/class="meals-row" data-meal-id="7"/.test(html), 'die Kolacja steht nur im Helden, nicht noch einmal als Zeile darunter');
+    assert(/class="meals-row" data-meal-id="8"/.test(html), 'der Obiad steht als Zeile in "Reszta dnia"');
+  });
+});
+
+test('Tafla: vergangene Tage der Woche liegen hinter EINER Zeile, und nur die laufende Woche hat einen Helden', () => {
+  const today = todayKey();
+  const monday = mealsUi.getMondayOf(today);
+  mitTaflaPlan({ currentWeek: monday, meals: [{ id: 1, date: monday, meal_type: 'lunch', title: 'Pierogi', ingredients: [] }] }, () => {
+    const html = mealsUi.phoneBodyHtml();
+    if (today !== monday) {
+      assert(/data-action="phone-past" aria-expanded="false"/.test(html), 'die Zeile "Wcześniej" steht zu');
+      assert(/id="meals-past-days" hidden/.test(html), 'die vergangenen Tage sind verborgen');
+    } else {
+      assert(!/phone-past/.test(html), 'am Montag gibt es nichts Vergangenes');
+    }
+  });
+  mitTaflaPlan({ currentWeek: '2020-01-06', meals: [{ id: 2, date: '2020-01-06', meal_type: 'dinner', title: 'Gulasz', ingredients: [] }] }, () => {
+    const html = mealsUi.phoneBodyHtml();
+    assert(!/meals-hero/.test(html) && !/phone-past/.test(html), 'eine andere Woche zeigt alle Tage, ohne Herd-Karte');
+  });
+});
+
+test('Tafla-Blatt: der Primaerknopf nennt das Ergebnis, die Chips entscheiden, was mitgeht', () => {
+  gleich(mealsUi.sheetPrimaryLabel({ isEdit: false, mealType: 'dinner', count: 4 }),
+    'meals.sheetAddWithItems{"meal":"meals.typeAccDinner","count":4}');
+  gleich(mealsUi.sheetPrimaryLabel({ isEdit: false, mealType: 'dinner', count: 0 }), 'meals.sheetAdd{"meal":"meals.typeAccDinner"}');
+  gleich(mealsUi.sheetPrimaryLabel({ isEdit: true, mealType: 'lunch', count: 3 }), 'meals.sheetSave{"meal":"meals.typeAccLunch"}');
+  mitTaflaPlan({ pantry: [{ name: 'Cebula', quantity: 2 }] }, () => {
+    const have = mealsUi.ingredientChipHtml({ name: 'Cebula', quantity: '1 szt.' });
+    const buy = mealsUi.ingredientChipHtml({ name: 'Ryż arborio', quantity: '300 g' });
+    assert(/aria-pressed="false" data-have="1"/.test(have) && have.includes('meals.chipHave'), 'was der Vorrat hat, startet ungedrueckt als "· masz"');
+    assert(/aria-pressed="true" data-have="0"/.test(buy) && buy.includes('Ryż arborio 300 g'), 'was fehlt, startet gedrueckt mit Menge');
+  });
+  const chip = (name, pressed) => ({ dataset: { name, qty: '1', category: 'Sonstiges' }, getAttribute: (a) => (a === 'aria-pressed' ? String(pressed) : null) });
+  const overlay = { querySelectorAll: (sel) => (sel === '.ingredient-chip' ? [chip('Ryż', true), chip('Cebula', false)] : []) };
+  gleich(mealsUi.collectModalIngredients(overlay).map((i) => i.name), ['Ryż'], 'nur gedrueckte Chips werden Zutaten');
+  gleich(mealsUi.collectModalIngredients(overlay, { allChips: true }).map((i) => i.name), ['Ryż', 'Cebula'],
+    '"Als Rezept speichern" nimmt jeden Chip');
 });
 
 // --------------------------------------------------------
