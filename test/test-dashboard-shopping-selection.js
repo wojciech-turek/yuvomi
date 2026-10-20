@@ -532,7 +532,9 @@ test('Lader: der Dialog holt die Listen von /shopping, und ein Fehler loescht di
   // Der Aufrufer nimmt `null` als "nichts aendern" - sonst wuerde er `undefined` speichern.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const wiring = src.slice(src.indexOf("container.querySelectorAll('[data-widget-options]')"));
+  // Seit Tafla (2026-10-19) oeffnet „Dostosuj Dziś" die Dialoge
+  // (editTodayFilter) - der Aufrufer ist ein anderer, die Regel dieselbe.
+  const wiring = src.slice(src.indexOf('async function editTodayFilter(id)'));
   assert.match(wiring.slice(0, 600), /const next = await openWidgetOptions\(id, current\);\n\s+if \(next === null\) return;/);
 });
 
