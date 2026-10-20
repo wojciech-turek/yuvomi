@@ -1440,7 +1440,7 @@ async function payVisit(visit, onPaid, { also = [] } = {}) {
     : t('housekeeping.markPaidConfirm');
   const confirmed = await confirmOverModal(question, {
     closeOnConfirm: false,
-    confirmLabel: t('housekeeping.markPaid'),
+    confirmLabel: batch.length > 1 ? t('housekeeping.markAllPaid') : t('housekeeping.markPaid'),
     detail: batch.some((each) => each.payment_task_id)
       ? t('housekeeping.markPaidConfirmDetailTask')
       : t('housekeeping.markPaidConfirmDetail'),
