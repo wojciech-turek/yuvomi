@@ -1918,16 +1918,15 @@ test('die Widget-Optionen sind auch am ausgeblendeten Widget erreichbar (#814)',
   assert.ok(optionIds.some((id) => coveredIds.includes(id)),
     'kein Options-Widget ist ab Werk ausgeblendet - dann ist diese Regel gegenstandslos geworden');
 
-  // Die Ablage der ausgeblendeten Widgets traegt den Knopf.
-  const tray = source.match(/function renderHiddenWidgetsTray[\s\S]*?\n}/);
-  assert.ok(tray, 'renderHiddenWidgetsTray nicht gefunden');
-  assert.match(tray[0], /data-widget-options=/,
-    'die Ablage bietet keine Optionen an - am ausgeblendeten Widget waeren sie unerreichbar');
-
-  // Und sie werden auch verdrahtet: die Ablage liegt AUSSERHALB des Grids, ein
-  // `grid.querySelectorAll` faende sie nicht.
-  assert.match(source, /container\.querySelectorAll\('\[data-widget-options\]'\)/,
-    'die Optionen-Knoepfe der Ablage bekommen keinen Listener');
+  // TAFLA (2026-10-19): Kachelraster und Ablage sind fort; Dziś zeigt die
+  // Aufgaben und Termine selbst. Ihre Filter wirken weiter auf den ganzen
+  // Plan - also bietet „Dostosuj Dziś" sie an (Abschnitt „Więcej"), und die
+  // Zeilen oeffnen dieselben Dialoge.
+  assert.match(source, /filters: \['tasks', 'calendar'\]\.filter\(/,
+    'das Blatt bietet die Filter von Aufgaben und Kalender an');
+  assert.match(source, /onFilter: editTodayFilter/, 'und verdrahtet sie');
+  assert.match(source, /async function editTodayFilter\(id\) \{[\s\S]*?openWidgetOptions\(id, current\)/,
+    'mit demselben Dialog wie frueher an der Kachel');
 });
 
 test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () => {
@@ -1947,8 +1946,9 @@ test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () 
   assert.deepEqual(withoutGlance, [],
     'Kacheln und Kopfband muessen in EINEM PUT gehen - sonst schreibt ein Fehlschlag die Haelfte:\n  '
     + withoutGlance.join('\n  '));
-  assert.match(source, /function cancelDashboardConfig\(\)[\s\S]{0,200}?glanceVisible = savedGlanceVisible/,
-    'Abbrechen stellt das Kopfband nicht zurueck');
+  // TAFLA (2026-10-19): kein Abbrechen mehr - „Dostosuj Dziś" speichert jede
+  // Aenderung sofort. Der Wert reist im selben PUT wie die Anordnung weiter
+  // (oben), damit ein spaeterer Kopfband-Leser ihn nicht verliert.
   // SEIT #827 IST "STANDARD" DIE VORGABE DES HAUSHALTS, nicht mehr der
   // Auslieferungszustand: Zuruecksetzen loescht den eigenen Stand und uebernimmt,
   // was der Server daraufhin zurueckmeldet. Das Kopfband muss diesen Weg
@@ -1959,14 +1959,8 @@ test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () 
     'Zuruecksetzen muss BEIDE eigenen Werte loeschen - sonst folgt die Haelfte weiter dem alten Stand');
   assert.match(source, /glanceVisible = previousGlance/,
     'Rueckgaengig nimmt das Kopfband nicht mit zurueck');
-  assert.match(source, /previousGlance !== glanceVisible/,
-    'wurde NUR das Kopfband umgeschaltet, muss der Toast trotzdem Rueckgaengig anbieten');
-
-  // Im Bearbeiten-Modus bleibt das Kopfband stehen, auch ausgeblendet und auch
-  // ohne Inhalt - sonst waere der Schalter, der es zurueckholt, nur sichtbar
-  // solange es ohnehin da ist.
-  assert.match(source, /\(glanceVisible \|\| isCustomizing\)/,
-    'ausgeblendet verschwindet das Kopfband auch im Bearbeiten-Modus');
+  // Das Kopfband selbst zeichnet Dziś nicht mehr (Tafla) - das Cockpit
+  // bleibt fuer die Wand, und dort gilt weiter: ohne Inhalt faellt es weg.
   assert.match(source, /!parts\.length && !editing/,
     'ohne Inhalt faellt das Kopfband auch im Bearbeiten-Modus weg');
   assert.match(source, /data-glance-show/,
@@ -6294,13 +6288,16 @@ test('der entschiedene Nicht-Text-Kontrast bleibt an den Tokens dokumentiert', (
   const block = tokens.slice(0, tokens.indexOf('--color-border:'));
   assert.match(block, /WCAG 1\.4\.11/, 'der Befund muss an den Kanten-Tokens dokumentiert bleiben');
   assert.match(block, /#1230/, 'der Vorgang, in dem entschieden wurde, gehoert dazu');
-  assert.match(block, /--color-border-control ist die\s+\*?\s*vorhandene Rampenstufe --neutral-500/,
+  // Tafla (2026-10-19): das Token ist die Feldkante der Spezifikation, nicht
+  // mehr die Rampenstufe --neutral-500 - Kommentar und Wert ziehen gemeinsam um.
+  assert.match(block, /--color-border-control ist seit Tafla[\s\S]{0,40}die Feldkante der\s+\*?\s*Spezifikation, #8A857C hell \/ #8A8378 dunkel/,
     'welcher Wert das Token ist und woher er kommt, gehoert dazu');
-  assert.match(block, /3,18 auf der Buehne/, 'der knappste helle Grund gehoert dazu');
-  assert.match(block, /3,86\s+\*?\s*auf -raised/, 'der knappste dunkle Grund gehoert dazu');
+  assert.match(block, /3,30 auf der Buehne/, 'der knappste helle Grund gehoert dazu');
+  assert.match(block, /3,39 auf -raised/, 'der knappste dunkle Grund gehoert dazu');
   assert.match(block, /NUR FELDKANTEN/,
     'die Abgrenzung Feldkante gegen Kartenkante gehoert dazu - der Critique warf beides zusammen');
-  assert.match(tokens, /--color-border-control:\s*var\(--neutral-500\)/, 'das Token selbst muss so stehen, wie der Kommentar es beschreibt');
+  assert.match(tokens, /--_color-border-control:\s*#8A857C;/, 'das Token selbst muss so stehen, wie der Kommentar es beschreibt');
+  assert.match(darkAttrBlock(tokens)[1], /--color-border-control:\s*#8A8378;/, 'der dunkle Wert ebenso');
 });
 
 /**
@@ -7920,12 +7917,16 @@ test('calendar draws its gutter from the shared page token and compacts weekday 
 
 // Bis Block 2 (2026-08-10) verglich dieser Guard genau zwei Namen
 // (--_module-dashboard gegen --_module-calendar) - das Kollisionspaar von
-// damals. Seit den Familientoenen ist die Regel allgemein: die Modul-Akzente
-// leben in --_family-*-Werten, und KEIN Familienpaar darf denselben Wert
-// tragen, sonst kehrt die Kollision (zwei Violetts, zwei Teals) still zurueck.
-// Dazu bezieht jedes --module-* seinen Wert aus einer Familie: ein Solo-Hex an
-// einem Modul wuerde die Familienregel unterlaufen, ohne dass es ein Paar gibt.
-test('module accent families stay pairwise distinct and every module draws from one', () => {
+// damals. Seit den Familientoenen war die Regel allgemein: KEIN Familienpaar
+// durfte denselben Wert tragen.
+//
+// TAFLA (2026-10-19, DESIGN.md Direction Contract) dreht die Regel um: die
+// Modulfarbe verlaesst das Chrome. JEDE Familie zeigt in beiden Themes auf
+// Tinte-2 (var(--_neutral-600)), damit kein Modul im Chrome mehr einen eigenen
+// Ton traegt - ein Solo-Hex an einer Familie oder an einem --module-* holte
+// den Regenbogen still zurueck. Die Pflicht, dass jedes --module-* aus einer
+// Familie zieht, bleibt: sie ist der eine Hebel, an dem das Chrome haengt.
+test('Tafla: module accents leave the chrome - every family is ink-2 and every module draws from one', () => {
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
   const darkBlock = darkAttrBlock(tokens);
@@ -7940,14 +7941,12 @@ test('module accent families stay pairwise distinct and every module draws from 
       families.length >= 9,
       `${theme}: expected the module accent families in this block, found ${families.length}`,
     );
-    const seen = new Map();
     for (const [name, value] of families) {
-      const v = value.toLowerCase();
-      assert.ok(
-        !seen.has(v),
-        `${theme}: ${name} shares its value ${v} with ${seen.get(v)} - family accents must stay pairwise distinct`,
+      assert.equal(
+        value.replace(/\s+/g, ''),
+        'var(--_neutral-600)',
+        `${theme}: ${name} = ${value} - Tafla: module colour has left the chrome, every family is ink-2`,
       );
-      seen.set(v, name);
     }
   }
 
@@ -8068,6 +8067,43 @@ test('text/surface token pairs meet WCAG AA 4.5:1 in both themes', () => {
     ['--color-text-secondary', '--color-bg'],
     ['--color-text-tertiary', '--color-bg'],
     ['--color-accent', '--color-surface'],
+    // TAFLA (2026-10-19): jedes Textpaar der Spezifikation ist ein Vertrag,
+    // in beiden Themes (Werte und Rollen: tokens.css, DESIGN.md "Colors").
+    ['--color-text-primary', '--color-fill'],
+    ['--color-text-secondary', '--color-fill'],
+    ['--color-text-primary', '--color-raised'],
+    ['--color-text-secondary', '--color-raised'],
+    ['--color-text-primary', '--color-hearth'],
+    ['--color-text-secondary', '--color-hearth'],
+    ['--color-accent', '--color-hearth'],
+    ['--color-accent', '--color-bg'],
+    ['--color-accent', '--color-fill'],
+    ['--color-accent', '--color-accent-tint'],
+    ['--color-text-primary', '--color-accent-tint'],
+    ['--color-text-secondary', '--color-accent-tint'],
+    ['--color-on-accent', '--color-btn-primary'],
+    ['--color-on-accent', '--color-accent-pressed'],
+    ['--color-success', '--color-success-tint'],
+    ['--color-warning', '--color-warning-tint'],
+    ['--color-danger', '--color-danger-tint'],
+    ['--color-success', '--color-surface'],
+    ['--color-warning', '--color-surface'],
+    ['--color-danger', '--color-surface'],
+    ['--color-toast-text', '--color-toast-bg'],
+    ['--color-toast-action', '--color-toast-bg'],
+    ...[1, 2, 3, 4, 5, 6].flatMap((n) => [
+      [`--person-${n}`, '--color-surface'],
+      [`--person-${n}`, '--color-bg'],
+      [`--person-${n}`, '--color-fill'],
+      [`--person-${n}`, `--person-${n}-tint`],
+    ]),
+    ['--cook-ink', '--cook-stage'],
+    ['--cook-ink-2', '--cook-stage'],
+    ['--cook-accent', '--cook-stage'],
+    ['--cook-ink', '--cook-panel'],
+    ['--cook-ink-2', '--cook-panel'],
+    ['--cook-accent', '--cook-panel'],
+    ['--wall-night-ink', '--wall-night-bg'],
   ];
 
   for (const [theme, map] of [['light', light], ['dark', dark]]) {
@@ -8079,6 +8115,55 @@ test('text/surface token pairs meet WCAG AA 4.5:1 in both themes', () => {
         ratio >= 4.5,
         `${theme}: ${fg} (${fgHex}) on ${bg} (${bgHex}) is ${ratio.toFixed(2)}:1, below WCAG AA 4.5:1`,
       );
+    }
+  }
+});
+
+// TAFLA (Rollout-Schritt 0): EIN Violett, und es kommt nur ueber die Tokens.
+// Die Stimme hat in tokens.css ihre Rollen (--color-accent als Text,
+// --color-btn-primary / --color-accent-fill als Flaeche, --color-accent-tint,
+// --color-accent-pressed, --shadow-accent-glow, --cook-accent, --toast-action).
+// Ein Violett-Literal in einem Stylesheet waere eine zweite Quelle, die beim
+// naechsten Theme- oder Rollenwechsel nicht mitzieht - genau so stand die
+// Flieder-Pille im Dark. Geprueft werden die Deklarationen (Kommentare duerfen
+// Messwerte nennen); offline.html spiegelt die Tokens bewusst als Literal.
+test('Tafla: Violett kommt nur ueber die Akzent-Tokens, nie als Literal im Stylesheet', () => {
+  const VIOLET = /#(?:6C3AED|7C52F2|B49CFF|5A2BD6|6A42E0|C6B4FF|F0EBFD|3A3249|A78BFA|7C3AED|8B5CF6|C4B5FD)\b|rgba?\(\s*(?:108,\s*58,\s*237|124,\s*82,\s*242|180,\s*156,\s*255)\b/i;
+  const offenders = [];
+  let scanned = 0;
+  for (const file of readdirSync(new URL('../public/styles/', import.meta.url)).filter((n) => n.endsWith('.css'))) {
+    if (file === 'tokens.css') continue;
+    scanned += 1;
+    const css = read(`../public/styles/${file}`).replace(/\/\*[\s\S]*?\*\//g, '');
+    css.split('\n').forEach((line, i) => {
+      if (VIOLET.test(line)) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+    });
+  }
+  assert.ok(scanned >= 30, `nur ${scanned} Stylesheets gelesen`);
+  assert.deepEqual(offenders, [], 'Violett gehoert in tokens.css (--color-accent*, --color-btn-primary)');
+});
+
+// TAFLA: die Grafikpaare der Spezifikation (WCAG 1.4.11, 3:1) - der Ring des
+// Pruefkreises und jede Feldkante auf den Gruenden, auf denen sie stehen, die
+// violette Fuellung als Form (gecheckter Kreis, +) auf Grund und Karte, und
+// der 3pt-Rand eines Termins in jeder Personenfarbe.
+test('Tafla: Grafikpaare halten 3:1 in beiden Themes', () => {
+  const tokens = read('../public/styles/tokens.css');
+  const light = parseTokenMap(tokens.match(/:root\s*\{([\s\S]*?)\n\}/)[1]);
+  const dark = new Map(light);
+  for (const [k, v] of parseTokenMap(darkAttrBlock(tokens)[1])) dark.set(k, v);
+  const pairs = [
+    ['--color-field-border', '--color-surface'],
+    ['--color-field-border', '--color-bg'],
+    ['--color-btn-primary', '--color-surface'],
+    ['--color-btn-primary', '--color-bg'],
+    ['--cook-accent-fill', '--cook-stage'],
+    ...[1, 2, 3, 4, 5, 6].map((n) => [`--person-${n}`, '--color-surface']),
+  ];
+  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+    for (const [fg, bg] of pairs) {
+      const ratio = contrastRatio(resolveColor(fg, map), resolveColor(bg, map));
+      assert.ok(ratio >= 3, `${theme}: ${fg} on ${bg} is ${ratio.toFixed(2)}:1, below WCAG 1.4.11 3:1`);
     }
   }
 });
@@ -14822,6 +14907,10 @@ function withoutColorMix(value) {
   return out;
 }
 
+// TAFLA (2026-10-19): fuer MODULE gilt die Vollton-Regel nicht mehr - ein Modul
+// nennt sich mit dem nackten Zeichen in Tinte-2 (layout.css, "Tafla: ein Modul
+// nennt sich mit seinem Zeichen"). Fuer INHALTSFARBEN (Kategorie, frei
+// gewaehlte Farbe) bleibt sie: Vollton oder Kante, nie zweimal blass.
 test('eine Marke nennt ihre Identitaet im Vollton, nicht zweimal als Waschung', () => {
   const offenders = [];
   let seen = 0;
@@ -16101,6 +16190,11 @@ test('die Shell traegt die Stimme, nicht den Modulton', () => {
 });
 
 test('die Sidebar zeigt die Modultoene als Legende', () => {
+  // TAFLA (2026-10-19): die Familien sind Tinte-2 (tokens.css, Abschnitt 4),
+  // die "Legende" ist damit ein ruhiges, einheitliches Zeichen - der Haken
+  // bleibt trotzdem: ueber --item-module-accent kann ein Drittanbieter-Modul
+  // seinen Ton zeigen, und der aktive Eintrag gewinnt die Stimme zurueck.
+  //
   // Die Kehrseite der Regel oben: wenn die Stimme das Chrome traegt, muss der
   // Modulton EINEN sichtbaren Ort behalten, sonst verschwindet die
   // Modul-Identitaet ganz. Ohne diesen Guard waere die Legende der erste
@@ -16283,6 +16377,9 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
 });
 
 test('die Tab-Bar zeigt dieselbe Legende wie die Sidebar', () => {
+  // TAFLA (2026-10-19): der Ton hinter --item-module-accent ist Tinte-2 - die
+  // Zeichen der Leiste sind ruhig, aktiv bleibt violett (siehe Sidebar-Guard).
+  //
   // UND SIE IST DIE MOBILE FASSUNG DERSELBEN REGEL, kein zweites Feature.
   //
   // Die Legende hing bis 2026-08-17 an einem Breakpoint: ueber 1024px trug
@@ -21238,7 +21335,12 @@ test('R18: eine Feldhaut - 1px auf dem 3:1-Minimum, eine Fuellung, eigenes Auswa
   for (const [theme, map] of [['light', light], ['dark', dark]]) {
     const worst = Math.min(...GROUNDS.map((g) => contrastRatio(hex('--color-border-control', map), hex(g, map))));
     assert.ok(worst >= 3, `${theme}: die Feldkante faellt auf ${worst.toFixed(2)}:1`);
-    assert.ok(worst <= 3.3, `${theme}: die Feldkante steht mit ${worst.toFixed(2)}:1 ueber dem Minimum - "leiser" heisst am knappsten Grund hoechstens 3,3:1`);
+    // Tafla (2026-10-19): die Feldkante der Spezifikation ist zugleich der
+    // Ring jedes Pruefkreises und steht eine Spur ueber dem alten Minimum -
+    // hell #8A857C 3,305:1 auf dem Papier, dunkel #8A8378 3,39:1 auf der
+    // Fill-Stufe (vorher #8C8880 bei 3,18 und #857F76 bei 3,16). "Leiser"
+    // bleibt die Regel: am knappsten Grund hoechstens 3,4:1.
+    assert.ok(worst <= 3.4, `${theme}: die Feldkante steht mit ${worst.toFixed(3)}:1 ueber dem Minimum - "leiser" heisst am knappsten Grund hoechstens 3,4:1`);
   }
 
   // 5. Die Auswahl: eigenes Zeichen, natives Blatt, RTL-Zwilling.
@@ -22033,14 +22135,15 @@ test('R20: der Auswahlmodus nimmt Kapsel, FAB und Wisch-Pfeil weg, die ganze Zei
 test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Initialen frei', () => {
   const dash = read('../public/pages/dashboard.js');
   assert.match(dash, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
-  const enter = dash.slice(dash.indexOf("querySelector('#dashboard-wall-enter')?.addEventListener('click'"));
+  // TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (enterWallFromToday).
+  const enter = dash.slice(dash.indexOf('function enterWallFromToday('));
   assert.match(enter.slice(0, 200), /_wallFocusIntent = 'enter'/, 'der Start merkt sich, wohin der Fokus soll');
   const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function renderWallWeather('));
   assert.match(wall, /captureRebuildFocus\(/, 'der stille Neuaufbau nimmt den Fokus mit');
   assert.match(wall, /takeWallFocusIntent\('enter'\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
   const leave = dash.slice(dash.indexOf('function wireWallExit('), dash.indexOf('function wireWallExit(') + 400);
   assert.match(leave, /_wallFocusIntent = 'leave'/, 'der Ausstieg merkt sich den Rueckweg');
-  assert.match(dash, /takeWallFocusIntent\('leave'\) \? \['#dashboard-wall-enter', '\.dashboard-tools-btn'\]/, 'nach Esc steht er auf dem Knopf, der die Wand wieder oeffnet');
+  assert.match(dash, /if \(takeWallFocusIntent\('leave'\)\) restoreFocusAfterRebuild\(container, \['\[data-day-action="customize"\]'\]\)/, 'nach Esc steht er auf „Dostosuj Dziś", dem Weg, der die Wand wieder oeffnet');
 
   const timer = read('../public/components/wall-timer.js');
   assert.match(timer, /role="group" aria-labelledby="wall-timer-presets-label"/, 'die sichtbare Zeile ist der Name der Gruppe');

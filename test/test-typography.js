@@ -308,18 +308,32 @@ test('die Produkt-Typografie nutzt feste semantische Rollenwerte', () => {
   // Hero UND Page-Title stehen bewusst auf demselben Wert: in der HIG-Welt ist
   // der Dashboard-Gruß derselbe Large Title wie jeder Seitentitel, und er wächst
   // auf dem Desktop NICHT mit - die Überschriften-Skala endet bei 34px.
+  //
+  // TAFLA (2026-10-19, DESIGN.md "Typography"): die iPhone-Skala hat genau VIER
+  // Groessen - 34/41, 22/28, 17/22, 13/18 - und zwei Gewichte. Title 3 (20),
+  // Subheadline (15) und Caption 2 (11) sind aufgegangen: der Abschnittstitel
+  // steht auf Title (22), Sekundaer- und Mikrorolle auf Footnote (13). Die
+  // Tafla-Namen (--type-large-title, --type-title, --type-footnote) tragen
+  // dieselben Werte und ihre Zeilenhoehen.
   const expectedTokens = [
     ['--type-hero-mobile', '2.125rem'],
     ['--type-hero-desktop', '2.125rem'],
     ['--type-page-title-mobile', '2.125rem'],
     ['--type-page-title-desktop', '2.125rem'],
     ['--type-toolbar-title', '1.375rem'],
-    ['--type-section-title', '1.25rem'],
+    ['--type-section-title', '1.375rem'],
     ['--type-card-title', '1.0625rem'],
     ['--type-body', '1.0625rem'],
-    ['--type-secondary', '0.9375rem'],
+    ['--type-secondary', '0.8125rem'],
     ['--type-caption', '0.8125rem'],
-    ['--type-micro', '0.6875rem'],
+    ['--type-micro', '0.8125rem'],
+    ['--type-large-title', '2.125rem'],
+    ['--type-large-title-lh', '2.5625rem'],
+    ['--type-title', '1.375rem'],
+    ['--type-title-lh', '1.75rem'],
+    ['--type-body-lh', '1.375rem'],
+    ['--type-footnote', '0.8125rem'],
+    ['--type-footnote-lh', '1.125rem'],
   ];
 
   for (const [token, value] of expectedTokens) {
@@ -334,11 +348,19 @@ test('die Produkt-Typografie nutzt feste semantische Rollenwerte', () => {
     /--type-page-title-size:\s*clamp\(/,
     'Seitentitel dürfen in der Produktoberfläche nicht fluid skalieren',
   );
+  // Die kompakte Stufe war 14px (Untergrenze fuer Bedientext). Tafla legt sie
+  // mit --text-xs auf die Footnote: 13px ist die kleinste Schrift der Skala,
+  // nichts darf darunter fallen.
   assert.match(
     tokens,
-    /--text-sm:\s*0\.875rem/,
-    'die kompakte Sekundärstufe muss mindestens 14px groß sein',
+    /--text-sm:\s*0\.8125rem/,
+    'die kompakte Stufe ist die Tafla-Footnote (13px)',
   );
+  assert.match(tokens, /--text-xs:\s*0\.8125rem/, '--text-xs ist die Tafla-Footnote (13px)');
+  assert.match(tokens, /--font-weight-medium:\s*400;/, 'Tafla kennt zwei Gewichte: medium faellt auf 400');
+  assert.match(tokens, /--font-rounded:\s*ui-rounded,\s*"SF Pro Rounded"/,
+    '--font-rounded fuehrt mit dem Systemschnitt (ui-rounded), ohne Webfont');
+  assert.doesNotMatch(tokens, /@font-face/, 'Tafla laedt keine Webfont');
 });
 
 test('Raster und Liste der Dokumente verwenden dieselbe Titelrolle', () => {
@@ -906,19 +928,49 @@ test('jede Trenngrenze steht auch in der Safari-Schreibweise, mit denselben Zahl
     + '-webkit-hyphenate-limit-before / -after mit denselben Zahlen ergaenzen.');
 });
 
+test('Tafla: kein Stylesheet setzt Versal-Labels mit Tracking, Gruppenkoepfe stehen in Satzschreibung', () => {
+  // Tafla (2026-10-19, DESIGN.md Direction Contract) hat das Versal-Mikro-Label
+  // zurueckgezogen: Gruppenkoepfe sind Body 17/600 in Satzschreibung, Labels
+  // Footnote 13. --tracking-label steht auf 0; dieser Guard haelt, dass keine
+  // Regel der geteilten Schicht den Versal-Stil zurueckholt. Modul-Stylesheets
+  // der Bildschirme, die gerade neu gebaut werden (calendar, dashboard, meals),
+  // ziehen in ihrem eigenen Umbau nach - sie stehen deshalb (noch) nicht in der
+  // Liste, die Rolle selbst aber schon.
+  const tokens = readFileSync(new URL('tokens.css', STYLES_DIR), 'utf8');
+  assert.match(tokens, /--tracking-label:\s*0;/, '--tracking-label ist 0');
+  const shared = ['typography.css', 'list-row.css', 'layout.css', 'datepicker.css', 'reminders.css', 'budget.css', 'settings.css', 'filter-chip.css', 'sub-tabs.css'];
+  const funde = [];
+  for (const name of shared) {
+    for (const rule of eachRule(readFileSync(new URL(name, STYLES_DIR), 'utf8'))) {
+      if (/text-transform:\s*uppercase/.test(rule.body)) funde.push(`${name}: ${rule.selector.trim()}`);
+    }
+  }
+  assert.deepStrictEqual(funde, [], 'Versal-Labels gehoeren nicht mehr zur Tafla-Skala');
+  const typo = [...eachRule(readFileSync(new URL('typography.css', STYLES_DIR), 'utf8'))];
+  const kopf = typo.find((rule) => rule.selector.split(',').map((s) => s.trim()).includes('.meal-slot__type-label'));
+  assert.ok(kopf, 'der Gruppenkopf ist registriert');
+  assert.match(kopf.body, /font-size:\s*var\(--type-body\)/);
+  assert.match(kopf.body, /font-weight:\s*var\(--font-weight-semibold\)/);
+  const gruppe = [...eachRule(readFileSync(new URL('list-row.css', STYLES_DIR), 'utf8'))]
+    .find((rule) => rule.selector.trim() === '.list-group__title');
+  assert.match(gruppe.body, /font-size:\s*var\(--type-body\)/, 'der geteilte Gruppenkopf der Listen ist Body-Semibold');
+});
+
 test('der Zeilentitel ist eine Rolle (R16)', () => {
   const typo = [...eachRule(readFileSync(new URL('typography.css', STYLES_DIR), 'utf8'))];
   const sels = (rule) => rule.selector.split(',').map((s) => s.trim());
   const rolle = typo.find((rule) => sels(rule).includes('.list-row__name'));
   assert.ok(rolle, 'typography.css registriert `.list-row__name`');
-  assert.match(rolle.body, /font-size:\s*var\(--text-base\)/);
+  // Tafla (2026-10-19): der Zeilentitel ist Body 17/400 - --type-body statt
+  // --text-base (16, das bleibt den Feldern), Gewicht medium = 400.
+  assert.match(rolle.body, /font-size:\s*var\(--type-body\)/);
   assert.match(rolle.body, /font-weight:\s*var\(--font-weight-medium\)/);
   for (const sel of ['.u-row-title', '.agenda-event__title', '.contact-item__name', '.subscription-card__name', '.rw-standing__name']) {
     assert.ok(sels(rolle).includes(sel), `${sel} nimmt die Rolle`);
   }
 
   // Eine Zeile steht nicht in der Headline-Registrierung (17/600) und nicht in
-  // ihrer Dichte-Variante (15/600): das sind Karten-Titel.
+  // ihrer Dichte-Variante (seit Tafla ebenfalls 17/600): das sind Karten-Titel.
   const ZEILEN = ['.agenda-event__title', '.budget-entry__title', '.contact-item__name', '.birthday-item__name',
     '.housekeeping-task__body h2', '.subscription-card__name', '.task-card__title'];
   const headline = typo.filter((rule) => /--type-card-title|--type-secondary/.test(rule.body) && /font-weight-semibold/.test(rule.body));

@@ -85,7 +85,9 @@
  * mehr trifft, ist die Glas-ist-Chrome-Regel eingehalten statt ueberschrieben. */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   .page-fab:not(.page-fab--docked):not(.page-fab--ghost) {
-    background-color: color-mix(in srgb, var(--color-accent) 78%, transparent);
+    /* Tafla: die Flaechen-Rolle (--color-btn-primary), weisses Plus darauf -
+     * hell 4,1:1, dunkel 6,3:1 ueber der Buehne (Grafik, 3:1). */
+    background-color: color-mix(in srgb, var(--color-btn-primary) 78%, transparent);
     /* blur-md statt blur-sm: die weiche Streuung des Untergrunds ist auf
      * Kapselgröße der einzige Materialbeweis, wenn kein Text darunter
      * durchläuft (Finish-Verdict Fundament-Phase, Fix 3). Der Tint bleibt
@@ -114,7 +116,7 @@
   }
 
   .page-fab:not(.page-fab--docked):not(.page-fab--ghost):hover {
-    background-color: var(--color-accent);
+    background-color: var(--color-btn-primary);
   }
 
   /* ANGEDOCKT IST ER KEIN GLAS MEHR, und der Grund ist eine abgelaufene
@@ -139,12 +141,14 @@
      * hier gewollt: der angedockte Knopf soll gegen den Grund seines Themes
      * mischen, nicht immer gegen Schwarz. Als Literal war die
      * Theme-Abhaengigkeit beim Kopieren verlorengegangen. */
-    background-color: color-mix(in srgb, var(--color-accent) 88%, var(--neutral-950));
+    /* Tafla: deckend in der Flaechen-Rolle wie der Primaerknopf - ein Wort
+     * darauf braucht 4,5:1 (weiss auf #6C3AED 6,06, auf #7C52F2 4,83). */
+    background-color: var(--color-btn-primary);
     box-shadow: var(--shadow-sm);
   }
 
   .page-fab--docked:hover {
-    background-color: color-mix(in srgb, var(--color-accent) 76%, var(--neutral-950));
+    background-color: var(--color-btn-primary-hover);
   }
 }
 

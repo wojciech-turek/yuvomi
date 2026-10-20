@@ -790,18 +790,21 @@ test('Formularfelder tragen im Ruhezustand die 3:1-Kante --color-border-control'
   assert.deepEqual(offenders, [],
     `Feldkanten unter 3:1 (Kartenkante statt --color-border-control): ${offenders.join(' | ')}`);
 
-  // Das Token zeigt in beiden Quellen auf dieselbe Rampenstufe ...
-  assert.match(html, /--color-border-control:\s*var\(--neutral-500\)/, 'Fallback: --color-border-control fehlt');
-  assert.match(tokensCss, /--color-border-control:\s*var\(--neutral-500\)/, 'tokens.css: --color-border-control zeigt nicht mehr auf --neutral-500');
-
-  // ... und diese Stufe haelt 3:1 auf der Feldflaeche, hell und dunkel.
+  // Das Token traegt in beiden Quellen denselben Wert - seit Tafla (2026-10-19)
+  // die Feldkante der Spezifikation statt der Rampenstufe --neutral-500 ...
   const htmlDark = html.indexOf('@media (prefers-color-scheme: dark)');
   const tokensDark = tokensCss.indexOf('@media (prefers-color-scheme: dark)');
+  assert.equal(cssVar(html, '--color-border-control'), cssVar(tokensCss, '--_color-border-control'),
+    'Fallback und tokens.css tragen dieselbe helle Feldkante');
+  assert.equal(cssVar(html, '--color-border-control', htmlDark), cssVar(tokensCss, '--color-border-control', tokensDark),
+    'Fallback und tokens.css tragen dieselbe dunkle Feldkante');
+
+  // ... und dieser Wert haelt 3:1 auf der Feldflaeche, hell und dunkel.
   const paare = [
-    ['Inline-Fallback hell', cssVar(html, '--neutral-500'), cssVar(html, '--color-surface')],
-    ['Inline-Fallback dunkel', cssVar(html, '--neutral-500', htmlDark), cssVar(html, '--color-surface', htmlDark)],
-    ['tokens.css hell', cssVar(tokensCss, '--_neutral-500'), cssVar(tokensCss, '--_color-surface')],
-    ['tokens.css dunkel', cssVar(tokensCss, '--_neutral-500', tokensDark), cssVar(tokensCss, '--_color-surface', tokensDark)],
+    ['Inline-Fallback hell', cssVar(html, '--color-border-control'), cssVar(html, '--color-surface')],
+    ['Inline-Fallback dunkel', cssVar(html, '--color-border-control', htmlDark), cssVar(html, '--color-surface', htmlDark)],
+    ['tokens.css hell', cssVar(tokensCss, '--_color-border-control'), cssVar(tokensCss, '--_color-surface')],
+    ['tokens.css dunkel', cssVar(tokensCss, '--color-border-control', tokensDark), cssVar(tokensCss, '--_color-surface', tokensDark)],
   ];
   for (const [label, edge, field] of paare) {
     const ratio = contrastRatio(edge, field);
@@ -954,7 +957,7 @@ const resolveVar = (value) => {
 /* Die Schritt-H2 stand auf 20px/700 - auf derselben Stufe wie die Wortmarke
  * darueber, zwei gleich laute Titel und keiner fuehrte. Jetzt Title 1 der App
  * (28px, bold, -0.015em, 1.21), die Wortmarke eine klare Stufe darunter, und
- * Untertitel/Hinweise auf Subheadline/Footnote. Geprueft wird die Wirkung in px
+ * Untertitel/Hinweise auf Body/Footnote (Tafla, vorher Subheadline). Geprueft wird die Wirkung in px
  * ueber den Fallback, nicht der Tokenname - ein var(), das auf die falsche
  * Stufe zeigt, faellt so mit auf. */
 test('Typo-Hierarchie: die Schritt-H2 ist Title 1, die Wortmarke eine Stufe darunter', () => {
@@ -970,14 +973,17 @@ test('Typo-Hierarchie: die Schritt-H2 ist Title 1, die Wortmarke eine Stufe daru
   assert.ok(wordPx <= 17, `die Wortmarke steht auf ${wordPx}px und konkurriert mit der H2`);
   assert.ok(Number(declared(word, 'font-weight', base)) <= 600, 'die Wortmarke ist fetter als 600');
 
-  assert.equal(toPx(declared(sel => sel === '.card-head p', 'font-size', base)), 15, 'Untertitel ist nicht Subheadline (15px)');
+  // Tafla (2026-10-19): die App hat keine Subheadline (15) mehr - die
+  // Erklaerung unter dem Titel ist Body (17) in Tinte-2, der Hinweis Footnote.
+  assert.equal(toPx(declared(sel => sel === '.card-head p', 'font-size', base)), 17, 'Untertitel ist nicht Body (17px)');
   assert.equal(toPx(declared(sel => sel === '.hint', 'font-size', base)), 13, 'Hinweis ist nicht Footnote (13px)');
 
-  // Das Gruppen-Label ist das Versal-Mikro-Label der App.
+  // Das Gruppen-Label ist der Gruppenkopf der App: Satzschreibung, 17/600,
+  // kein Tracking - Tafla hat die Versal-Labels zurueckgezogen.
   const label = sel => sel === '.group-label';
-  assert.equal(declared(label, 'text-transform', base), 'uppercase');
-  assert.equal(resolveVar(declared(label, 'letter-spacing', base)), '0.05em');
-  assert.equal(toPx(declared(label, 'font-size', base)), 12);
+  assert.equal(declared(label, 'text-transform', base), null, 'keine Versalien mehr');
+  assert.equal(declared(label, 'letter-spacing', base), 'normal');
+  assert.equal(toPx(declared(label, 'font-size', base)), 17);
 });
 
 /* Desktop ab 1024px: zweispaltig, Inhalt oben verankert. `safe center` liess die

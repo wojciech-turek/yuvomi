@@ -547,20 +547,20 @@ test('#1821 Fokus: der Neuaufbau der Seite ruft Erfassen und Wiederfokus, um das
   // rebuildDashboard() lebt im Abschluss von render() und laesst sich nicht
   // rufen. Was die beiden Funktionen TUN, messen die Tests darueber; hier steht
   // nur, dass der Abschluss sie in dieser Reihenfolge und mit diesen Werten ruft.
+  // TAFLA (2026-10-19): ausserhalb der Wand baut renderToday() die Seite; die
+  // Nachfolger einer Geste (der naechste Kreis nach einem Haken) stehen in
+  // `todayFocus`, der Anpassen-Knopf von frueher ist das Blatt „Dostosuj Dziś".
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const fn = src.slice(src.indexOf('  function rebuildDashboard(cfg) {'));
-  const body = fn.slice(0, fn.indexOf('\n  }\n')).split('\n').filter((line) => !/^\s*(\/\/|\/?\*)/.test(line)).join('\n');
-  const capture = body.indexOf('const { key: keepFocus, had: hadFocus } = captureRebuildFocus(shell, document.activeElement, document.body);');
-  const paint = body.indexOf('setHtml(shell, `\n      <section class="dashboard-masthead');
-  // R19: mobil steht der Anpassen-Einstieg im Menue (`.dashboard-tools-btn`) -
-  // der Knopf ist dort nicht gerendert, das Menue ist der Rueckweg.
-  // R20 (D, Wand-Modus): nach dem Verlassen der Wand steht danach der
-  // Einstieg in die Wand als letzter Kandidat - nach den drei oben.
-  const restore = body.search(/^ {4}restoreFocusAfterRebuild\(container, \[\n {6}keepFocus,\n {6}\.\.\.\(focusAfterRebuild \?\? \[\]\),\n {6}\.\.\.\(hadFocus && modeChanged \? \['#dashboard-customize-btn', '\.dashboard-tools-btn'\] : \[\]\),\n(?: {6}\.\.\.\(takeWallFocusIntent\('leave'\) \? \[[^\n]*\] : \[\]\),\n)? {4}\]\);$/m);
+  const fn = src.slice(src.indexOf('  function renderToday(shell) {'));
+  const body = fn.slice(0, fn.indexOf('\n  }\n'));
+  const capture = body.indexOf('const { key: keepFocus } = captureRebuildFocus(shell, document.activeElement, document.body);');
+  const paint = body.indexOf('setHtml(shell, renderTodayPage(todayState))');
+  const restore = body.indexOf('restoreFocusAfterRebuild(container, [keepFocus, ...(todayFocus ?? [])]);');
   assert.ok(capture > 0, 'erfasst wird vor dem Aufbau');
   assert.ok(paint > capture, 'dann wird gebaut');
-  assert.ok(restore > paint, 'und danach wieder fokussiert: eigener Schluessel, Nachfolger der Geste, Anpassen-Knopf');
+  assert.ok(restore > paint, 'und danach wieder fokussiert: eigener Schluessel, dann der Nachfolger der Geste');
+  assert.match(src, /function rebuildDashboard\(cfg\) \{[\s\S]*?renderToday\(shell\);/, 'jeder Neuaufbau ausserhalb der Wand geht durch renderToday()');
 });
 
 test('der Aufrufer reicht die Gesamtzahlen aus der Antwort an die Kacheln durch', () => {
@@ -876,17 +876,15 @@ test('FLIP: jede Kachel laeuft von ihrer alten Lage in die neue, statt zu spring
 });
 
 test('FLIP haengt am Neuaufbau: vorher messen, nach dem setHtml abspielen - nur innerhalb des Anpassen-Modus', async () => {
+  // TAFLA (2026-10-19): Dziś hat kein Kachelraster und keinen Anpassen-Modus
+  // mehr - es gibt keine Kacheln, die gleiten koennten. playTileFlip bleibt
+  // (Test darueber) fuer ein Raster, das es wieder geben koennte; der Aufbau
+  // ruft es nicht mehr.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   const body = src.match(/function rebuildDashboard\(cfg\) \{[\s\S]*?\n {2}\}\n/)?.[0];
   assert.ok(body, 'rebuildDashboard() nicht gefunden - die Signatur greift nicht mehr');
-  const capture = body.search(/const tileRectsBefore = isCustomizing && renderedCustomizing === true \? captureTileRects\(shell\) : null;/);
-  const rebuild = body.search(/setHtml\(shell, `\s*<section class="dashboard-masthead/);
-  const play = body.search(/playTileFlip\(shell, tileRectsBefore\)/);
-  assert.ok(capture > -1 && rebuild > -1 && play > -1, 'Messen, Neuaufbau und Abspielen stehen alle drei im Neuaufbau');
-  assert.ok(capture < rebuild && rebuild < play, 'erst messen, dann neu bauen, dann abspielen');
-  assert.ok(capture < body.indexOf('renderedCustomizing = isCustomizing;'),
-    'gemessen wird, bevor der Modus des letzten Aufbaus ueberschrieben ist - sonst gleitet auch das Betreten des Modus');
+  assert.doesNotMatch(body, /playTileFlip\(/);
 });
 
 // R16 (Bewegung): beim Betreten/Verlassen des Anpassen-Modus sprang das Raster
@@ -913,13 +911,13 @@ test('Anpassen-Modus betreten/verlassen: das Raster gleitet als Ganzes, ohne Fed
   __test.playGridShift({ querySelector: () => ({ getBoundingClientRect: () => ({ top: 0 }) }) }, 100, { reduced: false });
   assert.equal(calls.length, 1, 'reduzierte Bewegung, kein Vorher-Wert, kein Versatz, kein animate: nichts');
 
+  // TAFLA (2026-10-19): ohne Anpassen-Modus gibt es keinen Moduswechsel, der
+  // das Raster verschieben koennte - der Aufbau ruft das Gleiten nicht mehr.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   const body = src.match(/function rebuildDashboard\(cfg\) \{[\s\S]*?\n {2}\}\n/)?.[0] ?? '';
-  const capture = body.search(/const gridTopBefore = modeChanged\s*\?/);
-  const rebuild = body.search(/setHtml\(shell, `\s*<section class="dashboard-masthead/);
-  const play = body.search(/playGridShift\(shell, gridTopBefore\)/);
-  assert.ok(capture > -1 && capture < rebuild && rebuild < play, 'nur beim Moduswechsel: vorher messen, neu bauen, gleiten');
+  assert.ok(body, 'rebuildDashboard() gefunden');
+  assert.doesNotMatch(body, /playGridShift\(/);
 });
 
 test('Anpassen-Modus: das Raster traegt eine Kante, keine Toenung ueber allen Kacheln', async () => {
@@ -1280,7 +1278,10 @@ test('R18: die umgestellten Inhaltsklassen der Uebersicht stehen auf der Lese-Le
   const { eachRule } = await import('./css-rules.js');
   const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-  const LADDER = { '--type-card-title': '1.0625rem', '--type-secondary': '0.9375rem', '--type-caption': '0.8125rem', '--text-xs': '0.75rem' };
+  // Tafla (2026-10-19): die Leiter faellt auf die iPhone-Skala - Sekundaer-
+  // und Mikrostufe stehen auf der Footnote (13). Die Klassen bleiben auf
+  // ihren Rollen-Tokens; die Werte darunter sind jetzt 17/13/13/13.
+  const LADDER = { '--type-card-title': '1.0625rem', '--type-secondary': '0.8125rem', '--type-caption': '0.8125rem', '--text-xs': '0.8125rem' };
   for (const [token, value] of Object.entries(LADDER)) {
     assert.match(tokens, new RegExp(`${token}:\\s*${value.replace('.', '\\.')};`), `${token} ist ${value}`);
   }
@@ -1436,8 +1437,11 @@ test('R19 mobil: die Wetterzeile steht im Masthead auch neben der Karte, breit s
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  assert.match(src, /renderDashboardOverview\(user, isCustomizing, weather, \{ followsDefault, canPublish, weatherCard: weatherCardShown \}\)/,
-    'das Wetter geht immer in den Kopf, die Karte nur als Merkmal');
+  // TAFLA (2026-10-19): Dziś hat keine Wetterkarte mehr; die Zeile steht im
+  // Kopf, abschaltbar in „Dostosuj Dziś" (`today-weather`).
+  const view = readFileSync(new URL('../public/components/today-view.js', import.meta.url), 'utf8');
+  assert.match(view, /\$\{showWeather \? weatherLine\(weather\) : ''\}/, 'das Wetter geht in den Kopf von Dziś');
+  assert.match(src, /showWeather: entries\.some\(\(w\) => w\.id === 'today-weather' && todayVisible\(w\)\)/);
   const weather = { current: { temp: 18, desc: 'Sonnig', icon: '01d' }, units: 'metric' };
   const head = __test.renderDashboardOverview({ display_name: 'Linda' }, false, weather, { weatherCard: true });
   assert.match(head, /class="dashboard-overview__weather dashboard-overview__weather--card"/);
@@ -1458,5 +1462,9 @@ test('R19 mobil: der Wand-Modus steht im Anpassen-Menue, je Breite ein Weg', asy
   assert.match(css, /\.dashboard-tools-btn \{\s*display: none;\s*\}/, 'breit gibt es das Menue nicht');
   assert.match(css, /@media \(max-width: 767px\) \{\s*\.dashboard-tools-btn \{\s*display: inline-flex;\s*\}\s*\.dashboard-overview__tools:has\(> \.dashboard-tools-btn\) > #dashboard-wall-enter,\s*\.dashboard-overview__tools:has\(> \.dashboard-tools-btn\) > #dashboard-customize-btn \{\s*display: none;/,
     'schmal ersetzt das Menue die zwei Knoepfe');
-  assert.match(src, /if \(action === 'dashboard-wall'\) container\.querySelector\('#dashboard-wall-enter'\)\?\.click\(\);/);
+  // TAFLA (2026-10-19): der Kopf von Dziś hat keine Werkzeuge mehr; der
+  // Wand-Modus steht in „Dostosuj Dziś" (Abschnitt „Więcej"), nie am Display.
+  assert.match(src, /onWall: onDisplay \? null : enterWallFromToday/);
+  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+  assert.match(sheet, /actions\.onWall \? actionRow\(\{ action: 'wall', label: t\('dashboard\.wallEnter'\)/);
 });

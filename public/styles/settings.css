@@ -144,6 +144,18 @@
   height: var(--space-4);
 }
 
+/* TAFLA (2026-10-19): die Marke eines Blatts ist ein nacktes Zeichen in
+ * Tinte-2, keine Vollton-Kachel - die Modulfarbe hat das Chrome verlassen
+ * (layout.css, "Tafla: ein Modul nennt sich mit seinem Zeichen"). Das gilt
+ * fuer alle drei Orte der Liste und fuer die Modulzeilen; ein Drittanbieter-
+ * Modul darf sein Zeichen weiter in seinem eigenen Ton zeigen. */
+.settings-shell__navigation-link-icon.vivid-mark,
+.settings-overview__row-mark.vivid-mark,
+.settings-module-row__icon.vivid-mark {
+  background: none;
+  color: var(--seal-accent);
+}
+
 /* EINE Spalte, die schrumpfen darf. Ohne `minmax(0, 1fr)` war die Spalte
  * implizit `auto` und so breit wie das laengste Wort: die Sync-Links massen
  * 226px im 196px-Traeger, und `overflow: hidden` am Panel schnitt

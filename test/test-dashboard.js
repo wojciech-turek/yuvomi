@@ -2974,7 +2974,10 @@ function layoutOhne(missing) {
 // WIDGET_IDS (ihr eigentlicher Zweck), und zwei Zweige, die je eine ANDERE Id
 // ergaenzen, aendern dieselbe Zeile unterschiedlich - das ist ein Konflikt, den
 // git meldet, statt ihn stillschweigend zu verschmelzen.
+// TAFLA (2026-10-19): die fuenf Abschnitte von Dziś stehen vorn
+// (TODAY_SECTION_IDS) - ein Bestandslayout bekommt sie oben, in dieser Folge.
 const ERWARTETE_WIDGET_IDS = [
+  'today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon',
   'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget',
   'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule',
   'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks',
@@ -3001,10 +3004,12 @@ test('Widget-Merge: zwei fehlende Ids behalten ihre Reihenfolge zueinander', () 
 });
 
 test('Widget-Merge: eine fehlende Id am Anfang der Liste landet vorn, nicht hinten', () => {
-  // Der Fall ohne Vorgaenger - `tasks` ist WIDGET_IDS[0]. Die Rueckwaertssuche
-  // findet nichts und muss auf Position 0 fallen.
-  const merged = widgets.normalizeDashboardConfig(layoutOhne('tasks'));
-  assert(merged[0].id === 'tasks', `Erste Id landete auf Position ${merged.findIndex((w) => w.id === 'tasks')}`);
+  // Der Fall ohne Vorgaenger - seit Tafla ist `today-weather` WIDGET_IDS[0]
+  // (vorher `tasks`). Die Rueckwaertssuche findet nichts und muss auf
+  // Position 0 fallen.
+  const first = widgets.WIDGET_IDS[0];
+  const merged = widgets.normalizeDashboardConfig(layoutOhne(first));
+  assert(merged[0].id === first, `Erste Id landete auf Position ${merged.findIndex((w) => w.id === first)}`);
 });
 
 test('Widget-Merge: ein umsortiertes Layout laesst den Neuzugang seinem Vorgaenger folgen', () => {
@@ -3020,8 +3025,9 @@ test('Widget-Merge: ein umsortiertes Layout laesst den Neuzugang seinem Vorgaeng
   const sichtbar = merged.filter((w) => w.visible).map((w) => w.id);
   // `countdown` ist der zweite Neuzugang in diesem Layout (#647) und belegt
   // dieselbe Zusicherung ein zweites Mal: sein Vorgaenger in WIDGET_IDS ist
-  // `birthdays`, und dorthin gehoert er - nicht ans Ende.
-  assert(sichtbar.join(',') === 'weather,metrics,family,budget,birthdays,countdown,rewards,notes',
+  // `birthdays`, und dorthin gehoert er - nicht ans Ende. Die fuenf
+  // Tafla-Abschnitte (2026-10-19) haben keinen Vorgaenger und stehen vorn.
+  assert(sichtbar.join(',') === 'today-weather,today-shopping,today-tomorrow,today-question,today-soon,weather,metrics,family,budget,birthdays,countdown,rewards,notes',
     `Neuzugang an unerwarteter Stelle: ${sichtbar.join(',')}`);
 });
 
@@ -3251,9 +3257,12 @@ test('das Wachstum ist verdrahtet: CSS liest den Span, der Aufbau ruft es nach d
   nodeAssert.ok(regel, 'keine Regel fuer [data-row-fill] in dashboard.css');
   nodeAssert.match(regel.body, /grid-column:\s*span var\(--widget-fill-span\)/);
   nodeAssert.ok(regel.at.some((a) => /min-width:\s*768px/.test(a)), 'nur ab zwei Spalten');
+  // TAFLA (2026-10-19): Dziś zeichnet kein Kachelraster mehr - ausserhalb der
+  // Wand gibt es keinen Aufbau, der das Wachstum verdrahten koennte. Die
+  // Regel oben und applyRowFill (Test davor) bleiben fuer ein Raster, das es
+  // wieder geben koennte; verdrahtet wird es nicht mehr.
   const src = withoutBlockComments(readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8'));
-  nodeAssert.match(src, /wireDashboardEditMode\(\);\s*wireRowFill\(\);/, 'rebuildDashboard ruft wireRowFill() nach dem Anpassen-Draht');
-  nodeAssert.match(src, /applyRowFill\(grid, \{ editing: isCustomizing \}\)/, 'wireRowFill nimmt das Wachstum im Anpassen-Modus zurueck');
+  nodeAssert.doesNotMatch(src, /wireRowFill\(\)/, 'Dziś hat kein Raster, dessen Zeilen wachsen koennten');
 });
 
 test('isUserOrderedConfig gibt es nicht mehr - das Raster schaltet nach keiner Reihenfolge um', () => {
@@ -3388,18 +3397,14 @@ test('das Schedule-Widget wird an der periodischen Refresh-Stelle zurueckgesetzt
   // refetch) and re-await it with a freshly computed "today" BEFORE folding
   // it into `fresh` - in that order, or a stale/failed slice survives another
   // 15 minutes.
+  // TAFLA (2026-10-19): outside wall mode Dziś draws no schedule widget, so
+  // the page loads no schedule slice any more, and the silent refresh must not
+  // carry a stale one over either - it takes the fresh /dashboard answer as a
+  // whole. (Before Tafla this guard pinned the reset-and-reload of the slice
+  // here; the widget it fed is gone from the normal page.)
   const refreshFn = src.slice(src.indexOf('async function refreshDashboardData'), src.indexOf('const refreshTimerId'));
-  nodeAssert.match(refreshFn, /data\.schedule = undefined;/, 'must reset the memoized slice, or ensureScheduleSlice() short-circuits on its own "already loaded" memo and nothing is refetched');
-  nodeAssert.match(refreshFn, /await ensureScheduleSlice\(\);/, 'must re-await the slice, not just remember the previous result');
-  const resetIndex = refreshFn.indexOf('data.schedule = undefined;');
-  const reEnsureIndex = refreshFn.indexOf('await ensureScheduleSlice();');
-  const carryOverIndex = refreshFn.indexOf('fresh.schedule = data.schedule;');
-  assert(
-    resetIndex > -1 && reEnsureIndex > resetIndex && carryOverIndex > reEnsureIndex,
-    'the reset must precede the re-fetch, which must precede folding the (now newly loaded) slice into `fresh` - '
-    + 'a regression back to a bare carry-over would still satisfy a loose "the line appears twice in the file" '
-    + 'grep but fails this ordering check',
-  );
+  nodeAssert.ok(refreshFn.length > 0, 'refreshDashboardData() is still there');
+  nodeAssert.doesNotMatch(refreshFn, /fresh\.schedule = data\.schedule;/, 'no stale schedule slice survives the silent refresh');
 });
 
 test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen', async () => {

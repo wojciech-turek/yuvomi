@@ -156,28 +156,28 @@
   max-width: var(--page-measure, var(--content-max-width-narrow));
 }
 
-/* Label-Rolle, keine Titel-Rolle: die Überschrift ordnet, sie konkurriert nicht
- * mit den Statusfarben der Zeilen darunter. 12px/uppercase, weil zwei der drei
- * Tabs es so hielten und der dritte (Vorrat, 14px/none) der Ausreißer war. */
+/* Gruppenkopf, keine Titel-Rolle: die Überschrift ordnet, sie konkurriert nicht
+ * mit den Statusfarben der Zeilen darunter. Bis Tafla stand sie auf
+ * 12px/Versalien; Tafla (2026-10-19) setzt den Kopf einer Gruppe in
+ * Satzschreibung auf Body-Semibold in Tinte ("Nabiał 4"), die Zahl daneben
+ * bleibt Sache der Seite (17/400 Tinte-2). */
 .list-group__title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  font-size: var(--text-xs);
+  font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  /* Der EINE Tracking-Wert für Uppercase-Mikro-Labels; ein Guard verbietet
-   * hartkodierte letter-spacing-Werte. */
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-secondary);
+  line-height: var(--type-body-lh);
+  letter-spacing: var(--tracking-normal);
+  color: var(--color-text-primary);
 }
 
 /* Auf- und zuklappbarer Gruppenkopf (#812).
  *
  * Ein KNOPF im h2, nicht ein anklickbares h2: sonst kennt ihn die Tastatur
  * nicht und aria-expanded haette nichts, woran es haengt. Er erbt die
- * Schrift der Ueberschrift vollstaendig - Groesse, Versalien und Tracking
+ * Schrift der Ueberschrift vollstaendig - Groesse, Gewicht und Tracking
  * stehen dort einmal und duerfen hier nicht zum zweiten Mal auftauchen,
  * sonst laufen Kopf und Knopf beim naechsten Token-Wechsel auseinander. */
 .list-group__toggle {

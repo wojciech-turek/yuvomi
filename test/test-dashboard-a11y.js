@@ -223,10 +223,12 @@ test('„Verwalten" am Familie-Widget fuehrt an das Familienblatt - und nur, wer
       { familyManage: familyManageHref({ role: 'member' }) }));
     assert.doesNotMatch(member, /widget__link/, 'Mitglied: kein Link, der auf das eigene Konto umleitet');
 
-    // Die Verdrahtung: der echte Aufruf reicht das Ziel des angemeldeten Nutzers durch.
-    assert.match(dashboardSource,
-      /renderDashboardLayout\(cfg, data, weather, currency, \{[^}]*familyManage: familyManageHref\(user\)/,
-      'rebuildDashboard gibt familyManageHref(user) an das Raster');
+    // TAFLA (2026-10-19): Dziś zeichnet kein Raster mehr. Die Familienkarte
+    // gibt es dort nur, wo mehr als zwei Erwachsene im Haushalt leben (Wunsch
+    // des Haushalts: mit zweien sagen die Kreise im Plan schon, wer was tut);
+    // die Verwaltung der Mitglieder erreicht man ueber die Einstellungen.
+    assert.match(dashboardSource, /if \(id === 'family'\) return todayAdults\(\)\.length > 2/,
+      'Dziś bietet die Familienkarte erst ab drei Erwachsenen an');
   }
 });
 
@@ -280,7 +282,7 @@ test('am Wandtablett bietet der Kopf weder Anpassen noch die Suche an (#1808)', 
   assert.match(gast, /id="dashboard-customize-btn"/, 'die Regel haengt am Display, nicht an jedem engen Konto');
 });
 
-test('Abbrechen fragt nur, wenn es etwas zu verlieren gibt (H2)', () => {
+test('Abbrechen fragt nur, wenn es etwas zu verlieren gibt (H2)', async () => {
   const saved = [{ id: 'tasks', visible: true, size: '2x1', order: 0 }, { id: 'notes', visible: true, size: '1x1', order: 1 }];
   const same = saved.map((w) => ({ ...w }));
   assert.equal(customizeHasChanges({ widgetConfig: same, savedWidgetConfig: saved, glanceVisible: true, savedGlanceVisible: true }), false);
@@ -288,15 +290,14 @@ test('Abbrechen fragt nur, wenn es etwas zu verlieren gibt (H2)', () => {
   assert.equal(customizeHasChanges({ widgetConfig: hidden, savedWidgetConfig: saved, glanceVisible: true, savedGlanceVisible: true }), true);
   assert.equal(customizeHasChanges({ widgetConfig: same, savedWidgetConfig: saved, glanceVisible: false, savedGlanceVisible: true }), true,
     'das Kopfband zaehlt mit');
-  // Verdrahtung: Abbrechen laeuft ueber die Rueckfrage, nicht direkt ins Verwerfen.
-  assert.match(dashboardSource, /'#dashboard-customize-cancel'\)\?\.addEventListener\('click', requestCancelDashboardConfig/);
-  const body = dashboardSource.match(/async function requestCancelDashboardConfig\(\) \{([\s\S]*?)\n {2}\}/)?.[1] ?? '';
-  // Die Rueckfrage ist seit A7 P2-1 (2026-09-28) EINE Funktion fuer Abbrechen
-  // und Verlassen - gemessen wird, dass sie an der Aenderung haengt und die
-  // Verwerfen-Frage ist, nicht wie sie heisst.
-  assert.match(body, /if \(customizeHasChanges\([\s\S]*?confirmDiscardCustomize\(/, 'die Rueckfrage haengt an der Aenderung');
-  assert.match(dashboardSource, /const confirmDiscardCustomize = \(\) => confirmModal\(t\('modal\.unsavedChanges'\)/,
-    'und sie ist die Verwerfen-Frage');
+  // TAFLA (2026-10-19): „Dostosuj Dziś" ersetzt den Anpassen-Modus und hat
+  // GAR NICHTS zu verlieren - jede Aenderung wird sofort gespeichert und Dziś
+  // dahinter neu gezeichnet. Darum gibt es kein „Abbrechen", das verwerfen
+  // koennte, und keine Rueckfrage; „Gotowe" schliesst nur.
+  const sheet = await readFile(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+  assert.match(sheet, /headerAction: \{ label: t\('today\.customizeDone'\), onClick: \(\) => closeModal\(\) \}/, '„Gotowe" schliesst nur');
+  assert.doesNotMatch(sheet, /common\.cancel/, 'kein zweiter Ausgang, der verwerfen koennte');
+  assert.match(dashboardSource, /onChange: \(\{ order, visible \}\) => \{[\s\S]*?persistTodayLayout\(/, 'jede Aenderung geht sofort an den Speicher');
 });
 
 test('„+N weitere heute" ist ein Weg dorthin, wo die verdeckten Zeilen stehen (H13)', () => {
@@ -445,8 +446,12 @@ test('R9 M7: mobil eine Kopfzeile [Abbrechen] Titel [Fertig], Reichweite als Fus
   assert.match(foot, /data-customize-publish/);
   assert.match(foot, /data-customize-reset/);
   assert.doesNotMatch(foot, /\bid="/, 'eine Id gibt es einmal - die Fussnote verdrahtet ueber Datenattribute');
-  assert.match(dashboardSource, /\$\{isCustomizing \? renderCustomizeFootnote\(\{ followsDefault, canPublish \}\) : ''\}/, 'die Fussnote steht unter dem Raster, nur im Anpassen-Modus');
-  assert.match(dashboardSource, /querySelectorAll\('\[data-customize-publish\]'\)\.forEach/, 'beide Orte laufen durch denselben Handler');
+  // TAFLA (2026-10-19): Vorgabe und Zuruecksetzen stehen in „Dostosuj Dziś"
+  // (Abschnitt „Więcej"), nur fuer wen sie gelten - Admin bzw. eigener Stand.
+  const sheet = await readFile(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+  assert.match(sheet, /actions\.canPublish \? actionRow\(\{ action: 'publish'/);
+  assert.match(sheet, /actions\.followsDefault === false \? actionRow\(\{ action: 'reset'/);
+  assert.match(dashboardSource, /onPublish: async \(\) => \{ await closeModal\(\{ force: true \}\); await publishHouseholdDefault\(\); \}/);
 
   const rules = [...eachRule(css)];
   const phone = (r) => r.at.some((a) => /\(max-width:\s*639px\)/.test(a));
@@ -471,8 +476,9 @@ test('R9 M7: einspaltig bietet die Kachel EIN Groessen-Menue mit nur den wirksam
 
   assert.match(dashboardSource, /'data-widget-size-preset', 'data-widget-size-menu'/, 'der Menue-Knopf ist eine Fokus-Identitaet');
   assert.match(dashboardSource, /installPopoverMenus\(container\)/, 'Position, Pfeiltasten und Schliessen kommen vom geteilten Menue');
-  const handler = dashboardSource.slice(dashboardSource.indexOf("grid.querySelectorAll('[data-widget-size-preset]')"));
-  assert.match(handler.slice(0, 900), /menu\.hidePopover\?\.\(\);\s*grid\.querySelector\(`\[popovertarget=/, 'nach der Wahl gehoert der Fokus dem Menue-Knopf');
+  // TAFLA (2026-10-19): Dziś hat keine Kachelgroessen mehr; das Menue gehoert
+  // zum alten Raster und wird nirgends mehr verdrahtet.
+  assert.doesNotMatch(dashboardSource, /querySelectorAll\('\[data-widget-size-preset\]'\)/);
 
   const rules = [...eachRule(css)];
   const oneCol = (r) => r.at.some((a) => /\(max-width:\s*767px\)/.test(a));
@@ -575,10 +581,12 @@ test('Anpassen: der Speed-Dial ist ausgeblendet, und der Neuaufbau meldet den Sc
   }
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const rebuild = src.slice(src.indexOf('function rebuildDashboard('), src.indexOf('setHtml(shell, `\n      <section class="dashboard-masthead'));
-  assert.ok(/syncLeaveGuard\(\);/.test(rebuild), 'jeder Neuaufbau gleicht den Verlassen-Schutz mit dem Modus ab');
-  assert.ok(/setCustomizeFabHidden\(isCustomizing\);/.test(rebuild), 'und blendet den Speed-Dial mit dem Modus');
-  assert.ok(/setLeaveGuard\(\(\) => customizeLeaveAllowed\(/.test(src), 'der Schutz ist die Rueckfrage von Abbrechen');
+  // TAFLA (2026-10-19): „Dostosuj Dziś" ist ein modales Blatt - der Knopf
+  // liegt unter dem Scrim, und weil jede Aenderung sofort gespeichert ist,
+  // braucht der Weg hinaus keinen Verlassen-Schutz mehr.
+  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+  assert.match(sheet, /openModal\(\{/, 'das Blatt ist ein Dialog');
+  assert.doesNotMatch(src, /setLeaveGuard\(\(\) => customizeLeaveAllowed\(/, 'kein Schutz fuer einen Modus, den es nicht mehr gibt');
 });
 
 // navigate() steht seit #1657 in utils/router-navigate.js; der Router reicht
@@ -852,10 +860,10 @@ test('Dashboard: ein Wort fuer den Kopf-Link, Onboarding-Karte als schwebende Ta
 test('R20: Esc beendet das Anpassen wie "Abbrechen", nicht an einem offenen Dialog vorbei', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const at = src.indexOf("if (event.key !== 'Escape' || event.defaultPrevented || !isCustomizing) return;");
-  assert.ok(at > 0, 'kein Esc-Ausstieg aus dem Anpassen');
-  const block = src.slice(src.lastIndexOf('if (isCustomizing) {', at), src.indexOf('}, { signal: signal });', at));
-  assert.match(block, /document\.addEventListener\('keydown'/);
-  assert.match(block, /dialog\[open\]/, 'ein offener Dialog behaelt sein Esc');
-  assert.match(block, /requestCancelDashboardConfig\(\)/, 'derselbe Weg wie der Knopf, mit Rueckfrage');
+  // TAFLA (2026-10-19): das Anpassen ist ein Dialog (modal.js) - sein Esc ist
+  // das Esc des Dialogs, und es verliert nichts, weil jede Aenderung schon
+  // gespeichert ist. Die Seite selbst haengt kein eigenes Esc mehr an.
+  assert.doesNotMatch(src, /event\.key !== 'Escape' \|\| event\.defaultPrevented \|\| !isCustomizing/);
+  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+  assert.match(sheet, /dirtyGuard: false/, 'nichts Ungespeichertes, also keine Rueckfrage beim Schliessen');
 });

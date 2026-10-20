@@ -1,6 +1,14 @@
 /* ==========================================================================
  * Typografie-Rollen — eine Quelle der Wahrheit
  *
+ * TAFLA (2026-10-19): auf dem iPhone gibt es genau VIER Groessen und ZWEI
+ * Gewichte - Large title 34/41, Title 22/28, Body 17/22, Footnote 13/18, je
+ * 400 oder 600 (tokens.css, Abschnitt 10). Die Rollen unten bilden darauf ab:
+ * Titel tragen 600 statt 700, der Zeilentitel ist Body 17/400, Gruppenkoepfe
+ * stehen in Satzschreibung auf 17/600 - es gibt keine Versal-Labels mit
+ * Tracking mehr. Ziffern in runden Zahlen (Uhr, Timer, die eine Heldenzahl)
+ * nehmen `.u-rounded`.
+ *
  * Jede Rolle definiert Größe + Weight + Line-Height + Tracking + Transform an
  * EINER Stelle. Ein Element nimmt eine Rolle auf einem von zwei Wegen an:
  *
@@ -25,7 +33,7 @@
 .dashboard-hero__title,
 .dashboard-overview__title {
   font-size: var(--type-hero-mobile);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-tight);
 }
@@ -41,7 +49,7 @@
  * ------------------------------------------------------------------------ */
 .u-page-title {
   font-size: var(--type-page-title-mobile);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-tight);
 }
@@ -68,7 +76,7 @@
 .settings-leaf-header__title,
 .split-title {
   font-size: var(--type-toolbar-title);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
@@ -125,18 +133,20 @@
 /* --------------------------------------------------------------------------
  * Section-/Bereichs-Überschrift (normale Schreibweise)
  *
- * ABGRENZUNG zum Versal-Mikro-Label darunter (HIG-Rollout Runde 3, der
+ * ABGRENZUNG zum Gruppenkopf darunter (HIG-Rollout Runde 3, der
  * Finish-Review fand zwei Schreibweisen über demselben Trägertyp):
- *   BEREICH einer Seite  → diese Rolle. Ein Heading-Element, Satzschreibung.
- *                          Es gibt eine Handvoll pro Seite, jede benennt etwas
- *                          anderes („Heute wichtig", „Punktestände",
- *                          „Nach Kategorie", „Transaktionen").
- *   GRUPPE in einer Liste → das Versal-Mikro-Label. Kein Heading, sondern ein
+ *   BEREICH einer Seite  → diese Rolle. Ein Heading-Element, Satzschreibung,
+ *                          Tafla-Title 22/600. Es gibt eine Handvoll pro
+ *                          Seite, jede benennt etwas anderes („Heute wichtig",
+ *                          „Punktestände", „Nach Kategorie", „Transaktionen").
+ *   GRUPPE in einer Liste → der Gruppenkopf (Body 17/600, seit Tafla ebenfalls
+ *                          Satzschreibung). Kein Heading, sondern ein
  *                          Sortierschlüssel, der sich über die Liste
  *                          wiederholt (Kategorie in Kontakten, Mahlzeitentyp
  *                          im Wochenplan, Monat in einer Chronik).
  * Die Faustregel: wiederholt sich der Kopf mit wechselndem Wert über EINE
- * Liste, ist er versal; benennt er einen eigenen Bereich, ist er Überschrift.
+ * Liste, ist er Gruppenkopf; benennt er einen eigenen Bereich, ist er
+ * Überschrift.
  * ------------------------------------------------------------------------ */
 .u-section-title,
 .panel-head__title,
@@ -169,59 +179,49 @@
 }
 
 /* --------------------------------------------------------------------------
- * Versal-Mikro-Label (Grouped-List-Sektionskopf) — der EINE konsistente
- * Tracking-Wert. Ersetzt die zuvor gestreuten 0/0.05/0.06/0.07/0.08/0.1em-Werte.
+ * Gruppenkopf (Grouped-List-Sektionskopf) — TAFLA: Satzschreibung, 17/600
  *
- * Rollenwechsel mit dem HIG-Rollout: das ist der SEKTIONSKOPF einer
- * Grouped-Liste (Apples eigenes Muster: „NACH KATEGORIE", „OBST & GEMÜSE"),
- * nicht mehr der dekorative Eyebrow über einer Überschrift. Den verbietet
- * DESIGN.md ausdrücklich; erlaubt ist die Versal-Zeile nur als ECHTE
- * Information (Apple-News-Muster, z. B. das Masthead-Datum).
+ * Hier stand das Versal-Mikro-Label (12px, semibold, Versalien, 0.05em) als
+ * Sektionskopf einer Grouped-Liste, Apples altes Muster ("NACH KATEGORIE").
+ * Tafla (2026-10-19, DESIGN.md Direction Contract) hat es zurueckgezogen: der
+ * Kopf einer Gruppe ist Body-Semibold in Satzschreibung und Tinte ("Nabiał 4",
+ * "Na później 2", "Ty", "Dom"), ohne Tracking. Die Bedeutungsfrage bleibt, was
+ * sich aendert, ist nur der Schnitt:
+ *   BEREICH einer Seite   -> Section-Rolle darueber (Title 22/600).
+ *   GRUPPE in einer Liste -> diese Rolle (Body 17/600).
+ * `--tracking-label` steht deshalb auf 0, und kein Stylesheet setzt mehr
+ * `text-transform: uppercase` mit Tracking (test-typography.js).
  *
- * Entfallen sind mit dem Rollout .u-eyebrow (die generische Opt-in-Klasse - ohne
- * Nutzer im Markup und mit einem Namen, der zur Rückkehr des Musters einlädt),
- * .dashboard-metric__title, .today-cockpit-card__label (die Cockpit-Zeile trägt
- * jetzt Titel + Untertitel statt Versal-Label), .dashboard-hero__summary-label
- * und .item-category__header - alle fünf ohne Fundstelle im Markup.
- *
- * DIESE LISTE HAT BEWUSST KEINEN GUARD, und das ist keine Lücke, sondern die
- * Regel (Guard-Abdeckung 2026-08-08, Befund D). Die Kopf-Abgrenzung entscheidet
- * an einer BEDEUTUNG: ein Kopf, der einen Bereich der Seite benennt, ist eine
- * Überschrift in Satzschreibung (Block darüber); einer, der sich mit
- * wechselndem Wert über eine Liste wiederholt, ist ein Versal-Mikro-Label
- * (dieser Block). Was ein Kopf benennt, ist keine Eigenschaft seines Markups -
- * `.panel-head__title` stand bis 2026-09-25 in DIESEM Block, obwohl es
- * einen Bereich benennt (Konten, Darlehen) - als einziger Titel eines Panels
- * war das Versal-Label die zweite Ueberschriftsgrammatik des Budgets neben
- * „Nach Kategorie" (Critique 2026-09-25). Es ist jetzt ein <h2> im Block
- * darueber.
- *
- * Ein Guard darüber wäre deshalb ein Guard über DIESE LISTE, nicht über die
- * Regel - genau die Bauart, die dieses Repo bei der Küche und beim Budget schon
- * zweimal eingeholt hat: er wäre ab dem Tag grün, an dem jemand einen neuen
- * Selektor hier einträgt, egal was der Kopf benennt. Die Prüfung, die trägt,
- * ist die, die es gibt: `test:typography` hält die ROLLENSCHICHT (jede Rolle
- * existiert als Regel, keine nur als Kommentar) und verbietet die entfallene
- * `.u-eyebrow` in Stylesheet und Markup. Wer hier einen Selektor hinzufügt,
- * beantwortet die Bedeutungsfrage - im Zweifel im Review, nicht im Test.
+ * Entfallen sind mit dem HIG-Rollout .u-eyebrow, .dashboard-metric__title,
+ * .today-cockpit-card__label, .dashboard-hero__summary-label und
+ * .item-category__header - alle fuenf ohne Fundstelle im Markup. Die Liste hat
+ * weiter bewusst keinen Guard ueber ihre Selektoren: was ein Kopf benennt, ist
+ * keine Eigenschaft seines Markups (Guard-Abdeckung 2026-08-08, Befund D).
  * ------------------------------------------------------------------------ */
 .event-icon-picker__category-label,
 .budget-chart-block__title,
 .loan-report__section-title,
-.day-header__name,
-.meal-slot__type-label,
-.week-gutter-label {
+.meal-slot__type-label {
   /* `.documents-folder-browser__title` stand hier und war die falsche Antwort
-   * auf die Bedeutungsfrage, die der Kommentar oben stellt: "Ordner
-   * durchsuchen" NENNT, was folgt, statt es zu wiederholen - nach der
-   * Kopf-Abgrenzungs-Regel also eine Ueberschrift in Satzschreibung. Dazu war
-   * es eine Verbphrase, und die las in Versal mit Tracking als Anweisung
-   * (Critique 2026-08-13). Sie ist jetzt ein echtes <h2>. */
-  font-size: var(--text-xs);
+   * auf die Bedeutungsfrage: "Ordner durchsuchen" NENNT, was folgt - ein
+   * echtes <h2> (Critique 2026-08-13). */
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--type-body-lh);
+  letter-spacing: var(--tracking-normal);
+  color: var(--color-text-primary);
+}
+
+/* Die kompakten Kalenderlabels (Wochentag im Spaltenkopf, Gutter der
+ * Wochenansicht) waren dieselbe Versal-Zeile, sind aber keine Gruppenkoepfe:
+ * sie stehen in schmalen Spalten. Tafla setzt sie auf die Footnote (13/600)
+ * in Satzschreibung - wie die Wochenleiste ("Pn Wt Śr"). */
+.day-header__name,
+.week-gutter-label {
+  font-size: var(--type-footnote);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
+  letter-spacing: var(--tracking-normal);
 }
 
 /* --------------------------------------------------------------------------
@@ -298,7 +298,11 @@
  * die Registrierung behauptete das eine, die Datei tat das andere, und im
  * Ergebnis rendert dasselbe h3-Element zwei Größen (Critique 2026-07-27). */
 .settings-navigation-group__title {
-  font-size: var(--type-secondary);
+  /* Tafla: die Dichte-Variante stand auf Subheadline (15/600). Die Skala hat
+   * keine 15 mehr, und 13/600 ist die Rolle von Chips und Pillen, nicht von
+   * Titeln - die Variante steht deshalb auf Body-Semibold wie die Headline
+   * darueber. Dichter wird eine Karte ueber Abstand, nicht ueber Schriftgrad. */
+  font-size: var(--type-card-title);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-snug);
 }
@@ -338,7 +342,9 @@
 .contact-item__name,
 .subscription-card__name,
 .rw-standing__name {
-  font-size: var(--text-base);
+  /* Tafla: der Zeilentitel ist Body 17/400 (vorher 16, medium). --text-base
+   * bleibt den Feldern (iOS-Zoom-Schwelle); --font-weight-medium ist 400. */
+  font-size: var(--type-body);
   font-weight: var(--font-weight-medium);
 }
 
@@ -398,6 +404,15 @@
 }
 .u-section-title.u-compact {
   font-size: var(--type-card-title);
+}
+
+/* Tafla: runde Ziffern NUR fuer Uhr, Timer, die Schrittnummer beim Kochen, die
+ * eine Heldenzahl je Bildschirm und die Gipfelzeilen ("Smacznego!", "Dzień
+ * ogarnięty"). Immer 600 und tabellarisch; ab 96px mit -0.02em. */
+.u-rounded {
+  font-family: var(--font-rounded);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (min-width: 1024px) {
