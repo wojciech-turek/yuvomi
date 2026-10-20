@@ -1866,7 +1866,8 @@ test('Rezepte mobil: die Zeile oeffnet ein Leseblatt, sie klappt nichts auf', ()
   assert(!/expandIn|collapseOut|aria-expanded/.test(narrow), 'kein Aufklapper mehr');
   const sheet = recipesSrc.slice(recipesSrc.indexOf('function openRecipeSheet('), recipesSrc.indexOf('function openRecipeNarrow('));
   assert(/openDetailView\(\{/.test(sheet), 'dasselbe Blatt wie die anderen Module');
-  assert(/fillRecipeDetail\(detail, recipe\)/.test(sheet), 'derselbe Inhalt wie die Detailspalte');
+  // Tafla: dasselbe Fuellen, im Blatt mit Kopfbild und grossem Titel (`variant: 'sheet'`).
+  assert(/fillRecipeDetail\(detail, recipe(?:, \{ variant: 'sheet' \})?\)/.test(sheet), 'derselbe Inhalt wie die Detailspalte');
   assert(/narrow: 'sheet'/.test(recipesSrc), 'der Baustein fuehrt die Rezepte unter der Schwelle als Blatt');
   assert(!/class="recipe-detail"[^]*?hidden = true|detail\.hidden = true/.test(recipesSrc), 'kein verstecktes Panel je Zeile');
 });

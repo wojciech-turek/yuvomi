@@ -1,6 +1,13 @@
 /**
  * Modul: Rezepte (Recipes)
- * Zweck: Styles fuer gespeicherte Rezepte und Aktionskarten
+ * Zweck: Rezeptliste (Suche, Mahlzeit-Chips, "Gotowane ostatnio", Zeilen) und
+ *        Rezeptdetail (Spalte am Desktop, geschobenes Blatt am Telefon)
+ *
+ * TAFLA (2026-10-19): warmes Papier, weisse gruppierte Karten, EINE violette
+ * Stimme nur dort, wo man handeln kann, vier Schriftgroessen (34/22/17/13),
+ * zwei Gewichte. Farben, Radien und Schatten kommen aus den Vertragsnamen des
+ * Fundaments (BUILD.md, "Token contract"); bis es im Haupt-Zweig steht, tragen
+ * sie den heutigen Token als Rueckfall.
  */
 
 .recipes-page {
@@ -20,136 +27,337 @@
   }
 }
 
-/* Scroller, Lesemaß, FAB-Auslauf und Gruppen-Abstand kommen aus .list-scroller
+/* Scroller, Lesemaß und FAB-Auslauf kommen aus .list-scroller
  * (styles/list-row.css); die Klasse steht im Markup neben .recipes-list. Hier
- * bleibt nur der Träger der Content-Spalte und der obere Auslauf.
- *
- * Das frühere Kartenraster (`repeat(auto-fit, minmax(320px, 1fr))`) ist weg. Es
- * war der Grund für drei Befunde in einer Komponente: 408px gegen 360px Höhe in
- * derselben Rasterzeile, dadurch 48px Versatz der CTA-Grundlinien (Tablet 56px),
- * und bei 320px ein stiller 32px-Überlauf. Als Zeilenliste in der geteilten
- * 720er-Lesespalte teilt der Tab jetzt Fläche und Rhythmus mit Einkauf und
- * Vorrat, statt ein viertes Layout zu sein (Critique 2026-07-30). */
+ * bleibt der Träger der Content-Spalte, der obere Auslauf und der Rhythmus der
+ * Abschnitte (Tafla: 24 zwischen den Gruppen). */
 .recipes-list {
   padding-inline: var(--page-inline-pad);
-  padding-block-start: var(--space-4);
+  padding-block-start: var(--space-2);
+  gap: var(--space-6);
 }
-
-/* Der Stretch-und-Clip-Fix für lange, ungruppierte Zeilenlisten (.row-carrier,
- * bis Runde 5 .list-rows) sitzt
- * jetzt in list-row.css selbst (align-self: start) - er galt hier zuerst
- * nur für Rezepte, betrifft aber jede Küchenliste, deren Filter sie auf eine
- * einzige flache Gruppe reduziert (z. B. Vorrat unter "fast leer"). Siehe
- * dortigen Kommentar für die Messung. */
 
 /* --------------------------------------------------------
- * Rezeptzeile
+ * Suche (Tafla): ein 36 hohes Feld im Fuellton, Ecke 12, Text 17. Die
+ * Trefferflaeche bleibt 44 hoch - das Polster der Beschriftung gehoert dazu
+ * (`<label for>` fokussiert das Feld).
  * -------------------------------------------------------- */
-
-/* Geometrie, Fläche, Trennlinie und Hover: .list-row. */
-
-.recipe-row__heading {
-  /* Die Überschrift ist der Flex-Slot, der Button füllt ihn. Ohne Reset brächte
-   * h2 seine Blockmargen und die eigene Schriftgröße mit. */
-  margin: 0;
-  font: inherit;
-  display: flex;
-  min-width: 0;
+.recipes-page .recipes-search .page-search__control {
+  padding-block: var(--space-1);
 }
 
-/* Der Button trägt die ganze Textspalte: Name, Zutatenzahl, Chevron. */
-/* NAME UND META STEHEN HIER NEBENEINANDER, NICHT ÜBEREINANDER - und das ist
- * die eine benannte Ausnahme vom Stapel der geteilten Zeile (Critique
- * 2026-08-13, dort zunächst als vergessener Umbau gelesen).
- *
- * Der Grund ist die Meta selbst: sie ist hier EINE Zahl („6 Zutaten"), kein
- * mehrteiliger Satz aus Datum, Konto und Kategorie. Eine einzelne Zahl gehört
- * rechtsbündig ans Zeilenende, wo das Chevron steht - das ist die Detailspalte
- * der HIG-Tabellenzeile, und die Regeln darunter halten sie über Ziffernzahl
- * und Singular/Plural hinweg bündig. Untereinander gesetzt kostete dieselbe
- * Zahl eine zweite Textzeile pro Rezept und stünde linksbündig unter einem
- * Titel, mit dem sie nichts zu tun hat.
- *
- * Wer diese Ausnahme kopiert, prüfe zuerst, ob seine Metazeile auch nur EINE
- * Angabe trägt. Ab zwei gilt der Stapel. */
-.recipe-row__toggle {
-  flex: 1 1 auto;
+.recipes-page .recipes-search .page-search__input {
+  min-height: 36px;
+  padding-block: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill, var(--color-fill-field));
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+}
+
+/* --------------------------------------------------------
+ * Mahlzeit-Chips (Tafla "Chipy"): 36 sichtbar, 44 Trefferflaeche. Der Grund
+ * liegt am ::before, damit der Knopf selbst 44 hoch bleiben kann.
+ * -------------------------------------------------------- */
+.recipes-filter {
+  display: flex;
+  gap: var(--space-2);
+  /* Ein Scroll-Traeger als Rasterkind faellt sonst auf die Hoehe 0. */
+  min-height: var(--target-base);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  margin-inline: calc(-1 * var(--page-inline-pad));
+  padding-inline: var(--page-inline-pad);
+}
+
+.recipes-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.recipes-filter__chip {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-base);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.recipes-filter__chip::before {
+  content: '';
+  position: absolute;
+  inset: var(--space-1) 0;
+  z-index: -1;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill, var(--color-fill-field));
+  transition: background-color var(--transition-fast);
+}
+
+.recipes-filter__chip--active {
+  color: var(--color-accent);
+}
+
+.recipes-filter__chip--active::before {
+  background-color: var(--color-accent-tint, var(--color-accent-light));
+}
+
+.recipes-filter__check {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.25;
+}
+
+.recipes-filter__chip:focus-visible {
+  outline: none;
+}
+
+.recipes-filter__chip:focus-visible::before {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* --------------------------------------------------------
+ * "Gotowane ostatnio": zwei Karten je Reihe, Bild oder warme Flaeche mit dem
+ * Teller-Zeichen, Titel 17/600 in hoechstens zwei Zeilen, Tag 13 ink-2.
+ * -------------------------------------------------------- */
+.recipes-recent {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.recipes-section-title {
+  margin: 0;
+  font-size: var(--type-title, var(--type-toolbar-title));
+  line-height: var(--type-title-lh, 1.273);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.recipes-recent__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.recipe-card {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.recipe-card:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.recipe-card__media {
+  flex: none;
+  height: 120px;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  text-align: start;
+  justify-content: center;
+  background-color: var(--color-hearth, var(--color-surface-2));
 }
 
-/* `flex-basis: 0` statt der ererbten `auto` (list-row.css): mit `auto`
- * zieht der Browser für die Zeilenumbruch-Entscheidung die VOLLE, unumbrochene
- * Textbreite als hypothetische Größe heran - bei einem langen Rezeptnamen
- * passte die nicht neben das Vorschaubild, und statt NUR den Text intern
- * umzubrechen, wanderte der GESAMTE Name in eine eigene Zeile (gemessen: „Alpha
- * One Ingredient" blieb neben dem Bild, „Delta Twenty One Ingredients Recipe"
- * fiel komplett darunter - zwei verschiedene Zeilenzahlen für dieselbe
- * Zeilen-Vorlage, je nach Titellänge). Mit `flex-basis: 0` startet der Name bei
- * null, „passt" also immer neben dem Bild, wächst danach in den Rest, und der
- * Text bricht dort ganz normal per `overflow-wrap: anywhere` intern um. */
-.recipe-row__toggle .list-row__name {
-  flex-basis: 0;
+.recipe-card__media-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-/* Zutatenzahl und Chevron bleiben beim Namen, statt an die Zeilenkante zu
- * wandern: sie beschriften, was das Aufklappen zeigt. */
-.recipe-row__toggle .list-row__meta {
-  flex-shrink: 0;
-  /* Ohne feste Mindestbreite verschiebt sich alles, was VOR ihr im Flex-Fluss
-   * steht (das Mealie-Badge), von Zeile zu Zeile: der Name wächst per
-   * flex-grow auf genau so viel Platz, wie die Geschwister danach übrig
-   * lassen, und „1 ingredient" gegen „21 ingredients" ändert diesen Rest um
-   * mehrere Zeichenbreiten. `text-align: end` + `tabular-nums` statt eines
-   * ausgeschriebenen Zeichen-Zählers: die Zahl bleibt bündig zum Chevron,
-   * unabhängig von Ziffernanzahl oder Singular/Plural-Wortlänge der
-   * jeweiligen Sprache. */
-  min-width: 15ch;
-  text-align: end;
+.recipe-card__plate {
+  width: 40px;
+  height: 40px;
+  stroke-width: 1.5;
+  color: var(--color-border-control);
+}
+
+.recipe-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.recipe-card__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+  font-weight: var(--font-weight-semibold);
+}
+
+.recipe-card__meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  color: var(--color-text-secondary);
+}
+
+/* --------------------------------------------------------
+ * "Wszystkie przepisy N": Gruppenkopf ausserhalb der Karte (17/600 plus Zahl
+ * 17/400 ink-2, 16 eingerueckt, 8 ueber der Karte), dann 64er-Zeilen.
+ * -------------------------------------------------------- */
+.recipes-all {
+  display: grid;
+  align-content: start;
+}
+
+.recipes-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1h);
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.recipes-group-title__count {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-/* Unsichtbarer Slot um das Badge (siehe recipes.js): in der Breitfassung
- * nimmt er per `display: contents` gar nicht am Flex-Layout teil, die Pille
- * selbst ist dann das Flex-Item wie zuvor. Die Container-Query unten
- * reaktiviert ihn als echtes Flex-Item mit eigener Zeile. */
+/* Die Zeile: 64 hoch, Polster 0 16, fuehrender Platz 28 + 12 Abstand, sodass
+ * der Titel bei x=56 der Karte beginnt. Haarlinien 0,5 und ab x=56. */
+.recipes-page .recipe-row {
+  min-height: 64px;
+  padding: 0 var(--space-4);
+}
+
+.recipes-page .row-carrier {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.recipes-page .row-carrier > * + * {
+  border-top: 0;
+}
+
+.recipes-page .row-carrier > .recipe-row-item + .recipe-row-item {
+  position: relative;
+}
+
+.recipes-page .row-carrier > .recipe-row-item + .recipe-row-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 56px;
+  height: 0.5px;
+  background-color: var(--color-separator, var(--color-border-subtle));
+}
+
+.recipe-row__heading {
+  margin: 0;
+  font: inherit;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Der Hauptknopf der Zeile ist ein Raster: Platz | Titel ueber Meta | Herkunft.
+ * Tafla: die Zeile ist IMMER zweizeilig - Name oben, Zutatenzahl und Tag
+ * darunter (17 ueber 13). */
+.recipe-row__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "slot name badge"
+    "slot sub  badge";
+  align-items: center;
+  align-content: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding-block: var(--space-2);
+  text-align: start;
+  -webkit-touch-callout: none;
+}
+
+.recipe-row__toggle > .recipe-row__thumb,
+.recipe-row__toggle > .recipe-row__glyph {
+  grid-area: slot;
+}
+
+.recipe-row__toggle .list-row__name {
+  grid-area: name;
+  align-self: end;
+}
+
+.recipe-row__glyph {
+  display: flex;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.recipe-row__toggle .list-row__meta {
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Breit unsichtbar war er bis Tafla (`display: contents`): die Zeile war dort
+ * einzeilig. Jetzt ist er immer die zweite Zeile unter dem Namen. */
 .recipe-row__badge-slot {
-  display: contents;
+  display: flex;
+  grid-area: badge;
 }
 
-/* Derselbe Kniff fuer Zutatenzahl und „Diese Woche geplant": breit sind beide
- * Flex-Items der Zeile wie zuvor, schmal (Query unten) ist der Slot die zweite
- * Zeile und haelt beide Angaben zusammen. Ohne ihn rueckte nur die Zahl unter
- * den Namen, und „· Diese Woche geplant" blieb mit fuehrendem Mittelpunkt
- * allein neben dem Namen stehen - gemessen in der Listenbahn der Detailspalte
- * (Zeile 424px, 26,5rem, 2026-09-26), vorher jede Zeile zwischen 26 und 30rem. */
 .recipe-row__sub {
-  display: contents;
+  display: block;
+  grid-area: sub;
+  align-self: start;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  color: var(--color-text-secondary);
 }
 
-/* Vorschaubild aus Mealie (server/routes/recipes.js proxied die Bytes, siehe
- * dortigen Kommentar - kein direkter <img src> auf Mealie möglich, der
- * Bearer-Token darf den Client nie erreichen). Feste Größe statt intrinsischer:
- * Mealie liefert Originalseitenverhältnisse, eine Zeile darf davon nicht
- * abhängen. Der Slot ist ein <span>, das entweder ein <img> (echtes Bild) oder
- * direkt den Platzhalter-Zustand trägt - Mealie liefert selbst KEIN
- * generisches Platzhalterbild über die Medien-Route (die 404t bei fehlendem
- * Bild, mealie-recipes/mealie#4804), das Icon kommt deshalb von uns. */
+/* Das Vorschaubild im fuehrenden Platz: 28 im Quadrat, Ecke 8. Ein gespiegeltes
+ * Rezept ohne Bild traegt den Platzhalter (utils/recipe-thumb.js). */
 .recipe-row__thumb {
-  width: var(--target-md);
-  height: var(--target-md);
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .recipe-row__thumb-img {
   width: 100%;
   height: 100%;
-  /* `object-fit: cover` schneidet statt zu verzerren. */
   object-fit: cover;
 }
 
@@ -157,59 +365,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--color-surface-2);
-  color: var(--color-text-tertiary);
+  background-color: var(--color-fill, var(--color-fill-field));
+  color: var(--color-text-secondary);
 }
 
-/* Das Badge sitzt in derselben Flex-Zeile wie Name und Zutatenzahl - ohne
- * eigenes flex-shrink würde ein langer Rezeptname es auf seine Buchstaben
- * zusammendrücken, bevor der Name selbst umbricht (er trägt overflow-wrap
- * bewusst, siehe .list-row__name). */
 .recipe-row__toggle .source-badge {
   flex-shrink: 0;
 }
 
-/* Sichtbare Herkunfts-Kennzeichnung je Provider - ein Ton pro Provider,
- * definiert in tokens.css (--source-<provider>/-light). */
+/* Gespiegelte Rezepte (#1059): kleines Herkunfts-Badge. */
 .source-badge {
   display: inline-flex;
   align-items: center;
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);
+  font-size: var(--type-footnote, var(--type-caption));
+  font-weight: var(--font-weight-semibold);
 }
+
 .source-badge--mealie {
   background: var(--source-mealie-light);
   color: var(--source-mealie);
 }
+
 .source-badge--tandoor {
   background: var(--source-tandoor-light);
   color: var(--source-tandoor);
 }
 
-/* --------------------------------------------------------
- * Schmale Zeile: Aktionen ins Menü, Zutatenzahl auf eine eigene Zeile
- *
- * GEMESSEN bei 320px (Critique 2026-07-30, P0): drei Zeilenaktionen belegten
- * 3 × 48 + 2 × 8 = 152px der 262px Zeilenbreite. Für die Textspalte blieben 98px,
- * und darin teilten sich Name, „6 Zutaten" (nicht schrumpfend, ~70px) und Chevron
- * (16px) den Platz - für den Namen blieb nichts. Als Flex-Item mit
- * `overflow-wrap: anywhere` fiel er auf min-content, also auf die Breite des
- * breitesten Einzelzeichens: **8px**. „Chicken Tikka Masala" stand ein Zeichen pro
- * Zeile, die Zeile war 448px hoch, auf den Bildschirm passte EIN Rezept.
- *
- * Zwei Züge, beide mit derselben Container-Query wie der Vorrats-Stepper - die
- * maßgebliche Breite ist die der Zeile, nicht die des Fensters:
- *   1. Die drei Sekundäraktionen wandern in das geteilte Überlaufmenü
- *      (utils/popover-menu.js), MIT Labels. 152px → 48px.
- *   2. Die Zutatenzahl rückt unter den Namen, damit er die Zeile allein hat.
- *
- * Danach: Textspalte 202px statt 98px, Namensbreite 186px statt 8px.
- * -------------------------------------------------------- */
-
-/* Basiszustand ZUERST: `@container` erhöht die Spezifität nicht, es entscheidet die
- * Quellreihenfolge. Standen diese beiden Regeln hinter der Query, gewannen sie -
- * und die Aktionen blieben sichtbar, obwohl die Query griff (gemessen: Textspalte
- * 46px statt 202px). */
+/* ZEILENAKTIONEN AM ZEIGER (Tafla: am Finger kein ⋯ je Zeile). Breit stehen
+ * Bearbeiten/Duplizieren/Loeschen inline, schmal im Ueberlaufmenue - die
+ * Umschaltung haengt an der ZEILENbreite. Der Basiszustand steht VOR der
+ * Container-Query, sonst gewinnt er gegen sie. */
 .recipe-row__inline-actions {
   display: flex;
   align-items: center;
@@ -230,129 +417,92 @@
     align-items: center;
   }
 
-  /* `order`, damit die Vorlesereihenfolge Name → Zutatenzahl → Chevron bleibt. */
   .recipe-row__toggle {
     flex-wrap: wrap;
-    /* DER SPALTENABSTAND DARF NICHT DER ZEILENABSTAND SEIN. Sobald die Query
-     * greift, stapelt dieser Flex-Container Name über Meta - dieselbe
-     * Beziehung, die .list-row__main (list-row.css) als Grid mit
-     * `gap: var(--space-0h)` führt. Hier erbte der Stapel den HORIZONTALEN
-     * Abstand zum Vorschaubild (--space-2) als Zeilenabstand und war damit
-     * 6px höher als jede andere Zeile der App: gemessen bei 390x844
-     * 23,5 (Name) + 8 + 20,6 (Meta) = 52,1 statt 46,1, Zeile 68,1 statt 64.
-     * Der Spaltenabstand bleibt, er hat einen eigenen Anlass (Bild ↔ Text). */
-    row-gap: var(--space-0h);
+    row-gap: var(--space-1);
   }
 
-  /* Eigene Zeile fürs Mealie-Badge, direkt unter dem Namen und über der
-   * Zutatenzahl - konsistent auf jeder Zeile, unabhängig von Titellänge oder
-   * Zutatenzahl-Wortbreite (siehe .recipe-row__badge-slot in recipes.js: der
-   * SLOT trägt die volle Breite, nicht die Pille selbst). */
   .recipe-row__badge-slot {
     display: flex;
     flex: 1 0 100%;
     order: 1;
   }
 
-  /* Der Slot ist die zweite Zeile; darin laufen Zahl und Planungsangabe als
-   * Text hintereinander (Block, kein Flex - die beiden Angaben sind ein Satz). */
   .recipe-row__sub {
     display: block;
     flex: 1 0 100%;
     order: 2;
     min-width: 0;
-    /* Die Schrift der beiden Angaben auch am Block: sonst setzt die Zeile den
-     * Strut der groesseren Namensschrift an und wird 1-2px hoeher als die
-     * Meta allein (gemessen 390px: 65/66 statt 64px). */
-    font-size: var(--text-sm);
   }
 
   .recipe-row__toggle .list-row__meta {
     flex: 1 0 100%;
     order: 2;
-    /* UND DAMIT ENTFÄLLT DER GRUND FÜR `text-align: end`.
-     *
-     * Oben steht er, damit die Zutatenzahl bündig zum Chevron bleibt, während
-     * sie in derselben Zeile rechts vom Namen sitzt. Hier bekommt sie ihre
-     * eigene volle Zeile - der Name beginnt links, sein Untertitel endete
-     * rechts, und die Zeile verlor ihre Anatomie: gemessen bei 375px stand
-     * „Chicken Tikka Masala" bei x=29 und „6 Zutaten" 257px weiter rechts
-     * darunter. Jede andere Liste der App hält Name und Meta auf einer Kante.
-     *
-     * Die Mindestbreite geht mit: sie hielt die Spalte für die Breitfassung
-     * frei und presst hier nur noch eine volle Zeile auf 15ch. */
     min-width: 0;
     text-align: start;
   }
 }
 
+/* Am Finger traegt die Zeile keine Bedienzone: Bearbeiten, Duplizieren und
+ * Loeschen liegen im Rezept (⋯) und hinter einem langen Druck auf die Zeile
+ * (wireLongPress in recipes.js). Das Menue selbst bleibt im DOM - der lange
+ * Druck oeffnet es. */
+@media (hover: none) {
+  .recipes-page .recipe-row .list-row__actions {
+    position: absolute;
+    width: var(--space-px);
+    height: var(--space-px);
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 
-/* „Diese Woche geplant": die zweite Meta-Angabe der Zeile - neutraler
- * Sekundaertext, keine Flaeche und kein Ton (der Zustand ist eine Meldung,
- * keine Identitaet; Skalen-Regel). Der Mittelpunkt kommt aus dem
- * +-Kombinator, der Hausform fuer benachbarte Meldungen (pantry.css). Die
- * Rezepteliste zeigte ihre Verbindung zum Wochenplan vorher nirgends
- * (Critique 2026-08-27, P2). Der Block steht HINTER den beiden
- * Container-Query-Bloecken oben: der Zeilen-Guard verlangt die
- * Basis-vor-Query-Ordnung ueber die ganze Datei, und diese Query ist die
- * dritte. */
+  /* Wer per Tastatur oder Schaltersteuerung hineinkommt, bekommt sie zurueck. */
+  .recipes-page .recipe-row .list-row__actions:focus-within {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+}
+
+/* Nach der Haltezeit des langen Drucks: die Zeile ist gegriffen, beim
+ * Loslassen geht ihr Menue auf. */
+.recipe-row-item--held .recipe-row {
+  background-color: var(--color-fill, var(--color-fill-field));
+}
+
 .recipe-row__planned {
-  flex-shrink: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
+/* Zweite Meta-Angabe, getrennt ueber den Mittelpunkt (Hausform, Vorrat). */
 .list-row__meta + .recipe-row__planned::before {
   content: '·';
   margin-inline: var(--space-1) var(--space-1);
-  color: var(--color-text-tertiary);
 }
 
-/* In der Schmalfassung der Zeile ist die Angabe verzichtbar: sie ist eine
- * Zweitinformation, und die Zutatenzahl behaelt ihren Platz (dieselbe
- * Rangfolge wie beim Badge-Slot). */
-@container list-rows (max-width: 26rem) {
-  .recipe-row__planned { display: none; }
-}
-
+/* Der Wegweiser-Chevron entfaellt (Tafla-Zeile ohne Chevron); er bleibt im DOM,
+ * weil die Zeile ihr `aria-haspopup` nach ihm richtet. */
 .recipe-row__chevron {
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-  /* Ein Wegweiser (chevron-right): die Zeile oeffnet das Rezept als
-   * Leseblatt (R19). Bis dahin drehte sich hier ein Aufklapp-Winkel. */
-}
-
-/* Gespiegelte Zeile ganz ohne Detail (recipes.js, isMirrored && !hasDetail):
- * derselbe Chevron als reiner Breiten-Platzhalter, unsichtbar statt entfernt.
- * `display: none` würde ihn wieder aus dem Flex-Fluss nehmen und das Badge
- * erneut verschieben - genau das Problem, das er lösen soll. */
-.recipe-row__chevron--placeholder {
-  visibility: hidden;
+  display: none;
 }
 
 /* --------------------------------------------------------
- * Rezept-Detail: EIN Inhalt fuer Leseblatt (unter der Schwelle) und
- * Detailspalte (fillRecipeDetail, recipes.js). Bis R19 hing er als
- * Aufklapper unter der Zeile.
+ * Rezeptdetail (geteilt von Spalte und Blatt)
  * -------------------------------------------------------- */
 .recipe-detail {
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-1) var(--space-3) var(--space-4);
+  gap: var(--space-8);
+  padding: var(--space-1) var(--space-3) var(--space-6);
 }
 
-/* Kopfbild des Details (R16): das selbst hochgeladene Bild, 3:2. Der RAHMEN
- * traegt das Verhaeltnis, das Bild fuellt ihn per `object-fit: cover` - es wird
- * beschnitten, nie gestaucht (ein Hochformat-Foto verliert oben und unten,
- * statt breitgezogen zu werden). Ohne Bild gibt es den Rahmen nicht
- * (utils/recipe-thumb.js), also auch keinen grauen Block. Auf breiter Flaeche
- * begrenzt, damit das Bild die Zutaten nicht aus dem ersten Bildschirm schiebt. */
+/* Das eigene Bild als Kopf der Spalte (R16): 3:2, beschnitten, nicht gestaucht. */
 .recipe-detail__hero {
   aspect-ratio: 3 / 2;
   width: 100%;
   max-width: 30rem;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background-color: var(--color-surface-2);
 }
@@ -364,53 +514,220 @@
   object-fit: cover;
 }
 
-.recipe-detail__ingredients {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* Kopf: "Ugotowane 3× · ostatnio 2 tyg. temu" (17 ink-2), Mahlzeiten (13
+ * ink-2, als Text), dann die Zahlenreihe 16 darunter. */
+.recipe-detail__head {
   display: grid;
   gap: var(--space-1);
 }
 
-/* Ein Abschnitt des Details: Kopf + Inhalt (Zutaten, Notizen). Die Koepfe
- * tragen die Bereichsrolle aus typography.css; hier stehen nur Abstand und
- * Rand, damit der erste Kopf nicht auf dem Detailrand klebt. */
+.recipe-detail__meta {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+  color: var(--color-text-secondary);
+}
+
+.recipe-detail__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  color: var(--color-text-secondary);
+}
+
+.recipe-detail__planned + .recipe-card__meal-types::before {
+  content: '·';
+}
+
+.recipe-card__meal-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* Tafla: die Mahlzeiten sind Text, keine farbigen Marken - Farbe hat nur, was
+ * man tun kann oder was dringend ist. */
+.recipe-detail .meal-type-badge {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  font-weight: var(--font-weight-regular);
+}
+
+.recipe-detail .meal-type-badge + .meal-type-badge::before {
+  content: '·';
+  margin-inline-end: var(--space-1);
+}
+
+.recipe-detail__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-3) 0 0;
+}
+
+.recipe-detail__fact {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.recipe-detail__fact dt {
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  color: var(--color-text-secondary);
+}
+
+.recipe-detail__fact dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Der Zutaten-Zaehler (Tafla "Licznik"): Segmente 4 hoch, 4 Abstand,
+ * vorhanden in Tinte, fehlend im Warnton. */
+.recipe-meter {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  width: 56px;
+}
+
+.recipe-meter__seg {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-primary);
+}
+
+.recipe-meter__seg--missing {
+  background-color: var(--color-warning);
+}
+
 .recipe-detail__section {
   display: grid;
   gap: var(--space-2);
 }
 
+.recipe-detail__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--target-base);
+  margin-block: calc(-1 * var(--space-2));
+}
+
 .recipe-detail__section-title {
   margin: 0;
+  font-size: var(--type-title, var(--type-toolbar-title));
+  line-height: var(--type-title-lh, 1.273);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
-/* ZUTATEN IN PRIMAERTEXT: sie sind der Inhalt des Rezepts, nicht seine
- * Fussnote. Grau standen sie gleichrangig mit den Notizen und leiser als die
- * Zuordnungs-Knoepfe daneben (Re-Critique 2026-09-27, A4). */
+/* "Dopisz 1": eine getoente 32er-Pille, 44 Trefferflaeche ueber das Polster. */
+.recipe-detail__add-missing {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  min-height: var(--target-base);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.recipe-detail__add-missing::before {
+  content: '';
+  position: absolute;
+  inset: 6px 0;
+  z-index: -1;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-tint, var(--color-accent-light));
+}
+
+/* Die Zutaten als Karte aus 48er-Zeilen: Zeichen | Name | Menge, die Menge
+ * rechtsbuendig in tabellarischen Ziffern (Critique R18: EINE Kante fuer
+ * "200 g", "1 EL" und "2"). Die Vorrats-Zuordnung steht als zweite Zeile
+ * unter dem Namen. */
+.recipe-detail__ingredients {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: var(--color-surface);
+}
+
 .recipe-detail__ingredient {
   font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
-  /* DREI SPALTEN: Menge - Zutat - Vorrats-Zuordnung (Critique R18). Die Menge
-   * steht rechtsbuendig in ihrer eigenen Spalte, die Zuordnung am Zeilenende.
-   * Rueckfall ohne Subgrid: jede Zeile misst ihre Mengenspalte selbst, mit
-   * einer Mindestbreite, in die "200 g" und "1 EL" passen - gleich breit,
-   * solange keine Menge laenger ist. Die Zuordnung darf umbrechen: ein
-   * Vorratsname ist so lang, wie der Haushalt ihn getippt hat. */
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(var(--space-12), max-content) minmax(0, 1fr) fit-content(45%);
-  align-items: baseline;
-  gap: var(--space-1) var(--space-3);
+  grid-template-columns: 28px minmax(0, 1fr) fit-content(45%);
+  grid-template-areas:
+    "status name quantity"
+    "status match match";
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-3) var(--space-4);
+  box-sizing: border-box;
 }
 
-.recipe-detail__ingredient-quantity {
-  text-align: end;
+.recipe-detail__ingredient + .recipe-detail__ingredient::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 56px;
+  height: 0.5px;
+  background-color: var(--color-separator, var(--color-border-subtle));
+}
+
+.recipe-detail__ingredient-status {
+  grid-area: status;
+  display: flex;
+  justify-content: center;
   color: var(--color-text-secondary);
-  white-space: nowrap;
+}
+
+.recipe-detail__have {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.25;
+}
+
+.recipe-detail__ring {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
 }
 
 .recipe-detail__ingredient-name {
+  grid-area: name;
   min-width: 0;
   hyphens: auto;
   hyphenate-limit-chars: 6 4 4;
@@ -419,39 +736,47 @@
   overflow-wrap: break-word;
 }
 
-/* Mit Subgrid teilt sich die ganze Liste EINE Mengenspalte: sie ist so breit
- * wie die laengste Menge des Rezepts, und jede Zeile endet an derselben Kante
- * (Chrome 117, Firefox 71, Safari 16). */
-@supports (grid-template-columns: subgrid) {
-  .recipe-detail__ingredients {
-    grid-template-columns: max-content minmax(0, 1fr) fit-content(45%);
-    column-gap: var(--space-3);
-  }
-
-  .recipe-detail__ingredient {
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
-  }
+.recipe-detail__ingredient-quantity {
+  grid-area: quantity;
+  text-align: end;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
-/* Die Einkaufskategorie einer Zutat. Sie steht sonst nur im Formular; bei
- * `meals: read` (#1265) steht sie hinter dem Namen, leise wie die Zuordnung
- * daneben - eine Angabe zur Zutat, nicht ihr Inhalt. */
+/* "na liście": Status als Wort in einer getoenten Pille (Tafla "Status pill"). */
+.recipe-detail__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background-color: var(--color-warning-tint, var(--color-warning-light));
+  color: var(--color-warning-ink);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  font-weight: var(--font-weight-semibold);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .recipe-detail__ingredient-category {
-  font-size: var(--type-caption);
-  color: var(--color-text-tertiary);
+  font-size: var(--type-footnote, var(--type-caption));
+  color: var(--color-text-secondary);
 }
 
-/* Die bestaetigte Zuordnung zu einer Vorratszeile (#1314). Als Knopf, wenn das
- * Konto den Vorrat schreiben darf, sonst als stiller Text - derselbe Platz,
- * dieselbe Groesse, damit der Zustand nicht springt. */
+/* Die bestaetigte Vorrats-Zuordnung (#1314): Zeichen in 13 ink-2 unter dem
+ * Namen; als Knopf, wenn man sie aendern darf. */
 .recipe-detail__ingredient-match {
-  font-size: var(--type-caption);
-  color: var(--color-text-tertiary);
+  grid-area: match;
+  justify-self: start;
+  margin-top: var(--space-1);
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  color: var(--color-text-secondary);
   background: none;
   border: none;
   padding: 0;
-  text-align: right;
+  text-align: start;
   font-family: inherit;
 }
 
@@ -462,15 +787,48 @@ button.recipe-detail__ingredient-match {
 }
 
 button.recipe-detail__ingredient-match:hover {
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
 }
 
-/* (Hier stand `.recipe-detail__ingredient-match--unset` fuer das kursive „Nicht
- * zugeordnet" an jeder offenen Zutat. Das Wort steht nicht mehr an der Zeile -
- * recipes.js `pantryMatchEl` -, der Weg zu den offenen Zuordnungen ist EIN
- * Knopf unter der Liste.) */
+/* Der Weg zu den offenen Zuordnungen: leise, unter der Karte. */
 .recipe-detail__match-open {
   justify-self: start;
+}
+
+/* Kroki: eine Karte, Nummern 13/600 in der Stimme auf der Achse x=28. */
+.recipe-detail__steps {
+  margin: 0;
+  padding: var(--space-2) 0;
+  list-style: none;
+  display: grid;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+.recipe-detail__step {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+  color: var(--color-text-primary);
+}
+
+.recipe-detail__step-num {
+  flex: none;
+  width: 28px;
+  text-align: center;
+  font-size: var(--type-footnote, var(--type-caption));
+  line-height: var(--type-footnote-lh, 1.385);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.recipe-detail__step-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .recipe-detail__notes {
@@ -480,9 +838,8 @@ button.recipe-detail__ingredient-match:hover {
   white-space: pre-wrap;
 }
 
-/* Die beiden Kreislauf-Ausgänge, beschriftet. Umbruchfähig, weil bei 320px drei
- * beschriftete Buttons nicht in eine Zeile passen - und ein Label, das umbricht,
- * ist besser als ein Glyph, den man erraten muss. */
+/* "Do planu" · "Na listę zakupów": zwei getoente Pillen, die sich die Zeile
+ * teilen (sekundaer - die Hauptaktion ist "Zacznij gotować"). */
 .recipe-detail__actions {
   display: flex;
   flex-wrap: wrap;
@@ -490,97 +847,281 @@ button.recipe-detail__ingredient-match:hover {
   gap: var(--space-2);
 }
 
-/* Die Suchzeile (Audit A1-21) ist jetzt der kanonische Kopf in der Variante
- * .page-toolbar--in-group (layout.css); die frühere eigene .recipes-toolbar
- * entfällt samt Padding-Regeln, die der Kopf schon mitbringt. */
+.recipe-detail__actions > .btn--secondary {
+  flex: 1 1 auto;
+  min-height: var(--target-base);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-tint, var(--color-accent-light));
+  color: var(--color-accent);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: none;
+}
 
-/* .recipes-search traegt keine eigene Breite mehr (Re-Critique 2026-09-27,
- * D4): sie ist der Center-Slot, Breite und Stelle kommen aus page-search.css
- * (`--page-search-width`). */
+.recipe-detail__actions > .btn--ghost {
+  flex: 1 0 100%;
+}
 
-/* Herkunfts-Filter (Alle/Nativ/Mealie): Trigger im __actions-Slot des Kopfs
- * (nur sichtbar, wenn Mirror-Rezepte existieren, siehe renderSourceFilter()),
- * Panel über das geteilte .popover-menu (utils/popover-menu.js) - dieselbe
- * Behandlung wie „Lagerorte verwalten" im Vorrat, statt einer eigenen
- * Chip-Reihe, die auf schmalen Bildschirmen für drei Optionen eine ganze
- * Kopf-Zeile kostete (fast immer nur "Alle" aktiv). */
+/* In der Detailspalte (Desktop) stehen die Karten auf der Flaeche der Spalte:
+ * dort tragen sie den Papierton, damit sie sich abheben. */
+.recipe-detail--pane .recipe-detail__ingredients,
+.recipe-detail--pane .recipe-detail__steps {
+  background-color: var(--color-bg);
+}
+
+/* --------------------------------------------------------
+ * Das Rezept am Telefon (Tafla "Przepis"): eine geschobene Seite statt eines
+ * Blatts - Bild oben, Glas-Zurueck und ⋯ darueber, unten der EINE
+ * Primaerknopf "Zacznij gotować". Die Huelle ist der geteilte Dialog
+ * (`size: 'recipe'` -> .modal-panel--recipe); hier stehen nur die Abweichungen.
+ * -------------------------------------------------------- */
+.modal-panel--recipe {
+  background-color: var(--color-bg);
+}
+
+.modal-panel--recipe > .modal-panel__header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: max(var(--space-2), env(safe-area-inset-top)) var(--space-3) 0;
+  border-bottom: 0;
+  pointer-events: none;
+}
+
+/* Der Name des Dialogs bleibt fuer Hilfsmittel; sichtbar steht er gross unter dem Bild. */
+.modal-panel--recipe .modal-panel__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.modal-panel--recipe .modal-panel__header-actions,
+.modal-panel--recipe .recipe-view__menu {
+  pointer-events: auto;
+}
+
+.modal-panel--recipe .recipe-view__menu {
+  margin-inline-start: auto;
+}
+
+/* Glas-Kreise 36 in einer 44er-Trefferflaeche. */
+.modal-panel--recipe .modal-panel__close,
+.recipe-view__more {
+  position: relative;
+  isolation: isolate;
+  width: var(--target-base);
+  height: var(--target-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.modal-panel--recipe .modal-panel__close::before,
+.recipe-view__more::before {
+  content: '';
+  position: absolute;
+  inset: var(--space-1);
+  z-index: -1;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-e2, var(--shadow-sm));
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .modal-panel--recipe .modal-panel__close::before,
+  .recipe-view__more::before {
+    background-color: var(--glass-bg-capsule);
+    backdrop-filter: var(--blur-lg) saturate(180%);
+    -webkit-backdrop-filter: var(--blur-lg) saturate(180%);
+  }
+}
+
+.modal-panel--recipe > .modal-panel__body {
+  padding: 0;
+  gap: 0;
+}
+
+/* Die Huellen der geteilten Leseansicht tragen hier nichts bei. */
+.modal-panel--recipe .detail-view,
+.modal-panel--recipe .detail-view__rows,
+.modal-panel--recipe .detail-row,
+.modal-panel--recipe .detail-row__text {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.recipe-detail--sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 var(--page-inline-pad, var(--space-4)) var(--space-8);
+}
+
+.recipe-detail--sheet > * + * {
+  margin-top: var(--space-8);
+}
+
+.recipe-detail--sheet > .recipe-view__title {
+  margin-top: var(--space-6);
+}
+
+.recipe-detail--sheet > .recipe-view__title + .recipe-detail__head {
+  margin-top: var(--space-1);
+}
+
+/* Das Kopfbild: randlos in 4:3, ohne Bild die warme Flaeche mit dem
+ * Teller-Zeichen (64, Strich 1,25). */
+.recipe-view__hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  margin-inline: calc(-1 * var(--page-inline-pad, var(--space-4)));
+  overflow: hidden;
+  background-color: var(--color-hearth, var(--color-surface-2));
+}
+
+.recipe-view__hero-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.recipe-view__plate {
+  width: 64px;
+  height: 64px;
+  stroke-width: 1.25;
+  color: var(--color-border-control);
+}
+
+.recipe-view__title {
+  margin: 0;
+  font-size: var(--type-large-title, var(--type-page-title-mobile));
+  line-height: var(--type-large-title-lh, 1.206);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  overflow-wrap: break-word;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+/* Unten die Leiste mit dem einen Primaerknopf: Glas ueber dem Inhalt, der
+ * darunter weiterlaeuft. */
+.modal-panel--recipe > .modal-panel__footer {
+  border-top: 0;
+  padding: var(--space-3) var(--space-4) max(var(--space-3), env(safe-area-inset-bottom));
+  background-color: var(--color-bg);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .modal-panel--recipe > .modal-panel__footer {
+    background-color: var(--glass-bg-capsule);
+    backdrop-filter: var(--blur-lg) saturate(180%);
+    -webkit-backdrop-filter: var(--blur-lg) saturate(180%);
+  }
+}
+
+.modal-panel--recipe > .modal-panel__footer > .btn--primary {
+  flex: 1 1 auto;
+  min-height: 52px;
+  border-radius: var(--radius-full);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-accent-glow, none);
+}
+
+@media (max-width: 767px) {
+  /* Am Telefon fuellt das Rezept den Bildschirm: kein Rand, keine Ecken, kein
+   * Griff - es ist eine Seite, kein Blatt. */
+  dialog.modal-overlay:has(> .modal-panel--recipe) {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .modal-panel.modal-panel--recipe {
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .modal-panel.modal-panel--recipe::before {
+    content: none;
+  }
+}
+
+/* --------------------------------------------------------
+ * Leerzustaende der Rezeptliste (Tafla "Pusty stan"): keine Scheibe hinter
+ * dem Zeichen, das Zeichen 32 in ink-3, eine warme Zeile 22/600, eine Zeile
+ * 17/400 ink-2, schmal (<= 320). Nur hier - der geteilte Baustein bleibt.
+ * -------------------------------------------------------- */
+.recipes-list .empty-state {
+  gap: var(--space-2);
+  padding: var(--space-16) var(--space-4) var(--space-8);
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+.recipes-list .empty-state .empty-state__icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  color: var(--color-text-quaternary);
+}
+
+.recipes-list .empty-state__title {
+  font-size: var(--type-title, var(--type-toolbar-title));
+  line-height: var(--type-title-lh, 1.273);
+}
+
+.recipes-list .empty-state__description {
+  max-width: none;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh, 1.294);
+}
+
+/* --------------------------------------------------------
+ * Quellenfilter (Mealie/Tandoor/...) im __actions-Slot des Kopfs
+ * -------------------------------------------------------- */
 .recipes-source-filter-menu {
-  /* Schmaler als die Standardbreite (200px): drei kurze Wörter brauchen sie nicht. */
   min-width: 160px;
 }
 
-/* Der Filter hat einen eigenen Container IM Aktions-Slot, weil der Router in
- * den Slot den FAB andockt (siehe recipes.js). `display: contents` laesst den
- * Trigger darin wie zuvor als Flex-Kind des Slots stehen. */
+/* Der Slot traegt nur den Filter-Trigger und darf deshalb keine eigene
+ * Flaeche mitbringen; sein `hidden` muss gegen `display: contents` gewinnen. */
 .recipes-source-filter {
   display: contents;
 }
 
-/* `display: contents` schlaegt das UA-`[hidden]` wie jede andere Angabe - ohne
- * gespiegelte Rezepte bliebe der Trigger sonst stehen. */
 .recipes-source-filter[hidden] {
   display: none;
 }
 
-/* Das Häkchen-Muster der Einfachauswahl (.popover-menu__item-check--hidden)
- * wohnt seit 2026-08-31 beim restlichen popover-menu-Vokabular in layout.css -
- * es hat mit dem Personen-Umschalter der Gesundheit einen zweiten Nutzer. */
-
-/* ENTFERNT mit dem Kartenraster:
- *   .recipes-search-empty  - der Suchtreffer-Leerzustand läuft jetzt über
- *                            mountEmptyState({ variant: 'no-results' }), also
- *                            mit Icon, <h2>, Suchbegriff und Reset-CTA wie im
- *                            Vorrat. Es war die letzte Stelle im Modul, die den
- *                            erzwingenden Renderer umging.
- *   .recipe-read*          - das Nur-Lese-Modal; sein Inhalt ist jetzt das
- *                            Aufklapp-Detail der Zeile (siehe .recipe-detail).
- *   .recipe-card__title    - der Name kommt aus .list-row__name.
- *   .recipe-card__notes    - jetzt .recipe-detail__notes.
- *   .recipe-card__ingredients / __ingredient / __ingredient--more
- *                          - jetzt .recipe-detail__ingredients / __ingredient;
- *                            das „+N" ist ersatzlos weg, weil die Zutatenzahl in
- *                            der Zeile steht und das Detail alle zeigt.
- */
-
-.recipe-card__meal-types {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-/* ENTFERNT mit dem Kartenraster (Fortsetzung):
- *   .recipe-card__link       - der Link ist jetzt ein regulärer btn--ghost in
- *                              .recipe-detail__actions.
- *   .recipe-card__actions / __primary / __to-shopping
- *                            - die beiden Kreislauf-Ausgänge stehen im Detail
- *                              und nutzen .btn--primary / .btn--secondary. Damit
- *                              verschwindet der Eigenbau-Primärbutton, der neben
- *                              dem soliden .btn--primary des Leerzustands ein
- *                              zweites Erscheinungsbild für „primär" im selben
- *                              Tab war (Critique 2026-07-30, P3).
- *   .recipe-card__icon-actions
- *                            - die drei Icon-Aktionen sitzen in der geteilten
- *                              .list-row__actions und sind DAUERHAFT sichtbar.
- *                              Das Hover-Reveal (`opacity: 0` + pointer-events)
- *                              ist bewusst weg: es hat in diesem Repo zweimal
- *                              dieselbe Defektklasse produziert, und der Vorrat
- *                              und der Einkauf zeigten ihre Zeilenaktionen
- *                              ohnehin immer. Ruhig bleibt die Zone über den
- *                              Tertiär-Ton von .row-action, nicht über
- *                              Unsichtbarkeit.
- */
-
-/* Die Zeilen-Aktions-Buttons (Bearbeiten/Duplizieren/Löschen) nutzen die
- * geteilte .row-action-Grammatik aus layout.css in der geteilten
- * .list-row__actions. Kein eigenes Reveal-Layout mehr. */
-
+/* --------------------------------------------------------
+ * Rezept-Formular (Dialog)
+ * -------------------------------------------------------- */
 .recipe-ingredient-list {
   display: grid;
   gap: var(--space-2);
 }
-
-/* Zutaten-Zeilen (.ingredient-row*) sind global in layout.css definiert und
- * werden mit dem Mahlzeiten-Modal geteilt. */
 
 .recipe-add-ingredient {
   align-self: flex-start;
@@ -592,23 +1133,20 @@ button.recipe-detail__ingredient-match:hover {
   gap: var(--space-2);
 }
 
-/* Die Optionen sind Umschalt-Chips (`.filter-chip`, Re-Critique 2026-09-28,
- * A4 P2-7) - Form, Zielgroesse und Aktivton kommen aus filter-chip.css. */
-
-/* Eigenes Rezeptbild im Formular (#1059, Schritt 2) - dieselbe Bauart wie der
-   Foto-Editor im Inventar: eine quadratische Vorschau, die selbst der Ausloeser
-   ist, daneben die zwei Knoepfe. */
+/* Bild-Editor im Rezept-Formular (#1059): dieselbe Form wie der
+ * Foto-Editor im Inventar - eine quadratische Vorschau, die selbst der
+ * Ausloeser ist, daneben die zwei Knoepfe. */
 .recipe-image-editor {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* Rund und 84px wie der Foto-Editor im Inventar, nicht als Geschmacksfrage:
-   ein quadratischer Knopf muss laut Guard ein Kreis sein, und die Ausnahmeliste
-   ist fuer Zustandsschalter, Rasterzellen und Felder mit eigener Kante da - ein
-   Bildausloeser ist keines davon. Dieselbe Groesse wie nebenan, damit die
-   beiden Editoren nicht zwei Sprachen sprechen. */
+/* Rund, nicht quadratisch (Formen-Guard in test-frontend-audit.js): ein
+ * quadratischer Knopf muss laut Guard ein Kreis sein, und die Ausnahmeliste
+ * ist fuer Zustandsschalter, Rasterzellen und Felder mit eigener Kante da - ein
+ * Bildausloeser ist keines davon. Dieselbe Groesse wie nebenan, damit die
+ * beiden Editoren nicht zwei Sprachen sprechen. */
 .recipe-image-preview {
   width: 84px;
   height: 84px;
@@ -628,40 +1166,5 @@ button.recipe-detail__ingredient-match:hover {
 .recipe-image-preview__img {
   width: 100%;
   height: 100%;
-  /* Schneiden statt verzerren - dasselbe wie in der Zeilenvorschau. */
   object-fit: cover;
-}
-
-/* --------------------------------------------------------
- * Liste + Detail (Breitenregel, Regime 2 - DESIGN.md)
- *
- * Ab der Schwelle steht das ausgewaehlte Rezept rechts in der Detailspalte
- * (utils/master-detail.js, Geometrie in layout.css `.split-view`). Die Zeile
- * waehlt dort aus, statt aufzuklappen - also fallen Aufklapper und Chevron in
- * der Liste weg.
- *
- * KEINE EIGENE `@container`-ABFRAGE. Die Schwelle steht einmal in layout.css
- * (PAGE-019 haelt sie am Token); ein zweites `65rem` hier liefe ihr bei der
- * naechsten Aenderung still davon. `.recipes-list--split` setzt recipes.js
- * nach der gerechneten Darstellung der Spalte (syncRowMode).
- * -------------------------------------------------------- */
-
-.recipes-list--split .recipe-row__chevron {
-  display: none;
-}
-
-/* Derselbe Inhalt wie der Aufklapper, aber mit dem Polster der Spalte: der
- * Aufklapper haengt unter einer Zeile und rueckt nur um die Zeilenkante ein,
- * die Spalte ist eine eigene Flaeche mit dem Polster ihres Kopfs
- * (`.split-view__detail-head`, --space-5). */
-.recipe-detail--pane {
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5) var(--space-5);
-}
-
-/* Im Leseblatt traegt die Zeile der Leseansicht (`.detail-row`) das Polster
- * des Blatts; das Detail selbst rueckt nicht noch einmal ein. */
-.recipe-detail--sheet {
-  gap: var(--space-4);
-  padding: 0;
 }
