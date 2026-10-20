@@ -3919,6 +3919,11 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   Recent SEARCH TERMS are deliberately not stored: the R19 security review keeps only places,
   never a name or a data hit, on the device. Guard change: four `NOT_A_FIELD` exceptions removed
   (those rules no longer draw a card edge).
+- **Light pass** (Budżet, Rozliczenia, Inwentarz, Odbiór odpadów, Grafik, Nagrody - mostly off
+  in this household; the tokens already shift them): the fill of a progress bar takes the FILL
+  role of the voice (`--color-btn-primary`; the text role is #B49CFF in dark), and the section
+  head's "…" (Budżet, Rozliczenia, Abonamenty) wears the header's ghost circle like the search
+  beside it. Expenses stay ink; only income and a positive balance carry success (contract).
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

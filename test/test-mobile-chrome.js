@@ -208,7 +208,10 @@ test('(4) die Suche nimmt mobil ihre Icon-Form auch in einem Wrapper-Slot', () =
   assert.equal(decl(rule.body, 'background-clip'), 'content-box', '36pt sichtbar im 44er Ziel');
   const glyph = rules(layoutCss).find((r) => /\.page-toolbar\s+\.page-search(?::not\(\.page-search--field\))?:not\(:focus-within\)[^,]*\.page-search__icon/.test(r.selector));
   assert.equal(glyph && decl(glyph.body, 'color'), 'var(--color-text-primary)', 'das Zeichen in Tinte - nie violett');
-  const ghost = rules(layoutCss).find((r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && r.selector === '.page-toolbar .btn--icon' && decl(r.body, 'background-color'));
+  // The section head (budget, split, subscriptions) shares the rule since
+  // Tafla, so the selector is a list - find the one that names the page head.
+  const ghost = rules(layoutCss).find((r) => r.at.some((a) => /max-width:\s*1023px/.test(a))
+    && r.selector.split(',').map((part) => part.trim()).includes('.page-toolbar .btn--icon') && decl(r.body, 'background-color'));
   assert.equal(decl(ghost?.body ?? '', 'background-color'), 'var(--color-fill)', 'dieselbe Haut fuer Werkzeug- und Filterknopf');
   const wrapper = rules(layoutCss).filter((r) => r.selector.includes(':has(> .page-search:only-child')
     && decl(r.body, 'flex') === '0 0 auto');

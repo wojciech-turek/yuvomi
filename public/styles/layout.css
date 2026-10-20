@@ -8020,7 +8020,11 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
  * `background-clip: content-box` im 4pt-Innenrand; die Rundung des Knopfes
  * macht sie zum Kreis. Am Desktop bleibt die bisherige Haut (R14 unten). */
 @media (max-width: 1023px) {
-  .page-toolbar .btn--icon {
+  /* Der Abschnittskopf (`.section-toolbar`: Budget, Rozliczenia, Abos) traegt
+   * dieselbe Haut - seine Lupe ist schon ein Geisterkreis (Regel oben), und
+   * daneben stand das "..." noch beringt in Violett. */
+  .page-toolbar .btn--icon,
+  .section-toolbar .btn--icon {
     min-height: var(--target-base);
     min-width: var(--target-base);
     padding: var(--ghost-circle-inset);
@@ -8031,7 +8035,8 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
     color: var(--color-text-primary);
   }
 
-  .page-toolbar .btn--icon svg {
+  .page-toolbar .btn--icon svg,
+  .section-toolbar .btn--icon svg {
     width: var(--space-5);
     height: var(--space-5);
   }
