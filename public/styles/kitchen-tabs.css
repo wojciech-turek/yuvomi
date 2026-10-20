@@ -170,3 +170,119 @@
     height: calc(100% - var(--kitchen-tabs-height));
   }
 }
+
+/* ================================================================
+ * TAFLA: „KUCHNIA" ALS GROSSER TITEL UEBER EINEM SEGMENT-SCHALTER
+ *
+ * Artboards Posilki/Zakupy.dc.html: 34/600 „Kuchnia", darunter ein neutraler
+ * Segment-Schalter ueber die volle Breite - 36 hohe Spur in --fill, 2pt
+ * Einzug, der Daumen --raised mit E1, Labels 13/600 (Tinte aktiv, ink-2
+ * sonst), die Zahl an Zakupy 13/400 ink-2, an Spiżarnia ein 6pt-Warnpunkt.
+ * Nie violett: die Stimme gehoert dem, was man tun kann, nicht dem Ort.
+ * Kein Modulzeichen neben dem Titel (entfallen, kitchen-tabs.js).
+ *
+ * Der Titel ist das vorhandene, aria-versteckte Titelelement der Leiste: die
+ * Ueberschrift der Seite bleibt ihr sr-only <h1> (Posiłki, Zakupy …), die
+ * Leiste selbst heisst „Kuchnia". Die Leiste steht ausserhalb des
+ * Scrollports, ihre Hoehe zieht --kitchen-tabs-height mit (die Seiten rechnen
+ * `100% - --kitchen-tabs-height`).
+ * ================================================================ */
+@media (max-width: 1023px) {
+  :root {
+    --kitchen-seg-height: 36px;
+    --kitchen-tabs-height: calc(var(--space-2) * 3 + var(--type-large-title-lh) + var(--kitchen-seg-height));
+  }
+
+  .kitchen-tabs-bar {
+    --seg-active-bg: var(--color-raised);
+    --seg-active-shadow: var(--shadow-e1);
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--space-2) 0;
+    padding-block: var(--space-2);
+    border-bottom: 0;
+    overflow: visible;
+  }
+
+  /* Die Spur: hinter Daumen (z -1, segment-indicator) und Labels. */
+  .kitchen-tabs-bar::before {
+    content: '';
+    position: absolute;
+    inset-inline: var(--page-inline-pad);
+    bottom: var(--space-2);
+    height: var(--kitchen-seg-height);
+    border-radius: var(--radius-full);
+    background-color: var(--color-fill);
+    z-index: -2;
+  }
+
+  .kitchen-tabs-bar .sub-tabs-bar__title {
+    display: block;
+    flex: 0 0 100%;
+    margin: 0;
+    font-size: var(--type-large-title);
+    line-height: var(--type-large-title-lh);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+  }
+
+  .kitchen-tabs-bar .sub-tab {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: calc(var(--kitchen-seg-height) - var(--space-1));
+    margin-block: calc(var(--space-1) / 2);
+    padding-inline: var(--space-1);
+    gap: var(--space-1);
+    color: var(--color-text-secondary);
+    font-size: var(--type-footnote);
+    line-height: var(--type-footnote-lh);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .kitchen-tabs-bar .sub-tab:first-of-type {
+    margin-inline-start: calc(var(--space-1) / 2);
+  }
+
+  .kitchen-tabs-bar .sub-tab:last-of-type {
+    margin-inline-end: calc(var(--space-1) / 2);
+  }
+
+  /* 32 sichtbar, 44 Trefferflaeche. */
+  .kitchen-tabs-bar .sub-tab::after {
+    content: '';
+    position: absolute;
+    inset: calc(-1.5 * var(--space-1)) 0;
+  }
+
+  .kitchen-tabs-bar .sub-tab.sub-tab--active {
+    color: var(--color-text-primary);
+  }
+
+  .kitchen-tabs-bar .sub-tab__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Die Zahl ist leise Schrift, keine Pille. */
+  .kitchen-tabs-bar .sub-tab__badge {
+    min-width: 0;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--color-text-secondary);
+    font-size: var(--type-footnote);
+    line-height: var(--type-footnote-lh);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .kitchen-tabs-bar .sub-tab__badge.sub-tab__badge--dot {
+    flex: none;
+    width: var(--nav-dot-size);
+    height: var(--nav-dot-size);
+    border-radius: var(--radius-full);
+    background-color: var(--color-warning);
+  }
+}

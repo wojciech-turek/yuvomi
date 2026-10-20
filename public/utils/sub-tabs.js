@@ -363,8 +363,10 @@ export function setSubTabBadge(bar, tabId, state) {
   }
 
   badge.hidden = false;
-  badge.textContent = String(count);
-  badge.className = `sub-tab__badge${state.tone ? ` sub-tab__badge--${state.tone}` : ''}`;
+  // Ein Punkt (Tafla: „hier wartet etwas") traegt keine Ziffer - die Menge
+  // steht im Namen des Tabs.
+  badge.textContent = state.dot ? '' : String(count);
+  badge.className = `sub-tab__badge${state.tone ? ` sub-tab__badge--${state.tone}` : ''}${state.dot ? ' sub-tab__badge--dot' : ''}`;
   // Der Zähler ist für Screenreader redundant, sobald das Label ihn nennt.
   badge.setAttribute('aria-hidden', 'true');
   if (state.label) btn.setAttribute('aria-label', state.label);
