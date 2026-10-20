@@ -1,6 +1,6 @@
 /**
  * Modul: Pinnwand / Notizen (Notes)
- * Zweck: Masonry-Grid mit farbigen Sticky Notes, Pin-Toggle, CRUD
+ * Zweck: Notizliste (angepinnte Kacheln, Zeilen), Lese-/Bearbeiten-Dialog, CRUD
  * Abhängigkeiten: /api.js, /router.js (window.yuvomi)
  */
 
@@ -228,11 +228,9 @@ export async function render(container, { user, signal }) {
   state.user = user;
 
   container.replaceChildren();
-  // Modus `full`, nicht `reading`: das Masonry-Raster reflowt nach seinem
-  // EIGENEN Platz (bis vier Spalten ab 1200px Container, notes.css) und ist
-  // die Seite. Ein Lesemass wuerde entweder den Kopf bei 720px enden lassen,
-  // waehrend das Raster daneben weiterlaeuft, oder das Raster auf zwei bis drei
-  // Spalten stutzen. Kopf und Koerper enden deshalb beide an der Nutzbreite.
+  // Modus `reading` (Tafla, 2026-10-20): die Seite ist eine Liste mit
+  // angepinnten Kacheln darueber, kein Masonry-Raster mehr - Kopf und Liste
+  // enden am selben Lesemass.
   container.insertAdjacentHTML('beforeend', `
     <div class="notes-page app-page app-page--reading" data-composition="reading">
       <div class="page-toolbar page-toolbar--title-tools notes-toolbar">
@@ -266,10 +264,11 @@ export async function render(container, { user, signal }) {
              zurueckholte (A8); hier scrollt sie mit dem Raster weg. -->
         <!-- DIE REIHE HAELT IHREN PLATZ, BIS DIE DATEN DA SIND (R20, Re-Critique
              2026-10-17 a2 P2-3: CLS 0,067). Sie stand verborgen und erschien
-             nach dem Laden - das Raster sprang um ihre Hoehe nach unten. In
-             einem Haushalt mit zwei Personen steht sie fast immer; ohne
-             Auswahl faellt sie nach dem Laden weg (renderFilters). -->
-        <div class="notes-filters page-chip-row" id="notes-filters" aria-hidden="true" data-pending>
+             nach dem Laden - das Raster sprang um ihre Hoehe nach unten. Seit
+             Tafla (Autorenfilter erst ab drei Personen) steht sie bei zwei
+             Erwachsenen nur mit Kategorien; das Geraet merkt sich deshalb, ob
+             sie beim letzten Mal stand, und haelt den Platz nur dann. -->
+        <div class="notes-filters page-chip-row" id="notes-filters" aria-hidden="true" data-pending${filtersStoodLastTime() ? '' : ' hidden'}>
           <span class="skeleton notes-filters__skeleton"></span><span class="skeleton notes-filters__skeleton"></span><span class="skeleton notes-filters__skeleton"></span>
         </div>
         <div id="notes-grid" class="notes-grid" aria-busy="true">${renderSkeletonList({ rows: 5, lines: 3 })}</div>
@@ -405,6 +404,7 @@ function renderFilters() {
   row.hidden = !showCreators && filterCategories.length === 0;
   row.removeAttribute('aria-hidden');
   delete row.dataset.pending;
+  rememberFiltersStood(!row.hidden);
   const focused = row.contains(document.activeElement) ? document.activeElement : null;
   const focusKey = ['creator', 'categoryId', 'clearCategories'].find((key) => focused && Object.hasOwn(focused.dataset, key));
   const focusValue = focusKey ? focused.dataset[focusKey] : null;
@@ -483,6 +483,18 @@ function renderFilters() {
     [...row.querySelectorAll('button')].find((chip) => chip.dataset[focusKey] === focusValue)?.focus({ preventScroll: true });
   }
   row.scrollLeft = scrollLeft;
+}
+
+// Per device, and only a convenience: did the chip row stand last time? The
+// placeholder then holds its place (R20); a blocked storage just reserves it.
+const FILTERS_STOOD_KEY = 'yuvomi-notes-filters-stood';
+
+function filtersStoodLastTime() {
+  try { return localStorage.getItem(FILTERS_STOOD_KEY) !== '0'; } catch { return true; }
+}
+
+function rememberFiltersStood(stood) {
+  try { localStorage.setItem(FILTERS_STOOD_KEY, stood ? '1' : '0'); } catch { /* private mode */ }
 }
 
 function visibleNotes() {

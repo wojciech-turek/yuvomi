@@ -382,6 +382,10 @@ a.inset-row:active {
   line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
   overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
 }
 
 /* --------------------------------------------------------
@@ -422,6 +426,10 @@ a.inset-row:active {
   line-height: var(--type-title-lh);
   font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
 }
 
 .hero-card__sub {

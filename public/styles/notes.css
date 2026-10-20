@@ -246,6 +246,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .note-category-badge svg {
@@ -513,12 +514,16 @@
   z-index: 1;
 }
 
-/* Auf der Notiz liegt der Mehr-Knopf am Ende: in der Kachel unten, in der
- * Zeile mittig neben der Nadel. */
+/* Auf der Notiz liegt der Mehr-Knopf am Ende: in der Kachel oben neben der
+ * Nadel, in der Zeile mittig neben ihr. */
 .note-card > .note-card__actions {
   position: absolute;
-  inset-block-end: var(--space-1);
+  inset-block-start: var(--space-1);
   inset-inline-end: var(--space-1);
+}
+
+.note-card--tile:has(> .note-card__actions .note-card__more) > .note-card__pin {
+  inset-inline-end: calc(var(--space-1) + var(--target-base));
 }
 
 .note-card--row > .note-card__actions {
@@ -567,15 +572,27 @@
   .note-card--tile .preview-tile__top {
     padding-inline-end: var(--target-base);
   }
+
+  .note-card--tile:has(> .note-card__actions .note-card__more) .preview-tile__top {
+    padding-inline-end: calc(2 * var(--target-base) - var(--space-2));
+  }
 }
 
 /* AM FINGER KEINE NADEL UND KEIN "⋯" auf der Notiz (Tafla, spec "Lista
  * grupowana + wiersz": on touch there is no ⋯). Anheften steht im Editor
- * ("Weitere Einstellungen"), Loeschen im Fuss der Leseansicht. */
+ * ("Weitere Einstellungen"), Loeschen im Fuss der Leseansicht. Aus dem Bild,
+ * nicht aus dem Fokusbaum: VoiceOver und eine Tastatur am iPad erreichen
+ * beide Knoepfe weiter, und wer dort hinkommt, sieht sie wieder. */
 @media (hover: none) {
-  .note-card__pin,
-  .note-card__actions {
-    display: none;
+  .note-card__pin:not(:focus-visible),
+  .note-card > .note-card__actions:not(:focus-within) {
+    width: 1px;
+    height: 1px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

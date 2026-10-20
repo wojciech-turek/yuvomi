@@ -59,7 +59,9 @@ test('notes.css defines switch and reader styles', async () => {
   const css = await notesCss();
   assert.match(css, /\.note-mode-switch\s*\{/);
   assert.match(css, /\.note-read-view\s*\{/, 'reader surface must be styled');
-  assert.match(css, /--note-color/, 'reader surface must tint with the note color');
+  // Tafla (2026-10-20): notes carry no sticky colour any more - not on the
+  // list, not in the reader (colour is for acting, people and state only).
+  assert.doesNotMatch(css, /--note-color/, 'the reader is the plain dialog surface, no note tint');
   assert.match(css, /\.note-read__body\s*\{/);
   assert.match(css, /\.note-read__empty\s*\{/);
   assert.match(css, /prefers-reduced-motion/, 'pane transition must have a reduced-motion fallback');

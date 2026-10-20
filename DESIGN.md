@@ -3865,6 +3865,31 @@ Die Startseite ist ausserhalb des Wand-Modus kein Kachelraster mehr, sondern EIN
 
 Das Tagesprogramm darunter gilt seitdem fuer die Wand.
 
+### Die Modulseiten (Tafla, 2026-10-20)
+The pages behind Więcej speak ONE vocabulary, `public/styles/inset-list.css` (global, next to
+`list-row.css`): `.inset-group` (17/600 head + 17/400 count, 8 above the card), `.inset-card`
+(white, radius 20, flat) with `.inset-row` (64, or 48 `--single`; 28 leading slot + 12 gap so
+every title sits at x=56; hairlines inset to 56; title 17/400, meta 13/400 ink-2, aside date,
+trailing value 17 ink-2, chevron 16 ink-3), `.preview-tiles`/`.preview-tile` (2-up, min 96),
+`.status-pill` (a word on its tint: warning/danger/success), `.initial-disc` (neutral 28 initial
+for people WITHOUT an account - only household members get person colours), `.hero-card` (E1, the
+one thing that matters now), `.pill-btn` (`--primary` fill = `--color-btn-primary` + white +
+glow, one per screen; `--secondary` accent-tint; `--plain`) and `.ghost-circle` (36 on a 44 hit).
+Dates in rows come from `utils/day-label.js`: `pastDateLabel` (time today, "wczoraj", then
+"16 paź" - a past day never gets a weekday), `shortDayMonth`, `shortWeekdayDayMonth` ("wt 27 paź").
+On touch a row carries no "⋯" and no pin: they leave the picture via `clip-path`, not the focus
+tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
+
+- **Notatki**: pinned notes as 2-up preview tiles (glyph, title 17/600, two lines of preview, the
+  author's disc when it is someone else's), then "Ostatnie" as one list of 64 rows (title + date,
+  one-line preview + disc). No sticky-note colours anywhere - not on the list, not in the reader
+  (the stored colour stays in the data; the editor no longer offers a picker). The author chips
+  start at three authors (with two adults the disc says who); the chip row's placeholder holds its
+  place only when it stood last time on this device. Checklists tick in the reader (one tap more
+  than on the old card). Guards moved: R19 masonry -> "two groups", note colour on card/reader ->
+  "no note colour", D8 group head -> `.inset-group__head`, M13 compact card -> "row with one-line
+  preview, no circles on touch", R20 placeholder -> remembered per device.
+
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
 `--radius-xl` und `--shadow-lg`, Zeilen als Haarlinien, je Zeile ein Siegel fuer den Raum,

@@ -6565,17 +6565,20 @@ test('showToast is never called with an unsupported variant', () => {
 // darunter ab Spalte 1 weiter und mischten sich bei 1440 zwischen die
 // angepinnten. Jede Gruppe beginnt wieder eine eigene Zeile, und wo der
 // Browser grid-lanes kann, packt er die Karten ohne Luecke.
-test('R19: jede Notizgruppe beginnt eine eigene Zeile, grid-lanes als Fortschritt', () => {
+test('R19/Tafla: Notatki sind zwei Gruppen - angepinnte Kacheln, dann die Liste', () => {
+  // Tafla (2026-10-20) ersetzt das Masonry-Raster (R19: grid-lanes, Koepfe
+  // ueber alle Spalten) durch zwei Gruppen: "Przypięte" als 2-up-Vorschau-
+  // kacheln, "Ostatnie" als EINE gruppierte Liste. Die Absicht von R19 bleibt:
+  // jede Gruppe steht fuer sich, nichts mischt sich zwischen die Angepinnten.
   const page = read('../public/pages/notes.js');
   assert.doesNotMatch(page, /syncGroupFlow|groupFlow|notes-group__title--inline|note-card--trailing/, 'kein Einreihen des Kopfes mehr');
-  assert.match(page, /heading\(t\('notes\.groupPinned'\)\)[\s\S]{0,120}heading\(t\('notes\.groupOthers'\)\)/, 'beide Gruppenlabel bleiben');
+  assert.match(page, /t\('notes\.groupPinned'\)[\s\S]{0,200}class="preview-tiles notes-tiles"/, 'die Angepinnten als Kacheln');
+  assert.match(page, /t\('notes\.groupRecent'\)[\s\S]{0,200}<ul class="inset-card notes-list">/, 'der Rest als eine Liste');
   const css = read('../public/styles/notes.css');
   const rules = [...eachRule(css)];
-  assert.match(rules.find((r) => r.selector.trim() === '.notes-group__title' && !r.at.length)?.body ?? '', /grid-column:\s*1 \/ -1/, 'der Kopf spannt ueber alle Spalten');
   assert.ok(!rules.some((r) => /notes-group__title--inline|note-card--trailing/.test(r.selector)), 'keine Einreihe-Regeln');
-  const lanes = rules.find((r) => r.selector.trim() === '.notes-grid' && r.at.some((a) => /@supports \(display: grid-lanes\)/.test(a)));
-  assert.match(lanes?.body ?? '', /display:\s*grid-lanes/, 'grid-lanes unter @supports');
-  assert.match(css, /\.notes-grid\[aria-busy="true"\] \{\s*display: block;/, 'das Laden schlaegt grid-lanes');
+  assert.doesNotMatch(css, /grid-lanes|masonry/, 'kein Masonry mehr');
+  assert.match(css, /\.notes-grid\[aria-busy="true"\] \{\s*display: block;/, 'das Laden zeigt die geteilte Skelettliste');
 });
 
 test('responsive adaptation keeps Notes vertical and prevents intrinsic-width overflow', () => {
@@ -6586,24 +6589,14 @@ test('responsive adaptation keeps Notes vertical and prevents intrinsic-width ov
   // The shared search control guards its own intrinsic-width overflow.
   assert.match(pageSearch, /\.page-search\s*\{[\s\S]*min-width:\s*0/);
   assert.match(notes, /\.notes-toolbar\s+\.page-toolbar__title\s*\{[\s\S]*flex:\s*0\s+0\s+auto/);
-  assert.match(notes, /\.notes-grid\s*\{[\s\S]*display:\s*grid/);
-  assert.match(notes, /\.notes-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-  assert.doesNotMatch(notes, /\.notes-grid\s*\{[\s\S]*?columns:\s*2/);
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*520px\)[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
-  );
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*720px\)[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/
-  );
-  // #1765: never more than four columns, and the four-column step sits at 1200px.
+  // Tafla (2026-10-20): the list is one column of groups; only the pinned
+  // tiles form a grid (2-up from inset-list.css, 3 and 4 on wider containers,
+  // never more than four, #1765).
+  assert.match(notes, /\.notes-grid\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column/);
+  assert.match(read('../public/styles/inset-list.css'), /\.preview-tiles\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(notes, /@container notes-page \(min-width:\s*600px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(notes, /@container notes-page \(min-width:\s*900px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(notes, /repeat\(5/);
-  assert.doesNotMatch(notes, /@container notes-page \(min-width:\s*900px\)/);
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*1200px\)\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/
-  );
   assert.match(
     dashboard,
     /\.notes-grid-widget\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
@@ -6925,24 +6918,21 @@ test('Notes keeps user colours off the reading surface', () => {
   const notesPage = read('../public/pages/notes.js');
   const notesCss = read('../public/styles/notes.css');
 
-  // Der Guard hielt bis Runde 3 die Zusage „die Textfarbe wird zur Laufzeit
-  // aus der Zettelfarbe gerechnet" (getReadableTextColor). Die neue Welt gibt
-  // eine staerkere: die Zettelfarbe traegt die Flaeche gar nicht mehr allein,
-  // sie wird auf der Objekt-Stufe der Toenungsskala auf die Kartenflaeche
-  // gemischt (--tint-surface, tokens.css 6b) - damit
-  // haengt die Lesbarkeit an keiner Nutzerfarbe mehr, auch nicht an
-  // Alt-Hex-Werten ausserhalb der Palette (DESIGN.md, User-Farben-Regel).
+  // Tafla (2026-10-20): the sticky colour no longer paints anything. Until
+  // then it was mixed onto the card at --tint-surface (the measured recipe
+  // this guard held); now a note is ink on the white card like every row,
+  // and the author shows as the person disc (person-color.js), not as a
+  // user-colour dot. Still true: no text colour computed at runtime.
   assert.doesNotMatch(notesPage, /function isLightColor/);
   assert.doesNotMatch(notesPage, /getReadableTextColor/,
     'Eine zur Laufzeit gerechnete Textfarbe waere wieder eine ungemessene Paarung.');
-  assert.match(notesPage, /style="--note-color:\$\{esc\(note\.color\)\};"/,
-    'Die Zettelfarbe reist als CSS-Variable, nicht als background-color.');
-  assert.match(notesPage, /style="--avatar-color:\$\{esc\(avatarColor\)\};"/);
+  assert.doesNotMatch(notesPage, /--note-color|--avatar-color/, 'keine Zettel- oder Avatarfarbe am Markup');
+  assert.doesNotMatch(notesCss, /--note-color/, 'keine Zettelfarbe im Stylesheet');
+  assert.match(notesPage, /personDisc\(/, 'der Urheber ist die Personenscheibe');
 
   const cardRule = notesCss.match(/\n\.note-card\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.match(cardRule, /background:\s*color-mix\(in srgb, var\(--note-color[^)]*\) var\(--tint-surface\), var\(--color-surface\)\)/);
   assert.match(cardRule, /color:\s*var\(--color-text-primary\)/);
-  assert.match(cardRule, /border:\s*none/, 'Karten sind randlos auf dem Grouped-Grund.');
+  assert.doesNotMatch(cardRule, /background/, 'die Flaeche ist die Karte der Gruppe (inset-list.css)');
 
   assert.doesNotMatch(
     notesCss.match(/\.note-card__content\s*\{[\s\S]*?\n\}/)?.[0] ?? '',
@@ -21394,17 +21384,15 @@ test('R18: die Einkaufszeile fuehrt die Menge in der Namenszeile und kappt den N
   assert.deepEqual(cut.map((rule) => rule.selector.trim()), [], 'der Artikelname bricht um, er wird nicht gekappt');
 });
 
-test('R18: die Leseansicht einer Notiz ist der Dialogkoerper in Zettelfarbe, mit EINEM Weg zum Bearbeiten', () => {
+test('R18: die Leseansicht einer Notiz ist der Dialogkoerper, mit EINEM Weg zum Bearbeiten', () => {
   const rules = r18Rules('notes.css');
   const view = rules.find((rule) => rule.at.length === 0 && rule.selector.trim() === '.note-read-view');
   assert.ok(view, '.note-read-view fehlt');
   assert.doesNotMatch(view.body, /(?:^|;)\s*border(?:-[\w-]+)?\s*:/, 'kein Kasten: die roetliche Kante ueber dem roten "Loeschen" las sich als Fehlermeldung');
   assert.doesNotMatch(view.body, /border-radius/);
-  assert.match(view.body, /margin:\s*calc\(-1 \* var\(--space-4\)\)/, 'die Ansicht zieht sich ueber die Polsterung des Dialogkoerpers');
-  assert.match(cssRuleBody(read('../public/styles/layout.css'), '.modal-panel__body'), /padding:\s*var\(--space-4\)/,
-    'die Polsterung des Dialogkoerpers ist der Wert, den die Leseansicht ausgleicht');
-  assert.match(view.body, /background:\s*color-mix\(in srgb, var\(--note-color, transparent\) var\(--tint-surface\), transparent\)/,
-    'dieselbe Toenung wie vorher - die Kontrastrechnung der Zettelfarben gilt weiter');
+  // Tafla (2026-10-20): no sticky colour any more, so the reader is the
+  // dialog's own white surface - no tint, and no bleed over the padding.
+  assert.doesNotMatch(view.body, /background|--note-color/, 'keine Zettelfarbe in der Leseansicht');
   assert.ok(rules.some((rule) => rule.selector.trim() === '.note-modal[data-view="read"] .note-mode-switch'
     && /display:\s*none/.test(rule.body)), 'in der Leseansicht steht nur der Primaerknopf "Bearbeiten", nicht zusaetzlich der Reiter');
   const page = read('../public/pages/notes.js');
@@ -21987,7 +21975,8 @@ test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und
   assert.match(contacts, /<h2 class="list-group__title contact-group__header">\$\{esc\(catLabel\(cat\)\)\}<\/h2>/,
     'Kontakte: der geteilte Gruppenkopf, ohne Kategorie-Zeichen davor');
   const notes = read('../public/pages/notes.js');
-  assert.match(notes, /<h2 class="notes-group__title list-group__title">/, 'Notizen: „Angepinnt" ist ein Gruppenkopf, kein Abschnittstitel');
+  // Tafla: the group head is the inset list's 17/600 head with its count.
+  assert.match(notes, /<h2 class="inset-group__head notes-group__title" id="\$\{id\}">/, 'Notizen: „Przypięte" ist ein Gruppenkopf, kein Abschnittstitel');
   assert.doesNotMatch(notes, /notes-group__title u-section-title/);
   // Der Tageskopf der Agenda ist die begruendete eigene Stufe (Zeitachse,
   // calendar.css) - aber sein Kasten traegt die Groesse seiner Schrift, nicht

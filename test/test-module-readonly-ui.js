@@ -1776,14 +1776,19 @@ function mitEchtemMarkdown(fn) {
   }
 }
 
-test('Notizkarte mit Schreibrecht: Nadel, Loeschen und das antippbare Kaestchen', () => {
+// TAFLA (2026-10-20): die Notiz in der Liste ist eine Zeile bzw. Kachel mit
+// VORSCHAU (Titel, eine Zeile Text) - die Checkliste steht nicht mehr auf der
+// Karte, sie ist in der Leseansicht bedienbar, die ein Tipp auf die Zeile
+// oeffnet (#704 bleibt: Haken ohne Editor, ein Tipp mehr).
+test('Notizkarte mit Schreibrecht: Nadel, Loeschen, und die Leseansicht hakt ab', () => {
   mitEchtemMarkdown(() => withAccess({ notes: 'write' }, () => {
     const html = notes.renderNoteCard(notiz());
     assert.match(html, /data-action="pin"/);
     assert.match(html, /data-action="delete"/);
     assert.match(html, /data-action="open"/);
-    assert.match(html, /<button type="button" class="note-md-box" role="checkbox"/,
-      'die Checkliste ist bedienbar (#704)');
+    assert.doesNotMatch(html, /note-md-box/, 'die Zeile ist eine Vorschau, kein zweiter Ort zum Abhaken');
+    assert.match(notes.renderNoteReadHtml(notiz().content, { live: true }), /<button type="button" class="note-md-box" role="checkbox"/,
+      'die Checkliste ist in der Leseansicht bedienbar (#704)');
     assert.doesNotMatch(html, /note-card__pin--static/);
   }));
 });
@@ -1796,7 +1801,11 @@ test('R8 H15: der Notiztitel ist eine echte Ueberschrift der passenden Ebene, oh
     assert.doesNotMatch(html, /<div class="note-card__title">/, 'ein `div` findet die Ueberschriften-Navigation nicht');
     assert.match(notes.renderNoteCard(notiz({ title: 'Einkauf' }), { headingLevel: 3 }), /<h3 class="note-card__title">/,
       'unter "Angeheftet"/"Weitere" (h2) eine Ebene tiefer');
-    assert.doesNotMatch(notes.renderNoteCard(notiz({ title: '' })), /note-card__title/, 'ohne Titel keine leere Ueberschrift');
+    // Tafla: ohne Titel traegt die erste Zeile die Ueberschrift (wie noteName)
+    // - eine Zeile ohne Titel waere eine Zeile ohne Namen. Leer ist sie nie.
+    const ohneTitel = notes.renderNoteCard(notiz({ title: '' }));
+    assert.match(ohneTitel, /<h2 class="note-card__title">Milch<\/h2>/, 'ohne Titel nennt die erste Zeile die Notiz');
+    assert.doesNotMatch(ohneTitel, /<h2 class="note-card__title"><\/h2>/, 'nie eine leere Ueberschrift');
   }));
   // Die Optik haengt an der Klasse, nicht am Element: die Rolle setzt die
   // Groesse, sonst griffe die UA-Groesse eines h2.
@@ -1812,7 +1821,11 @@ test('R8 H15: der Notiztitel ist eine echte Ueberschrift der passenden Ebene, oh
 
 test('Notizkarte mit `notes: read`: das Kaestchen wird zum Zustandszeichen', () => {
   mitEchtemMarkdown(() => withAccess({ notes: 'read' }, () => {
-    const html = notes.renderNoteCard(notiz());
+    const card = notes.renderNoteCard(notiz());
+    // Tafla: die Kaestchen stehen in der Leseansicht (live, weil gespeichert);
+    // die Zeile selbst ist eine Vorschau ohne Kaestchen.
+    assert.doesNotMatch(card, /note-md-box/);
+    const html = notes.renderNoteReadHtml(notiz().content, { live: true });
 
     // Zustand ANZEIGEN: das Kaestchen bleibt - als span mit role="img", dessen
     // Beschriftung den Zustand nennt, nicht als gesperrter Knopf.
@@ -1827,14 +1840,14 @@ test('Notizkarte mit `notes: read`: das Kaestchen wird zum Zustandszeichen', () 
       'und ausdruecklich nicht die dekorative Form - die verschwiege den Zustand');
 
     // Reine HANDLUNG: verschwindet.
-    assert.doesNotMatch(html, /data-action="pin"/);
-    assert.doesNotMatch(html, /data-action="delete"/);
+    assert.doesNotMatch(card, /data-action="pin"/);
+    assert.doesNotMatch(card, /data-action="delete"/);
 
     // Der Leseweg bleibt, und der Inhalt steht wirklich noch da - sonst maesse
     // dieser Test einen Renderer, der nie gelaufen ist.
-    assert.match(html, /data-action="open"/);
-    assert.match(html, /Einkauf/);
-    assert.match(html, /Milch/);
+    assert.match(card, /data-action="open"/);
+    assert.match(card, /Einkauf/);
+    assert.match(card, /Milch/);
     assert.match(html, /Brot/);
     assert.match(html, /is-checked/, 'der erledigte Punkt ist auch sichtbar erledigt');
   }));
@@ -2476,7 +2489,8 @@ test('die Nadel als Zeichen traegt keinen Zeiger, keine Trefferflaeche und keine
 
   assert.equal(effektiverWert(NOTES_CSS, zeichen, 'background', ':hover'), null,
     'keine Hover-Regel darf das Zeichen treffen - sie nimmt es per :not() aus, statt dagegen anzuschreiben');
-  assert.match(effektiverWert(NOTES_CSS, knopf, 'background', ':hover') ?? '', /note-action-bg-hover/,
+  // Tafla: die Quittung ist die Fuellung der Geisterknoepfe (--color-fill).
+  assert.match(effektiverWert(NOTES_CSS, knopf, 'background', ':hover') ?? '', /--color-fill/,
     'und der Knopf reagiert weiter');
 });
 
