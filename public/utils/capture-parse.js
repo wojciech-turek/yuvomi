@@ -42,7 +42,7 @@ function fold(s) {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .replace(/ł/g, 'l')
-    .replace(/[–—]/g, '-');
+    .replace(/[\u2013\u2014]/g, '-');
 }
 
 /** Folded token without surrounding quotes/brackets/sentence punctuation. */
@@ -56,23 +56,47 @@ function upperFirst(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// A comma is a decimal mark only between two digits ("1,5 kg").
-const SEPARATOR = /\r?\n|;|,(?!\d)|(?<!\d),/;
-const TOKEN_RE = /(\r?\n|;|,(?!\d)|(?<!\d),)|((?:[^\s,;]|(?<=\d),(?=\d))+)/g;
+// A comma is a decimal mark only between two digits ("1,5 kg"). Written as a
+// scan, not a regex: lookbehind needs Safari 16.4, the app supports 14.1.
+const isDigit = (c) => c >= '0' && c <= '9';
+
+/** Length of the list separator starting at `i` (newline, ";" or a list comma), else 0. */
+function separatorAt(text, i) {
+  const c = text[i];
+  if (c === '\r' && text[i + 1] === '\n') return 2;
+  if (c === '\n' || c === ';') return 1;
+  if (c === ',' && !(isDigit(text[i - 1] ?? '') && isDigit(text[i + 1] ?? ''))) return 1;
+  return 0;
+}
 
 function tokenize(text) {
   const tokens = [];
   let seg = 0;
-  TOKEN_RE.lastIndex = 0;
-  let m;
-  while ((m = TOKEN_RE.exec(text))) {
-    if (m[1]) { seg += 1; continue; }
-    const raw = m[2];
+  let start = -1;
+  const flush = (end) => {
+    if (start < 0) return;
+    const raw = text.slice(start, end);
     let norm = normToken(raw);
     const at = norm.startsWith('@');
     if (at) norm = norm.slice(1);
-    tokens.push({ raw, start: m.index, end: m.index + raw.length, norm, at, seg, used: false });
+    tokens.push({ raw, start, end, norm, at, seg, used: false });
+    start = -1;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const sep = separatorAt(text, i);
+    if (sep) {
+      flush(i);
+      seg += 1;
+      i += sep - 1;
+      continue;
+    }
+    if (/\s/.test(text[i])) {
+      flush(i);
+      continue;
+    }
+    if (start < 0) start = i;
   }
+  flush(text.length);
   return tokens;
 }
 
@@ -443,15 +467,13 @@ function remainder(text, tokens, from = 0, to = text.length) {
     .replace(/\s+/g, ' ')
     .replace(/\s+([,;.!?])/g, '$1')
     .replace(/([,;])(?:\s*[,;])+/g, '$1')
-    .replace(/^[\s,;:.\-–—]+|[\s,;:\-–—]+$/g, '')
+    .replace(/^[\s,;:.\-\u2013\u2014]+|[\s,;:\-\u2013\u2014]+$/g, '')
     .trim();
 }
 
 function segmentsOf(text, splitAnd) {
   const out = [];
-  const re = new RegExp(SEPARATOR.source, 'g');
   let pos = 0;
-  let m;
   const push = (start, end) => {
     if (!splitAnd) { out.push([start, end]); return; }
     const part = text.slice(start, end);
@@ -464,9 +486,12 @@ function segmentsOf(text, splitAnd) {
     }
     out.push([start + p, end]);
   };
-  while ((m = re.exec(text))) {
-    push(pos, m.index);
-    pos = m.index + m[0].length;
+  for (let i = 0; i < text.length; i++) {
+    const sep = separatorAt(text, i);
+    if (!sep) continue;
+    push(pos, i);
+    pos = i + sep;
+    i += sep - 1;
   }
   push(pos, text.length);
   return out.filter(([s, e]) => text.slice(s, e).trim());

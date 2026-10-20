@@ -5648,14 +5648,11 @@ a.popover-menu__item {
   height: var(--space-5);
 }
 
-.page-fab.page-fab--ghost:hover {
-  background: transparent;
-}
 
 .page-fab.page-fab--ghost:focus-visible {
   --focus-ring-color: var(--color-accent);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: calc(-1 * var(--space-1));
+  outline-offset: var(--focus-ring-offset-inset);
   box-shadow: none;
 }
 
@@ -7912,8 +7909,7 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
  * `background-clip: content-box` im 4pt-Innenrand; die Rundung des Knopfes
  * macht sie zum Kreis. Am Desktop bleibt die bisherige Haut (R14 unten). */
 @media (max-width: 1023px) {
-  .page-toolbar .btn--icon,
-  .page-toolbar .btn--icon:hover {
+  .page-toolbar .btn--icon {
     min-height: var(--target-base);
     min-width: var(--target-base);
     padding: var(--ghost-circle-inset);

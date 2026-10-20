@@ -556,7 +556,7 @@ function winningBackground(tone, { supportsBlur }) {
   return best;
 }
 
-test('ein Erfolgs-Toast steht auf dem Shell-Material, das Gruen traegt das Icon', () => {
+test('ein Erfolgs-Toast steht auf dem Shell-Material, das Haekchen in der Toast-Stimme', () => {
   for (const supportsBlur of [true, false]) {
     const success = winningBackground('success', { supportsBlur });
     assert.ok(success, 'keine Flaeche fuer den Erfolgs-Toast gefunden - der Guard waere blind');
@@ -567,7 +567,9 @@ test('ein Erfolgs-Toast steht auf dem Shell-Material, das Gruen traegt das Icon'
   }
   const glass = readFileSync(new URL('../public/styles/glass.css', import.meta.url), 'utf8');
   const icon = [...eachRule(glass)].find((r) => r.selector.trim() === '.toast--success .toast__icon');
-  assert.match(icon?.body ?? '', /color:\s*var\(--shell-success-ink\)/, 'das Haekchen traegt die Erfolgsfarbe');
+  // Tafla (spec-components „Toast z Cofnij“): das Haekchen steht in der
+  // Toast-Stimme (#B49CFF) wie „Cofnij“ - auf dem dunklen Grund in beiden Themes.
+  assert.match(icon?.body ?? '', /color:\s*var\(--color-toast-action\)/, 'das Haekchen traegt die Toast-Stimme');
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
   // Seit R16 ist das Material in beiden Themes dunkel: EINE Tinte fuer beide
   // (die Gegendrehung #0B6B2B fuer den hellen Dunkelmodus-Grund ist entfallen).

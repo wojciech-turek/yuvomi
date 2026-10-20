@@ -6563,7 +6563,6 @@
         "fullForm": "Full form: {{action}}",
         "shoppingCount": "{{count}} items",
         "shoppingCount_one": "{{count}} item",
-        "shoppingCount_few": "{{count}} items",
         "shoppingCount_many": "{{count}} items",
         "saved": {
             "task": "Added to Tasks",

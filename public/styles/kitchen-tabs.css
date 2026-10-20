@@ -201,7 +201,6 @@
     gap: var(--space-2) 0;
     padding-block: var(--space-2);
     border-bottom: 0;
-    overflow: visible;
   }
 
   /* Die Spur: hinter Daumen (z -1, segment-indicator) und Labels. */
@@ -226,10 +225,13 @@
     color: var(--color-text-primary);
   }
 
+  /* Gleich verteilt, aber nie unter das Label: ein gekuerztes „Posił…" kostet
+   * mehr Orientierung als eine Leiste, die in einer langen Sprache wischt
+   * (die Leiste bleibt overflow-x: auto, sub-tabs.css). */
   .kitchen-tabs-bar .sub-tab {
     position: relative;
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 0 auto;
+    min-width: auto;
     height: calc(var(--kitchen-seg-height) - var(--space-1));
     margin-block: calc(var(--space-1) / 2);
     padding-inline: var(--space-1);
@@ -257,11 +259,6 @@
 
   .kitchen-tabs-bar .sub-tab.sub-tab--active {
     color: var(--color-text-primary);
-  }
-
-  .kitchen-tabs-bar .sub-tab__label {
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* Die Zahl ist leise Schrift, keine Pille. */

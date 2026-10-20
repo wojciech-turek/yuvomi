@@ -94,15 +94,15 @@ export function isKitchenModule(mod) {
 // ohne das hörte ein Screenreader „12 offene Artikel" und wüsste nicht, wohin der
 // Knopf führt.
 /* TAFLA (spec-components „Segmented control"): Zakupy traegt seine Zahl als
- * leise 13/400 („Zakupy 23"), auch auf dem aktiven Segment - die Zahl ist der
- * Grund, den Tab zu oeffnen, und sie aendert sich auf der eigenen Seite
- * sichtbar mit. Spiżarnia traegt nur einen 6pt-Warnpunkt, und nur, wenn etwas
- * in hoechstens drei Tagen ablaeuft (`pantry.expiring`, /kitchen/summary). */
+ * leise 13/400 („Zakupy 23"), Spiżarnia nur einen 6pt-Warnpunkt, und nur,
+ * wenn etwas in hoechstens drei Tagen ablaeuft (`pantry.expiring`,
+ * /kitchen/summary). Auf dem AKTIVEN Segment bleibt beides weg (Regel oben):
+ * die Seite sagt es dort vollstaendiger, und eine Zahl, die jede eigene
+ * Mutation nachziehen muesste, veraltete sonst sichtbar. */
 const BADGES = [
   {
     route: '/shopping',
     pick: (d) => d.shopping?.open ?? 0,
-    keepWhenActive: true,
     label: (count) => `${t('nav.shopping')}: ${t('nav.shoppingOpen', { count })}`,
   },
   {
@@ -110,8 +110,7 @@ const BADGES = [
     pick: (d) => d.pantry?.expiring ?? 0,
     tone: 'warning',
     dot: true,
-    keepWhenActive: true,
-    label: () => `${t('nav.pantry')}, ${t('nav.kitchenExpiringSoon')}`,
+    label: () => `${t('nav.pantry')}: ${t('nav.kitchenExpiringSoon')}`,
   },
 ];
 
@@ -132,8 +131,8 @@ let _lastSummary = null;
 
 function applyBadges(data) {
   if (!_bar || !data) return;
-  for (const { route, pick, label, tone, dot, keepWhenActive } of BADGES) {
-    const count = route === _activeRoute && !keepWhenActive ? 0 : Number(pick(data)) || 0;
+  for (const { route, pick, label, tone, dot } of BADGES) {
+    const count = route === _activeRoute ? 0 : Number(pick(data)) || 0;
     setSubTabBadge(_bar, route, count > 0 ? { count, tone, dot, label: label(count) } : null);
   }
   // Derselbe Stand faerbt den Punkt am Tab „Kuchnia" der Kapsel (router.js).

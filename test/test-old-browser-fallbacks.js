@@ -951,20 +951,18 @@ test('kein Stylesheet nutzt ein Konstrukt, das an der Mindestversion einen ganze
     + 'ausschreiben):\n' + offenders.join('\n'));
 });
 
-// DIE PILLE DER MOBILEN KAPSEL (R20, Review): sie verschiebt das aktive Ziel
-// mit `translate` (Chromium 104) und schneidet mit `overflow: clip` (90). Unter
-// der Mindestversion (Chrome 87, der Chromebook aus #1276 bei 91) schrumpfte
-// die Kapsel ohne den Versatz, und die Pille stuende leer. Jede Regel, die die
-// Pille baut, steht deshalb in `@supports (translate: 0)`; ohne die Eigenschaft
-// minimiert die Kapsel wie in R19.
-test('die Pille der Kapsel steht nur dort, wo translate gilt', () => {
-  const pillRules = [...eachRule(read('public/styles/layout.css'))].filter(({ selector, body }) => (
-    /nav-item--pill/.test(selector)
-    || /var\(--nav-(?:pill-width|pill-shift|item-width)/.test(body)
-    || (/\.nav-bottom__items/.test(selector) && /overflow:\s*clip/.test(body))
-  ));
-  assert.ok(pillRules.length >= 4, `Reichweite: nur ${pillRules.length} Regeln der Pille gefunden`);
-  const open = pillRules.filter(({ at }) => !at.some((a) => /^@supports \(translate: 0\)/.test(a)))
-    .map(({ selector }) => selector);
-  assert.deepEqual(open, [], 'Regeln der Pille ohne @supports (translate: 0)');
+// DIE MINIMIERTE KAPSEL (R20, Review; Tafla 2026-10-19): die R20-Pille
+// verschob das aktive Ziel mit `translate` (Chromium 104) und schnitt mit
+// `overflow: clip` (90) - darum stand sie in `@supports (translate: 0)`. Seit
+// Tafla bleiben minimiert ALLE Ziele stehen und die Kapsel wird nur schmaler
+// und flacher; sie braucht keines der beiden Konstrukte mehr. Der Guard haelt
+// fest, dass keines zurueckkommt, ohne wieder unter @supports zu stehen.
+test('die minimierte Kapsel braucht weder translate noch overflow: clip (Mindestversion Chrome 87)', () => {
+  const css = read('public/styles/layout.css');
+  const capsuleRules = [...eachRule(css)].filter(({ selector }) => /nav-bottom--minimized|nav-bottom--settling/.test(selector));
+  assert.ok(capsuleRules.length >= 4, `Reichweite: nur ${capsuleRules.length} Regeln der minimierten Kapsel gefunden`);
+  const risky = capsuleRules.filter(({ body, at }) => (/(?:^|[;\s])translate\s*:/.test(body) || /overflow:\s*clip/.test(body))
+    && !at.some((a) => /^@supports \(translate: 0\)/.test(a)));
+  assert.deepEqual(risky.map((r) => r.selector), [], 'Regeln der minimierten Kapsel mit translate/clip ohne @supports');
+  assert.ok(![...eachRule(css)].some(({ selector }) => /nav-item--pill/.test(selector)), 'die R20-Pille ist entfallen');
 });

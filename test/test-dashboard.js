@@ -155,34 +155,32 @@ db.prepare(`INSERT INTO budget_entries (title, amount, category, subcategory, da
 
 console.log('\n[Dashboard-Test] API-Abfragen\n');
 
-test('Der Speed-Dial bietet nur an, was der Betrachter anlegen darf (#1208)', async () => {
-  // Die Liste stand ungefiltert da: wer Notizen auf `none` hatte, bekam trotzdem
-  // „Notiz anlegen" angeboten und lief in ein 403. Aufgefallen ist es am
-  // Wandtablett, wo ALLE vier Eintraege ins Leere fuehren - dessen Module stehen
-  // samt und sonders auf `read`.
+test('Das Erfassen bietet nur an, was der Betrachter anlegen darf (#1208, Tafla)', async () => {
+  // Der Speed-Dial stand ungefiltert da: wer Notizen auf `none` hatte, bekam
+  // trotzdem „Notiz anlegen" angeboten und lief in ein 403. Seit Tafla ersetzt
+  // ihn das globale Erfassen-Blatt - dieselbe Zusage gilt fuer seine Typen.
   const { __test } = await import('../public/pages/dashboard.js');
+  const { availableCaptureKinds } = await import('../public/components/capture-sheet.js');
   const { setPermissions, clearPermissions } = await import('../public/permissions.js');
+  const keys = () => availableCaptureKinds().map((kind) => kind.key);
 
   setPermissions({ admin: false, modules: {}, widgets: {}, capabilities: {} });
-  const voll = __test.renderFab();
-  assert(voll.includes('data-route="/tasks"'), 'ohne Einschraenkung stehen alle vier da');
-  assert(voll.includes('data-route="/notes"'));
+  assert(keys().join() === 'task,event,shopping,meal,note', 'ohne Einschraenkung stehen alle fuenf da');
 
   // Ein eingeschraenktes Mitglied: Notizen weg, der Rest bleibt.
   setPermissions({ admin: false, modules: { notes: 'none' }, widgets: {}, capabilities: {} });
-  const teilweise = __test.renderFab();
-  assert(!teilweise.includes('data-route="/notes"'), 'ein gesperrtes Modul wird nicht angeboten');
-  assert(teilweise.includes('data-route="/tasks"'), 'die uebrigen bleiben');
+  assert(!keys().includes('note'), 'ein gesperrtes Modul wird nicht angeboten');
+  assert(keys().includes('task'), 'die uebrigen bleiben');
 
-  // Ein Wandtablett: alles nur lesend, also kein Knopf. Ein Speed-Dial, der
-  // sich auf eine leere Liste oeffnet, waere die schlechtere Haelfte des
-  // Fehlers, den der Filter behebt.
+  // Ein Wandtablett: alles nur lesend, also nichts zu erfassen.
   setPermissions({
     admin: false,
-    modules: { tasks: 'read', calendar: 'read', shopping: 'none', notes: 'none' },
+    modules: { tasks: 'read', calendar: 'read', shopping: 'none', meals: 'read', notes: 'none' },
     widgets: {}, capabilities: {},
   });
-  assert(__test.renderFab() === '', 'nur Lesezugriff heisst kein Anlege-Knopf');
+  assert(keys().length === 0, 'nur Lesezugriff heisst kein Typ');
+  // Und die Uebersicht traegt am Telefon keinen eigenen Knopf mehr.
+  assert(__test.renderFab() === '', 'kein Speed-Dial - das + der Shell');
 
   clearPermissions();
 });

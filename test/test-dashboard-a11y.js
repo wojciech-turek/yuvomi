@@ -801,32 +801,31 @@ test('R14 P2: Anpassen mobil ist eine kompakte Liste - Name, Griff, Auge - und d
 // R14 P12 (Re-Critique 2026-09-28, A8 P3-2): die Uebersicht war der einzige
 // schwebende FAB am Desktop (48x48 @1360,820, nur "Schnellaktionen" als Name);
 // jedes andere Modul dockt als Pille mit Nomen im Kopf an.
-test('R14: am Desktop traegt die Uebersicht "+ Neu" als angedockte Pille mit demselben Menue', () => withStage(false, () => {
+// Tafla (2026-10-19): der Speed-Dial ist entfallen. Am Desktop bleibt die
+// angedockte Pille - sie heisst jetzt „Dodaj" und oeffnet das globale
+// Erfassen-Blatt (dasselbe wie das + neben der Kapsel), statt eines Menues.
+test('R14/Tafla: am Desktop traegt die Uebersicht „Dodaj" als angedockte Pille, die das Erfassen oeffnet', () => withStage(false, () => {
   const desk = { ...globalThis.window, matchMedia: (q) => ({ matches: /min-width:\s*1024px/.test(q), media: q }) };
   globalThis.window = desk;
   const header = renderDashboardOverview({ display_name: 'Linda' }, false, null, {});
   const pill = header.match(/<button\b[^>]*id="fab-main"[^>]*>[\s\S]*?<\/button>/)?.[0];
   assert.ok(pill, 'die Pille steht im Kopf');
   assert.match(pill, /class="page-fab btn btn--primary page-fab--docked/, 'dieselbe angedockte Form wie jedes Modul');
-  assert.match(pill, /data-dock-label="dashboard\.fabNew"/);
-  assert.match(pill, /<span class="toolbar-new-btn__label">dashboard\.fabNew<\/span>/, 'sichtbares Wort, nicht nur ein Plus');
-  assert.match(pill, /aria-haspopup="menu"/);
-  const target = pill.match(/popovertarget="([^"]+)"/)?.[1];
-  assert.ok(target, 'die Pille oeffnet ein Menue');
-  const menu = header.match(new RegExp(`<div class="popover-menu" id="${target}" popover role="menu">([\\s\\S]*?)</div>`))?.[1] ?? '';
-  for (const route of ['/tasks', '/calendar', '/shopping', '/notes']) {
-    assert.match(menu, new RegExp(`role="menuitem"[^>]*data-new-route="${route.replace('/', '\\/')}"`), `${route} steht im Menue`);
-  }
+  assert.match(pill, /data-dock-label="capture\.add"/);
+  assert.match(pill, /<span class="toolbar-new-btn__label">capture\.add<\/span>/, 'sichtbares Wort, nicht nur ein Plus');
+  assert.match(pill, /aria-haspopup="dialog"/, 'sie oeffnet das Erfassen-Blatt');
+  assert.doesNotMatch(pill, /aria-label=/, 'ihr Name ist ihr sichtbares Wort (WCAG 2.5.3)');
+  assert.doesNotMatch(header, /popover role="menu"[^>]*>[\s\S]*data-new-route/, 'kein Vier-Wege-Menue mehr');
   assert.match(header, /class="page-toolbar__actions dashboard-overview__new"/, 'der Slot, in den die Shell andockt');
   assert.equal(__test.renderFab(), '', 'kein schwebender Speed-Dial daneben');
   const editing = renderDashboardOverview({ display_name: 'Linda' }, true, null, {});
   assert.doesNotMatch(editing, /id="fab-main"/, 'im Anpassen-Modus gibt es kein Anlegen');
-  assert.match(dashboardSource, /function wireNewMenu\(container, signal\)/);
-  assert.match(dashboardSource, /wireNewMenu\(container, signal\)/);
+  assert.match(dashboardSource, /window\.yuvomi\?\.openCapture\?\.\(\)/, 'die Pille ruft das globale Erfassen');
+  assert.doesNotMatch(dashboardSource, /FAB_ACTIONS|FAB_NEW_BTN|function wireNewMenu/, 'der Speed-Dial ist entfallen');
 }));
 
-test('R14: auf dem Telefon bleibt der Speed-Dial in der Kapsel', () => withStage(true, () => {
-  assert.match(__test.renderFab(), /class="page-fab-group"/);
+test('Tafla: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf - das + der Shell', () => withStage(true, () => {
+  assert.equal(__test.renderFab(), '');
   assert.doesNotMatch(renderDashboardOverview({ display_name: 'Linda' }, false, null, {}), /id="fab-main"/);
 }));
 

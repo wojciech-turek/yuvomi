@@ -30,6 +30,7 @@ import { moduleIconEl } from '/nav-icons.js';
 import { assigneeSyncTarget } from '/utils/sync-target.js';
 import { initials } from '/utils/initials.js';
 import { mealTypeLabel, ensureMealTypeNames } from '/utils/meal-types.js';
+import { errorSentence } from '/utils/friendly-error.js';
 
 /** Die Typen des Blattes, in der Reihenfolge des Artboards. */
 export const CAPTURE_KINDS = Object.freeze([
@@ -60,7 +61,7 @@ export function captureTypeForRoute(path) {
 
 /** Darf dieses Mitglied in diesem Modul anlegen, und gibt es das Modul? */
 function canWrite(module) {
-  if (window.yuvomi?.isModuleDisabled?.(module)) return false;
+  if (globalThis.window?.yuvomi?.isModuleDisabled?.(module)) return false;
   return navModuleAccess(module) === 'write';
 }
 
@@ -162,7 +163,7 @@ function plusOneHour(dateKey, time) {
 
 function timeRangeLabel(p) {
   if (!p.time) return '';
-  return p.endTime ? `${p.time}–${p.endTime}` : p.time;
+  return p.endTime ? `${p.time}-${p.endTime}` : p.time;
 }
 
 function kindOf(key) {
@@ -247,7 +248,7 @@ const SAVERS = {
 
   async shopping(p, text) {
     const list = await firstShoppingList();
-    if (!list) throw new Error(t('capture.noShoppingList'));
+    if (!list) throw Object.assign(new Error('no shopping list'), { code: 'capture_no_list' });
     const items = p.items?.length ? p.items : [{ name: text, quantity: null, unit: null }];
     const ids = [];
     for (const item of items) {
@@ -663,7 +664,7 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
             : staticToken(label));
         }
         if (parse.time && type !== 'meal') {
-          const range = type === 'event' && !parse.endTime ? `${parse.time}–${plusOneHour(date, parse.time).time}` : timeRangeLabel(parse);
+          const range = type === 'event' && !parse.endTime ? `${parse.time}-${plusOneHour(date, parse.time).time}` : timeRangeLabel(parse);
           tokens.append(tokenButton({ label: range, aria: t('capture.tokenTime', { value: range }), tokenText: tokenText('time') }));
         }
         if (parse.assignee) {
@@ -737,14 +738,14 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
               await result.undo();
               window.dispatchEvent(new CustomEvent('yuvomi:captured', { detail: { type, route: kind.route, undone: true } }));
             } catch (err) {
-              window.yuvomi?.showToast(window.yuvomi?.friendlyError?.(err) ?? t('capture.undoFailed'), 'danger');
+              window.yuvomi?.showToast(errorSentence(err, 'capture.undoFailed'), 'danger');
             }
           },
         });
         window.dispatchEvent(new CustomEvent('yuvomi:captured', { detail: { type, route: kind.route } }));
       } catch (err) {
         saving = false;
-        errorEl.textContent = window.yuvomi?.friendlyError?.(err) ?? err?.message ?? t('capture.saveFailed');
+        errorEl.textContent = err?.code === 'capture_no_list' ? t('capture.noShoppingList') : errorSentence(err, 'capture.saveFailed');
         updateSave();
       }
     }
