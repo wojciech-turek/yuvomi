@@ -31,6 +31,7 @@ import { assigneeSyncTarget } from '/utils/sync-target.js';
 import { initials } from '/utils/initials.js';
 import { mealTypeLabel, ensureMealTypeNames } from '/utils/meal-types.js';
 import { errorSentence } from '/utils/friendly-error.js';
+import { personToken } from '/utils/person-color.js';
 
 /** Die Typen des Blattes, in der Reihenfolge des Artboards. */
 export const CAPTURE_KINDS = Object.freeze([
@@ -586,7 +587,7 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
       update();
     };
 
-    const tokenButton = ({ label, aria, tokenText, disc = null }) => {
+    const tokenButton = ({ label, aria, tokenText, disc = null, person = null }) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'capture-token';
@@ -596,6 +597,13 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
         d.className = 'capture-token__disc';
         d.setAttribute('aria-hidden', 'true');
         d.textContent = disc;
+        // Die Personenfarbe (person-color.js) - genau wie auf Dziś gerufen, damit
+        // dieselbe Person auf beiden Flaechen dieselbe Farbe traegt.
+        if (person) {
+          const tok = personToken(person);
+          d.style.backgroundColor = tok.tint;
+          d.style.color = tok.ink;
+        }
         b.append(d);
       }
       b.append(document.createTextNode(label));
@@ -686,6 +694,7 @@ export async function openCaptureSheet({ context = 'auto', pageAction = null, te
             aria: t('capture.tokenPerson', { value: name }),
             tokenText: tokenText('person'),
             disc: initials(name).slice(0, 1),
+            person: members.find((m) => m.id === parse.assignee.id) ?? null,
           }));
         }
       }
