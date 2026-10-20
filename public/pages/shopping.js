@@ -1329,6 +1329,8 @@ function renderListContent(container) {
          from the guess while typing, so the category field only shows with a
          pointer; on the phone the fresh row offers "zmien". -->
     <div class="quick-add shopping-addbar">
+      <div class="shopping-addbar__predictions" id="shopping-addbar-predictions"
+           role="group" aria-label="${esc(t('shopping.predictionsLabel'))}"></div>
       <form class="quick-add__form" id="quick-add-form" novalidate autocomplete="off">
         <div class="quick-add__input-wrap">
           <i data-lucide="plus" class="quick-add__glyph" aria-hidden="true"></i>
@@ -1984,6 +1986,26 @@ function predictionsHtml() {
     </section>`;
 }
 
+/**
+ * The same chips ride above the add bar while it has focus and no name yet
+ * (Tafla, "Pasek dodawania"): with the keyboard up the list's own row is far
+ * away. CSS shows the row only in that state; a press on a chip keeps the
+ * field's focus (pointerdown, renderListContent).
+ */
+function renderBarPredictions(container) {
+  const box = container?.querySelector?.('#shopping-addbar-predictions');
+  if (!box?.insertAdjacentHTML) return;
+  box.replaceChildren();
+  const items = visiblePredictions();
+  if (!items.length) return;
+  box.insertAdjacentHTML('beforeend', items.map((i) => `
+    <button type="button" class="shopping-predictions__chip" data-action="add-prediction" data-name="${esc(i.name)}"
+            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">
+      <i data-lucide="plus" aria-hidden="true"></i>${esc(i.name)}
+    </button>`).join(''));
+  window.lucide?.createIcons({ el: box });
+}
+
 async function loadPredictions(container) {
   if (readOnly() || predictionsHiddenToday()) return;
   const listId = state.activeListId;
@@ -2100,11 +2122,16 @@ function wireAddBar(container) {
     const covered = typing && vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
     bar.style.setProperty('--addbar-keyboard', `${Math.round(covered)}px`);
     bar.classList.toggle('shopping-addbar--typing', typing && covered > 0);
+    bar.classList.toggle('shopping-addbar--focused', typing);
   };
   _addBarSync = sync;
   bar.addEventListener('focusin', sync);
-  // `focusout` fires before the new focus lands - measure after it.
-  bar.addEventListener('focusout', () => setTimeout(sync, 0));
+  // `focusout` fires before the new focus lands - measure after it. The short
+  // grace lets a tap on a suggestion chip above the bar land before the chips
+  // step away with the focus.
+  bar.addEventListener('focusout', () => setTimeout(sync, 250));
+  // A press on a chip keeps the field (and the keyboard) where it is.
+  bar.querySelector('#shopping-addbar-predictions')?.addEventListener('mousedown', (e) => e.preventDefault());
   vv?.addEventListener('resize', sync);
   vv?.addEventListener('scroll', sync);
   _routeSignal?.addEventListener?.('abort', () => {
@@ -3212,6 +3239,7 @@ function updateItemsList(container) {
       maybeShowSwipeHint(container);
     }
   }
+  renderBarPredictions(container);
   updateCheckedActions(container);
 }
 

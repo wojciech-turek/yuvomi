@@ -580,6 +580,26 @@
   }
 }
 
+/* "Pewnie się kończy" rides above the bar while it has focus and no name yet
+ * (phone only - with a pointer the list's own row stands right under the
+ * bar). */
+.shopping-addbar__predictions {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .shopping-addbar--focused:has(.quick-add__input:placeholder-shown) .shopping-addbar__predictions:not(:empty) {
+    position: absolute;
+    inset-inline: 0;
+    bottom: calc(100% + var(--space-2));
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
 /* With a pointer: the first row above the list, the aisle field shows. */
 @media (min-width: 1024px) {
   .shopping-addbar {
