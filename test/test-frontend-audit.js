@@ -2734,10 +2734,25 @@ test('router hides inactive overlays from keyboard focus', () => {
   assert.match(source, /returnFocus/);
 });
 
-test('mobile More sheet trigger controls its dialog and traps keyboard focus', () => {
+/*
+ * TAFLA (2026-10-20): the Więcej tab is a destination (/more), not the
+ * trigger of the More sheet. Its accessible contract is therefore a link's:
+ * it navigates and carries aria-current on its page, and announces no popup
+ * (aria-haspopup/-controls would promise a dialog that no longer opens). The
+ * sheet keeps its focus trap for as long as it is built.
+ */
+test('mobile More tab navigates to the Więcej page; the sheet keeps its focus trap', () => {
   const source = read('../public/router.js');
 
-  assert.match(source, /moreBtn\.setAttribute\('aria-controls',\s*'more-sheet'\)/);
+  assert.match(source, /\{ path: '\/more',\s+page: '\/pages\/more\.js'/, 'the /more route exists');
+  assert.match(source, /if \(!e\.target\.closest\('#more-btn'\)\) return;[\s\S]{0,200}?navigate\(MORE_PATH\)/,
+    'the tab goes to /more');
+  const moreBtnFn = /function moreNavButtonEl\(\)[\s\S]*?\n\}/.exec(source)?.[0] ?? '';
+  assert.ok(moreBtnFn, 'moreNavButtonEl() not found');
+  assert.doesNotMatch(moreBtnFn, /aria-haspopup|aria-controls|aria-expanded/,
+    'a navigating tab announces no popup');
+  assert.match(source, /setMoreButtonState\(moreBtn, activeSecondary, path === MORE_PATH\)/,
+    'on /more the tab is the current page');
   assert.match(source, /const currentMoreBtn = \(\) => container\.querySelector\('#more-btn'\) \|\| moreBtn/);
   assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'true'\)/);
   assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'false'\)/);
@@ -3157,7 +3172,7 @@ test('bottom-nav target fills the 44x44 touch-comfort zone', () => {
   assert.match(tokens, /--nav-height-mobile:\s*6[0-4]px/);
 });
 
-test('bottom nav keeps a navigation landmark with a disclosure button, not a tablist', () => {
+test('bottom nav keeps a navigation landmark with a navigating Więcej tab, not a tablist', () => {
   const source = read('../public/router.js');
 
   // Landmark statt ARIA-Tablist (Navigation, keine Tabs in einem Tabpanel).
@@ -3165,9 +3180,10 @@ test('bottom nav keeps a navigation landmark with a disclosure button, not a tab
   assert.doesNotMatch(source, /'role',\s*'tablist'/);
   assert.doesNotMatch(source, /setAttribute\('role', 'tab'\)/);
 
-  // More bleibt ein korrekter Disclosure-Button.
-  assert.match(source, /moreBtn\.setAttribute\('aria-expanded', 'false'\)/);
-  assert.match(source, /moreBtn\.setAttribute\('aria-controls', 'more-sheet'\)/);
+  // TAFLA: Więcej is a destination (/more) - a navigating tab with
+  // aria-current, no longer a disclosure button for the sheet.
+  assert.match(source, /navigate\(MORE_PATH\)/);
+  assert.doesNotMatch(source, /moreBtn\.setAttribute\('aria-controls', 'more-sheet'\)/);
 });
 
 test('kitchen tab discloses its (variable) destination in the accessible name', () => {
