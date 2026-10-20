@@ -44,7 +44,7 @@
         "errorDetails": "技术详情",
         "pageFailedTitle": "暂时无法打开{{page}}",
         "pageFailedHint": "其他所有功能照常可用。",
-        "toOverview": "前往概览",
+        "toOverview": "前往今天",
         "errorGeneric": "发生了错误。",
         "updateAvailable": "有更新 - 重新加载页面以获取最新版本。",
         "titleRequired": "标题为必填项",
@@ -104,7 +104,7 @@
         "transferUndone": "已从购物清单中移除。"
     },
     "nav": {
-        "dashboard": "概览",
+        "dashboard": "今天",
         "tasks": "任务",
         "calendar": "日历",
         "meals": "饮食",
@@ -151,10 +151,12 @@
         "rewards": "奖励",
         "pantry": "库存",
         "inventory": "物品",
-        "schedule": "排班"
+        "schedule": "排班",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "概览",
+        "title": "今天",
         "greetingMorning": "早上好，{{name}}",
         "greetingDay": "下午好，{{name}}",
         "greetingEvening": "晚上好，{{name}}",
@@ -2214,7 +2216,7 @@
             "housekeeping": "家务",
             "weather": "天气",
             "family": "家庭",
-            "dashboard": "概览",
+            "dashboard": "今天",
             "search": "搜索",
             "inventory": "物品",
             "waste": "垃圾收集"
@@ -3954,7 +3956,7 @@
     "shortcuts": {
         "goKitchen": "厨房",
         "goCal": "日历",
-        "goDash": "仪表板",
+        "goDash": "今天",
         "calToday": "跳到今天",
         "calPrev": "上一时段",
         "calNext": "下一时段",
@@ -6786,5 +6788,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

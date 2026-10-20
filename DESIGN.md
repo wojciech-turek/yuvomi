@@ -841,6 +841,9 @@ Inhalt, kein Verlauf ueber eine Karte, kein Text auf einer Flaeche, die nicht ge
   komponierte Glas gemessen); Fehler und Warnung bleiben Vollflaechen - sie sollen
   unterbrechen, eine Bestaetigung nicht. Alle Aufrufe laufen ueber `showToast`, die Regel
   steht einmal in glass.css (`test:toast-placement`).
+  **Tafla (2026-10-19):** der Toast ist eine DECKENDE dunkle Pille in beiden Themes (48 hoch,
+  radius-full, E2, auch mit Blur kein Glas), 12pt ueber der Kapsel, Satz 17/400, „Cofnij"
+  17/600 und das Haekchen in der Toast-Stimme (`--color-toast-action`, #B49CFF).
 - **Chart-Serien** (`--chart-series-1..7`): eigene Datenreihen-Palette, bewusst KEINE
   geborgten Modul-Tints (Modulfarben tragen Bedeutung, die in einem Ausgaben-Donut falsch
   waere). Sieben Toene, im Dark aufgehellt auf >=3:1 Grafikkontrast; mehr Segmente werden
@@ -2634,6 +2637,22 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 `test:dashboard-rewards`, `test:member-order`.
 
 ### Navigation
+
+> **Tafla (2026-10-19, Owner-Freigabe; Guards: test:mobile-chrome, test:frontend-audit,
+> test:nav-badges).** Mobil fuenf feste Ziele **Dziś · Kalendarz · Zadania · Kuchnia · Więcej**
+> mit eigenen Zeichen (`TAB_ICON` in router.js: Sonne, Kalender, Haken im Kreis, Topf, Raster),
+> Labels 13/600 in ink-2. Die Kapsel steht 12pt vom Rand und 20pt ueber der Unterkante
+> (390pt: x 12-318, `--nav-capsule-bottom`), dahinter ein 32pt-Verlauf (`.nav-bottom::before`).
+> Die aktive Pille ist der GANZE Tab (Zeichen UND Label, 48 hoch) in `--color-accent-tint`,
+> Zeichen und Label in der Stimme, Strich 2.25 statt Fuellung. Minimiert (abwaerts lesen,
+> und dauerhaft auf Seiten hinter Więcej) eine 48pt-Kapsel aus Zeichen, ALLE Ziele bleiben -
+> die R20-Pille aus nur dem aktiven Ziel ist entfallen. Badges sind ein 6pt-Akzentpunkt
+> „wartet heute auf dich" ohne Ziffer; die Menge steht im Namen des Ziels. Rechts der Kapsel
+> das abgesetzte **+** (52pt, `.capture-plus`, components/capture-sheet.js): auf jeder Seite
+> dasselbe globale Erfassen, nie umgedeutet. Die **Modulton-Legende an Leiste und Seitenleiste
+> ist entfallen** - Zeichen einfarbig, die aktive Zeile der Seitenleiste traegt dieselbe
+> Akzent-Toenung wie die Kapsel. Die Abschnitte unten beschreiben den Stand davor, soweit sie
+> dem widersprechen.
 - **Mobil:** schwebende Glas-Kapsel (radius-full) mit gleitendem Aktiv-Indikator, duenner
   als das uebrige Chrome (2026-10-01): `--glass-bg-capsule` (hell 0.66, dunkel 0.50) ueber
   `--blur-lg` + `saturate(--lg-capsule-saturate)` + `--glass-capsule-tone`, dazu Lichtfang
@@ -2787,6 +2806,16 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > **Tafla (2026-10-19):** the module icon beside the page title is retired -
 > `router.js` passes `wireCollapsingHeader` no `sealIcon`, so a header carries its title
 > only. Title weight is 600 (was 700), tracking default.
+>
+> **Tafla, Kopf (2026-10-19).** Unter 1024px: grosser Titel 34/41 in 600, kein Trenner in Ruhe,
+> Kopf-Knoepfe sind **Geisterkreise** (36pt `--color-fill`, Zeichen 20 in Tinte, 44 Treffer,
+> nie violett, `--ghost-circle`), hoechstens zwei. Das „Neu" einer Seite dockt dort nur, wenn
+> der Kopf weniger als zwei traegt, und nicht auf Seiten, deren Sache das Erfassen-Blatt
+> kennt (Zadania, Kalendarz, Zakupy, Posiłki, Notatki) - deren volles Formular steht im
+> Blatt als „Pełny formularz". Seiten hinter Więcej tragen einen 36pt-Rueckweg in eigener
+> Zeile ueber dem Titel („Wróć: Więcej", oeffnet das Mehr-Blatt). Kuchnia: „Kuchnia" als
+> grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·
+> Przepisy (kitchen-tabs.css).
 Eine `.page-toolbar` pro Modul, **Absender-Siegel und Titel links**, Center-Slot (Suche oder
 Zeitraum-Navigation), Aktionen rechts. In der KOMPAKTEN Groessenklasse (<1024px, die Welt mit
 Tab-Bar) steht der Titel am Scroll-Anfang als **Large Title** (34px) auf eigener Zeile und
@@ -3001,6 +3030,10 @@ Flaeche und Erreichbarkeit war nur noetig, solange die Reserve den Scrollport ve
 einzige Aufgabe sichtbar" auf zwei.
 
 ### Kopfregel mobil (2026-09-26, Critique A1 P1-3 / A8)
+
+> **Tafla (2026-10-19):** die Kopf-Icon-Haut (Punkt 1, D1) ist seither der Geisterkreis -
+> `--color-fill`, kein Ring, Zeichen in Tinte; die Such-Icon-Form traegt dieselbe Haut. Der
+> Large Title steht in 600 statt 700, das Siegel davor ist entfallen.
 
 Die Chrome-Regel oben sagt, WIEVIEL ueber dem Inhalt stehen darf; die Kopfregel sagt, WIE
 ein Modulkopf unter 768px gebaut ist. Anlass: dieselbe Frage hatte sechs Antworten - Kopf
@@ -3997,6 +4030,15 @@ ist Region-Fokusziel ohne Rahmen (`.page-crash`, wie `.page-unreachable`).
 die Ziele bleiben 48px. Vorher vier umrandete Kreise je Zeile.
 
 ### FAB (Signature Component)
+
+> **Tafla (2026-10-19):** am Telefon schwebt kein Seiten-FAB mehr. Das globale **+** neben der
+> Kapsel (deckende Stimme `--color-btn-primary`, Akzent-Glow, 52pt; minimiert 48) oeffnet das
+> Erfassen-Blatt mit dem Typ der Seite vorgewaehlt; Langdruck (400ms) oeffnet Zdjęcie spiżarni
+> (wenn die KI-Funktion an ist) und Dokument. Der Seiten-FAB bleibt als Knoten (Kurzbefehl `n`,
+> „Pełny formularz"), wird am Telefon Geisterkreis im Kopf oder bleibt unsichtbar; der
+> Speed-Dial der Uebersicht ist entfallen. Am Desktop gilt das Andocken unten unveraendert;
+> dort oeffnet die Pille „Dodaj" der Uebersicht und der Knopf „Dodaj" der Seitenleiste das
+> Blatt.
 Getoente Glas-Kapsel: der App-Akzent mit 78 % Deckung
 (`color-mix(in srgb, var(--color-accent) 78%, transparent)`) ueber
 `--blur-md` + `saturate(var(--lg-glass-saturate))`, Specular-Kanten (`--glass-inset-strong`

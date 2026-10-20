@@ -102,6 +102,25 @@ const ICON_SHAPES = {
     ['path', { d: 'm8 12.3 2.8 2.8 5.6-5.6' }],
   ],
 
+  // Tafla: the tab capsule's own glyphs (Lucide shapes, spec-navigation.txt).
+  // Dziś is a sun, Zadania a ticked circle, Kuchnia a pot - only the five
+  // destinations use them (TAB_ICON in router.js), module identity elsewhere
+  // keeps MODULE_ICON below.
+  'sun': [
+    ['circle', { cx: '12', cy: '12', r: '4' }],
+    ['path', { d: 'M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41' }],
+  ],
+  'circle-check-big': [
+    ['path', { d: 'M21.801 10A10 10 0 1 1 17 3.335' }],
+    ['path', { d: 'm9 11 3 3L22 4' }],
+  ],
+  'cooking-pot': [
+    ['path', { d: 'M2 12h20' }],
+    ['path', { d: 'M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8' }],
+    ['path', { d: 'm4 8 16-4' }],
+    ['path', { d: 'm8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8' }],
+  ],
+
   'sticky-note': [
     ['path', { d: 'M5.5 4.5h9.5L18.5 8v11a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 19V6a1.5 1.5 0 0 1 1.5-1.5z' }],
     ['path', { d: 'M15 4.5V7a1.5 1.5 0 0 0 1.5 1.5H19' }],

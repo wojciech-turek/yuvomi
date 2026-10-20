@@ -699,20 +699,24 @@ test('Wetter: nicht eingerichtet - weder im Kopf noch im Blatt, wie ein abgescha
  * `.fab-layer .page-fab`, die fuenf Slots wurden breiter und „Mehr" lag unter
  * dem Knopf. Gemessen wird deshalb, was man sieht: wo der Knopf haengt, ob er
  * ein Glyph hat und ob ein Tab-Slot unter ihm liegt. */
+/* TAFLA (2026-10-19): der Speed-Dial der Uebersicht ist entfallen. Am Telefon
+ * steht dort, wo er stand, das globale + der Shell (`#capture-plus`) - und
+ * dieselben Zusagen gelten fuer es: genau eines, in der Shell statt im
+ * Scrollport, mit Plus, und kein Tab-Slot darunter. */
 async function fabOverCapsule(page) {
   await page.waitForFunction(() => {
-    const fab = document.querySelector('#fab-main');
-    return fab && !document.documentElement.hasAttribute('data-wall-mode');
+    const plus = document.querySelector('#capture-plus');
+    return plus && plus.getClientRects().length && !document.documentElement.hasAttribute('data-wall-mode');
   }, { timeout: 10000 });
   await freeze(page);
   await wait(300);
   return page.evaluate(() => {
-    const fab = document.querySelector('#fab-main');
+    const fab = document.querySelector('#capture-plus');
     const f = fab.getBoundingClientRect();
     const slots = [...document.querySelectorAll('.nav-bottom__items > .nav-item')];
     return {
-      count: document.querySelectorAll('#fab-main').length,
-      inLayer: !!fab.closest('#fab-layer'),
+      count: document.querySelectorAll('#capture-plus').length + document.querySelectorAll('#fab-main').length,
+      inLayer: !fab.closest('#main-content'),
       glyph: !!fab.querySelector('svg'),
       slots: slots.length,
       under: slots
@@ -729,8 +733,8 @@ function assertFabDocked(state, when) {
   // Gesammelt statt einzeln: rot soll jeder Befund auf einmal stehen, nicht
   // nur der erste.
   const findings = [];
-  if (state.count !== 1) findings.push(`${state.count} Knoepfe #fab-main im Dokument`);
-  if (!state.inLayer) findings.push('der FAB haengt im Scrollport statt in der Shell-Ebene');
+  if (state.count !== 1) findings.push(`${state.count} Plus-Knoepfe (#capture-plus/#fab-main) im Dokument`);
+  if (!state.inLayer) findings.push('das + haengt im Scrollport statt in der Shell');
   if (!state.glyph) findings.push('der FAB hat kein Plus');
   if (state.under.length) findings.push(`unter dem FAB liegt ein Tab-Slot (${state.under.join(', ')})`);
   assert.deepEqual(findings, [], `${when}:\n${findings.join('\n')}`);
@@ -743,7 +747,7 @@ function assertFabDocked(state, when) {
  * wird deshalb angehalten: gemessen wird der Moment, bevor die Daten da sind. */
 test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange die Daten laden (mobile, #1588)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  await page.waitForSelector('#fab-layer #fab-main');
+  await page.waitForSelector('#capture-plus');
   const held = [];
   page.__yuvomiRequestInterceptor = (req) => {
     if (!/\/api\/v1\/dashboard(\?|$)/.test(req.url())) return false;
@@ -755,7 +759,8 @@ test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange 
   await wait(300);
   const state = await page.evaluate(() => ({
     wall: document.documentElement.hasAttribute('data-wall-mode'),
-    fabs: document.querySelectorAll('#fab-main, #fab-layer .page-fab').length,
+    fabs: [...document.querySelectorAll('#fab-main, #fab-layer .page-fab, #capture-plus')]
+      .filter((el) => el.getClientRects().length).length,
   }));
   const pending = held.length;
   page.__yuvomiRequestInterceptor = null;
@@ -773,7 +778,7 @@ test('FAB: nach dem Verlassen des Wand-Modus steht er in der Shell-Ebene, mit Pl
   await page.waitForSelector('.wall #wall-exit');
   // Die Wand hat sich gesetzt: der Knopf der Vorseite ist aus der Shell-Ebene
   // geraeumt, wie nach jeder Weile an der Wand.
-  await page.waitForFunction(() => !document.querySelector('#fab-main'), { timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('#capture-plus')?.getClientRects().length, { timeout: 10000 });
   await page.click('#wall-exit');
   const after = await fabOverCapsule(page);
   await page.close();

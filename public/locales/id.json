@@ -44,7 +44,7 @@
         "errorDetails": "Detail teknis",
         "pageFailedTitle": "{{page}} tidak bisa dibuka sekarang",
         "pageFailedHint": "Semua bagian lain tetap berfungsi.",
-        "toOverview": "Ke Ringkasan",
+        "toOverview": "Ke Hari ini",
         "errorGeneric": "Terjadi kesalahan.",
         "updateAvailable": "Pembaruan tersedia - muat ulang halaman untuk mendapatkan versi terbaru.",
         "titleRequired": "Judul wajib diisi",
@@ -104,7 +104,7 @@
         "transferUndone": "Dihapus dari daftar belanja."
     },
     "nav": {
-        "dashboard": "Ringkasan",
+        "dashboard": "Hari ini",
         "tasks": "Tugas",
         "calendar": "Kalender",
         "meals": "Makanan",
@@ -151,7 +151,9 @@
         "rewards": "Hadiah",
         "pantry": "Persediaan",
         "inventory": "Inventaris",
-        "schedule": "Jadwal shift"
+        "schedule": "Jadwal shift",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "search": {
         "emptyHint": "Ketik untuk membuka bagian atau membuat sesuatu. Mulai 2 karakter, entri kamu juga ditemukan, bahkan dengan potongan kata.",
@@ -170,7 +172,7 @@
         "createTaskNamed": "Buat “{{title}}” sebagai tugas"
     },
     "dashboard": {
-        "title": "Ringkasan",
+        "title": "Hari ini",
         "greetingMorning": "Selamat pagi, {{name}}",
         "greetingDay": "Selamat siang, {{name}}",
         "greetingEvening": "Selamat malam, {{name}}",
@@ -2368,7 +2370,7 @@
             "housekeeping": "Asisten Rumah Tangga",
             "weather": "Cuaca",
             "family": "Keluarga",
-            "dashboard": "Ringkasan",
+            "dashboard": "Hari ini",
             "search": "Cari",
             "inventory": "Inventaris",
             "waste": "Pengumpulan sampah"
@@ -3697,7 +3699,7 @@
         "new": "Buat entri baru",
         "searchCalendar": "Cari di kalender",
         "help": "Pintasan keyboard",
-        "goDash": "Dasbor",
+        "goDash": "Hari ini",
         "calToday": "Lompat ke hari ini",
         "calPrev": "Periode sebelumnya",
         "calNext": "Periode berikutnya",
@@ -6786,5 +6788,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

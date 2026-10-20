@@ -1590,68 +1590,43 @@ export function nextNavMinimized(state, { top, max, delta, gesture }) {
 }
 
 /**
- * DIE MINIMIERTE KAPSEL IST EINE PILLE (R20, Entscheidung Ulas 2026-10-17,
- * Messlatte iOS 26 Tab-Bar-Minimize). R19 machte sie nur flacher und gewann
- * 8px; jetzt schrumpft sie an ihrer Startkante auf das aktive Ziel: die
- * anderen Tabs blenden aus, das aktive gleitet per `translate` an den Anfang,
- * die Kapsel wird so breit wie dieses eine Ziel plus ihr Polster rundum. Der
- * FAB bleibt an seinem Platz.
+ * DIE MINIMIERTE KAPSEL IST EINE KAPSEL AUS ZEICHEN (Tafla 2026-10-19,
+ * spec-navigation.txt; R20 schrumpfte sie noch auf das aktive Ziel). Alle Ziele
+ * bleiben stehen, jedes 48 breit, die Labels blenden aus. Die Breite wird
+ * gerechnet statt `auto`, damit sie gleiten kann:
+ *   Polster + Anzahl x Ziel + Polster + Rand (Border-Box).
  *
- * Reine Rechnung, damit sie ohne DOM pruefbar ist. Alle Werte stammen aus der
- * AUSGEFAHRENEN Kapsel (gemessen vor dem Umschalten):
- *   - `width`: Polster + Ziel (hoechstens 64px) + Polster + Rand (Border-Box)
- *   - `shift`: wie weit das aktive Ziel zum ersten wandert (in RTL nach rechts)
- *   - `itemWidth`: die Breite, auf der die Tabs waehrenddessen stehen bleiben -
- *     schrumpfte ihr Flex-Slot mit, wanderten sie (und das aktive verzoege)
+ * Reine Rechnung, damit sie ohne DOM pruefbar ist.
  *
- * @param {{ first: {left: number, right: number}, active: {left: number, right: number, width: number},
- *   padStart: number, border?: number, rtl?: boolean }} m
- * @returns {{ width: number, shift: number, itemWidth: number }}
+ * @param {{ count: number, padStart: number, border?: number, item?: number }} m
+ * @returns {number}
  */
-export const NAV_PILL_MAX_INNER = 64;
-export function navPillGeometry({ first, active, padStart, border = 0, rtl = false }) {
-  // Am Tablet ist ein Slot ~100px breit; die Pille bleibt trotzdem eine
-  // Pille (hoechstens NAV_PILL_MAX_INNER Inhalt), das Ziel steht mittig darin
-  // und ragt seitlich unter die Kante - sichtbar und tippbar bleiben 64px.
-  const inner = Math.min(active.width, NAV_PILL_MAX_INNER);
-  const centre = (active.width - inner) / 2;
-  const shift = rtl ? first.right - active.right + centre : first.left - active.left - centre;
-  return {
-    width: padStart * 2 + inner + border * 2,
-    shift,
-    itemWidth: active.width,
-  };
+export const NAV_MINI_ITEM = 48;
+export function navMiniWidth({ count, padStart, border = 0, item = NAV_MINI_ITEM }) {
+  return padStart * 2 + Math.max(0, count) * item + border * 2;
 }
 
 /** Ein Ziel der Kapsel, das gerade gezeichnet wird (der Kuechen-Tab fehlt je nach Modulen). */
 const isShownNavItem = (el) => Boolean(el?.classList?.contains('nav-item') && el.getClientRects?.().length);
 
 /**
- * Misst die Pille an der ausgefahrenen Kapsel und schreibt sie als Variablen
- * an `.nav-bottom` (layout.css liest sie im minimierten Zustand). Das aktive
- * Ziel traegt `.nav-item--pill`. Ohne aktives Ziel (Einstellungen ueber Mehr
- * ohne Markierung) steht das erste in der Pille.
+ * Misst die minimierte Breite an der ausgefahrenen Kapsel und schreibt sie als
+ * `--nav-mini-width` an `.nav-bottom` (layout.css liest sie im minimierten
+ * Zustand).
  * @param {Element} nav
  */
-function measureNavPill(nav) {
+function measureNavMini(nav) {
   const items = nav.querySelector?.('.nav-bottom__items');
   if (!items) return;
-  const tabs = [...items.children].filter(isShownNavItem);
-  if (!tabs.length) return;
-  const active = tabs.find((el) => el.matches('[aria-current="page"], .nav-item--active')) ?? tabs[0];
+  const count = [...items.children].filter(isShownNavItem).length;
+  if (!count) return;
   const cs = getComputedStyle(items);
-  const rtl = cs.direction === 'rtl';
-  const g = navPillGeometry({
-    first: tabs[0].getBoundingClientRect(),
-    active: active.getBoundingClientRect(),
-    padStart: parseFloat(rtl ? cs.paddingRight : cs.paddingLeft) || 0,
+  const width = navMiniWidth({
+    count,
+    padStart: parseFloat(cs.paddingInlineStart ?? cs.paddingLeft) || 0,
     border: parseFloat(cs.borderLeftWidth) || 0,
-    rtl,
   });
-  nav.style.setProperty('--nav-pill-width', `${g.width}px`);
-  nav.style.setProperty('--nav-pill-shift', `${g.shift}px`);
-  nav.style.setProperty('--nav-item-width', `${g.itemWidth}px`);
-  for (const tab of tabs) tab.classList.toggle('nav-item--pill', tab === active);
+  nav.style.setProperty('--nav-mini-width', `${width}px`);
 }
 
 /**
@@ -1681,9 +1656,8 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
   const apply = (minimized) => {
     if (minimized === nav.classList.contains('nav-bottom--minimized')) return;
     clearTimeout(settleTimer);
-    // Gemessen wird ausgefahren - im Rueckweg (`--settling`) stehen die Tabs
-    // noch auf der alten Breite, das ist dieselbe Geometrie.
-    if (minimized) measureNavPill(nav);
+    // Gemessen wird ausgefahren - an der Kapsel, wie sie gerade steht.
+    if (minimized) measureNavMini(nav);
     nav.classList.toggle('nav-bottom--minimized', minimized);
     doc.documentElement.classList.toggle('nav-minimized', minimized);
     // Zurueck gleitet sie ueber Zwischenhoehen - die duerfen die Zone nicht
@@ -1697,7 +1671,9 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
     && !el.closest('dialog, [popover], .modal-overlay, .more-sheet');
 
   const onGesture = (e) => { if (inContent(e.target)) gestureAt = now(); };
+  let pinned = false;
   const onScroll = (e) => {
+    if (pinned) return;
     const port = e.target;
     if (!inContent(port)) return;
     // Nur wo die Kapsel steht (unter 1024px); am Desktop gibt es nichts zu minimieren.
@@ -1718,34 +1694,26 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
   for (const type of GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
 
   const expand = () => { state = { minimized: false, travel: 0 }; apply(false); };
-  // EIN TIPP AUF DIE PILLE FAEHRT SIE AUS - er navigiert nicht und fuehrt
-  // auch nicht nach oben (das taete der Tipp auf den aktiven Tab). Gemerkt
-  // beim Druck: der Fokus, den der Browser dabei setzt, faehrt die Kapsel per
-  // `:focus-within` schon aus, bevor der `click` kommt.
-  let pillTap = false;
-  const onPillDown = () => { pillTap = nav.classList.contains('nav-bottom--minimized'); };
-  const onPillClick = (e) => {
-    if (!pillTap) return;
-    pillTap = false;
-    e.preventDefault();
-    e.stopPropagation();
-    expand();
-    // Bliebe der Fokus im Tab, haelt `:focus-within` die Kapsel offen, und
-    // sie minimierte beim naechsten Lesen nicht mehr.
-    if (e.detail > 0) e.target?.closest?.('.nav-item')?.blur?.();
+  // Tafla: auf einer geschobenen Seite (hinter Więcej) steht die Kapsel
+  // minimiert, unabhaengig vom Scrollen; Fokus in ihr faehrt sie weiter aus.
+  const pin = (on) => {
+    pinned = Boolean(on);
+    if (!pinned) return;
+    state = { minimized: true, travel: 0 };
+    if (nav.getClientRects?.().length) apply(true);
   };
-  nav.addEventListener?.('pointerdown', onPillDown, { capture: true, passive: true });
-  nav.addEventListener?.('click', onPillClick, { capture: true });
+  // Minimiert bleiben alle Ziele sichtbar (Tafla): ein Tipp auf ein Zeichen
+  // navigiert wie ausgefahren, und der Seitenwechsel faehrt die Kapsel aus
+  // (updateNav im Router). Die Sonderbehandlung der R20-Pille ist entfallen.
 
   return {
     nav,
     expand,
+    pin,
     destroy: () => {
       clearTimeout(settleTimer);
       doc.removeEventListener('scroll', onScroll, { capture: true });
       for (const type of GESTURES) doc.removeEventListener(type, onGesture, { capture: true });
-      nav.removeEventListener?.('pointerdown', onPillDown, { capture: true });
-      nav.removeEventListener?.('click', onPillClick, { capture: true });
       // Der Root-Zustand gehoert der Kapsel, die ihn gesetzt hat; eine
       // Nachfolgerin beginnt ausgefahren.
       doc.documentElement.classList.remove('nav-minimized');

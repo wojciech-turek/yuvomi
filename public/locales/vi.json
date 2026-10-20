@@ -44,7 +44,7 @@
         "errorDetails": "Chi tiết kỹ thuật",
         "pageFailedTitle": "Hiện không thể mở {{page}}",
         "pageFailedHint": "Mọi phần khác vẫn hoạt động bình thường.",
-        "toOverview": "Về Tổng quan",
+        "toOverview": "Về Hôm nay",
         "errorGeneric": "Đã xảy ra lỗi.",
         "updateAvailable": "Có bản cập nhật - tải lại trang để nhận phiên bản mới nhất.",
         "titleRequired": "Tiêu đề là bắt buộc",
@@ -104,7 +104,7 @@
         "transferUndone": "Đã xóa khỏi danh sách mua sắm."
     },
     "nav": {
-        "dashboard": "Tổng quan",
+        "dashboard": "Hôm nay",
         "tasks": "Nhiệm vụ",
         "calendar": "Lịch",
         "meals": "Bữa ăn",
@@ -151,10 +151,12 @@
         "rewards": "Phần thưởng",
         "pantry": "Kho dự trữ",
         "inventory": "Tài sản",
-        "schedule": "Lịch làm việc"
+        "schedule": "Lịch làm việc",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Tổng quan",
+        "title": "Hôm nay",
         "greetingMorning": "Chào buổi sáng, {{name}}",
         "greetingDay": "Chào buổi chiều, {{name}}",
         "greetingEvening": "Chào buổi tối, {{name}}",
@@ -2325,7 +2327,7 @@
             "housekeeping": "Dọn dẹp",
             "weather": "Thời tiết",
             "family": "Gia đình",
-            "dashboard": "Tổng quan",
+            "dashboard": "Hôm nay",
             "search": "Tìm kiếm",
             "inventory": "Tài sản",
             "waste": "Thu gom rác"
@@ -3686,7 +3688,7 @@
         "new": "Tạo mục nhập mới",
         "searchCalendar": "Tìm trong lịch",
         "help": "Phím tắt",
-        "goDash": "Bảng điều khiển",
+        "goDash": "Hôm nay",
         "calToday": "Chuyển đến hôm nay",
         "calPrev": "Khoảng trước",
         "calNext": "Khoảng sau",
@@ -6786,5 +6788,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

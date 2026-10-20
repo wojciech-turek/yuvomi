@@ -2,7 +2,6 @@ import { t } from '/i18n.js';
 import { api } from '/api.js';
 import { renderSubTabs, selectSubTab, setSubTabBadge, scrollActiveSubTabIntoView } from '/utils/sub-tabs.js';
 import { navigationFrom } from '/utils/view-transition.js';
-import { MODULE_ICON, moduleIconEl } from '/nav-icons.js';
 import { todayKey } from '/utils/date.js';
 import { KITCHEN_MODULES as KITCHEN_MODULES_SOURCE } from '/utils/module-accent.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
@@ -19,21 +18,33 @@ export { KITCHEN_MODULES } from '/utils/module-accent.js';
 export const KITCHEN_ROUTES = Object.freeze(KITCHEN_MODULES_SOURCE.map((mod) => `/${mod}`));
 export const KITCHEN_STORAGE_KEY = 'yuvomi-kitchen-tab';
 
+// TAFLA (2026-10-19, Entscheidung des Haushalts): Posiłki · Zakupy · Spiżarnia ·
+// Przepisy - Zakupy an zweiter Stelle, weil es der meistbesuchte Tab ist.
 const TABS = () => [
   { route: '/meals',    labelKey: 'nav.meals',    icon: 'utensils'      },
-  { route: '/recipes',  labelKey: 'nav.recipes',  icon: 'book-text'     },
   { route: '/shopping', labelKey: 'nav.shopping', icon: 'shopping-cart' },
   { route: '/pantry',   labelKey: 'nav.pantry',   icon: 'archive'       },
+  { route: '/recipes',  labelKey: 'nav.recipes',  icon: 'book-text'     },
 ].filter(({ route }) => !window.yuvomi?.isModuleDisabled(route.slice(1)));
 
+/* TAFLA: Kuchnia merkt sich den letzten Abschnitt ueber den Start der App
+ * hinaus (spec-navigation „the control remembers the last segment") - eine
+ * installierte App beginnt jede Sitzung neu, und `sessionStorage` vergass ihn.
+ * Die Sitzung schreibt weiter (renderSubTabs), das Geraet merkt ihn dazu. */
+function rememberKitchenRoute(route) {
+  try { localStorage.setItem(KITCHEN_STORAGE_KEY, route); } catch { /* privates Fenster */ }
+}
+
 export function getLastKitchenRoute() {
-  try {
-    const stored = sessionStorage.getItem(KITCHEN_STORAGE_KEY);
-    if (KITCHEN_ROUTES.includes(stored) && !window.yuvomi?.isModuleDisabled(stored.slice(1))) {
-      return stored;
-    }
-  } catch { /* ignore */ }
-  const first = ['meals', 'recipes', 'shopping', 'pantry'].find((m) => !window.yuvomi?.isModuleDisabled(m));
+  for (const store of ['sessionStorage', 'localStorage']) {
+    try {
+      const stored = globalThis[store]?.getItem(KITCHEN_STORAGE_KEY);
+      if (KITCHEN_ROUTES.includes(stored) && !window.yuvomi?.isModuleDisabled(stored.slice(1))) {
+        return stored;
+      }
+    } catch { /* ignore */ }
+  }
+  const first = ['meals', 'shopping', 'pantry', 'recipes'].find((m) => !window.yuvomi?.isModuleDisabled(m));
   return first ? `/${first}` : '/meals';
 }
 
@@ -92,6 +103,12 @@ export function isKitchenModule(mod) {
 // der Tabname vorangestellt und die Locale-Keys tragen nur das Zustandsfragment -
 // ohne das hörte ein Screenreader „12 offene Artikel" und wüsste nicht, wohin der
 // Knopf führt.
+/* TAFLA (spec-components „Segmented control"): Zakupy traegt seine Zahl als
+ * leise 13/400 („Zakupy 23"), Spiżarnia nur einen 6pt-Warnpunkt, und nur,
+ * wenn etwas in hoechstens drei Tagen ablaeuft (`pantry.expiring`,
+ * /kitchen/summary). Auf dem AKTIVEN Segment bleibt beides weg (Regel oben):
+ * die Seite sagt es dort vollstaendiger, und eine Zahl, die jede eigene
+ * Mutation nachziehen muesste, veraltete sonst sichtbar. */
 const BADGES = [
   {
     route: '/shopping',
@@ -100,11 +117,10 @@ const BADGES = [
   },
   {
     route: '/pantry',
-    pick: (d) => d.pantry?.attention ?? 0,
-    // Der einzige Ton-Ausschlag: abgelaufene und fast leere Artikel sind das
-    // einzige Küchen-Signal mit einer Frist.
+    pick: (d) => d.pantry?.expiring ?? 0,
     tone: 'warning',
-    label: (count) => `${t('nav.pantry')}: ${t('nav.pantryAttention', { count })}`,
+    dot: true,
+    label: () => `${t('nav.pantry')}: ${t('nav.kitchenExpiringSoon')}`,
   },
 ];
 
@@ -125,10 +141,12 @@ let _lastSummary = null;
 
 function applyBadges(data) {
   if (!_bar || !data) return;
-  for (const { route, pick, label, tone } of BADGES) {
+  for (const { route, pick, label, tone, dot } of BADGES) {
     const count = route === _activeRoute ? 0 : Number(pick(data)) || 0;
-    setSubTabBadge(_bar, route, count > 0 ? { count, tone, label: label(count) } : null);
+    setSubTabBadge(_bar, route, count > 0 ? { count, tone, dot, label: label(count) } : null);
   }
+  // Derselbe Stand faerbt den Punkt am Tab „Kuchnia" der Kapsel (router.js).
+  window.dispatchEvent(new CustomEvent('yuvomi:kitchen-expiring', { detail: { count: Number(data.pantry?.expiring) || 0 } }));
 }
 
 async function loadBadges() {
@@ -236,6 +254,7 @@ function syncToLocation() {
 /** Tipp auf einen Tab: Zahlen und Kapsel ziehen sofort, die Seite folgt. */
 function onTabChosen(route) {
   _activeRoute = route;
+  rememberKitchenRoute(route);
   applyBadges(_lastSummary);
   placeIndicator({ glide: true });
   // Abgelehnt loest das Promise sofort auf, angenommen nach dem Render - beide
@@ -246,6 +265,7 @@ function onTabChosen(route) {
 export function renderKitchenTabsBar(container, activeRoute) {
   container.classList.add('has-kitchen-tabs');
   _activeRoute = activeRoute;
+  rememberKitchenRoute(activeRoute);
 
   const tabs = TABS();
   // Nur innerhalb der Kueche bleibt die Leiste stehen. Wer von aussen kommt,
@@ -282,13 +302,9 @@ export function renderKitchenTabsBar(container, activeRoute) {
     extraClass: 'kitchen-tabs-bar',
     ariaLabel: t('nav.kitchen'),
     title: t('nav.kitchen'),
-    // DER ABSENDER DER KÜCHE STEHT EINMAL, UND ZWAR HIER. Die vier Küchen-Köpfe
-    // bekommen keinen: sie teilen EINEN Tint, weil sie EIN Raum sind - vier
-    // Siegel wiederholten denselben Absender bei jedem Tabwechsel, und zwei der
-    // vier Köpfe (Rezepte, Vorrat) tragen gar keinen Seitentitel, hätten also
-    // einen Absender ohne Brief. Das Besteck ist dasselbe Zeichen, das die
-    // Bottom-Nav für „Küche" führt (kitchenNavButtonEl in router.js).
-    sealIcon: () => moduleIconEl(MODULE_ICON.kitchen),
+    // TAFLA: kein Modulzeichen neben dem Titel (das Siegel ist entfallen) -
+    // „Kuchnia" steht als grosser Titel ueber dem Segment-Schalter
+    // (kitchen-tabs.css).
     insertPosition: 'afterbegin',
     onChange: onTabChosen,
   });

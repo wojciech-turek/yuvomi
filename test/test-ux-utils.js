@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { eachRule } from './css-rules.js';
 
 // Minimales Window/Navigator-Mock für Node
-const { stagger, vibrate, withBusy, scheduleUndoableDelete, wireSwipeToDismiss, wireCollapsingHeader, collapseOut, expandIn, watchNavCapsuleHeight, wireScrollFade, nextNavMinimized, NAV_MINIMIZE_DOWN, NAV_MINIMIZE_UP, bindNavMinimize, navPillGeometry, NAV_PILL_MAX_INNER, STAGGER_ROWS, durationToken } = await (async () => {
+const { stagger, vibrate, withBusy, scheduleUndoableDelete, wireSwipeToDismiss, wireCollapsingHeader, collapseOut, expandIn, watchNavCapsuleHeight, wireScrollFade, nextNavMinimized, NAV_MINIMIZE_DOWN, NAV_MINIMIZE_UP, bindNavMinimize, navMiniWidth, NAV_MINI_ITEM, STAGGER_ROWS, durationToken } = await (async () => {
   global.window = {
     matchMedia: () => ({ matches: false }),
     addEventListener: () => {},
@@ -1853,26 +1853,19 @@ test('R20: Bewegungs-Tokens werden einmal gelesen, stagger animiert nur den Anfa
   }
 });
 
-// R20 (Entscheidung Ulas 2026-10-17): DIE MINIMIERTE KAPSEL IST EINE PILLE.
-test('navPillGeometry: die Pille ist das aktive Ziel plus Polster, das Ziel wandert an den Anfang', () => {
-  // 390px: fuenf Slots zu 62px ab x=17 (Kapsel 8 + Rand 1 + Polster 8), aktiv der dritte.
-  const slot = (i) => ({ left: 17 + i * 62, right: 79 + i * 62, width: 62 });
-  assert.deepEqual(navPillGeometry({ first: slot(0), active: slot(2), padStart: 8, border: 1 }),
-    { width: 80, shift: -124, itemWidth: 62 });
-  assert.deepEqual(navPillGeometry({ first: slot(0), active: slot(0), padStart: 8, border: 1 }).shift, 0,
-    'ist das erste aktiv, bewegt sich nichts');
-  // RTL: das erste Ziel steht rechts, das aktive wandert nach rechts.
-  const rtl = (i) => ({ left: 311 - i * 62, right: 373 - i * 62, width: 62 });
-  assert.equal(navPillGeometry({ first: rtl(0), active: rtl(3), padStart: 8, border: 1, rtl: true }).shift, 186);
-  // Tablet: Slots ~99px - die Pille bleibt hoechstens 64px Inhalt breit, das Ziel mittig darin.
-  const wide = (i) => ({ left: 146 + i * 99, right: 245 + i * 99, width: 99 });
-  const g = navPillGeometry({ first: wide(0), active: wide(2), padStart: 8, border: 1 });
-  assert.equal(g.width, 8 * 2 + NAV_PILL_MAX_INNER + 2);
-  assert.equal(g.shift, -198 - (99 - NAV_PILL_MAX_INNER) / 2, 'das Ziel steht in der Mitte der Pille');
-  assert.ok(NAV_PILL_MAX_INNER >= 48, 'sichtbar und tippbar bleibt mindestens ein 48px-Ziel');
+// Tafla (2026-10-19, chrome.py --mini): DIE MINIMIERTE KAPSEL IST EINE KAPSEL
+// AUS ZEICHEN - alle Ziele bleiben, je 48 breit; die Breite wird gerechnet,
+// damit sie gleiten kann (R20 schrumpfte sie noch auf das aktive Ziel).
+test('navMiniWidth: Polster + Ziele zu je 48 + Polster + Rand', () => {
+  assert.equal(NAV_MINI_ITEM, 48, 'ein minimiertes Ziel ist 48 breit');
+  // 390pt, fuenf Ziele, 4pt Polster, 1pt Rand: 4 + 240 + 4 + 2 = 250.
+  assert.equal(navMiniWidth({ count: 5, padStart: 4, border: 1 }), 250);
+  // Ohne Kueche (abgeschaltet) vier Ziele.
+  assert.equal(navMiniWidth({ count: 4, padStart: 4, border: 1 }), 202);
+  assert.equal(navMiniWidth({ count: -1, padStart: 4 }), 8, 'keine negative Breite');
 });
 
-test('watchNavMinimize R20: ein Tipp auf die Pille faehrt sie aus, statt zu navigieren', () => {
+test('watchNavMinimize Tafla: minimiert navigiert ein Tipp wie sonst; pin haelt geschobene Seiten minimiert', () => {
   const savedElement = globalThis.Element;
   globalThis.Element = class {};
   const docListeners = new Map();
@@ -1905,18 +1898,22 @@ test('watchNavMinimize R20: ein Tipp auf die Pille faehrt sie aus, statt zu navi
     port.scrollTop += NAV_MINIMIZE_DOWN + 6;
     fire(docListeners, 'scroll', { target: port });
     assert.equal(nav.classList.contains('nav-bottom--minimized'), true);
-    let prevented = false; let stopped = false;
-    fire(navListeners, 'pointerdown', {});
-    fire(navListeners, 'click', { detail: 1, target: null, preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; } });
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), false, 'die Pille faehrt nicht aus');
-    assert.ok(prevented && stopped, 'der Tipp auf die Pille navigiert noch (oder fuehrt nach oben)');
-    // Ausgefahren ist ein Tipp ein Tipp.
-    prevented = false;
-    fire(navListeners, 'pointerdown', {});
-    fire(navListeners, 'click', { detail: 1, target: null, preventDefault: () => { prevented = true; }, stopPropagation: () => {} });
-    assert.equal(prevented, false, 'ausgefahren wird ein Tipp abgefangen');
+    // Alle Ziele bleiben minimiert sichtbar: kein Zuhoerer faengt den Tipp ab.
+    assert.equal((navListeners.get('click') ?? []).length, 0, 'ein Tipp auf ein Zeichen navigiert');
+    // Geschobene Seite (hinter Więcej): die Kapsel bleibt minimiert, auch
+    // wenn aufwaerts gescrollt wird.
+    m.expand();
+    assert.equal(nav.classList.contains('nav-bottom--minimized'), false);
+    m.pin(true);
+    assert.equal(nav.classList.contains('nav-bottom--minimized'), true, 'pin minimiert sofort');
+    port.scrollTop -= NAV_MINIMIZE_UP + 10;
+    fire(docListeners, 'scroll', { target: port });
+    assert.equal(nav.classList.contains('nav-bottom--minimized'), true, 'gepinnt aendert Scrollen nichts');
+    m.pin(false);
+    m.expand();
+    assert.equal(nav.classList.contains('nav-bottom--minimized'), false, 'ohne Pin faehrt sie wieder aus');
     m.destroy();
-    assert.equal((navListeners.get('click') ?? []).length, 0, 'der Zuhoerer bleibt nach destroy()');
+    assert.equal(doc.documentElement.classList.contains('nav-minimized'), false, 'destroy() raeumt den Wurzelzustand');
   } finally {
     globalThis.Element = savedElement;
   }

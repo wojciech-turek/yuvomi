@@ -44,7 +44,7 @@
         "errorDetails": "Tekniske detaljer",
         "pageFailedTitle": "Siden {{page}} kan ikke åpnes akkurat nå",
         "pageFailedHint": "Alle andre deler fungerer som før.",
-        "toOverview": "Til oversikten",
+        "toOverview": "Til I dag",
         "errorGeneric": "En feil oppstod.",
         "updateAvailable": "Oppdatering tilgjengelig - last inn siden på nytt for å få den nyeste versjonen.",
         "titleRequired": "Tittel er påkrevd",
@@ -104,7 +104,7 @@
         "transferUndone": "Fjernet fra handlelisten."
     },
     "nav": {
-        "dashboard": "Oversikt",
+        "dashboard": "I dag",
         "tasks": "Oppgaver",
         "calendar": "Kalender",
         "meals": "Måltider",
@@ -151,10 +151,12 @@
         "rewards": "Belønninger",
         "pantry": "Spiskammer",
         "inventory": "Inventar",
-        "schedule": "Planlegging"
+        "schedule": "Planlegging",
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Oversikt",
+        "title": "I dag",
         "greetingMorning": "God morgen, {{name}}",
         "greetingDay": "God ettermiddag, {{name}}",
         "greetingEvening": "God kveld, {{name}}",
@@ -2348,7 +2350,7 @@
             "housekeeping": "Husarbeid",
             "weather": "Vær",
             "family": "Familie",
-            "dashboard": "Oversikt",
+            "dashboard": "I dag",
             "search": "Søk",
             "inventory": "Inventar",
             "waste": "Avfallshåndtering"
@@ -3686,7 +3688,7 @@
         "new": "Opprett ny oppføring",
         "searchCalendar": "Søk i kalender",
         "help": "Tastateltal",
-        "goDash": "Dashbord",
+        "goDash": "I dag",
         "calToday": "Gå til i dag",
         "calPrev": "Forrige periode",
         "calNext": "Neste periode",
@@ -6786,5 +6788,56 @@
         "repeatWeekly": "weekly",
         "repeatMonthly": "monthly",
         "repeatYearly": "yearly"
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }
