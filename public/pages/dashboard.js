@@ -7116,6 +7116,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
         rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
         await reloadIfQueryChanged(previousQuery);
         rebuildDashboard(widgetConfig);
+        // A section switched on fetches what it shows (question, predictions,
+        // expiring documents) - otherwise it would stay empty until reload.
+        void loadTodayExtras();
       } catch {
         window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
       }
