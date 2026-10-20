@@ -6965,6 +6965,8 @@
         "wastePutOut": "Wystawić: {{types}}",
         "wasteToday": "dziś",
         "wasteTonight": "dziś wieczorem · odbiór jutro",
-        "weatherTomorrow": "jutro {{what}}"
+        "weatherTomorrow": "jutro {{what}}",
+        "customizeFilterTasks": "Które zadania",
+        "customizeFilterCalendar": "Które wydarzenia"
     }
 }

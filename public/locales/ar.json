@@ -7129,6 +7129,8 @@
         "pantryExpiring_two": "{{count}} to use up",
         "shoppingItems_few": "{{count}} items",
         "shoppingItems_many": "{{count}} items",
-        "shoppingItems_two": "{{count}} items"
+        "shoppingItems_two": "{{count}} items",
+        "customizeFilterTasks": "Which tasks",
+        "customizeFilterCalendar": "Which events"
     }
 }

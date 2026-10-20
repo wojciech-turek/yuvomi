@@ -7309,6 +7309,10 @@ button.today-cockpit__more--link {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
 }
 
 .day-head__weather {

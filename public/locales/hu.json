@@ -6639,6 +6639,8 @@
         "wastePutOut": "Put out: {{types}}",
         "wasteToday": "today",
         "wasteTonight": "tonight · collected tomorrow",
-        "weatherTomorrow": "tomorrow {{what}}"
+        "weatherTomorrow": "tomorrow {{what}}",
+        "customizeFilterTasks": "Which tasks",
+        "customizeFilterCalendar": "Which events"
     }
 }

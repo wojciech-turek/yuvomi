@@ -537,6 +537,21 @@ export function pickNow(data, plan, ctx, { timer = null } = {}) {
 }
 
 /**
+ * The plan and the Teraz card together. In dinner mode tonight's dinner is
+ * the card, so it is not a row of the plan as well.
+ * @returns {{ plan: object, now: object }}
+ */
+export function buildDay(data, ctx, { timer = null } = {}) {
+  let plan = buildPlan(data, ctx);
+  let now = pickNow(data, plan, ctx, { timer });
+  if (now.mode === 'dinner') {
+    plan = buildPlan(data, ctx, { featuredDinner: now.meal });
+    now = pickNow(data, plan, ctx, { timer });
+  }
+  return { plan, now };
+}
+
+/**
  * The day is done ("Dzień ogarnięty"): something was on today, every checkable
  * row is ticked and nothing timed is still ahead. Info rows (a birthday, the
  * help being here) do not hold it up.

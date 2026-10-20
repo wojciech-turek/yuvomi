@@ -6965,6 +6965,8 @@
         "pantryExpiring_few": "{{count}} to use up",
         "pantryExpiring_many": "{{count}} to use up",
         "shoppingItems_few": "{{count}} items",
-        "shoppingItems_many": "{{count}} items"
+        "shoppingItems_many": "{{count}} items",
+        "customizeFilterTasks": "Which tasks",
+        "customizeFilterCalendar": "Which events"
     }
 }

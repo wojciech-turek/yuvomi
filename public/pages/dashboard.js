@@ -7,7 +7,7 @@
 import { api, auth } from '/api.js';
 import { openCookForMeal } from '/components/cook-mode.js';
 import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-question.js';
-import { planContext, buildPlan, pickNow, dayClosed, buildTomorrow, buildSoon } from '/utils/today-plan.js';
+import { planContext, buildDay, dayClosed, buildTomorrow, buildSoon } from '/utils/today-plan.js';
 import { renderTodayPage, renderTodaySkeleton, updateTimerText } from '/components/today-view.js';
 import { openTodayCustomize } from '/components/today-customize.js';
 import { createPageController } from '/utils/page-lifecycle.js';
@@ -7301,14 +7301,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   function buildTodayState() {
     const ctx = planContext({ now: new Date(), viewer: user, users: data?.users ?? [], moduleOff, mealLabel: mealTypeLabel });
-    const timer = readWallTimer();
-    let plan = buildPlan(data, ctx);
-    let now = pickNow(data, plan, ctx, { timer });
-    if (now.mode === 'dinner') {
-      // Tonight's dinner is the card; it is not a row of the plan as well.
-      plan = buildPlan(data, ctx, { featuredDinner: now.meal });
-      now = pickNow(data, plan, ctx, { timer });
-    }
+    const { plan, now } = buildDay(data, ctx, { timer: readWallTimer() });
     const closed = now.mode !== 'timer' && dayClosed(plan);
     const tomorrow = buildTomorrow(data, ctx);
     const soon = buildSoon(data, ctx, { documents: todayUi.documents });
@@ -7388,6 +7381,10 @@ export async function render(container, { user, signal: routeSignal = null } = {
     void mountExtensionWidgets(shell, widgetConfig, user);
     restoreFocusAfterRebuild(container, [keepFocus, ...(todayFocus ?? [])]);
     todayFocus = null;
+    // Nach dem Ausstieg aus der Wand (R20): der Fokus geht an den Weg, der sie
+    // wieder oeffnet - „Dostosuj Dziś". Eigener Aufruf, weil ein gemerkter
+    // Fokus von davor dieses Ziel nicht verdraengen darf.
+    if (takeWallFocusIntent('leave')) restoreFocusAfterRebuild(container, ['[data-day-action="customize"]']);
     syncTimerTick();
   }
 
@@ -7574,6 +7571,21 @@ export async function render(container, { user, signal: routeSignal = null } = {
     return next.map((w, i) => ({ ...w, order: i }));
   }
 
+  /* THE FILTERS STAY REACHABLE (#814). A category choice of the task widget or
+   * "only mine" of the calendar widget narrows the whole /dashboard answer -
+   * and so the plan. The old widget menus are gone with the board; the sheet
+   * opens the same option dialogs, so a saved filter never hides rows without
+   * a way to see and change it. */
+  async function editTodayFilter(id) {
+    await closeModal({ force: true });
+    const current = widgetConfig.find((w) => w.id === id)?.options ?? {};
+    const next = await openWidgetOptions(id, current);
+    if (next === null) return;
+    // Ein leeres Optionsobjekt wird zu „keine Optionen" (#814).
+    await persistTodayLayout(updateWidgetConfig(widgetConfig, id,
+      Object.keys(next).length ? { options: next } : { options: undefined }));
+  }
+
   function openTodayCustomizeSheet() {
     const entries = todayEntries(widgetConfig);
     const weatherEntry = entries.find((w) => w.id === 'today-weather');
@@ -7597,6 +7609,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
         onPublish: async () => { await closeModal({ force: true }); await publishHouseholdDefault(); },
         onReset: async () => { await closeModal({ force: true }); await resetDashboardConfig(); },
         onWall: onDisplay ? null : enterWallFromToday,
+        filters: ['tasks', 'calendar'].filter((id) => !moduleOff(MODULE_FOR_WIDGET[id])),
+        onFilter: editTodayFilter,
       },
     });
   }

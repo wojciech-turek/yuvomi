@@ -68,7 +68,8 @@ function actionRow({ action, label, glyph }) {
  * @param {{id: string, label: string, visible: boolean, note?: string}[]} opts.sections in their order
  * @param {{visible: boolean}|null} opts.weather the header weather switch, null when there is no weather
  * @param {(next: {order: string[], visible: Record<string, boolean>}) => void} opts.onChange
- * @param {{ canPublish?: boolean, followsDefault?: boolean, onPublish?: Function, onReset?: Function, onWall?: Function }} [opts.actions]
+ * @param {{ canPublish?: boolean, followsDefault?: boolean, onPublish?: Function, onReset?: Function, onWall?: Function,
+ *           filters?: string[], onFilter?: (id: string) => void }} [opts.actions]
  */
 export function openTodayCustomize({ sections, weather, onChange, actions = {} }) {
   let order = sections.map((s) => s.id);
@@ -78,7 +79,10 @@ export function openTodayCustomize({ sections, weather, onChange, actions = {} }
 
   const emit = () => onChange?.({ order: [...order], visible: { ...visible } });
 
+  const filterLabels = { tasks: t('today.customizeFilterTasks'), calendar: t('today.customizeFilterCalendar') };
+  const filterGlyphs = { tasks: 'list-filter', calendar: 'calendar-search' };
   const advanced = [
+    ...(actions.onFilter ? (actions.filters ?? []) : []).map((id) => actionRow({ action: `filter:${id}`, label: filterLabels[id] ?? id, glyph: filterGlyphs[id] ?? 'filter' })),
     actions.canPublish ? actionRow({ action: 'publish', label: t('today.customizePublish'), glyph: 'users' }) : '',
     actions.followsDefault === false ? actionRow({ action: 'reset', label: t('today.customizeReset'), glyph: 'rotate-ccw' }) : '',
     actions.onWall ? actionRow({ action: 'wall', label: t('dashboard.wallEnter'), glyph: 'maximize-2' }) : '',
@@ -167,6 +171,7 @@ export function openTodayCustomize({ sections, weather, onChange, actions = {} }
       if (action === 'publish') actions.onPublish?.();
       if (action === 'reset') actions.onReset?.();
       if (action === 'wall') { closeModal({ force: true }); actions.onWall?.(); }
+      if (action?.startsWith('filter:')) actions.onFilter?.(action.slice('filter:'.length));
     });
 
     panel.addEventListener('keydown', (event) => {

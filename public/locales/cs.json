@@ -6807,6 +6807,8 @@
         "earlierDone_few": "{{count}} done",
         "earlierEvents_few": "{{count}} events",
         "pantryExpiring_few": "{{count}} to use up",
-        "shoppingItems_few": "{{count}} items"
+        "shoppingItems_few": "{{count}} items",
+        "customizeFilterTasks": "Which tasks",
+        "customizeFilterCalendar": "Which events"
     }
 }
