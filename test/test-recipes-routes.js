@@ -316,6 +316,44 @@ test('POST /:id/to-shopping-list: abgehakte Artikel blockieren die Übernahme ni
   assert.equal(shoppingItems(listId).length, 2);
 });
 
+// Tafla "Dopisz 1" (2026-10-19): nur die Zutaten, die der Vorrat nicht zu
+// haben scheint - die Oberflaeche nennt sie mit `names`.
+test('POST /:id/to-shopping-list: mit `names` nur diese Zutaten, ohne alle', async () => {
+  const listId = newList('Transfer Namen');
+  const created = await call('POST', '/', {
+    title: 'Teilweise',
+    ingredients: [{ name: 'Śmietanka 30%', quantity: '100 ml' }, { name: 'Cebula' }, { name: 'Czosnek' }],
+  });
+  const id = created.body.data.id;
+  const r = await call('POST', `/${id}/to-shopping-list`, { listId, names: ['śmietanka 30%', 'Gibt es nicht'] });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.transferred, 1, 'nur die genannte Zutat, gleich wie geschrieben');
+  assert.deepEqual(shoppingItems(listId).map((i) => i.name), ['Śmietanka 30%']);
+
+  const bad = await call('POST', `/${id}/to-shopping-list`, { listId, names: 'Cebula' });
+  assert.equal(bad.status, 400, 'names ist eine Liste');
+  const rest = await call('POST', `/${id}/to-shopping-list`, { listId });
+  assert.deepEqual({ transferred: rest.body.data.transferred, skipped: rest.body.data.skipped }, { transferred: 2, skipped: 1 },
+    'ohne names bleibt es beim ganzen Rezept');
+});
+
+// Tafla "Ugotowane 3× · ostatnio 2 tyg. temu": gelesen aus dem Essensplan,
+// nur Tage VOR heute zaehlen als gekocht.
+test('GET /: jedes Rezept traegt cooked_count und last_cooked_on aus dem Essensplan', async () => {
+  const created = await call('POST', '/', { title: 'Oft gekocht', ingredients: [] });
+  const id = created.body.data.id;
+  const insert = db.prepare('INSERT INTO meals (date, meal_type, title, recipe_id, created_by) VALUES (?, ?, ?, ?, ?)');
+  insert.run('2020-01-05', 'dinner', 'Oft gekocht', id, OWNER);
+  insert.run('2020-02-09', 'dinner', 'Oft gekocht', id, OWNER);
+  insert.run('2999-01-01', 'dinner', 'Oft gekocht', id, OWNER); // geplant, nicht gekocht
+  const r = await call('GET', '/');
+  const row = r.body.data.find((x) => x.id === id);
+  assert.equal(row.cooked_count, 2);
+  assert.equal(row.last_cooked_on, '2020-02-09');
+  const never = r.body.data.find((x) => x.id !== id);
+  assert.ok(never === undefined || (never.cooked_count >= 0 && 'last_cooked_on' in never), 'jedes Rezept traegt die Felder');
+});
+
 test('POST /:id/to-shopping-list: Rezept ohne Zutaten → 0/0 statt Fehler', async () => {
   const listId = newList('Transfer D');
   const created = await call('POST', '/', { title: 'Leer', ingredients: [] });

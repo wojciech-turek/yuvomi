@@ -204,6 +204,16 @@ const vorrat = (over = {}) => ({
   location_id: 4, location_name: 'Kellerregal', expires_on: '2027-02-24', notes: 'Nur die ungesuesste', ...over,
 });
 
+/** Der erste Knoten mit dieser `data-action`, als Knoten des Mini-DOM. */
+function knotenMitAktion(el, action) {
+  if (el.dataset?.action === action) return el;
+  for (const kind of el.childNodes ?? []) {
+    const treffer = kind.childNodes ? knotenMitAktion(kind, action) : null;
+    if (treffer) return treffer;
+  }
+  return null;
+}
+
 /** Der Zeilenknopf der Vorratszeile, als Knoten des Mini-DOM. */
 function zeilenKnopf(el) {
   if (el.dataset?.action === 'details' || el.dataset?.action === 'edit') return el;
@@ -228,11 +238,16 @@ test('Vorrat bei `pantry: read`: der Zeilenknopf sagt, dass er die Details zeigt
     assert.doesNotMatch(lesend.outerHTML, /common\.edit/);
   }
 
-  const schreibend = knopf({ pantry: 'write', shopping: 'write' });
-  assert.equal(schreibend.dataset.action, 'edit');
-  assert.match(schreibend.childNodes.at(-1).outerHTML, /<span class="sr-only">common\.edit<\/span>/,
-    'Gegenfall: mit Schreibrecht steht „Bearbeiten"');
+  // TAFLA (2026-10-19): mit Schreibrecht klappt der Zeilenknopf auf - Stepper,
+  // "Na listę" und "Edytuj" stehen darunter. Er sagt das ueber aria-expanded,
+  // nicht ueber einen Zusatz; "Bearbeiten" ist dort ein eigener, sichtbarer Knopf.
+  const zeile = withAccess({ pantry: 'write', shopping: 'write' }, () => pantry.rowEl(vorrat()));
+  const schreibend = knotenMitAktion(zeile, 'expand');
+  assert.ok(schreibend, 'Gegenfall: mit Schreibrecht ist der Zeilenknopf das Aufklappen');
+  assert.equal(schreibend.attributes.get('aria-expanded'), 'false');
   assert.doesNotMatch(schreibend.outerHTML, /common\.showDetails/);
+  assert.match(knotenMitAktion(zeile, 'edit')?.outerHTML ?? '', /common\.edit/,
+    'Gegenfall: „Bearbeiten" steht als Wort im aufgeklappten Teil');
 });
 
 test('Vorrat: die Leseansicht baut ihre Zeilen ueber den geteilten Baustein', () => {
@@ -246,30 +261,32 @@ test('Vorrat: die Leseansicht baut ihre Zeilen ueber den geteilten Baustein', ()
   assert.equal(zeilen(ansicht({ notes: '   ' })), zeilen(voll) - 1);
 });
 
-/* Schmales Telefon: pantry.css laesst das MHD in Zeilen mit Warenkorb weg, weil
- * dort Warenkorb UND Stepper die Textspalte auf 168px druecken. Die Lesezeile
- * hat keinen Stepper - die Regel traf sie trotzdem, und das Datum stand nur in
- * der Leseansicht. Gemessen an beiden Seiten: der Selektor verlangt den
- * Stepper, und der Renderer zeichnet ihn bei `read` nicht (das Datum aber
- * schon). Die Breiten selbst sieht nur ein Browser. */
-test('Vorrat, schmale Zeile: das MHD faellt nur weg, wo auch ein Stepper steht', () => {
+/* TAFLA (2026-10-19) statt "schmale Zeile". Bis hierher liess pantry.css das MHD
+ * in Zeilen weg, in denen Warenkorb UND Stepper die Textspalte auf 168px
+ * drueckten (und der Test sicherte, dass die Regel die Lesezeile ohne Stepper
+ * nicht traf). Die Tafla-Zeile hat diese Enge nicht mehr: ruhend traegt sie nur
+ * Name, Statuswort und Mengen-Pille; Stepper, "Na listę" und das Datum stehen
+ * im aufgeklappten Teil darunter. Damit gibt es keine CSS-Regel mehr, die das
+ * Datum weglaesst - es steht immer dort, wo man es sucht: aufgeklappt mit
+ * Schreibrecht, in der Leseansicht bei `read` (Test darueber). */
+test('Vorrat, Tafla-Zeile: das Datum steht aufgeklappt bzw. in der Leseansicht, keine Regel laesst es weg', () => {
   const css = readFileSync(new URL('../public/styles/pantry.css', import.meta.url), 'utf8');
   const versteckt = [];
   for (const rule of eachRule(css)) {
     if (/\.pantry-row__expiry/.test(rule.selector) && /display:\s*none/.test(rule.body)) versteckt.push(rule.selector.trim());
   }
-  assert.equal(versteckt.length, 1, `genau eine Regel blendet das MHD aus: ${versteckt.join(' | ')}`);
-  assert.match(versteckt[0], /:has\(\.pantry-row__cart\)/, 'sie fragt nach dem Warenkorb');
-  assert.match(versteckt[0], /:has\(\.pantry-stepper\)/, 'und nach dem Stepper - ohne ihn ist Platz');
+  assert.deepEqual(versteckt, [], 'keine Regel blendet das Datum aus');
 
   const knapp = vorrat({ quantity: 1, min_quantity: 5 });
   const zeile = (modules) => withAccess(modules, () => pantry.rowEl(knapp).outerHTML);
   const lesend = zeile({ pantry: 'read', shopping: 'write' });
-  assert.match(lesend, /pantry-row__cart"/, 'die Lesezeile traegt den Warenkorb');
-  assert.match(lesend, /pantry-row__expiry/, 'und das MHD');
-  assert.doesNotMatch(lesend, /pantry-stepper/, 'aber keinen Stepper: die Regel trifft sie nicht');
+  assert.match(lesend, /pantry\.pillLow/, 'die ruhende Lesezeile sagt den Zustand als Wort');
+  assert.doesNotMatch(lesend, /pantry-stepper|pantry-row__cart"/, 'ruhend: weder Stepper noch Warenkorb');
+  assert.match(withAccess({ pantry: 'read', shopping: 'write' }, () => pantry.itemReadHtml(knapp)), /pantry\.expiresLabel/,
+    'das Datum steht in der Leseansicht, die der Tipp oeffnet');
 
   const schreibend = zeile({ pantry: 'write', shopping: 'write' });
-  assert.match(schreibend, /pantry-row__cart"/);
-  assert.match(schreibend, /class="pantry-stepper"/, 'Gegenfall: mit Schreibrecht stehen beide, die Regel greift weiter');
+  assert.match(schreibend, /class="pantry-stepper"/, 'aufgeklappt: der Stepper');
+  assert.match(schreibend, /pantry-row__cart"/, 'aufgeklappt: "Na listę" fuer den knappen Artikel');
+  assert.match(schreibend, /pantry-row__expiry/, 'aufgeklappt: das Datum');
 });

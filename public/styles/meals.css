@@ -226,8 +226,8 @@
 }
 
 .day-header--today .day-header__date {
-  background-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   font-weight: var(--font-weight-semibold);
   border-radius: var(--radius-full);
   padding-inline: var(--space-2);
@@ -864,14 +864,13 @@
   /* Vorsatz: Punkt und Typ in der Label-Rolle (typography.css), im Fluss vor
    * dem Namen - kein eigenes Zeilenband. Zwei Zeilen fuer Vorsatz plus Name
    * haelt die Klammer am Titel unten. */
+  /* Tafla: sentence case, footnote size - no uppercase tracked labels. */
   .meal-card__type {
     display: inline;
     margin-inline-end: var(--space-1h);
     color: var(--color-text-secondary);
-    font-size: var(--text-xs);
+    font-size: var(--type-footnote);
     font-weight: var(--font-weight-semibold);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
     white-space: nowrap;
   }
 
@@ -1811,4 +1810,1373 @@
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
+}
+
+/* ========================================================
+ * TAFLA: DIE WOCHE AM TELEFON (unter 1024px)
+ *
+ * Unter 1024px steht statt Board und Wochenstepper EINE ruhige Liste
+ * (meals.js, renderPhoneWeek): Wochenkopf mit Streifen, die heutige Kolacja
+ * als Herd-Karte, die Tage als gruppierte Karten mit 56er-Zeilen. Board und
+ * Kopfzeile bleiben im DOM (Desktop, Tests), sind hier aber aus. Die Werte
+ * folgen dem Tafla-Kit: vier Schriftgroessen (34/22/17/13), 8er-Raster,
+ * Titel bei x = 56 in der Karte, Status als Wort, ein Violett.
+ * Tokens mit Rueckfall, bis die Tafla-Grundlage (tokens.css) gelandet ist.
+ * ======================================================== */
+
+.meals-phone {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .meals-page > .meals-toolbar,
+  .meals-page > .meals-layout {
+    display: none;
+  }
+
+  .meals-phone {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding-inline: var(--page-inline-pad);
+    /* Bodenfreiheit ueber der Kapsel bringt .page-scrollport (layout.css). */
+    --scrollport-pad: var(--space-6);
+  }
+}
+
+/* ---- Wochenkopf + Streifen (klebt beim Scrollen oben) ---- */
+
+.meals-phone__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: var(--space-2);
+  background-color: var(--color-bg);
+}
+
+.meals-week {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: var(--content-max-width-narrow);
+}
+
+.meals-week__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--space-6);
+}
+
+.meals-week__range {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.meals-week__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Schlichte Knoepfe in der Stimme: "Dziś" und "Ten tydzień ▾". Sichtbar 18px
+ * Schrift, getroffen wird eine 44er-Flaeche (negativer Rand gibt sie der
+ * Zeile zurueck). */
+.meals-week__today,
+.meals-week__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-base);
+  margin-block: calc((var(--space-6) - var(--target-base)) / 2);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.meals-week__pick {
+  margin-inline-end: calc(-1 * var(--space-2));
+}
+
+.meals-week__pick svg {
+  width: 16px;
+  height: 16px;
+}
+
+.meals-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* Waagrechtes Wischen blaettert die Woche (meals.js, wireStripSwipe). */
+  touch-action: pan-y;
+}
+
+.meals-strip__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.meals-strip__weekday {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.meals-strip__num {
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.meals-strip__day--past .meals-strip__num {
+  color: var(--color-text-secondary);
+}
+
+.meals-strip__day--selected .meals-strip__num {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.meals-strip__day--today .meals-strip__num {
+  background-color: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+}
+
+.meals-strip__dots {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-0h);
+  height: var(--space-1h);
+}
+
+.meals-strip__dot {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--color-text-quaternary);
+}
+
+.meals-strip__dot--on {
+  background-color: var(--color-text-secondary);
+  box-shadow: none;
+}
+
+/* ---- Inhalt ---- */
+
+.meals-phone__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-block: var(--space-2) var(--space-4);
+  max-width: var(--content-max-width-narrow);
+}
+
+.meals-phone__body[aria-busy="true"],
+.meals-phone:has(+ .meals-layout #week-grid[aria-busy="true"]) .meals-phone__body {
+  opacity: 0.55;
+}
+
+/* Die heutige Kolacja: das eine warme Stueck der App (Herd-Ton, E1). */
+.meals-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-hearth);
+  box-shadow: var(--shadow-e1);
+  -webkit-touch-callout: none;
+}
+
+.meals-hero[hidden] {
+  display: none;
+}
+
+.meals-hero__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.meals-hero__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.meals-hero__eyebrow {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.meals-hero__heading {
+  margin: 0;
+  min-width: 0;
+  font: inherit;
+}
+
+/* Der Name der Kolacja darf zwei Zeilen nehmen ("Łosoś z pieczonymi
+ * warzywami") - er ist der Inhalt der Karte, kein Zeilentitel. */
+.meals-hero__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+  text-align: start;
+  text-decoration: none;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.meals-hero__title--link {
+  /* 44er-Treffer um eine 28er-Zeile, ohne die Zeile zu verschieben. */
+  padding-block: var(--space-2);
+  margin-block: calc(-1 * var(--space-2));
+  cursor: pointer;
+}
+
+.meals-hero__cook {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.meals-hero__cook > span:last-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Teller statt Foto: weiss auf dem Herd (dunkel: die Kartenflaeche). */
+.meals-plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+}
+
+.meals-hero__plate {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  object-fit: cover;
+}
+
+.meals-hero .meals-plate {
+  background-color: var(--color-surface);
+}
+
+/* Das Zeichen ist Schmuck (aria-hidden): es nimmt die Feldkante, keine
+ * Textfarbe - ein Teller, kein Wort. */
+.meals-plate__icon {
+  width: 36px;
+  height: 36px;
+  stroke-width: 1.5;
+  color: var(--color-border-control);
+}
+
+.meals-hero__plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Der Zaehler: ein Segment je Zutat, Tinte = da, Bernstein = fehlt. */
+.meals-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.meals-meter__bar {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  width: 96px;
+}
+
+.meals-meter__seg {
+  flex: 1;
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-primary);
+}
+
+.meals-meter__seg--missing {
+  background-color: var(--color-warning);
+}
+
+.meals-meter__caption {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+/* Zwei Zeilen statt Abschneiden: "Masz 5 z 6 · śmietanka 30% na liście" ist
+ * der Satz, um den es geht, und der Name der Zutat steht am Ende. */
+.meals-meter__text {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.meals-meter__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.meals-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* DER EINE Primaerknopf des Bildschirms: Gotuj (bzw. "Dodaj kolację"). */
+.meals-primary {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.meals-primary svg {
+  width: 20px;
+  height: 20px;
+}
+
+.meals-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 52px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.meals-secondary svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Das Menue der Herd-Karte: mit Zeiger ein Kreis neben "Gotuj"; am Finger
+ * oeffnet langes Druecken dasselbe Menue, der Knopf bleibt fuer Tastatur und
+ * VoiceOver erreichbar (geclippt wie .sr-only, sichtbar beim Fokus). */
+.meals-hero__more {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+@media (hover: none) {
+  .meals-hero__more:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---- Tage: Ueberschrift + gruppierte Karte ---- */
+
+.meals-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meals-day + .meals-day {
+  margin-top: var(--space-2);
+}
+
+.meals-day__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.meals-day__title--small {
+  padding-inline: var(--space-4);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.meals-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.meals-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding-inline: var(--space-4);
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.meals-row[hidden] {
+  display: none;
+}
+
+/* Haarlinie zwischen den Zeilen, eingerueckt bis zum Titel (x = 56). */
+.meals-card > .meals-row + .meals-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  inset-inline: 56px 0;
+  height: 0.5px;
+  background-color: var(--color-separator);
+}
+
+.meals-row__glyph {
+  flex: none;
+  width: 28px;
+  display: flex;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.meals-row__glyph svg {
+  width: 20px;
+  height: 20px;
+}
+
+.meals-row__main {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 56px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.meals-row__title {
+  min-width: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meals-row__meta {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meals-row__value {
+  flex: none;
+  font-size: var(--type-body);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.meals-row__add .meals-row__title {
+  color: var(--color-text-secondary);
+}
+
+.meals-row--quiet {
+  padding-inline-start: 56px;
+  color: var(--color-text-secondary);
+}
+
+/* Rezept und Einkaufswagen der Zeile nur mit Zeiger; am Finger fuehrt das
+ * lange Druecken (oder das Blatt) zu denselben Wegen - keine Icon-Reihe
+ * neben jeder Mahlzeit. */
+.meals-row__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-inline-end: calc(-1 * var(--space-3));
+}
+
+.meals-row__action {
+  width: var(--target-base);
+  height: var(--target-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.meals-row__action svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Am Finger aus dem Fluss genommen, nicht entfernt: Tastatur und VoiceOver
+ * erreichen die Knoepfe weiter (geclippt wie .sr-only, sichtbar beim Fokus). */
+@media (hover: none) {
+  .meals-row__actions:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (hover: hover) {
+  .meals-row__main:hover .meals-row__title,
+  .meals-row__action:hover {
+    color: var(--color-accent);
+  }
+}
+
+/* "Wcześniej w tym tygodniu": EINE Zeile in der Karte, darunter die Tage. */
+.meals-past__toggle {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.meals-past__toggle .meals-row__title {
+  flex: 1;
+}
+
+.meals-past__chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-quaternary);
+  transition: transform var(--duration-lg) var(--ease-in-out);
+}
+
+.meals-past__toggle[aria-expanded="true"] .meals-past__chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meals-past__chevron { transition: none; }
+}
+
+.meals-past__days {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.meals-past__days[hidden] {
+  display: none;
+}
+
+/* Chips: 36 sichtbar, 44 getroffen (die Luft darueber/darunter zaehlt mit). */
+.meals-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.meals-chip::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.meals-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.meals-chip--ai {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+/* Ende der Woche: ein schlichter Knopf in der Stimme. */
+.meals-phone__end {
+  display: flex;
+  justify-content: center;
+}
+
+.meals-plain {
+  min-height: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+/* Leere Woche: kein Kasten, eine ruhige Spalte (Tafla "Pusty stan"). */
+.meals-empty {
+  align-self: center;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-6);
+  text-align: center;
+}
+
+.meals-empty__glyph {
+  width: var(--space-8);
+  height: var(--space-8);
+  color: var(--color-text-quaternary);
+}
+
+.meals-empty__title {
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.meals-empty__text {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.meals-empty__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* Das Menue einer Mahlzeit (langes Druecken): grosse Zeilen, eine danger. */
+.meals-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.meals-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--space-12);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body);
+  text-align: start;
+  cursor: pointer;
+}
+
+.meals-menu__item svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-text-secondary);
+}
+
+.meals-menu__item--danger,
+.meals-menu__item--danger svg {
+  color: var(--color-danger);
+}
+
+@media (hover: hover) {
+  .meals-menu__item:hover {
+    background-color: var(--color-fill);
+  }
+}
+
+/* ========================================================
+ * TAFLA: DAS BLATT "DODAJ POSIŁEK"
+ *
+ * Derselbe Dialog wie bisher (openMealModal), als Blatt gekleidet: X links,
+ * Kopf mit Kontext ("Kolacja · czw 22 paź"), Felder 52 auf Fuellflaeche,
+ * Mahlzeit als Segment, Tage als Chips, Zutaten als Chips ("· masz" fuer den
+ * Vorrat), der Schalter "Dopisz brakujące do listy" und EIN Primaerknopf
+ * unten, der das Ergebnis nennt. Kein "Anuluj", kein Stern.
+ * ======================================================== */
+
+@media (max-width: 767px) {
+  .meal-sheet.modal-panel {
+    max-height: calc(var(--viewport-height) - 56px - env(safe-area-inset-top));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: 0;
+  }
+}
+
+.meal-sheet .modal-panel__header {
+  display: grid;
+  grid-template-columns: var(--target-base) minmax(0, 1fr) var(--target-base);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-bottom: 0;
+}
+
+.meal-sheet .modal-panel__title {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  text-align: center;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet .modal-panel__header-actions {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* Das X als 36er-Kreis auf der Fuellflaeche, 44 getroffen. */
+.meal-sheet .modal-panel__close {
+  background: none;
+  color: var(--color-text-primary);
+}
+
+.meal-sheet .modal-panel__close::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  z-index: -1;
+}
+
+.meal-sheet .modal-panel__close {
+  isolation: isolate;
+}
+
+.meal-sheet .modal-panel__body {
+  gap: var(--space-6);
+  padding-top: var(--space-2);
+}
+
+.meal-sheet .form-group {
+  margin: 0;
+}
+
+/* Felder: 52 hoch, Radius 12, Fuellflaeche, 17er Schrift (kein iOS-Zoom). */
+.meal-sheet #modal-title {
+  min-height: 52px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+  font-size: var(--type-body);
+}
+
+.meal-sheet__name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meal-sheet__recipe[hidden] {
+  display: none;
+}
+
+.meal-sheet__recipe-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--space-12);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.meal-sheet__recipe-plate {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  object-fit: cover;
+}
+
+.meal-sheet__recipe-plate .meals-plate__icon,
+.meal-sheet__recipe-plate.meals-plate .meals-plate__icon {
+  width: 20px;
+  height: 20px;
+}
+
+.meal-sheet__recipe-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.meal-sheet__recipe-title {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet__recipe-meta {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet__recipe-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--color-accent);
+}
+
+/* Mahlzeit als Segment: eine Fuellkapsel, der gewaehlte Teil hebt sich weiss
+ * ab. Ohne die Farbpunkte der Mahlzeit-Toene (Tafla: keine Farbe ohne
+ * Aufgabe) - die Chips bleiben dieselben Knoepfe mit role="radio". */
+.meal-sheet__when {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meal-sheet .meal-type-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  height: 36px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+}
+
+.meal-sheet .meal-type-chip {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 32px;
+  padding: 0 var(--space-1);
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet .meal-type-chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+
+.meal-sheet .meal-type-chip::before {
+  display: none;
+}
+
+.meal-sheet .meal-type-chip.filter-chip--active {
+  /* Hell weiss, dunkel die erhabene Stufe - der Daumen hebt sich ab. */
+  background-color: var(--color-raised);
+  box-shadow: var(--seg-active-shadow, var(--shadow-sm));
+  color: var(--color-text-primary);
+}
+
+.meal-sheet__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) var(--target-base);
+  align-items: center;
+}
+
+.meal-sheet__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.meal-sheet__day-name {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet__day-num {
+  width: var(--space-8);
+  height: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-sheet__day--on .meal-sheet__day-num {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.meal-sheet__other-day {
+  width: var(--target-base);
+  height: var(--target-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.meal-sheet__other-day[aria-expanded="true"] {
+  color: var(--color-accent);
+}
+
+.meal-sheet__other-day svg {
+  width: 20px;
+  height: 20px;
+}
+
+.meal-sheet__date[hidden] {
+  display: none;
+}
+
+/* Zutaten: "Składniki" + Herkunft in einer Zeile, darunter die Chips, die
+ * eigenen Zeilen und "+ Dodaj składnik" als schlichter Knopf. */
+.meal-sheet .meal-ingredients {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-2);
+}
+
+.meal-sheet .meal-ingredients > .form-label {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet .meal-ingredients > .ingredient-suggest {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.meal-sheet .meal-ingredients > .ingredient-list,
+.meal-sheet .meal-ingredients > .add-ingredient-btn {
+  grid-column: 1 / -1;
+}
+
+.meal-sheet .ingredient-suggest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet .ingredient-suggest[hidden] {
+  display: none;
+}
+
+.meal-sheet .ingredient-suggest__icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.meal-sheet .ingredient-suggest__label {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet .ingredient-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* "Gotuje": dieselbe Personenauswahl, im Blatt als Chips der Tafla - Fuell-
+ * flaeche, gewaehlt in der einen Stimme statt im Kuechenton. */
+.meal-sheet .user-ms > .label {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet .user-ms__option {
+  min-height: 36px;
+  border: 0;
+  background-color: var(--color-fill);
+}
+
+.meal-sheet .user-ms__option::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.meal-sheet .user-ms__option:has(.user-ms__checkbox:checked) {
+  background-color: var(--color-accent-tint);
+}
+
+.meal-sheet .user-ms__option:has(.user-ms__checkbox:checked) .user-ms__name {
+  color: var(--color-accent);
+}
+
+.meal-sheet .user-ms__name {
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.meal-sheet .user-ms__avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.meal-sheet .ingredient-list:empty {
+  display: none;
+}
+
+.meal-sheet .ingredient-list > .ingredient-row {
+  flex: 1 1 100%;
+}
+
+.ingredient-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+/* 36 sichtbar, 44 getroffen: die 8er-Luft der Reihe zaehlt mit. */
+.ingredient-chip::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.ingredient-chip[aria-pressed="true"] {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.ingredient-chip__icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.ingredient-chip__text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet .add-ingredient-btn {
+  justify-self: start;
+  min-height: var(--target-base);
+  padding: 0 var(--space-2);
+  margin-inline-start: calc(-1 * var(--space-2));
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--color-accent);
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* "Dopisz brakujące do listy": Zeile auf der Fuellflaeche mit Schalter. */
+.meal-sheet__switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: var(--space-2) var(--space-4);
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+}
+
+.meal-sheet__switch-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.meal-sheet__switch-title {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.meal-sheet__switch-meta {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meal-sheet__toggle {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: var(--target-base);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.meal-sheet__toggle::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: calc((var(--target-base) - 31px) / 2);
+  height: 31px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border-control);
+  transition: background-color var(--transition-fast);
+}
+
+.meal-sheet__toggle[aria-checked="true"]::before {
+  background-color: var(--color-btn-primary);
+}
+
+.meal-sheet__toggle-knob {
+  position: absolute;
+  top: calc((var(--target-base) - 27px) / 2);
+  inset-inline-start: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: var(--radius-full);
+  /* Der Knopf eines Schalters ist in beiden Themes weiss (iOS). */
+  background-color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-sm);
+  transition: inset-inline-start var(--transition-fast);
+}
+
+.meal-sheet__toggle[aria-checked="true"] .meal-sheet__toggle-knob {
+  inset-inline-start: 22px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meal-sheet__toggle::before,
+  .meal-sheet__toggle-knob { transition: none; }
+}
+
+/* "Więcej opcji" als Fuellzeile wie im Entwurf. */
+.meal-sheet .form-advanced {
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+}
+
+.meal-sheet .form-advanced__summary {
+  min-height: 56px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.meal-sheet .form-advanced__body {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* Der Fuss traegt den einen Primaerknopf, volle Breite, 52 hoch. */
+.meal-sheet > .modal-panel__footer {
+  border-top: 0;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+
+.meal-sheet .meal-sheet__primary {
+  flex: 1;
+  min-height: 52px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
 }
