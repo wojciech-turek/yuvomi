@@ -159,7 +159,8 @@
         "rewards": "Nagrody",
         "pantry": "Spiżarnia",
         "inventory": "Inwentarz",
-        "schedule": "Grafik"
+        "schedule": "Grafik",
+        "kitchenExpiringSoon": "coś się kończy"
     },
     "search": {
         "emptyHint": "Pisz, aby przejść do obszaru lub coś utworzyć. Od 2 znaków znajdziesz też swoje wpisy, nawet po fragmentach słów.",
@@ -6844,5 +6845,58 @@
         "askNow": "Zadaj pytanie teraz",
         "askNowDone": "Na pulpicie czeka nowe pytanie.",
         "askNowNone": "Na razie brak nowego pytania; pamięć może już obejmować podstawy."
+    },
+    "capture": {
+        "add": "Dodaj",
+        "title": "Szybkie dodawanie",
+        "fieldLabel": "Co dodać? Napisz albo podyktuj",
+        "placeholder": "Co dodać?",
+        "typeGroup": "Typ wpisu",
+        "parseLabel": "Rozpoznany wpis",
+        "type": {
+            "auto": "Auto",
+            "task": "Zadanie",
+            "event": "Wydarzenie",
+            "shopping": "Zakupy",
+            "meal": "Posiłek",
+            "note": "Notatka"
+        },
+        "recognized": "rozpoznane automatycznie",
+        "hint": "Napisz np. „jutro 18 fryzjer” albo „mleko, jajka, masło”.",
+        "photoLabel": "Dodaj ze zdjęcia",
+        "primary": {
+            "auto": "Dodaj",
+            "task": "Dodaj do Zadań",
+            "event": "Dodaj do Kalendarza",
+            "shopping": "Dodaj do Zakupów",
+            "shoppingMany": "Dodaj {{count}} do Zakupów",
+            "meal": "Dodaj do Posiłków",
+            "note": "Zapisz notatkę"
+        },
+        "fullForm": "Pełny formularz: {{action}}",
+        "shoppingCount": "{{count}} produktów",
+        "shoppingCount_one": "{{count}} produkt",
+        "shoppingCount_few": "{{count}} produkty",
+        "shoppingCount_many": "{{count}} produktów",
+        "saved": {
+            "task": "Dodano do Zadań",
+            "event": "Dodano do Kalendarza",
+            "shoppingOne": "Dodano do Zakupów",
+            "shoppingMany": "Dodano do Zakupów: {{count}}",
+            "meal": "Dodano do Posiłków",
+            "note": "Zapisano notatkę"
+        },
+        "tokenDate": "Kiedy: {{value}}. Usuń",
+        "tokenTime": "Godzina: {{value}}. Usuń",
+        "tokenPerson": "Kto: {{value}}. Usuń",
+        "noShoppingList": "Nie ma jeszcze listy zakupów.",
+        "saveFailed": "Nie udało się zapisać. Tekst został w polu.",
+        "undoFailed": "Nie udało się cofnąć.",
+        "nothingWritable": "Tutaj nie możesz niczego dodać.",
+        "menu": {
+            "label": "Dodaj ze zdjęcia",
+            "pantryPhoto": "Zdjęcie spiżarni",
+            "document": "Dokument"
+        }
     }
 }

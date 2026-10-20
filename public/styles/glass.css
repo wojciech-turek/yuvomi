@@ -84,7 +84,7 @@
  * Knoten weiter, und der steht im `#main-content`. Erst wenn sie ihn gar nicht
  * mehr trifft, ist die Glas-ist-Chrome-Regel eingehalten statt ueberschrieben. */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .page-fab:not(.page-fab--docked) {
+  .page-fab:not(.page-fab--docked):not(.page-fab--ghost) {
     background-color: color-mix(in srgb, var(--color-accent) 78%, transparent);
     /* blur-md statt blur-sm: die weiche Streuung des Untergrunds ist auf
      * Kapselgröße der einzige Materialbeweis, wenn kein Text darunter
@@ -105,7 +105,7 @@
   /* Kein pointer-events:none nötig: Pseudos hit-testen auf ihr Host-Element,
    * der Sheen kann dem FAB nichts verdecken - und der #634-Guard verbietet
    * die Deklaration in .page-fab-Regeln zu Recht pauschal. */
-  .page-fab:not(.page-fab--docked)::before {
+  .page-fab:not(.page-fab--docked):not(.page-fab--ghost)::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -113,7 +113,7 @@
     background: linear-gradient(to bottom, var(--glass-sheen), transparent 55%);
   }
 
-  .page-fab:not(.page-fab--docked):hover {
+  .page-fab:not(.page-fab--docked):not(.page-fab--ghost):hover {
     background-color: var(--color-accent);
   }
 
@@ -388,10 +388,15 @@ textarea.form-input {
 /* ================================================================
  * 9. Toasts — Glass + Capsule
  * ================================================================ */
-.toast,
 .list-bulkbar {
   border-radius: var(--radius-glass-card);
   box-shadow: var(--glass-shadow-md);
+}
+
+/* TAFLA: der Toast ist eine deckende Pille (E2), kein Glas. */
+.toast {
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-e2);
 }
 
 /* Die Sammelaktions-Pille steht im selben Stapel wie der Toast und trägt
@@ -400,12 +405,20 @@ textarea.form-input {
  * weg, und das ist der Punkt, der den Konflikt mit „Glas gehört der Shell"
  * auflöst: in der Shell-Schicht gilt Shell-Material, nicht Modul-Tinte. */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .toast:not(.toast--danger):not(.toast--warning),
   .list-bulkbar {
     background-color: color-mix(in srgb, var(--toast-bg) 90%, transparent);
     backdrop-filter: var(--blur-sm);
     -webkit-backdrop-filter: var(--blur-sm);
     border: 1px solid var(--glass-border-overlay);
+  }
+
+  /* Tafla: der Toast bleibt auch mit Blur deckend - eine dunkle Pille, die in
+   * beiden Themes gleich liest (spec-components „Toast z Cofnij"). */
+  .toast:not(.toast--danger):not(.toast--warning) {
+    background-color: var(--toast-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 0;
   }
 }
 
@@ -422,7 +435,8 @@ textarea.form-input {
 }
 
 .toast--success .toast__icon {
-  color: var(--shell-success-ink);
+  /* Tafla: das Haekchen in der Toast-Stimme (#B49CFF), wie „Cofnij". */
+  color: var(--color-toast-action);
 }
 
 .toast--danger,
@@ -976,9 +990,9 @@ textarea.form-input {
 /* iOS-Tab-Pille: crisp und randlos — solide Tönung statt Blur+Border,
  * die auf der Kapsel als verschwommener Fleck lasen. */
 .nav-bottom__indicator {
-  /* Hell die Objekt-Stufe, dunkel eine halbe darueber (--nav-indicator-tint,
-   * tokens.css: auf dem duennen Kapselglas las 16 % mit 1,3:1 kaum). */
-  background: color-mix(in srgb, var(--color-accent) var(--nav-indicator-tint), transparent);
+  /* TAFLA: die Akzent-Toenung des Token-Vertrags (#F0EBFD / dunkel #3A3249),
+   * deckend - sie traegt Zeichen und Label in der Stimme mit AA. */
+  background: var(--color-accent-tint);
   border: none;
   box-shadow: none;
 }

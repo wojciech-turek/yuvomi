@@ -151,7 +151,8 @@
         "rewards": "Επιβραβεύσεις",
         "pantry": "Απόθεμα",
         "inventory": "Απογραφή",
-        "schedule": "Βάρδιες"
+        "schedule": "Βάρδιες",
+        "kitchenExpiringSoon": "something expires soon"
     },
     "dashboard": {
         "title": "Επισκόπηση",
@@ -6530,5 +6531,58 @@
         "askNow": "Ask a question now",
         "askNowDone": "There is a new question on the dashboard.",
         "askNowNone": "No new question right now; the memory may already cover the basics."
+    },
+    "capture": {
+        "add": "Add",
+        "title": "Quick add",
+        "fieldLabel": "What to add? Type or dictate",
+        "placeholder": "What to add?",
+        "typeGroup": "Entry type",
+        "parseLabel": "Recognised entry",
+        "type": {
+            "auto": "Auto",
+            "task": "Task",
+            "event": "Event",
+            "shopping": "Shopping",
+            "meal": "Meal",
+            "note": "Note"
+        },
+        "recognized": "recognised automatically",
+        "hint": "Try “tomorrow 6pm dentist” or “milk, eggs, butter”.",
+        "photoLabel": "Add from a photo",
+        "primary": {
+            "auto": "Add",
+            "task": "Add to Tasks",
+            "event": "Add to Calendar",
+            "shopping": "Add to Shopping",
+            "shoppingMany": "Add {{count}} to Shopping",
+            "meal": "Add to Meals",
+            "note": "Save note"
+        },
+        "fullForm": "Full form: {{action}}",
+        "shoppingCount": "{{count}} items",
+        "shoppingCount_one": "{{count}} item",
+        "shoppingCount_few": "{{count}} items",
+        "shoppingCount_many": "{{count}} items",
+        "saved": {
+            "task": "Added to Tasks",
+            "event": "Added to Calendar",
+            "shoppingOne": "Added to Shopping",
+            "shoppingMany": "Added to Shopping: {{count}}",
+            "meal": "Added to Meals",
+            "note": "Note saved"
+        },
+        "tokenDate": "When: {{value}}. Remove",
+        "tokenTime": "Time: {{value}}. Remove",
+        "tokenPerson": "Who: {{value}}. Remove",
+        "noShoppingList": "There is no shopping list yet.",
+        "saveFailed": "Couldn't save. Your text is still here.",
+        "undoFailed": "Couldn't undo.",
+        "nothingWritable": "There is nothing you can add here.",
+        "menu": {
+            "label": "Add from a photo",
+            "pantryPhoto": "Pantry photo",
+            "document": "Document"
+        }
     }
 }

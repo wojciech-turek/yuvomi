@@ -1,0 +1,504 @@
+/**
+ * Modul: Globales Erfassen (Tafla „Szybkie dodawanie")
+ * Zweck: Das abgesetzte + neben der Tab-Kapsel, sein Langdruck-Menue und das
+ *        Erfassen-Blatt (components/capture-sheet.js). Artboard:
+ *        SzybkieDodawanie.dc.html, Geometrie aus tools/chrome.py.
+ * Abhaengigkeiten: tokens.css (Tafla-Token-Vertrag), layout.css (.modal-panel)
+ */
+
+/* ================================================================
+ * Das + (global capture)
+ *
+ * 52pt deckende Stimme rechts der Kapsel (390x844: x 326-378, mittig auf der
+ * Kapsel), weisses Plus 24 bei Strich 2.25, Akzent-Glow. Es steht auf jeder
+ * Seite und wird nie umgedeutet. Druck: scale .94. Minimiert die Kapsel, wird
+ * es um seine Mitte so hoch wie sie (layout.css, `--capture-scale`).
+ * ================================================================ */
+.capture-plus {
+  --capture-scale: 1;
+  position: fixed;
+  inset-inline-end: var(--nav-capsule-inset);
+  bottom: var(--fab-offset-bottom);
+  z-index: calc(var(--z-nav) + 1);
+  inline-size: var(--capture-size);
+  block-size: var(--capture-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+  cursor: pointer;
+  transform: scale(var(--capture-scale));
+  transition:
+    transform var(--duration-md) var(--ease-out),
+    background-color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  /* Der Langdruck gehoert dem Menue, nicht der Textauswahl von iOS. */
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.capture-plus svg {
+  width: var(--space-6);
+  height: var(--space-6);
+  stroke-width: var(--tab-icon-stroke-active);
+}
+
+.capture-plus:active {
+  transform: scale(calc(var(--capture-scale) * 0.94));
+  box-shadow: none;
+}
+
+/* Der Ring der App (2pt Stimme, 2pt Abstand) - aussen, ohne Halo. */
+.capture-plus:focus-visible {
+  --focus-ring-color: var(--color-accent);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Wo die Kapsel nicht steht, steht auch das + nicht: am Desktop (Seitenleiste,
+ * dort der Knopf „Dodaj" oben), an der Wand, waehrend einer Auswahl, unter der
+ * Tastatur und solange das Mehr-Blatt offen ist. */
+@media (min-width: 1024px) {
+  .capture-plus {
+    display: none;
+  }
+}
+
+[data-wall-mode] .capture-plus,
+html:has(.app-page.is-selecting) .capture-plus {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .keyboard-visible .capture-plus {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-plus {
+    transition: none;
+  }
+}
+
+/* ================================================================
+ * Das Langdruck-Menue: Zdjęcie spiżarni · Dokument
+ *
+ * Ein natives Popover (Top-Layer, Light-Dismiss, Esc) ueber dem +. Form und
+ * Eintraege leiht es vom geteilten Ueberlaufmenue (`.popover-menu`,
+ * layout.css); hier steht nur, WO es steht.
+ * ================================================================ */
+.capture-menu {
+  position: fixed;
+  inset: auto var(--nav-capsule-inset) calc(var(--fab-offset-bottom) + var(--capture-size) + var(--space-2)) auto;
+  margin: 0;
+}
+
+/* ================================================================
+ * Das Blatt (SzybkieDodawanie.dc.html)
+ *
+ * Mittleres iOS-26-Blatt: schwebt 8pt von den Kanten, alle Ecken r28, E3,
+ * ohne Titel - der Griff ist ein Knopf (Schliessen). Feld 52 auf --fill,
+ * darunter die Typ-Chips, die Lesart als Karte und der Fuss mit Kamera-Kreis
+ * und der einen Primaeraktion, die ihr Ziel nennt („Dodaj do Kalendarza").
+ * ================================================================ */
+.modal-overlay:has(.modal-panel--capture) {
+  padding:
+    max(var(--space-2), env(safe-area-inset-top))
+    max(var(--space-2), env(safe-area-inset-right))
+    calc(max(var(--space-2), env(safe-area-inset-bottom)) + var(--capture-keyboard, 0px))
+    max(var(--space-2), env(safe-area-inset-left));
+}
+
+/* Der Grund ist der Tafla-Scrim (32 % Tinte), ohne Unschaerfe: Dziś bleibt
+ * unter dem Blatt lesbar, wie im Artboard. */
+dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
+  background-color: var(--color-scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.modal-panel.modal-panel--capture {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-e3);
+  border: 0;
+}
+
+@media (min-width: 768px) {
+  .modal-panel.modal-panel--capture {
+    max-width: 540px;
+  }
+}
+
+/* Kein sichtbarer Kopf: der Name des Dialogs bleibt (sr-only), das X weicht dem
+ * Griff-Knopf. Der Grabber des geteilten Blattes (::before) wird ersetzt. */
+.modal-panel--capture > .modal-panel__header {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.modal-panel--capture::before {
+  display: none;
+}
+
+.modal-panel--capture > .modal-panel__body {
+  padding: var(--space-6) var(--space-4) var(--space-4);
+}
+
+.capture-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.capture-sheet__grabber {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  inline-size: var(--target-base);
+  block-size: var(--space-6);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.capture-sheet__grabber::before {
+  content: '';
+  inline-size: 36px;
+  block-size: 5px;
+  border-radius: var(--radius-full);
+  background-color: var(--sheet-grabber);
+}
+
+.capture-sheet__grabber:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  border-radius: var(--radius-full);
+}
+
+.capture-sheet__top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Das Feld: 52 hoch, --fill, r12, 17/400 (kein iOS-Zoom), Caret in der Stimme. */
+.capture-field {
+  display: flex;
+  align-items: center;
+  block-size: 52px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+}
+
+.capture-field__input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  caret-color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.capture-field__input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.capture-field__input:focus {
+  outline: none;
+}
+
+.capture-field:focus-within {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* Die Typ-Chips: eine waagrechte Reihe, die an der Blattkante ausblutet. */
+.capture-chips {
+  display: flex;
+  gap: var(--space-2);
+  margin-inline: calc(-1 * var(--space-4));
+  padding-inline: var(--space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.capture-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.capture-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  block-size: 36px;
+  margin-block: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 36 sichtbar, 44 Trefferflaeche. */
+.capture-chip::after,
+.capture-token::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--space-1)) 0;
+}
+
+.capture-chip[aria-pressed="true"] {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.capture-chip svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* Die Lesart: weisse Karte mit 1pt Kante, r20, p16. */
+.capture-parse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-separator);
+}
+
+.capture-parse[hidden] {
+  display: none;
+}
+
+.capture-parse__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.capture-parse__glyph {
+  flex: none;
+  inline-size: 28px;
+  block-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.capture-parse__glyph svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.capture-parse__text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.capture-parse__title {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-parse__sub,
+.capture-sheet__hint {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.capture-parse__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-parse__tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-inline-start: 40px;
+}
+
+.capture-parse__tokens:empty {
+  display: none;
+}
+
+/* Ein erkannter Teil: --fill, Tinte, × am Ende. Ein Tipp nimmt ihn aus dem
+ * Feld - die Lesart folgt dem Text, nicht umgekehrt. */
+.capture-token {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  block-size: 36px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.capture-token--static {
+  padding-inline-end: var(--space-3);
+  cursor: default;
+}
+
+.capture-token__x {
+  display: flex;
+  color: var(--color-text-secondary);
+}
+
+.capture-token__x svg {
+  width: 14px;
+  height: 14px;
+}
+
+.capture-token__disc {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  border-radius: var(--radius-full);
+  background-color: var(--color-raised);
+  color: var(--color-text-primary);
+  font-size: var(--type-footnote);
+  line-height: var(--space-5);
+  text-align: center;
+}
+
+/* Der Fuss reitet ueber der Tastatur (visualViewport, `--capture-keyboard`). */
+.capture-sheet__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.capture-sheet__camera {
+  flex: none;
+  inline-size: 52px;
+  block-size: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.capture-sheet__camera svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.capture-sheet__save {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 52px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-btn-primary);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-accent-glow);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.capture-sheet__save:active {
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+.capture-sheet__save:disabled {
+  background-color: var(--color-fill);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+  cursor: default;
+}
+
+/* Der Weg zum vollen Formular der Seite (bisher ihr FAB). */
+.capture-sheet__full {
+  align-self: center;
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.capture-sheet__error {
+  margin: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-danger);
+}
+
+.capture-sheet__error:empty {
+  display: none;
+}
