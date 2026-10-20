@@ -4070,7 +4070,21 @@
         "errorAmountsHidden": "Ödemeyi yalnızca ev yardımcısı tutarlarını görebilen kişi işaretleyebilir.",
         "notHereToday": "Bugün henüz gelmedi",
         "tabVisits": "Ziyaretler",
-        "tabChores": "Ev işleri"
+        "tabChores": "Ev işleri",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "daha",

@@ -456,9 +456,13 @@ test('R16: die Kennzahl-Kurzzeile ist ein geteilter Baustein, und Inventar und H
   assert.ok(panel.some((r) => phone(r) && r.selector === '.budget-glance-details > .metric-card--empty' && decl(r.body, 'display') === 'none'),
     'eine leere Kennzahl entfaellt mobil');
   assert.ok(panel.some((r) => r.selector === '.budget-glance__row'), 'die Zeile selbst steht in panel.css');
+  // TAFLA (2026-10-20): the housekeeping visit page opens with the hero card
+  // ("Następna wizyta", what is owed, "Zapłacone") instead of the metric line;
+  // its reports tab keeps the shared glance (checked below).
+  assert.match(read('../public/pages/housekeeping.js'), /function renderReports[\s\S]*metricGlanceHtml\(\{/,
+    'housekeeping: the reports keep the shared glance');
   for (const [file, id, controls] of [
     ['../public/pages/inventory.js', 'inventory-glance-more', 'inventory-metrics'],
-    ['../public/pages/housekeeping.js', 'housekeeping-glance-more', 'housekeeping-metrics'],
   ]) {
     const src = read(file);
     assert.match(src, /import \{ metricGlanceHtml, wireMetricGlance \} from '\/utils\/metric-glance\.js';/, file);

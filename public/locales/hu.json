@@ -4070,7 +4070,21 @@
         "errorAmountsHidden": "Fizetést csak az jelölhet, aki láthatja a háztartási segítő összegeit.",
         "notHereToday": "Ma még nincs itt",
         "tabVisits": "Látogatások",
-        "tabChores": "Házimunkák"
+        "tabChores": "Házimunkák",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "továbbiak",

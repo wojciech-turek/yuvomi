@@ -4839,6 +4839,9 @@ test('READ_SAFE_CONTROLS ist eine Positivliste und enthaelt nur lesende Bedienel
   assert.deepEqual(erlaubt, [
     '#housekeeping-report-current', '#housekeeping-report-next', '#housekeeping-report-prev',
     '#housekeeping-staff-month', '.housekeeping-staff-row__select', '.housekeeping-tab',
+    // Tafla (2026-10-20): the rows "Prace domowe / Raporty / Pomoce domowe" on
+    // the visit page switch the area like a tab - navigation, nothing written.
+    '[data-goto-tab]',
     '[data-open-visit]', '[data-open-worker]',
   ], 'Tab, Bericht, Profil, Personenwahl und Monat - alles andere dieser Seite schreibt');
   // Kein Eintrag darf veraltet sein: was hier steht, muss im Markup vorkommen.

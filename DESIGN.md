@@ -3889,6 +3889,24 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   than on the old card). Guards moved: R19 masonry -> "two groups", note colour on card/reader ->
   "no note colour", D8 group head -> `.inset-group__head`, M13 compact card -> "row with one-line
   preview, no circles on touch", R20 placeholder -> remembered per device.
+- **Sprzątanie**: the "Wizyty" view is one calm page under its large title. The E1 hero card says
+  when she comes next - guessed only when the last two or three finished visits share a weekday
+  (in the household zone); the profile has no visiting days, so without a pattern it names the
+  last visit, and while she is in the house it says "Teraz w domu · Od 9:05" -, check-in/out as a
+  secondary pill in its corner (the same `toggleSession()` button, both directions, #1133), then
+  "Do zapłaty 360 zł" in ink with "2 wizyty · 8 i 15 paź" and ONE primary "Zapłacone":
+  `payVisit(first, onPaid, { also })` asks once for the batch (plural question) and posts each
+  visit through the one pay line (#1136). Below: the chores due by that visit ("Na następną
+  wizytę", the decay tasks overdue or due by then) as checkable 48 rows with "Dodaj zadanie" as
+  the last row, the last visits as compact 48 rows ("czw 15 paź · 4 h", amount in ink, no
+  paid/pending word - status only where it asks for action), the payment chart, and the other
+  areas (Prace domowe, Raporty, Pomoce domowe) behind one card of rows. On phones the tab bar
+  steps aside on this view only; the other areas keep it as their title line (R19), so a tap on
+  "Wizyty" brings you back. The metric glance left this view (the reports keep it). The month
+  before is loaded beside `loadData()` for the hero. Guards moved: #1133 (two markup sites:
+  hero and strip, both checked), #1136 (one question for a batch), R16 section heads accept the
+  inset-group head, READ_SAFE_CONTROLS gains the area rows, the metric-glance and last-visit-year
+  tests became hero tests.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
