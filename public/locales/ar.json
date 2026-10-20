@@ -47,7 +47,7 @@
         "errorDetails": "التفاصيل التقنية",
         "pageFailedTitle": "تعذّر فتح {{page}} الآن",
         "pageFailedHint": "كل الأقسام الأخرى تعمل كالمعتاد.",
-        "toOverview": "إلى لوحة التحكم",
+        "toOverview": "إلى «اليوم»",
         "errorGeneric": "حدث خطأ.",
         "updateAvailable": "يوجد تحديث - أعد تحميل الصفحة للحصول على أحدث إصدار.",
         "titleRequired": "العنوان مطلوب",
@@ -107,7 +107,7 @@
         "transferUndone": "تمت الإزالة من قائمة التسوق."
     },
     "nav": {
-        "dashboard": "لوحة التحكم",
+        "dashboard": "اليوم",
         "tasks": "المهام",
         "calendar": "التقويم",
         "meals": "الوجبات",
@@ -164,10 +164,11 @@
         "pantry": "المؤن",
         "inventory": "المقتنيات",
         "schedule": "جدول المناوبات",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "لوحة التحكم",
+        "title": "اليوم",
         "greetingMorning": "صباح الخير، {{name}}",
         "greetingDay": "مرحباً، {{name}}",
         "greetingEvening": "مساء الخير، {{name}}",
@@ -2368,7 +2369,7 @@
             "housekeeping": "التدبير المنزلي",
             "weather": "الطقس",
             "family": "العائلة",
-            "dashboard": "لوحة التحكم",
+            "dashboard": "اليوم",
             "search": "بحث",
             "inventory": "المقتنيات",
             "waste": "جمع النفايات"
@@ -4175,7 +4176,7 @@
     "shortcuts": {
         "goKitchen": "المطبخ",
         "goCal": "التقويم",
-        "goDash": "لوحة التحكم",
+        "goDash": "اليوم",
         "calToday": "الانتقال إلى اليوم",
         "calPrev": "الفترة السابقة",
         "calNext": "الفترة التالية",

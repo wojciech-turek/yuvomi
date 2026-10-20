@@ -44,7 +44,7 @@
         "errorDetails": "Teknik ayrıntılar",
         "pageFailedTitle": "{{page}} sayfası şu anda açılamıyor",
         "pageFailedHint": "Diğer tüm bölümler çalışmaya devam ediyor.",
-        "toOverview": "Genel bakışa git",
+        "toOverview": "Bugün’e git",
         "errorGeneric": "Bir hata oluştu.",
         "updateAvailable": "Güncelleme mevcut - en son sürümü almak için sayfayı yenileyin.",
         "titleRequired": "Başlık zorunludur",
@@ -104,7 +104,7 @@
         "transferUndone": "Alışveriş listesinden kaldırıldı."
     },
     "nav": {
-        "dashboard": "Genel Bakış",
+        "dashboard": "Bugün",
         "tasks": "Görevler",
         "calendar": "Takvim",
         "meals": "Yemekler",
@@ -152,10 +152,11 @@
         "pantry": "Kiler",
         "inventory": "Envanter",
         "schedule": "Vardiya planı",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Genel Bakış",
+        "title": "Bugün",
         "greetingMorning": "Günaydın, {{name}}",
         "greetingDay": "İyi günler, {{name}}",
         "greetingEvening": "İyi akşamlar, {{name}}",
@@ -2124,7 +2125,7 @@
             "housekeeping": "Ev işleri",
             "weather": "Hava durumu",
             "family": "Aile",
-            "dashboard": "Genel Bakış",
+            "dashboard": "Bugün",
             "search": "Ara",
             "inventory": "Envanter",
             "waste": "Atık toplama"
@@ -3832,7 +3833,7 @@
     "shortcuts": {
         "goKitchen": "Mutfak",
         "goCal": "Takvim",
-        "goDash": "Pano",
+        "goDash": "Bugün",
         "calToday": "Bugüne git",
         "calPrev": "Önceki dönem",
         "calNext": "Sonraki dönem",

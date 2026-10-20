@@ -44,7 +44,7 @@
         "errorDetails": "Tekniske detaljer",
         "pageFailedTitle": "Siden {{page}} kan ikke åpnes akkurat nå",
         "pageFailedHint": "Alle andre deler fungerer som før.",
-        "toOverview": "Til oversikten",
+        "toOverview": "Til I dag",
         "errorGeneric": "En feil oppstod.",
         "updateAvailable": "Oppdatering tilgjengelig - last inn siden på nytt for å få den nyeste versjonen.",
         "titleRequired": "Tittel er påkrevd",
@@ -104,7 +104,7 @@
         "transferUndone": "Fjernet fra handlelisten."
     },
     "nav": {
-        "dashboard": "Oversikt",
+        "dashboard": "I dag",
         "tasks": "Oppgaver",
         "calendar": "Kalender",
         "meals": "Måltider",
@@ -152,10 +152,11 @@
         "pantry": "Spiskammer",
         "inventory": "Inventar",
         "schedule": "Planlegging",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Oversikt",
+        "title": "I dag",
         "greetingMorning": "God morgen, {{name}}",
         "greetingDay": "God ettermiddag, {{name}}",
         "greetingEvening": "God kveld, {{name}}",
@@ -2258,7 +2259,7 @@
             "housekeeping": "Husarbeid",
             "weather": "Vær",
             "family": "Familie",
-            "dashboard": "Oversikt",
+            "dashboard": "I dag",
             "search": "Søk",
             "inventory": "Inventar",
             "waste": "Avfallshåndtering"
@@ -3564,7 +3565,7 @@
         "new": "Opprett ny oppføring",
         "searchCalendar": "Søk i kalender",
         "help": "Tastateltal",
-        "goDash": "Dashbord",
+        "goDash": "I dag",
         "calToday": "Gå til i dag",
         "calPrev": "Forrige periode",
         "calNext": "Neste periode",

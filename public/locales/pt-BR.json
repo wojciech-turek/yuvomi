@@ -44,7 +44,7 @@
         "errorDetails": "Detalhes técnicos",
         "pageFailedTitle": "Não é possível abrir {{page}} agora",
         "pageFailedHint": "Todas as outras áreas continuam funcionando.",
-        "toOverview": "Ir para o painel",
+        "toOverview": "Ir para Hoje",
         "errorGeneric": "Ocorreu um erro.",
         "updateAvailable": "Atualização disponível - recarregue a página para obter a versão mais recente.",
         "titleRequired": "Título é obrigatório",
@@ -104,7 +104,7 @@
         "transferUndone": "Removido da lista de compras."
     },
     "nav": {
-        "dashboard": "Painel",
+        "dashboard": "Hoje",
         "tasks": "Tarefas",
         "calendar": "Calendário",
         "meals": "Refeições",
@@ -152,10 +152,11 @@
         "pantry": "Despensa",
         "inventory": "Inventário",
         "schedule": "Turnos",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Painel",
+        "title": "Hoje",
         "greetingMorning": "Bom dia, {{name}}",
         "greetingDay": "Boa tarde, {{name}}",
         "greetingEvening": "Boa noite, {{name}}",
@@ -2124,7 +2125,7 @@
             "housekeeping": "Faxina",
             "weather": "Meteorologia",
             "family": "Família",
-            "dashboard": "Painel",
+            "dashboard": "Hoje",
             "search": "Pesquisar",
             "inventory": "Inventário",
             "waste": "Coleta de lixo"
@@ -3832,7 +3833,7 @@
     "shortcuts": {
         "goKitchen": "Cozinha",
         "goCal": "Calendário",
-        "goDash": "Painel",
+        "goDash": "Hoje",
         "calToday": "Ir para hoje",
         "calPrev": "Período anterior",
         "calNext": "Próximo período",

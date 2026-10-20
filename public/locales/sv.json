@@ -44,7 +44,7 @@
         "errorDetails": "Tekniska detaljer",
         "pageFailedTitle": "Sidan {{page}} går inte att öppna just nu",
         "pageFailedHint": "Allt annat fungerar som vanligt.",
-        "toOverview": "Till översikten",
+        "toOverview": "Till Idag",
         "errorGeneric": "Ett fel uppstod.",
         "updateAvailable": "Uppdatering tillgänglig - ladda om sidan för att få den senaste versionen.",
         "titleRequired": "Titel krävs",
@@ -104,7 +104,7 @@
         "transferUndone": "Borttagen från inköpslistan."
     },
     "nav": {
-        "dashboard": "Översikt",
+        "dashboard": "Idag",
         "tasks": "Uppgifter",
         "calendar": "Kalender",
         "meals": "Måltider",
@@ -152,10 +152,11 @@
         "pantry": "Skafferi",
         "inventory": "Inventarier",
         "schedule": "Skiftschema",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Översikt",
+        "title": "Idag",
         "greetingMorning": "God morgon, {{name}}",
         "greetingDay": "God eftermiddag, {{name}}",
         "greetingEvening": "God kväll, {{name}}",
@@ -2124,7 +2125,7 @@
             "housekeeping": "Städning",
             "weather": "Väder",
             "family": "Familj",
-            "dashboard": "Översikt",
+            "dashboard": "Idag",
             "search": "Sök",
             "inventory": "Inventarier",
             "waste": "Avfallshämtning"
@@ -3835,7 +3836,7 @@
         "new": "Skapa ny post",
         "searchCalendar": "Sök i kalendern",
         "help": "Tangentbordsgenvägar",
-        "goDash": "Översikt",
+        "goDash": "Idag",
         "calToday": "Gå till i dag",
         "calPrev": "Föregående period",
         "calNext": "Nästa period",

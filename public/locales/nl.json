@@ -44,7 +44,7 @@
         "errorDetails": "Technische details",
         "pageFailedTitle": "De pagina {{page}} kan nu niet worden geopend",
         "pageFailedHint": "Alle andere onderdelen blijven werken.",
-        "toOverview": "Naar het overzicht",
+        "toOverview": "Naar Vandaag",
         "errorGeneric": "Er is een fout opgetreden.",
         "updateAvailable": "Update beschikbaar - herlaad de pagina voor de nieuwste versie.",
         "titleRequired": "Titel is verplicht",
@@ -104,7 +104,7 @@
         "transferUndone": "Van de boodschappenlijst verwijderd."
     },
     "nav": {
-        "dashboard": "Overzicht",
+        "dashboard": "Vandaag",
         "tasks": "Taken",
         "calendar": "Agenda",
         "meals": "Maaltijden",
@@ -152,10 +152,11 @@
         "pantry": "Voorraad",
         "inventory": "Inventaris",
         "schedule": "Dienstrooster",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Overzicht",
+        "title": "Vandaag",
         "greetingMorning": "Goedemorgen, {{name}}",
         "greetingDay": "Goedemiddag, {{name}}",
         "greetingEvening": "Goedenavond, {{name}}",
@@ -2235,7 +2236,7 @@
             "housekeeping": "Huishouden",
             "weather": "Weer",
             "family": "Familie",
-            "dashboard": "Overzicht",
+            "dashboard": "Vandaag",
             "search": "Zoeken",
             "inventory": "Inventaris",
             "waste": "Afvalinzameling"
@@ -3564,7 +3565,7 @@
         "new": "Nieuwe vermelding aanmaken",
         "searchCalendar": "Agenda doorzoeken",
         "help": "Sneltoetsen",
-        "goDash": "Dashboard",
+        "goDash": "Vandaag",
         "calToday": "Naar vandaag",
         "calPrev": "Vorige periode",
         "calNext": "Volgende periode",

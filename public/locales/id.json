@@ -44,7 +44,7 @@
         "errorDetails": "Detail teknis",
         "pageFailedTitle": "{{page}} tidak bisa dibuka sekarang",
         "pageFailedHint": "Semua bagian lain tetap berfungsi.",
-        "toOverview": "Ke Ringkasan",
+        "toOverview": "Ke Hari ini",
         "errorGeneric": "Terjadi kesalahan.",
         "updateAvailable": "Pembaruan tersedia - muat ulang halaman untuk mendapatkan versi terbaru.",
         "titleRequired": "Judul wajib diisi",
@@ -104,7 +104,7 @@
         "transferUndone": "Dihapus dari daftar belanja."
     },
     "nav": {
-        "dashboard": "Ringkasan",
+        "dashboard": "Hari ini",
         "tasks": "Tugas",
         "calendar": "Kalender",
         "meals": "Makanan",
@@ -152,7 +152,8 @@
         "pantry": "Persediaan",
         "inventory": "Inventaris",
         "schedule": "Jadwal shift",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "search": {
         "emptyHint": "Ketik untuk membuka bagian atau membuat sesuatu. Mulai 2 karakter, entri kamu juga ditemukan, bahkan dengan potongan kata.",
@@ -171,7 +172,7 @@
         "createTaskNamed": "Buat “{{title}}” sebagai tugas"
     },
     "dashboard": {
-        "title": "Ringkasan",
+        "title": "Hari ini",
         "greetingMorning": "Selamat pagi, {{name}}",
         "greetingDay": "Selamat siang, {{name}}",
         "greetingEvening": "Selamat malam, {{name}}",
@@ -2278,7 +2279,7 @@
             "housekeeping": "Asisten Rumah Tangga",
             "weather": "Cuaca",
             "family": "Keluarga",
-            "dashboard": "Ringkasan",
+            "dashboard": "Hari ini",
             "search": "Cari",
             "inventory": "Inventaris",
             "waste": "Pengumpulan sampah"
@@ -3575,7 +3576,7 @@
         "new": "Buat entri baru",
         "searchCalendar": "Cari di kalender",
         "help": "Pintasan keyboard",
-        "goDash": "Dasbor",
+        "goDash": "Hari ini",
         "calToday": "Lompat ke hari ini",
         "calPrev": "Periode sebelumnya",
         "calNext": "Periode berikutnya",

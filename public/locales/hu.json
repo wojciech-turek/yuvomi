@@ -44,7 +44,7 @@
         "errorDetails": "Technikai részletek",
         "pageFailedTitle": "A(z) {{page}} oldal most nem nyitható meg",
         "pageFailedHint": "Minden más rész tovább működik.",
-        "toOverview": "Az áttekintéshez",
+        "toOverview": "Ugrás: Ma",
         "errorGeneric": "Hiba történt.",
         "updateAvailable": "Frissítés elérhető - frissítse az oldalt a legújabb verzióhoz.",
         "titleRequired": "A cím megadása kötelező",
@@ -104,7 +104,7 @@
         "transferUndone": "Eltávolítva a bevásárlólistáról."
     },
     "nav": {
-        "dashboard": "Áttekintés",
+        "dashboard": "Ma",
         "tasks": "Feladatok",
         "calendar": "Naptár",
         "meals": "Ételek",
@@ -152,10 +152,11 @@
         "pantry": "Készlet",
         "inventory": "Leltár",
         "schedule": "Műszakbeosztás",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Áttekintés",
+        "title": "Ma",
         "greetingMorning": "Jó reggelt, {{name}}",
         "greetingDay": "Jó napot, {{name}}",
         "greetingEvening": "Jó estét, {{name}}",
@@ -2235,7 +2236,7 @@
             "housekeeping": "Háztartás",
             "weather": "Időjárás",
             "family": "Család",
-            "dashboard": "Áttekintés",
+            "dashboard": "Ma",
             "search": "Keresés",
             "inventory": "Leltár",
             "waste": "Hulladékgyűjtés"
@@ -3564,7 +3565,7 @@
         "new": "Új bejegyzés létrehozása",
         "searchCalendar": "Keresés a naptárban",
         "help": "Billentyűparancsok",
-        "goDash": "Vezérlőpult",
+        "goDash": "Ma",
         "calToday": "Ugrás a mai napra",
         "calPrev": "Előző időszak",
         "calNext": "Következő időszak",

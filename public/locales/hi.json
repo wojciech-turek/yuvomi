@@ -44,7 +44,7 @@
         "errorDetails": "तकनीकी विवरण",
         "pageFailedTitle": "{{page}} अभी नहीं खुल पा रहा है",
         "pageFailedHint": "बाकी सभी हिस्से पहले की तरह काम करते हैं।",
-        "toOverview": "डैशबोर्ड पर जाएँ",
+        "toOverview": "«आज» पर जाएँ",
         "errorGeneric": "एक त्रुटि हुई।",
         "updateAvailable": "अपडेट उपलब्ध है - नवीनतम संस्करण के लिए पृष्ठ पुनः लोड करें।",
         "titleRequired": "शीर्षक आवश्यक है",
@@ -104,7 +104,7 @@
         "transferUndone": "खरीदारी सूची से हटा दिया गया।"
     },
     "nav": {
-        "dashboard": "डैशबोर्ड",
+        "dashboard": "आज",
         "tasks": "कार्य",
         "calendar": "कैलेंडर",
         "meals": "भोजन",
@@ -152,10 +152,11 @@
         "pantry": "भंडार",
         "inventory": "इन्वेंटरी",
         "schedule": "शिफ़्ट शेड्यूल",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "डैशबोर्ड",
+        "title": "आज",
         "greetingMorning": "सुप्रभात, {{name}}",
         "greetingDay": "नमस्ते, {{name}}",
         "greetingEvening": "शुभ संध्या, {{name}}",
@@ -2124,7 +2125,7 @@
             "housekeeping": "गृहकार्य",
             "weather": "मौसम",
             "family": "परिवार",
-            "dashboard": "डैशबोर्ड",
+            "dashboard": "आज",
             "search": "खोज",
             "inventory": "इन्वेंटरी",
             "waste": "कचरा संग्रहण"
@@ -3832,7 +3833,7 @@
     "shortcuts": {
         "goKitchen": "रसोई",
         "goCal": "कैलेंडर",
-        "goDash": "डैशबोर्ड",
+        "goDash": "आज",
         "calToday": "आज पर जाएँ",
         "calPrev": "पिछली अवधि",
         "calNext": "अगली अवधि",

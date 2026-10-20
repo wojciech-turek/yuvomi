@@ -46,7 +46,7 @@
         "errorDetails": "Технічні подробиці",
         "pageFailedTitle": "Розділ «{{page}}» зараз не відкривається",
         "pageFailedHint": "Усі інші розділи працюють як звичайно.",
-        "toOverview": "До огляду",
+        "toOverview": "До «Сьогодні»",
         "errorGeneric": "Сталася помилка.",
         "updateAvailable": "Доступне оновлення - перезавантажте сторінку, щоб отримати останню версію.",
         "titleRequired": "Заголовок є обов'язковим",
@@ -106,7 +106,7 @@
         "transferUndone": "Видалено зі списку покупок."
     },
     "nav": {
-        "dashboard": "Огляд",
+        "dashboard": "Сьогодні",
         "tasks": "Завдання",
         "calendar": "Календар",
         "meals": "Харчування",
@@ -160,10 +160,11 @@
         "pantry": "Запаси",
         "inventory": "Інвентар",
         "schedule": "Графік змін",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Огляд",
+        "title": "Сьогодні",
         "greetingMorning": "Доброго ранку, {{name}}",
         "greetingDay": "Доброго дня, {{name}}",
         "greetingEvening": "Доброго вечора, {{name}}",
@@ -2286,7 +2287,7 @@
             "housekeeping": "Прибирання",
             "weather": "Погода",
             "family": "Родина",
-            "dashboard": "Огляд",
+            "dashboard": "Сьогодні",
             "search": "Пошук",
             "inventory": "Інвентар",
             "waste": "Вивезення сміття"
@@ -4060,7 +4061,7 @@
     "shortcuts": {
         "goKitchen": "Кухня",
         "goCal": "Календар",
-        "goDash": "Дашборд",
+        "goDash": "Сьогодні",
         "calToday": "Перейти до сьогодні",
         "calPrev": "Попередній період",
         "calNext": "Наступний період",

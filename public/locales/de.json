@@ -44,7 +44,7 @@
         "errorDetails": "Technische Details",
         "pageFailedTitle": "Die Seite „{{page}}“ lässt sich gerade nicht öffnen",
         "pageFailedHint": "Alle anderen Bereiche funktionieren weiter.",
-        "toOverview": "Zur Übersicht",
+        "toOverview": "Zu „Heute“",
         "errorGeneric": "Ein Fehler ist aufgetreten.",
         "updateAvailable": "Update verfügbar - lade die Seite neu, um die neueste Version zu erhalten.",
         "titleRequired": "Titel ist erforderlich",
@@ -104,7 +104,7 @@
         "transferUndone": "Von der Einkaufsliste entfernt."
     },
     "nav": {
-        "dashboard": "Übersicht",
+        "dashboard": "Heute",
         "tasks": "Aufgaben",
         "calendar": "Kalender",
         "meals": "Mahlzeiten",
@@ -152,7 +152,8 @@
         "pantry": "Vorrat",
         "inventory": "Inventar",
         "schedule": "Schichtplan",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "search": {
         "emptyHint": "Tippe, um zu einem Bereich zu springen oder etwas anzulegen. Ab 2 Zeichen findest du auch deine Einträge, sogar über Wortteile.",
@@ -171,7 +172,7 @@
         "createTaskNamed": "„{{title}}“ als Aufgabe anlegen"
     },
     "dashboard": {
-        "title": "Übersicht",
+        "title": "Heute",
         "greetingMorning": "Guten Morgen, {{name}}",
         "greetingDay": "Guten Tag, {{name}}",
         "greetingEvening": "Guten Abend, {{name}}",
@@ -2301,7 +2302,7 @@
             "housekeeping": "Haushaltshilfe",
             "weather": "Wetter",
             "family": "Familie",
-            "dashboard": "Übersicht",
+            "dashboard": "Heute",
             "search": "Suche",
             "inventory": "Inventar",
             "waste": "Entsorgung"
@@ -3575,7 +3576,7 @@
         "new": "Neuen Eintrag erstellen",
         "searchCalendar": "Kalender durchsuchen",
         "help": "Tastenkombinationen",
-        "goDash": "Übersicht",
+        "goDash": "Heute",
         "calToday": "Zu heute springen",
         "calPrev": "Vorheriger Zeitraum",
         "calNext": "Nächster Zeitraum",

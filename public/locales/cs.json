@@ -45,7 +45,7 @@
         "errorDetails": "Technické podrobnosti",
         "pageFailedTitle": "Stránku {{page}} teď nelze otevřít",
         "pageFailedHint": "Všechny ostatní části fungují dál.",
-        "toOverview": "Na přehled",
+        "toOverview": "Na Dnes",
         "errorGeneric": "Nastala chyba.",
         "updateAvailable": "Je k dispozici aktualizace - obnovte stránku pro získání nejnovější verze.",
         "titleRequired": "Název je povinný",
@@ -105,7 +105,7 @@
         "transferUndone": "Odebráno ze seznamu nákupů."
     },
     "nav": {
-        "dashboard": "Přehled",
+        "dashboard": "Dnes",
         "tasks": "Úkoly",
         "calendar": "Kalendář",
         "meals": "Jídelníček",
@@ -156,10 +156,11 @@
         "pantry": "Spíž",
         "inventory": "Inventář",
         "schedule": "Rozpis směn",
-        "kitchenExpiringSoon": "something expires soon"
+        "kitchenExpiringSoon": "something expires soon",
+        "backTo": "Back: {{section}}"
     },
     "dashboard": {
-        "title": "Přehled",
+        "title": "Dnes",
         "greetingMorning": "Dobré ráno, {{name}}",
         "greetingDay": "Dobrý den, {{name}}",
         "greetingEvening": "Dobrý večer, {{name}}",
@@ -2344,7 +2345,7 @@
             "housekeeping": "Domácí práce",
             "weather": "Počasí",
             "family": "Rodina",
-            "dashboard": "Přehled",
+            "dashboard": "Dnes",
             "search": "Hledat",
             "inventory": "Inventář",
             "waste": "Svoz odpadu"
@@ -3435,7 +3436,7 @@
         "new": "Vytvořit nový záznam",
         "searchCalendar": "Prohledat kalendář",
         "help": "Klávesové zkratky",
-        "goDash": "Přehled",
+        "goDash": "Dnes",
         "calToday": "Přejít na dnešek",
         "calPrev": "Předchozí období",
         "calNext": "Následující období",
