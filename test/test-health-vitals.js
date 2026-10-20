@@ -788,9 +788,11 @@ test('R18: die Kennzahlkarte hat vier feste Zeilen - Kopf, Wert, Trendlinie, Met
   const label = body('.metric-card__label', plain);
   assert.match(label, /letter-spacing:\s*var\(--tracking-normal\)/);
   assert.doesNotMatch(label, /text-transform/);
-  const versal = [...eachRule(typo)].find((r) => /text-transform:\s*uppercase/.test(r.body) && /letter-spacing:\s*var\(--tracking-label\)/.test(r.body));
-  assert.ok(versal, 'der Versal-Block steht noch');
-  assert.ok(!versal.selector.split(',').map((s) => s.trim()).includes('.metric-card__label'), 'das Kennzahl-Label steht nicht mehr im Versal-Block');
+  // Seit Tafla (2026-10-19) gibt es den Versal-Block gar nicht mehr - die
+  // Zusage wird damit strenger, nicht schwaecher: keine Rolle in
+  // typography.css setzt Versalien, auch nicht fuer das Kennzahl-Label.
+  const versal = [...eachRule(typo)].filter((r) => /text-transform:\s*uppercase/.test(r.body));
+  assert.deepEqual(versal.map((r) => r.selector.trim()), [], 'typography.css fuehrt keine Versal-Rolle mehr');
   // Wert und Einheit: eine Grundlinie.
   assert.match(body('.metric-card__body', plain), /align-items:\s*baseline/);
 
@@ -817,13 +819,15 @@ test('R18: die Kennzahlkarte hat vier feste Zeilen - Kopf, Wert, Trendlinie, Met
   assert.match(body('.metric-card__spark', plain), /color:\s*var\(--module-accent, var\(--color-text-secondary\)\)/);
   assert.match(body('.metric-card__spark-to'), /stop-opacity:\s*0\b/);
   assert.match(body('.metric-card__spark-end'), /stroke:\s*var\(--color-text-primary\)/);
-  // Grafikkontrast 3:1 der Linie gegen Karte und Well, beide Themes (Gesundheitston).
+  // Grafikkontrast 3:1 der Linie gegen Karte und Well, beide Themes. Seit Tafla
+  // (2026-10-19) ist der Modulton der Gesundheit Tinte-2 (die Modulfarbe hat
+  // das Chrome verlassen): #5E5A53 hell, #B3ACA1 dunkel.
   const { contrastRatio } = await import('../public/utils/contrast.js');
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-  for (const [name, ink, surface] of [['hell/Karte', '#9E1E88', '#FFFFFF'], ['hell/Well', '#9E1E88', '#EDEAE3'], ['dunkel/Karte', '#DB60CB', '#2B2825'], ['dunkel/Well', '#DB60CB', '#37332E']]) {
+  for (const [name, ink, surface] of [['hell/Karte', '#5E5A53', '#FFFFFF'], ['hell/Well', '#5E5A53', '#ECE8E0'], ['dunkel/Karte', '#B3ACA1', '#2B2825'], ['dunkel/Well', '#B3ACA1', '#36322D']]) {
     assert.ok(contrastRatio(ink, surface) >= 3, `${name}: ${contrastRatio(ink, surface)}`);
   }
-  for (const hex of ['--_family-health:   #9E1E88', '--_family-health:   #DB60CB']) assert.ok(tokens.includes(hex), hex);
+  for (const hex of ['--_family-health:   var(--_neutral-600)', '--_neutral-600: #5E5A53', '--_neutral-600: #B3ACA1']) assert.ok(tokens.includes(hex), hex);
   // Zeiten, Daten und Betraege unter dem Wert stehen tabellarisch.
   for (const part of ['note', 'meta', 'trend', 'unit']) {
     assert.match(body(`.metric-card__${part}`), /font-variant-numeric:\s*tabular-nums/, `.metric-card__${part}`);

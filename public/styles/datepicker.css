@@ -234,11 +234,12 @@ yuvomi-datepicker {
 .ydp-cal__wd {
   padding: var(--space-1) 0;
   text-align: center;
-  font-size: var(--text-2xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  /* Tafla: Wochentag wie in der Wochenleiste - Footnote 13/400, Tinte-2,
+   * Satzschreibung (vorher 10px Versalien mit Tracking). */
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  letter-spacing: var(--tracking-normal);
 }
 
 .ydp-cal__day {

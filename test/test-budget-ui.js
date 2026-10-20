@@ -737,7 +737,14 @@ test('keine Datenreihe deckt sich mit dem Modulton einer Seite, die Diagramme ze
   for (const m of tokensCss.matchAll(/--module-([\w-]+):\s*var\(--_family-([\w-]+)\)/g)) {
     familyOf.set(m[1], m[2]);
   }
-  const valuesOf = (token) => [...tokensCss.matchAll(new RegExp(`${token}:\\s*(#[\\da-fA-F]{6})`, 'g'))].map((x) => x[1]);
+  // Tafla (2026-10-19): die Familien zeigen auf Tinte-2 (`var(--_neutral-600)`)
+  // statt einen eigenen Hexwert zu tragen - der Ton wird deshalb ueber die
+  // Kette aufgeloest. Die Zusage bleibt: keine Datenreihe sieht aus wie das
+  // Chrome ihrer Seite (Tinte-2 ist ein Grau, die Serien sind bunt).
+  const valuesOf = (token) => {
+    const raw = [...tokensCss.matchAll(new RegExp(`${token}:\\s*(#[\\da-fA-F]{6}|var\\(--[\\w-]+\\))`, 'g'))].map((x) => x[1]);
+    return raw.flatMap((v) => (v.startsWith('var(') ? valuesOf(v.slice(4, -1)) : [v]));
+  };
 
   // 4. CIEDE2000 - der Abstand, den ein Auge sieht. Unter 2.3 (Just Noticeable
   //    Difference) sind zwei Farben derselbe Ton, egal was die Hexwerte sagen.
@@ -6056,13 +6063,14 @@ test('R18 Verlauf: drei Gitterlinien, kurze Zeitachse, EIN Strichmuster, Punkt m
   // Grafikkontrast 3:1 gegen den Traeger, in beiden Themes gerechnet.
   const { contrastRatio } = await import('../public/utils/contrast.js');
   for (const [name, ink, surface] of [
-    ['Einnahmen hell', '#1E7B35', '#FFFFFF'], ['Einnahmen dunkel', '#30D158', '#2B2825'],
-    ['Ausgaben hell', '#63615B', '#FFFFFF'], ['Ausgaben dunkel', '#B4AEA5', '#2B2825'],
+    // Tafla-Werte (2026-10-19): Erfolg #1C7134 / #5CC27D, Tinte-2 #5E5A53 / #B3ACA1.
+    ['Einnahmen hell', '#1C7134', '#FFFFFF'], ['Einnahmen dunkel', '#5CC27D', '#2B2825'],
+    ['Ausgaben hell', '#5E5A53', '#FFFFFF'], ['Ausgaben dunkel', '#B3ACA1', '#2B2825'],
   ]) {
     assert.ok(contrastRatio(ink, surface) >= 3, `${name}: ${contrastRatio(ink, surface)}`);
   }
   const tokens = read('../public/styles/tokens.css');
-  for (const hex of ['--_color-success:       #1E7B35', '--_color-success:       #30D158', '--_neutral-600: #63615B', '--_neutral-600: #B4AEA5', '--_color-surface:          #2B2825']) {
+  for (const hex of ['--_color-success:       #1C7134', '--_color-success:       #5CC27D', '--_neutral-600: #5E5A53', '--_neutral-600: #B3ACA1', '--_color-surface:          #2B2825']) {
     assert.ok(tokens.includes(hex), `die gerechneten Werte sind die der Tokens: ${hex}`);
   }
 });
