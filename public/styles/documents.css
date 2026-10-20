@@ -2640,8 +2640,10 @@
     display: none;
   }
 
+  /* Der Punkt ist ein Flex-Kind des Eintrags: dessen Abstand (4) steht
+   * dahinter, der Spaltenabstand der Meta (4) davor. */
   .document-row__meta > span:not(.doc-badge) + span:not(.doc-badge)::before {
-    content: '·\00a0';
+    content: '·';
   }
 
   .document-row__meta > .doc-badge + span:not(.doc-badge) {
