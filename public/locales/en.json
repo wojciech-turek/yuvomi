@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "This DMS account no longer exists.",
         "errorDmsDocumentGone": "This document no longer exists in the DMS.",
         "errorDmsAlreadyLinked": "This DMS document is already linked.",
-        "errorDmsAlreadyStored": "This document is already stored in a DMS."
+        "errorDmsAlreadyStored": "This document is already stored in a DMS.",
+        "inDays_one": "in {{count}} day",
+        "inDays": "in {{count}} days",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Housekeeping",

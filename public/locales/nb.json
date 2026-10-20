@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "Denne DMS-kontoen finnes ikke lenger.",
         "errorDmsDocumentGone": "Dette dokumentet finnes ikke lenger i DMS-systemet.",
         "errorDmsAlreadyLinked": "Dette DMS-dokumentet er allerede koblet til.",
-        "errorDmsAlreadyStored": "Dette dokumentet er allerede lagret i et DMS."
+        "errorDmsAlreadyStored": "Dette dokumentet er allerede lagret i et DMS.",
+        "inDays_one": "om {{count}} dag",
+        "inDays": "om {{count}} dager",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Husarbeid",

@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "이 DMS 계정은 더 이상 존재하지 않습니다.",
         "errorDmsDocumentGone": "이 문서는 DMS에 더 이상 존재하지 않습니다.",
         "errorDmsAlreadyLinked": "이 DMS 문서는 이미 연결되어 있습니다.",
-        "errorDmsAlreadyStored": "이 문서는 이미 DMS에 저장되어 있습니다."
+        "errorDmsAlreadyStored": "이 문서는 이미 DMS에 저장되어 있습니다.",
+        "inDays_one": "{{count}}일 후",
+        "inDays": "{{count}}일 후",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "없음",

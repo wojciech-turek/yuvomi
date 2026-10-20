@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "Ez a DMS-fiók már nem létezik.",
         "errorDmsDocumentGone": "Ez a dokumentum már nem létezik a DMS-ben.",
         "errorDmsAlreadyLinked": "Ez a DMS-dokumentum már össze van kapcsolva.",
-        "errorDmsAlreadyStored": "Ez a dokumentum már egy DMS-ben van tárolva."
+        "errorDmsAlreadyStored": "Ez a dokumentum már egy DMS-ben van tárolva.",
+        "inDays_one": "{{count}} nap múlva",
+        "inDays": "{{count}} nap múlva",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Háztartás",

@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "Akun DMS ini sudah tidak ada.",
         "errorDmsDocumentGone": "Dokumen ini sudah tidak ada di DMS.",
         "errorDmsAlreadyLinked": "Dokumen DMS ini sudah ditautkan.",
-        "errorDmsAlreadyStored": "Dokumen ini sudah tersimpan di DMS."
+        "errorDmsAlreadyStored": "Dokumen ini sudah tersimpan di DMS.",
+        "inDays_one": "dalam {{count}} hari",
+        "inDays": "dalam {{count}} hari",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Tidak ada",

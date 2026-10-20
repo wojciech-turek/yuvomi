@@ -29,6 +29,10 @@ import { mountEmptyState, mountSearchEmpty } from '/utils/empty-state.js';
 import { subtreeIds, folderPath, flattenFolderTree } from '/utils/folder-tree.js';
 import { dateStatus } from '/utils/date-status.js';
 import { expiryChipSpec, expiryViewerSpec } from '/utils/document-expiry.js';
+import { shortDayMonth, pastDateLabel } from '/utils/day-label.js';
+import { addLocalDays, todayKey } from '/utils/date.js';
+import { personDisc } from '/utils/person-color.js';
+import { initials } from '/utils/initials.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import { setBulkPill, clearBulkPill } from '/utils/bulk-pill.js';
 import { createPageController } from '/utils/page-lifecycle.js';
@@ -401,6 +405,12 @@ export async function render(container, context = {}) {
           ${documentsToolsMenuHtml()}
         </div>
       </div>
+      ${/* TAFLA (2026-10-20): DER UEBERBLICK VOR DER LISTE. Oben das eine
+           Dokument, dessen Frist zuerst ablaeuft (E1-Karte mit EINER
+           Handlung), darunter - nur unterhalb 1024px, wo die Ordnerspalte
+           fehlt - die Ordner der aktuellen Ebene als gruppierte Zeilen mit
+           Zaehler, "Ordner hinzufuegen" und der Weg ins Archiv. */ ''}
+      <div class="documents-overview" id="documents-overview"></div>
       ${/* ZWEI FILTERSPRACHEN WAREN EINE ZU VIEL (Critique 2026-09-25, P1/P2).
            Aktiv/Archiviert sah aus wie ein Chip und verhielt sich wie ein
            Segment - genau eins ist immer gewaehlt. Jetzt IST es das Segment
@@ -473,6 +483,7 @@ export async function render(container, context = {}) {
                gewaehlt ist: ein Pfad auf "alle Dokumente" waere eine Zeile
                ohne Aussage. */''}
           <nav class="documents-breadcrumb" id="documents-breadcrumb" aria-label="${t('documents.folderPathLabel')}" hidden></nav>
+          <h2 class="inset-group__head documents-list-head" id="documents-list-head" hidden></h2>
           <div id="documents-list" class="${listClasses()}" aria-busy="true">${renderSkeletonList({ rows: 6, lines: 2 })}</div>
         </div>
       </div>
@@ -495,6 +506,7 @@ export async function render(container, context = {}) {
   renderCategoryChips();
   renderExpiringChip();
   renderFolderBrowser();
+  renderOverview();
   renderDocuments();
 }
 
@@ -505,6 +517,7 @@ function renderAll({ motion = false } = {}) {
   renderExpiringChip();
   renderFolderBrowser();
   renderBreadcrumb();
+  renderOverview();
   renderDocuments({ motion });
 }
 
@@ -536,6 +549,275 @@ function renderBreadcrumb() {
       ? `<span class="documents-breadcrumb__crumb documents-breadcrumb__crumb--current" aria-current="page">${esc(folder.name)}</span>`
       : `<button type="button" class="documents-breadcrumb__crumb" data-folder-select="${folder.id}">${esc(folder.name)}</button>`);
   }).join('')}`);
+}
+
+// --------------------------------------------------------
+// Tafla (2026-10-20): Ueberblick - Frist, Ordner, Archiv
+// --------------------------------------------------------
+
+/** Steht man in der Wurzel der aktiven Ablage, ohne Suche und ohne Facette? */
+function atRoot() {
+  return state.status === 'active' && !state.folderId && !state.category && !state.expiringSoon && !state.query;
+}
+
+/**
+ * Das EINE Dokument, dessen Frist zuerst ablaeuft (oder schon abgelaufen ist):
+ * dieselbe Regel wie Zeile und Betrachter (dateStatus, utils/document-expiry.js)
+ * - es steht nur, wenn es handeln verlangt (abgelaufen oder binnen 30 Tagen).
+ */
+export function nearestExpiringDocument(docs) {
+  let best = null;
+  for (const doc of docs) {
+    const status = dateStatus(doc.expires_at);
+    if (!status || status.state === 'valid') continue;
+    if (!best || status.days < best.status.days) best = { doc, status };
+  }
+  return best;
+}
+
+/** Eine Woche vor Ablauf - liegt das noch vor uns? (Tagesschluessel, keine Uhrzeit.) */
+const WEEK_BEFORE_DAYS = 7;
+
+function reminderDateKey(doc) {
+  if (doc.expiry_reminder_days == null || !doc.expires_at) return null;
+  return addLocalDays(String(doc.expires_at).slice(0, 10), -Number(doc.expiry_reminder_days));
+}
+
+/**
+ * Die E1-Karte "Wkrótce wygasa" (spec Dokumenty). Glyphe der Art, Name, Ordner
+ * und Datum, der Abstand als WORT in der Pille. EINE Handlung: eine Woche vorher
+ * erinnern (das Feld `expiry_reminder_days`, das auch der Dialog setzt) - sonst,
+ * wenn schon eine Erinnerung steht, die Frist zu nah ist oder das Dokument
+ * jemand anderem gehoert, das Dokument oeffnen.
+ */
+function expiryCardHtml(found) {
+  const { doc, status } = found;
+  const expired = status.state === 'expired';
+  const when = shortDayMonth(status.endDateKey);
+  const reminder = reminderDateKey(doc);
+  const reminderAhead = reminder && reminder >= todayKey();
+  const meta = [
+    doc.folder_name || '',
+    t(expired ? 'documents.expiredOnShort' : 'documents.expiresOnShort', { date: when }),
+  ].filter(Boolean).join(' · ');
+  const reminderLine = reminderAhead
+    ? `<span class="inset-row__meta documents-expiry-card__reminder"><i data-lucide="bell" aria-hidden="true"></i>${esc(t('documents.reminderOn', { date: shortDayMonth(reminder) }))}</span>`
+    : '';
+  const pill = expired
+    ? `<span class="status-pill status-pill--danger">${esc(t('documents.expiredPill'))}</span>`
+    : `<span class="status-pill status-pill--warning">${esc(t('documents.inDays', { count: status.days }))}</span>`;
+  const canRemind = !expired && !reminderAhead && status.days > WEEK_BEFORE_DAYS && mayManage(doc);
+  const action = canRemind
+    ? `<button type="button" class="pill-btn pill-btn--secondary" data-expiry-remind="${doc.id}">${esc(t('documents.remindWeekBefore'))}</button>`
+    : `<button type="button" class="pill-btn pill-btn--secondary" data-expiry-open="${doc.id}">${esc(t('documents.viewAction'))}</button>`;
+  const label = t(expired ? 'documents.expiredLabel' : 'documents.expiringSoonLabel', { name: doc.name });
+  return `
+    <section class="hero-card documents-expiry-card" aria-label="${esc(label)}">
+      <div class="documents-expiry-card__row">
+        <span class="inset-row__lead"><i data-lucide="${CATEGORY_ICONS[doc.category] || 'file'}" aria-hidden="true"></i></span>
+        <span class="inset-row__body">
+          <span class="documents-expiry-card__title">${esc(doc.name)}</span>
+          <span class="inset-row__meta">${esc(meta)}</span>
+          ${reminderLine}
+        </span>
+        ${pill}
+      </div>
+      <div class="documents-expiry-card__actions">${action}</div>
+    </section>`;
+}
+
+/**
+ * Nur Dokumente, die ein anderer sehen darf, ODER nur private? Ein Ordner, in
+ * dem jedes sichtbare Dokument privat oder eingeschraenkt ist, traegt das
+ * Schloss vor dem Zaehler (Ordner selbst haben keine Sichtbarkeit).
+ */
+function folderIsPrivate(folderId) {
+  const ids = folderSubtree(folderId);
+  const docs = state.allDocuments.filter((doc) => doc.folder_id != null && ids.has(doc.folder_id));
+  return docs.length > 0 && docs.every((doc) => doc.visibility && doc.visibility !== 'family');
+}
+
+/**
+ * Die Ordner der aktuellen Ebene als gruppierte Zeilen (nur unterhalb 1024px;
+ * darueber steht die Ordnerspalte). In der Wurzel die obersten Ordner, in einem
+ * Ordner seine Unterordner. Darunter "Ordner hinzufuegen" (mit Schreibrecht)
+ * und in der Wurzel der Weg ins Archiv.
+ */
+function folderRowsHtml() {
+  const parent = state.folderId && state.folderId !== '__none' ? Number(state.folderId) : null;
+  if (state.folderId === '__none') return '';
+  const counts = folderCounts();
+  const children = state.folders.filter((folder) => (folder.parent_id ?? null) === parent);
+  const rows = children.map((folder) => {
+    const count = counts.get(String(folder.id)) || 0;
+    const locked = folderIsPrivate(folder.id);
+    const label = t('documents.folderRowLabel', { name: folder.name, total: count })
+      + (locked ? `, ${t('documents.folderPrivate')}` : '');
+    return `
+      <li><button type="button" class="inset-row inset-row--single documents-folder-row" data-folder-select="${folder.id}" aria-label="${esc(label)}">
+        <span class="inset-row__lead"><i data-lucide="folder" aria-hidden="true"></i></span>
+        <span class="inset-row__title">${esc(folder.name)}</span>
+        <span class="inset-row__trail">
+          <span class="inset-row__value documents-folder-row__count">${locked ? '<i data-lucide="lock" aria-hidden="true"></i>' : ''}${count}</span>
+          <span class="inset-row__chevron"><i data-lucide="chevron-right" aria-hidden="true"></i></span>
+        </span>
+      </button></li>`;
+  });
+  // Neue Ordner entstehen in der Wurzel hier; in einem Ordner traegt sein
+  // Menue am Listenkopf "Nowy podfolder" (renderListHead).
+  if (!readOnly() && parent === null) {
+    rows.push(`
+      <li><button type="button" class="inset-row inset-row--single inset-row--action documents-folder-row" data-overview-new-folder>
+        <span class="inset-row__lead"><i data-lucide="folder-plus" aria-hidden="true"></i></span>
+        <span class="inset-row__title">${esc(t('documents.addFolderButton'))}</span>
+      </button></li>`);
+  }
+  if (parent === null) {
+    rows.push(`
+      <li><button type="button" class="inset-row inset-row--single documents-folder-row" data-overview-archive>
+        <span class="inset-row__lead"><i data-lucide="archive" aria-hidden="true"></i></span>
+        <span class="inset-row__title">${esc(t('documents.archiveRow'))}</span>
+        <span class="inset-row__trail"><span class="inset-row__chevron"><i data-lucide="chevron-right" aria-hidden="true"></i></span></span>
+      </button></li>`);
+  }
+  if (!rows.length) return '';
+  const showHead = parent === null;
+  return `
+    <section class="inset-group documents-folder-group"${showHead ? ' aria-labelledby="documents-folder-group-head"' : ` aria-label="${esc(t('documents.folderBrowserTitle'))}"`}>
+      ${showHead ? `<h2 class="inset-group__head" id="documents-folder-group-head">${esc(t('documents.folderBrowserTitle'))}</h2>` : ''}
+      <ul class="inset-card">${rows.join('')}</ul>
+    </section>`;
+}
+
+/**
+ * Der Weg eine Ebene hoeher (unterhalb 1024px, wo Pfad und Ordnerspalte
+ * fehlen): im Ordner zum Elternordner bzw. zu allen Dokumenten, im Archiv
+ * zurueck in die aktive Ablage. Ein schlichtes Verb, keine Karte.
+ */
+function overviewBackHtml(view) {
+  let attrs;
+  let label;
+  if (view === 'archived') {
+    // Ein leeres Archiv fuehrt mit seinem Leerzustand zurueck - nicht zweimal.
+    if (!state.allDocuments.length) return '';
+    attrs = 'data-overview-active';
+    label = t('documents.showActiveAction');
+  } else {
+    const current = state.folders.find((folder) => String(folder.id) === String(state.folderId));
+    const parent = current?.parent_id != null ? state.folders.find((folder) => folder.id === current.parent_id) : null;
+    attrs = `data-folder-select="${parent ? parent.id : ''}"`;
+    label = parent ? parent.name : t('documents.allDocuments');
+  }
+  return `
+    <div class="documents-overview__back">
+      <button type="button" class="pill-btn pill-btn--plain" ${attrs}>
+        <i data-lucide="chevron-left" aria-hidden="true"></i><span>${esc(label)}</span>
+      </button>
+    </div>`;
+}
+
+/**
+ * Zeichnet den Ueberblick und sagt der Seite, wo sie steht (`data-documents-view`:
+ * root | folder | archived | filtered) - documents.css blendet danach unterhalb
+ * 1024px die Filterzeile und den Ordner-Chip aus, die der Ueberblick ersetzt.
+ */
+function renderOverview() {
+  const host = _container?.querySelector('#documents-overview');
+  if (!host) return;
+  const page = _container.querySelector('.documents-page');
+  const view = state.status === 'archived' ? 'archived'
+    : (state.category || state.expiringSoon || state.query) ? 'filtered'
+      : state.folderId ? 'folder' : 'root';
+  if (page) page.dataset.documentsView = view;
+  const parts = [];
+  if (atRoot()) {
+    const found = nearestExpiringDocument(state.allDocuments);
+    if (found) parts.push(expiryCardHtml(found));
+  }
+  if (view === 'archived' || (view === 'folder' && state.folderId !== '__none')) parts.push(overviewBackHtml(view));
+  if (view === 'root' || view === 'folder') parts.push(folderRowsHtml());
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', parts.join(''));
+  host.hidden = !parts.some(Boolean);
+  if (window.lucide) lucide.createIcons({ el: host });
+}
+
+/** Der Kopf ueber der Liste: was sie zeigt, und wie viele. */
+function renderListHead(count) {
+  const head = _container?.querySelector('#documents-list-head');
+  if (!head) return;
+  let label;
+  if (state.status === 'archived') label = t('documents.statusArchived');
+  else if (state.folderId === '__none') label = t('documents.noFolder');
+  else if (state.folderId) label = state.folders.find((folder) => String(folder.id) === String(state.folderId))?.name ?? t('documents.allDocuments');
+  else if (atRoot() && state.sort === 'updated' && state.sortDirection === 'desc') label = t('documents.listRecent');
+  else label = t('documents.allDocuments');
+  head.hidden = count === 0 && !state.folderId;
+  head.replaceChildren();
+  // Im Ordner traegt der Kopf das Menue DIESES Ordners (Unterordner,
+  // Umbenennen, Verschieben, Loeschen) - unterhalb 1024px der eine Weg dorthin,
+  // darueber steht es zusaetzlich an seiner Zeile in der Ordnerspalte.
+  const folder = !readOnly() && state.folderId && state.folderId !== '__none'
+    ? state.folders.find((item) => String(item.id) === String(state.folderId))
+    : null;
+  const menu = folder
+    ? rowActionHtml({ icon: 'ellipsis', className: 'documents-list-head__menu', label: t('documents.folderActionsFor', { name: folder.name }), attrs: { 'data-head-folder-menu': folder.id, title: t('documents.folderActionsFor', { name: folder.name }), 'aria-haspopup': 'menu', 'aria-expanded': 'false' } })
+    : '';
+  head.insertAdjacentHTML('beforeend', `<span>${esc(label)}</span><span class="inset-group__count">${count}</span>${menu}`);
+  if (menu && window.lucide) lucide.createIcons({ el: head });
+}
+
+/** Eine Woche vor Ablauf erinnern - derselbe Weg wie das Feld im Dialog. */
+async function remindWeekBefore(doc) {
+  if (!mayManage(doc)) return;
+  const owner = _container;
+  const body = { expiry_reminder_days: WEEK_BEFORE_DAYS };
+  // Eine eingeschraenkte Freigabe reist mit: der Server setzt die Liste der
+  // Berechtigten bei jedem PUT neu (replaceAccess).
+  if (doc.visibility === 'restricted') body.allowed_member_ids = doc.allowed_member_ids || [];
+  try {
+    const res = await api.put(`/documents/${doc.id}`, body);
+    const fresh = res?.data;
+    if (fresh) {
+      const index = state.allDocuments.findIndex((item) => item.id === doc.id);
+      if (index !== -1) state.allDocuments[index] = { ...state.allDocuments[index], ...fresh };
+      applyFilters();
+    }
+    const reminder = reminderDateKey(fresh || { ...doc, ...body });
+    window.yuvomi?.showToast(t('documents.reminderSetToast', { date: shortDayMonth(reminder) }), 'success');
+    if (!stillShown(owner)) return;
+    renderOverview();
+  } catch (err) {
+    reportError(err, { owner });
+  }
+}
+
+function bindOverview() {
+  _container.querySelector('#documents-list-head')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-head-folder-menu]');
+    if (!btn) return;
+    const folder = state.folders.find((item) => String(item.id) === btn.dataset.headFolderMenu);
+    if (folder) openFolderMenu(folder, btn);
+  });
+  _container.querySelector('#documents-overview')?.addEventListener('click', (e) => {
+    const folder = e.target.closest('[data-folder-select]');
+    if (folder) { selectFolder(folder.dataset.folderSelect); return; }
+    if (e.target.closest('[data-overview-new-folder]')) {
+      const parent = Number(state.folderId);
+      openFolderModal({ parentId: Number.isInteger(parent) && parent > 0 ? parent : null });
+      return;
+    }
+    if (e.target.closest('[data-overview-archive]')) { _statusTablist?.setActive('archived', { focus: false }); return; }
+    if (e.target.closest('[data-overview-active]')) { _statusTablist?.setActive('active', { focus: false }); return; }
+    const remind = e.target.closest('[data-expiry-remind]');
+    const open = e.target.closest('[data-expiry-open]');
+    const id = remind?.dataset.expiryRemind ?? open?.dataset.expiryOpen;
+    if (!id) return;
+    const doc = state.allDocuments.find((item) => String(item.id) === String(id));
+    if (!doc) return;
+    if (remind) remindWeekBefore(doc);
+    else openDocumentViewer(doc);
+  });
 }
 
 /**
@@ -855,6 +1137,7 @@ function bindPageEvents() {
   _container.querySelector('#documents-folder-add')?.addEventListener('click', () => openFolderModal());
   findPageFab('fab-new-document')?.addEventListener('click', () => openDocumentModal());
   bindToolsMenu();
+  bindOverview();
 
   _search = wirePageSearch(_container, {
     id: 'documents-search',
@@ -862,6 +1145,7 @@ function bindPageEvents() {
       state.query = normalizeDocumentQuery(value);
       state.queryText = String(value ?? '').trim();
       renderFacets();
+      renderOverview();
       renderDocuments();
     },
   });
@@ -1035,6 +1319,7 @@ function clearSearch() {
   state.queryText = '';
   _search?.clear();
   renderFacets();
+  renderOverview();
   renderDocuments();
   _search?.input.focus();
 }
@@ -1255,6 +1540,7 @@ function drawDocuments() {
   list.className = listClasses();
   // Der Einstieg in die Auswahl haengt an den geladenen Dokumenten (mayManage).
   syncToolsMenu();
+  renderListHead(docs.length);
   if (!docs.length) {
     renderEmptyState(list);
     return;
@@ -1884,7 +2170,7 @@ async function handleFolderDeleteError(err, folder, { delayed = false, owner = n
 
 // `showSize` aus, wenn die Ansicht die Größe bereits in einer eigenen Spalte
 // führt (Listenzeile) — sonst stünde sie doppelt in derselben Zeile.
-function renderMeta(doc, { showSize = true } = {}) {
+function renderMeta(doc, { showSize = true, when = false } = {}) {
   const labels = categoryLabels();
   const categoryLabel = labels[doc.category] || doc.category;
   // Der Ordner-Chip entfaellt, wenn der Ordner die Kategorie wiederholt, und im
@@ -1896,8 +2182,12 @@ function renderMeta(doc, { showSize = true } = {}) {
   // bei 375px 0px sichtbar, genau die Angabe, die Handeln verlangt. Die
   // Reihenfolge ist damit die Rangfolge: Ablauf, Art, Ablageort, Sichtbarkeit -
   // letztere nur, wenn sie vom Standard abweicht (showsVisibility).
+  // Tafla: die schmale Zeile nennt nach dem Ablauf Dateityp und Datum ("PDF ·
+  // dziś") - am breiten Schirm stehen Datum und Groesse in ihrer eigenen
+  // Spalte, dort blendet documents.css diesen Eintrag aus.
   return `
     ${expiryChipHtml(doc)}
+    ${when ? rowWhenHtml(doc) : ''}
     <span><i data-lucide="${CATEGORY_ICONS[doc.category] || 'folder'}" aria-hidden="true"></i>${categoryLabel}</span>
     ${folderChip ? `<span><i data-lucide="folder" aria-hidden="true"></i>${esc(doc.folder_name)}</span>` : ''}
     ${hidesPrivacyControls('documents') || !showsVisibility(doc.visibility) ? '' : `<span><i data-lucide="${doc.visibility === 'private' ? 'lock' : 'user-check'}" aria-hidden="true"></i>${t(`documents.visibility.${doc.visibility}`)}</span>`}
@@ -2201,6 +2491,22 @@ function renderGridCard(doc) {
 // Die Zeile trägt bewusst mehr als die Karte: Datum und Größe stehen als eigene
 // Spalten rechts. Vorher zeigte die Listenansicht kein Datum — der Wechsel von
 // Raster auf Liste nahm Information weg, statt Dichte zu gewinnen.
+/** "PDF · dziś": Dateityp und letzter Stand, wie eine Tafla-Zeile sie nennt. */
+function rowWhenHtml(doc) {
+  const text = [fileTypeLabel(doc.original_name), pastDateLabel(doc.updated_at)].filter(Boolean).join(' · ');
+  return text ? `<span class="document-row__when">${esc(text)}</span>` : '';
+}
+
+/** Die Scheibe der Person, die es abgelegt hat - nur an fremden Dokumenten. */
+function creatorDiscHtml(doc) {
+  if (state.currentUserId == null || !doc.creator_name) return '';
+  if (Number(doc.created_by) === Number(state.currentUserId)) return '';
+  return personDisc(
+    { id: doc.created_by, avatar_color: doc.creator_color },
+    { text: initials(doc.creator_name), label: doc.creator_name, className: 'document-row__who' },
+  );
+}
+
 function renderListItem(doc) {
   const selected = state.selectMode && state.selected.has(doc.id);
   return `
@@ -2208,12 +2514,13 @@ function renderListItem(doc) {
       ${state.selectMode && mayManage(doc) ? renderSelectBox(doc) : renderRowGlyph(doc)}
       <div class="list-row__main document-row__body">
         <h2 class="list-row__name document-row__title">${esc(doc.name)}</h2>
-        <div class="list-row__meta document-row__meta">${renderMeta(doc, { showSize: false })}</div>
+        <div class="list-row__meta document-row__meta">${renderMeta(doc, { showSize: false, when: true })}</div>
       </div>
       <div class="document-row__stats">
         <span class="document-row__date">${formatDate(doc.updated_at)}</span>
         <span class="document-row__size">${formatFileSize(doc.file_size)}</span>
       </div>
+      ${creatorDiscHtml(doc)}
       ${state.selectMode ? '' : `<div class="document-row__actions" role="toolbar" aria-label="${esc(t('documents.actionsFor', { name: doc.name }))}"${readBarAttr(doc)}>${renderActions(doc)}</div>`}
     </article>
   `;

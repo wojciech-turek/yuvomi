@@ -3889,7 +3889,21 @@
         "errorDmsAccountGone": "این حساب DMS دیگر وجود ندارد.",
         "errorDmsDocumentGone": "این سند دیگر در DMS وجود ندارد.",
         "errorDmsAlreadyLinked": "این سند DMS از قبل پیوند داده شده است.",
-        "errorDmsAlreadyStored": "این سند از قبل در یک DMS ذخیره شده است."
+        "errorDmsAlreadyStored": "این سند از قبل در یک DMS ذخیره شده است.",
+        "inDays_one": "{{count}} روز دیگر",
+        "inDays": "{{count}} روز دیگر",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "هیچ‌کس",

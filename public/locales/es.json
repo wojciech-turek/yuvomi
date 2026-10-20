@@ -3829,7 +3829,21 @@
         "errorDmsAccountGone": "Esta cuenta de DMS ya no existe.",
         "errorDmsDocumentGone": "Este documento ya no existe en el DMS.",
         "errorDmsAlreadyLinked": "Este documento del DMS ya está vinculado.",
-        "errorDmsAlreadyStored": "Este documento ya está guardado en un DMS."
+        "errorDmsAlreadyStored": "Este documento ya está guardado en un DMS.",
+        "inDays_one": "en {{count}} día",
+        "inDays": "en {{count}} días",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Cocina",

@@ -3829,7 +3829,21 @@
         "errorDmsAccountGone": "Bu DMS hesabı artık yok.",
         "errorDmsDocumentGone": "Bu belge artık DMS'de yok.",
         "errorDmsAlreadyLinked": "Bu DMS belgesi zaten bağlı.",
-        "errorDmsAlreadyStored": "Bu belge zaten bir DMS'de saklanıyor."
+        "errorDmsAlreadyStored": "Bu belge zaten bir DMS'de saklanıyor.",
+        "inDays_one": "{{count}} gün sonra",
+        "inDays": "{{count}} gün sonra",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Mutfak",
