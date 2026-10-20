@@ -32,6 +32,8 @@ import { withChosenPeople } from '/utils/people-picker.js';
 import { isSoloHousehold } from '/utils/household.js';
 import { errorSentence } from '/utils/friendly-error.js';
 import { openCookForMeal } from '/components/cook-mode.js';
+import { personDisc } from '/utils/person-color.js';
+import { initials } from '/utils/initials.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -1880,7 +1882,7 @@ function heroHtml(meal) {
         <div class="meals-hero__text">
           <span class="meals-hero__eyebrow">${esc(mealTypeLabel(meal.meal_type))}</span>
           <h2 class="meals-hero__heading">${title}</h2>
-          ${cookText ? `<span class="meals-hero__cook">${renderAvatarStack([cook], { size: 20, maxVisible: 1 })}<span>${esc(cookText)}</span></span>` : ''}
+          ${cookText ? `<span class="meals-hero__cook">${personDisc({ id: cook.id, avatar_color: cook.color }, { text: initials(cook.display_name), household: state.members })}<span>${esc(cookText)}</span></span>` : ''}
         </div>
         ${plateHtml(meal, 'meals-hero__plate')}
       </div>

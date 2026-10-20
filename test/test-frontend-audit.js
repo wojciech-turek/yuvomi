@@ -22038,7 +22038,7 @@ test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche - 
   const shopping = [...eachRule(read('../public/styles/shopping.css'))];
   const bar = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar');
   assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-full\)/, 'die Leiste ist die Kapsel');
-  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-fill, var\(--color-fill-field\)\)/, 'mit der Flaeche der Suche');
+  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-fill(?:-field)?\)/, 'mit der Flaeche der Suche (Tafla: --color-fill)');
   const focus = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar:focus-within');
   assert.match(focus?.body ?? '', /border-color:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut - wie an der Suche');
   const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat/.test(r.selector));

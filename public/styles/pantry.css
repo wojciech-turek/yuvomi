@@ -83,8 +83,8 @@
   border: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -95,7 +95,7 @@
   inset-inline: 0;
   inset-block: calc(50% - var(--space-4) - var(--space-0h));
   border-radius: var(--radius-full);
-  background: var(--color-fill, var(--color-fill-field));
+  background: var(--color-fill);
 }
 
 @media (hover: hover) {
@@ -109,7 +109,7 @@
 }
 
 .pantry-filters .filter-chip--active::before {
-  background: var(--color-accent-tint, var(--color-accent-light));
+  background: var(--color-accent-tint);
 }
 
 /* Die Zahl neben dem Ort: Fliesstext-Gewicht, keine eigene Marke. */
@@ -146,7 +146,7 @@
   z-index: -1;
   inset: calc(50% - var(--space-4) - var(--space-0h));
   border-radius: var(--radius-full);
-  background: var(--color-fill, var(--color-fill-field));
+  background: var(--color-fill);
 }
 
 .pantry-search-toggle:focus-visible {
@@ -272,22 +272,22 @@
   padding: var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-e1, var(--shadow-sm));
+  box-shadow: var(--shadow-e1);
   max-width: var(--page-measure, var(--content-max-width-narrow));
 }
 
 .pantry-attention__title {
   margin: 0 0 var(--space-2);
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
 .pantry-attention__heading {
   margin: 0;
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
@@ -324,7 +324,7 @@
 .pantry-attention__name {
   min-width: 0;
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -333,7 +333,7 @@
 .pantry-attention__rule {
   block-size: 0.5px;
   margin-block: var(--space-2) var(--space-4);
-  background: var(--color-separator, var(--color-border-subtle));
+  background: var(--color-separator);
 }
 
 .pantry-attention__part {
@@ -360,7 +360,7 @@
  * Auslassungspunkten (die Namen stehen vollstaendig in der Liste darunter). */
 .pantry-attention__names {
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -372,8 +372,8 @@
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
 }
 
@@ -396,7 +396,7 @@
   padding-inline: var(--space-5);
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--color-accent-tint, var(--color-accent-light));
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
@@ -467,7 +467,7 @@
 
 .pantry-photo-card__title {
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
@@ -475,8 +475,8 @@
 }
 
 .pantry-photo-card__hint {
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -504,7 +504,7 @@
   gap: var(--space-1h);
   padding-inline: var(--space-4);
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
   text-transform: none;
   letter-spacing: var(--tracking-normal);
@@ -535,7 +535,7 @@
   inset-block-start: 0;
   inset-inline: calc(var(--space-12) + var(--space-2)) 0;
   block-size: 0.5px;
-  background: var(--color-separator, var(--color-border-subtle));
+  background: var(--color-separator);
   pointer-events: none;
 }
 
@@ -607,8 +607,8 @@
   block-size: var(--space-6);
   padding-inline: var(--space-2);
   border-radius: var(--radius-full);
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
@@ -616,12 +616,12 @@
 /* Die Schrift ist die lesbare Stufe der Familie (`--color-<n>-ink`): auf der
  * eigenen blassen Fuellung haelt sie AA in beiden Themes. */
 .pantry-badge--warning {
-  background: var(--color-warning-tint, var(--color-warning-light));
+  background: var(--color-warning-tint);
   color: var(--color-warning-ink);
 }
 
 .pantry-badge--danger {
-  background: var(--color-danger-tint, var(--color-danger-light));
+  background: var(--color-danger-tint);
   color: var(--color-danger-ink);
 }
 
@@ -633,9 +633,9 @@
   block-size: calc(var(--space-6) + var(--space-1));
   padding-inline: var(--space-2h);
   border-radius: var(--radius-full);
-  background: var(--color-fill, var(--color-fill-field));
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  background: var(--color-fill);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
@@ -666,8 +666,8 @@
 .pantry-row__facts {
   margin: 0;
   padding-inline-start: calc(var(--space-6) + var(--space-4));
-  font-size: var(--type-footnote, var(--type-caption));
-  line-height: var(--type-footnote-lh, 1.385);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
 }
 
@@ -696,7 +696,7 @@
   background: none;
   color: var(--color-accent);
   font: inherit;
-  font-size: var(--type-footnote, var(--type-caption));
+  font-size: var(--type-footnote);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
@@ -709,7 +709,7 @@
   inset-inline: 0;
   inset-block: calc(50% - var(--space-4) - var(--space-0h));
   border-radius: var(--radius-full);
-  background: var(--color-accent-tint, var(--color-accent-light));
+  background: var(--color-accent-tint);
 }
 
 /* "Edytuj": schlichter Text-Knopf in Akzent (KIT "Plain"), 44 hoch. */
@@ -752,7 +752,7 @@
   flex-shrink: 0;
   block-size: calc(var(--space-8) + var(--space-1));
   border-radius: var(--radius-full);
-  background: var(--color-fill, var(--color-fill-field));
+  background: var(--color-fill);
   /* Eine Variable statt zwei Regelsätze: die Knopfgröße wechselt mit der
    * Zeigerfähigkeit. */
   --pantry-step-btn: var(--target-md);
@@ -802,7 +802,7 @@
   padding-inline: var(--space-1);
   text-align: center;
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -875,14 +875,14 @@
 }
 
 .pantry-page .pantry-empty .empty-state__title {
-  font-size: var(--type-title, var(--type-toolbar-title));
-  line-height: var(--type-title-lh, 1.273);
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
   font-weight: var(--font-weight-semibold);
 }
 
 .pantry-page .pantry-empty .empty-state__description {
   font-size: var(--type-body);
-  line-height: var(--type-body-lh, 1.294);
+  line-height: var(--type-body-lh);
   color: var(--color-text-secondary);
 }
 
