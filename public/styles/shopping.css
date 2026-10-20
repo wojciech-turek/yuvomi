@@ -44,12 +44,6 @@
 /* --------------------------------------------------------
  * The row above the list: list name (picker), progress, tools
  * -------------------------------------------------------- */
-/* No seam under this row: in Tafla the header is one calm sheet, the cards
- * below carry the structure. */
-.shopping-toolbar {
-  border-bottom: 0;
-}
-
 .shopping-head {
   display: flex;
   align-items: center;
