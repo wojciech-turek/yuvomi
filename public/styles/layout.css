@@ -2757,8 +2757,9 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   width: var(--fab-size);
   height: var(--fab-size);
   border-radius: var(--radius-full);
-  background-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  /* Tafla: die Flaechen-Rolle der Stimme mit weissem Zeichen (siehe .btn--primary). */
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   /* Specular über die Inset-Tokens, nicht als rohe rgba: sie tragen den Faktor
    * --glass-inset-strength, der unter prefers-reduced-transparency und
    * prefers-contrast auf 0 fällt. Der rohe Wert überlebte den Schalter genau
@@ -2778,7 +2779,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 .page-fab:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 85%, black);
+  background-color: var(--color-btn-primary-hover);
 }
 
 .page-fab:active {
@@ -2795,7 +2796,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   --focus-ring-color: var(--color-bg);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
-  box-shadow: 0 0 0 4px var(--color-accent);
+  box-shadow: 0 0 0 4px var(--color-btn-primary);
 }
 
 /* Long Loop: FAB-Animation nach N Aufrufen deaktivieren */
@@ -7637,7 +7638,16 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
   outline-offset: var(--focus-ring-offset);
 }
 
-/* EINE STIMME: der Primärknopf trägt app-weit Violett, nicht den Modulton.
+/* TAFLA (2026-10-19): der Primaerknopf ist eine violette FLAECHE und nimmt
+ * deshalb die Flaechen-Rolle der Stimme, --color-btn-primary (Tafla-Name
+ * --color-accent-fill), mit weisser Schrift: hell #6C3AED 6,06:1, dunkel
+ * #7C52F2 4,83:1. --color-accent ist im Dark die TEXT-Rolle (#B49CFF) - als
+ * Flaeche stand sie dort als Flieder-Pille mit schwarzer Schrift. Die
+ * Abdunklung 88/76 % gegen --neutral-950 entfaellt: sie mischte im Dark gegen
+ * Hell und hob die Flaeche aus dem AA-Bereich weisser Schrift; gedrueckt und
+ * Hover nehmen --color-btn-primary-hover (#5A2BD6 / #6A42E0).
+ *
+ * EINE STIMME: der Primärknopf trägt app-weit Violett, nicht den Modulton.
  * `--color-accent` IST die Stimme; der Modulton läuft über
  * `--active-module-accent`, das der Router aufs Dokument setzt, und erreicht
  * diese Regel nicht.
@@ -7648,13 +7658,13 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
  * nicht. Die 88%/76%-Abdunklung bleibt: sie reproduziert die
  * „Action"-Abstufung des bisherigen --color-btn-primary. */
 .btn--primary {
-  background-color: color-mix(in srgb, var(--color-accent) 88%, var(--neutral-950));
-  color: var(--color-ink-on-vivid);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   box-shadow: var(--shadow-sm);
 }
 
 .btn--primary:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 76%, var(--neutral-950));
+  background-color: var(--color-btn-primary-hover);
   box-shadow: var(--shadow-md);
 }
 
