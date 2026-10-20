@@ -456,6 +456,13 @@
     clip-path: inset(50%);
   }
 
+  /* Aus dem Fluss genommen trifft sie auch kein Finger: ihr Zentrum laege
+   * unter dem Teller-Zeichen der Zeile. Der Fokus bleibt (Tastatur,
+   * Schaltersteuerung); das Menue selbst (Popover) erbt das nicht. */
+  .recipes-page .recipe-row .list-row__actions .row-action {
+    pointer-events: none;
+  }
+
   /* Wer per Tastatur oder Schaltersteuerung hineinkommt, bekommt sie zurueck. */
   .recipes-page .recipe-row .list-row__actions:focus-within {
     position: static;
@@ -463,6 +470,10 @@
     height: auto;
     overflow: visible;
     clip-path: none;
+  }
+
+  .recipes-page .recipe-row .list-row__actions:focus-within .row-action {
+    pointer-events: auto;
   }
 }
 
