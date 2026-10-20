@@ -5111,7 +5111,25 @@
             "reminders": {
                 "title": "التذكيرات التالية",
                 "empty": "لا مزيد من الجرعات اليوم"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "المؤشرات الحيوية",
@@ -5954,7 +5972,10 @@
         "errorCycleImportNoRows": "يحتوي الملف على سطر العناوين فقط ولا يحتوي على دورات.",
         "errorCycleImportTooManyRows": "يمكن أن يحتوي الاستيراد على {{limit}} دورة كحد أقصى. قسّم الملف.",
         "errorVitalImpossible": "هذه القيمة غير ممكنة. يرجى التحقق من الإدخال.",
-        "errorVitalBpOrder": "يجب أن تكون القيمة الانقباضية أعلى من الانبساطية."
+        "errorVitalBpOrder": "يجب أن تكون القيمة الانقباضية أعلى من الانبساطية.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "جمع النفايات",

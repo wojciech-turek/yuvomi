@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Nhắc nhở tiếp theo",
                 "empty": "Hôm nay không còn lần dùng thuốc nào"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Chỉ số sinh tồn",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "Tệp chỉ có dòng tiêu đề và không có kỳ kinh nào.",
         "errorCycleImportTooManyRows": "Mỗi lần nhập chỉ được tối đa {{limit}} kỳ kinh. Hãy chia nhỏ tệp.",
         "errorVitalImpossible": "Giá trị này không thể có. Vui lòng kiểm tra lại.",
-        "errorVitalBpOrder": "Huyết áp tâm thu phải cao hơn tâm trương."
+        "errorVitalBpOrder": "Huyết áp tâm thu phải cao hơn tâm trương.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Thu gom rác",

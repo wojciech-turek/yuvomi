@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "다음 알림",
                 "empty": "오늘 남은 복용 없음"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "생체 신호",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "파일에 머리글 행만 있고 생리 기간이 없습니다.",
         "errorCycleImportTooManyRows": "한 번에 최대 {{limit}}개의 생리 기간만 가져올 수 있습니다. 파일을 나누세요.",
         "errorVitalImpossible": "불가능한 값입니다. 입력한 내용을 확인해 주세요.",
-        "errorVitalBpOrder": "수축기 값은 이완기 값보다 커야 합니다."
+        "errorVitalBpOrder": "수축기 값은 이완기 값보다 커야 합니다.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "쓰레기 수거",

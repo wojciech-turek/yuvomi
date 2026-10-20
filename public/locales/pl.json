@@ -4962,7 +4962,7 @@
             "loadError": "Nie udało się załadować przeglądu",
             "loadErrorDesc": "Spróbuj ponownie.",
             "retry": "Spróbuj ponownie",
-            "areasTitle": "Wszystkie kategorie",
+            "areasTitle": "Dziennik",
             "moreTitle": "Pokaż wszystkie wartości",
             "areasPick": "Wybierz kategorię",
             "dueToday": {
@@ -4987,7 +4987,25 @@
             "reminders": {
                 "title": "Kolejne przypomnienia",
                 "empty": "Brak kolejnych dawek na dziś"
-            }
+            },
+            "todayTitle": "Dziś",
+            "doneOf": "{{done}} z {{total}}",
+            "takenAt": "przyjęto o {{time}}",
+            "untakeNamed": "Jednak nie przyjęto: {{name}}",
+            "toastTaken": "Przyjęto: {{name}}",
+            "toastUntaken": "Oznaczono jako nieprzyjęte: {{name}}",
+            "stockTitle": "Zapasy",
+            "stockLeft": "zostało {{amount}}",
+            "stockUntil": "wystarczy do {{date}}",
+            "stockLow": "kończy się",
+            "stockOut": "brak",
+            "visitsTitle": "Wizyty",
+            "dueOn": "termin {{date}}",
+            "pillOverdue": "zaległe",
+            "pillToday": "dziś",
+            "pillTomorrow": "jutro",
+            "pillInDays": "za {{count}} dni",
+            "aiPrivacy": "Dane o zdrowiu nigdy nie trafiają do asystenta AI."
         },
         "vitals": {
             "title": "Parametry życiowe",
@@ -5824,7 +5842,10 @@
         "errorCycleImportNoRows": "Plik zawiera tylko wiersz nagłówka i żadnej miesiączki.",
         "errorCycleImportTooManyRows": "Jeden import może zawierać najwyżej {{limit}} miesiączek. Podziel plik.",
         "errorVitalImpossible": "Ta wartość jest niemożliwa. Sprawdź wprowadzone dane.",
-        "errorVitalBpOrder": "Wartość skurczowa musi być wyższa niż rozkurczowa."
+        "errorVitalBpOrder": "Wartość skurczowa musi być wyższa niż rozkurczowa.",
+        "person": {
+            "you": "Ty"
+        }
     },
     "waste": {
         "title": "Odbiór odpadów",

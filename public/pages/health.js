@@ -19,6 +19,7 @@ import { scheduleUndoableDelete, expandIn, drawChartOnce } from '/utils/ux.js';
 import { swapContent } from '/utils/content-swap.js';
 import { toLocalDateKey, parseLocalDateKey, addLocalDays, todayKey} from '/utils/date.js';
 import { zonedDateKey } from '/utils/timezone.js';
+import { shortDayMonth } from '/utils/day-label.js';
 import { DATE_STATUS_ALERT_DAYS } from '/utils/date-status.js';
 import { nowFields } from '/utils/timezone.js';
 import { trendMarkup } from '/utils/metric-card.js';
@@ -28,7 +29,7 @@ import { rowActionHtml } from '/utils/row-action.js';
 import { formRowsHtml, formRowHtml, formCompositeHtml } from '/utils/form-row.js';
 import { toggleRowHtml } from '/settings/components.js';
 import { installPopoverMenus, pageToolsMenuHtml } from '/utils/popover-menu.js';
-import { personSwitcherMarkup } from '/utils/health-person-switcher.js';
+import { personSwitcherMarkup, personSwitcherFocusTarget } from '/utils/health-person-switcher.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import {
   computeVitalSeries, stepVitalAnchor, VITAL_METRICS, vitalMetric,
@@ -599,16 +600,20 @@ let _overviewScroll = 0;
 // Eintrag, der beim nächsten Zurück wieder im Bereich landet.
 let _pushedFromOverview = false;
 
+// TAFLA (2026-10-20): die Bereiche sind Zeilen der gruppierten Liste
+// (inset-list.css) - Zeichen in Tinte-2 im 28er-Slot, Titel bei x=56, darunter
+// der letzte Wert, rechts der Chevron des Push-Wegs. Kopf "Dziennik" als
+// Gruppenkopf 17/600 statt eines Abschnittstitels.
 function areaRowMarkup(area) {
   return `
     <li>
-      <a class="list-row health-area-row" href="${esc(area.route)}" data-md-id="${esc(area.id)}">
-        <span class="health-area-row__icon" aria-hidden="true"><i data-lucide="${esc(area.icon)}"></i></span>
-        <span class="list-row__main health-area-row__main">
-          <span class="list-row__name health-area-row__name">${esc(t(area.labelKey))}</span>
-          <span class="list-row__meta health-area-row__status" data-health-area-status="${esc(area.id)}"></span>
+      <a class="inset-row health-area-row" href="${esc(area.route)}" data-md-id="${esc(area.id)}">
+        <span class="inset-row__lead health-area-row__icon" aria-hidden="true"><i data-lucide="${esc(area.icon)}"></i></span>
+        <span class="inset-row__body health-area-row__main">
+          <span class="inset-row__title health-area-row__name">${esc(t(area.labelKey))}</span>
+          <span class="inset-row__meta health-area-row__status" data-health-area-status="${esc(area.id)}"></span>
         </span>
-        <i data-lucide="chevron-right" class="health-area-row__chevron" aria-hidden="true"></i>
+        <span class="inset-row__chevron health-area-row__chevron" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
       </a>
     </li>`;
 }
@@ -620,9 +625,9 @@ function areasNavMarkup() {
   // ein Link auf sich selbst.
   return `
     <nav class="health-areas" aria-label="${esc(t('nav.health'))}">
-      <ul class="row-divided health-areas__group health-areas__overview" role="list">${areaRowMarkup(overviewArea)}</ul>
-      <h2 class="health-areas__title u-section-title" id="health-areas-title">${esc(t('health.overview.areasTitle'))}</h2>
-      <ul class="row-divided health-areas__group health-areas__list" role="list" aria-labelledby="health-areas-title">${rest.map(areaRowMarkup).join('')}</ul>
+      <ul class="inset-card health-areas__group health-areas__overview" role="list">${areaRowMarkup(overviewArea)}</ul>
+      <h2 class="health-areas__title inset-group__head" id="health-areas-title">${esc(t('health.overview.areasTitle'))}</h2>
+      <ul class="inset-card health-areas__group health-areas__list" role="list" aria-labelledby="health-areas-title">${rest.map(areaRowMarkup).join('')}</ul>
     </nav>`;
 }
 
@@ -746,10 +751,6 @@ function prioritySkeletonMarkup() {
               <div class="skeleton-card health-priority-skeleton__card health-priority-skeleton__card--due">
                 <div class="skeleton skeleton-line skeleton-line--title"></div>
                 <div class="skeleton skeleton-line skeleton-line--medium"></div>
-                <div class="skeleton skeleton-line skeleton-line--full"></div>
-              </div>
-              <div class="skeleton-card health-priority-skeleton__card health-priority-skeleton__card--quick">
-                <div class="skeleton skeleton-line skeleton-line--title"></div>
                 <div class="skeleton skeleton-line skeleton-line--full"></div>
               </div>
             </div>`;
@@ -886,6 +887,18 @@ function medsStatusText(list) {
   return (list || []).filter((m) => m.active).map((m) => m.name).filter(Boolean).join(', ');
 }
 
+/** Die naechste Faelligkeit der Vorsorge: Art und wann. */
+function preventionStatusText(items) {
+  const item = (items || []).slice().sort((a, b) => a.days_left - b.days_left)[0];
+  if (!item) return '';
+  const when = item.days_left < 0
+    ? t('health.prevention.overdueDays', { count: Math.abs(item.days_left) })
+    : item.days_left === 0
+      ? t('health.prevention.dueToday')
+      : t('health.prevention.dueInDays', { count: item.days_left });
+  return `${item.type_name} · ${when}`;
+}
+
 /** Zyklustag und Phase - dieselbe Vorhersage wie Ring und Uebersicht. */
 function cycleStatusText(periods, settings, logs) {
   const prediction = predictCycle(periods || [], settings || {}, todayKey(), logs || []);
@@ -918,22 +931,15 @@ const AREA_STATUS = {
     return medsStatusText((await api.get('/health/medications')).data);
   },
   async prevention() {
-    const due = ((await api.get('/health/prevention/due')).data || []).slice().sort((a, b) => a.days_left - b.days_left);
-    const item = due[0];
-    if (!item) return '';
-    const when = item.days_left < 0
-      ? t('health.prevention.overdueDays', { count: Math.abs(item.days_left) })
-      : item.days_left === 0
-        ? t('health.prevention.dueToday')
-        : t('health.prevention.dueInDays', { count: item.days_left });
-    return `${item.type_name} · ${when}`;
+    return preventionStatusText((await api.get('/health/prevention/due')).data);
   },
   async labs() {
     const reports = (await api.get('/health/labs')).data || [];
     const latest = reports.reduce((best, r) => (!best || String(r.report_date) > String(best.report_date) ? r : best), null);
     if (!latest) return '';
     const sum = summarizeReport(latest);
-    const date = formatDate(String(latest.report_date).slice(0, 10));
+    // Tafla: ein Datum in einer Zeile ist "1 paź", nicht "01.10.2026".
+    const date = shortDayMonth(String(latest.report_date).slice(0, 10));
     return sum.hasAbnormal ? `${date} · ${t('health.labs.abnormalBadge', { count: sum.abnormal })}` : date;
   },
   async activity() {
@@ -941,7 +947,7 @@ const AREA_STATUS = {
     const latest = rows.reduce((best, r) => (!best || String(r.performed_at) > String(best.performed_at) ? r : best), null);
     if (!latest) return '';
     const preset = activityType(latest.type);
-    return `${preset ? t(preset.labelKey) : latest.type} · ${formatDate(String(latest.performed_at).slice(0, 10))}`;
+    return `${preset ? t(preset.labelKey) : latest.type} · ${shortDayMonth(String(latest.performed_at).slice(0, 10))}`;
   },
   async nutrition() {
     const summary = (await api.get('/health/nutrition/summary')).data;
@@ -956,7 +962,7 @@ const AREA_STATUS = {
 // ein zweites Mal zu holen. Gemessen: ohne das kostete ein Aufruf der
 // Gesundheit 24 statt 14 API-Anfragen, und eine Folge harter Neuladungen lief
 // ins Anfragelimit des Servers (300/min).
-const OVERVIEW_DERIVED = new Set(['vitals', 'meds', 'cycle']);
+const OVERVIEW_DERIVED = new Set(['vitals', 'meds', 'cycle', 'prevention']);
 
 // Jeder Seitenaufbau zaehlt weiter: eine Antwort aus einem verlassenen
 // Aufbau schreibt nicht in die Liste des neuen.
@@ -990,6 +996,7 @@ function applyOverviewStatuses() {
   if (!_statusesRequested || !overview.loaded || overview.error || overview.personId !== overview.meId) return false;
   setAreaStatus('vitals', vitalsStatusText(overview.vitals));
   setAreaStatus('meds', medsStatusText(overview.meds));
+  setAreaStatus('prevention', preventionStatusText(overview.preventionDue));
   if (cycleEnabled) setAreaStatus('cycle', cycleStatusText(overview.cyclePeriods, overview.cycleSettings, overview.cycleLogs));
   return true;
 }
@@ -1110,7 +1117,7 @@ export async function render(container, ctx = {}) {
       </header>
       <div class="split-view health-split">
         <div class="split-view__list page-scrollport health-browse">
-          <!-- Telefon-Uebersicht: Person, Heute faellig und Schnell erfassen
+          <!-- Telefon-Uebersicht: Person und der Tag (Dziś, Zapasy, Wizyty)
                VOR der Bereichsliste (health-hoist.js, R14 P3). Die h2 steht
                vor dem Umzugsziel, nicht darin: die Karten bringen ihre h3 mit,
                ohne sie folgten sie direkt auf das h1. -->
@@ -1346,17 +1353,17 @@ function renderVitalsShell() {
  * Nachzuegler-Muster gemessen hat.
  */
 function wirePersonSwitcher(view, onSwitch) {
-  const menuId = view.root.querySelector('.health-person-switcher__trigger')?.getAttribute('popovertarget');
+  const menuId = view.root.querySelector('.health-person-switcher__trigger')?.getAttribute('popovertarget')
+    ?? view.root.querySelector('.health-person-seg')?.id;
   view.root.querySelectorAll('.health-person-switcher [data-person-id]').forEach((item) =>
     item.addEventListener('click', async () => {
       const id = Number(item.dataset.personId);
       if (id === view.personId) return;
       view.personId = id;
       await onSwitch();
-      // Die neue Pille steht womoeglich schon im Kopf (health-hoist.js):
-      // ueber ihr Menue finden, nicht nur im Panel.
-      (view.root.querySelector('.health-person-switcher__trigger')
-        ?? (menuId ? document.querySelector(`[popovertarget="${menuId}"]`) : null))?.focus();
+      // Die neue Pille (oder das neue Segment) steht womoeglich schon im Kopf
+      // (health-hoist.js): ueber die Menue-Id finden, nicht nur im Panel.
+      personSwitcherFocusTarget(view.root, menuId)?.focus();
     }));
 }
 
@@ -6309,6 +6316,7 @@ const overview = {
   members: [],
   vitals: [],
   meds: [],
+  preventionDue: [],
   schedulesByMed: {},
   logsByMed: {},
   // Zyklus-Kachel - dieselben drei Ressourcen wie der Zyklus-Tab
@@ -6396,9 +6404,12 @@ async function loadOverview() {
   // weiter dieselbe Regel wie oben - sie waehlt nur noch, welche Abrufe in der
   // Welle stehen. Ein Fehler bei den Einstellungen bleibt folgenlos (leere
   // Einstellungen), jeder andere bricht das Laden ab wie vorher.
-  const [vRes, mRes, cpRes, clRes, cycleSettings] = await Promise.all([
+  const [vRes, mRes, pRes, cpRes, clRes, cycleSettings] = await Promise.all([
     api.get(`/health/vitals${query}`),
     api.get(`/health/medications${query}`),
+    // Wizyty (Tafla): die Vorsorge, die ansteht - dieselbe Liste, aus der die
+    // Zeile "Profilaktyka" ihren Status liest.
+    api.get(`/health/prevention/due${query}`),
     cycleEnabled ? api.get(`/health/cycle/periods${query}`) : empty,
     cycleEnabled ? api.get(`/health/cycle/logs${query}`) : empty,
     cycleEnabled && ownView
@@ -6407,6 +6418,7 @@ async function loadOverview() {
   ]);
   overview.vitals = vRes.data || [];
   overview.meds = mRes.data || [];
+  overview.preventionDue = pRes.data || [];
   overview.schedulesByMed = {};
   overview.logsByMed = {};
   overview.cyclePeriods = cpRes.data || [];
@@ -6511,7 +6523,7 @@ function renderOverviewShell() {
  * Kopf (`healthToolsHtml`, `openHealthExport`) - auf jeder Breite.
  */
 function overviewGridMarkup({ phone = isPhone() } = {}) {
-  const due = overviewCard('calendar-check', 'health.overview.dueToday.title', overviewDueMarkup(), 'due');
+  const due = overviewTodayMarkup();
   const quick = canEditFor(overview.personId, overview.meId)
     ? overviewCard('plus-circle', 'health.overview.quick.title', quickCaptureMarkup(), 'quick') : '';
   const vitalsCard = overviewCard('activity', 'health.overview.vitals.title', overviewVitalsMarkup(), 'vitals', { action: 'ov-go-vitals' });
@@ -6536,35 +6548,16 @@ function overviewGridMarkup({ phone = isPhone() } = {}) {
     </div>`;
   }
 
-  // Titel und Markup zusammen: die Zeile nennt, was hinter ihr liegt.
-  const rest = [prn, adherence, cycleTile, reminders].filter(Boolean);
-
-  /* TELEFON: KERNWERTE ZUERST, DER REST HINTER EINER ZEILE (R16). Die Wurzel
-   * des Moduls IST dort die Uebersicht - "Heute faellig" und "Schnell
-   * erfassen" stehen vor der Bereichsliste (health-hoist.js), alles andere
-   * hing als 1627px lange Kartenfolge darunter. Jetzt folgen der Bereichsliste
-   * die Vitalwerte (zwei Kennzahlen, der Titel fuehrt zu allen) und EINE
-   * Zeile, die den Rest aufklappt und nennt, was sie haelt. Die Reihenfolge im
-   * Baum ist die im Bild, damit der Fokus dem Auge folgt. */
-  const open = overview.moreExpanded;
+  /* TELEFON (Tafla, 2026-10-20): DIE UEBERSICHT IST DER TAG. Vor der
+   * Bereichsliste stehen Dziś, Zapasy und Wizyty (health-hoist.js), danach
+   * nur noch die Bereiche - jede Zeile mit ihrem letzten Wert. Die Karten, die
+   * hier noch folgten (zwei Vitalwerte, "Alle Werte anzeigen" mit Einnahme-
+   * treue, Bedarf, Zyklus und Erinnerungen), wiederholten die Bereichszeilen
+   * oder wohnen in ihrem Bereich (Leki, Pomiary, Cykl). Schnell erfassen ist
+   * gegangen: der Weg zum Anlegen ist der Bereich und das + der Shell. */
   return `
     <div class="health-overview__grid">
       ${due}
-      ${quick}
-      ${vitalsCard}
-      <div class="row-divided health-vitals__more-list health-overview__more-list">
-        <button type="button" class="health-vitals__more-row health-overview__more-toggle"
-                aria-expanded="${open ? 'true' : 'false'}" aria-controls="health-overview-more">
-          <span class="health-vitals__more-text">
-            <span class="health-vitals__more-title">${esc(t('health.overview.moreTitle'))}</span>
-            <span class="health-vitals__more-names">${esc(rest.map((card) => card.title).join(', '))}</span>
-          </span>
-          <i data-lucide="chevron-down" class="icon-sm health-vitals__more-chevron" aria-hidden="true"></i>
-        </button>
-      </div>
-      <div class="health-overview__more" id="health-overview-more"${open ? '' : ' hidden'}>
-        ${rest.map((card) => card.html).join('')}
-      </div>
     </div>`;
 }
 
@@ -6686,34 +6679,178 @@ function overviewCycleTileMarkup() {
     </button>`;
 }
 
-// --- Heute fällig (identische Logik wie dueTodayMarkup im Meds-Tab) ---
+// --- Heute (Tafla, 2026-10-20): Dosen, Zapasy, Wizyty ---
+//
+// DER TAG ALS EINE LISTE MIT KREISEN (Artboard Zdrowie). Die Dosen von heute
+// stehen als 64er-Zeilen in einer gruppierten Karte: links der Kreis (ein
+// Tipp = genommen, noch ein Tipp = zurueck, wie auf Dziś), Titel das Praeparat,
+// darunter die Notiz oder Dosis und nach der Einnahme ihre Uhrzeit; rechts die
+// geplante Zeit, solange sie offen ist. "Pominięcie" steht im Bereich Leki -
+// die Uebersicht hat EINE Handlung je Zeile. Darunter, nur wenn es etwas zu
+// sagen gibt: "Zapasy" (Bestand unter der Meldegrenze) und "Wizyty" (Vorsorge,
+// deren Erinnerungsfenster offen ist), dann der Datenschutz-Satz.
+
+/** "Dziś 1 z 2": die Dosen von heute und wie viele davon genommen sind. */
+function overviewTodayDoses() {
+  const today = todayKey();
+  return computeDueDoses(overviewAllSchedules(), { from: today, to: today }).map((dose) => ({
+    dose,
+    med: overview.meds.find((m) => m.id === dose.medicationId),
+    log: overviewFindLog(dose),
+  }));
+}
 
 function overviewDueMarkup() {
-  const today = todayKey();
-  const due = computeDueDoses(overviewAllSchedules(), { from: today, to: today });
-  if (!due.length) {
+  const rows = overviewTodayDoses();
+  if (!rows.length) {
     return emptyHintHTML(t('health.meds.dueToday.empty'));
   }
   const own = canEditFor(overview.personId, overview.meId);
-  const rows = due.map((dose) => {
-    const med = overview.meds.find((m) => m.id === dose.medicationId);
-    return overviewDueRowMarkup(dose, med, overviewFindLog(dose), own);
-  }).join('');
-  return `<ul class="health-meds__due-list">${rows}</ul>`;
+  return `<ul class="inset-card health-overview__due-list">${rows.map(({ dose, med, log }) => overviewDueRowMarkup(dose, med, log, own)).join('')}</ul>`;
+}
+
+/** Der Kreis vor einer Dosis: Knopf mit Recht, sonst ein stilles Zeichen. */
+function doseCheckMarkup(dose, log, name, own) {
+  const done = log?.status === 'taken';
+  const ring = '<span class="health-check__ring"><i data-lucide="check" aria-hidden="true"></i></span>';
+  if (!own) {
+    return `<span class="health-check health-check--static${done ? ' health-check--done' : ''}" aria-hidden="true">${ring}</span>`;
+  }
+  const data = `data-med-id="${esc(dose.medicationId)}" data-schedule-id="${esc(dose.scheduleId ?? '')}" data-scheduled-at="${esc(dose.scheduledAt)}" data-log-id="${esc(log?.id ?? '')}" data-dose="${esc(dose.dose_qty ?? '')}" data-done="${done ? '1' : '0'}"`;
+  const label = done ? t('health.overview.untakeNamed', { name }) : t('health.meds.takeNamed', { name });
+  return `<button type="button" class="health-check${done ? ' health-check--done' : ''}" ${OVERVIEW_DOSE_HOOKS.take} ${data} aria-pressed="${done ? 'true' : 'false'}" aria-label="${esc(label)}">${ring}</button>`;
 }
 
 function overviewDueRowMarkup(dose, med, log, own) {
   const name = med ? med.name : '';
-  const doseText = dose.dose_qty != null ? ` · ${t('health.meds.doseQty', { count: fmtNum(dose.dose_qty) })}` : '';
-  // Dieselbe rechte Seite wie im Medikamente-Tab, aus DEMSELBEN Renderer:
-  // hier fehlten einmal Klasse und Label-Span, und der Fix von dort erreichte
-  // diese Zeile nicht (Critique 2026-08-13).
+  // Ein zurueckgenommener Eintrag steht wieder auf "pending" - offen wie ohne.
+  const status = log?.status === 'pending' ? null : log?.status;
+  const note = med?.note || med?.dosage_text || '';
+  const doseText = dose.dose_qty != null ? t('health.meds.doseQty', { count: fmtNum(dose.dose_qty) }) : '';
+  let meta;
+  if (status === 'taken') {
+    meta = [note, log.taken_at ? t('health.overview.takenAt', { time: formatTime(log.taken_at) }) : t('health.meds.status.taken')];
+  } else if (status === 'skipped') {
+    meta = [note, t('health.meds.status.skipped').toLocaleLowerCase(getLocale())];
+  } else {
+    meta = [note, doseText];
+  }
+  // Ohne Recht sagt die rechte Seite den Zustand als Wort (#1265): "steht aus".
+  let trail = '';
+  if (!status) {
+    trail = own
+      ? `<span class="inset-row__value">${esc(dose.time)}</span>`
+      : `<span class="health-dose__status">${esc(t('health.meds.status.pending'))}</span>`;
+  }
   return `
-    <li class="list-row health-dose">
-      <span class="health-dose__time">${esc(dose.time)}</span>
-      <span class="list-row__name health-dose__name">${esc(name)}${esc(doseText)}</span>
-      ${doseActionsMarkup(dose, log, name, own, OVERVIEW_DOSE_HOOKS)}
+    <li class="inset-row health-ov-dose${status ? ' inset-row--quiet' : ''}">
+      ${doseCheckMarkup(dose, log, name, own)}
+      <span class="inset-row__body">
+        <span class="inset-row__title health-dose__name">${esc(name)}</span>
+        <span class="inset-row__meta">${esc(meta.filter(Boolean).join(' · '))}</span>
+      </span>
+      ${trail ? `<span class="inset-row__trail">${trail}</span>` : ''}
     </li>`;
+}
+
+/** Wie lange der Bestand reicht: Bestand durch die Tagesdosis der Plaene. */
+function stockLastsUntil(med) {
+  const daily = (overview.schedulesByMed[med.id] || [])
+    .filter((sch) => sch.active !== 0)
+    .reduce((sum, sch) => sum + (Number(sch.dose_qty) || 1) * ((sch.days_mask == null ? WEEKDAY_COUNT : daysMaskToIndices(sch.days_mask).length) / WEEKDAY_COUNT), 0);
+  const stock = Number(med.stock_qty);
+  if (!(daily > 0) || !Number.isFinite(stock) || stock <= 0) return '';
+  return addLocalDays(todayKey(), Math.floor(stock / daily));
+}
+
+/** "Zapasy": nur Praeparate unter ihrer Meldegrenze (oder leer). */
+function overviewStockMarkup() {
+  const low = overview.meds.filter((m) => m.active && refillState(m).below);
+  if (!low.length) return '';
+  const rows = low.map((med) => {
+    const rf = refillState(med);
+    const amount = `${fmtNum(rf.stock)}${med.stock_unit ? ` ${med.stock_unit}` : ''}`;
+    const until = rf.level === 'out' ? '' : stockLastsUntil(med);
+    const meta = [t('health.overview.stockLeft', { amount }), until ? t('health.overview.stockUntil', { date: shortDayMonth(until) }) : ''];
+    // Die Gruppe "Zapasy" steht nur, wenn etwas zur Neige geht - "kończy się"
+    // an jeder Zeile wiederholte ihren Kopf. Das Wort steht nur, wenn nichts
+    // mehr da ist (spec Status pill: nie die ganze Liste hinunter).
+    const pill = rf.level === 'out'
+      ? `<span class="status-pill status-pill--danger">${esc(t('health.overview.stockOut'))}</span>`
+      : '';
+    return `
+      <li>
+        <a class="inset-row" href="/health/meds" data-ov-nav>
+          <span class="inset-row__lead"><i data-lucide="pill" aria-hidden="true"></i></span>
+          <span class="inset-row__body">
+            <span class="inset-row__title">${esc(med.name)}</span>
+            <span class="inset-row__meta">${esc(meta.filter(Boolean).join(' · '))}</span>
+          </span>
+          ${pill ? `<span class="inset-row__trail">${pill}</span>` : ''}
+        </a>
+      </li>`;
+  }).join('');
+  return overviewGroupMarkup('health-ov-stock', t('health.overview.stockTitle'), '', `<ul class="inset-card">${rows}</ul>`);
+}
+
+/** Der Zustand einer Faelligkeit als Wort - nur wenn sie draengt (Status pill). */
+function visitPill(daysLeft) {
+  if (daysLeft < 0) return `<span class="status-pill status-pill--danger">${esc(t('health.overview.pillOverdue'))}</span>`;
+  if (daysLeft === 0) return `<span class="status-pill status-pill--warning">${esc(t('health.overview.pillToday'))}</span>`;
+  if (daysLeft === 1) return `<span class="status-pill status-pill--warning">${esc(t('health.overview.pillTomorrow'))}</span>`;
+  if (daysLeft <= 3) return `<span class="status-pill status-pill--warning">${esc(t('health.overview.pillInDays', { count: daysLeft }))}</span>`;
+  return '';
+}
+
+/** "Wizyty": Vorsorge, deren Erinnerungsfenster offen ist (oder ueberfaellig). */
+function overviewVisitsMarkup() {
+  const due = (overview.preventionDue || [])
+    .filter((item) => item.days_left <= (item.reminder_offset_days ?? 30))
+    .sort((a, b) => a.days_left - b.days_left)
+    .slice(0, 3);
+  if (!due.length) return '';
+  const allCheckups = due.every((item) => item.kind !== 'vaccination');
+  const rows = due.map((item) => {
+    const pill = visitPill(item.days_left);
+    return `
+      <li>
+        <a class="inset-row" href="/health/prevention" data-ov-nav>
+          <span class="inset-row__lead"><i data-lucide="${item.kind === 'vaccination' ? 'syringe' : 'calendar'}" aria-hidden="true"></i></span>
+          <span class="inset-row__body">
+            <span class="inset-row__title">${esc(item.type_name)}</span>
+            <span class="inset-row__meta">${esc(t('health.overview.dueOn', { date: shortDayMonth(item.due_on) }))}</span>
+          </span>
+          ${pill ? `<span class="inset-row__trail">${pill}</span>` : ''}
+        </a>
+      </li>`;
+  }).join('');
+  return overviewGroupMarkup('health-ov-visits', t(allCheckups ? 'health.overview.visitsTitle' : 'health.tabs.prevention'), '', `<ul class="inset-card">${rows}</ul>`);
+}
+
+/** Eine Gruppe: Kopf 17/600 (+ Zahl), darunter die Karte. */
+function overviewGroupMarkup(id, title, count, body) {
+  return `
+      <div class="inset-group health-overview__group" role="group" aria-labelledby="${id}">
+        <h3 class="inset-group__head health-overview__card-title" id="${id}">${esc(title)}${count ? `<span class="inset-group__count">${esc(count)}</span>` : ''}</h3>
+        ${body}
+      </div>`;
+}
+
+/**
+ * Die Heute-Gruppe der Uebersicht (Telefon: vor der Bereichsliste, Desktop:
+ * oben im Raster). Ein Knoten, ein Umzug (health-hoist.js, Teil `due`).
+ */
+function overviewTodayMarkup() {
+  const rows = overviewTodayDoses();
+  const taken = rows.filter(({ log }) => log?.status === 'taken').length;
+  const count = rows.length ? t('health.overview.doneOf', { done: fmtNum(taken), total: fmtNum(rows.length) }) : '';
+  return `
+    <section class="health-overview__card health-overview__card--due" aria-labelledby="health-ov-today">
+      ${overviewGroupMarkup('health-ov-today', t('health.overview.todayTitle'), count, overviewDueMarkup())}
+      ${overviewStockMarkup()}
+      ${overviewVisitsMarkup()}
+      <p class="inset-group__foot health-overview__privacy"><i data-lucide="lock" aria-hidden="true"></i><span>${esc(t('health.overview.aiPrivacy'))}</span></p>
+    </section>`;
 }
 
 async function handleOverviewDose(btn, action) {
@@ -6724,11 +6861,33 @@ async function handleOverviewDose(btn, action) {
   const scheduleId = btn.dataset.scheduleId ? Number(btn.dataset.scheduleId) : null;
   const scheduledAt = btn.dataset.scheduledAt || null;
   const dose = btn.dataset.dose !== '' ? Number(btn.dataset.dose) : null;
+  const med = overview.meds.find((m) => m.id === medId);
+  const name = med?.name ?? '';
+  // Der Bestand geht mit der Dosis: genommen zieht ab, zurueck legt wieder hin.
+  const moveStock = async (sign) => {
+    if (dose == null || !Number.isFinite(dose) || !med || med.stock_qty == null) return;
+    const next = Math.max(0, Number(med.stock_qty) + sign * dose);
+    await api.patch(`/health/medications/${medId}`, { stock_qty: next });
+    med.stock_qty = next;
+  };
+  // Der Kreis antwortet sofort (wie auf Dziś); scheitert die Anfrage, geht er zurueck.
+  const toggles = action === 'take' || action === 'untake';
+  const paint = (checked) => {
+    btn.classList.toggle('health-check--done', checked);
+    btn.setAttribute('aria-pressed', checked ? 'true' : 'false');
+  };
+  if (toggles) paint(action === 'take');
 
   setDoseBusy(medId, true);
+  let touchedLog = logId;
   try {
-    if (logId) {
+    if (action === 'untake') {
+      if (!logId) throw new Error('no log to undo');
+      await api.patch(`/health/logs/${logId}`, { status: 'pending' });
+      await moveStock(+1);
+    } else if (logId) {
       await api.post(`/health/logs/${logId}/${action}`, {});
+      if (action === 'take') await moveStock(-1);
     } else {
       const body = { status: action === 'take' ? 'taken' : 'skipped' };
       if (scheduledAt) body.scheduled_at = scheduledAt;
@@ -6739,22 +6898,36 @@ async function handleOverviewDose(btn, action) {
       // war das im Protokoll; seit ein Medikament Plan UND Bedarf haben kann,
       // rechnet auch der Countdown daraus - und zwar zwei Stunden daneben.
       if (action === 'take') body.taken_at = toLocalStamp();
-      await api.post(`/health/medications/${medId}/logs`, body);
+      const res = await api.post(`/health/medications/${medId}/logs`, body);
+      touchedLog = res?.data?.id ?? null;
+      if (action === 'take') await moveStock(-1);
     }
 
-    if (action === 'take' && dose != null && Number.isFinite(dose)) {
-      const med = overview.meds.find((m) => m.id === medId);
-      if (med && med.stock_qty != null) {
-        const next = Math.max(0, Number(med.stock_qty) - dose);
-        await api.patch(`/health/medications/${medId}`, { stock_qty: next });
-      }
-    }
-
-    window.yuvomi?.showToast(t('health.meds.doseSaved'), 'success');
     await reloadMedViews();
     setDoseBusy(medId, false);
+    if (toggles && touchedLog) {
+      // Tafla: der dunkle Toast nennt, was geschah, und nimmt es mit "Cofnij" zurueck.
+      const undo = async () => {
+        try {
+          if (action === 'take') {
+            await api.patch(`/health/logs/${touchedLog}`, { status: 'pending' });
+            await moveStock(+1);
+          } else {
+            await api.post(`/health/logs/${touchedLog}/take`, {});
+            await moveStock(-1);
+          }
+          await reloadMedViews();
+        } catch (err) {
+          reportError(err, 'health.meds.doseError', reloadMedViews, { fromDialog: false });
+        }
+      };
+      window.yuvomi?.showToast(t(action === 'take' ? 'health.overview.toastTaken' : 'health.overview.toastUntaken', { name }), 'default', 5000, undo);
+    } else {
+      window.yuvomi?.showToast(t('health.meds.doseSaved'), 'success');
+    }
   } catch (err) {
     console.error('[Health] overview dose error:', err);
+    if (toggles) paint(action !== 'take');
     setDoseBusy(medId, false);
     reportError(err, 'health.meds.doseError', reloadMedViews, { fromDialog: false });
   }
@@ -6979,7 +7152,7 @@ function wireOverview() {
 
   if (!readOnly()) {
     overview.root.querySelectorAll('[data-ov-dose-take]').forEach((btn) =>
-      btn.addEventListener('click', () => handleOverviewDose(btn, 'take')));
+      btn.addEventListener('click', () => handleOverviewDose(btn, btn.dataset.done === '1' ? 'untake' : 'take')));
     overview.root.querySelectorAll('[data-ov-dose-skip]').forEach((btn) =>
       btn.addEventListener('click', () => handleOverviewDose(btn, 'skip')));
   }
@@ -6998,6 +7171,14 @@ function wireOverview() {
   }
   overview.root.querySelector('[data-action="ov-go-meds"]')
     ?.addEventListener('click', () => window.yuvomi?.navigate('/health/meds'));
+  // Zapasy und Wizyty sind Wege in ihren Bereich - eine Soft-Navigation wie
+  // die Bereichszeilen, kein Neuladen der Seite.
+  overview.root.querySelectorAll('a[data-ov-nav]').forEach((link) =>
+    link.addEventListener('click', (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button > 0) return;
+      event.preventDefault();
+      window.yuvomi?.navigate(link.getAttribute('href'));
+    }));
   overview.root.querySelector('[data-action="ov-go-cycle"]')
     ?.addEventListener('click', () => window.yuvomi?.navigate('/health/cycle'));
   overview.root.querySelector('[data-action="ov-go-vitals"]')

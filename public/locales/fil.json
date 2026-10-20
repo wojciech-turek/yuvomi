@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Mga paparating na paalala",
                 "empty": "Wala nang dosis ngayong araw"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Bayolohikal na palatandaan",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "Header row lang ang laman ng file at walang regla.",
         "errorCycleImportTooManyRows": "Hanggang {{limit}} regla lang ang kaya ng isang import. Hatiin ang file.",
         "errorVitalImpossible": "Hindi posible ang halagang ito. Pakisuri ang inilagay mo.",
-        "errorVitalBpOrder": "Dapat mas mataas ang systolic kaysa sa diastolic."
+        "errorVitalBpOrder": "Dapat mas mataas ang systolic kaysa sa diastolic.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Koleksyon ng basura",

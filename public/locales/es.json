@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Próximos recordatorios",
                 "empty": "Hoy no hay más tomas"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Constantes",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "El archivo solo tiene la fila de encabezado y ningún periodo.",
         "errorCycleImportTooManyRows": "Una importación puede tener como máximo {{limit}} periodos. Divide el archivo.",
         "errorVitalImpossible": "Este valor no es posible. Revisa lo que has introducido.",
-        "errorVitalBpOrder": "El valor sistólico debe ser mayor que el diastólico."
+        "errorVitalBpOrder": "El valor sistólico debe ser mayor que el diastólico.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Recogida de basura",

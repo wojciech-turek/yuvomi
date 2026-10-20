@@ -531,9 +531,12 @@ test('R14 P3/P6: der Umzugsplan - Desktop Detailkopf, Bereich schmal Kopfzeile, 
   assert.deepEqual(hoistPlan({ split: true, overview: true, phone: false }), [{ part: 'person', slot: 'detail' }]);
   assert.deepEqual(hoistPlan({ split: false, overview: false, phone: true }), [{ part: 'person', slot: 'toolbar' }],
     'Bereichsseite: die Pille teilt die Zeile mit „‹ Gesundheit" statt eine eigene zu kosten');
+  // Tafla (2026-10-20): "Schnell erfassen" zieht nicht mehr mit - die
+  // Telefon-Uebersicht ist der Tag (Dziś, Zapasy, Wizyty in EINEM Teil `due`),
+  // angelegt wird im Bereich und ueber das + der Shell.
   assert.deepEqual(hoistPlan({ split: false, overview: true, phone: true }).map((p) => `${p.part}>${p.slot}`),
-    ['person>priority', 'banner>priority', 'due>priority', 'quick>priority'],
-    'Telefon-Uebersicht: Person, Hinweis, Heute faellig, Schnell erfassen stehen VOR der Bereichsliste');
+    ['person>priority', 'banner>priority', 'due>priority'],
+    'Telefon-Uebersicht: Person, Hinweis und der Tag stehen VOR der Bereichsliste');
   assert.deepEqual(hoistPlan({ split: false, overview: true, phone: false }), [], 'Tablet: das Raster bleibt, wie es ist');
 });
 
@@ -567,7 +570,8 @@ test('R14 P3/P6: der Umzug haengt verdrahtete Knoten um und bringt sie zurueck o
   const slots = { toolbar, detail, priority };
 
   applyHoistPlan(hoistPlan({ split: false, overview: true, phone: true }), { panel, slots });
-  assert.deepEqual(priority.children, [person, due, quick], 'in Planreihenfolge vor der Liste');
+  assert.deepEqual(priority.children, [person, due], 'in Planreihenfolge vor der Liste (Tafla: ohne Schnell erfassen)');
+  assert.equal(quick.parentElement, grid, 'Schnell erfassen bleibt im Raster (breit)');
   applyHoistPlan(hoistPlan({ split: true, overview: true, phone: false }), { panel, slots });
   assert.deepEqual(detail.children, [person], 'Desktop: die Pille steht im Detailkopf');
   assert.equal(priority.children.length, 0);
@@ -587,7 +591,9 @@ test('R14 P3/P6: Kopf, Streifen und Detailkopf stehen im Markup, die Karten sind
   assert.match(HEALTH_JS, /class="health-toolbar__person" data-health-person-slot/, 'Slot in der Zeile „‹ Gesundheit"');
   // Seit R18 folgt dem Umzugsziel sein Skelett (Geschwister, nicht Kind - siehe den R18-Test unten).
   assert.match(HEALTH_JS, /class="health-priority" data-health-priority><\/div>\s*\$\{prioritySkeletonMarkup\(\)\}\s*<\/section>\s*\$\{areasNavMarkup\(\)\}/, 'Streifen VOR der Bereichsliste');
-  assert.match(HEALTH_JS, /overviewCard\('calendar-check', 'health\.overview\.dueToday\.title', overviewDueMarkup\(\), 'due'\)/);
+  // Tafla: der Teil `due` ist der Tag (Dziś, Zapasy, Wizyty) - ein Traeger.
+  assert.match(HEALTH_JS, /const due = overviewTodayMarkup\(\);/);
+  assert.match(HEALTH_JS, /<section class="health-overview__card health-overview__card--due"/);
   assert.match(HEALTH_JS, /overviewCard\('plus-circle', 'health\.overview\.quick\.title', quickCaptureMarkup\(\), 'quick'\)/);
   assert.match(HEALTH_JS, /class="split-view__detail-head health-detail-head"/, 'Detailkopf wie die anderen Split-Views (A8 P2-2)');
   const { eachRule } = await import('./css-rules.js');
@@ -739,8 +745,9 @@ test('R18: die Heute-Region steht auf dem Telefon vom ersten Bild an - mit Skele
   //    beim ersten Abgleich fort, vor den Daten.
   const fn = HEALTH_JS.slice(HEALTH_JS.indexOf('function prioritySkeletonMarkup()'), HEALTH_JS.indexOf('function syncPriorityRegion()'));
   assert.match(fn, /class="health-priority-skeleton" data-health-priority-skeleton aria-hidden="true"/);
-  assert.match(fn, /health-priority-skeleton__pill[\s\S]*health-priority-skeleton__card--due[\s\S]*health-priority-skeleton__card--quick/,
-    'die Form dessen, was kommt: Pille, Heute faellig, Schnell erfassen');
+  assert.match(fn, /health-priority-skeleton__pill[\s\S]*health-priority-skeleton__card--due/,
+    'die Form dessen, was kommt: Personenwahl und der Tag');
+  assert.doesNotMatch(fn, /health-priority-skeleton__card--quick/, 'Tafla: Schnell erfassen kommt auf dem Telefon nicht mehr');
   assert.match(body('.health-priority-skeleton'), /display:\s*none/, 'ohne die Marke steht kein Skelett');
   const show = rules.find((r) => /\[data-health-priority-pending\]\s*>\s*\.health-priority:empty\s*~\s*\.health-priority-skeleton/.test(r.selector));
   assert.ok(show && /display:\s*flex/.test(show.body), 'es steht nur, solange die Region wartet UND ihr Ziel leer ist');

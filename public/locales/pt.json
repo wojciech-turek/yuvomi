@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Próximos lembretes",
                 "empty": "Sem mais tomas hoje"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Sinais vitais",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "O ficheiro tem só a linha de cabeçalho e nenhum período.",
         "errorCycleImportTooManyRows": "Uma importação pode ter no máximo {{limit}} períodos. Divide o ficheiro.",
         "errorVitalImpossible": "Este valor não é possível. Verifique o que introduziu.",
-        "errorVitalBpOrder": "O valor sistólico tem de ser superior ao diastólico."
+        "errorVitalBpOrder": "O valor sistólico tem de ser superior ao diastólico.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Recolha de lixo",

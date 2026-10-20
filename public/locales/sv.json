@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Nästa påminnelser",
                 "empty": "Inga fler intag idag"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitalvärden",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "Filen har bara en rubrikrad och ingen mens.",
         "errorCycleImportTooManyRows": "En import får innehålla högst {{limit}} menscykler. Dela upp filen.",
         "errorVitalImpossible": "Det här värdet är inte möjligt. Kontrollera det du skrev.",
-        "errorVitalBpOrder": "Det systoliska värdet måste vara högre än det diastoliska."
+        "errorVitalBpOrder": "Det systoliska värdet måste vara högre än det diastoliska.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Avfallshämtning",

@@ -4741,7 +4741,25 @@
             "reminders": {
                 "title": "Volgende herinneringen",
                 "empty": "Vandaag geen innames meer"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitale waarden",
@@ -5566,7 +5584,10 @@
         "errorCycleImportNoRows": "Het bestand bevat alleen een kopregel en geen menstruaties.",
         "errorCycleImportTooManyRows": "Eén import mag hoogstens {{limit}} menstruaties bevatten. Splits het bestand.",
         "errorVitalImpossible": "Deze waarde is niet mogelijk. Controleer je invoer.",
-        "errorVitalBpOrder": "De systolische waarde moet hoger zijn dan de diastolische."
+        "errorVitalBpOrder": "De systolische waarde moet hoger zijn dan de diastolische.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Afvalinzameling",

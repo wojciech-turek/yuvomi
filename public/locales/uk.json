@@ -4987,7 +4987,25 @@
             "reminders": {
                 "title": "Наступні нагадування",
                 "empty": "На сьогодні прийомів більше немає"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Показники",
@@ -5824,7 +5842,10 @@
         "errorCycleImportNoRows": "У файлі лише рядок заголовка і жодної менструації.",
         "errorCycleImportTooManyRows": "Один імпорт може містити не більше {{limit}} менструацій. Розділіть файл.",
         "errorVitalImpossible": "Таке значення неможливе. Перевірте введення.",
-        "errorVitalBpOrder": "Систолічне значення має бути більшим за діастолічне."
+        "errorVitalBpOrder": "Систолічне значення має бути більшим за діастолічне.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Вивезення сміття",
