@@ -102,3 +102,33 @@ test('PUT /preferences rejects a non-array mobile order', async () => {
     await close();
   }
 });
+
+/*
+ * Więcej (Tafla): the "Przypięte" tiles are chosen per person. `null` means
+ * "never chosen" (the page takes its default), an array is a choice - known
+ * tiles only, no doubles, at most four.
+ */
+test('more_pins is per person, normalized, and null until chosen', async () => {
+  get().prepare("DELETE FROM sync_config WHERE key LIKE 'more_pins:user:%' OR key = 'more_pins'").run();
+  const { baseUrl, close } = await startApp();
+  const put = (body) => fetch(`${baseUrl}/`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    assert.equal((await (await fetch(`${baseUrl}/`)).json()).data.more_pins, null);
+
+    const saved = await put({ more_pins: ['budget', 'nope', 'budget', 'notes', 'waste', 'health', 'documents'] });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).data.more_pins, ['budget', 'notes', 'waste', 'health']);
+
+    currentUserId = 2;
+    assert.equal((await (await fetch(`${baseUrl}/`)).json()).data.more_pins, null);
+    assert.deepEqual((await (await put({ more_pins: [] })).json()).data.more_pins, []);
+
+    currentUserId = 1;
+    assert.equal((await put({ more_pins: 'notes' })).status, 400);
+    assert.equal((await (await put({ more_pins: null })).json()).data.more_pins, null);
+  } finally {
+    await close();
+  }
+});
