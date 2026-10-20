@@ -6967,6 +6967,10 @@
         "wasteTonight": "dziś wieczorem · odbiór jutro",
         "weatherTomorrow": "jutro {{what}}",
         "customizeFilterTasks": "Które zadania",
-        "customizeFilterCalendar": "Które wydarzenia"
+        "customizeFilterCalendar": "Które wydarzenia",
+        "repeatDaily": "codziennie",
+        "repeatWeekly": "co tydzień",
+        "repeatMonthly": "co miesiąc",
+        "repeatYearly": "co rok"
     }
 }

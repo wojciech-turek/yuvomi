@@ -23,7 +23,6 @@ import { t, formatTime } from '/i18n.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { addLocalDays } from '/utils/date.js';
 import { todaySheetContext, collectSourceRows, TODAY_SHEET_SOURCES } from '/utils/today-sheet.js';
-import { describeRRule } from '/rrule-ui.js';
 
 /* Meals carry no clock time; these place them in the day. The dinner time is
  * also the one the Teraz card counts down to ("Kolacja za 19 min"). */
@@ -221,7 +220,7 @@ function taskRow(task, ctx) {
     pill,
     repeats: Boolean(task.is_recurring || task.recurrence_rule),
     // 'co tydzień' - the rhythm in words, as the task's own detail says it.
-    repeatLabel: task.recurrence_rule ? lowerFirst(describeRRule(task.recurrence_rule)) : '',
+    repeatLabel: repeatLabel(task.recurrence_rule),
     time: timed ? dueTime : '',
     timeLabel: timed ? formatTime(dueTime) : '',
     sortMin: timed ? minutesOf(dueTime) : NaN,
@@ -343,9 +342,17 @@ function sourceRow(row, ctx) {
   };
 }
 
-function lowerFirst(text) {
-  const s = String(text ?? '');
-  return s ? s[0].toLowerCase() + s.slice(1) : s;
+/* The rhythm in one word for the common rules ('co tydzień'); anything more
+ * elaborate keeps just the repeat glyph - the task's own detail spells it out
+ * (rrule-ui.js), which is too heavy to load with the start page. */
+const REPEAT_KEYS = { DAILY: 'today.repeatDaily', WEEKLY: 'today.repeatWeekly', MONTHLY: 'today.repeatMonthly', YEARLY: 'today.repeatYearly' };
+
+function repeatLabel(rule) {
+  const parts = Object.fromEntries(String(rule ?? '').replace(/^RRULE:/i, '').split(';')
+    .map((part) => part.split('=')).filter(([k, v]) => k && v).map(([k, v]) => [k.toUpperCase(), v.toUpperCase()]));
+  if (!REPEAT_KEYS[parts.FREQ] || (parts.INTERVAL && parts.INTERVAL !== '1')) return '';
+  if (parts.FREQ === 'WEEKLY' && parts.BYDAY && parts.BYDAY.includes(',')) return '';
+  return t(REPEAT_KEYS[parts.FREQ]);
 }
 
 /** First word of a display name ("Mariola Kowalska" -> "Mariola"). */

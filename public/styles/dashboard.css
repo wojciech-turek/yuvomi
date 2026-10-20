@@ -8032,18 +8032,18 @@ a.day-row__main {
 
 @media (prefers-reduced-motion: no-preference) {
   .day-check__ring {
-    transition: background-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+    transition: background-color var(--duration-sm) var(--ease-out), box-shadow var(--duration-sm) var(--ease-out);
   }
 
   .day-row__title {
-    transition: color 160ms var(--ease-out);
+    transition: color var(--duration-sm) var(--ease-out);
   }
 
   /* The tick is drawn, then one bloom - the row folds into "Wcześniej"
    * after the hold (pages/dashboard.js). */
   .day-row--ticking .day-check__ring svg {
     stroke-dasharray: 24;
-    animation: day-tick-draw 220ms var(--ease-out) 120ms both;
+    animation: day-tick-draw var(--duration-md) var(--ease-out) var(--duration-xs) both;
   }
 
   .day-row--ticking .day-check__ring::after {
@@ -8052,7 +8052,7 @@ a.day-row__main {
     inset: 0;
     border-radius: var(--radius-full);
     background: var(--color-accent-tint);
-    animation: day-tick-bloom 500ms var(--ease-out) both;
+    animation: day-tick-bloom var(--duration-2xl) var(--ease-out) both;
     z-index: -1;
   }
 }
@@ -8217,17 +8217,17 @@ a.day-row__main {
   padding-block-start: var(--space-2);
 }
 
-/* After an answer the card is one line naming what changed; it fades out
- * after three seconds (pages/dashboard.js removes it). */
-@media (prefers-reduced-motion: no-preference) {
-  .day-question--settled {
-    animation: day-question-fade 3s linear both;
-  }
+/* After an answer the card is one line naming what changed; after three
+ * seconds it fades and goes (pages/dashboard.js sets the class, then removes
+ * the card). */
+.day-question--leaving {
+  opacity: 0;
 }
 
-@keyframes day-question-fade {
-  0%, 85% { opacity: 1; }
-  100% { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .day-question--settled {
+    transition: opacity var(--duration-lg) var(--ease-out);
+  }
 }
 
 /* ── Preview tiles ("Kafelek podglądu") ─────────────────── */

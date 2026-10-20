@@ -7131,6 +7131,10 @@
         "shoppingItems_many": "{{count}} items",
         "shoppingItems_two": "{{count}} items",
         "customizeFilterTasks": "Which tasks",
-        "customizeFilterCalendar": "Which events"
+        "customizeFilterCalendar": "Which events",
+        "repeatDaily": "daily",
+        "repeatWeekly": "weekly",
+        "repeatMonthly": "monthly",
+        "repeatYearly": "yearly"
     }
 }

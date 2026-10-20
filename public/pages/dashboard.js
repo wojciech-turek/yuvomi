@@ -7542,7 +7542,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
       todayUi.question = null;
       rebuildDashboard(widgetConfig);
       if (todayUi.questionSettled) {
-        // The line naming what changed stays three seconds, then goes.
+        // The line naming what changed stays three seconds, fades, then goes.
+        setTimeout(() => container.querySelector('.day-question--settled')?.classList.add('day-question--leaving'), 2750);
         setTimeout(() => {
           todayUi.questionSettled = null;
           if (!signal.aborted) rebuildDashboard(widgetConfig);
