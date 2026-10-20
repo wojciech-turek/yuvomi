@@ -10233,9 +10233,11 @@ test('contacts keep one primary call action and disclose the rest through a labe
   const contactsCss = read('../public/styles/contacts.css');
 
   // Genau eine stets sichtbare Primäraktion pro Zeile: Anrufen (falls Telefon da).
-  // Nutzt die geteilte .row-action-Grammatik mit semantischer Erfolgs-Färbung
-  // (grün) über row-action--success (Audit F1).
-  assert.match(contactsPage, /href="tel:[\s\S]*class="row-action row-action--success"/);
+  // Nutzt die geteilte .row-action-Grammatik (Audit F1). Tafla (2026-10-20):
+  // ein NEUTRALER Geisterkreis (36 Fill auf 44 Treffer, Glyphe in Tinte) statt
+  // der gruenen Erfolgs-Faerbung - Gruen ist ein Status, keine Handlung.
+  assert.match(contactsPage, /href="tel:[\s\S]*class="row-action contact-item__call"/);
+  assert.doesNotMatch(contactsPage, /row-action--success/, 'kein Status-Gruen an einer Handlung');
   // Sekundäraktionen leben im „Mehr"-Menü als BESCHRIFTETE Einträge (Icon + Text),
   // identisch auf Desktop und Mobile. Seit R16 (Re-Critique 2026-09-28) ist es
   // das geteilte Menü aus utils/popover-menu.js - Popover, Pfeiltasten und
@@ -21982,8 +21984,10 @@ test('Notizen: eine Kartenhaut fuer angepinnt und nicht angepinnt; Loeschen im M
 
 test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und Notizen', () => {
   const contacts = read('../public/pages/contacts.js');
-  assert.match(contacts, /<h2 class="list-group__title contact-group__header">\$\{esc\(catLabel\(cat\)\)\}<\/h2>/,
-    'Kontakte: der geteilte Gruppenkopf, ohne Kategorie-Zeichen davor');
+  // Tafla (2026-10-20): Kontakte gruppieren nach BUCHSTABEN wie das Telefonbuch;
+  // der Kopf ist der Buchstabe als Footnote 13/600 Tinte-2, ohne Zeichen.
+  assert.match(contacts, /<h2 class="contact-group__header">\$\{esc\(letter\)\}<\/h2>/,
+    'Kontakte: der Buchstabe als Gruppenkopf, ohne Kategorie-Zeichen davor');
   const notes = read('../public/pages/notes.js');
   // Tafla: the group head is the inset list's 17/600 head with its count.
   assert.match(notes, /<h2 class="inset-group__head notes-group__title" id="\$\{id\}">/, 'Notizen: „Przypięte" ist ein Gruppenkopf, kein Abschnittstitel');

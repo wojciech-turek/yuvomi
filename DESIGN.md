@@ -3899,6 +3899,15 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   row only. On touch the row's "⋯" leaves the picture (tap opens the editor, delete is in it,
   swipe stays). Guards moved: R19 module-tone countdown -> pill on the nearest, carrier ->
   `.inset-card` per month, D6 -> "no ⋯ on touch, the row itself opens".
+- **Kontakty**: alphabetical sections like the phone book ("A", "B" as Footnote 13/600 ink-2,
+  sticky), one inset card per letter, 64 rows with a 28 initial disc (neutral without an account,
+  person colour for a household member), the meta line says who the person is to us (position ·
+  company, else the note's first line, else the category; the number only when nothing else is
+  known), and a NEUTRAL 36 call ghost circle (no status green on an action). The category stays as
+  the chip filter and in the detail. "Pod ręką" (favourites) is omitted: contacts have no
+  favourite flag in the data. On touch the "⋯" leaves the picture (mail, map, export, delete are
+  in the opened contact). Guards moved: call "row-action--success" -> neutral `contact-item__call`,
+  D8 category head -> letter head.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

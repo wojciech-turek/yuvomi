@@ -79,10 +79,8 @@
  * Liste muss seine eigene Leserichtung behalten. */
 .birthday-item__name {
   min-width: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-regular);
-  /* Hoechstens zwei Zeilen, dann Ellipse: die Titelregel (typography.css,
+  /* Groesse und Gewicht (17/400) kommen aus der Zeilentitel-Rolle
+   * (typography.css). Hoechstens zwei Zeilen, dann Ellipse: die Titelregel (typography.css,
    * R19). Die Torte steht als Zeichen im Textfluss hinter dem Namen. */
   unicode-bidi: plaintext;
 }
