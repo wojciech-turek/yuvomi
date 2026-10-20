@@ -5179,16 +5179,19 @@ test('der Einkaufs-Kopf trägt mobil keine unbeschrifteten Aktionen', () => {
   assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /\.list-header__import-btn span\s*\{\s*display:\s*none/,
     '„Aus dem Essensplan" darf mobil nicht auf ein nacktes Icon reduziert werden - es steht mit Label im Menü');
 
-  // Quick-Add als Disclosure, und der FAB meldet den Zustand.
-  assert.match(css, /@media \(hover: none\)[\s\S]{0,600}\.quick-add\s*\{\s*display:\s*none/,
-    'das Quick-Add muss auf Touch eingeklappt sein');
-  assert.match(css, /\.shopping-page--adding \.quick-add\s*\{\s*display:\s*block/,
-    'der FAB muss es aufklappen können');
-  assert.match(page, /fab\.setAttribute\('aria-expanded', String\(open\)\)/,
-    'der FAB muss seinen Aufklapp-Zustand melden');
-  assert.match(page, /fab\.removeAttribute\('aria-expanded'\)/,
-    'auf Zeigergeräten klappt der FAB nichts auf und darf keinen Zustand behaupten');
-  assert.match(page, /e\.key !== 'Escape'/, 'Esc muss das Quick-Add wieder schließen');
+  // TAFLA (2026-10-19): das Quick-Add ist keine Disclosure mehr. Es steht als
+  // angedockte Leiste ueber der Tab-Kapsel und ist immer da (Rollout Schritt 5:
+  // "Delete the '@media (hover: none) .quick-add { display:none }' rule") -
+  // auf dem Telefon ist es der Weg, wie die Liste waechst, im Daumenbereich.
+  // Der FAB klappt nichts mehr auf und behauptet deshalb auch keinen Zustand;
+  // Esc laesst das Feld los (und mit ihm die Tastatur).
+  assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /\.quick-add\s*\{[^}]*display:\s*none/,
+    'das Quick-Add wird nirgends mehr eingeklappt');
+  assert.doesNotMatch(page, /shopping-page--adding|aria-expanded', String\(open\)/,
+    'kein Aufklapp-Zustand mehr am FAB - es gibt nichts aufzuklappen');
+  assert.match(css, /@media \(max-width: 1023px\)\s*\{\s*\.shopping-addbar\s*\{[^}]*position:\s*fixed/,
+    'am Telefon dockt die Leiste unten an');
+  assert.match(page, /e\.key !== 'Escape'/, 'Esc laesst das Feld los');
 
   // Der dritte Add-Weg entfällt, wo das Eingabefeld selbst sichtbar ist.
   assert.match(css, /@media \(hover: hover\)[\s\S]{0,400}\.empty-state__cta\s*\{\s*display:\s*none/,
@@ -6960,20 +6963,28 @@ test('phase 3 Tasks bulk actions appear only in select mode, in the shell pill (
   assert.doesNotMatch(tasksCss, /\.bulk-actions-bar|\.task-bulk-checkbox/);
 });
 
+// TAFLA (2026-10-19): the add bar is ONE row on the phone - name (with the
+// plus glyph), quantity, sender - and with a pointer the aisle field joins
+// it. Name, quantity, aisle and sender stay separate controls (this test's
+// promise); the name no longer takes a row of its own, because the bar is a
+// 52pt capsule docked above the tab capsule.
 test('phase 3 mobile Shopping quick-add separates name, quantity, category, and add controls', () => {
   const shoppingPage = read('../public/pages/shopping.js');
   const shoppingCss = read('../public/styles/shopping.css');
 
   assert.match(shoppingPage, /<div class="quick-add__input-wrap">[\s\S]*id="item-name-input"[\s\S]*id="autocomplete-dropdown" hidden[\s\S]*<\/div>\s*<input class="quick-add__qty"/);
-  // Die Aufteilung von Menge und Kategorie (#1372: 2:3) pinnt der Guard darunter
-  // als Regel - hier nur die Zusage dieses Tests: drei Spuren, der Knopf am Ende.
+  // Die Aufteilung (#1372) pinnt der Guard darunter als Regel - hier nur die
+  // Zusage dieses Tests: flexible Spuren, der Knopf am Ende.
   assert.match(
     shoppingCss,
     /\.quick-add__form\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*\d+fr\)\s*minmax\(0,\s*\d+fr\)\s*var\(--target-base\)/
   );
-  assert.match(shoppingCss, /\.quick-add__input-wrap\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1/);
-  assert.match(shoppingCss, /\.quick-add__qty\s*\{[\s\S]*position:\s*static[\s\S]*min-height:\s*var\(--target-base\)/);
-  assert.match(shoppingCss, /\.quick-add__cat\s*\{[\s\S]*min-width:\s*0[\s\S]*min-height:\s*var\(--target-base\)/);
+  assert.match(shoppingCss, /\.quick-add__qty\s*\{[\s\S]*position:\s*static/);
+  assert.match(shoppingCss, /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*var\(--target-base\)/,
+    'alle drei Felder tragen das volle Ziel und duerfen schrumpfen');
+  // The aisle field shows with a pointer; on the phone the guess while typing
+  // chooses the aisle and the fresh row offers "zmień".
+  assert.match(shoppingCss, /@media \(min-width: 1024px\)\s*\{[\s\S]*?\.quick-add__cat\s*\{\s*display:\s*block/);
 });
 
 /**
@@ -7033,6 +7044,12 @@ test('#1372 quick-add fields stretch with their row, and no translated field get
     .filter(({ value }) => value);
   assert.ok(templates.length >= 2, `erwartet: eine Basis- und eine Desktop-Aufteilung, gefunden ${templates.length}`);
 
+  // TAFLA (2026-10-19): the phone bar carries no aisle track (name, quantity,
+  // sender - the aisle comes from the guess while typing); the pointer row
+  // keeps all three fields. The rule stays: every field track flexible, the
+  // button the only fixed one, and the wider word gets the wider track -
+  // the aisle over the quantity where both stand, the name over the
+  // quantity on the phone.
   for (const { at, value } of templates) {
     const list = tracks(value);
     assert.equal(list.at(-1), 'var(--target-base)', `${at}: die letzte Spur ist der Knopf`);
@@ -7041,8 +7058,13 @@ test('#1372 quick-add fields stretch with their row, and no translated field get
       assert.match(track, FLEX_TRACK,
         `${at}: Spur „${track}" ist nicht flexibel - ein uebersetzter Platzhalter kennt keine feste Breite (#1372)`);
     }
-    const [qty, cat] = fields.slice(-2).map(frOf);
-    assert.ok(cat > qty, `${at}: die Kategorie (${cat}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
+    if (fields.length >= 3) {
+      const [qty, cat] = fields.slice(-2).map(frOf);
+      assert.ok(cat > qty, `${at}: die Kategorie (${cat}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
+    } else {
+      const [name, qty] = fields.map(frOf);
+      assert.ok(name > qty, `${at}: der Name (${name}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
+    }
   }
 
   for (const cls of ['.quick-add__qty', '.quick-add__cat']) {
@@ -21898,23 +21920,29 @@ test('D3: die Unternavigation der Module ist Text, keine Icon-Reiter', () => {
 });
 
 // D5 (Critique 2026-10-16): Quick-Add im Einkauf ist die benannte Ausnahme vom
-// FAB - und seine Felder tragen die Kapsel-Haut der Suche statt Kante auf
-// Feldgrund. EINE Regel fuer beide, keine zweite Fassung in shopping.css.
-test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche', () => {
+// FAB - und es traegt die Kapsel-Haut der Suche statt Kante auf Feldgrund.
+//
+// TAFLA (2026-10-19): die Haut sitzt EINMAL um die ganze Zeile - die angedockte
+// Leiste `.shopping-addbar` ist die Kapsel (Ecke, Flaeche, Kante, Fokus wie die
+// Suche), ihre Felder darin sind nackt. Je Feld eine eigene Kapsel waere in der
+// Leiste eine Kapsel in der Kapsel. Die Zusage bleibt: eine Haut, keine zweite
+// Fassung - deshalb fuehrt page-search.css die Felder auch nicht mehr.
+test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche - einmal, um die Leiste', () => {
   const search = [...eachRule(read('../public/styles/page-search.css'))].filter((r) => !r.at.length);
   const skin = search.find((r) => r.selector.split(',').map((x) => x.trim()).includes('.page-search__input')
     && /border-radius:\s*var\(--radius-full\)/.test(r.body));
   assert.ok(skin && /background-color:\s*var\(--color-fill-field\)/.test(skin.body), 'Vorbedingung: die Suchhaut steht in page-search.css');
-  const sel = skin.selector.split(',').map((x) => x.trim());
-  for (const cls of ['.quick-add__input', '.quick-add__qty', '.quick-add__cat']) {
-    assert.ok(sel.includes(cls), `${cls} teilt die Haut der Suche`);
-    const focus = search.find((r) => r.selector.split(',').map((x) => x.trim()).includes(`${cls}:focus`));
-    assert.ok(focus, `${cls}: der Fokus kommt mit der Haut`);
-  }
+  assert.ok(!search.some((r) => /\.quick-add__/.test(r.selector)), 'die Felder der Leiste tragen keine zweite, eigene Haut');
+
   const shopping = [...eachRule(read('../public/styles/shopping.css'))];
-  for (const r of shopping.filter((x) => /\.quick-add__(?:input|qty|cat)\b/.test(x.selector))) {
-    assert.doesNotMatch(r.body, /(?:^|[;\s{])(?:border(?:-radius)?|background-color)\s*:/, `${r.selector}: keine eigene Kante/Ecke/Flaeche mehr`);
-  }
+  const bar = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar');
+  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-full\)/, 'die Leiste ist die Kapsel');
+  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-fill, var\(--color-fill-field\)\)/, 'mit der Flaeche der Suche');
+  const focus = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar:focus-within');
+  assert.match(focus?.body ?? '', /border-color:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut - wie an der Suche');
+  const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat/.test(r.selector));
+  assert.match(bare?.body ?? '', /border:\s*0/, 'die Felder sind nackt');
+  assert.match(bare?.body ?? '', /background-color:\s*transparent/, 'die Felder sind nackt');
 });
 
 // Critique 2026-10-16 (Jordan): das Mehr-Blatt zeigte 16 Ziele als flaches

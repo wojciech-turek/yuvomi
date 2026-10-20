@@ -757,7 +757,20 @@
         "itemStateOpen": "não marcado",
         "predictionsLabel": "Probably running low:",
         "predictionsWhy": "You buy this about every {{every}} days; last time {{since}} days ago.",
-        "predictionsHide": "Hide for today"
+        "predictionsHide": "Hide for today",
+        "newListShort": "New list",
+        "chooseListLabel": "List {{name}}, change list",
+        "progress": "{{done}} of {{total}}",
+        "progressLabel": "{{done}} of {{total}} in the basket",
+        "predictionAddLabel": "Add to the list: {{name}}",
+        "allBought": "Everything bought",
+        "allBoughtMeta": "{{count}} items from {{name}}",
+        "allBoughtMeta_one": "{{count}} item from {{name}}",
+        "moveToPantry": "Move {{count}} to the pantry",
+        "clearList": "Clear the list",
+        "changeAisle": "{{category}} · change",
+        "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
+        "usualQuantity": "usually {{quantity}}"
     },
     "meals": {
         "ingredientCount_one": "{{count}} ingrediente",

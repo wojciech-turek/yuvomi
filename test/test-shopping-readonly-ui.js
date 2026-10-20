@@ -353,9 +353,13 @@ test('Leerzustaende bei `read`: nur der Zustand, keine Einladung und kein Knopf'
   });
   const ohneListe = { lists: [], activeList: null, activeListId: null, items: [] };
   const leereListe = { items: [] };
+  // TAFLA (2026-10-19): die leere Liste traegt auch mit Schreibrecht keinen
+  // Knopf mehr ("Pusty stan": kein CTA) - die angedockte Leiste darunter ist
+  // auf jedem Geraet der Weg hinein. Dass sie bei `read` fehlt, prueft
+  // "Listeninhalt bei `read`: kein Quick-Add" oben.
   for (const [name, patch, texte] of [
     ['keine Liste', ohneListe, ['shopping.noListsDescription', 'shopping.noListsHint', 'shopping.newListButton']],
-    ['leere Liste', leereListe, ['shopping.emptyListDescription', 'emptyHint.shopping', 'shopping.emptyAction']],
+    ['leere Liste', leereListe, ['shopping.emptyListDescription', 'emptyHint.shopping']],
   ]) {
     const lesend = await leer(LESEN, patch);
     const schreibend = await leer(SCHREIBEN, patch);
@@ -392,7 +396,10 @@ test('Leere Liste: der Vorrats-Hinweis steht nur, wo „In den Vorrat" auch steh
     ['pantry: none', await leer({ shopping: 'write', pantry: 'none' })],
   ]) {
     assert.ok(!html.includes('emptyHint.shopping'), `${name}: der Hinweis nennt einen Weg, den es hier nicht gibt`);
-    assert.ok(html.includes('shopping.emptyAction'), `${name}: das Anlegen bleibt`);
+    // Das Anlegen bleibt - ueber die angedockte Leiste (Tafla), nicht mehr als
+    // Knopf im Leerzustand; die Beschreibung, die dorthin zeigt, steht weiter.
+    assert.ok(html.includes('shopping.emptyListDescription'), `${name}: das Anlegen bleibt`);
+    assert.ok(!html.includes('shopping.emptyAction'), `${name}: kein zweiter Weg zum selben Feld`);
   }
 });
 
