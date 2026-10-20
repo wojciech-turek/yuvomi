@@ -3908,6 +3908,17 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   favourite flag in the data. On touch the "⋯" leaves the picture (mail, map, export, delete are
   in the opened contact). Guards moved: call "row-action--success" -> neutral `contact-item__call`,
   D8 category head -> letter head.
+- **Szukaj** (the palette, router.js + layout.css): plain paper instead of the violet wash (desktop:
+  the warm `--color-scrim`), a radius-12 field with the magnifier and "Anuluj" as a plain word
+  beside it (grid places it there; in the DOM it stays after the results, so Tab still goes field
+  -> Anuluj). Results are grouped by module with a count ("Urodziny 1", 17/600 + 17/400), every
+  row carries its module's bare glyph in the 28 slot (no seal disc, no module tone; title at
+  x=56), rows are 48/64 with hairlines inset to the title, the matched words are 600 in the same
+  ink (no marker). The keyboard preselection tint shows only at a pointer. Empty state: the
+  "Ostatnio otwierane" places (rows with glyphs) and the "Przejdź do" tiles as quiet white tiles.
+  Recent SEARCH TERMS are deliberately not stored: the R19 security review keeps only places,
+  never a name or a data hit, on the device. Guard change: four `NOT_A_FIELD` exceptions removed
+  (those rules no longer draw a card edge).
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

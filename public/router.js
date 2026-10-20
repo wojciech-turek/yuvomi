@@ -2232,16 +2232,19 @@ function renderAppShell(container) {
   searchInput.id = 'search-input';
   searchInput.placeholder = t('search.placeholder');
   searchInput.setAttribute('aria-label', t('search.title'));
+  // TAFLA (2026-10-20): "Anuluj" as a plain word beside the field, like the
+  // iOS search bar - the x circle read as "clear the field".
   const searchClose = document.createElement('button');
   searchClose.className = 'search-overlay__close';
   searchClose.id = 'search-close';
   searchClose.type = 'button';
-  searchClose.setAttribute('aria-label', t('common.close'));
-  const closeIcon = document.createElement('i');
-  closeIcon.dataset.lucide = 'x';
-  closeIcon.className = 'search-overlay__close-icon';
-  closeIcon.setAttribute('aria-hidden', 'true');
-  searchClose.appendChild(closeIcon);
+  searchClose.textContent = t('common.cancel');
+  // Die Lupe im Feld (Tafla): sie sagt, was das Feld ist, bevor man tippt.
+  const searchGlyph = document.createElement('i');
+  searchGlyph.dataset.lucide = 'search';
+  searchGlyph.className = 'search-overlay__glyph';
+  searchGlyph.setAttribute('aria-hidden', 'true');
+  searchHeader.appendChild(searchGlyph);
   searchHeader.appendChild(searchInput);
   const searchResults = document.createElement('div');
   searchResults.className = 'search-overlay__results';
@@ -3817,6 +3820,14 @@ function paletteRowsSection(label, items, { title, meta, go }, onClose) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'search-result';
+    if (item.module && MODULE_ICON[item.module]) {
+      btn.classList.add('search-result--sealed');
+      const glyph = document.createElement('span');
+      glyph.className = 'search-result__seal search-result__glyph';
+      glyph.setAttribute('aria-hidden', 'true');
+      glyph.appendChild(moduleIconEl(MODULE_ICON[item.module]));
+      btn.appendChild(glyph);
+    }
     const titleEl = document.createElement('span');
     titleEl.className = 'search-result__title';
     titleEl.textContent = title(item);
@@ -3919,26 +3930,23 @@ function renderSearchResults(container, data, onClose, { local = { places: [], a
     return preset ? t(preset.labelKey) : item.title;
   };
 
-  // Die Suche ist DIE Mischstelle der App (Herkunfts-Regel, Block 2): jede
-  // Sektion traegt das Markensiegel ihres Herkunftsmoduls im Kopf; innerhalb
-  // der Sektion ist die Herkunft damit selbstverstaendlich, die Zeilen
-  // bleiben siegelfrei. Die Zeilen selbst liegen in GENAU EINEM Traeger
-  // (Zeilenlisten-Regel) statt als Karte pro Treffer.
+  // Die Suche ist DIE Mischstelle der App. TAFLA (2026-10-20): die Gruppe
+  // nennt sich mit Wort und Zahl ("Urodziny 1", 17/600 + 17/400 ausserhalb
+  // der Karte), jede Zeile traegt das blanke Zeichen ihres Moduls im 28er-
+  // Platz (Tinte-2, keine Siegelscheibe, kein Modulton) - so steht der Titel
+  // jeder Zeile bei x=56, und gemischte Gruppen ("Przejdź do") sagen je Zeile,
+  // wohin sie fuehren. Die Zeilen liegen in GENAU EINEM Traeger.
   function makeSection(label, sealModule, items, { route, title, meta, go, remember = false, rowSeals = false }) {
     if (!items.length) return;
     const section = document.createElement('div');
     section.className = 'search-section';
     const heading = document.createElement('h3');
     heading.className = 'search-section__heading';
-    if (sealModule) {
-      const sealEl = document.createElement('span');
-      sealEl.className = 'module-seal module-seal--sm';
-      sealEl.setAttribute('aria-hidden', 'true');
-      sealEl.style.setProperty('--seal-accent', moduleAccentVar(sealModule));
-      sealEl.appendChild(moduleIconEl(MODULE_ICON[sealModule]));
-      heading.appendChild(sealEl);
-    }
     heading.appendChild(document.createTextNode(label));
+    const count = document.createElement('span');
+    count.className = 'search-section__count';
+    count.textContent = String(items.length);
+    heading.appendChild(count);
     section.appendChild(heading);
     const rows = document.createElement('div');
     rows.className = 'search-section__rows';
@@ -3946,18 +3954,18 @@ function renderSearchResults(container, data, onClose, { local = { places: [], a
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'search-result';
-      // DAS SIEGEL AN DER ZEILE, WO DIE SEKTION GEMISCHT IST (R20): unter
-      // „Gehe zu" und „Neu anlegen" stehen Ziele aus vielen Modulen, und ohne
-      // Siegel sah „Neuer Termin" aus wie „Neue Aufgabe". Datensektionen
-      // tragen es weiter im Kopf - dort ist die Herkunft eine.
-      if (rowSeals && item.module && MODULE_ICON[item.module]) {
+      // DAS ZEICHEN AN JEDER ZEILE (R20, Tafla): unter „Gehe zu" und „Neu
+      // anlegen" stehen Ziele aus vielen Modulen - ohne Zeichen sah „Neuer
+      // Termin" aus wie „Neue Aufgabe" -, und in den Datengruppen setzt es den
+      // Titel auf dieselbe Kante.
+      const glyphModule = rowSeals ? item.module : sealModule;
+      if (glyphModule && MODULE_ICON[glyphModule]) {
         btn.classList.add('search-result--sealed');
-        const sealEl = document.createElement('span');
-        sealEl.className = 'module-seal module-seal--sm search-result__seal';
-        sealEl.setAttribute('aria-hidden', 'true');
-        sealEl.style.setProperty('--seal-accent', moduleAccentVar(item.module));
-        sealEl.appendChild(moduleIconEl(MODULE_ICON[item.module]));
-        btn.appendChild(sealEl);
+        const glyph = document.createElement('span');
+        glyph.className = 'search-result__seal search-result__glyph';
+        glyph.setAttribute('aria-hidden', 'true');
+        glyph.appendChild(moduleIconEl(MODULE_ICON[glyphModule]));
+        btn.appendChild(glyph);
       }
       const titleEl = document.createElement('span');
       titleEl.className = 'search-result__title';

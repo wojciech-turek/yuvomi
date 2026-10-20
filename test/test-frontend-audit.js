@@ -8363,13 +8363,9 @@ test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrun
     // Kalendersuche ist entfallen, das Feld steht im Kopf.
     // Die Icon-Form der Kopfsuche stand hier bis Tafla (2026-10-19): sie ist
     // seither ein Geisterkreis ohne jede Kante (--fill im 44er Ziel).
-    ['.search-overlay__header', 'Kopf des Such-Overlays; Trennlinie zur Trefferliste'],
     // `.search-overlay__panel` stand hier bis R18 (2026-10-07): die Palette traegt
     // seither die Glaskante der schwebenden Flaechen (--glass-border), keine
     // Kartenkante mehr.
-    ['.search-result + .search-result', 'Trennlinie zwischen zwei Treffern'],
-    ['.search-scope', 'Bereichs-Chip in der Suche; ein Knopf, kein Feld'],
-    ['.search-scope:hover', 'Hover desselben Chips'],
     ['.rrule-fields', 'Gruppe der Wiederholungsfelder; Gruppenkante, die Felder darin tragen ihre eigene'],
     ['.schedule-day-row-fields', 'Gruppe der Felder eines Wochentags; linke Gruppenlinie'],
     ['.note-category-selection', 'Chip der gewaehlten Notiz-Kategorie; Knopf, kein Feld'],

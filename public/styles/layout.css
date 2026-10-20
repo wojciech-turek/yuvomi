@@ -1813,10 +1813,10 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 .search-overlay {
   position: fixed;
   inset: 0;
-  /* Leichte Tönung statt randlosem Weiß: die Suche gehört sichtbar zur
-   * App-Fläche (Audit A1-14). Sie sucht app-weit, nicht im Modul - deshalb
-   * traegt sie die Stimme (Eine-Stimme-Regel). */
-  background-color: color-mix(in srgb, var(--color-accent) var(--tint-wash), var(--color-bg));
+  /* Das Papier der App (Tafla, 2026-10-20): die Suche gehoert zur App-Flaeche
+   * (Audit A1-14). Die violette Waschung von frueher faerbte eine ganze Flaeche
+   * in der Stimme, die Tafla nur dem gibt, was man tun kann. */
+  background-color: var(--color-bg);
   z-index: calc(var(--z-nav) + 3);
   display: flex;
   flex-direction: column;
@@ -1844,29 +1844,48 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   position: relative;
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  /* Feld und "Anuluj" teilen die erste Zeile; die Treffer fuellen die zweite.
+   * Im DOM steht "Anuluj" HINTER den Treffern (Tab-Weg: Feld, dann Anuluj) -
+   * das Raster setzt es sichtbar neben das Feld. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .search-overlay__header {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  /* Rechts Raum für den absolut positionierten Schließen-Button. */
-  padding: calc(var(--space-3) + var(--safe-area-inset-top))
-           calc(var(--space-4) + var(--target-base) + var(--space-3))
-           var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border-subtle);
+  padding: calc(var(--space-2) + var(--safe-area-inset-top)) 0 var(--space-2) var(--space-4);
 }
 
 /* Flaeche, Kante, Form und Fokus teilt die globale Suche mit dem EINEN
  * Suchfeld (page-search.css, Komponenten-Kanon 2026-09-26); hier steht nur,
  * was ihr eigen ist: sie fuellt die Kopfzeile und hat keine Lupe davor. */
-.search-overlay__input {
+/* Tafla: das Suchfeld der Palette ist eckig wie jedes Feld (Radius 12, Fill),
+ * mit der Lupe vorn; 17px, damit iOS beim Fokus nicht zoomt. Die Haut teilt
+ * es mit page-search.css (laedt spaeter) - die Form setzt deshalb der Kopf. */
+.search-overlay__header .search-overlay__input {
   flex: 1;
   height: var(--target-lg);
-  padding: 0 var(--space-4);
-  font-size: var(--text-base);
+  padding: 0 var(--space-4) 0 calc(var(--space-3) + 20px + var(--space-2));
+  border-radius: var(--radius-sm);
+  font-size: var(--type-body);
+}
+
+.search-overlay__glyph {
+  position: absolute;
+  inset-inline-start: calc(var(--space-4) + var(--space-3));
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin-top: calc(var(--safe-area-inset-top) / 2);
+  transform: translateY(-50%);
+  color: var(--color-text-secondary);
+  pointer-events: none;
 }
 
 /* EIN X IM PALETTENKOPF (R14, A1 P3-3): das native Leeren des Suchfelds stand
@@ -1878,32 +1897,35 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   display: none;
 }
 
+/* "Anuluj" als Wort neben dem Feld (Tafla): Body 600 in der Stimme, volle
+ * Zielhoehe. Liegt im DOM hinter den Treffern (Audit A1-14). */
 .search-overlay__close {
-  /* Liegt im DOM hinter den Treffern (Tab-Weg: Suchfeld -> Ergebnisse,
-   * Audit A1-14), visuell aber weiterhin oben rechts im Kopfbereich. */
-  position: absolute;
-  top: calc(var(--space-3) + var(--safe-area-inset-top));
-  right: var(--space-4);
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  margin-top: calc(var(--space-2) + var(--safe-area-inset-top) + (var(--target-lg) - var(--target-base)) / 2);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--target-base);
+  min-width: var(--target-base);
   height: var(--target-base);
-  border-radius: var(--radius-full);
+  padding: 0 var(--space-4);
   border: none;
-  background: var(--color-surface-elevated);
-  color: var(--color-text-secondary);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
   cursor: pointer;
-  flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
 
-.search-overlay__close-icon {
-  width: var(--space-5);
-  height: var(--space-5);
-}
-
 .search-overlay__results {
+  grid-column: 1 / -1;
+  grid-row: 2;
   flex: 1;
   /* Verschachteltes Flex-Kind (overlay > panel > results): ohne min-height:0
    * greift overflow-y nicht und lange Trefferlisten würden im höhen-gedeckelten
@@ -1917,23 +1939,34 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * geteilte .empty-state--compact (emptyHintEl, utils/empty-state.js). */
 
 .search-section {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.search-result__title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-result__meta {
   display: block;
-  margin-top: var(--space-0h);
-  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
 }
 
 /* Der getroffene Wortteil (Re-Critique 2026-09-28, A1 P2-2): wie Spotlight
- * fett in der Primaertinte statt als gelber Marker - er zeigt den Grund des
- * Treffers, ohne die Liste zu einer Textmarker-Seite zu machen. In der
- * Zweitzeile hebt die Primaertinte ihn zusaetzlich vom Sekundaertext ab. */
+ * 600 statt eines gelben Markers - er zeigt den Grund des Treffers, ohne die
+ * Liste zu einer Textmarker-Seite zu machen. Tafla: dieselbe Tinte wie der
+ * Text um ihn, nur das Gewicht spricht. */
 .search-result__hit {
   background: transparent;
-  color: var(--color-text-primary);
+  color: inherit;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1943,13 +1976,21 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * Grund, nie in ihm (Zeilenlisten-Regel). */
 .search-section__heading {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-4);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   letter-spacing: var(--tracking-normal);
-  margin-bottom: var(--space-2);
+}
+
+/* Tafla: die Zahl neben dem Gruppennamen, 17/400 Tinte-2. */
+.search-section__count {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
 }
 
 /* Zeilenlisten-Regel: eine Folge gleichartiger Treffer liegt in GENAU
@@ -1958,39 +1999,74 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 .search-section__rows {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
+/* Die Trefferzeile (Tafla): 48 einzeilig, 64 mit Zweitzeile, 0 16 Polster,
+ * Titel 17/400 Tinte; Haarlinien auf die Titelkante eingerueckt. */
 .search-result {
-  display: block;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: 100%;
-  text-align: left;
-  padding: var(--space-3);
+  min-height: 48px;
+  text-align: start;
+  padding: var(--space-2) var(--space-4);
   border: none;
   background: none;
   color: var(--color-text-primary);
-  font-size: var(--text-sm);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
   cursor: pointer;
   transition: background-color var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
 }
 
-.search-result + .search-result {
-  border-top: 1px solid var(--color-border-subtle);
+.search-result:has(.search-result__meta) {
+  min-height: 64px;
 }
 
-/* Zeile mit Modulsiegel (R20, „Gehe zu" und „Neu anlegen"): das Siegel steht
- * vor Titel und Zweitzeile und spannt ueber beide, wie in der Seitenleiste. */
+.search-result + .search-result::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: var(--space-4) 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  pointer-events: none;
+}
+
+.search-result--sealed + .search-result::before,
+.search-result + .search-result--sealed::before {
+  inset-inline-start: 56px;
+}
+
+/* Zeile mit Modulzeichen (R20; Tafla: das blanke Zeichen im 28er-Platz, der
+ * Titel bei x=56): das Zeichen steht vor Titel und Zweitzeile und spannt
+ * ueber beide. */
 .search-result--sealed {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   column-gap: var(--space-3);
   align-items: center;
+  align-content: center;
 }
 
 .search-result--sealed > .search-result__seal {
   grid-row: 1 / span 2;
+}
+
+.search-result__glyph {
+  display: flex;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.search-result__glyph svg {
+  width: 20px;
+  height: 20px;
 }
 
 .search-result--sealed > :not(.search-result__seal) {
@@ -2013,9 +2089,13 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * ausgewaehlte Zeile von Liste+Detail und die Aktiv-Pille der Seitenleiste -
  * "das ist gemeint". Im Kontrastmodus traegt ein Rahmen die Markierung, weil
  * dort keine Hintergrundfarbe durchkommt. */
-.search-result[aria-selected="true"],
-.search-scope[aria-selected="true"] {
-  background-color: color-mix(in srgb, var(--color-accent) var(--tint-state), var(--color-surface));
+/* Tafla: nur dort, wo eine Tastatur waehlt (am Zeiger); am Finger tippt man
+ * die Zeile selbst, und eine vorgewaehlte Flaeche waere ein Fleck ohne Sinn. */
+@media (hover: hover) {
+  .search-result[aria-selected="true"],
+  .search-scope[aria-selected="true"] {
+    background-color: var(--color-accent-tint);
+  }
 }
 
 .search-scope[aria-selected="true"] {
@@ -2046,17 +2126,20 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 .search-scope {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   /* Grid-Item: ohne min-width:0 sprengen lange Labels (andere Locales) die
    * Kachel statt umzubrechen. */
   min-width: 0;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-elevated);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
+  /* Tafla: weisse Kachel ohne Kante auf dem Papier, wie die Vorschaukacheln. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   color: var(--color-text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-regular);
   text-align: left;
   overflow-wrap: break-word;
   cursor: pointer;
@@ -2067,8 +2150,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 @media (hover: hover) {
   /* Wie .more-sheet__search: erhoehte Ruheflaeche, also die Stufe darueber. */
   .search-scope:hover {
-    background-color: var(--color-surface-elevated-hover);
-    border-color: var(--color-border);
+    background-color: var(--color-surface-hover);
   }
 }
 
@@ -2096,8 +2178,8 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * ersetzt zu werden). Kein Bottom-Slide: Ein-/Ausblenden über opacity. */
 @media (min-width: 768px) {
   .search-overlay {
-    /* Scrim statt Vollflächen-Tönung (gespiegelt aus .modal-overlay). */
-    background-color: color-mix(in srgb, var(--color-accent) var(--tint-wash), var(--color-overlay-glass));
+    /* Scrim statt Vollflaechen-Toenung (Tafla: der warme Scrim der Sheets). */
+    background-color: var(--color-scrim);
     backdrop-filter: var(--blur-xs) saturate(120%);
     -webkit-backdrop-filter: var(--blur-xs) saturate(120%);
     align-items: center;          /* Panel horizontal zentriert */
@@ -2151,7 +2233,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   }
 
   .search-overlay__close {
-    top: var(--space-3);
+    margin-top: calc(var(--space-3) + (var(--target-lg) - var(--target-base)) / 2);
   }
 
   .search-overlay__results {
