@@ -71,6 +71,7 @@ import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
 import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
 import { wireNoteCategoryOverflow } from '/utils/note-category-overflow.js';
 import { installPopoverMenus, popoverMenuHtml } from '/utils/popover-menu.js';
+import { availableCaptureKinds } from '/components/capture-sheet.js';
 import { nextRewardGoal } from '/utils/reward-goal.js';
 
 // Hält den AbortController des aktuellen FAB-Listeners - wird bei jedem render() erneuert.
@@ -354,7 +355,8 @@ function getOnboardingSteps() {
     { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
       target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
     { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
-      target: () => [...document.querySelectorAll('.page-fab')].find(isShownOnScreen) ?? null },
+      // Tafla: das globale + der Shell (Telefon) bzw. die Pille „Dodaj" im Kopf.
+      target: () => [...document.querySelectorAll('.capture-plus, .page-fab')].find(isShownOnScreen) ?? null },
   ];
 }
 
@@ -6391,39 +6393,22 @@ function wireWallExit(container, rerender, signal) {
 }
 
 // --------------------------------------------------------
-// FAB Speed-Dial
+// Erfassen (Tafla): das globale + ersetzt den Speed-Dial
 // --------------------------------------------------------
 
-/**
- * Der Speed-Dial bietet nur an, was der Betrachter auch ANLEGEN darf.
+/* DER SPEED-DIAL IST ENTFALLEN (Tafla, 2026-10-19; spec-navigation.txt).
  *
- * Die Liste stand bis #1208 ungefiltert da: wer Notizen auf `none` hatte, bekam
- * trotzdem „Notiz anlegen" angeboten und lief in ein 403. Aufgefallen ist es am
- * Wandtablett, wo ALLE vier Eintraege ins Leere fuehren - dessen Module stehen
- * samt und sonders auf `read`. Der Filter ist deshalb nicht am Display
- * aufgehaengt, sondern an der Frage, um die es geht: darf diese Route beschrieben
- * werden? Damit verschwindet derselbe tote Knopf auch fuer ein eingeschraenktes
- * Mitglied.
+ * Er bot vier Wege an (Aufgabe, Termin, Einkauf, Notiz), die je auf ihre Seite
+ * sprangen und dort das Formular oeffneten. Jetzt gibt es EIN Erfassen auf
+ * jeder Seite: am Telefon das abgesetzte + neben der Tab-Kapsel (Shell,
+ * components/capture-sheet.js) mit „Auto" vorgewaehlt - hier steht dafuer
+ * nichts mehr. Am Desktop bleibt die Pille im Kopf („Dodaj"), sie oeffnet
+ * dasselbe Blatt, und der Kurzbefehl `n` klickt sie (triggerPageFab).
  *
- * `navModuleAccess` und nicht `moduleAccess`: die Schluessel hier sind
- * NAVIGATIONS-Routen, und die Zuordnung auf den Rechte-Schluessel steht in
- * permissions.js (`/shopping` haengt etwa am Kuechen-Modul). Eine eigene
- * Uebersetzung hier waere die zweite Tabelle dafuer.
+ * Angeboten wird sie nur, wenn der Betrachter ueberhaupt etwas anlegen darf
+ * (#1208: am Wandtablett fuehrte jeder Eintrag ins Leere) - die Frage stellt
+ * das Blatt selbst (availableCaptureKinds: Modul an, Schreibrecht).
  */
-const FAB_ACTIONS = () => [
-  { route: '/tasks',    label: t('dashboard.fabTask'),     icon: 'check-square'   },
-  { route: '/calendar', label: t('dashboard.fabCalendar'), icon: 'calendar-plus'  },
-  { route: '/shopping', label: t('dashboard.fabShopping'), icon: 'shopping-cart'  },
-  { route: '/notes',    label: t('dashboard.fabNote'),     icon: 'sticky-note'    },
-].filter((a) => navModuleAccess(a.route.slice(1)) === 'write');
-
-/* AM DESKTOP IST ANLEGEN EINE ANGEDOCKTE PILLE (R14, A8 P3-2). Die Uebersicht
- * war der einzige schwebende FAB am Desktop - 48x48 unten rechts, nur
- * "Schnellaktionen" als Name -, waehrend jedes andere Modul "+ Nomen" im Kopf
- * traegt. Dieselbe Grenze wie das Andocken der Shell (router.js,
- * isDesktopViewport); dieselbe Form (`page-fab--docked`, schon so gerendert,
- * damit ein Neuaufbau des Kopfs nicht auf das Andocken warten muss), dasselbe
- * Menue als Popover. Der Kurzbefehl `n` klickt den `.page-fab` und oeffnet es. */
 const DESKTOP_STAGE_QUERY = '(min-width: 1024px)';
 
 function onDesktopStage() {
@@ -6435,98 +6420,27 @@ function onDesktopStage() {
 }
 
 function renderNewPill() {
-  const actions = FAB_ACTIONS();
-  if (!actions.length) return '';
-  const items = actions.map((a) => `
-          <button type="button" role="menuitem" class="popover-menu__item" data-new-route="${esc(a.route)}">
-            <i data-lucide="${esc(a.icon)}" class="icon-md" aria-hidden="true"></i>
-            <span>${esc(a.label)}</span>
-          </button>`).join('');
-  const label = t('dashboard.fabNew');
+  if (!availableCaptureKinds().length) return '';
+  const label = t('capture.add');
   return `
         <div class="page-toolbar__actions dashboard-overview__new">
-          <button type="button" class="page-fab btn btn--primary page-fab--docked popover-menu__trigger" id="fab-main"
-                  data-dock-label="${esc(label)}" aria-label="${esc(t('nav.quickActions'))}" title="${esc(t('nav.quickActions'))} (n)"
-                  aria-keyshortcuts="n" aria-haspopup="menu" aria-expanded="false" popovertarget="dashboard-new-menu">
+          <button type="button" class="page-fab btn btn--primary page-fab--docked" id="fab-main"
+                  data-dock-label="${esc(label)}" data-action-label="${esc(t('capture.title'))}" title="${esc(t('capture.title'))} (n)"
+                  aria-keyshortcuts="n" aria-haspopup="dialog">
             <i data-lucide="plus" aria-hidden="true"></i><span class="toolbar-new-btn__label">${esc(label)}</span>
           </button>
-          <div class="popover-menu" id="dashboard-new-menu" popover role="menu">${items}
-          </div>
         </div>`;
 }
 
-/** Die Menuepunkte der Pille: dieselben Wege wie der Speed-Dial (FAB_NEW_BTN). */
-function wireNewMenu(container, signal) {
-  installPopoverMenus(container);
-  container.addEventListener('click', async (event) => {
-    const item = event.target.closest?.('[data-new-route]');
-    if (!item) return;
-    item.closest('[popover]')?.hidePopover?.();
-    const route = item.dataset.newRoute;
-    await window.yuvomi.navigate(route);
-    const btnSelector = FAB_NEW_BTN[route];
-    if (btnSelector) document.querySelector(btnSelector)?.click();
-  }, { signal });
-}
-
-// "Neu"-Button-Selector auf der jeweiligen Zielseite
-const FAB_NEW_BTN = {
-  '/tasks':    '#btn-new-task',
-  '/calendar': '#fab-new-event',
-  '/shopping': '#fab-new-item',
-  '/notes':    '#fab-new-note',
-};
-
+/** Am Telefon traegt die Uebersicht keinen eigenen FAB mehr - das + der Shell. */
 function renderFab() {
-  // Am Desktop steht Anlegen als Pille im Kopf (renderNewPill).
-  if (onDesktopStage()) return '';
-  const actions = FAB_ACTIONS();
-  // Kein Eintrag, kein Knopf. Ein Speed-Dial, der sich auf eine leere Liste
-  // oeffnet, waere die schlechtere Haelfte des Fehlers, den der Filter behebt.
-  if (!actions.length) return '';
-  const actionsHtml = actions.map((a) => `
-    <button type="button" class="fab-action" data-route="${a.route}" tabindex="-1"
-            aria-label="${a.label}">
-      <span class="fab-action__label">${a.label}</span>
-      <span class="fab-action__btn" aria-hidden="true">
-        <i data-lucide="${a.icon}" aria-hidden="true"></i>
-      </span>
-    </button>
-  `).join('');
-
-  // Der Knopf ist ein `.page-fab` und die Gruppe eine `.page-fab-group`: nur so
-  // hebt `adoptPageFab()` den Speed-Dial nach dem Rendern aus dem Scrollport in
-  // die Shell-Layer (#634). Backdrop und Aktionsliste liegen deshalb IN der
-  // Gruppe - sie sind beide `position: fixed`/`absolute` und müssen den Umzug
-  // mitmachen, sonst bleibt die halbe Mechanik im Scroller zurück.
-  return `
-    <div class="page-fab-group" id="fab-group">
-      <div class="fab-backdrop" id="fab-backdrop"></div>
-      <button type="button" class="page-fab" id="fab-main" aria-label="${t('nav.quickActions')}" title="${t('nav.quickActions')} (n)" aria-keyshortcuts="n" aria-expanded="false">
-        <i data-lucide="plus" aria-hidden="true"></i>
-      </button>
-      <div class="fab-actions" id="fab-actions" aria-hidden="true">
-        ${actionsHtml}
-      </div>
-    </div>
-  `;
+  return '';
 }
 
 /**
- * Speed-Dial verdrahten - dokumentweit gesucht, nicht im Seiten-Container.
- *
- * Der Router zieht die Gruppe direkt nach dem Rendern in die Shell-Layer
- * (adoptPageFab, #634). Ein `container.querySelector('#fab-main')` fände sie
- * danach still nicht mehr, und die Verdrahtung entfiele lautlos: der Knopf wäre
- * sichtbar und täte nichts - genau der Bug hinter #634. `findPageFab()` ist die
- * eine Stelle, an der der Ort steht.
- */
-/**
- * Den Speed-Dial im Anpassen-Modus ausblenden (A7 P2-1). Ausgeblendet wird der
- * KNOPF, nicht die Gruppe: `.page-fab[hidden]` (layout.css) nimmt ihn aus der
- * Anzeige, und nur an `.page-fab:not([hidden])` haengen Kapselreserve und
- * `--fab-safe-zone` - eine versteckte Gruppe liesse beide stehen und die Seite
- * einen Nachlauf fuer einen Knopf freihalten, den es nicht gibt.
+ * Im Anpassen-Modus gibt es kein Anlegen (A7 P2-1). Ausgeblendet wird der
+ * KNOPF: `.page-fab[hidden]` (layout.css) nimmt ihn aus der Anzeige, und der
+ * Kurzbefehl `n` prallt am `hidden` ab (initFab).
  */
 function setCustomizeFabHidden(hidden) {
   const fab = findPageFab('fab-main');
@@ -6535,61 +6449,11 @@ function setCustomizeFabHidden(hidden) {
 }
 
 function initFab(signal) {
-  const fabMain     = findPageFab('fab-main');
-  const fabGroup    = fabMain?.closest('.page-fab-group');
-  const fabActions  = fabGroup?.querySelector('#fab-actions');
-  const fabBackdrop = fabGroup?.querySelector('#fab-backdrop');
-  if (!fabMain || !fabActions) return;
-
-  let open = false;
-
-  function toggleFab(force) {
-    open = force !== undefined ? force : !open;
-    // Kein zweiter Zustandsträger neben `aria-expanded`: die Drehung zum X
-    // hängt in dashboard.css direkt am Attribut.
-    fabMain.setAttribute('aria-expanded', String(open));
-    fabActions.classList.toggle('fab-actions--visible', open);
-    fabActions.setAttribute('aria-hidden', String(!open));
-    fabBackdrop?.classList.toggle('fab-backdrop--visible', open);
-    fabActions.querySelectorAll('.fab-action').forEach((el) => {
-      el.tabIndex = open ? 0 : -1;
-    });
-    if (window.lucide) window.lucide.createIcons({ el: fabGroup });
-  }
-
-  fabMain.addEventListener('click', (e) => {
-    e.stopPropagation();
+  findPageFab('fab-main')?.addEventListener('click', (e) => {
     // Der Kurzbefehl `n` klickt den Knopf auch, wenn er ausgeblendet ist
     // (triggerPageFab) - im Anpassen-Modus oeffnet er nichts.
-    if (fabMain.hidden) return;
-    toggleFab();
-  });
-
-  fabActions.querySelectorAll('[data-route]').forEach((el) => {
-    const go = async () => {
-      toggleFab(false);
-      await window.yuvomi.navigate(el.dataset.route);
-      const btnSelector = FAB_NEW_BTN[el.dataset.route];
-      if (btnSelector) document.querySelector(btnSelector)?.click();
-    };
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-
-  document.addEventListener('click', () => { if (open) toggleFab(false); }, { signal });
-
-  // ESCAPE SCHLIESST DEN DIAL, und der Fokus geht zurueck an den Knopf.
-  // Vorher schloss ihn nur ein Klick irgendwohin - wer ihn mit der Tastatur
-  // geoeffnet hatte, konnte ihn ohne Maus nicht mehr zumachen und stand in
-  // einer Liste von vier Zielen, die er nicht angesteuert hatte (WCAG 2.1.2).
-  // Der Fokus muss mitgehen: `tabIndex = -1` nimmt den Aktionen beim Schliessen
-  // die Fokussierbarkeit, ein Fokus darauf faellt sonst an den Body.
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !open) return;
-    toggleFab(false);
-    fabMain.focus();
+    if (e.currentTarget.hidden) return;
+    window.yuvomi?.openCapture?.();
   }, { signal });
 }
 
@@ -7859,10 +7723,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // per CSS: eine Regel, die `.page-fab` auf `opacity: 0` oder
     // `pointer-events: none` setzt, ist seit #634 verboten (Guard in
     // test-frontend-audit.js).
-    findPageFab('fab-main')?.closest('.page-fab-group')?.remove();
+    findPageFab('fab-main')?.remove();
   } else {
     initFab(signal);
-    wireNewMenu(container, signal);
   }
 
   // SELBSTHEILUNG STATT RETRY-KNOPF. Am Wandtablet drueckt niemand auf
