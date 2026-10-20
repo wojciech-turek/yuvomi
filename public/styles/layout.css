@@ -9539,6 +9539,9 @@ html:has(.app-page.is-selecting) {
   position: absolute;
   width: 1px;
   height: 1px;
+  /* Die Tafla-Pille hat eine Mindesthoehe (48) - zurueckgenommen muss sie
+   * wirklich 1x1 sein, sonst steht ihr unsichtbarer Kasten auf der Leiste. */
+  min-height: 0;
   padding: 0;
   margin: -1px;
   overflow: hidden;
