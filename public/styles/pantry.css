@@ -356,15 +356,19 @@
   gap: var(--space-1);
 }
 
-/* Eine Zeile je Angabe, wie die Zeilen der Liste: was nicht passt, endet mit
- * Auslassungspunkten (die Namen stehen vollstaendig in der Liste darunter). */
+/* Hoechstens zwei Zeilen je Angabe: neben "Dodaj 2 do listy" bleibt am
+ * Telefon gut die Haelfte der Karte, und eine Zeile kappte schon den zweiten
+ * Namen ("Kawa ziarnista i M..."). Was auch zwei Zeilen nicht fassen, endet
+ * mit Auslassungspunkten - die Namen stehen vollstaendig in der Liste darunter. */
 .pantry-attention__names {
   font-size: var(--type-body);
   line-height: var(--type-body-lh);
   color: var(--color-text-primary);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .pantry-attention__note {
@@ -379,9 +383,11 @@
 
 .pantry-attention__note-text {
   min-width: 0;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .pantry-attention__note svg {
