@@ -172,6 +172,77 @@ function addTask(title, visibility = 'all', points = 5) {
 }
 
 // --------------------------------------------------------
+// Tafla (2026-10-19): die Wand ist schreibgeschuetzt, bis der Haushalt es
+// erlaubt ("Pozwól odhaczać na ścianie", standardmaessig aus)
+// --------------------------------------------------------
+
+const LISTE = (await admin('POST', '/shopping', { name: 'Zakupy' })).body.data.id;
+
+test('ohne den Schalter hakt das Tablett nichts ab, setzt nichts auf die Liste und beantwortet keine Frage', async () => {
+  // DER SERVER SETZT ES DURCH, nicht die Oberflaeche: eine alte Seite oder
+  // eine Anfrage von Hand kommt genauso wenig durch.
+  const id = addTask('Schreibschutz');
+  const tick = await display('PATCH', `/tasks/${id}/status`, { status: 'done', done_by_user_id: LEA });
+  assert.equal(tick.status, 403);
+  assert.equal(tick.body.reason, 'wall_read_only');
+  assert.equal(db.prepare('SELECT status FROM tasks WHERE id = ?').get(id).status, 'open');
+
+  const add = await display('POST', `/shopping/${LISTE}/items`, { name: 'masło' });
+  assert.equal(add.status, 403);
+  assert.equal(add.body.reason, 'wall_read_only');
+
+  for (const action of ['answer', 'dismiss']) {
+    const res = await display('POST', `/ai/questions/1/${action}`, { option: 0 });
+    assert.equal(res.status, 403, action);
+    assert.equal(res.body.reason, 'wall_read_only', action);
+  }
+
+  // Und der Picker zeigt niemanden: die Ringe an der Wand und die Auswahl auf
+  // der Aufgabenseite verschwinden, bevor die Route absagen muss.
+  const people = await display('GET', '/displays/people');
+  assert.equal(people.status, 200);
+  assert.ok(people.body.data.length >= 2, 'Reichweite: die Mitglieder stehen da');
+  assert.ok(people.body.data.every((p) => p.can_tick_off === false), 'niemand ist abhakbar');
+
+  // Minutnik und Gotuj schreiben nichts - Lesen bleibt offen.
+  assert.equal((await display('GET', '/dashboard?audience=household')).status, 200);
+  assert.equal((await display('GET', '/recipes')).status, 200, 'Gotuj liest das Rezept');
+});
+
+test('ein Mensch bleibt vom Schalter unberuehrt - er gilt nur fuer die Wand', async () => {
+  const id = addTask('Menschenhand');
+  assert.equal((await admin('PATCH', `/tasks/${id}/status`, { status: 'done' })).status, 200);
+});
+
+test('mit dem Schalter darf die Wand abhaken - eingeschaltet von einem Administrator', async () => {
+  const switched = await admin('PUT', '/preferences', { wall_allow_ticking: true });
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.data.wall_allow_ticking, true);
+  const people = await display('GET', '/displays/people');
+  assert.ok(people.body.data.some((p) => p.id === LEA && p.can_tick_off), 'Lea ist jetzt abhakbar');
+  const prefs = await display('GET', '/preferences');
+  assert.equal(prefs.body.data.wall_allow_ticking, true, 'das Tablett liest die Wahl selbst');
+});
+
+test('mit dem Schalter setzt das Tablett einen Artikel beim Namen auf die Liste - und nur so', async () => {
+  const add = await display('POST', `/shopping/${LISTE}/items`, { name: 'masło', category_source: 'default' });
+  assert.equal(add.status, 201);
+  assert.equal(add.body.data.name, 'masło');
+  for (const body of [{ name: 'kawa', quantity: '3 kg' }, { name: 'kawa', notes: 'x' }, { name: 'kawa', category_source: 'hand' }]) {
+    const res = await display('POST', `/shopping/${LISTE}/items`, body);
+    assert.equal(res.status, 403, JSON.stringify(body));
+    assert.equal(res.body.reason, 'display_action');
+  }
+  // Andere Schreibwege des Einkaufs bleiben zu.
+  const item = add.body.data.id;
+  assert.equal((await display('PATCH', `/shopping/items/${item}`, { is_checked: 1 })).status, 403);
+  assert.equal((await display('DELETE', `/shopping/items/${item}`)).status, 403);
+  assert.equal((await display('POST', '/shopping', { name: 'Neu' })).status, 403);
+  // Eine offene Frage gibt es nicht: der Weg ist offen, die Route sagt 404.
+  assert.equal((await display('POST', '/ai/questions/1/answer', { option: 0 })).status, 404);
+});
+
+// --------------------------------------------------------
 // Die Naht, an der der Schreibweg ueberhaupt haengt
 // --------------------------------------------------------
 

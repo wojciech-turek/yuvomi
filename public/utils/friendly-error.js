@@ -32,6 +32,8 @@ export const REFUSAL_MESSAGES = new Map([
   ['contact_email_protected', 'contacts.emailLockedHint'],
   // Bezahlen ohne das Recht, Betraege der Haushaltshilfe zu sehen (R20).
   ['amounts_hidden', 'housekeeping.errorAmountsHidden'],
+  // Die Wand ist schreibgeschuetzt, bis der Haushalt das Abhaken erlaubt (Tafla).
+  ['wall_read_only', 'wall.readOnly'],
 ]);
 
 /**

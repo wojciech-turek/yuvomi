@@ -27,6 +27,7 @@ import { requireAdmin } from '../middleware/require-admin.js';
 import { householdMemberSql, memberOrderSql, memberPositionSql } from '../services/household-members.js';
 import { resolvePermissions } from '../permissions.js';
 import { DISPLAY_AREA_MODULES } from '../display-scopes.js';
+import { wallWritesAllowed } from '../services/wall-settings.js';
 import { isEnrolled } from '../services/rewards.js';
 import { CURRENT_ONBOARDING_VERSION, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from '../auth.js';
 import {
@@ -189,6 +190,10 @@ peopleRouter.get('/people', (req, res) => {
       return res.status(403).json({ error: 'This route is for paired displays.', code: 403, reason: 'display_only' });
     }
     const d = db.get();
+    // THE WALL SWITCH (Tafla): while the household keeps the wall read-only,
+    // nobody can be ticked for here - the picker on the tasks page and the
+    // rings on the wall disappear with this flag, before the route refuses.
+    const mayTick = wallWritesAllowed({ db: d });
     const rows = d.prepare(`
       SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.role, u.family_role,
              ${memberPositionSql('u')} AS sort_order
@@ -203,7 +208,7 @@ peopleRouter.get('/people', (req, res) => {
         display_name: row.display_name,
         avatar_color: row.avatar_color,
         avatar_data: row.avatar_data,
-        can_tick_off: admin || modules.tasks === 'write',
+        can_tick_off: mayTick && (admin || modules.tasks === 'write'),
         can_redeem: (admin || modules.rewards === 'write') && isEnrolled(d, row.id),
       };
     });

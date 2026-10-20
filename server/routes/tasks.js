@@ -28,6 +28,7 @@ import { resolvePermissions } from '../permissions.js';
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { householdMemberSql, isHouseholdMember, memberOrderSql, memberPositionSql, newNonMembers, nonMemberMessage } from '../services/household-members.js';
 import { displayActingPerson, isDisplayRequest } from '../services/display-acting.js';
+import { refuseWallWrite } from '../services/wall-settings.js';
 import { pushService } from '../services/push.js';
 import { todayKey } from '../utils/timezone.js';
 import { runExternalJob } from '../utils/restore-state.js';
@@ -1910,6 +1911,11 @@ router.patch('/:id/status', (req, res) => {
     // derselben 404 wie fuer eine, die es nie gab.
     let displayDoneBy = null;
     if (isDisplayRequest(req)) {
+      // FIRST THE HOUSEHOLD SWITCH (Tafla, 2026-10-19): the wall is read-only
+      // until an admin allows ticking there. It is a fact about the household,
+      // not about this task, so answering it before the visibility check tells
+      // a guessed id nothing.
+      if (refuseWallWrite(req, res, { db: db.get() })) return;
       if (prev.visibility !== 'all') {
         return res.status(404).json({ error: 'Task not found.', code: 404 });
       }

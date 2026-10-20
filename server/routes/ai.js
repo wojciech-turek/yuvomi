@@ -16,6 +16,7 @@ import { publicSettings, updateSettings, aiSettings } from '../ai/settings.js';
 import { usageSummary } from '../ai/usage.js';
 import { listMemories, addMemory, updateMemory, deleteMemory, getMemory, TOPICS, MAX_TEXT } from '../ai/memory.js';
 import { openQuestion, answerQuestion, dismissQuestion, generateQuestion, learnFromHistory } from '../ai/questions.js';
+import { refuseWallWrite } from '../services/wall-settings.js';
 
 const router = express.Router();
 const log = createLogger('AI');
@@ -182,6 +183,8 @@ router.get('/questions/open', (_req, res) => {
 
 router.post('/questions/:id/answer', (req, res) => {
   try {
+    // The kitchen wall answers only when the household lets it write (Tafla).
+    if (refuseWallWrite(req, res)) return;
     const id = Number.parseInt(req.params.id, 10);
     const option = Number(req.body?.option);
     if (!Number.isInteger(option) || option < 0) return res.status(400).json({ error: 'Choose an answer.', code: 400 });
@@ -196,6 +199,7 @@ router.post('/questions/:id/answer', (req, res) => {
 
 router.post('/questions/:id/dismiss', (req, res) => {
   try {
+    if (refuseWallWrite(req, res)) return;
     if (!dismissQuestion(Number.parseInt(req.params.id, 10))) return res.status(404).json({ error: 'This question is no longer open.', code: 404 });
     res.status(204).end();
   } catch (err) {
