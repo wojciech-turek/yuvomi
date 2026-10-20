@@ -2178,7 +2178,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   min-width: var(--target-base);
   min-height: var(--space-12);
   padding: var(--space-1) 0;
-  gap: var(--space-0h);
+  gap: calc(var(--space-1) / 2);
   border-radius: var(--radius-full);
   color: var(--color-text-primary);
 }
@@ -2237,8 +2237,8 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 .nav-item__icon-wrap .nav-badge--dot {
-  top: calc(-1 * var(--space-0h));
-  right: calc(-1 * var(--space-0h));
+  top: calc(var(--space-1) / -2);
+  right: calc(var(--space-1) / -2);
 }
 
 /* Punkt ohne Zahl: markiert eine ungelesene Neuigkeit, keine Menge (#490).
@@ -4856,8 +4856,14 @@ html.fab-steady .page-fab {
      * sitzt an der Huelle (`label`), nicht am Feld: in dieser Form ist sie ein
      * Knopf, und mit Fokus oder Begriff kehrt der Feldkanon zurueck. */
     block-size: var(--target-base);
-    border: 1.5px solid var(--color-border);
+    /* TAFLA: die Kopf-Icon-Haut ist ein Geisterkreis - 36pt --fill in einer
+     * 44er Trefferflaeche, ohne Ring (spec-components „Nagłówek"). Die
+     * Flaeche sitzt per `background-clip` im 4pt-Innenrand. */
+    border: 0;
     border-radius: var(--radius-full);
+    padding: var(--ghost-circle-inset);
+    background-color: var(--color-fill);
+    background-clip: content-box;
   }
 
   .page-toolbar
@@ -4877,7 +4883,7 @@ html.fab-steady .page-fab {
      * traegt die Huelle (Regel oben, D1) -, und es fuellt sie genau: ihre
      * Kante liegt innen. */
     min-height: 0;
-    block-size: calc(var(--target-base) - 2 * 1.5px);
+    block-size: var(--ghost-circle);
     border-color: transparent;
     background: transparent;
   }
@@ -4909,7 +4915,8 @@ html.fab-steady .page-fab {
     inset-inline: 0;
     margin-inline: auto;
     transform: translateY(-50%);
-    color: var(--color-accent);
+    /* Tafla: Tinte, nie violett - die Stimme gehoert der Handlung. */
+    color: var(--color-text-primary);
   }
 
   /* Ein Slot, der NUR die Suche traegt, gibt ihre Breite mit ab - sonst
@@ -5630,7 +5637,7 @@ a.popover-menu__item {
 .page-fab.page-fab--ghost::before {
   content: '';
   position: absolute;
-  inset: calc((100% - 36px) / 2);
+  inset: calc((100% - var(--ghost-circle)) / 2);
   border-radius: var(--radius-full);
   background-color: var(--color-fill);
 }
@@ -6077,11 +6084,16 @@ p.field-hint--warn[hidden] {
    * Grafik (3:1 nach 1.4.11), ein Label waere Text und muesste 4.5:1 gegen
    * die Sidebar-Flaeche halten - was sieben der neun Familientoene reissen
    * wuerden. --item-module-accent setzt der Router pro Item (router.js). */
+  /* TAFLA: DIE SEITENLEISTE IST EINFARBIG (spec-navigation „iPad in the
+   * hand"). Module verlassen den Rahmen: die Zeichen stehen in ink-2 wie ihr
+   * Label, die aktive Zeile traegt die Akzent-Toenung und die Stimme. Die
+   * Toene der Familien zeigt der Haushalt dort, wo Menschen gemeint sind
+   * (Personenfarben), nicht an Orten. */
   .nav-sidebar .nav-item__icon {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    color: var(--item-module-accent, currentColor);
+    color: var(--color-text-secondary);
   }
 
   /* Aktiv gewinnt die Stimme auch ueber dem Zeichen: die Zeile ist dann als
@@ -7894,6 +7906,36 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
  * Pille mit --target-md (40px, die `.btn`-Regel oben) - zwei Kanten in einer
  * Zeile, gemessen in 12 Modulen bei 1440. Am Zeiger ist 40px die Regel
  * (Hit-Test, ignore.md); dieselbe Grenze wie `.btn`. */
+/* TAFLA: KOPF-KNOEPFE SIND GEISTERKREISE (iPhone und iPad im Hochformat).
+ * 36pt --fill mit einem 20er Zeichen in Tinte, 44 Treffer, kein Ring und nie
+ * violett (spec-components „Nagłówek"). Die Flaeche sitzt per
+ * `background-clip: content-box` im 4pt-Innenrand; die Rundung des Knopfes
+ * macht sie zum Kreis. Am Desktop bleibt die bisherige Haut (R14 unten). */
+@media (max-width: 1023px) {
+  .page-toolbar .btn--icon,
+  .page-toolbar .btn--icon:hover {
+    min-height: var(--target-base);
+    min-width: var(--target-base);
+    padding: var(--ghost-circle-inset);
+    border: 0;
+    border-radius: var(--radius-full);
+    background-color: var(--color-fill);
+    background-clip: content-box;
+    color: var(--color-text-primary);
+  }
+
+  .page-toolbar .btn--icon svg {
+    width: var(--space-5);
+    height: var(--space-5);
+  }
+
+  /* Kein Trenner unter dem Kopf in Ruhe (Tafla: „no divider"); eingeklappt
+   * beim Lesen traegt er weiter die Kante zum Inhalt. */
+  .page-toolbar:not(.is-collapsed) {
+    border-bottom-color: transparent;
+  }
+}
+
 @media (min-width: 1024px) {
   .page-toolbar .btn--icon {
     min-height: var(--target-md);

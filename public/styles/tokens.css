@@ -1773,6 +1773,10 @@
   --tab-icon-stroke-active: 2.25;
   /* Der Punkt „wartet heute auf dich" an einem Nav-Ziel (nav-badges.js). */
   --nav-dot-size: 6px;
+  /* Tafla-Geisterkreis im Kopf (Rueckweg, Werkzeuge, Seiten-„Neu"): 36pt
+   * sichtbar in einer --target-base grossen Trefferflaeche. */
+  --ghost-circle: 36px;
+  --ghost-circle-inset: calc((var(--target-base) - var(--ghost-circle)) / 2);
   /* Der seitliche Rand der Bar-Zone. Er steht hier und nicht als Literal in
    * layout.css, weil ZWEI Dinge ihn brauchen: die Zone selbst und der Inset
    * unten, aus dem der eingesetzte FAB seine Position rechnet. Sie liefen

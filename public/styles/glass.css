@@ -961,18 +961,11 @@ textarea.form-input {
      * violette Toenung, Akzent-Rand statt Weiss, dezente Glanzkante oben,
      * Schatten ohne Weissring. Werte und Messung: tokens.css
      * --sidebar-indicator-*. */
-    background: color-mix(in srgb, var(--color-accent) var(--sidebar-indicator-tint), var(--glass-bg-card));
-    border: 1px solid color-mix(in srgb, var(--color-accent) var(--sidebar-indicator-rim-tint), transparent);
-    box-shadow:
-      var(--glass-inset-soft),
-      var(--sidebar-indicator-shadow);
-  }
-
-  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .nav-sidebar__indicator {
-      backdrop-filter: var(--blur-xs) saturate(150%);
-      -webkit-backdrop-filter: var(--blur-xs) saturate(150%);
-    }
+    /* TAFLA: dieselbe deckende Akzent-Toenung wie die Pille der Tab-Kapsel -
+     * ein Aktivzustand in beiden Navigationen, ohne Glas und Rand. */
+    background: var(--color-accent-tint);
+    border: 0;
+    box-shadow: none;
   }
 
   @media (prefers-reduced-transparency: reduce) {

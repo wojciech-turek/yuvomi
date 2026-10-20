@@ -2505,6 +2505,10 @@ function dockFabIntoToolbar(fab) {
  */
 function dockFabAsGhost(fab, slot) {
   if (captureTypeForRoute(topLevelSection(routerState.currentPath || location.pathname)) !== 'auto') return false;
+  // Hoechstens zwei Geisterkreise im Kopf (spec-components „Nagłówek"): traegt
+  // er schon zwei (Suche, Werkzeuge), bleibt das „Neu" im Erfassen-Blatt.
+  const shown = [...slot.children].filter((el) => !el.hidden && el.getClientRects().length);
+  if (shown.length >= 2) return false;
   fab.classList.add('page-fab--ghost');
   syncFabName(fab);
   slot.appendChild(fab);
@@ -2658,11 +2662,59 @@ function headSealIcon(mod) {
 }
 
 function wireToolbar(el) {
-  const handle = wireCollapsingHeader(el, { sealIcon: headSealIcon(currentRoute()?.module) });
+  // TAFLA: kein Modulzeichen mehr neben dem Titel (das Absender-Siegel ist
+  // entfallen, spec-components „Nagłówek"). headSealIcon bleibt fuer
+  // Erweiterungen, die es ausdruecklich anfordern; die Shell setzt keines.
+  const handle = wireCollapsingHeader(el, {});
+  syncPageBack(el);
   // Der erste Handle gewinnt: `wireCollapsingHeader` ist idempotent und liefert
   // beim zweiten Anlauf ein wirkungsloses Paar zurueck. Wer das eintraegt,
   // ueberschreibt genau das `destroy()`, um das es hier geht.
   if (handle && !_toolbarHandles.has(el)) _toolbarHandles.set(el, handle);
+}
+
+/**
+ * Liegt die Route hinter „Więcej" (kein eigener Tab)? Dann ist sie eine
+ * GESCHOBENE Seite (Tafla, spec-navigation.txt): ihr Kopf traegt einen
+ * Rueckweg, und die Kapsel steht minimiert. Dieselbe Frage, die den
+ * Mehr-Knopf aktiv macht (updateNav).
+ */
+function isPushedRoute(rawPath = routerState.currentPath || location.pathname) {
+  const path = topLevelSection(rawPath);
+  const scope = routerState.currentUser?.access_scope;
+  if (!routerState.currentUser || scope === 'display' || scope === 'split_guest') return false;
+  return secondaryMobileItems().some((item) => (
+    item.navId === 'kitchen' ? isKitchenRoute(path) : item.path === path
+  ));
+}
+
+/**
+ * Der 36pt-Rueckweg im Kopf einer geschobenen Seite (Tafla: „Wróć: Więcej").
+ * Er oeffnet das Mehr-Blatt - den Ort, von dem die Seite kam. Nur im ersten
+ * Kopf der Seite und nur unter 1024px (layout.css); am Desktop fuehrt die
+ * Seitenleiste.
+ */
+function syncPageBack(toolbar) {
+  const main = document.getElementById('main-content');
+  if (!toolbar || !main || toolbar !== main.querySelector('.page-toolbar')) return;
+  if (toolbar.classList.contains('page-toolbar--in-group')) return;
+  const existing = toolbar.querySelector(':scope > .page-back');
+  if (!isPushedRoute()) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'page-back';
+  back.setAttribute('aria-label', t('nav.backTo', { section: t('nav.more') }));
+  const icon = document.createElement('i');
+  icon.dataset.lucide = 'chevron-left';
+  icon.setAttribute('aria-hidden', 'true');
+  back.appendChild(icon);
+  back.addEventListener('click', () => document.getElementById('more-btn')?.click());
+  toolbar.prepend(back);
+  window.lucide?.createIcons({ el: back });
 }
 
 function unwireToolbar(el) {
@@ -4822,6 +4874,8 @@ function updateNav(rawPath) {
   // /settings/personal/notifications fand "Mehr" dann kein Ziel und stand
   // ohne Aktivzustand da. Idempotent - ein schon gekuerzter Pfad bleibt.
   const path = topLevelSection(rawPath);
+  // Geschobene Seiten (hinter Więcej) stehen mit minimierter Kapsel (Tafla).
+  navMinimizer?.pin?.(isPushedRoute(path));
   const kitchenDestination = currentKitchenDestination();
   document.querySelectorAll('[data-route]').forEach((el) => {
     if (el.dataset.navId === 'kitchen' && kitchenDestination) {

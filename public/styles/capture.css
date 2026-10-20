@@ -502,3 +502,56 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
 .capture-sheet__error:empty {
   display: none;
 }
+
+/* ================================================================
+ * Der Rueckweg geschobener Seiten (router.js, syncPageBack)
+ *
+ * Seiten hinter „Więcej" tragen vorn im Kopf einen 36pt-Kreis mit Chevron
+ * (44 Treffer), der das Mehr-Blatt oeffnet - „Wróć: Więcej" (Artboards
+ * Notatki/Budzet.dc.html). Am Desktop fuehrt die Seitenleiste; dort entfaellt er.
+ * ================================================================ */
+.page-back {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .page-back {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--target-base);
+    block-size: var(--target-base);
+    margin-inline-start: calc(-1 * var(--ghost-circle-inset));
+    padding: var(--ghost-circle-inset);
+    border: 0;
+    border-radius: var(--radius-full);
+    background-color: var(--color-fill);
+    background-clip: content-box;
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  /* Der Rueckweg steht in einer eigenen Zeile ueber dem grossen Titel (Artboards
+   * Budzet/Notatki): ein Rand ueber die ganze Breite laesst den Kopf nach ihm
+   * umbrechen, die Titelzeile darunter bleibt, wie sie war. */
+  .page-toolbar:has(> .page-back) {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+
+  .page-toolbar > .page-back {
+    margin-inline-end: 100%;
+  }
+
+  .page-back svg {
+    width: var(--space-5);
+    height: var(--space-5);
+    stroke-width: var(--tab-icon-stroke-active);
+  }
+
+  .page-back:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-accent);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}

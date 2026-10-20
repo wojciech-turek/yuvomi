@@ -89,8 +89,11 @@
  * Canonical-Page-Head-Rolle einmal beendet hat (18/22/28px gestreut).
  * ------------------------------------------------------------------------ */
 @media (max-width: 1023px) {
+  /* TAFLA: der grosse Titel ist 34/41 in 600 (vier Groessen, zwei Gewichte). */
   .page-toolbar:not(.page-toolbar--in-group) > .page-toolbar__title {
     font-size: var(--type-page-title-mobile);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--type-large-title-lh);
   }
 
   .page-toolbar--capped.is-collapsed > .page-toolbar__title {

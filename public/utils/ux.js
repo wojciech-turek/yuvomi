@@ -1671,7 +1671,9 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
     && !el.closest('dialog, [popover], .modal-overlay, .more-sheet');
 
   const onGesture = (e) => { if (inContent(e.target)) gestureAt = now(); };
+  let pinned = false;
   const onScroll = (e) => {
+    if (pinned) return;
     const port = e.target;
     if (!inContent(port)) return;
     // Nur wo die Kapsel steht (unter 1024px); am Desktop gibt es nichts zu minimieren.
@@ -1692,6 +1694,14 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
   for (const type of GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
 
   const expand = () => { state = { minimized: false, travel: 0 }; apply(false); };
+  // Tafla: auf einer geschobenen Seite (hinter Więcej) steht die Kapsel
+  // minimiert, unabhaengig vom Scrollen; Fokus in ihr faehrt sie weiter aus.
+  const pin = (on) => {
+    pinned = Boolean(on);
+    if (!pinned) return;
+    state = { minimized: true, travel: 0 };
+    if (nav.getClientRects?.().length) apply(true);
+  };
   // Minimiert bleiben alle Ziele sichtbar (Tafla): ein Tipp auf ein Zeichen
   // navigiert wie ausgefahren, und der Seitenwechsel faehrt die Kapsel aus
   // (updateNav im Router). Die Sonderbehandlung der R20-Pille ist entfallen.
@@ -1699,6 +1709,7 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
   return {
     nav,
     expand,
+    pin,
     destroy: () => {
       clearTimeout(settleTimer);
       doc.removeEventListener('scroll', onScroll, { capture: true });
