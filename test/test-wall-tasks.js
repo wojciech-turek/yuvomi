@@ -1382,6 +1382,10 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   rewards: 'rewards', health: 'health', fasting: 'health', nutrition: 'health', myShiftsToday: 'schedule',
   // Keinem Modul zugeordnet: nach der anfragenden Person geschnitten.
   countdowns: null, countdownTotal: null, quicklinks: null,
+  // Der Tagesplan von Dziś (Tafla, 2026-10-19): persoenlich gelesen, nach
+  // der Sichtbarkeit der anfragenden Person - die Wand hat ihre eigenen
+  // Zeilen (wallTasks, upcomingEvents, todayMeals).
+  planTasks: 'tasks', planEvents: 'calendar', tomorrowMeals: 'meals', dinnerPlan: 'meals',
 });
 const DELIBERATELY_EMPTY_FIELDS = Object.freeze({
   housekeeping: ['configured', 'visitsThisMonth', 'unpaidAmount', 'lastVisit'],

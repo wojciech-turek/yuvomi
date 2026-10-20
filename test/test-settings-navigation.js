@@ -3902,10 +3902,11 @@ test('R18: die Formularzeile steht im globalen Blatt - randlose Auswahl mit Zeic
   // Das Zeichen haelt 3:1 auf den Flaechen, auf denen eine Zeile steht.
   const tokens = await readFile(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
   const strokes = [...tokens.matchAll(/--_field-chevron:[^;]*stroke='%23([0-9A-Fa-f]{6})'/g)].map((m) => `#${m[1]}`);
-  assert.deepEqual([...new Set(strokes)], ['#63615B', '#B4AEA5']);
+  // Tafla-Tinte-2 (2026-10-19): das Zeichen zieht mit --_neutral-600 um.
+  assert.deepEqual([...new Set(strokes)], ['#5E5A53', '#B3ACA1']);
   const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
-  for (const [chevron, grounds] of [['#63615B', ['#FFFFFF', '#FBFAF7', '#F5F3ED']], ['#B4AEA5', ['#2B2825', '#37332E', '#191816']]]) {
+  for (const [chevron, grounds] of [['#5E5A53', ['#FFFFFF', '#FBFAF7', '#F5F3ED']], ['#B3ACA1', ['#2B2825', '#36322D', '#191816']]]) {
     for (const ground of grounds) assert.ok(ratio(chevron, ground) >= 3, `${chevron} auf ${ground}: ${ratio(chevron, ground).toFixed(2)}:1`);
   }
   // Und in den Einstellungen gibt es keine zweite Auswahl-Regel mehr daneben.

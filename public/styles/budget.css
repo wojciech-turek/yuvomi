@@ -1687,8 +1687,8 @@ button.budget-bar-row:focus-visible {
    der getrennte Ausweis von Restschuld und Restzahlungssumme auflöst. Als Eyebrow
    gesetzt, damit es nicht mit der Bezugsgröße darunter verschwimmt. */
 .budget-loan-card__amount-label {
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  /* Tafla: Satzschreibung statt Versal-Eyebrow; das Gewicht traegt die Rolle. */
+  letter-spacing: var(--tracking-normal);
   font-weight: var(--font-weight-semibold);
 }
 

@@ -20,7 +20,7 @@
 
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startHarness, openPage, gotoRoute, enterDashboardWall } from './document-guards-harness.js';
+import { startHarness, openPage, gotoRoute, enterDashboardWall, clickLive } from './document-guards-harness.js';
 
 let harness;
 
@@ -154,46 +154,30 @@ for (const device of ['desktop', 'mobile']) {
   });
 }
 
-// Seit R14 (A8 P3-2) schwebt am Desktop kein FAB mehr ueber der Uebersicht:
-// "Neu" ist eine Pille im Kopf. Die Regel dahinter - am Seitenende liegt keine
-// schwebende Flaeche auf einem Widget - gilt weiter; gemessen wird ein
-// schwebender FAB, und steht keiner da, muss die Pille im Kopf stehen.
-test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Widget (desktop)', async () => {
+// TAFLA (2026-10-19): Dziś ist eine Spalte, kein Raster. Die Regel dahinter
+// bleibt: am Seitenende liegt keine schwebende Flaeche auf Inhalt. Steht am
+// Desktop kein schwebender Knopf (der Anlegen-Weg gehoert der Kapsel und ihrem
+// +), gibt es nichts, das verdecken koennte.
+test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Inhalt (desktop)', async () => {
   const page = await openPage(harness, { device: 'desktop' });
-  // Die rechte Spalte reicht bis ans Ende - der Anlassfall der Critique. Endet
-  // das Raster links, liegt unter dem Knopf ohnehin nichts, und die Sonde
-  // waere mit jedem Nachlauf gruen.
-  await saveLayout(page, [
-    { id: 'calendar', size: '2x1' },
-    { id: 'tasks', size: '1x2' },
-    { id: 'notes', size: '2x1' },
-    { id: 'shopping', size: '2x1' },
-    { id: 'birthdays', size: '1x2' },
-  ]);
   await gotoRoute(page, '/');
+  await page.waitForSelector('[data-today]');
   await tailAtEnd(page);
   const hits = await page.evaluate(() => {
     const fab = [...document.querySelectorAll('.page-fab:not([hidden])')].find((el) => getComputedStyle(el).position === 'fixed');
-    if (!fab) {
-      const pill = document.querySelector('.page-fab--docked:not([hidden])');
-      return pill ? { docked: true, reach: true, ids: [] } : null;
-    }
+    if (!fab) return { reach: true, ids: [] };
     const f = fab.getBoundingClientRect();
-    const wrappers = [...document.querySelectorAll('.widget-wrapper')];
-    const lowest = wrappers.reduce((a, w) => (w.getBoundingClientRect().bottom > (a?.getBoundingClientRect().bottom ?? -1) ? w : a), null);
+    const blocks = [...document.querySelectorAll('[data-today] .day-card, [data-today] .day-now, [data-today] .day-closed, [data-today] .day-tile, [data-today] .day-question')];
     return {
-      reach: !!lowest && lowest.getBoundingClientRect().right > f.left,
-      ids: wrappers
-        .filter((w) => {
-          const r = w.getBoundingClientRect();
-          return r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top;
-        })
-        .map((w) => w.dataset.widgetId),
+      reach: blocks.length > 0,
+      ids: blocks.filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top;
+      }).map((b) => b.className),
     };
   });
   await page.close();
-  assert.ok(hits, 'Reichweite: weder ein schwebender FAB noch die Pille "Neu" im Kopf');
-  assert.ok(hits.reach, 'Reichweite: das Raster endet nicht unter dem Knopf');
+  assert.ok(hits.reach, 'Reichweite: Dziś hat keinen Inhalt');
   assert.deepEqual(hits.ids, [], `Am Seitenende liegt der FAB auf: ${hits.ids.join(', ')}`);
 });
 
@@ -222,10 +206,11 @@ test('Nachlauf: eine Seite mit eigenem Scrollport behaelt ihre Hoehe (desktop)',
  * ──────────────────────────────────────────────────────────────────────────── */
 
 async function measureHead(page) {
+  await page.waitForSelector('[data-today] .day-head__greeting');
   await freeze(page);
   return page.evaluate(() => {
     const q = (s) => document.querySelector(s);
-    const title = q('.dashboard-overview__title');
+    const title = q('.day-head__greeting');
     const lines = (text) => {
       title.textContent = text;
       const cs = getComputedStyle(title);
@@ -244,18 +229,25 @@ async function measureHead(page) {
       const cs = getComputedStyle(el);
       return {
         top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height),
+        left: Math.round(r.left), right: Math.round(r.right),
         shown: cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 1 && r.height > 1,
       };
     };
-    const first = q('.dashboard-masthead .today-cockpit') || q('.dashboard__grid');
+    // Wie breit der Gruss wirklich geschrieben ist, nicht seine Box.
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const text = range.getBoundingClientRect();
+    const first = q('[data-today] .day-now, [data-today] .day-closed, [data-today] .day-empty');
     return {
       titleLines,
       titleText: title.textContent.trim(),
-      date: box('.dashboard-overview__date'),
-      title: box('.dashboard-overview__title'),
-      tools: box('.dashboard-overview__tools'),
-      overview: box('.dashboard-overview'),
-      updated: box('.dashboard-overview__updated'),
+      titleRight: Math.round(text.right),
+      date: box('.day-head__date'),
+      title: box('.day-head__greeting'),
+      tools: box('.day-head__me'),
+      disc: box('.day-head__me .day-disc'),
+      overview: box('.day-head'),
+      updated: box('.wall__updated'),
       firstContent: first ? Math.round(first.getBoundingClientRect().top) : null,
     };
   });
@@ -271,8 +263,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 812 }
 
     const umbrochen = Object.entries(m.titleLines).filter(([, n]) => n !== 1);
     assert.deepEqual(umbrochen, [], `Der Gruss bricht um: ${umbrochen.map(([t, n]) => `"${t}" ${n} Zeilen`).join(', ')}`);
-    assert.ok(m.tools.bottom <= m.title.top + 1,
-      `Die Werkzeuge stehen neben dem Titel statt in der Datumszeile (Werkzeuge bis ${m.tools.bottom}, Titel ab ${m.title.top})`);
+    // TAFLA (2026-10-19): rechts in der Datumszeile steht nur noch der eigene
+    // Avatar (36, Treffer 44). Er ragt wie im Entwurf in den Zeilenabstand des
+    // Grusses, aber nie in dessen Schrift.
+    assert.ok(m.disc.bottom <= m.title.top + 8,
+      `Der Avatar steht neben dem Titel statt in der Datumszeile (Avatar bis ${m.disc.bottom}, Titel ab ${m.title.top})`);
+    assert.ok(m.titleRight <= m.disc.left || m.disc.bottom <= m.title.top + 8, 'Gruss und Avatar beruehren sich nicht');
     assert.ok(m.date.top < m.title.top && m.date.bottom <= m.title.top + 1, 'Das Datum steht ueber dem Titel');
     assert.ok(!m.updated?.shown, 'Der Stand-Anker gehoert der Wand, nicht dem Telefon');
     // Vorher 227px (ohne Wetterzeile) bzw. 274px (mit). Die Grenze laesst der
@@ -287,11 +283,13 @@ test('Kopf desktop: nicht hoeher als vorher, Werkzeuge rechts auf Hoehe des Datu
   await gotoRoute(page, '/');
   const m = await measureHead(page);
   await page.close();
-  // Vorher 67px: Datum, Titel und darunter rechts der Stand-Anker unter den
-  // Knoepfen. Ohne den Anker sind es Datum plus Titel.
-  assert.ok(m.overview.height <= 67, `Der Kopf ist am Desktop ${m.overview.height}px hoch`);
+  // TAFLA (2026-10-19): Datum 18, Gruss 41, die Wetterzeile 22 (wenn es
+  // Wetter gibt), dazwischen je 4 - hoechstens 89px. Vorher 67px ohne
+  // Wetterzeile, die damals unter dem Gruss nur mobil stand.
+  assert.ok(m.overview.height <= 89, `Der Kopf ist am Desktop ${m.overview.height}px hoch`);
   assert.equal(m.titleLines['Guten Morgen, Linda'], 1);
-  assert.ok(Math.abs(m.tools.top - m.date.top) <= 2, 'Die Werkzeuge haengen oben, auf der Datumszeile');
+  const middle = (b) => (b.top + b.bottom) / 2;
+  assert.ok(Math.abs(middle(m.disc) - middle(m.date)) <= 2, 'Der Avatar steht auf der Datumszeile');
   assert.ok(!m.updated?.shown, 'Kein Stand-Anker ausserhalb des Wand-Modus');
 });
 
@@ -300,14 +298,14 @@ test('Kopf in der kompakten Hoehenklasse (640x400): nur die Datumszeile bleibt s
   await gotoRoute(page, '/');
   const m = await measureHead(page);
   const a11y = await page.evaluate(() => {
-    const t = document.querySelector('.dashboard-overview__title');
+    const t = document.querySelector('.day-head__greeting');
     return { tag: t?.tagName, text: t?.textContent.trim() };
   });
   await page.close();
   assert.ok(!m.title.shown, 'Der Large Title steht in 400px Hoehe noch sichtbar da');
   assert.equal(a11y.tag, 'H2', 'Die Ueberschrift bleibt fuer Screenreader im Dokument');
   assert.ok(a11y.text.length > 0);
-  assert.ok(m.date.shown && m.tools.shown, 'Datum und Werkzeuge bleiben');
+  assert.ok(m.date.shown && m.tools.shown, 'Datum und Avatar bleiben');
   // Datumszeile (Knopf 44px) plus Polster - vorher 150px und mehr.
   assert.ok(m.overview.height <= 72, `Der Kopf ist in 400px Hoehe ${m.overview.height}px hoch`);
 });
@@ -439,7 +437,7 @@ async function afterBack(page) {
     // Auf `about:blank` (die App ist „geschlossen") ist der Speicher gesperrt.
     stored: (() => { try { return localStorage.getItem('yuvomi-wall-mode'); } catch { return 'unlesbar'; } })(),
     wallSurface: !!document.querySelector('.dashboard--wall'),
-    overview: !!document.querySelector('.dashboard-overview'),
+    overview: !!document.querySelector('[data-today]'),
   }));
 }
 
@@ -493,7 +491,7 @@ test('Wand-Modus nach einem Neustart: Zurueck beendet ihn, statt die App zu verl
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
- * 3. Das Raster packt dicht, auch mit eigener Reihenfolge
+ * 3. Dziś: Reihenfolge, Zeilen, Kacheln und „Dostosuj Dziś"
  * ──────────────────────────────────────────────────────────────────────────── */
 
 async function saveLayout(page, layout) {
@@ -510,229 +508,117 @@ async function saveLayout(page, layout) {
   }, layout);
 }
 
-/** Belegt die Zellen aus den gerenderten Rechtecken - nicht aus der eigenen Rechnung. */
-async function gridCells(page) {
-  return page.evaluate(() => {
-    const g = document.getElementById('dashboard-widget-grid');
-    const cs = getComputedStyle(g);
-    const colsT = cs.gridTemplateColumns.split(' ').map(parseFloat);
-    const rowsT = cs.gridTemplateRows.split(' ').map(parseFloat);
-    const cg = parseFloat(cs.columnGap);
-    const rg = parseFloat(cs.rowGap);
-    const gr = g.getBoundingClientRect();
-    const offX = parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
-    const offY = parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop);
-    const trackAt = (tracks, gap, off) => {
-      let p = 0;
-      for (let i = 0; i < tracks.length; i += 1) {
-        if (off < p + tracks[i] / 2) return i;
-        p += tracks[i] + gap;
-      }
-      return tracks.length - 1;
-    };
-    const trackEnd = (tracks, gap, start, end) => {
-      let p = 0;
-      let last = start;
-      for (let i = 0; i < tracks.length; i += 1) {
-        if (i >= start && p + tracks[i] / 2 <= end) last = i;
-        p += tracks[i] + gap;
-      }
-      return last;
-    };
-    const occ = rowsT.map(() => Array(colsT.length).fill(null));
-    const order = [];
-    for (const it of g.querySelectorAll(':scope > .widget-wrapper')) {
-      const r = it.getBoundingClientRect();
-      const x0 = r.left - gr.left - offX;
-      const y0 = r.top - gr.top - offY;
-      const c0 = trackAt(colsT, cg, x0);
-      const r0 = trackAt(rowsT, rg, y0);
-      const c1 = trackEnd(colsT, cg, c0, x0 + r.width);
-      const r1 = trackEnd(rowsT, rg, r0, y0 + r.height);
-      for (let a = r0; a <= r1; a += 1) for (let b = c0; b <= c1; b += 1) occ[a][b] = it.dataset.widgetId;
-      order.push(it.dataset.widgetId);
-    }
-    const lastRow = occ.length - 1;
-    const inner = [];
-    occ.forEach((row, ri) => row.forEach((v, ci) => { if (!v && ri < lastRow) inner.push(`${ri}/${ci}`); }));
-    return {
-      cols: colsT.length,
-      flow: cs.gridAutoFlow,
-      order,
-      inner,
-      cells: occ,
-      map: occ.map((row) => row.map((v) => (v || '.').slice(0, 8)).join(' | ')).join('\n'),
-    };
-  });
+/* TAFLA (2026-10-19): Dziś hat kein Kachelraster mehr - die Raster-Sonden
+ * (Loecher, Ziehen, Groessen-Hinweis, die hohe Budget-Kachel) messen jetzt,
+ * was an ihre Stelle trat: die Abschnitte in der Reihenfolge der Person, die
+ * Zeilengeometrie des Plans, die Vorschaukacheln und „Dostosuj Dziś". */
+
+async function openCustomize(page) {
+  await clickLive(page, '[data-day-action="customize"]', { timeout: 15000 });
+  await page.waitForSelector('.day-sheet [data-section-list]', { timeout: 10000 });
+  await wait(300);
 }
 
-// Der Knopf steht erst mit den Daten: bis `/dashboard` antwortet, zeigt die
-// Shell das Skelett ohne Werkzeuge. `settle()` gibt nach hoechstens rund 2,7s
-// auf, auch wenn die Antwort noch aussteht - unter Last (volle Kette, R19) war
-// das zu frueh, und `page.click` fand `#dashboard-customize-btn` nicht.
-async function enterEditMode(page) {
-  await page.waitForSelector('#dashboard-customize-btn', { visible: true, timeout: 15000 });
-  await page.click('#dashboard-customize-btn');
-  await page.waitForSelector('#dashboard-widget-grid .widget-wrapper--editing', { timeout: 10000 });
-  await wait(300);
-  await freeze(page);
-}
-
-// Umsortiert (calendar vor tasks): bisher schaltete das auf preserve-order, und
-// die 1x1-Kachel blieb hinter der zweiten Breitkachel stehen - ein Loch rechts
-// neben der ersten.
-const REORDERED = [
-  { id: 'calendar', size: '2x1' },
-  { id: 'tasks', size: '2x1' },
-  { id: 'notes', size: '1x1' },
-];
-
-test('Raster: eine eigene Reihenfolge laesst keine Loecher, in Ansicht UND Bearbeiten', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  await saveLayout(page, REORDERED);
-  await gotoRoute(page, '/');
-  const view = await gridCells(page);
-  await enterEditMode(page);
-  const edit = await gridCells(page);
-  await page.close();
-
-  assert.equal(view.cols, 3, `Reichweite: ${view.cols} Spalten statt 3`);
-  assert.deepEqual(view.order, ['calendar', 'tasks', 'notes'], 'Die gespeicherte Reihenfolge bleibt die Rangfolge im Dokument');
-  assert.deepEqual(view.inner, [], `Loch in der Ansicht:\n${view.map}`);
-  assert.deepEqual(edit.inner, [], `Loch im Bearbeiten-Modus:\n${edit.map}`);
-  // Keine Karte springt: jede Zelle, die im Bearbeiten-Modus belegt ist, traegt
-  // in der Ansicht dieselbe Kachel. Die Ansicht darf nur LEERE Zellen fuellen -
-  // seit R10 (L9) waechst die Kachel vor einer Luecke in den Rest ihrer Reihe,
-  // der Bearbeiten-Modus zeigt die gewaehlte Groesse und damit das Loch samt
-  // Hinweis. Ein Vergleich der ganzen Karte hielt dieses Wachsen fuer Springen.
-  const moved = [];
-  edit.cells.forEach((row, ri) => row.forEach((id, ci) => {
-    const shown = view.cells[ri]?.[ci] ?? null;
-    if (id && shown !== id) moved.push(`${ri}/${ci}: ${id} -> ${shown}`);
-  }));
-  assert.deepEqual(moved, [], `Beim Umschalten springen Karten:\nAnsicht\n${view.map}\nBearbeiten\n${edit.map}`);
-  assert.deepEqual(view.order, edit.order, 'Die Reihenfolge ist in beiden Modi dieselbe');
-});
-
-test('Raster: Ziehen und Ablegen ordnet im dichten Raster weiter um', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  await saveLayout(page, REORDERED);
-  await gotoRoute(page, '/');
-  await enterEditMode(page);
-  // Natives HTML5-Drag (draggable="true" am Wrapper): dieselben Ereignisse, die
-  // der Browser beim Ziehen schickt, mit einem echten DataTransfer.
-  await page.evaluate(() => {
-    const grid = document.getElementById('dashboard-widget-grid');
-    const from = grid.querySelector('[data-widget-id="notes"]');
-    const to = grid.querySelector('[data-widget-id="calendar"]').getBoundingClientRect();
-    const dt = new DataTransfer();
-    const at = { clientX: to.left + 10, clientY: to.top + to.height / 2 };
-    from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
-    grid.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, ...at }));
-    grid.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, ...at }));
-  });
-  await wait(300);
-  const after = await gridCells(page);
-  await page.close();
-  assert.deepEqual(after.order, ['notes', 'calendar', 'tasks'], `Ablegen vor "calendar" ergab ${after.order.join(', ')}`);
-  assert.deepEqual(after.inner, [], `Loch nach dem Ablegen:\n${after.map}`);
-});
-
-// Drei Breitkacheln in drei Spalten: auch dicht gepackt bleibt rechts je eine
-// Zelle frei, weil keine spaetere Kachel hineinpasst. Das ist der Fall fuer den
-// Hinweis - und eine Groesse, die ihn loest, gibt es.
-const UNFILLABLE = [
-  { id: 'calendar', size: '2x1' },
-  { id: 'tasks', size: '2x1' },
-  { id: 'notes', size: '2x1' },
-];
-
-test('Raster: bleibt im Bearbeiten-Modus ein Loch, schlaegt ein Hinweis eine Groesse vor, die es schliesst', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  await saveLayout(page, UNFILLABLE);
-  await gotoRoute(page, '/');
-  const view = await page.evaluate(() => !!document.querySelector('.dashboard-grid-hint'));
-  await enterEditMode(page);
-  const before = await gridCells(page);
-  const hint = await page.evaluate(() => {
-    const el = document.querySelector('.dashboard-grid-hint');
-    const btn = el?.querySelector('[data-grid-hint-apply]');
-    return el ? { text: el.textContent.replace(/\s+/g, ' ').trim(), apply: !!btn } : null;
-  });
-  assert.ok(!view, 'Der Hinweis gehoert in den Bearbeiten-Modus, nicht in die Ansicht');
-  assert.ok(before.inner.length > 0, `Reichweite: kein Loch im Ausgangsraster\n${before.map}`);
-  assert.ok(hint, `Kein Hinweis trotz Loch:\n${before.map}`);
-  assert.ok(hint.apply, 'Der Hinweis bietet seinen Vorschlag nicht zum Uebernehmen an');
-
-  await page.click('.dashboard-grid-hint [data-grid-hint-apply]');
-  await wait(400);
-  await freeze(page);
-  const after = await gridCells(page);
-  const still = await page.evaluate(() => !!document.querySelector('.dashboard-grid-hint'));
-  await page.close();
-  assert.deepEqual(after.inner, [], `Der Vorschlag schliesst das Loch nicht:\n${after.map}`);
-  assert.ok(!still, 'Der Hinweis bleibt stehen, obwohl kein Loch mehr da ist');
-});
-
-/* ────────────────────────────────────────────────────────────────────────────
- * 4. Die hohe Budget-Kachel fuellt ihre Hoehe mit Inhalt
- * ──────────────────────────────────────────────────────────────────────────── */
-
-test('Budget 1x2: zwischen Einnahmen/Ausgaben und Fusszeile steht kein leeres Band', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  // Drei hohe Karten nebeneinander: die Zeilenhoehe kommt von den Listen links
-  // und rechts, nicht von der Budget-Karte - genau die Lage der Critique.
+test('Dziś: die gespeicherte Reihenfolge ist die Reihenfolge der Abschnitte', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
   await saveLayout(page, [
-    { id: 'birthdays', size: '1x2' },
-    { id: 'budget', size: '1x2' },
-    { id: 'tasks', size: '1x2' },
+    { id: 'today-soon', size: '1x1' },
+    { id: 'today-shopping', size: '1x1' },
+    { id: 'today-tomorrow', size: '1x1' },
   ]);
   await gotoRoute(page, '/');
+  await page.waitForSelector('[data-today]');
+  const order = await page.evaluate(() => [...document.querySelectorAll('[data-today] .day-section__title[id]')]
+    .map((h) => h.id).filter((id) => id !== 'day-plan-title'));
+  await page.close();
+  const known = order.filter((id) => ['day-soon-title', 'day-shopping-title', 'day-tomorrow-title'].includes(id));
+  assert.ok(known.length >= 1, `Reichweite: keiner der Abschnitte steht (${order.join(', ')})`);
+  const expected = ['day-soon-title', 'day-shopping-title', 'day-tomorrow-title'].filter((id) => known.includes(id));
+  assert.deepEqual(known, expected, `Reihenfolge auf der Seite: ${order.join(', ')}`);
+});
+
+test('Dziś: jede Zeile des Plans beginnt bei 56, und jedes Ziel ist 44 hoch', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
+  await gotoRoute(page, '/');
+  await page.waitForSelector('[data-today]');
   await freeze(page);
   const m = await page.evaluate(() => {
-    const card = document.querySelector('[data-widget-id="budget"]');
-    const flow = card?.querySelector('.budget-widget__flow');
-    const foot = card?.querySelector('.budget-widget__footer');
-    if (!flow || !foot) return null;
+    const rows = [...document.querySelectorAll('[data-today] .day-card > .day-row')];
     return {
-      band: Math.round(foot.getBoundingClientRect().top - flow.getBoundingClientRect().bottom),
-      rows: foot.querySelectorAll('li').length,
+      rows: rows.length,
+      offsets: rows.map((row) => {
+        const card = row.closest('.day-card').getBoundingClientRect();
+        const title = row.querySelector('.day-row__title').getBoundingClientRect();
+        return Math.round(title.left - card.left);
+      }),
+      small: [...document.querySelectorAll('[data-today] button, [data-today] a')]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.width > 0 && (r.height < 43.5 || r.width < 43.5))
+        .filter(({ el }) => !el.classList.contains('day-row__main') && !el.classList.contains('day-link-row'))
+        .map(({ el, r }) => `${el.className || el.tagName} ${Math.round(r.width)}x${Math.round(r.height)}`),
+      overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     };
   });
   await page.close();
-  assert.ok(m, 'Reichweite: die Budget-Kachel traegt keine Buchungen oder keine Fusszeile');
-  // Vorher 69px bei 1280px (90px bei 1440px): Abstand der Zeile plus ein Band,
-  // das die unten verankerte Fusszeile aufgerissen hat.
-  assert.ok(m.band <= 40, `Zwischen Ein-/Ausgaben und Fusszeile stehen ${m.band}px leer`);
-  assert.ok(m.rows >= 2, `Die hohe Kachel nennt nur ${m.rows} Ausgabenkategorie(n)`);
+  assert.ok(m.rows > 0, 'Reichweite: der Plan hat keine Zeilen');
+  assert.deepEqual([...new Set(m.offsets)], [56], `Titel nicht bei 56: ${m.offsets.join(', ')}`);
+  assert.deepEqual(m.small, [], `Ziele unter 44: ${m.small.join('; ')}`);
+  assert.ok(!m.overflow, 'Dziś scrollt waagerecht');
 });
 
-test('Raster: ohne Loch schweigt der Hinweis', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  await saveLayout(page, REORDERED);
+test('Dziś: Vorschaukacheln stehen zu zweit nebeneinander, gleich breit', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
+  await saveLayout(page, [
+    { id: 'today-shopping', size: '1x1' },
+    { id: 'budget', size: '1x1' },
+    { id: 'notes', size: '1x1' },
+    { id: 'health', size: '1x1' },
+    { id: 'housekeeping', size: '1x1' },
+  ]);
   await gotoRoute(page, '/');
-  await enterEditMode(page);
-  const hint = await page.evaluate(() => !!document.querySelector('.dashboard-grid-hint'));
+  await page.waitForSelector('[data-today]');
+  await freeze(page);
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('[data-today] .day-tile')]
+    .map((t) => { const r = t.getBoundingClientRect(); return { top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; }));
   await page.close();
-  assert.ok(!hint, 'Ein Hinweis ohne Loch ist Laerm');
+  assert.ok(tiles.length >= 2, `Reichweite: nur ${tiles.length} Vorschaukachel(n) mit Aussage im Seed`);
+  assert.equal(tiles[0].top, tiles[1].top, 'die ersten beiden stehen in einer Zeile');
+  assert.ok(Math.abs(tiles[0].width - tiles[1].width) <= 1, 'gleich breit');
+  assert.ok(tiles.every((t) => t.height >= 96), 'mindestens 96 hoch');
 });
 
-// Der Flake aus R19 als fester Fall: `/dashboard` antwortet erst nach
-// `settle()`. Gegen den alten Helfer (Klick ohne Warten) rot mit "No element
-// found for selector: #dashboard-customize-btn".
-test('Raster: der Bearbeiten-Modus wartet auf den Knopf, auch wenn /dashboard spaet antwortet', async () => {
+test('Dziś: „Dostosuj Dziś" wartet auf die Daten, auch wenn /dashboard spaet antwortet', async () => {
   const page = await openPage(harness, { device: 'desktop' });
-  await saveLayout(page, REORDERED);
   page.__yuvomiRequestInterceptor = (req) => {
     if (!/\/api\/v1\/dashboard(\?|$)/.test(req.url())) return false;
     setTimeout(() => { req.continue().catch(() => {}); }, 4000);
     return true;
   };
   await gotoRoute(page, '/');
-  await enterEditMode(page);
-  const editing = await page.evaluate(() => document.querySelectorAll('#dashboard-widget-grid .widget-wrapper--editing').length);
+  await openCustomize(page);
+  const rows = await page.evaluate(() => document.querySelectorAll('.day-sheet [data-section-id]').length);
   await page.close();
-  assert.ok(editing > 0, 'Reichweite: der Bearbeiten-Modus steht');
+  assert.ok(rows >= 3, 'Reichweite: das Blatt steht mit seinen Abschnitten');
+});
+
+test('Dziś: ein Schalter im Blatt nimmt den Abschnitt sofort von der Seite und speichert ihn', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
+  await saveLayout(page, [{ id: 'today-shopping', size: '1x1' }, { id: 'today-tomorrow', size: '1x1' }]);
+  await gotoRoute(page, '/');
+  await openCustomize(page);
+  await page.click('.day-sheet [data-switch="today-shopping"]');
+  await wait(800);
+  const after = await page.evaluate(async () => {
+    const { api } = await import('/api.js');
+    const prefs = await api.get('/preferences');
+    return {
+      section: !!document.querySelector('[data-today] #day-shopping-title'),
+      saved: prefs.data.dashboard_widgets.find((w) => w.id === 'today-shopping')?.visible,
+    };
+  });
+  await page.close();
+  assert.equal(after.section, false, 'der Abschnitt steht noch auf der Seite');
+  assert.equal(after.saved, false, 'die Aenderung ist nicht gespeichert');
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -754,67 +640,50 @@ function answerWeather(page, reply) {
   };
 }
 
+/* TAFLA (2026-10-19): Dziś hat keine Wetterkachel mehr; das Wetter ist eine
+ * Zeile im Kopf und in „Dostosuj Dziś" abschaltbar. Dieselbe Regel wie vorher:
+ * eingerichtet, aber gescheitert, bleibt der Schalter erreichbar; nicht
+ * eingerichtet gibt es ihn nicht, wie bei einem abgeschalteten Modul. */
 async function weatherState(page) {
-  return page.evaluate(() => {
-    const tile = document.querySelector('#dashboard-widget-grid [data-widget-id="weather"]');
-    return {
-      tile: !!tile,
-      unavailable: !!tile?.querySelector('.weather-widget--unavailable'),
-      text: tile?.querySelector('.widget__empty')?.textContent.trim() ?? null,
-      refresh: !!tile?.querySelector('#weather-refresh-btn'),
-      chip: !!document.querySelector('[data-widget-show="weather"]'),
-      grid: [...document.querySelectorAll('#dashboard-widget-grid > .widget-wrapper')].map((w) => w.dataset.widgetId),
-    };
-  });
+  await page.waitForSelector('[data-today]');
+  return page.evaluate(() => ({
+    line: !!document.querySelector('[data-today] .day-head__weather'),
+    page: !!document.querySelector('[data-today]'),
+  }));
+}
+
+async function weatherSwitch(page) {
+  await openCustomize(page);
+  return page.evaluate(() => !!document.querySelector('.day-sheet [data-switch="today-weather"]'));
 }
 
 for (const [label, reply] of [
   ['der Anbieter scheitert (upstream_error)', { data: null, reason: 'upstream_error' }],
   ['die Anfrage selbst scheitert (Seed hat Wetter eingerichtet)', 'abort'],
 ]) {
-  test(`Wetter: ${label} - die Kachel bleibt im Raster und sagt es`, async () => {
-    const page = await openPage(harness, { device: 'desktop' });
+  test(`Wetter: ${label} - keine Zeile ohne Wetter, der Schalter bleibt im Blatt`, async () => {
+    const page = await openPage(harness, { device: 'mobile' });
     answerWeather(page, reply);
-    await saveLayout(page, [{ id: 'weather', size: '2x1' }, { id: 'notes', size: '1x1' }]);
     await gotoRoute(page, '/');
     const s = await weatherState(page);
+    const toggle = await weatherSwitch(page);
     await page.close();
-
-    assert.ok(s.grid.includes('notes'), `Reichweite: das Raster steht (${s.grid.join(', ')})`);
-    assert.ok(s.tile, `die Wetterkachel fehlt im Raster (${s.grid.join(', ')})`);
-    assert.ok(s.unavailable, 'die Kachel zeigt den Zustand "gerade nicht verfuegbar"');
-    assert.equal(s.text, 'Wetter gerade nicht verfügbar');
-    assert.ok(s.refresh, 'der Aktualisieren-Knopf bleibt als Weg zurueck');
+    assert.ok(s.page, 'Reichweite: Dziś steht');
+    assert.ok(!s.line, 'ohne Wetter keine leere Wetterzeile');
+    assert.ok(toggle, 'eingerichtetes Wetter bleibt in „Dostosuj Dziś" erreichbar');
   });
 }
 
-test('Wetter: ausgeblendet und gescheitert - die Ablage bietet die Kachel weiter an', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  answerWeather(page, { data: null, reason: 'upstream_error' });
-  await saveLayout(page, [{ id: 'notes', size: '1x1' }]);
-  await gotoRoute(page, '/');
-  await enterEditMode(page);
-  const s = await weatherState(page);
-  await page.close();
-  assert.ok(s.chip, 'eingerichtetes Wetter bleibt in der Anpassen-Ablage');
-});
-
-test('Wetter: nicht eingerichtet - weder im Raster noch in der Ablage, wie ein abgeschaltetes Modul', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
+test('Wetter: nicht eingerichtet - weder im Kopf noch im Blatt, wie ein abgeschaltetes Modul', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
   answerWeather(page, { data: null, reason: 'not_configured' });
-  await saveLayout(page, [{ id: 'weather', size: '2x1' }, { id: 'notes', size: '1x1' }]);
   await gotoRoute(page, '/');
-  const view = await weatherState(page);
-  await saveLayout(page, [{ id: 'notes', size: '1x1' }]);
-  await gotoRoute(page, '/');
-  await enterEditMode(page);
-  const edit = await weatherState(page);
+  const s = await weatherState(page);
+  const toggle = await weatherSwitch(page);
   await page.close();
-
-  assert.ok(view.grid.includes('notes'), `Reichweite: das Raster steht (${view.grid.join(', ')})`);
-  assert.ok(!view.tile, 'ohne Einrichtung gibt es keine Wetterkachel');
-  assert.ok(edit.grid.length > 0, 'Reichweite: der Bearbeiten-Modus steht');
-  assert.ok(!edit.chip, 'und auch keinen Chip, der eine leere Kachel zurueckholen wuerde');
+  assert.ok(s.page, 'Reichweite: Dziś steht');
+  assert.ok(!s.line, 'keine Wetterzeile');
+  assert.ok(!toggle, 'und kein Schalter fuer ein Wetter, das es nicht gibt');
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -924,7 +793,7 @@ test('FAB: nach "erneut versuchen" steht er in der Shell-Ebene, mit Plus, neben 
   await page.waitForSelector('#dashboard-retry');
   assert.equal(failNext, false, 'Reichweite: die Uebersicht hat die gescheiterte Anfrage gar nicht gestellt');
   await page.click('#dashboard-retry');
-  await page.waitForSelector('#dashboard-widget-grid .widget-wrapper');
+  await page.waitForSelector('[data-today]');
   const after = await fabOverCapsule(page);
   await page.close();
   assertFabDocked(after, 'nach erneut versuchen');

@@ -130,7 +130,12 @@
 
      Only the --f-* values are written down, here and in the two dark lists;
      every --m-* is an alias and follows by itself. The overview family is not
-     listed: in the app it IS --color-accent (--accent here). */
+     listed: in the app it IS --color-accent (--accent here).
+
+     Since Tafla (2026-10-19) the app keeps module colour out of its chrome
+     (every --_family-* is ink-2 there). This page keeps the tones as its own
+     illustration palette, frozen at the app's last values; the guard in
+     test/test-docs-landing.js holds the table. */
   --f-time: #00668F;         /* --_family-time: calendar, shifts, reminders */
   --f-work: #157F3D;         /* --_family-work: tasks, housekeeping, waste, rewards */
   --f-kitchen: #C2410C;      /* --_family-kitchen: meals, recipes, shopping, pantry */

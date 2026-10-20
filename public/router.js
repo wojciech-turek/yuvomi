@@ -2541,29 +2541,12 @@ let _toolbarObserverRoot = null;
  */
 const _toolbarHandles = new WeakMap();
 
-/**
- * Icon-Fabrik für das Absender-Siegel eines Modulkopfes.
- *
- * ABGELEITET, NICHT ZWEITGESCHRIEBEN: welches Zeichen ein Modul führt, steht in
- * `MODULE_ICON` (nav-icons.js) - ein zweiter Katalog Modul→Icon wäre die Sorte
- * Dublette, die beim achtzehnten Modul auseinanderläuft. Genau das war er auch:
- * bis 2026-08-17 las diese Stelle aus `navItems()`, das Dashboard aus seinem
- * eigenen `widgetIcon()`, und Notizen trug deshalb im Kopf einen Zettel und im
- * Widget eine Stecknadel. Die Farbe braucht gar keine Angabe: das
- * Modul-Stylesheet setzt `--module-accent` auf seinem Root, der Kopf liegt
- * darin, das Siegel erbt.
- *
- * DRITTANBIETER-MODULE BEKOMMEN KEINES, und das ist kein Loch: das Siegel ist
- * Yuvomis eigene Ausweisform. Ein fremdes Modul ist kein Raum dieser Familie,
- * und sein Icon steht in keiner Zeile von MODULE_ICON.
- */
-function headSealIcon(mod) {
-  const name = mod ? MODULE_ICON[mod] : null;
-  return name ? () => moduleIconEl(name) : null;
-}
-
+/* Das Absender-Siegel neben dem Seitentitel ist mit Tafla (2026-10-19,
+ * DESIGN.md Direction Contract) zurueckgezogen: ein Kopf traegt nur noch
+ * seinen Titel. `headSealIcon` stand hier und lieferte `wireCollapsingHeader`
+ * das Modulzeichen (aus MODULE_ICON); der Kopf legt ohne `sealIcon` keines an. */
 function wireToolbar(el) {
-  const handle = wireCollapsingHeader(el, { sealIcon: headSealIcon(currentRoute()?.module) });
+  const handle = wireCollapsingHeader(el);
   // Der erste Handle gewinnt: `wireCollapsingHeader` ist idempotent und liefert
   // beim zweiten Anlauf ein wirkungsloses Paar zurueck. Wer das eintraegt,
   // ueberschreibt genau das `destroy()`, um das es hier geht.

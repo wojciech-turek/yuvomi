@@ -1417,7 +1417,9 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * bei 5,04-7,17:1; die Spanne dazwischen ist der Preis des Materials, und er
  * ist bezahlt. */
 .module-seal {
-  --seal-accent: var(--module-accent, var(--color-accent));
+  /* Tafla: ohne Modulton im Raum ist das Zeichen Tinte-2, nie Violett -
+   * Violett heisst "hier kannst du handeln". */
+  --seal-accent: var(--module-accent, var(--color-text-secondary));
   --seal-icon: var(--icon-md);
   display: inline-flex;
   align-items: center;
@@ -1457,6 +1459,26 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 
 .vivid-mark {
   --seal-accent: var(--module-accent, var(--color-accent));
+}
+
+/* ── TAFLA: EIN MODUL NENNT SICH MIT SEINEM ZEICHEN (2026-10-19) ──
+ * Die Modulfarbe hat das Chrome verlassen (tokens.css, Abschnitt 4: jede
+ * Familie ist Tinte-2). Das Siegel verliert deshalb seine Scheibe: ein Modul
+ * nennt sich in Navigation, Mehr-Blatt, Suche, Widget- und Wandzeilen mit dem
+ * nackten Zeichen in --seal-accent (Tinte-2), ohne Flaeche, ohne Sheen, ohne
+ * farbige Kachel. Die Geometrie (Groessenrollen) bleibt beim Baustein oben.
+ *
+ * `.vivid-mark` behaelt das Material: es traegt INHALTSFARBEN, die jemand
+ * gewaehlt hat (Kategorie eines Kontakts, Farbe einer Kategorie). Wo eine
+ * vivid-mark ein MODUL nennt (die Marken der Einstellungen), nimmt
+ * settings.css ihr die Scheibe auf demselben Weg.
+ *
+ * Die Kopfrolle (`.module-seal--head`, das Zeichen neben dem Seitentitel) ist
+ * mit Tafla zurueckgezogen: router.js uebergibt dem Kopf kein Siegel mehr.
+ * Die Regeln dafuer bleiben, solange die Kuechen-Leiste noch eines fuehrt. */
+.module-seal {
+  background: none;
+  color: var(--seal-accent);
 }
 
 .module-seal svg {
@@ -1641,12 +1663,8 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   width: var(--target-sm);
   height: var(--target-sm);
   flex-shrink: 0;
-  /* Der Inset-Specular kommt aus den Tokens (haengt am
-   * --glass-inset-strength-Schalter und faellt unter
-   * prefers-reduced-transparency / prefers-contrast mit). */
-  box-shadow:
-    var(--glass-inset-elevated),
-    var(--glass-inset-bottom-base);
+  /* Tafla: kein Inset-Specular mehr - ohne Scheibe gaebe es nichts, worauf
+   * das Licht faellt (vorher --glass-inset-elevated + -bottom-base). */
 }
 
 /* Aktives Modul (Sheet auf dieser Route geöffnet): Akzent-Ring am Siegel
@@ -2739,8 +2757,9 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   width: var(--fab-size);
   height: var(--fab-size);
   border-radius: var(--radius-full);
-  background-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  /* Tafla: die Flaechen-Rolle der Stimme mit weissem Zeichen (siehe .btn--primary). */
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   /* Specular über die Inset-Tokens, nicht als rohe rgba: sie tragen den Faktor
    * --glass-inset-strength, der unter prefers-reduced-transparency und
    * prefers-contrast auf 0 fällt. Der rohe Wert überlebte den Schalter genau
@@ -2760,7 +2779,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 .page-fab:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 85%, black);
+  background-color: var(--color-btn-primary-hover);
 }
 
 .page-fab:active {
@@ -2777,7 +2796,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   --focus-ring-color: var(--color-bg);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
-  box-shadow: 0 0 0 4px var(--color-accent);
+  box-shadow: 0 0 0 4px var(--color-btn-primary);
 }
 
 /* Long Loop: FAB-Animation nach N Aufrufen deaktivieren */
@@ -5397,12 +5416,13 @@ a.popover-menu__item {
   margin-top: var(--space-2);
 }
 
+/* Tafla: das Feldlabel eines Blatts - Footnote 13/600 in Tinte-2 und
+ * Satzschreibung (vorher Versalien mit Tracking in Tertiaer). */
 .filter-sheet__heading {
-  font-size: var(--text-xs);
+  font-size: var(--type-footnote);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  letter-spacing: var(--tracking-normal);
+  color: var(--color-text-secondary);
   margin: 0 0 var(--space-2);
 }
 
@@ -7618,7 +7638,16 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
   outline-offset: var(--focus-ring-offset);
 }
 
-/* EINE STIMME: der Primärknopf trägt app-weit Violett, nicht den Modulton.
+/* TAFLA (2026-10-19): der Primaerknopf ist eine violette FLAECHE und nimmt
+ * deshalb die Flaechen-Rolle der Stimme, --color-btn-primary (Tafla-Name
+ * --color-accent-fill), mit weisser Schrift: hell #6C3AED 6,06:1, dunkel
+ * #7C52F2 4,83:1. --color-accent ist im Dark die TEXT-Rolle (#B49CFF) - als
+ * Flaeche stand sie dort als Flieder-Pille mit schwarzer Schrift. Die
+ * Abdunklung 88/76 % gegen --neutral-950 entfaellt: sie mischte im Dark gegen
+ * Hell und hob die Flaeche aus dem AA-Bereich weisser Schrift; gedrueckt und
+ * Hover nehmen --color-btn-primary-hover (#5A2BD6 / #6A42E0).
+ *
+ * EINE STIMME: der Primärknopf trägt app-weit Violett, nicht den Modulton.
  * `--color-accent` IST die Stimme; der Modulton läuft über
  * `--active-module-accent`, das der Router aufs Dokument setzt, und erreicht
  * diese Regel nicht.
@@ -7629,13 +7658,13 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
  * nicht. Die 88%/76%-Abdunklung bleibt: sie reproduziert die
  * „Action"-Abstufung des bisherigen --color-btn-primary. */
 .btn--primary {
-  background-color: color-mix(in srgb, var(--color-accent) 88%, var(--neutral-950));
-  color: var(--color-ink-on-vivid);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   box-shadow: var(--shadow-sm);
 }
 
 .btn--primary:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 76%, var(--neutral-950));
+  background-color: var(--color-btn-primary-hover);
   box-shadow: var(--shadow-md);
 }
 
@@ -8818,7 +8847,8 @@ textarea::placeholder {
 
 /* Die FLAECHEN-Rolle der Stimme, nicht der Text-Akzent: die Bahn traegt einen
  * weissen Knopf wie der Primaerknopf sein weisses Label. Hell derselbe Wert
- * wie --color-accent (6,06:1); dunkel #7C3AED statt #A78BFA (5,70 statt 2,72). */
+ * wie --color-accent (6,06:1); dunkel #7C52F2 (Tafla, 4,83:1) statt des
+ * Text-Akzents #B49CFF (2,1). */
 .toggle input:checked + .toggle__track {
   background-color: var(--color-btn-primary);
 }
@@ -10793,6 +10823,9 @@ textarea.input { resize: vertical; }
  * die Sektionslabels an ihre Gruppe (4px Luft darueber statt 6, keine
  * darunter: 18,5 statt 22,5px), unter der Logo-Zeile und unter der Liste
  * fallen je 4px Polster weg - zusammen 24px; 1024x768 behaelt 3px Luft.
+ * Tafla (2026-10-19): die Labels stehen auf der Footnote (13 statt 12px, 4 x
+ * 1,2px mehr) - die Liste gibt dafuer ihr letztes Polster ab (0 statt 4px),
+ * 1024x768 behaelt 2px Luft.
  *
  * Eine CONTAINER-Abfrage an der Tafel, keine Media-Query: die Hoehen-Achse
  * der Groessenklasse kennt genau eine Grenze (--bp-short, tokens.css §11c),
@@ -10808,7 +10841,7 @@ textarea.input { resize: vertical; }
   }
 
   .nav-sidebar__items {
-    padding-bottom: var(--space-1);
+    padding-bottom: 0;
   }
 
   .nav-section-label {
@@ -11154,4 +11187,38 @@ p.field-hint--warn svg {
 
 .select-circle--on .select-circle__check {
   display: block;
+}
+
+/* ── TAFLA: DIE PERSONENSCHEIBE (utils/person-color.js) ──
+ * Das Initial einer Person in ihrer Tinte auf ihrer Toenung (--person-N /
+ * --person-N-tint, tokens.css 4c); die Werte setzt personDisc() als
+ * --person-disc-ink / --person-disc-tint. Drei Groessen: 20 in Zeilen, 36 im
+ * Kopf, 40 auf der Wand. Die geteilte Scheibe ("razem", razemDisc()) traegt
+ * statt der Toenung den harten 135-Grad-Schnitt beider Tinten und keinen
+ * Buchstaben. Eigene Eintraege zeigen keine Scheibe (DESIGN.md, Colors). */
+.person-disc {
+  --person-disc-size: var(--space-5);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--person-disc-size);
+  block-size: var(--person-disc-size);
+  border-radius: var(--radius-full);
+  background: var(--person-disc-tint, var(--color-fill));
+  color: var(--person-disc-ink, var(--color-text-secondary));
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.person-disc--md {
+  --person-disc-size: calc(var(--space-8) + var(--space-1));
+  font-size: var(--type-body);
+}
+
+.person-disc--lg {
+  --person-disc-size: var(--space-10);
+  font-size: var(--type-body);
 }
