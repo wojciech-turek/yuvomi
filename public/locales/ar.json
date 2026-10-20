@@ -7167,10 +7167,11 @@
             "note": "Save note"
         },
         "fullForm": "Full form: {{action}}",
-        "shoppingCount": "{{count}} items",
-        "shoppingCount_one": "{{count}} item",
-        "shoppingCount_few": "{{count}} items",
-        "shoppingCount_many": "{{count}} items",
+        "shoppingCount": "{{count}} عناصر",
+        "shoppingCount_one": "عنصر واحد",
+        "shoppingCount_two": "عنصران",
+        "shoppingCount_few": "{{count}} عناصر",
+        "shoppingCount_many": "{{count}} عنصرًا",
         "saved": {
             "task": "Added to Tasks",
             "event": "Added to Calendar",

@@ -317,6 +317,10 @@ const PLURAL_EXCEPTIONS = {
   // subscriptions.js:150-154 - dueLabel() faengt d<0, d===0 und d===1 vorher ab,
   // diese Zeile sieht nur noch d >= 2.
   'subscriptions.dueInDays': 'GUARDED',
+  // capture-sheet.js - shoppingOne/shoppingMany pair: the button text uses
+  // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
+  'capture.primary.shoppingMany': 'GUARDED',
+  'capture.saved.shoppingMany': 'GUARDED',
 
   // --- echte Luecken, eingefroren statt behoben ---------------------------
   // Alle unten sind bei n=1 grammatisch falsch und n=1 ist erreichbar.
