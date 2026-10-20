@@ -365,9 +365,13 @@ function loeschenStehtLinks(fuss, id, abbrechenId) {
     'als danger-outline, das den Rest nach rechts schiebt');
 }
 
+// Tafla (2026-10-19): das Mahlzeit-Blatt hat kein "Abbrechen" mehr - das X im
+// Kopf schliesst (mit Rueckfrage bei Eingaben), der Fuss traegt nur noch
+// [Loeschen] [Primaer]. Die Regel bleibt: Loeschen steht links vom Primaerknopf.
 test('Mahlzeit bearbeiten: Loeschen steht links im Dialogfuss, beim Anlegen nicht (R8 H10)', async () => {
   await withAccess(BEIDE, () => {
-    loeschenStehtLinks(fussVon(dialog()), 'modal-delete', 'modal-cancel');
+    loeschenStehtLinks(fussVon(dialog()), 'modal-delete', 'modal-save');
+    assert.doesNotMatch(fussVon(dialog()), /id="modal-cancel"/, 'Tafla: kein Abbrechen im Blatt');
     const neu = meals.buildModalContent({ mode: 'create', date: '2026-09-21', mealType: 'lunch', meal: null });
     assert.doesNotMatch(fussVon(neu), /modal-delete/, 'ohne Bestand gibt es nichts zu loeschen');
   });

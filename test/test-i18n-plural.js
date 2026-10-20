@@ -276,6 +276,10 @@ const PLURAL_EXCEPTIONS = {
   'subscriptions.activeCount': 'NO_NOUN',
   // "Przenieś 23 do spiżarni" - the number stands for the items, no noun follows.
   'shopping.moveToPantry': 'NO_NOUN',
+  // Tafla Posiłki (2026-10-19): "2 do kupienia", "2 na liście" - auf die Zahl
+  // folgt kein Substantiv, pl/en sind numerusneutral.
+  'meals.meterMissing': 'NO_NOUN',
+  'meals.meterListedCount': 'NO_NOUN',
 
   // --- Zahl in Klammern / hinter Doppelpunkt ------------------------------
   'category.errorInUse': 'PARENTHETICAL',
