@@ -276,6 +276,10 @@ const PLURAL_EXCEPTIONS = {
   'subscriptions.activeCount': 'NO_NOUN',
   // "Przenieś 23 do spiżarni" - the number stands for the items, no noun follows.
   'shopping.moveToPantry': 'NO_NOUN',
+  // Tafla Przepis: "Ugotowane 4×" (a multiplier, not a noun) and "Dopisz 2"
+  // on the tinted button - the ingredients are named around it.
+  'recipes.cookedTimes': 'NO_NOUN',
+  'recipes.addMissing': 'NO_NOUN',
   // Tafla Posiłki (2026-10-19): "2 do kupienia", "2 na liście" - auf die Zahl
   // folgt kein Substantiv, pl/en sind numerusneutral.
   'meals.meterMissing': 'NO_NOUN',
@@ -285,6 +289,8 @@ const PLURAL_EXCEPTIONS = {
   'category.errorInUse': 'PARENTHETICAL',
   'category.errorSubInUse': 'PARENTHETICAL',
   'shopping.clearChecked': 'PARENTHETICAL',
+  // Tafla Przepis: the aria label of "Dopisz N" - the count after the colon.
+  'recipes.addMissingLabel': 'PARENTHETICAL',
   'contacts.importSubmit': 'PARENTHETICAL',
   'health.cycle.settings.applyToAllDone': 'PARENTHETICAL',
 
