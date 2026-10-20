@@ -181,8 +181,8 @@
  * Hier stand das Versal-Mikro-Label (12px, semibold, Versalien, 0.05em) als
  * Sektionskopf einer Grouped-Liste, Apples altes Muster ("NACH KATEGORIE").
  * Tafla (2026-10-19, DESIGN.md Direction Contract) hat es zurueckgezogen: der
- * Kopf einer Gruppe ist Body-Semibold in Satzschreibung und Tinte ("Nabial 4",
- * "Na pozniej 2", "Ty", "Dom"), ohne Tracking. Die Bedeutungsfrage bleibt, was
+ * Kopf einer Gruppe ist Body-Semibold in Satzschreibung und Tinte ("Nabiał 4",
+ * "Na później 2", "Ty", "Dom"), ohne Tracking. Die Bedeutungsfrage bleibt, was
  * sich aendert, ist nur der Schnitt:
  *   BEREICH einer Seite   -> Section-Rolle darueber (Title 22/600).
  *   GRUPPE in einer Liste -> diese Rolle (Body 17/600).
@@ -212,7 +212,7 @@
 /* Die kompakten Kalenderlabels (Wochentag im Spaltenkopf, Gutter der
  * Wochenansicht) waren dieselbe Versal-Zeile, sind aber keine Gruppenkoepfe:
  * sie stehen in schmalen Spalten. Tafla setzt sie auf die Footnote (13/600)
- * in Satzschreibung - wie die Wochenleiste ("Pn Wt Sr"). */
+ * in Satzschreibung - wie die Wochenleiste ("Pn Wt Śr"). */
 .day-header__name,
 .week-gutter-label {
   font-size: var(--type-footnote);
@@ -404,8 +404,8 @@
 }
 
 /* Tafla: runde Ziffern NUR fuer Uhr, Timer, die Schrittnummer beim Kochen, die
- * eine Heldenzahl je Bildschirm und die Gipfelzeilen ("Smacznego!", "Dzien
- * ogarniety"). Immer 600 und tabellarisch; ab 96px mit -0.02em. */
+ * eine Heldenzahl je Bildschirm und die Gipfelzeilen ("Smacznego!", "Dzień
+ * ogarnięty"). Immer 600 und tabellarisch; ab 96px mit -0.02em. */
 .u-rounded {
   font-family: var(--font-rounded);
   font-weight: var(--font-weight-semibold);

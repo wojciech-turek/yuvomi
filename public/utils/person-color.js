@@ -145,7 +145,7 @@ export function razemBackground(userA, userB, household = []) {
 
 /**
  * Markup der "Razem"-Scheibe (geteilt). Ohne Buchstaben; der Name kommt als
- * Label vom Aufrufer (schon uebersetzt, z. B. t('people.together')), und die
+ * Label vom Aufrufer (schon uebersetzt, aus dem i18n-Helfer), und die
  * Scheibe ist ein Bild mit diesem Namen - oder dekorativ, wenn kein Label
  * kommt, weil der Text daneben es schon sagt.
  *

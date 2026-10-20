@@ -309,7 +309,7 @@
    *   --color-ink-3   non-text only: chevrons, grabber, disabled and empty-state
    *                   glyphs (#A29D94 / #6F6A61, ~2.7:1). Never words.
    *   --color-hearth  the warm wash used ONLY behind tonight's dinner (Teraz
-   *                   card in dinner mode, Posilki hero, wall hero). ink 15.21 /
+   *                   card in dinner mode, Posiłki hero, wall hero). ink 15.21 /
    *                   12.61, ink-2 6.06 / 6.32, accent 5.35 / 6.19. Never chrome,
    *                   never a gradient. */
   --color-fill:               var(--color-surface-3);
@@ -1497,8 +1497,8 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
   /* TAFLA: rounded numerals and peak lines ONLY - the wall clock, timers, the
-   * cook step number, the one hero number per screen ("Zostalo 2 504 zl") and
-   * the peaks ("Smacznego!", "Dzien ogarniety"), always 600 with tabular-nums.
+   * cook step number, the one hero number per screen ("Zostało 2 504 zł") and
+   * the peaks ("Smacznego!", "Dzień ogarnięty"), always 600 with tabular-nums.
    * Zero bytes: SF Pro Rounded ships with every Apple device, everything else
    * falls back to the UI face. No web font, on purpose. */
   --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

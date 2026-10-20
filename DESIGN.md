@@ -2,30 +2,50 @@
 name: Yuvomi
 description: Familienplaner in Apples Handwerk und Yuvomis Handschrift - warme Buehne, eine violette Stimme, WCAG AA als Invariante
 colors:
+  # Tafla (2026-10-19): Werte aus tokens.css, Dark-Werte im Kommentar.
   accent-violet: "#6C3AED"
-  accent-violet-hover: "#5B2FD4"
-  accent-violet-dark: "#A78BFA"
+  accent-violet-hover: "#5A2BD6"   # = accent-pressed
+  accent-violet-dark: "#B49CFF"    # Dark als TEXT; als Flaeche btn-primary #7C52F2
+  accent-fill-dark: "#7C52F2"
+  accent-tint: "#F0EBFD"           # dark #3A3249
   accent-light: "#F3EFFE"
   grouped-bg: "#F5F3ED"
   surface: "#FFFFFF"
   surface-dark: "#2B2825"
-  surface-3: "#EDEAE3"
-  fill-well: "#EDEAE3"
+  surface-3: "#ECE8E0"
+  fill-well: "#ECE8E0"             # = Tafla fill; dark #36322D
+  raised-dark: "#423D37"           # Tafla raised (light = surface)
   surface-elevated: "#FBFAF7"
-  surface-elevated-hover: "#EDEAE3"
+  surface-elevated-hover: "#ECE8E0"
   bg-dark: "#191816"
-  label: "#1D1B17"
-  text-secondary: "#63615B"
+  label: "#1C1B19"                 # Tafla ink; dark #F5F1E8
+  text-secondary: "#5E5A53"        # Tafla ink-2; dark #B3ACA1
   text-tertiary: "#6B675F"
   text-quaternary: "#8C8880"
+  ink-3: "#A29D94"                 # non-text only; dark #6F6A61
   border: "#E4E0D7"
-  border-subtle: "#EDEAE3"
+  border-subtle: "#E2DDD3"         # = Tafla separator; dark #3E3933
   border-strong: "#CFC9BC"
+  field-border: "#8A857C"          # dark #8A8378
   ink-on-vivid: "#FFFFFF"
-  success: "#1E7B35"
-  warning: "#A85D00"
-  danger: "#D70015"
+  success: "#1C7134"               # tint #E3F1E6; dark #5CC27D on #1F3A2B
+  warning: "#8F5000"               # tint #F7ECDC; dark #E6A94F on #40331F
+  danger: "#C41E3A"                # tint #FAE6E9; dark #FF7B76 on #46282A
   info: "#0663C7"
+  hearth: "#FBEFE3"                # dark #33291F; only behind tonight's dinner
+  toast: "#2B2825"                 # dark #3A3631; text #F5F1E8, action #B49CFF / #C6B4FF
+  person-1: "#2A64A8"              # blue, tint #E1E9F3; dark #7AAEEB on #2F3A47
+  person-2: "#AD3568"              # rose, tint #F4E3EA; dark #F08AB4 on #4A3139
+  person-3: "#2A6E45"              # green, tint #E0EFE5; dark #6ABA8C on #2A3D31
+  person-4: "#A3461C"              # terracotta, tint #F6E5DA; dark #EC9A70 on #47322A
+  person-5: "#8F4398"              # plum, tint #F2E4F4; dark #D396DB on #42324A
+  person-6: "#146B77"              # teal, tint #DCEDEF; dark #5BBAC4 on #253C3F
+  cook-stage: "#141311"            # both themes; panel #24211E, ink #F5F1E8, ink-2 #B8B2A7, accent #B49CFF
+  wall-night: "#0E0C0A"            # both themes; amber digits #B8792E
+  # TAFLA (2026-10-19): die Familien haben das Chrome verlassen - in tokens.css
+  # zeigt jedes --_family-* auf Tinte-2 (#5E5A53 / #B3ACA1). Die Werte unten
+  # sind die zurueckgezogenen Toene; die Webseite (docs/assets/site.css) fuehrt
+  # sie als eigene Illustrationspalette weiter.
   # Familientoene (Block 2, 2026-08-10): die Modul-Einzeltoene sind neun
   # Familien; jedes --module-* bezieht aus seiner Familie. Hier steht bewusst
   # keine Zahl - sie ist schon einmal gedriftet (CLAUDE.md, „Kanonische
@@ -61,12 +81,17 @@ typography:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "clamp(3rem, 9vw, 4.5rem)"
     fontWeight: 700
+  # Tafla: vier Groessen (34/41, 22/28, 17/22, 13/18), zwei Gewichte (400/600).
   large-title:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "2.125rem"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: 1.21
-    letterSpacing: "-0.015em"
+    letterSpacing: "0"
+  rounded-numerals:
+    fontFamily: "ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    fontWeight: 600
+    note: "clock, timers, cook step number, the one hero number, peak lines; tabular-nums"
   title-1:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "1.75rem"
@@ -76,12 +101,13 @@ typography:
   title-2:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "1.375rem"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: 1.21
-    letterSpacing: "-0.015em"
+    letterSpacing: "0"
+  # Tafla: der Bereichstitel ist Title 22/600 (vorher Title 3, 20px).
   title-3:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
-    fontSize: "1.25rem"
+    fontSize: "1.375rem"
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "0"
@@ -95,33 +121,38 @@ typography:
   # headline; Zeilenhoehe des Body (R16, 2026-10-05, test:typography).
   row-title:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 500
+    fontSize: "1.0625rem"
+    fontWeight: 400
     lineHeight: 1.47
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 400
     lineHeight: 1.47
+  # Tafla: Subheadline (15) ist aufgegangen - die Rolle --type-secondary steht
+  # auf der Footnote.
   subheadline:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
-    fontSize: "0.9375rem"
+    fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: 1.47
   footnote:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
     fontSize: "0.8125rem"
-    fontWeight: 500
+    fontWeight: 400
     lineHeight: 1.21
+  # Tafla: der Gruppenkopf ist Body 17/600 in Satzschreibung, keine Versalien,
+  # kein Tracking (vorher Versal-Mikro-Label 12px/0.05em).
   micro-label:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
-    fontSize: "0.75rem"
+    fontSize: "1.0625rem"
     fontWeight: 600
-    lineHeight: 1.21
-    letterSpacing: "0.05em"
+    lineHeight: 1.29
+    letterSpacing: "0"
+  # Tafla: Caption 2 (11) ist aufgegangen, --type-micro steht auf 13.
   caption-2:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
-    fontSize: "0.6875rem"
+    fontSize: "0.8125rem"
     fontWeight: 600
     lineHeight: 1.21
   mono:
@@ -129,15 +160,16 @@ typography:
     fontSize: "0.875rem"
     fontWeight: 400
 rounded:
+  # Tafla: fuenf konzentrische Radien 8/12/20/28/full.
   2xs: "2px"
-  xs: "4px"
-  sm: "10px"
+  xs: "8px"
+  sm: "12px"
   md: "12px"
-  lg: "16px"
-  xl: "26px"
+  lg: "20px"
+  xl: "28px"
   full: "9999px"
-  glass-card: "26px"
-  glass-inner: "18px"
+  glass-card: "20px"
+  glass-inner: "20px"
 spacing:
   px: "1px"
   0h: "2px"
@@ -374,48 +406,97 @@ composition modes, and extension layout rules - lives in
 
 ## Direction Contract
 
-Stand bis 2026-08-08 als HTML-Kommentar am Body-Anfang von `public/index.html`
-und wurde damit an jeden Browser ausgeliefert. Er gehoert hierher, wo die
-uebrigen Designentscheidungen stehen.
+**THESIS:** Apples HANDWERK, Yuvomis HANDSCHRIFT. The structure is platform canon
+(grouped lists, capsule controls, the type scale, motion, AA discipline); the skin
+belongs to Yuvomi. Since **Tafla** (approved by the owner on 2026-10-19, "ok approve
+build it") the skin is one calm, still sheet: Dziś on one checkable plan, one violet
+voice, warmth only in the kitchen, everything under the thumb.
 
-**THESIS:** Apples HANDWERK, Yuvomis HANDSCHRIFT. Die Struktur ist
-Plattform-Kanon (Gruppenlisten, Kapsel-Controls, Typo-Skala, Motion,
-AA-Disziplin); die Haut gehoert Yuvomi. Verweigert wird der Kategorie-Standard
-(freundlicher Pastell-Organizer) - und seit 2026-08-10 ausdruecklich auch die
-woertliche Uebernahme von Apples PALETTE und seinem Pro-App-Tint-Modell.
+**TAFLA IN ONE PARAGRAPH.** Warm paper `#F5F3ED` with white grouped cards (radius 20),
+ink `#1C1B19` and ink-2 `#5E5A53` (dark: stage `#191816`, card `#2B2825`, fill
+`#36322D`, raised `#423D37`, ink `#F5F1E8`, ink-2 `#B3ACA1`). Colour has exactly three
+jobs: **violet** means "you can act here, or now"; **person colours** say who; **amber
+and red** mark state, always as a word in a tinted pill. Everything else is ink on paper.
+The iPhone type scale has four sizes and two weights; numerals that matter are rounded.
+Source of truth for every value: `public/styles/tokens.css` (its header lists the Tafla
+sections); the approved artboards and spec live with the design brief (BUILD.md).
 
-**KORREKTUR VOM 2026-08-10, und der Anlass steht in einem Satz des Betreibers:**
-"Im Vergleich zum alten Yuvomi fuehlt sich die App nicht mehr wie aus einem Guss
-an." Hier stand vorher "Plattform-Kanon in voller Treue" mit kuehlen
-System-Neutralen (#F2F2F7 / Near-Black #0A0A0C) und Apple Indigo als globalem
-Tint. Drei Uebernahmen waren zu woertlich, und alle drei sind zurueckgenommen:
-die KUEHLE BUEHNE (Apples Grau war Apples Buehne, nicht Yuvomis - jetzt warmes
-Papier #F5F3ED / warme Kohle #191816), der INDIGO-TINT (die Bildmarke ist
-violett und gesetzt; Logo und App sprachen zwei Farben - jetzt #6C3AED) und das
-PRO-APP-TINT-MODELL (Apple faerbt pro App, Yuvomi hat siebzehn Zimmer in EINEM
-Haus - siehe die Eine-Stimme-Regel). Was BLEIBT, ist alles, was die Runden 1-9
-an Struktur und Messbarkeit gebaut haben. Der Kanon war nicht der Fehler, seine
-woertliche Anwendung auf die Haut war es.
+**Retired with Tafla** (each replaced by the rule in brackets):
+- the **nine family tones in the chrome** - nav icons, More sheet, seals, widget heads,
+  sidebar legend and settings tiles no longer carry a module hue; every `--_family-*`
+  points at ink-2, so module identity is the bare glyph (the `--module-*` API stays, a
+  third-party module may still bring its own hue);
+- the **Vollton-Siegel widget head** and the coloured seal disc (`.module-seal` is a bare
+  ink-2 glyph; `.vivid-mark` keeps its disc only for CONTENT colours such as a contact
+  category);
+- the **module icon beside page titles** (`router.js` hands the header no seal any more;
+  a header carries its title only);
+- **uppercase tracked group labels** (`--tracking-label` is 0; a group header is
+  sentence-case Body 17/600 in ink, a label is Footnote 13);
+- the **read-only wall without exception** (the wall stays read-only by default; ticking
+  things off is behind the per-household switch "Pozwól odhaczać na ścianie", default
+  off; timers and Gotuj always work);
+- Title 1 (28), Title 3 (20), Subheadline (15), Caption 2 (11) and weight 500/700 as
+  separate steps (they map onto the four sizes and 400/600);
+- the light toast on dark, pure-black shadows on paper, the 26/16 radius mismatch.
 
-**OWN-WORLD:** Liquid-Glass-Designphilosophie (Lesbarkeit vor Transparenz:
-diffuses, sattes Glas, Inhalte opak). SF-Pro-System-Stack, Apple-Typo-Skala
-(Body 17, Large Title 34, Footnote 13). WARME Neutrale (#F5F3ED grouped /
-#191816 dunkel mit #2B2825-Flaechen). Eine Stimme: das Violett der Bildmarke
-#6C3AED. Neun Familientoene als Orientierungsvokabular, im INHALT. Glas nur als
-Chrome (Tab-Bar, Sidebar, Sheets), Inhalte opak. Kapsel-Controls,
-Inset-Grouped-Listen, Feder-Motion.
+**New with Tafla:**
+- **The person-colour rule.** Each household member is mapped to one of six curated AA
+  pairs (`--person-1..6` with `--person-N-tint`: 1 blue `#2A64A8` on `#E1E9F3`, 2 rose
+  `#AD3568` on `#F4E3EA`, then green, terracotta, plum, teal; dark variants per token).
+  `public/utils/person-color.js` does the mapping: `personToken(user, household)` returns
+  `{ slot, ink: 'var(--person-N)', tint: 'var(--person-N-tint)' }`, taking the nearest hue
+  of the user's avatar colour, starting grey avatars at (id - 1) mod 6, and never giving
+  two members of one household the same slot. Person colour appears ONLY as the initial on
+  a disc (20 rows / 36 header / 40 wall, `personDisc()`), the 3pt calendar edge and the 6pt
+  dot. Your own items show no avatar. **Shared ("razem")** items use `razemDisc(a, b,
+  { label })`: a letterless disc split at 135 degrees, `linear-gradient(135deg, A 0 50%,
+  B 50% 100%)` of the two people's inks (the only gradient besides the scroll-edge fade);
+  shared calendar events use the violet accent as their edge - blue and rose mix to
+  violet, so "together" needs no third hue. Both helpers return escaped markup for
+  `insertAdjacentHTML`; the label comes translated from the caller, without a label the
+  disc is decorative (`aria-hidden`). Styles: `.person-disc` in `layout.css`.
+- **The hearth** (`--color-hearth`, `#FBEFE3` / `#33291F`): a warm wash ONLY behind
+  tonight's dinner (Teraz card in dinner mode, the Posiłki hero, the wall hero). Never in
+  chrome, never a gradient.
+- **Rounded numerals** (`--font-rounded`: `ui-rounded, "SF Pro Rounded"`, system only, no
+  web font; `.u-rounded`): the wall clock, timers, the cook step number, the one hero
+  number per screen and the peak lines, always 600 with tabular figures.
+- **The dark cook stage** in both themes (`--cook-stage #141311`, `--cook-panel`,
+  `--cook-ink`, `--cook-ink-2`, `--cook-accent`): no glare at the stove at night. The
+  wall's night scene has its own pair (`--wall-night-bg #0E0C0A`, dim amber
+  `--wall-night-ink #B8792E`, 5.40:1).
+- **One violet voice, only where you can act** - primary, +, active tab, selection,
+  today, checked circles, links, focus ring, AI chips; at most ~10 % of a screen. Light
+  `#6C3AED`; in dark the voice is split: `--color-btn-primary` `#7C52F2` as a FILL under
+  white, `--color-accent` `#B49CFF` as TEXT or icon. Quiet wash: `--color-accent-tint`.
+  Done is violet, not green.
+- **Status as words.** success / warning / danger each come with a `-tint` and appear as
+  a word in a tinted pill ("zaległe", "jutro"), never as bare colour and never repeated
+  down a list; money is ink. Success only for income, a positive balance and "kwita".
+- **The four-size scale** (Large title 34/41, Title 22/28, Body 17/22, Footnote 13/18;
+  weights 400/600; `--type-large-title`, `--type-title`, `--type-body`, `--type-footnote`
+  with `-lh`), the wall's four fluid steps (`--wall-display` 112, `--wall-title` 44,
+  `--wall-body` 30, `--wall-label` 24 - nothing on the wall under 24).
+- **Shape and depth:** radii 8/12/20/28/full (`--radius-xs/sm/lg/xl/full`), warm shadows
+  `--shadow-e1` (cards that matter), `-e2` (chrome), `-e3` (sheets) and
+  `--shadow-accent-glow` (only the + and the one primary per screen); motion
+  `--ease-spring`, `--ease-exit`, `--dur-press/fast/base/move/sheet/peak`.
+- **The dark toast shell in both themes** (`--color-toast-bg` `#2B2825` / `#3A3631`, text
+  `#F5F1E8`, action "Cofnij" `#B49CFF` / `#C6B4FF`).
 
-**STORY:** Ein Familienmitglied oeffnet die App und sie fuehlt sich an wie ein
-Ort, der ihm gehoert: Orientierung in zwei Sekunden, heute zuerst, jedes Modul
-ein vertrauter Raum mit eigenem Zeichen - unter einem Dach, das nie die Farbe
-wechselt.
+**Where Tafla could not take a spec value literally** (measured, noted at the token):
+the dark toast action is `#C6B4FF` instead of `#B49CFF` (the 90 % glass over a white
+photo drops `#B49CFF` to 3.84:1); the shell danger ink rose to `#FFA59D` for the same
+reason; the dark `--color-border` moved to `#45403A` so ink-2 keeps 4.5:1 on the
+markdown separator. The field border sits a hair above the old "quiet minimum" (3.30
+light on paper / 3.39 dark on fill); its guard ceiling is 3.4.
 
-**FIRST VIEWPORT:** Dashboard - Large-Title-Gruss, Heute-Programm als
-Inset-Grouped-Listen, Glas-Tab-Bar mit eingesetztem FAB (mobil) /
-Glas-Sidebar mit farbiger Modul-Legende (Desktop).
-
-**FORM:** User-pinned Kanon (Apple HIG, Liquid-Glass-Designphilosophie;
-Messlatte Apple-Systemapps + Fantastical) als STRUKTUR, nicht als Palette.
+**Earlier contract, still in force where Tafla does not say otherwise:** warm neutrals
+instead of Apple's cool greys (2026-08-10), the violet of the brand mark instead of
+Indigo, glass only as chrome with opaque content, the private/public token
+architecture, AA as an invariant in both themes, and every rule named with the level on
+which a guard can hold it.
 
 ## Overview
 
@@ -495,6 +576,46 @@ endgueltig loeschte.
 - WCAG AA als Invariante in Light UND Dark, inkl. prefers-reduced-transparency- und prefers-contrast-Fallbacks
 
 ## Colors
+
+### Tafla palette (2026-10-19) - supersedes the numbers below where they differ
+
+Colour has three jobs: violet = "you can act here", person colours = who, amber/red =
+state as a word. Everything else is ink on warm paper. Measured pairs (WCAG 2.1,
+light / dark); every one of them is a contract in `test-frontend-audit.js` ("text/surface
+token pairs meet WCAG AA", "Tafla: Grafikpaare halten 3:1"):
+
+| Role | Token | Light | Dark | Measured |
+|---|---|---|---|---|
+| Paper (60 %) | `--color-bg` | `#F5F3ED` | `#191816` | ink 15.51 / 15.74 |
+| Card | `--color-surface` | `#FFFFFF` | `#2B2825` | ink 17.21 / 13.00, ink-2 6.86 / 6.51 |
+| Fill (fields, track, chips, plates) | `--color-fill` | `#ECE8E0` | `#36322D` | ink-2 5.61 / 5.65 |
+| Raised (thumb on fill) | `--color-raised` | `#FFFFFF` | `#423D37` | ink-2 - / 4.78 |
+| Separator (decorative) | `--color-separator` | `#E2DDD3` | `#3E3933` | - |
+| Field border, check ring | `--color-field-border` | `#8A857C` | `#8A8378` | 3.67 card, 3.30 paper / 3.91, 3.39 fill |
+| Ink (30 %) | `--color-text-primary` | `#1C1B19` | `#F5F1E8` | |
+| Ink-2 | `--color-text-secondary` | `#5E5A53` | `#B3ACA1` | 6.18 paper / 7.88 |
+| Ink-3, non-text only | `--color-ink-3` | `#A29D94` | `#6F6A61` | ~2.7, never words |
+| Violet (10 %) | `--color-accent` | `#6C3AED` | `#B49CFF` (text) | 6.06 card / 6.38 |
+| Violet fill | `--color-btn-primary` | `#6C3AED` | `#7C52F2` | white 6.06 / 4.83 |
+| Violet tint | `--color-accent-tint` | `#F0EBFD` | `#3A3249` | violet on it 5.20 / 5.28 |
+| Hearth | `--color-hearth` | `#FBEFE3` | `#33291F` | ink 15.21 / 12.61 |
+| Toast shell (both themes dark) | `--color-toast-bg` | `#2B2825` | `#3A3631` | text 13.00 / 10.63 |
+| Status | `--color-success/-warning/-danger` + `-tint` | `#1C7134` `#8F5000` `#C41E3A` | `#5CC27D` `#E6A94F` `#FF7B76` | on own tint 5.20 / 5.43 / 4.89; dark 5.57 / 5.93 / 5.23 |
+| Scrim | `--color-scrim` | ink 32 % | black 50 % | |
+
+**Die Tinte-2-Regel fuer Module (Tafla).** Every `--_family-*` resolves to ink-2 in both
+themes, so `--module-*`, `--module-accent`, `--active-module-accent` and
+`--item-module-accent` all carry a calm grey; `.module-seal` is a bare glyph. The
+Vollton rule below now applies only to CONTENT colours (a category, a chosen colour).
+Guard: "Tafla: module accents leave the chrome" (`test-frontend-audit.js`).
+
+**Die Personenfarben-Regel** (person palette, `person-color.js`, razem disc) is written
+out in the Direction Contract above. Calendar event colours, categories, account and
+meal-type colours are content and keep their hues.
+
+The text below is the history of the earlier palette; where it names a value Tafla
+changed (ink, ink-2, the dark violet `#A78BFA`, the status colours, the family tones in
+the chrome), the table above wins.
 
 Warme Neutrale als Buehne, das Violett der Bildmarke als Stimme, 17 Modul-Tints als
 Orientierungsvokabular; alle Textfarben AA-vertieft. Es gibt keinen chromatischen
@@ -960,6 +1081,28 @@ ist genau einmal definiert (typography.css); ein Element nimmt sie ueber die
 `u-*`-Utility-Klasse oder ueber seinen dort registrierten BEM-Selektor an.
 
 ### Hierarchy
+
+**Tafla (2026-10-19): on iPhone and iPad in the hand there are exactly FOUR sizes and TWO
+weights** - Large title 34/41 600 (screen titles, greeting, the one hero number), Title
+22/28 600 (sections, Teraz title, dinner name, end cards), Body 17/22 400 or 600 (rows,
+fields; buttons and group headers at 600), Footnote 13/18 400 or 600 (meta, eyebrows,
+chips, pills, tab and segment labels). Tokens: `--type-large-title`, `--type-title`,
+`--type-body`, `--type-footnote`, each with `-lh`. The older roles map onto them:
+`--text-xs`, `--text-sm`, `--type-secondary`, `--type-micro` are 13; `--type-section-title`
+is 22; `--font-weight-medium` is 400; titles are 600, not 700; `--tracking-tight` and
+`--tracking-label` are 0 (default tracking everywhere, `--tracking-display` -0.02em only
+on rounded numerals from 96px). The row title is Body 17/400; the dense card-title
+variant joined the headline (17/600). Group headers are sentence-case 17/600 in ink -
+there are no uppercase tracked labels any more (guard: "Tafla: kein Stylesheet setzt
+Versal-Labels mit Tracking"). `--text-base` (16) stays for inputs (iOS zoom threshold),
+`--text-2xs` (10) only for tiny counters. Rounded numerals: `--font-rounded` /
+`.u-rounded`. Wall and iPad cook mode: four fluid steps `--wall-display` (112),
+`--wall-title` (44), `--wall-body` (30), `--wall-label` (24, the floor).
+
+The list below is the earlier Apple scale; the Tafla paragraph above wins where they
+differ (Title 1 28, Title 3 20, Subheadline 15, Caption 2 11, the Versal-Mikro-Label and
+bold titles are retired).
+
 Apple-Skala: Large Title 34, Title 2 22, Title 3 20, Headline 17 semibold, Body 17,
 Subheadline 15, Footnote 13, Caption 2 11.
 
@@ -1552,6 +1695,22 @@ die der Schatten im Dark nicht leisten kann. Im Light bleibt der Ring den Glas-S
 vorbehalten; xs bleibt in beiden Themes ohne Ring.
 
 ### Shadow Vocabulary
+**Tafla (2026-10-19): mostly flat, and every shadow on paper is WARM** (`rgb(41,37,31)`,
+the hue of the ink) at the alphas listed below; dark keeps black. Four named steps:
+- **E0** - grouped lists and tiles: no shadow, white on paper is enough.
+- **E1** `--shadow-e1` (`0 1px 2px rgba(41,37,31,.04), 0 6px 20px rgba(41,37,31,.06)`):
+  the cards that matter (Teraz card, dinner hero, weekly question, "Wymaga uwagi"). Dark:
+  no drop, only `inset 0 0.5px 0 rgba(255,255,255,.06)`.
+- **E2** `--shadow-e2` (`0 2px 6px rgba(41,37,31,.06), 0 8px 32px rgba(41,37,31,.12)`
+  + a 0.5px inner highlight): chrome - capsule, +, add bar, collapsed top bar, toast.
+  Dark: `0 8px 32px rgba(0,0,0,.45)` + highlight `.08`.
+- **E3** `--shadow-e3` (`0 -12px 48px rgba(41,37,31,.14)`): sheets, over the scrim.
+- **`--shadow-accent-glow`** (`0 6px 20px rgba(108,58,237,.30)` + `inset 0 1px 0`
+  highlight; dark `rgba(124,82,242,.35)`): ONLY the + and the one primary per screen,
+  halved when pressed.
+The inner highlights hang on `--glass-inset-strength`, so reduced transparency and
+increased contrast switch them off with every other specular.
+
 - **shadow-xs** (`0 1px 2px rgba(0,0,0,0.08)`): kleinste Abhebung.
 - **shadow-sm** (`0 1px 2px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.04)`): Karten und
   Zeilen-Traeger in Ruhe.
@@ -1636,6 +1795,17 @@ nicht an einer Seite; gesetzt ist es an Uhrzeit, Datum und Fuss der Wand, wo der
 Einschalten bis rund 834px Breite acht Sekunden auf der Uhr lag.
 
 ## Shapes
+
+**Tafla (2026-10-19): five concentric radii.** 8 (`--radius-xs`: thumbnails up to 40,
+quantity tags, cook progress segments), 12 (`--radius-sm`/`--radius-md`: text fields,
+search, plates up to 56, tiles inside a 20 card with 8 padding, the all-day banner), 20
+(`--radius-lg`, `--radius-glass-card`, `--radius-glass-inner`: every card, grouped list,
+glance tile, Teraz card, dinner hero, menus, lifted rows), 28 (`--radius-xl`: sheets - top
+corners, all four at the floating medium detent), full (buttons, chips, pills, segmented
+track and thumb, capsule, +, avatars, toasts, timer discs). Wall and iPad cook mode step
+cards up to 32 and the plate to 24. Concentric pairs held in `test:material`: sheet 28 -
+16 padding = 12 field, More-sheet list 28 - 12 = 16, menu rows 20 - 4 = 16. The older
+numbers in the paragraph below (10/12/16/26/18) are history.
 
 Apple-Kurvatur, durchgehend gerundet, nie scharfkantig: Formfelder und Zellen 10px
 (`--radius-sm`), Karten 12px (`--radius-md`), Zeilen-Traeger und grosse Flaechen 16px
@@ -2613,6 +2783,10 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
   nie ihr Ersatz.
 
 ### Modulkopf (Signature Component)
+
+> **Tafla (2026-10-19):** the module icon beside the page title is retired -
+> `router.js` passes `wireCollapsingHeader` no `sealIcon`, so a header carries its title
+> only. Title weight is 600 (was 700), tracking default.
 Eine `.page-toolbar` pro Modul, **Absender-Siegel und Titel links**, Center-Slot (Suche oder
 Zeitraum-Navigation), Aktionen rechts. In der KOMPAKTEN Groessenklasse (<1024px, die Welt mit
 Tab-Bar) steht der Titel am Scroll-Anfang als **Large Title** (34px) auf eigener Zeile und
@@ -3486,6 +3660,12 @@ der Leerzustand des Tages nennt die Geste des Zeigers. Die Monatsansicht legt pe
 nie an und blieb, wie sie war. Umsetzung: `wireTimeGridCreate` in `pages/calendar.js`.
 
 ### Das Markensiegel (Signature Component)
+
+> **Tafla (2026-10-19):** the seal has no disc any more - a module names itself with its
+> bare glyph in ink-2 (`layout.css`, "Tafla: ein Modul nennt sich mit seinem Zeichen";
+> settings marks likewise in `settings.css`). The material described below survives only
+> on `.vivid-mark` for content colours. Guard changes: "Tafla: module accents leave the
+> chrome" replaced "module accent families stay pairwise distinct".
 Yuvomis eigene Ausweisform und die Antwort auf "Health hat die Ringe, was hat Yuvomi?" - die
 eine Stelle, an der die Marke etwas kann, was keine Systemapp braucht: **Yuvomi ist der
 einzige Ort, an dem siebzehn Apps in einem Raum leben, und das Siegel weist jedes Ding als
@@ -3570,6 +3750,10 @@ die Sprache des Nutzers. Die beiden Karten liegen beidseits der Schichtgrenze un
 `entity_type` gebunden, die der Server wirklich schreibt (Guard-Ebene Signatur).
 
 ### Der Widget-Kopf: das Vollton-Siegel als Absender (Signature Component)
+
+> **Tafla (2026-10-19): retired.** The widget head no longer carries a full-tone seal;
+> Dziś becomes one checkable plan (product decision 1). Where a widget head survives, its
+> glyph is the bare ink-2 seal.
 Seit 2026-08-17 (Widget-Kopf-Kur, Etappe 2 der Modernisierung) ist der Kopf einer
 Dashboard-Karte eine TITELZEILE DIREKT AUF DER KARTENFLAECHE: davor das Markensiegel im
 Vollton (Ton = Flaeche, Tinte = `--color-ink-on-vivid`), Titel in
