@@ -6,7 +6,10 @@
 
 import { api, auth } from '/api.js';
 import { openCookForMeal } from '/components/cook-mode.js';
-import { mountAiQuestion } from '/components/ai-question.js';
+import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-question.js';
+import { planContext, buildPlan, pickNow, dayClosed, buildTomorrow, buildSoon } from '/utils/today-plan.js';
+import { renderTodayPage, renderTodaySkeleton, updateTimerText } from '/components/today-view.js';
+import { openTodayCustomize } from '/components/today-customize.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { canSeeWidget, moduleAccess, navModuleAccess, canUseFasting } from '/permissions.js';
 import { todaySheetContext, collectSourceRows, composeTodaySheet, codaAllowed, speakingSourceIds } from '/utils/today-sheet.js';
@@ -45,7 +48,7 @@ import {
   COCKPIT_COVERED_WIDGETS,
   nearestPreset, sameWidgetConfig, suggestGridHoleFill, rowFillSpans,
   dashboardQuery, dashboardQueryFiltersCounts, dashboardRequest, normalizeShoppingListSelection,
-  fetchPendingReminders, childDefaultWidgetConfig,
+  fetchPendingReminders, childDefaultWidgetConfig, TODAY_SECTION_IDS, TODAY_EXTRA_IDS,
 } from '/utils/dashboard-widgets.js';
 import { EVENT_LIMIT_STEPS, EVENT_LIMIT_DEFAULT, clampEventLimit } from '/utils/dashboard-event-limit.js';
 import {
@@ -60,14 +63,14 @@ import { whoMark } from '/utils/seal-pair.js';
 import { MODULE_ICON, moduleIconHTML } from '/nav-icons.js';
 import { enterWallMode, exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
 import { mountZonePrompt } from '/utils/household-zone-hint.js';
-import { renderWallTimer, wireWallTimer } from '/components/wall-timer.js';
+import { renderWallTimer, wireWallTimer, readWallTimer, clearWallTimer } from '/components/wall-timer.js';
 import { rememberLayoutHint, layoutHintSizes, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
 import { emptyHintHTML } from '/utils/empty-state.js';
 import { quickLinkHost } from '/utils/quick-link-url.js';
 import { hasIcon } from '/utils/lucide-icons.js';
 import { prefersInkText } from '/utils/contrast.js';
 import { attachOverlay, pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.js';
-import { mealTypeList, primeMealTypeNames } from '/utils/meal-types.js';
+import { mealTypeList, mealTypeLabel, primeMealTypeNames } from '/utils/meal-types.js';
 import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
 import { wireNoteCategoryOverflow } from '/utils/note-category-overflow.js';
 import { installPopoverMenus, popoverMenuHtml } from '/utils/popover-menu.js';
@@ -4373,6 +4376,13 @@ const FOCUS_IDENTITY_ATTRS = [
 
 function focusKeyOf(el) {
   if (el.id) return `#${CSS.escape(el.id)}`;
+  // Dziś (Tafla): a control is its action plus, in a row, the row's key - the
+  // circle of "Zamówić tort" is found again after any rebuild.
+  const dayAction = el.getAttribute?.('data-day-action');
+  if (dayAction) {
+    const rowKey = el.getAttribute('data-row-key');
+    return `[data-day-action="${CSS.escape(dayAction)}"]${rowKey ? `[data-row-key="${CSS.escape(rowKey)}"]` : ''}`;
+  }
   const attr = FOCUS_IDENTITY_ATTRS.find((a) => el.hasAttribute(a));
   if (!attr) return rowFocusKeyOf(el);
   const value = el.getAttribute(attr);
@@ -6890,10 +6900,10 @@ export async function render(container, { user, signal: routeSignal = null } = {
   const wallMode = isWallActive();
 
   setHtml(container, `
-    <div class="dashboard app-page app-page--dashboard${wallMode ? ' dashboard--wall' : ''}" data-composition="dashboard">
+    <div class="dashboard app-page app-page--dashboard${wallMode ? ' dashboard--wall' : ' dashboard--today'}" data-composition="dashboard">
       <h1 class="sr-only">${t('dashboard.title')}</h1>
       <div class="dashboard-shell" id="dashboard-shell">
-        ${wallMode ? renderWallSurface(null, null, { loading: true }) : renderDashboardSkeleton()}
+        ${wallMode ? renderWallSurface(null, null, { loading: true }) : renderTodaySkeleton()}
       </div>
     </div>
     ${wallMode ? '' : renderFab()}
@@ -6910,11 +6920,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     before: container.querySelector('#dashboard-shell'),
     toast: (message, type) => window.yuvomi?.showToast(message, type),
   });
-  // Yuvomi's question of the week (fork, 2026-10-19), beside the shell like the
-  // zone prompt: the shell is refilled with data, the card stays.
-  mountAiQuestion(container.querySelector('.dashboard'), {
-    api, wall: wallMode, before: container.querySelector('#dashboard-shell'),
-  });
+  // Die Frage der Woche (fork, 2026-10-19) steht seit Tafla als Abschnitt
+  // „Pytanie tygodnia" in Dziś, an der Stelle, die die Person waehlt
+  // (loadTodayExtras, components/today-view.js).
 
   // Ein Neuaufbau AUS DER SEITE HERAUS laeuft nicht durch renderPage() im
   // Router, und damit an dessen FAB-Wechsel vorbei (#634): den alten Knopf aus
@@ -6979,7 +6987,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
   // (`loadPendingReminders`): sie sind die zweite Antwort, die davon abhaengt,
   // wer fragt.
   const overviewRequest = (query) => dashboardRequest(query, { wall: wallMode });
-  let isCustomizing = false;
+  // Hat ein Admin eine Vorgabe fuer den Haushalt veroeffentlicht? Dann gilt sie
+  // samt ihrer Kacheln auch fuer die, die ihr folgen (Dziś, todayVisible).
+  let householdDefaultPublished = false;
   let screensaverEnabled = false;
   let currency     = 'EUR';
   let visibleMealTypes = MEAL_ORDER;
@@ -7054,6 +7064,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     glanceVisible = prefsRes.data?.dashboard_today_glance !== false;
     savedGlanceVisible = glanceVisible;
     followsDefault = prefsRes.data?.dashboard_follows_default !== false;
+    householdDefaultPublished = prefsRes.data?.dashboard_widgets_default != null;
     // Das Skelett des NAECHSTEN Aufrufs lernt hier seine Kachelform.
     rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
     screensaverEnabled = Boolean(prefsRes.data?.screensaver_enabled);
@@ -7066,89 +7077,11 @@ export async function render(container, { user, signal: routeSignal = null } = {
     loadErrorStatus = Number.isFinite(err?.status) ? err.status : null;
   }
 
-  // Zyklus-Slice strikt owner-only nachladen: Zyklusdaten sind privat und dürfen
-  // nicht in den familienweiten /dashboard-Payload. Genau einmal (data.cycle bleibt
-  // sonst undefined = „noch nie geladen"). Ein Fehler lässt die Kachel auf ihren
-  // Onboarding-Empty fallen, statt das Dashboard zu kippen.
-  async function ensureCycleSlice() {
-    if (data.cycle !== undefined) return;
-    if (window.yuvomi?.isModuleDisabled('health')) return;
-    try {
-      const [periodsRes, settingsRes] = await Promise.all([
-        api.get('/health/cycle/periods'),
-        api.get('/health/cycle/settings').catch(() => ({ data: {} })),
-      ]);
-      data.cycle = { periods: periodsRes.data || [], settings: settingsRes.data || {} };
-    } catch (err) {
-      console.error('[Dashboard] Zyklus-Slice Ladefehler:', err?.message);
-      data.cycle = null;
-    }
-  }
-
-  // Eigener Slice wie Zyklus, aber aus einem anderen Grund: nicht Privatsphaere,
-  // sondern weil /dashboard das Modul schlicht nicht mitfuehrt. `/schedule/entries`
-  // ohne user_id liefert schon den ganzen Haushalt (dieselbe Abfrage, die die
-  // Schedule-Seite fuer ihre eigene „Heute"-Karte nutzt); die Typenliste daneben
-  // unterscheidet „niemand hat heute Dienst" von „das Modul ist noch leer".
-  async function ensureScheduleSlice() {
-    if (data.schedule !== undefined) return;
-    if (window.yuvomi?.isModuleDisabled('schedule')) return;
-    try {
-      data.schedule = await loadScheduleSlice(householdToday());
-    } catch (err) {
-      console.error('[Dashboard] Schedule-Slice Ladefehler:', err?.message);
-      data.schedule = null;
-    }
-  }
-
-  // Eigener Slice aus demselben Grund wie Schedule: /dashboard fuehrt Waste
-  // nicht mit. Zwei parallele Aufrufe wie beim Schedule-Slice (Entries + Typen) -
-  // hier "naechste Abholung je Typ" UND die Quellen-Liste, weil "braucht
-  // Auffrischung" (invariant #6) ein Source-Feld ist, kein Feld der Occurrence
-  // selbst (siehe Kommentar an renderWasteWidget).
-  async function ensureWasteSlice() {
-    if (data.waste !== undefined) return;
-    if (window.yuvomi?.isModuleDisabled('waste')) return;
-    try {
-      const [nextRes, sourcesRes] = await Promise.all([
-        api.get('/waste/occurrences/next'),
-        api.get('/waste/sources'),
-      ]);
-      // Per-type widget option (#1063 Phase 10), same shape as tasks' own
-      // category filter: no selection (or every type selected) means "all" -
-      // an empty picked list would otherwise be an empty widget for anyone
-      // who only ever opened the options dialog.
-      const selectedTypes = widgetConfig.find((w) => w.id === 'waste')?.options?.types;
-      const items = nextRes.data ?? [];
-      data.waste = {
-        items: (selectedTypes?.length ? items.filter((i) => selectedTypes.includes(i.type.id)) : items),
-        needsRefresh: (sourcesRes.data ?? []).some((s) => s.needs_refresh),
-      };
-    } catch (err) {
-      console.error('[Dashboard] Waste-Slice Ladefehler:', err?.message);
-      data.waste = null;
-    }
-  }
-
-  // Nur wenn die opt-in-Kachel sichtbar ist — die Mehrheit ohne aktivierte Kachel
-  // löst keinen Request aus.
-  if (!loadFailed && widgetConfig.some((w) => w.id === 'cycle' && w.visible)) {
-    await ensureCycleSlice();
-  }
-  if (!loadFailed && widgetConfig.some((w) => w.id === 'schedule' && w.visible)) {
-    await ensureScheduleSlice();
-  }
-  if (!loadFailed && widgetConfig.some((w) => w.id === 'waste' && w.visible)) {
-    await ensureWasteSlice();
-  }
   // Auch die Nachlade-Runden koennen von einem Verlassen oder Neuaufbau
   // ueberholt worden sein (#977).
   if (signal.aborted) return;
 
 
-  // Einziger Persist-Pfad für Inline- UND Modal-Speichern. Legt vor dem Schreiben
-  // einen Schnappschuss an und bietet — wenn sich etwas geändert hat — im Toast ein
-  // „Rückgängig" an, das den vorherigen Stand wiederherstellt (inkl. Server).
   /** Die Uebersicht neu holen, wenn sich die Filter geaendert haben (#814). */
   async function reloadIfQueryChanged(previousQuery) {
     if (dashboardQuery(widgetConfig) === previousQuery) return;
@@ -7165,133 +7098,34 @@ export async function render(container, { user, signal: routeSignal = null } = {
     } catch { /* der alte Stand bleibt stehen, statt die Seite zu leeren */ }
   }
 
-  async function persistWidgetConfig(nextConfig) {
-    const previousConfig = savedWidgetConfig.map((w) => ({ ...w }));
-    const previousQuery = dashboardQuery(savedWidgetConfig);
+  /* DOSTOSUJ DZIŚ SAVES AS IT GOES (Tafla, 2026-10-19). Every switch and every
+   * move in the sheet redraws Dziś behind it at once and is written in order
+   * behind the previous write - the sheet has no "Anuluj", so there is no
+   * unsaved state to lose. The first change gives the person their own layout,
+   * exactly as saving the old customise mode did (#827). */
+  let layoutWrites = Promise.resolve();
+  function persistTodayLayout(nextConfig) {
     widgetConfig = nextConfig.map((w) => ({ ...w }));
-    const previousGlance = savedGlanceVisible;
-    await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
-    savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
-    savedGlanceVisible = glanceVisible;
-    // Ab jetzt liegt ein eigener Stand vor - die Vorgabe des Haushalts erreicht
-    // mich erst wieder, wenn ich ihn loesche.
-    followsDefault = false;
-    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
-    isCustomizing = false;
-    // Wird die Zyklus-Kachel gerade erst eingeblendet, ihren owner-only Slice
-    // nachladen — sonst zeigte sie fälschlich den Empty-State bis zum Reload.
-    if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
-    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
-    // Waste's Typ-Option (#1063 Phase 10) reist nicht in dashboardQuery() mit
-    // (der Slice ist ein eigenstaendiger Client-Fetch, siehe ensureWasteSlice) -
-    // reloadIfQueryChanged() wuerde den alten, ungefilterten Stand also
-    // stillschweigend behalten. Ein geaenderter Typ-Filter verwirft ihn
-    // deshalb hier gezielt, statt bis zum naechsten vollen Seitenaufbau zu
-    // warten (dieselbe Sofort-Zusage wie bei Kalender/Aufgaben-Optionen).
-    const wasteOptionsChanged = JSON.stringify(previousConfig.find((w) => w.id === 'waste')?.options ?? null)
-      !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
-    if (wasteOptionsChanged) data.waste = undefined;
-    if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
-    await reloadIfQueryChanged(previousQuery);
     rebuildDashboard(widgetConfig);
-
-    const changed = !sameWidgetConfig(previousConfig, widgetConfig) || previousGlance !== glanceVisible;
-    const onUndo = changed
-      ? async () => {
-          const queryBeforeUndo = dashboardQuery(widgetConfig);
-          const wasteOptionsBeforeUndo = JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
-          try {
-            widgetConfig = previousConfig.map((w) => ({ ...w }));
-            glanceVisible = previousGlance;
-            await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
-            savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
-            savedGlanceVisible = glanceVisible;
-            rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
-            if (wasteOptionsBeforeUndo !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null)) data.waste = undefined;
-            if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
-            await reloadIfQueryChanged(queryBeforeUndo);
-          } catch {
-            window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
-          }
-          isCustomizing = false;
-          rebuildDashboard(widgetConfig);
-        }
-      : null;
-    window.yuvomi?.showToast(t('dashboard.customizeSaved'), 'success', onUndo ? 6000 : 1500, onUndo);
+    layoutWrites = layoutWrites.then(async () => {
+      const previousQuery = dashboardQuery(savedWidgetConfig);
+      try {
+        await api.put('/preferences', { dashboard_widgets: widgetConfig, dashboard_today_glance: glanceVisible });
+        savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
+        followsDefault = false;
+        rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
+        await reloadIfQueryChanged(previousQuery);
+        rebuildDashboard(widgetConfig);
+      } catch {
+        window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+      }
+    });
+    return layoutWrites;
   }
 
-  async function saveDashboardConfig() {
-    try {
-      await persistWidgetConfig(widgetConfig);
-    } catch {
-      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
-    }
-  }
-
-  function cancelDashboardConfig() {
-    widgetConfig = savedWidgetConfig.map((w) => ({ ...w }));
-    glanceVisible = savedGlanceVisible;
-    isCustomizing = false;
-    rebuildDashboard(widgetConfig);
-  }
-
-  /* ABBRECHEN FRAGT, SOBALD ES ETWAS ZU VERLIEREN GIBT (Re-Critique
-   * 2026-09-27, A7 P2-5). Ein Fehlgriff neben „Speichern" warf die ganze
-   * Anordnung wortlos weg. Ohne Aenderung bleibt der Ausgang ein Tipp - eine
-   * Rueckfrage ohne Folge waere nur Reibung. Nach dem Verwerfen steht der Fokus
-   * wieder auf „Anpassen", wie nach jedem Moduswechsel. */
-  // Die eine Rueckfrage fuer Abbrechen UND Verlassen.
-  const confirmDiscardCustomize = () => confirmModal(t('modal.unsavedChanges'), {
-    danger: true,
-    confirmLabel: t('modal.discardChanges'),
-    detail: t('dashboard.customizeDiscardDetail'),
-  });
-
-  async function requestCancelDashboardConfig() {
-    if (customizeHasChanges({ widgetConfig, savedWidgetConfig, glanceVisible, savedGlanceVisible })) {
-      const confirmed = await confirmDiscardCustomize();
-      if (!confirmed || !isCustomizing) return;
-    }
-    focusAfterRebuild = ['#dashboard-customize-btn'];
-    cancelDashboardConfig();
-  }
-
-  // Verlassen-Schutz, solange angepasst wird (siehe customizeLeaveAllowed).
-  // Beim Verlassen wird nicht neu gezeichnet - die Seite geht ohnehin; nur der
-  // Modus endet, damit ein spaeter Neuaufbau nicht im Anpassen landet.
-  let releaseLeaveGuard = null;
-  const syncLeaveGuard = () => {
-    if (isCustomizing && !releaseLeaveGuard) {
-      releaseLeaveGuard = setLeaveGuard(() => customizeLeaveAllowed({
-        customizing: () => isCustomizing,
-        changed: () => customizeHasChanges({ widgetConfig, savedWidgetConfig, glanceVisible, savedGlanceVisible }),
-        askDiscard: confirmDiscardCustomize,
-        discard: () => {
-          widgetConfig = savedWidgetConfig.map((w) => ({ ...w }));
-          glanceVisible = savedGlanceVisible;
-          isCustomizing = false;
-          syncLeaveGuard();
-        },
-      }));
-    } else if (!isCustomizing && releaseLeaveGuard) {
-      releaseLeaveGuard();
-      releaseLeaveGuard = null;
-    }
-  };
-  signal.addEventListener('abort', () => { releaseLeaveGuard?.(); releaseLeaveGuard = null; }, { once: true });
-
-  /* „ZURÜCKSETZEN" HATTE SEIT #585 ZWEI PLAUSIBLE BEDEUTUNGEN und lieferte eine
-   * dritte (Critique 2026-08-16). Solange die Anordnung dem Haushalt gehörte,
-   * war „auf Standard" eindeutig. Seit sie der Person gehört, kann der Satz auch
-   * „zurück zu dem, was die Familie hatte" oder „zurück zu meinem letzten Stand"
-   * heißen - und keine der beiden trifft zu.
-   *
-   * SEIT #827 IST ES DER RÜCKWEG ZUR VORGABE, und zwar durch LÖSCHEN des
-   * eigenen Standes, nicht durch Hineinladen der Vorgabe in den Editor. Der
-   * Unterschied zeigt sich erst später: ein hineingeladenes und gespeichertes
-   * Layout friert die heutige Vorgabe auf dem Konto ein, und die nächste
-   * Änderung des Admins erreicht mich nie wieder. Deshalb schreibt diese
-   * Funktion `null` und wartet nicht auf „Speichern" - sie IST das Speichern. */
+  /* „ZURÜCKSETZEN" IST DER RÜCKWEG ZUR VORGABE (#827), durch LÖSCHEN des
+   * eigenen Standes, nicht durch Hineinladen der Vorgabe - sonst friert die
+   * heutige Vorgabe auf dem Konto ein. Seit Tafla aus „Dostosuj Dziś" heraus. */
   async function resetDashboardConfig() {
     const confirmed = await confirmModal(t('dashboard.customizeResetConfirm'), {
       confirmLabel: t('dashboard.customizeReset'),
@@ -7317,25 +7151,13 @@ export async function render(container, { user, signal: routeSignal = null } = {
     savedGlanceVisible = glanceVisible;
     followsDefault = true;
     rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
-    isCustomizing = false;
-    if (widgetConfig.some((w) => w.id === 'cycle' && w.visible)) await ensureCycleSlice();
-    if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) await ensureScheduleSlice();
-    // Siehe die Notiz an derselben Zeile in persistWidgetConfig() - der Reset
-    // kann eine eigene Typ-Auswahl verwerfen, und dashboardQuery() traegt sie
-    // nicht mit.
-    const wasteOptionsChanged = JSON.stringify(previousConfig.find((w) => w.id === 'waste')?.options ?? null)
-      !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
-    if (wasteOptionsChanged) data.waste = undefined;
-    if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
     // Die Vorgabe kann andere Filter tragen als mein geloeschter Stand (#814).
     await reloadIfQueryChanged(previousQuery);
     rebuildDashboard(widgetConfig);
     // Ein Zurücksetzen ist so umkehrbar wie jedes andere Speichern (#821):
     // der vorherige eigene Stand wird zurückgeschrieben, nicht nachgebaut.
     window.yuvomi?.showToast(t('dashboard.customizeResetDone'), 'success', 6000, async () => {
-      // Der Stand, fuer den die aktuell angezeigten Daten geholt wurden.
       const queryBeforeUndo = dashboardQuery(widgetConfig);
-      const wasteOptionsBeforeUndo = JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null);
       try {
         widgetConfig = previousConfig.map((w) => ({ ...w }));
         glanceVisible = previousGlance;
@@ -7344,26 +7166,17 @@ export async function render(container, { user, signal: routeSignal = null } = {
         savedGlanceVisible = glanceVisible;
         followsDefault = false;
         rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
-        if (wasteOptionsBeforeUndo !== JSON.stringify(widgetConfig.find((w) => w.id === 'waste')?.options ?? null)) data.waste = undefined;
-        if (widgetConfig.some((w) => w.id === 'waste' && w.visible)) await ensureWasteSlice();
         await reloadIfQueryChanged(queryBeforeUndo);
       } catch {
         window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
       }
-      isCustomizing = false;
       rebuildDashboard(widgetConfig);
     });
   }
 
-  /* DIE VORGABE DES HAUSHALTS (#827) entsteht dort, wo man eine Übersicht
-   * ohnehin einrichtet - im Anpassen-Modus. Ein zweites Arrangier-Werkzeug in
-   * den Einstellungen wäre eine zweite Fassung derselben Oberfläche, und die
-   * beiden liefen auseinander.
-   *
-   * WER DER VORGABE FOLGT, HÄNGT SICH MIT DEM VERÖFFENTLICHEN NICHT AB: für ihn
-   * wird nichts Persönliches geschrieben. Ein Admin, der die Vorgabe setzt und
-   * damit stillschweigend einen eigenen Stand bekäme, verlöre jede spätere
-   * Änderung eines zweiten Admins - und würde es nicht merken. */
+  /* DIE VORGABE DES HAUSHALTS (#827) entsteht dort, wo man Dziś ohnehin
+   * einrichtet. WER DER VORGABE FOLGT, HÄNGT SICH MIT DEM VERÖFFENTLICHEN NICHT
+   * AB: für ihn wird nichts Persönliches geschrieben. */
   async function publishHouseholdDefault() {
     const confirmed = await confirmModal(t('dashboard.customizeSetDefaultConfirm'), {
       confirmLabel: t('dashboard.customizeSetDefault'),
@@ -7387,296 +7200,485 @@ export async function render(container, { user, signal: routeSignal = null } = {
     }
     savedWidgetConfig = widgetConfig.map((w) => ({ ...w }));
     savedGlanceVisible = glanceVisible;
+    householdDefaultPublished = true;
     rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
-    isCustomizing = false;
-    // Wie beim Speichern: haben sich mit den Optionen die Parameter der Abfrage
-    // geaendert, steht noch die alte Antwort da. Ohne den Abruf zeigte die
-    // Kachel nach „Als Vorgabe fuer alle" weiter fuenf Termine, obwohl gerade
-    // zwoelf veroeffentlicht wurden (#1680) - und „nur meine" weiter alle.
     await reloadIfQueryChanged(previousQuery);
     rebuildDashboard(widgetConfig);
     window.yuvomi?.showToast(t('dashboard.customizeSetDefaultDone'), 'success');
   }
 
-  // Beobachtet im Bearbeiten-Modus die Spaltenzahl des Rasters: ein Loch, das
-  // bei drei Spalten bleibt, gibt es bei zwei vielleicht nicht - und umgekehrt.
-  let gridHintObserver = null;
-  signal.addEventListener('abort', () => gridHintObserver?.disconnect(), { once: true });
-  // Und im Normalmodus dieselbe Beobachtung fuer das Wachstum in den
-  // Zeilenrest: Spaltenzahl und Kachelzahl (Erweiterungs-Widgets haengen sich
-  // spaeter ein) entscheiden, wer waechst. Die Hoehe allein nicht - sonst
-  // loeste das eigene Wachstum die naechste Runde aus.
-  let rowFillObserver = null;
-  signal.addEventListener('abort', () => rowFillObserver?.disconnect(), { once: true });
+  // --------------------------------------------------------
+  // Dziś (Tafla, 2026-10-19)
+  // --------------------------------------------------------
 
-  function wireRowFill() {
-    rowFillObserver?.disconnect();
-    rowFillObserver = null;
-    const grid = container.querySelector('#dashboard-widget-grid');
-    if (!grid) return;
-    applyRowFill(grid, { editing: isCustomizing });
-    if (isCustomizing || typeof ResizeObserver !== 'function') return;
-    let shape = `${gridColumnCount(grid)}:${grid.childElementCount}`;
-    rowFillObserver = new ResizeObserver(() => {
-      const next = `${gridColumnCount(grid)}:${grid.childElementCount}`;
-      if (next === shape) return;
-      shape = next;
-      applyRowFill(grid);
-    });
-    rowFillObserver.observe(grid);
+  /* WHAT A REBUILD KEEPS: the open "Wcześniej" row, the extras that arrive
+   * after the first paint (question of the week, "Pewnie się kończy",
+   * expiring documents) and the rows that are being ticked right now. */
+  const todayUi = {
+    earlierOpen: false,
+    question: null,
+    questionSettled: null,
+    predictions: [],
+    documents: [],
+    busy: new Set(),
+  };
+  let todayState = null;
+  let todayFocus = null;
+  const onDisplay = user?.access_scope === 'display';
+  const moduleOff = (module) => Boolean(window.yuvomi?.isModuleDisabled(module)) || moduleAccess(module) === 'none';
+  // The adults of the household: members without the child role. Display
+  // accounts, staff and guests are no members at all (householdMemberSql).
+  const todayAdults = () => (Array.isArray(data?.users) ? data.users : []).filter((u) => u.family_role !== 'child');
+
+  /** Can this viewer have this section or extra at all? */
+  function todayAvailable(id) {
+    if (id === 'today-weather') return weatherAvailable;
+    if (id === 'today-shopping') return !moduleOff('shopping');
+    if (id === 'today-question') return !onDisplay;
+    if (id === 'today-tomorrow' || id === 'today-soon') return true;
+    // THE FAMILY CARD ONLY WHERE IT SAYS SOMETHING (owner, 2026-10-19): with
+    // two adults the discs in the plan already say who does what.
+    if (id === 'family') return todayAdults().length > 2 && isWidgetModuleEnabled('family');
+    if (TODAY_EXTRA_IDS.includes(id) || isExtensionWidget(id)) return isWidgetModuleEnabled(id);
+    return false;
   }
 
-  function syncGridHint(grid) {
-    container.querySelector('.dashboard-grid-hint')?.remove();
-    const suggestion = gridHoleSuggestion(grid);
-    if (!suggestion) return;
-    // VOR dem Raster, nicht dahinter: das Loch steht oft oben, und ein Hinweis
-    // unter zwanzig Kacheln waere einer, den man erst nach dem Scrollen findet.
-    grid.insertAdjacentHTML('beforebegin', renderGridHint(suggestion));
-    container.querySelector('.dashboard-grid-hint [data-grid-hint-apply]')?.addEventListener('click', () => {
-      widgetConfig = updateWidgetConfig(widgetConfig, suggestion.id, { size: suggestion.size });
-      rebuildDashboard(widgetConfig);
-    });
+  /* EXTRAS FOLLOW WHAT SOMEBODY ARRANGED. A layout this person saved, or one an
+   * admin published for the household, keeps its widgets as preview tiles - so
+   * nobody loses what they set up. Following the built-in default, Dziś starts
+   * as Tafla does: the plan and its sections, no tiles. */
+  const extrasFromLayout = () => !followsDefault || householdDefaultPublished;
+
+  function todayEntries(cfg) {
+    return cfg.filter((w) => (TODAY_SECTION_IDS.includes(w.id) || TODAY_EXTRA_IDS.includes(w.id) || isExtensionWidget(w.id))
+      && todayAvailable(w.id));
   }
 
-  function wireDashboardEditMode() {
-    gridHintObserver?.disconnect();
-    gridHintObserver = null;
-    if (!isCustomizing) return;
-    const grid = container.querySelector('#dashboard-widget-grid');
-    if (!grid) return;
-    // Groessen-Menue (R9 M7): Position, Pfeiltasten, Schliessen - einmal an der
-    // stabilen Seitenwurzel, idempotent ueber sein data-Attribut.
-    installPopoverMenus(container);
-    let draggedId = '';
-    let currentDrop = null;
+  function todayVisible(w) {
+    if (TODAY_SECTION_IDS.includes(w.id)) return w.visible !== false;
+    return extrasFromLayout() && w.visible !== false;
+  }
 
-    syncGridHint(grid);
-    if (typeof ResizeObserver === 'function') {
-      let columns = gridColumnCount(grid);
-      gridHintObserver = new ResizeObserver(() => {
-        const next = gridColumnCount(grid);
-        if (next === columns) return;
-        columns = next;
-        syncGridHint(grid);
-      });
-      gridHintObserver.observe(grid);
+  function todaySectionLabel(id) {
+    const labels = {
+      'today-shopping': 'today.shoppingTitle',
+      'today-tomorrow': 'today.tomorrow',
+      'today-question': 'today.questionTitle',
+      'today-soon': 'today.soonTitle',
+      pantry: 'nav.pantry',
+    };
+    return labels[id] ? t(labels[id]) : widgetLabel(id);
+  }
+
+  /** The preview tile of an extra, or null when it has nothing to say. */
+  function todayTile(id) {
+    if (id === 'pantry') {
+      const slice = data?.pantryExpiring;
+      const total = Number(slice?.total) || 0;
+      if (!total) return null;
+      return {
+        id, route: '/pantry?filter=soon', icon: MODULE_ICON.pantry, label: t('nav.pantry'),
+        value: t('today.pantryExpiring', { count: total }),
+        note: (slice.items ?? []).slice(0, 2).map((item) => item.name).join(', '),
+      };
     }
+    // The plan already lists the doses and the waiting approvals - their tiles
+    // speak only for what the plan does not say (a refill, a points goal).
+    return metricTileFor(id, data, currency, new Set(['doses', 'approvals']));
+  }
 
-    const clearDropHint = () => {
-      grid.querySelectorAll('.widget-wrapper--drop-before, .widget-wrapper--drop-after').forEach((el) => {
-        el.classList.remove('widget-wrapper--drop-before', 'widget-wrapper--drop-after');
-      });
+  function todayFamily() {
+    const counts = new Map((data?.memberTodayTasks ?? []).map((m) => [m.user_id, Number(m.open_count) || 0]));
+    return todayAdults().filter((u) => u.id !== user?.id).map((u) => ({ ...u, open: counts.get(u.id) ?? 0 }));
+  }
+
+  const canCheckToday = (row) => {
+    if (onDisplay) return false;
+    if (row.kind === 'task') return moduleAccess('tasks') === 'write';
+    if (row.kind === 'dose') return moduleAccess('health') === 'write';
+    return false;
+  };
+
+  function buildTodayState() {
+    const ctx = planContext({ now: new Date(), viewer: user, users: data?.users ?? [], moduleOff, mealLabel: mealTypeLabel });
+    const timer = readWallTimer();
+    let plan = buildPlan(data, ctx);
+    let now = pickNow(data, plan, ctx, { timer });
+    if (now.mode === 'dinner') {
+      // Tonight's dinner is the card; it is not a row of the plan as well.
+      plan = buildPlan(data, ctx, { featuredDinner: now.meal });
+      now = pickNow(data, plan, ctx, { timer });
+    }
+    const closed = now.mode !== 'timer' && dayClosed(plan);
+    const tomorrow = buildTomorrow(data, ctx);
+    const soon = buildSoon(data, ctx, { documents: todayUi.documents });
+    const entries = todayEntries(widgetConfig);
+    const sections = entries.filter((w) => w.id !== 'today-weather' && todayVisible(w)).map((w) => w.id);
+    const tiles = new Map();
+    for (const id of sections) {
+      if (!TODAY_EXTRA_IDS.includes(id) || id === 'family') continue;
+      const tile = todayTile(id);
+      if (tile) tiles.set(id, tile);
+    }
+    const shopping = moduleOff('shopping') ? null : {
+      count: Number(data?.shoppingOpenCount) || 0,
+      lists: Number(data?.shoppingOpenLists) || 0,
+      predictions: todayUi.predictions.slice(0, 3),
+      route: shoppingSoleListRoute(data),
     };
-
-    const updateDropHint = (event) => {
-      if (!draggedId) return null;
-      clearDropHint();
-      currentDrop = closestWidgetDrop(grid, event, draggedId);
-      if (currentDrop) {
-        currentDrop.item.classList.add(currentDrop.placement === 'after' ? 'widget-wrapper--drop-after' : 'widget-wrapper--drop-before');
-      }
-      return currentDrop;
+    const firstRun = !plan.hasAnything && !tomorrow.total && !soon.length
+      && !(Number(data?.openTaskCount) > 0) && !(Number(data?.shoppingOpenCount) > 0)
+      && !(data?.upcomingEvents?.length) && !(data?.todayMeals?.length);
+    return {
+      user, ctx, weather,
+      showWeather: entries.some((w) => w.id === 'today-weather' && todayVisible(w)),
+      plan, now, closed, tomorrow, soon, shopping,
+      question: todayUi.questionSettled ? { settled: todayUi.questionSettled } : todayUi.question,
+      sections,
+      tiles,
+      extensions: new Map(entries.filter((w) => isExtensionWidget(w.id)).map((w) => [w.id, widgetLabel(w.id)])),
+      family: sections.includes('family') ? todayFamily() : [],
+      earlierOpen: todayUi.earlierOpen,
+      firstRun,
+      canCustomize: !onDisplay,
+      canCheck: canCheckToday,
+      canWriteShopping: navModuleAccess('shopping') === 'write',
     };
+  }
 
-    grid.querySelectorAll('.widget-wrapper[data-widget-id]').forEach((wrapper) => {
-      wrapper.addEventListener('dragstart', (event) => {
-        draggedId = wrapper.dataset.widgetId;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', draggedId);
-        wrapper.classList.add('widget-wrapper--dragging');
-      });
-      wrapper.addEventListener('dragend', () => {
-        draggedId = '';
-        wrapper.classList.remove('widget-wrapper--dragging');
-        currentDrop = null;
-        clearDropHint();
-      });
-    });
+  /** What changes by the clock alone: rows over, the Teraz card and its minutes. */
+  function todayClockStamp() {
+    const state = buildTodayState();
+    return JSON.stringify([
+      state.plan.open.map((row) => row.key), state.plan.earlier.length, state.closed,
+      state.now?.mode, state.now?.minutes ?? null, state.ctx.todayKey,
+    ]);
+  }
 
-    grid.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      updateDropHint(event);
-    });
-
-    grid.addEventListener('dragleave', (event) => {
-      if (!grid.contains(event.relatedTarget)) {
-        currentDrop = null;
-        clearDropHint();
-      }
-    });
-
-    grid.addEventListener('drop', (event) => {
-      event.preventDefault();
-      const fromId = event.dataTransfer.getData('text/plain') || draggedId;
-      const drop = currentDrop || updateDropHint(event);
-      if (fromId && drop) {
-        widgetConfig = reorderWidgetConfig(widgetConfig, fromId, drop.id, drop.placement);
-        rebuildDashboard(widgetConfig);
-      }
-    });
-
-    grid.querySelectorAll('[data-widget-size-preset]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const size = btn.dataset.widgetSizePreset;
-        if (!WIDGET_SIZE_OPTIONS.includes(size)) return;
-        // Aus dem Groessen-Menue (R9 M7): der Fokus gehoert danach dem Knopf,
-        // der das Menue oeffnete - der Eintrag steht nach dem Neuaufbau in
-        // einem geschlossenen Panel und naehme ihn nicht an.
-        const menu = btn.closest('.popover-menu');
-        if (menu) {
-          menu.hidePopover?.();
-          grid.querySelector(`[popovertarget="${CSS.escape(menu.id)}"]`)?.focus();
+  let timerTick = null;
+  signal.addEventListener('abort', () => clearInterval(timerTick), { once: true });
+  function syncTimerTick() {
+    const running = todayState?.now?.mode === 'timer' && todayState.now.timer.state === 'running';
+    if (running && !timerTick) {
+      timerTick = setInterval(() => {
+        const timer = readWallTimer();
+        if (timer.state !== 'running') {
+          clearInterval(timerTick);
+          timerTick = null;
+          rebuildDashboard(widgetConfig);
+          return;
         }
-        widgetConfig = updateWidgetConfig(widgetConfig, btn.dataset.widgetId, { size });
-        // Der Fokus bleibt auf demselben Knopf (rebuildDashboard traegt ihn
-        // hinueber), und der traegt jetzt aria-pressed - gesagt wird trotzdem,
-        // was sich geaendert hat: die Kachel ist gewachsen, nicht der Knopf.
-        rebuildDashboard(widgetConfig);
-        const preset = WIDGET_SIZE_PRESETS.find((p) => p.value === size);
-        announceDashboard(t('dashboard.customizeSizeDone', {
-          widget: widgetLabel(btn.dataset.widgetId),
-          size: preset ? t(preset.labelKey) : size,
-        }));
-      });
+        updateTimerText(container.querySelector('[data-today]'), timer);
+      }, 1000);
+    } else if (!running && timerTick) {
+      clearInterval(timerTick);
+      timerTick = null;
+    }
+  }
+
+  function renderToday(shell) {
+    todayState = buildTodayState();
+    const fromSkeleton = Boolean(shell.querySelector('.day-skeleton'))
+      && !document.documentElement.classList.contains('page-swapping');
+    const { key: keepFocus } = captureRebuildFocus(shell, document.activeElement, document.body);
+    swapContent(shell, () => setHtml(shell, renderTodayPage(todayState)), { animate: fromSkeleton });
+    if (window.lucide) window.lucide.createIcons({ el: shell });
+    wireRecipeThumbs(shell);
+    wireToday(shell.querySelector('[data-today]'));
+    void mountExtensionWidgets(shell, widgetConfig, user);
+    restoreFocusAfterRebuild(container, [keepFocus, ...(todayFocus ?? [])]);
+    todayFocus = null;
+    syncTimerTick();
+  }
+
+  function todayRowByKey(key) {
+    if (!todayState || !key) return null;
+    return todayState.plan.all.find((row) => row.key === key)
+      ?? todayState.tomorrow.rows.find((row) => row.key === key)
+      ?? null;
+  }
+
+  /* TICKING A ROW (spec "Kółko odhaczania"): the circle fills and the title
+   * dims at once, the server is asked, and after a short hold the row folds
+   * into "Wcześniej" - with a toast and "Cofnij". A failure puts the row back
+   * the way it was. */
+  async function commitTodayRow(row, doing) {
+    if (row.kind === 'task') {
+      const task = row.task;
+      const before = { status: task.status, completed_at: task.completed_at };
+      await api.patch(`/tasks/${task.id}/status`, { status: doing ? 'done' : 'open' });
+      task.status = doing ? 'done' : 'open';
+      task.completed_at = doing ? new Date().toISOString() : null;
+      return async () => {
+        await api.patch(`/tasks/${task.id}/status`, { status: before.status === 'done' ? 'done' : 'open' });
+        Object.assign(task, before);
+      };
+    }
+    if (row.kind === 'dose') {
+      const dose = row.dose;
+      const before = { status: dose.status, taken_at: dose.taken_at };
+      if (doing) {
+        const res = dose.log_id
+          ? await api.post(`/health/logs/${dose.log_id}/take`, {})
+          : await api.post(`/health/medications/${dose.medication_id}/logs`, {
+            schedule_id: dose.schedule_id,
+            scheduled_at: `${todayState.ctx.todayKey}T${dose.time}`,
+            status: 'taken',
+          });
+        dose.log_id = res?.data?.id ?? dose.log_id;
+        dose.status = 'taken';
+        dose.taken_at = res?.data?.taken_at ?? null;
+      } else {
+        await api.patch(`/health/logs/${dose.log_id}`, { status: 'pending' });
+        dose.status = 'pending';
+        dose.taken_at = null;
+      }
+      return async () => {
+        await api.patch(`/health/logs/${dose.log_id}`, { status: before.status });
+        Object.assign(dose, before);
+      };
+    }
+    throw new Error('not checkable');
+  }
+
+  function markRowChecked(button, checked) {
+    const li = button.closest('.day-row');
+    button.classList.toggle('day-check--done', checked);
+    button.setAttribute('aria-pressed', checked ? 'true' : 'false');
+    li?.classList.toggle('day-row--done', checked);
+    li?.classList.toggle('day-row--ticking', checked);
+  }
+
+  async function toggleTodayRow(row, button) {
+    if (!row?.checkable || todayUi.busy.has(row.key) || !canCheckToday(row)) return;
+    todayUi.busy.add(row.key);
+    const doing = !row.done;
+    // Keyboard users go on to the next row's circle once this one has folded.
+    if (document.activeElement === button) {
+      const rows = [...container.querySelectorAll('[data-today] .day-check:not([disabled])')];
+      const next = rows[rows.indexOf(button) + 1];
+      todayFocus = next ? [`[data-day-action="check"][data-row-key="${CSS.escape(next.dataset.rowKey)}"]`] : null;
+    }
+    markRowChecked(button, doing);
+    const hold = doing && !prefersReducedMotion() ? new Promise((resolve) => setTimeout(resolve, 820)) : null;
+    let undo;
+    try {
+      undo = await commitTodayRow(row, doing);
+      await hold;
+    } catch (err) {
+      markRowChecked(button, !doing);
+      todayUi.busy.delete(row.key);
+      todayFocus = null;
+      window.yuvomi?.showToast(err?.status === 403 ? t('today.notAllowed') : t('common.errorGeneric'), 'danger');
+      return;
+    }
+    todayUi.busy.delete(row.key);
+    if (signal.aborted) return;
+    rebuildDashboard(widgetConfig);
+    const message = !doing
+      ? t('today.toastReopened', { title: row.title })
+      : t(row.kind === 'dose' ? 'today.toastTaken' : 'today.toastDone', { title: row.title });
+    window.yuvomi?.showToast(message, 'default', 5000, async () => {
+      try {
+        await undo();
+        if (!signal.aborted) rebuildDashboard(widgetConfig);
+        void refreshDashboardData();
+      } catch {
+        window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+      }
     });
+    void refreshDashboardData();
+  }
 
-    container.querySelectorAll('[data-widget-options]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.widgetOptions;
-        const current = widgetConfig.find((w) => w.id === id)?.options ?? {};
-        const next = await openWidgetOptions(id, current);
-        if (next === null) return;
-        // Ein leeres Optionsobjekt wird zu „keine Optionen": so bleibt der
-        // gespeicherte Stand identisch mit dem eines Layouts, das den Dialog
-        // nie gesehen hat.
-        widgetConfig = updateWidgetConfig(widgetConfig, id,
-          Object.keys(next).length ? { options: next } : { options: undefined });
-        rebuildDashboard(widgetConfig);
-      });
-    });
-
-    /* WER AUSBLENDET, VERLIERT SEINEN KNOPF - UND DARF DESHALB NICHT DEN FOKUS
-     * VERLIEREN. Der Neuaufbau ersetzt das ganze Raster; der gedrueckte Knopf
-     * ist danach fort, und der Fokus fiel bis hierher auf <body> zurueck: wer
-     * per Tastatur drei Kacheln ausblenden wollte, stand nach der ersten wieder
-     * am Seitenanfang. Er geht deshalb zum gleichen Knopf der Nachbarkachel
-     * (so laesst sich eine Reihe nacheinander abraeumen), und wo es keine gibt,
-     * zum Chip, der sie zurueckholt. Beim Einblenden spiegelbildlich. */
-    const neighbourIds = (el, selector, attr) => {
-      const next = el?.nextElementSibling?.closest(selector) ? el.nextElementSibling : null;
-      const prev = el?.previousElementSibling?.closest(selector) ? el.previousElementSibling : null;
-      return [next, prev].map((n) => n?.getAttribute(attr) ?? n?.querySelector(`[${attr}]`)?.getAttribute(attr))
-        .filter(Boolean);
-    };
-
-    grid.querySelectorAll('[data-widget-hide]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.widgetHide;
-        const wrapper = btn.closest('.widget-wrapper');
-        focusAfterRebuild = [
-          ...neighbourIds(wrapper, '.widget-wrapper', 'data-widget-id')
-            .map((n) => `.widget-wrapper[data-widget-id="${CSS.escape(n)}"] [data-widget-hide]`),
-          `[data-widget-show="${CSS.escape(id)}"]`,
-        ];
-        widgetConfig = updateWidgetConfig(widgetConfig, id, { visible: false });
-        rebuildDashboard(widgetConfig);
-        announceDashboard(t('dashboard.customizeHiddenDone', { widget: widgetLabel(id) }));
-      });
-    });
-
-    // Wieder-Einblenden aus der Tray-Leiste (außerhalb des Grids, daher container-
-    // weit gesucht): der Gegenpart zum Ausblenden, macht den Inline-Editor komplett.
-    container.querySelectorAll('[data-widget-show]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.widgetShow;
-        focusAfterRebuild = [
-          ...neighbourIds(btn.closest('.widget-restore-chip-group') ?? btn, '.widget-restore-chip-group, [data-glance-show]', 'data-widget-show')
-            .map((n) => `[data-widget-show="${CSS.escape(n)}"]`),
-          `.widget-wrapper[data-widget-id="${CSS.escape(id)}"] [data-widget-hide]`,
-        ];
-        widgetConfig = updateWidgetConfig(widgetConfig, id, { visible: true });
-        rebuildDashboard(widgetConfig);
-        announceDashboard(t('dashboard.customizeShownDone', { widget: widgetLabel(id) }));
-      });
-    });
-
-    // Kopfband: beide Knoepfe sitzen ausserhalb des Grids (der eine im Masthead,
-    // der andere in der Tray-Leiste), deshalb container-weit gesucht.
-    container.querySelector('[data-glance-hide]')?.addEventListener('click', () => {
-      glanceVisible = false;
-      focusAfterRebuild = ['[data-glance-show]'];
+  /** "Dopisz": the missing ingredients of tonight's dinner onto the first list. */
+  async function addMissingToShopping(button) {
+    const dinnerPlan = data?.dinnerPlan;
+    const missing = [...(dinnerPlan?.missing ?? [])];
+    if (!missing.length) return;
+    button.disabled = true;
+    try {
+      const lists = (await api.get('/shopping'))?.data ?? [];
+      const list = lists[0];
+      if (!list) {
+        button.disabled = false;
+        window.yuvomi?.showToast(t('today.noShoppingList'), 'danger');
+        return;
+      }
+      const added = [];
+      for (const name of missing) {
+        const res = await api.post(`/shopping/${list.id}/items`, { name, category_source: 'default' });
+        if (res?.data?.id != null) added.push(res.data.id);
+      }
+      dinnerPlan.on_list = [...(dinnerPlan.on_list ?? []), ...missing];
+      dinnerPlan.missing = [];
+      data.shoppingOpenCount = (Number(data.shoppingOpenCount) || 0) + added.length;
       rebuildDashboard(widgetConfig);
-      announceDashboard(t('dashboard.customizeHiddenDone', { widget: t('dashboard.todayTitle') }));
-    });
-    container.querySelector('[data-glance-show]')?.addEventListener('click', () => {
-      glanceVisible = true;
-      focusAfterRebuild = ['[data-glance-hide]'];
-      rebuildDashboard(widgetConfig);
-      announceDashboard(t('dashboard.customizeShownDone', { widget: t('dashboard.todayTitle') }));
-    });
-
-    // Reorder ohne HTML5-DnD (das feuert nicht per Finger und ist nicht per
-    // Tastatur bedienbar). Ein Pfad für drei Auslöser: Touch-Up/Down-Buttons,
-    // Desktop-Grip-Pfeiltasten und (indirekt) das Modal — alle über den Nachbarn
-    // aus der gerenderten Grid-Reihenfolge und dasselbe reorderWidgetConfig.
-    const moveWidget = (id, dir) => {
-      const wrapper = grid.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"]`);
-      const sibling = dir === 'up' ? wrapper?.previousElementSibling : wrapper?.nextElementSibling;
-      const siblingId = sibling?.dataset?.widgetId;
-      if (!id || !siblingId) return false;
-      widgetConfig = reorderWidgetConfig(widgetConfig, id, siblingId, dir === 'up' ? 'before' : 'after');
-      rebuildDashboard(widgetConfig);
-      // Der Fokus folgt der Kachel (die Aufrufer unten), aber wohin sie
-      // gerutscht ist, sieht nur, wer hinsieht: gesagt wird der neue Platz.
-      const order = [...container.querySelectorAll('#dashboard-widget-grid > .widget-wrapper[data-widget-id]')]
-        .map((w) => w.dataset.widgetId);
-      announceDashboard(t('dashboard.customizeMovedTo', {
-        widget: widgetLabel(id), position: order.indexOf(id) + 1, total: order.length,
-      }));
-      return true;
-    };
-
-    grid.querySelectorAll('[data-widget-move]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.widgetId;
-        const dir = btn.dataset.widgetMove;
-        if (!moveWidget(id, dir)) return;
-        // Fokus dem bewegten Widget nachführen (Tastatur-Kontinuität): gleiche
-        // Richtung, sonst die noch aktive Gegenrichtung.
-        const movedWrapper = container.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"]`);
-        const sameDir = movedWrapper?.querySelector(`[data-widget-move="${dir}"]:not([disabled])`);
-        const anyMove = movedWrapper?.querySelector('[data-widget-move]:not([disabled])');
-        (sameDir ?? anyMove)?.focus();
-      });
-    });
-
-    // Desktop-Tastatur: der Grip ist ein fokussierbarer Button — Pfeil hoch/runter
-    // ordnet um. Schließt die Inline-Reorder-Lücke für Tastatur-Nutzer, ohne die
-    // schmale Edit-Leiste mit zusätzlichen Buttons zu überladen (Drag bleibt Maus).
-    grid.querySelectorAll('[data-widget-drag-handle]').forEach((handle) => {
-      handle.addEventListener('keydown', (event) => {
-        const dir = event.key === 'ArrowUp' ? 'up' : event.key === 'ArrowDown' ? 'down' : null;
-        if (!dir) return;
-        event.preventDefault();
-        const id = handle.closest('.widget-wrapper[data-widget-id]')?.dataset.widgetId;
-        if (moveWidget(id, dir)) {
-          container.querySelector(`.widget-wrapper[data-widget-id="${CSS.escape(id)}"] [data-widget-drag-handle]`)?.focus();
+      window.yuvomi?.showToast(t('today.addedToast', { n: added.length }), 'default', 5000, async () => {
+        try {
+          await Promise.all(added.map((id) => api.delete(`/shopping/items/${id}`)));
+          dinnerPlan.missing = missing;
+          dinnerPlan.on_list = (dinnerPlan.on_list ?? []).filter((name) => !missing.includes(name));
+          data.shoppingOpenCount = Math.max(0, (Number(data.shoppingOpenCount) || 0) - added.length);
+          if (!signal.aborted) rebuildDashboard(widgetConfig);
+        } catch {
+          window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
         }
       });
+    } catch {
+      button.disabled = false;
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+    }
+  }
+
+  async function answerTodayQuestion(button) {
+    const question = todayUi.question;
+    if (!question) return;
+    const skip = button.dataset.dayAction === 'skip-question';
+    const card = button.closest('.day-question');
+    card?.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    try {
+      if (skip) await skipQuestion(api, question);
+      else todayUi.questionSettled = await answerQuestion(api, question, Number(button.dataset.option));
+      todayUi.question = null;
+      rebuildDashboard(widgetConfig);
+      if (todayUi.questionSettled) {
+        // The line naming what changed stays three seconds, then goes.
+        setTimeout(() => {
+          todayUi.questionSettled = null;
+          if (!signal.aborted) rebuildDashboard(widgetConfig);
+        }, 3000);
+      }
+    } catch {
+      card?.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+      window.yuvomi?.showToast(t('common.errorGeneric'), 'danger');
+    }
+  }
+
+  function enterWallFromToday() {
+    enterWallMode();
+    _wallFocusIntent = 'enter';
+    // EIN KNOPF OHNE WORT SCHALTET DIE GANZE SHELL AB (#1559): eine Zeile sagt,
+    // was das ist und wie man herauskommt.
+    window.yuvomi?.showToast(t('dashboard.wallEntered', {
+      action: t('dashboard.wallExit'),
+    }), 'default', 8000);
+    rerender();
+  }
+
+  /** Applies the sheet's order and switches to the layout (positions of the rest stay). */
+  function applyTodayLayout(cfg, order, visible) {
+    const next = cfg.map((w) => (Object.hasOwn(visible, w.id) ? { ...w, visible: Boolean(visible[w.id]) } : { ...w }));
+    const slots = next.map((w, i) => (order.includes(w.id) ? i : -1)).filter((i) => i >= 0);
+    const moved = order.map((id) => next.find((w) => w.id === id)).filter(Boolean);
+    slots.forEach((slot, i) => { if (moved[i]) next[slot] = moved[i]; });
+    return next.map((w, i) => ({ ...w, order: i }));
+  }
+
+  function openTodayCustomizeSheet() {
+    const entries = todayEntries(widgetConfig);
+    const weatherEntry = entries.find((w) => w.id === 'today-weather');
+    openTodayCustomize({
+      sections: entries.filter((w) => w.id !== 'today-weather').map((w) => ({
+        id: w.id,
+        label: todaySectionLabel(w.id),
+        visible: todayVisible(w),
+        note: w.id === 'today-question' ? t('today.questionNote') : '',
+      })),
+      weather: weatherEntry ? { visible: todayVisible(weatherEntry) } : null,
+      onChange: ({ order, visible }) => {
+        // Following the built-in default, every extra the sheet showed as off
+        // is written off - the first own layout must not wake old widgets.
+        const shown = Object.fromEntries(entries.map((w) => [w.id, Object.hasOwn(visible, w.id) ? visible[w.id] : todayVisible(w)]));
+        void persistTodayLayout(applyTodayLayout(widgetConfig, order, shown));
+      },
+      actions: {
+        canPublish,
+        followsDefault,
+        onPublish: async () => { await closeModal({ force: true }); await publishHouseholdDefault(); },
+        onReset: async () => { await closeModal({ force: true }); await resetDashboardConfig(); },
+        onWall: onDisplay ? null : enterWallFromToday,
+      },
     });
   }
 
-  let disposeNoteCategories = () => {};
-  let disposeFastingClock = () => {};
-  // Fokus-Nachfolger, den eine Geste fuer den naechsten Neuaufbau vormerkt
-  // (Selektoren, der erste Treffer gewinnt), und der Modus des letzten Aufbaus -
-  // null, solange noch keiner lief.
-  let focusAfterRebuild = null;
-  let renderedCustomizing = null;
-  signal.addEventListener('abort', () => disposeFastingClock(), { once: true });
-  signal.addEventListener('abort', () => disposeNoteCategories(), { once: true });
+  async function handleTodayAction(el) {
+    const action = el.dataset.dayAction;
+    if (action === 'earlier') {
+      const open = el.getAttribute('aria-expanded') !== 'true';
+      const region = container.querySelector(`#${el.getAttribute('aria-controls')}`);
+      toggleRegion(region, open);
+      el.setAttribute('aria-expanded', open ? 'true' : 'false');
+      todayUi.earlierOpen = open;
+      return;
+    }
+    if (action === 'check') {
+      await toggleTodayRow(todayRowByKey(el.dataset.rowKey), el);
+      return;
+    }
+    if (action === 'open') {
+      const row = todayRowByKey(el.dataset.rowKey);
+      if (row?.kind === 'task') openTaskFromOverview(row.id, container, () => refreshDashboardData(), user);
+      return;
+    }
+    if (action === 'open-task') {
+      openTaskFromOverview(el.dataset.taskId, container, () => refreshDashboardData(), user);
+      return;
+    }
+    if (action === 'cook') {
+      const meal = todayState?.now?.meal;
+      if (!meal) return;
+      openCookForMeal({ mealId: meal.id, recipeId: meal.recipe_id, date: meal.date })
+        .catch(() => window.yuvomi?.showToast(t('common.errorGeneric'), 'danger'));
+      return;
+    }
+    if (action === 'add-missing') { await addMissingToShopping(el); return; }
+    if (action === 'timer-stop') { clearWallTimer(); rebuildDashboard(widgetConfig); return; }
+    if (action === 'answer' || action === 'skip-question') { await answerTodayQuestion(el); return; }
+    if (action === 'customize') openTodayCustomizeSheet();
+  }
+
+  function wireToday(root) {
+    if (!root) return;
+    root.addEventListener('click', (event) => {
+      const actionEl = event.target.closest?.('[data-day-action]');
+      if (actionEl && root.contains(actionEl)) {
+        if (actionEl.tagName === 'A') event.preventDefault();
+        void handleTodayAction(actionEl);
+        return;
+      }
+      const link = event.target.closest?.('a[data-route]');
+      if (!link || !root.contains(link)) return;
+      // Der Browser behaelt seinen Klick: Cmd-, Mittel- und Shift-Klick oeffnen
+      // den Link, wie an jedem <a href> der App.
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      window.yuvomi?.navigate(link.dataset.route);
+    }, { signal });
+  }
+
+  /** The extras that may come later than the page: they never hold up the plan. */
+  async function loadTodayExtras() {
+    if (wallMode || loadFailed) return;
+    const visible = new Set(todayEntries(widgetConfig).filter(todayVisible).map((w) => w.id));
+    const jobs = [];
+    if (visible.has('today-question')) {
+      jobs.push(fetchOpenQuestion(api).then((question) => { todayUi.question = question; }));
+    }
+    if (visible.has('today-shopping')) {
+      jobs.push(api.get('/shopping/predictions')
+        .then((res) => { todayUi.predictions = (Array.isArray(res?.data) ? res.data : []).map((p) => p.name).filter(Boolean); })
+        .catch(() => {}));
+    }
+    if (visible.has('today-soon') && !moduleOff('documents')) {
+      jobs.push(api.get('/documents?expiring=30')
+        .then((res) => { todayUi.documents = Array.isArray(res?.data) ? res.data : []; })
+        .catch(() => {}));
+    }
+    if (!jobs.length) return;
+    await Promise.all(jobs);
+    if (!signal.aborted) rebuildDashboard(widgetConfig);
+  }
+
   // Das Einpassen der Wand auf Aufbau und Fenstergroesse (#1817).
   const wallFit = createWallFit(window, signal);
   function rebuildDashboard(cfg) {
@@ -7685,8 +7687,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // eintrifft, darf die Flaeche nicht mehr anfassen - sonst ueberschreibt der
     // aeltere Stand den neueren.
     if (signal.aborted) return;
-    disposeNoteCategories();
-    disposeFastingClock();
     const shell = container.querySelector('#dashboard-shell');
     if (!shell) return;
     if (wallMode) {
@@ -7696,150 +7696,15 @@ export async function render(container, { user, signal: routeSignal = null } = {
       return;
     }
     if (loadFailed) {
-      setHtml(shell, `
-        ${renderDashboardOverview(user, false, null, { offerNew: false })}
-        ${renderDashboardError(loadErrorStatus)}
-      `);
+      setHtml(shell, renderDashboardError(loadErrorStatus));
       if (window.lucide) window.lucide.createIcons({ el: shell });
       container.querySelector('#dashboard-retry')?.addEventListener('click', rerender, { signal: signal });
       return;
     }
-    // Signature-„Heute"-Masthead: Begrüßung und Glance-Cockpit teilen sich EIN
-    // erhöhtes Material-Band (statt zweier gestapelter gerahmter Kästen). Die
-    // inneren Sections sind entrahmt; das Band trägt Rahmen/Schatten/Tönung.
-    // Fehlt das Cockpit (alle Domänen als Widgets sichtbar → kein Glance-Inhalt),
-    // kollabiert das Band per --slim auf eine schlanke Gruß-Leiste statt ein
-    // großes leeres Rechteck zu zeigen (Critique R3 P1).
-    const cockpitHtml = (glanceVisible || isCustomizing) ? renderTodayCockpit(data, cfg, isCustomizing) : '';
-    const mastheadSlim = cockpitHtml ? '' : ' dashboard-masthead--slim';
-    // Kein Wetter-Echo: die Masthead-Zeile spricht nur, wenn die Wetter-Karte
-    // nicht ohnehin im Raster sichtbar ist (Opt-in fürs Wandtablet).
-    // Eine nicht verfuegbare Karte steht nicht im Raster, spricht also auch
-    // nicht fuer die Zeile.
-    const weatherCardShown = cfg.some((w) => w.id === 'weather' && w.visible) && isWidgetModuleEnabled('weather');
-    // Wer hatte den Fokus? Nach dem setHtml gibt es sein Element nicht mehr
-    // (captureRebuildFocus / restoreFocusAfterRebuild).
-    const { key: keepFocus, had: hadFocus } = captureRebuildFocus(shell, document.activeElement, document.body);
-    const modeChanged = renderedCustomizing !== null && renderedCustomizing !== isCustomizing;
-    // Nur eine Geste IM Anpassen-Modus gleitet (playTileFlip): beim Betreten
-    // und Verlassen wachsen und schwinden die Bearbeiten-Leisten aller Kacheln,
-    // da waere jede Bewegung nur Unruhe.
-    const tileRectsBefore = isCustomizing && renderedCustomizing === true ? captureTileRects(shell) : null;
-    // BETRETEN UND VERLASSEN: das Raster gleitet ALS GANZES an seine neue Lage
-    // (R16, Bewegung). Der Gruss bricht um, die Ablage schiebt sich davor - das
-    // Raster sprang beim Betreten um mehrere hundert Pixel (gemessen 486 ->
-    // 868). Die Kacheln selbst bleiben ruhig (Satz oben): EIN Versatz fuer das
-    // Raster, keine zweiundzwanzig einzelnen.
-    const gridTopBefore = modeChanged
-      ? shell.querySelector('#dashboard-widget-grid')?.getBoundingClientRect?.().top ?? null
-      : null;
-    renderedCustomizing = isCustomizing;
-    syncLeaveGuard();
-    // Im Anpassen-Modus ist die Seite ein Editor: der Speed-Dial ("Neue
-    // Aufgabe", "Neuer Termin" ...) fuehrte mitten aus der Anordnung hinaus
-    // und stand ueber den Bearbeiten-Leisten der unteren Kacheln (A7 P2-1).
-    setCustomizeFabHidden(isCustomizing);
-    // VOM SKELETT ZUM INHALT BLENDET ES (Critique R19): vorher ein harter
-    // Schnitt, die Kacheln standen von einem Frame auf den anderen da. Nur
-    // dieser eine Uebergang - ein Neuaufbau ueber vorhandenem Inhalt bleibt
-    // still, und unter der Seitenblende ist die Blende schon das Einblenden.
-    const fromSkeleton = Boolean(shell.querySelector('.widget-skeleton'))
-      && !document.documentElement.classList.contains('page-swapping');
-    swapContent(shell, () => setHtml(shell, `
-      <section class="dashboard-masthead dashboard-masthead--${greetingPeriod()}${mastheadSlim}">
-        ${renderDashboardOverview(user, isCustomizing, weather, { followsDefault, canPublish, weatherCard: weatherCardShown })}
-        ${cockpitHtml}
-      </section>
-      ${renderDashboardLayout(cfg, data, weather, currency, { editing: isCustomizing, visibleMealTypes, glanceHidden: !glanceVisible, familyManage: familyManageHref(user) })}
-      ${isCustomizing ? renderCustomizeFootnote({ followsDefault, canPublish }) : ''}
-    `), { animate: fromSkeleton });
-    wireLinks(container, rerender, { editing: isCustomizing, user });
-    disposeFastingClock = wireFastingWidget(container, rerender, refreshDashboardData, data.fasting, signal);
-    // Retry einer isolierten Widget-Fehlerkachel: da /dashboard aggregiert lädt,
-    // ist „erneut versuchen" ein voller Neuaufbau (wie der Page-Level-Retry).
-    container.querySelectorAll('[data-widget-retry]').forEach((btn) =>
-      btn.addEventListener('click', rerender, { signal: signal }));
-    if (window.lucide) window.lucide.createIcons({ el: shell });
-    // Vorschaubilder der Mahlzeitenkachel: Ruecksturz auf den Platzhalter per
-    // Listener, weil ein `onerror` im Markup gegen die CSP liefe (#1059).
-    wireRecipeThumbs(shell);
-    disposeNoteCategories = wireNoteCategoryOverflow(
-      shell,
-      (count) => getNumberFormat().format(count),
-      (count) => t('noteCategories.moreAction', { count }),
-    );
-    wireWeatherRefresh(container, (updatedWeather) => {
-      weather = updatedWeather;
-      rebuildDashboard(cfg);
-    }, signal);
-    container.querySelector('#dashboard-search')?.addEventListener('click', () => {
-      window.yuvomi?.openSearch?.();
-    }, { signal: signal });
-    container.querySelector('#dashboard-wall-enter')?.addEventListener('click', () => {
-      enterWallMode();
-      _wallFocusIntent = 'enter';
-      // EIN KNOPF OHNE WORT SCHALTET DIE GANZE SHELL AB (#1559, D#1494): wer
-      // ihn aus Neugier antippt, steht ohne Seitenleiste und Tab-Leiste da.
-      // Eine Zeile sagt, was das ist und wie man herauskommt - der Name des
-      // Ausstiegs kommt aus dessen Schluessel, wie beim Gegenstueck
-      // `wallExited`, damit die Wegbeschreibung nicht vom Knopf wegdriftet.
-      window.yuvomi?.showToast(t('dashboard.wallEntered', {
-        action: t('dashboard.wallExit'),
-      }), 'default', 8000);
-      rerender();
-    }, { signal: signal });
-    container.querySelector('#dashboard-customize-btn')?.addEventListener('click', () => {
-      // Nur noch der Einstieg: im Anpassen-Modus gibt es diesen Knopf nicht.
-      // Der Fokus geht in die Leiste, die ihn abloest.
-      isCustomizing = true;
-      focusAfterRebuild = ['#dashboard-customize-cancel'];
-      rebuildDashboard(widgetConfig);
-    }, { signal: signal });
-    // Die Eintraege des mobilen Anpassen-Menues loesen die Knoepfe aus, die sie
-    // dort ersetzen - derselbe Weg, dieselbe Rueckmeldung.
-    container.querySelector('#dashboard-tools-menu')?.addEventListener('click', (event) => {
-      const action = event.target.closest('[data-action]')?.dataset.action;
-      if (action === 'dashboard-customize') container.querySelector('#dashboard-customize-btn')?.click();
-      if (action === 'dashboard-wall') container.querySelector('#dashboard-wall-enter')?.click();
-    }, { signal: signal });
-    container.querySelector('#dashboard-customize-save')?.addEventListener('click', saveDashboardConfig, { signal: signal });
-    container.querySelector('#dashboard-customize-cancel')?.addEventListener('click', requestCancelDashboardConfig, { signal: signal });
-    // ESC BEENDET DAS ANPASSEN (R20, Re-Critique 2026-10-17 A1 P3), wie
-    // "Abbrechen": mit Rueckfrage, wenn etwas geaendert ist. Nicht, solange
-    // ein Dialog oder Menue offen ist - deren Esc gehoert ihnen.
-    if (isCustomizing) {
-      document.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape' || event.defaultPrevented || !isCustomizing) return;
-        if (document.querySelector('dialog[open], .modal-overlay, [popover].is-open, .popover-menu.is-open')) return;
-        try { if (document.querySelector(':popover-open')) return; } catch { /* ohne Popover-API gibt es keins */ }
-        event.preventDefault();
-        requestCancelDashboardConfig();
-      }, { signal: signal });
-    }
-    // Zwei Orte je Knopf (Leiste breit, Fussnote schmal), ein Handler.
-    container.querySelectorAll('[data-customize-reset]').forEach((btn) => btn.addEventListener('click', resetDashboardConfig, { signal: signal }));
-    container.querySelectorAll('[data-customize-publish]').forEach((btn) => btn.addEventListener('click', publishHouseholdDefault, { signal: signal }));
-    wireDashboardEditMode();
-    wireRowFill();
-    void mountExtensionWidgets(shell, cfg, user);
-
-    /* DER FOKUS UEBERLEBT DEN NEUAUFBAU. Jede Geste im Anpassen-Modus baut die
-     * Flaeche neu - und bis hierher fiel der Fokus danach auf <body>: wer per
-     * Tastatur „Anpassen" drueckte, eine Groesse waehlte oder speicherte, stand
-     * wieder am Seitenanfang. Reihenfolge der Kandidaten: dasselbe Element
-     * (gleiche Id bzw. gleiches data-Attribut), dann das, was die Geste selbst
-     * als Nachfolger nennt (Ausblenden -> Nachbarkachel), und wenn die Geste den
-     * Modus gewechselt hat (Speichern, Abbrechen), der Anpassen-Knopf, der ihn
-     * wieder oeffnet. */
-    restoreFocusAfterRebuild(container, [
-      keepFocus,
-      ...(focusAfterRebuild ?? []),
-      ...(hadFocus && modeChanged ? ['#dashboard-customize-btn', '.dashboard-tools-btn'] : []),
-      ...(takeWallFocusIntent('leave') ? ['#dashboard-wall-enter', '.dashboard-tools-btn'] : []),
-    ]);
-    focusAfterRebuild = null;
-    playTileFlip(shell, tileRectsBefore);
-    playGridShift(shell, gridTopBefore);
+    // Dziś liest die Anordnung aus `widgetConfig`; `cfg` bleibt das Argument
+    // aller Aufrufer.
+    void cfg;
+    renderToday(shell);
   }
 
   rebuildDashboard(widgetConfig);
@@ -7879,38 +7744,22 @@ export async function render(container, { user, signal: routeSignal = null } = {
   // Kernszene, dort zeigte „Heute wichtig" abends noch den Morgenstand. EIN
   // Pfad für beide Auslöser (Tab-Reaktivierung + 15-Min-Takt im sichtbaren
   // Tab), bewusst ohne Skeleton (das gehört dem Erstaufbau) und still bei
-  // Fehlern, wie der Wetter-Timer. Während „Anpassen" wird nicht neu gebaut -
-  // ein Rebuild würde den Bearbeitungszustand wegwerfen.
+  // Fehlern, wie der Wetter-Timer. Dziś ruft ihn auch nach jedem Haken auf.
   let refreshInFlight = false;
   async function refreshDashboardData() {
-    if (isCustomizing || loadFailed || refreshInFlight) return;
+    if (loadFailed || refreshInFlight) return;
     refreshInFlight = true;
     try {
       const fresh = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
       if (signal.aborted) return;
       localizeEventLists(fresh);
-      // Der owner-only Zyklus-Slice reist unveraendert mit: /dashboard
-      // liefert ihn nie, ein Refresh darf ihn nicht auf „nie geladen"
-      // zurückwerfen.
-      fresh.cycle = data.cycle;
-      // Schedule hat anders als Cycle keinen Privatsphaere-Grund, den alten
-      // Stand einfach mitzuschleppen (M-6a): "wer heute Dienst hat" blieb
-      // sonst bis zu 15 Minuten stehen und ueberlebte sogar einen
-      // Mitternachts-Wechsel auf dem Wandtablet. Vor der Uebernahme
-      // zuruecksetzen und mit frisch berechnetem Tag neu laden - derselbe
-      // Weg, den ein frisch eingeblendetes Widget in persistWidgetConfig()
-      // schon nimmt. Das heilt nebenbei auch einen zuvor gescheiterten Slice
-      // (M-6b) beim naechsten stillen Takt, statt auf den Retry-Knopf zu warten.
-      if (widgetConfig.some((w) => w.id === 'schedule' && w.visible)) {
-        data.schedule = undefined;
-        await ensureScheduleSlice();
-        if (signal.aborted) return;
-      }
-      fresh.schedule = data.schedule;
-      fresh.waste = data.waste;
       fresh.pendingReminders = await loadPendingReminders(overviewRequest);
       if (signal.aborted) return;
+      // Was gerade abgehakt wird, haelt seinen Stand: die Antwort kann vor
+      // dem Haken abgeschickt worden sein.
+      if (todayUi.busy.size) return;
       data = fresh;
+      setCountdownAvailability(data?.countdowns);
       lastLoadedAt = new Date();
       rebuildDashboard(widgetConfig);
     } catch { /* Hintergrund-Refresh: bewusst still */ }
@@ -7922,25 +7771,10 @@ export async function render(container, { user, signal: routeSignal = null } = {
   signal.addEventListener('abort', () => clearInterval(refreshTimerId));
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    const titleEl = container.querySelector('.dashboard-overview__title');
-    if (titleEl) {
-      titleEl.replaceChildren();
-      titleEl.insertAdjacentHTML('afterbegin', greeting(user.display_name));
-      // Gradient-Periode mit-resyncen: sonst aktualisieren sich über Mittag/18 Uhr
-      // die Worte, aber der Tageszeit-Gradient bliebe auf dem alten Fenster stehen.
-      titleEl.classList.remove(
-        'dashboard-overview__title--morning',
-        'dashboard-overview__title--day',
-        'dashboard-overview__title--evening',
-      );
-      titleEl.classList.add(`dashboard-overview__title--${greetingPeriod()}`);
-    }
-    const dateEl  = container.querySelector('.dashboard-overview__date');
-    if (dateEl)  dateEl.textContent = mastheadDateLabel();
     // Hintergrund-Tabs bekommen gedrosselte Timer: die Uhr könnte beim
     // Zurückkehren Minuten nachhängen und muss sofort nachziehen (#651).
+    // Gruss, Datum und Teraz zeichnet der Neuaufbau nach dem Refresh neu.
     updateClockWidget(container);
-    // Inhalte ziehen nach, nicht nur Gruß/Datum/Uhr (Paket 2).
     refreshDashboardData();
   }, { signal: signal });
 
@@ -7951,13 +7785,14 @@ export async function render(container, { user, signal: routeSignal = null } = {
   //
   // Derselbe Takt traegt die Grenzen des Tages (#1449): endet ein Termin, wird
   // eine Dosis faellig oder ist die Tonne mittags abgeholt, aendert sich das
-  // Blatt - ohne Neuladen, denn das unberuehrte Wandtablet wartet sonst bis zum
-  // stillen Refresh. Gebaut wird nur, wenn sich der Stand WIRKLICH geaendert
-  // hat: der Fingerabdruck ist billig, ein Neuaufbau je Minute waere es nicht.
-  let dayFingerprint = todayFingerprint(data, widgetConfig);
+  // Blatt - ohne Neuladen. Gebaut wird nur, wenn sich der Stand WIRKLICH
+  // geaendert hat. Auf Dziś zaehlt dazu die Minute der Teraz-Karte („Kolacja
+  // za 19 min"), an der Wand der Fingerabdruck des Blatts.
+  const dayStamp = () => (wallMode ? todayFingerprint(data, widgetConfig) : todayClockStamp());
+  let dayFingerprint = loadFailed ? '' : dayStamp();
   const followDayBoundaries = () => {
-    if (loadFailed || isCustomizing) return;
-    const next = todayFingerprint(data, widgetConfig);
+    if (loadFailed || todayUi.busy.size) return;
+    const next = dayStamp();
     if (next === dayFingerprint) return;
     dayFingerprint = next;
     rebuildDashboard(widgetConfig);
@@ -7966,6 +7801,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
     if (wallMode) syncWallMode(location.pathname);
     followDayBoundaries();
   });
+
+  void loadTodayExtras();
 
   // 30-Minuten Auto-Refresh für Wetter (inkl. optionaler Standort-Aktualisierung).
   // Anker ist der Datensatz, nicht der Karten-Button: seit dem Masthead-Umzug
