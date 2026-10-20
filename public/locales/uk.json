@@ -890,7 +890,9 @@
         "clearList": "Clear the list",
         "changeAisle": "{{category}} · change",
         "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
-        "usualQuantity": "usually {{quantity}}"
+        "usualQuantity": "usually {{quantity}}",
+        "allBoughtMeta_few": "{{count}} items from {{name}}",
+        "allBoughtMeta_many": "{{count}} items from {{name}}"
     },
     "meals": {
         "randomizeSuccess_few": "Заплановано {{count}} прийоми їжі.",
