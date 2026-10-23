@@ -239,10 +239,11 @@ test('overview: vitals, medications and all three cycle requests are one wave', 
   const h = await loadOverviewHarness({ cycleEnabled: true, personId: 4, meId: 4, meds: [{ id: 9 }] });
   await h.settle();
 
+  // Tafla: die faellige Vorsorge (Wizyty) laeuft in derselben Welle mit.
   assert.deepEqual(paths(h.open), [
     '/health/cycle/logs', '/health/cycle/periods', '/health/cycle/settings',
-    '/health/medications', '/health/vitals',
-  ], 'fuenf Abrufe gleichzeitig offen, keiner wartet auf einen anderen');
+    '/health/medications', '/health/prevention/due', '/health/vitals',
+  ], 'sechs Abrufe gleichzeitig offen, keiner wartet auf einen anderen');
 
   h.answer();
   await h.settle();
@@ -256,14 +257,14 @@ test('overview: vitals, medications and all three cycle requests are one wave', 
 test('overview: the cycle rule still decides what is requested at all', async () => {
   const off = await loadOverviewHarness({ cycleEnabled: false, personId: 4, meId: 4 });
   await off.settle();
-  assert.deepEqual(paths(off.open), ['/health/medications', '/health/vitals'], 'Zyklus abgewaehlt: kein Zyklus-Abruf');
+  assert.deepEqual(paths(off.open), ['/health/medications', '/health/prevention/due', '/health/vitals'], 'Zyklus abgewaehlt: kein Zyklus-Abruf');
   off.answer();
   await off.finished();
   assert.deepEqual([off.overview.cyclePeriods, off.overview.cycleLogs, off.overview.cycleSettings], [[], [], null]);
 
   const other = await loadOverviewHarness({ cycleEnabled: true, personId: 5, meId: 4 });
   await other.settle();
-  assert.deepEqual(paths(other.open), ['/health/cycle/logs', '/health/cycle/periods', '/health/medications', '/health/vitals'],
+  assert.deepEqual(paths(other.open), ['/health/cycle/logs', '/health/cycle/periods', '/health/medications', '/health/prevention/due', '/health/vitals'],
     'fremde Person: die privaten Einstellungen werden nicht angefragt');
   assert.ok(other.open.every((req) => req.path.endsWith('?user_id=5')));
   other.answer();

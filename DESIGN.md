@@ -3955,6 +3955,28 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   material tests measure every ink on paper instead of on the panel; the brand field lives on the
   loading screen only; the auth head carries the house, not `brandMarkSvg()` (the sidebar keeps
   the brand mark); the card title is 600, not 700.
+- **Zdrowie**: the overview is the day. Up to three people pick the person on a neutral segmented
+  control ("Ty | Wojtek", track `--color-fill`, the chosen one on `--color-raised`, never violet;
+  four and more keep the pill with its menu). "Dziś 1 z 2" lists today's doses as 64 rows with the
+  check circle of Dziś (tap = taken via the existing log API, tap again = back to pending, both with
+  a "Cofnij" toast; the stock moves with the dose as before); "Pominięcie" stays in Leki. "Zapasy"
+  appears only when a medicine is under its refill threshold (left amount, "wystarczy do 29 paź"; the
+  word pill only for "brak"), "Wizyty" only when a prevention item's reminder window is open (pill
+  only within three days or overdue). Under them a lock line "Dane o zdrowiu nigdy nie trafiają do
+  asystenta AI." - verified 2026-10-20: every AI call site (server/ai questions/insights, the admin
+  test, shopping category guess, pantry photo, meal ideas, meal ingredients) reads meals, recipes,
+  pantry, shopping and the AI's own tables, never a health table. Then "Dziennik": every area as a
+  quiet row with its latest value. On the phone the overview no longer repeats vitals, adherence,
+  reminders and "Szybki zapis" below the list (they live in their areas; the + covers capture); the
+  desktop grid keeps them. Areas get one back circle to Zdrowie (the shell's "Wróć: Więcej" steps
+  aside there). Done is violet, never success-green ("Przyjęto", a normal lab value, a typical cycle
+  go to ink-2/neutral). Guards moved: hoist plan without "quick", the one-wave request list gains
+  `/health/prevention/due`, the overview dose renderer is the circle (Leki keeps both labelled
+  buttons), the person switcher test reads the segment. Areas keep their structure and take the
+  tokens: Profilaktyka's "due" list and each type's history are flat white grouped cards with 64
+  rows (the word pill only when soon or overdue), selections (weekday toggles, symptom/mood chips,
+  the chosen lab report) speak violet, and chips/discs on cards sit on `--color-fill` instead of the
+  dark `--color-surface-2` well.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

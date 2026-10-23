@@ -4883,7 +4883,25 @@
             "reminders": {
                 "title": "接下来的提醒",
                 "empty": "今日没有更多服药"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "生命体征",
@@ -5708,7 +5726,10 @@
         "errorCycleImportNoRows": "文件只有标题行没有任何经期。",
         "errorCycleImportTooManyRows": "一次导入最多 {{limit}} 个经期。请拆分文件。",
         "errorVitalImpossible": "这个数值不可能。请检查输入。",
-        "errorVitalBpOrder": "收缩压必须高于舒张压。"
+        "errorVitalBpOrder": "收缩压必须高于舒张压。",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "垃圾收集",

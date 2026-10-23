@@ -4883,7 +4883,25 @@
             "reminders": {
                 "title": "次のリマインダー",
                 "empty": "本日の服薬はこれ以上ありません"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "バイタル",
@@ -5708,7 +5726,10 @@
         "errorCycleImportNoRows": "ファイルには見出し行しかなく生理期間がありません。",
         "errorCycleImportTooManyRows": "一度にインポートできる生理期間は最大{{limit}}件です。ファイルを分けてください。",
         "errorVitalImpossible": "この値はありえません。入力内容を確認してください。",
-        "errorVitalBpOrder": "収縮期の値は拡張期の値より大きくなければなりません。"
+        "errorVitalBpOrder": "収縮期の値は拡張期の値より大きくなければなりません。",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "ゴミ収集",

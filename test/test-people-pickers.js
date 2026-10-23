@@ -429,8 +429,14 @@ test('health: a signed-in account that is not a member sees its own name on the 
     const view = { members: [], personId: null, meId: CLARA.id };
     await health.loadHealthMembers(view, CLARA);
     assert.equal(view.personId, CLARA.id);
+    // Tafla: up to three people the switcher is a segmented control; the
+    // signed-in account is its own first segment ("Ty") and is pressed.
     const html = health.personSwitcherMarkup(view.members, view.personId, view.meId, { menuId: 'm', label: 'Person' });
-    assert.match(html, /class="health-person-switcher__name">Clara · health\.vitals\.you</, 'the switcher names the person whose data is shown');
+    assert.match(html, new RegExp(`data-person-id="${CLARA.id}"\\s+aria-pressed="true">health\\.person\\.you<`), 'the switcher names the person whose data is shown');
+    // With four people it stays the pill with its menu.
+    const many = [...view.members, { id: 90, display_name: 'Dora' }, { id: 91, display_name: 'Emil' }];
+    assert.match(health.personSwitcherMarkup(many, view.personId, view.meId, { menuId: 'm', label: 'Person' }),
+      /class="health-person-switcher__name">Clara · health\.vitals\.you</);
 
     const member = { members: [], personId: null, meId: ANNA.id };
     await health.loadHealthMembers(member, ANNA);

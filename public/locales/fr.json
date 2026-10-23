@@ -4885,7 +4885,25 @@
             "reminders": {
                 "title": "Prochains rappels",
                 "empty": "Plus aucune prise aujourd'hui"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Constantes",
@@ -5710,7 +5728,10 @@
         "errorCycleImportNoRows": "Le fichier ne contient qu’une ligne d’en-tête et aucune période de règles.",
         "errorCycleImportTooManyRows": "Un import peut contenir au plus {{limit}} périodes de règles. Divise le fichier.",
         "errorVitalImpossible": "Cette valeur n'est pas possible. Vérifiez votre saisie.",
-        "errorVitalBpOrder": "La valeur systolique doit être supérieure à la diastolique."
+        "errorVitalBpOrder": "La valeur systolique doit être supérieure à la diastolique.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Collecte des déchets",

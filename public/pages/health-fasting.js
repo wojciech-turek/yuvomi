@@ -4,7 +4,7 @@ import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
-import { personSwitcherMarkup } from '/utils/health-person-switcher.js';
+import { personSwitcherMarkup, personSwitcherFocusTarget } from '/utils/health-person-switcher.js';
 import { fastingHistoryQuery, fastingSections, fastingStatsQuery, formatFastingDuration, shouldLoadFastingStats } from '/utils/health-fasting.js';
 import { rowActionHtml } from '/utils/row-action.js';
 import { emptyStateHTML } from '/utils/empty-state.js';
@@ -78,8 +78,7 @@ async function onPersonPick(view, el, event) {
   const refocus = () => {
     const active = document.activeElement;
     if (!active || active === document.body || !active.isConnected) {
-      (el.querySelector('.health-person-switcher__trigger')
-        ?? document.querySelector('[popovertarget="health-person-menu-fasting"]'))?.focus({ preventScroll: true });
+      personSwitcherFocusTarget(el, 'health-person-menu-fasting')?.focus({ preventScroll: true });
     }
   };
   refocus();

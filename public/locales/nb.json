@@ -4883,7 +4883,25 @@
             "reminders": {
                 "title": "Kommende påminnelser",
                 "empty": "Ingen flere doser i dag"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitalparametre",
@@ -5708,7 +5726,10 @@
         "errorCycleImportNoRows": "Filen har bare en overskriftsrad og ingen mens.",
         "errorCycleImportTooManyRows": "En import kan inneholde høyst {{limit}} menser. Del opp filen.",
         "errorVitalImpossible": "Denne verdien er ikke mulig. Sjekk det du skrev inn.",
-        "errorVitalBpOrder": "Den systoliske verdien må være høyere enn den diastoliske."
+        "errorVitalBpOrder": "Den systoliske verdien må være høyere enn den diastoliske.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Avfallshåndtering",

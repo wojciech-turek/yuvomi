@@ -5024,7 +5024,25 @@
             "reminders": {
                 "title": "Další připomenutí",
                 "empty": "Dnes už žádné další užití"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitální hodnoty",
@@ -5855,7 +5873,10 @@
         "errorCycleImportNoRows": "Soubor obsahuje jen řádek záhlaví a žádné menstruace.",
         "errorCycleImportTooManyRows": "Jeden import smí obsahovat nejvýše {{limit}} menstruací. Rozděl soubor.",
         "errorVitalImpossible": "Tato hodnota není možná. Zkontrolujte prosím zadání.",
-        "errorVitalBpOrder": "Systolická hodnota musí být vyšší než diastolická."
+        "errorVitalBpOrder": "Systolická hodnota musí být vyšší než diastolická.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Svoz odpadu",

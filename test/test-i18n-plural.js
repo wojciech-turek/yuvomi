@@ -333,6 +333,9 @@ const PLURAL_EXCEPTIONS = {
   // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
   'capture.primary.shoppingMany': 'GUARDED',
   'capture.saved.shoppingMany': 'GUARDED',
+  // health.js visitPill() - d<0 ("zaległe"), d===0 und d===1 gehen vorher ab,
+  // die Pille steht nur bis d<=3: diese Zeile sieht nur 2 und 3 (Tafla, Wizyty).
+  'health.overview.pillInDays': 'GUARDED',
 
   // --- echte Luecken, eingefroren statt behoben ---------------------------
   // Alle unten sind bei n=1 grammatisch falsch und n=1 ist erreichbar.

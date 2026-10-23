@@ -4883,7 +4883,25 @@
             "reminders": {
                 "title": "Upcoming reminders",
                 "empty": "No more doses today"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitals",
@@ -5708,7 +5726,10 @@
         "errorCycleImportNoRows": "The file only has a header row and no periods.",
         "errorCycleImportTooManyRows": "An import can hold at most {{limit}} periods. Split the file.",
         "errorVitalImpossible": "This value is not possible. Please check what you entered.",
-        "errorVitalBpOrder": "The systolic value must be higher than the diastolic one."
+        "errorVitalBpOrder": "The systolic value must be higher than the diastolic one.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Waste collection",

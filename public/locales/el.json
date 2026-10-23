@@ -4883,7 +4883,25 @@
             "reminders": {
                 "title": "Επόμενες υπενθυμίσεις",
                 "empty": "Καμία άλλη λήψη για σήμερα"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Ζωτικά σημεία",
@@ -5708,7 +5726,10 @@
         "errorCycleImportNoRows": "Το αρχείο έχει μόνο γραμμή κεφαλίδας και καμία περίοδο.",
         "errorCycleImportTooManyRows": "Μια εισαγωγή μπορεί να έχει έως {{limit}} περιόδους. Χώρισε το αρχείο.",
         "errorVitalImpossible": "Αυτή η τιμή δεν είναι δυνατή. Ελέγξτε την καταχώριση.",
-        "errorVitalBpOrder": "Η συστολική τιμή πρέπει να είναι μεγαλύτερη από τη διαστολική."
+        "errorVitalBpOrder": "Η συστολική τιμή πρέπει να είναι μεγαλύτερη από τη διαστολική.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Αποκομιδή απορριμμάτων",
