@@ -83,28 +83,29 @@ function icon(name) {
 
 const chevron = () => `<span class="more-row__chevron" aria-hidden="true">${icon('chevron-right')}</span>`;
 
-/** "2504 zł" with the currency part in ink-2 (money is ink, the unit steps back). */
-function moneyHtml(amount, currency, { whole = false } = {}) {
+/**
+ * The money format of the page: no cents on a whole amount ("360 zł", not
+ * "360,00 zł") nor from 1000 up, as the artboards write it; `whole` rounds.
+ */
+function moneyFormat(amount, currency, { whole = false } = {}) {
   const value = Number(amount) || 0;
-  const fraction = whole || Math.abs(value) >= 1000 ? 0 : undefined;
-  const format = getNumberFormat({
+  const noCents = whole || Math.abs(value) >= 1000 || Number.isInteger(value);
+  return getNumberFormat({
     style: 'currency',
     currency: currency || 'EUR',
-    ...(fraction === 0 ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
+    ...(noCents ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
   });
-  return format.formatToParts(value)
+}
+
+/** "2504 zł" with the currency part in ink-2 (money is ink, the unit steps back). */
+function moneyHtml(amount, currency, opts = {}) {
+  return moneyFormat(amount, currency, opts).formatToParts(Number(amount) || 0)
     .map((part) => (part.type === 'currency' ? `<span class="more-quiet">${esc(part.value)}</span>` : esc(part.value)))
     .join('');
 }
 
 function moneyText(amount, currency, opts = {}) {
-  const value = Number(amount) || 0;
-  const whole = opts.whole || Math.abs(value) >= 1000;
-  return getNumberFormat({
-    style: 'currency',
-    currency: currency || 'EUR',
-    ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
-  }).format(value);
+  return moneyFormat(amount, currency, opts).format(Number(amount) || 0);
 }
 
 /**
@@ -246,7 +247,7 @@ function buildInbox(state) {
         glyph: GLYPH.housekeeping,
         title: tHtml('more.housekeepingDue', { name }, { amount: moneyHtml(amount, currency) }),
         titleText: t('more.housekeepingDue', { name, amount: moneyText(amount, currency) }),
-        meta: t('more.visitsOn', { visits: t('more.visits', { count: visits.length }), days: daysList(days.slice(0, 3)) }),
+        meta: t('more.visitsOn', { visits: t('more.forVisits', { count: visits.length }), days: daysList(days.slice(0, 3)) }),
         route: '/housekeeping',
         verbLabel: payable ? t('more.verbPaid') : t('more.verbOpen'),
         act: payable ? async () => {
@@ -404,7 +405,6 @@ function nextPickup(data) {
 /** The preview tile of a pinnable id, or null when it has nothing to say. */
 function buildTile(id, state) {
   const { data, currency, extra } = state;
-  const route = (path) => path;
   switch (id) {
     case 'notes': {
       const total = Number(data.notesTotal) || 0;
@@ -414,7 +414,7 @@ function buildTile(id, state) {
       const lead = notes.find((n) => n.pinned) ?? notes[0];
       const countText = t('more.notesCount', { count: total });
       return {
-        id, route: route('/notes'), glyph: GLYPH.notes, label: t('nav.notes'),
+        id, route: '/notes', glyph: GLYPH.notes, label: t('nav.notes'),
         value: esc(lead?.title || countText),
         note: lead?.title
           ? (pinned ? `${countText} · ${t('dashboard.metricPinned', { count: pinned })}` : countText)
@@ -432,14 +432,14 @@ function buildTile(id, state) {
         const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
         const left = daysInMonth - today.getDate() + 1;
         return {
-          id, route: route('/budget'), glyph: GLYPH.budget, label: t('nav.budget'),
+          id, route: '/budget', glyph: GLYPH.budget, label: t('nav.budget'),
           value: tHtml('more.budgetLeft', {}, { amount: `<span class="more-tile__number">${moneyHtml(balance, currency, { whole: true })}</span>` }),
           ariaValue: t('more.budgetLeft', { amount: moneyText(balance, currency, { whole: true }) }),
           note: balance > 0 ? t('more.budgetPerDay', { amount: moneyText(balance / left, currency, { whole: true }) }) : '',
         };
       }
       return {
-        id, route: route('/budget'), glyph: GLYPH.budget, label: t('nav.budget'),
+        id, route: '/budget', glyph: GLYPH.budget, label: t('nav.budget'),
         value: tHtml('more.budgetSpent', {}, { amount: moneyHtml(expenses, currency, { whole: true }) }),
         ariaValue: t('more.budgetSpent', { amount: moneyText(expenses, currency, { whole: true }) }),
         note: '',
@@ -453,7 +453,7 @@ function buildTile(id, state) {
       const age = next.kind !== 'name_day' && Number(next.next_age) > 0 ? t('more.turnsAge', { count: Number(next.next_age) }) : '';
       const kind = next.kind === 'name_day' ? t('birthdays.nameDay') : '';
       return {
-        id, route: route('/birthdays'), glyph: GLYPH.birthdays, label: t('nav.birthdays'),
+        id, route: '/birthdays', glyph: GLYPH.birthdays, label: t('nav.birthdays'),
         value: esc(t('more.birthdayWhen', { name: next.name ?? '', when: Number.isFinite(days) ? whenLabel(days) : '' })),
         note: [/^\d{4}-\d{2}-\d{2}$/.test(date) ? shortDate(date) : '', age || kind].filter(Boolean).join(' · '),
       };
@@ -464,7 +464,7 @@ function buildTile(id, state) {
       const low = Number(h.lowStockCount) || 0;
       if (!next?.name && !low) return null;
       return {
-        id, route: route('/health'), glyph: GLYPH.health, label: t('nav.health'),
+        id, route: '/health', glyph: GLYPH.health, label: t('nav.health'),
         value: esc(next?.name ? (next.time ? t('more.doseAt', { name: next.name, time: formatTime(next.time) }) : next.name) : t('more.healthRefill')),
         note: low ? t('dashboard.healthRefill', { count: low }) : '',
       };
@@ -476,13 +476,13 @@ function buildTile(id, state) {
       if (hk.present) value = esc(hk.workerName ? t('more.housekeepingHere', { name: firstName(hk.workerName) }) : t('dashboard.housekeepingPresent'));
       else if (Number(hk.unpaidAmount) > 0) value = tHtml('more.housekeepingUnpaid', {}, { amount: moneyHtml(hk.unpaidAmount, currency) });
       else value = esc(t('dashboard.metricVisitsMonth', { count: Number(hk.visitsThisMonth) || 0 }));
-      return { id, route: route('/housekeeping'), glyph: GLYPH.housekeeping, label: t('nav.housekeeping'), value, note: '' };
+      return { id, route: '/housekeeping', glyph: GLYPH.housekeeping, label: t('nav.housekeeping'), value, note: '' };
     }
     case 'documents': {
       const next = nextDocument(extra);
       if (!next) return null;
       return {
-        id, route: route(`/documents?open=${encodeURIComponent(String(next.doc.id))}`), glyph: GLYPH.documents, label: t('nav.documents'),
+        id, route: `/documents?open=${encodeURIComponent(String(next.doc.id))}`, glyph: GLYPH.documents, label: t('nav.documents'),
         value: esc(String(next.doc.title ?? next.doc.name ?? '')),
         note: t('more.documentExpires', { when: whenLabel(next.days) }),
       };
@@ -491,7 +491,7 @@ function buildTile(id, state) {
       const next = nextPickup(data);
       if (!next) return null;
       return {
-        id, route: route('/waste'), glyph: GLYPH.waste, label: t('nav.waste'),
+        id, route: '/waste', glyph: GLYPH.waste, label: t('nav.waste'),
         value: esc(t('more.wasteWhen', { when: whenLabel(next.days), types: next.types })),
         note: '',
       };
@@ -501,7 +501,7 @@ function buildTile(id, state) {
       if (!position) return null;
       const owe = position.direction === 'owe';
       return {
-        id, route: route(`/budget?tab=split-expenses&group=${encodeURIComponent(String(position.groupId))}`),
+        id, route: `/budget?tab=split-expenses&group=${encodeURIComponent(String(position.groupId))}`,
         glyph: GLYPH['split-expenses'], label: t('splitExpenses.title'),
         value: moneyHtml(position.amount, position.currency),
         note: t(owe ? 'more.splitYouOweShort' : 'more.splitOwesYouShort', { name: firstName(position.name) }),
@@ -527,9 +527,9 @@ function rowValue(module, state) {
       return next ? t('more.documentShort', { title: String(next.doc.title ?? next.doc.name ?? ''), when: whenLabel(next.days) }) : '';
     }
     case 'contacts':
-      return Number.isFinite(extra.counts.contacts) ? getNumberFormat().format(extra.counts.contacts) : '';
+      return extra.counts.contacts > 0 ? getNumberFormat().format(extra.counts.contacts) : '';
     case 'inventory':
-      return Number.isFinite(extra.counts.inventory) ? getNumberFormat().format(extra.counts.inventory) : '';
+      return extra.counts.inventory > 0 ? getNumberFormat().format(extra.counts.inventory) : '';
     case 'waste': {
       const next = nextPickup(data);
       return next ? t('more.wasteWhen', { when: whenLabel(next.days), types: next.types }) : '';
@@ -549,7 +549,7 @@ function rowValue(module, state) {
       const next = (Array.isArray(data.birthdays) ? data.birthdays : [])[0];
       if (!next) return '';
       const date = String(next.next_date ?? '').slice(0, 10);
-      return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${firstName(next.name)} · ${shortDate(date).split(' ').slice(1).join(' ')}` : firstName(next.name);
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${next.name} · ${shortDate(date).split(' ').slice(1).join(' ')}` : String(next.name ?? '');
     }
     default:
       return '';
