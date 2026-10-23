@@ -3977,6 +3977,23 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   rows (the word pill only when soon or overdue), selections (weekday toggles, symptom/mood chips,
   the chosen lab report) speak violet, and chips/discs on cards sit on `--color-fill` instead of the
   dark `--color-surface-2` well.
+- **Dokumenty**: an overview above the list. The E1 card shows the ONE document whose expiry
+  comes first (`dateStatus`, the same rule as row and viewer: expired or within 30 days) with the
+  distance as a word in a pill ("za 23 dni" / "po terminie") and ONE action: "Przypomnij tydzień
+  wcześniej" sets the existing `expiry_reminder_days` to 7 (owner or admin, like the server; a
+  restricted share travels along because PUT rewrites the access list); with a reminder already
+  ahead, a deadline under a week or someone else's document it is "Wyświetl". Below 1024px the
+  folders of the current level are 48 rows with counts (a lock before the count when every visible
+  document in it is private or restricted - folders have no visibility of their own), "Dodaj
+  folder" and "Archiwum"; folder chip, Aktywny/Zarchiwizowany segment and breadcrumb give way to
+  those rows and a plain "‹ back"; the folder's own menu sits on the list head. The list has a
+  head ("Ostatnie 14", the folder name, "Zarchiwizowany") and, in the narrow row, a 28 glyph slot,
+  one-line title, meta joined with " · " starting with "PDF · dziś", the uploader's disc on
+  someone else's document, inset hairlines and no shadow; on touch the redundant eye of a
+  read-only bar leaves the picture (clip-path, still the toolbar's tab stop). Category and
+  deadline chips stay as the list's filter. Guards: "Datum und Größe" now expects
+  `renderMeta(doc, { showSize: false, when: true })`; the TDZ in test-documents-ux (fnBody used
+  before its declaration) is fixed.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit

@@ -3957,7 +3957,21 @@
         "errorDmsAccountGone": "この DMS アカウントはもう存在しません。",
         "errorDmsDocumentGone": "このドキュメントは DMS にもう存在しません。",
         "errorDmsAlreadyLinked": "この DMS ドキュメントはすでにリンクされています。",
-        "errorDmsAlreadyStored": "このドキュメントはすでに DMS に保存されています。"
+        "errorDmsAlreadyStored": "このドキュメントはすでに DMS に保存されています。",
+        "inDays_one": "あと{{count}}日",
+        "inDays": "あと{{count}}日",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "キッチン",

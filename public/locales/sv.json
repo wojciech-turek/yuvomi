@@ -3957,7 +3957,21 @@
         "errorDmsAccountGone": "Det här DMS-kontot finns inte längre.",
         "errorDmsDocumentGone": "Det här dokumentet finns inte längre i DMS.",
         "errorDmsAlreadyLinked": "Det här DMS-dokumentet är redan länkat.",
-        "errorDmsAlreadyStored": "Det här dokumentet är redan lagrat i ett DMS."
+        "errorDmsAlreadyStored": "Det här dokumentet är redan lagrat i ett DMS.",
+        "inDays_one": "om {{count}} dag",
+        "inDays": "om {{count}} dagar",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Kök",

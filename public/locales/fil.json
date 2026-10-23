@@ -4017,7 +4017,21 @@
         "errorDmsAccountGone": "Wala na ang DMS account na ito.",
         "errorDmsDocumentGone": "Wala na sa DMS ang dokumentong ito.",
         "errorDmsAlreadyLinked": "Naka-link na ang dokumentong ito mula sa DMS.",
-        "errorDmsAlreadyStored": "Nakaimbak na sa isang DMS ang dokumentong ito."
+        "errorDmsAlreadyStored": "Nakaimbak na sa isang DMS ang dokumentong ito.",
+        "inDays_one": "sa loob ng {{count}} araw",
+        "inDays": "sa loob ng {{count}} araw",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Wala",

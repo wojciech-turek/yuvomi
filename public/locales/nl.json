@@ -4017,7 +4017,21 @@
         "errorDmsAccountGone": "Dit DMS-account bestaat niet meer.",
         "errorDmsDocumentGone": "Dit document bestaat niet meer in het DMS.",
         "errorDmsAlreadyLinked": "Dit DMS-document is al gekoppeld.",
-        "errorDmsAlreadyStored": "Dit document staat al in een DMS."
+        "errorDmsAlreadyStored": "Dit document staat al in een DMS.",
+        "inDays_one": "over {{count}} dag",
+        "inDays": "over {{count}} dagen",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Huishouden",

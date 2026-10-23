@@ -4017,7 +4017,21 @@
         "errorDmsAccountGone": "Tài khoản DMS này không còn tồn tại.",
         "errorDmsDocumentGone": "Tài liệu này không còn tồn tại trong DMS.",
         "errorDmsAlreadyLinked": "Tài liệu DMS này đã được liên kết.",
-        "errorDmsAlreadyStored": "Tài liệu này đã được lưu trong một DMS."
+        "errorDmsAlreadyStored": "Tài liệu này đã được lưu trong một DMS.",
+        "inDays_one": "trong {{count}} ngày",
+        "inDays": "trong {{count}} ngày",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Dọn dẹp",

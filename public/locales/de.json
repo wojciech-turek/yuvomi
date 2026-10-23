@@ -4017,7 +4017,21 @@
         "errorDmsAccountGone": "Dieses DMS-Konto gibt es nicht mehr.",
         "errorDmsDocumentGone": "Dieses Dokument gibt es im DMS nicht mehr.",
         "errorDmsAlreadyLinked": "Dieses DMS-Dokument ist schon verknüpft.",
-        "errorDmsAlreadyStored": "Dieses Dokument liegt schon in einem DMS."
+        "errorDmsAlreadyStored": "Dieses Dokument liegt schon in einem DMS.",
+        "inDays_one": "in {{count}} Tag",
+        "inDays": "in {{count}} Tagen",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Niemand",

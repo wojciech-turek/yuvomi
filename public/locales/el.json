@@ -3957,7 +3957,21 @@
         "errorDmsAccountGone": "Αυτός ο λογαριασμός DMS δεν υπάρχει πια.",
         "errorDmsDocumentGone": "Αυτό το έγγραφο δεν υπάρχει πια στο DMS.",
         "errorDmsAlreadyLinked": "Αυτό το έγγραφο DMS είναι ήδη συνδεδεμένο.",
-        "errorDmsAlreadyStored": "Αυτό το έγγραφο είναι ήδη αποθηκευμένο σε DMS."
+        "errorDmsAlreadyStored": "Αυτό το έγγραφο είναι ήδη αποθηκευμένο σε DMS.",
+        "inDays_one": "σε {{count}} ημέρα",
+        "inDays": "σε {{count}} ημέρες",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Κουζίνα",

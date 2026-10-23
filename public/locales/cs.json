@@ -4282,7 +4282,22 @@
         "errorDmsAccountGone": "Tento účet DMS už neexistuje.",
         "errorDmsDocumentGone": "Tento dokument už v DMS neexistuje.",
         "errorDmsAlreadyLinked": "Tento dokument z DMS je už propojený.",
-        "errorDmsAlreadyStored": "Tento dokument je už uložený v DMS."
+        "errorDmsAlreadyStored": "Tento dokument je už uložený v DMS.",
+        "inDays_one": "za {{count}} den",
+        "inDays": "za {{count}} dní",
+        "inDays_few": "za {{count}} dny",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "reminders": {
         "sectionTitle": "Připomínka",

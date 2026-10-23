@@ -3957,7 +3957,21 @@
         "errorDmsAccountGone": "此 DMS 账户已不存在。",
         "errorDmsDocumentGone": "此文档在 DMS 中已不存在。",
         "errorDmsAlreadyLinked": "此 DMS 文档已关联。",
-        "errorDmsAlreadyStored": "此文档已存储在 DMS 中。"
+        "errorDmsAlreadyStored": "此文档已存储在 DMS 中。",
+        "inDays_one": "{{count}}天后",
+        "inDays": "{{count}}天后",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "厨房",

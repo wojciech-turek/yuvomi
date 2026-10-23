@@ -3957,7 +3957,21 @@
         "errorDmsAccountGone": "Ce compte de GED n’existe plus.",
         "errorDmsDocumentGone": "Ce document n’existe plus dans la GED.",
         "errorDmsAlreadyLinked": "Ce document de la GED est déjà lié.",
-        "errorDmsAlreadyStored": "Ce document est déjà stocké dans une GED."
+        "errorDmsAlreadyStored": "Ce document est déjà stocké dans une GED.",
+        "inDays_one": "dans {{count}} jour",
+        "inDays": "dans {{count}} jours",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Cuisine",
