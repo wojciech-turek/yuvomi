@@ -1955,56 +1955,6 @@
   cursor: pointer;
 }
 
-/* DER KALENDERNAME IST ZURUECK, MIT DEM RANG DES ORTES (Critique 2026-08-13, P1).
- *
- * Er war beim Zeilenschnitt gegangen, mit der Begruendung, die Farbspur an der
- * linken Kante sage dasselbe. Das tut sie nur fuer den, der die Zuordnung
- * auswendig kann: ein Haushalt mit Familien-, Arbeits-, Schul- und
- * Feiertagskalender hat vier Farben, zwei davon in der Demo-Agenda blau und
- * nicht auseinanderzuhalten - und farbfehlsichtig ist die Aussage gar nicht
- * abrufbar (WCAG 1.4.1). Der Vergleich mit der Aufgaben-Kategorie traegt nicht:
- * die stand als Gruppen-Ueberschrift ueber der Liste, sie war nie ersatzlos weg.
- *
- * ER WEICHT ALS ERSTER, und das ist der ganze Unterschied zu vorher: die
- * Metazeile bleibt einzeilig, weil der Name unter der Schwelle verschwindet,
- * statt die Zeile zu brechen. Dieselbe Mechanik, die Vorrat und Budget fuer
- * MHD, Tag und Konto schon fahren - der Traeger wird gefragt, nicht das Fenster.
- *
- * FUER DAS OHR IST ER IMMER DA: der Kalendername steht im `aria-label` der
- * Zeile, unabhaengig von jeder Breite. Was unter der Schwelle bleibt, ist die
- * Grenze dieser Loesung und sie ist benannt: am schmalen Telefon traegt die
- * Zuordnung wieder die Farbe allein, wie in Apples Kalender. */
-/* MIT DER ZEILE IM SELEKTOR, und das ist keine Schoenheitsfrage: eine
- * Container-Query erhoeht die Spezifitaet nicht. `.calendar-meta-item--cal`
- * allein steht mit (0,1,0) gegen `.calendar-meta-item { display: inline-flex }`
- * weiter unten in derselben Datei - gleiche Spezifitaet, spaeter im Quelltext,
- * also gewinnt die Basisregel. Gemessen: Container 366px, Bedingung erfuellt,
- * Regel im CSSOM, `display` trotzdem `flex`.
- *
- * 35rem IST GEMESSEN, NICHT GERUNDET. Der Name wieder eingeblendet und die
- * Traegerbreite durchgefahren: bei 24,8rem brechen 16 von 37 Metazeilen, bei
- * 27,3rem elf, bei 29,8rem sieben, bei 32,3rem noch genau eine, ab 34,8rem
- * keine. Eine erste Fassung stand auf 30rem - dort waeren zwischen 480 und
- * 556px Traegerbreite sieben Zeilen zweizeilig geworden, also genau der
- * Zustand, den der Zeilenschnitt abgeschafft hat. */
-@container list-rows (max-width: 35rem) {
-  .agenda-event .calendar-meta-item--cal {
-    display: none;
-  }
-}
-
-/* Die Notbremse fuer einen Namen, den keine Schwelle vorhersieht: die Messung
- * oben lief gegen „Feiertage Nordrhein-Westfalen" (30 Zeichen), und ein
- * CalDAV-Kalender darf laenger heissen. Gekuerzt ist er noch erkennbar - anders
- * als der Artikelname im Laden, denn der volle Name steht im `aria-label` der
- * Zeile und in der Detailflaeche. */
-.agenda-event .calendar-meta-item--cal > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 12rem;
-}
-
 /* DIE ZEILE TRAEGT DIESELBE KANTE WIE DER BLOCK (Critique 2026-09-24, P2).
  *
  * Hier stand ein 8px-Punkt vor dem Text - die vierte Form, in der ein Termin
@@ -2252,55 +2202,10 @@
   white-space: nowrap;
 }
 
-.agenda-event__meta > .calendar-meta-item--time,
-.agenda-event__meta > .agenda-event__assigned {
-  flex-shrink: 0;
-}
-
-.agenda-event__meta > .calendar-meta-item--place {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.agenda-event__meta > .calendar-meta-item--place > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.calendar-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.calendar-meta-icon {
-  color: var(--color-text-tertiary);
-  flex: 0 0 auto;
-}
-
 /* Tafla: dieselbe Liste auf jeder Breite - 16er-Rinne, 64er-Zeilen. Hier
- * stand eine schmalere Mobilfassung (12er-Rinne, 8er-Zeilenpolster). */
-
-.agenda-event__assigned {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.agenda-event__avatar {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-on-accent);
-  flex-shrink: 0;
-}
+ * stand eine schmalere Mobilfassung (12er-Rinne, 8er-Zeilenpolster). Die
+ * Metazeile ist seit Tafla ein Text ("Park Wodny · Wojtek"), ohne Uhr-,
+ * Orts- und Kalenderzeichen und ohne Avatar-Stapel; deren Regeln sind weg. */
 
 /* --------------------------------------------------------
  * Calendar-Modal Content-Styles (Overlay/Panel via shared modal.js)
@@ -2796,13 +2701,6 @@
 
 .month-day__lanes {
   height: calc(min(var(--lanes), var(--lanes-shown, 99)) * (var(--month-band-h) + var(--space-0h)));
-}
-
-/* „Tag 2 von 3" in Agenda und Tagesliste, hinter der Uhrzeit derselben
- * Metaangabe - der Punkt trennt, das Gewicht bleibt das der Zeit. */
-.calendar-meta-item__day::before {
-  content: '·';
-  margin-inline-end: var(--space-1);
 }
 
 /* --------------------------------------------------------

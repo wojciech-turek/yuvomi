@@ -764,10 +764,6 @@ function formatDateTime(datetimeStr) {
   return time ? `${formatDate(date)} ${time} ${timeSuffix()}`.trimEnd() : formatDate(date);
 }
 
-function calendarMetaIconHtml(icon) {
-  return `<i data-lucide="${icon}" class="calendar-meta-icon icon-sm" aria-hidden="true"></i>`;
-}
-
 function calendarRepeatIconHtml(event) {
   if (!event?.recurrence_rule && !event?.is_recurring_instance) return '';
   return `<span class="calendar-repeat-icon" role="img" aria-label="${esc(t('calendar.recurringEvent'))}"><i data-lucide="repeat" class="icon-sm" aria-hidden="true"></i></span>`;
@@ -5926,7 +5922,7 @@ function agendaStripHtml() {
 }
 
 /** Ein Tipp im Streifen: zum Tag rollen, oder die Liste dort beginnen lassen. */
-async function jumpToStripDay(date, trigger = null) {
+async function jumpToStripDay(date) {
   const target = _container?.querySelector(`.agenda-day[data-date="${CSS.escape(date)}"]`);
   if (target && date >= state.cursor) {
     const port = _container.querySelector('#agenda-view');
@@ -5945,7 +5941,6 @@ async function jumpToStripDay(date, trigger = null) {
   updateLabel();
   renderView();
   _container?.querySelector(`[data-strip-day="${CSS.escape(date)}"]`)?.focus();
-  void trigger;
 }
 
 function prefersReducedMotionCal() {
@@ -6023,7 +6018,7 @@ function renderAgendaView(container) {
     }
     const stripDay = e.target.closest('[data-strip-day]');
     if (stripDay) {
-      jumpToStripDay(stripDay.dataset.stripDay, stripDay);
+      jumpToStripDay(stripDay.dataset.stripDay);
       return;
     }
     handleDayRowActivation(e);
@@ -7211,17 +7206,6 @@ function agendaEventAriaLabel(ev, timeStr, dayText = '') {
 function eventBlockAttrs(ev, timeText, dayStr = null) {
   const dayText = dayStr ? formatDate(dayStr, { long: true, weekday: true }) : '';
   return ` role="button" tabindex="0" aria-label="${esc(agendaEventAriaLabel(ev, timeText, dayText))}"`;
-}
-
-// Sichtbarkeits-Indikator (#474): nur bei eingeschränkten Terminen ein dezentes
-// Icon mit Label - „Alle" bleibt icon-los.
-function eventVisibilityMeta(visibility) {
-  if (!visibility || visibility === 'all') return '';
-  const icon  = visibility === 'private' ? 'lock' : 'users';
-  const label = visibility === 'private'
-    ? t('common.visibility.private')
-    : t('common.visibility.assignees');
-  return `<span class="calendar-meta-item" title="${esc(label)}">${calendarMetaIconHtml(icon)}<span>${esc(label)}</span></span>`;
 }
 
 // --------------------------------------------------------

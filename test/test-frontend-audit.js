@@ -7524,11 +7524,10 @@ test('calendar metadata uses lucide icon markup instead of visible emoji', () =>
   const source = read('../public/pages/calendar.js');
 
   assert.doesNotMatch(source, /📍|🗓|📅|🎂|👤/, 'calendar metadata must not render visible emoji icons');
-  // Tafla (2026-10-20, Artboard Kalendarz): die Listenzeile traegt keine Uhr-
-  // und keine Ortsnadel mehr ("Park Wodny · Wojtek") - wo noch ein Zeichen
-  // steht (Sichtbarkeit), kommt es weiter aus dem einen Helfer.
-  assert.match(source, /function calendarMetaIconHtml\(icon\)/, 'metadata icons come from the shared helper');
-  assert.match(source, /class="calendar-meta-icon icon-sm"/, 'metadata icons should use tokenized icon classes');
+  // Tafla (2026-10-20, Artboard Kalendarz): die Listenzeile traegt keine Uhr-,
+  // Orts- und Kalenderzeichen mehr - ihre Metazeile ist Text ("Park Wodny ·
+  // Wojtek", Sichtbarkeit als Wort), und der Helfer dafuer ist mit ihnen gegangen.
+  assert.match(source, /<span class="agenda-event__meta">\$\{esc\(meta\)\}<\/span>/, 'the list meta line is plain text');
 });
 
 // R19 (Critique 2026-10-16, "Zeitraum-Stepper: drei Bauarten"): EIN Stepper -
