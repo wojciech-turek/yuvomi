@@ -1050,6 +1050,13 @@
   z-index: 2;
 }
 
+/* Der Wisch nach rechts ist das violette Band "Zrobione" (Artboard Zadania):
+ * erledigt ist in Tafla violett, nicht gruen - wie der gefuellte Kreis. */
+.tasks-page .swipe-reveal--done {
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
+}
+
 /* "Na dziś wszystko" - der leere Korb Dziś mit dem, was als Naechstes kommt. */
 .tasks-today-done {
   display: flex;

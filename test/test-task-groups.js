@@ -525,16 +525,24 @@ test('Teilaufgabe: Knopf und Feld verstecken sich wirklich - display: flex stich
 // tydzień · Później · Bez terminu (Artboard Zadania); "Ten tydzień" sind die
 // Tage zwei bis sechs voraus. Erledigtes steht in einem eigenen Korb am Ende.
 
+// Auf dem KALENDERTAG gerechnet, nicht in 24-Stunden-Schritten: ueber eine
+// Zeitumstellung (Ende Oktober) landete `inTagen(7)` kurz nach Mitternacht
+// auf dem sechsten Tag - und die Korbgrenze 6/7 ist genau, was hier zaehlt.
+const plusTage = (n) => {
+  const [y, m, d] = heute().split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+};
+
 test('Tafla: die Zeitkoerbe in ihrer Reihenfolge, Erledigtes am Ende', () => {
   const groups = tasks.groupBy([
-    task({ id: 1, due_date: inTagen(-2) }),
+    task({ id: 1, due_date: plusTage(-2) }),
     task({ id: 2, due_date: heute() }),
-    task({ id: 3, due_date: inTagen(1) }),
-    task({ id: 4, due_date: inTagen(2) }),
-    task({ id: 5, due_date: inTagen(6) }),
-    task({ id: 6, due_date: inTagen(7) }),
+    task({ id: 3, due_date: plusTage(1) }),
+    task({ id: 4, due_date: plusTage(2) }),
+    task({ id: 5, due_date: plusTage(6) }),
+    task({ id: 6, due_date: plusTage(7) }),
     task({ id: 7, due_date: null }),
-    task({ id: 8, due_date: inTagen(-1), status: 'done' }),
+    task({ id: 8, due_date: plusTage(-1), status: 'done' }),
   ], 'due');
   assert.deepEqual(groups.map((g) => [g.id, g.tasks.map((x) => x.id)]), [
     ['overdue', [1]], ['today', [2]], ['tomorrow', [3]], ['thisWeek', [4, 5]], ['later', [6]], ['noDate', [7]], ['done', [8]],
@@ -544,25 +552,25 @@ test('Tafla: die Zeitkoerbe in ihrer Reihenfolge, Erledigtes am Ende', () => {
 });
 
 test('Tafla: das Wann der Zeile haengt am Korb, ueberfaellig ist eine Pille', () => {
-  const overdue = tasks.taskWhen(task({ due_date: inTagen(-3) }), 'overdue');
+  const overdue = tasks.taskWhen(task({ due_date: plusTage(-3) }), 'overdue');
   assert.equal(overdue.pill?.tone, 'danger');
   assert.equal(overdue.pill?.text, 'tasks.overduePill');
   assert.match(overdue.text, /^tasks\.overdueSince/, '"od pt 16 paź" - seit wann');
-  assert.equal(tasks.taskWhen(task({ due_date: inTagen(-1) }), 'overdue').text, 'tasks.overdueSinceYesterday');
+  assert.equal(tasks.taskWhen(task({ due_date: plusTage(-1) }), 'overdue').text, 'tasks.overdueSinceYesterday');
   // Im Korb Dziś sagt der Kopf den Tag - die Zeile nur die Uhrzeit.
   const today = tasks.taskWhen(task({ due_date: heute(), due_time: '19:00' }), 'today');
   assert.equal(today.pill, null);
   assert.match(today.text, /^tasks\.dueBy/);
   assert.equal(tasks.taskWhen(task({ due_date: heute() }), 'today').text, '', 'ohne Uhrzeit kein Wann');
   // Nach Kategorie gruppiert traegt das Baldige sein Wort als Pille.
-  const soon = tasks.taskWhen(task({ due_date: inTagen(1) }), null);
+  const soon = tasks.taskWhen(task({ due_date: plusTage(1) }), null);
   assert.equal(soon.pill?.tone, 'warning');
   // Erledigt: kein Status-Wort mehr.
-  assert.equal(tasks.taskWhen(task({ due_date: inTagen(-3), status: 'done' }), 'done').pill, null);
+  assert.equal(tasks.taskWhen(task({ due_date: plusTage(-3), status: 'done' }), 'done').pill, null);
 });
 
 test('Tafla: die Zeile zeigt die Kategorie als #tag, keine Prioritaetsworte, die Fahne nur bei Hoch/Dringend', () => {
-  const meta = tasks.taskMetaHtml(task({ category: 'household', due_date: inTagen(3) }), { bucket: 'thisWeek' });
+  const meta = tasks.taskMetaHtml(task({ category: 'household', due_date: plusTage(3) }), { bucket: 'thisWeek' });
   assert.match(meta, /#/, 'die Kategorie steht als #tag im Text');
   assert.doesNotMatch(meta, /priority/);
   assert.equal(tasks.taskTrailHtml(task({ priority: 'medium' })), '', 'mittel und niedrig: keine Fahne');
@@ -619,7 +627,7 @@ test('Tafla: "Czyje zadania" teilt die Liste - Moje, die andere Person, Razem', 
 
 test('Tafla: "Na dziś wszystko" nur, wenn Dziś leer ist und spaeter etwas kommt', () => {
   const now = tasks.taskSortNow();
-  const later = tasks.groupBy([task({ id: 1, title: 'Umówić przegląd auta', due_date: inTagen(3) })], 'due');
+  const later = tasks.groupBy([task({ id: 1, title: 'Umówić przegląd auta', due_date: plusTage(3) })], 'due');
   const html = tasks.todayDoneHtml(later, now);
   assert.match(html, /tasks\.todayAllDone/);
   assert.match(html, /tasks\.todayNext\{[^}]*Umówić przegląd auta/, 'und was als Naechstes kommt');

@@ -5518,7 +5518,8 @@ function busyTogetherWindow(timed, dayStr) {
     common = mergeSpans(next);
     if (!common.length) return null;
   }
-  return { from: common[0][0], to: common[0][1], everyone: adults.length > 2 };
+  const [[from, to]] = common;
+  return { from, to, everyone: adults.length > 2 };
 }
 
 /** Ist der Abend dieses Tages frei (kein Zeit-Termin beruehrt 17:00-24:00)? */
