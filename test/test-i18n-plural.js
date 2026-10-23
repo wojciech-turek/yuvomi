@@ -274,11 +274,23 @@ const PLURAL_EXCEPTIONS = {
   'dashboard.healthRefill': 'NO_NOUN',
   'health.labs.abnormalBadge': 'NO_NOUN',
   'subscriptions.activeCount': 'NO_NOUN',
+  // "Przenieś 23 do spiżarni" - the number stands for the items, no noun follows.
+  'shopping.moveToPantry': 'NO_NOUN',
+  // Tafla Przepis: "Ugotowane 4×" (a multiplier, not a noun) and "Dopisz 2"
+  // on the tinted button - the ingredients are named around it.
+  'recipes.cookedTimes': 'NO_NOUN',
+  'recipes.addMissing': 'NO_NOUN',
+  // Tafla Posiłki (2026-10-19): "2 do kupienia", "2 na liście" - auf die Zahl
+  // folgt kein Substantiv, pl/en sind numerusneutral.
+  'meals.meterMissing': 'NO_NOUN',
+  'meals.meterListedCount': 'NO_NOUN',
 
   // --- Zahl in Klammern / hinter Doppelpunkt ------------------------------
   'category.errorInUse': 'PARENTHETICAL',
   'category.errorSubInUse': 'PARENTHETICAL',
   'shopping.clearChecked': 'PARENTHETICAL',
+  // Tafla Przepis: the aria label of "Dopisz N" - the count after the colon.
+  'recipes.addMissingLabel': 'PARENTHETICAL',
   'contacts.importSubmit': 'PARENTHETICAL',
   'health.cycle.settings.applyToAllDone': 'PARENTHETICAL',
 
@@ -317,6 +329,10 @@ const PLURAL_EXCEPTIONS = {
   // subscriptions.js:150-154 - dueLabel() faengt d<0, d===0 und d===1 vorher ab,
   // diese Zeile sieht nur noch d >= 2.
   'subscriptions.dueInDays': 'GUARDED',
+  // capture-sheet.js - shoppingOne/shoppingMany pair: the button text uses
+  // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
+  'capture.primary.shoppingMany': 'GUARDED',
+  'capture.saved.shoppingMany': 'GUARDED',
 
   // --- echte Luecken, eingefroren statt behoben ---------------------------
   // Alle unten sind bei n=1 grammatisch falsch und n=1 ist erreichbar.

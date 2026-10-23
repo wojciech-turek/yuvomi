@@ -678,3 +678,87 @@ test('Vorrat: die Stepper-Zeichen haben Knopfmass (--icon-md), keine Inline-Mark
   assert.match(src, /data-lucide="plus" class="icon-md"/);
   assert.doesNotMatch(src, /data-lucide="(minus|plus)" class="icon-sm"/);
 });
+
+// --------------------------------------------------------
+// Tafla (2026-10-19): Statuswort, Karte "Wymaga uwagi", Aufklappen
+// --------------------------------------------------------
+
+const TAFLA_TODAY = '2026-10-19';
+
+// Das Statuswort steht nur, wenn es etwas zu tun gibt, und es ist EIN Wort:
+// abgelaufen (das einzige Rot), eine Frist in hoechstens drei Tagen, leer oder
+// knapp (Amber). Eine Frist schlaegt "knapp" - sie wartet nicht.
+test('Tafla: das Statuswort der Zeile - Frist vor Bestand, nur was ansteht', () => {
+  resetPantry();
+  __test.state.todayKey = TAFLA_TODAY;
+  const pill = (extra) => __test.statusPill(rice(3, extra));
+  assert.deepEqual(pill({ expires_on: '2026-10-18' }), { tone: 'danger', text: 'pantry.pillExpired' });
+  assert.deepEqual(pill({ expires_on: '2026-10-19' }), { tone: 'warning', text: 'pantry.pillToday' });
+  assert.deepEqual(pill({ expires_on: '2026-10-20' }), { tone: 'warning', text: 'pantry.pillTomorrow' });
+  assert.equal(pill({ expires_on: '2026-10-22' }).tone, 'warning');
+  assert.match(pill({ expires_on: '2026-10-22' }).text, /^pantry\.pillInDays.*"count":3/, '"za 3 dni" zaehlt die Tage');
+  assert.equal(pill({ expires_on: '2026-10-23' }), null, 'vier Tage sind noch keine Frist, die mija');
+  assert.deepEqual(pill({ min_quantity: 5 }), { tone: 'warning', text: 'pantry.pillLow' });
+  assert.deepEqual(__test.statusPill(rice(0)), { tone: 'warning', text: 'pantry.pillOut' });
+  assert.deepEqual(pill({ min_quantity: 5, expires_on: '2026-10-20' }), { tone: 'warning', text: 'pantry.pillTomorrow' },
+    'knapp UND morgen faellig: die Frist gewinnt');
+  assert.equal(pill({}), null, 'ein ruhiger Artikel traegt kein Wort');
+  resetPantry();
+});
+
+// Die Karte ersetzt die drei Statusfilter als Einstieg: "Termin mija" nach
+// Datum (abgelaufen eingeschlossen), "Kończy się" mit allem Knappen und Leeren.
+test('Tafla: die Karte "Wymaga uwagi" sammelt Fristen bis drei Tage und alles Knappe', () => {
+  resetPantry();
+  __test.state.todayKey = TAFLA_TODAY;
+  const items = [
+    rice(5, { id: 1, name: 'Reis' }),
+    rice(1, { id: 2, name: 'Jogurt', expires_on: '2026-10-20' }),
+    rice(1, { id: 3, name: 'Mleko', expires_on: '2026-10-17' }),
+    rice(1, { id: 4, name: 'Szpinak', expires_on: '2026-10-25' }),
+    rice(1, { id: 5, name: 'Masło', min_quantity: 2 }),
+    rice(0, { id: 6, name: 'Kawa' }),
+  ];
+  const { expiring, low } = __test.attentionGroups(items);
+  assert.deepEqual(expiring.map((i) => i.name), ['Mleko', 'Jogurt'], 'nach Datum, sechs Tage sind zu weit');
+  assert.deepEqual(low.map((i) => i.name), ['Masło', 'Kawa']);
+  __test.state.items = [rice(5)];
+  assert.equal(__test.attentionEl(), null, 'ohne Anlass gibt es die Karte nicht');
+  resetPantry();
+});
+
+// Ein Tipp klappt eine Zeile auf; es ist immer hoechstens EINE offen, und die
+// Liste wird dafuer nicht neu gebaut.
+test('Tafla: Aufklappen ist ein Zustand fuer genau eine Zeile', () => {
+  resetPantry();
+  const rows = new Map();
+  const rowNode = (id) => {
+    const more = { hidden: true, getAnimations: () => [], animate: () => ({ finished: Promise.resolve(), cancel() {} }), style: {} };
+    const main = { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
+    const row = {
+      classes: new Set(),
+      classList: { toggle(c, on) { if (on) row.classes.add(c); else row.classes.delete(c); } },
+      querySelector: (sel) => (sel === '.pantry-row__expand' ? more : sel === '.pantry-row__main' ? main : null),
+      more,
+      main,
+    };
+    rows.set(id, row);
+    return row;
+  };
+  rowNode(1);
+  rowNode(2);
+  __test.setContainerForTest({ querySelector: (sel) => rows.get(Number(/data-id="(\d+)"/.exec(sel)?.[1])) ?? null });
+  __test.state.expanded = null;
+  __test.toggleExpanded(1);
+  assert.equal(__test.state.expanded, 1);
+  assert.equal(rows.get(1).more.hidden, false);
+  assert.equal(rows.get(1).main.attrs['aria-expanded'], 'true');
+  __test.toggleExpanded(2);
+  assert.equal(__test.state.expanded, 2, 'die zweite Zeile schliesst die erste');
+  assert.equal(rows.get(1).more.hidden, true);
+  assert.equal(rows.get(1).main.attrs['aria-expanded'], 'false');
+  __test.toggleExpanded(2);
+  assert.equal(__test.state.expanded, null, 'ein zweiter Tipp klappt wieder zu');
+  assert.equal(rows.get(2).more.hidden, true);
+  resetPantry();
+});

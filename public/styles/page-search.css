@@ -44,19 +44,13 @@
  * statt eine sechste Handschrift zu fuehren; sie hat keine Lupe, nur ihr
  * Innenabstand weicht ab (layout.css).
  *
- * DIE SCHNELLZEILE DES EINKAUFS TRAEGT DIESELBE HAUT (Critique 2026-10-16,
- * D5). Quick-Add ist die benannte Ausnahme vom FAB als Anlege-Weg - und
- * stand als einziges Feld im Modulkopf in der Formular-Haut (Kante, 10px-Ecke,
- * Feldgrund) direkt unter der Kapsel der Suche. Ein Feld, das man tippt und
- * mit Enter abschickt, ist ein Bedienelement wie die Suche, kein Formular.
- * `background-color` statt der Kurzform: die Kategorie-Auswahl malt ihren
- * Chevron als Hintergrundbild (shopping.css), und die Kurzform hier setzte es
- * je nach Ladereihenfolge zurueck. */
+ * DIE SCHNELLZEILE DES EINKAUFS (Critique 2026-10-16, D5) trug bis Tafla
+ * dieselbe Haut je Feld. Seit Tafla (2026-10-19) ist sie EINE Kapsel - die
+ * angedockte Leiste `.shopping-addbar` (shopping.css) traegt Ecke, Flaeche,
+ * Kante und Fokus, ihre Felder darin sind nackt. Dieselbe Sprache wie hier,
+ * nur einmal um die ganze Zeile statt um jedes Feld. */
 .page-search__input,
-.search-overlay__input,
-.quick-add__input,
-.quick-add__qty,
-.quick-add__cat {
+.search-overlay__input {
   border: 1.5px solid transparent;
   border-radius: var(--radius-full);
   background-color: var(--color-fill-field);
@@ -64,25 +58,17 @@
 }
 
 .page-search__input::placeholder,
-.search-overlay__input::placeholder,
-.quick-add__input::placeholder,
-.quick-add__qty::placeholder {
+.search-overlay__input::placeholder {
   color: var(--color-text-secondary);
 }
 
 .page-search__input:hover,
-.search-overlay__input:hover,
-.quick-add__input:hover,
-.quick-add__qty:hover,
-.quick-add__cat:hover {
+.search-overlay__input:hover {
   border-color: var(--color-border-control);
 }
 
 .page-search__input:focus,
-.search-overlay__input:focus,
-.quick-add__input:focus,
-.quick-add__qty:focus,
-.quick-add__cat:focus {
+.search-overlay__input:focus {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) var(--tint-shadow), transparent);
@@ -90,10 +76,7 @@
 
 @media (prefers-contrast: more) {
   .page-search__input,
-  .search-overlay__input,
-  .quick-add__input,
-  .quick-add__qty,
-  .quick-add__cat {
+  .search-overlay__input {
     border-color: var(--color-border-control);
   }
 }

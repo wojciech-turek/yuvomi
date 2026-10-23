@@ -718,8 +718,13 @@ test('Liste + Detail, unter der Schwelle: ?open= und ein Tipp oeffnen das Rezept
     await settle();
     assert.deepEqual(opened.map((o) => o.title), ['Gericht 2'], 'der Deep-Link oeffnet das Rezept nicht (#936)');
     assert.equal(opened[0].key, 'recipe:2');
+    // TAFLA (2026-10-19): das Blatt ist am Telefon eine geschobene Seite mit
+    // EINEM Primaerknopf, "Zacznij gotować" (Kochmodus). Bearbeiten,
+    // Duplizieren und Loeschen stehen im ⋯ des Kopfs (decorateRecipeSheet) -
+    // vorher war Bearbeiten hier der Primaerknopf am Ende (R19).
     const actions = opened[0].actions.map((a) => [a.id, a.variant]);
-    assert.deepEqual(actions.at(-1), ['recipe-sheet-edit', 'primary'], 'Bearbeiten ist der Primaerknopf am Ende');
+    assert.deepEqual(actions, [['recipe-sheet-cook', 'primary']], 'Zacznij gotować ist der eine Primaerknopf');
+    assert.equal(opened[0].size, 'recipe', 'das Blatt traegt die Seitenform des Rezepts (recipes.css)');
     assert.equal(toggleOf(doc, 2).getAttribute('aria-expanded'), null, 'kein Aufklapper mehr');
     assert.equal(toggleOf(doc, 2).getAttribute('aria-haspopup'), 'dialog', 'der Knopf oeffnet ein Blatt');
     assert.equal(paneTitle(doc), null, 'unter der Schwelle wird in die (unsichtbare) Spalte nichts gezeichnet');
@@ -750,7 +755,12 @@ test('Liste + Detail: in der schmalen Zeile stehen Zutatenzahl und "Diese Woche 
   const rules = [...eachRule(css)].filter(({ selector }) => selector.trim() === '.recipe-row__sub');
   const base = rules.find(({ at }) => at.length === 0);
   const narrow = rules.find(({ at }) => at.join(' ').includes('@container list-rows (max-width: 30rem)'));
-  assert.match(base?.body ?? '', /display:\s*contents/, 'breit muss der Slot unsichtbar sein - sonst aendert sich die breite Zeile');
+  // TAFLA (2026-10-19): die Zeile ist in JEDER Breite zweizeilig (Name ueber
+  // Zutatenzahl und Tag, 64 hoch) - der Slot ist deshalb auch breit die zweite
+  // Zeile (`display: block` im Raster der Zeile), nicht mehr unsichtbar
+  // (`display: contents`, als die breite Zeile einzeilig war).
+  assert.match(base?.body ?? '', /display:\s*block/, 'der Slot ist in jeder Breite die zweite Zeile unter dem Namen');
+  assert.match(base?.body ?? '', /grid-area:\s*sub/, 'und steht im Raster der Zeile unter dem Namen');
   assert.match(narrow?.body ?? '', /display:\s*block/, 'schmal muss der Slot die Angaben als Text hintereinander setzen');
   assert.match(narrow?.body ?? '', /flex:\s*1 0 100%/, 'schmal muss der Slot eine eigene Zeile unter dem Namen sein');
 });
