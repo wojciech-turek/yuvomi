@@ -247,9 +247,11 @@ a.inset-row:active {
   color: var(--color-text-secondary);
 }
 
-/* A plain verb as the last row of a card ("Dodaj prośbę"): 48 tall, accent. */
+/* A plain verb as the last row of a card ("Dodaj prośbę"): 48 tall, the
+ * whole row in the accent - the title sets its own ink otherwise. */
 .inset-row--action,
-.inset-row--action .inset-row__lead {
+.inset-row--action .inset-row__lead,
+.inset-row--action .inset-row__title {
   color: var(--color-accent);
 }
 

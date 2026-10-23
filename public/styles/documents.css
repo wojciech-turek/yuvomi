@@ -2494,12 +2494,8 @@
   padding-inline-start: calc(28px + var(--space-3));
 }
 
-/* Ein Verb als letzte Zeile ("Dodaj folder") spricht ganz im Akzent - die
- * geteilte `.inset-row--action` faerbt Zeile und Zeichen, der Titel setzt
- * seine Tinte aber selbst. */
-.documents-overview .inset-row--action .inset-row__title {
-  color: var(--color-accent);
-}
+/* Ein Verb als letzte Zeile ("Dodaj folder") spricht ganz im Akzent - das
+ * faerbt die geteilte `.inset-row--action` samt Titel (inset-list.css). */
 
 .documents-folder-row__count {
   display: inline-flex;
