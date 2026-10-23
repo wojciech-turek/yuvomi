@@ -31,11 +31,13 @@ test('jedes Karten- und Hero-Element der Auth-Seiten hat eine Regel in auth.css'
   assert.deepEqual(missing, [], `ohne Regel (faellt auf die Reset-Basis zurueck): ${missing.join(', ')}`);
 });
 
-test('der Kartentitel ist ein Titel: Title-2-Stufe, fett, Label-Farbe', () => {
+// Tafla (2026-10-20): two weights on the phone, 400 and 600 - the title is
+// semibold like every other title, not bold (700).
+test('der Kartentitel ist ein Titel: Title-2-Stufe, halbfett, Label-Farbe', () => {
   const rule = [...eachRule(css)].find((r) => r.selector === '.auth-card__title' && !r.at.length);
   assert.ok(rule, '.auth-card__title fehlt');
   assert.match(rule.body, /font-size:\s*var\(--type-toolbar-title\)/);
-  assert.match(rule.body, /font-weight:\s*var\(--font-weight-bold\)/);
+  assert.match(rule.body, /font-weight:\s*var\(--font-weight-semibold\)/);
   assert.match(rule.body, /color:\s*var\(--color-text-primary\)/);
 });
 
@@ -48,7 +50,9 @@ const ui = read('../public/utils/auth-ui.js');
 
 test('R16: jede Seite vor der Anmeldung traegt denselben Kopf mit der Marke', () => {
   assert.match(ui, /export function authHeroHtml\(/);
-  assert.match(ui, /<span class="auth-hero__mark" aria-hidden="true">\$\{brandMarkSvg\(\)\}<\/span>/, 'der Baustein fuehrt die Marke');
+  // Tafla (2026-10-20, artboard "Logowanie"): the head carries the house in
+  // the accent tint, not the brand tile - one head for every page, still.
+  assert.match(ui, /<span class="auth-hero__mark" aria-hidden="true">\$\{HOUSE_GLYPH\}<\/span>/, 'der Baustein fuehrt das Haus');
   for (const page of AUTH_FORMS) {
     const src = read(`../public/pages/${page}.js`);
     const mains = (src.match(/<main class="auth-page" id="main-content">/g) ?? []).length;
@@ -126,17 +130,19 @@ test('R18: die Bildmarke ist docs/logo.svg - eine Quelle, feste Farben, beide St
   // Beide Stellen nehmen die eine Quelle, und keine baut die Marke daneben.
   const router = read('../public/router.js');
   assert.match(router, /logomark\.insertAdjacentHTML\('beforeend', brandMarkSvg\(\)\);/, 'die Seitenleiste nimmt die eine Marke');
-  assert.match(ui, /import \{ brandMarkSvg \} from '\/utils\/brand-mark\.js';/);
+  // Tafla: the auth pages carry the house glyph, so auth-ui no longer imports
+  // the brand mark - and still builds none of its own (checked below).
   for (const [name, src] of [['router.js', router], ['auth-ui.js', ui]]) {
     assert.doesNotMatch(src, /<circle|createElementNS\([^)]*\), 'circle'\)|linearGradient/, `${name} baut keine eigene Marke`);
   }
 
-  // Der Traeger auf den Zugangsseiten faerbt nichts mehr: keine Akzentkachel
-  // unter dem Zeichen, keine Tinte, kein verkleinertes SVG.
+  // Tafla (2026-10-20): the carrier on the auth pages is the house in the
+  // accent on its tint (artboard "Logowanie") - the brand tile is no longer
+  // drawn there, so nothing can recolour it; the glyph is sized, not the tile.
   const mark = [...eachRule(css)].filter((r) => /\.auth-hero__mark\b/.test(r.selector));
-  assert.ok(mark.length >= 2, 'Reichweite: Grund- und Kompaktregel der Marke');
-  for (const r of mark) {
-    assert.doesNotMatch(r.body, /background|(?:^|;)\s*color\s*:/, `${r.selector} faerbt die Marke`);
-    assert.doesNotMatch(r.selector, /\bsvg\b/, `${r.selector} skaliert das Zeichen in seiner Kachel`);
-  }
+  assert.ok(mark.length >= 2, 'Reichweite: Grund- und Kompaktregel des Zeichens');
+  const base = mark.find((r) => r.selector.trim() === '.auth-hero__mark' && !r.at.length);
+  assert.match(base?.body ?? '', /background:\s*var\(--color-accent-tint\)/, 'das Haus steht auf der Akzent-Toenung');
+  assert.match(base?.body ?? '', /(?:^|;)\s*color:\s*var\(--color-accent\)/, 'in der Akzent-Tinte');
+  assert.doesNotMatch(ui, /brandMarkSvg/, 'die Zugangsseiten zeichnen die Bildmarke nicht mehr'); 
 });

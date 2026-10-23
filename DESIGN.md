@@ -3924,6 +3924,37 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   role of the voice (`--color-btn-primary`; the text role is #B49CFF in dark), and the section
   head's "…" (Budżet, Rozliczenia, Abonamenty) wears the header's ghost circle like the search
   beside it. Expenses stay ink; only income and a positive balance carry success (contract).
+- **Sprzątanie**: the "Wizyty" view is one calm page under its large title. The E1 hero card says
+  when she comes next - guessed only when the last two or three finished visits share a weekday
+  (in the household zone); the profile has no visiting days, so without a pattern it names the
+  last visit, and while she is in the house it says "Teraz w domu · Od 9:05" -, check-in/out as a
+  secondary pill in its corner (the same `toggleSession()` button, both directions, #1133), then
+  "Do zapłaty 360 zł" in ink with "2 wizyty · 8 i 15 paź" and ONE primary "Zapłacone":
+  `payVisit(first, onPaid, { also })` asks once for the batch (plural question) and posts each
+  visit through the one pay line (#1136). Below: the chores due by that visit ("Na następną
+  wizytę", the decay tasks overdue or due by then) as checkable 48 rows with "Dodaj zadanie" as
+  the last row, the last visits as compact 48 rows ("czw 15 paź · 4 h", amount in ink, no
+  paid/pending word - status only where it asks for action), the payment chart, and the other
+  areas (Prace domowe, Raporty, Pomoce domowe) behind one card of rows. On phones the tab bar
+  steps aside on this view only; the other areas keep it as their title line (R19), so a tap on
+  "Wizyty" brings you back. The metric glance left this view (the reports keep it). The month
+  before is loaded beside `loadData()` for the hero. Guards moved: #1133 (two markup sites:
+  hero and strip, both checked), #1136 (one question for a batch), R16 section heads accept the
+  inset-group head, READ_SAFE_CONTROLS gains the area rows, the metric-glance and last-visit-year
+  tests became hero tests.
+- **Logowanie** (login, setup, join, forgot/reset password, tablet pairing - one `auth.css`): calm
+  paper instead of R18's glass panel over the brand light field. The head is the house (Lucide
+  `house`, inline in `utils/auth-ui.js`) in the accent on its tint (64 circle), the app name as a
+  34/600 large title, the tagline in 17 ink-2; fields 52 tall, radius 12, on `--color-fill` with
+  the label 13/600 ink-2 eight above - the 1px field edge stays (3:1 on paper and on the fill,
+  WCAG 1.4.11); ONE primary "Zaloguj się" (52, full width, glow); "Nie pamiętam hasła" as a plain
+  17/600 verb (still only when the server can send the mail); and a footnote at the foot with the
+  lock, "<host> · połączenie szyfrowane", written only when the page is served over https. The
+  block sits in the middle of the screen, the footnote (or the version line) at its foot. SSO,
+  SSO-only, the guest password way and the two-factor step are untouched. Guards moved: the
+  material tests measure every ink on paper instead of on the panel; the brand field lives on the
+  loading screen only; the auth head carries the house, not `brandMarkSvg()` (the sidebar keeps
+  the brand mark); the card title is 600, not 700.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
@@ -4043,6 +4074,14 @@ unter 768px mit „Widgets anpassen" in EINEM Anpassen-Menue (`settings-2`), ab 
 zwei Knoepfe; die Eintraege klicken die Knoepfe, ein Display behaelt seinen Wand-Knopf.
 
 ### Anmeldeseite
+> **Tafla (2026-10-20, Artboard "Logowanie"):** Lichtfeld und Glastafel sind fuer diese
+> Seiten zurueckgenommen - Glas bleibt Chrome, und ausser Scroll-Kante und Razem-Scheibe gibt es
+> keinen Verlauf. Die Seiten stehen auf dem Papier der App (`--color-bg`); der Kopf ist das Haus
+> in der Akzent-Tinte auf seiner Toenung statt der Bildmarke (die bleibt Seitenleiste, Ladebild
+> und Homescreen). Jede Tinte haelt auf dem Papier AA, die Feldkante 3:1 auf Papier UND Fuellung
+> (test:material). Das Folgende ist die Geschichte der R18-Fassung; Einzelheiten der neuen stehen
+> unter "Die Modulseiten (Tafla, 2026-10-20)", Abschnitt Logowanie.
+
 Die erste Seite der App ist Teil derselben Welt, keine Ausnahme - und sie hat einen Ort
 (R18, 2026-10-07; gilt fuer Anmeldung, Einrichtung, Einladung, Passwort-Reset und das
 Koppeln eines Wandtabletts). Zwei Ebenen, wie ueberall sonst: **Raumlicht und Glas.** Die

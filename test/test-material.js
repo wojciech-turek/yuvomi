@@ -440,26 +440,28 @@ test('R18: das Marken-Lichtfeld steht still, ohne Filter, und faellt unter den a
       assert.doesNotMatch(rule.body, /animation|(?:^|;)\s*filter\s*:|transform\s*:/, `${rule.selector}: das Feld steht still`);
     }
   }
-  assert.deepEqual(carriers.sort(), ['.app-loading', '.app-shell:has(.auth-page)', '.app-shell:has(> .session-unreachable)'].sort(), 'das Feld lebt nur vor der App');
+  // Tafla (2026-10-20): the sign-in pages stand on calm paper (no gradient
+  // besides the scroll-edge fade and the split disc), so the field lives on
+  // the loading screen and its stand-in only.
+  assert.deepEqual(carriers.sort(), ['.app-loading', '.app-shell:has(> .session-unreachable)'].sort(), 'das Feld lebt nur vor der App');
 });
 
 /**
- * Die Tafel: opaker Rueckfall AUSSERHALB von @supports, Glas und Blur nur
- * darin (Fallback-Regel in DESIGN.md), die Stufe der schwebenden Flaechen.
+ * TAFLA (2026-10-20, artboard "Logowanie"): the sign-in pages stand on calm
+ * paper. R18's glass panel over the brand field is retired - glass is chrome
+ * only, and no gradient remains but the scroll-edge fade and the split disc.
+ * What this guard keeps from R18: nothing paints a second surface under the
+ * form (the card is a shell, not a card on a card).
  */
-test('R18: die Zugangstafel ist Glas mit opakem Rueckfall', () => {
+test('Tafla: die Zugangsseite steht auf Papier - keine Tafel, kein Glas, kein Feld', () => {
   const base = rulesFor(AUTH, '.auth-page').find((r) => !r.at.length);
   assert.ok(base, '.auth-page fehlt');
-  assert.match(base.body, /background-color:\s*var\(--color-surface\)/, 'opaker Rueckfall ohne backdrop-filter');
-  assert.doesNotMatch(base.body, /backdrop-filter/, 'der Blur steht nur in @supports');
-  assert.match(base.body, /border-radius:\s*var\(--radius-xl\)/);
-  assert.match(base.body, /box-shadow:[^;]*var\(--glass-inset-elevated\)/, 'Lichtkante');
-  const glass = rulesFor(AUTH, '.auth-page').find((r) => r.at.some((a) => /@supports[^{]*backdrop-filter/.test(a)));
-  assert.ok(glass, 'die Glas-Regel in @supports fehlt');
-  assert.match(glass.body, /background-color:\s*var\(--glass-bg-elevated\)/);
-  assert.match(glass.body, /(?:^|;)\s*backdrop-filter:\s*var\(--blur-lg\)/, 'der Blur kommt aus dem Token (a11y-Schalter)');
-  assert.match(glass.body, /-webkit-backdrop-filter:\s*var\(--blur-lg\)/, 'webkit-Zwilling');
-  // Eine Karte IN der Tafel waere Flaeche auf Flaeche.
+  assert.match(base.body, /background-color:\s*transparent/, 'die Seite ist das Papier der Shell');
+  assert.doesNotMatch(base.body, /backdrop-filter|box-shadow|border-radius/, 'keine Tafel');
+  assert.ok(!rulesFor(AUTH, '.auth-page').some((r) => r.at.some((a) => /@supports[^{]*backdrop-filter/.test(a))), 'kein Glas');
+  const shell = rulesFor(AUTH, '.app-shell:has(.auth-page)')[0];
+  assert.match(shell?.body ?? '', /background-color:\s*var\(--color-bg\)/);
+  assert.doesNotMatch(shell?.body ?? '', /background-image|--brand-field/, 'kein Marken-Lichtfeld');
   const card = rulesFor(AUTH, '.auth-page .auth-card')[0];
   assert.ok(card, 'die Huelle des Formulars gibt ihre Flaeche nicht ab');
   assert.match(card.body, /background:\s*none/);
@@ -467,46 +469,44 @@ test('R18: die Zugangstafel ist Glas mit opakem Rueckfall', () => {
 });
 
 /**
- * KEIN TEXT DIREKT AUF DEM FELD, und auf der Tafel haelt jede Tinte. Gerechnet
- * gegen den schlechtesten denkbaren Grund: alle drei Kreise mit vollem Kern
- * uebereinander, ohne den Blur der Tafel.
+ * TAFLA: every ink on the sign-in page stands on the paper itself (no panel),
+ * and holds AA there in both themes; the field keeps its 3:1 edge against the
+ * paper AND its own fill (WCAG 1.4.11), the house its 3:1 on its tint. The
+ * loading screen still stands on the brand field - its ink is measured
+ * against the worst point of that field.
  */
-test('R18: auf der Zugangstafel halten Text und Feldkante ihre Schwelle, direkt auf dem Feld stuende Text unter AA', () => {
+test('Tafla: auf dem Papier der Zugangsseite halten Text, Feldkante und Haus ihre Schwelle', () => {
   const from = tone('--brand-mark-from', 'light').rgb;
   const to = tone('--brand-mark-to', 'light').rgb;
-  // Die Kernstaerke je Kreis: der Stopp bei 0 %.
   const peaks = [...LIGHT.get('--brand-field').matchAll(/var\(--brand-mark-(from|to)\) calc\(var\(--brand-field-opacity\) \* (\d+)%\), transparent\) 0%/g)]
     .map((m) => ({ ink: m[1] === 'from' ? from : to, share: Number(m[2]) / 100 }));
   assert.equal(peaks.length, 3, 'drei Kerne gelesen');
   const report = [];
   for (const theme of ['light', 'dark']) {
-    const strength = Number(resolve('--_brand-field-opacity', theme));
-    assert.ok(strength > 0 && strength <= 0.3, `${theme}: Staerke ${strength}`);
-    const stage = tone('--_neutral-100', theme).rgb;
-    const worst = peaks.reduce((ground, peak) => over(peak.ink, strength * peak.share, ground), stage);
-    const glass = tone('--_glass-bg-elevated', theme);
-    const panel = over(glass.rgb, glass.a, worst);
+    const paper = tone('--_neutral-100', theme).rgb;
+    const fill = tone('--_color-surface-3', theme).rgb;
+    const edge = tone(theme === 'dark' ? '--color-border-control' : '--_color-border-control', theme).rgb;
     const pairs = [
-      ['Label und Satz (Sekundaertext)', tone('--_neutral-600', theme).rgb, 4.5],
-      ['Versionszeile (Tertiaertext)', tone('--_color-text-tertiary', theme).rgb, 4.5],
-      ['Name (Tinte)', tone('--_neutral-900', theme).rgb, 4.5],
-      ['Link (Akzent)', tone('--_color-accent', theme).rgb, 4.5],
-      ['Feldkante', tone('--_neutral-500', theme).rgb, 3],
+      ['Label und Satz (Sekundaertext)', tone('--_neutral-600', theme).rgb, paper, 4.5],
+      ['Versionszeile (Tertiaertext)', tone('--_color-text-tertiary', theme).rgb, paper, 4.5],
+      ['Name (Tinte)', tone('--_neutral-900', theme).rgb, paper, 4.5],
+      ['Link (Akzent)', tone('--_color-accent', theme).rgb, paper, 4.5],
+      ['Feldtext (Tinte auf Fuellung)', tone('--_neutral-900', theme).rgb, fill, 4.5],
+      ['Feldkante auf Papier', edge, paper, 3],
+      ['Feldkante auf Fuellung', edge, fill, 3],
+      ['Haus auf seiner Toenung', tone('--_color-accent', theme).rgb, tone('--_color-accent-tint', theme).rgb, 3],
     ];
-    for (const [name, ink, min] of pairs) {
-      const ratio = contrast(ink, panel);
+    for (const [name, ink, ground, min] of pairs) {
+      const ratio = contrast(ink, ground);
       report.push(`${theme} ${name} ${ratio.toFixed(2)}`);
-      assert.ok(ratio >= min, `${theme}: ${name} auf der Tafel ${ratio.toFixed(2)}:1 < ${min}`);
+      assert.ok(ratio >= min, `${theme}: ${name} ${ratio.toFixed(2)}:1 < ${min}`);
     }
     // Der Schriftzug des Ladebilds steht direkt auf dem Feld - in Tinte.
+    const strength = Number(resolve('--_brand-field-opacity', theme));
+    const worst = peaks.reduce((ground, peak) => over(peak.ink, strength * peak.share, ground), paper);
     const logo = contrast(tone('--_neutral-900', theme).rgb, worst);
     report.push(`${theme} Ladebild-Schriftzug ${logo.toFixed(2)}`);
     assert.ok(logo >= 4.5, `${theme}: Schriftzug des Ladebilds ${logo.toFixed(2)}:1`);
-    if (theme === 'light') {
-      const bare = contrast(tone('--_neutral-600', theme).rgb, worst);
-      report.push(`light Sekundaertext direkt auf dem Feld ${bare.toFixed(2)}`);
-      assert.ok(bare < 4.5, 'direkt auf dem Feld hielte Sekundaertext AA - dann braeuchte es die Regel nicht');
-    }
   }
   if (process.env.MATERIAL_REPORT) console.log(report.join('\n'));
 
@@ -521,10 +521,10 @@ test('R18: auf der Zugangstafel halten Text und Feldkante ihre Schwelle, direkt 
   for (const part of ['app-loading__seal', 'app-loading__card', 'app-loading__capsule', 'app-loading__rail']) {
     assert.ok(index.includes(`class="${part}`), `die Skizze der Shell hat kein ${part}`);
   }
-  // Auf den Seiten steht alles in der Tafel: der Kopf ist ein Kind von
-  // `main.auth-page` (test:auth-pages-ui haelt, dass jede Seite so beginnt),
-  // und die Versionszeile steht vor dem schliessenden </main>.
+  // Der Kopf ist ein Kind von `main.auth-page` (test:auth-pages-ui haelt,
+  // dass jede Seite so beginnt), und die Versionszeile steht als letzte
+  // Zeile vor dem schliessenden </main> - am Fuss der Seite.
   for (const page of ['login', 'setup']) {
-    assert.match(read(`../public/pages/${page}.js`), /<p class="auth-version"[^>]*><\/p>\s*<\/main>/, `${page}.js: Versionszeile in der Tafel`);
+    assert.match(read(`../public/pages/${page}.js`), /<p class="auth-version"[^>]*><\/p>\s*<\/main>/, `${page}.js: Versionszeile am Fuss`);
   }
 });

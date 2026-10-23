@@ -9998,9 +9998,17 @@ test('der Housekeeping-Check-Knopf bleibt in beide Richtungen bedienbar (#1133)'
   // `toggleSession()` kann ein- UND auschecken, und `[data-worker-check]` ist
   // sein EINZIGER Ausloeser (eine zweite Fundstelle waere hier ein Signal,
   // dass diese Zusicherung nicht mehr die ganze Wahrheit ist).
+  // Tafla (2026-10-20): the hero card of the visit page carries the button
+  // for the person it speaks about, the strip for any further people - two
+  // markup sites, one handler. Both are checked below.
   const ausloeser = page.match(/data-worker-check/g) ?? [];
-  assert.equal(ausloeser.length, 2,
-    'Knopf-Markup und Handler-Selektor - mehr Stellen heben diesen Guard aus');
+  assert.equal(ausloeser.length, 3,
+    'Knopf-Markup (Heldenkarte, Personenzeile) und Handler-Selektor - mehr Stellen heben diesen Guard aus');
+  const held = page.slice(page.indexOf('<button class="pill-btn pill-btn--secondary housekeeping-check-small housekeeping-hero__check"'),
+    page.indexOf('</button>', page.indexOf('housekeeping-hero__check"')));
+  assert.ok(held, 'der Check-Knopf der Heldenkarte muss auffindbar bleiben');
+  assert.doesNotMatch(held, /disabled/, 'auch der Knopf der Heldenkarte ist nie gesperrt (#1133)');
+  assert.match(held, /checkedIn \? t\('housekeeping\.checkOut'\)/, 'und bietet eingecheckt das Auschecken an');
 
   // Der Knopf trug im eingecheckten Zustand `disabled`. Damit war der
   // Auscheck-Zweig von toggleSession() unerreichbar: toter Code hinter einem
@@ -10038,11 +10046,15 @@ test('Housekeeping: Bezahlen laeuft durch EINE Funktion, die vorher bestaetigt (
     .find((i) => /^(?:export )?(?:async )?function /.test(lines[i]));
   assert.equal(lines[kopf].match(/function (\w+)/)?.[1], 'payVisit', 'der Post gehoert in payVisit()');
   const bisZumPost = lines.slice(kopf, posts[0]).join('\n');
-  assert.match(bisZumPost, /const confirmed = await confirmOverModal\(t\('housekeeping\.markPaidConfirm'\)/,
+  // Tafla (2026-10-20): the hero's "Zapłacone" settles all unpaid visits of a
+  // person in one go - payVisit(first, onPaid, { also }) asks ONCE for the
+  // batch (its own plural question), then posts each through the same line.
+  assert.match(bisZumPost, /t\('housekeeping\.markPaidConfirm'\)/, 'die Frage fuer einen Besuch bleibt');
+  assert.match(bisZumPost, /const confirmed = await confirmOverModal\(question,/,
     'payVisit fragt vor dem Post - ueber confirmOverModal, damit der Besuchsbericht darunter ueberlebt');
   assert.match(bisZumPost, /if \(!confirmed\) return;/, 'ein Nein bucht nichts');
-  assert.match(bisZumPost, /visit\.payment_task_id\s*\?\s*t\('housekeeping\.markPaidConfirmDetailTask'\)\s*:\s*t\('housekeeping\.markPaidConfirmDetail'\)/,
-    'die Rueckfrage nennt die Zahlungsaufgabe, wenn es eine gibt');
+  assert.match(bisZumPost, /batch\.some\(\(each\) => each\.payment_task_id\)\s*\?\s*t\('housekeeping\.markPaidConfirmDetailTask'\)\s*:\s*t\('housekeeping\.markPaidConfirmDetail'\)/,
+    'die Rueckfrage nennt die Zahlungsaufgabe, wenn einer der Besuche eine hat');
 
   // Und alle Ausloeser gehen durch sie hindurch. Seit D6 (Critique 2026-10-16)
   // ist `[data-pay-report]` der Eintrag `[data-pay-visit]` im Mehr-Knopf -
@@ -20678,7 +20690,10 @@ test('R16: die einzeilige Kopfzeile ist am Desktop in jedem Modul ein volles Zie
 test('R16: die Abschnittstitel der Haushaltshilfe stehen auf der Buehne, ueber der Karte', () => {
   const page = withoutHtmlComments(read('../public/pages/housekeeping.js'));
   assert.doesNotMatch(page, /<section class="housekeeping-card/, 'kein Abschnitt ist selbst die Karte');
-  const koepfe = page.match(/<section class="housekeeping-section[^"]*">\s*<div class="housekeeping-section-heading">[\s\S]*?<h2 class="u-section-title">[\s\S]*?<div class="housekeeping-card">/g) ?? [];
+  // Tafla (2026-10-20): the visit page's sections are inset groups - the
+  // 17/600 head on the stage, the card (`inset-card` or the chart's
+  // `housekeeping-card`) below. Same rule, the head is the Tafla one.
+  const koepfe = page.match(/<section class="housekeeping-section[^"]*"[^>]*>\s*(?:<div class="housekeeping-section-heading">[\s\S]*?<h2 class="u-section-title">|<h2 class="inset-group__head"[^>]*>)[\s\S]*?<div class="(?:housekeeping-card|inset-card[^"]*)">/g) ?? [];
   // Drei, nicht mehr vier (#1723): der Reiter heisst seither wie die Liste
   // darunter ("Haushaltshilfen"), und eine sichtbare Ueberschrift, die den
   // Reiter wiederholt, verbietet test-typography.js. Sie bleibt als `.sr-only`
@@ -20687,7 +20702,9 @@ test('R16: die Abschnittstitel der Haushaltshilfe stehen auf der Buehne, ueber d
   const liste = page.match(/<section class="housekeeping-section">\s*<h2 class="sr-only">\$\{esc\(t\('housekeeping\.staffTitle'\)\)\}<\/h2>\s*<div class="housekeeping-card">/g) ?? [];
   assert.equal(liste.length, 1, 'die Liste der Haushaltshilfen traegt ihre Ueberschrift unsichtbar, vor der Flaeche');
   for (const kopf of koepfe) {
-    assert.ok(kopf.indexOf('u-section-title') < kopf.indexOf('class="housekeeping-card"'));
+    const titel = Math.max(kopf.indexOf('u-section-title'), kopf.indexOf('inset-group__head'));
+    const karte = Math.max(kopf.lastIndexOf('class="housekeeping-card"'), kopf.lastIndexOf('class="inset-card'));
+    assert.ok(titel >= 0 && titel < karte, 'der Titel steht vor der Flaeche');
   }
   const css = rulesOf(read('../public/styles/housekeeping.css'));
   const flaeche = css.filter((rule) => selectorsOf(rule).some((sel) => /^\.housekeeping-section(?:-heading)?$/.test(sel)) && /background(?:-color)?:|box-shadow:/.test(rule.body));

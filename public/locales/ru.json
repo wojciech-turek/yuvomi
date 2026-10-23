@@ -3582,7 +3582,8 @@
         "twoFactorCancel": "Отмена",
         "ssoOnlyHint": "Вход в это домохозяйство выполняется исключительно через SSO.",
         "guestPasswordLogin": "Вход гостя по паролю",
-        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства."
+        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Добро пожаловать в Yuvomi",
@@ -4439,7 +4440,25 @@
         "errorAmountsHidden": "Отметить оплату может только тот, кому видны суммы помощницы по дому.",
         "notHereToday": "Сегодня ещё не пришла",
         "tabVisits": "Визиты",
-        "tabChores": "Дела по дому"
+        "tabChores": "Дела по дому",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "ещё",

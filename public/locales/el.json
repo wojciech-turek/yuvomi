@@ -3366,7 +3366,8 @@
         "twoFactorCancel": "Ακύρωση",
         "ssoOnlyHint": "Η σύνδεση σε αυτό το νοικοκυριό γίνεται αποκλειστικά μέσω SSO.",
         "guestPasswordLogin": "Σύνδεση επισκέπτη με κωδικό",
-        "accountCannotSignIn": "Αυτός ο λογαριασμός δεν μπορεί να συνδεθεί. Απευθυνθείτε στον διαχειριστή του νοικοκυριού σας."
+        "accountCannotSignIn": "Αυτός ο λογαριασμός δεν μπορεί να συνδεθεί. Απευθυνθείτε στον διαχειριστή του νοικοκυριού σας.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Καλώς ορίσατε στο Yuvomi",
@@ -4197,7 +4198,21 @@
         "errorAmountsHidden": "Μόνο όποιος βλέπει τα ποσά της οικιακής βοηθού μπορεί να καταχωρίσει πληρωμή.",
         "notHereToday": "Δεν έχει έρθει ακόμη σήμερα",
         "tabVisits": "Επισκέψεις",
-        "tabChores": "Δουλειές"
+        "tabChores": "Δουλειές",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "ακόμη",

@@ -3366,7 +3366,8 @@
         "twoFactorCancel": "Cancel",
         "ssoOnlyHint": "Signing in to this household works exclusively through single sign-on.",
         "guestPasswordLogin": "Guest sign-in with password",
-        "accountCannotSignIn": "This account cannot sign in. Please contact your household's administrator."
+        "accountCannotSignIn": "This account cannot sign in. Please contact your household's administrator.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Welcome to Yuvomi",
@@ -4197,7 +4198,21 @@
         "errorAmountsHidden": "Only someone who may see housekeeping amounts can mark a payment.",
         "notHereToday": "Not here yet today",
         "tabVisits": "Visits",
-        "tabChores": "Chores"
+        "tabChores": "Chores",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "more",

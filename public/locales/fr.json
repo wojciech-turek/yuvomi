@@ -3366,7 +3366,8 @@
         "twoFactorCancel": "Annuler",
         "ssoOnlyHint": "La connexion à ce foyer se fait exclusivement via le SSO.",
         "guestPasswordLogin": "Connexion invité avec mot de passe",
-        "accountCannotSignIn": "Ce compte ne peut pas se connecter. Contactez l'administrateur de votre foyer."
+        "accountCannotSignIn": "Ce compte ne peut pas se connecter. Contactez l'administrateur de votre foyer.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Bienvenue sur Yuvomi",
@@ -4197,7 +4198,23 @@
         "errorAmountsHidden": "Seule une personne autorisée à voir les montants de l’aide ménagère peut marquer un paiement.",
         "notHereToday": "Pas encore là aujourd’hui",
         "tabVisits": "Visites",
-        "tabChores": "Travaux"
+        "tabChores": "Travaux",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "autres",

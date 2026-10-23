@@ -3382,7 +3382,8 @@
         "twoFactorCancel": "Kanselahin",
         "ssoOnlyHint": "Ang pag-sign in sa sambahayang ito ay eksklusibong sa pamamagitan ng SSO.",
         "guestPasswordLogin": "Pag-sign in ng bisita gamit ang password",
-        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan."
+        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Maligayang pagdating sa Yuvomi",
@@ -4201,7 +4202,21 @@
         "errorAmountsHidden": "Ang may pahintulot lang na makita ang halaga para sa kasambahay ang makakapagmarka ng bayad.",
         "notHereToday": "Wala pa ngayong araw",
         "tabVisits": "Mga pagbisita",
-        "tabChores": "Gawaing-bahay"
+        "tabChores": "Gawaing-bahay",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "splitExpenses": {
         "title": "Mga hinating gastos",

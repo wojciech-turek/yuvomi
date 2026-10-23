@@ -3382,7 +3382,8 @@
         "twoFactorCancel": "Batal",
         "ssoOnlyHint": "Masuk ke rumah tangga ini hanya melalui SSO.",
         "guestPasswordLogin": "Masuk tamu dengan kata sandi",
-        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda."
+        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Selamat datang di Yuvomi",
@@ -4201,7 +4202,21 @@
         "errorAmountsHidden": "Hanya yang boleh melihat jumlah untuk asisten rumah tangga yang dapat menandai pembayaran.",
         "notHereToday": "Hari ini belum datang",
         "tabVisits": "Kunjungan",
-        "tabChores": "Pekerjaan rumah"
+        "tabChores": "Pekerjaan rumah",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "splitExpenses": {
         "title": "Pengeluaran Bersama",

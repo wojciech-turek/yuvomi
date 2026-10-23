@@ -3697,7 +3697,8 @@
         "twoFactorCancel": "إلغاء",
         "ssoOnlyHint": "تسجيل الدخول إلى هذا المنزل يتم حصريًا عبر الدخول الموحد SSO.",
         "guestPasswordLogin": "تسجيل دخول الضيف بكلمة مرور",
-        "accountCannotSignIn": "لا يمكن لهذا الحساب تسجيل الدخول. يرجى التواصل مع مسؤول منزلك."
+        "accountCannotSignIn": "لا يمكن لهذا الحساب تسجيل الدخول. يرجى التواصل مع مسؤول منزلك.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "مرحبًا بك في Yuvomi",
@@ -4567,7 +4568,29 @@
         "errorAmountsHidden": "لا يمكن تسجيل الدفع إلا لمن يُسمح له برؤية مبالغ المساعدة المنزلية.",
         "notHereToday": "لم تصل اليوم بعد",
         "tabVisits": "الزيارات",
-        "tabChores": "الأعمال المنزلية"
+        "tabChores": "الأعمال المنزلية",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_zero": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_two": "{{count}} visits",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_zero": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_two": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "آخرون",

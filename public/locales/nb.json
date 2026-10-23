@@ -3366,7 +3366,8 @@
         "twoFactorCancel": "Avbryt",
         "ssoOnlyHint": "Innlogging til denne husholdningen skjer utelukkende via felles pålogging.",
         "guestPasswordLogin": "Gjestinnlogging med passord",
-        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din."
+        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Velkommen til Yuvomi",
@@ -4197,7 +4198,21 @@
         "errorAmountsHidden": "Bare den som kan se beløpene for husholdningshjelpen, kan registrere en betaling.",
         "notHereToday": "Ikke kommet ennå i dag",
         "tabVisits": "Besøk",
-        "tabChores": "Gjøremål"
+        "tabChores": "Gjøremål",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "mer",

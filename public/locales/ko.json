@@ -3382,7 +3382,8 @@
         "twoFactorCancel": "취소",
         "ssoOnlyHint": "이 가정의 로그인은 SSO로만 이루어집니다.",
         "guestPasswordLogin": "비밀번호로 게스트 로그인",
-        "accountCannotSignIn": "이 계정은 로그인할 수 없습니다. 가정의 관리자에게 문의해 주세요."
+        "accountCannotSignIn": "이 계정은 로그인할 수 없습니다. 가정의 관리자에게 문의해 주세요.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi에 오신 것을 환영합니다",
@@ -4201,7 +4202,21 @@
         "errorAmountsHidden": "가사 도우미 금액을 볼 수 있는 사람만 지급을 표시할 수 있습니다.",
         "notHereToday": "오늘은 아직 오지 않음",
         "tabVisits": "방문",
-        "tabChores": "집안일"
+        "tabChores": "집안일",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "splitExpenses": {
         "title": "공동 지출",

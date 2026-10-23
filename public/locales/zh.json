@@ -3366,7 +3366,8 @@
         "twoFactorCancel": "取消",
         "ssoOnlyHint": "登录此家庭仅通过 SSO 进行。",
         "guestPasswordLogin": "以访客身份用密码登录",
-        "accountCannotSignIn": "此账户无法登录，请联系您家庭的管理员。"
+        "accountCannotSignIn": "此账户无法登录，请联系您家庭的管理员。",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "欢迎使用 Yuvomi",
@@ -4197,7 +4198,21 @@
         "errorAmountsHidden": "只有可以查看家政金额的人才能标记付款。",
         "notHereToday": "今天还没到",
         "tabVisits": "上门",
-        "tabChores": "家务"
+        "tabChores": "家务",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "更多",
