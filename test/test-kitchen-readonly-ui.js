@@ -611,8 +611,9 @@ test('Rezepte bei `read`: das Detail zeigt, was sonst nur im Formular stand', as
   assert.match(lesend.html, /recipe-card__meal-types/, 'die Mahlzeiten stehen da, auch wenn alle gelten');
   assert.equal((lesend.html.match(/meal-type-badge--/g) ?? []).length, 4);
   assert.match(lesend.html, /recipe-detail__ingredient-category">Backwaren</, 'die Einkaufskategorie je Zutat');
-  // Seit R18 steht die Menge in ihrer eigenen Spalte vor dem Namen (eigener Test unten).
-  assert.match(lesend.html, /<span class="recipe-detail__ingredient-quantity">250 g<\/span><span class="recipe-detail__ingredient-name">Mehl/);
+  // Seit R18 steht die Menge in ihrer eigenen Spalte; seit Tafla RECHTS vom
+  // Namen (eigener Test unten).
+  assert.match(lesend.html, /<span class="recipe-detail__ingredient-name">Mehl[^]*?<\/span><span class="recipe-detail__ingredient-quantity">250 g<\/span>/);
   assert.match(lesend.html, /Teig ruhen lassen/);
   // Der Mini-DOM schreibt `href` nicht ins Markup; der Link ist am Text zu erkennen.
   assert.match(lesend.html, /<a class="btn btn--ghost">.*recipes\.openLink/, 'der Link ist Lesen und bleibt');
@@ -824,7 +825,12 @@ test('Rezepte: die Vorrats-Zuordnung braucht Kueche UND Vorrat, wie der Server',
 });
 
 /* ZUTATENMENGEN ALS EIGENE SPALTE (Critique R18, 2026-10-07): "200 g · Mehl"
- * stand in einem Text, jede Zeile begann woanders. */
+ * stand in einem Text, jede Zeile begann woanders.
+ *
+ * TAFLA (2026-10-19): die Spalte bleibt, steht aber RECHTS - die Zeile ist
+ * Zeichen des Vorrats (28) | Name (bei x=56) | Menge (17 ink-2, tabellarisch,
+ * rechtsbuendig). Die Kante, an der "200 g" und "2" enden, ist jetzt die
+ * rechte Kante der Karte statt einer Spalte vor dem Namen. */
 test('R18: die Menge einer Zutat steht in ihrer eigenen rechtsbuendigen Spalte', async () => {
   const el = new MiniElement('div');
   const r = { id: 31, title: 'Brot', source: 'native', has_own_image: false, meal_types: ['dinner'], ingredients: [{ name: 'Mehl', quantity: '200 g' }, { name: 'Salz' }] };
@@ -836,21 +842,21 @@ test('R18: die Menge einer Zutat steht in ihrer eigenen rechtsbuendigen Spalte',
   };
   const rows = find(el, 'recipe-detail__ingredient');
   assert.equal(rows.length, 2);
-  const [menge, name] = rows[0].childNodes;
-  assert.equal(menge.className, 'recipe-detail__ingredient-quantity');
-  assert.equal(menge.textContent, '200 g');
+  const [zeichen, name, menge] = rows[0].childNodes;
+  assert.equal(zeichen.className, 'recipe-detail__ingredient-status', 'vorn der Platz fuer das Zeichen des Vorrats');
   assert.equal(name.className, 'recipe-detail__ingredient-name');
   assert.equal(name.textContent, 'Mehl', 'der Name steht allein - nicht mehr "200 g · Mehl"');
-  assert.equal(rows[1].childNodes[0].className, 'recipe-detail__ingredient-quantity', 'ohne Menge bleibt die Zelle stehen, damit der Name seine Spalte haelt');
-  assert.equal(rows[1].childNodes[0].textContent, '');
+  assert.equal(menge.className, 'recipe-detail__ingredient-quantity');
+  assert.equal(menge.textContent, '200 g');
+  assert.equal(rows[1].childNodes[2].className, 'recipe-detail__ingredient-quantity', 'ohne Menge bleibt die Zelle stehen, damit die Spalte haelt');
+  assert.equal(rows[1].childNodes[2].textContent, '');
   const { eachRule } = await import('./css-rules.js');
   const css = (await import('node:fs')).readFileSync(new URL('../public/styles/recipes.css', import.meta.url), 'utf8');
   const rules = [...eachRule(css)];
   const body = (sel, at = (r) => r.at.length === 0) => rules.filter((r) => r.selector.trim() === sel && at(r)).map((r) => r.body).join(';');
   assert.match(body('.recipe-detail__ingredient-quantity'), /text-align:\s*end/, 'rechtsbuendig');
   assert.match(body('.recipe-detail__ingredient'), /font-variant-numeric:\s*tabular-nums/, 'tabellarisch');
-  assert.match(body('.recipe-detail__ingredient'), /grid-template-columns:\s*minmax\(var\(--space-12\), max-content\) minmax\(0, 1fr\) fit-content\(45%\)/);
-  const sub = (r) => r.at.some((a) => /@supports\s*\(grid-template-columns:\s*subgrid\)/.test(a));
-  assert.match(body('.recipe-detail__ingredient', sub), /grid-template-columns:\s*subgrid/, 'mit Subgrid teilt die Liste EINE Mengenspalte');
-  assert.match(body('.recipe-detail__ingredients', sub), /grid-template-columns:\s*max-content minmax\(0, 1fr\) fit-content\(45%\)/);
+  // Zeichen 28 | Name | Menge - die Menge endet an der rechten Kante der Karte.
+  assert.match(body('.recipe-detail__ingredient'), /grid-template-columns:\s*28px minmax\(0, 1fr\) fit-content\(45%\)/);
+  assert.match(body('.recipe-detail__ingredient-quantity'), /grid-area:\s*quantity/);
 });

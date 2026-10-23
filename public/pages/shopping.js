@@ -35,11 +35,6 @@ import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.j
 // Konstanten
 // --------------------------------------------------------
 
-/** Icon für eine Kategorie (aus state.categories, Fallback 'tag'). */
-function catIcon(name) {
-  return state.categories.find((c) => c.name === name)?.icon ?? 'tag';
-}
-
 /** Kategorienamen in DB-Reihenfolge. */
 function categoryNames() {
   return state.categories.map((c) => c.name);
@@ -77,6 +72,11 @@ const state = {
    *  Gespeichert wie die Kategorien - je Mitglied und Liste -, nur mit dem
    *  umgekehrten Grundzustand: er startet ZU, also wird das Offene gemerkt. */
   tickedOpen: false,
+  /** "Pewnie się kończy" - the last answer of GET /shopping/predictions. */
+  predictions: [],
+  /** The row the add bar just created: it shows its aisle with "zmień" for a
+   *  moment (Tafla), because on the phone the bar has no category field. */
+  freshItemId: null,
 };
 
 // --------------------------------------------------------
@@ -963,13 +963,17 @@ function renderTabs(container) {
     // Knoepfe. Die Leiste ist `role="group"` (sie haelt auch „Neue Liste"),
     // kein Tablist - `aria-selected` waere dort ungueltig, `aria-current`
     // sagt genau „das ist die gezeigte Liste".
+    // Tafla: the chips are the rows of the list picker (a popover under the
+    // list name). The chosen list carries a check; the open count stays a
+    // quiet number, and an all-bought list shows none (no dingbat).
     const active = list.id === state.activeListId;
     return `
       <button type="button" class="list-tab ${active ? 'list-tab--active' : ''}"
               data-action="switch-list" data-id="${list.id}"${active ? ' aria-current="true"' : ''}
               ${list.item_total > 0 ? `aria-label="${esc(list.name)}, ${esc(t('nav.shoppingOpen', { count: unchecked }))}"` : ''}>
-        ${esc(list.name)}
-        ${list.item_total > 0 ? `<span class="list-tab__count" aria-hidden="true">${unchecked > 0 ? unchecked : '✓'}</span>` : ''}
+        <i data-lucide="check" class="list-tab__check" aria-hidden="true"></i>
+        <span class="list-tab__name">${esc(list.name)}</span>
+        ${unchecked > 0 ? `<span class="list-tab__count" aria-hidden="true">${unchecked}</span>` : ''}
       </button>`;
   }).join('');
 
@@ -1006,9 +1010,11 @@ function renderTabs(container) {
     ${tabsHtml}
     ${ro ? '' : `<button class="list-tab__new" data-action="new-list" aria-label="${t('shopping.newListButton')}">
       <i data-lucide="plus" class="icon-md" aria-hidden="true"></i>
+      <span class="list-tab__new-label" aria-hidden="true">${esc(t('shopping.newListShort'))}</span>
     </button>`}
   `);
   if (window.lucide) window.lucide.createIcons({ el: bar });
+  renderHead(container);
 
   // KUECHENKOPF (Kopfregel mobil, 2026-09-26): das Menue der gewaehlten Liste
   // ist das EINE Werkzeugmenue des Kopfs und steht im __actions-Slot - wie im
@@ -1022,6 +1028,62 @@ function renderTabs(container) {
     tools.insertAdjacentHTML('beforeend', actionsHtml);
     if (window.lucide) window.lucide.createIcons({ el: tools });
   }
+}
+
+/**
+ * The row above the list (Tafla, 2026-10-19): the chosen list's name as the
+ * button that opens the picker, and the progress "8 z 23" with its bar.
+ *
+ * The name is written as text, not as markup: it is the one visible place the
+ * chosen list is named - the chips with the same names only show inside the
+ * opened picker, where the chosen one carries the check.
+ */
+function renderHead(container) {
+  const nameEl = container.querySelector?.('#shopping-list-name');
+  const button = container.querySelector?.('#shopping-list-button');
+  if (nameEl) nameEl.textContent = state.activeList?.name ?? '';
+  if (button) {
+    button.hidden = !state.activeList;
+    button.setAttribute('aria-label', state.activeList
+      ? t('shopping.chooseListLabel', { name: state.activeList.name })
+      : t('shopping.listsLabel'));
+  }
+  renderProgress(container);
+}
+
+/** "8 z 23": how much of the open list is already in the basket. */
+function renderProgress(container) {
+  const box = container.querySelector?.('#shopping-progress');
+  if (!box) return;
+  const total = _itemsListId === state.activeListId ? state.items.length : 0;
+  const done = total ? state.items.filter((i) => checkedOf(i)).length : 0;
+  box.hidden = !total || Boolean(state.itemsError);
+  if (!total) return;
+  const label = box.querySelector('.shopping-progress__label');
+  if (label) label.textContent = t('shopping.progress', { done, total });
+  box.setAttribute('role', 'img');
+  box.setAttribute('aria-label', t('shopping.progressLabel', { done, total }));
+  const fill = box.querySelector('.shopping-progress__fill');
+  if (fill) fill.style.inlineSize = `${Math.round((done / total) * 100)}%`;
+  syncDoneCard(container);
+}
+
+/**
+ * The end card follows the ticks without rebuilding the list: a tap on the
+ * last open row moves only that row (settleItemPlacements), so the card comes
+ * and goes here, at the top of the list, after the suggestions.
+ */
+function syncDoneCard(container) {
+  const listEl = container.querySelector?.('#items-list');
+  if (!listEl?.querySelector) return;
+  const card = listEl.querySelector('.shopping-done');
+  const html = doneCardHtml();
+  if (!html) { card?.remove(); return; }
+  if (card) return;
+  const lanes = listEl.querySelector('.items-lanes');
+  if (!lanes) return;
+  lanes.insertAdjacentHTML('beforebegin', html);
+  if (window.lucide) window.lucide.createIcons({ el: listEl.querySelector('.shopping-done') ?? listEl });
 }
 
 /**
@@ -1261,11 +1323,18 @@ function renderListContent(container) {
 
   content.replaceChildren();
   content.insertAdjacentHTML('beforeend', `
-    ${readOnly() ? '' : `<!-- Quick-Add -->
-    <div class="quick-add">
+    ${readOnly() ? '' : `<!-- Quick-Add: Tafla's docked add bar. On the phone it floats above
+         the tab capsule (shopping.css) and rides the keyboard while typing;
+         with a pointer it is the first row above the list. The aisle comes
+         from the guess while typing, so the category field only shows with a
+         pointer; on the phone the fresh row offers "zmien". -->
+    <div class="quick-add shopping-addbar">
+      <div class="shopping-addbar__predictions" id="shopping-addbar-predictions"
+           role="group" aria-label="${esc(t('shopping.predictionsLabel'))}"></div>
       <form class="quick-add__form" id="quick-add-form" novalidate autocomplete="off">
         <div class="quick-add__input-wrap">
-          <input class="quick-add__input" type="text" id="item-name-input"
+          <i data-lucide="plus" class="quick-add__glyph" aria-hidden="true"></i>
+          <input class="quick-add__input" type="text" id="item-name-input" enterkeyhint="enter"
                  placeholder="${t('shopping.itemNamePlaceholder')}" aria-label="${t('shopping.itemNameLabel')}" autocomplete="off">
           <div class="autocomplete-dropdown" id="autocomplete-dropdown" hidden></div>
         </div>
@@ -1274,13 +1343,12 @@ function renderListContent(container) {
         <select class="quick-add__cat" id="item-cat-select" aria-label="${t('shopping.categoryLabel')}">
           ${state.categories.map((c) => `<option value="${esc(c.name)}" ${c.name === DEFAULT_CATEGORY_NAME ? 'selected' : ''}>${esc(categoryLabel(c.name))}</option>`).join('')}
         </select>
-        <!-- Return-Glyphe statt eines zweiten "+" (Re-Critique 2026-09-28,
-             A4 P2-4): das Plus gehoert der Kopf-Pille bzw. dem FAB. -->
+        <!-- The sender appears once there is text: an accent arrow, the one
+             plus of the screen stays the global capture button. -->
         <button class="quick-add__btn" type="submit" aria-label="${t('shopping.addItemLabel')}">
-          <i data-lucide="corner-down-left" class="icon-lg" aria-hidden="true"></i>
+          <i data-lucide="arrow-up" class="icon-lg" aria-hidden="true"></i>
         </button>
       </form>
-      <div class="shopping-predictions" id="shopping-predictions" hidden></div>
     </div>`}
 
     <!-- Die Sammelaktions-Leiste stand hier als statischer Block über der
@@ -1320,7 +1388,7 @@ function renderListContent(container) {
   wireAutocomplete(container);
   wireQuickAdd(container);
   loadPredictions(container);
-  syncQuickAddDisclosure(container, false);
+  wireAddBar(container);
 }
 
 /**
@@ -1355,18 +1423,21 @@ function mountItems(listEl, container) {
     // Hinweis (abgehakte Artikel in den Vorrat) meinen beide eine Handlung.
     // Der Hinweis nennt die Kapsel „In den Vorrat" und steht deshalb nur, wo
     // sie auch steht (#1607) - dieselbe Frage wie in updateCheckedActions().
+    //
+    // TAFLA: no button in the empty state - the add bar under the list is the
+    // way in, and a second door to the same field would be the third add path
+    // on one screen. The "Pewnie się kończy" chips stand above it as the
+    // starters when the purchase log has any.
     const ro = readOnly();
     mountEmptyState(listEl, {
       icon: 'shopping-cart',
       title: t('shopping.emptyList'),
       description: ro ? undefined : t('shopping.emptyListDescription'),
       hint: ro || !pantryTransferOffered() ? undefined : t('emptyHint.shopping'),
-      action: ro ? null : {
-        label: t('shopping.emptyAction'),
-        icon: 'plus',
-        onClick: () => document.querySelector('.page-fab')?.click(),
-      },
+      action: null,
     });
+    const starters = predictionsHtml();
+    if (starters && typeof listEl.insertAdjacentHTML === 'function') listEl.insertAdjacentHTML('afterbegin', starters);
     return;
   }
 
@@ -1375,7 +1446,35 @@ function mountItems(listEl, container) {
   // in zwei Spalten packt (shopping.css, `.items-lanes`). Der Scroller selbst
   // kann das nicht - mit begrenzter Hoehe liefe Multicol seitlich ueber.
   // Mobil ist sie `display: contents` und aendert nichts.
-  listEl.insertAdjacentHTML('beforeend', `<div class="items-lanes">${renderItems()}</div>`);
+  //
+  // Davor (Tafla): "Pewnie się kończy" and, once nothing is left to buy, the
+  // end card "Wszystko kupione" with the way into the pantry.
+  listEl.insertAdjacentHTML('beforeend', `${predictionsHtml()}${doneCardHtml()}<div class="items-lanes">${renderItems()}</div>`);
+}
+
+/**
+ * The end of a shop (Tafla, "Design the peak and the end"): every item is in
+ * the basket. The card says so, names how many and from which list, and offers
+ * the next step - into the pantry (only where that path exists, the same
+ * question as the menu entry) - and clearing the list. Both buttons use the
+ * actions the tools menu already has.
+ */
+function doneCardHtml() {
+  const total = state.items.length;
+  if (!total || state.items.some((i) => !checkedOf(i)) || readOnly()) return '';
+  const toPantry = pantryTransferOffered();
+  return `
+    <section class="shopping-done" aria-labelledby="shopping-done-title">
+      <span class="shopping-done__glyph" aria-hidden="true"><i data-lucide="check"></i></span>
+      <h2 class="shopping-done__title" id="shopping-done-title">${esc(t('shopping.allBought'))}</h2>
+      <p class="shopping-done__meta">${esc(t('shopping.allBoughtMeta', { count: total, name: state.activeList?.name ?? '' }))}</p>
+      <div class="shopping-done__actions">
+        ${toPantry ? `<button type="button" class="btn btn--primary shopping-done__primary" data-action="checked-to-pantry">
+          ${esc(t('shopping.moveToPantry', { count: total }))}
+        </button>` : ''}
+        <button type="button" class="btn btn--ghost shopping-done__plain" data-action="clear-checked">${esc(t('shopping.clearList'))}</button>
+      </div>
+    </section>`;
 }
 
 function renderItems() {
@@ -1391,6 +1490,10 @@ function renderItems() {
   // Zeilen (.row-carrier) bleiben bei [hidden] im DOM - ein Rerender wuerde
   // Sortable-Instanzen und Swipe-Closures verwerfen, nur um eine Gruppe
   // zuzuklappen.
+  //
+  // TAFLA: the aisle header is the aisle's name in sentence case and its count
+  // - no aisle icon, no uppercase. The chevron only shows while the aisle is
+  // folded (shopping.css); the whole header stays the button that folds it.
   return groups.map(([cat, items], idx) => {
     const key = categoryStorageKey(cat);
     const collapsed = state.collapsedCategories.has(key);
@@ -1400,12 +1503,11 @@ function renderItems() {
       <h2 class="list-group__title">
         <button type="button" class="list-group__toggle" data-category-toggle="${esc(key)}"
                 aria-expanded="${collapsed ? 'false' : 'true'}" aria-controls="${rowsId}">
+          <span>${esc(categoryLabel(cat))}</span>
+          <span class="list-group__count">${items.length}</span>
           <i data-lucide="chevron-down" aria-hidden="true"
              class="list-group__chevron${collapsed ? ' list-group__chevron--collapsed' : ''}"></i>
-          <i data-lucide="${catIcon(cat)}" class="icon-sm" aria-hidden="true"></i>
-          <span>${esc(categoryLabel(cat))}</span>
         </button>
-        <span class="list-group__count">${items.length}</span>
       </h2>
       <div class="row-carrier" id="${rowsId}" ${collapsed ? 'hidden' : ''}>
         ${items.map(renderItem).join('')}
@@ -1428,6 +1530,9 @@ function renderItems() {
  * seinen Traeger, ohne dass die Liste neu gebaut wird.
  */
 function renderTickedSection(ticked) {
+  // TAFLA: "W koszyku" is a fold, not another aisle - its head is a row at the
+  // top of its own card (shopping.css), ink-2, the rows below it without
+  // strikethrough.
   const open = state.tickedOpen;
   return `
     <div class="list-group item-ticked" ${ticked.length ? '' : 'hidden'}>
@@ -1435,12 +1540,11 @@ function renderTickedSection(ticked) {
         <button type="button" class="list-group__toggle" data-ticked-toggle
                 aria-expanded="${open ? 'true' : 'false'}" aria-controls="shopping-ticked-rows"
                 aria-labelledby="shopping-ticked-label shopping-ticked-count">
+          <span id="shopping-ticked-label">${t('shopping.tickedSection')}</span>
+          <span class="list-group__count" id="shopping-ticked-count">${ticked.length}</span>
           <i data-lucide="chevron-down" aria-hidden="true"
              class="list-group__chevron${open ? '' : ' list-group__chevron--collapsed'}"></i>
-          <i data-lucide="check" class="icon-sm" aria-hidden="true"></i>
-          <span id="shopping-ticked-label">${t('shopping.tickedSection')}</span>
         </button>
-        <span class="list-group__count" id="shopping-ticked-count">${ticked.length}</span>
       </h2>
       <div class="row-carrier" id="shopping-ticked-rows" ${open ? '' : 'hidden'}>
         ${ticked.map(renderItem).join('')}
@@ -1547,9 +1651,43 @@ function renderReadActions(item) {
           </button>`;
 }
 
+/**
+ * The aisle a fresh row landed in, with the way to change it (Tafla): on the
+ * phone the add bar has no category field - the guess while typing chose the
+ * aisle, and this tag under the new row says which one and opens the editor.
+ */
+function freshTagHtml(item) {
+  const aisle = categoryLabel(categoryOf(item));
+  return `<button type="button" class="shopping-item__fresh" data-action="item-details" data-id="${item.id}"
+          aria-label="${esc(t('shopping.changeAisleLabel', { name: item.name, category: aisle }))}">
+    <i data-lucide="sparkles" aria-hidden="true"></i>${esc(t('shopping.changeAisle', { category: aisle }))}
+  </button>`;
+}
+
+/** Ends the "fresh" moment of a row in place - no rebuild of the list. */
+function clearFreshItem(container) {
+  const id = state.freshItemId;
+  state.freshItemId = null;
+  if (id == null) return;
+  const row = container?.querySelector?.(`.shopping-item[data-item-id="${id}"]`);
+  row?.classList.remove('shopping-item--fresh');
+  row?.querySelector('.shopping-item__fresh')?.remove();
+}
+
+const FRESH_ITEM_MS = 6000;
+let _freshTimer = null;
+
+function markFreshItem(container, id) {
+  clearTimeout(_freshTimer);
+  if (state.freshItemId != null && state.freshItemId !== id) clearFreshItem(container);
+  state.freshItemId = id;
+  _freshTimer = setTimeout(() => clearFreshItem(container), FRESH_ITEM_MS);
+}
+
 function renderItem(item) {
   const isDone = Boolean(checkedOf(item));
   const ro = readOnly();
+  const fresh = !ro && !isDone && state.freshItemId === item.id;
   return `
     <div class="swipe-row${ro ? ' swipe-row--static' : ''}" data-swipe-id="${item.id}" data-swipe-checked="${checkedOf(item)}">
       ${ro ? '' : `<div class="swipe-reveal swipe-reveal--done swipe-reveal--leading" aria-hidden="true">
@@ -1560,7 +1698,7 @@ function renderItem(item) {
         <i data-lucide="trash-2" class="icon-xl" aria-hidden="true"></i>
         <span>${t('shopping.swipeDelete')}</span>
       </div>`}
-      <div class="list-row shopping-item ${isDone ? 'shopping-item--checked' : ''}${ro ? ' shopping-item--static' : ''}"
+      <div class="list-row shopping-item ${isDone ? 'shopping-item--checked' : ''}${ro ? ' shopping-item--static' : ''}${fresh ? ' shopping-item--fresh' : ''}"
            data-item-id="${item.id}">
         ${renderItemCheck(item, isDone)}
         <div class="list-row__main">
@@ -1569,6 +1707,7 @@ function renderItem(item) {
             ${item.quantity ? `<span class="shopping-item__quantity">${esc(item.quantity)}</span>` : ''}
             ${renderItemTags(item.tags)}
           </div>` : ''}
+          ${fresh ? freshTagHtml(item) : ''}
         </div>
         <!-- Geteilte .row-action-Grammatik aus layout.css (app-weit von sieben
              Modulen genutzt), gruppiert in der geteilten .list-row__actions -
@@ -1731,6 +1870,8 @@ function wireAutocomplete(container) {
     autocompleteTimeout = setTimeout(async () => {
       try {
         const data = await api.get(`/shopping/suggestions?q=${encodeURIComponent(q)}`);
+        // The field moved on (sent, cleared, retyped): this answer is stale.
+        if (input.value.trim() !== q) return;
         const suggestions = data.data ?? [];
         if (!suggestions.length) { dropdown.hidden = true; return; }
 
@@ -1739,11 +1880,20 @@ function wireAutocomplete(container) {
         // data-Attribute mit und füllen beim Wählen die übrigen Felder (#1103).
         // Ein Name, der abgehakt auf dieser Liste steht, sagt es (#1816): die
         // Wahl holt dann die Zeile zurueck, statt eine zweite anzulegen.
-        dropdown.insertAdjacentHTML('beforeend', suggestions.map((s, i) =>
-          `<div class="autocomplete-item" data-idx="${i}" data-name="${esc(s.name)}"
-                data-category="${esc(s.category ?? '')}" data-quantity="${esc(s.quantity ?? '')}"><span>${esc(s.name)}</span>${
-            tickedItemNamed(s.name) ? `<span class="autocomplete-item__state">${esc(t('shopping.itemStateChecked'))}</span>` : ''}</div>`
-        ).join(''));
+        // Tafla: the row also says what the household usually buys and in
+        // which aisle it lands ("zwykle 1 l · Nabiał") - the bar itself has
+        // no quantity or aisle field on the phone, so this is where you see
+        // what the pick will fill in.
+        dropdown.insertAdjacentHTML('beforeend', suggestions.slice(0, 3).map((s, i) => {
+          const usual = [
+            s.quantity ? t('shopping.usualQuantity', { quantity: s.quantity }) : '',
+            s.category ? categoryLabel(s.category) : '',
+          ].filter(Boolean).join(' · ');
+          return `<div class="autocomplete-item" data-idx="${i}" data-name="${esc(s.name)}"
+                data-category="${esc(s.category ?? '')}" data-quantity="${esc(s.quantity ?? '')}"><span class="autocomplete-item__name">${esc(s.name)}</span>${
+            usual ? `<span class="autocomplete-item__usual">${esc(usual)}</span>` : ''}${
+            tickedItemNamed(s.name) ? `<span class="autocomplete-item__state">${esc(t('shopping.itemStateChecked'))}</span>` : ''}</div>`;
+        }).join(''));
         dropdown.hidden = false;
         activeIdx = -1;
 
@@ -1788,12 +1938,16 @@ function wireAutocomplete(container) {
 }
 
 // --------------------------------------------------------
-// "Probably running low" (fork, 2026-10-19)
-// Chips under the quick-add field for items whose usual buying rhythm says
-// they are due again (GET /shopping/predictions: statistics on the purchase
-// log, no model call, empty unless AI shopping help is on). One tap adds the
-// item to this list in its usual aisle; "hide" keeps the row away until
-// tomorrow on this device.
+// "Probably running low" (fork, 2026-10-19; Tafla placement 2026-10-19)
+// Chips for items whose usual buying rhythm says they are due again
+// (GET /shopping/predictions: statistics on the purchase log, no model call,
+// empty unless AI shopping help is on). They live IN the list, above the
+// aisles: one sparkles label for the group, accent-tint chips with a plus.
+// One tap adds the item to this list in its usual aisle; "hide" keeps the row
+// away until tomorrow on this device.
+//
+// The answer is kept in `state.predictions`, because the box is part of the
+// list: every rebuild of the list draws it again from there.
 // --------------------------------------------------------
 const PREDICTIONS_HIDDEN_KEY = 'yuvomi-shopping-predictions-hidden';
 
@@ -1801,65 +1955,101 @@ function predictionsHiddenToday() {
   try { return localStorage.getItem(PREDICTIONS_HIDDEN_KEY) === todayKey(); } catch { return false; }
 }
 
+/** The suggestions still worth showing: not hidden today, not already open on the list. */
+function visiblePredictions() {
+  if (readOnly() || predictionsHiddenToday()) return [];
+  const open = new Set(state.items.filter((i) => !checkedOf(i)).map((i) => i.name.toLowerCase()));
+  return (state.predictions ?? []).filter((i) => !open.has(i.name.toLowerCase())).slice(0, 6);
+}
+
+/** Markup of the suggestions row; empty when there is nothing to suggest. */
+function predictionsHtml() {
+  const items = visiblePredictions();
+  if (!items.length) return '';
+  return `
+    <section class="shopping-predictions" id="shopping-predictions" aria-labelledby="shopping-predictions-label">
+      <h2 class="shopping-predictions__label" id="shopping-predictions-label">
+        <i data-lucide="sparkles" aria-hidden="true"></i>${esc(t('shopping.predictionsLabel'))}
+      </h2>
+      <div class="shopping-predictions__chips">
+        ${items.map((i) => `
+        <button type="button" class="shopping-predictions__chip" data-action="add-prediction" data-name="${esc(i.name)}"
+                aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}"
+                title="${esc(t('shopping.predictionsWhy', { every: i.everyDays, since: i.sinceDays }))}">
+          <i data-lucide="plus" aria-hidden="true"></i>${esc(i.name)}
+        </button>`).join('')}
+        <button type="button" class="shopping-predictions__hide" data-action="hide-predictions"
+                aria-label="${esc(t('shopping.predictionsHide'))}" title="${esc(t('shopping.predictionsHide'))}">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </div>
+    </section>`;
+}
+
+/**
+ * The same chips ride above the add bar while it has focus and no name yet
+ * (Tafla, "Pasek dodawania"): with the keyboard up the list's own row is far
+ * away. CSS shows the row only in that state; a press on a chip keeps the
+ * field's focus (pointerdown, renderListContent).
+ */
+function renderBarPredictions(container) {
+  const box = container?.querySelector?.('#shopping-addbar-predictions');
+  if (!box?.insertAdjacentHTML) return;
+  box.replaceChildren();
+  const items = visiblePredictions();
+  if (!items.length) return;
+  box.insertAdjacentHTML('beforeend', items.map((i) => `
+    <button type="button" class="shopping-predictions__chip" data-action="add-prediction" data-name="${esc(i.name)}"
+            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">
+      <i data-lucide="plus" aria-hidden="true"></i>${esc(i.name)}
+    </button>`).join(''));
+  window.lucide?.createIcons({ el: box });
+}
+
 async function loadPredictions(container) {
-  const box = container.querySelector('#shopping-predictions');
-  if (!box || predictionsHiddenToday()) return;
+  if (readOnly() || predictionsHiddenToday()) return;
+  const listId = state.activeListId;
   let items = [];
   try {
     items = (await api.get('/shopping/predictions')).data ?? [];
   } catch {
     return;
   }
-  const open = new Set(state.items.filter((i) => !i.is_checked).map((i) => i.name.toLowerCase()));
+  state.predictions = items;
+  if (!items.length || listId !== state.activeListId || container.isConnected === false) return;
+  updateItemsList(container);
+}
+
+/** One tap on a suggestion: the item lands on the open list in its usual aisle. */
+async function addPrediction(container, chip) {
+  const item = (state.predictions ?? []).find((i) => i.name === chip.dataset.name);
+  if (!item || chip.disabled) return;
   const categories = new Set(state.categories.map((c) => c.name));
-  items = items.filter((i) => !open.has(i.name.toLowerCase())).slice(0, 6);
-  if (!items.length || !box.isConnected) return;
+  const known = item.category && categories.has(item.category);
+  chip.disabled = true;
+  try {
+    const data = await api.post(`/shopping/${state.activeListId}/items`, {
+      name: item.name,
+      quantity: item.quantity ?? null,
+      category: known ? item.category : DEFAULT_CATEGORY_NAME,
+      category_source: known ? 'suggestion' : 'default',
+    });
+    acknowledgeOwnChange(data);
+    state.items.push(data.data);
+    // The new row is open, so its chip drops out of `visiblePredictions`.
+    updateItemsList(container);
+    updateListCounter(state.activeListId, 1, 0);
+    renderTabs(container);
+  } catch (err) {
+    chip.disabled = false;
+    reportError(err, container);
+  }
+}
 
-  box.replaceChildren();
-  box.insertAdjacentHTML('beforeend', `
-    <span class="shopping-predictions__label">${esc(t('shopping.predictionsLabel'))}</span>
-    ${items.map((i, idx) => `
-      <button type="button" class="shopping-predictions__chip" data-idx="${idx}"
-              title="${esc(t('shopping.predictionsWhy', { every: i.everyDays, since: i.sinceDays }))}">
-        <i data-lucide="plus" class="icon-sm" aria-hidden="true"></i>${esc(i.name)}
-      </button>`).join('')}
-    <button type="button" class="shopping-predictions__hide" aria-label="${esc(t('shopping.predictionsHide'))}"
-            title="${esc(t('shopping.predictionsHide'))}">
-      <i data-lucide="x" class="icon-sm" aria-hidden="true"></i>
-    </button>`);
-  box.hidden = false;
-  window.lucide?.createIcons({ el: box });
-
-  box.addEventListener('click', async (e) => {
-    if (e.target.closest('.shopping-predictions__hide')) {
-      try { localStorage.setItem(PREDICTIONS_HIDDEN_KEY, todayKey()); } catch { /* hidden for this view only */ }
-      box.hidden = true;
-      return;
-    }
-    const chip = e.target.closest('.shopping-predictions__chip');
-    if (!chip || chip.disabled) return;
-    const item = items[Number(chip.dataset.idx)];
-    const known = item.category && categories.has(item.category);
-    chip.disabled = true;
-    try {
-      const data = await api.post(`/shopping/${state.activeListId}/items`, {
-        name: item.name,
-        quantity: item.quantity ?? null,
-        category: known ? item.category : DEFAULT_CATEGORY_NAME,
-        category_source: known ? 'suggestion' : 'default',
-      });
-      acknowledgeOwnChange(data);
-      state.items.push(data.data);
-      updateItemsList(container);
-      updateListCounter(state.activeListId, 1, 0);
-      renderTabs(container);
-      chip.remove();
-      if (!box.querySelector('.shopping-predictions__chip')) box.hidden = true;
-    } catch (err) {
-      chip.disabled = false;
-      reportError(err, container);
-    }
-  });
+function hidePredictions(container) {
+  try { localStorage.setItem(PREDICTIONS_HIDDEN_KEY, todayKey()); } catch { /* hidden for this view only */ }
+  state.predictions = [];
+  container.querySelector('#shopping-predictions')?.remove();
 }
 
 // --------------------------------------------------------
@@ -1896,81 +2086,60 @@ function _flashAddBtn(btn) {
 }
 
 // --------------------------------------------------------
-// Quick-Add als Disclosure (nur Touch)
+// The docked add bar (Tafla, 2026-10-19)
 // --------------------------------------------------------
 
 /**
- * Auf Touch ist das Quick-Add eingeklappt und der FAB öffnet es.
+ * Tafla docks the add bar above the tab capsule and keeps it there: the list
+ * is what you shop from, the bar is how it grows, and both stay in reach of
+ * the thumb. The old disclosure (hidden on touch, opened by the FAB, revealed
+ * at the top of the list) is gone with the `(hover: none)` rule that hid it.
  *
- * WARUM: Der Einkauf trug mobil 439 von 852px Chrome, bevor ein Artikel sichtbar
- * war (52%; bei 320px 495 von 720 = 69%). Das zweizeilige Quick-Add ist davon
- * 126px - und es ist der einzige Tab, dessen FAB kein Formular öffnet, sondern
- * nur ein bereits sichtbares Feld fokussiert. Ein Griff löst beides: der FAB tut
- * dasselbe wie in Mahlzeiten, Rezepten und Vorrat, und die Liste beginnt weiter
- * oben (Critique 2026-07-30, P1).
+ * WHILE TYPING THE BAR RIDES THE KEYBOARD. Safari leaves `position: fixed;
+ * bottom` under the keyboard (the visual viewport shrinks, the layout viewport
+ * does not), so the bar reads the covered height from `visualViewport` and
+ * hands it to CSS as `--addbar-keyboard`; `.shopping-addbar--typing` lifts it
+ * 8px above the keyboard and lets the capsule step aside (shopping.css). Without
+ * `visualViewport` nothing moves - the bar then simply stays above the capsule.
  *
- * KEIN BOTTOM-SHEET, obwohl der FAB unten sitzt und die Tastatur unten aufgeht:
- * das Feld bleibt an seinem Platz über der Liste, wird nur enthüllt und
- * eingescrollt. Ein Sheet wäre die schönere Geste und ein zweiter Overlay-Typ mit
- * eigenem Focus-Trap - „Modal als erster Gedanke" ist in diesem Projekt ein
- * ausdrücklich verbotenes Muster, und die Eingabe gehört sichtbar zur Liste, in
- * die sie schreibt.
- *
- * Der Zustand hängt an `.shopping-page--adding` (siehe shopping.css) statt an
- * einem `hidden` am Formular: das Kriterium ist die Zeigerfähigkeit, und die
- * kennt nur CSS. JS setzt die Absicht, CSS entscheidet, ob sie überhaupt eine
- * Wirkung hat - auf Desktop ist die Klasse ein No-op.
- *
- * @param {Element} container
- * @param {boolean} open
+ * ONE listener pair at a time: the bar is rebuilt with the list content, and
+ * the viewport outlives it.
  */
-/** Letzte Absicht des Quick-Add (offen/zu) - ein Zuklappen, das ein Oeffnen ueberholt hat, raeumt nicht mehr ab. */
-let quickAddOpenIntent = false;
+let _addBarSync = null;
 
-function syncQuickAddDisclosure(container, open) {
-  const page = container.querySelector('.shopping-page');
-  const fab = findPageFab('fab-new-item');
-  if (!page || !fab) return;
-
-  const collapsible = window.matchMedia('(hover: none)').matches && Boolean(state.activeList);
-  const wasOpen = page.classList.contains('shopping-page--adding');
-  const nowOpen = collapsible && open;
-  quickAddOpenIntent = nowOpen;
-  // DAS FELD ZIEHT AUF UND KLAPPT ZU (R16, Bewegung). Vorher schaltete nur
-  // `display` um: die Liste darunter sprang um die Hoehe des Formulars (127px
-  // bei 390). Der ZUSTAND bleibt die Klasse; die Bewegung liegt davor bzw.
-  // dahinter, und wo nichts animiert (kein `animate`, reduzierte Bewegung -
-  // dann loest collapseOut sofort auf), faellt sie im selben Takt wie bisher.
-  const quick = page.querySelector?.('.quick-add') ?? null;
-  const canAnimate = typeof quick?.animate === 'function';
-  if (wasOpen && !nowOpen && canAnimate) {
-    collapseOut(quick).then(() => {
-      // Inzwischen wieder geoeffnet: das Oeffnen hat schon aufgeraeumt.
-      if (quickAddOpenIntent) return;
-      page.classList.remove('shopping-page--adding');
-      // collapseOut haelt die Hoehe 0 (fill: forwards) - nach `display: none` verwerfen.
-      quick.getAnimations?.().forEach((anim) => anim.cancel());
-      quick.style.overflow = '';
-    });
-  } else {
-    page.classList.toggle('shopping-page--adding', nowOpen);
-    if (nowOpen && canAnimate) {
-      quick.getAnimations?.().forEach((anim) => anim.cancel());
-      quick.style.overflow = '';
-      if (!wasOpen) expandIn(quick);
-    }
+function wireAddBar(container) {
+  const bar = container.querySelector?.('.shopping-addbar');
+  const vv = window.visualViewport;
+  if (_addBarSync) {
+    vv?.removeEventListener('resize', _addBarSync);
+    vv?.removeEventListener('scroll', _addBarSync);
+    _addBarSync = null;
   }
-
-  // `aria-expanded` NUR wo der Knopf tatsächlich etwas aufklappt. Auf Desktop
-  // fokussiert er ein sichtbares Feld; ein „eingeklappt" zu melden, was gar nicht
-  // eingeklappt ist, wäre eine Falschaussage an den Screenreader.
-  if (collapsible) {
-    fab.setAttribute('aria-expanded', String(open));
-    fab.setAttribute('aria-controls', 'quick-add-form');
-  } else {
-    fab.removeAttribute('aria-expanded');
-    fab.removeAttribute('aria-controls');
-  }
+  if (!bar) return;
+  const sync = () => {
+    if (!bar.isConnected) return;
+    const typing = bar.contains(document.activeElement);
+    const covered = typing && vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    bar.style.setProperty('--addbar-keyboard', `${Math.round(covered)}px`);
+    bar.classList.toggle('shopping-addbar--typing', typing && covered > 0);
+    bar.classList.toggle('shopping-addbar--focused', typing);
+  };
+  _addBarSync = sync;
+  bar.addEventListener('focusin', sync);
+  // `focusout` fires before the new focus lands - measure after it. The short
+  // grace lets a tap on a suggestion chip above the bar land before the chips
+  // step away with the focus.
+  bar.addEventListener('focusout', () => setTimeout(sync, 250));
+  // A press on a chip keeps the field (and the keyboard) where it is.
+  bar.querySelector('#shopping-addbar-predictions')?.addEventListener('mousedown', (e) => e.preventDefault());
+  vv?.addEventListener('resize', sync);
+  vv?.addEventListener('scroll', sync);
+  _routeSignal?.addEventListener?.('abort', () => {
+    if (_addBarSync !== sync) return;
+    vv?.removeEventListener('resize', sync);
+    vv?.removeEventListener('scroll', sync);
+    _addBarSync = null;
+  }, { once: true });
 }
 
 /**
@@ -2024,15 +2193,14 @@ function wireQuickAdd(container) {
   const form = container.querySelector('#quick-add-form');
   if (!form) return;
 
-  // Esc klappt zu und gibt den Fokus an den FAB zurück - dieselbe Zusage wie im
-  // Modal, wo Esc schließt und den Auslöser wieder fokussiert.
+  // Esc leaves the bar: open suggestions close first (the autocomplete's own
+  // handler), a second Esc lets go of the field and with it the keyboard.
   form.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    const page = container.querySelector('.shopping-page');
-    if (!page?.classList.contains('shopping-page--adding')) return;
+    const dropdown = container.querySelector('#autocomplete-dropdown');
+    if (dropdown && !dropdown.hidden) return;
     e.stopPropagation();
-    syncQuickAddDisclosure(container, false);
-    findPageFab('fab-new-item')?.focus();
+    e.target?.blur?.();
   });
 
   container.querySelector('#item-cat-select')?.addEventListener?.('change', () => { quickAddCategoryChosen = true; });
@@ -2101,17 +2269,29 @@ function wireQuickAdd(container) {
         // ein Satz sagt, was aus der Eingabe geworden ist.
         window.yuvomi.showToast(t('shopping.itemBackToast', { name: revive.name }), 'info');
       } else {
-        const data = await api.post(`/shopping/${state.activeListId}/items`, { name, quantity, category, category_source: quickAddCategorySource() });
+        const source = quickAddCategorySource();
+        const data = await api.post(`/shopping/${state.activeListId}/items`, { name, quantity, category, category_source: source });
         acknowledgeOwnChange(data);
         state.items.push(data.data);
+        // The app chose the aisle (guess, suggestion or the default): the new
+        // row says which one for a moment, with "zmień" (Tafla).
+        if (source !== 'hand' && data.data?.id != null) markFreshItem(container, data.data.id);
         // Einfügen in DOM ohne komplettes Re-Render
         updateItemsList(container);
         updateListCounter(state.activeListId, 1, 0);
         renderTabs(container);
+        // The bar sits at the bottom, the row lands in its aisle somewhere
+        // above: bring it into view so the eye can follow it (Tafla).
+        container.querySelector?.(`.shopping-item[data-item-id="${data.data?.id}"]`)
+          ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
       }
       nameInput.value = '';
       qtyInput.value  = '';
       resetQuickAddCategory(catSelect);
+      // The suggestions belonged to the name that was just sent.
+      clearTimeout(autocompleteTimeout);
+      const dropdown = container.querySelector('#autocomplete-dropdown');
+      if (dropdown) dropdown.hidden = true;
       // Erfolgs-Feedback auf dem +-Button (DOM-API, kein innerHTML)
       _flashAddBtn(form.querySelector('.quick-add__btn'));
       nameInput.focus();
@@ -3059,6 +3239,7 @@ function updateItemsList(container) {
       maybeShowSwipeHint(container);
     }
   }
+  renderBarPredictions(container);
   updateCheckedActions(container);
 }
 
@@ -4156,6 +4337,9 @@ function wireTabBar(container) {
     const target = e.target.closest('[data-action]');
     if (!target) return;
 
+    // The chips live in the list picker (Tafla): a choice closes it.
+    container.querySelector('#shopping-list-picker')?.hidePopover?.();
+
     if (target.dataset.action === 'switch-list') {
       await switchList(Number(target.dataset.id), container);
     }
@@ -4175,6 +4359,62 @@ function wireTabBar(container) {
         reportError(err, container);
       }
     }
+  });
+}
+
+/**
+ * LONG-PRESS OPENS THE ROW (Tafla, 2026-10-19). On touch the row carries no ⋯
+ * and no grip any more: a tap ticks, a swipe ticks or deletes, and a long
+ * press opens the editor, which holds everything else (name, quantity, aisle,
+ * list, delete). A right click does the same with a pointer, where the ⋯ and
+ * the grip stay. The press ends as soon as the finger travels (a scroll or a
+ * swipe owns the gesture then) or lifts early.
+ */
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP = 8;
+let longPressFired = false;
+
+function wireRowLongPress(root, container) {
+  let timer = null;
+  let start = null;
+  const cancel = () => { clearTimeout(timer); timer = null; start = null; };
+
+  const openRow = (row) => {
+    const id = Number(row?.dataset.itemId);
+    if (!id || readOnly()) return false;
+    openItemDetails(id, container);
+    return true;
+  };
+
+  root.addEventListener('pointerdown', (e) => {
+    // Every new press starts clean: a long-press whose lift sent no click
+    // must not swallow the next tap.
+    longPressFired = false;
+    if (e.pointerType !== 'touch' || readOnly()) return;
+    const row = e.target.closest?.('.shopping-item');
+    if (!row || e.target.closest?.('a, input, select, textarea, [data-no-row-toggle]')) return;
+    start = { x: e.clientX, y: e.clientY };
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      if (!row.isConnected) return;
+      longPressFired = openRow(row);
+      if (longPressFired) vibrate(15);
+    }, LONG_PRESS_MS);
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP) cancel();
+  });
+  for (const type of ['pointerup', 'pointercancel', 'scroll']) {
+    root.addEventListener(type, cancel, { capture: type === 'scroll', passive: true });
+  }
+  root.addEventListener('contextmenu', (e) => {
+    const row = e.target.closest?.('.shopping-item');
+    if (!row || e.target.closest?.('a, input, select, textarea')) return;
+    // The touch path already opened it; the system menu would only cover it.
+    if (longPressFired) { e.preventDefault(); return; }
+    if (openRow(row)) e.preventDefault();
   });
 }
 
@@ -4199,7 +4439,14 @@ function wireListContentEvents(container) {
   if (root.dataset.eventsWired) return;
   root.dataset.eventsWired = 'true';
 
+  wireRowLongPress(root, container);
+
   root.addEventListener('click', async (e) => {
+    // A long-press just opened the editor: the finger lifting off is not a tap.
+    if (longPressFired) {
+      longPressFired = false;
+      if (e.target.closest?.('.shopping-item')) { e.preventDefault(); return; }
+    }
     // ---- Kategorie auf-/zuklappen (#1039) ----
     // Eigener, frueher Zweig statt eines weiteren [data-action]-Falls: die
     // uebrigen Aktionen loesen serverseitige Aenderungen aus, dieser hier
@@ -4246,6 +4493,15 @@ function wireListContentEvents(container) {
     // ---- Artikel-Details (URL/Notiz) bearbeiten ----
     if (action === 'item-details') {
       openItemDetails(Number(target.dataset.id), container);
+    }
+
+    // ---- "Pewnie się kończy" (Tafla: the chips live in the list) ----
+    if (action === 'add-prediction') {
+      await addPrediction(container, target);
+    }
+
+    if (action === 'hide-predictions') {
+      hidePredictions(container);
     }
 
     // ---- Artikel löschen (mit Undo, 5s Fenster) ----
@@ -4687,9 +4943,23 @@ export async function render(container, { user, signal: routeSignal = null } = {
            wie in den drei Geschwister-Tabs. Kein --narrow (Re-Critique
            2026-09-27, D3): der Kopf endet an der Kuechen-Leiste, damit die
            Primaeraktion in allen vier Tabs an derselben Stelle steht. -->
+      <!-- Tafla (2026-10-19): the chosen list IS the title of this row, a
+           button that opens the list picker; the list chips moved into that
+           popover. Next to it the progress of the list and its tools menu. -->
       <div class="page-toolbar page-toolbar--in-group shopping-toolbar">
-        <div class="page-toolbar__center">
-          <div class="list-tabs-bar" id="list-tabs-bar" role="group" aria-label="${t('shopping.listsLabel')}"></div>
+        <div class="page-toolbar__center shopping-head">
+          <button type="button" class="shopping-head__list" id="shopping-list-button"
+                  popovertarget="shopping-list-picker" aria-haspopup="true" aria-expanded="false">
+            <span class="shopping-head__name" id="shopping-list-name"></span>
+            <i data-lucide="chevron-down" class="shopping-head__chevron" aria-hidden="true"></i>
+          </button>
+          <div class="popover-menu shopping-list-picker" id="shopping-list-picker" popover>
+            <div class="list-tabs-bar" id="list-tabs-bar" role="group" aria-label="${t('shopping.listsLabel')}"></div>
+          </div>
+          <div class="shopping-progress" id="shopping-progress" hidden>
+            <span class="shopping-progress__track" aria-hidden="true"><span class="shopping-progress__fill"></span></span>
+            <span class="shopping-progress__label"></span>
+          </div>
         </div>
         <div class="page-toolbar__actions">
           <div class="shopping-tools" id="shopping-tools"></div>
@@ -4707,7 +4977,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   renderListContent(container);
   wireListContentEvents(container);
 
-  findPageFab('fab-new-item')?.addEventListener('click', (e) => {
+  findPageFab('fab-new-item')?.addEventListener('click', () => {
     if (readOnly()) return;
     const input = container.querySelector('#item-name-input');
     if (!input) {
@@ -4715,18 +4985,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
       container.querySelector('[data-action="new-list"]')?.click();
       return;
     }
-
-    // Auf Touch ist das Quick-Add eingeklappt: der FAB schaltet es um, statt nur
-    // ein sichtbares Feld zu fokussieren (siehe syncQuickAddDisclosure).
-    if (e.currentTarget.getAttribute('aria-expanded') === 'true') {
-      syncQuickAddDisclosure(container, false);
-      return;
-    }
-    syncQuickAddDisclosure(container, true);
-
-    // FAB = Erstell-Flow (wie Meals/Recipes): die Quick-Add-Fläche sichtbar
-    // aktivieren — Scroll + Fokus + kurzer Puls als „hier entsteht das Neue".
-    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // The add bar is always there (Tafla): the button only hands it the focus,
+    // with the short pulse that says "this is where it goes".
     input.focus();
     input.classList.add('quick-add__input--flash');
     input.addEventListener('animationend', () => input.classList.remove('quick-add__input--flash'), { once: true });

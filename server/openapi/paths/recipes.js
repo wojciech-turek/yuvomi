@@ -3,7 +3,7 @@ import { op, jsonBody, idParam } from '../helpers.js';
 export function recipesPaths() {
   return withCaseReasons({
     '/api/v1/recipes': {
-      get: op({ summary: 'List recipes', tag: 'Recipes', description: 'Every ingredient carries `pantry_item_id` and `pantry_item_name`, the household\'s own confirmed match to one row of its pantry, both `null` when there is none. They name a row of the `pantry` module although this path belongs to `meals`, so they are also `null` for a member whose pantry access is `none` and for a token that carries no pantry scope - the ingredient itself stays, simply unmatched.' }),
+      get: op({ summary: 'List recipes', tag: 'Recipes', description: 'Every ingredient carries `pantry_item_id` and `pantry_item_name`, the household\'s own confirmed match to one row of its pantry, both `null` when there is none. They name a row of the `pantry` module although this path belongs to `meals`, so they are also `null` for a member whose pantry access is `none` and for a token that carries no pantry scope - the ingredient itself stays, simply unmatched. Each recipe also carries `cooked_count` and `last_cooked_on` (YYYY-MM-DD or `null`), read from the meal plan: meals linked to the recipe before today in the household time zone.' }),
       post: op({ summary: 'Create recipe', tag: 'Recipes', stateChanging: true, requestBody: jsonBody(null) }),
     },
     '/api/v1/recipes/{id}': {
@@ -21,7 +21,7 @@ export function recipesPaths() {
       post: op({
         summary: 'Transfer recipe ingredients to shopping list',
         tag: 'Recipes',
-        description: 'Creates shopping items, so it requires write access to the `shopping` module in addition to `meals` (which owns `/recipes`) - a credential scoped to the recipes alone is refused with 403.',
+        description: 'Creates shopping items, so it requires write access to the `shopping` module in addition to `meals` (which owns `/recipes`) - a credential scoped to the recipes alone is refused with 403. Body: `{ listId, names? }` - with `names` only those ingredients of the recipe are added (the ones the pantry lacks); without it, all of them. Ingredients already open on the list are skipped either way.',
         params: [idParam()],
         stateChanging: true,
         requestBody: jsonBody(null),

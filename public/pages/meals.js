@@ -7,7 +7,7 @@
 import { api } from '/api.js';
 import { openModal as openSharedModal, closeModal as closeSharedModal, captureModalContext, selectModal, confirmModal, askOverModal, advancedSection, wireBlurValidation, reportFieldError, reportFieldErrors, refocusAfterRender, swapFieldsKeepingDirtyBase } from '/components/modal.js';
 import { stagger, scheduleUndoableDelete, wireScrollFade } from '/utils/ux.js';
-import { t, formatDate, formatDayMonth, formatDateInput, parseDateInput, isDateInputValid } from '/i18n.js';
+import { t, formatDate, formatDayMonth, formatDateInput, parseDateInput, isDateInputValid, getLocale } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
 import { periodStepperHtml, syncPeriodReset, swapPeriod } from '/utils/period-stepper.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
@@ -20,7 +20,7 @@ import { normalizeRecipeMealTypes, recipeSupportsMealType, recipeAllowsMealType 
 import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-state.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
-import { pageToolsMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
+import { pageToolsMenuHtml, popoverMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
 import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
 import { recipeThumbHtml, wireRecipeThumbs } from '/utils/recipe-thumb.js';
@@ -31,6 +31,9 @@ import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderA
 import { withChosenPeople } from '/utils/people-picker.js';
 import { isSoloHousehold } from '/utils/household.js';
 import { errorSentence } from '/utils/friendly-error.js';
+import { openCookForMeal } from '/components/cook-mode.js';
+import { personDisc } from '/utils/person-color.js';
+import { initials } from '/utils/initials.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -72,6 +75,15 @@ let state = {
    *  Ohne dieses Feld ist eine fehlgeschlagene Woche von einer leeren Woche
    *  nicht zu unterscheiden - und der Renderer zeigte den Leerzustand. */
   loadError:        null,
+  // Tafla, die Woche am Telefon: was der Vorrat hat (null = nicht lesbar oder
+  // abgeschaltet - dann zeigt der Plan keinen Zaehler), welche Namen offen auf
+  // einer Einkaufsliste stehen, wer schaut (der eigene Koch bekommt keinen
+  // Namen) und ob es Pomysl-Vorschlaege gibt.
+  pantry:           null,
+  listedKeys:       new Set(),
+  userId:           null,
+  ideasReady:       false,
+  pastOpen:         false,
 };
 
 // Container-Referenz für Hilfsfunktionen (wird in render() gesetzt)
@@ -733,6 +745,7 @@ export async function render(container, { user }) {
           ${mealsToolsMenuHtml()}
         </div>
       </div>
+      ${phoneWeekShellHtml()}
       ${mealsLayoutHtml()}
     </div>
   `);
@@ -740,6 +753,8 @@ export async function render(container, { user }) {
   if (window.lucide) lucide.createIcons({ el: container });
   renderKitchenTabsBar(container, '/meals');
   installPopoverMenus(container.querySelector('.meals-toolbar'));
+  state.userId = user?.id ?? null;
+  state.pastOpen = false;
 
   const today  = todayKey();
   const monday = getMondayOf(today);
@@ -753,8 +768,11 @@ export async function render(container, { user }) {
   state.currentWeek = monday;
   syncTodayButton();
 
-  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers()]);
+  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
+  // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
+  await loadListedNames();
   renderWeekGrid();
+  wirePhoneWeek();
   renderRecipeSidebar();
   wireNav();
   wireRecipeSidebar();
@@ -789,13 +807,17 @@ async function wireMealIdeas(container, today) {
     return;
   }
   entry?.addEventListener('click', () => openIdeasModal(today));
+  // The phone week offers "Pomysł" on empty slots once the service answered.
+  state.ideasReady = true;
+  renderPhoneWeek();
   const asked = new URLSearchParams(location.search).get('ideas');
   if (asked && /^\d{4}-\d{2}-\d{2}$/.test(asked)) openIdeasModal(asked);
 }
 
-function openIdeasModal(date) {
+function openIdeasModal(date, { mealType = null, autoAsk = false } = {}) {
   const types = state.visibleMealTypes.length ? state.visibleMealTypes : ['lunch', 'dinner'];
-  const defaultType = ['lunch', 'dinner'].find((tp) => types.includes(tp)) ?? types[0];
+  const defaultType = (mealType && types.includes(mealType) ? mealType : null)
+    ?? ['lunch', 'dinner'].find((tp) => types.includes(tp)) ?? types[0];
   const days = Array.from({ length: 7 }, (_, i) => addLocalDays(todayKey(), i));
   if (!days.includes(date)) days.unshift(date);
   const content = `
@@ -873,6 +895,9 @@ function openIdeasModal(date) {
           window.yuvomi?.showToast(errorSentence(err), 'danger');
         }
       });
+      // Opened from a slot's "Pomysł" chip: day and meal are known, so the
+      // ideas come without a second tap.
+      if (autoAsk) panel.querySelector('[data-ideas="ask"]')?.click();
     },
   });
 }
@@ -984,7 +1009,17 @@ function emptyWeekOptions() {
   };
 }
 
+/**
+ * Zeichnet die Woche neu - das Board (ab 1024px) und die Tafla-Woche des
+ * Telefons darunter. Alle Schreibwege (Speichern, Loeschen, Verschieben,
+ * Transfer) rufen diese eine Funktion, also bleiben beide Ansichten gleich.
+ */
 function renderWeekGrid() {
+  renderBoardGrid();
+  renderPhoneWeek();
+}
+
+function renderBoardGrid() {
   const grid = _container.querySelector('#week-grid');
   if (!grid) return;
 
@@ -1403,6 +1438,814 @@ ${/* KEIN PAPIERKORB AUF DER KARTE (Entscheidung 2026-10-07, benannte
             fragt Tag und Mahlzeit. */ ''}
     </div>
   `;
+}
+
+// --------------------------------------------------------
+// Tafla: die Woche am Telefon (unter 1024px)
+//
+// Darunter steht das Board nicht mehr, sondern EINE ruhige Liste: Wochenkopf
+// mit Streifen (sieben Tage, heute violett, vier Punkte je Tag), die heutige
+// Kolacja als Herd-Karte mit Zutatenzaehler und "Gotuj", danach die Tage als
+// gruppierte Karten mit 56er-Zeilen. Vergangene Tage der laufenden Woche
+// liegen hinter EINER Zeile "Wcześniej w tym tygodniu". Die Daten sind
+// dieselben wie am Board (state.meals), geschrieben wird ueber dieselben Wege
+// (openMealModal, transferMeal, deleteMeal) - renderWeekGrid() zeichnet beide.
+// --------------------------------------------------------
+
+/** Mahlzeit-Zeichen der Zeilen: der Tagesverlauf, keine Farbe. */
+const PHONE_SLOT_ICON = { breakfast: 'sunrise', lunch: 'sun', dinner: 'sunset', snack: 'apple' };
+const STRIP_DAY_KEYS = ['meals.stripMo', 'meals.stripTu', 'meals.stripWe', 'meals.stripTh', 'meals.stripFr', 'meals.stripSa', 'meals.stripSu'];
+/** Die Mahlzeit im Akkusativ fuer "Dodaj kolację" - nur fuer die eingebauten Namen. */
+const MEAL_TYPE_ACC_KEYS = { breakfast: 'meals.typeAccBreakfast', lunch: 'meals.typeAccLunch', dinner: 'meals.typeAccDinner', snack: 'meals.typeAccSnack' };
+const BUILT_IN_TYPE_KEYS = { breakfast: 'meals.typeBreakfast', lunch: 'meals.typeLunch', dinner: 'meals.typeDinner', snack: 'meals.typeSnack' };
+const DAY_ACC_KEYS = ['meals.dayAccSunday', 'meals.dayAccMonday', 'meals.dayAccTuesday', 'meals.dayAccWednesday', 'meals.dayAccThursday', 'meals.dayAccFriday', 'meals.dayAccSaturday'];
+/** Wie lange ein Finger liegen muss, bis die Zeile ihr Menue oeffnet. */
+const LONG_PRESS_MS = 450;
+
+function dateFromKey(key) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1, 12));
+}
+
+function dateParts(key, options) {
+  try {
+    return new Intl.DateTimeFormat(getLocale(), { ...options, timeZone: 'UTC' }).formatToParts(dateFromKey(key));
+  } catch {
+    return [];
+  }
+}
+
+const partOf = (parts, type) => (parts.find((p) => p.type === type)?.value ?? '').replace(/\.$/, '');
+
+/** "czw 22 paź" - Wochentag, Tag, Monat, ohne Satzzeichen. */
+function shortDayLabel(key) {
+  const parts = dateParts(key, { weekday: 'short', day: 'numeric', month: 'short' });
+  const text = `${partOf(parts, 'weekday')} ${partOf(parts, 'day')} ${partOf(parts, 'month')}`.trim();
+  return text || formatDayMonth(key);
+}
+
+/** "20 paź". */
+function dayMonthLabel(key) {
+  const parts = dateParts(key, { day: 'numeric', month: 'short' });
+  const text = `${partOf(parts, 'day')} ${partOf(parts, 'month')}`.trim();
+  return text || formatDayMonth(key);
+}
+
+/**
+ * "19-25 paź" (Intl.formatRange in der Sprache der App). Der Halbgeviertstrich
+ * der Formatierung wird zum Bindestrich - die Projektregel fuer UI-Texte, wie
+ * im Wochenlabel des Boards (formatWeekLabel).
+ */
+function weekRangeLabel(monday) {
+  const sunday = addDays(monday, 6);
+  try {
+    const fmt = new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    if (typeof fmt.formatRange === 'function') {
+      // "19-25 pa\u017a" zwischen zwei Ziffern, sonst mit Luft: "26 pa\u017a - 1 lis".
+      return fmt.formatRange(dateFromKey(monday), dateFromKey(sunday))
+        .replace(/(\d?)\s*[\u2013\u2014]\s*(\d?)/g, (_, before, after) => (before && after ? `${before}-${after}` : `${before} - ${after}`));
+    }
+  } catch { /* Rueckfall unten */ }
+  return `${dayMonthLabel(monday)} - ${dayMonthLabel(sunday)}`;
+}
+
+/** Der Name der Mahlzeit fuer Saetze ("Dodaj kolację"); eigene Namen des Haushalts klein. */
+function mealTypeInSentence(key) {
+  const label = mealTypeLabel(key);
+  const builtIn = BUILT_IN_TYPE_KEYS[key];
+  if (builtIn && label === t(builtIn) && MEAL_TYPE_ACC_KEYS[key]) return t(MEAL_TYPE_ACC_KEYS[key]);
+  return label ? label.charAt(0).toLocaleLowerCase(getLocale()) + label.slice(1) : '';
+}
+
+function lowerFirst(text) {
+  const value = String(text ?? '');
+  return value ? value.charAt(0).toLocaleLowerCase(getLocale()) + value.slice(1) : value;
+}
+
+function upperFirst(text) {
+  const value = String(text ?? '');
+  return value ? value.charAt(0).toLocaleUpperCase(getLocale()) + value.slice(1) : value;
+}
+
+// ---- Vorrat und Einkaufsliste: "masz" und "na liście" ----
+
+/**
+ * Was der Vorrat hat - fuer "Masz 5 z 6" und die "masz"-Chips im Dialog. Ohne
+ * Vorratsmodul oder ohne Leserecht bleibt `null`: dann gibt es keinen Zaehler,
+ * statt eines, der alles als fehlend zeigt.
+ */
+async function loadPantry() {
+  if (window.yuvomi?.isModuleDisabled?.('pantry')) { state.pantry = null; return; }
+  try {
+    const res = await api.get('/pantry');
+    state.pantry = Array.isArray(res?.data) ? res.data : null;
+  } catch {
+    state.pantry = null;
+  }
+}
+
+/** Namen, die offen (nicht abgehakt) auf einer Einkaufsliste stehen. */
+async function loadListedNames() {
+  const keys = new Set();
+  if (!window.yuvomi?.isModuleDisabled?.('shopping')) {
+    await Promise.all((state.lists ?? []).slice(0, 6).map(async (list) => {
+      try {
+        const res = await api.get(`/shopping/${list.id}/items`);
+        for (const item of res?.data ?? []) if (!item.is_checked) keys.add(mealNameKey(item.name));
+      } catch { /* eine Liste, die nicht laedt, zaehlt nicht */ }
+    }));
+  }
+  state.listedKeys = keys;
+}
+
+const NAME_FOLD = { ł: 'l', Ł: 'l', đ: 'd', ø: 'o', ß: 'ss' };
+
+/** Derselbe Schluessel wie am Server (server/utils/name-key.js). */
+function mealNameKey(value) {
+  return String(value ?? '')
+    .replace(/[łŁđøß]/g, (ch) => NAME_FOLD[ch])
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "pomidory w puszce" passt zu "pomidory", "sól" zu "sól morska" - wie inPantry() am Server. */
+function namesMatch(a, b) {
+  if (!a || !b) return false;
+  return a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `);
+}
+
+function inPantry(name) {
+  if (!Array.isArray(state.pantry)) return false;
+  const key = mealNameKey(name);
+  return state.pantry.some((p) => (p.quantity == null || Number(p.quantity) > 0) && namesMatch(key, mealNameKey(p.name)));
+}
+
+function isListed(name) {
+  const key = mealNameKey(name);
+  for (const listed of state.listedKeys ?? []) if (namesMatch(key, listed)) return true;
+  return false;
+}
+
+function recipeOf(meal) {
+  return meal?.recipe_id ? state.recipes.find((r) => r.id === meal.recipe_id) ?? null : null;
+}
+
+/**
+ * Die Zutaten einer Mahlzeit gegen Vorrat und Liste. Das Rezept fuehrt (es kennt
+ * alle Zutaten, die Mahlzeit traegt oft nur, was zu kaufen war); ohne Rezept
+ * die eigenen Zutaten. `null`, wenn es nichts zu zaehlen gibt.
+ */
+function ingredientMeter(meal) {
+  if (!Array.isArray(state.pantry)) return null;
+  const recipe = recipeOf(meal);
+  const source = recipe?.ingredients?.length ? recipe.ingredients : (meal.ingredients ?? []);
+  if (!source.length) return null;
+  const own = new Map((meal.ingredients ?? []).map((ing) => [mealNameKey(ing.name), ing]));
+  return source.map((ing) => {
+    const have = inPantry(ing.name);
+    const listed = !have && (Boolean(own.get(mealNameKey(ing.name))?.on_shopping_list) || isListed(ing.name));
+    return { name: ing.name, have, listed };
+  });
+}
+
+function meterCaption(rows) {
+  const total = rows.length;
+  const have = rows.filter((r) => r.have).length;
+  const missing = rows.filter((r) => !r.have);
+  const unlisted = missing.filter((r) => !r.listed);
+  if (!missing.length) return { text: t('meals.meterAll'), done: true };
+  if (!unlisted.length) {
+    if (!have) return { text: t('meals.meterEverythingListed'), done: true };
+    const tail = missing.length === 1 ? t('meals.meterOneListed', { name: lowerFirst(missing[0].name) }) : t('meals.meterRestListed');
+    return { text: `${t('meals.meterHave', { have, total })} · ${tail}`, done: true };
+  }
+  const listed = missing.length - unlisted.length;
+  const tail = unlisted.length === 1
+    ? t('meals.meterOneMissing', { name: lowerFirst(unlisted[0].name) })
+    : t('meals.meterMissing', { count: unlisted.length });
+  const parts = [
+    have ? t('meals.meterHave', { have, total }) : '',
+    listed ? t('meals.meterListedCount', { count: listed }) : '',
+    tail,
+  ].filter(Boolean);
+  return { text: upperFirst(parts.join(' · ')), done: false };
+}
+
+/** Der Zaehler: ein Segment je Zutat, Tinte = da, Bernstein = fehlt. */
+function meterHtml(rows) {
+  const caption = meterCaption(rows);
+  const segments = [...rows].sort((a, b) => Number(b.have) - Number(a.have)).map((r) => `<span class="meals-meter__seg${r.have ? '' : ' meals-meter__seg--missing'}"></span>`).join('');
+  return `
+    <div class="meals-meter">
+      <span class="meals-meter__bar" aria-hidden="true">${segments}</span>
+      <span class="meals-meter__caption"><span class="meals-meter__text">${esc(caption.text)}</span>${caption.done ? '<i data-lucide="check" class="meals-meter__check" aria-hidden="true"></i>' : ''}</span>
+    </div>`;
+}
+
+/** Ein Teller-Zeichen statt eines Fotos - nach dem Namen, sonst Besteck. */
+function plateIcon(title) {
+  const key = mealNameKey(title);
+  if (/zup|krem|rosol|barszcz|spaghetti|makaron|pasta|risotto|soup|curry|tikka|gulasz/.test(key)) return 'soup';
+  if (/salat|salad/.test(key)) return 'salad';
+  if (/loso|ryb|dorsz|fish|salmon|tunczyk/.test(key)) return 'fish';
+  if (/pizz/.test(key)) return 'pizza';
+  if (/kanap|tost|sandw|bulk|chleb/.test(key)) return 'sandwich';
+  if (/jajk|jajecz|omlet|egg/.test(key)) return 'egg';
+  if (/kaw|coffee/.test(key)) return 'coffee';
+  return 'utensils';
+}
+
+function plateHtml(meal, className) {
+  if (meal.recipe_has_own_image || meal.recipe_has_image) {
+    return recipeThumbHtml({
+      recipeId: meal.recipe_id,
+      hasImage: meal.recipe_has_image,
+      hasOwnImage: meal.recipe_has_own_image,
+      className,
+    });
+  }
+  return `<span class="${className} meals-plate" aria-hidden="true"><i data-lucide="${plateIcon(meal.title)}" class="meals-plate__icon"></i></span>`;
+}
+
+// ---- Markup ----
+
+function phoneWeekShellHtml() {
+  return `
+      <div class="meals-phone page-scrollport" id="meals-phone">
+        <div class="meals-phone__head" id="meals-phone-head"></div>
+        <div class="meals-phone__body" id="meals-phone-body">
+          <div class="meals-phone__skeleton">${renderSkeletonList({ rows: 4, lines: 2 })}</div>
+        </div>
+      </div>`;
+}
+
+function weekOffset() {
+  const thisMonday = getMondayOf(todayKey());
+  const diff = Math.round((dateFromKey(state.currentWeek) - dateFromKey(thisMonday)) / 86_400_000);
+  return Math.round(diff / 7);
+}
+
+function weekPickerHtml() {
+  const offset = weekOffset();
+  const label = offset === 0 ? t('meals.weekThis')
+    : offset === 1 ? t('meals.nextWeek')
+      : offset === -1 ? t('meals.prevWeek')
+        : t('meals.weekOther');
+  const ro = readOnly();
+  const items = [
+    { action: 'phone-week-prev', label: t('meals.prevWeek'), icon: 'chevron-left' },
+    { action: 'phone-week-today', label: t('meals.weekThis'), icon: 'calendar-check' },
+    { action: 'phone-week-next', label: t('meals.nextWeek'), icon: 'chevron-right' },
+    ...(!ro && state.recipes.length ? [{ separator: true }, { action: 'randomize-plan', label: t('meals.randomizePlan'), icon: 'shuffle' }] : []),
+    ...(!ro && state.ideasReady ? [{ action: 'phone-meal-ideas', label: t('meals.ideasMenu'), icon: 'sparkles' }] : []),
+  ];
+  // Der Ausloeser traegt sein Wort sichtbar ("Ten tydzień ▾") - die geteilte
+  // Fassung kennt nur das Icon, also kommt der Text vor das Zeichen.
+  return popoverMenuHtml({
+    id: 'meals-week-menu',
+    label: `${label}, ${t('meals.weekPickerLabel')}`,
+    items,
+    triggerClass: 'meals-week__pick',
+    icon: 'chevron-down',
+  }).replace('<i data-lucide="chevron-down"', `<span class="meals-week__pick-label">${esc(label)}</span><i data-lucide="chevron-down"`);
+}
+
+function stripHtml() {
+  const today = todayKey();
+  const types = state.visibleMealTypes.length ? state.visibleMealTypes : MEAL_TYPE_KEYS;
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(state.currentWeek, i);
+    const dayMeals = state.meals.filter((m) => m.date === date);
+    const planned = types.filter((type) => dayMeals.some((m) => m.meal_type === type)).length;
+    const isTodayCell = date === today;
+    const past = date < today;
+    const dots = types.map((type) => `<span class="meals-strip__dot${dayMeals.some((m) => m.meal_type === type) ? ' meals-strip__dot--on' : ''}"></span>`).join('');
+    const status = planned ? t('meals.stripPlanned', { planned, total: types.length }) : t('meals.stripNothing');
+    const name = `${dayLongName(date)} ${dayMonthLabel(date)}${isTodayCell ? `, ${lowerFirst(t('meals.today'))}` : ''}, ${status}`;
+    return `
+      <button type="button" class="meals-strip__day${isTodayCell ? ' meals-strip__day--today' : ''}${past ? ' meals-strip__day--past' : ''}"
+              data-action="phone-day" data-date="${date}" aria-label="${esc(name)}"${isTodayCell ? ' aria-current="date"' : ''}>
+        <span class="meals-strip__weekday" aria-hidden="true">${esc(t(STRIP_DAY_KEYS[i]))}</span>
+        <span class="meals-strip__num" aria-hidden="true">${esc(String(Number(date.slice(8))))}</span>
+        <span class="meals-strip__dots" aria-hidden="true">${dots}</span>
+      </button>`;
+  }).join('');
+}
+
+function phoneHeadHtml() {
+  const offset = weekOffset();
+  return `
+    <section class="meals-week" aria-label="${esc(t('meals.weekRangeAria', { range: weekRangeLabel(state.currentWeek) }))}">
+      <div class="meals-week__head">
+        <span class="meals-week__range">${esc(weekRangeLabel(state.currentWeek))}</span>
+        <span class="meals-week__nav">
+          ${offset !== 0 ? `<button type="button" class="meals-week__today" data-action="phone-week-today">${esc(t('meals.todayShort'))}</button>` : ''}
+          ${weekPickerHtml()}
+        </span>
+      </div>
+      <div class="meals-strip" role="group" aria-label="${esc(t('meals.stripLabel'))}">${stripHtml()}</div>
+    </section>`;
+}
+
+/** Die Zeile "gotuje Ola" - nur, wenn nicht der Betrachter selbst kocht. */
+function phoneMetaText(meal) {
+  const bits = [];
+  if (meal.notes) bits.push(String(meal.notes).split('\n')[0]);
+  const cook = mealCook(meal);
+  if (cook && cook.id !== state.userId && cook.display_name) bits.push(t('meals.metaCook', { name: cook.display_name }));
+  return bits.join(' · ');
+}
+
+function phoneMealRowHtml(meal) {
+  const ro = readOnly();
+  const typeLabel = mealTypeLabel(meal.meal_type);
+  const meta = phoneMetaText(meal);
+  const ownCount = meal.ingredients?.length ?? 0;
+  const ingDone = meal.ingredients?.filter((i) => i.on_shopping_list).length ?? 0;
+  const recipeCount = ownCount === 0 ? (meal.recipe_ingredient_count ?? 0) : 0;
+  const canTransfer = !ro && (recipeCount > 0 || (ownCount > 0 && ingDone < ownCount)) && mayTransferMealToShopping(meal.id);
+  const recipeLink = meal.recipe_id && recipesReachable()
+    ? `<a class="meals-row__action" data-action="open-linked-recipe" href="/recipes?open=${encodeURIComponent(meal.recipe_id)}"
+          aria-label="${esc(t('meals.viewRecipeNamed', { title: meal.title }))}"><i data-lucide="chef-hat" aria-hidden="true"></i></a>`
+    : '';
+  const cart = canTransfer
+    ? `<button type="button" class="meals-row__action" data-action="transfer-meal" data-meal-id="${meal.id}"
+          aria-label="${esc(t('common.toShoppingListNamed', { title: meal.title }))}"><i data-lucide="shopping-cart" aria-hidden="true"></i></button>`
+    : '';
+  return `
+    <div class="meals-row" data-meal-id="${meal.id}">
+      <span class="meals-row__glyph" role="img" aria-label="${esc(typeLabel)}"><i data-lucide="${PHONE_SLOT_ICON[meal.meal_type] ?? 'utensils'}" aria-hidden="true"></i></span>
+      <button type="button" class="meals-row__main" data-action="${ro ? 'meal-details' : 'edit-meal'}" data-meal-id="${meal.id}">
+        <span class="meals-row__title">${esc(meal.title)}</span>
+        ${meta ? `<span class="meals-row__meta">${esc(meta)}</span>` : ''}
+      </button>
+      ${recipeLink || cart ? `<span class="meals-row__actions">${recipeLink}${cart}</span>` : ''}
+    </div>`;
+}
+
+/** Die Tage, an denen der "Pomysł"-Chip steht: heute und die naechste leere Kolacja. */
+function ideaSlots(days) {
+  const out = new Set();
+  if (!state.ideasReady || readOnly()) return out;
+  const today = todayKey();
+  for (const type of state.visibleMealTypes) {
+    if (!state.meals.some((m) => m.date === today && m.meal_type === type)) out.add(`${today}|${type}`);
+  }
+  const nextDinner = days.find((d) => d > today && !state.meals.some((m) => m.date === d && m.meal_type === 'dinner'));
+  if (nextDinner && state.visibleMealTypes.includes('dinner')) out.add(`${nextDinner}|dinner`);
+  return out;
+}
+
+function phoneEmptyRowHtml(date, type, withIdea) {
+  const label = mealTypeLabel(type);
+  return `
+    <div class="meals-row meals-row--empty">
+      <span class="meals-row__glyph" role="img" aria-label="${esc(label)}"><i data-lucide="${PHONE_SLOT_ICON[type] ?? 'utensils'}" aria-hidden="true"></i></span>
+      <button type="button" class="meals-row__main meals-row__add" data-action="add-meal" data-date="${date}" data-type="${type}"
+              aria-label="${esc(t('meals.addMealTypeOnDay', { type: label, day: dayLongName(date) }))}">
+        <span class="meals-row__title">+ ${esc(label)}</span>
+      </button>
+      ${withIdea ? `<button type="button" class="meals-chip meals-chip--ai" data-action="phone-idea" data-date="${date}" data-type="${type}"
+              aria-label="${esc(t('meals.ideaAria', { meal: mealTypeInSentence(type), day: dayLongName(date) }))}">
+        <i data-lucide="sparkles" aria-hidden="true"></i><span>${esc(t('meals.idea'))}</span>
+      </button>` : ''}
+    </div>`;
+}
+
+/**
+ * Die Zeilen eines Tages. `skip` nimmt die Mahlzeit heraus, die oben als Held
+ * steht; `skipType` den leeren Platz, den die Herd-Karte schon anbietet.
+ */
+function phoneDayRowsHtml(date, { skip = null, skipType = null, ideas = new Set() } = {}) {
+  const ro = readOnly();
+  const rows = [];
+  for (const type of state.visibleMealTypes) {
+    const meals = state.meals.filter((m) => m.date === date && m.meal_type === type && m !== skip);
+    if (meals.length) {
+      for (const meal of meals) rows.push(phoneMealRowHtml(meal));
+    } else if (!(skip && skip.meal_type === type) && type !== skipType && !ro) {
+      rows.push(phoneEmptyRowHtml(date, type, ideas.has(`${date}|${type}`)));
+    }
+  }
+  if (!rows.length) {
+    rows.push(`<div class="meals-row meals-row--quiet"><span class="meals-row__title">${esc(t('meals.noMealPlanned'))}</span></div>`);
+  }
+  return rows.join('');
+}
+
+function phoneDaySectionHtml(date, { heading, headingClass = '', skip = null, skipType = null, ideas }) {
+  return `
+    <section class="meals-day" data-date="${date}" aria-label="${esc(`${dayLongName(date)} ${dayMonthLabel(date)}`)}">
+      <h2 class="meals-day__title${headingClass}">${esc(heading)}</h2>
+      <div class="meals-card">${phoneDayRowsHtml(date, { skip, skipType, ideas })}</div>
+    </section>`;
+}
+
+function dayHeading(date) {
+  return t('meals.dayHeading', { weekday: dayLongName(date), date: dayMonthLabel(date) });
+}
+
+/** Die Kolacja von heute als Herd-Karte - oder die Einladung, eine zu planen. */
+function heroHtml(meal) {
+  const ro = readOnly();
+  if (!meal) {
+    if (ro || !state.visibleMealTypes.includes('dinner')) return '';
+    const today = todayKey();
+    return `
+    <section class="meals-hero meals-hero--empty" aria-label="${esc(t('meals.heroLabel'))}">
+      <div class="meals-hero__top">
+        <div class="meals-hero__text">
+          <span class="meals-hero__eyebrow">${esc(mealTypeLabel('dinner'))}</span>
+          <h2 class="meals-hero__title">${esc(t('meals.heroEmptyTitle'))}</h2>
+        </div>
+        <span class="meals-hero__plate meals-plate" aria-hidden="true"><i data-lucide="utensils" class="meals-plate__icon"></i></span>
+      </div>
+      <div class="meals-hero__actions">
+        <button type="button" class="meals-primary" data-action="add-meal" data-date="${today}" data-type="dinner">${esc(t('meals.sheetAdd', { meal: mealTypeInSentence('dinner') }))}</button>
+        ${state.ideasReady ? `<button type="button" class="meals-secondary" data-action="phone-idea" data-date="${today}" data-type="dinner">
+          <i data-lucide="sparkles" aria-hidden="true"></i>${esc(t('meals.idea'))}</button>` : ''}
+      </div>
+    </section>`;
+  }
+  const cook = mealCook(meal);
+  const cookText = cook ? (cook.id === state.userId ? t('meals.heroCookYou') : t('meals.heroCook', { name: cook.display_name })) : '';
+  const meter = ingredientMeter(meal);
+  const title = meal.recipe_id && recipesReachable()
+    ? `<a class="meals-hero__title meals-hero__title--link" data-action="open-linked-recipe" href="/recipes?open=${encodeURIComponent(meal.recipe_id)}">${esc(meal.title)}</a>`
+    : `<button type="button" class="meals-hero__title meals-hero__title--link" data-action="${ro ? 'meal-details' : 'edit-meal'}" data-meal-id="${meal.id}">${esc(meal.title)}</button>`;
+  return `
+    <section class="meals-hero" data-meal-id="${meal.id}" aria-label="${esc(t('meals.heroLabel'))}">
+      <div class="meals-hero__top">
+        <div class="meals-hero__text">
+          <span class="meals-hero__eyebrow">${esc(mealTypeLabel(meal.meal_type))}</span>
+          <h2 class="meals-hero__heading">${title}</h2>
+          ${cookText ? `<span class="meals-hero__cook">${personDisc({ id: cook.id, avatar_color: cook.color }, { text: initials(cook.display_name), household: state.members })}<span>${esc(cookText)}</span></span>` : ''}
+        </div>
+        ${plateHtml(meal, 'meals-hero__plate')}
+      </div>
+      ${meter ? meterHtml(meter) : ''}
+      <div class="meals-hero__actions">
+        <button type="button" class="meals-primary" data-action="phone-cook" data-meal-id="${meal.id}"
+                aria-label="${esc(t('meals.cookNamedAria', { title: meal.title }))}">
+          <i data-lucide="chef-hat" aria-hidden="true"></i><span>${esc(t('meals.cook'))}</span>
+        </button>
+        ${/* Das Menue der Mahlzeit: am Finger per langem Druck auf die Karte,
+            mit Zeiger und Tastatur ueber diesen Knopf (am Finger nur fuer
+            Tastatur und VoiceOver sichtbar, siehe meals.css). */ ''}
+        <button type="button" class="row-action meals-hero__more" data-action="phone-meal-menu" data-meal-id="${meal.id}"
+                aria-label="${esc(t('meals.mealMenu', { title: meal.title }))}"><i data-lucide="ellipsis" aria-hidden="true"></i></button>
+      </div>
+    </section>`;
+}
+
+/** Leere Woche: kein Kasten, eine ruhige Spalte mit drei Startern. */
+function emptyWeekHtml() {
+  const ro = readOnly();
+  const today = todayKey();
+  const inWeek = today >= state.currentWeek && today <= addDays(state.currentWeek, 6);
+  const day = inWeek ? today : state.currentWeek;
+  const chips = ro ? [] : [
+    state.visibleMealTypes.includes('dinner')
+      ? `<button type="button" class="meals-chip meals-chip--ai" data-action="add-meal" data-date="${day}" data-type="dinner"><i data-lucide="plus" aria-hidden="true"></i><span>${esc(inWeek ? t('meals.emptyChipDinnerToday') : t('meals.emptyChipDinnerDay', { day: t(DAY_ACC_KEYS[zonedWeekday(day)]) }))}</span></button>`
+      : '',
+    state.ideasReady
+      ? `<button type="button" class="meals-chip meals-chip--ai" data-action="phone-idea" data-date="${day}" data-type="dinner"><i data-lucide="sparkles" aria-hidden="true"></i><span>${esc(t('meals.emptyChipIdea'))}</span></button>`
+      : '',
+    state.recipes.length
+      ? `<button type="button" class="meals-chip meals-chip--ai" data-action="randomize-plan"><i data-lucide="shuffle" aria-hidden="true"></i><span>${esc(t('meals.emptyChipRandom'))}</span></button>`
+      : '',
+  ].filter(Boolean);
+  return `
+    <div class="meals-empty">
+      <i data-lucide="utensils" class="meals-empty__glyph" aria-hidden="true"></i>
+      <h2 class="meals-empty__title">${esc(t('meals.emptyWeekTitle'))}</h2>
+      ${ro ? '' : `<p class="meals-empty__text">${esc(t('meals.emptyWeekText'))}</p>`}
+      ${chips.length ? `<div class="meals-empty__chips">${chips.join('')}</div>` : ''}
+    </div>`;
+}
+
+/**
+ * Was in den kommenden Mahlzeiten fehlt: nicht im Vorrat, nicht schon auf
+ * einer Liste. Je Name einmal. Die eigenen Zutaten tragen ihre id, damit ihr
+ * Haken `on_shopping_list` nach dem Dopisz stimmt.
+ */
+function missingIngredients() {
+  if (readOnly() || !Array.isArray(state.pantry)) return [];
+  const today = todayKey();
+  const seen = new Set();
+  const out = [];
+  for (const meal of state.meals) {
+    if (meal.date < today) continue;
+    const recipe = recipeOf(meal);
+    const own = (meal.ingredients ?? []).filter((ing) => !ing.on_shopping_list);
+    const source = (meal.ingredients?.length ? own : (recipe?.ingredients ?? []));
+    for (const ing of source) {
+      const key = mealNameKey(ing.name);
+      if (!key || inPantry(ing.name) || isListed(ing.name)) continue;
+      if (seen.has(key)) {
+        if (ing.id && ing.meal_id) out.find((m) => m.key === key)?.ingIds.push(ing.id);
+        continue;
+      }
+      seen.add(key);
+      out.push({ key, name: ing.name, quantity: ing.quantity ?? null, category: ing.category || DEFAULT_CATEGORY_NAME, ingIds: ing.id && ing.meal_id ? [ing.id] : [] });
+    }
+  }
+  return out;
+}
+
+function phoneBodyHtml() {
+  const today = todayKey();
+  const days = Array.from({ length: 7 }, (_, i) => addDays(state.currentWeek, i));
+  const isCurrent = days.includes(today);
+  const ideas = ideaSlots(days);
+  const parts = [];
+
+  if (isCurrent) {
+    const past = days.filter((d) => d < today);
+    if (past.length) {
+      parts.push(`
+        <div class="meals-card meals-past">
+          <button type="button" class="meals-row meals-past__toggle" data-action="phone-past" aria-expanded="${state.pastOpen}" aria-controls="meals-past-days">
+            <span class="meals-row__glyph" aria-hidden="true"><i data-lucide="history"></i></span>
+            <span class="meals-row__title">${esc(t('meals.pastToggle'))}</span>
+            <span class="meals-row__value">${esc(t('meals.pastCount', { count: past.length }))}</span>
+            <i data-lucide="chevron-down" class="meals-past__chevron" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="meals-past__days" id="meals-past-days"${state.pastOpen ? '' : ' hidden'}>
+          ${past.map((d) => phoneDaySectionHtml(d, { heading: dayHeading(d), ideas })).join('')}
+        </div>`);
+    }
+    if (!state.meals.length) parts.push(emptyWeekHtml());
+    const dinner = state.meals.find((m) => m.date === today && m.meal_type === 'dinner') ?? null;
+    const hero = state.meals.length ? heroHtml(dinner) : '';
+    if (hero) parts.push(hero);
+    const restHeading = dinner ? t('meals.restOfDay') : t('meals.todayHeading');
+    // Bietet die Herd-Karte die leere Kolacja schon an, steht sie nicht noch einmal darunter.
+    parts.push(phoneDaySectionHtml(today, {
+      heading: restHeading, headingClass: ' meals-day__title--small', skip: dinner, skipType: hero && !dinner ? 'dinner' : null, ideas,
+    }));
+    for (const d of days.filter((day) => day > today)) parts.push(phoneDaySectionHtml(d, { heading: dayHeading(d), ideas }));
+  } else {
+    if (!state.meals.length) parts.push(emptyWeekHtml());
+    for (const d of days) parts.push(phoneDaySectionHtml(d, { heading: dayHeading(d), ideas }));
+  }
+
+  const missing = missingIngredients();
+  if (missing.length && state.lists.length && mayWritePath('/shopping')) {
+    parts.push(`
+      <div class="meals-phone__end">
+        <button type="button" class="meals-plain" data-action="phone-missing">${esc(t('meals.missingToList', { count: missing.length }))}</button>
+      </div>`);
+  }
+  return parts.join('');
+}
+
+function renderPhoneWeek() {
+  const root = _container?.querySelector?.('#meals-phone');
+  if (!root || typeof root.querySelector !== 'function') return;
+  const head = root.querySelector('#meals-phone-head');
+  const body = root.querySelector('#meals-phone-body');
+  if (!head || !body) return;
+  head.replaceChildren();
+  head.insertAdjacentHTML('beforeend', phoneHeadHtml());
+  body.replaceChildren();
+  if (state.loadError) {
+    mountLoadError(body, {
+      title: t('meals.loadError'),
+      description: t('common.loadErrorDescription'),
+      error: state.loadError,
+      retryLabel: t('common.retry'),
+      onRetry: async () => {
+        await loadWeek(state.currentWeek);
+        renderWeekGrid();
+      },
+    });
+  } else {
+    body.insertAdjacentHTML('beforeend', phoneBodyHtml());
+  }
+  if (window.lucide) lucide.createIcons({ el: root });
+  wireRecipeThumbs(body);
+}
+
+// ---- Verhalten ----
+
+async function phoneGoToWeek(monday) {
+  if (monday === state.currentWeek) return;
+  state.pastOpen = false;
+  setWeekBusy();
+  await loadWeek(monday);
+  renderWeekGrid();
+  _container?.querySelector('#meals-phone')?.scrollTo?.({ top: 0 });
+}
+
+function phoneScrollToDay(date) {
+  const root = _container?.querySelector('#meals-phone');
+  if (!root) return;
+  const today = todayKey();
+  if (date < today && !state.pastOpen && date >= state.currentWeek) {
+    state.pastOpen = true;
+    renderPhoneWeek();
+  }
+  root.querySelectorAll('.meals-strip__day--selected').forEach((el) => el.classList.remove('meals-strip__day--selected'));
+  if (date !== today) root.querySelector(`.meals-strip__day[data-date="${date}"]`)?.classList.add('meals-strip__day--selected');
+  if (date === today) { root.scrollTo?.({ top: 0, behavior: 'smooth' }); return; }
+  const section = root.querySelector(`.meals-day[data-date="${date}"]`);
+  const headH = root.querySelector('#meals-phone-head')?.getBoundingClientRect().height ?? 0;
+  if (section && root.scrollTo) {
+    const top = section.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - headH - 8;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    root.scrollTo({ top, behavior: reduce ? 'auto' : 'smooth' });
+  }
+}
+
+async function phoneCook(meal) {
+  try {
+    await openCookForMeal({ mealId: meal.id, recipeId: meal.recipe_id, date: meal.date });
+  } catch (err) {
+    window.yuvomi?.showToast(errorSentence(err), 'danger');
+  }
+}
+
+/**
+ * Das Menue einer Mahlzeit fuer den Finger (langes Druecken) und fuer den
+ * "..."-Knopf der Herd-Karte: alles, was am Board als Kartenaktion steht.
+ */
+function openMealMenu(meal) {
+  const ro = readOnly();
+  const ownCount = meal.ingredients?.length ?? 0;
+  const ingDone = meal.ingredients?.filter((i) => i.on_shopping_list).length ?? 0;
+  const recipeCount = ownCount === 0 ? (meal.recipe_ingredient_count ?? 0) : 0;
+  const canTransfer = !ro && (recipeCount > 0 || (ownCount > 0 && ingDone < ownCount)) && mayTransferMealToShopping(meal.id);
+  const entries = [
+    ro ? { id: 'details', icon: 'info', label: t('meals.mealDetails') } : { id: 'edit', icon: 'pencil', label: t('common.edit') },
+    { id: 'cook', icon: 'chef-hat', label: t('meals.cook') },
+    meal.recipe_id && recipesReachable() ? { id: 'recipe', icon: 'book-open', label: t('meals.openRecipe') } : null,
+    canTransfer ? { id: 'transfer', icon: 'shopping-cart', label: t('meals.toShoppingListAction') } : null,
+    ro ? null : { id: 'delete', icon: 'trash-2', label: t('common.delete'), danger: true },
+  ].filter(Boolean);
+  openSharedModal({
+    title: meal.title,
+    size: 'sm',
+    content: `<div class="meals-menu" role="group">${entries.map((e) => `
+      <button type="button" class="meals-menu__item${e.danger ? ' meals-menu__item--danger' : ''}" data-menu="${e.id}">
+        <i data-lucide="${e.icon}" aria-hidden="true"></i><span>${esc(e.label)}</span>
+      </button>`).join('')}</div>`,
+    onSave(panel) {
+      if (window.lucide) lucide.createIcons({ el: panel });
+      panel.querySelector('.meals-menu')?.addEventListener('click', (e) => {
+        const choice = e.target.closest('[data-menu]')?.dataset.menu;
+        if (!choice) return;
+        closeSharedModal({ force: true });
+        if (choice === 'details') openMealReadModal(meal);
+        if (choice === 'edit') openMealModal({ mode: 'edit', meal, date: meal.date, mealType: meal.meal_type });
+        if (choice === 'cook') phoneCook(meal);
+        if (choice === 'recipe') window.yuvomi?.navigate(`/recipes?open=${encodeURIComponent(meal.recipe_id)}`);
+        if (choice === 'transfer') transferMeal(meal.id);
+        if (choice === 'delete') deleteMeal(meal.id);
+      });
+    },
+  });
+}
+
+/** "Brakujące składniki na listę": was fehlt, auf EINE Liste, mit Rücknahme. */
+async function phoneAddMissing(btn) {
+  if (readOnly() || !mayWritePath('/shopping')) return;
+  const missing = missingIngredients();
+  if (!missing.length) return;
+  const target = await resolveShoppingTarget(state.lists);
+  if (!target) return;
+  if (btn) btn.disabled = true;
+  const addedIds = [];
+  const flagged = [];
+  try {
+    for (const ing of missing) {
+      const res = await api.post(`/shopping/${target.id}/items`, {
+        name: ing.name, quantity: ing.quantity, category: ing.category, category_source: 'suggestion',
+      });
+      if (res?.data?.id) addedIds.push(res.data.id);
+      for (const id of ing.ingIds) {
+        await api.patch(`/meals/ingredients/${id}`, { on_shopping_list: true });
+        flagged.push(id);
+      }
+    }
+  } catch (err) {
+    window.yuvomi?.showToast(errorSentence(err), 'danger');
+  }
+  await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
+  renderWeekGrid();
+  if (!addedIds.length) return;
+  announceTransfer({
+    message: t('meals.missingAdded', { count: addedIds.length, list: target.name }),
+    addedIds,
+    onUndone: async () => {
+      // Die Ruecknahme loescht die Artikel; den Haken der eigenen Zutaten
+      // setzt nur zurueck, wer ihn gesetzt hat.
+      for (const id of flagged) {
+        try { await api.patch(`/meals/ingredients/${id}`, { on_shopping_list: false }); } catch { /* bleibt gesetzt */ }
+      }
+      await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
+      renderWeekGrid();
+    },
+  });
+}
+
+/** Langes Druecken (Finger/Stift) auf einer Zeile oeffnet ihr Menue; der Klick danach faellt aus. */
+function wirePhoneLongPress(root) {
+  let timer = null;
+  let start = null;
+  let fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; start = null; };
+  root.addEventListener('pointerdown', (e) => {
+    fired = false;
+    if (e.pointerType === 'mouse') return;
+    const host = e.target.closest?.('.meals-row[data-meal-id], .meals-hero[data-meal-id]');
+    if (!host || e.target.closest('.meals-row__actions, .meals-primary, .meals-hero__more')) return;
+    start = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => {
+      timer = null;
+      const meal = state.meals.find((m) => m.id === Number(host.dataset.mealId));
+      if (!meal) return;
+      fired = true;
+      if (typeof navigator !== 'undefined') navigator.vibrate?.(10);
+      openMealMenu(meal);
+    }, LONG_PRESS_MS);
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) cancel();
+  });
+  root.addEventListener('pointerup', cancel);
+  root.addEventListener('pointercancel', cancel);
+  root.addEventListener('contextmenu', (e) => {
+    if (e.target.closest?.('.meals-row[data-meal-id], .meals-hero[data-meal-id]')) e.preventDefault();
+  });
+  root.addEventListener('click', (e) => {
+    if (!fired && !_phoneSwiped) return;
+    fired = false;
+    _phoneSwiped = false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, { capture: true });
+}
+
+/** Ein Wisch ueber den Streifen ist kein Tipp auf einen Tag. */
+let _phoneSwiped = false;
+
+/** Wischen ueber den Streifen blaettert die Woche. */
+function wireStripSwipe(root) {
+  let start = null;
+  root.addEventListener('pointerdown', (e) => {
+    start = e.target.closest?.('.meals-strip') ? { x: e.clientX, y: e.clientY } : null;
+  });
+  root.addEventListener('pointerup', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) / 2) return;
+    _phoneSwiped = true;
+    phoneGoToWeek(addDays(state.currentWeek, dx < 0 ? 7 : -7));
+  });
+}
+
+async function onPhoneClick(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'phone-day') { phoneScrollToDay(btn.dataset.date); return; }
+  if (action === 'phone-week-prev') { await phoneGoToWeek(addDays(state.currentWeek, -7)); return; }
+  if (action === 'phone-week-next') { await phoneGoToWeek(addDays(state.currentWeek, 7)); return; }
+  if (action === 'phone-week-today') { await phoneGoToWeek(getMondayOf(todayKey())); return; }
+  if (action === 'phone-past') {
+    state.pastOpen = !state.pastOpen;
+    btn.setAttribute('aria-expanded', String(state.pastOpen));
+    const days = _container.querySelector('#meals-past-days');
+    if (days) days.hidden = !state.pastOpen;
+    return;
+  }
+  const meal = btn.dataset.mealId ? state.meals.find((m) => m.id === Number(btn.dataset.mealId)) : null;
+  if (action === 'phone-cook') { if (meal) phoneCook(meal); return; }
+  if (action === 'phone-meal-menu') { if (meal) openMealMenu(meal); return; }
+  if (readOnly() && !READ_SAFE_ACTIONS.has(action)) return;
+  if (action === 'phone-idea') { openIdeasModal(btn.dataset.date, { mealType: btn.dataset.type, autoAsk: true }); return; }
+  if (action === 'phone-meal-ideas') { openIdeasModal(todayKey()); return; }
+  if (action === 'phone-missing') { await phoneAddMissing(btn); return; }
+  if (action === 'randomize-plan') { openRandomizeModal(); return; }
+  // Alles Weitere sind die Aktionen des Boards - derselbe Handler.
+  await onGridClick(e);
+}
+
+function wirePhoneWeek() {
+  const root = _container?.querySelector?.('#meals-phone');
+  if (!root || root.dataset.eventsWired) return;
+  root.dataset.eventsWired = 'true';
+  installPopoverMenus(root);
+  root.addEventListener('click', onPhoneClick);
+  wirePhoneLongPress(root);
+  wireStripSwipe(root);
 }
 
 // --------------------------------------------------------
@@ -2137,9 +2980,12 @@ function openMealModal(opts) {
   const membersMissing = state.members.length === 0;
 
   const content = buildModalContent(opts);
+  // Der Kopf nennt Mahlzeit und Tag ("Kolacja · czw 22 paź"); syncSheet()
+  // zieht ihn nach, wenn beides im Blatt geaendert wird.
+  const sheetType = MEAL_TYPES().some((mt) => mt.key === mealType) ? mealType : MEAL_TYPES()[0]?.key;
 
   openSharedModal({
-    title: isEdit ? t('meals.editMeal') : t('meals.addMealTitle'),
+    title: date ? t('meals.sheetTitle', { meal: mealTypeLabel(sheetType), day: shortDayLabel(date) }) : (isEdit ? t('meals.editMeal') : t('meals.addMealTitle')),
     content,
     size: 'md',
     onSave(panel) {
@@ -2168,22 +3014,28 @@ function openMealModal(opts) {
         panel.querySelector('#modal-notes').value = recipe.notes || '';
         panel.querySelector('#modal-recipe-url').value = recipe.recipe_url || '';
 
+        // TAFLA: die Zutaten des Rezepts kommen als Chips - gedrueckt, was zu
+        // kaufen ist, "· masz", was der Vorrat hat. Eigene Zeilen bleiben fuer
+        // das, was jemand von Hand dazuschreibt.
         ingList.replaceChildren();
-        ingList.insertAdjacentHTML('beforeend', (recipe.ingredients || [])
-          .map((ing) => ingredientRowHTML({
+        ingList.insertAdjacentHTML('beforeend', buyFirst(recipe.ingredients || [])
+          .map((ing) => ingredientChipHtml({
             name: ing.name,
             quantity: scaleQuantityText(ing.quantity ?? '', factor),
             category: ing.category ?? DEFAULT_CATEGORY_NAME,
-            categories: mealCategories(),
           }))
           .join(''));
 
         if (window.lucide) lucide.createIcons({ el: ingList });
+        setIngredientSource(panel, recipe.ingredients?.length ? 'recipe' : null);
+        syncSheetRecipeRow(panel);
+        syncSheet(panel);
       };
 
       recipeSelect?.addEventListener('change', () => {
         if (recipeScaleInput) recipeScaleInput.value = '1';
         applyRecipe(recipeSelect.value);
+        syncSheetRecipeRow(panel);
       });
 
       // Namensfeld als Combobox (Re-Kritik 2026-09-28, A4 P1-1): ein
@@ -2206,12 +3058,11 @@ function openMealModal(opts) {
         if (!Number.isFinite(factor) || factor <= 0) return;
 
         ingList.replaceChildren();
-        ingList.insertAdjacentHTML('beforeend', (currentAppliedRecipe.ingredients || [])
-          .map((ing) => ingredientRowHTML({
+        ingList.insertAdjacentHTML('beforeend', buyFirst(currentAppliedRecipe.ingredients || [])
+          .map((ing) => ingredientChipHtml({
             name: ing.name,
             quantity: scaleQuantityText(ing.quantity ?? '', Math.max(factor, 0.1)),
             category: ing.category ?? DEFAULT_CATEGORY_NAME,
-            categories: mealCategories(),
           }))
           .join(''));
 
@@ -2229,7 +3080,7 @@ function openMealModal(opts) {
 
         const notes = panel.querySelector('#modal-notes').value.trim() || null;
         const recipe_url = panel.querySelector('#modal-recipe-url').value.trim() || null;
-        const ingredients = collectModalIngredients(panel).map((ing) => ({
+        const ingredients = collectModalIngredients(panel, { allChips: true }).map((ing) => ({
           name: ing.name,
           quantity: ing.quantity,
           category: ing.category,
@@ -2342,7 +3193,8 @@ function openMealModal(opts) {
           .catch((err) => console.error('[Meals] refreshCookPicker Fehler:', err));
       }
 
-      panel.querySelector('#modal-cancel').addEventListener('click', closeModal);
+      // "Anuluj" gibt es im Tafla-Blatt nicht mehr; das X im Kopf schliesst.
+      panel.querySelector('#modal-cancel')?.addEventListener('click', closeModal);
       /* EIN ABGEBROCHENES SERIEN-LOESCHEN NAHM DEN EDITOR MIT (Codex an #1485):
        * der Knopf schloss den Dialog, bevor deleteMeal() nach dem Umfang
        * fragte - brach man dort ab, war nichts geloescht, aber Editor und
@@ -2360,6 +3212,7 @@ function openMealModal(opts) {
       panel.querySelector('#modal-save').addEventListener('click', () => saveModal(panel));
       // Pflichtfelder melden sich beim Verlassen inline (geteiltes Muster).
       wireBlurValidation(panel);
+      wireSheet(panel);
     },
   });
 }
@@ -2529,6 +3382,218 @@ function wireMealTypeChips(panel) {
   });
 }
 
+// --------------------------------------------------------
+// Tafla-Blatt "Dodaj posiłek": Tage, Zutaten-Chips, Schalter, Primaerknopf
+// --------------------------------------------------------
+
+/** Sieben Tag-Chips der Woche, in der `date` liegt; der gewaehlte getoent. */
+function sheetDayChipsHtml(date) {
+  const monday = getMondayOf(date || todayKey());
+  const today = todayKey();
+  const chips = Array.from({ length: 7 }, (_, i) => {
+    const day = addDays(monday, i);
+    const on = day === date;
+    const name = `${dayLongName(day)} ${dayMonthLabel(day)}${day === today ? `, ${lowerFirst(t('meals.today'))}` : ''}`;
+    return `<button type="button" class="meal-sheet__day${on ? ' meal-sheet__day--on' : ''}" role="radio" data-date="${day}"
+              aria-checked="${on}" tabindex="${on ? '0' : '-1'}" aria-label="${esc(name)}">
+        <span class="meal-sheet__day-name" aria-hidden="true">${esc(day === today ? t('meals.todayShort') : t(STRIP_DAY_KEYS[i]))}</span>
+        <span class="meal-sheet__day-num" aria-hidden="true">${esc(String(Number(day.slice(8))))}</span>
+      </button>`;
+  }).join('');
+  return `${chips}
+      <button type="button" class="meal-sheet__other-day" id="meal-sheet-other-day" aria-expanded="false" aria-controls="meal-sheet-date-group"
+              aria-label="${esc(t('meals.sheetOtherDay'))}" title="${esc(t('meals.sheetOtherDay'))}"><i data-lucide="calendar-days" aria-hidden="true"></i></button>`;
+}
+
+/** Darf das Blatt beim Anlegen gleich auf die Liste schreiben? */
+function sheetCanAddToList() {
+  return !globalThis.window?.yuvomi?.isModuleDisabled?.('shopping') && mayWritePath('/shopping') && state.lists.length > 0;
+}
+
+/** Der Primaerknopf nennt das Ergebnis: "Dodaj kolację i 4 produkty". */
+function sheetPrimaryLabel({ isEdit, mealType, count }) {
+  const meal = mealTypeInSentence(mealType || 'dinner');
+  if (isEdit) return t('meals.sheetSave', { meal });
+  return count > 0 ? t('meals.sheetAddWithItems', { meal, count }) : t('meals.sheetAdd', { meal });
+}
+
+/**
+ * Eine Zutat als Chip (Tafla-Blatt). Gedrueckt = sie wird Zutat der Mahlzeit
+ * und geht mit dem Schalter auf die Liste; was der Vorrat hat, startet
+ * ungedrueckt als "· masz" - dieselbe Regel wie die Vorschlaege bisher.
+ */
+function ingredientChipHtml({ name, quantity = '', category = DEFAULT_CATEGORY_NAME, source = 'recipe', have = inPantry(name), buy = !have }) {
+  return `<button type="button" class="ingredient-chip" aria-pressed="${buy}" data-have="${have ? '1' : '0'}"
+            data-name="${esc(name)}" data-qty="${esc(quantity ?? '')}" data-category="${esc(category || DEFAULT_CATEGORY_NAME)}"
+            data-source="${esc(source)}">${ingredientChipInner({ name, quantity, have, buy })}</button>`;
+}
+
+/** Was zu kaufen ist zuerst, dann was der Vorrat hat - in sich in der Reihenfolge der Quelle. */
+function buyFirst(ingredients, have = (ing) => inPantry(ing.name)) {
+  return [...ingredients].sort((a, b) => Number(have(a)) - Number(have(b)));
+}
+
+function ingredientChipInner({ name, quantity, have, buy }) {
+  const text = have && !buy ? t('meals.chipHave', { name }) : [name, quantity].filter(Boolean).join(' ');
+  const icon = buy ? 'check' : (have ? 'archive' : 'plus');
+  return `<i data-lucide="${icon}" class="ingredient-chip__icon" aria-hidden="true"></i><span class="ingredient-chip__text">${esc(text)}</span>`;
+}
+
+function toggleIngredientChip(chip) {
+  const buy = chip.getAttribute('aria-pressed') !== 'true';
+  chip.setAttribute('aria-pressed', String(buy));
+  chip.replaceChildren();
+  chip.insertAdjacentHTML('beforeend', ingredientChipInner({
+    name: chip.dataset.name, quantity: chip.dataset.qty, have: chip.dataset.have === '1', buy,
+  }));
+  if (window.lucide) lucide.createIcons({ el: chip });
+}
+
+/** Wie viele Produkte das Speichern auf die Liste schreibt: gedrueckte Chips und eigene Zeilen. */
+function sheetBuyCount(panel) {
+  const chips = panel.querySelectorAll?.('.ingredient-chip[aria-pressed="true"]')?.length ?? 0;
+  const rows = [...(panel.querySelectorAll?.('.ingredient-row') ?? [])]
+    .filter((row) => !row.dataset.ingId && row.querySelector('.ingredient-row__name')?.value.trim()).length;
+  return chips + rows;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Haelt Titel, Schalter-Zeile und Primaerknopf beim Tippen auf dem Stand:
+ * "Kolacja · czw 22 paź", "Cotygodniowe · 4 produkty", "Dodaj kolację i 4 produkty".
+ */
+function syncSheet(panel) {
+  if (!panel?.querySelector) return;
+  const isEdit = state.modal?.mode === 'edit';
+  const type = panel.querySelector('#modal-type')?.value || 'dinner';
+  const dateRaw = panel.querySelector('#modal-date')?.value || '';
+  const date = ISO_DATE.test(dateRaw) ? dateRaw : parseDateInput(dateRaw);
+  const title = panel.closest?.('.modal-overlay')?.querySelector('.modal-panel__title') ?? null;
+  if (title && date) title.textContent = t('meals.sheetTitle', { meal: mealTypeLabel(type), day: shortDayLabel(date) });
+  const count = sheetBuyCount(panel);
+  const toggle = panel.querySelector('#meal-sheet-to-list');
+  const on = toggle?.getAttribute?.('aria-checked') === 'true';
+  const meta = panel.querySelector('#meal-sheet-to-list-meta');
+  if (meta && state.lists[0]) meta.textContent = t('meals.sheetToListMeta', { list: state.lists[0].name, count });
+  const save = panel.querySelector('#modal-save');
+  if (save && !save.disabled) save.textContent = sheetPrimaryLabel({ isEdit, mealType: type, count: on ? count : 0 });
+}
+
+/** Die Rezept-Zeile unter dem Namen: Teller, Titel, "wasz przepis · 6 składników", Haken. */
+function syncSheetRecipeRow(panel) {
+  const box = panel.querySelector?.('#meal-sheet-recipe');
+  if (!box) return;
+  const id = Number(panel.querySelector('#modal-recipe-id')?.value || 0);
+  const recipe = id ? state.recipes.find((r) => r.id === id) : null;
+  box.replaceChildren?.();
+  box.hidden = !recipe;
+  if (!recipe) return;
+  const source = recipe.source && recipe.source !== 'native'
+    ? t(`recipes.source${recipe.source[0].toUpperCase()}${recipe.source.slice(1)}`)
+    : t('meals.sheetRecipeOwn');
+  const count = recipe.ingredients?.length ?? 0;
+  const meta = [source, count ? t('meals.ingredientCount', { count }) : ''].filter(Boolean).join(' · ');
+  const plate = recipe.image_data || recipe.provider_has_image
+    ? recipeThumbHtml({ recipeId: recipe.id, hasImage: recipe.provider_has_image, hasOwnImage: Boolean(recipe.image_data), className: 'meal-sheet__recipe-plate' })
+    : `<span class="meal-sheet__recipe-plate meals-plate" aria-hidden="true"><i data-lucide="${plateIcon(recipe.title)}" class="meals-plate__icon"></i></span>`;
+  box.insertAdjacentHTML?.('beforeend', `
+    <button type="button" class="meal-sheet__recipe-btn" id="meal-sheet-recipe-unlink" aria-pressed="true"
+            aria-label="${esc(t('meals.sheetRecipeLinked', { title: recipe.title }))}">
+      ${plate}
+      <span class="meal-sheet__recipe-text">
+        <span class="meal-sheet__recipe-title">${esc(recipe.title)}</span>
+        <span class="meal-sheet__recipe-meta">${esc(meta)}</span>
+      </span>
+      <i data-lucide="check" class="meal-sheet__recipe-check" aria-hidden="true"></i>
+    </button>`);
+  if (window.lucide) lucide.createIcons({ el: box });
+  wireRecipeThumbs(box);
+}
+
+/** Tag-Chips, "Inny dzień", Schalter und Chips des Blatts verdrahten. */
+function wireSheet(panel) {
+  if (!panel?.querySelector) return;
+  panel.classList?.add('meal-sheet');
+  panel.closest?.('.modal-overlay')?.classList.add('meal-sheet-overlay');
+  const dateEl = panel.querySelector('#modal-date');
+  const days = panel.querySelector('#meal-sheet-days');
+  const dateGroup = panel.querySelector('#meal-sheet-date-group');
+  const selectDay = (day, { focus = false } = {}) => {
+    if (!days) return;
+    // Liegt der Tag ausserhalb der gezeigten Woche, zeigt die Reihe seine Woche.
+    if (!days.querySelector(`[data-date="${day}"]`)) {
+      days.replaceChildren();
+      days.insertAdjacentHTML('beforeend', sheetDayChipsHtml(day));
+      if (window.lucide) lucide.createIcons({ el: days });
+    }
+    for (const chip of days.querySelectorAll('[data-date]')) {
+      const on = chip.dataset.date === day;
+      chip.classList.toggle('meal-sheet__day--on', on);
+      chip.setAttribute('aria-checked', String(on));
+      chip.tabIndex = on ? 0 : -1;
+      if (on && focus) chip.focus();
+    }
+  };
+  days?.addEventListener?.('click', (e) => {
+    const other = e.target.closest('#meal-sheet-other-day');
+    if (other && dateGroup) {
+      dateGroup.hidden = !dateGroup.hidden;
+      other.setAttribute('aria-expanded', String(!dateGroup.hidden));
+      if (!dateGroup.hidden) dateEl?.focus?.();
+      return;
+    }
+    const chip = e.target.closest('[data-date]');
+    if (!chip || !dateEl) return;
+    dateEl.value = chip.dataset.date;
+    selectDay(chip.dataset.date);
+    syncSheet(panel);
+  });
+  days?.addEventListener?.('keydown', (e) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    const current = e.target.closest?.('[data-date]');
+    if (!step || !current || !dateEl) return;
+    e.preventDefault();
+    const next = addDays(current.dataset.date, step);
+    dateEl.value = next;
+    selectDay(next, { focus: true });
+    syncSheet(panel);
+  });
+  dateEl?.addEventListener?.('change', () => {
+    const iso = ISO_DATE.test(dateEl.value) ? dateEl.value : parseDateInput(dateEl.value);
+    if (iso) selectDay(iso);
+    syncSheet(panel);
+  });
+  panel.querySelector('#modal-type')?.addEventListener?.('change', () => syncSheet(panel));
+
+  const toggle = panel.querySelector('#meal-sheet-to-list');
+  toggle?.addEventListener?.('click', () => {
+    toggle.setAttribute('aria-checked', String(toggle.getAttribute('aria-checked') !== 'true'));
+    syncSheet(panel);
+  });
+
+  const list = panel.querySelector('#ingredient-list');
+  list?.addEventListener?.('click', (e) => {
+    const chip = e.target.closest('.ingredient-chip');
+    if (!chip) return;
+    toggleIngredientChip(chip);
+    syncSheet(panel);
+  });
+  list?.addEventListener?.('input', () => syncSheet(panel));
+  if (list?.nodeType === 1 && typeof MutationObserver === 'function') {
+    new MutationObserver(() => syncSheet(panel)).observe(list, { childList: true });
+  }
+
+  panel.querySelector('#meal-sheet-recipe')?.addEventListener?.('click', (e) => {
+    if (!e.target.closest('#meal-sheet-recipe-unlink')) return;
+    const select = panel.querySelector('#modal-recipe-id');
+    if (select) select.value = '';
+    syncSheetRecipeRow(panel);
+  });
+  syncSheetRecipeRow(panel);
+  syncSheet(panel);
+}
+
 function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
   const isEdit   = mode === 'edit';
   const isRecurring = isEdit && meal.recurrence_template_id;
@@ -2655,20 +3720,27 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
       </div>
     </div>`}`;
 
+  // TAFLA (Dodaj posiłek): die Mahlzeitart ist ein Segment, der Tag eine
+  // Reihe aus sieben Chips der Woche - das Datumsfeld bleibt die Quelle fuer
+  // Speichern und Dirty-Check und steht hinter "Inny dzień" fuer alles
+  // ausserhalb dieser Woche. Die Ueberschriften bleiben fuer Screenreader.
   const whenHtml = `
-    <div class="form-group">
-      <span class="form-label" id="modal-type-label">${t('meals.mealTypeLabel')}</span>
+    <div class="form-group meal-sheet__when">
+      <span class="form-label sr-only" id="modal-type-label">${t('meals.mealTypeLabel')}</span>
       <div class="meal-type-chips" id="modal-type-chips" role="radiogroup" aria-labelledby="modal-type-label">${typeChips}</div>
       <input type="hidden" id="modal-type" value="${esc(chosenType ?? '')}">
+      <div class="meal-sheet__days" id="meal-sheet-days" role="radiogroup" aria-label="${esc(t('meals.sheetDays'))}">${sheetDayChipsHtml(date)}</div>
     </div>
-    <div class="form-group">
+    <div class="form-group meal-sheet__date" id="meal-sheet-date-group" hidden>
       <label class="form-label" for="modal-date">${t('meals.dateLabel')}</label>
       <yuvomi-datepicker type="date" id="modal-date" value="${formatDateInput(date)}"></yuvomi-datepicker>
     </div>
 `;
+  // Kein sichtbares Label und kein Stern (Tafla-Blatt): das Feld traegt den
+  // Platzhalter, das Label bleibt fuer Screenreader samt Pflicht-Zeichen.
   const nameHtml = `
-    <div class="form-group" style="position:relative;">
-      <label class="form-label" for="modal-title">${t('common.nameLabel')}${REQUIRED_MARK}</label>
+    <div class="form-group meal-sheet__name" style="position:relative;">
+      <label class="form-label sr-only" for="modal-title">${t('common.nameLabel')}${REQUIRED_MARK}</label>
       <input type="text" class="form-input" id="modal-title" required
              placeholder="${t('meals.titlePlaceholder')}"
              value="${esc(isEdit ? meal.title : '')}"
@@ -2676,6 +3748,7 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
              aria-expanded="false" aria-controls="modal-autocomplete">
       <div id="modal-autocomplete" class="meal-modal__autocomplete" role="listbox"
            aria-label="${esc(t('meals.suggestionsLabel'))}" hidden></div>
+      <div class="meal-sheet__recipe" id="meal-sheet-recipe" hidden></div>
     </div>
 `;
   // NAME ZUERST, IMMER (Re-Critique 2026-09-28 A4 P2-9 fuer den Slot;
@@ -2703,9 +3776,22 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
       ${advancedSection(ingFieldsHtml, { label: ingredientsFoldLabel(ingCount) })}
     </div>`
     : `
-    <div class="form-group">
+    <div class="form-group meal-ingredients">
       <label class="form-label">${t('meals.ingredientsLabel')}</label>${ingFieldsHtml}
     </div>`;
+
+  // "Dopisz brakujące do listy" (Tafla): beim Anlegen ein Schalter statt des
+  // Transfer-Abschnitts - was gewaehlt ist, geht mit dem Speichern auf die
+  // erste Liste. Nur, wo der Einkauf beschreibbar ist und eine Liste hat.
+  const toListHtml = !isEdit && sheetCanAddToList() ? `
+    <div class="meal-sheet__switch">
+      <span class="meal-sheet__switch-text">
+        <span class="meal-sheet__switch-title" id="meal-sheet-to-list-label">${esc(t('meals.sheetToList'))}</span>
+        <span class="meal-sheet__switch-meta" id="meal-sheet-to-list-meta">${esc(t('meals.sheetToListMeta', { list: state.lists[0].name, count: 0 }))}</span>
+      </span>
+      <button type="button" class="meal-sheet__toggle" id="meal-sheet-to-list" role="switch" aria-checked="true"
+              aria-labelledby="meal-sheet-to-list-label" aria-describedby="meal-sheet-to-list-meta"><span class="meal-sheet__toggle-knob"></span></button>
+    </div>` : '';
 
   return `
     ${scopeHtml}
@@ -2713,8 +3799,9 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
     ${cookPickerHtml(isEdit ? meal : null)}
 
     ${ingredientsHtml}
+    ${toListHtml}
 
-    ${advancedSection(advancedFieldsHtml, { open: advancedOpen })}
+    ${advancedSection(advancedFieldsHtml, { open: advancedOpen, label: t('meals.sheetMore'), hint: t('meals.sheetMoreHint') })}
 
     ${canTransfer ? `
     <div class="shopping-transfer">
@@ -2739,10 +3826,12 @@ function buildModalContent({ mode, date, mealType, meal, recipeId = null }) {
     ${/* Loeschen links im Dialogfuss (Kanon, R8 H10): am Desktop war eine
         * Mahlzeit sonst nur ueber den Papierkorb der Karte loeschbar. Es geht
         * denselben Weg wie dort (`deleteMeal`: Serienabfrage, Rueckgaengig). */ ''}
-    <div class="modal-panel__footer modal-panel__footer--plain">
+    ${/* KEIN "Anuluj" (Tafla-Blatt): das X im Kopf schliesst, mit Rueckfrage,
+        * wenn etwas getippt ist. Der Primaerknopf nennt das Ergebnis
+        * ("Dodaj kolację i 4 produkty", sheetPrimaryLabel). */ ''}
+    <div class="modal-panel__footer modal-panel__footer--plain meal-sheet__footer">
       ${isEdit ? `<button type="button" class="btn btn--danger-outline" id="modal-delete" data-delete-name="${esc(meal.title)}" style="margin-inline-end:auto"><i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>${esc(t('common.delete'))}</button>` : ''}
-      <button class="btn btn--secondary" id="modal-cancel">${t('common.cancel')}</button>
-      <button class="btn btn--primary" id="modal-save">${isEdit ? t('common.save') : t('common.add')}</button>
+      <button class="btn btn--primary meal-sheet__primary" id="modal-save">${esc(sheetPrimaryLabel({ isEdit, mealType: chosenType, count: 0 }))}</button>
     </div>`;
 }
 
@@ -2791,6 +3880,10 @@ async function saveModal(overlay) {
 
   const ingredients = collectModalIngredients(overlay);
   let createdWithIngredients = null;
+  // "Dopisz brakujące do listy" (Tafla-Blatt, nur beim Anlegen): an, wenn der
+  // Schalter steht und an ist.
+  const toListSwitch = overlay.querySelector('#meal-sheet-to-list');
+  const addToList = Boolean(toListSwitch) && toListSwitch.getAttribute?.('aria-checked') === 'true' && sheetCanAddToList();
 
   saveBtn.disabled    = true;
   saveBtn.textContent = '…';
@@ -2836,6 +3929,32 @@ async function saveModal(overlay) {
     }
 
     closeModal({ force: true });
+    // TAFLA: mit dem Schalter gehen die gewaehlten Zutaten gleich auf die
+    // erste Liste - derselbe Transfer wie an der Karte, mit Ruecknahme.
+    if (mode === 'create' && addToList && createdWithIngredients && mayTransferMealToShopping(createdWithIngredients.id)) {
+      const created = createdWithIngredients;
+      const list = state.lists[0];
+      try {
+        const res = await api.post(`/meals/${created.id}/to-shopping-list`, { listId: list.id });
+        await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
+        renderWeekGrid();
+        refocusAfterRender();
+        announceTransfer({
+          message: t('meals.sheetSavedItems', {
+            meal: mealTypeInSentence(meal_type), day: t(DAY_ACC_KEYS[zonedWeekday(date)]), count: res.data?.transferred ?? 0, list: list.name,
+          }),
+          addedIds: res.data?.added_ids ?? [],
+          onUndone: async () => {
+            await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
+            renderWeekGrid();
+          },
+        });
+        return;
+      } catch (err) {
+        // Die Mahlzeit steht - nur der Transfer scheiterte. Die Karte bietet ihn weiter an.
+        window.yuvomi?.showToast(errorSentence(err), 'danger');
+      }
+    }
     renderWeekGrid();
     // Das Ergebnis, nicht der Dialogtitel: „Mahlzeit hinzufügen" als
     // Erfolgsmeldung liest sich wie eine Aufforderung (R16).
@@ -2856,7 +3975,7 @@ async function saveModal(overlay) {
     // geloeschtes Rezept nennt der Server `meals_selected_recipe_not_found`.
     window.yuvomi?.showToast(errorSentence(err), 'danger');
     saveBtn.disabled    = false;
-    saveBtn.textContent = state.modal?.mode === 'edit' ? t('common.save') : t('common.add');
+    saveBtn.textContent = sheetPrimaryLabel({ isEdit: state.modal?.mode === 'edit', mealType: meal_type, count: addToList ? ingredients.length : 0 });
   }
 }
 
@@ -2864,10 +3983,28 @@ async function saveModal(overlay) {
 // Ingredient suggestions in the meal dialog (fork, 2026-10-19)
 // A pause after typing the meal (or leaving the field) asks
 // POST /meals/ingredient-suggestions - the recipe, the last time this meal was
-// cooked, or Haiku when AI is on. The answer is a row of chips, ticked except
-// what the pantry already has; "Add ticked" turns them into ingredient rows.
-// Nothing is added on its own, and the panel stays away once rows exist.
+// cooked, or Haiku when AI is on.
+//
+// TAFLA: the answer lands as chips IN the ingredient list (no "Add ticked"
+// step any more): ticked = goes with the meal and, with the switch on, onto
+// the shopping list; what the pantry has starts unticked as "· masz". A new
+// answer replaces the previous suggestion chips; a recipe's chips and rows
+// typed by hand stay, and while any of them exist nothing is asked.
 // --------------------------------------------------------
+
+/** "z przepisu" / "z ostatniego razu" / "propozycja AI" next to the "Składniki" label. */
+function setIngredientSource(panel, source) {
+  const box = panel.querySelector?.('#ingredient-suggest');
+  if (!box) return;
+  const text = { recipe: t('meals.suggestFromRecipe'), history: t('meals.suggestFromHistory'), ai: t('meals.suggestFromAi'), loading: t('meals.suggestLoading') }[source] ?? '';
+  box.replaceChildren();
+  box.hidden = !text;
+  if (!text) return;
+  const icon = { recipe: 'book-open', history: 'history', ai: 'sparkles', loading: 'sparkles' }[source];
+  box.insertAdjacentHTML('beforeend', `<i data-lucide="${icon}" class="ingredient-suggest__icon" aria-hidden="true"></i><span class="ingredient-suggest__label">${esc(text)}</span>`);
+  window.lucide?.createIcons({ el: box });
+}
+
 function wireIngredientSuggestions(panel, ingList) {
   const box = panel.querySelector('#ingredient-suggest');
   const titleInput = panel.querySelector('#modal-title');
@@ -2875,81 +4012,51 @@ function wireIngredientSuggestions(panel, ingList) {
   let timer = null;
   let seq = 0;
   let lastTitle = '';
-  let offered = [];
   const hasRows = () => [...ingList.querySelectorAll('.ingredient-row__name')].some((i) => i.value.trim());
-
-  const hide = () => { box.hidden = true; box.replaceChildren(); offered = []; };
-  const show = (html) => {
-    box.replaceChildren();
-    box.insertAdjacentHTML('beforeend', html);
-    box.hidden = false;
-    window.lucide?.createIcons({ el: box });
-  };
-
-  const renderChoices = (source, ingredients) => {
-    offered = ingredients;
-    const from = { recipe: t('meals.suggestFromRecipe'), history: t('meals.suggestFromHistory'), ai: t('meals.suggestFromAi') }[source] ?? '';
-    show(`
-      <p class="ingredient-suggest__label">${esc(t('meals.suggestTitle'))}${from ? ` <span>${esc(from)}</span>` : ''}</p>
-      <div class="ingredient-suggest__chips">
-        ${ingredients.map((ing, i) => `
-          <button type="button" class="ingredient-suggest__chip" data-idx="${i}" aria-pressed="${ing.in_pantry ? 'false' : 'true'}">
-            <i data-lucide="check" class="icon-sm ingredient-suggest__tick" aria-hidden="true"></i>
-            <span>${esc(ing.name)}</span>${ing.quantity ? ` <span class="ingredient-suggest__qty">${esc(ing.quantity)}</span>` : ''}
-            ${ing.in_pantry ? `<span class="ingredient-suggest__have">${esc(t('meals.suggestInPantry'))}</span>` : ''}
-          </button>`).join('')}
-      </div>
-      <div class="ingredient-suggest__actions">
-        <button type="button" class="btn btn--secondary" data-suggest="add">${esc(t('meals.suggestAdd'))}</button>
-        <button type="button" class="btn btn--ghost" data-suggest="dismiss">${esc(t('meals.suggestDismiss'))}</button>
-      </div>`);
-  };
+  const hasRecipeChips = () => ingList.querySelectorAll('.ingredient-chip[data-source="recipe"]').length > 0;
+  const dropSuggestions = () => ingList.querySelectorAll('.ingredient-chip[data-source="suggest"]').forEach((chip) => chip.remove());
 
   const ask = async () => {
     const title = titleInput.value.trim();
-    if (title.length < 3 || title === lastTitle || hasRows()) return;
+    if (title.length < 3 || title === lastTitle || hasRows() || hasRecipeChips()) return;
     lastTitle = title;
     const mine = ++seq;
     const recipeId = Number(panel.querySelector('#modal-recipe-id')?.value) || undefined;
-    show(`<p class="ingredient-suggest__label">${esc(t('meals.suggestLoading'))}</p>`);
+    setIngredientSource(panel, 'loading');
     try {
       const res = await api.post('/meals/ingredient-suggestions', { title, recipe_id: recipeId });
       if (mine !== seq || !box.isConnected) return;
       const { source, ingredients = [] } = res.data ?? {};
-      if (!ingredients.length || hasRows()) { hide(); return; }
-      renderChoices(source, ingredients);
+      if (!ingredients.length || hasRows() || hasRecipeChips()) { setIngredientSource(panel, null); return; }
+      dropSuggestions();
+      ingList.insertAdjacentHTML('afterbegin', buyFirst(ingredients, (ing) => Boolean(ing.in_pantry) || inPantry(ing.name)).map((ing) => {
+        const have = Boolean(ing.in_pantry) || inPantry(ing.name);
+        return ingredientChipHtml({ name: ing.name, quantity: ing.quantity ?? '', category: ing.category, source: 'suggest', have });
+      }).join(''));
+      if (window.lucide) lucide.createIcons({ el: ingList });
+      setIngredientSource(panel, source);
     } catch {
-      if (mine === seq) hide();
+      if (mine === seq) setIngredientSource(panel, null);
     }
   };
-
-  box.addEventListener('click', (e) => {
-    const chip = e.target.closest('.ingredient-suggest__chip');
-    if (chip) {
-      chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true'));
-      return;
-    }
-    const act = e.target.closest('[data-suggest]')?.dataset.suggest;
-    if (act === 'dismiss') { hide(); return; }
-    if (act !== 'add') return;
-    const chosen = [...box.querySelectorAll('.ingredient-suggest__chip[aria-pressed="true"]')]
-      .map((c) => offered[Number(c.dataset.idx)])
-      .filter(Boolean);
-    const tmp = document.createElement('div');
-    tmp.insertAdjacentHTML('beforeend', chosen.map((ing) => ingredientRowHTML({
-      name: ing.name, quantity: ing.quantity ?? '', category: ing.category, categories: mealCategories(),
-    })).join(''));
-    ingList.append(...tmp.children);
-    if (window.lucide) lucide.createIcons({ el: ingList });
-    hide();
-  });
 
   titleInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(ask, 900); });
   titleInput.addEventListener('change', () => { clearTimeout(timer); ask(); });
 }
 
-function collectModalIngredients(overlay) {
+/**
+ * Die Zutaten des Dialogs: eigene Zeilen und die GEDRUECKTEN Chips (Tafla).
+ * Ein ungedrueckter Chip - "· masz" oder abgewaehlt - ist keine Zutat dieser
+ * Mahlzeit, er geht nicht auf die Liste. `allChips` nimmt fuer "Als Rezept
+ * speichern" jeden Chip: das Rezept braucht auch, was im Vorrat steht.
+ */
+function collectModalIngredients(overlay, { allChips = false } = {}) {
   const ingredients = [];
+  overlay.querySelectorAll('.ingredient-chip').forEach((chip) => {
+    if (!allChips && chip.getAttribute('aria-pressed') !== 'true') return;
+    const name = String(chip.dataset.name ?? '').trim();
+    if (name) ingredients.push({ name, quantity: chip.dataset.qty || null, category: chip.dataset.category || DEFAULT_CATEGORY_NAME, id: null });
+  });
   overlay.querySelectorAll('.ingredient-row').forEach((row) => {
     const name = row.querySelector('.ingredient-row__name').value.trim();
     const qty = row.querySelector('.ingredient-row__qty').value.trim() || null;
@@ -3015,6 +4122,9 @@ async function deleteMeal(mealId, { scope } = {}) {
 
   const itemEl = _container.querySelector(`.meal-card[data-meal-id="${mealId}"]`);
   if (itemEl) itemEl.style.display = 'none';
+  // Dieselbe Mahlzeit steht in der Telefon-Woche als Zeile oder Herd-Karte.
+  const phoneEls = [...(_container.querySelectorAll?.(`.meals-row[data-meal-id="${mealId}"], .meals-hero[data-meal-id="${mealId}"]`) ?? [])];
+  for (const el of phoneEls) el.hidden = true;
 
   scheduleUndoableDelete({
     message: t('meals.deletedToast'),
@@ -3026,6 +4136,7 @@ async function deleteMeal(mealId, { scope } = {}) {
     },
     restore: (err) => {
       if (itemEl) itemEl.style.display = '';
+      for (const el of phoneEls) el.hidden = false;
       if (err) window.yuvomi?.showToast(err.data?.error ?? t('common.unknownError'), 'danger');
     },
   });
@@ -3153,6 +4264,19 @@ export const __test = {
   cookPickerHtml,
   loadMembers,
   showCookForScope,
+  // Tafla (2026-10-19): die Telefon-Woche und das Blatt "Dodaj posiłek" -
+  // Zaehler, Wochenbereich, Markup der Woche, Chips und Primaerknopf
+  // (test-meals.js, Abschnitt "Tafla").
+  ingredientMeter,
+  meterCaption,
+  weekRangeLabel,
+  phoneBodyHtml,
+  phoneHeadHtml,
+  missingIngredients,
+  mealNameKey,
+  sheetPrimaryLabel,
+  ingredientChipHtml,
+  collectModalIngredients,
 };
 
 // --------------------------------------------------------
