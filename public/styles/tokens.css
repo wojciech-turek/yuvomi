@@ -1527,7 +1527,7 @@
   --wall-display: clamp(96px, 13.6vmin, 144px);  /* 112 - Uhr, laufender Timer, Schrittnummer, "Smacznego!" (600, rounded, tabular) */
   --wall-title:   clamp(36px, 5.4vmin, 56px);    /* 44  - Name des Abendessens, Kochschritt (400, Zeile 56) */
   --wall-body:    clamp(26px, 3.66vmin, 36px);   /* 30  - Zeilen, Datum, Teraz-Zeile, Zutaten, Knopflabels (600) */
-  --wall-label:   clamp(22px, 2.93vmin, 28px);   /* 24  - Eyebrows, Abschnittslabels, "min", Exit-Pille: der Boden */
+  --wall-label:   clamp(24px, 2.93vmin, 28px);   /* 24  - Eyebrows, Abschnittslabels, "min", Exit-Pille: der Boden, auch bei 1280x800 */
 
   /* Größen-Skala (Kompatibilitäts- und Layout-Tokens) */
   --text-2xs:  0.625rem;   /* 10px - Sehr kleine Badges (z.B. Erinnerungs-Zähler) */

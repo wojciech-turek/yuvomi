@@ -236,11 +236,14 @@ test('(4) Wand-Minutnik: sichtbar in Ruhe, der erste Tipp startet, die Anzeige i
     const btn = document.querySelector('[data-wall-timer-start="5"]');
     const cs = getComputedStyle(btn);
     const r = btn.getBoundingClientRect();
-    return { color: cs.color, background: cs.backgroundColor, opacity: cs.opacity, w: r.width, h: r.height };
+    return { color: cs.color, background: cs.backgroundColor, shadow: cs.boxShadow, opacity: cs.opacity, w: r.width, h: r.height };
   });
   const alpha = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); const p = m ? m[1].split(',').map(Number) : []; return p.length === 4 ? p[3] : 1; };
-  assert.ok(alpha(rest.color) > 0 && alpha(rest.background) > 0 && Number(rest.opacity) > 0,
-    `die Scheibe ruht unsichtbar (color ${rest.color}, background ${rest.background}, opacity ${rest.opacity})`);
+  // Tags eine gefuellte Scheibe, in der Szene Noc (22-6) ein bernsteinfarbener
+  // Ring - sichtbar ist sie in beiden.
+  const shape = alpha(rest.background) > 0 || (rest.shadow && rest.shadow !== 'none');
+  assert.ok(alpha(rest.color) > 0 && shape && Number(rest.opacity) > 0,
+    `die Scheibe ruht unsichtbar (color ${rest.color}, background ${rest.background}, shadow ${rest.shadow}, opacity ${rest.opacity})`);
   assert.ok(rest.w >= 56 && rest.h >= 56, `Treffflaeche ${rest.w}x${rest.h}`);
 
   await page.tap('[data-wall-timer-start="5"]');
