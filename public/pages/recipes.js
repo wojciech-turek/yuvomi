@@ -5,7 +5,7 @@
 
 import { api } from '/api.js';
 import { openCookMode } from '/components/cook-mode.js';
-import { t, formatDate, formatDateInput, parseDateInput, isDateInputValid } from '/i18n.js';
+import { t, getLocale, formatDate, formatDateInput, parseDateInput, isDateInputValid } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
 import { openModal as openSharedModal, closeModal as closeSharedModal, advancedSection, wireBlurValidation, reportFieldError, refocusAfterRender, captureModalContext, isModalContextCurrent, isOwnModalOpen } from '/components/modal.js';
 import { DEFAULT_CATEGORY_NAME, categoryLabel } from '/utils/shopping-categories.js';
@@ -16,7 +16,8 @@ import { ingredientRowHTML } from '/utils/ingredient-row.js';
 import { scheduleUndoableDelete } from '/utils/ux.js';
 import { normalizeRecipeMealTypes, RECIPE_MEAL_TYPE_KEYS } from '/utils/recipe-meal-types.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
-import { todayKey } from '/utils/date.js';
+import { todayKey, parseLocalDateKey } from '/utils/date.js';
+import { splitSteps } from '/utils/cook-steps.js';
 import '/components/datepicker.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { mountEmptyState, mountLoadError, mountSearchEmpty } from '/utils/empty-state.js';
@@ -57,6 +58,15 @@ const state = {
   sourceFilter: 'all',
   // Rezept-IDs, die im Wochenplan der AKTUELLEN Woche stehen (loadPlannedRecipes).
   plannedRecipeIds: new Set(),
+  // Tafla: recipe id -> the next day (today or later) it is planned this week.
+  plannedOn: new Map(),
+  // Tafla filter chips: 'all' or a meal type key.
+  mealFilter: 'all',
+  // What the pantry holds, for "masz 5 z 6": null = unknown (no access, not
+  // loaded, failed) - then the detail claims nothing about the pantry.
+  pantry: null,
+  // Name keys open on any shopping list ("na liście"), null = unknown.
+  onList: null,
 };
 
 /**
@@ -95,10 +105,11 @@ function mayPlanRecipe() {
 /**
  * Die `data-action`s der Seite, die NICHT in die Kueche schreiben - eine
  * Positivliste wie in pantry.js: eine morgen ergaenzte Schreib-Aktion ist bei
- * `read` zu, bis sie hier ausdruecklich steht. `to-shopping` schreibt in den
- * Einkauf und traegt seinen eigenen Riegel (`transferRecipe`).
+ * `read` zu, bis sie hier ausdruecklich steht. `to-shopping` und
+ * `to-shopping-missing` ("Dopisz N") schreiben in den Einkauf und tragen ihren
+ * eigenen Riegel (`transferRecipe`).
  */
-const READ_SAFE_ACTIONS = new Set(['open-detail', 'to-shopping']);
+const READ_SAFE_ACTIONS = new Set(['open-detail', 'to-shopping', 'to-shopping-missing']);
 
 /**
  * EIN WEG FUER DIE FEHLER-TOASTS DER SEITE (#1909). Der Toast sagt den Satz der
@@ -225,6 +236,7 @@ function filteredRecipes() {
   const q = state.query.toLowerCase();
   return listedRecipes().filter((r) => {
     if (state.sourceFilter !== 'all' && r.source !== state.sourceFilter) return false;
+    if (state.mealFilter !== 'all' && !normalizeRecipeMealTypes(r.meal_types).includes(state.mealFilter)) return false;
     if (!q) return true;
     return r.title?.toLowerCase().includes(q)
       || r.notes?.toLowerCase().includes(q)
@@ -335,10 +347,152 @@ async function loadPlannedRecipes() {
   }
   try {
     const res = await api.get('/meals');
-    state.plannedRecipeIds = new Set((res.data ?? []).map((m) => m.recipe_id).filter(Boolean));
+    const meals = res.data ?? [];
+    state.plannedRecipeIds = new Set(meals.map((m) => m.recipe_id).filter(Boolean));
+    // Tafla: WHEN it is planned ("dziś", "w czwartek") - only today and later;
+    // an earlier day of this week counts as cooked (`last_cooked_on`).
+    const today = todayKey();
+    state.plannedOn = new Map();
+    for (const m of meals) {
+      if (!m.recipe_id || !m.date || m.date < today) continue;
+      const known = state.plannedOn.get(m.recipe_id);
+      if (!known || m.date < known) state.plannedOn.set(m.recipe_id, m.date);
+    }
   } catch {
     state.plannedRecipeIds = new Set();
+    state.plannedOn = new Map();
   }
+}
+
+/**
+ * Tafla "masz 5 z 6": what the pantry holds, as comparison keys. Read-only and
+ * never stored. Without pantry access the state stays `null` (unknown) and the
+ * detail shows no have/missing marks at all.
+ */
+async function loadPantry() {
+  if (pantryAccess() === 'none') {
+    state.pantry = null;
+    return;
+  }
+  try {
+    const res = await api.get('/pantry');
+    state.pantry = (res.data ?? []).map((item) => ({
+      id: item.id,
+      key: foldKey(item.name),
+      stocked: item.quantity == null || Number(item.quantity) > 0,
+    }));
+  } catch {
+    state.pantry = null;
+  }
+}
+
+/** Tafla "na liście": names open (not ticked) on any shopping list. */
+async function loadOnList() {
+  if (!state.lists.length || navModuleAccess('shopping') === 'none') {
+    state.onList = null;
+    return;
+  }
+  try {
+    const answers = await Promise.all(state.lists.map((list) => api.get(`/shopping/${list.id}/items`)));
+    state.onList = new Set(answers.flatMap((res) => res.data ?? [])
+      .filter((item) => !item.is_checked)
+      .map((item) => foldKey(item.name))
+      .filter(Boolean));
+  } catch {
+    state.onList = null;
+  }
+}
+
+/* EIN VERGLEICHSSCHLUESSEL FUER NAMEN - dieselbe Regel wie `nameKey` in
+ * server/utils/name-key.js (klein, ohne diakritische Zeichen, ł -> l, einfache
+ * Leerzeichen), damit "masz" hier genauso urteilt wie die Zutatenvorschlaege im
+ * Essensplan (server/services/meal-ingredient-suggest.js). */
+const FOLD_MANUAL = { ł: 'l', Ł: 'l', đ: 'd', ø: 'o', ß: 'ss' };
+function foldKey(value) {
+  return String(value ?? '')
+    .replace(/[łŁđøß]/g, (ch) => FOLD_MANUAL[ch])
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "pomidory w puszce" findet "pomidory", "sól" findet "sól morska" - wie inPantry() am Server. */
+function keyMatches(key, other) {
+  return Boolean(key && other) && (other === key || key.startsWith(`${other} `) || other.startsWith(`${key} `));
+}
+
+/**
+ * Was die Kueche ueber eine Zutat weiss: `have` true/false, oder `null`, wenn
+ * der Vorrat unbekannt ist. Eine bestaetigte Zuordnung (#1314) geht vor; sonst
+ * vergleicht der Name - nur fuer die Anzeige, gespeichert wird nichts
+ * (docs/DECISIONS.md Abschnitt 7). `onList`: steht offen auf einer
+ * Einkaufsliste.
+ */
+function ingredientState(ing) {
+  const key = foldKey(ing?.name);
+  let have = null;
+  if (state.pantry) {
+    const confirmed = ing?.pantry_item_id ? state.pantry.find((p) => p.id === ing.pantry_item_id) : null;
+    have = confirmed
+      ? confirmed.stocked
+      : state.pantry.some((p) => p.stocked && keyMatches(key, p.key));
+  }
+  const onList = Boolean(state.onList && [...state.onList].some((k) => keyMatches(key, k)));
+  return { have, onList };
+}
+
+/** `{ have, total }` fuer den Zutaten-Zaehler, oder `null` ohne Vorratswissen. */
+function pantryTally(recipe) {
+  const ingredients = recipe?.ingredients ?? [];
+  if (!state.pantry || !ingredients.length) return null;
+  const have = ingredients.filter((ing) => ingredientState(ing).have).length;
+  return { have, total: ingredients.length };
+}
+
+/** Zutaten, die der Vorrat nicht zu haben scheint und die auch auf keiner Liste stehen. */
+function missingIngredients(recipe) {
+  if (!state.pantry) return [];
+  return (recipe?.ingredients ?? []).filter((ing) => {
+    const s = ingredientState(ing);
+    return s.have === false && !s.onList;
+  });
+}
+
+// --------------------------------------------------------
+// Tafla: relative Tage ("dziś", "w czwartek", "3 tyg. temu")
+// --------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function dayDiff(fromKey, toKey) {
+  return Math.round((parseLocalDateKey(toKey) - parseLocalDateKey(fromKey)) / DAY_MS);
+}
+
+/** Ein geplanter Tag: "dziś", "jutro", "w czwartek" (innerhalb einer Woche), sonst das Datum. */
+function upcomingLabel(dateKey) {
+  const ahead = dayDiff(todayKey(), dateKey);
+  if (ahead <= 0) return t('recipes.whenToday');
+  if (ahead === 1) return t('recipes.whenTomorrow');
+  if (ahead < 7) return t(`recipes.whenOn.${WEEKDAY_KEYS[parseLocalDateKey(dateKey).getDay()]}`);
+  return formatDate(dateKey);
+}
+
+/** Ein vergangener Tag: "wczoraj", "3 dni temu", "2 tyg. temu" - aus Intl, in jeder Sprache. */
+function agoLabel(dateKey) {
+  const days = Math.max(1, dayDiff(dateKey, todayKey()));
+  let fmt;
+  try {
+    fmt = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto', style: 'short' });
+  } catch {
+    return formatDate(dateKey);
+  }
+  if (days < 7) return fmt.format(-days, 'day');
+  if (days < 35) return fmt.format(-Math.round(days / 7), 'week');
+  if (days < 365) return fmt.format(-Math.max(1, Math.round(days / 30)), 'month');
+  return fmt.format(-Math.round(days / 365), 'year');
 }
 
 /**
@@ -512,7 +666,9 @@ export async function render(container, { signal } = {}) {
 
   if (window.lucide) window.lucide.createIcons({ el: container });
 
-  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes(), ensureMealTypeNames()]);
+  await Promise.all([loadRecipes(), loadCategories(), loadShoppingLists(), loadPlannedRecipes(), loadPantry(), ensureMealTypeNames()]);
+  // Tafla "na liście": braucht die Listen von eben.
+  await loadOnList();
   // Ein Seitenwechsel waehrend des Ladens: die Seite ist schon abgebaut, ein
   // Einhaengen jetzt schriebe in eine fremde Adresse.
   if (signal?.aborted || !page.isConnected) return;
@@ -552,6 +708,8 @@ export async function render(container, { signal } = {}) {
   // Vorrats-Zuordnung stehen in der Spalten-Darstellung in der Detailspalte,
   // mit denselben `data-action`-Knoepfen wie im Aufklapper.
   split.addEventListener('click', (e) => onSplitClick(e, list));
+  // Am Finger: langer Druck auf eine Zeile oeffnet ihr Menue (Tafla).
+  wireLongPress(list, signal);
 
   // Kein eigener keydown-Handler mehr: das Aufklappen sitzt auf einem echten
   // <button>, der Enter und Space von sich aus verarbeitet. Der frühere Handler
@@ -564,9 +722,25 @@ async function onSplitClick(e, list) {
   // er das Leseblatt oder das Formular - der Baustein entscheidet ueber open().
   // Auswaehlen und Oeffnen sind Lesen; den Weg ins Formular schliesst
   // openRecipeModal() selbst.
-  const main = e.target.closest('.recipe-row__toggle');
+  // Die Mahlzeit-Chips (Tafla) filtern nur die Ansicht - Lesen, kein Riegel.
+  const chip = e.target.closest('[data-meal-filter]');
+  if (chip && list.contains(chip)) {
+    const value = chip.dataset.mealFilter;
+    if (state.mealFilter !== value) {
+      state.mealFilter = value;
+      renderRecipeList();
+      list.querySelector(`[data-meal-filter="${CSS.escape(value)}"]`)?.focus();
+    }
+    return;
+  }
+
+  // Eine Karte in "Gotowane ostatnio" tut, was der Tipp auf ihre Zeile tut.
+  const card = e.target.closest('.recipe-card');
+  const main = card && list.contains(card)
+    ? list.querySelector(`.recipe-row__toggle[data-id="${CSS.escape(card.dataset.id)}"]`)
+    : e.target.closest('.recipe-row__toggle');
   if (main && list.contains(main)) {
-    if (_md) _md.open(main.dataset.id, main);
+    if (_md) _md.open(main.dataset.id, card ?? main);
     else openRecipeNarrow(main.dataset.id, main);
     return;
   }
@@ -603,6 +777,7 @@ const SPLIT_ACTIONS = {
   delete: (recipe) => removeRecipe(recipe),
   duplicate: (recipe) => duplicateRecipe(recipe),
   'to-shopping': (recipe, btn) => transferRecipe(recipe, btn),
+  'to-shopping-missing': (recipe, btn) => transferRecipe(recipe, btn, { onlyMissing: true }),
   'add-to-meals': (recipe, btn) => planRecipe(recipe, btn),
 };
 
@@ -779,31 +954,82 @@ function recipeActions(recipe, { edit, duplicate, remove }) {
  * Das Rezept als LESEBLATT unter der Schwelle (R19, Critique 2026-10-16:
  * "Zeilentipp hat vier Bedeutungen"). Derselbe Inhalt wie die Detailspalte
  * (fillRecipeDetail), dasselbe Blatt wie Kontakte und Inventar
- * (openDetailView), Bearbeiten unten als Hauptaktion. Die Knoepfe IM Detail
- * (Einplanen, Einkauf, Vorrat zuordnen) laufen ueber dieselbe Tabelle wie in
- * der Liste (SPLIT_ACTIONS) samt Nur-lesen-Riegel.
+ * (openDetailView). Die Knoepfe IM Detail (Einplanen, Einkauf, Vorrat
+ * zuordnen) laufen ueber dieselbe Tabelle wie in der Liste (SPLIT_ACTIONS)
+ * samt Nur-lesen-Riegel.
+ *
+ * TAFLA (2026-10-19): auf dem Telefon ist das Blatt eine geschobene Seite
+ * (`size: 'recipe'`, recipes.css): Bild oben, eine Glas-Zurueck-Taste und ⋯
+ * darueber, und unten EIN Primaerknopf, "Zacznij gotować" - er oeffnet den
+ * Kochmodus. Bearbeiten, Duplizieren und Loeschen wandern ins ⋯ (Tafla: ein
+ * Primaerknopf je Ansicht). Zurueck (Taste, Wischgeste, Browser) schliesst
+ * das Blatt wie jedes Modal.
  */
 function openRecipeSheet(recipe) {
   const detail = document.createElement('div');
   detail.className = 'recipe-detail recipe-detail--sheet';
-  fillRecipeDetail(detail, recipe);
+  fillRecipeDetail(detail, recipe, { variant: 'sheet' });
   detail.addEventListener('click', (e) => onSplitClick(e, detail));
-  // Erst das Blatt schliessen, dann das naechste Fenster: das geteilte Modal
-  // kennt kein Stapeln (closeDetailView).
-  const leave = (next) => async ({ close } = {}) => {
-    await (close ?? closeDetailView)({ force: true });
-    next();
-  };
   openDetailView({
     title: recipe.title,
     key: `recipe:${recipe.id}`,
+    size: 'recipe',
     sections: [{ node: detail }],
-    actions: readOnly() ? [] : recipeActions(recipe, {
-      edit: { id: 'recipe-sheet-edit', onClick: leave(() => openRecipeModal('edit', recipe)) },
-      duplicate: leave(() => duplicateRecipe(recipe)),
-      remove: leave(() => removeRecipe(recipe)),
-    }),
+    actions: canCook(recipe) ? [{
+      id: 'recipe-sheet-cook',
+      label: t('recipes.startCooking'),
+      icon: 'chef-hat',
+      variant: 'primary',
+      onClick: () => startCooking(recipe),
+    }] : [],
   });
+  decorateRecipeSheet(recipe);
+}
+
+/**
+ * Der Kopf des Blatts (Tafla): das Schliessen-X des geteilten Dialogs wird zur
+ * Zurueck-Taste (Chevron, "Wstecz"), rechts daneben das ⋯ mit den
+ * Objektaktionen. Nur am Blatt dieser Seite (`.modal-panel--recipe`).
+ */
+function decorateRecipeSheet(recipe) {
+  const panel = document.querySelector?.('#shared-modal-overlay .modal-panel--recipe');
+  if (!panel) return;
+  const close = panel.querySelector('.modal-panel__close');
+  if (close) {
+    close.setAttribute('aria-label', t('common.back'));
+    close.replaceChildren();
+    close.insertAdjacentHTML('beforeend', '<i data-lucide="chevron-left" class="icon-md" aria-hidden="true"></i>');
+  }
+  const isMirrored = recipe.source !== 'native';
+  const items = readOnly() ? [] : [
+    !isMirrored && { action: 'edit', icon: 'pencil', label: t('common.edit') },
+    { action: 'duplicate', icon: 'copy', label: t('recipes.duplicate') },
+    !isMirrored && { action: 'delete', icon: 'trash-2', label: t('common.delete'), danger: true },
+  ].filter(Boolean);
+  if (items.length) {
+    const head = panel.querySelector('.modal-panel__header');
+    const menu = document.createElement('div');
+    menu.className = 'recipe-view__menu';
+    menu.insertAdjacentHTML('beforeend', popoverMenuHtml({
+      id: `recipe-view-menu-${recipe.id}`,
+      label: t('common.moreActions'),
+      triggerClass: 'recipe-view__more',
+      items: items.map((item) => ({ ...item, id: recipe.id })),
+    }));
+    head?.appendChild(menu);
+    installPopoverMenus(panel);
+    // Erst das Blatt schliessen, dann das naechste Fenster: das geteilte
+    // Modal kennt kein Stapeln (closeDetailView).
+    menu.addEventListener('click', async (e) => {
+      const item = e.target.closest('.popover-menu__item[data-action]');
+      if (!item || readOnly()) return;
+      await closeDetailView({ force: true });
+      if (item.dataset.action === 'edit') openRecipeModal('edit', recipe);
+      else if (item.dataset.action === 'duplicate') duplicateRecipe(recipe);
+      else if (item.dataset.action === 'delete') removeRecipe(recipe);
+    });
+  }
+  if (window.lucide) window.lucide.createIcons({ el: panel });
 }
 
 /**
@@ -908,18 +1134,25 @@ function buildRecipeList() {
     return;
   }
 
+  // TAFLA (2026-10-19): oben die Filter-Chips, dann "Gotowane ostatnio" als
+  // Karten und darunter "Wszystkie przepisy N" als gruppierte Zeilen.
+  const chips = mealFilterEl();
+  if (chips) list.appendChild(chips);
+
   const visible = filteredRecipes();
   if (!visible.length) {
     // Geteilter Renderer, Variante 'no-results' (role="status", sekundärer CTA).
-    // Vorher war das hier ein nacktes <p class="recipes-search-empty"> - die eine
-    // Stelle im Modul, die den erzwingenden Baustein umging, während die
-    // Schwester im Vorrat im identischen Zustand Icon, Überschrift, den
-    // Suchbegriff und einen Zurücksetzen-Pfad lieferte (Critique 2026-07-30).
-    // Seit R19 der EINE Leerzustand einer leeren Suche (mountSearchEmpty).
-    mountSearchEmpty(list, {
+    // Seit R19 der EINE Leerzustand einer leeren Suche (mountSearchEmpty) - in
+    // einem eigenen Traeger unter den Chips, damit ein gewaehlter Chip sichtbar
+    // bleibt und sich zuruecknehmen laesst.
+    const holder = document.createElement('div');
+    holder.className = 'recipes-list__empty';
+    list.appendChild(holder);
+    mountSearchEmpty(holder, {
       query: state.query,
       onReset: () => {
         state.query = '';
+        state.mealFilter = 'all';
         // clear() versteckt zugleich den Leeren-Knopf; ein blankes
         // `value = ''` ließe ihn über dem leeren Feld stehen.
         _search?.clear();
@@ -927,267 +1160,422 @@ function buildRecipeList() {
         _search?.input.focus();
       },
     });
+    if (window.lucide) window.lucide.createIcons({ el: list });
     return;
+  }
+
+  const unfiltered = !state.query && state.mealFilter === 'all' && state.sourceFilter === 'all';
+  const recent = unfiltered ? recentRecipes(visible) : [];
+  if (recent.length >= 2) list.appendChild(recentSectionEl(recent));
+
+  const section = document.createElement('section');
+  section.className = 'recipes-all';
+  if (unfiltered) {
+    // Gruppenkopf ausserhalb der Karte: Titel 17/600 plus Zahl 17/400.
+    const heading = document.createElement('h2');
+    heading.className = 'recipes-group-title';
+    heading.id = 'recipes-all-title';
+    const label = document.createElement('span');
+    label.textContent = t('recipes.allTitle');
+    const count = document.createElement('span');
+    count.className = 'recipes-group-title__count';
+    count.textContent = String(visible.length);
+    heading.append(label, count);
+    section.setAttribute('aria-labelledby', 'recipes-all-title');
+    section.appendChild(heading);
   }
 
   // Eine Zeilenliste, keine Kacheln: das Kartenraster war der letzte Tab mit
   // eigener Zeilen-Grammatik (20px Radius, 408px Höhe, drei CTA-Grundlinien,
   // 48px Bodenversatz in derselben Rasterzeile). Als Zeile teilt es Fläche,
-  // Trennlinie, Textspalte und Bedienzone mit Einkauf und Vorrat.
+  // Trennlinie, Textspalte und Bedienzone mit Einkauf und Vorrat. Die Karten
+  // oben (Tafla) sind die Abkuerzung zu dem, was gerade gekocht wird.
   const rows = document.createElement('ul');
   rows.className = 'row-carrier';
-
-  for (const recipe of visible) {
-    // Mirror-Rezepte sind read-only (der Provider bleibt Quelle der Wahrheit); steuert
-    // weiter unten sowohl die Zeilenaktionen als auch das Aufklapp-Detail.
-    const isMirrored = recipe.source !== 'native';
-    const ro = readOnly();
-    const ingredients = recipe.ingredients ?? [];
-    // Bei `read` hat JEDE Zeile ein Detail: dort stehen dann immer die
-    // Mahlzeiten (fillRecipeDetail), und der Weg „ohne Detail direkt ins
-    // Formular" ist zu - die Zeile waere sonst ein Knopf, der nichts tut.
-    const hasDetail = ro || Boolean(ingredients.length || recipe.notes || recipe.recipe_url);
-
-    const li = document.createElement('li');
-    li.className = 'recipe-row-item';
-    li.dataset.id = String(recipe.id);
-    // Liste + Detail: die Zeile ist auswaehlbar, ihr Hauptknopf traegt den Fokus
-    // der Pfeiltasten (utils/master-detail.js).
-    li.dataset.mdId = String(recipe.id);
-
-    const row = document.createElement('div');
-    row.className = 'list-row recipe-row';
-
-    // Kanonisches Accordion-Muster: Überschrift umschließt den Button. Die
-    // Überschrift trägt die Dokumentstruktur, der Button den Zustand - vorher
-    // war die ganze Karte ein role="button" MIT Buttons darin, was für
-    // Hilfsmittel ein verschachteltes Bedienelement ist.
-    const heading = document.createElement('h2');
-    heading.className = 'list-row__main recipe-row__heading';
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'list-row__main--interactive recipe-row__toggle';
-    toggle.dataset.action = 'open-detail';
-    toggle.dataset.id = String(recipe.id);
-    toggle.dataset.mdFocus = "";
-
-    // Herkunft ist Teil der Identität der Zeile, nicht erst ein Detail: wer
-    // durch eine gemischte Liste scrollt, muss vor dem Aufklappen sehen können,
-    // welche Rezepte gespiegelt (und schreibgeschützt) sind, nicht erst
-    // danach.
-    if (rowShowsThumb(recipe)) toggle.appendChild(recipeThumb(recipe));
-
-    const name = document.createElement('span');
-    name.className = 'list-row__name';
-    name.textContent = recipe.title;
-    toggle.appendChild(name);
-
-    if (isMirrored) {
-      // Eigener, unsichtbarer Slot statt das Badge selbst als Flex-Item zu
-      // verwenden: unter der Container-Query unten braucht das Badge eine
-      // erzwungene eigene Zeile (wie die Zutatenzahl), aber ein `flex-basis:
-      // 100%` DIREKT am Badge würde die Pille selbst auf volle Zeilenbreite
-      // dehnen (sie trägt einen sichtbaren Hintergrund, anders als der reine
-      // Text der Zutatenzahl). Der Slot dehnt sich, die Pille darin bleibt
-      // ihrer Inhaltsbreite treu.
-      const badgeSlot = document.createElement('span');
-      badgeSlot.className = 'recipe-row__badge-slot';
-      badgeSlot.appendChild(sourceBadge(recipe));
-      toggle.appendChild(badgeSlot);
-    }
-
-    // Die Zutatenzahl ersetzt das frühere „+N": dort stand ein <li> mit
-    // cursor: pointer, ohne role, ohne tabindex, ohne aria-expanded, dessen
-    // Klick nachweislich nichts tat (Kartenhöhe 408 → 408px an sechs Karten
-    // gemessen, Critique 2026-07-30). Jetzt ist die Zahl die Beschriftung
-    // dessen, was das Aufklappen zeigt.
-    //
-    // IMMER gerendert, auch bei 0: die Mindestbreite von .list-row__meta
-    // (15ch, siehe recipes.css) hält alles davor - das Mealie/Tandoor-Badge -
-    // an derselben Stelle. Fehlte das Element ganz, würde der Name per
-    // flex-grow den freiwerdenden Platz schlucken und das Badge nach rechts
-    // schieben, sobald ein Rezept ganz ohne Zutaten in der Liste steht.
-    const meta = document.createElement('span');
-    meta.className = 'list-row__meta';
-    meta.textContent = t('meals.ingredientCount', { count: ingredients.length });
-    // Zutatenzahl und „Diese Woche geplant" teilen sich einen Slot: breit
-    // nimmt er per `display: contents` nicht am Layout teil, schmal wird er
-    // die zweite Zeile unter dem Namen - BEIDE Angaben darin, statt dass die
-    // zweite allein neben dem Namen haengen bleibt (recipes.css).
-    const sub = document.createElement('span');
-    sub.className = 'recipe-row__sub';
-    sub.appendChild(meta);
-
-    // Zweite Meta-Angabe, getrennt ueber den Mittelpunkt des +-Kombinators
-    // (Hausform, Vorrat): neutraler Sekundaertext, keine Flaeche - der
-    // Zustand ist eine Meldung, keine Identitaet (Skalen-Regel).
-    if (state.plannedRecipeIds.has(recipe.id)) {
-      const planned = document.createElement('span');
-      planned.className = 'recipe-row__planned';
-      planned.textContent = t('recipes.plannedThisWeek');
-      sub.appendChild(planned);
-    }
-    toggle.appendChild(sub);
-
-    if (hasDetail) {
-      // Ein Wegweiser, kein Aufklapp-Winkel: die Zeile oeffnet das Rezept.
-      toggle.setAttribute('aria-haspopup', 'dialog');
-      toggle.insertAdjacentHTML('beforeend',
-        '<i data-lucide="chevron-right" class="icon-sm recipe-row__chevron" aria-hidden="true"></i>');
-    } else if (!isMirrored) {
-      // Ohne Detail kein Versprechen: kein Chevron, kein aria-expanded. Der
-      // Button öffnet dann direkt das Bearbeiten-Formular.
-      toggle.dataset.action = 'edit';
-    } else {
-      // Gespiegelt UND ohne Detail (kein Slug-Link, keine Zutaten, keine
-      // Notiz - selten, aber möglich, wenn Mealies /users/self keinen
-      // groupSlug liefert): weder aufklappbar noch bearbeitbar. Der Button
-      // bliebe sonst interaktiv aussehend, ohne dass ein Klick etwas täte -
-      // oder schlimmer, er würde über den generischen edit-Handler ein
-      // Bearbeitungsformular öffnen, dessen Speichern serverseitig ohnehin
-      // mit 403 abgewiesen wird (provider_account_id-Guard, routes/recipes.js).
-      delete toggle.dataset.action;
-      toggle.classList.remove('list-row__main--interactive');
-      toggle.tabIndex = -1;
-      // Nur unter der Schwelle stumm: in der Spalte zeigt auch dieses Rezept
-      // sein Detail rechts, also ist die Zeile dort ein Knopf wie jede andere
-      // (syncRowMode).
-      toggle.dataset.narrowInert = "";
-      // Trotzdem einen (unsichtbaren) Chevron-Platzhalter einfügen: sonst
-      // wächst der Name per flex-grow um genau dessen Breite, und das Badge
-      // vor ihm rutscht gegenüber jeder anderen gespiegelten Zeile nach
-      // rechts - derselbe Mechanismus wie bei der Zutatenzahl oben.
-      toggle.insertAdjacentHTML('beforeend',
-        '<i data-lucide="chevron-right" class="icon-sm recipe-row__chevron recipe-row__chevron--placeholder" aria-hidden="true"></i>');
-    }
-
-    heading.appendChild(toggle);
-    row.appendChild(heading);
-
-    // Mirror-Rezepte sind read-only (der Provider bleibt Quelle der Wahrheit) - Edit
-    // und Delete entfallen, Duplizieren bleibt: das legt eine eigenständige,
-    // frei bearbeitbare Kopie an (duplicateRecipe() postet immer als natives
-    // Rezept, unabhängig von der Quelle des Originals). Eine Liste speist
-    // sowohl die Inline-Buttons als auch das Überlaufmenü weiter unten, damit
-    // beide Fassungen nie auseinanderlaufen.
-    // Bei `read` bleibt keine: alle drei schreiben (Duplizieren legt ein
-    // Rezept an). Die Bedienzone entfaellt dann samt Ueberlaufmenue.
-    const ROW_ACTIONS = ro ? [] : [
-      !isMirrored && { action: 'edit',      icon: 'pencil',  label: t('common.edit') },
-      { action: 'duplicate', icon: 'copy',    label: t('recipes.duplicate') },
-      !isMirrored && { action: 'delete',    icon: 'trash-2', label: t('common.delete'), danger: true },
-    ].filter(Boolean);
-
-    const actions = document.createElement('div');
-    actions.className = 'list-row__actions';
-
-    // Drei Zeilenaktionen kosten 152px von 262px Zeilenbreite bei 320px - 58% der
-    // Zeile für Sekundäraktionen. Für den Namen blieben 98px, und weil er in einem
-    // Flex-Elternteil steht, fiel er auf min-content: 8px, Zeilenhöhe 448px
-    // (Critique 2026-07-30, P0).
-    //
-    // Unter 30rem Zeilenbreite wandern sie deshalb in dasselbe Überlaufmenü, das der
-    // Einkaufs-Kopf benutzt - mit Labels, und ein 48px-Trigger statt drei Knöpfen.
-    // Die Container-Query dazu steht in recipes.css; hier stehen beide Fassungen im
-    // DOM, CSS entscheidet. Dieselbe Mechanik wie beim Kopf: `display: none` nimmt
-    // die ungenutzte Fassung auch aus der Tabfolge.
-    const inline = document.createElement('div');
-    inline.className = 'recipe-row__inline-actions';
-    for (const a of ROW_ACTIONS) {
-      const btn = document.createElement('button');
-      btn.className = `row-action${a.danger ? ' row-action--danger' : ''}`;
-      btn.type = 'button';
-      btn.dataset.action = a.action;
-      btn.dataset.id = String(recipe.id);
-      btn.setAttribute('aria-label', `${a.label}: ${recipe.title}`);
-      btn.title = a.label;
-      btn.insertAdjacentHTML('beforeend',
-        `<i data-lucide="${a.icon}" class="icon-md" aria-hidden="true"></i>`);
-      inline.appendChild(btn);
-    }
-    actions.appendChild(inline);
-
-    const more = document.createElement('div');
-    more.className = 'recipe-row__more';
-    more.insertAdjacentHTML('beforeend', popoverMenuHtml({
-      id: `recipe-menu-${recipe.id}`,
-      label: t('common.moreActions'),
-      triggerClass: 'row-action',
-      items: ROW_ACTIONS.map((a) => ({ ...a, id: recipe.id })),
-    }));
-    actions.appendChild(more);
-
-    if (ROW_ACTIONS.length) row.appendChild(actions);
-    li.appendChild(row);
-
-    rows.appendChild(li);
-  }
-
-  list.appendChild(rows);
+  for (const recipe of visible) rows.appendChild(recipeRowEl(recipe));
+  section.appendChild(rows);
+  list.appendChild(section);
 
   if (window.lucide) window.lucide.createIcons({ el: list });
 }
 
 /**
- * Der Inhalt eines Rezeptdetails: Mahlzeit-Chips, Zutaten samt Vorrats-
- * Zuordnung, Notizen und die beiden Kreislauf-Ausgaenge. EINE Quelle fuer
- * zwei Orte - den Aufklapper der Zeile (unter der Schwelle) und die
- * Detailspalte (Liste + Detail), damit beide nie auseinanderlaufen.
+ * Die Mahlzeit-Chips (Tafla): "Wszystkie" plus jede Mahlzeit, die nur EINEN
+ * Teil der Rezepte betrifft - ein Chip, der alle Rezepte zeigt, filtert nichts.
+ * Zeit ("Szybkie") und Favoriten ("Ulubione") aus dem Entwurf gibt es nicht:
+ * Rezepte tragen weder eine Kochzeit noch ein Favoritenfeld.
  */
-function fillRecipeDetail(detail, recipe) {
-  const ingredients = recipe.ingredients ?? [];
-  const mealTypes = normalizeRecipeMealTypes(recipe.meal_types);
-  // Das eigene Bild als Kopf des Details (R16) - ohne Bild kein Platzhalterblock
-  // (utils/recipe-thumb.js). OHNE BILD BEGINNT DAS DETAIL MIT SEINEM INHALT
-  // (R20, Entscheidung Ulas 2026-10-17): das flache Band im Kuechenton aus R18
-  // ist weg - am Desktop stand es als 480px breiter Stummel ueber den Zutaten,
-  // und den Titel traegt der Kopf des Rahmens ohnehin. Scheitert ein Bild beim
-  // Laden, nimmt es seinen Rahmen mit (keine Luecke, kein Ersatz).
-  const hero = recipeHeroEl({ recipeId: recipe.id, hasOwnImage: recipe.has_own_image });
-  if (hero) detail.appendChild(hero);
+function mealFilterChoices() {
+  const recipes = listedRecipes();
+  return mealTypeOptions().filter(({ key }) => {
+    const n = recipes.filter((r) => normalizeRecipeMealTypes(r.meal_types).includes(key)).length;
+    return n > 0 && n < recipes.length;
+  });
+}
 
-  // Chips nur, wenn sie unterscheiden: gilt ein Rezept für alle Mahlzeiten,
-  // ist die volle Chip-Reihe reine Ornamentik (Audit A1-21). Das
-  // Herkunfts-Badge sitzt jetzt schon in der Zeilenüberschrift (immer sichtbar,
-  // nicht erst nach dem Aufklappen) und wird hier nicht noch einmal gezeigt.
-  //
-  // BEI `read` IMMER (Regel 9 in utils/module-access.js): im Formular stehen
-  // die Mahlzeiten als Chips, und wer es nicht oeffnen darf, saehe „gilt fuer
-  // alle" sonst nur daran, dass hier nichts steht.
-  const showMealTypeBadges = mealTypes.length && (readOnly() || mealTypes.length < mealTypeOptions().length);
-  if (showMealTypeBadges) {
-    const badges = document.createElement('div');
-    badges.className = 'recipe-card__meal-types';
-    badges.append(...mealTypeOptions()
-      .filter((option) => mealTypes.includes(option.key))
-      .map((option) => {
-        const badge = document.createElement('span');
-        badge.className = `meal-type-badge meal-type-badge--${option.key}`;
-        badge.textContent = option.label;
-        return badge;
-      }));
-    detail.appendChild(badges);
-  } else if (!mealTypes.length) {
-    // Keine Mahlzeit ist eine Aussage und braucht ein Wort: Das Rezept fällt
-    // aus Menüplan und Zufallsauswahl heraus (#750). Ohne Hinweis wäre der
-    // Zustand von „gilt für alle" nur daran zu unterscheiden, dass hier
-    // nichts steht - und genau diese Stille war der gemeldete Fehler.
-    const none = document.createElement('div');
-    none.className = 'recipe-card__meal-types';
-    const badge = document.createElement('span');
-    badge.className = 'meal-type-badge meal-type-badge--none';
-    badge.textContent = t('recipes.mealTypeNone');
-    none.appendChild(badge);
-    detail.appendChild(none);
+function mealFilterEl() {
+  const choices = mealFilterChoices();
+  if (state.mealFilter !== 'all' && !choices.some((c) => c.key === state.mealFilter)) state.mealFilter = 'all';
+  if (!choices.length) return null;
+  const group = document.createElement('div');
+  group.className = 'recipes-filter';
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', t('recipes.filterLabel'));
+  for (const { key, label } of [{ key: 'all', label: t('recipes.filterAll') }, ...choices]) {
+    const active = state.mealFilter === key;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `recipes-filter__chip${active ? ' recipes-filter__chip--active' : ''}`;
+    chip.dataset.mealFilter = key;
+    chip.setAttribute('aria-pressed', String(active));
+    if (active) chip.insertAdjacentHTML('beforeend', '<i data-lucide="check" class="recipes-filter__check" aria-hidden="true"></i>');
+    const text = document.createElement('span');
+    text.textContent = label;
+    chip.appendChild(text);
+    group.appendChild(chip);
+  }
+  return group;
+}
+
+/**
+ * "Gotowane ostatnio" (Tafla): was heute oder spaeter in dieser Woche geplant
+ * ist und was zuletzt gekocht wurde - das Naechste zuerst, hoechstens vier.
+ * Gekocht heisst: eine Mahlzeit mit diesem Rezept vor heute (`last_cooked_on`
+ * vom Server). Bei Gleichstand geht das Geplante vor.
+ */
+function recentRecipes(recipes) {
+  const today = todayKey();
+  return recipes.map((recipe) => {
+    const planned = state.plannedOn.get(recipe.id);
+    if (planned) return { recipe, planned, distance: dayDiff(today, planned) };
+    if (recipe.last_cooked_on) return { recipe, cooked: recipe.last_cooked_on, distance: dayDiff(recipe.last_cooked_on, today) + 0.5 };
+    return null;
+  }).filter(Boolean).sort((a, b) => a.distance - b.distance).slice(0, 4);
+}
+
+function recentSectionEl(entries) {
+  const section = document.createElement('section');
+  section.className = 'recipes-recent';
+  section.setAttribute('aria-labelledby', 'recipes-recent-title');
+  const heading = document.createElement('h2');
+  heading.className = 'recipes-section-title';
+  heading.id = 'recipes-recent-title';
+  heading.textContent = t('recipes.recentTitle');
+  section.appendChild(heading);
+  const grid = document.createElement('div');
+  grid.className = 'recipes-recent__grid';
+  for (const entry of entries) grid.appendChild(recipeCardEl(entry));
+  section.appendChild(grid);
+  return section;
+}
+
+/**
+ * Eine Karte in "Gotowane ostatnio": Bild (oder die warme Flaeche mit dem
+ * Teller-Zeichen), Titel in zwei Zeilen, darunter der Tag. Ein Tipp tut, was
+ * der Tipp auf die Zeile darunter tut (onSplitClick reicht ihn weiter).
+ */
+function recipeCardEl({ recipe, planned, cooked }) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'recipe-card';
+  card.dataset.id = String(recipe.id);
+  card.appendChild(recipeThumbEl({
+    recipeId: recipe.id,
+    hasImage: recipe.provider_has_image,
+    hasOwnImage: recipe.has_own_image,
+    className: 'recipe-card__media',
+    iconClass: 'recipe-card__plate',
+  }));
+  const body = document.createElement('span');
+  body.className = 'recipe-card__body';
+  const title = document.createElement('span');
+  title.className = 'recipe-card__title';
+  title.textContent = recipe.title;
+  const meta = document.createElement('span');
+  meta.className = 'recipe-card__meta';
+  meta.textContent = planned ? upcomingLabel(planned) : agoLabel(cooked);
+  body.append(title, meta);
+  card.appendChild(body);
+  return card;
+}
+
+/** Eine Zeile in "Wszystkie przepisy": 64 hoch, Bild oder Teller-Zeichen, Titel, Meta. */
+function recipeRowEl(recipe) {
+  // Mirror-Rezepte sind read-only (der Provider bleibt Quelle der Wahrheit); steuert
+  // weiter unten sowohl die Zeilenaktionen als auch das Detail.
+  const isMirrored = recipe.source !== 'native';
+  const ro = readOnly();
+  const ingredients = recipe.ingredients ?? [];
+  // Bei `read` hat JEDE Zeile ein Detail: dort stehen dann immer die
+  // Mahlzeiten (fillRecipeDetail), und der Weg „ohne Detail direkt ins
+  // Formular" ist zu - die Zeile waere sonst ein Knopf, der nichts tut.
+  const hasDetail = ro || Boolean(ingredients.length || recipe.notes || recipe.recipe_url);
+
+  const li = document.createElement('li');
+  li.className = 'recipe-row-item';
+  li.dataset.id = String(recipe.id);
+  // Liste + Detail: die Zeile ist auswaehlbar, ihr Hauptknopf traegt den Fokus
+  // der Pfeiltasten (utils/master-detail.js).
+  li.dataset.mdId = String(recipe.id);
+
+  const row = document.createElement('div');
+  row.className = 'list-row recipe-row';
+
+  // Überschrift umschließt den Button (Dokumentstruktur + Zustand). Eine
+  // Stufe unter den Abschnittskoepfen der Liste (h2).
+  const heading = document.createElement('h3');
+  heading.className = 'list-row__main recipe-row__heading';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'list-row__main--interactive recipe-row__toggle';
+  toggle.dataset.action = 'open-detail';
+  toggle.dataset.id = String(recipe.id);
+  toggle.dataset.mdFocus = "";
+
+  // Der fuehrende Platz (28 breit, Titel bei x=56): das Bild des Rezepts, sonst
+  // das Teller-Zeichen. Die Herkunft bleibt Teil der Zeile (Badge darunter).
+  if (rowShowsThumb(recipe)) toggle.appendChild(recipeThumb(recipe));
+  else toggle.insertAdjacentHTML('beforeend', '<span class="recipe-row__glyph" aria-hidden="true"><i data-lucide="utensils" class="icon-md" aria-hidden="true"></i></span>');
+
+  const name = document.createElement('span');
+  name.className = 'list-row__name';
+  name.textContent = recipe.title;
+  toggle.appendChild(name);
+
+  if (isMirrored) {
+    // Eigener Slot statt das Badge selbst als Flex-Item zu verwenden: die
+    // Pille bleibt ihrer Inhaltsbreite treu.
+    const badgeSlot = document.createElement('span');
+    badgeSlot.className = 'recipe-row__badge-slot';
+    badgeSlot.appendChild(sourceBadge(recipe));
+    toggle.appendChild(badgeSlot);
   }
 
-  // VOLLSTÄNDIGE Zutatenliste, nicht die ersten vier: das Kürzen war nur
-  // nötig, um die Kartenhöhe zu bändigen. Ein Detail, das sich öffnet, hat
-  // keinen Grund, etwas zu verschweigen.
+  // Die Zutatenzahl ist die Beschriftung dessen, was das Detail zeigt - IMMER
+  // gerendert, auch bei 0, damit die Zeile ihre zweite Zeile behaelt.
+  const meta = document.createElement('span');
+  meta.className = 'list-row__meta';
+  meta.textContent = t('meals.ingredientCount', { count: ingredients.length });
+  // Zutatenzahl und der Tag (geplant / zuletzt gekocht) teilen sich die zweite
+  // Zeile unter dem Namen (recipes.css).
+  const sub = document.createElement('span');
+  sub.className = 'recipe-row__sub';
+  sub.appendChild(meta);
+
+  // Zweite Meta-Angabe, getrennt ueber den Mittelpunkt (Hausform, Vorrat):
+  // neutraler Sekundaertext, keine Flaeche. Geplant geht vor gekocht.
+  const plannedDate = state.plannedOn.get(recipe.id);
+  if (plannedDate || (state.plannedRecipeIds.has(recipe.id) && !recipe.last_cooked_on)) {
+    const planned = document.createElement('span');
+    planned.className = 'recipe-row__planned';
+    planned.textContent = plannedDate
+      ? t('recipes.plannedRow', { when: upcomingLabel(plannedDate) })
+      : t('recipes.plannedThisWeek');
+    sub.appendChild(planned);
+  } else if (recipe.last_cooked_on) {
+    const cooked = document.createElement('span');
+    cooked.className = 'recipe-row__planned recipe-row__cooked';
+    cooked.textContent = t('recipes.cookedAgo', { when: agoLabel(recipe.last_cooked_on) });
+    sub.appendChild(cooked);
+  }
+  toggle.appendChild(sub);
+
+  if (hasDetail) {
+    // Ein Wegweiser, kein Aufklapp-Winkel: die Zeile oeffnet das Rezept.
+    toggle.setAttribute('aria-haspopup', 'dialog');
+    toggle.insertAdjacentHTML('beforeend',
+      '<i data-lucide="chevron-right" class="icon-sm recipe-row__chevron" aria-hidden="true"></i>');
+  } else if (!isMirrored) {
+    // Ohne Detail kein Versprechen: kein Chevron, kein aria-expanded. Der
+    // Button öffnet dann direkt das Bearbeiten-Formular.
+    toggle.dataset.action = 'edit';
+  } else {
+    // Gespiegelt UND ohne Detail: weder zu oeffnen noch zu bearbeiten (der
+    // Server weist das Speichern mit 403 ab). Nur unter der Schwelle stumm: in
+    // der Spalte zeigt auch dieses Rezept sein Detail rechts (syncRowMode).
+    delete toggle.dataset.action;
+    toggle.classList.remove('list-row__main--interactive');
+    toggle.tabIndex = -1;
+    toggle.dataset.narrowInert = "";
+    toggle.insertAdjacentHTML('beforeend',
+      '<i data-lucide="chevron-right" class="icon-sm recipe-row__chevron recipe-row__chevron--placeholder" aria-hidden="true"></i>');
+  }
+
+  heading.appendChild(toggle);
+  row.appendChild(heading);
+
+  // Bearbeiten, Duplizieren, Loeschen: am Zeiger in der Zeile (breit inline,
+  // schmal im Ueberlaufmenue), am Finger NICHT (Tafla: kein ⋯ je Zeile) - dort
+  // liegen sie im Detail und hinter einem langen Druck (wireLongPress). Ein
+  // gespiegeltes Rezept kennt nur Duplizieren; bei `read` gibt es keine.
+  const ROW_ACTIONS = ro ? [] : [
+    !isMirrored && { action: 'edit',      icon: 'pencil',  label: t('common.edit') },
+    { action: 'duplicate', icon: 'copy',    label: t('recipes.duplicate') },
+    !isMirrored && { action: 'delete',    icon: 'trash-2', label: t('common.delete'), danger: true },
+  ].filter(Boolean);
+
+  const actions = document.createElement('div');
+  actions.className = 'list-row__actions';
+
+  const inline = document.createElement('div');
+  inline.className = 'recipe-row__inline-actions';
+  for (const a of ROW_ACTIONS) {
+    const btn = document.createElement('button');
+    btn.className = `row-action${a.danger ? ' row-action--danger' : ''}`;
+    btn.type = 'button';
+    btn.dataset.action = a.action;
+    btn.dataset.id = String(recipe.id);
+    btn.setAttribute('aria-label', `${a.label}: ${recipe.title}`);
+    btn.title = a.label;
+    btn.insertAdjacentHTML('beforeend',
+      `<i data-lucide="${a.icon}" class="icon-md" aria-hidden="true"></i>`);
+    inline.appendChild(btn);
+  }
+  actions.appendChild(inline);
+
+  const more = document.createElement('div');
+  more.className = 'recipe-row__more';
+  more.insertAdjacentHTML('beforeend', popoverMenuHtml({
+    id: `recipe-menu-${recipe.id}`,
+    label: t('common.moreActions'),
+    triggerClass: 'row-action',
+    items: ROW_ACTIONS.map((a) => ({ ...a, id: recipe.id })),
+  }));
+  actions.appendChild(more);
+
+  if (ROW_ACTIONS.length) row.appendChild(actions);
+  li.appendChild(row);
+  return li;
+}
+
+/**
+ * LANGER DRUCK = MENUE (Tafla, Gesten): am Finger hat die Zeile kein ⋯, also
+ * oeffnet ein Druck von ~450 ms ohne Bewegung dasselbe Ueberlaufmenue der
+ * Zeile, an ihr ausgerichtet. Der Klick danach oeffnet das Rezept NICHT.
+ * Tastatur und Zeiger behalten die sichtbaren Knoepfe (recipes.css).
+ *
+ * GEOEFFNET WIRD BEIM LOSLASSEN, nicht waehrend des Drucks: das Loslassen
+ * ausserhalb eines offenen Popovers ist sein "light dismiss" - ein Menue, das
+ * unter dem Finger aufgeht, schloesse sich beim Heben sofort wieder. Die
+ * Zeile zeigt nach der Haltezeit, dass sie gegriffen ist (`--held`).
+ */
+function wireLongPress(list, signal) {
+  const HOLD_MS = 450;
+  const SLOP = 8;
+  let timer = null;
+  let start = null;
+  let armed = null;
+  let swallowClick = false;
+  let touching = false;
+  const release = () => {
+    armed?.item.classList.remove('recipe-row-item--held');
+    armed = null;
+  };
+  const cancel = () => { clearTimeout(timer); timer = null; start = null; release(); };
+  const openMenu = ({ item, menu }) => {
+    try { menu.showPopover(); } catch { return; }
+    // Die Lage gibt die Zeile vor - der Ausloeser selbst ist am Finger
+    // ausgeblendet. Nach dem toggle-Handler (popover-menu.js) gesetzt.
+    requestAnimationFrame(() => {
+      const rect = item.getBoundingClientRect();
+      const width = menu.offsetWidth || 200;
+      const height = menu.offsetHeight || 120;
+      const left = Math.min(Math.max(8, rect.right - width - 16), window.innerWidth - width - 8);
+      const below = rect.bottom + 4;
+      const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 4) : below;
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+    });
+  };
+  list.addEventListener('pointerdown', (e) => {
+    swallowClick = false;
+    cancel();
+    touching = e.pointerType === 'touch';
+    if (!touching) return;
+    const item = e.target.closest?.('.recipe-row-item');
+    const menu = item && document.getElementById?.(`recipe-menu-${item.dataset.id}`);
+    if (!menu) return;
+    start = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => {
+      timer = null;
+      armed = { item, menu };
+      item.classList.add('recipe-row-item--held');
+    }, HOLD_MS);
+  }, { signal });
+  list.addEventListener('pointermove', (e) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > SLOP) cancel();
+  }, { signal });
+  const lift = () => {
+    const held = armed;
+    clearTimeout(timer);
+    timer = null;
+    start = null;
+    release();
+    if (!held) return;
+    swallowClick = true;
+    // Nach dem Loslassen, nicht in ihm (siehe oben).
+    setTimeout(() => openMenu(held), 0);
+  };
+  list.addEventListener('pointerup', lift, { signal, passive: true });
+  list.addEventListener('pointercancel', lift, { signal, passive: true });
+  list.addEventListener('scroll', cancel, { signal, passive: true });
+  // Das Kontextmenue des Systems (iOS-Vorschau, Android) faellt auf der Zeile weg.
+  list.addEventListener('contextmenu', (e) => {
+    if (touching && e.target.closest?.('.recipe-row-item')) e.preventDefault();
+  }, { signal });
+  list.addEventListener('click', (e) => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { signal, capture: true });
+}
+
+/**
+ * Der Inhalt eines Rezeptdetails: Kopf (wie oft gekocht, Mahlzeiten, Zahlen),
+ * Zutaten mit Vorrat und Einkaufsliste, Kroki und die Kreislauf-Ausgaenge.
+ * EINE Quelle fuer zwei Orte - das Blatt unter der Schwelle (`variant:
+ * 'sheet'`, Tafla: Bild oben, grosser Titel) und die Detailspalte (Liste +
+ * Detail, Titel im Kopf der Spalte), damit beide nie auseinanderlaufen.
+ */
+function fillRecipeDetail(detail, recipe, { variant = 'pane' } = {}) {
+  const ingredients = recipe.ingredients ?? [];
+  const mealTypes = normalizeRecipeMealTypes(recipe.meal_types);
+  const sheet = variant === 'sheet';
+
+  if (sheet) {
+    // Tafla: das Blatt beginnt mit dem Bild - oder der warmen Flaeche mit dem
+    // Teller-Zeichen -, darunter der Titel 34/600. Den Namen des Dialogs
+    // traegt sein (unsichtbarer) Kopf, der sichtbare Titel ist Bild.
+    detail.appendChild(recipeViewHeroEl(recipe));
+    const title = document.createElement('p');
+    title.className = 'recipe-view__title';
+    title.setAttribute('aria-hidden', 'true');
+    title.textContent = recipe.title;
+    detail.appendChild(title);
+  } else {
+    // Das eigene Bild als Kopf der Spalte (R16) - ohne Bild kein Platzhalter
+    // (R20, Entscheidung Ulas 2026-10-17: am Desktop stand das Band als 480px
+    // breiter Stummel ueber den Zutaten).
+    const hero = recipeHeroEl({ recipeId: recipe.id, hasOwnImage: recipe.has_own_image });
+    if (hero) detail.appendChild(hero);
+  }
+
+  const head = recipeHeadEl(recipe, mealTypes);
+  if (head) detail.appendChild(head);
+
+  // VOLLSTÄNDIGE Zutatenliste: ein Detail, das sich öffnet, hat keinen Grund,
+  // etwas zu verschweigen.
   if (ingredients.length) detail.appendChild(ingredientsSectionEl(recipe));
 
-  if (recipe.notes) {
+  // Kroki (Tafla): dieselbe Zerlegung wie im Kochmodus (utils/cook-steps.js),
+  // damit die Nummern hier und am Herd dieselben sind. Eine Notiz, die keine
+  // zwei Schritte hergibt, steht als Text da.
+  const steps = splitSteps(recipe.notes);
+  if (steps.length >= 2) {
+    detail.appendChild(stepsSectionEl(steps));
+  } else if (recipe.notes) {
     const section = detailSectionEl(t('recipes.notesLabel'));
     const notes = document.createElement('p');
     notes.className = 'recipe-detail__notes';
@@ -1196,21 +1584,17 @@ function fillRecipeDetail(detail, recipe) {
     detail.appendChild(section);
   }
 
-  // Die beiden Kreislauf-Ausgänge stehen im Detail, nicht in der Zeile, und
-  // sind dort BESCHRIFTET. Grund: derselbe Weg hieß im Modul dreimal etwas
-  // anderes - ein 24px-Glyph im Essensplan, ein 48px-Glyph im Vorrat, ein
-  // 167px-Pill in den Rezepten (Critique 2026-07-30). Und man entscheidet
-  // sich fürs Einplanen, nachdem man gesehen hat, was drin ist. Der Preis
-  // ist ein zusätzlicher Tap für den häufigsten Weg; die Zeile bleibt dafür
-  // scanbar und auf 393px ohne fünf konkurrierende Bedienelemente.
+  // Die Kreislauf-Ausgänge stehen im Detail, nicht in der Zeile, und sind dort
+  // BESCHRIFTET (Critique 2026-07-30): man entscheidet sich fürs Einplanen,
+  // nachdem man gesehen hat, was drin ist.
   const detailActions = document.createElement('div');
   detailActions.className = 'recipe-detail__actions';
 
-  // GOTUJ (cook mode): the full-screen kitchen view. It writes nothing, so it
-  // stands for every reader, the wall tablet included - as long as the recipe
-  // has something to cook from. Its own listener, not a `data-action`: it is
-  // not one of the page's write paths.
-  if (ingredients.length || recipe.notes?.trim()) {
+  // GOTUJ (cook mode) schreibt nichts und steht deshalb fuer jeden Leser. Im
+  // Blatt ist es der EINE Primaerknopf in der Leiste unten ("Zacznij
+  // gotować", openRecipeSheet); in der Spalte traegt Bearbeiten den Fuss, und
+  // Gotuj steht hier als sekundaerer Knopf.
+  if (!sheet && canCook(recipe)) {
     const cook = document.createElement('button');
     cook.className = 'btn btn--secondary';
     cook.type = 'button';
@@ -1218,22 +1602,19 @@ function fillRecipeDetail(detail, recipe) {
     const cookLabel = document.createElement('span');
     cookLabel.textContent = t('cook.open');
     cook.appendChild(cookLabel);
-    cook.addEventListener('click', () => openCookMode({ title: recipe.title, ingredients, notes: recipe.notes }));
+    cook.addEventListener('click', () => startCooking(recipe));
     detailActions.appendChild(cook);
   }
 
-  // „In den Essensplan" legt eine Mahlzeit an - ohne Schreibrecht entfaellt
-  // der Knopf (Regel 2), der Riegel dazu steht in planRecipe().
-  // SEKUNDAER (R19): der Fuss von Leseblatt und Detailspalte traegt
-  // Bearbeiten als den EINEN Primaerknopf (withPrimaryEdit); zwei gefuellte
-  // Knoepfe in einer Ansicht stritten um die Hauptaktion.
+  // „Do planu" legt eine Mahlzeit an - ohne Schreibrecht entfaellt der Knopf
+  // (Regel 2), der Riegel dazu steht in planRecipe(). SEKUNDAER (R19).
   if (mayPlanRecipe()) {
     const addToMeals = document.createElement('button');
     addToMeals.className = 'btn btn--secondary';
     addToMeals.type = 'button';
     addToMeals.dataset.action = 'add-to-meals';
     addToMeals.dataset.id = String(recipe.id);
-    addToMeals.textContent = t('recipes.addToMeals');
+    addToMeals.textContent = t('recipes.toPlan');
     detailActions.appendChild(addToMeals);
   }
 
@@ -1256,66 +1637,230 @@ function fillRecipeDetail(detail, recipe) {
 
   // Bei `read` ohne Einkaufsrecht und ohne Link bliebe eine leere Leiste.
   if (detailActions.childNodes.length) detail.appendChild(detailActions);
+
+  // Die Zeichen (Haken, Teller, Gotuj) materialisiert der Renderer selbst -
+  // er hat zwei Aufrufer (Spalte und Blatt).
+  if (window.lucide) window.lucide.createIcons({ el: detail });
+}
+
+/** Hat das Rezept etwas, wonach man kochen kann? (Zutaten oder Notiz) */
+function canCook(recipe) {
+  return Boolean((recipe.ingredients ?? []).length || recipe.notes?.trim());
+}
+
+function startCooking(recipe) {
+  openCookMode({ title: recipe.title, ingredients: recipe.ingredients ?? [], notes: recipe.notes });
+}
+
+/**
+ * Das Kopfbild im Blatt (Tafla): das Bild des Rezepts in 4:3 - das eigene oder
+ * das der Rezeptquelle -, sonst die warme Flaeche mit dem Teller-Zeichen.
+ * Scheitert das Bild, faellt es auf die Flaeche zurueck (recipeThumbEl).
+ */
+function recipeViewHeroEl(recipe) {
+  return recipeThumbEl({
+    recipeId: recipe.id,
+    hasImage: recipe.provider_has_image,
+    hasOwnImage: recipe.has_own_image,
+    className: 'recipe-view__hero',
+    iconClass: 'recipe-view__plate',
+  });
+}
+
+/**
+ * Der Kopf des Details: wie oft und wann gekocht bzw. geplant (aus dem
+ * Essensplan), die Mahlzeiten - nur wenn sie unterscheiden oder bei `read` -
+ * und eine Reihe Zahlen (Zutaten, Schritte, "masz 5 z 6").
+ */
+function recipeHeadEl(recipe, mealTypes) {
+  const head = document.createElement('div');
+  head.className = 'recipe-detail__head';
+
+  // Erste Zeile (17 ink-2): wie oft und wann zuletzt gekocht - oder, wenn
+  // noch nie, wann es geplant ist. Die zweite Zeile (13 ink-2) traegt den
+  // Plan (falls die erste schon belegt ist) und die Mahlzeiten.
+  const planned = state.plannedOn.get(recipe.id);
+  const plannedText = planned ? t('recipes.plannedWhen', { when: upcomingLabel(planned) }) : '';
+  let metaText = '';
+  if (recipe.cooked_count > 0) {
+    metaText = t('recipes.cookedTimes', { count: recipe.cooked_count });
+    if (recipe.last_cooked_on) metaText += ` · ${t('recipes.cookedLast', { when: agoLabel(recipe.last_cooked_on) })}`;
+  } else if (plannedText) {
+    metaText = plannedText;
+  }
+  if (metaText) {
+    const meta = document.createElement('p');
+    meta.className = 'recipe-detail__meta';
+    meta.textContent = metaText;
+    head.appendChild(meta);
+  }
+  const sub = document.createElement('div');
+  sub.className = 'recipe-detail__sub';
+  if (plannedText && recipe.cooked_count > 0) {
+    const plan = document.createElement('span');
+    plan.className = 'recipe-detail__planned';
+    plan.textContent = plannedText;
+    sub.appendChild(plan);
+  }
+
+  // Mahlzeiten nur, wenn sie unterscheiden: gilt ein Rezept für alle, ist die
+  // Reihe reine Ornamentik (Audit A1-21). BEI `read` IMMER (Regel 9 in
+  // utils/module-access.js): im Formular stehen sie als Chips, und wer es nicht
+  // oeffnen darf, saehe „gilt fuer alle" sonst nur daran, dass hier nichts steht.
+  // Tafla: als Text in ink-2, nicht als farbige Marken (recipes.css).
+  const showMealTypeBadges = mealTypes.length && (readOnly() || mealTypes.length < mealTypeOptions().length);
+  if (showMealTypeBadges) {
+    const badges = document.createElement('div');
+    badges.className = 'recipe-card__meal-types';
+    badges.append(...mealTypeOptions()
+      .filter((option) => mealTypes.includes(option.key))
+      .map((option) => {
+        const badge = document.createElement('span');
+        badge.className = `meal-type-badge meal-type-badge--${option.key}`;
+        badge.textContent = option.label;
+        return badge;
+      }));
+    sub.appendChild(badges);
+  } else if (!mealTypes.length) {
+    // Keine Mahlzeit ist eine Aussage und braucht ein Wort: das Rezept fällt
+    // aus Menüplan und Zufallsauswahl heraus (#750).
+    const none = document.createElement('div');
+    none.className = 'recipe-card__meal-types';
+    const badge = document.createElement('span');
+    badge.className = 'meal-type-badge meal-type-badge--none';
+    badge.textContent = t('recipes.mealTypeNone');
+    none.appendChild(badge);
+    sub.appendChild(none);
+  }
+  if (sub.childNodes.length) head.appendChild(sub);
+
+  const facts = recipeFactsEl(recipe);
+  if (facts) head.appendChild(facts);
+
+  return head.childNodes.length ? head : null;
+}
+
+/**
+ * Drei Spalten, Wert ueber Bezeichnung (Tafla). Nur echte Zahlen: Zutaten,
+ * Schritte und - wenn der Vorrat bekannt ist - "5 z 6 / masz" mit Zaehler.
+ * Zeit und Portionen aus dem Entwurf gibt es nicht, Rezepte tragen keine.
+ * Eine einzelne Zahl allein wiederholte nur die Liste darunter.
+ */
+function recipeFactsEl(recipe) {
+  const ingredients = recipe.ingredients ?? [];
+  const steps = splitSteps(recipe.notes);
+  const items = [];
+  if (ingredients.length) items.push({ value: String(ingredients.length), label: t('recipes.factIngredients') });
+  if (steps.length >= 2) items.push({ value: String(steps.length), label: t('recipes.factSteps') });
+  const tally = pantryTally(recipe);
+  if (tally) items.push({ value: t('recipes.haveOf', tally), label: t('recipes.factHave'), tally });
+  if (items.length < 2) return null;
+
+  const dl = document.createElement('dl');
+  dl.className = 'recipe-detail__facts';
+  for (const item of items) {
+    const cell = document.createElement('div');
+    cell.className = 'recipe-detail__fact';
+    const dt = document.createElement('dt');
+    dt.textContent = item.label;
+    const dd = document.createElement('dd');
+    const value = document.createElement('span');
+    value.textContent = item.value;
+    dd.appendChild(value);
+    if (item.tally) dd.appendChild(meterEl(item.tally));
+    cell.append(dt, dd);
+    dl.appendChild(cell);
+  }
+  return dl;
+}
+
+/**
+ * Der Zutaten-Zaehler (Tafla "Licznik składników"): ein Segment je Zutat,
+ * vorhanden in Tinte, fehlend im Warnton. Ab zwoelf Zutaten anteilig, damit
+ * die Segmente lesbar bleiben. Dekorativ - die Zahl daneben sagt dasselbe.
+ */
+function meterEl({ have, total }) {
+  const meter = document.createElement('span');
+  meter.className = 'recipe-meter';
+  meter.setAttribute('aria-hidden', 'true');
+  const segments = Math.min(total, 12);
+  const owned = Math.round((have / total) * segments);
+  for (let i = 0; i < segments; i += 1) {
+    const seg = document.createElement('span');
+    seg.className = `recipe-meter__seg${i < owned ? '' : ' recipe-meter__seg--missing'}`;
+    meter.appendChild(seg);
+  }
+  return meter;
 }
 
 /* ABSCHNITTSKOEPFE, DIE MAN ANSPRINGEN KANN (Re-Critique 2026-09-27, W2).
  *
- * Zutaten und Notizen standen als zwei gleich graue 17px-Bloecke untereinander,
- * ohne Wort dafuer, was sie sind - das Detail las sich wie ein Formular-Nachdruck,
- * nicht wie ein Rezept, und die Ueberschriften-Navigation eines Screenreaders
- * fand darin nichts. Jetzt traegt jeder Abschnitt eine echte Ueberschrift in der
- * Bereichsrolle (`u-section-title u-compact`, typography.css). Eine Stufe unter
- * dem Rezepttitel: der ist im Aufklapper wie in der Detailspalte ein <h2>
- * (`recipe-row__heading`, `detailPaneHeaderEl`). Die Worte sind die Feldnamen
- * des Formulars - dieselbe Sache heisst an beiden Stellen gleich. */
-function detailSectionEl(title) {
+ * Jeder Abschnitt traegt eine echte Ueberschrift (h3, unter dem Titel des
+ * Rezepts). Tafla: Titel 22/600, rechts daneben hoechstens eine Handlung
+ * ("Dopisz 1"). Die Worte sind die Feldnamen des Formulars - dieselbe Sache
+ * heisst an beiden Stellen gleich. */
+function detailSectionEl(title, action = null) {
   const section = document.createElement('section');
   section.className = 'recipe-detail__section';
+  const head = document.createElement('div');
+  head.className = 'recipe-detail__section-head';
   const heading = document.createElement('h3');
-  heading.className = 'recipe-detail__section-title u-section-title u-compact';
+  heading.className = 'recipe-detail__section-title';
   heading.textContent = title;
-  section.appendChild(heading);
+  head.appendChild(heading);
+  if (action) head.appendChild(action);
+  section.appendChild(head);
   return section;
 }
 
 /**
  * Der Zutaten-Abschnitt als EIN Element mit Rezept-ID, damit eine geaenderte
- * Zuordnung ihn an beiden Orten (Aufklapper und Detailspalte) als Ganzes neu
- * bauen kann - samt Sammelknopf, dessen Zahl sich mitaendert.
+ * Zuordnung oder ein Uebertrag auf die Liste ihn an beiden Orten (Blatt und
+ * Detailspalte) als Ganzes neu bauen kann - samt "Dopisz N".
+ *
+ * Tafla: eine Karte aus 48er-Zeilen. Vorn das Zeichen des Vorrats (Haken:
+ * vorhanden, Ring: nicht zu sehen; nichts, wenn der Vorrat unbekannt ist),
+ * dann der Name - mit "na liście", wenn die Zutat offen auf einer
+ * Einkaufsliste steht -, rechts die Menge in tabellarischen Ziffern.
  */
 function ingredientsSectionEl(recipe) {
   const ingredients = recipe.ingredients ?? [];
-  const section = detailSectionEl(t('recipes.ingredientsLabel'));
+  const missing = missingIngredients(recipe);
+  const section = detailSectionEl(t('recipes.ingredientsLabel'), missingTransferButton(recipe, missing));
   section.classList.add('recipe-detail__ingredients-section');
   section.dataset.recipeId = String(recipe.id);
   const ul = document.createElement('ul');
   ul.className = 'recipe-detail__ingredients';
   for (const ing of ingredients) {
+    const { have, onList } = ingredientState(ing);
     const item = document.createElement('li');
     item.className = 'recipe-detail__ingredient';
+    item.appendChild(ingredientStatusEl(have));
     const label = document.createElement('span');
     label.className = 'recipe-detail__ingredient-name';
-    // DIE MENGE HAT IHRE EIGENE SPALTE (Critique R18): rechtsbuendig und in
-    // gleich breiten Ziffern vor dem Namen, sodass "200 g", "1 EL" und "2"
-    // an EINER Kante enden und die Namen an einer beginnen. Vorher stand sie
-    // im selben Text ("200 g · Mehl") - jede Zeile begann woanders. Die Zelle
-    // steht auch ohne Menge da (leer), damit der Name seine Spalte haelt.
-    const quantity = document.createElement('span');
-    quantity.className = 'recipe-detail__ingredient-quantity';
-    quantity.textContent = ing.quantity ?? '';
-    item.appendChild(quantity);
     label.textContent = ing.name;
-    item.appendChild(label);
     // Die Einkaufskategorie steht sonst NUR im Formular. Bei `read` deshalb
     // hier, wo der Tipp landet (Regel 9) - als Text, nicht als Auswahl.
-    // IM Namen statt als drittes Kind: die Zeile verteilt ihre Kinder auf die
-    // beiden Raender (Zutat links, Zuordnung rechts, recipes.css).
     if (readOnly() && ing.category) {
       const category = document.createElement('span');
       category.className = 'recipe-detail__ingredient-category';
       category.textContent = categoryLabel(ing.category);
       label.append(' ', category);
     }
+    if (onList && have !== true) {
+      const pill = document.createElement('span');
+      pill.className = 'recipe-detail__pill';
+      pill.textContent = t('recipes.onList');
+      label.append(' ', pill);
+    }
+    item.appendChild(label);
+    // Die Menge hat ihre eigene Spalte (Critique R18): rechtsbuendig in gleich
+    // breiten Ziffern, sodass "200 g", "1 EL" und "2" an EINER Kante enden.
+    // Die Zelle steht auch ohne Menge da (leer), damit die Spalte haelt.
+    const quantity = document.createElement('span');
+    quantity.className = 'recipe-detail__ingredient-quantity';
+    quantity.textContent = ing.quantity ?? '';
+    item.appendChild(quantity);
     item.appendChild(pantryMatchEl(recipe, ing));
     ul.appendChild(item);
   }
@@ -1325,12 +1870,81 @@ function ingredientsSectionEl(recipe) {
   return section;
 }
 
-/** Baut jeden Zutaten-Abschnitt dieses Rezepts neu (Aufklapper + Spalte). */
+/**
+ * Das Vorrats-Zeichen einer Zutat: Haken (16, ink-2) wenn vorhanden, ein Ring
+ * wenn im Vorrat nichts Passendes zu sehen ist. Ohne Vorratswissen ein leerer
+ * Platz - unbekannt ist nicht fehlend (docs/DECISIONS.md Abschnitt 7).
+ */
+function ingredientStatusEl(have) {
+  const slot = document.createElement('span');
+  slot.className = 'recipe-detail__ingredient-status';
+  if (have === null) {
+    slot.setAttribute('aria-hidden', 'true');
+    return slot;
+  }
+  slot.setAttribute('role', 'img');
+  slot.setAttribute('aria-label', have ? t('recipes.inPantry') : t('recipes.notInPantry'));
+  slot.insertAdjacentHTML('beforeend', have
+    ? '<i data-lucide="check" class="recipe-detail__have" aria-hidden="true"></i>'
+    : '<span class="recipe-detail__ring" aria-hidden="true"></span>');
+  return slot;
+}
+
+/**
+ * "Dopisz N" (Tafla): nur die Zutaten, die der Vorrat nicht zu haben scheint
+ * und die noch auf keiner Liste stehen. Dieselben zwei Riegel wie "Na listę"
+ * (shoppingTransferButton); ohne Vorratswissen gibt es den Knopf nicht - dann
+ * bleibt "Na listę" mit allen Zutaten.
+ */
+function missingTransferButton(recipe, missing) {
+  if (!missing.length || !state.lists.length) return null;
+  if (!mayTransferRecipeToShopping(recipe.id)) return null;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'recipe-detail__add-missing';
+  btn.dataset.action = 'to-shopping-missing';
+  btn.dataset.id = String(recipe.id);
+  btn.textContent = t('recipes.addMissing', { count: missing.length });
+  btn.setAttribute('aria-label', t('recipes.addMissingLabel', { count: missing.length }));
+  return btn;
+}
+
+/** Kroki (Tafla): eine Karte, Nummern in der Stimme, der Text in Body. */
+function stepsSectionEl(steps) {
+  const section = detailSectionEl(t('recipes.stepsLabel'));
+  section.classList.add('recipe-detail__steps-section');
+  const ol = document.createElement('ol');
+  ol.className = 'recipe-detail__steps';
+  steps.forEach((text, i) => {
+    const li = document.createElement('li');
+    li.className = 'recipe-detail__step';
+    const num = document.createElement('span');
+    num.className = 'recipe-detail__step-num';
+    num.setAttribute('aria-hidden', 'true');
+    num.textContent = String(i + 1);
+    const body = document.createElement('span');
+    body.className = 'recipe-detail__step-text';
+    body.textContent = text;
+    li.append(num, body);
+    ol.appendChild(li);
+  });
+  section.appendChild(ol);
+  return section;
+}
+
+/**
+ * Baut jeden Zutaten-Abschnitt dieses Rezepts neu - in der Detailspalte (in
+ * der Seite) und im Blatt (ein Dialog am Ende von <body>, nicht in der Seite).
+ */
 function renderIngredientSections(recipe) {
-  const sections = _container?.querySelectorAll(
-    `.recipe-detail__ingredients-section[data-recipe-id="${CSS.escape(String(recipe.id))}"]`) ?? [];
-  for (const el of sections) el.replaceWith(ingredientsSectionEl(recipe));
-  if (sections.length && window.lucide) window.lucide.createIcons({ el: _container });
+  const selector = `.recipe-detail__ingredients-section[data-recipe-id="${CSS.escape(String(recipe.id))}"]`;
+  const inPage = [...(_container?.querySelectorAll(selector) ?? [])];
+  const inSheet = [...(document.querySelectorAll?.(`.modal-panel--recipe ${selector}`) ?? [])];
+  for (const el of new Set([...inPage, ...inSheet])) {
+    const next = ingredientsSectionEl(recipe);
+    el.replaceWith(next);
+    if (window.lucide) window.lucide.createIcons({ el: next });
+  }
 }
 
 /* DIE BESTAETIGTE ZUORDNUNG ZU EINER VORRATSZEILE (#1314, Stufe 1).
@@ -2086,9 +2700,13 @@ function shoppingTransferButton(recipe, ingredients) {
   return btn;
 }
 
-async function transferRecipe(recipe, btn) {
+async function transferRecipe(recipe, btn, { onlyMissing = false } = {}) {
   // Zweite Linie hinter dem Markup (Regel 2 in utils/module-access.js).
   if (!mayTransferRecipeToShopping(recipe.id)) return;
+  // "Dopisz N" (Tafla): nur, was der Vorrat nicht zu haben scheint und noch
+  // auf keiner Liste steht - der Server nimmt dann nur diese Namen.
+  const names = onlyMissing ? missingIngredients(recipe).map((ing) => ing.name) : null;
+  if (names && !names.length) return;
   // Vorprüfung, Listenwahl und die Antwort auf „es gibt keine Liste" liegen im
   // geteilten Baustein. Vorher lieh sich diese Stelle `meals.noShoppingLists` -
   // der Text der Rezepte hing damit an einem fremden Modul, und ein Refactor im
@@ -2099,9 +2717,19 @@ async function transferRecipe(recipe, btn) {
   if (btn) btn.disabled = true;
   const owner = _container;
   try {
-    const res = await api.post(`/recipes/${recipe.id}/to-shopping-list`, { listId: target.id });
+    const res = await api.post(`/recipes/${recipe.id}/to-shopping-list`,
+      names ? { listId: target.id, names } : { listId: target.id });
     const added = res.data?.transferred ?? 0;
     const skipped = res.data?.skipped ?? 0;
+
+    // Was jetzt offen auf der Liste steht, zeigt das Detail als "na liście".
+    if (added > 0 || skipped > 0) {
+      state.onList ??= new Set();
+      for (const ing of names ? recipe.ingredients.filter((i) => names.includes(i.name)) : (recipe.ingredients ?? [])) {
+        state.onList.add(foldKey(ing.name));
+      }
+      if (stillShown(owner)) renderIngredientSections(recipe);
+    }
 
     if (added > 0) {
       // t() wählt die _one-Form selbst, sobald count numerisch ist (i18n.js).
@@ -2254,4 +2882,15 @@ export const __test = {
   openPantryBulkMatchModal,
   pantryMatchEl,
   pantryMatchBulkEl,
+  // Tafla: Vorrat/Liste je Zutat, die Karten "Gotowane ostatnio", die Chips
+  // und die relativen Tage - als Programm gefahren (test-recipes-tafla.js).
+  ingredientState,
+  pantryTally,
+  missingIngredients,
+  recentRecipes,
+  mealFilterChoices,
+  upcomingLabel,
+  agoLabel,
+  foldKey,
+  openRecipeSheet,
 };

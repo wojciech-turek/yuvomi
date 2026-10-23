@@ -719,14 +719,20 @@ test('Gruppenkopf ist eine echte Disclosure (h2 > button[aria-expanded])', () =>
     'die Zeilen bleiben im DOM und werden nur per [hidden] gefaltet - kein Rerender, keine verlorenen Sortable-Instanzen');
 });
 
-test('Kompakte Zeile und engerer Gruppen-Rhythmus sind Shopping-only, nicht die geteilte Grammatik', () => {
+// TAFLA (2026-10-19): the rhythm changed, the rule did not. #1039 tightened
+// the groups to 12/4 while every row still carried a grip and a ⋯; the Tafla
+// aisles stand 24 apart with their header 8 above the card (KIT: "24 between
+// groups, 8 header→card"). What stays pinned is the point of this test: the
+// shopping rhythm lives in shopping.css, scoped to .shopping-page, and the
+// shared .list-group grammar keeps its app-wide values.
+test('Zeile und Gruppen-Rhythmus des Einkaufs sind Shopping-only, nicht die geteilte Grammatik', () => {
   const css = readFileSync(new URL('../public/styles/shopping.css', import.meta.url), 'utf8');
   assert(/\.shopping-item\s*\{[^}]*padding-block:\s*0;/s.test(css),
     'die redundante Blockpolsterung (das Bedienelement traegt schon --target-lg) muss NUR im Einkauf entfallen');
-  assert(/\.shopping-page \.list-scroller\s*\{\s*gap:\s*var\(--space-3\);\s*\}/.test(css),
-    'der Gruppenabstand darf nur innerhalb von .shopping-page verengt werden, nicht app-weit');
-  assert(/\.shopping-page \.list-group\s*\{\s*gap:\s*var\(--space-1\);\s*\}/.test(css),
-    'der Kopf-zu-Fläche-Abstand darf nur innerhalb von .shopping-page verengt werden');
+  assert(/\.shopping-page \.list-scroller\s*\{\s*gap:\s*var\(--space-6\);/.test(css),
+    'der Gruppenabstand (Tafla: 24) steht nur innerhalb von .shopping-page, nicht app-weit');
+  assert(/\.shopping-page \.list-group\s*\{\s*gap:\s*var\(--space-2\);\s*\}/.test(css),
+    'der Kopf-zu-Fläche-Abstand (Tafla: 8) steht nur innerhalb von .shopping-page');
 
   const listRowCss = readFileSync(new URL('../public/styles/list-row.css', import.meta.url), 'utf8');
   assert(!/\.list-group\s*\{[^}]*gap:\s*var\(--space-1\)/s.test(listRowCss),

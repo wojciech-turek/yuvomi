@@ -2259,7 +2259,9 @@ test('ab 60rem Einkaufsflaeche stehen die Kategorien dicht gepackt in zwei Spalt
 
   // Die Huelle steht im Markup UM die Gruppen - der Scroller selbst hat eine
   // feste Hoehe, und Multicol liefe dort seitlich statt nach unten weiter.
-  assert.match(js, /insertAdjacentHTML\('beforeend', `<div class="items-lanes">\$\{renderItems\(\)\}<\/div>`\)/);
+  // Tafla: davor stehen "Pewnie się kończy" und die Endkarte - beide AUSSERHALB
+  // der Huelle, sie gehoeren keiner Spalte.
+  assert.match(js, /insertAdjacentHTML\('beforeend', `\$\{predictionsHtml\(\)\}\$\{doneCardHtml\(\)\}<div class="items-lanes">\$\{renderItems\(\)\}<\/div>`\)/);
   const narrow = rules.find((r) => r.at.length === 0 && r.selector.trim() === '.items-lanes');
   assert.match(narrow?.body ?? '', /display:\s*contents/, 'schmal aendert die Huelle nichts');
 
@@ -2297,19 +2299,25 @@ test('Einkauf: kein Wisch-Chevron an der Zeile, keine Reserve dafuer', async () 
 });
 
 // Re-Critique 2026-09-28 (P7 / A4 P2-4): am Zeiger standen zwei violette "+"
-// fuer dieselbe Absicht - die angedockte Kopf-Pille "+ Artikel" und der
-// Absender des Schnellfelds. Das "+" bleibt der Pille; der Absender ist die
-// ruhige Return-Glyphe wie in Erinnerungen (tippen, Enter).
-test('Einkauf: EIN Plus - der Absender des Schnellfelds ist eine ruhige Return-Glyphe', async () => {
+// fuer dieselbe Absicht. Die Zusage bleibt EIN Plus - das gehoert dem globalen
+// Erfassen-Knopf (Tafla) und als ruhiges ink-2-Zeichen der Leiste selbst.
+//
+// TAFLA (2026-10-19) aendert den Absender: die angedockte Leiste zeigt ihn erst,
+// wenn ein Name dasteht, als 36er-Kreis in der Stimme mit einem Pfeil nach oben
+// (Spec "Pasek dodawania": "A 36 accent arrow-up send circle appears once
+// there is text"). Kein Plus, kein Dauer-Akzent: ohne Text steht er nicht da.
+test('Einkauf: EIN Plus - der Absender ist ein Pfeil, und er erscheint erst mit Text', async () => {
   const src = readFileSync(new URL('../public/pages/shopping.js', import.meta.url), 'utf8');
   const btn = /<button class="quick-add__btn"[^>]*>\s*<i data-lucide="([^"]+)"/.exec(src);
   assert.ok(btn, 'der Absender bleibt ein echter Submit-Knopf');
-  assert.equal(btn[1], 'corner-down-left', 'kein zweites Plus neben der Kopf-Pille');
+  assert.equal(btn[1], 'arrow-up', 'kein zweites Plus: der Absender ist der Pfeil');
   const { eachRule } = await import('./css-rules.js');
-  const rule = [...eachRule(readFileSync(new URL('../public/styles/shopping.css', import.meta.url), 'utf8'))]
-    .find((r) => r.selector.trim() === '.quick-add__btn' && !r.at.length);
-  assert.doesNotMatch(rule?.body ?? '', /background-color:\s*var\(--color-accent\)/, 'keine zweite gefuellte Stimme');
-  assert.match(rule?.body ?? '', /color:\s*var\(--color-text-(?:secondary|tertiary)\)/);
+  const rules = [...eachRule(readFileSync(new URL('../public/styles/shopping.css', import.meta.url), 'utf8'))];
+  const rule = rules.find((r) => r.selector.trim() === '.quick-add__btn' && !r.at.length);
+  assert.doesNotMatch(rule?.body ?? '', /background-color:\s*var\(--color-(?:accent|btn-primary)\)/,
+    'der Knopf selbst bleibt flaechenlos - der Kreis ist ein ::before in seinem Ziel');
+  const hidden = rules.find((r) => /:has\(\.quick-add__input:placeholder-shown\)\s+\.quick-add__btn/.test(r.selector));
+  assert.match(hidden?.body ?? '', /visibility:\s*hidden/, 'ohne Text steht kein Absender da');
 });
 
 // Re-Critique 2026-09-28 (P11 / A4 P2-8): eine neu gezeichnete Einkaufsliste
