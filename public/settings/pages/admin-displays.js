@@ -1,9 +1,16 @@
 /**
- * Einstellungen: Wandtabletts (#1208, entschieden in #913)
+ * Einstellungen: Tablet w kuchni (Tafla, 2026-10-19; vorher „Wandtabletts",
+ * #1208, entschieden in #913)
  *
- * Ein Display anlegen, ihm einen Kopplungscode ausstellen, sein Geraet
- * widerrufen, ein widerrufenes Geraet entfernen. Die Seite ist bewusst duenn - die ganze Entscheidung liegt im
- * Server, hier steht nur, was ein Mensch davon sieht.
+ * Das Blatt nach dem Artboard „TabletKuchnia": oben je Tablett eine
+ * Statuskarte (gekoppelt, zuletzt gesehen, „Podgląd ściany"), darunter die
+ * Wahl des Haushalts, was die Wand zeigt („Na ścianie"), ob man auf ihr
+ * abhaken darf („Dotyk", Standard aus), die Nachtszene und das Geraet selbst:
+ * koppeln, einen neuen Code ausstellen, entkoppeln, das Konto entfernen.
+ *
+ * Die Entscheidungen liegen im Server: welche Bereiche ein Tablett lesen darf
+ * (DISPLAY_SCOPES), was es schreiben darf (services/wall-settings.js, nur mit
+ * dem Schalter), wann ein Code gilt. Hier steht nur, was ein Mensch davon sieht.
  *
  * DER CODE STEHT GENAU EINMAL AUF DEM SCHIRM, wie der Klartext eines
  * API-Tokens. Er wandert nicht in die Liste und ueberlebt kein Neuladen: der
@@ -16,12 +23,29 @@ import { formatDate, formatTime, getLocale, t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { confirmModal, refocusAfterRender } from '/components/modal.js';
 import { settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
+import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
+import { enterWallMode, WALL_NIGHT_FROM, WALL_NIGHT_TO } from '/utils/wall-mode.js';
 
-function formatSeen(value) {
+/** The wall sections the household switches, in the order of the artboard. */
+const WALL_SECTIONS = Object.freeze([
+  { id: 'dinner', icon: 'utensils', key: 'settings.tabletSectionDinner' },
+  { id: 'plan', icon: 'list-checks', key: 'settings.tabletSectionPlan' },
+  { id: 'shopping', icon: 'shopping-basket', key: 'settings.tabletSectionShopping' },
+  { id: 'timers', icon: 'timer', key: 'settings.tabletSectionTimers' },
+  { id: 'weather', icon: 'cloud-sun', key: 'settings.tabletSectionWeather' },
+]);
+
+function icon(name, cls = '') {
+  return `<i data-lucide="${esc(name)}"${cls ? ` class="${esc(cls)}"` : ''} aria-hidden="true"></i>`;
+}
+
+function formatSeen(value, now = new Date()) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return `${formatDate(date)} ${formatTime(date)}`.trim();
+  // Heute genuegt die Uhrzeit („ostatnio widziany 18:10"), sonst mit Datum.
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay ? formatTime(date) : `${formatDate(date)} ${formatTime(date)}`.trim();
 }
 
 function showError(element, message) {
@@ -45,135 +69,230 @@ function groupCode(code) {
   return `${code.slice(0, 5)} ${code.slice(5)}`.trim();
 }
 
-/**
- * Ein Geraet in einer Zeile.
- *
- * „ZULETZT GESEHEN" IST DIE GANZE BEGRUENDUNG DES KNOPFS DANEBEN. Ohne sie
- * waere „Widerrufen" eine Frage ins Dunkle: welches der beiden Tabletts ist
- * das? Ein Geraet, das seit Wochen nichts mehr gesagt hat, ist die Antwort.
- */
-function renderDevice(display, device) {
-  const seen = formatSeen(device.last_seen_at);
-  const revoked = formatSeen(device.revoked_at);
-  const label = device.label || t('settings.displayDeviceUnnamed');
-  return `
-    <li class="settings-members__item">
-      <span class="settings-members__name">${esc(label)}</span>
-      <span class="form-hint">${revoked
-        ? esc(t('settings.displayDeviceRevokedAt', { when: revoked }))
-        : esc(seen ? t('settings.displayDeviceLastSeen', { when: seen }) : t('settings.displayDeviceNeverSeen'))}</span>
-      ${revoked ? `
-      <button type="button" class="btn btn--ghost btn--sm"
-              data-display-remove-device="${display.id}" data-device="${device.id}">
-        ${esc(t('settings.displayRemoveDevice'))}
-      </button>` : `
-      <button type="button" class="btn btn--secondary btn--sm"
-              data-display-revoke="${display.id}" data-device="${device.id}">
-        ${esc(t('settings.displayRevokeDevice'))}
-      </button>`}
-    </li>`;
+function activeDevice(display) {
+  return (display.devices || []).find((d) => !d.revoked_at) ?? null;
 }
 
-// Exported so test:display-screensaver-switch can read the real card.
-export function renderDisplay(display) {
-  const active = (display.devices || []).filter((d) => !d.revoked_at);
+/** One action row of a group: a full-width button with its glyph in the 28 slot. */
+function actionRow({ glyph, label, hint = '', tone = '', attrs = '' }) {
   return `
-    <li class="settings-card" data-display="${display.id}">
-      <h3 class="settings-card__title">${esc(display.display_name)}</h3>
-      <p class="form-hint">${esc(active.length
-        ? t('settings.displayPaired')
-        : t('settings.displayNotPaired'))}</p>
-      <ul class="settings-members">
-        ${(display.devices || []).map((device) => renderDevice(display, device)).join('')}
-      </ul>
-      <!-- Ob dieses Tablett den Foto-Bildschirmschoner zeigt (#1766). Ein
-           Display aendert keine Einstellungen, also entscheidet es hier ein
-           Administrator, je Display und standardmaessig aus; der Server
-           sperrt die Fotos bei "aus" am Gate. row-divided, nicht
-           row-carrier: die Zeile liegt schon in der Karte, ein eigener
-           Traeger waere eine Karte in der Karte (DESIGN.md, "Folge
-           gleichartiger Zeilen"). settings-group gibt ihr nur das Raster
-           der Einstellungszeile, keine Flaeche. Keine Backticks in diesem
-           Kommentar - er steht im Template-Literal. -->
-      <div class="row-divided settings-group">
-      ${settingSwitchRowHtml({
-        label: t('settings.displayScreensaverLabel'),
-        checked: display.show_screensaver === true,
-        icon: 'image',
-        description: t('settings.displayScreensaverHint'),
-        descriptionId: `display-screensaver-hint-${display.id}`,
-        attrs: {
-          id: `display-screensaver-${display.id}`,
-          'data-display-screensaver': display.id,
-          'data-name': display.display_name,
-        },
-      })}
+    <button type="button" class="tablet-action${tone ? ` tablet-action--${tone}` : ''}" ${attrs}>
+      <span class="tablet-action__glyph">${icon(glyph)}</span>
+      <span class="tablet-action__text">
+        <span class="tablet-action__label">${esc(label)}</span>
+        ${hint ? `<span class="tablet-action__hint">${esc(hint)}</span>` : ''}
+      </span>
+    </button>`;
+}
+
+/**
+ * Ein Geraet als Zeile der Gruppe „Urządzenie".
+ *
+ * „ZULETZT GESEHEN" STEHT IN DER STATUSKARTE und begruendet diesen Knopf: ein
+ * Geraet, das seit Wochen nichts mehr gesagt hat, ist das, das man entkoppelt.
+ * Ein entkoppeltes Geraet laesst sich danach von der Liste nehmen (D#1672).
+ */
+function renderDevice(display, device, { named = false } = {}) {
+  const revoked = formatSeen(device.revoked_at);
+  const label = device.label || t('settings.displayDeviceUnnamed');
+  return `${revoked ? `
+      ${actionRow({
+        glyph: 'list-x',
+        label: t('settings.tabletRemoveRevoked', { name: label }),
+        hint: t('settings.displayDeviceRevokedAt', { when: revoked }),
+        attrs: `data-display-remove-device="${display.id}" data-device="${device.id}"`,
+      })}` : `
+      ${actionRow({
+        glyph: 'log-out',
+        label: named ? t('settings.tabletUnpairNamed', { name: display.display_name }) : t('settings.tabletUnpair'),
+        tone: 'danger',
+        attrs: `data-display-revoke="${display.id}" data-device="${device.id}"`,
+      })}`}`;
+}
+
+/**
+ * Die Statuskarte eines Tabletts: Name, gekoppelt oder nicht, zuletzt
+ * gesehen, „Podgląd ściany". Exportiert fuer test:display-screensaver-switch.
+ */
+export function renderDisplay(display) {
+  const device = activeDevice(display);
+  const seen = device ? formatSeen(device.last_seen_at) : null;
+  const meta = device
+    ? (seen ? t('settings.tabletSeen', { when: seen }) : t('settings.tabletNeverSeen'))
+    : t('settings.tabletPairHint');
+  return `
+    <section class="tablet-card" data-display="${display.id}" aria-labelledby="display-title-${display.id}">
+      <div class="tablet-card__head">
+        <span class="tablet-card__glyph">${icon('tablet')}</span>
+        <div class="tablet-card__text">
+          <div class="tablet-card__title-row">
+            <h2 class="tablet-card__title" id="display-title-${display.id}">${esc(display.display_name)}</h2>
+            <span class="tablet-pill${device ? ' tablet-pill--ok' : ''}">${esc(device ? t('settings.tabletPaired') : t('settings.tabletNotPaired'))}</span>
+          </div>
+          <p class="tablet-card__meta">${esc(meta)}</p>
+        </div>
       </div>
-      <div class="settings-token-output" data-display-code="${display.id}" hidden>
+      <div class="tablet-card__actions">
+        <button type="button" class="tablet-preview" data-wall-preview>${esc(t('settings.tabletPreview'))}</button>
+      </div>
+      <div class="settings-token-output tablet-code" data-display-code="${display.id}" hidden>
         <p class="form-label">${esc(t('settings.displayPairingCodeLabel'))}</p>
         <p class="settings-token-output__row"><code data-display-code-value="${display.id}"></code></p>
         <p class="form-hint">${esc(t('settings.displayPairingCodeHint'))}</p>
       </div>
-      <div class="settings-actions">
-        <button type="button" class="btn btn--secondary btn--sm" data-display-pair="${display.id}">
-          ${esc(t('settings.displayIssueCode'))}
-        </button>
-        <button type="button" class="btn btn--ghost btn--sm" data-display-delete="${display.id}"
-                data-name="${esc(display.display_name)}">
-          ${esc(t('settings.displayDelete'))}
-        </button>
-      </div>
-    </li>`;
+    </section>`;
 }
 
-function renderList(container, displays) {
-  const list = container.querySelector('#display-list');
-  if (!list) return;
-  if (!displays.length) {
-    list.replaceChildren();
-    list.insertAdjacentHTML('beforeend', `<li class="form-hint">${esc(t('settings.displayEmpty'))}</li>`);
-    return;
+/**
+ * Der Schalter „Zdjęcia z albumu" je Display (#1766): ob dieses Tablett den
+ * Foto-Bildschirmschoner zeigt. Ein Display aendert keine Einstellungen, also
+ * entscheidet es hier ein Administrator, je Display und standardmaessig aus;
+ * der Server sperrt die Fotos bei „aus" am Gate.
+ */
+export function renderPhotoSwitch(display, { named = false } = {}) {
+  return settingSwitchRowHtml({
+    label: named ? t('settings.tabletPhotosNamed', { name: display.display_name }) : t('settings.tabletPhotos'),
+    checked: display.show_screensaver === true,
+    icon: 'image',
+    description: t('settings.displayScreensaverHint'),
+    descriptionId: `display-screensaver-hint-${display.id}`,
+    attrs: {
+      id: `display-screensaver-${display.id}`,
+      'data-display-screensaver': display.id,
+      'data-name': display.display_name,
+    },
+  });
+}
+
+function sectionTitle(id, key) {
+  return `<h2 class="tablet-group-title" id="${esc(id)}">${esc(t(key))}</h2>`;
+}
+
+function nightRange() {
+  const at = (hour) => formatTime(new Date(2026, 0, 1, hour, 0));
+  return t('settings.tabletNightHint', { from: at(WALL_NIGHT_FROM), to: at(WALL_NIGHT_TO) });
+}
+
+function renderBody(state) {
+  const { displays, prefs } = state;
+  const sections = prefs?.wall_sections ?? {};
+  const ticking = prefs?.wall_allow_ticking === true;
+  const named = displays.length > 1;
+
+  const cards = displays.length
+    ? displays.map(renderDisplay).join('')
+    : `
+    <section class="tablet-card tablet-card--empty" aria-labelledby="tablet-empty-title">
+      <div class="tablet-card__head">
+        <span class="tablet-card__glyph">${icon('tablet')}</span>
+        <div class="tablet-card__text">
+          <h2 class="tablet-card__title" id="tablet-empty-title">${esc(t('settings.tabletEmpty'))}</h2>
+          <p class="tablet-card__meta tablet-card__meta--wrap">${esc(t('settings.tabletEmptyHint'))}</p>
+        </div>
+      </div>
+    </section>`;
+
+  const sectionRows = WALL_SECTIONS.map((section) => settingSwitchRowHtml({
+    label: t(section.key),
+    checked: sections[section.id] !== false,
+    icon: section.icon,
+    attrs: { 'data-wall-section': section.id },
+  }));
+  const photoRows = displays.map((display) => renderPhotoSwitch(display, { named }));
+
+  const deviceRows = [];
+  for (const display of displays) {
+    for (const device of display.devices || []) deviceRows.push(renderDevice(display, device, { named }));
+    deviceRows.push(actionRow({
+      glyph: 'qr-code',
+      label: named ? t('settings.tabletNewCodeNamed', { name: display.display_name }) : t('settings.tabletNewCode'),
+      tone: 'accent',
+      attrs: `data-display-pair="${display.id}"`,
+    }));
   }
-  list.replaceChildren();
-  list.insertAdjacentHTML('beforeend', displays.map(renderDisplay).join(''));
+  deviceRows.push(actionRow({
+    glyph: 'plus',
+    label: displays.length ? t('settings.tabletPairAnother') : t('settings.tabletPairFirst'),
+    tone: 'accent',
+    attrs: 'data-display-add aria-expanded="false" aria-controls="display-form"',
+  }));
+  for (const display of displays) {
+    deviceRows.push(actionRow({
+      glyph: 'trash-2',
+      label: named ? t('settings.tabletDeleteNamed', { name: display.display_name }) : t('settings.tabletDelete'),
+      tone: 'danger',
+      attrs: `data-display-delete="${display.id}" data-name="${esc(display.display_name)}"`,
+    }));
+  }
+
+  return `
+    ${cards}
+    <section class="tablet-group" aria-labelledby="tablet-wall-title">
+      ${sectionTitle('tablet-wall-title', 'settings.tabletOnWall')}
+      <div class="row-carrier settings-group">
+        ${[...sectionRows, ...photoRows].join('')}
+      </div>
+    </section>
+    <section class="tablet-group" aria-labelledby="tablet-touch-title">
+      ${sectionTitle('tablet-touch-title', 'settings.tabletTouch')}
+      <div class="row-carrier settings-group">
+        ${settingSwitchRowHtml({
+          label: t('settings.tabletAllowTicking'),
+          checked: ticking,
+          icon: 'circle-check',
+          description: ticking ? t('settings.tabletTickingOn') : t('settings.tabletTickingOff'),
+          descriptionId: 'tablet-ticking-hint',
+          attrs: { id: 'tablet-allow-ticking', 'data-wall-ticking': '' },
+        })}
+      </div>
+      <p class="form-hint settings-group__footer">${esc(t('settings.tabletTouchFooter'))}</p>
+    </section>
+    <section class="tablet-group" aria-labelledby="tablet-night-title">
+      ${sectionTitle('tablet-night-title', 'settings.tabletNight')}
+      <div class="row-carrier settings-group">
+        <div class="tablet-info">
+          <span class="tablet-action__glyph">${icon('moon')}</span>
+          <span class="tablet-info__text">
+            <span class="tablet-info__label">${esc(t('settings.tabletNightMode'))}</span>
+            <span class="tablet-info__hint">${esc(nightRange())}</span>
+          </span>
+        </div>
+      </div>
+    </section>
+    <section class="tablet-group" aria-labelledby="tablet-device-title">
+      ${sectionTitle('tablet-device-title', 'settings.tabletDevice')}
+      <div class="row-carrier settings-group tablet-actions">
+        ${deviceRows.join('')}
+      </div>
+      <form id="display-form" class="settings-form tablet-form" autocomplete="off" hidden>
+        ${/* displayDeviceNameLabel, NICHT displayNameLabel: der zweite heisst
+             "Anzeigename" - der Name eines MENSCHEN (admin-family.js). */ ''}
+        <div class="row-carrier settings-group">
+          ${settingRowHtml({
+            label: t('settings.displayDeviceNameLabel'), labelFor: 'display-name',
+            description: t('settings.displayDeviceNameHint'), descriptionId: 'display-name-hint',
+            control: '<input class="form-input" type="text" id="display-name" maxlength="128" required aria-describedby="display-name-hint" />',
+          })}
+        </div>
+        <div class="settings-form-actions">
+          <button type="submit" class="btn btn--primary">${esc(t('settings.displayCreate'))}</button>
+        </div>
+      </form>
+      ${/* Welche Bereiche ein Tablett lesen darf, weiss nur der Server
+           (DISPLAY_SCOPES, #1808); der Satz kommt mit der Liste. */ ''}
+      <p class="form-hint settings-group__footer" id="display-areas-hint" hidden></p>
+    </section>`;
 }
 
 function renderPage(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="settings-section">
-      <!-- KEINE eigene Ueberschrift: die Shell setzt den Blatt-Titel schon
-           darueber, und ein <h2> mit demselben Wort waere er ein zweites Mal
-           (test:typography haelt das fest). settings.displaysTitle traegt
-           weiterhin den Namen in der Navigation. -->
-      <div class="settings-card">
-        <div style="margin-bottom:var(--space-3)">
-        <p class="form-hint">${esc(t('settings.displaysHint'))}</p>
-        <!-- Zweiter Absatz desselben Hinweises (#1808). Er kommt mit der Liste:
-             WELCHE Bereiche ein Tablett zeigt, weiss nur der Server
-             (DISPLAY_SCOPES), und eine zweite Handliste hier bliebe beim
-             naechsten Scope stehen. Bis dahin leer und versteckt. -->
-        <p class="form-hint" id="display-areas-hint" style="margin-top:var(--space-2)" hidden></p>
-        </div>
-        <ul class="settings-cards" id="display-list"></ul>
-        <form id="display-form" class="settings-form" autocomplete="off">
-          ${/* displayDeviceNameLabel, NICHT displayNameLabel: der zweite heisst
-               "Anzeigename" - der Name eines MENSCHEN (admin-family.js,
-               personal-account.js). Eine Zeile der Gruppe (R19, B7). */ ''}
-          <div class="row-carrier settings-group">
-            ${settingRowHtml({
-              label: t('settings.displayDeviceNameLabel'), labelFor: 'display-name',
-              description: t('settings.displayDeviceNameHint'), descriptionId: 'display-name-hint',
-              control: '<input class="form-input" type="text" id="display-name" maxlength="128" required aria-describedby="display-name-hint" />',
-            })}
-          </div>
-          <div id="display-error" class="form-error" role="alert" hidden></div>
-          <div class="settings-form-actions">
-            <button type="submit" class="btn btn--primary">${esc(t('settings.displayCreate'))}</button>
-          </div>
-        </form>
-      </div>
-    </section>
+    <div class="settings-section tablet-page">
+      <!-- KEINE eigene Ueberschrift: die Shell setzt den Blatt-Titel
+           („Tablet w kuchni") schon darueber. -->
+      <div id="display-error" class="form-error" role="alert" hidden></div>
+      <div class="tablet-page__body" id="display-list"></div>
+    </div>
   `);
 }
 
@@ -182,9 +301,8 @@ function renderPage(container) {
  *
  * Die Namen sind die der Scope-Module, wie sie der API-Zugriff nebenan nennt
  * (`settings.apiTokenScopeModules.*`) - dieselben Schluessel, die der Server
- * liefert, also keine zweite Zuordnung. Dass es zu jedem Bereich in jeder
- * Sprache einen Namen gibt, haelt `test:display-account` fest. Ohne Liste (alte
- * Antwort aus dem Cache) bleibt der Absatz aus, statt einen halben Satz zu zeigen.
+ * liefert, also keine zweite Zuordnung. Ohne Liste (alte Antwort aus dem
+ * Cache) bleibt der Absatz aus, statt einen halben Satz zu zeigen.
  */
 function displayAreasText(modules) {
   const names = (Array.isArray(modules) ? modules : [])
@@ -202,13 +320,27 @@ function renderAreasHint(container, modules) {
   hint.hidden = !text;
 }
 
+const pageState = { displays: [], prefs: null, areaModules: [] };
+
+function renderList(container) {
+  const list = container.querySelector('#display-list');
+  if (!list) return;
+  list.replaceChildren();
+  list.insertAdjacentHTML('beforeend', renderBody(pageState));
+  renderAreasHint(container, pageState.areaModules);
+  window.lucide?.createIcons({ el: list });
+}
+
 async function reload(container) {
-  const res = await api.get('/displays');
-  const displays = res.data ?? [];
-  renderAreasHint(container, res.area_modules);
-  renderList(container, displays);
-  window.lucide?.createIcons({ el: container });
-  return displays;
+  const [res, prefs] = await Promise.all([
+    api.get('/displays'),
+    getPreferences().catch(() => null),
+  ]);
+  pageState.displays = res.data ?? [];
+  pageState.areaModules = res.area_modules ?? [];
+  if (prefs) pageState.prefs = prefs;
+  renderList(container);
+  return pageState.displays;
 }
 
 /**
@@ -218,11 +350,10 @@ async function reload(container) {
 const pairTickets = new Map();
 
 /**
- * Der Schalter "Foto-Bildschirmschoner zeigen" je Display (#1766). Er wirkt
- * sofort wie jeder Schalter in den Einstellungen. Scheitert die Anfrage,
- * springt er zurueck - sonst zeigte die Liste einen Zustand, den der Server
- * nicht hat. Exported so test:display-screensaver-switch can drive the real
- * handler.
+ * Der Schalter "Zdjęcia z albumu" je Display (#1766). Er wirkt sofort wie
+ * jeder Schalter in den Einstellungen. Scheitert die Anfrage, springt er
+ * zurueck - sonst zeigte die Liste einen Zustand, den der Server nicht hat.
+ * Exported so test:display-screensaver-switch can drive the real handler.
  */
 export function bindDisplayScreensaverSwitches(list, errorEl) {
   list.addEventListener('change', async (event) => {
@@ -246,50 +377,107 @@ export function bindDisplayScreensaverSwitches(list, errorEl) {
   });
 }
 
+/**
+ * Die Wahl des Haushalts fuer die Wand: welche Bereiche sie zeigt und ob man
+ * auf ihr abhaken darf. Beides sofort gespeichert, beides springt bei einem
+ * Fehler zurueck. Der Server setzt den Abhak-Schalter fuer das Tablett durch
+ * (services/wall-settings.js) - hier ist es nur die Wahl.
+ */
+function bindWallSwitches(list, errorEl) {
+  list.addEventListener('change', async (event) => {
+    const section = event.target.closest?.('[data-wall-section]');
+    const ticking = event.target.closest?.('[data-wall-ticking]');
+    if (!section && !ticking) return;
+    const toggle = section || ticking;
+    clearError(errorEl);
+    const on = toggle.checked;
+    toggle.disabled = true;
+    try {
+      const patch = section
+        ? { wall_sections: { [toggle.dataset.wallSection]: on } }
+        : { wall_allow_ticking: on };
+      const fresh = (await savePreferences(patch))?.data ?? {};
+      // Der Server antwortet mit der ganzen Wahl (alle Bereiche) - sie gilt.
+      pageState.prefs = {
+        ...(pageState.prefs ?? {}),
+        wall_sections: fresh.wall_sections ?? pageState.prefs?.wall_sections,
+        wall_allow_ticking: typeof fresh.wall_allow_ticking === 'boolean' ? fresh.wall_allow_ticking : pageState.prefs?.wall_allow_ticking,
+      };
+      if (ticking) {
+        const hint = list.querySelector('#tablet-ticking-hint');
+        if (hint) hint.textContent = on ? t('settings.tabletTickingOn') : t('settings.tabletTickingOff');
+      }
+      window.yuvomi?.showToast(t('settings.tabletSaved'), 'success');
+    } catch (err) {
+      toggle.checked = !on;
+      showError(errorEl, err.message);
+    } finally {
+      toggle.disabled = false;
+    }
+  });
+}
+
 function bindEvents(container) {
-  const form = container.querySelector('#display-form');
   const list = container.querySelector('#display-list');
   const errorEl = container.querySelector('#display-error');
-  if (!form || !list) return;
+  if (!list) return;
 
-  form.addEventListener('submit', async (event) => {
+  bindDisplayScreensaverSwitches(list, errorEl);
+  bindWallSwitches(list, errorEl);
+
+  list.addEventListener('submit', async (event) => {
+    const form = event.target.closest?.('#display-form');
+    if (!form) return;
     event.preventDefault();
     clearError(errorEl);
-    const input = container.querySelector('#display-name');
+    const input = form.querySelector('#display-name');
     const name = input.value.trim();
     if (!name) return;
     const btn = form.querySelector('[type=submit]');
     btn.disabled = true;
     try {
-      await api.post('/displays', { display_name: name });
+      const created = await api.post('/displays', { display_name: name });
       // DAS ERSTE DISPLAY MACHT AUS EINEM EIN-PERSONEN-HAUSHALT EINEN MIT
       // MITLESER. `othersCanRead` entscheidet, ob Aufgaben und Kalender ihre
       // Sichtbarkeitsfelder ueberhaupt zeigen; der Wert kommt aus /auth/me und
       // liegt im Speicher. Ohne dieses Nachholen blieben die Felder bis zum
-      // naechsten vollen Laden verborgen, und alles, was in derselben Sitzung
-      // noch entsteht, waere "fuer alle" - also lesbar fuer das Tablett, das
-      // gerade erst angelegt wurde. Rechteaenderungen holen den Wert aus
-      // demselben Grund nach (admin-permissions.js).
+      // naechsten vollen Laden verborgen.
       await auth.me().catch(() => {});
-      input.value = '';
       await reload(container);
+      // Gleich den Code: wer ein Tablett anlegt, will es koppeln.
+      const id = created?.data?.id;
+      if (id != null) list.querySelector(`[data-display-pair="${id}"]`)?.click();
     } catch (err) {
       showError(errorEl, err.message);
     } finally {
-      btn.disabled = false;
+      if (btn.isConnected) btn.disabled = false;
     }
   });
 
-  bindDisplayScreensaverSwitches(list, errorEl);
-
   list.addEventListener('click', async (event) => {
+    if (event.target.closest('[data-wall-preview]')) {
+      // „Podgląd ściany": dieses Geraet zeigt die Wand, bis man sie schliesst.
+      enterWallMode();
+      window.yuvomi?.navigate?.('/');
+      return;
+    }
+
+    const add = event.target.closest('[data-display-add]');
+    if (add) {
+      const form = list.querySelector('#display-form');
+      if (!form) return;
+      form.hidden = !form.hidden;
+      add.setAttribute('aria-expanded', String(!form.hidden));
+      if (!form.hidden) form.querySelector('#display-name')?.focus();
+      return;
+    }
+
     const pair = event.target.closest('[data-display-pair]');
     if (pair) {
       // ZWEI KLICKS DUERFEN NICHT ZWEI CODES ANFRAGEN. Der Server entwertet
       // beim Ausstellen jeden aelteren Code - kommen die Antworten in der
-      // anderen Reihenfolge zurueck als die Anfragen hinausgingen, steht am
-      // Ende der ALTE, laengst ungueltige Code auf dem Schirm, und das Tablett
-      // bekommt darauf beharrlich 400. Der Knopf sperrt sich deshalb fuer die
+      // anderen Reihenfolge zurueck, stuende am Ende der ALTE, laengst
+      // ungueltige Code auf dem Schirm. Der Knopf sperrt sich deshalb fuer die
       // Dauer der Anfrage, und eine ueberholte Antwort schreibt nicht mehr.
       if (pair.disabled) return;
       clearError(errorEl);
@@ -305,13 +493,11 @@ function bindEvents(container) {
         if (box && value) {
           value.textContent = groupCode(res.data.code);
           box.hidden = false;
+          box.scrollIntoView?.({ block: 'nearest' });
         }
       } catch (err) {
         if (pairTickets.get(id) === ticket) showError(errorEl, err.message);
       } finally {
-        // Die Liste wird hier nicht neu gezeichnet, der Knopf von eben ist also
-        // noch derselbe - `isConnected` faengt den Fall trotzdem ab, falls ein
-        // paralleles `reload()` ihn ersetzt hat.
         if (pair.isConnected) pair.disabled = false;
       }
       return;
@@ -319,9 +505,8 @@ function bindEvents(container) {
 
     const revoke = event.target.closest('[data-display-revoke]');
     if (revoke) {
-      // Die Frage nennt die HANDLUNG, das Detail die FOLGE - getrennt, weil ein
-      // Titel beides nicht traegt und „widerrufen" allein nicht verraet, dass
-      // das Tablett an der Wand danach leer ist.
+      // Die Frage nennt die HANDLUNG, das Detail die FOLGE: „entkoppeln" allein
+      // verraet nicht, dass das Tablett an der Wand danach leer ist.
       const ok = await confirmModal(t('settings.displayRevokeConfirm'), {
         danger: true,
         detail: t('settings.displayRevokeDetail'),
@@ -331,9 +516,6 @@ function bindEvents(container) {
       try {
         await api.post(`/displays/${revoke.dataset.displayRevoke}/devices/${revoke.dataset.device}/revoke`, {});
         await reload(container);
-        // Der Dialog hat den Fokus gehalten, und `reload()` ersetzt die Liste
-        // darunter - ohne das hier landet der Fokus nach dem Schliessen am
-        // Dokumentanfang statt an der Stelle, an der gerade gearbeitet wurde.
         refocusAfterRender();
       } catch (err) {
         showError(errorEl, err.message);
@@ -341,9 +523,9 @@ function bindEvents(container) {
       return;
     }
 
-    // EIN WIDERRUFENES GERAET LAESST SICH ENTFERNEN (D#1672). Jede neue Kopplung
-    // widerruft das Geraet davor, und dessen Zeile blieb fuer immer stehen.
-    // Rueckgaengig gibt es nicht - die Zeile ist danach weg -, also die
+    // EIN ENTKOPPELTES GERAET LAESST SICH ENTFERNEN (D#1672). Jede neue
+    // Kopplung widerruft das Geraet davor, und dessen Zeile blieb fuer immer
+    // stehen. Rueckgaengig gibt es nicht - die Zeile ist danach weg -, also die
     // Rueckfrage vorab, mit der Folge im Detail.
     const remove = event.target.closest('[data-display-remove-device]');
     if (remove) {
@@ -399,13 +581,13 @@ function bindEvents(container) {
 
 export async function render(container) {
   renderPage(container);
+  bindEvents(container);
   try {
     await reload(container);
   } catch {
-    renderList(container, []);
+    pageState.displays = [];
+    renderList(container);
   }
-  bindEvents(container);
-  window.lucide?.createIcons({ el: container });
 }
 
-export const __test = { displayAreasText };
+export const __test = { displayAreasText, renderBody, WALL_SECTIONS };

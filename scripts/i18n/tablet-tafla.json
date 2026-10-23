@@ -1,0 +1,142 @@
+{
+  "settings.tabletPaired": {
+    "en": "paired",
+    "pl": "połączony"
+  },
+  "settings.tabletNotPaired": {
+    "en": "not paired",
+    "pl": "niepołączony"
+  },
+  "settings.tabletSeen": {
+    "en": "Wall mode · last seen {{when}}",
+    "pl": "Tryb ściany · ostatnio widziany {{when}}"
+  },
+  "settings.tabletNeverSeen": {
+    "en": "Wall mode · not seen yet",
+    "pl": "Tryb ściany · jeszcze nie widziany"
+  },
+  "settings.tabletPairHint": {
+    "en": "Create a pairing code below and enter it on the tablet.",
+    "pl": "Wygeneruj kod parowania poniżej i wpisz go na tablecie."
+  },
+  "settings.tabletPreview": {
+    "en": "Preview the wall",
+    "pl": "Podgląd ściany"
+  },
+  "settings.tabletOnWall": {
+    "en": "On the wall",
+    "pl": "Na ścianie"
+  },
+  "settings.tabletSectionDinner": {
+    "en": "Dinner and Cook",
+    "pl": "Kolacja i Gotuj"
+  },
+  "settings.tabletSectionPlan": {
+    "en": "Today's plan",
+    "pl": "Plan dnia"
+  },
+  "settings.tabletSectionShopping": {
+    "en": "Shopping",
+    "pl": "Zakupy"
+  },
+  "settings.tabletSectionTimers": {
+    "en": "Timers",
+    "pl": "Minutniki"
+  },
+  "settings.tabletSectionWeather": {
+    "en": "Weather",
+    "pl": "Pogoda"
+  },
+  "settings.tabletPhotosNamed": {
+    "en": "Photos from the album · {{name}}",
+    "pl": "Zdjęcia z albumu · {{name}}"
+  },
+  "settings.tabletTouch": {
+    "en": "Touch",
+    "pl": "Dotyk"
+  },
+  "settings.tabletAllowTicking": {
+    "en": "Allow ticking things off on the wall",
+    "pl": "Pozwól odhaczać na ścianie"
+  },
+  "settings.tabletTickingOff": {
+    "en": "Right now the wall only shows",
+    "pl": "Teraz ściana tylko pokazuje"
+  },
+  "settings.tabletTickingOn": {
+    "en": "Tasks, running-out items and the weekly question from the wall",
+    "pl": "Zadania, kończące się produkty i pytanie tygodnia ze ściany"
+  },
+  "settings.tabletTouchFooter": {
+    "en": "Cook and the timers always work.",
+    "pl": "Gotuj i minutniki działają zawsze."
+  },
+  "settings.tabletNight": {
+    "en": "Night",
+    "pl": "Noc"
+  },
+  "settings.tabletNightMode": {
+    "en": "Night mode",
+    "pl": "Tryb nocny"
+  },
+  "settings.tabletNightHint": {
+    "en": "{{from}} to {{to}} · amber clock",
+    "pl": "od {{from}} do {{to}} · bursztynowy zegar"
+  },
+  "settings.tabletDevice": {
+    "en": "Device",
+    "pl": "Urządzenie"
+  },
+  "settings.tabletPairAnother": {
+    "en": "Pair another tablet",
+    "pl": "Połącz kolejny tablet"
+  },
+  "settings.tabletPairFirst": {
+    "en": "Pair a tablet",
+    "pl": "Połącz tablet"
+  },
+  "settings.tabletUnpair": {
+    "en": "Unpair this tablet",
+    "pl": "Odłącz ten tablet"
+  },
+  "settings.tabletUnpairNamed": {
+    "en": "Unpair: {{name}}",
+    "pl": "Odłącz: {{name}}"
+  },
+  "settings.tabletNewCode": {
+    "en": "New pairing code",
+    "pl": "Nowy kod parowania"
+  },
+  "settings.tabletNewCodeNamed": {
+    "en": "New pairing code: {{name}}",
+    "pl": "Nowy kod parowania: {{name}}"
+  },
+  "settings.tabletDelete": {
+    "en": "Remove the tablet account",
+    "pl": "Usuń konto tabletu"
+  },
+  "settings.tabletDeleteNamed": {
+    "en": "Remove the tablet account: {{name}}",
+    "pl": "Usuń konto tabletu: {{name}}"
+  },
+  "settings.tabletRemoveRevoked": {
+    "en": "Remove from the list: {{name}}",
+    "pl": "Usuń z listy: {{name}}"
+  },
+  "settings.tabletEmpty": {
+    "en": "No kitchen tablet yet",
+    "pl": "Nie ma jeszcze tabletu w kuchni"
+  },
+  "settings.tabletEmptyHint": {
+    "en": "A tablet gets its own account that only shows the home: it is not a family member and does not sign in.",
+    "pl": "Tablet dostaje własne konto, które tylko pokazuje dom: nie jest członkiem rodziny i się nie loguje."
+  },
+  "settings.tabletSaved": {
+    "en": "The wall is updated",
+    "pl": "Ściana zaktualizowana"
+  },
+  "settings.tabletPhotos": {
+    "en": "Photos from the album",
+    "pl": "Zdjęcia z albumu"
+  }
+}
