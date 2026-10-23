@@ -231,8 +231,10 @@
   text-decoration: none;
 }
 
-.auth-form__forgot a:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .auth-form__forgot a:hover {
+    text-decoration: underline;
+  }
 }
 
 /* The footnote at the foot: "<host> · połączenie szyfrowane" with the lock,
