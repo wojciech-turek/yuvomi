@@ -714,6 +714,11 @@ test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller 
   const collapsed = capture.filter((r) => compact(r) && r.selector.includes('is-collapsed') && r.selector.includes(':has(> .page-back)'));
   const inline = collapsed.find((r) => r.selector.endsWith('> .page-toolbar__title'));
   assert.equal(inline && decl(inline.body, 'order'), '-1', 'eingeklappt: Rueckweg, Titel, Kreise in EINER Leiste');
+  // Die scrollenden Seiten klappen auf demselben Weg ein (wireCollapsingHeader,
+  // `--bar`) und halten dabei ihren Platz im Fluss - der Inhalt springt nicht.
+  const bar = capture.find((r) => compact(r) && r.selector === '.page-toolbar--bar.is-collapsed');
+  assert.equal(bar && decl(bar.body, 'margin-block-end'), 'var(--bar-collapse-gap, 0px)', 'eingeklappt traegt die Leiste den Hoehenverlust als Rand');
+  assert.match(read('../public/utils/ux.js'), /toolbar\.style\.setProperty\('--bar-collapse-gap'/, 'wireCollapsingHeader misst den Rand');
 });
 
 // R20 (E1-Befund, gemessen 2026-10-17): der Nachlauf-Platzhalter hinter dem

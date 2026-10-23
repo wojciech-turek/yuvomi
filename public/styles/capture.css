@@ -614,6 +614,14 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
     order: -1;
     flex: 1 1 0;
   }
+
+  /* Dieselbe Leiste auf den SCROLLENDEN Seiten (`--bar`, wireCollapsingHeader
+   * in utils/ux.js): sie klebt bei 0 wie die gedeckelten Koepfe und behaelt
+   * eingeklappt ihren Platz im Fluss als Rand unten - der Inhalt darunter
+   * bleibt stehen, der Kopf wird nur kuerzer. */
+  .page-toolbar--bar.is-collapsed {
+    margin-block-end: var(--bar-collapse-gap, 0px);
+  }
 }
 
 @media (max-width: 1023px) and (max-height: 499px) {
