@@ -78,3 +78,49 @@ export function formatTimer(totalSeconds) {
   const sec = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
+
+/**
+ * A step as text and timer pieces, in order: "Duś 20 min na małym ogniu" ->
+ * [{text: 'Duś '}, {timer: {label: '20 min', seconds: 1200}}, {text: ' na małym ogniu'}].
+ * Cook mode draws each timer as a pill inside the sentence (Tafla, Gotowanie).
+ * @returns {({text: string}|{timer: {label: string, seconds: number}})[]}
+ */
+export function stepSegments(step) {
+  const text = String(step ?? '');
+  const parts = [];
+  let at = 0;
+  for (const m of text.matchAll(DURATION)) {
+    const [timer] = findTimers(m[0]);
+    if (!timer) continue;
+    if (m.index > at) parts.push({ text: text.slice(at, m.index) });
+    parts.push({ timer });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at) });
+  return parts;
+}
+
+/** Lower case without diacritics: "Sól" -> "sol", "passatę" -> "passate". */
+function plain(word) {
+  return String(word ?? '').toLocaleLowerCase('pl').replace(/ł/g, 'l').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * The ingredients a step mentions, by a stem of each name's first word - the
+ * step says "Wlej passatę, dopraw solą", the list says "passata", "sól". The
+ * stem drops the last two letters (Polish endings), never below three.
+ * @param {string} step
+ * @param {{name: string}[]} ingredients
+ * @returns {number[]} indexes into `ingredients`, in list order
+ */
+export function stepIngredientIndexes(step, ingredients) {
+  const words = plain(step).split(/[^a-z0-9]+/).filter(Boolean);
+  const out = [];
+  (Array.isArray(ingredients) ? ingredients : []).forEach((ingredient, index) => {
+    const first = plain(ingredient?.name).split(/[^a-z0-9]+/).find(Boolean);
+    if (!first) return;
+    const stem = first.slice(0, Math.max(3, first.length - 2));
+    if (words.some((word) => word.startsWith(stem))) out.push(index);
+  });
+  return out;
+}
