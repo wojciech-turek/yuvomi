@@ -1888,10 +1888,10 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
 | **D2 Filter** | Eine Dimension mit hoechstens sechs Werten = Chipzeile inline, Chips immer `--sm`. Mehrere Dimensionen = EIN Filterblatt: Personen und Kategorien als Chips, Ebenen und Ansichtsschalter als Schalter (`.switch`), EIN Reset-Text (vorhandenen Key wiederverwenden). Ausloeser = Kopf-Icon-Knopf mit Zaehler-Badge, kein Wort "Filter" | `filterButtonHtml()` ohne `showLabel`, `openFilterSheet()` (utils/filter-sheet.js), `.filter-chip--sm` | Text-Pille "Filter (n)", 48px-Chips in Kontakten und Vorrat, Checkbox-Blatt, zwei Reset-Texte |
 | **D3 Unternavigation** | Hoechstens sieben Bereiche = Text-Reiter (`.sub-tab`, OHNE Icons); mehr = Liste mit Drill-down | `renderSubTabs({ indicator })` | Icon-Reiter, eigene Bereichsspalte, Segment + Chips als Navigation |
 | **D4 Formulare** | Zwei Dialekte nach ZWECK: Label-ueber-Feld fuer Text und Stammdaten, Inset-Zeile fuer Messwerte. Datum/Uhrzeit sieht in beiden wie ein Feld aus. Pflichtfeld/Name zuerst und fokussiert, Seltenes hinter "Weitere Angaben" | `.form-group`/`.form-input`, `<yuvomi-datepicker>` | Dialekt nach Modul, nacktes Datum als Text |
-| **D5 Anlegen** | Der FAB ist der eine Weg (benannte Ausnahme: Quick-Add im Einkauf, Felder in Kapsel+Fill wie die Suche). Ein Leerzustand neben dem FAB hat keine zweite Primaeraktion; das Planer-"+" nur in leeren Zellen | `createPageFab()` (utils/fab.js) | `btn--primary` im Leerzustand neben dem FAB |
-| **D6 Zeilen** (R18) | Hoechstens zwei dauerhaft sichtbare Icon-Aktionen, alles Weitere hinter EINEM sichtbaren Mehr-Knopf (`ellipsis`), auch auf Touch; Zeilenkoerper oeffnet, Chevron nur bei Navigation | `rowMenuHtml()`; `test:control-dialect` | Aktion nur per Geste oder Hover, Stift neben oeffnendem Koerper |
+| **D5 Anlegen** | Der FAB ist der eine Weg (benannte Ausnahme: Quick-Add im Einkauf, Felder in Kapsel+Fill wie die Suche). Ein Leerzustand neben dem FAB hat keine zweite Primaeraktion; das Planer-"+" nur in leeren Zellen. **Tafla (2026-10-19):** das Quick-Add des Einkaufs ist die angedockte Leiste ueber der Tab-Kapsel, immer sichtbar (das `(hover: none)`-Einklappen ist entfallen); die Kapsel-Haut sitzt EINMAL um die Leiste (`.shopping-addbar`), ihre Felder sind nackt. Leerzustaende in der Kueche tragen keinen Knopf ("Pusty stan"), einzige Ausnahme die Kamera im Vorrat | `createPageFab()` (utils/fab.js) | `btn--primary` im Leerzustand neben dem FAB |
+| **D6 Zeilen** (R18) | Hoechstens zwei dauerhaft sichtbare Icon-Aktionen, alles Weitere hinter EINEM sichtbaren Mehr-Knopf (`ellipsis`), auch auf Touch; Zeilenkoerper oeffnet, Chevron nur bei Navigation. **Tafla (2026-10-19), Kueche:** auf Touch (`hover: none`) tragen Einkaufs- und Vorratszeilen weder "..." noch Griff - Tipp hakt ab (Einkauf) bzw. klappt auf (Vorrat), Wischen hakt ab/loescht, langes Druecken oeffnet den Editor, der jede Aktion traegt (auch Loeschen); am Zeiger und per Tastatur bleiben "..." und Griff | `rowMenuHtml()`; `test:control-dialect` | Aktion nur per Geste oder Hover, Stift neben oeffnendem Koerper |
 | **D7 Modale** | Das geteilte Modal laeuft auf `<dialog>.showModal()` (Top-Layer, inerter Hintergrund, Esc) | modal.js | eigener Fokusfang ueber einem `div` |
-| **D8 Typo** | Gruppenueberschrift in Listen = EIN Stil (Micro-Label, ohne Icon). Die Titelzeile hat eine feste Mindesthoehe (`min-block-size: var(--target-base)`, Titel mittig): der Large Title steht in jedem Modul am selben Ort (vorher 8 gegen 11px). Die Einstellungen tragen am Desktop den Modulkopf wie jedes Modul; eine Abschnittsueberschrift, die das Blatt wiederholt ("Mein Konto" unter "Konto"), steht nur in der Gliederung | `.list-group__title`; layout.css Large-Title-Zone; `test:mobile-chrome` (D8) | Icon vor der Gruppenueberschrift, springender Titel, Einstellungen ohne Kopf |
+| **D8 Typo** | Gruppenueberschrift in Listen = EIN Stil (Micro-Label, ohne Icon). **Tafla (2026-10-19), Kueche:** Einkauf und Vorrat setzen den Gruppenkopf als Name 17/600 + Zahl 17/400 ink-2 in Satzschreibung ueber die flache Karte (seitenweit gescoped; der geteilte Micro-Label-Stil gilt in den uebrigen Modulen, bis die Komponentenrunde ihn umstellt). Die Titelzeile hat eine feste Mindesthoehe (`min-block-size: var(--target-base)`, Titel mittig): der Large Title steht in jedem Modul am selben Ort (vorher 8 gegen 11px). Die Einstellungen tragen am Desktop den Modulkopf wie jedes Modul; eine Abschnittsueberschrift, die das Blatt wiederholt ("Mein Konto" unter "Konto"), steht nur in der Gliederung | `.list-group__title`; layout.css Large-Title-Zone; `test:mobile-chrome` (D8) | Icon vor der Gruppenueberschrift, springender Titel, Einstellungen ohne Kopf |
 | **D9 Farbe** | Datenidentitaet (Budget-Kategorie) behaelt EINE Farbe ueberall; Zustand sagen Text und Icon, nicht Umfaerben | Kategorie-Token | Kategorie, die je Zustand die Farbe wechselt |
 
 **Wege und Eingaben (R16 Schritt 3, Critique 2026-10-05).** Neun Regeln, je mit ihrem Ort:
@@ -4472,6 +4472,86 @@ trifft, wo der erste hinzielte. Ansagen nennen Start, Stopp und Ende, nicht jede
 
 **Dass die Flaeche lebt, sagt eine absolute Uhrzeit**, kein „vor 3 Minuten": eine relative
 Angabe braeuchte einen zweiten Timer, nur damit sie sich selbst aktuell haelt.
+
+### Kuchnia in Tafla (2026-10-19)
+
+Die vier Kuechen-Reiter nach dem Tafla-Entwurf (Artboards Zakupy, Spizarnia, Posilki,
+DodajPosilek, Przepisy, Przepis). Gemeinsame Grammatik: Gruppenkopf 17/600 + Zahl 17/400
+ink-2 in Satzschreibung UEBER einer flachen weissen Karte (Radius 20), Zeilen 56pt mit dem
+28er-Fuehrungsslot (Titel bei x = 56), Haarlinien 0.5pt ab x = 56, Status als WORT in einer
+getoenten Pille (nur wo es zaehlt), Mengen als Pille (Vorrat) oder als ink-2-Text (Einkauf),
+EIN Primaerknopf je Bildschirm. Die Seiten lesen die Tafla-Vertragstokens mit dem heutigen
+Token als Rueckfall (`var(--color-fill, var(--color-fill-field))`), bis die Grundlage landet.
+
+**Einkauf (Zakupy).**
+- Die gewaehlte Liste IST der Titel der Zeile ueber der Liste (22/600 mit Winkel) und oeffnet
+  die Listenwahl; die frueheren Kapseln sind deren Zeilen (Haken an der gewaehlten). Daneben
+  der Fortschritt "8 z 23" mit 4pt-Balken und das Werkzeugmenue als Geisterkreis.
+- Zeilen: Tipp irgendwo hakt ab, Wisch nach rechts hakt ab, nach links loescht (widerrufbar),
+  langes Druecken oder Rechtsklick oeffnet den Editor (der auch Loeschen traegt). Auf Touch
+  kein "..." und kein Griff; am Zeiger bleiben beide, Pfeiltasten am Griff sortieren.
+  Erledigt ist VIOLETT (gefuellter Ring), ohne Durchstrich, der Name tritt auf ink-2 zurueck.
+  Der Ring traegt bis zur Komponentenrunde die Kante des geteilten `.check-ring`
+  (R20-Guard: beide gleich).
+- "Pewnie się kończy" steht IN der Liste (ein Sparkles-Label je Gruppe, Chips in
+  accent-tint) und, solange die Leiste Fokus und noch keinen Namen hat, ueber der Leiste.
+- Die Hinzufuegen-Leiste ist am Telefon unten angedockt (12 ueber der Kapsel), immer da; sie
+  reitet beim Tippen 8 ueber der Tastatur (visualViewport), die Kapsel tritt so lange ab. Die
+  Menge kommt beim Tippen dazu, der Absender (36er-Kreis, Pfeil) erst mit Text. Der Gang
+  kommt aus der Vermutung beim Tippen; die frische Zeile sagt ihn ("Nabiał · zmień") und
+  oeffnet den Editor. Kein Blur in `.app-content` (glass.css, iOS-Leerbild-Schutz): unter
+  der Leiste liegt deshalb der Scroll-Kanten-Verlauf statt Glas. Toasts und Sammel-Pille
+  stehen ueber der Leiste. Am Zeiger ist die Leiste die erste Zeile ueber der Liste, mit
+  Gangfeld.
+- Abgehaktes klappt in "W koszyku" (EINE Karte am Ende, Kopfzeile ink-2). Ist alles gekauft,
+  steht oben die Endkarte "Wszystko kupione" mit "Przenieś N do spiżarni" (der vorhandene
+  Uebertrag, nur wo er angeboten wird) und "Wyczyść listę".
+- Leere Liste: kein Knopf, die Leiste ist der Weg; die Vorschlaege stehen als Starter darueber.
+
+**Vorrat (Spiżarnia).** Ortskapseln statt Statusfilter, "Wymaga uwagi" als EINE Karte oben
+("Termin mija" mit Wortpillen, "Kończy się" mit dem, was schon auf der Liste steht, und
+"Dodaj N do listy"), die Kamerakarte "Dodaj ze zdjęcia" darunter (gleiche Freigabe wie
+vorher), dann je Ort 56pt-Zeilen mit hoechstens einem Statuswort und der Mengenpille. Tipp
+klappt die Zeile auf (MHD, Stepper − Wert +, "Na listę", "Edytuj"), langes Druecken oeffnet
+den Editor, Wisch nach links loescht. Die Suche ist am Telefon ein Geisterkreis in der
+Kapselzeile. Leerzustand ohne Knopf - einzige Ausnahme ist die Kamera.
+
+**Mahlzeiten (Posiłki) und das Blatt "Dodaj posiłek".** Unter 1024px ist der Plan EINE ruhige
+Liste statt des Boards (das Desktop-Board bleibt): Wochenkopf "19–25 paź" (der Strich kommt aus
+dem Code, nicht aus einem Locale-Wert) mit "Ten tydzień"-Menue, darunter die 7-Tage-Leiste
+(heute violett, vier Mahlzeitpunkte je Tag, Wischen wechselt die Woche). Das heutige Abendessen
+ist die Herd-Karte (hearth) mit dem Zutaten-Messbalken gegen Vorrat und Listen und "Gotuj", das
+den vorhandenen Kochmodus oeffnet; vergangene Tage der Woche falten hinter EINE Zeile
+"Wcześniej"; leere Slots bieten "+ Typ" und, wo KI-Ideen an sind, einen "Pomysł"-Chip.
+"Brakujące składniki na listę (N)" schreibt nur, was weder Vorrat noch eine Liste hat (mit
+Cofnij). Langes Druecken auf einer Mahlzeit oeffnet ihr Menue. Das Anlege-/Bearbeiten-Blatt hat
+einen Kontexttitel ("Kolacja · czw 22 paź"), ein X statt "Anuluj", die Mahlzeitart als Segment,
+Tageschips, Rezept- und KI-Zutaten als Chips ("· masz" fuer Vorhandenes), den Schalter "Dopisz
+brakujące do listy" und EINEN Primaerknopf, der das Ergebnis nennt ("Dodaj kolację i 3 produkty").
+
+**Rezepte (Przepisy, Przepis).** Liste: Suchfeld 36pt, Mahlzeitart-Chips (nur Arten, die die
+Sammlung teilen), "Gotowane ostatnio" als Zweierkarten (aus dem, was ab heute geplant ist oder
+zuletzt gekocht wurde), dann "Wszystkie przepisy N" als 64pt-Zeilen; kein Zeilenmenue auf Touch
+(langes Druecken). Detail am Telefon: eine Vollbildseite mit Foto oder Herd-Band, Zurueck- und
+Mehr-Kreisen (deckend, kein Glas in `.app-content`), Titel 34, "Ugotowane 3×, ostatnio …",
+Faktenzeile mit Vorrats-Messbalken, Zutaten mit vorhanden/fehlt und der Pille "na liście",
+"Dopisz N" fuer das Fehlende, Kroki aus der Schrittzerlegung des Kochmodus und EIN klebender
+Primaerknopf "Zacznij gotować" (oeffnet den vorhandenen Kochmodus). Bearbeiten, Duplizieren und
+Loeschen stehen im Mehr-Menue. GET /recipes traegt dafuer `cooked_count` und `last_cooked_on`
+(aus dem Essensplan, ohne Migration). Es gibt kein Feld fuer Kochzeit und keines fuer Favoriten:
+"Szybkie" und "Ulubione" (Artboard) fehlen deshalb, ebenso die Zeitangabe ("45 min").
+
+**Geaenderte Guards (Absicht erhalten, Regel nachgezogen):** das Quick-Add ist keine
+Disclosure mehr (test-frontend-audit "Einkaufs-Kopf"), Phase-3/#1372 lesen die einzeilige
+Leiste (alle Feldspuren flexibel, der Name breiter als die Menge, mit Zeiger der Gang breiter
+als die Menge), D5 prueft die Haut EINMAL um die Leiste, der Absender ist der Pfeil, der erst
+mit Text erscheint (test-shopping-ux), der Gruppenrhythmus 24/8 bleibt auf `.shopping-page`
+gescoped (test-shopping), die leere Liste traegt auch mit Schreibrecht keinen Knopf
+(test-shopping-readonly-ui); im Vorrat beschreiben Warenkorb-Slot und Bedienzone den
+aufgeklappten Teil, das MHD lebt in der aufgeklappten Zeile, der Leerzustand hat keinen CTA;
+im Mahlzeit-Blatt gibt es kein "Abbrechen" mehr (das X schliesst) und D4 zaehlt nur die
+Mahlzeitart-Radios; die Rezept-Tests lesen die neue Liste und das Detail (je mit Notiz).
+Zwei Zaehl-Schluessel ohne Substantiv stehen in der Plural-Ausnahmekarte.
 
 ## Do's and Don'ts
 

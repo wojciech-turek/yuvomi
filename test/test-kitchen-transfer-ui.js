@@ -365,9 +365,13 @@ function loeschenStehtLinks(fuss, id, abbrechenId) {
     'als danger-outline, das den Rest nach rechts schiebt');
 }
 
+// Tafla (2026-10-19): das Mahlzeit-Blatt hat kein "Abbrechen" mehr - das X im
+// Kopf schliesst (mit Rueckfrage bei Eingaben), der Fuss traegt nur noch
+// [Loeschen] [Primaer]. Die Regel bleibt: Loeschen steht links vom Primaerknopf.
 test('Mahlzeit bearbeiten: Loeschen steht links im Dialogfuss, beim Anlegen nicht (R8 H10)', async () => {
   await withAccess(BEIDE, () => {
-    loeschenStehtLinks(fussVon(dialog()), 'modal-delete', 'modal-cancel');
+    loeschenStehtLinks(fussVon(dialog()), 'modal-delete', 'modal-save');
+    assert.doesNotMatch(fussVon(dialog()), /id="modal-cancel"/, 'Tafla: kein Abbrechen im Blatt');
     const neu = meals.buildModalContent({ mode: 'create', date: '2026-09-21', mealType: 'lunch', meal: null });
     assert.doesNotMatch(fussVon(neu), /modal-delete/, 'ohne Bestand gibt es nichts zu loeschen');
   });
@@ -461,11 +465,16 @@ test('R16: das Detail traegt ein Kopfbild, wenn es ein eigenes Bild gibt - und n
  * Kuechenton aus R18 ist weg. Ohne Bild beginnt das Detail mit seinem Inhalt
  * (Mahlzeit-Chips, Zutaten), den Titel traegt der Kopf des Rahmens. Am Desktop
  * stand das Band als 480px breiter Stummel ueber den Zutaten. */
+/* TAFLA (2026-10-19): der Inhalt beginnt mit seinem Kopf (wie oft gekocht,
+ * Mahlzeiten, Zahlenreihe) statt direkt mit den Mahlzeiten - die Regel R20
+ * fuer die Spalte bleibt: kein Band, kein Platzhalter. Das Blatt am Telefon
+ * (`variant: 'sheet'`) traegt dagegen bewusst das Kopfbild bzw. die warme
+ * Flaeche (Tafla "Przepis"), eigener Fall unten. */
 test('R20: ohne Bild beginnt das Detail mit seinem Inhalt - kein Band, kein Platzhalter', async () => {
   const ohne = document.createElement('div');
   recipes.fillRecipeDetail(ohne, NATIVE_OHNE_BILD);
   const [first] = ohne.childNodes;
-  assert.equal(first.className, 'recipe-card__meal-types', 'das Detail beginnt mit den Mahlzeiten, nicht mit einem Band');
+  assert.equal(first.className, 'recipe-detail__head', 'das Detail beginnt mit seinem Kopf, nicht mit einem Band');
   assert.equal(ohne.childNodes.some((node) => /recipe-detail__(?:band|hero)/.test(node?.className ?? '')), false);
 
   // Mit Bild bleibt der Hero vorn.
@@ -496,4 +505,173 @@ test('R16: das Kopfbild beschneidet (3:2, cover) und verzerrt nicht', async () =
   assert.match(frame?.body ?? '', /aspect-ratio:\s*3\s*\/\s*2/);
   assert.match(frame?.body ?? '', /overflow:\s*hidden/);
   assert.match(image?.body ?? '', /object-fit:\s*cover/, 'das Bild wird beschnitten, nicht gestaucht');
+});
+
+// ---------------------------------------------------------------------------
+// TAFLA (2026-10-19): das Rezept weiss, was der Vorrat hat und was schon auf
+// einer Liste steht ("masz 5 z 6", Haken/Ring, "na liście", "Dopisz 1").
+// Eine bestaetigte Zuordnung (#1314) geht vor; sonst vergleicht der Name wie
+// die Zutatenvorschlaege im Essensplan - nur fuer die Anzeige, nichts wird
+// gespeichert. Ohne Vorratswissen (`pantry: null`) behauptet das Detail nichts.
+
+// Die Seiten setzen Klassen ueber `classList`; der Mini-DOM kennt nur das
+// Attribut. Derselbe duenne Aufsatz wie in test-kitchen-readonly-ui.js.
+const { MiniElement: TaflaMini } = await import('./mini-dom.js');
+if (!Object.getOwnPropertyDescriptor(TaflaMini.prototype, 'classList')) {
+  Object.defineProperty(TaflaMini.prototype, 'classList', {
+    get() {
+      const el = this;
+      const liste = () => el.className.split(/\s+/).filter(Boolean);
+      const setze = (l) => { el.className = l.join(' '); };
+      return {
+        add: (...c) => setze([...new Set([...liste(), ...c])]),
+        remove: (...c) => setze(liste().filter((k) => !c.includes(k))),
+        contains: (c) => liste().includes(c),
+        toggle: (c, an = !liste().includes(c)) => { if (an) setze([...new Set([...liste(), c])]); else setze(liste().filter((k) => k !== c)); return an; },
+      };
+    },
+  });
+}
+
+// Eine Zutat ohne Zuordnung gibt ein leeres Fragment zurueck (pantryMatchEl).
+globalThis.document.createDocumentFragment ??= () => ({ childNodes: [], dataset: {}, outerHTML: '' });
+
+const TAFLA_REZEPT = {
+  id: 41, title: 'Spaghetti', source: 'native', has_own_image: false, meal_types: ['dinner'],
+  notes: '1. Kochen.\n2. Abgiessen.', cooked_count: 3, last_cooked_on: '2026-10-05',
+  ingredients: [
+    { name: 'Cebula', quantity: '1 szt.' },
+    { name: 'Makaron  spaghetti', quantity: '250 g' },
+    { name: 'Śmietanka 30%', quantity: '100 ml' },
+    { name: 'Kapusta biała', quantity: '1 główka' },
+  ],
+};
+
+async function mitKueche({ pantry = null, onList = null, lists = [] } = {}, fn) {
+  const zuvor = { ...recipes.state };
+  Object.assign(recipes.state, { pantry, onList, lists, plannedOn: new Map(), plannedRecipeIds: new Set() });
+  try {
+    return await fn();
+  } finally {
+    Object.assign(recipes.state, zuvor);
+  }
+}
+
+const VORRAT = [
+  { id: 1, key: 'cebula', stocked: true },
+  { id: 2, key: 'makaron spaghetti', stocked: true },
+  { id: 3, key: 'smietanka 30%', stocked: false },
+];
+
+test('Tafla: Vorrat und Liste je Zutat - Name gefaltet, bestaetigte Zuordnung zuerst', async () => {
+  assert.equal(recipes.foldKey('  Śmietanka   30%'), 'smietanka 30%');
+  assert.equal(recipes.foldKey('Żółty ser'), 'zolty ser');
+  await mitKueche({ pantry: VORRAT, onList: new Set(['smietanka 30%']) }, () => {
+    const s = TAFLA_REZEPT.ingredients.map((ing) => recipes.ingredientState(ing));
+    assert.deepEqual(s.map((x) => x.have), [true, true, false, false], 'leerer Bestand zaehlt nicht als vorhanden');
+    assert.deepEqual(s.map((x) => x.onList), [false, false, true, false]);
+    assert.deepEqual(recipes.pantryTally(TAFLA_REZEPT), { have: 2, total: 4 });
+    assert.deepEqual(recipes.missingIngredients(TAFLA_REZEPT).map((i) => i.name), ['Kapusta biała'],
+      'was schon auf der Liste steht, ist nicht mehr "zu dopisz"');
+    // "pomidory w puszce" findet "pomidory" (wie inPantry() am Server).
+    assert.equal(recipes.ingredientState({ name: 'Cebula czerwona' }).have, true);
+    // Die bestaetigte Zuordnung schlaegt den Namen: zeigt sie auf eine leere Zeile, fehlt die Zutat.
+    assert.equal(recipes.ingredientState({ name: 'Cebula', pantry_item_id: 3 }).have, false);
+  });
+  await mitKueche({}, () => {
+    assert.equal(recipes.ingredientState(TAFLA_REZEPT.ingredients[0]).have, null, 'unbekannt ist nicht fehlend');
+    assert.equal(recipes.pantryTally(TAFLA_REZEPT), null);
+    assert.deepEqual(recipes.missingIngredients(TAFLA_REZEPT), []);
+  });
+});
+
+test('Tafla: "Dopisz N" schickt nur die fehlenden Namen, "Na listę zakupów" das ganze Rezept', async () => {
+  const bodies = [];
+  const zuvor = globalThis.__apiStub;
+  globalThis.__apiStub = {
+    post: async (path, body) => { bodies.push([path, body]); return { data: { transferred: 1, skipped: 0, added_ids: [9] } }; },
+  };
+  try {
+    await withAccess(BEIDE, () => mitKueche({ pantry: VORRAT, onList: new Set(), lists: [{ id: 5, name: 'Cotygodniowe' }] }, async () => {
+      await recipes.transferRecipe(TAFLA_REZEPT, null, { onlyMissing: true });
+      await recipes.transferRecipe(TAFLA_REZEPT, null);
+    }));
+  } finally {
+    globalThis.__apiStub = zuvor;
+  }
+  assert.deepEqual(bodies, [
+    ['/recipes/41/to-shopping-list', { listId: 5, names: ['Śmietanka 30%', 'Kapusta biała'] }],
+    ['/recipes/41/to-shopping-list', { listId: 5 }],
+  ]);
+});
+
+test('Tafla: das Detail traegt Kopf, Zahlenreihe, Zeichen je Zutat und Kroki', async () => {
+  const find = (node, cls, out = []) => {
+    if (String(node?.className ?? '').split(' ').includes(cls)) out.push(node);
+    for (const child of node?.childNodes ?? []) find(child, cls, out);
+    return out;
+  };
+  await withAccess(BEIDE, () => mitKueche({ pantry: VORRAT, onList: new Set(['smietanka 30%']), lists: [{ id: 5, name: 'L' }] }, () => {
+    const blatt = document.createElement('div');
+    recipes.fillRecipeDetail(blatt, TAFLA_REZEPT, { variant: 'sheet' });
+    const [hero, title, head] = blatt.childNodes;
+    assert.match(hero.className, /recipe-view__hero/, 'das Blatt beginnt mit dem Kopfbild bzw. der warmen Flaeche');
+    assert.equal(title.className, 'recipe-view__title');
+    assert.equal(head.className, 'recipe-detail__head');
+    assert.match(head.outerHTML, /recipes\.cookedTimes\{&quot;count&quot;:3\}|recipes\.cookedTimes\{"count":3\}/, '"Ugotowane 3×" aus dem Essensplan');
+    assert.equal(find(blatt, 'recipe-detail__fact').length, 3, 'Zutaten, Schritte, masz');
+    assert.equal(find(blatt, 'recipe-meter__seg').length, 4);
+    assert.equal(find(blatt, 'recipe-meter__seg--missing').length, 2);
+    const zeichen = find(blatt, 'recipe-detail__ingredient-status').map((el) => el.getAttribute('aria-label'));
+    assert.deepEqual(zeichen, ['recipes.inPantry', 'recipes.inPantry', 'recipes.notInPantry', 'recipes.notInPantry']);
+    assert.equal(find(blatt, 'recipe-detail__pill').length, 1, '"na liście" nur an der fehlenden Zutat auf der Liste');
+    assert.equal(find(blatt, 'recipe-detail__add-missing').length, 1, '"Dopisz 1" im Kopf der Zutaten');
+    assert.equal(find(blatt, 'recipe-detail__step').length, 2, 'Kroki aus der Notiz, wie im Kochmodus');
+    assert.equal(find(blatt, 'recipe-detail__notes').length, 0, 'die Notiz steht nicht ein zweites Mal da');
+    assert.equal(find(blatt, 'btn--secondary').some((b) => b.textContent.includes('cook.open')), false,
+      'im Blatt ist Gotuj der eine Primaerknopf unten, kein zweiter Knopf im Inhalt');
+  }));
+
+  // Ohne Vorratswissen: keine Zeichen, kein Zaehler, kein "Dopisz".
+  await withAccess(BEIDE, () => mitKueche({ lists: [{ id: 5, name: 'L' }] }, () => {
+    const spalte = document.createElement('div');
+    recipes.fillRecipeDetail(spalte, TAFLA_REZEPT);
+    assert.equal(find(spalte, 'recipe-meter').length, 0);
+    assert.equal(find(spalte, 'recipe-detail__add-missing').length, 0);
+    assert.ok(find(spalte, 'recipe-detail__ingredient-status').every((el) => el.getAttribute('aria-hidden') === 'true'));
+  }));
+});
+
+test('Tafla: "Gotowane ostatnio" - geplant ab heute und zuletzt gekocht, das Naechste zuerst', async () => {
+  const { todayKey, addLocalDays } = await import('../public/utils/date.js');
+  const heute = todayKey();
+  const r = (id, extra = {}) => ({ id, title: `R${id}`, source: 'native', ingredients: [], meal_types: ['dinner'], ...extra });
+  const liste = [
+    r(1, { last_cooked_on: addLocalDays(heute, -20) }),
+    r(2),
+    r(3, { last_cooked_on: addLocalDays(heute, -1) }),
+    r(4),
+    r(5, { last_cooked_on: addLocalDays(heute, -3) }),
+  ];
+  await mitKueche({}, () => {
+    recipes.state.plannedOn = new Map([[4, heute], [2, addLocalDays(heute, 2)]]);
+    const order = recipes.recentRecipes(liste).map((e) => e.recipe.id);
+    assert.deepEqual(order, [4, 3, 2, 5], 'heute geplant, gestern gekocht, uebermorgen, vor drei Tagen - hoechstens vier');
+  });
+});
+
+test('Tafla: Mahlzeit-Chips nur fuer Mahlzeiten, die einen TEIL der Rezepte betreffen', async () => {
+  await mitKueche({}, () => {
+    const zuvor = recipes.state.recipes;
+    try {
+      recipes.state.recipes = [
+        { id: 1, title: 'A', meal_types: ['dinner'] },
+        { id: 2, title: 'B', meal_types: ['lunch', 'dinner'] },
+      ];
+      assert.deepEqual(recipes.mealFilterChoices().map((c) => c.key), ['lunch'],
+        'Kolacja gilt fuer alle - ein Chip, der nichts filtert, entfaellt');
+    } finally {
+      recipes.state.recipes = zuvor;
+    }
+  });
 });

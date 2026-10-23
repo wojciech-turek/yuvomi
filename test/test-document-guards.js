@@ -1256,6 +1256,11 @@ const SHAPE_EXEMPT = new Map([
   // `.health-overview__card--link`: eine Kapsel waere hier eine zweite Form
   // neben den gleichen Karten des Rasters.
   ['note-card__open', 'Rasterzelle: ganze Notizkarte als Oeffner im Notizraster (Masonry, DESIGN.md)'],
+  // Tafla (2026-10-19): "Gotowane ostatnio" in den Rezepten ist ein Raster aus
+  // zwei Karten je Reihe (Bild oben, Titel, Tag) - die ganze Karte oeffnet das
+  // Rezept. Eine Kapsel waere eine zweite Form neben den Karten des Rasters,
+  // dieselbe Begruendung wie bei `.note-card__open`.
+  ['recipe-card', 'Rasterzelle: Rezeptkarte im Raster "Gotowane ostatnio" (Tafla, zwei je Reihe)'],
   // 4. Zeilen einer Zeilenliste
   ['nav-item', 'Zeile: Eintrag der Sidebar-Navigation'],
   ['note-item', 'Zeile: Notiz im Dashboard-Widget'],

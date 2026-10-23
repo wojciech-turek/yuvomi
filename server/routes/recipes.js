@@ -13,6 +13,7 @@ import { ingredientMatchKey } from '../../public/utils/ingredient-match-key.js';
 import { getAdapter } from '../services/recipe-providers/index.js';
 import { dataUrlContentMatches } from '../utils/file-signature.js';
 import { mayReadModule, mayWriteModule } from '../permissions.js';
+import { todayKey } from '../utils/timezone.js';
 
 const log = createLogger('Recipes');
 const router = express.Router();
@@ -97,6 +98,34 @@ function attachPantryMatches(req, ingredients) {
   });
 }
 
+/* WIE OFT UND WANN ZULETZT GEKOCHT (Tafla, 2026-10-19).
+ *
+ * Gelesen aus dem Essensplan, nichts wird gespeichert: eine Mahlzeit mit
+ * `recipe_id` VOR dem heutigen Tag des Haushalts zaehlt als gekocht. Heute und
+ * spaeter ist geplant, nicht gekocht. Die Rezeptliste zeigt damit "Gotowane
+ * ostatnio" und das Detail "Ugotowane 3x · ostatnio 2 tyg. temu".
+ *
+ * @returns {Map<number, {cooked_count: number, last_cooked_on: string|null}>}
+ */
+function cookStats(ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  const today = todayKey(db.get());
+  const rows = db.get().prepare(`
+    SELECT recipe_id, COUNT(*) AS cooked_count, MAX(date) AS last_cooked_on
+    FROM meals
+    WHERE recipe_id IN (${ids.map(() => '?').join(',')}) AND date < ?
+    GROUP BY recipe_id
+  `).all(...ids, today);
+  for (const r of rows) out.set(r.recipe_id, { cooked_count: r.cooked_count, last_cooked_on: r.last_cooked_on });
+  return out;
+}
+
+function withCookStats(recipe, stats) {
+  const s = stats.get(recipe.id);
+  return { ...recipe, cooked_count: s?.cooked_count ?? 0, last_cooked_on: s?.last_cooked_on ?? null };
+}
+
 function loadRecipeWithIngredients(req, id) {
   const recipe = db.get().prepare(`
     SELECT r.*, u.display_name AS creator_name, u.avatar_color AS creator_color,
@@ -115,7 +144,10 @@ function loadRecipeWithIngredients(req, id) {
     ORDER BY id ASC
   `).all(id));
 
-  return withSource({ ...recipe, meal_types: normalizeRecipeMealTypes(recipe.meal_types), ingredients });
+  return withSource(withCookStats(
+    { ...recipe, meal_types: normalizeRecipeMealTypes(recipe.meal_types), ingredients },
+    cookStats([recipe.id]),
+  ));
 }
 
 router.get('/', (req, res) => {
@@ -146,11 +178,12 @@ router.get('/', (req, res) => {
       }
     }
 
-    res.json({ data: recipes.map((r) => withSource({
+    const stats = cookStats(ids);
+    res.json({ data: recipes.map((r) => withSource(withCookStats({
       ...r,
       meal_types: normalizeRecipeMealTypes(r.meal_types),
       ingredients: ingredientMap[r.id] || [],
-    })) });
+    }, stats))) });
   } catch (err) {
     log.error('GET / error:', err);
     res.status(500).json({ error: 'Internal error', code: 500 });
@@ -485,9 +518,21 @@ router.post('/:id/to-shopping-list', (req, res) => {
     // Derselbe Grund wie im Einkauf: die Liste wurde inzwischen geloescht.
     if (!list) return res.status(404).json({ error: 'Shopping list not found.', code: 404, reason: 'shopping_list_not_found' });
 
+    // Optional `names` (Tafla "Dopisz 1"): only these ingredients of the recipe
+    // go to the list - the ones the pantry does not seem to have. Matched by
+    // the same key as the confirmed pantry match; unknown names are ignored.
+    let only = null;
+    if (req.body.names !== undefined) {
+      if (!Array.isArray(req.body.names) || req.body.names.length > 200
+        || !req.body.names.every((n) => typeof n === 'string' && n.length <= MAX_TITLE)) {
+        return res.status(400).json({ error: 'names must be a list of ingredient names.', code: 400 });
+      }
+      only = new Set(req.body.names.map((n) => ingredientMatchKey(n)));
+    }
+
     const ingredients = db.get().prepare(
       'SELECT name, quantity, category FROM recipe_ingredients WHERE recipe_id = ? ORDER BY id ASC',
-    ).all(id);
+    ).all(id).filter((ing) => !only || only.has(ingredientMatchKey(ing.name)));
     if (!ingredients.length) return res.json({ data: { transferred: 0, skipped: 0, added_ids: [] } });
 
     const result = db.transaction(() => {
