@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Avbryt",
         "ssoOnlyHint": "Innlogging til denne husholdningen skjer utelukkende via felles pålogging.",
         "guestPasswordLogin": "Gjestinnlogging med passord",
-        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din."
+        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Velkommen til Yuvomi",

@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Annuleren",
         "ssoOnlyHint": "Aanmelden bij dit huishouden gaat uitsluitend via SSO.",
         "guestPasswordLogin": "Gastaanmelding met wachtwoord",
-        "accountCannotSignIn": "Dit account kan zich niet aanmelden. Neem contact op met de beheerder van je huishouden."
+        "accountCannotSignIn": "Dit account kan zich niet aanmelden. Neem contact op met de beheerder van je huishouden.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Welkom bij Yuvomi",

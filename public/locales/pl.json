@@ -3464,7 +3464,7 @@
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",
         "usernameLabel": "Nazwa użytkownika",
         "passwordLabel": "Hasło",
-        "loginButton": "Zaloguj",
+        "loginButton": "Zaloguj się",
         "loggingIn": "Logowanie…",
         "tooManyAttempts": "Zbyt wiele prób. Odczekaj około minuty i spróbuj ponownie.",
         "invalidCredentials": "Nieprawidłowe dane logowania.",
@@ -3477,7 +3477,7 @@
         "ssoNoAccount": "Dla tego logowania SSO nie ma tu jeszcze konta. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
         "ssoEmailAmbiguous": "Twój adres e-mail należy tu do kilku kont, dlatego logowania SSO nie można przypisać do żadnego z nich. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
         "ssoLinkRequired": "Dla Twojego adresu e-mail istnieje tu już konto z hasłem. Zaloguj się nim i powiąż SSO w Ustawienia → Konto albo skontaktuj się z administratorem swojego gospodarstwa domowego.",
-        "forgotPassword": "Nie pamiętasz hasła?",
+        "forgotPassword": "Nie pamiętam hasła",
         "networkError": "Połączenie nie powiodło się. Sprawdź, czy serwer działa, i spróbuj ponownie.",
         "capsLockWarning": "Caps Lock jest włączony.",
         "fillAllFields": "Wprowadź nazwę użytkownika i hasło.",
@@ -3493,7 +3493,8 @@
         "twoFactorCancel": "Anuluj",
         "ssoOnlyHint": "Logowanie do tego gospodarstwa domowego odbywa się wyłącznie przez SSO.",
         "guestPasswordLogin": "Logowanie gościa hasłem",
-        "accountCannotSignIn": "To konto nie może się zalogować. Skontaktuj się z administratorem swojego gospodarstwa domowego."
+        "accountCannotSignIn": "To konto nie może się zalogować. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
+        "secureConnection": "{{host}} · połączenie szyfrowane"
     },
     "setup": {
         "title": "Witamy w Yuvomi",

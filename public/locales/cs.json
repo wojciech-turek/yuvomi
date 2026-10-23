@@ -3376,7 +3376,8 @@
         "twoFactorCancel": "Zrušit",
         "ssoOnlyHint": "Přihlášení do této domácnosti probíhá výhradně přes SSO.",
         "guestPasswordLogin": "Přihlášení hosta heslem",
-        "accountCannotSignIn": "Tento účet se nemůže přihlásit. Obraťte se na správce vaší domácnosti."
+        "accountCannotSignIn": "Tento účet se nemůže přihlásit. Obraťte se na správce vaší domácnosti.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Vítejte v Yuvomi",

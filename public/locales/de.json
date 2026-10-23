@@ -3291,7 +3291,8 @@
         "twoFactorCancel": "Abbrechen",
         "ssoOnlyHint": "Die Anmeldung an diesem Haushalt läuft ausschließlich über Single Sign-On.",
         "guestPasswordLogin": "Als Gast mit Passwort anmelden",
-        "accountCannotSignIn": "Dieses Konto kann sich nicht anmelden. Wende dich an die Administration deines Haushalts."
+        "accountCannotSignIn": "Dieses Konto kann sich nicht anmelden. Wende dich an die Administration deines Haushalts.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Willkommen bei Yuvomi",

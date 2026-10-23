@@ -3291,7 +3291,8 @@
         "twoFactorCancel": "Batal",
         "ssoOnlyHint": "Masuk ke rumah tangga ini hanya melalui SSO.",
         "guestPasswordLogin": "Masuk tamu dengan kata sandi",
-        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda."
+        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Selamat datang di Yuvomi",

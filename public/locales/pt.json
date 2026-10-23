@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Cancelar",
         "ssoOnlyHint": "O acesso a este agregado familiar é feito exclusivamente através de SSO.",
         "guestPasswordLogin": "Início de sessão de convidado com senha",
-        "accountCannotSignIn": "Esta conta não pode iniciar sessão. Contacte o administrador do seu agregado familiar."
+        "accountCannotSignIn": "Esta conta não pode iniciar sessão. Contacte o administrador do seu agregado familiar.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Bem-vindo ao Yuvomi",

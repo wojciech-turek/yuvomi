@@ -3291,7 +3291,8 @@
         "twoFactorCancel": "Kanselahin",
         "ssoOnlyHint": "Ang pag-sign in sa sambahayang ito ay eksklusibong sa pamamagitan ng SSO.",
         "guestPasswordLogin": "Pag-sign in ng bisita gamit ang password",
-        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan."
+        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Maligayang pagdating sa Yuvomi",

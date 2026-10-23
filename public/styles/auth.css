@@ -14,49 +14,27 @@
  * layout.css.
  */
 
-/* DIE ZUGANGSSEITEN HABEN EINEN ORT (R18, 2026-10-07).
+/* TAFLA (2026-10-20, artboard "Logowanie"): CALM PAPER.
  *
- * Bis hierher: eine 380px-Karte mit dem Kartenradius auf planer Buehne, Marke
- * und Name frei darueber. Jetzt zwei Ebenen, wie die App sie ueberall sonst
- * kennt - Raumlicht und Glas:
+ * R18 (2026-10-07) gave these pages a place: the brand light field on the
+ * shell and a glass panel carrying everything. Tafla takes both back - no
+ * gradient besides the scroll-edge fade and the split disc, glass only as
+ * chrome - and puts the page on the paper every other screen stands on: the
+ * house in its tint, the name, the fields, ONE primary, a plain link, and a
+ * footnote at the foot of the screen. Every ink stands on --color-bg, where it
+ * holds AA in both themes (test:material measures the pairs).
  *
- *   1. Die Shell traegt das Marken-Lichtfeld (`--brand-field`, tokens.css):
- *      drei stehende, weiche Kreise in den Farben der Bildmarke. Es ist die
- *      eine Stelle neben dem Ladebild, an der nichts Opakes darueber liegt.
- *   2. Die Seite selbst (`main.auth-page`) ist die Glastafel: 26px wie jede
- *      schwebende Flaeche, Lichtkante, Blur - sie bricht das Feld.
- *
- * ALLES STEHT AUF DER TAFEL, auch Marke, Name und Versionszeile. Das ist keine
- * Geschmacksfrage: direkt auf dem Feld faellt Sekundaertext unter AA (Rechnung
- * am Token), auf der Tafel haelt jede Tinte. Deshalb ist die TAFEL das <main>
- * und nicht mehr die Karte darin - am Markup der Seiten aendert sich nichts,
- * `.auth-card` gibt nur Flaeche, Schatten und Polster an die Tafel ab.
- *
- * Diese Seiten werden direkt in #app.app-shell gerendert (keine Sidebar vor
- * der Anmeldung). Ab 1024px schaltet .app-shell auf flex-direction: row fuer
- * die Sidebar um; solange eine Auth-Seite praesent ist, bleibt sie im
- * Spaltenfluss.
- *
- * `:has()` IST DIE WEICHE: ein Browser ohne `:has()` (Chrome < 105, Firefox
- * < 121) verwirft die Regeln unten. Er bekommt die plane Buehne ohne Feld und
- * die Tafel waagerecht mittig mit festem Abstand nach oben - bedienbar, nur
- * ohne Ort. */
+ * These pages render straight into #app.app-shell (no sidebar before sign-in).
+ * From 1024px .app-shell switches to a row for the sidebar; while an auth page
+ * is present it stays a column. */
 .app-shell:has(.auth-page) {
   flex-direction: column;
   background-color: var(--color-bg);
-  background-image: var(--brand-field);
-  background-repeat: no-repeat;
 }
 
-/* Der Router haengt jede Seite in eine `.page-transition`-Huelle. Fuer die
- * Zugangsseiten ist sie der Rahmen der Tafel: sie fuellt die Shell, stellt die
- * Tafel in ihre Mitte (`margin: auto` an einem Flex-Kind zentriert in beiden
- * Richtungen und klemmt nicht, wenn der Inhalt hoeher ist) und SCROLLT, wenn
- * die Tafel hoeher ist als das Fenster (Einrichtung auf einem kleinen Telefon,
- * Querformat). `body` ist `overflow: hidden` - vorher lief die Seite dort
- * unten aus dem Bild und liess sich von Hand nicht scrollen (gemessen bei
- * 390x420: 543px Inhalt, der Knopf nur per Tab erreichbar). Das Feld haengt an
- * der Shell und bleibt beim Scrollen stehen. */
+/* The router wraps every page in `.page-transition`. Here it is the frame: it
+ * fills the shell and SCROLLS when the page is taller than the window (setup
+ * on a small phone, landscape) - `body` is `overflow: hidden`. */
 .page-transition:has(> .auth-page) {
   flex: 1 1 auto;
   min-block-size: 0;
@@ -64,79 +42,65 @@
   flex-direction: column;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding-block: var(--space-4);
 }
 
-.page-transition:has(> .auth-page) > .auth-page {
-  margin: auto;
-}
-
+/* The page is a column as tall as the window: the hero and the form sit in
+ * the middle (the two auto margins share the free space), the footnote at the
+ * foot. Without `:has()` it is a plain centred column - usable, just without
+ * the foot. */
 .auth-page {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  flex: 0 0 auto;
-  /* 380px Formularbreite plus das Polster der Tafel; auf dem Telefon bleibt
-   * beidseits der Seitenrand der App. */
-  inline-size: min(100% - 2 * var(--space-4), 380px + 2 * var(--space-4));
-  /* Der Rueckfall ohne `:has()`: die Huelle ist dort ein Block, `auto`
-   * zentriert nur waagerecht, und der senkrechte Wert haelt die Tafel von der
-   * Fensterkante ab. Mit der Flex-Huelle gilt die Regel direkt darueber. */
-  margin: var(--space-4) auto;
-  /* 16px Polster: aussen 26px minus 16px sind die 10px der Felder
-   * (`--radius-sm`) - konzentrisch. Oben eine Stufe mehr, damit die Marke
-   * nicht an der Lichtkante klebt. */
-  padding: var(--space-6) var(--space-4) var(--space-4);
-  /* Der opake Rueckfall steht AUSSERHALB von @supports (Fallback-Regel in
-   * DESIGN.md): ohne backdrop-filter liefe das Feld ungefiltert durch. */
-  background-color: var(--color-surface);
-  border: var(--space-px) solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--glass-inset-elevated), var(--glass-shadow-lg);
+  flex: 1 0 auto;
+  box-sizing: border-box;
+  inline-size: min(100%, 380px + 2 * var(--space-4));
+  min-block-size: 100%;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+  background-color: transparent;
 }
 
-/* Hier scrollt nichts unter dem Glas weg (die Tafel ist der Inhalt), also
- * darf sie den Blur selbst tragen - anders als `.modal-panel`, dessen Rumpf
- * scrollt. Unter prefers-reduced-transparency und prefers-contrast kippen
- * `--glass-bg-elevated` auf `--color-surface` und `--blur-lg` auf 0: dieselbe
- * opake Tafel wie im Rueckfall darueber. */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .auth-page {
-    background-color: var(--glass-bg-elevated);
-    backdrop-filter: var(--blur-lg) saturate(var(--lg-glass-saturate));
-    -webkit-backdrop-filter: var(--blur-lg) saturate(var(--lg-glass-saturate));
-  }
+.auth-page > .auth-hero {
+  margin-block-start: auto;
 }
 
-/* Kopf der Tafel: Marke, Name, ein Satz. */
+.auth-page > .auth-secure {
+  margin-block-start: auto;
+}
+
 .auth-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
   text-align: center;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-16);
 }
 
-/* Marken-Anker: die Bildmarke selbst (utils/brand-mark.js) - dieselbe Kachel
- * wie in der Seitenleiste und auf dem Homescreen, in beiden Themes dieselbe.
- *
- * Hier stand eine akzentfarbene Kachel mit den Kreisen in `currentColor` bei
- * 55 %: im Dark dunkle Punkte auf Flieder, und die Kreise fuellten rund 30 %
- * der Kachel statt der Haelfte (19px in 64px, R18). Der Traeger gibt jetzt nur
- * noch Groesse und Schatten; die Rundung ist das Verhaeltnis der Marke
- * (36 auf 160), damit der Schatten ihrer Kante folgt - in jeder Groesse. */
+/* The house in the accent on its tint (64 circle, 32 glyph): the page says
+ * "your home". The brand tile stays the app's picture (sidebar, loading). */
 .auth-hero__mark {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: var(--space-16);
   height: var(--space-16);
-  margin-bottom: var(--space-4);
-  border-radius: 22.5%;
-  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
 }
 
-/* DER KOPF UEBER EINER KARTE MIT EIGENEM TITEL (R16, utils/auth-ui.js):
- * Einladung und Passwort-Reset tragen dieselbe Marke wie die Anmeldung, aber
- * eine Stufe leiser - die Seite hat ihre <h1> in der Karte ("Einladung
- * annehmen"), der App-Name ist dort Absender, nicht Titel. */
+.auth-hero__mark svg {
+  width: var(--space-8);
+  height: var(--space-8);
+}
+
+/* Over a card with its own title (join, reset): the same house, one step
+ * quieter - the app name is the sender there, not the title. */
 .auth-hero--compact {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-8);
 }
 
 .auth-hero--compact .auth-hero__mark {
@@ -145,31 +109,33 @@
   margin-bottom: var(--space-2);
 }
 
+.auth-hero--compact .auth-hero__mark svg {
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
 .auth-hero--compact .auth-hero__title {
   margin: 0;
-  font-size: var(--type-section-title);
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
   font-weight: var(--font-weight-semibold);
 }
 
-/* Large Title wie jeder Seitentitel, in Label-Farbe. Der Titel stand bis Runde 3
- * auf einer eigenen 48px-Stufe und in --color-accent - beides verbietet
- * DESIGN.md ausdruecklich (Ueberschriften enden bei 34px; Large Titles tragen
- * immer --color-text-primary). Die Marke trägt das Tile darueber, das laut
- * PRODUCT.md unantastbar ist. */
+/* Large title like every page title, in ink. */
 .auth-hero__title {
-  font-size: var(--type-page-title-mobile);
-  font-weight: var(--font-weight-bold);
+  margin: 0;
+  font-size: var(--type-large-title);
+  line-height: var(--type-large-title-lh);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  letter-spacing: var(--tracking-tight);
-  margin-bottom: var(--space-2);
 }
 
 .auth-hero__tagline {
-  font-size: var(--text-base);
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
   color: var(--color-text-secondary);
-  max-width: 360px;
-  margin-inline: auto;
-  line-height: var(--line-height-relaxed, 1.6);
+  max-width: 340px;
   text-wrap: balance;
 }
 
@@ -198,6 +164,93 @@
   gap: var(--space-2);
 }
 
+/* TAFLA FIELDS (artboard "Logowanie", spec "Arkusz"): 52 tall, radius 12, on
+ * the fill, the label 13/600 ink-2 eight above. The 1px field edge of the one
+ * field skin stays: fill on paper alone is 1.1:1, and a field needs its 3:1
+ * boundary (WCAG 1.4.11). */
+.auth-page .label {
+  margin-bottom: var(--space-2);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.auth-page .input {
+  min-height: 52px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-fill);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.auth-page .form-group + .form-group {
+  margin-top: var(--space-5);
+}
+
+/* ONE primary, full width, 52 tall, with the accent glow; it names the
+ * outcome ("Zaloguj się"). The SSO way below stays a secondary. */
+.auth-page .auth-form__submit {
+  min-height: 52px;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.auth-page .btn--primary.auth-form__submit {
+  margin-top: var(--space-6);
+  box-shadow: var(--shadow-accent-glow);
+}
+
+/* "Nie pamiętam hasła": a plain verb, centred, 44 tall. */
+.auth-form__forgot {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+}
+
+.auth-form__forgot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-base);
+  padding-inline: var(--space-2);
+  color: var(--color-accent);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.auth-form__forgot a:hover {
+  text-decoration: underline;
+}
+
+/* The footnote at the foot: "<host> · połączenie szyfrowane" with the lock,
+ * only over https (utils/auth-ui.js); empty, it leaves the foot to the
+ * version line. */
+.auth-secure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: var(--space-8) 0 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.auth-secure svg {
+  flex: none;
+}
+
+.auth-page > .auth-secure:empty {
+  display: none;
+}
+
+.auth-page > .auth-secure:empty + .auth-version {
+  margin-block-start: auto;
+}
+
 /* Der Kartentitel der Seiten ohne Hero (/join, /forgot-password,
  * /reset-password, /pair). Er hatte KEINE Regel (Critique 2026-09-26, Minor
  * Observations): das <h1> fiel auf die Reset-Basis zurueck, 17px halbfett -
@@ -207,7 +260,7 @@
  * Titel in ihr. */
 .auth-card__title {
   font-size: var(--type-toolbar-title);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
   color: var(--color-text-primary);
   text-wrap: balance;
@@ -259,16 +312,15 @@
 /* Nach falschen Zugangsdaten wird der Recovery-Link betont, damit der Nutzer
  * einen Ausweg sieht statt es blind erneut zu versuchen. */
 .auth-form__forgot--emphasis a {
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .auth-version {
-  margin-top: var(--space-3);
+  margin-top: var(--space-1);
   /* Platz reservieren, damit die spät nachgeladene Version das zentrierte
    * Formular nicht nach oben schiebt (CLS). */
-  min-height: var(--text-sm);
-  font-size: var(--text-xs);
+  min-height: var(--type-footnote-lh);
+  font-size: var(--type-footnote);
   color: var(--color-text-tertiary, var(--color-text-secondary));
   text-align: center;
 }

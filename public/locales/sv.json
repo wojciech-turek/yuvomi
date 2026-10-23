@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Avbryt",
         "ssoOnlyHint": "Inloggning till det här hushållet sker uteslutande via SSO.",
         "guestPasswordLogin": "Gästinloggning med lösenord",
-        "accountCannotSignIn": "Det här kontot kan inte logga in. Kontakta administratören för ditt hushåll."
+        "accountCannotSignIn": "Det här kontot kan inte logga in. Kontakta administratören för ditt hushåll.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Välkommen till Yuvomi",

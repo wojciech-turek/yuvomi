@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Annuler",
         "ssoOnlyHint": "La connexion à ce foyer se fait exclusivement via le SSO.",
         "guestPasswordLogin": "Connexion invité avec mot de passe",
-        "accountCannotSignIn": "Ce compte ne peut pas se connecter. Contactez l'administrateur de votre foyer."
+        "accountCannotSignIn": "Ce compte ne peut pas se connecter. Contactez l'administrateur de votre foyer.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Bienvenue sur Yuvomi",

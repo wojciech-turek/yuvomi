@@ -3275,7 +3275,8 @@
         "guestPasswordLogin": "Login de convidado com senha",
         "accountCannotSignIn": "Esta conta não pode fazer login. Contate o administrador do seu grupo familiar.",
         "ssoEmailAmbiguous": "Não foi possível vincular sua conta de logon único porque este endereço de e-mail corresponde a mais de uma pessoa.",
-        "ssoLinkRequired": "O logon único exige que um administrador vincule seu endereço de e-mail a uma pessoa."
+        "ssoLinkRequired": "O logon único exige que um administrador vincule seu endereço de e-mail a uma pessoa.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Bem-vindo ao Yuvomi",

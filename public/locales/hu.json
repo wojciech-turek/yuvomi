@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Mégse",
         "ssoOnlyHint": "Az ebbe a háztartásba való belépés kizárólag SSO-val történik.",
         "guestPasswordLogin": "Vendég bejelentkezés jelszóval",
-        "accountCannotSignIn": "Ez a fiók nem tud bejelentkezni. Kérjük, forduljon a háztartás rendszergazdájához."
+        "accountCannotSignIn": "Ez a fiók nem tud bejelentkezni. Kérjük, forduljon a háztartás rendszergazdájához.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Üdvözöljük a Yuvomi-ban",

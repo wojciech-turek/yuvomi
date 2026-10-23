@@ -3291,7 +3291,8 @@
         "twoFactorCancel": "لغو",
         "ssoOnlyHint": "ورود به این خانوار فقط از طریق SSO انجام می‌شود.",
         "guestPasswordLogin": "ورود مهمان با رمز عبور",
-        "accountCannotSignIn": "این حساب نمی‌تواند وارد شود. لطفاً با مدیر خانوار خود تماس بگیرید."
+        "accountCannotSignIn": "این حساب نمی‌تواند وارد شود. لطفاً با مدیر خانوار خود تماس بگیرید.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "به Yuvomi خوش آمدید",

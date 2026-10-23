@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Hủy",
         "ssoOnlyHint": "Việc đăng nhập vào hộ gia đình này chỉ diễn ra qua SSO.",
         "guestPasswordLogin": "Đăng nhập khách bằng mật khẩu",
-        "accountCannotSignIn": "Tài khoản này không thể đăng nhập. Vui lòng liên hệ quản trị viên hộ gia đình của bạn."
+        "accountCannotSignIn": "Tài khoản này không thể đăng nhập. Vui lòng liên hệ quản trị viên hộ gia đình của bạn.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Chào mừng đến với Yuvomi",

@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "रद्द करें",
         "ssoOnlyHint": "इस घर में साइन इन केवल SSO के ज़रिए होता है।",
         "guestPasswordLogin": "पासवर्ड से अतिथि साइन-इन",
-        "accountCannotSignIn": "यह खाता साइन इन नहीं कर सकता। कृपया अपने घर के प्रशासक से संपर्क करें।"
+        "accountCannotSignIn": "यह खाता साइन इन नहीं कर सकता। कृपया अपने घर के प्रशासक से संपर्क करें।",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi में आपका स्वागत है",

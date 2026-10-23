@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "取消",
         "ssoOnlyHint": "登录此家庭仅通过 SSO 进行。",
         "guestPasswordLogin": "以访客身份用密码登录",
-        "accountCannotSignIn": "此账户无法登录，请联系您家庭的管理员。"
+        "accountCannotSignIn": "此账户无法登录，请联系您家庭的管理员。",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "欢迎使用 Yuvomi",

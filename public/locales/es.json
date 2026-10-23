@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Cancelar",
         "ssoOnlyHint": "El acceso a este hogar se realiza exclusivamente mediante SSO.",
         "guestPasswordLogin": "Acceso de invitado con contraseña",
-        "accountCannotSignIn": "Esta cuenta no puede iniciar sesión. Ponte en contacto con la administración de tu hogar."
+        "accountCannotSignIn": "Esta cuenta no puede iniciar sesión. Ponte en contacto con la administración de tu hogar.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Bienvenido a Yuvomi",

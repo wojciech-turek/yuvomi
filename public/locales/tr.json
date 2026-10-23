@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "İptal",
         "ssoOnlyHint": "Bu haneye giriş yalnızca SSO ile yapılır.",
         "guestPasswordLogin": "Şifreyle misafir girişi",
-        "accountCannotSignIn": "Bu hesap giriş yapamaz. Lütfen hane yöneticinizle iletişime geçin."
+        "accountCannotSignIn": "Bu hesap giriş yapamaz. Lütfen hane yöneticinizle iletişime geçin.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi’a hoş geldiniz",

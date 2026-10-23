@@ -3477,7 +3477,8 @@
         "twoFactorCancel": "Отмена",
         "ssoOnlyHint": "Вход в это домохозяйство выполняется исключительно через SSO.",
         "guestPasswordLogin": "Вход гостя по паролю",
-        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства."
+        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Добро пожаловать в Yuvomi",

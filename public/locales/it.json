@@ -3275,7 +3275,8 @@
         "twoFactorCancel": "Annulla",
         "ssoOnlyHint": "L'accesso a questa famiglia avviene esclusivamente tramite SSO.",
         "guestPasswordLogin": "Accesso ospite con password",
-        "accountCannotSignIn": "Questo account non può accedere. Contatta l'amministratore della tua famiglia."
+        "accountCannotSignIn": "Questo account non può accedere. Contatta l'amministratore della tua famiglia.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Benvenuto in Yuvomi",
