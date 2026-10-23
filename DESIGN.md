@@ -2818,8 +2818,11 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > Breite (2026-10-24, „Odbiór odpadó…" bei 390px; ROUND2 „Pushed pages"). Die Reiter-Koepfe
 > (`--tabs-title`: Nagrody, Grafik, Sprzątanie) zeigen dort ihren Titel wieder, die Reiter
 > stehen in Zeile 3; ohne Rueckweg-Zeile gilt R19 weiter. Gedeckelte
-> Koepfe klappen zu EINER Leiste ein: Rueckweg · Inline-Titel · Kreise (65px); in den scrollenden
-> Koepfen wandert die Rueckweg-Zeile samt Kreisen mit der Lead-Zone weg, der Titel dockt. Budget
+> Koepfe klappen zu EINER Leiste ein: Rueckweg · Inline-Titel · Kreise (65px), eine Reiterzeile
+> klebt darunter - auf JEDER geschobenen Seite, auch den scrollenden (2026-10-24:
+> `wireCollapsingHeader` setzt dort `page-toolbar--bar`, Kollaps wie gedeckelt; den
+> Hoehenverlust traegt der Kopf als Rand unten `--bar-collapse-gap`, der Inhalt springt nicht,
+> und die Scroll-Verankerung ruht fuer den Umschalt-Durchgang). Budget
 > (`--period-inline`) behaelt Titel und Zeitraum in Zeile 2. Fuehrt ein Modul selbst zurueck
 > („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (capture.css). Kuchnia: „Kuchnia" als
 > grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·
