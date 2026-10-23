@@ -61,11 +61,20 @@
   background-color: transparent;
 }
 
-.auth-page > .auth-hero {
+/* The first child (the hero; on /pair the card) and the footnote share the
+ * free space, so the block sits in the middle and the footnote at the foot.
+ * Pages without a footnote (join, forgot, reset, pair) balance with an empty
+ * last item instead - otherwise the block would sink to the bottom. */
+.auth-page > :first-child {
   margin-block-start: auto;
 }
 
 .auth-page > .auth-secure {
+  margin-block-start: auto;
+}
+
+.auth-page:not(:has(> .auth-secure))::after {
+  content: '';
   margin-block-start: auto;
 }
 
@@ -168,14 +177,16 @@
  * the fill, the label 13/600 ink-2 eight above. The 1px field edge of the one
  * field skin stays: fill on paper alone is 1.1:1, and a field needs its 3:1
  * boundary (WCAG 1.4.11). */
-.auth-page .label {
+.auth-page .label,
+.auth-page .form-label {
   margin-bottom: var(--space-2);
   font-size: var(--type-footnote);
   line-height: var(--type-footnote-lh);
   font-weight: var(--font-weight-semibold);
 }
 
-.auth-page .input {
+.auth-page .input,
+.auth-page .form-input {
   min-height: 52px;
   padding-inline: var(--space-4);
   border-radius: var(--radius-sm);
