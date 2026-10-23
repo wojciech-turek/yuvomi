@@ -935,7 +935,7 @@
         "viewMonth": "Month",
         "viewWeek": "Week",
         "viewDay": "Day",
-        "viewAgenda": "Agenda",
+        "viewAgenda": "List",
         "allDay": "All day",
         "allDayShort": "all day",
         "moreEvents": "+{{count}} more",
@@ -1224,7 +1224,14 @@
             "inDays": "in {{count}} days",
             "daysAgo_one": "{{count}} day ago",
             "daysAgo": "{{count}} days ago"
-        }
+        },
+        "together": "together",
+        "bothBusy": "Both busy {{range}}",
+        "allBusy": "Everyone busy {{range}}",
+        "freeEvening": "Free evening",
+        "toDo": "To do",
+        "nowLine": "Now, {{time}}",
+        "stripLabel": "Days of the week"
     },
     "noteCategories": {
         "categories": "Categories",

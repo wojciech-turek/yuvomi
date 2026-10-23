@@ -64,7 +64,9 @@ import { renderSkeletonList } from '/utils/skeleton.js';
 import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { dayHeading, dayHeadingLabel } from '/utils/day-label.js';
+import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday } from '/utils/day-label.js';
+import { whoOf, whoDiscHtml, includesViewer, firstName, edgeColorOf } from '/utils/row-person.js';
+import { seriesDoneText } from '/utils/task-fields.js';
 import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
 import { holdDocumentAttachStyle } from '/components/document-attach.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -272,7 +274,7 @@ const UNASSIGNED = 'none';
  * dieser Fehler zweimal entstanden ist. */
 const MOBILE_MEDIA_QUERY = '(max-width: 639px)';
 // Ansichten, zwischen deren Zeitraeumen gewischt wird (wirePeriodSwipe).
-const PERIOD_SWIPE_VIEWS = new Set(['month', 'week', 'day']);
+const PERIOD_SWIPE_VIEWS = new Set(['month', 'week', 'day', 'agenda']);
 
 const HOLIDAY_PUBLIC_FALLBACK = '#FF3B30';
 const HOLIDAY_SCHOOL_FALLBACK = '#34C759';
@@ -456,7 +458,21 @@ function resolveEventBackground(ev) {
  * Ersetzt die frühere vollgesättigte Füllung + getContrastColor-Textfarbe.
  */
 function eventSurfaceStyle(ev) {
-  return `--ev-color:${esc(resolveEventColor(ev))};`;
+  return `--ev-color:${esc(eventEdgeColor(ev))};`;
+}
+
+/**
+ * DIE FARBE EINES TERMINS IST DIE PERSON (Tafla, 2026-10-20; DESIGN.md
+ * "The person-colour rule"). Ein Termin einer Person traegt ihre Personenfarbe
+ * (--person-N, AA-gemessen in beiden Themes), ein gemeinsamer das Violett -
+ * blau und rosa mischen sich zu violett, "razem" braucht keinen dritten Ton.
+ * Erst ein Termin OHNE Person faellt auf die bisherige Achse zurueck (eigene
+ * Farbe, Kalenderfarbe, Grau; utils/event-color.js) - dort ist die Farbe
+ * Inhalt, kein "wer". Kante und Toenung in Liste, Woche und Monat lesen alle
+ * diesen einen Wert (`--ev-color`).
+ */
+function eventEdgeColor(ev) {
+  return edgeColorOf(ev?.assigned_users, state.users) || resolveEventColor(ev);
 }
 
 /**
@@ -923,7 +939,8 @@ function monthStepCursor(cursor, dir, today = state.today) {
 function periodStepOf(view, { mobile = false, monthCollapsed = false } = {}) {
   if (view === 'month')  return monthCollapsed && mobile ? { unit: 'week', days: 7 } : { unit: 'month', days: 0 };
   if (view === 'week')   return mobile ? { unit: 'days', days: 3 } : { unit: 'week', days: 7 };
-  if (view === 'agenda') return { unit: 'days', days: 30 };
+  // Tafla: die Liste blaettert wochenweise, wie ihr Wochenstreifen.
+  if (view === 'agenda') return { unit: 'week', days: 7 };
   return { unit: 'day', days: 1 };
 }
 
@@ -1001,8 +1018,14 @@ function getWeekRange(dateStr, { weekStart = state.weekStart, mobile = false } =
   };
 }
 
+/*
+ * Die Liste beginnt am Cursor und reicht 30 Tage weit; GELADEN wird ab dem
+ * Wochenanfang davor, weil der Wochenstreifen ueber der Liste auch die Punkte
+ * der Tage zeigt, die schon vorbei sind (Tafla, 2026-10-20).
+ */
 function getAgendaRange(dateStr) {
-  return { from: dateStr, to: addDays(dateStr, 30) };
+  const weekStart = startOfWeekOf(dateStr);
+  return { from: weekStart < dateStr ? weekStart : dateStr, to: addDays(dateStr, 30) };
 }
 
 /**
@@ -2055,9 +2078,11 @@ export async function render(container, { user, signal } = {}) {
   findPageFab('fab-new-event')?.addEventListener('click', () => openEventModal({ mode: 'create', date: newEventDate() }));
 
   // Wischen zwischen Zeitraeumen (utils/period-swipe.js). Monat, Woche und Tag
-  // sind Zeitraeume mit Nachbarn; die Agenda ist eine fortlaufende Liste, die
-  // senkrecht gelesen wird, und die Suche hat gar keinen Zeitraum. Die
-  // Pfeilknoepfe bleiben der Weg fuer Tastatur und Maus.
+  // sind Zeitraeume mit Nachbarn, und seit Tafla auch die Liste: ihr
+  // Wochenstreifen blaettert wochenweise ("Swipe to change week"); der Wisch
+  // rastet erst waagerecht ein, das senkrechte Lesen bleibt frei. Die Suche
+  // hat gar keinen Zeitraum. Die Pfeilknoepfe bleiben der Weg fuer Tastatur
+  // und Maus.
   wirePeriodSwipe(bodyEl, {
     enabled: () => !searchActive && PERIOD_SWIPE_VIEWS.has(state.view),
     // Der Wisch gleitet selbst herein (period-swipe.js) - kein zweiter Uebergang.
@@ -2495,9 +2520,11 @@ function updateLabel() {
   // sagte nicht, wie weit die Liste reicht, und „Weiter" sprang dann still
   // auf „Ab 24.10.2026" (Critique 2026-09-24). Die Spanne ist die, die
   // getAgendaRange() laedt und renderAgendaView() zeigt.
+  // TAFLA: die Liste nennt den Monat ihres Wochenstreifens ("październik
+  // 2026"); welche Tage sie zeigt, sagt der Streifen darunter.
   if (state.view === 'agenda') {
-    const { from, to } = getAgendaRange(state.cursor);
-    lbl.textContent = t('calendar.dayRangeLabel', { from: formatDayMonth(from), to: formatPreferredDate(to) });
+    const strip = new Date(`${startOfWeekOf(state.cursor)}T00:00:00`);
+    lbl.textContent = formatMonthYear(strip.getFullYear(), strip.getMonth() + 1);
   }
 
   syncPeriodArrows();
@@ -5405,19 +5432,293 @@ function dayGroupIsEmpty({ events, tasks, holidays, schedule, waste }) {
   return !events.length && !tasks.length && !holidays.length && !schedule.length && !waste.length;
 }
 
-/** Die Zeilen eines Tages ohne Kopf: Nebenebenen, Termine (Farbkante), Aufgaben (Checkbox). */
-function dayGroupHtml({ date, events, tasks, holidays, schedule, waste }) {
+// --------------------------------------------------------
+// TAFLA: DER TAG ALS KARTE (2026-10-20, Artboard Kalendarz)
+//
+// Eine weisse Karte je Tag: oben die Baender (ganztaegig, mehrtaegig, Feiertag,
+// Schicht, Abfuhr) und der Hinweis "Oboje zajęci", dann die Termine mit
+// Zeitschiene (Beginn 17/600 ueber Ende 13), der 3pt-Personenkante und Titel
+// plus Metazeile; heute die Jetzt-Linie zwischen Vorbei und Kommend; darunter
+// "Do zrobienia" mit echten Abhakzeilen; an einem Abend ohne Termin "Wolny
+// wieczór". Agenda ("Lista") und die Tagesliste unter dem Telefon-Monat zeigen
+// dieselbe Karte.
+// --------------------------------------------------------
+
+/** Ab hier ist Abend - ohne Termin darin ist er "Wolny wieczór". */
+const EVENING_FROM_MIN = 17 * 60;
+/** So viele Tage voraus sagt die Liste "Wolny wieczór" (die Woche des Streifens). */
+const FREE_EVENING_DAYS = 7;
+/** Nach dieser Uhrzeit sagt heute keiner mehr "Wolny wieczór". */
+const FREE_EVENING_LATEST_MIN = 22 * 60;
+
+/** Minuten seit Mitternacht -> Uhrzeit in der Schreibweise der Region. */
+function minutesClock(min) {
+  const clamped = Math.max(0, Math.min(24 * 60 - 1, Math.round(min)));
+  return formatTime(`${pad(Math.floor(clamped / 60))}:${pad(clamped % 60)}`);
+}
+
+/** [Beginn, Ende] eines Zeit-Termins an diesem Tag, in Minuten (ueber Mitternacht gekappt). */
+function eventSpanOn(ev, dayStr) {
+  const kind = agendaSegmentKind(ev, dayStr);
+  const start = kind === 'end' || kind === 'middle' ? 0 : timeToMinutes(localTime(ev.start_datetime));
+  let end = kind === 'start' || kind === 'middle' ? 24 * 60
+    : ev.end_datetime ? timeToMinutes(localTime(ev.end_datetime)) : start + 60;
+  if (end <= start) end = Math.min(24 * 60, start + 60);
+  return [start, end];
+}
+
+/** Ueberlappende Spannen zusammenlegen, sortiert. */
+function mergeSpans(spans) {
+  const out = [];
+  for (const [a, b] of [...spans].sort((x, y) => x[0] - y[0])) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/**
+ * Die Erwachsenen, deren gleichzeitige Termine der Hinweis zaehlt: die
+ * Mitglieder des Haushalts ohne Kinder- und Display-Konten.
+ */
+function busyPeople() {
+  return (state.users ?? []).filter((u) => u && u.family_role !== 'child' && !isDisplayUser(u));
+}
+
+/**
+ * "Oboje zajęci 18:30 - 19:30": die erste Spanne, in der ALLE Erwachsenen
+ * zugleich mit VERSCHIEDENEM beschaeftigt sind - wer dann bei den Kindern ist,
+ * ist die Frage, die der Hinweis stellt. Ein Termin, den alle gemeinsam haben
+ * (Kolacja u Kasi, "razem"), zaehlt nicht: dort ist man zusammen. Ab drei
+ * Erwachsenen heisst er "Wszyscy zajęci".
+ * @returns {{ from: number, to: number, everyone: boolean } | null}
+ */
+function busyTogetherWindow(timed, dayStr) {
+  const adults = busyPeople();
+  if (adults.length < 2) return null;
+  const ids = new Set(adults.map((u) => Number(u.id)));
+  const perAdult = new Map([...ids].map((id) => [id, []]));
+  for (const ev of timed) {
+    const own = [...new Set((ev.assigned_users ?? []).map((u) => Number(u.id)).filter((id) => ids.has(id)))];
+    if (!own.length || own.length === ids.size) continue;
+    const span = eventSpanOn(ev, dayStr);
+    for (const id of own) perAdult.get(id).push(span);
+  }
+  let common = [[0, 24 * 60]];
+  for (const spans of perAdult.values()) {
+    const next = [];
+    for (const [a, b] of common) {
+      for (const [c, d] of spans) {
+        const s = Math.max(a, c);
+        const e = Math.min(b, d);
+        if (e > s) next.push([s, e]);
+      }
+    }
+    common = mergeSpans(next);
+    if (!common.length) return null;
+  }
+  return { from: common[0][0], to: common[0][1], everyone: adults.length > 2 };
+}
+
+/** Ist der Abend dieses Tages frei (kein Zeit-Termin beruehrt 17:00-24:00)? */
+function eveningIsFree(timed, dayStr) {
+  return !timed.some((ev) => eventSpanOn(ev, dayStr)[1] > EVENING_FROM_MIN);
+}
+
+/** Sagt die Liste an diesem Tag "Wolny wieczór"? Nur in der Woche voraus, heute nur bis 22 Uhr. */
+function showsFreeEvening(timed, dayStr) {
+  const ahead = daysFromToday(dayStr, state.today);
+  if (!(ahead >= 0 && ahead < FREE_EVENING_DAYS)) return false;
+  if (ahead === 0 && nowMinutes() >= FREE_EVENING_LATEST_MIN) return false;
+  return eveningIsFree(timed, dayStr);
+}
+
+/** Wer an einem Termin steht, in Worten: "Wojtek", "razem", "Wojtek, Ania". */
+function eventWhoText(ev) {
+  const people = (ev.assigned_users ?? []).filter((u) => u?.id != null);
+  if (!people.length) return '';
+  if (people.length === 1) return firstName(people[0].display_name);
+  if (includesViewer(people, state.currentUserId)) return t('calendar.together');
+  return people.map((u) => firstName(u.display_name)).join(', ');
+}
+
+/** Die Metazeile eines Termins: Ort · Person(en) · Tag x von y, ohne Person der Kalender. */
+function eventMetaText(ev, day) {
+  const parts = [];
+  if (ev.location) parts.push(fmtLocation(ev.location));
+  const who = eventWhoText(ev);
+  if (who) parts.push(who);
+  else if (!ev.location && eventLocalCalendarDisplayName(ev)) parts.push(eventLocalCalendarDisplayName(ev));
+  const position = multiDayPositionText(ev, day);
+  if (position) parts.push(position);
+  if (ev.visibility === 'private') parts.push(t('common.visibility.private'));
+  else if (ev.visibility === 'assignees') parts.push(t('common.visibility.assignees'));
+  return parts.join(' · ');
+}
+
+/** Ist der Termin heute schon vorbei? Dann steht er in Tinte-2 ueber der Jetzt-Linie. */
+function eventIsPast(ev, day, nowMin) {
+  return day < state.today || (day === state.today && eventSpanOn(ev, day)[1] <= nowMin);
+}
+
+/** Ein Band oben in der Karte: ganztaegig oder mehrtaegig, 32 hoch, mit der Personenkante. */
+function renderAgendaBanner(ev, day) {
+  // Am ersten und letzten Tag eines ZEITgebundenen Mehrtagestermins steht die
+  // Uhrzeit dieses Tages (wie am Ganztags-Chip der Woche, #1350), sonst
+  // "ganztaegig" - im gesprochenen Namen wie in der Metazeile.
+  const time = allDayChipTimeText(ev, day, { suffix: true });
+  const meta = [time, eventMetaText(ev, day)].filter(Boolean).join(' · ');
+  const label = agendaEventAriaLabel(ev, [time || t('calendar.allDay'), multiDayPositionText(ev, day)].filter(Boolean).join(', '));
   return `
-    ${holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => `
+    <div class="agenda-event agenda-event--banner" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+         style="${eventSurfaceStyle(ev)}" aria-label="${esc(label)}">
+      <div class="agenda-event__body">
+        <span class="agenda-banner__title">${eventGlyphsHtml(ev, { compact: true })}<span>${esc(ev.title)}</span></span>
+        ${meta ? `<span class="agenda-event__meta">· ${esc(meta)}</span>` : ''}
+      </div>
+    </div>`;
+}
+
+/** "Oboje zajęci 18:30 - 19:30" als leises Band. */
+function busyBandHtml(busy) {
+  if (!busy) return '';
+  const range = t('calendar.dayRangeLabel', { from: minutesClock(busy.from), to: minutesClock(busy.to) });
+  return `
+    <div class="agenda-busy" role="note">
+      <i data-lucide="users" aria-hidden="true"></i>
+      <span>${esc(t(busy.everyone ? 'calendar.allBusy' : 'calendar.bothBusy', { range }))}</span>
+    </div>`;
+}
+
+/** Die Jetzt-Linie: 8er-Punkt, 1pt Violett, die Uhrzeit in der Zeitschiene. */
+function nowLineHtml(nowMin) {
+  const time = minutesClock(nowMin);
+  return `
+    <div class="agenda-now" role="separator" aria-label="${esc(t('calendar.nowLine', { time }))}">
+      <span class="agenda-now__time">${esc(time)}</span>
+      <span class="agenda-now__rule" aria-hidden="true"></span>
+    </div>`;
+}
+
+/** Darf diese Seite Aufgaben abhaken? (Schreibrecht, kein Wandtablett.) */
+function canTickTasks() {
+  return moduleAccess('tasks') === 'write' && !isDisplayUser(state.user);
+}
+
+/**
+ * Eine Aufgabe des Tages als ECHTE Abhakzeile (48): Kreis, Titel (oeffnet die
+ * Aufgabe wie bisher der Chip), hinten die Person nach der Personenregel.
+ */
+function renderAgendaTaskRow(task) {
+  const who = whoDiscHtml(whoOf(task.assigned_users, state.currentUserId), {
+    household: state.users,
+    razemLabel: (people) => t('tasks.togetherWith', { names: people.map((p) => firstName(p.display_name)).join(', ') }),
+  });
+  const time = taskTimeLabel(task);
+  const check = canTickTasks()
+    ? `<button type="button" class="agenda-task__check" data-cal-task-check="${task.id}"
+              aria-label="${esc(t('tasks.markDone', { title: task.title }))}"><span class="agenda-task__ring"><i data-lucide="check" aria-hidden="true"></i></span></button>`
+    : '<span class="agenda-task__check agenda-task__check--static" aria-hidden="true"><span class="agenda-task__ring"></span></span>';
+  return `
+    <div class="agenda-task" data-task-row="${task.id}">
+      ${check}
+      <div class="cal-task-chip agenda-task__title" data-task-id="${task.id}" role="button" tabindex="0"
+           aria-label="${esc(taskChipAriaLabel(task))}" title="${esc(task.title)}"><span>${esc(task.title)}</span>${time ? `<span class="agenda-task__time">${esc(t('tasks.dueBy', { time }))}</span>` : ''}</div>
+      ${who}
+    </div>`;
+}
+
+/**
+ * Die Karte eines Tages (ohne Kopf).
+ * @param {{ nowLine?: boolean, freeEvening?: boolean }} [opts]
+ *   `nowLine` zeichnet heute die Jetzt-Linie, `freeEvening` darf "Wolny wieczór"
+ *   sagen (die Liste; die Tagesliste des Monats zeigt den Tag ohne beides).
+ */
+function dayGroupHtml({ date, events, tasks, holidays, schedule, waste }, { nowLine = true, freeEvening = true } = {}) {
+  const banners = events.filter((ev) => isAllDayLike(ev));
+  const timed = events.filter((ev) => !isAllDayLike(ev))
+    .sort((a, b) => eventSpanOn(a, date)[0] - eventSpanOn(b, date)[0]);
+  const busy = busyTogetherWindow(timed, date);
+  const nowMin = nowMinutes();
+  const isToday = date === state.today;
+
+  const rows = [];
+  let lineDrawn = !(nowLine && isToday && timed.length);
+  for (const ev of timed) {
+    const span = eventSpanOn(ev, date);
+    if (!lineDrawn && span[0] > nowMin) {
+      rows.push(nowLineHtml(nowMin));
+      lineDrawn = true;
+    }
+    rows.push(renderAgendaEvent(ev, date, { past: eventIsPast(ev, date, nowMin) }));
+  }
+  if (!lineDrawn) rows.push(nowLineHtml(nowMin));
+
+  const top = [
+    holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => `
       <div class="agenda-holiday" style="--holi-color:${esc(h.color)}">
         <span class="agenda-holiday__dot"></span>
         <span>${esc(h.name)}</span>
-      </div>`).join('')}</div>` : ''}
-    ${schedule.length ? `<div class="agenda-holidays">${schedule.map((entry) => renderScheduleChip(entry, 'agenda-holiday')).join('')}</div>` : ''}
-    ${waste.length ? `<div class="agenda-holidays">${waste.map((occ) => renderWasteChip(occ, { className: 'agenda-holiday', interactive: true })).join('')}</div>` : ''}
-    ${events.length ? `<div class="row-carrier">${events.map((ev) => renderAgendaEvent(ev, date)).join('')}</div>` : ''}
-    ${tasks.length ? `<div class="agenda-tasks">${tasks.map((tk) => renderTaskChip(tk)).join('')}</div>` : ''}
-  `;
+      </div>`).join('')}</div>` : '',
+    schedule.length ? `<div class="agenda-holidays">${schedule.map((entry) => renderScheduleChip(entry, 'agenda-holiday')).join('')}</div>` : '',
+    waste.length ? `<div class="agenda-holidays">${waste.map((occ) => renderWasteChip(occ, { className: 'agenda-holiday', interactive: true })).join('')}</div>` : '',
+    banners.map((ev) => renderAgendaBanner(ev, date)).join(''),
+    busyBandHtml(busy),
+  ].filter(Boolean).join('');
+
+  const free = freeEvening && showsFreeEvening(timed, date)
+    ? `<div class="agenda-free"><span class="agenda-free__glyph" aria-hidden="true"><i data-lucide="moon"></i></span><span>${esc(t('calendar.freeEvening'))}</span></div>`
+    : '';
+
+  return `
+    <div class="agenda-card">
+      ${top ? `<div class="agenda-card__top">${top}</div>` : ''}
+      ${rows.length ? `<div class="agenda-card__events">${rows.join('')}</div>` : ''}
+      ${tasks.length ? `<div class="agenda-tasks">
+        <h3 class="agenda-tasks__title">${esc(t('calendar.toDo'))}</h3>
+        ${tasks.map((tk) => renderAgendaTaskRow(tk)).join('')}
+      </div>` : ''}
+      ${free}
+    </div>`;
+}
+
+/**
+ * Abhaken aus dem Kalender: der Kreis fuellt sich violett, die Zeile klappt
+ * nach einer kurzen Haltezeit weg, der Toast bietet "Cofnij" an - derselbe
+ * Weg wie in der Aufgabenliste (PATCH /tasks/:id/status).
+ */
+async function tickCalendarTask(button) {
+  const id = button.dataset.calTaskCheck;
+  const row = button.closest('.agenda-task');
+  if (!id || button.disabled) return;
+  button.disabled = true;
+  button.classList.add('agenda-task__check--done');
+  row?.classList.add('agenda-task--done');
+  vibrate(15);
+  try {
+    const response = await api.patch(`/tasks/${id}/status`, { status: 'done' });
+    await new Promise((resolve) => setTimeout(resolve, durationToken('--duration-2xl', 400)));
+    state.tasks = state.tasks.filter((task) => String(task.id) !== String(id));
+    buildDayIndex();
+    renderView();
+    window.yuvomi?.showToast(seriesDoneText(response) ?? t('tasks.swipedDoneToast'), 'default', 5000, async () => {
+      try {
+        await api.patch(`/tasks/${id}/status`, { status: 'open' });
+        await loadRange(state.rangeFrom, state.rangeTo);
+        renderView();
+      } catch (err) {
+        window.yuvomi?.showToast(err.message, 'danger');
+      }
+    });
+    // Eine Serie legt ihr naechstes Vorkommen an - das soll gleich dastehen.
+    if (seriesDoneText(response)) loadRange(state.rangeFrom, state.rangeTo).then(() => renderView()).catch(() => {});
+  } catch (err) {
+    button.disabled = false;
+    button.classList.remove('agenda-task__check--done');
+    row?.classList.remove('agenda-task--done');
+    window.yuvomi?.showToast(err.message, 'danger');
+  }
 }
 
 /**
@@ -5425,6 +5726,14 @@ function dayGroupHtml({ date, events, tasks, holidays, schedule, waste }) {
  * von Agenda und Telefon-Monat - dieselbe Zeile oeffnet dasselbe Ziel.
  */
 function handleDayRowActivation(e, { keyboard = false } = {}) {
+  // Der Abhakkreis einer Aufgabe (Tafla) ist ein echter Knopf: Enter und
+  // Leertaste loesen an ihm ohnehin `click` aus - die Tastaturfassung hier
+  // liesse ihn sonst zweimal abhaken.
+  const check = e.target.closest('[data-cal-task-check]');
+  if (check) {
+    if (!keyboard) tickCalendarTask(check);
+    return;
+  }
   const taskChip = e.target.closest('.cal-task-chip');
   if (taskChip) {
     if (keyboard) e.preventDefault();
@@ -5560,17 +5869,92 @@ function mountAgendaDetail(container) {
  * (utils/day-label.js): Arithmetik auf dem Key, kein Date aus dem Key.
  * Die beiden Spannen behalten ihre Klassen - vorn steht, was fuehrt.
  */
+/*
+ * TAFLA (2026-10-20): der Kopf sagt den Tag wie der Artboard - "Dziś ·
+ * poniedziałek 19 paź", "Jutro · wtorek 20 paź", sonst "Środa · 21 paź" - aus
+ * dem EINEN Helfer fuer den relativen Tag (utils/day-label.js
+ * `listDayHeading`). Das fuehrende Wort steht in 600, der Rest in Tinte-2;
+ * "Dziś" traegt das Violett (`.agenda-day__header--today`).
+ */
 function agendaDayHeadHtml(dayKey) {
-  const { relative, full } = dayHeading(dayKey);
-  return relative
-    ? `<span class="agenda-day__date">${esc(relative)}</span>
-              <span class="agenda-day__weekday">${esc(full)}</span>`
-    : `<span class="agenda-day__date">${esc(full)}</span>`;
+  const { lead, rest } = listDayHeading(dayKey, state.today || undefined);
+  return `<span class="agenda-day__date">${esc(lead)}</span>
+              <span class="agenda-day__weekday">· ${esc(rest)}</span>`;
+}
+
+/**
+ * Der Wochenstreifen ueber der Liste (spec "Pasek tygodnia"): sieben Tage,
+ * Wochentag 13 in Tinte-2, die Ziffer 17/600 in einem 32er-Kreis - heute
+ * violett gefuellt, der gewaehlte Tag in der violetten Toenung, Vergangenes in
+ * Tinte-2 -, darunter bis zu drei 6pt-Punkte in den Personenfarben des Tages
+ * (Violett fuer Gemeinsames). Ein Tipp springt zum Tag; ein Tag vor dem Beginn
+ * der Liste setzt ihren Anfang dorthin.
+ */
+function agendaStripHtml() {
+  const start = startOfWeekOf(state.cursor);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const dotColors = (events) => {
+    const colors = [];
+    for (const ev of events) {
+      const color = eventEdgeColor(ev);
+      if (!colors.includes(color)) colors.push(color);
+      if (colors.length === 3) break;
+    }
+    return colors;
+  };
+  return `
+    <div class="cal-strip" data-cal-strip>
+      <div class="cal-strip__days" role="group" aria-label="${esc(t('calendar.stripLabel'))}">
+        ${days.map((d) => {
+          const evs = eventsOnDay(d);
+          const tks = tasksOnDay(d);
+          const isToday = d === state.today;
+          const label = monthDayAriaLabel(d, evs.length + tks.length, evs, { tasks: tks, isToday });
+          const cls = ['cal-strip__day', isToday ? 'is-today' : '', d < state.today ? 'is-past' : '',
+            d === state.cursor && !isToday ? 'is-selected' : ''].filter(Boolean).join(' ');
+          const dow = new Date(`${d}T12:00:00`).getDay();
+          return `
+        <button type="button" class="${cls}" data-strip-day="${esc(d)}" aria-label="${esc(label)}"${isToday ? ' aria-current="date"' : ''}>
+          <span class="cal-strip__wd" aria-hidden="true">${esc(DAY_NAMES_SHORT()[dow])}</span>
+          <span class="cal-strip__num" aria-hidden="true">${Number(d.slice(8, 10))}</span>
+          <span class="cal-strip__dots" aria-hidden="true">${dotColors(evs).map((c) => `<span style="--dot:${esc(c)}"></span>`).join('')}</span>
+        </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+/** Ein Tipp im Streifen: zum Tag rollen, oder die Liste dort beginnen lassen. */
+async function jumpToStripDay(date, trigger = null) {
+  const target = _container?.querySelector(`.agenda-day[data-date="${CSS.escape(date)}"]`);
+  if (target && date >= state.cursor) {
+    const port = _container.querySelector('#agenda-view');
+    const strip = port?.querySelector('[data-cal-strip]');
+    const offset = (strip?.offsetHeight ?? 0) + 8;
+    if (port && port.scrollHeight > port.clientHeight) {
+      port.scrollTo({ top: Math.max(0, target.offsetTop - offset), behavior: prefersReducedMotionCal() ? 'auto' : 'smooth' });
+    } else {
+      target.scrollIntoView({ block: 'start', behavior: prefersReducedMotionCal() ? 'auto' : 'smooth' });
+    }
+    target.querySelector('.agenda-day__header')?.focus?.({ preventScroll: true });
+    return;
+  }
+  state.cursor = date;
+  await reloadForView();
+  updateLabel();
+  renderView();
+  _container?.querySelector(`[data-strip-day="${CSS.escape(date)}"]`)?.focus();
+  void trigger;
+}
+
+function prefersReducedMotionCal() {
+  return typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
 }
 
 function renderAgendaView(container) {
-  const { from, to } = getAgendaRange(state.cursor);
-  const days = Array.from({ length: 31 }, (_, i) => addDays(from, i));
+  const { to } = getAgendaRange(state.cursor);
+  const from = state.cursor;
+  const days = Array.from({ length: daysBetween(from, to) + 1 }, (_, i) => addDays(from, i));
 
   /* HEUTE WIRD NICHT STILL UEBERSPRUNGEN.
    *
@@ -5586,32 +5970,38 @@ function renderAgendaView(container) {
    * waere eine Liste aus Leere; „heute" ist der eine Tag, dessen Abwesenheit
    * eine Frage offen laesst. */
   const todayInRange = state.today >= from && state.today <= to;
+  // TAFLA: die Tage der Woche voraus stehen auch leer da - mit "Wolny
+  // wieczór" (Artboard: Czwartek). Weiter vorn bleibt es bei Tagen mit Inhalt.
+  const weekAhead = (date) => date >= state.today && daysFromToday(date, state.today) < FREE_EVENING_DAYS;
 
   const groups = days
     .map(dayGroup)
-    .filter((g) => !dayGroupIsEmpty(g) || (todayInRange && g.date === state.today));
+    .filter((g) => !dayGroupIsEmpty(g) || (todayInRange && g.date === state.today) || weekAhead(g.date));
 
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
     <div class="split-view calendar-agenda-split">
     <div class="agenda-view page-scrollport split-view__list" id="agenda-view">
+      ${agendaStripHtml()}
       ${groups.length === 0
         ? emptyStateHTML({
           icon: 'calendar-plus',
           title: t('calendar.agendaEmpty'),
           action: readOnly() ? undefined : { label: t('calendar.newEvent'), attrs: { id: 'agenda-empty-cta' } },
         })
-        : groups.map((group) => `
-          <div class="agenda-day">
+        : groups.map((group) => {
+          const card = dayGroupHtml(group);
+          const quiet = dayGroupIsEmpty(group) && !/agenda-free/.test(card);
+          return `
+          <div class="agenda-day" data-date="${esc(group.date)}">
             <!-- Tageskopf als echte Ueberschrift (Critique 2026-08-10):
                  /calendar hatte genau EIN h-Element im ganzen Dokument. -->
-            <h2 class="agenda-day__header ${group.date === state.today ? 'agenda-day__header--today' : ''}">
+            <h2 class="agenda-day__header ${group.date === state.today ? 'agenda-day__header--today' : ''}" tabindex="-1">
               ${agendaDayHeadHtml(group.date)}
             </h2>
-            ${dayGroupHtml(group)}
-            ${dayGroupIsEmpty(group) ? `<p class="agenda-day__empty">${t('calendar.agendaDayEmpty')}</p>` : ''}
-          </div>
-        `).join('')
+            ${quiet ? `<p class="agenda-day__empty">${t('calendar.agendaDayEmpty')}</p>` : card}
+          </div>`;
+        }).join('')
       }
     </div>
     ${splitViewDetailHtml({
@@ -5628,6 +6018,11 @@ function renderAgendaView(container) {
   agenda.addEventListener('click', (e) => {
     if (e.target.closest('#agenda-empty-cta')) {
       openEventModal({ mode: 'create', date: newEventDate() });
+      return;
+    }
+    const stripDay = e.target.closest('[data-strip-day]');
+    if (stripDay) {
+      jumpToStripDay(stripDay.dataset.stripDay, stripDay);
       return;
     }
     handleDayRowActivation(e);
@@ -6581,6 +6976,9 @@ async function openFoundEvent(ev) {
 
 export const __test = {
   alignedHourScroll,
+  // Tafla (2026-10-20): die Liste - Personenkante, "Oboje zajęci", "Wolny
+  // wieczór", die Tageskarte und der Wochenstreifen.
+  eventEdgeColor, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
   // R19: die Seitenleiste ab ca. 1600px - Mini-Monat, Filter aus EINER Quelle, Als Naechstes.
   miniMonthHtml, sidebarFiltersHtml, calendarFilterParts, upNextEvents,
   // Review #2049: ein gescheiterter Abruf ist ein Fehler, kein leerer Tag.
@@ -6743,31 +7141,40 @@ export const __test = {
   scheduleTimeLabel,
 };
 
-function renderAgendaEvent(ev, dayStr) {
+/**
+ * Eine Terminzeile der Liste (Tafla, Artboard Kalendarz): 64 hoch, vorn die
+ * 3pt-Personenkante, dann die Zeitschiene (Beginn 17/600 ueber Ende 13), dann
+ * Titel 17 und Metazeile 13 ("Park Wodny · Wojtek") - ohne Uhr- und
+ * Ortszeichen und ohne Avatar-Stapel: wer, sagt die Kante und das Wort.
+ * Ganztaegiges steht als Band oben in der Karte (renderAgendaBanner).
+ */
+function renderAgendaEvent(ev, dayStr, { past = false } = {}) {
   const day  = dayStr ?? localDate(ev.start_datetime);
   const kind = agendaSegmentKind(ev, day);
-  const timeStr = (kind === 'all-day' || kind === 'middle') ? t('calendar.allDay') : eventTimeText(ev, day);
+  if (kind === 'all-day' || kind === 'middle') return renderAgendaBanner(ev, day);
+  const timeStr = eventTimeText(ev, day);
   // „Tag 2 von 3" (Re-Kritik 2026-09-25): eine Zeile je Tag darf bleiben,
-  // aber sie sagt, welcher Tag des Termins es ist - vorher stand dreimal
-  // dieselbe „Ganztaegig"-Zeile.
+  // aber sie sagt, welcher Tag des Termins es ist.
   const position = multiDayPositionText(ev, day);
-  const assignedUsers = ev.assigned_users ?? [];
+  const start = kind === 'end' ? '' : clockText(ev.start_datetime, { suffix: false });
+  const end = kind === 'start' || !ev.end_datetime ? '' : clockText(ev.end_datetime, { suffix: false });
+  const meta = eventMetaText(ev, day);
   // `data-date` macht die Zeile eindeutig: ein Serientermin und ein mehrtaegiger
   // Termin stehen mit derselben id an mehreren Tagen. Ohne das Datum findet
   // `renderKeepingFocus()` nach dem Neuaufbau mehrere Kandidaten und weicht auf
   // die Seitenwurzel aus, statt auf der Zeile zu bleiben (#1083).
   return `
-    <div class="list-row agenda-event" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+    <div class="list-row agenda-event${past ? ' agenda-event--past' : ''}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
          style="${eventSurfaceStyle(ev)}" aria-label="${esc(agendaEventAriaLabel(ev, [timeStr, position].filter(Boolean).join(', ')))}">
       <div class="agenda-event__body">
-        <div class="agenda-event__title">${eventGlyphsHtml(ev, { compact: false })}<span>${esc(ev.title)}</span></div>
-        <div class="agenda-event__meta">
-          <span class="calendar-meta-item calendar-meta-item--time">${calendarMetaIconHtml('clock')}<span>${esc(timeStr)}</span>${position ? `<span class="calendar-meta-item__day">${esc(position)}</span>` : ''}</span>
-          ${ev.location ? `<span class="calendar-meta-item calendar-meta-item--place">${calendarMetaIconHtml('map-pin')}<span>${esc(fmtLocation(ev.location))}</span></span>` : ''}
-          ${eventLocalCalendarDisplayName(ev) ? `<span class="calendar-meta-item calendar-meta-item--cal">${calendarMetaIconHtml('calendar-days')}<span>${esc(eventLocalCalendarDisplayName(ev))}</span></span>` : ''}
-          ${eventVisibilityMeta(ev.visibility)}
-          ${assignedUsers.length ? `<span class="agenda-event__assigned">${renderAvatarStack(assignedUsers, { size: 22, maxVisible: 3, minFont: 12 })}</span>` : ''}
-        </div>
+        <span class="agenda-event__rail" aria-hidden="true">
+          <span class="agenda-event__start">${esc(start || '·')}</span>
+          ${end ? `<span class="agenda-event__end">${esc(end)}</span>` : ''}
+        </span>
+        <span class="agenda-event__text">
+          <span class="agenda-event__title">${eventGlyphsHtml(ev, { compact: true })}<span>${esc(ev.title)}</span></span>
+          ${meta ? `<span class="agenda-event__meta">${esc(meta)}</span>` : ''}
+        </span>
       </div>
     </div>
   `;

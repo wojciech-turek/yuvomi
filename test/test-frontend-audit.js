@@ -7505,7 +7505,10 @@ test('calendar metadata uses lucide icon markup instead of visible emoji', () =>
   const source = read('../public/pages/calendar.js');
 
   assert.doesNotMatch(source, /📍|🗓|📅|🎂|👤/, 'calendar metadata must not render visible emoji icons');
-  assert.match(source, /calendarMetaIconHtml\('map-pin'\)/, 'location metadata should use the shared metadata icon helper');
+  // Tafla (2026-10-20, Artboard Kalendarz): die Listenzeile traegt keine Uhr-
+  // und keine Ortsnadel mehr ("Park Wodny · Wojtek") - wo noch ein Zeichen
+  // steht (Sichtbarkeit), kommt es weiter aus dem einen Helfer.
+  assert.match(source, /function calendarMetaIconHtml\(icon\)/, 'metadata icons come from the shared helper');
   assert.match(source, /class="calendar-meta-icon icon-sm"/, 'metadata icons should use tokenized icon classes');
 });
 
@@ -22003,12 +22006,12 @@ test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und
   const notes = read('../public/pages/notes.js');
   assert.match(notes, /<h2 class="notes-group__title list-group__title">/, 'Notizen: „Angepinnt" ist ein Gruppenkopf, kein Abschnittstitel');
   assert.doesNotMatch(notes, /notes-group__title u-section-title/);
-  // Der Tageskopf der Agenda ist die begruendete eigene Stufe (Zeitachse,
-  // calendar.css) - aber sein Kasten traegt die Groesse seiner Schrift, nicht
-  // die 24px der h2-Rolle.
+  // Der Tageskopf der Agenda traegt am Kasten die Groesse seiner Schrift,
+  // nicht die 24px der h2-Rolle. Seit Tafla (2026-10-20) ist er ein
+  // Gruppenkopf wie jeder andere: Body 17, "Dziś · wtorek 20 paź".
   const agenda = [...eachRule(read('../public/styles/calendar.css'))]
     .find(({ selector, at }) => selector.trim() === '.agenda-day__header' && at.length === 0);
-  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--text-sm\)/);
+  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-body\)/);
 });
 
 test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {

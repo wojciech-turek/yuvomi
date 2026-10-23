@@ -1087,7 +1087,7 @@
         "viewMonth": "Miesiąc",
         "viewWeek": "Tydzień",
         "viewDay": "Dzień",
-        "viewAgenda": "Agenda",
+        "viewAgenda": "Lista",
         "allDay": "Cały dzień",
         "allDayShort": "cały dz.",
         "moreEvents": "+{{count}} więcej",
@@ -1390,7 +1390,14 @@
             "daysAgo": "{{count}} dni temu",
             "daysAgo_few": "{{count}} dni temu",
             "daysAgo_many": "{{count}} dni temu"
-        }
+        },
+        "together": "razem",
+        "bothBusy": "Oboje zajęci {{range}}",
+        "allBusy": "Wszyscy zajęci {{range}}",
+        "freeEvening": "Wolny wieczór",
+        "toDo": "Do zrobienia",
+        "nowLine": "Teraz, {{time}}",
+        "stripLabel": "Dni tygodnia"
     },
     "noteCategories": {
         "categories": "Kategorie",
