@@ -2803,6 +2803,22 @@ caller". No event is ever assigned to a display account, so `GET /dashboard` rea
 "all" for `authMethod === 'display'` - at the reader, not when the default is saved, because the same
 default is right for the members who follow it.
 
+**Tafla (2026-10-19): the kitchen wall reads more and writes only when the household says so.**
+The list also carries `meals:read` (cook mode on the wall), `shopping:read` and `pantry:read` (the
+wall's shopping card and the dinner meter, which compares tonight's ingredients with the pantry).
+The household answer of `GET /dashboard?audience=household` carries the day plan of Dziś in its
+household version (`planTasks`, `planEvents`, `tomorrowMeals`, `dinnerPlan`, `shoppingLists`) and
+no longer the retired program fields (`urgentTasks`, `tasksDoneToday`, `wallTasks` come empty).
+Every write of a display is behind the household switch **"Pozwól odhaczać na ścianie"**
+(`sync_config.wall_allow_ticking`, admin-only through `PUT /preferences`, default off, readable by
+the display): while it is off, ticking a task, adding a running-out item and answering or skipping
+the weekly question answer 403 with `reason: 'wall_read_only'`, and `GET /displays/people` reports
+`can_tick_off: false` for everybody (`server/services/wall-settings.js`, checked in each route). Two
+writes joined the route list for the wall, both behind that switch: `POST /shopping/{listId}/items`
+(a name only - any other field is refused with `display_action`) and
+`POST /ai/questions/{id}/answer|dismiss`. `GET /ai/questions/open` is readable. The sections the wall
+shows are `wall_sections` (`dinner`, `plan`, `shopping`, `timers`, `weather`; all on by default).
+
 **What a display does, not only what it sees (#1209, decided in #913).** A paired display may act,
 on behalf of a person chosen on the device, for exactly two things: tick a task off, and request a
 redemption. Nothing else - no creating, editing or deleting, and no settings.
