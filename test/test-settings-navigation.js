@@ -2299,11 +2299,13 @@ test('die Wurzel ist in jeder Breite EINE gruppierte Liste, die Bereichsebene gi
   // Der Sprung wartet auf den Router, der den Port nach update() zuruecksetzt.
   assert.match(shell, /function revealOverviewSection[\s\S]*?setTimeout\(/);
 
-  // Mobil: Zeile 44/48px, 32px-Marke, keine Beschreibung.
+  // Mobil: Zeile 44/48px, keine Beschreibung. TAFLA (2026-10-20): die Marke
+  // ist keine 32px-Kachel mehr, sondern der 28er Leitplatz mit dem nackten
+  // Zeichen - so stehen alle Titel bei x=56 wie in jeder gruppierten Liste.
   const rules = await settingsCssRules();
   const mobile = /max-width:\s*767px/;
   assert.match(ruleBody(rules, '.settings-overview__row', mobile), /min-height:\s*var\(--target-base\)/);
-  assert.match(ruleBody(rules, '.settings-overview__row-mark', mobile), /width:\s*var\(--target-sm\)/);
+  assert.match(ruleBody(rules, '.settings-overview__row-mark', mobile), /width:\s*28px/);
   assert.match(ruleBody(rules, '.settings-overview__row-description', mobile), /display:\s*none/);
   // Der Abschnitt landet unter dem klebenden Kopf, nicht dahinter.
   assert.match(ruleBody(rules, '.settings-overview__section'), /scroll-margin-block-start:/);
@@ -2357,8 +2359,14 @@ test('Modulzeilen beschriften nur die Abweichung, nicht den Normalzustand', asyn
   }
   const rules = await settingsCssRules();
   assert.deepEqual(rules.filter((rule) => rule.selector.includes('settings-module-status--enabled')).map((rule) => rule.selector), []);
-  // Die Abweichung behaelt ihr Wort.
-  assert.match(await read('../public/settings/pages/modules-active.js'), /settings-module-status--disabled[\s\S]*thirdPartyModulesStatusDisabled/);
+  // Die Abweichung behaelt ihr Wort. TAFLA (2026-10-20, Artboard Moduly): bei
+  // eingebauten Modulen sagt es die Gruppe "Na później", in der jedes
+  // abgeschaltete steht (mit seinem Zweck); ein Drittmodul behaelt das Wort
+  // an der Zeile (aus, Fehler, nicht im Menue).
+  const active = await read('../public/settings/pages/modules-active.js');
+  assert.match(active, /settings-module-status--disabled[\s\S]*row\.status/);
+  assert.match(active, /return row\.enabled \? ON_SECTION : LATER_SECTION;/);
+  assert.match(active, /t\('settings\.modulesLater'\)/);
 });
 
 /**
@@ -3769,10 +3777,13 @@ test('R17: kein Einstellungsblatt rendert eine Karte mit genau einem Bedieneleme
     'options-budget', 'options-housekeeping', 'options-health', 'modules-rewards', 'personal-health',
     'feed-birthdays', 'feed-schedule', 'feed-cycle', 'feed-inventory', 'feed-waste',
   ];
+  // TAFLA (2026-10-20): die Tafla-Liste (components.js taflaGroupHtml, Karte
+  // `.tafla-card` mit `.tafla-row`) ist dieselbe Zusage in der Form der
+  // Artboards - Zeilen in EINEM Traeger, keine Karte je Option.
   for (const id of GROUPED) {
     const html = rendered.get(id) ?? '';
-    assert.match(html, /class="row-carrier settings-group"/, `${id}: keine gruppierten Zeilen im gerenderten Markup`);
-    assert.match(html, /class="settings-setting-row[ "]/, `${id}: der Traeger ist leer`);
+    assert.match(html, /class="row-carrier settings-group"|class="tafla-card"/, `${id}: keine gruppierten Zeilen im gerenderten Markup`);
+    assert.match(html, /class="settings-setting-row[ "]|class="tafla-row[ "]/, `${id}: der Traeger ist leer`);
   }
   const drawn = [...rendered.values()].filter((html) => html.length > 0).length;
   assert.ok(drawn >= 30, `nur ${drawn} von ${rendered.size} Abschnitten haben gezeichnet - liest der Guard die Blaetter noch?`);

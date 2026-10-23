@@ -171,6 +171,74 @@ export function bindInstantSwitch(input, { save, savedMessage, onRevert = () => 
   });
 }
 
+/**
+ * TAFLA-ZEILEN DER EINSTELLUNGEN (2026-10-20, Artboards Domownicy, Moduly,
+ * AsystentAI, Powiadomienia). Eine gruppierte Liste: Kopf 17/600 auf dem Grund,
+ * eine weisse Karte (Radius 20), Zeilen 48 bzw. 64 mit dem 28er Leitplatz (das
+ * nackte 20er Zeichen in Tinte-2, Titel bei x=56), Wert 17 Tinte-2, Chevron 16,
+ * Haarlinien auf 56 eingerueckt, darunter hoechstens zwei Zeilen Fussnote.
+ * Texte laufen durch esc(); `trail` und `lead` sind Markup des Aufrufers.
+ *
+ * @param {object} row
+ * @param {string} row.title
+ * @param {string} [row.meta]      zweite Zeile (13 Tinte-2) - macht die Zeile 64 hoch
+ * @param {string} [row.glyph]     Lucide-Name des Zeichens
+ * @param {string} [row.lead]      eigenes Markup im Leitplatz (Personenscheibe)
+ * @param {string} [row.value]     Wert am Ende (17 Tinte-2)
+ * @param {string} [row.trail]     eigenes Markup am Ende (Schalter, Verb)
+ * @param {boolean} [row.chevron]  Chevron am Ende (die Zeile fuehrt weiter)
+ * @param {string} [row.href]      die Zeile ist ein Link
+ * @param {object} [row.attrs]     Attribute: an einem Knopf/Link der Zeile selbst
+ * @param {boolean} [row.button]   die Zeile ist ein Knopf
+ * @param {boolean} [row.accent]   der Titel ist selbst die Handlung (Violett)
+ */
+export function taflaRowHtml({
+  title, meta = '', glyph = '', lead = '', value = '', trail = '', chevron = false,
+  href = '', button = false, attrs = {}, accent = false, titleId = '', wrap = false,
+}) {
+  const classes = ['tafla-row', meta ? 'tafla-row--two' : '', accent ? 'tafla-row--accent' : '', wrap ? 'tafla-row--wrap' : ''].filter(Boolean).join(' ');
+  const leadHtml = lead
+    ? `<span class="tafla-row__lead">${lead}</span>`
+    : `<span class="tafla-row__lead" aria-hidden="true">${glyph ? `<i data-lucide="${esc(glyph)}"></i>` : ''}</span>`;
+  const body = `<span class="tafla-row__body">`
+    + `<span class="tafla-row__title"${titleId ? ` id="${esc(titleId)}"` : ''}>${esc(title)}</span>`
+    + (meta ? `<span class="tafla-row__meta">${esc(meta)}</span>` : '')
+    + '</span>';
+  const end = (value ? `<span class="tafla-row__value">${esc(value)}</span>` : '')
+    + trail
+    + (chevron ? '<span class="tafla-row__chevron" aria-hidden="true"><i data-lucide="chevron-right"></i></span>' : '');
+  if (href) return `<a class="${classes}" href="${esc(href)}"${attrsHtml(attrs)}>${leadHtml}${body}${end}</a>`;
+  if (button) return `<button type="button" class="${classes}"${attrsHtml(attrs)}>${leadHtml}${body}${end}</button>`;
+  return `<div class="${classes}"${attrsHtml(attrs)}>${leadHtml}${body}${end}</div>`;
+}
+
+/**
+ * Der Schalter am Ende einer Tafla-Zeile: dieselbe `.toggle`-Bahn wie ueberall
+ * (`input[type=checkbox][role=switch]`, `change` wie bisher), mit eigenem
+ * Namen, weil die Zeile ihn nicht als <label> umschliesst.
+ */
+export function taflaSwitchHtml({ label, checked = false, disabled = false, attrs = {} }) {
+  return '<label class="toggle tafla-switch">'
+    + `<input type="checkbox" role="switch"${attrsHtml({ 'aria-label': label, ...attrs, checked, disabled })}>`
+    + '<span class="toggle__track" aria-hidden="true"></span>'
+    + '</label>';
+}
+
+/**
+ * Eine Gruppe: Kopf (optional), Karte mit den Zeilen, Fussnote (optional).
+ * @param {{ id?: string, title?: string, count?: string|number, rows: string[], footer?: string, className?: string }} group
+ */
+export function taflaGroupHtml({ id = '', title = '', count = '', rows = [], footer = '', className = '' }) {
+  const items = rows.filter(Boolean);
+  if (!items.length) return '';
+  const headId = id ? `${id}-title` : '';
+  return `<section class="tafla-group ${esc(className)}"${id ? ` id="${esc(id)}"` : ''}${headId && title ? ` aria-labelledby="${esc(headId)}"` : ''}>`
+    + (title ? `<h3 class="tafla-group__title"${headId ? ` id="${esc(headId)}"` : ''}>${esc(title)}${count !== '' ? ` <span class="tafla-group__count">${esc(String(count))}</span>` : ''}</h3>` : '')
+    + `<div class="tafla-card">${items.join('')}</div>`
+    + (footer ? `<p class="tafla-group__footer">${esc(footer)}</p>` : '')
+    + '</section>';
+}
+
 export function createToggleRow(options) {
   const host = document.createElement('div');
   host.insertAdjacentHTML('afterbegin', toggleRowHtml(options));
