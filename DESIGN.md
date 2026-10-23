@@ -2813,7 +2813,15 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > der Kopf weniger als zwei traegt, und nicht auf Seiten, deren Sache das Erfassen-Blatt
 > kennt (Zadania, Kalendarz, Zakupy, Posiłki, Notatki) - deren volles Formular steht im
 > Blatt als „Pełny formularz". Seiten hinter Więcej tragen einen 36pt-Rueckweg in eigener
-> Zeile ueber dem Titel („Wróć: Więcej", oeffnet das Mehr-Blatt). Kuchnia: „Kuchnia" als
+> Zeile ueber dem Titel („Wróć: Więcej", oeffnet das Mehr-Blatt). **Diese Zeile traegt auch die
+> Kopfkreise** (Aktionen, Such-Icon, rechts), der grosse Titel steht darunter allein auf voller
+> Breite (2026-10-24, „Odbiór odpadó…" bei 390px; ROUND2 „Pushed pages"). Die Reiter-Koepfe
+> (`--tabs-title`: Nagrody, Grafik, Sprzątanie) zeigen dort ihren Titel wieder, die Reiter
+> stehen in Zeile 3; ohne Rueckweg-Zeile gilt R19 weiter. Gedeckelte
+> Koepfe klappen zu EINER Leiste ein: Rueckweg · Inline-Titel · Kreise (65px); in den scrollenden
+> Koepfen wandert die Rueckweg-Zeile samt Kreisen mit der Lead-Zone weg, der Titel dockt. Budget
+> (`--period-inline`) behaelt Titel und Zeitraum in Zeile 2. Fuehrt ein Modul selbst zurueck
+> („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (capture.css). Kuchnia: „Kuchnia" als
 > grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·
 > Przepisy (kitchen-tabs.css).
 Eine `.page-toolbar` pro Modul, **Absender-Siegel und Titel links**, Center-Slot (Suche oder
