@@ -6038,9 +6038,11 @@ button.today-cockpit__more--link {
   font-size: var(--wall-title);
   line-height: 1.27;
   font-weight: var(--font-weight-semibold);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .wall-dinner .wall-cook {
@@ -6632,8 +6634,43 @@ button.today-cockpit__more--link {
     block-size: calc(var(--space-16) + var(--space-8));
   }
 
-  .wall__dock-end {
-    flex-wrap: wrap;
+  /* Das Dock klebt am Telefon - es bleibt deshalb kompakt: die Scheiben 64
+   * statt 80, ueber die ganze Breite verteilt; das Wort „Minutnik" bleibt der
+   * Name der Gruppe fuer den Screenreader. */
+  .wall__dock {
+    gap: var(--space-3);
+  }
+
+  .wall__dock-end,
+  .wall__timer-presets {
+    inline-size: 100%;
+  }
+
+  .wall__timer-presets {
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .wall__timer-presets-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wall__timer-preset {
+    inline-size: var(--space-16);
+    block-size: var(--space-16);
+  }
+
+  .wall__timer-preset-num {
+    font-size: var(--wall-label);
+  }
+
+  .wall-ghost {
+    block-size: var(--space-12);
   }
 }
 

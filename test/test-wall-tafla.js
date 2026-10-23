@@ -115,6 +115,12 @@ test('the Teraz line: a violet lead and what follows', () => {
     lead: 'today.inMinutes{"minutes":19}',
     text: 'today.dinnerShort · 20:00 Wieczór filmowy',
   });
+  // Before the dinner window the dinner has its own card - the line names
+  // what comes after it, not the dinner again.
+  assert.deepEqual(build('11:00').teraz, { lead: '20:00', text: 'Wieczór filmowy' });
+  // Everybody's events count on the wall, not only a viewer's: the film of
+  // both of them runs at 20:45, after the dinner window.
+  assert.deepEqual(build('20:45').teraz, { lead: 'today.now', text: 'Wieczór filmowy' });
   const evening = build('19:45', {}, { ...household(), todayMeals: [], dinnerPlan: null });
   assert.equal(evening.teraz.lead, 'today.inMinutes{"minutes":15}');
   assert.match(evening.teraz.text, /^Wieczór filmowy/);

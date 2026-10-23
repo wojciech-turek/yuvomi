@@ -25,7 +25,7 @@ import { t, formatTime } from '/i18n.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { isWallNight } from '/utils/wall-mode.js';
 import {
-  planContext, buildDay, buildTomorrow, dayClosed, minutesOf, firstName, MEAL_TIMES, DINNER_FROM, DINNER_LINGER_MIN,
+  planContext, buildPlan, pickNow, buildTomorrow, dayClosed, minutesOf, firstName, MEAL_TIMES, DINNER_FROM, DINNER_LINGER_MIN,
 } from '/utils/today-plan.js';
 
 /** Until when it is morning on the wall. */
@@ -130,6 +130,15 @@ export function terazLine(now, plan, { closed = false } = {}) {
   return plan?.open?.length ? null : { lead: '', text: t('today.nothingLeft') };
 }
 
+/** The same Teraz, with its "then" skipping meal rows (the wall shows dinner as a card). */
+function skipDinnerThen(now, plan, ctx) {
+  if (!now?.then?.row || now.then.row.kind !== 'meal') return now;
+  const after = now.then.row.sortMin;
+  const next = plan.open.find((row) => Number.isFinite(row.sortMin) && row.sortMin >= after && row.kind !== 'meal'
+    && row.kind !== 'info' && !row.overdue && row.sortMin > ctx.nowMin);
+  return { ...now, then: next ? { row: next } : null };
+}
+
 /** The edge of a row: violet for "razem", the person's ink for one person, none otherwise. */
 function rowEdge(row) {
   if (row.kind !== 'event') return null;
@@ -179,6 +188,23 @@ function dinnerCard(now, data, ctx) {
     date: meal.date ?? ctx.todayKey,
     household: data?.users ?? [],
   };
+}
+
+/**
+ * The plan and Teraz of the wall - buildDay() of Dziś, with one difference:
+ * Dziś counts only YOUR events for Teraz ("your or a shared event within 60
+ * min"); the wall is everybody's, so every event of the household counts.
+ * The rows keep their discs (built without a viewer).
+ */
+function wallDay(data, ctx, timer) {
+  const forEveryone = (p) => ({ ...p, open: p.open.map((row) => ({ ...row, mine: true })) });
+  let plan = buildPlan(data, ctx);
+  let now = pickNow(data, forEveryone(plan), ctx, { timer });
+  if (now.mode === 'dinner') {
+    plan = buildPlan(data, ctx, { featuredDinner: now.meal });
+    now = pickNow(data, forEveryone(plan), ctx, { timer });
+  }
+  return { plan, now };
 }
 
 function dinnerOfToday(data) {
@@ -234,7 +260,7 @@ export function buildWall(data, {
     return base;
   }
 
-  const { plan, now: teraz } = buildDay(data, ctx, { timer: timerShown ? timer : null });
+  const { plan, now: teraz } = wallDay(data, ctx, timerShown ? timer : null);
   const dinner = !moduleOff('meals') && on.dinner ? dinnerOfToday(data) : null;
   const dinnerMin = minutesOf(MEAL_TIMES.dinner);
   const dinnerWindow = Boolean(dinner) && ctx.nowMin >= minutesOf(DINNER_FROM) && ctx.nowMin < dinnerMin + DINNER_LINGER_MIN;
@@ -246,7 +272,10 @@ export function buildWall(data, {
   const canTick = mayWrite && (!isDisplay || (Array.isArray(tickers) && tickers.length > 0));
 
   const model = { ...base, scene, canTick };
-  model.teraz = terazLine(teraz, plan, { closed });
+  // The dinner has its own card on the wall: the Teraz line names what comes
+  // after it in the plan ("20:00 Wieczór filmowy"), not the dinner again.
+  const showsDinner = Boolean(dinner) && scene !== 'noc' && scene !== 'wieczor';
+  model.teraz = terazLine(showsDinner ? skipDinnerThen(teraz, plan, ctx) : teraz, plan, { closed });
 
   // Tonight's dinner: the hero in the Kolacja scene, a quiet card before it.
   if (dinner && (scene === 'kolacja' || scene === 'rano' || scene === 'dzien')) {
