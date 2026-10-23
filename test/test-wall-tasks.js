@@ -9,14 +9,9 @@
  *           Aufgabe selbst angelegt hat und ihr zugewiesen ist; Erledigtes von
  *           heute (faellig heute, oder ueberfaellig und HEUTE abgehakt - der Tag
  *           ist der des Haushalts, mit Los Angeles als Gegenlauf).
- *        2. PLAN (`planWallWhoLines`, `WALL_WHO_LADDER`): offene zuerst, Haken
- *           darunter, die Zaehlzeile kostet eine Zeile, und ueber die Leiter
- *           hinab weichen ALLE Haken, bevor ein offener Titel weicht - ausser
- *           bei der Person, die alles erledigt hat.
- *        3. FLAECHE (`renderWallWho`, `fitWallWho`): Titel escaped, Haken als
- *           eigene Klasse mit Wort fuer Screenreader, die Zahl am Gesicht ist
- *           die der OFFENEN; und der Abstieg laeuft als Programm gegen eine
- *           Attrappe, deren Hoehe an der Zahl der Zeilen haengt.
+ *        2.-5. MIT TAFLA (2026-10-19) IM RUHESTAND: „Wer heute dran ist"
+ *           samt Leiter und Abstieg ist von der Wand gegangen; wer dran ist,
+ *           sagt die Scheibe an jeder Zeile (Begruendung im Abschnitt).
  *
  *        6. GETEILTE FLAECHE (`audience=household`): die ganze Antwort fuer die
  *           Wand traegt nur, was der ganze Haushalt sehen darf - Aufgaben UND
@@ -307,98 +302,30 @@ test('Server: der Tag einer Erledigung ist der des Haushalts, nicht der UTC-Tag'
 });
 
 // --------------------------------------------------------------------------
-// 2. Plan
+// 2.-5. Plan, Flaeche, Verdrahtung, Nacht von „Wer heute dran ist":
+//       MIT TAFLA (2026-10-19) IM RUHESTAND
 // --------------------------------------------------------------------------
+//
+// Hier standen die Leiter (`planWallWhoLines`, `WALL_WHO_LADDER`), der Abstieg
+// (`fitWallWho`) und die Nachtstufen der Aufgaben unter den Gesichtern. Die
+// Tafla-Wand hat keinen Abschnitt „Wer heute dran ist" mehr (Artboard „Ściana",
+// Owner-Entscheidung 2026-10-19: „no duplicate Who's up") - wer dran ist, sagt
+// die Scheibe an jeder Zeile der Dziś-Karte. Die Absicht der Leiter - die Wand
+// scrollt nicht, also folgt die Zeilenzahl dem Platz - lebt im Hoehenbudget
+// der Dziś-Karte weiter (`planWallRows`/`fitWallLists`, test:wall-tafla). Der
+// Server liefert `wallTasks` weiter fuer API-Nutzer (Abschnitt 1); die Wand
+// zeichnet es nicht mehr und bekommt es nicht (Abschnitt 8).
 
 const { __test: dash } = await import('../public/pages/dashboard.js');
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 const { setHouseholdSize, clearHouseholdSize } = await import('../public/utils/household.js');
 
-const task = (title) => ({ id: title, title });
-const entry = (open, done, extra = {}) => ({
-  open: open.map(task), done: done.map(task), open_count: open.length, done_count: done.length, ...extra,
-});
-const shape = (plan) => ({
-  open: plan.open.map((x) => x.title), done: plan.done.map((x) => x.title), moreOpen: plan.moreOpen, moreDone: plan.moreDone,
-});
-
-test('Plan: offene zuerst, Haken darunter, alles passt', () => {
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b'], ['x']), { rows: 5, doneRows: 4 })),
-    { open: ['a', 'b'], done: ['x'], moreOpen: 0, moreDone: 0 });
-});
-
-test('Plan: die Zaehlzeile kostet eine Zeile und verdraengt zuerst einen Haken', () => {
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b', 'c'], ['x', 'y']), { rows: 4, doneRows: 4 })),
-    { open: ['a', 'b', 'c'], done: [], moreOpen: 0, moreDone: 2 },
-    'drei offene + ein Haken waeren vier Zeilen, der zweite Haken bliebe ungenannt');
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b', 'c', 'd'], ['x']), { rows: 3, doneRows: 0 })),
-    { open: ['a', 'b'], done: [], moreOpen: 2, moreDone: 1 });
-});
-
-test('Plan: ein offener Titel weicht nie fuer die Zahl der Erledigten', () => {
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b', 'c'], ['x', 'y']), { rows: 3, doneRows: 0 })),
-    { open: ['a', 'b', 'c'], done: [], moreOpen: 0, moreDone: 0 });
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b', 'c'], ['x', 'y']), { rows: 4, doneRows: 0 })),
-    { open: ['a', 'b', 'c'], done: [], moreOpen: 0, moreDone: 2 }, 'ist eine Zeile frei, steht die Zahl da');
-});
-
-test('Plan: eine Zeile gehoert dem Titel, null Zeilen zeigen nichts', () => {
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b'], []), { rows: 1, doneRows: 0 })),
-    { open: ['a'], done: [], moreOpen: 0, moreDone: 0 });
-  assert.deepEqual(shape(dash.planWallWhoLines(entry(['a', 'b'], ['x']), { rows: 0, doneRows: 0 })),
-    { open: [], done: [], moreOpen: 0, moreDone: 0 });
-});
-
-test('Plan: die Zahl kommt vom Server, nicht aus der gekappten Titelliste', () => {
-  const plan = dash.planWallWhoLines(entry(['a', 'b'], [], { open_count: 9 }), { rows: 3, doneRows: 0 });
-  assert.equal(plan.openTotal, 9);
-  assert.deepEqual(shape(plan), { open: ['a', 'b'], done: [], moreOpen: 7, moreDone: 0 });
-});
-
-test('Plan: wer alles erledigt hat, behaelt einen Haken, solange Titel stehen', () => {
-  assert.deepEqual(shape(dash.planWallWhoLines(entry([], ['x', 'y']), { rows: 2, doneRows: 0 })),
-    { open: [], done: ['x'], moreOpen: 0, moreDone: 1 });
-  assert.deepEqual(shape(dash.planWallWhoLines(entry([], ['x', 'y']), { rows: 1, doneRows: 0 })),
-    { open: [], done: ['x'], moreOpen: 0, moreDone: 0 });
-});
-
-test('Leiter: sie endet ohne Titel, und alle Haken weichen, bevor ein offener Titel weicht', () => {
-  const ladder = dash.WALL_WHO_LADDER;
-  assert.deepEqual(ladder.at(-1), { rows: 0, doneRows: 0 }, 'die letzte Stufe ist die Reihe der Gesichter');
-  const anna = entry(['a1'], ['x1', 'x2', 'x3']);       // wenig offen, viele Haken
-  const ben = entry(['b1', 'b2', 'b3', 'b4'], []);      // nur offene
-  let openBefore = Infinity;
-  let doneBefore = Infinity;
-  for (const budget of ladder) {
-    const a = dash.planWallWhoLines(anna, budget);
-    const b = dash.planWallWhoLines(ben, budget);
-    for (const plan of [a, b]) {
-      const lines = plan.open.length + plan.done.length + (plan.moreOpen || plan.moreDone ? 1 : 0);
-      assert.ok(lines <= budget.rows, `Stufe ${JSON.stringify(budget)}: ${lines} Zeilen`);
-    }
-    const open = a.open.length + b.open.length;
-    const done = a.done.length + b.done.length;
-    assert.ok(open <= openBefore && done <= doneBefore, 'die Leiter zeigt nach unten nie mehr');
-    if (open < openBefore && openBefore !== Infinity) {
-      assert.equal(doneBefore, 0, `ein offener Titel wich auf Stufe ${JSON.stringify(budget)}, waehrend noch ein Haken stand`);
-    }
-    openBefore = open;
-    doneBefore = done;
-  }
-});
-
-// --------------------------------------------------------------------------
-// 3. Flaeche
-// --------------------------------------------------------------------------
-
 function onWall(fn) {
   return async () => {
     const prevWindow = global.window;
     const prevDocument = global.document;
-    const prevComputed = global.getComputedStyle;
     global.window = { yuvomi: { isModuleDisabled: () => false }, innerHeight: 800 };
     global.document = { documentElement: { classList: { toggle() {}, add() {}, remove() {} } } };
-    global.getComputedStyle = (element) => ({ gridTemplateColumns: element?.__columns ?? '' });
     setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
     setHouseholdSize(4);
     try {
@@ -408,293 +335,20 @@ function onWall(fn) {
       clearPermissions();
       global.window = prevWindow;
       global.document = prevDocument;
-      global.getComputedStyle = prevComputed;
     }
   };
 }
 
-const U = (id, name) => ({ id, display_name: name, avatar_color: '#7C3AED' });
-const members = (html) => [...html.matchAll(/<li class="wall-who__member">([\s\S]*?)<\/li>\s*(?=<li class="wall-who__member">|<\/ul>(?:<p|\s*<\/section>))/g)].map((m) => m[1]);
-const NO_ROWS = { allRows: [] };
-
-test('Flaeche: Titel unter dem Gesicht, Haken darunter, die Zahl ist die der offenen', onWall(() => {
-  const data = {
-    users: [U(1, 'Anna Muster'), U(2, 'Ben Muster'), U(3, 'Cleo Muster')],
-    wallTasks: [
-      { user_id: 2, ...entry(['Klavier <b>ueben</b>', 'Zimmer'], ['Bett machen']) },
-      { user_id: 3, ...entry([], ['Tisch decken']) },
-    ],
-  };
-  const html = dash.renderWallWho(data, NO_ROWS);
-  assert.match(html, /wall-who__list--tasks/);
-  assert.ok(!html.includes('Anna'), 'wer nichts hat und in keinem Programm steht, ist nicht dran');
-  const [ben, cleo] = members(html);
-  assert.match(ben, /Ben/);
-  assert.ok(ben.includes('Klavier &lt;b&gt;ueben&lt;/b&gt;'), 'der Titel ist Nutzereingabe und laeuft durch esc()');
-  assert.ok(ben.indexOf('Zimmer') < ben.indexOf('Bett machen'), 'offene zuerst');
-  assert.match(ben, /wall-who__task--done[\s\S]*tasks\.statusDone[\s\S]*Bett machen/, 'der Haken traegt Klasse und Wort');
-  assert.match(ben, /wall-who__count">\s*<span aria-hidden="true">2</, 'die Zahl ist, was offen ist');
-  assert.match(ben, /dashboard\.familyDayTally\{&quot;open&quot;:2,&quot;done&quot;:1\}/);
-  assert.match(cleo, /wall-who__count--done/, 'alles erledigt: Haken statt Zahl');
-  assert.match(cleo, /wall-who__task--done[\s\S]*Tisch decken/, 'und die Spalte zeigt, was geschafft wurde');
+test('Tafla: die Wand zeichnet keinen Abschnitt „Wer heute dran ist" mehr - die Scheiben an den Zeilen sagen es', onWall(() => {
+  const html = dash.renderWallSurface({
+    planTasks: [{ id: 1, title: 'Tisch decken', status: 'open', due_date: '2026-10-08', assigned_users: [{ id: 7, display_name: 'Cleo' }] }],
+    users: [{ id: 7, display_name: 'Cleo', avatar_color: '#7C3AED' }],
+  }, null, { now: new Date('2026-10-08T10:00:00Z') });
+  assert.match(html, /Tisch decken/, 'Reichweite: die Wand ist gebaut');
+  assert.ok(!/wall__who|wall-who__member/.test(html), 'kein zweiter Ort fuer „wer ist dran"');
+  assert.match(html, /aria-label="Cleo"/, 'die Zeile traegt Cleos Scheibe');
+  assert.ok(!('planWallWhoLines' in dash) && !('WALL_WHO_LADDER' in dash), 'die Leiter ist nicht mehr exportiert');
 }));
-
-test('Flaeche: die Zahl zaehlt offene Aufgaben und was das Programm sonst fuehrt - nie dessen Aufgabenzeilen', onWall(() => {
-  const data = {
-    users: [U(1, 'Anna'), U(2, 'Ben'), U(3, 'Cleo')],
-    wallTasks: [{ user_id: 2, ...entry(['a', 'b', 'c'], []) }],
-  };
-  const model = { allRows: [
-    { kind: 'event', who: { id: 1 } },                    // Annas Termin
-    { kind: 'meal', who: { id: 2 } },                     // Ben kocht
-    { kind: 'task', who: { id: 2 } },                     // dieselbe Aufgabe wie in wallTasks
-    { kind: 'task', who: { id: 3 } },                     // Cleos Aufgabe ist "nur Zugewiesene"
-  ] };
-  const html = dash.renderWallWho(data, model);
-  const count = (block) => (/wall-who__count">\s*<span aria-hidden="true">(\d+)</.exec(block) ?? [])[1] ?? null;
-  const by = Object.fromEntries(members(html).map((block) => [/wall-who__name">([^<]*)/.exec(block)[1], block]));
-  assert.equal(count(by.Ben), '4', 'drei offene Aufgaben und das Kochen - die Programmzeile der Aufgabe zaehlt nicht doppelt');
-  assert.equal(count(by.Anna), '1', 'ein Termin ist etwas, das heute vor ihr liegt');
-  assert.ok(!by.Anna.includes('wall-who__tasks'), 'aber kein Titel: der Termin steht links');
-  assert.ok(by.Cleo, 'wer im Programm steht, ist dran');
-  assert.equal(count(by.Cleo), null, 'eine Aufgabe, die der Haushalt nicht sehen darf, traegt auch keine Zahl an die Wand');
-  assert.deepEqual(Object.keys(by), ['Ben', 'Anna', 'Cleo'], 'wer am meisten vor sich hat, zuerst');
-}));
-
-test('Flaeche: ohne Titel bleibt die Reihe der Gesichter', onWall(() => {
-  const data = { users: [U(1, 'Anna'), U(2, 'Ben')], wallTasks: [] };
-  const html = dash.renderWallWho(data, { allRows: [{ kind: 'event', who: { id: 1 } }] });
-  assert.match(html, /Anna/);
-  assert.ok(!html.includes('wall-who__list--tasks'));
-}));
-
-test('Flaeche: was nicht passt, ist eine Zahl - offene als „weitere", Haken als „erledigt"', onWall(() => {
-  const data = {
-    users: [U(1, 'Anna'), U(2, 'Ben')],
-    wallTasks: [
-      { user_id: 1, ...entry(['a', 'b', 'c', 'd'], []) },
-      { user_id: 2, ...entry([], ['x', 'y', 'z']) },
-    ],
-  };
-  const html = dash.renderWallWho(data, NO_ROWS, { rows: 2, doneRows: 0 });
-  const [anna, ben] = members(html);
-  assert.match(anna, /wall-who__task--more">dashboard\.shoppingMore\{&quot;count&quot;:3\}/);
-  assert.match(ben, /wall-who__task--more">dashboard\.wallWhoDoneMore\{&quot;count&quot;:2\}/);
-}));
-
-// Eine Attrappe der Wand: `base` Pixel Sockel, 40px je Zeile unter den
-// Gesichtern. `columns` ist, was das Stylesheet der Buehne gaebe - zwei Spalten
-// auf dem Wandtablett, eine auf dem Telefon; `fitWallWho` fragt es ueber
-// `getComputedStyle` ab, das `onWall` hier bereitstellt.
-function fakeWall(initialHtml, base, { columns = '600px 400px', aside = '400px', floor = 0 } = {}) {
-  const state = { html: initialHtml, base, placed: 0 };
-  const stage = { __columns: columns };
-  const asideEl = { __columns: aside };
-  const section = () => ({
-    insertAdjacentHTML(_pos, next) { state.html = next; state.placed += 1; },
-    remove() {},
-  });
-  const wall = {
-    querySelector: (selector) => (selector === '.wall__who' ? section()
-      : selector === '.wall__stage' ? stage
-        : selector === '.wall__aside' ? asideEl : null),
-    // `floor`: was die Flaeche OHNE Zutun der Liste hoch ist (das Programm
-    // links, das Wetter daneben) - darunter kosten Zeilen nichts.
-    get scrollHeight() {
-      return Math.max(floor, state.base + 40 * (state.html.match(/class="wall-who__task[ "]/g) ?? []).length);
-    },
-  };
-  return { root: { querySelector: () => wall }, html: () => state.html, state, wall };
-}
-const countTasks = (html, cls) => (html.match(new RegExp(`class="wall-who__task${cls}`, 'g')) ?? []).length;
-
-test('Flaeche: fitWallWho steigt hinab, bis die Wand passt - Haken zuerst', onWall(() => {
-  const data = {
-    users: [U(1, 'Anna'), U(2, 'Ben')],
-    upcomingEvents: [], urgentTasks: [],
-    wallTasks: [
-      { user_id: 1, ...entry(['a1', 'a2', 'a3'], ['x1', 'x2']) },
-      { user_id: 2, ...entry(['b1'], ['y1', 'y2', 'y3']) },
-    ],
-  };
-  // Eine Attrappe der Wand: 600px Sockel, 40px je Zeile unter den Gesichtern.
-  const makeWall = (base, opts) => fakeWall(dash.renderWallWho(data, NO_ROWS), base, opts);
-  const count = countTasks;
-
-  const roomy = makeWall(300);
-  assert.equal(dash.fitWallWho(roomy.root, data), 0, 'passt alles, bleibt die oberste Stufe');
-
-  // 600 + 40 * Zeilen <= 800: fuenf Zeilen passen. Vier sind offen.
-  const tight = makeWall(600);
-  const step = dash.fitWallWho(tight.root, data);
-  assert.ok(step > 0, 'Reichweite: die Attrappe lief ueber');
-  const html = tight.html();
-  assert.equal(count(html, '"'), 4, 'alle offenen Titel stehen noch');
-  assert.ok(count(html, ' wall-who__task--done') <= 1, 'gewichen sind die Haken');
-  assert.ok(600 + 40 * (html.match(/class="wall-who__task[ "]/g) ?? []).length <= 800, 'und jetzt passt es');
-
-  // Laeuft eine GESTAPELTE Flaeche auch ohne Titel ueber (Telefon), sind die
-  // Titel nicht der Grund - dann bleiben sie stehen.
-  const phone = makeWall(900, { columns: '358px' });
-  assert.equal(dash.fitWallWho(phone.root, data), 0);
-  assert.equal(count(phone.html(), '"'), 4, 'auf einer Flaeche, die ohnehin scrollt, wird nichts gekuerzt');
-
-  // Ein Hochformat-Tablett stapelt nur die Buehne; „Wer" und Wetter stehen
-  // nebeneinander. Das ist kein Telefon.
-  const portrait = makeWall(820, { columns: '720px', aside: '350px 350px' });
-  assert.equal(dash.fitWallWho(portrait.root, data), dash.WALL_WHO_LADDER.length - 1);
-  assert.ok(!portrait.html().includes('wall-who__task'), 'jede Zeile kostet Hoehe: die Reihe der Gesichter bleibt');
-
-  // Ein Querformat-Tablett, das ohne Titel um ein paar Pixel zu hoch ist, ist
-  // KEIN Telefon: die volle Liste schoebe Fuss und Ausgang weit aus dem Bild.
-  const lowTablet = makeWall(820);
-  assert.equal(dash.fitWallWho(lowTablet.root, data), dash.WALL_WHO_LADDER.length - 1);
-  assert.ok(!lowTablet.html().includes('wall-who__task'), 'zweispaltig und zu hoch: die Reihe der Gesichter bleibt');
-
-  // Ist die Flaeche aus einem ANDEREN Grund zu hoch (das Programm links: 845px),
-  // stehen so viele Titel da, wie nichts kosten - hier fuenf Zeilen (600 + 5 * 40
-  // = 800 <= 845), nicht null und nicht alle neun.
-  const tallProgram = makeWall(600, { floor: 845 });
-  dash.fitWallWho(tallProgram.root, data);
-  const kept = count(tallProgram.html(), '[ "]');
-  assert.ok(kept > 0, 'die Titel, die nichts kosten, bleiben');
-  assert.equal(tallProgram.wall.scrollHeight, 845, 'die Flaeche ist nicht hoeher als ohne Titel');
-  assert.equal(count(tallProgram.html(), '"'), 4, 'und zwar alle offenen');
-
-  const none = makeWall(790);
-  assert.equal(dash.fitWallWho(none.root, data), dash.WALL_WHO_LADDER.length - 1);
-  assert.ok(!none.html().includes('wall-who__task'), 'ohne Platz bleibt die Reihe der Gesichter');
-}));
-
-// --------------------------------------------------------------------------
-// 4. Verdrahtung: wer das Einpassen RUFT
-// --------------------------------------------------------------------------
-
-// Ein Fenster, das seine Hoerer wirklich fuehrt: `resize` laesst sich
-// ausloesen, das Signal haengt ab, und das naechste Bild laeuft sofort.
-function fakeWindow() {
-  const listeners = [];
-  const frames = [];
-  return {
-    innerHeight: 800,
-    yuvomi: { isModuleDisabled: () => false },
-    addEventListener(type, fn, options = {}) {
-      const entry = { type, fn, options };
-      listeners.push(entry);
-      options.signal?.addEventListener('abort', () => listeners.splice(listeners.indexOf(entry), 1), { once: true });
-    },
-    // Das naechste Bild kommt NACH dem Ereignis, wie im Browser: `resize()`
-    // loest erst die Hoerer aus und zeichnet dann.
-    requestAnimationFrame(fn) { frames.push(fn); return frames.length; },
-    cancelAnimationFrame() { frames.length = 0; },
-    resize() {
-      for (const entry of listeners.filter((l) => l.type === 'resize')) entry.fn();
-      for (const fn of frames.splice(0)) fn();
-    },
-    count: (type) => listeners.filter((l) => l.type === type).length,
-  };
-}
-
-const FIT_DATA = {
-  users: [U(1, 'Anna'), U(2, 'Ben')],
-  upcomingEvents: [], urgentTasks: [],
-  wallTasks: [
-    { user_id: 1, ...entry(['a1', 'a2', 'a3'], ['x1', 'x2']) },
-    { user_id: 2, ...entry(['b1'], ['y1', 'y2', 'y3']) },
-  ],
-};
-
-test('Verdrahtung: der Aufbau der Wand passt sie ein', onWall(() => {
-  const controller = new AbortController();
-  const win = fakeWindow();
-  global.window = win;
-  // Die Schale, in die `rebuildWall` baut: sie gibt die Wand zurueck, sobald
-  // die Flaeche darin steht, und deren Hoehe haengt an den Zeilen.
-  let wall = null;
-  const shell = {
-    replaceChildren() { wall = null; },
-    insertAdjacentHTML(_pos, html) {
-      const who = (/<section class="wall__who"[\s\S]*?<\/section>/.exec(html) || [])[0];
-      assert.ok(who, 'Reichweite: die gebaute Flaeche traegt den Abschnitt');
-      wall = fakeWall(who, 600);
-    },
-    querySelector: (selector) => (selector === '.wall' ? wall?.wall ?? null : null),
-  };
-  const container = { querySelector: () => null };
-  const fit = dash.createWallFit(win, controller.signal);
-  const step = dash.rebuildWall(container, shell, {
-    data: FIT_DATA, weather: null, failed: false, updatedAt: null, rerender() {}, signal: controller.signal, fit,
-  });
-  assert.ok(step > 0, 'die zu hohe Flaeche wurde beim Aufbau eingepasst');
-  assert.ok(wall.wall.scrollHeight <= 800, 'und passt danach ins Bild');
-  controller.abort();
-}));
-
-test('Verdrahtung: ein Resize schrumpft die Wand UND laesst sie wieder wachsen', onWall(() => {
-  const controller = new AbortController();
-  const win = fakeWindow();
-  global.window = win;
-  const fit = dash.createWallFit(win, controller.signal);
-  const wall = fakeWall(dash.renderWallWho(FIT_DATA, NO_ROWS), 300);
-
-  assert.equal(fit.show(wall.root, FIT_DATA), 0, 'Vorbedingung: mit Platz steht alles da');
-  const full = countTasks(wall.html(), '[ "]');
-
-  wall.state.base = 600;        // das Fenster wird kleiner
-  win.resize();
-  const shrunk = countTasks(wall.html(), '[ "]');
-  assert.ok(shrunk < full, `nach dem Verkleinern stehen weniger Zeilen (${shrunk} < ${full})`);
-  assert.ok(wall.wall.scrollHeight <= 800);
-
-  wall.state.base = 300;        // und wieder groesser
-  win.resize();
-  assert.equal(countTasks(wall.html(), '[ "]'), full, 'nach dem Vergroessern stehen wieder alle da');
-  controller.abort();
-}));
-
-test('Verdrahtung: nach dem Verlassen der Seite haengt kein Hoerer mehr am Fenster', onWall(() => {
-  const controller = new AbortController();
-  const win = fakeWindow();
-  global.window = win;
-  const fit = dash.createWallFit(win, controller.signal);
-  const wall = fakeWall(dash.renderWallWho(FIT_DATA, NO_ROWS), 300);
-  fit.show(wall.root, FIT_DATA);
-  assert.equal(win.count('resize'), 1, 'Vorbedingung: ein Hoerer');
-
-  controller.abort();
-  assert.equal(win.count('resize'), 0, 'der Hoerer faellt mit dem Signal der Seite');
-  wall.state.base = 600;
-  const before = wall.state.placed;
-  win.resize();
-  assert.equal(wall.state.placed, before, 'und nichts baut mehr an der verlassenen Flaeche');
-}));
-
-// --------------------------------------------------------------------------
-// 5. Nachtabsenkung: jede Stimme der Liste geht mit
-// --------------------------------------------------------------------------
-
-test('Nacht: die Aufgaben unter den Gesichtern senken sich mit, der Haken gibt sein Gruen ab', async () => {
-  const { readFileSync } = await import('node:fs');
-  const { eachRule } = await import('./css-rules.js');
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  const rules = [...eachRule(css)];
-  // Jede Klasse der Liste, die tags eine Farbe setzt, braucht nachts eine Stufe.
-  const coloured = new Set();
-  for (const rule of rules) {
-    if (/data-wall-night/.test(rule.selector) || !/\bcolor\s*:/.test(rule.body.replace(/background(-color)?\s*:[^;]*;/g, ''))) continue;
-    for (const [cls] of rule.selector.matchAll(/\.wall-who__(?:task|count--done)[\w-]*/g)) coloured.add(cls);
-  }
-  assert.ok(coloured.size >= 4, `nur ${coloured.size} farbtragende Klassen gelesen - misst der Filter noch? ${[...coloured]}`);
-  const night = rules.filter((rule) => /data-wall-night/.test(rule.selector) && /\bcolor\s*:/.test(rule.body));
-  const nightColour = (cls) => night
-    .filter((rule) => rule.selector.split(',').some((part) => new RegExp(`${cls.replace('.', '\\.')}(?![\\w-])`).test(part)))
-    .map((rule) => (/\bcolor\s*:\s*([^;]+);/.exec(rule.body) || [])[1]?.trim());
-  const missing = [...coloured].filter((cls) => nightColour(cls).length === 0);
-  assert.deepEqual(missing, [], `Klassen der Aufgabenliste ohne Nachtstufe: ${missing.join(', ')}`);
-  assert.deepEqual(nightColour('.wall-who__task-check'), ['var(--color-text-tertiary)'], 'der Haken am Titel traegt nachts kein Gruen');
-  assert.deepEqual(nightColour('.wall-who__count--done'), ['var(--color-text-tertiary)'], 'der Haken am Gesicht auch nicht');
-  assert.deepEqual(nightColour('.wall-who__task'), ['var(--color-text-secondary)'], 'der offene Titel geht eine Stufe zurueck');
-});
 
 // --------------------------------------------------------------------------
 // 6. Die Wand ist eine geteilte Flaeche: `audience=household`
@@ -754,9 +408,13 @@ test('Geteilte Flaeche: die Haushaltsfassung traegt in KEINER Scheibe etwas Eing
   for (const who of [BEN, ANNA]) {
     const wall = await overview(who, '?audience=household');
     const label = who === BEN ? 'Sitzung des Besitzers' : 'Sitzung eines anderen Mitglieds';
-    assert.deepEqual(titles(wall.urgentTasks), ['Aufgabe fuer alle'], label);
+    // TAFLA: die Wand liest den Tagesplan (planTasks, planEvents) - in der
+    // Haushaltsfassung. Programm-Felder des alten Wand-Layouts kommen leer.
+    assert.deepEqual(titles(wall.planTasks), ['Aufgabe fuer alle'], label);
+    assert.deepEqual(eventTitles(wall.planEvents), ['Aus dem geteilten Abo', 'Termin fuer alle'], label);
+    assert.deepEqual(wall.urgentTasks, [], label);
     assert.equal(wall.tasksDoneToday, 0, label);
-    assert.deepEqual(wall.wallTasks.map((entry) => [entry.user_id, titles(entry.open)]), [[BEN, ['Aufgabe fuer alle']]], label);
+    assert.deepEqual(wall.wallTasks, [], label);
     assert.deepEqual(eventTitles(wall.upcomingEvents), ['Aus dem geteilten Abo', 'Termin fuer alle'], label);
     // Was die Wand nicht zeichnet, kommt seit der Allowlist leer (Abschnitt 8):
     // die Zahlen der Kacheln, der Wochenstreifen, die Familienkarte.
@@ -765,7 +423,7 @@ test('Geteilte Flaeche: die Haushaltsfassung traegt in KEINER Scheibe etwas Eing
     assert.deepEqual(wall.memberTodayTasks, [], label);
     assert.deepEqual(wall.weekEvents, [], label);
     assert.deepEqual(wall.familyEvents, [], label);
-    const text = JSON.stringify([wall.urgentTasks, wall.upcomingEvents, wall.weekEvents, wall.familyEvents, wall.wallTasks]);
+    const text = JSON.stringify([wall.planTasks, wall.planEvents, wall.upcomingEvents, wall.weekEvents, wall.familyEvents]);
     for (const title of PRIVATE_TITLES) assert.ok(!text.includes(title), `${label}: „${title}" reist nicht mit`);
   }
 }));
@@ -777,7 +435,7 @@ test('Geteilte Flaeche: die Haushaltsfassung traegt in KEINER Scheibe etwas Eing
 test('Geteilte Flaeche: der Parameter gilt auch, wenn er doppelt in der Adresse steht', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedSharedSurface();
   const wall = await overview(BEN, '?audience=household&audience=household');
-  assert.deepEqual(titles(wall.urgentTasks), ['Aufgabe fuer alle']);
+  assert.deepEqual(titles(wall.planTasks), ['Aufgabe fuer alle']);
   assert.equal(wall.openTaskCount, 0);
   assert.deepEqual(eventTitles(wall.upcomingEvents), ['Aus dem geteilten Abo', 'Termin fuer alle']);
   // Ein anderes Wort bleibt, was es war: keine Haushaltsfassung.
@@ -786,7 +444,7 @@ test('Geteilte Flaeche: der Parameter gilt auch, wenn er doppelt in der Adresse 
 
 test('Geteilte Flaeche: beide Fassungen sagen jedem Mitglied dasselbe', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedSharedSurface();
-  const pick = (body) => [titles(body.urgentTasks), eventTitles(body.upcomingEvents), body.tasksDoneToday, body.wallTasks];
+  const pick = (body) => [titles(body.planTasks), eventTitles(body.planEvents), eventTitles(body.upcomingEvents)];
   assert.deepEqual(pick(await overview(BEN, '?audience=household')), pick(await overview(CLEO, '?audience=household')));
 }));
 
@@ -798,7 +456,7 @@ test('Geteilte Flaeche: „nur meine" gilt an der Wand nicht - sie ist niemandes
   assert.deepEqual(eventTitles(wall.upcomingEvents), ['Aus dem geteilten Abo', 'Termin fuer alle']);
 }));
 
-test('Geteilte Flaeche: die gebaute Wand zeigt nichts davon, und wer nur darueber dran waere, steht nicht unter den Gesichtern', async () => {
+test('Geteilte Flaeche: die gebaute Wand zeigt nichts davon, und wer nur darueber dran waere, traegt keine Scheibe', async () => {
   let wall;
   let personal;
   await withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
@@ -823,9 +481,8 @@ test('Geteilte Flaeche: die gebaute Wand zeigt nichts davon, und wer nur daruebe
       assert.match(html, /Tisch decken/, 'Reichweite: die Wand ist gebaut und zeigt, was alle sehen duerfen');
       assert.ok(!html.includes('Geheime Aufgabe'), 'die eingeschraenkte Aufgabe steht an keiner Stelle der Wand');
       assert.ok(!html.includes('Geheimer Termin'), 'der eingeschraenkte Termin auch nicht');
-      const who = (/<section class="wall__who"[\s\S]*?<\/section>/.exec(html) || [''])[0];
-      assert.match(who, /Cleo/);
-      assert.ok(!who.includes('Ben'), 'wer nur ueber Eingeschraenktes dran waere, erscheint nicht unter den Gesichtern');
+      assert.match(html, /aria-label="Cleo"/, 'Cleos Zeile traegt ihre Scheibe');
+      assert.ok(!html.includes('aria-label="Ben"'), 'wer nur ueber Eingeschraenktes dran waere, erscheint an keiner Zeile');
     } finally {
       tzClient.setDisplayTimeZone(null);
       mock.timers.reset();
@@ -915,11 +572,10 @@ function seedPersonal() {
   db.prepare("INSERT INTO reward_redemptions (user_id, reward_name, cost, status, kind, currency) VALUES (?, 'Auszahlung', 5, 'pending', 'withdrawal', 'EUR')").run(CLEO);
 }
 const PERSONAL_WORDS = ['Eisen', 'Fruehdienst', 'Steuer abgeben', 'Kinoabend'];
-/** Der Programmteil der gebauten Wand und die Gesichter - ohne Uhr und Fuss. */
+/** Die Dziś-Karte der gebauten Wand - ohne Uhr und Dock. */
 function wallParts(body) {
   const html = dash.renderWallSurface(body, null, { now: new Date() });
-  const cut = (name) => (new RegExp(`<section class="wall__${name}"[\\s\\S]*?</section>`).exec(html) || [''])[0];
-  return { html, program: cut('program'), who: cut('who') };
+  return { html, program: (/<section class="wall-card wall-plan"[\s\S]*?<\/section>/.exec(html) || [''])[0] };
 }
 function onWallAt(iso, fn) {
   return onWall(() => {
@@ -969,7 +625,7 @@ test('Persoenliches: die Haushaltsfassung traegt es gar nicht - auch nicht fuer 
     assert.deepEqual(await reminders(who, '?audience=household'), [], `${label}: keine Erinnerung`);
     const text = JSON.stringify(wall);
     for (const word of ['Eisen', 'Fruehdienst', 'Kinoabend']) assert.ok(!text.includes(word), `${label}: „${word}" reist nicht mit`);
-    assert.ok(titles(wall.urgentTasks).includes('Tisch decken'), `${label}: Reichweite - was alle sehen duerfen, steht da`);
+    assert.ok(titles(wall.planTasks).includes('Tisch decken'), `${label}: Reichweite - was alle sehen duerfen, steht da`);
   }
 }));
 
@@ -1015,19 +671,14 @@ test('Persoenliches: die Wand ist aus jeder Sitzung dieselbe wie auf dem Display
     for (const word of ['Eisen', 'Fruehdienst', 'Steuer abgeben']) {
       assert.ok(before.program.includes(word), `Reichweite: persoenlich gebaut stuende „${word}" im Programm`);
     }
-    assert.match(wallParts(personal.anna).program, /wall-row--rewards/, 'Reichweite: persoenlich gebaut stuende die Freigabe im Programm');
 
     const shown = wallParts({ ...wall.ben, pendingReminders: wallReminders });
     assert.match(shown.program, /Tisch decken/, 'Reichweite: die Wand ist gebaut');
     for (const word of PERSONAL_WORDS) assert.ok(!shown.html.includes(word), `„${word}" steht an keiner Stelle der Wand`);
-    for (const tone of ['health', 'schedule', 'rewards']) {
-      assert.ok(!shown.program.includes(`wall-row--${tone}`), `keine Zeile im Ton ${tone}`);
-    }
     // EINE WAND: wer sie oeffnet, aendert nichts an ihr.
     for (const name of ['anna', 'cleo', 'display']) {
       const other = wallParts({ ...wall[name], pendingReminders: [] });
       assert.equal(other.program, shown.program, `Programm aus der Sitzung „${name}" ist dasselbe`);
-      assert.equal(other.who, shown.who, `„Wer heute dran ist" aus der Sitzung „${name}" ist dasselbe`);
     }
   })();
 });
@@ -1048,10 +699,10 @@ test('Persoenliches: genommene Dosen machen aus einem freien Tag an der Wand kei
   })();
   assert.equal(personal.health.dosesTaken, 1, 'Vorbedingung: die Dosis ist genommen');
   await onWallAt(NOON_BERLIN, () => {
-    assert.match(wallParts(personal).program, /check-circle/, 'Reichweite: persoenlich gebaut sagte die Wand „Alles erledigt"');
+    assert.match(wallParts(personal).program, /wall\.allDone/, 'Reichweite: persoenlich gebaut sagte die Wand „Na dziś wszystko"');
     const program = wallParts(wall).program;
-    assert.ok(!program.includes('check-circle'), 'die Wand sagt es nicht ueber die Dosen einer Person');
-    assert.match(program, /sparkles/, 'sie sagt „Heute frei"');
+    assert.ok(!program.includes('wall.allDone'), 'die Wand sagt es nicht ueber die Dosen einer Person');
+    assert.match(program, /today\.freeDay/, 'sie sagt „Nic pilnego"');
   })();
 });
 
@@ -1324,10 +975,13 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     const text = JSON.stringify(wall);
     for (const word of OFF_WALL_WORDS) assert.ok(!text.includes(word), `Sitzung ${who}: „${word}" reist nicht mit`);
 
-    for (const key of ['pinnedNotes', 'pinnedNotesCount', 'notesTotal', 'budget', 'splitBalance', 'shoppingLists',
-      'shoppingOpenLists', 'health', 'fasting', 'nutrition', 'myShiftsToday']) {
+    for (const key of ['pinnedNotes', 'pinnedNotesCount', 'notesTotal', 'budget', 'splitBalance',
+      'health', 'fasting', 'nutrition', 'myShiftsToday']) {
       assert.deepEqual(wall[key], denied[key], `Sitzung ${who}: „${key}" in der Fassung eines Kontos ohne das Modulrecht`);
     }
+    // Den Einkauf liest ein Display seit Tafla (die Einkaufskarte der Wand):
+    // die Listen traegt die Wand, die Zahl der Listen nicht.
+    assert.equal(wall.shoppingOpenLists, 0);
     assert.deepEqual(wall.rewards, { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] });
     // Was keinem Modul gehoert.
     assert.deepEqual(wall.countdowns, []);
@@ -1338,6 +992,9 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     assert.deepEqual(wall.familyEvents, []);
     assert.deepEqual(wall.weekEvents, []);
     assert.deepEqual(wall.memberTodayTasks, []);
+    assert.deepEqual(wall.urgentTasks, [], 'das alte Programm zeichnet die Wand nicht mehr');
+    assert.deepEqual(wall.wallTasks, [], '„Wer heute dran ist" auch nicht');
+    assert.equal(wall.tasksDoneToday, 0);
     assert.equal(wall.openTaskCount, 0);
     assert.equal(wall.overdueTaskCount, 0);
     assert.equal(wall.birthdayCount, 0);
@@ -1348,8 +1005,10 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     assert.deepEqual(wall.housekeeping, {
       ...denied.housekeeping, present: true, presentSince: '2026-10-08T07:00:00Z', workerName: 'Helga',
     });
+    // Den Vorrat liest ein Display seit Tafla (Zaehler am Abendessen), der
+    // Massstab fuer die leeren Felder ist deshalb die leere Scheibe selbst.
     assert.deepEqual(wall.pantryExpiring, {
-      ...denied.pantryExpiring, todayItems: personal.pantryExpiring.todayItems, todayCount: 1,
+      items: [], total: 0, expiredCount: 0, todayItems: personal.pantryExpiring.todayItems, todayCount: 1,
     });
     assert.deepEqual(wall.pantryExpiring.todayItems.map((item) => item.name), ['Joghurt']);
 
@@ -1373,8 +1032,9 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   birthdayCount: 'calendar', birthdayTotal: 'calendar', birthdaySoonCount: 'calendar',
   // Aufgaben: Kennzahlen der Kacheln und der Navigation.
   openTaskCount: 'tasks', overdueTaskCount: 'tasks', memberTodayTasks: 'tasks',
-  // Einkauf: die Wand nennt nur die Zahl der offenen Artikel.
-  shoppingLists: 'shopping', shoppingOpenLists: 'shopping', shoppingTile: 'shopping',
+  // Einkauf: die Wand nennt die Zahl und die ersten Artikel (shoppingLists),
+  // nicht die Zahl der Listen und nicht die Auswahl der Kachel.
+  shoppingOpenLists: 'shopping', shoppingTile: 'shopping',
   pinnedNotes: 'notes', pinnedNotesCount: 'notes', notesTotal: 'notes',
   // Geld steht an keiner Wand.
   budget: 'budget', splitBalance: 'budget',
@@ -1382,10 +1042,10 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   rewards: 'rewards', health: 'health', fasting: 'health', nutrition: 'health', myShiftsToday: 'schedule',
   // Keinem Modul zugeordnet: nach der anfragenden Person geschnitten.
   countdowns: null, countdownTotal: null, quicklinks: null,
-  // Der Tagesplan von Dziś (Tafla, 2026-10-19): persoenlich gelesen, nach
-  // der Sichtbarkeit der anfragenden Person - die Wand hat ihre eigenen
-  // Zeilen (wallTasks, upcomingEvents, todayMeals).
-  planTasks: 'tasks', planEvents: 'calendar', tomorrowMeals: 'meals', dinnerPlan: 'meals',
+  // Das alte Wand-Programm und „Wer heute dran ist" (bis Tafla, 2026-10-19):
+  // die Tafla-Wand liest den Tagesplan (planTasks, planEvents) und zeichnet
+  // beides nicht mehr.
+  urgentTasks: 'tasks', tasksDoneToday: 'tasks', wallTasks: 'tasks',
 });
 const DELIBERATELY_EMPTY_FIELDS = Object.freeze({
   housekeeping: ['configured', 'visitsThisMonth', 'unpaidAmount', 'lastVisit'],
@@ -1433,8 +1093,8 @@ test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der
   const blank = await overview(ANNA, householdQuery());
   const differs = (a, b) => { try { assert.deepEqual(a, b); return false; } catch { return true; } };
   const carried = Object.keys(wall).filter((key) => differs(wall[key], blank[key])).sort();
-  assert.deepEqual(carried, ['birthdays', 'housekeeping', 'pantryExpiring', 'shoppingOpenCount', 'todayMeals',
-    'upcomingEvents', 'urgentTasks', 'wallTasks', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
+  assert.deepEqual(carried, ['birthdays', 'housekeeping', 'pantryExpiring', 'planEvents', 'planTasks', 'shoppingLists',
+    'shoppingOpenCount', 'todayMeals', 'upcomingEvents', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
   for (const key of carried.filter((name) => !['housekeeping', 'pantryExpiring'].includes(name))) {
     assert.deepEqual(wall[key], personal[key], `„${key}" kommt unveraendert`);
   }
@@ -1492,30 +1152,23 @@ test('Allowlist: die gebaute Wand ist dieselbe wie zuvor - nichts, was sie zeich
     wall = await overview(ANNA, householdQuery());
   })();
   await onWallAt(NOON_BERLIN, () => {
-    // Der Stand vor der Allowlist: die volle Antwort, ohne die drei Module, die
-    // #1900 schon ausliess.
+    // Der Stand vor der Allowlist: die volle Antwort, ohne das, was nur dem
+    // Betrachter gilt (#1900) - und ohne Eingeschraenktes, das die Saat hier
+    // nicht hat.
     const beforeData = {
       ...personal,
       health: wall.health, fasting: wall.fasting, nutrition: wall.nutrition, rewards: wall.rewards, myShiftsToday: [],
       pendingReminders: [],
     };
     const afterData = { ...wall, pendingReminders: [] };
-    // Das Modell des ganzen Tages, nicht nur die vier Zeilen ueber dem Deckel.
-    const day = (data) => {
-      const model = dash.buildTodayCockpitModel(data, [], { cap: dash.WALL_ROW_CAP, now: new Date(), groupOverdue: false });
-      return { rows: model.allRows.map((row) => [row.kind, row.title, row.sub, row.timeLabel]), shopping: model.shopping?.title ?? null, overflow: model.overflow, coda: model.coda };
-    };
-    const before = day(beforeData);
-    const text = JSON.stringify(before.rows);
-    for (const word of ['Elternabend', 'Tisch decken', 'Linsensuppe', 'Biotonne', 'Joghurt', 'Helga', 'Oma Erna']) {
-      assert.ok(text.includes(word), `Reichweite: „${word}" steht im Programm des Tages`);
+    const before = wallParts(beforeData);
+    // Die Biotonne ist um zwoelf schon abgeholt und steht nicht mehr im
+    // offenen Plan - in beiden Fassungen gleich.
+    for (const word of ['Elternabend', 'Tisch decken', 'Joghurt', 'Helga', 'Oma Erna', 'Tomaten']) {
+      assert.ok(before.html.includes(word), `Reichweite: „${word}" steht an der Wand`);
     }
-    assert.ok(before.shopping, 'Reichweite: die Einkaufszeile steht');
-    assert.deepEqual(day(afterData), before, 'das Programm des Tages ist dasselbe');
     const shown = wallParts(afterData);
-    const was = wallParts(beforeData);
-    assert.equal(shown.who, was.who, '„Wer heute dran ist" ist dasselbe');
-    assert.equal(shown.html, was.html, 'die ganze Flaeche ist dieselbe');
+    assert.equal(shown.html, before.html, 'die ganze Flaeche ist dieselbe');
     for (const word of OFF_WALL_WORDS) assert.ok(!shown.html.includes(word));
   })();
 });
@@ -1532,5 +1185,5 @@ test('Allowlist: das Display ohne den Parameter bekommt, was es bekam', withCloc
   assert.deepEqual(wall.countdowns, []);
   assert.equal(wall.openTaskCount, 0);
   assert.deepEqual(wall.weekEvents, []);
-  assert.ok(titles(wall.urgentTasks).includes('Tisch decken'), 'Reichweite: das Programm steht');
+  assert.ok(titles(wall.planTasks).includes('Tisch decken'), 'Reichweite: der Tagesplan steht');
 }));

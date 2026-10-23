@@ -2128,7 +2128,8 @@
             "dashboard": "今天",
             "search": "搜索",
             "inventory": "物品",
-            "waste": "垃圾收集"
+            "waste": "垃圾收集",
+            "pantry": "库存"
         },
         "ics": {
             "title": "ICS 订阅",
@@ -6699,5 +6700,16 @@
             "pantryPhoto": "Pantry photo",
             "document": "Document"
         }
+    },
+    "wall": {
+        "allDone": "All done for today",
+        "dinnerAt": "Dinner · {{time}}",
+        "cookAria": "Cook: {{title}}",
+        "runningOut": "Running low: {{items}}",
+        "runningOutLabel": "Running low:",
+        "onList": "{{n}} on the list",
+        "stale": "data from {{minutes}} min ago",
+        "minutesShort": "min",
+        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
     }
 }

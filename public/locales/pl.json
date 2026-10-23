@@ -244,9 +244,9 @@
         "wallWhoDoneMore_one": "+{{count}} zrobione",
         "wallWhoDoneMore_few": "+{{count}} zrobione",
         "wallWhoDoneMore_many": "+{{count}} zrobione",
-        "wallExit": "Zakończ tryb ścienny",
-        "wallEnter": "Uruchom tryb ścienny",
-        "wallTimerLabel": "Minutnik kuchenny",
+        "wallExit": "Zamknij tryb ściany",
+        "wallEnter": "Włącz tryb ściany",
+        "wallTimerLabel": "Minutnik",
         "wallTimerMinutes": "{{count}} min",
         "wallTimerMinutes_one": "{{count}} min",
         "wallTimerMinutes_few": "{{count}} min",
@@ -263,8 +263,8 @@
         "customizeShownDone": "Pokazano: {{widget}}",
         "customizeSizeDone": "{{widget}}: rozmiar {{size}}",
         "customizeMovedTo": "{{widget}}: miejsce {{position}} z {{total}}",
-        "wallTimerStarted": "Minutnik kuchenny działa: {{duration}}",
-        "wallTimerCancelled": "Minutnik kuchenny anulowany",
+        "wallTimerStarted": "Minutnik działa: {{duration}}",
+        "wallTimerCancelled": "Minutnik anulowany",
         "wallExited": "Tryb ścienny wyłączony. Wróć przez „{{action}}” w nagłówku strony.",
         "wallEntered": "Tryb ścienny: stały program na ścianę, niezależny od twojego przeglądu. Wyjdziesz przez „{{action}}” na dole lub przyciskiem Wstecz.",
         "wallOffline": "Brak połączenia",
@@ -2446,7 +2446,8 @@
             "dashboard": "Dziś",
             "search": "Szukaj",
             "inventory": "Inwentarz",
-            "waste": "Odbiór odpadów"
+            "waste": "Odbiór odpadów",
+            "pantry": "Spiżarnia"
         },
         "ics": {
             "title": "Subskrypcje ICS",
@@ -7027,5 +7028,16 @@
             "pantryPhoto": "Zdjęcie spiżarni",
             "document": "Dokument"
         }
+    },
+    "wall": {
+        "allDone": "Na dziś wszystko",
+        "dinnerAt": "Kolacja · {{time}}",
+        "cookAria": "Gotuj: {{title}}",
+        "runningOut": "Kończy się: {{items}}",
+        "runningOutLabel": "Kończy się:",
+        "onList": "{{n}} na liście",
+        "stale": "dane sprzed {{minutes}} min",
+        "minutesShort": "min",
+        "readOnly": "Ściana tylko pokazuje. Odhaczanie włączysz w Ustawieniach › Tablet w kuchni."
     }
 }

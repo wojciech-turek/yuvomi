@@ -486,16 +486,16 @@ test('Raster: die Option der Kachel kommt beim Renderer an', inBrowser(THU_14_BE
   assert.deepEqual(aheadRows(layout(undefined)), firstAhead(5));
 }));
 
-test('Heute-Blatt und Wand behalten ihren Deckel, auch mit zwoelf Terminen in der Antwort', inBrowser('2026-09-24T04:00:00Z', 'Europe/Berlin', () => {
+// TAFLA (2026-10-19): die Wand hat keinen Zeilendeckel mehr (WALL_ROW_CAP), sie
+// passt die Dziś-Karte ihrer Hoehe an (planWallRows, test:wall-tafla). Das
+// Blatt behaelt seinen Deckel.
+test('das Heute-Blatt behaelt seinen Deckel, auch mit zwoelf Terminen in der Antwort', inBrowser('2026-09-24T04:00:00Z', 'Europe/Berlin', () => {
   // Zwoelf Termine HEUTE, ab 08:00 - nur was heute ist, kommt ueberhaupt ins Blatt.
   const today = Array.from({ length: 12 }, (_, i) => ev(i + 1, `Heute ${pad(i + 8)}`, `2026-09-24T${pad(i + 8)}:00`, `2026-09-24T${pad(i + 8)}:30`));
   const five = today.slice(0, 5);
   const sheet = (events) => dash.buildTodayCockpitModel({ upcomingEvents: events }, [], { cap: dash.PROGRAM_ROW_CAP, groupOverdue: false });
-  const wall = (events) => dash.buildTodayCockpitModel({ upcomingEvents: events }, [], { cap: dash.WALL_ROW_CAP, groupOverdue: false });
   assert.equal(sheet(today).rows.length, sheet(five).rows.length + 1, 'Vorbedingung: das Blatt war mit fuenf nicht voll (sechs Zeilen Platz)');
   assert.equal(sheet(today).rows.length, dash.PROGRAM_ROW_CAP, 'das Blatt zeigt nicht mehr als seinen Deckel');
-  assert.equal(wall(today).rows.length, dash.WALL_ROW_CAP, 'die Wand zeigt nicht mehr als ihren Deckel');
-  assert.equal(wall(today).rows.length, wall(five).rows.length, 'und nicht mehr Zeilen als mit fuenf');
   assert.equal(sheet(today).overflow, 12 - dash.PROGRAM_ROW_CAP, 'der Rest steht hinter „+N weitere"');
 }));
 

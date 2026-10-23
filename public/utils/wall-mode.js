@@ -67,6 +67,16 @@
  *    (components/cook-mode.js). It still meets (b)-(d): it reads the recipe,
  *    writes nothing, keeps its timers on this device and is built for wet hands.
  *
+ *    TAFLA (2026-10-19): DIE AUSNAHME VON (b) HAT EINEN SCHALTER. Die Wand ist
+ *    weiter standardmaessig schreibgeschuetzt. Erst wenn ein Administrator
+ *    „Pozwól odhaczać na ścianie" einschaltet (Einstellungen › Tablet w kuchni,
+ *    `wall_allow_ticking`), bekommen die Aufgabenzeilen ihre Ringe, die
+ *    Einkaufskarte ihre „+"-Chips und der Sonntagabend die Frage der Woche -
+ *    und auch dann nur ueber die Routen, die ein Display ohnehin erreicht.
+ *    Durchgesetzt am Server (services/wall-settings.js), nicht hier. Minutnik
+ *    und Gotuj schreiben nichts und gehen immer; der Minutnik erfuellt (a)-(d)
+ *    weiter ohne Ausnahme.
+ *
  * ── WARUM DIE ATTRIBUTE AN DER WURZEL HAENGEN ─────────────────────────────
  *
  * Der Modus blendet Sidebar und Tab-Leiste aus, und beide sind Shell-Elemente

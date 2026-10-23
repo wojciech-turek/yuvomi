@@ -2128,7 +2128,8 @@
             "dashboard": "Bugün",
             "search": "Ara",
             "inventory": "Envanter",
-            "waste": "Atık toplama"
+            "waste": "Atık toplama",
+            "pantry": "Kiler"
         },
         "ics": {
             "title": "ICS Abonelikleri",
@@ -6699,5 +6700,16 @@
             "pantryPhoto": "Pantry photo",
             "document": "Document"
         }
+    },
+    "wall": {
+        "allDone": "All done for today",
+        "dinnerAt": "Dinner · {{time}}",
+        "cookAria": "Cook: {{title}}",
+        "runningOut": "Running low: {{items}}",
+        "runningOutLabel": "Running low:",
+        "onList": "{{n}} on the list",
+        "stale": "data from {{minutes}} min ago",
+        "minutesShort": "min",
+        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
     }
 }

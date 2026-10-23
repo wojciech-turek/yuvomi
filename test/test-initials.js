@@ -520,8 +520,9 @@ test('Uebersicht: Familie, Geburtstage, Dienstplan, Belohnungen und Wandansicht'
   }, '2x2');
   assertShows(rewards, '민수', 'Belohnungen');
 
-  const wall = dashboard.renderWallWho({ users: [user] }, { allRows: [{ who: { id: 1 } }] });
-  assertShows(wall, '민수', 'Wandansicht');
+  // Tafla: die Scheibe an einer Zeile der Wand (components/wall-view.js).
+  const { wallPersonDisc } = await import('../public/components/wall-view.js');
+  assertShows(wallPersonDisc(user, [user]), '민수', 'Wandansicht');
 });
 
 // --------------------------------------------------------
@@ -639,6 +640,7 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const { __test: rewards } = await import('../public/pages/rewards.js');
   const { __test: hk } = await import('../public/pages/housekeeping.js');
   const { __test: dashboard, renderUpcomingBirthdays } = await import('../public/pages/dashboard.js');
+  const wallView = await import('../public/components/wall-view.js');
 
   const withState = (state, patch, run) => {
     const before = Object.fromEntries(Object.keys(patch).map((key) => [key, state[key]]));
@@ -682,7 +684,7 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
     'Uebersicht Belohnungen': (name) => dashboard.renderRewardsWidget({
       view: 'household', me: 99, standings: [{ id: 1, display_name: name, avatar_color: '#34C759', balance: 10 }], catalog: [], recent: [],
     }, '2x2'),
-    'Uebersicht Wandansicht': (name) => dashboard.renderWallWho({ users: [person(name)] }, { allRows: [{ who: { id: 1 } }] }),
+    'Uebersicht Wandansicht': (name) => wallView.wallPersonDisc(person(name), [person(name)]),
   };
 
   // Die Kontozeile der Seitenleiste: derselbe Weg wie im Test weiter oben.

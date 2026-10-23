@@ -282,14 +282,21 @@ test('die Startknoepfe ruhen sichtbar - ein unsichtbarer Knopf ist eine Falle', 
   // sie trotzdem: ein Tipp auf die schlafende Wand startete einen Timer, den
   // niemand gesehen hatte (Critique 2026-09-23, dort passiert).
   // `.impeccable/critique/ignore.md` nennt unsichtbare, klickbare Baender als
-  // Defektklasse dieses Repos; Ruhe entsteht durch Kontrast, nicht durch
-  // Unsichtbarkeit - der Ausstieg daneben zeigt sein Zeichen in Sekundaerfarbe.
+  // Defektklasse dieses Repos.
+  //
+  // TAFLA (2026-10-19): die Regel blieb, ihr Mass wurde schaerfer. Hier stand
+  // „leise heisst eine Textstufe ``--color-text-secondary/tertiary``" - die
+  // Knoepfe ruhten als Wort ohne Flaeche. Die Tafla-Scheiben (80pt) ruhen VOLL
+  // sichtbar: eine Flaeche aus tokens.css (`--color-fill`) und die Tinte der
+  // Seite. Geprueft wird weiter, dass beides eine Stufe aus tokens.css ist und
+  // nichts davon durchsichtig.
   const { value: color, found } = restingValue('.wall__timer-preset', 'color');
   assert.ok(found > 0, 'Reichweite: die Basisregel von .wall__timer-preset wurde gefunden');
   assert.ok(color, 'die Basisregel setzt eine Textfarbe');
   assert.ok(!/transparent/.test(color), `im Ruhezustand unsichtbar: color: ${color}`);
-  assert.match(color, /var\(--color-text-(secondary|tertiary)\)/,
-    'leise heisst eine Textstufe aus tokens.css, keine erfundene Deckkraft');
+  assert.match(color, /var\(--color-text-(primary|secondary)\)/, 'eine Textstufe aus tokens.css, keine erfundene Deckkraft');
+  const { value: background } = restingValue('.wall__timer-preset', 'background');
+  assert.match(background ?? '', /var\(--color-fill\)/, 'die Scheibe hat ihre Flaeche schon in Ruhe');
   const { value: opacity } = restingValue('.wall__timer-preset', 'opacity');
   assert.ok(opacity == null || Number(opacity) > 0, `opacity: ${opacity} waere dieselbe Falle`);
 });
@@ -337,23 +344,24 @@ function tap(btn) {
   btn.dispatchEvent(click);
 }
 
-test('der erste Zeiger auf einer schlafenden Wand weckt nur - er startet nichts', () => {
+// TAFLA (2026-10-19): HIER STAND „der erste Zeiger auf einer schlafenden Wand
+// weckt nur - er startet nichts". Die Regel war die Antwort auf Startknoepfe,
+// die fast unsichtbar im Fussband ruhten (Critique 2026-09-23). Die Tafla-
+// Scheiben ruhen voll sichtbar (Test oben); ein Tipp, der dort nur weckt,
+// laese sich als Defekt („ich habe 5 gedrueckt, nichts passiert"). Die Absicht
+// - kein Timer, den niemand gesehen hat - haelt jetzt die Sichtbarkeit selbst,
+// und der Foto-Screensaver faengt seinen Tipp weiter ab (photo-screensaver.js).
+test('der erste Tipp auf eine sichtbare Scheibe startet - auch auf einer Wand, die lange niemand beruehrt hat', () => {
   withWallGlobals((signal) => {
     const { wall, presets } = fakeWall({ awake: false });
     let renders = 0;
     wireWallTimer(wall, () => { renders += 1; }, signal);
     tap(presets[1]);
-    assert.equal(readWallTimer().state, 'idle',
-      'ein Tipp auf die schlafende Wand hat einen Timer gestartet, den niemand gesehen hat');
-    assert.equal(renders, 0, 'und nichts neu gezeichnet');
-
-    // Die Wand ist wach (das Wecken setzt das Attribut, siehe wireWallSurface):
-    // jetzt ist derselbe Tipp gemeint.
-    wall.setAttribute('data-wall-awake');
-    tap(presets[1]);
-    assert.equal(readWallTimer().state, 'running', 'auf der wachen Wand startet der Knopf');
+    assert.equal(readWallTimer().state, 'running', 'die sichtbare Scheibe tut beim ersten Tipp, was sie zeigt');
     assert.equal(renders, 1);
   });
+  const source = SOURCE.slice(SOURCE.indexOf('export function wireWallTimer'));
+  assert.ok(!/pressedWhileAsleep|wakeOnly/.test(source), 'kein Weck-Tipp mehr, der verschluckt wird');
 });
 
 test('auf der wachen Wand startet der erste Tipp, per Tastatur immer', () => {

@@ -222,45 +222,30 @@ test('(3) „Dostosuj Dziś" per Tastatur: der Fokus bleibt, das Umordnen wird a
   await page.close();
 });
 
-test('(4) Wand-Timer: sichtbar in Ruhe, der erste Tipp auf die schlafende Wand weckt nur', async () => {
+// TAFLA (2026-10-19): die Startknoepfe sind 80pt-Scheiben, die voll sichtbar
+// ruhen - der erste Tipp startet (vorher weckte er nur, weil die Knoepfe fast
+// unsichtbar im Fuss lagen; test:wall-timer). (4b) mass, dass das Wecken die
+// Knoepfe nicht verschiebt; ohne Wecken gibt es nichts mehr zu verschieben.
+test('(4) Wand-Minutnik: sichtbar in Ruhe, der erste Tipp startet, die Anzeige ist ein timer', async () => {
   const page = await dashboardPage({ device: 'mobile' });
   await enterDashboardWall(page);
   await page.waitForSelector('.wall [data-wall-timer-start]');
   await settle(page);
-  // Schlafend: das Attribut faellt nach sechs Sekunden von selbst - hier sofort.
   const rest = await page.evaluate(() => {
-    document.querySelector('.wall').removeAttribute('data-wall-awake');
     document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* egal */ } });
     const btn = document.querySelector('[data-wall-timer-start="5"]');
     const cs = getComputedStyle(btn);
-    return { color: cs.color, opacity: cs.opacity };
+    const r = btn.getBoundingClientRect();
+    return { color: cs.color, background: cs.backgroundColor, opacity: cs.opacity, w: r.width, h: r.height };
   });
   const alpha = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); const p = m ? m[1].split(',').map(Number) : []; return p.length === 4 ? p[3] : 1; };
-  assert.ok(alpha(rest.color) > 0 && Number(rest.opacity) > 0,
-    `die Startknoepfe ruhen unsichtbar (color ${rest.color}, opacity ${rest.opacity})`);
-
-  // Der zweite Tipp landet dort, wo der erste lag - das Wecken darf die Knoepfe
-  // also nicht verschieben. Genau das tat es: der Ausstieg bekommt wach seine
-  // Beschriftung, und im `space-between`-Fuss rutschte die Mitte um 91px
-  // (gemessen 1440) - aus „5 Min" wurde beim zweiten Tipp „10 Min".
-  const lefts = () => page.$$eval('[data-wall-timer-start]', (els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
-  const asleep = await lefts();
-  await page.$eval('.wall', (w) => w.setAttribute('data-wall-awake', ''));
-  const awake = await lefts();
-  await page.$eval('.wall', (w) => w.removeAttribute('data-wall-awake'));
-  assert.deepEqual(awake, asleep, 'die Startknoepfe verschieben sich beim Wecken');
-
-  await page.tap('[data-wall-timer-start="5"]');
-  const afterFirst = await page.evaluate(() => ({
-    timer: localStorage.getItem('yuvomi-wall-timer'),
-    awake: document.querySelector('.wall').hasAttribute('data-wall-awake'),
-  }));
-  assert.equal(afterFirst.timer, null, 'der erste Tipp auf die schlafende Wand hat einen Timer gestartet');
-  assert.equal(afterFirst.awake, true, 'er hat die Wand geweckt');
+  assert.ok(alpha(rest.color) > 0 && alpha(rest.background) > 0 && Number(rest.opacity) > 0,
+    `die Scheibe ruht unsichtbar (color ${rest.color}, background ${rest.background}, opacity ${rest.opacity})`);
+  assert.ok(rest.w >= 56 && rest.h >= 56, `Treffflaeche ${rest.w}x${rest.h}`);
 
   await page.tap('[data-wall-timer-start="5"]');
   await page.waitForSelector('.wall__timer');
-  assert.ok(await page.evaluate(() => localStorage.getItem('yuvomi-wall-timer')), 'der zweite Tipp startet');
+  assert.ok(await page.evaluate(() => localStorage.getItem('yuvomi-wall-timer')), 'der erste Tipp startet');
   assert.equal(await page.$eval('.wall__timer', (el) => el.getAttribute('role')), 'timer',
     'die tickende Anzeige ist keine Live-Region');
   await new Promise((r) => { setTimeout(r, 150); });
@@ -269,23 +254,6 @@ test('(4) Wand-Timer: sichtbar in Ruhe, der erste Tipp auf die schlafende Wand w
   await page.evaluate(() => {
     localStorage.removeItem('yuvomi-wall-timer');
   });
-  await page.close();
-});
-
-test('(4b) das Wecken verschiebt die Startknoepfe nicht - auch nicht am grossen Wandbildschirm', async () => {
-  // Der Fall aus (4) an der Breite, an der er gemessen wurde: am Telefon hat der
-  // Fuss keinen Ueberschuss zu verteilen, am Wandbildschirm schon.
-  const page = await dashboardPage({ device: 'desktop', viewport: { width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false } });
-  await enterDashboardWall(page);
-  await page.waitForSelector('.wall [data-wall-timer-start]');
-  await settle(page);
-  const lefts = () => page.$$eval('[data-wall-timer-start]', (els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
-  await page.$eval('.wall', (w) => w.removeAttribute('data-wall-awake'));
-  const asleep = await lefts();
-  await page.$eval('.wall', (w) => w.setAttribute('data-wall-awake', ''));
-  const awake = await lefts();
-  assert.equal(asleep.length, 5, 'Reichweite: fuenf Startknoepfe');
-  assert.deepEqual(awake, asleep, 'die Startknoepfe verschieben sich beim Wecken - der zweite Tipp traefe einen anderen');
   await page.close();
 });
 
