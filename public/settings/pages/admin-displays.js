@@ -25,6 +25,7 @@ import { confirmModal, refocusAfterRender } from '/components/modal.js';
 import { settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
 import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
 import { enterWallMode, WALL_NIGHT_FROM, WALL_NIGHT_TO } from '/utils/wall-mode.js';
+import { zonedDateKey } from '/utils/timezone.js';
 
 /** The wall sections the household switches, in the order of the artboard. */
 const WALL_SECTIONS = Object.freeze([
@@ -44,7 +45,8 @@ function formatSeen(value, now = new Date()) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   // Heute genuegt die Uhrzeit („ostatnio widziany 18:10"), sonst mit Datum.
-  const sameDay = date.toDateString() === now.toDateString();
+  // Der Tag in der Haushaltszone, nicht in der des Browsers.
+  const sameDay = zonedDateKey(date) === zonedDateKey(now);
   return sameDay ? formatTime(date) : `${formatDate(date)} ${formatTime(date)}`.trim();
 }
 
