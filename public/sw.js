@@ -395,6 +395,7 @@ const PAGE_MODULES = [
   '/settings/backup-key.js',
   '/settings/currency.js',
   '/settings/preferences-cache.js',
+  '/settings/overview-values.js',
   '/settings/region-presets.js',
   '/settings/weather-location.js',
   '/settings/family-users.js',

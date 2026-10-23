@@ -275,9 +275,12 @@ button.more-row {
 /* The one plain verb of an inbox row. */
 .more-verb {
   flex: none;
+  display: inline-flex;
+  align-items: center;
   min-block-size: var(--target-base);
   padding: 0;
   border: 0;
+  text-decoration: none;
   background: transparent;
   color: var(--color-accent);
   font: inherit;

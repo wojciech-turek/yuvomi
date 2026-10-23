@@ -7308,7 +7308,7 @@
         "housekeepingDue": "{{name}} · {{amount}}",
         "forVisits": "za {{count}} wizyty",
         "forVisits_one": "za {{count}} wizytę",
-        "visitsOn": "do zapłaty {{visits}} · {{days}}",
+        "visitsOn": "{{visits}} · {{days}}",
         "paidDone": "Zapisano zapłatę: {{name}}",
         "splitYouOwe": "{{name}} · {{amount}} do oddania",
         "splitOwesYou": "{{name}} · {{amount}} do odebrania",

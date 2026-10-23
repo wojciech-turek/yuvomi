@@ -7484,7 +7484,7 @@
         "housekeepingDue": "{{name}} · {{amount}}",
         "forVisits": "for {{count}} visits",
         "forVisits_one": "for {{count}} visit",
-        "visitsOn": "to pay {{visits}} · {{days}}",
+        "visitsOn": "{{visits}} · {{days}}",
         "paidDone": "Payment saved: {{name}}",
         "splitYouOwe": "{{name}} · you owe {{amount}}",
         "splitOwesYou": "{{name}} · owes you {{amount}}",
