@@ -3321,14 +3321,19 @@ test('R14: Familie legt im Blatt-Dialog an, Fuss [Abbrechen][Primaer], Zeilen mi
   // volle Breite (R14). R20 (Re-Critique 2026-10-17, A3 P3): er steht in der
   // Karte "Einladungen", die vorher ohne Handlung war; "Mitglied hinzufuegen"
   // bleibt ruhig unter der Mitgliederliste. Bewusst angepasst.
+  // TAFLA (2026-10-20, Artboard Domownicy): beide Wege sind violette Zeilen
+  // IN ihrer Karte ("Dodaj domownika" unter den Menschen, "Zaproś kogoś" unter
+  // den Einladungen) - eine Handlung als Zeile wie in iOS, kein Knopf und
+  // kein Balken. Die Zusage bleibt: jede Karte traegt ihren eigenen Weg, mit
+  // Zeichen, und kein Fuellknopf steht im Blatt.
   const membersCard = src.slice(src.indexOf('id="members-card"'), src.indexOf('id="invites-card"'));
   const invitesCard = src.slice(src.indexOf('id="invites-card"'), src.indexOf('two-factor-household-card'));
-  assert.match(membersCard, /<div class="settings-member-actions">\s*<button class="btn btn--secondary settings-add-btn" id="add-member-btn" hidden><i data-lucide="user-plus"/,
-    'Anlegen ruhig unter der Mitgliederliste, mit Icon');
+  assert.match(membersCard, /<div class="settings-member-actions">\s*<button class="settings-add-btn tafla-row tafla-row--accent" id="add-member-btn" hidden><span class="tafla-row__lead" aria-hidden="true"><i data-lucide="user-plus">/,
+    'Anlegen als Zeile unter der Mitgliederliste, mit Zeichen');
   assert.doesNotMatch(membersCard, /add-invite-btn/, 'Einladen steht nicht in der Mitgliederkarte');
-  assert.match(invitesCard, /id="invites-list"><\/ul>\s*<div class="settings-member-actions">\s*<button class="btn btn--primary settings-add-btn" id="add-invite-btn" hidden><i data-lucide="mail-plus" aria-hidden="true"><\/i>\$\{t\('settings\.invites\.add'\)\}<\/button>/,
-    'Einladen gefuellt unter den offenen Einladungen');
-  assert.equal((src.match(/btn--primary settings-add-btn/g) ?? []).length, 1, 'genau ein gefuellter Knopf');
+  assert.match(invitesCard, /id="invites-list"><\/ul>\s*<div class="settings-member-actions">\s*<button class="settings-add-btn tafla-row tafla-row--accent" id="add-invite-btn" hidden><span class="tafla-row__lead" aria-hidden="true"><i data-lucide="mail-plus"><\/i><\/span><span class="tafla-row__body"><span class="tafla-row__title">\$\{t\('settings\.invites\.add'\)\}/,
+    'Einladen als Zeile unter den offenen Einladungen');
+  assert.equal((src.match(/btn--primary settings-add-btn/g) ?? []).length, 0, 'kein Fuellknopf im Blatt');
   const css = await readFile(new URL('../public/styles/settings.css', import.meta.url), 'utf8');
   assert.match(css, /\.settings-add-btn \{\s*align-self: flex-start;/, 'kein Balken ueber die volle Breite');
   assert.match(css, /\.settings-member-actions \{\s*display: flex;/);

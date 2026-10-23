@@ -3100,7 +3100,7 @@
         "invites": {
             "title": "Invitations",
             "intro": "Invite new members by link. They choose their own password.",
-            "add": "Create invitation",
+            "add": "Invite someone",
             "submit": "Create invitation",
             "usernameHint": "Optional. Leave empty and the invited person picks their own name.",
             "sendEmail": "Send the invitation by email",
@@ -3393,7 +3393,15 @@
         "reminderEventsWhen": "as set on each event",
         "reminderAiEvening": "Evening heads-up",
         "reminderAiEveningWhen": "daily from 17:30, at most one",
-        "reminderAiQuestionWhen": "Sunday from 10:00"
+        "reminderAiQuestionWhen": "Sunday from 10:00",
+        "familyHelperHint": "What someone from outside can see is set in permissions.",
+        "familyKidsTitle": "Children",
+        "familyKidsRow": "Children's accounts",
+        "familyKidsNone": "Not now",
+        "familyKidsCount": "{{count}} accounts",
+        "familyKidsCount_one": "{{count}} account",
+        "familyKidsFooter": "A child's account has its own tasks, without the budget or any amounts.",
+        "familyDevicesTitle": "Devices"
     },
     "login": {
         "tagline": "Welcome back to your family planner.",

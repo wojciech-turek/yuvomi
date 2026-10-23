@@ -4901,3 +4901,127 @@
   block-size: 0.5px;
   background: var(--color-separator);
 }
+
+/* --------------------------------------------------------
+   Domownicy (Tafla, Artboard Domownicy; admin-family.js)
+
+   Die Menschen als 64er Zeilen mit der 40er Scheibe, die Einladungen ohne
+   Scheibe, "Dodaj domownika" und "Zaproś kogoś" als violette Zeilen in ihrer
+   Karte; das Logowanie dwuetapowe sagt seinen Zustand als Wort in der Pille.
+   -------------------------------------------------------- */
+
+.family-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.family-page > .tafla-group {
+  margin-block-end: 0;
+}
+
+.family-page .family-card .settings-members {
+  margin: 0;
+}
+
+.family-page .family-card .settings-members:empty {
+  display: none;
+}
+
+.family-page .settings-member {
+  position: relative;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+}
+
+.family-page .settings-members.row-divided > * + * {
+  border-top: 0;
+}
+
+.family-page .settings-members > .settings-member + .settings-member::before,
+.family-page .family-card > .settings-member-actions::before,
+.family-page .family-card > .tafla-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.family-page #members-list > .settings-member + .settings-member::before {
+  inset-inline-start: 68px;
+}
+
+/* Grid-Kinder schrumpfen erst mit min-width 0 - sonst schob eine lange
+ * Meta-Zeile Bearbeiten und Entfernen aus der Karte. */
+.family-page .family-card > * {
+  min-width: 0;
+}
+
+.family-page .family-card > .settings-member-actions {
+  position: relative;
+  display: block;
+}
+
+.family-page .family-card > .settings-members:empty + .settings-member-actions::before {
+  display: none;
+}
+
+.family-page .settings-add-btn {
+  width: 100%;
+}
+
+.family-page .settings-avatar--sm {
+  width: 40px;
+  height: 40px;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Die Personenscheibe: Initial in der Tinte auf der Toenung (person-color.js). */
+.settings-avatar--person {
+  background: var(--disc-tint);
+  color: var(--disc-ink);
+}
+
+.family-page .settings-member__name {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.family-page .settings-member__meta {
+  margin-top: var(--space-1);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.family-page #invites-list > li.form-hint {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.family-page #two-factor-household-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.family-page #two-factor-household-card .settings-group {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.family-page .settings-2fa__member-icon--on,
+.family-page .settings-2fa__member-icon--off {
+  color: var(--color-text-secondary);
+}
+
+.family-page .settings-2fa__member-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
