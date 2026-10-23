@@ -3906,7 +3906,11 @@ tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
   aside there). Done is violet, never success-green ("Przyjęto", a normal lab value, a typical cycle
   go to ink-2/neutral). Guards moved: hoist plan without "quick", the one-wave request list gains
   `/health/prevention/due`, the overview dose renderer is the circle (Leki keeps both labelled
-  buttons), the person switcher test reads the segment.
+  buttons), the person switcher test reads the segment. Areas keep their structure and take the
+  tokens: Profilaktyka's "due" list and each type's history are flat white grouped cards with 64
+  rows (the word pill only when soon or overdue), selections (weekday toggles, symptom/mood chips,
+  the chosen lab report) speak violet, and chips/discs on cards sit on `--color-fill` instead of the
+  dark `--color-surface-2` well.
 
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
