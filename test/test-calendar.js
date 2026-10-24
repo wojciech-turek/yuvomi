@@ -3828,17 +3828,19 @@ test('Kalenderkopf (Sonde 19): die eine Zeile gilt nur, wenn Titelzeile und Mind
     `Bar vor Aktionen nur mit cal-toolbar--one-row: ${oneRow.map((r) => r.selector.trim()).join(' | ')}`);
 });
 
-/* SONDE 1 (uk, 375px): der Stepper meldet keine Inhaltsbreite nach aussen,
- * und das Wort der Ansicht hat eine Obergrenze - sonst schob "Порядок денний"
- * die Zeitraumzeile ueber die Kante. */
+/* SONDE 1 (uk, 375px): der Stepper meldet keine Inhaltsbreite nach aussen -
+ * sonst schob "Порядок денний" die Zeitraumzeile ueber die Kante. Seit Tafla
+ * (2026-10-24) traegt der Ansichts-Knopf kein Wort mehr: ein Kreis in der
+ * Kopf-Icon-Haut, der nicht schrumpft und nichts zu kuerzen hat. */
 test('Kalenderkopf (Sonde 1): Stepper und Ansichts-Knopf laufen mobil nie ueber die Kante', () => {
   const rules = [...eachRule(calendarCss)].filter((r) => r.at.some((a) => /max-width:\s*639px/.test(a)));
   const stepper = rules.find((r) => r.selector.trim() === '.cal-toolbar__stepper');
   assert(/contain:\s*inline-size/.test(stepper?.body ?? ''), 'der Stepper ist in der Breite eingeschlossen');
-  const menu = rules.find((r) => r.selector.trim() === '.cal-toolbar__view-menu');
-  assert(/max-inline-size:/.test(menu?.body ?? '') && /min-width:\s*0/.test(menu?.body ?? ''), 'der Ansichts-Knopf hat eine Obergrenze');
-  const word = rules.find((r) => r.selector.trim() === '.cal-toolbar__view-menu-label');
-  assert(/text-overflow:\s*ellipsis/.test(word?.body ?? ''), 'ein langes Wort kuerzt mit Ellipse');
+  const label = rules.find((r) => r.selector.trim() === '.cal-toolbar__stepper > .cal-toolbar__label');
+  assert(/flex:\s*1 1 0/.test(label?.body ?? ''), 'das Label nimmt den Rest der Zeile und kuerzt (Ellipse aus der Basisregel)');
+  const btn = buttonTag(calendarHelpers.viewMenuHtml('agenda'), 'cal-views-menu');
+  assert(/\bbtn--icon\b/.test(btn.tag) && !/cal-toolbar__view-menu-label/.test(btn.whole), 'der Knopf ist ein Kreis ohne Wort');
+  assert(rules.some((r) => r.selector.trim() === '.cal-toolbar__view-menu' && /flex:\s*none/.test(r.body)), 'der Kreis schrumpft nicht');
 });
 
 test('Kalenderkopf (D1): die Ansichtswahl ist `.segmented` mit `.segmented__item`, aktiv per `is-active`', () => {
@@ -4202,6 +4204,15 @@ test('Aufgabe im Kalender: der Name nennt die Prioritaet und die Uhrzeit, nicht 
   const html = calendarHelpers.renderTaskChip({ id: 1, title: 'Steuer', priority: 'high' });
   assert(/aria-label="calendar\.taskChipAriaLabel\{[^"]*\}, tasks\.priorityLabel: tasks\.priorityHigh"/.test(html),
     `der gerenderte Chip traegt die Prioritaet nicht im aria-label: ${html.slice(0, 200)}`);
+  // Tafla: die Fahne der Aufgabenliste, nur fuer Hoch und Dringend, hinter dem Text.
+  for (const priority of ['urgent', 'high']) {
+    const chip = calendarHelpers.renderTaskChip({ id: 2, title: 'Steuer', priority });
+    assert(/<\/span>\s*<i data-lucide="flag" class="cal-task-chip__flag" aria-hidden="true"><\/i>/.test(chip), `${priority}: die Fahne steht hinter dem Text`);
+  }
+  for (const priority of ['medium', 'low', 'none']) {
+    const chip = calendarHelpers.renderTaskChip({ id: 3, title: 'Steuer', priority });
+    assert(!/cal-task-chip__flag|priority-dot/.test(chip), `${priority}: keine Marke, wie in der Liste`);
+  }
 });
 
 /* #2018: im 12-Stunden-Format stand am Chip „Steuer · 14:30", nur der
@@ -5444,17 +5455,18 @@ test('Zeitraum-Kopf (D1): Filter und Verwalten tragen die EINE Kopf-Icon-Haut, d
 
 // D1 (Critique 2026-10-16, Persona Jordan): der Ausloeser der mobilen
 // Ansichtswahl wechselte seit R17 E11 sein ZEICHEN mit der Ansicht und war
-// danach nicht wiederzuerkennen. Jetzt nennt er die Ansicht in WORTEN, und
-// sein Zeichen steht (Pop-up-Knopf mit Auf/Ab-Zeichen).
-test('D1: der Ansichtswahl-Knopf nennt die aktive Ansicht in Worten, sein Zeichen bleibt stehen', () => {
+// danach nicht wiederzuerkennen. Seit Tafla (2026-10-24) ist er der zweite
+// Geisterkreis der Tafel: EIN festes Zeichen (`calendar-days`), sein NAME
+// nennt die Ansicht. Ein Wort steht nicht mehr daneben - der Kopf traegt
+// hinter dem Titel nur Lupe und Ansicht (Kalendarz.dc.html).
+test('D1/Tafla: der Ansichtswahl-Kreis nennt die aktive Ansicht im Namen, sein Zeichen bleibt stehen', () => {
   const names = new Set();
   const glyphs = new Set();
   for (const view of ['month', 'week', 'day', 'agenda']) {
     const html = calendarHelpers.viewMenuHtml(view);
     const btn = buttonTag(html, 'cal-views-menu');
     glyphs.add((btn.whole.match(/data-lucide="([^"]+)"/) ?? [])[1]);
-    const word = btn.whole.match(/<span class="cal-toolbar__view-menu-label"[^>]*>([^<]*)<\/span>/);
-    assert(word && word[1].length > 0, `${view}: der Knopf zeigt das Wort der Ansicht`);
+    assert(/\bbtn--secondary\b/.test(btn.tag) && /\bbtn--icon\b/.test(btn.tag), `${view}: Kopf-Icon-Haut wie die Lupe`);
     const name = btn.tag.match(/aria-label="([^"]*)"/)[1];
     assert(name.startsWith('calendar.viewSwitcher: ') && name.length > 'calendar.viewSwitcher: '.length, `${view}: der Name nennt die Ansicht (${name})`);
     assert(btn.tag.includes(`title="${name}"`), 'Tooltip = Name');
@@ -5464,11 +5476,40 @@ test('D1: der Ansichtswahl-Knopf nennt die aktive Ansicht in Worten, sein Zeiche
     assert(new RegExp(`aria-checked="true"[^>]*data-cal-view="${view}"`).test(html.replace(/\s+/g, ' ')), `${view}: der Eintrag ist gewaehlt`);
   }
   assert(names.size === 4, 'vier Ansichten, vier Namen');
-  assert(glyphs.size === 1 && glyphs.has('chevrons-up-down'), `EIN festes Zeichen fuer alle Ansichten, gefunden: ${[...glyphs].join(', ')}`);
+  assert(glyphs.size === 1 && glyphs.has('calendar-days'), `EIN festes Zeichen fuer alle Ansichten, gefunden: ${[...glyphs].join(', ')}`);
   const sync = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8').match(/function syncViewMenu\([\s\S]*?\n\}/)[0];
-  assert(/trigger\.setAttribute\('aria-label', label\)/.test(sync) && /word\.textContent = /.test(sync),
-    'syncViewMenu() setzt Name und Wort des Ausloesers');
-  assert(!/replaceChildren\(glyph\)/.test(sync), 'das Zeichen wird nicht mehr getauscht');
+  assert(/trigger\.setAttribute\('aria-label', label\)/.test(sync), 'syncViewMenu() setzt den Namen des Ausloesers');
+  assert(!/replaceChildren\(glyph\)/.test(sync), 'das Zeichen wird nicht getauscht');
+});
+
+// Was der Kopf am Telefon nicht mehr zeigt, steht im Menue der Ansicht:
+// Blaettern (die Pfeile sind mobil weg) und die Filter (kein dritter Kreis).
+// Stehen Filter, traegt der Kreis ihre Zahl - als Badge und im Namen.
+test('Tafla: das Ansichtsmenue traegt Blaettern und Filter, der Kreis die Filterzahl', () => {
+  const html = calendarHelpers.viewMenuHtml('week', { filterCount: 0 });
+  const steps = [...html.matchAll(/data-cal-step="(-?1)"\s+aria-keyshortcuts="([^"]+)"/g)].map((m) => [m[1], m[2]]);
+  assert(JSON.stringify(steps) === JSON.stringify([['-1', 'k ArrowLeft'], ['1', 'j ArrowRight']]),
+    `zurueck und vor, mit den Kuerzeln der Pfeile: ${JSON.stringify(steps)}`);
+  assert(/data-cal-step="-1"[\s\S]*?<span class="cal-toolbar__step-label">calendar\.prev/.test(html), 'der Eintrag heisst wie der Pfeil');
+  assert(/data-cal-open-filters aria-haspopup="dialog"/.test(html), 'die Filter oeffnen ihr Blatt aus dem Menue');
+  assert(/<span class="page-filter-btn__count cal-toolbar__view-menu-count" aria-hidden="true" hidden><\/span>/.test(html),
+    'ohne Filter keine Zahl am Kreis');
+
+  const two = calendarHelpers.viewMenuHtml('week', { filterCount: 2 });
+  const btn = buttonTag(two, 'cal-views-menu');
+  assert(/<span class="page-filter-btn__count cal-toolbar__view-menu-count" aria-hidden="true">2<\/span>/.test(btn.whole), 'die Zahl als Badge');
+  assert(/aria-label="calendar\.viewSwitcher: [^"]*, calendar\.filtersActive[^"]*"/.test(btn.tag), `und im Namen: ${btn.tag}`);
+  assert(/<span class="cal-toolbar__filters-label">calendar\.filtersActive[^<]*<\/span>/.test(two), 'der Eintrag sagt, dass Filter stehen');
+
+  // Am Telefon ist der Filterknopf kein dritter Kreis, und die Pfeile stehen nicht im Kopf.
+  const mobile = [...eachRule(calendarCss)].filter((r) => r.at.some((a) => /max-width:\s*639px/.test(a)));
+  assert(mobile.some((r) => r.selector.trim() === '.cal-toolbar__filter-btn' && /display:\s*none/.test(r.body)), 'kein Filterkreis am Telefon');
+  assert(mobile.some((r) => /\.cal-toolbar__stepper > \.period-stepper__prev/.test(r.selector) && /\.period-stepper__next/.test(r.selector)
+    && /display:\s*none/.test(r.body)), 'keine Pfeile im Kopf am Telefon');
+  // Und der Kreis steht in der Werkzeuggruppe, hinter Lupe und Filter.
+  const tb = calendarHelpers.toolbarHtml({ filterCount: 0 });
+  assert(tb.indexOf('id="cal-views-menu"') > tb.indexOf('id="cal-filters"') && tb.indexOf('id="cal-views-menu"') > tb.indexOf('class="page-toolbar__tools'),
+    'der Kreis der Ansicht folgt Lupe und Filter in der Werkzeuggruppe');
 });
 
 test('Zeitraum-Kopf (R17 Z1): der Filterknopf traegt den geteilten Zaehler und nennt ihn', () => {

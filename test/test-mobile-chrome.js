@@ -310,51 +310,47 @@ test('R17 Z1: nur der markierte Zeitraum-Kopf loest seine Bar-Zeile in die Titel
 
 // R17 Schritt 5 (Critique 2026-10-07, A1 P1): der Kalenderkopf mass mobil
 // eingeklappt dieselben 117px wie ausgeklappt - Titel und Siegel gingen, die
-// Zeile blieb. Eingeklappt steht der Stepper jetzt in Zeile 1 vor dem Menue;
-// Suche, Filter und "Heute" falten ins Menue (gemessen 390x844: 117 -> 65px).
+// Zeile blieb. Eingeklappt steht der Stepper jetzt in Zeile 1 vor dem Menue.
 // R20 6c: seitdem falten die Pfeile, Filter und Wort der Ansicht bleiben.
-test('R17: der Kalenderkopf ist eingeklappt EINE Zeile, und was weicht, kommt im Menue wieder', () => {
+// TAFLA (2026-10-24, Kalendarz.dc.html): am Telefon stehen gar keine Pfeile
+// und kein Filterkreis mehr im Kopf, in KEINEM Zustand - hinter dem Titel nur
+// Lupe und der Kreis der Ansicht. Was dort fehlt, steht IMMER in dessen Menue
+// (Blaettern, Filter), nicht erst eingeklappt als Stellvertreter. Die Regel
+// bleibt dieselbe: nichts verschwindet, ohne irgendwo wiederzukommen.
+test('R17/Tafla: der Kalenderkopf ist eingeklappt EINE Zeile, und was mobil fehlt, steht im Menue der Ansicht', () => {
   const calendarCss = read('../public/styles/calendar.css');
   const collapsed = rules(calendarCss).filter((r) => /\.cal-toolbar\.page-toolbar--capped\.is-collapsed/.test(r.selector));
-  assert.ok(collapsed.length >= 2, 'calendar.css traegt die Regeln fuer den eingeklappten Kopf');
+  assert.ok(collapsed.length >= 1, 'calendar.css traegt die Regeln fuer den eingeklappten Kopf');
   for (const r of collapsed) {
     assert.ok(r.at.some((a) => /max-width:\s*639px/.test(a)),
-      `"${r.selector}" gilt nur, wo das Ansichtsmenue steht (unter 640px) - darueber gibt es kein Menue, in das gefaltet wird`);
+      `"${r.selector}" gilt nur am Telefon (unter 640px)`);
     assert.match(r.selector, /\.page-toolbar--period-title/, 'nur im markierten Zeitraum-Kopf');
   }
   const center = collapsed.find((r) => /> \.page-toolbar__center$/.test(r.selector));
   assert.equal(center && decl(center.body, 'order'), '0', 'der Zeitraum rueckt in Zeile 1, vor die Werkzeuge');
   assert.match(center.body, /flex:\s*1 1 0/, 'und nimmt den Rest der Zeile statt einer eigenen');
-  const hiddenRules = collapsed.filter((r) => decl(r.body, 'display') === 'none');
-  assert.ok(hiddenRules.length, 'die gefalteten Werkzeuge blenden eingeklappt aus');
-  const hiddenParts = hiddenRules.flatMap((r) => r.selector.split(',').map((p) => p.trim()));
-  for (const part of hiddenParts) {
-    assert.match(part, /\[data-collapse-fold\]/, `"${part}" blendet nur aus, was als faltbar markiert ist`);
-  }
-  // R20 6c (Ulas 2026-10-17, Option b): eingeklappt weichen die PFEILE, nicht
-  // Filter und Wort der Ansicht - der kompakte Kopf von Apple Kalender zeigt
-  // Zeitraum, Ansicht mit Wort, Suche und Filter. Blaettern bleibt per Wisch,
-  // Taste und ueber die Stellvertreter im Ansichtsmenue; ein Tipp aufs Label
-  // springt zurueck (Heute deckt es ganz).
-  assert.ok(hiddenParts.some((p) => /\.period-stepper__prev\[data-collapse-fold\]/.test(p))
-    && hiddenParts.some((p) => /\.period-stepper__next\[data-collapse-fold\]/.test(p)), 'eingeklappt weichen beide Pfeile');
-  assert.ok(!hiddenParts.some((p) => /cal-toolbar__filter-btn/.test(p)), 'der Filter bleibt eingeklappt sichtbar');
-  assert.ok(!collapsed.some((r) => /cal-toolbar__view-menu-label/.test(r.selector) && decl(r.body, 'display') === 'none'),
-    'das Wort der Ansicht bleibt eingeklappt stehen');
-  const reset = collapsed.find((r) => /\.cal-toolbar__today\[data-collapse-fold\]/.test(r.selector));
-  assert.equal(reset && decl(reset.body, 'inset-inline'), '0', '"Heute" deckt eingeklappt das ganze Label - ein Tipp darauf springt zurueck');
+  assert.ok(!collapsed.some((r) => decl(r.body, 'display') === 'none'),
+    'eingeklappt faltet nichts mehr weg - was mobil fehlt, fehlt in jedem Zustand und steht im Menue');
+
+  const mobile = rules(calendarCss).filter((r) => r.at.some((a) => /max-width:\s*639px/.test(a)));
+  const hidden = mobile.filter((r) => decl(r.body, 'display') === 'none').flatMap((r) => r.selector.split(',').map((p) => p.trim()));
+  assert.ok(hidden.includes('.cal-toolbar__stepper > .period-stepper__prev') && hidden.includes('.cal-toolbar__stepper > .period-stepper__next'),
+    'am Telefon keine Pfeile im Kopf');
+  assert.ok(hidden.includes('.cal-toolbar__filter-btn'), 'und kein Filterkreis');
 
   const calendarJs = read('../public/pages/calendar.js');
-  assert.match(calendarJs, /id="cal-views-menu"[^>]*data-collapse-fold-menu/, 'das Ansichtsmenue nimmt die gefalteten Werkzeuge auf');
-  // D1: die Suche ist ein Feld, kein Knopf - ein Stellvertreter im Menue koennte es nicht
-  // oeffnen. Sie faltet deshalb nicht, sie bleibt als Lupe stehen.
-  assert.doesNotMatch(calendarJs, /id="cal-search"/, 'kein Suchknopf mehr, der falten koennte');
+  const menu = calendarJs.match(/function viewMenuHtml\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(menu, /data-cal-step="-1"/, 'zurueck steht im Menue der Ansicht');
+  assert.match(menu, /data-cal-step="1"/, 'vor steht im Menue der Ansicht');
+  assert.match(menu, /data-cal-open-filters/, 'die Filter stehen im Menue der Ansicht');
+  assert.match(menu, /page-filter-btn__count/, 'und ihre Zahl am Kreis');
+  assert.doesNotMatch(calendarJs, /data-collapse-fold/, 'der Kalender faltet nicht mehr ueber die Stellvertreter');
+  // D1: die Suche ist ein Feld, kein Knopf - sie bleibt als Lupe stehen.
+  assert.doesNotMatch(calendarJs, /id="cal-search"/, 'kein Suchknopf mehr');
   assert.match(calendarJs, /id: 'cal-search-input'/, 'die Suche ist das Feld der Shell');
-  assert.doesNotMatch(calendarJs, /'#cal-filters'\)\.setAttribute\('data-collapse-fold'/, 'der Filter faltet nicht mehr (R20 6c)');
-  assert.match(calendarJs, /id: 'cal-prev'[^\n]*'data-collapse-fold': true/, 'der Zurueck-Pfeil ist markiert');
-  assert.match(calendarJs, /id: 'cal-next'[^\n]*'data-collapse-fold': true/, 'der Vor-Pfeil ist markiert');
-  assert.match(calendarJs, /id: 'cal-today'[\s\S]{0,200}'data-collapse-fold': true/, '"Heute" ist markiert');
 
+  // Die Faltmechanik der Shell selbst bleibt geprueft (utils/ux.js), auch
+  // wenn der Kalender sie seit Tafla nicht mehr nutzt.
   const ux = read('../public/utils/ux.js');
   const branch = ux.match(/const foldMenu = capped \?[\s\S]*?\n    \}\n/)?.[0] ?? '';
   assert.match(branch, /\[data-collapse-fold-menu\]\[popovertarget\]/, 'der Kopf findet das markierte Menue');
