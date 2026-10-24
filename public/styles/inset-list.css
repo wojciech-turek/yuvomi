@@ -230,10 +230,13 @@ a.inset-row:active {
   color: var(--color-text-primary);
 }
 
+/* The chevron sits in a tappable row, so it is a graphic that has to hold
+ * 3:1 (WCAG 1.4.11): `--color-text-quaternary` (#8C8880 / #948E85), the same
+ * as Dziś's row chevron - ink-3 (2.7:1) is for what is never touched. */
 .inset-row__chevron {
   flex: none;
   display: flex;
-  color: var(--color-ink-3);
+  color: var(--color-text-quaternary);
 }
 
 .inset-row__chevron svg {

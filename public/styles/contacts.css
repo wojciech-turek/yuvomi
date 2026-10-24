@@ -339,6 +339,7 @@
  * Aus dem Bild, nicht aus dem Fokusbaum. */
 @media (hover: none) {
   .contact-item__actions .contact-more-menu__trigger:not(:focus-visible) {
+    pointer-events: none;
     position: absolute;
     inline-size: 1px;
     block-size: 1px;

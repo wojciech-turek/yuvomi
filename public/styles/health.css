@@ -372,7 +372,8 @@
 
 .health-area-row__chevron {
   flex: 0 0 auto;
-  color: var(--color-ink-3);
+  /* 3:1 als Grafik in einer antippbaren Zeile (WCAG 1.4.11), wie in Dziś. */
+  color: var(--color-text-quaternary);
 }
 
 .health-area-row__chevron svg {

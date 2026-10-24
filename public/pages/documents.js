@@ -764,7 +764,13 @@ function renderListHead(count) {
     ? rowActionHtml({ icon: 'ellipsis', className: 'documents-list-head__menu', label: t('documents.folderActionsFor', { name: folder.name }), attrs: { 'data-head-folder-menu': folder.id, title: t('documents.folderActionsFor', { name: folder.name }), 'aria-haspopup': 'menu', 'aria-expanded': 'false' } })
     : '';
   head.insertAdjacentHTML('beforeend', `<span>${esc(label)}</span><span class="inset-group__count">${count}</span>${menu}`);
-  if (menu && window.lucide) lucide.createIcons({ el: head });
+  if (!menu) return;
+  if (window.lucide) lucide.createIcons({ el: head });
+  // Der Listener haengt am KNOPF, nicht an der Ueberschrift: ohne Ordner
+  // traegt der Kopf keinen Knopf, und ein Klick-Traeger ohne Ziel waere eine
+  // Tastatur-Sackgasse (Sonde 11).
+  const btn = head.querySelector('[data-head-folder-menu]');
+  btn?.addEventListener('click', () => openFolderMenu(folder, btn));
 }
 
 /** Eine Woche vor Ablauf erinnern - derselbe Weg wie das Feld im Dialog. */
@@ -793,12 +799,6 @@ async function remindWeekBefore(doc) {
 }
 
 function bindOverview() {
-  _container.querySelector('#documents-list-head')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-head-folder-menu]');
-    if (!btn) return;
-    const folder = state.folders.find((item) => String(item.id) === btn.dataset.headFolderMenu);
-    if (folder) openFolderMenu(folder, btn);
-  });
   _container.querySelector('#documents-overview')?.addEventListener('click', (e) => {
     const folder = e.target.closest('[data-folder-select]');
     if (folder) { selectFolder(folder.dataset.folderSelect); return; }

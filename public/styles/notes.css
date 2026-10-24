@@ -281,7 +281,8 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: var(--color-ink-3);
+  /* 3:1 als Grafik in einem Knopf (WCAG 1.4.11) - ink-3 hielt 2.7:1. */
+  color: var(--color-text-quaternary);
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -586,6 +587,8 @@
 @media (hover: none) {
   .note-card__pin:not(:focus-visible),
   .note-card > .note-card__actions:not(:focus-within) {
+    /* Und keine Trefferflaeche: ein Tipp auf die Ecke oeffnet die Notiz. */
+    pointer-events: none;
     width: 1px;
     height: 1px;
     min-width: 0;

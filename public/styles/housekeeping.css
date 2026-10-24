@@ -677,6 +677,16 @@
   position: relative;
   width: var(--space-3);
   height: var(--space-3);
+  /* In Ruhe ist der Haken nicht da (transparente Tinte), also auch nicht
+   * gezeichnet - er erscheint als Einladung unter Zeiger und Fokus und auf
+   * der Quittung. */
+  opacity: 0;
+}
+
+.housekeeping-task__check:hover svg,
+.housekeeping-task__check:focus-visible svg,
+.housekeeping-task__check.housekeeping-task__check--done svg {
+  opacity: 1;
 }
 
 .housekeeping-task__check:hover,

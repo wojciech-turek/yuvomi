@@ -199,6 +199,7 @@
  * bleibt Zusatzweg. Aus dem Bild, nicht aus dem Fokusbaum. */
 @media (hover: none) {
   .birthday-item__actions:not(:focus-within) {
+    pointer-events: none;
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
