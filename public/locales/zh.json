@@ -1307,14 +1307,14 @@
         "upNextTitle": "接下来",
         "upNextEmpty": "未来三周没有安排。",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "今天",
+            "tomorrow": "明天",
+            "dayAfterTomorrow": "后天",
+            "yesterday": "昨天",
+            "inDays_one": "{{count}}天后",
+            "inDays": "{{count}}天后",
+            "daysAgo_one": "{{count}}天前",
+            "daysAgo": "{{count}}天前"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

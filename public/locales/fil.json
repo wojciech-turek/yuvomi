@@ -1323,14 +1323,14 @@
         "upNextTitle": "Susunod",
         "upNextEmpty": "Walang nakatakda sa susunod na tatlong linggo.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "ngayon",
+            "tomorrow": "bukas",
+            "dayAfterTomorrow": "sa makalawa",
+            "yesterday": "kahapon",
+            "inDays_one": "sa loob ng {{count}} araw",
+            "inDays": "sa loob ng {{count}} araw",
+            "daysAgo_one": "{{count}} araw ang nakalipas",
+            "daysAgo": "{{count}} araw ang nakalipas"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

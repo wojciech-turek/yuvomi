@@ -1307,14 +1307,14 @@
         "upNextTitle": "आगे",
         "upNextEmpty": "अगले तीन हफ़्तों में कुछ नहीं है।",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "आज",
+            "tomorrow": "कल",
+            "dayAfterTomorrow": "परसों",
+            "yesterday": "कल",
+            "inDays_one": "{{count}} दिन में",
+            "inDays": "{{count}} दिनों में",
+            "daysAgo_one": "{{count}} दिन पहले",
+            "daysAgo": "{{count}} दिन पहले"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

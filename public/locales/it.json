@@ -1307,14 +1307,14 @@
         "upNextTitle": "Prossimi",
         "upNextEmpty": "Niente in programma nelle prossime tre settimane.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "oggi",
+            "tomorrow": "domani",
+            "dayAfterTomorrow": "dopodomani",
+            "yesterday": "ieri",
+            "inDays_one": "tra {{count}} giorno",
+            "inDays": "tra {{count}} giorni",
+            "daysAgo_one": "{{count}} giorno fa",
+            "daysAgo": "{{count}} giorni fa"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

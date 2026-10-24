@@ -1307,14 +1307,14 @@
         "upNextTitle": "次の予定",
         "upNextEmpty": "今後3週間の予定はありません。",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "今日",
+            "tomorrow": "明日",
+            "dayAfterTomorrow": "明後日",
+            "yesterday": "昨日",
+            "inDays_one": "{{count}}日後",
+            "inDays": "{{count}}日後",
+            "daysAgo_one": "{{count}}日前",
+            "daysAgo": "{{count}}日前"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

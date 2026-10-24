@@ -1307,14 +1307,14 @@
         "upNextTitle": "Hierna",
         "upNextEmpty": "Niets gepland in de komende drie weken.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "vandaag",
+            "tomorrow": "morgen",
+            "dayAfterTomorrow": "overmorgen",
+            "yesterday": "gisteren",
+            "inDays_one": "over {{count}} dag",
+            "inDays": "over {{count}} dagen",
+            "daysAgo_one": "{{count}} dag geleden",
+            "daysAgo": "{{count}} dagen geleden"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

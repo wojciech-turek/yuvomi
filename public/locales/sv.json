@@ -1307,14 +1307,14 @@
         "upNextTitle": "Härnäst",
         "upNextEmpty": "Inget de närmaste tre veckorna.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "i dag",
+            "tomorrow": "i morgon",
+            "dayAfterTomorrow": "i övermorgon",
+            "yesterday": "i går",
+            "inDays_one": "om {{count}} dag",
+            "inDays": "om {{count}} dagar",
+            "daysAgo_one": "för {{count}} dag sedan",
+            "daysAgo": "för {{count}} dagar sedan"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

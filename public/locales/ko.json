@@ -1323,14 +1323,14 @@
         "upNextTitle": "다음 일정",
         "upNextEmpty": "앞으로 3주 동안 일정이 없습니다.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "오늘",
+            "tomorrow": "내일",
+            "dayAfterTomorrow": "모레",
+            "yesterday": "어제",
+            "inDays_one": "{{count}}일 후",
+            "inDays": "{{count}}일 후",
+            "daysAgo_one": "{{count}}일 전",
+            "daysAgo": "{{count}}일 전"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

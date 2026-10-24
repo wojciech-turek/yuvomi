@@ -1307,14 +1307,14 @@
         "upNextTitle": "Sắp tới",
         "upNextEmpty": "Không có gì trong ba tuần tới.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "hôm nay",
+            "tomorrow": "ngày mai",
+            "dayAfterTomorrow": "ngày kia",
+            "yesterday": "hôm qua",
+            "inDays_one": "trong {{count}} ngày",
+            "inDays": "trong {{count}} ngày",
+            "daysAgo_one": "{{count}} ngày trước",
+            "daysAgo": "{{count}} ngày trước"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

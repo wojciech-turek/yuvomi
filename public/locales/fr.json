@@ -1307,14 +1307,14 @@
         "upNextTitle": "À venir",
         "upNextEmpty": "Rien de prévu dans les trois prochaines semaines.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "aujourd'hui",
+            "tomorrow": "demain",
+            "dayAfterTomorrow": "après-demain",
+            "yesterday": "hier",
+            "inDays_one": "dans {{count}} jour",
+            "inDays": "dans {{count}} jours",
+            "daysAgo_one": "il y a {{count}} jour",
+            "daysAgo": "il y a {{count}} jours"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",
