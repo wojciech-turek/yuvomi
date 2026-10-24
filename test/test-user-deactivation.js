@@ -745,6 +745,11 @@ function asDisplay(token) {
 const display = asDisplay(displayToken);
 
 test('Wandtablett: niemand hakt mehr als ein Ehemaliger ab, und die Personenauswahl nennt ihn nicht', async () => {
+  // TAFLA (2026-10-19): die Wand ist schreibgeschuetzt, bis ein Admin
+  // „Pozwól odhaczać na ścianie" einschaltet (services/wall-settings.js). Hier
+  // geht es um den Ehemaligen, nicht um den Schalter - er steht deshalb an,
+  // damit die Vorbedingung (das Tablett hakt fuer ihn ab) ueberhaupt gilt.
+  assert.equal((await admin('PUT', '/preferences', { wall_allow_ticking: true })).status, 200);
   const u = await member('Tablett Tom');
   const addTask = (title) => Number(db.prepare(`
     INSERT INTO tasks(title, status, visibility, created_by) VALUES (?, 'open', 'all', ?) RETURNING id
@@ -764,6 +769,7 @@ test('Wandtablett: niemand hakt mehr als ein Ehemaliger ab, und die Personenausw
   assert.ok(!(await display('GET', '/displays/people')).body.data.some((p) => p.id === u.id));
   // Der gespeicherte Verweis bleibt: die erste Aufgabe weiss weiter, wer sie erledigt hat.
   assert.equal(count('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ? AND done_by_user_id = ?', first, u.id), 1);
+  assert.equal((await admin('PUT', '/preferences', { wall_allow_ticking: false })).status, 200);
 });
 
 async function pairWith(code) {
