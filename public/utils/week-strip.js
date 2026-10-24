@@ -28,7 +28,6 @@
  */
 
 import { zonedFields, displayTimeZone } from './timezone.js';
-import { resolveEventColor } from './event-color.js';
 
 export const WEEK_STRIP_DAYS = 7;
 export const WEEK_STRIP_MAX_DOTS = 6;
@@ -95,108 +94,6 @@ export function eventDaySpan(event, timeZone = displayTimeZone()) {
     : 0;
   const band = endKey !== start.key && spanMinutes >= 1440;
   return { startKey: start.key, endKey, band, startMinutes: start.minutes };
-}
-
-/**
- * Das Modell des Streifens.
- *
- * @param {object[]} events   serialisierte Termine (auch expandierte Vorkommen)
- * @param {string}   fromKey  der erste Tag, 'YYYY-MM-DD' - „heute" des Haushalts
- * @param {object}   [opts]
- * @param {number}   [opts.days=7]
- * @param {number}   [opts.maxDots=6]   Punkte je Tag, der Rest zaehlt als `more`
- * @param {number}   [opts.maxLanes=2]  Spuren fuer Baender, der Rest zaehlt als `more`
- * @param {string|null} [opts.timeZone] Anzeigezone; Standard wie ueberall
- * @returns {{
- *   days: {key:string,index:number,isToday:boolean,weekday:number,dayOfMonth:number,
- *          dots:{id:*,color:string,title:string}[],more:number,count:number,titles:string[]}[],
- *   bands: {id:*,color:string,title:string,startIndex:number,endIndex:number,
- *           continuesBefore:boolean,continuesAfter:boolean,lane:number}[],
- *   laneCount:number
- * }}
- */
-export function buildWeekStrip(events, fromKey, {
-  days = WEEK_STRIP_DAYS,
-  maxDots = WEEK_STRIP_MAX_DOTS,
-  maxLanes = WEEK_STRIP_MAX_LANES,
-  timeZone = displayTimeZone(),
-} = {}) {
-  const dayList = Array.from({ length: days }, (_, index) => {
-    const key = shiftKey(fromKey, index);
-    const ms = keyMs(key);
-    return {
-      key,
-      index,
-      isToday: index === 0,
-      weekday: new Date(ms).getUTCDay(),
-      dayOfMonth: new Date(ms).getUTCDate(),
-      dots: [],
-      more: 0,
-      count: 0,
-      titles: [],
-    };
-  });
-  const lastKey = dayList[dayList.length - 1]?.key ?? fromKey;
-
-  const timed = [];
-  const bandCandidates = [];
-  for (const event of Array.isArray(events) ? events : []) {
-    const span = eventDaySpan(event, timeZone);
-    if (!span || span.endKey < fromKey || span.startKey > lastKey) continue;
-    const first = Math.max(0, daysBetween(fromKey, span.startKey));
-    const last = Math.min(days - 1, daysBetween(fromKey, span.endKey));
-    const entry = {
-      id: event.id,
-      color: resolveEventColor(event),
-      title: String(event.title ?? ''),
-      first,
-      last,
-      startMinutes: span.startMinutes,
-      startKey: span.startKey,
-      endKey: span.endKey,
-    };
-    for (let i = first; i <= last; i++) {
-      dayList[i].count++;
-      if (entry.title) dayList[i].titles.push(entry.title);
-    }
-    (span.band ? bandCandidates : timed).push(entry);
-  }
-
-  // Punkte: in zeitlicher Reihenfolge, je Tag gedeckelt.
-  timed.sort((a, b) => a.startKey.localeCompare(b.startKey) || a.startMinutes - b.startMinutes);
-  for (const entry of timed) {
-    for (let i = entry.first; i <= entry.last; i++) {
-      const day = dayList[i];
-      if (day.dots.length < maxDots) day.dots.push({ id: entry.id, color: entry.color, title: entry.title });
-      else day.more++;
-    }
-  }
-
-  // Baender: das frueheste und bei Gleichstand das laengste zuerst in die
-  // niedrigste freie Spur - dieselbe Packung wie die Ganztagszeile und der
-  // Monat im Kalender (packLanes()).
-  bandCandidates.sort((a, b) => a.first - b.first || (b.last - b.first) - (a.last - a.first));
-  const { lanes, laneCount } = packLanes(bandCandidates, { maxLanes });
-  const bands = [];
-  bandCandidates.forEach((entry, index) => {
-    const lane = lanes[index];
-    if (lane === -1) {
-      for (let i = entry.first; i <= entry.last; i++) dayList[i].more++;
-      return;
-    }
-    bands.push({
-      id: entry.id,
-      color: entry.color,
-      title: entry.title,
-      startIndex: entry.first,
-      endIndex: entry.last,
-      continuesBefore: entry.startKey < fromKey,
-      continuesAfter: entry.endKey > lastKey,
-      lane,
-    });
-  });
-
-  return { days: dayList, bands, laneCount };
 }
 
 /**

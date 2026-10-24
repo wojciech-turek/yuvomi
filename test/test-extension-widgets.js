@@ -146,15 +146,3 @@ test('normalizeDashboardConfigWithExtensions still drops unknown core widget ids
   assert.equal(cfg.some((w) => w.id === 'not-a-widget'), false);
 });
 
-test('openExtensionWidgetOptions uses its own empty-schema copy, not the task-categories one', () => {
-  const src = withoutBlockComments(
-    readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8'),
-  ).replace(/^\s*\/\/.*$/gm, '');
-  const start = src.indexOf('async function openExtensionWidgetOptions');
-  const end = src.indexOf('async function openWidgetOptions', start);
-  assert.ok(start >= 0 && end > start, 'openExtensionWidgetOptions must precede openWidgetOptions');
-  const body = src.slice(start, end);
-  assert.equal(body.includes('optionTaskCategoriesEmpty'), false);
-  assert.equal(body.includes('optionExtensionEmpty'), true);
-  assert.equal(src.includes('optionTaskCategoriesEmpty'), true);
-});

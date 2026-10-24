@@ -12,9 +12,9 @@
  *           Bedeutung), gehoert der Person, reist mit der Haushaltsvorgabe und
  *           faellt beim Zuruecksetzen auf sie zurueck.
  *        3. Browser: der Dialog bietet die drei Stufen, speichert nur die
- *           Abweichung; die Anfrage traegt sie; die Kachel rendert n Zeilen in
- *           jeder Listengroesse, 2x1 bleibt der Wochenstreifen, Heute-Blatt
- *           und Wand behalten ihren Deckel.
+ *           Abweichung; die Anfrage traegt sie. (TAFLA 2026-10-24: die Kachel,
+ *           die n Zeilen renderte, ist mit dem Raster gegangen; der Dialog
+ *           steht als Kalender-Filter in „Dostosuj Dziś“.)
  *
  *        Uhr und Zone sind festgenagelt (Berlin wie die Demo-Saat) mit einem
  *        Gegenlauf in einer Zone, die den Tag verschiebt.
@@ -303,7 +303,7 @@ test('ein gespeicherter Fremdwert wird nicht zur Anfrage: die Klemme sitzt hinte
 });
 
 // --------------------------------------------------------------------------
-// 3. Der Browser: Klemme, Anfrage, Dialog, Kachel
+// 3. Der Browser: Klemme, Anfrage, Dialog
 // --------------------------------------------------------------------------
 
 test('clampEventLimit: nur 5, 8 und 12, als Zahl oder als genau diese Ziffern', () => {
@@ -334,14 +334,14 @@ const tz = await import('/utils/timezone.js');
 const { __test: dash } = await import('../public/pages/dashboard.js');
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 
-function inBrowser(iso, zone, fn, { phone = false } = {}) {
+function inBrowser(iso, zone, fn) {
   return async () => {
     mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
     tz.setDisplayTimeZone(zone);
     const prevWindow = global.window;
     global.window = {
       yuvomi: { isModuleDisabled: () => false },
-      matchMedia: (query) => ({ matches: phone && query === '(max-width: 639px)' }),
+      matchMedia: () => ({ matches: false }),
     };
     setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
     try {
@@ -354,22 +354,6 @@ function inBrowser(iso, zone, fn, { phone = false } = {}) {
     }
   };
 }
-
-const ev = (id, title, start, end) => ({
-  id, title, start_datetime: start, end_datetime: end, all_day: 0, assigned_users: [],
-});
-/** Wie die Route sie liefert: beendete von heute, dann `count` Kommende. */
-function tileEvents(count, { ended = 0 } = {}) {
-  const list = [];
-  for (let i = 0; i < ended; i += 1) list.push(ev(100 + i, `Vorbei ${pad(8 + i)}`, `2026-09-24T${pad(8 + i)}:00`, `2026-09-24T${pad(8 + i)}:30`));
-  for (let i = 1; i <= count; i += 1) {
-    const day = `2026-${i <= 6 ? '09' : '10'}-${pad(i <= 6 ? 24 + i : i - 6)}`;
-    list.push(ev(i, `Kommt ${pad(i)}`, `${day}T10:00`, `${day}T11:00`));
-  }
-  return list;
-}
-const rowTitles = (html) => [...html.matchAll(/event-item__title">([^<]*)</g)].map((m) => m[1]);
-const aheadRows = (html) => rowTitles(html).filter((title) => title.startsWith('Kommt'));
 
 /** Den Dialog oeffnen, ohne DOM: der Stub faengt Inhalt und Speichern-Handler. */
 async function openCalendarDialog(current, picked) {
@@ -411,7 +395,9 @@ test('Dialog: die Kalender-Kachel bietet die drei Stufen, und fuenf ist vorgewae
     { value: 5, checked: true }, { value: 8, checked: false }, { value: 12, checked: false },
   ]);
   assert.match(content, /dashboard\.optionCalendarLimit</, 'die Gruppe traegt ihre Ueberschrift ueber t()');
-  assert.match(content, /dashboard\.optionCalendarLimitHint/, 'und den Hinweis auf den Wochenstreifen');
+  // TAFLA (2026-10-24): der Hinweis auf den Wochenstreifen ist mit dem
+  // Kachelraster gegangen - es gibt keine Kachelgroesse mehr, auf die er zeigt.
+  assert.doesNotMatch(content, /dashboard\.optionCalendarLimitHint/, 'kein Hinweis auf eine Kachelgroesse');
   // Die beiden aelteren Optionen stehen weiter da - die dritte kommt dazu.
   assert.match(content, /name="cal-scope"/);
   assert.match(content, /name="cal-birthdays"/);
@@ -430,74 +416,11 @@ test('Dialog: gespeichert wird nur die Abweichung, als Zahl', inBrowser(THU_14_B
   assert.deepEqual((await openCalendarDialog({}, {})).saved, {}, 'ohne gewaehltes Radio bleibt es bei der Vorgabe');
 }));
 
-for (const [limit, expected] of [[undefined, 5], [5, 5], [8, 8], [12, 12], [7, 5], [500, 5], ['8', 8]]) {
-  test(`Kachel: limit ${JSON.stringify(limit)} rendert ${expected} Kommende`, inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-    const html = dash.renderCalendarWidget({ upcomingEvents: tileEvents(14) }, '1x2', limit === undefined ? {} : { limit });
-    assert.deepEqual(aheadRows(html), firstAhead(expected));
-  }));
-}
-
-test('Kachel: jede Listengroesse traegt die gewaehlte Zahl, 2x1 bleibt der Wochenstreifen', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const data = { upcomingEvents: tileEvents(14), weekEvents: [] };
-  for (const size of ['1x1', '1x2', '2x2']) {
-    for (const limit of [8, 12]) {
-      assert.equal(aheadRows(dash.renderCalendarWidget(data, size, { limit })).length, limit, `${size} mit ${limit}`);
-    }
-  }
-  const strip = dash.renderCalendarWidget(data, '2x1', { limit: 12 });
-  assert.match(strip, /week-strip/, '2x1 ist die Woche');
-  assert.equal(rowTitles(strip).length, 0, 'und zeigt keine Liste, was immer gewaehlt ist');
-}));
-
-test('Kachel: auf dem Telefon gilt dieselbe Zahl', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const data = { upcomingEvents: tileEvents(14) };
-  assert.equal(dash.listRowCap('1x2'), 3, 'Vorbedingung: die Telefon-Buehne ist aktiv');
-  assert.equal(aheadRows(dash.renderCalendarWidget(data, '1x2', { limit: 12 })).length, 12);
-  assert.equal(aheadRows(dash.renderCalendarWidget(data, '1x2', {})).length, 5);
-}, { phone: true }));
-
-test('Kachel: beendete von heute stehen darueber und verbrauchen die Stufe nicht', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const html = dash.renderCalendarWidget({ upcomingEvents: tileEvents(14, { ended: 3 }) }, '1x2', { limit: 8 });
-  assert.deepEqual(aheadRows(html), firstAhead(8));
-  assert.deepEqual(rowTitles(html).filter((title) => title.startsWith('Vorbei')), ['Vorbei 09', 'Vorbei 10'], 'die zwei juengsten beendeten');
-  assert.equal((html.match(/event-item--ended/g) ?? []).length, 2);
-  assert.match(html, /event-list__earlier/, 'der dritte faltet sich in die Zeile darueber');
-}));
-
-test('Kachel: weniger Termine als die Stufe - keine Luecke, kein Badge, Leerzustand bleibt', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const some = dash.renderCalendarWidget({ upcomingEvents: tileEvents(3) }, '1x2', { limit: 12 });
-  assert.deepEqual(aheadRows(some), firstAhead(3));
-  assert.doesNotMatch(some, /class="widget__badge"/, 'die Liste traegt weiter keine Zahl im Kopf');
-  const none = dash.renderCalendarWidget({ upcomingEvents: [] }, '1x2', { limit: 12 });
-  assert.match(none, /dashboard\.noEvents/);
-  assert.match(none, /widget__empty/);
-}));
-
-test('Kachel: zurueck auf fuenf schneidet sofort, auch wenn die alte Antwort zwoelf traegt', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  // Im Anpassen-Modus steht bis zum Speichern die Antwort der alten Anfrage.
-  assert.deepEqual(aheadRows(dash.renderCalendarWidget({ upcomingEvents: tileEvents(12) }, '1x2', {})), firstAhead(5));
-}));
-
-test('Raster: die Option der Kachel kommt beim Renderer an', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const data = { upcomingEvents: tileEvents(14), weekEvents: [] };
-  const layout = (options) => dash.renderDashboardLayout(calendarTile(options), data, null, 'EUR');
-  assert.deepEqual(aheadRows(layout({ limit: 8 })), firstAhead(8));
-  assert.deepEqual(aheadRows(layout({ limit: 12 })), firstAhead(12));
-  assert.deepEqual(aheadRows(layout(undefined)), firstAhead(5));
-}));
-
-// TAFLA (2026-10-19): die Wand hat keinen Zeilendeckel mehr (WALL_ROW_CAP), sie
-// passt die Dziś-Karte ihrer Hoehe an (planWallRows, test:wall-tafla). Das
-// Blatt behaelt seinen Deckel.
-test('das Heute-Blatt behaelt seinen Deckel, auch mit zwoelf Terminen in der Antwort', inBrowser('2026-09-24T04:00:00Z', 'Europe/Berlin', () => {
-  // Zwoelf Termine HEUTE, ab 08:00 - nur was heute ist, kommt ueberhaupt ins Blatt.
-  const today = Array.from({ length: 12 }, (_, i) => ev(i + 1, `Heute ${pad(i + 8)}`, `2026-09-24T${pad(i + 8)}:00`, `2026-09-24T${pad(i + 8)}:30`));
-  const five = today.slice(0, 5);
-  const sheet = (events) => dash.buildTodayCockpitModel({ upcomingEvents: events }, [], { cap: dash.PROGRAM_ROW_CAP, groupOverdue: false });
-  assert.equal(sheet(today).rows.length, sheet(five).rows.length + 1, 'Vorbedingung: das Blatt war mit fuenf nicht voll (sechs Zeilen Platz)');
-  assert.equal(sheet(today).rows.length, dash.PROGRAM_ROW_CAP, 'das Blatt zeigt nicht mehr als seinen Deckel');
-  assert.equal(sheet(today).overflow, 12 - dash.PROGRAM_ROW_CAP, 'der Rest steht hinter „+N weitere"');
-}));
+// TAFLA (2026-10-24): hier stand, wie die Kalender-KACHEL die Stufe zeigt
+// (Liste je Groesse, 2x1 als Wochenstreifen, Telefon, Raster) und dass das
+// Heute-Blatt seinen Deckel behaelt. Kachel, Raster und Blatt sind gegangen;
+// die Stufe bleibt eine Option der Kalender-Filter in „Dostosuj Dziś" (Dialog
+// oben) und ein Parameter der Route (Abschnitt 1).
 
 // --------------------------------------------------------------------------
 // 4. Die Stufe ist kein Filter, und Veroeffentlichen holt die Antwort neu

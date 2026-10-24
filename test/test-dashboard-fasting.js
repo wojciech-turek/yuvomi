@@ -15,10 +15,12 @@ test('fasting dashboard widget is registered and sized as a compact timer', () =
   assert.deepEqual(PERMISSION_WIDGETS.find((item) => item.id === 'fasting'), { id: 'fasting', module: 'health' });
 });
 
-test('dashboard owns the shared fasting control styles', () => {
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
+// TAFLA (2026-10-24): die Fasten-Kachel des alten Rasters ist gegangen, und
+// mit ihr ihr Modulton in dashboard.css. Die geteilten Steuerelemente stehen
+// weiter auf der Gesundheitsseite (pages/health-fasting.js).
+test('the health page owns the shared fasting control styles', () => {
+  const css = readFileSync(new URL('../public/styles/health.css', import.meta.url), 'utf8');
   assert.match(css, /^@import url\('\/styles\/fasting-controls\.css'\);/);
-  assert.match(css, /\.widget--fasting\s*\{\s*--widget-accent:\s*var\(--module-health\);\s*\}/);
 });
 
 process.env.DB_PATH = ':memory:';

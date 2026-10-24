@@ -12,131 +12,11 @@ import * as noteCategoryNameContract from '../public/utils/note-category-name.js
 import { categoryNameKey } from '../server/services/note-categories.js';
 import { schemas as openApiSchemas } from '../server/openapi/schemas.js';
 import { notesPaths as buildNotePaths } from '../server/openapi/paths/notes.js';
-import { visibleCategoryCount, scrollCategoryTooltip, wireNoteCategoryOverflow } from '../public/utils/note-category-overflow.js';
 import { eachRule } from './css-rules.js';
 
-test('category overflow fits the largest prefix and reserves the actual +N width', () => {
-  assert.equal(visibleCategoryCount([40, 50, 60], 158, 4, () => 44), 3);
-  assert.equal(visibleCategoryCount([40, 50, 60], 150, 4, () => 44), 2);
-  assert.equal(visibleCategoryCount([40, 50, 60], 100, 4, () => 44), 1);
-  assert.equal(visibleCategoryCount([240, 30], 100, 4, () => 44), 0);
-  assert.equal(visibleCategoryCount([], 100, 4, () => 44), 0);
-  assert.equal(visibleCategoryCount(Array(12).fill(20), 98, 4, (n) => n >= 10 ? 50 : 40), 2);
-});
-
-test('keyboard scrolling reaches every hidden category without moving focus', () => {
-  let top = 0;
-  const tooltip = {
-    clientHeight: 300, scrollHeight: 900,
-    get scrollTop() { return top; },
-    set scrollTop(value) { top = Math.max(0, Math.min(value, 600)); },
-  };
-  for (const [key, expected] of [
-    ['ArrowDown', 40], ['ArrowUp', 0], ['PageDown', 300],
-    ['End', 600], ['PageUp', 300], ['Home', 0],
-  ]) {
-    assert.equal(scrollCategoryTooltip(tooltip, key), true);
-    assert.equal(top, expected, key);
-  }
-  assert.equal(scrollCategoryTooltip(tooltip, 'Tab'), false);
-  assert.equal(scrollCategoryTooltip(tooltip, 'Escape'), false);
-});
-
-function overflowFixture(badgeCount) {
-  const attrs = new Map([['aria-label', 'Categories']]);
-  const button = Object.assign(new EventTarget(), {
-    hidden: true,
-    textContent: '',
-    setAttribute(name, value) { attrs.set(name, value); },
-    getAttribute(name) { return attrs.get(name); },
-    getBoundingClientRect() { return { width: 30, left: 0, top: 0, bottom: 20 }; },
-    matches() { return false; },
-    contains() { return false; },
-  });
-  const badges = Array.from({ length: badgeCount }, (_, index) => ({
-    hidden: false,
-    textContent: `Category ${index + 1}`,
-    getBoundingClientRect() { return { width: 70 }; },
-  }));
-  const row = {
-    clientWidth: 110,
-    querySelectorAll(selector) { return selector === '.note-item__category' ? badges : []; },
-    querySelector(selector) { return selector === '.note-item__categories-more' ? button : null; },
-  };
-  return { root: { querySelectorAll: () => [row] }, row, button, badges, attrs };
-}
-
-test('overflow formats visible counts separately from whole accessible action labels', () => {
-  const previous = {
-    document: globalThis.document,
-    window: globalThis.window,
-    ResizeObserver: globalThis.ResizeObserver,
-    getComputedStyle: globalThis.getComputedStyle,
-  };
-  const appended = [];
-  const makeNode = (tag) => Object.assign(new EventTarget(), {
-    tag,
-    className: '',
-    id: '',
-    textContent: '',
-    style: {},
-    clientHeight: 0,
-    scrollHeight: 0,
-    scrollTop: 0,
-    children: [],
-    setAttribute() {},
-    append(child) { this.children.push(child); },
-    replaceChildren() { this.children = []; },
-    remove() {},
-    showPopover() {},
-    hidePopover() {},
-    matches() { return false; },
-    contains() { return false; },
-    getBoundingClientRect() { return { width: 100, height: 30, left: 0, top: 0, bottom: 30 }; },
-  });
-  globalThis.document = Object.assign(new EventTarget(), {
-    body: { append(node) { appended.push(node); } },
-    documentElement: { clientWidth: 800 },
-    activeElement: null,
-    fonts: Object.assign(new EventTarget(), { ready: Promise.resolve() }),
-    createElement: makeNode,
-  });
-  globalThis.window = { innerHeight: 600 };
-  globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    disconnect() {}
-  };
-  globalThis.getComputedStyle = () => ({ columnGap: '4px' });
-
-  const disposers = [];
-  try {
-    for (const [badgeCount, hiddenCount, accessibleLabel] of [
-      [2, 1, '1 more category'],
-      [3, 2, '2 more categories'],
-    ]) {
-      const fixture = overflowFixture(badgeCount);
-      const labelCounts = [];
-      disposers.push(wireNoteCategoryOverflow(
-        fixture.root,
-        (count) => `localized-${count}`,
-        (count) => {
-          labelCounts.push(count);
-          return count === 1 ? '1 more category' : `${count} more categories`;
-        },
-      ));
-
-      assert.equal(fixture.button.textContent, `+localized-${hiddenCount}`);
-      assert.equal(fixture.attrs.get('aria-label'), accessibleLabel);
-      assert.deepEqual(labelCounts, [hiddenCount]);
-    }
-  } finally {
-    disposers.forEach((dispose) => dispose());
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete globalThis[key];
-      else globalThis[key] = value;
-    }
-  }
-});
+// TAFLA (2026-10-19): the "+N" overflow of category badges and its tooltip
+// (utils/note-category-overflow.js) belonged to the pinned-notes widget of the
+// old dashboard board and went with it. The notes page shows its badges whole.
 
 const picker = await import('../public/utils/note-category-picker.js');
 
@@ -286,7 +166,7 @@ test('all supported locales contain every note-category translation', () => {
   // die Kategorien stehen dort als Chips (test:search-empty).
   const keys = [
     'categories', 'filterLabel', 'empty', 'personal', 'household',
-    'deleteDetail', 'widgetHint', 'permissionLabel', 'searchPlaceholder',
+    'deleteDetail', 'permissionLabel', 'searchPlaceholder',
     'searchResultsLabel', 'removeAction', 'createAction', 'scopeLabel', 'scopeHelp',
     'moreAction', 'moreAction_one', 'personalManagementHint',
   ];
@@ -479,14 +359,6 @@ test('category scope select fills the available creation row space', () => {
   assert.match(selectRule, /flex:\s*1/);
   assert.match(selectRule, /min-width:\s*0/);
   assert.match(selectRule, /width:\s*100%/);
-});
-
-test('compact dashboard note widgets hide category badges', () => {
-  const source = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  assert.match(source, /noteCategoryScope/);
-  assert.match(source, /sr-only[^\n]*noteCategoryScope/);
-  assert.match(css, /widget-size--1x1[^\{]*note-item__categories[\s\S]*display:\s*none/);
 });
 
 test('OpenAPI documents note category payloads and permission capabilities', () => {

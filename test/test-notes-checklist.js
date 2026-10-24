@@ -172,12 +172,16 @@ test('der Renderer maskiert auch im interaktiven Modus', () => {
 // --------------------------------------------------------------------------
 
 test('das Dashboard rendert Notizen NICHT interaktiv', async () => {
-  const src = await readFile(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const call = src.match(/renderMarkdownLight\([^)]*\)/g) ?? [];
-  assert.ok(call.length > 0, 'das Dashboard rendert Notizen');
-  for (const c of call) {
-    assert.doesNotMatch(c, /checklist|interactive/,
-      'das Dashboard zeigt einen gekuerzten Auszug - seine Zeilennummern sind nicht die der Notiz');
+  // TAFLA (2026-10-19): das Notizen-Widget mit seinem Markdown-Auszug ist mit
+  // dem Raster gegangen; Dziś und die Wand zeigen von Notizen hoechstens eine
+  // Kachel mit Zahl. Die Regel bleibt fuer jede Stelle der Uebersicht, die
+  // wieder Notiztext zeigt: ein Auszug ist nie interaktiv.
+  for (const rel of ['../public/pages/dashboard.js', '../public/components/today-view.js', '../public/components/wall-view.js']) {
+    const src = await readFile(new URL(rel, import.meta.url), 'utf8');
+    for (const c of src.match(/renderMarkdownLight\([^)]*\)/g) ?? []) {
+      assert.doesNotMatch(c, /checklist|interactive/,
+        `${rel}: die Uebersicht zeigt einen gekuerzten Auszug - seine Zeilennummern sind nicht die der Notiz`);
+    }
   }
 });
 

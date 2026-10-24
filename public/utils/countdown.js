@@ -26,35 +26,6 @@
 // Bis hierher wird nicht gerundet. Siehe Kopf.
 export const COUNTDOWN_EXACT_DAYS = 30;
 
-/**
- * Der Dringlichkeitsrang einer Tagesdifferenz - der Kanal, den die Farbe
- * bekommt.
- *
- * WARUM DIE FARBE HIER UND NICHT AN DER HERKUNFT HAENGT. Bis zur Critique vom
- * 2026-08-17 faerbte die Kachel ihre Zahl mit der Farbe des TERMINS. Damit
- * kodierte der lauteste Kanal die Herkunft, die das Zeichen daneben ohnehin
- * traegt, und der Zweck der Kachel - „wie bald" - lag auf dem leisesten. In
- * einer Messung las die Kachel „Heute / Heute / Heute / Morgen / Morgen": fuenf
- * Zeilen, zwei Werte, keine Rangfolge, und die lauteste Zeile war die mit der
- * dunkelsten Kalenderfarbe. Die Herkunftsfarbe bleibt, wo sie hingehoert - auf
- * der Zeichenscheibe links.
- *
- * Vier Raenge und nicht mehr: `overdue` (vorbei, in der Nachfrist), `now`
- * (heute/morgen), `soon` (bis 30 Tage, also der exakt gezaehlte Bereich) und
- * `later`. Die Grenze bei 30 ist keine zweite Zahl, sondern dieselbe, an der
- * auch die Formulierung von exakt auf grob schaltet - eine Kachel mit zwei
- * verschiedenen Vorstellungen von „nah" haette zwei Wahrheiten.
- *
- * @param {number} days
- * @returns {'overdue'|'now'|'soon'|'later'}
- */
-export function countdownRank(days) {
-  const d = Math.trunc(Number(days) || 0);
-  if (d < 0) return 'overdue';
-  if (d <= 1) return 'now';
-  if (d <= COUNTDOWN_EXACT_DAYS) return 'soon';
-  return 'later';
-}
 // Ab hier ist „ca. N Wochen" gröber als nötig: 61 Tage sind zwei Monate.
 export const COUNTDOWN_WEEKS_UNTIL = 60;
 // Ab einem Jahr zählt niemand mehr Monate.

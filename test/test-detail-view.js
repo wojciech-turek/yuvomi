@@ -564,11 +564,15 @@ test('der Rueckgaengig-Streifen blendet JEDE Darstellung der Aufgabe aus (#918)'
     'dieselbe Aufgabe kann zugleich im Cockpit und im Dringend-Widget stehen');
 
   // Und die Uebersicht muss diese Namen wirklich vergeben - sonst liefe der
-  // Guard ueber eine leere Menge.
-  const dash = await dashboardJs();
-  assert.match(dash, /data-object-kind="\$\{esc\(row\.kind\)\}" data-object-id=/,
-    'die Cockpit-Zeile benennt ihr Objekt');
-  assert.match(dash, /class="task-item" data-task-id=/, 'die Widget-Zeile nennt ihre Aufgabe');
+  // Guard ueber eine leere Menge. TAFLA (2026-10-19): Cockpit-Zeile und
+  // Dringend-Widget sind mit dem Raster gegangen; die Aufgabe steht jetzt als
+  // Zeile im Plan von Dziś (components/today-view.js, renderPlanRow) und muss
+  // dort einen der beiden Namen tragen, die taskRowsIn sucht.
+  const today = await read('public/components/today-view.js');
+  const planRow = today.slice(today.indexOf('export function renderPlanRow('), today.indexOf('function renderPlan(state)'));
+  assert.ok(planRow.length > 0, 'renderPlanRow ist nicht mehr auffindbar');
+  assert.match(planRow, /data-object-kind=|data-task-id=/,
+    'die Zeile einer Aufgabe in Dziś benennt ihr Objekt - sonst bleibt sie nach dem Loeschen stehen');
 });
 
 test('wer die Aufgabe von aussen oeffnet, bekommt ihr Blatt (#918)', async () => {

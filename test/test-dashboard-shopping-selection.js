@@ -19,10 +19,15 @@
  *        3. Browser: die Anfrage traegt die Auswahl, der Parameter aendert
  *           keine Zahl der Navigation; der Dialog zeigt die Listen, hakt die
  *           gespeicherten an, speichert nur eine echte Auswahl, und sein echter
- *           Lader laesst bei einem Fehler die Auswahl stehen; die Kachel nennt
- *           eine abgeschnittene gewaehlte Liste als "+1".
- *        4. Heute-Blatt und Wand: mit gesetzter Auswahl dieselbe Zahl wie
- *           ohne, und zwar die des Servers ueber alle Listen.
+ *           Lader laesst bei einem Fehler die Auswahl stehen.
+ *        4. Dziś und Wand: mit gesetzter Auswahl dieselbe Zahl wie ohne, und
+ *           zwar die des Servers ueber alle Listen.
+ *
+ *        TAFLA (2026-10-24): die Einkaufs-Kachel des alten Rasters
+ *        (renderShoppingTile) und das Heute-Blatt (buildTodayCockpitModel)
+ *        sind gegangen, ihre Tests mit ihnen. Dziś zeigt den Einkauf als
+ *        Abschnitt, die Wand als Karte (utils/wall-plan.js) - beide lesen die
+ *        ungefilterten Felder.
  *
  * Ausfuehren: npm run test:dashboard-shopping-selection
  */
@@ -443,54 +448,6 @@ const choices = (content) => [...content.matchAll(/<input type="checkbox" name="
   .map((m) => ({ id: Number(m[1]), checked: Boolean(m[2]), name: m[3] }));
 const CATALOG = [{ id: 1, name: 'Wocheneinkauf' }, { id: 7, name: 'Drogerie & "Bad"' }, { id: 9, name: 'Baumarkt' }];
 
-test('die Einkaufs-Kachel hat Optionen', async () => {
-  const { setPermissions, clearPermissions } = await import('../public/permissions.js');
-  const prevWindow = globalThis.window;
-  globalThis.window = { yuvomi: { isModuleDisabled: () => false }, matchMedia: () => ({ matches: false }) };
-  setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
-  try {
-    const layout = (id) => dash.renderDashboardLayout([{ id, visible: true, order: 0, size: '1x2' }], { shoppingLists: [] }, null, 'EUR', { editing: true });
-    assert.match(layout('shopping'), /data-widget-options="shopping"/);
-    // Reichweite der Probe: eine Kachel OHNE Optionen traegt den Knopf nicht.
-    assert.doesNotMatch(layout('birthdays'), /data-widget-options=/);
-  } finally {
-    clearPermissions();
-    globalThis.window = prevWindow;
-  }
-});
-
-test('Dialog: jede Liste ist waehlbar, ohne Auswahl ist nichts angehakt', async () => {
-  const { content } = await openShoppingDialog({}, { lists: CATALOG });
-  assert.deepEqual(choices(content), [
-    { id: 1, checked: false, name: 'Wocheneinkauf' },
-    { id: 7, checked: false, name: 'Drogerie &amp; &quot;Bad&quot;' },
-    { id: 9, checked: false, name: 'Baumarkt' },
-  ]);
-  assert.match(content, /dashboard\.optionShoppingLists</, 'die Gruppe traegt ihre Ueberschrift ueber t()');
-  assert.match(content, /dashboard\.optionShoppingListsHint/, 'und sagt, was "ohne Auswahl" heisst');
-});
-
-test('Dialog: die gespeicherte Auswahl ist angehakt, eine geloeschte Liste hat keine Zeile mehr', async () => {
-  const { content } = await openShoppingDialog({ lists: [7, 404, '9'] }, { lists: CATALOG, picked: [7, 9] });
-  assert.deepEqual(choices(content).filter((c) => c.checked).map((c) => c.id), [7, 9]);
-  assert.ok(!/value="404"/.test(content));
-});
-
-test('Dialog: gespeichert wird nur eine echte Auswahl, als Zahlen', async () => {
-  assert.deepEqual((await openShoppingDialog({}, { lists: CATALOG, picked: [7, 9] })).saved, { lists: [7, 9] });
-  assert.deepEqual((await openShoppingDialog({ lists: [7] }, { lists: CATALOG, picked: [] })).saved, {},
-    'alles abgewaehlt heisst wieder "alle Listen" - nichts wird gespeichert');
-  // Die geloeschte Liste 404 stand im Layout; mit dem Speichern ist sie fort.
-  assert.deepEqual((await openShoppingDialog({ lists: [7, 404] }, { lists: CATALOG, picked: [7] })).saved, { lists: [7] });
-});
-
-test('Dialog: ohne Listen sagt er das, statt eine leere Gruppe zu zeigen', async () => {
-  const { content, saved } = await openShoppingDialog({}, { lists: [] });
-  assert.deepEqual(choices(content), []);
-  assert.match(content, /dashboard\.noShoppingLists/);
-  assert.deepEqual(saved, {});
-});
-
 /** Der Dialog mit dem ECHTEN Lader: nur die Netzschicht (`api.get`) ist ersetzt. */
 async function openWithRealLoader(current, get) {
   const prev = { stub: globalThis.__apiStub, open: globalThis.__openModal, close: globalThis.__closeModal, window: globalThis.window };
@@ -515,149 +472,58 @@ async function openWithRealLoader(current, get) {
   }
 }
 
-test('Lader: der Dialog holt die Listen von /shopping, und ein Fehler loescht die gespeicherte Auswahl nicht', async () => {
-  // Jeder Dialogtest oben reicht `loadLists` herein - der echte Lader lief nie.
-  // Sein Vertrag: `null` bei einem Fehler. Lieferte er `[]`, ginge der Dialog
-  // ohne Zeilen auf, und Speichern schriebe `{}`: die Auswahl waere still fort.
-  const failed = await openWithRealLoader({ lists: [7] }, async () => { throw new Error('offline'); });
-  assert.deepEqual(failed.calls, [['/shopping']], 'der Pfad der Einkaufslisten');
-  assert.equal(failed.opened, false, 'ohne Katalog geht der Dialog nicht auf');
-  assert.equal(failed.result, null, '`null` heisst fuer den Aufrufer: Optionen stehen lassen');
-  assert.deepEqual(failed.toasts, [['dashboard.loadError', 'danger']]);
-
-  // Eine Antwort ohne Liste (kaputte Form) ist ebenfalls kein leerer Katalog.
-  const odd = await openWithRealLoader({ lists: [7] }, async () => ({ data: null }));
-  assert.deepEqual([odd.opened, odd.result], [false, null]);
-
-  // Und mit Katalog geht er auf - auch mit einem leeren (das ist eine Antwort).
-  assert.equal((await openWithRealLoader({ lists: [7] }, async () => ({ data: [{ id: 7, name: 'Drogerie' }] }))).opened, true);
-  assert.equal((await openWithRealLoader({}, async () => ({ data: [] }))).opened, true);
-
-  // Der Aufrufer nimmt `null` als "nichts aendern" - sonst wuerde er `undefined` speichern.
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // Seit Tafla (2026-10-19) oeffnet „Dostosuj Dziś" die Dialoge
-  // (editTodayFilter) - der Aufrufer ist ein anderer, die Regel dieselbe.
-  const wiring = src.slice(src.indexOf('async function editTodayFilter(id)'));
-  assert.match(wiring.slice(0, 600), /const next = await openWidgetOptions\(id, current\);\n\s+if \(next === null\) return;/);
-});
-
-test('Dialog: scheitert der Katalog, geht er nicht auf und die Auswahl bleibt', async () => {
-  // `null` heisst fuer den Aufrufer "nichts aendern". Ein Dialog ohne Katalog
-  // haette beim Speichern `{}` geliefert und die Auswahl still geloescht.
-  const { content, saved, toasts } = await openShoppingDialog({ lists: [7] }, { lists: null });
-  assert.equal(content, null);
-  assert.equal(saved, null);
-  assert.deepEqual(toasts, [['dashboard.loadError', 'danger']]);
-});
-
-test('Kachel: eine gewaehlte Liste ohne Offenes sagt, dass nichts offen ist, und bleibt der Weg zu ihr', () => {
-  const lists = [
-    { id: 3, name: 'Garten', open_count: 1, total_count: 1, items: [{ id: 30, name: 'Erde' }] },
-    { id: 5, name: 'Fest', open_count: 0, total_count: 4, items: [] },
-  ];
-  const html = dash.renderShoppingTile({ shoppingTile: { lists, openCount: 1, listCount: 2 }, shoppingLists: [], shoppingOpenCount: 14, shoppingOpenLists: 4 });
-  const rows = html.split('class="shopping-widget-list"').slice(1);
-  assert.equal(rows.length, 2);
-  assert.ok(!/shoppingListNothingOpen/.test(rows[0]), 'eine Liste mit Offenem traegt den Satz nicht');
-  assert.match(rows[1], /dashboard\.shoppingListNothingOpen/);
-  assert.match(rows[1], />4\/4</, 'der Zaehler der Zeile sagt weiter erledigt/gesamt');
-  assert.match(html, /data-route="\/shopping\?list=5"/, 'die leere Liste ist einen Tipp entfernt');
-  assert.match(html, /widget__badge[^>]*>1</, 'die Badge zaehlt in der Auswahl, nicht die 14 des Haushalts');
-  // Beide gewaehlten Listen stehen da: nichts ist abgeschnitten.
-  assert.ok(!/shoppingMoreLists/.test(html));
-  assert.ok(!/widget__empty/.test(html), 'kein Leerzustand: die Kachel zeigt ihre Auswahl');
-});
-
-test('Kachel: eine gewaehlte Liste, die der Deckel abschneidet, ist als "+1 weitere Liste" da - auch ohne Offenes', async () => {
-  // Der ganze Weg, von der Route bis zur Kachel. Vier gewaehlt, drei mit
-  // Offenem, "Fest" fertig gekauft: drei Zeilen und "+1". Mit der Zaehlung
-  // "nur Listen mit Offenem" (3 - 3 = 0) fehlte "Fest" stumm, obwohl Hinweis
-  // und CHANGELOG sagen, eine gewaehlte Liste bleibe stehen.
-  const four = await getJson(query(FEST, GARTEN, WOCHE, BAUMARKT));
-  const html = dash.renderShoppingTile(four);
-  assert.equal(html.split('class="shopping-widget-list"').length - 1, 3);
-  assert.ok(!html.includes('>Fest<'), 'Vorbedingung: die fertig gekaufte Liste ist abgeschnitten');
-  assert.match(html, /dashboard\.shoppingMoreLists\{&quot;count&quot;:1\}/);
-
-  // Zwei gewaehlt, beide gezeigt (eine davon leer): kein "+n".
-  assert.ok(!/shoppingMoreLists/.test(dash.renderShoppingTile(await getJson(query(FEST, GARTEN)))));
-  // Fuenf gewaehlt: "+2".
-  assert.match(dash.renderShoppingTile(await getJson(query(FEST, GARTEN, WOCHE, BAUMARKT, DROGERIE))), /shoppingMoreLists\{&quot;count&quot;:2\}/);
-});
-
-test('Kachel: ohne Auswahl liest sie die geteilten Felder, und "+n weitere Listen" bleibt wie zuvor', async () => {
-  const lists = [1, 2, 3].map((id) => ({ id, name: `L${id}`, open_count: 2, total_count: 2, items: [] }));
-  assert.match(dash.renderShoppingLists(lists, 14, 5), /dashboard\.shoppingMoreLists\{&quot;count&quot;:2\}/);
-  assert.ok(!/shoppingMoreLists/.test(dash.renderShoppingLists(lists, 6, 3)));
-  // Durch die echte Antwort: vier Listen mit Offenem, drei gezeigt, "+1", Badge 14.
-  const html = dash.renderShoppingTile(await getJson('/'));
-  assert.match(html, /shoppingMoreLists\{&quot;count&quot;:1\}/);
-  assert.match(html, /widget__badge[^>]*>14</);
-});
-
 // --------------------------------------------------------------------------
-// 4. Was die Auswahl NICHT anfasst: Heute-Blatt und Wand
+// 4. Was die Auswahl NICHT anfasst: Dziś und Wand
 // --------------------------------------------------------------------------
 
-/** Die Einkaufszeile des Blatts, wie Heute-Blatt (Layout ohne Kachel) und Wand (immer leeres Layout) sie bauen. */
-async function sheetShoppingRow(data, cap) {
+const { buildWall } = await import('../public/utils/wall-plan.js');
+
+/** Die Einkaufskarte der Wand, gebaut wie die Seite sie baut - am Tag, nicht in der Nacht. */
+async function wallShopping(data) {
   const { setPermissions, clearPermissions } = await import('../public/permissions.js');
   const prevWindow = globalThis.window;
   globalThis.window = { yuvomi: { isModuleDisabled: () => false }, matchMedia: () => ({ matches: false }) };
   setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
   try {
-    const model = dash.buildTodayCockpitModel(data, [], { cap, groupOverdue: false });
-    let row = null;
-    JSON.stringify(model, (_key, value) => { if (value && value.kind === 'shopping') row = value; return value; });
-    return row;
+    return buildWall(data, { now: new Date('2026-10-06T11:00:00Z') }).shopping;
   } finally {
     clearPermissions();
     globalThis.window = prevWindow;
   }
 }
 
-test('Heute-Blatt und Wand zaehlen ueber ALLE Listen - auch wenn die Kachel eine Auswahl traegt', async () => {
+test('Dziś und Wand zaehlen ueber ALLE Listen - auch wenn ein Layout eine Auswahl traegt', async () => {
   // Das Kuechentablett, das einer Haushaltsvorgabe mit Auswahl folgt: die Wand
-  // baut ihr Blatt mit leerem Layout auf denselben Daten, dort spricht der
-  // Einkauf also immer. Mit der ersten Fassung: "1" bei einer gewaehlten
-  // Liste, und mit nur der fertig gekauften verschwand die Zeile.
-  // Seit Tafla hat die Wand keinen eigenen Deckel mehr - das Blatt traegt ihn.
-  for (const cap of [dash.PROGRAM_ROW_CAP]) {
-    for (const path of ['/', query(GARTEN), query(FEST), query(GARTEN, WOCHE)]) {
-      const row = await sheetShoppingRow(await getJson(path), cap);
-      assert.ok(row, `${path}: die Einkaufszeile steht da`);
-      assert.equal(row.title, 'dashboard.todayShoppingCount{"count":14}', `${path} (Deckel ${cap})`);
-    }
+  // liest dieselbe Antwort. Mit der ersten Fassung: "1" bei einer gewaehlten
+  // Liste, und mit nur der fertig gekauften verschwand der Einkauf.
+  for (const path of ['/', query(GARTEN), query(FEST), query(GARTEN, WOCHE)]) {
+    const card = await wallShopping(await getJson(path));
+    assert.ok(card, `${path}: die Einkaufskarte steht da`);
+    assert.equal(card.count, 14, `${path}: die Zahl des Servers ueber alle Listen`);
   }
+  // Die Zahl des Servers, nicht die Summe der drei gelieferten Listen (Bestand
+  // vor #1818: 13 bei vierzehn offenen in vier Listen).
+  const plain = await getJson('/');
+  assert.equal(plain.shoppingLists.reduce((sum, list) => sum + list.open_count, 0), 13, 'Vorbedingung: die Summe der drei ist kleiner');
+  assert.equal((await wallShopping(plain)).count, 14);
+  // Dziś liest dieselben Felder (buildTodayState in pages/dashboard.js).
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  assert.match(page, /count: Number\(data\?\.shoppingOpenCount\) \|\| 0,/, 'Dziś zaehlt mit der Zahl des Servers');
+  assert.match(page, /route: shoppingSoleListRoute\(data\),/, 'und waehlt sein Ziel aus den ungefilterten Listen');
 });
 
-test('die Einkaufszeile des Heute-Blatts waehlt ihr Ziel aus den UNGEFILTERTEN Listen (#1821)', async () => {
+test('der Einkauf von Dziś waehlt sein Ziel aus den UNGEFILTERTEN Listen (#1821)', async () => {
   // `/shopping?list=<id>` gilt, wenn im HAUSHALT genau eine Liste Offenes hat -
-  // nicht, wenn die Kachel genau eine Liste gewaehlt hat. Hier haben vier Listen
+  // nicht, wenn ein Layout genau eine Liste gewaehlt hat. Hier haben vier Listen
   // Offenes: das Ziel bleibt die Seite, auch mit einer einzelnen gewaehlten.
   // Filterte die Route die geteilten Felder, stuende hier `?list=<Garten>`.
   for (const path of ['/', query(GARTEN), query(FEST)]) {
-    const data = await getJson(path);
-    assert.equal(dash.shoppingSoleListRoute(data), '/shopping', path);
-    assert.equal((await sheetShoppingRow(data, dash.PROGRAM_ROW_CAP)).route, '/shopping', path);
+    assert.equal(dash.shoppingSoleListRoute(await getJson(path)), '/shopping', path);
   }
   // Reichweite: mit genau einer Liste mit Offenem im Haushalt ist sie das Ziel -
-  // auch wenn die Kachel eine ANDERE gewaehlt hat.
+  // auch wenn das Layout eine ANDERE gewaehlt hat.
   const one = { shoppingLists: [{ id: 7, name: 'Drogerie', open_count: 2, total_count: 2, items: [] }], shoppingOpenCount: 2, shoppingOpenLists: 1,
     shoppingTile: { lists: [{ id: 9, name: 'Fest', open_count: 0, total_count: 1, items: [] }], openCount: 0, listCount: 1 } };
   assert.equal(dash.shoppingSoleListRoute(one), '/shopping?list=7');
-});
-
-test('das Heute-Blatt liest die Zahl des Servers, nicht die Summe der drei gelieferten Listen', async () => {
-  // Bestand vor #1818: `shoppingLists` traegt hoechstens drei Listen, das Blatt
-  // summierte deren `open_count` - 13 bei vierzehn offenen in vier Listen.
-  const plain = await getJson('/');
-  assert.equal(plain.shoppingLists.reduce((sum, list) => sum + list.open_count, 0), 13, 'Vorbedingung: die Summe der drei ist kleiner');
-  assert.equal(dash.buildTodayHighlights(plain).openShoppingCount, 14);
-  // Ohne die Zahl (aelterer Server) oder nach gescheiterter Abfrage (`null`) bleibt die Summe.
-  assert.equal(dash.buildTodayHighlights({ shoppingLists: plain.shoppingLists }).openShoppingCount, 13);
-  assert.equal(dash.buildTodayHighlights({ shoppingLists: plain.shoppingLists, shoppingOpenCount: null }).openShoppingCount, 13);
-  // Null offen ist eine Zahl, kein Fehlen.
-  assert.equal(dash.buildTodayHighlights({ shoppingLists: plain.shoppingLists, shoppingOpenCount: 0 }).openShoppingCount, 0);
 });

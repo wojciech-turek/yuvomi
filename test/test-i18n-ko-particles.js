@@ -226,7 +226,6 @@ test('t() in ko: echte Schluessel, je Partikel mit und ohne Batchim', async () =
     // Zitierter Platzhalter: vier Arten von Anfuehrungszeichen im Bestand.
     ['tasks.subtaskDeleteConfirm', { title: '우유' }, '「우유」를 삭제할까요?'],
     ['shopping.storeDeleteConfirm', { name: '시장' }, '상점 “시장”을 삭제할까요?'],
-    ['quickLinks.deleteConfirm', { name: '날씨' }, "'날씨'를 삭제할까요?"],
     ['inventory.deleteConfirm', { name: '냉장고' }, null],
   ];
   const wrong = [];

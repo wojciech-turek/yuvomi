@@ -12,10 +12,14 @@
  *            Stand, Fortschritt zur naechsten Praemie, zuletzt Verdientes;
  *          - wer weder das eine noch das andere ist (Wandtablett, Grosseltern
  *            ohne Teilnahme), sieht die Familie ohne Platz und ohne Freigaben.
- *        Server (Auswahl der Daten) und Renderer (was davon erscheint) werden
- *        getrennt geprueft: ein Renderer, der nur die eigene Zeile zeigt,
- *        waehrend die Antwort alle Kinder mitliefert, waere eine Rangliste im
- *        Netzwerk-Tab.
+ *        Server (Auswahl der Daten) und Anzeige werden getrennt geprueft: eine
+ *        Anzeige, die nur die eigene Zeile zeigt, waehrend die Antwort alle
+ *        Kinder mitliefert, waere eine Rangliste im Netzwerk-Tab.
+ *
+ *        TAFLA (2026-10-24): das Widget des alten Rasters (renderRewardsWidget)
+ *        ist mit dem Raster gegangen, seine Renderer-Tests mit ihm. Was Dziś
+ *        davon zeigt, ist die Vorschaukachel (metricTileFor 'rewards'); die
+ *        offenen Freigaben stehen als Zeile im Tagesplan (Quelle 'approvals').
  * Ausfuehren: node --experimental-sqlite --test test/test-dashboard-rewards.js
  */
 import { test } from 'node:test';
@@ -32,11 +36,6 @@ register('./test-browser-loader.mjs', import.meta.url);
 const { get } = await import('../server/db.js');
 const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
 const { __test } = await import('../public/pages/dashboard.js');
-const { selectMetricTiles } = __test;
-// Die Stub-Uebersetzung liefert `key{"a":1}`; im Markup steht das durch esc()
-// als `&quot;`. Gelesen wird der Text, den ein Mensch saehe.
-const renderRewardsWidget = (...args) => __test.renderRewardsWidget(...args)
-  .replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
 // --------------------------------------------------------------------------
 // Server: welche Daten gehen an wen
@@ -117,80 +116,15 @@ test('Server: wer weder sammelt noch freigibt, sieht die Familie, aber keine fre
 });
 
 // --------------------------------------------------------------------------
-// Renderer: was davon erscheint
+// Dziś: was davon erscheint
 // --------------------------------------------------------------------------
 
 const KINO = { id: 1, name: 'Kinoabend', cost: 60, remaining: null };
-const EIS = { id: 2, name: 'Eis', cost: 20, remaining: null };
 
 const emma = (balance) => ({ id: 7, display_name: 'Emma', avatar_color: '#34C759', balance });
 const leo = (balance) => ({ id: 8, display_name: 'Leo', avatar_color: '#FF9500', balance });
 
-function progressValue(html) {
-  const m = /role="progressbar"[^>]*aria-valuenow="(\d+)"/.exec(html);
-  return m ? Number(m[1]) : null;
-}
-
-test('Kind: sieht den eigenen Stand und keine Geschwister, keine Plaetze', () => {
-  const html = renderRewardsWidget({
-    view: 'self', me: 7, standings: [emma(45), leo(60)], catalog: [KINO],
-    recent: [{ delta: 10, reason: 'Zimmer', type: 'earn', created_at: '2026-09-21T08:00:00Z' }],
-  }, '1x2');
-  assert.doesNotMatch(html, /Leo/, 'ein Geschwisterkind taucht in der Kind-Sicht nicht auf');
-  assert.doesNotMatch(html, /__rank/, 'kein Rang-Element');
-  assert.match(html, /rewards\.remainingToReward\{"points":"15","reward":"Kinoabend"\}/, 'noch 15 bis Kinoabend');
-  assert.equal(progressValue(html), 75);
-  assert.match(html, /Zimmer/, 'die zuletzt verdienten Punkte stehen da');
-});
-
-test('Kind: zuletzt verdient liest sich rueckwaerts - heute, gestern, sonst ohne Jahr', () => {
-  const now = new Date();
-  const html = renderRewardsWidget({
-    view: 'self', me: 7, standings: [emma(45)], catalog: [KINO],
-    recent: [
-      { delta: 5, reason: 'Heute', type: 'earn', created_at: now.toISOString() },
-      { delta: 5, reason: 'Gestern', type: 'earn', created_at: new Date(now.getTime() - 86_400_000).toISOString() },
-    ],
-  }, '1x2');
-  const whens = [...html.matchAll(/rewards-recent__when">([^<]*)</g)].map((m) => m[1]);
-  assert.deepEqual(whens, ['common.today', 'common.yesterday']);
-});
-
-test('Eltern: alle Kinder ohne Platzierungsnummer, nach Namen, dazu die offenen Freigaben', () => {
-  const html = renderRewardsWidget({
-    view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 2,
-  }, '1x2');
-  assert.doesNotMatch(html, /__rank/, 'keine Rangziffer');
-  assert.doesNotMatch(html, /--leader/, 'kein hervorgehobener Spitzenreiter');
-  assert.ok(html.indexOf('Emma') < html.indexOf('Leo'), 'nebeneinander nach Namen, nicht nach Punkten');
-  assert.match(html, /dashboard\.rewardsPending\{"count":2\}/);
-  assert.match(html, /href="\/rewards"[^>]*data-route="\/rewards"|data-route="\/rewards"[^>]*href="\/rewards"/, 'die Freigaben verlinken auf die Freigabe-Ansicht');
-  const bars = html.match(/role="progressbar"/g) || [];
-  assert.equal(bars.length, 2, 'je Kind ein Fortschritt zum Ziel');
-});
-
-test('offene Geld-Anfragen (#1734) zaehlen im Hinweis mit, obwohl der Server sie getrennt fuehrt', () => {
-  // `pending` bleibt in der Antwort die Zahl der Praemien-Anfragen (zugesagte
-  // API), `moneyPending` steht daneben. Die Kachel sagt, wie viele warten.
-  const eltern = renderRewardsWidget({
-    view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 2, moneyPending: 3,
-  }, '1x2');
-  assert.match(eltern, /dashboard\.rewardsPending\{"count":5\}/);
-  const nurGeld = renderRewardsWidget({
-    view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 0, moneyPending: 1,
-  }, '1x2');
-  assert.match(nurGeld, /dashboard\.rewardsPending\{"count":1\}/, 'eine Abhebung allein ist ein Grund, hinzusehen');
-  const kind = renderRewardsWidget({
-    view: 'self', me: 7, standings: [emma(30)], catalog: [KINO], pending: 0, moneyPending: 1, recent: [],
-  }, '1x2');
-  assert.match(kind, /dashboard\.rewardsOwnPending\{"count":1\}/);
-  const wand = renderRewardsWidget({
-    view: 'family', me: 99, standings: [emma(30), leo(60)], catalog: [KINO], pending: 0, moneyPending: 4,
-  }, '1x2');
-  assert.doesNotMatch(wand, /rewardsPending/, 'und wer nicht freigibt, bekommt auch dafuer keinen Zaehler');
-});
-
-test('das Heute-Blatt nennt offene Geld-Anfragen mit, und weiter nur fuer den, der freigibt', async () => {
+test('der Tagesplan nennt offene Geld-Anfragen mit, und weiter nur fuer den, der freigibt', async () => {
   const { TODAY_SHEET_SOURCES } = await import('../public/utils/today-sheet.js');
   const approvals = TODAY_SHEET_SOURCES.find((source) => source.id === 'approvals');
   assert.ok(approvals, 'die Quelle der Freigaben');
@@ -201,121 +135,43 @@ test('das Heute-Blatt nennt offene Geld-Anfragen mit, und weiter nur fuer den, d
   assert.equal(title({ view: 'self', pending: 0, moneyPending: 2 }), undefined, 'die eigene Bitte eines Kindes ist keine Freigabe');
 });
 
-test('Familie (Wand, Grosseltern): alle Kinder, aber kein Freigabe-Hinweis', () => {
-  const html = renderRewardsWidget({
-    view: 'family', me: 99, standings: [emma(30), leo(60)], catalog: [KINO], pending: 3,
-  }, '1x2');
-  assert.match(html, /Emma/);
-  assert.match(html, /Leo/);
-  assert.doesNotMatch(html, /rewardsPending/, 'wer nicht freigibt, bekommt keinen Freigabe-Zaehler');
-});
+// Was Dziś der Kachel mitgibt (todayTile in pages/dashboard.js): Dosen und
+// Freigaben stehen im Tagesplan, die Kachel wiederholt sie nicht.
+const PLAN_SPEAKS = new Set(['doses', 'approvals']);
+const rewardsTile = (rewards) => __test.metricTileFor('rewards', { rewards }, 'EUR', PLAN_SPEAKS);
 
-test('Fortschritt: kein Ziel, Ziel erreicht, 0 Punkte, vergriffene Praemie', () => {
-  const self = (balance, catalog) => renderRewardsWidget({ view: 'self', me: 7, standings: [emma(balance)], catalog }, '1x1');
-
-  const none = self(30, []);
-  assert.equal(progressValue(none), null, 'ohne Praemie gibt es keinen Balken');
-  assert.match(none, /rewards\.noRewardsYet/);
-
-  const reached = self(80, [KINO, EIS]);
-  assert.equal(progressValue(reached), 100);
-  assert.match(reached, /rewards\.canRedeemNow/);
-
-  const zero = self(0, [KINO]);
-  assert.equal(progressValue(zero), 0);
-  assert.match(zero, /rewards\.remainingToReward\{"points":"60","reward":"Kinoabend"\}/);
-
-  const negative = self(-5, [KINO]);
-  assert.equal(progressValue(negative), 0, 'ein negativer Stand ist leer, nicht negativ');
-
-  const soldOut = self(30, [{ ...EIS, remaining: 0 }, KINO]);
-  assert.match(soldOut, /reward":"Kinoabend"/, 'eine vergriffene Praemie ist kein Ziel');
-  assert.equal(progressValue(soldOut), 50);
-});
-
-test('Ein einziges Mitglied: die eigene Zeile wird zur eigenen Sicht, eine fremde bleibt benannt', () => {
-  const soloSelf = renderRewardsWidget({
-    view: 'approver', me: 7, standings: [emma(45)], catalog: [KINO], pending: 0,
-    recent: [{ delta: 5, reason: 'Blumen giessen', type: 'earn', created_at: '2026-09-21T08:00:00Z' }],
-  }, '1x2');
-  assert.equal(progressValue(soloSelf), 75);
-  assert.match(soloSelf, /Blumen giessen/, 'wer allein sammelt und freigibt, sieht die eigene Sicht');
-
-  const oneKid = renderRewardsWidget({
-    view: 'approver', me: 1, standings: [leo(15)], catalog: [KINO], pending: 0,
-  }, '1x1');
-  assert.match(oneKid, /Leo/, 'das eine Kind bleibt mit Namen stehen');
-  assert.equal(progressValue(oneKid), 25);
-});
-
-test('Groessen: die Kachel entscheidet, wie viel davon steht', () => {
-  const recent = [1, 2, 3].map((n) => ({ delta: n, reason: `R${n}`, type: 'earn', created_at: '2026-09-01T08:00:00Z' }));
-  const kid = (size) => renderRewardsWidget({ view: 'self', me: 7, standings: [emma(45)], catalog: [KINO], recent }, size);
-  const rowsOf = (html) => (html.match(/rewards-recent__row"/g) || []).length;
-  assert.equal(rowsOf(kid('1x1')), 0, '1x1 traegt nur den Weg zum Ziel');
-  assert.equal(rowsOf(kid('2x1')), 2);
-  assert.equal(rowsOf(kid('1x2')), 3);
-  assert.equal(progressValue(kid('1x1')), 75, 'der Balken bleibt auf jeder Groesse');
-
-  const kids = ['Anna', 'Ben', 'Carla'].map((name, i) => ({ id: 20 + i, display_name: name, balance: 10 }));
-  const parent = (size) => renderRewardsWidget({ view: 'approver', me: 1, standings: kids, catalog: [KINO], pending: 1 }, size);
-  const short = parent('1x1');
-  assert.equal((short.match(/class="rewards-member"/g) || []).length, 2);
-  assert.match(short, /dashboard\.shoppingMore\{"count":1\}/, 'wer nicht passt, wird gezaehlt');
-  assert.doesNotMatch(short, /class="rewards-goal__label"/, 'die flache Kachel zeigt den Balken ohne Satz');
-  assert.match(short, /aria-valuetext="rewards\.remainingToReward/, 'die Ansage behaelt den Satz');
-  const tall = parent('1x2');
-  assert.equal((tall.match(/class="rewards-member"/g) || []).length, 3);
-  assert.match(tall, /class="rewards-goal__label"/);
-});
-
-test('Leerzustand: ein Kind bekommt keinen Knopf, den es nicht benutzen darf', () => {
-  const kid = renderRewardsWidget({ view: 'self', me: 7, standings: [], catalog: [] }, '1x1');
-  assert.match(kid, /dashboard\.noRewards/);
-  assert.doesNotMatch(kid, /rewards\.addReward/, 'Praemien anlegen ist Elternsache');
-  const parent = renderRewardsWidget({ view: 'approver', me: 1, standings: [], catalog: [] }, '1x1');
-  assert.match(parent, /rewards\.addReward/);
-});
-
-test('Kennzahlkachel: das Kind sieht den eigenen Stand, niemand einen Spitzenreiter', () => {
+test('Vorschaukachel: das Kind sieht den eigenen Stand und sein Ziel, niemand einen Spitzenreiter', () => {
   global.window = { yuvomi: null };
-  // Eine Kachelreihe braucht mindestens zwei Kacheln - das Budget ist die zweite.
-  const base = { budget: { entryCount: 3, balance: 100, income: 200 }, birthdays: [], pinnedNotes: [], health: {}, housekeeping: {} };
-  const kidTile = selectMetricTiles({
-    ...base, rewards: { view: 'self', me: 7, standings: [emma(45)], catalog: [KINO] },
-  }, 'EUR', new Set()).find((tile) => tile.id === 'rewards');
-  assert.ok(kidTile, 'die eigene Punktzahl ist eine Kennzahl');
-  assert.match(kidTile.value, /"count":45/);
-  assert.match(kidTile.note, /Kinoabend/, 'darunter das Ziel, nicht ein Name');
+  const kid = rewardsTile({ view: 'self', me: 7, standings: [emma(45)], catalog: [KINO] });
+  assert.ok(kid, 'die eigene Punktzahl ist eine Kennzahl');
+  assert.match(kid.value, /"count":45/);
+  assert.match(kid.note, /rewards\.remainingToReward.*Kinoabend/, 'darunter das Ziel, nicht ein Name');
+  assert.equal(kid.route, '/rewards');
 
-  const parentTile = selectMetricTiles({
-    ...base, rewards: { view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 0 },
-  }, 'EUR', new Set()).find((tile) => tile.id === 'rewards');
-  assert.ok(!parentTile || !/Leo|Emma/.test(`${parentTile.value} ${parentTile.note}`),
-    'die Kachel kuert keinen Spitzenreiter');
+  // Ein Minus steht nie ohne Satz da (#1607), auch ohne Katalog.
+  assert.match(rewardsTile({ view: 'self', me: 7, standings: [emma(-50)], catalog: [KINO] }).note, /rewards\.balanceBelowZero/);
+  assert.match(rewardsTile({ view: 'self', me: 7, standings: [emma(-50)], catalog: [] }).note, /rewards\.balanceBelowZero/);
+  // Eine vergriffene Praemie ist kein Ziel (utils/reward-goal.js).
+  const soldOut = rewardsTile({ view: 'self', me: 7, standings: [emma(30)], catalog: [{ id: 2, name: 'Eis', cost: 40, remaining: 0 }, KINO] });
+  assert.match(soldOut.note, /Kinoabend/);
+
+  // Wer freigibt, bekommt keine Kachel mit Namen - und die offenen Anfragen
+  // stehen an GENAU EINER Stelle: als Zeile im Tagesplan (Quelle 'approvals').
+  for (const rewards of [
+    { view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 0 },
+    { view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 1, moneyPending: 2 },
+    { view: 'family', me: 99, standings: [emma(30), leo(60)], catalog: [KINO], pending: 0, moneyPending: 2 },
+  ]) {
+    const tile = rewardsTile(rewards);
+    assert.ok(!tile || !/Leo|Emma|rewardsPending/.test(`${tile.value} ${tile.note}`),
+      `${rewards.view}: kein Spitzenreiter und keine zweite Freigabe-Zahl`);
+  }
 });
 
-test('Kennzahlkachel: offene Geld-Anfragen zaehlen mit - aber nur fuer den, der freigibt', () => {
-  global.window = { yuvomi: null };
-  const base = { budget: { entryCount: 3, balance: 100, income: 200 }, birthdays: [], pinnedNotes: [], health: {}, housekeeping: {} };
-  const tile = (rewards) => selectMetricTiles({ ...base, rewards }, 'EUR', new Set()).find((t) => t.id === 'rewards');
-  // Eltern: Praemien- und Geld-Anfragen zusammen, auch wenn nur Geld offen ist.
-  const both = tile({ view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 1, moneyPending: 2 });
-  assert.match(both.value.replace(/&quot;/g, '"'), /dashboard\.rewardsPending\{"count":3\}/);
-  const onlyMoney = tile({ view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 0, moneyPending: 1 });
-  assert.match(onlyMoney.value.replace(/&quot;/g, '"'), /dashboard\.rewardsPending\{"count":1\}/);
-  // Wer nicht freigibt, bekommt aus dem eigenen Geld-Zaehler keine Freigabe-Kachel:
-  // das Kind seine Punkte, die Sicht `family` (seit sie den eigenen Zaehler traegt) nichts.
-  const kid = tile({ view: 'self', me: 7, standings: [emma(45)], catalog: [KINO], pending: 0, moneyPending: 2 });
-  assert.doesNotMatch(`${kid?.value} ${kid?.note}`, /rewardsPending/);
-  const family = tile({ view: 'family', me: 99, standings: [emma(30), leo(60)], catalog: [KINO], pending: 0, moneyPending: 2 });
-  assert.ok(!family || !/rewardsPending/.test(`${family.value} ${family.note}`), 'die eigene Bitte ist keine Freigabe');
-});
-
-test('Verdrahtung: das Widget bekommt seine Groesse, und das Ziel kommt aus EINER Regel', () => {
+test('Verdrahtung: das Ziel kommt aus EINER Regel, und Dziś laesst die Freigaben dem Plan', () => {
   const dash = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.ok(/rewards:\s*\(size\)\s*=>\s*renderRewardsWidget\(data\.rewards \?\? \{\}, size\)/.test(dash),
-    'widgetById reicht die Kachelgroesse nicht an das Belohnungen-Widget durch');
+  assert.match(dash, /metricTileFor\(id, data, currency, new Set\(\['doses', 'approvals'\]\)\)/,
+    'die Vorschaukachel wiederholt nicht, was der Tagesplan schon sagt');
   const page = readFileSync(new URL('../public/pages/rewards.js', import.meta.url), 'utf8');
   for (const [name, text] of [['dashboard.js', dash], ['rewards.js', page]]) {
     assert.ok(/from '\/utils\/reward-goal\.js'/.test(text), `${name} rechnet das naechste Ziel selbst statt ueber utils/reward-goal.js`);
@@ -593,23 +449,6 @@ test('Server: auch nach dem Loeschen der Aufgabe bleibt die zurueckgenommene Gut
   d.prepare('DELETE FROM reward_participants WHERE user_id = ?').run(kid);
 });
 
-test('Widget: ein Minus traegt seinen Satz, der Balken steht bei null (#1607)', () => {
-  for (const [view, size] of [['self', '1x2'], ['approver', '2x2'], ['family', '2x2']]) {
-    const html = renderRewardsWidget({
-      view, me: 7, standings: [emma(-50)], participantCount: 1, pending: 0, catalog: [KINO], recent: [],
-    }, size);
-    assert.doesNotMatch(html, /NaN|undefined/, `${view}: keine kaputte Zahl`);
-    assert.equal(progressValue(html), 0, `${view}: der Balken steht bei null`);
-    assert.match(html, /--rewards-progress:0[;"]/, `${view}: keine negative Breite`);
-    assert.match(html, /aria-valuetext="rewards\.balanceBelowZero"/, `${view}: die Ansage erklaert das Minus`);
-    assert.doesNotMatch(html, /remainingToReward/, `${view}: "noch 110 bis Kinoabend" erklaerte die Zahl nicht`);
-  }
-  // Auch ohne eine einzige Praemie: der Satz haengt nicht am Katalog.
-  const ohne = renderRewardsWidget({ view: 'self', me: 7, standings: [emma(-50)], catalog: [], recent: [] }, '1x2');
-  assert.match(ohne, /rewards\.balanceBelowZero/);
-  assert.doesNotMatch(ohne, /rewards\.noRewardsYet/);
-});
-
 test('Belohnungsseite: Punktestandzeile, Anfrage und Verlauf erklaeren das Minus (#1607)', () => {
   const s = rewardsPage.state;
   const vorher = { user: s.user, overview: s.overview, catalog: s.catalog, redemptions: s.redemptions, prevBalances: s.prevBalances };
@@ -653,51 +492,6 @@ test('Belohnungsseite: Punktestandzeile, Anfrage und Verlauf erklaeren das Minus
   } finally {
     Object.assign(s, vorher);
   }
-});
-
-test('Kachel, eine Rasterzeile hoch: das Minus steht sichtbar da, nicht nur in der Ansage (#1623)', () => {
-  const kids = [emma(-50), leo(15)];
-  for (const size of ['1x1', '2x1']) {
-    for (const view of ['approver', 'family']) {
-      const html = renderRewardsWidget({ view, me: 1, standings: kids, participantCount: 2, pending: 0, catalog: [KINO] }, size);
-      const sichtbar = html.match(/<p class="rewards-goal__label[^"]*"[^>]*>([^<]*)<\/p>/g) || [];
-      assert.equal(sichtbar.length, 1, `${view} ${size}: genau eine sichtbare Zeile - Emmas, nicht Leos`);
-      assert.match(sichtbar[0], /rewards-goal__label--compact/, `${view} ${size}: die kompakte Zeile`);
-      assert.match(sichtbar[0], />rewards\.balanceBelowZeroShort</, `${view} ${size}: die Kurzform`);
-      assert.match(sichtbar[0], /aria-hidden="true"/, 'die Ansage traegt den ganzen Satz schon');
-      assert.match(html, /aria-valuetext="rewards\.balanceBelowZero"/, 'der ganze Satz bleibt in der Ansage');
-      assert.equal(progressValue(html), 0);
-      // Der leere Balken weicht der Kurzzeile sichtbar, bleibt aber fuer die Ansage im DOM.
-      const balken = html.match(/<div class="rewards-goal__track[^"]*"[^>]*>/g) || [];
-      assert.equal(balken.length, 2, `${view} ${size}: beide Balken stehen im DOM`);
-      const emmas = balken.find((b) => /aria-valuetext="rewards\.balanceBelowZero"/.test(b));
-      assert.match(emmas, /class="rewards-goal__track sr-only"/, `${view} ${size}: im Minus nicht sichtbar`);
-      assert.match(emmas, /role="progressbar"/);
-      assert.match(emmas, /aria-valuenow="0"/);
-      const leos = balken.find((b) => b !== emmas);
-      assert.match(leos, /class="rewards-goal__track"/, `${view} ${size}: ein Saldo ueber null behaelt seinen Balken`);
-    }
-  }
-  // Hoch bleibt, wie es war: der ganze Satz, keine Kurzform.
-  const tall = renderRewardsWidget({ view: 'approver', me: 1, standings: kids, participantCount: 2, pending: 0, catalog: [KINO] }, '1x2');
-  assert.match(tall, /class="rewards-goal__label"[^>]*>rewards\.balanceBelowZero</);
-  assert.doesNotMatch(tall, /balanceBelowZeroShort/);
-  assert.doesNotMatch(tall, /sr-only/, 'hoch bleibt der Balken sichtbar');
-});
-
-test('Kachel: die Kurzform bricht um, hoechstens zwei Zeilen (#1623)', async () => {
-  // Zwei Mitglieder nebeneinander (Viewports um 500 und um 1000px) lassen dem
-  // Satz nur 165-197px: einzeilig mit Ellipse schnitt de, fr und el ab.
-  const { eachRule } = await import('./css-rules.js');
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  const rule = [...eachRule(css)].find((r) => r.selector.trim() === '.rewards-goal__label--compact');
-  assert.ok(rule, 'die Regel gibt es');
-  assert.doesNotMatch(rule.body, /white-space:\s*nowrap/, 'kein Einzeiler');
-  assert.match(rule.body, /(?:^|[;\s])line-clamp:\s*2\b/, 'Standard-Eigenschaft');
-  assert.match(rule.body, /-webkit-line-clamp:\s*2\b/);
-  assert.match(rule.body, /display:\s*-webkit-box/);
-  assert.match(rule.body, /-webkit-box-orient:\s*vertical/);
-  assert.match(rule.body, /overflow:\s*hidden/, 'ohne overflow klemmt line-clamp nichts ab');
 });
 
 test('Genehmigungsliste: der Saldo kommt mit der Anfrage, nicht aus der Teilnehmerliste (#1623)', () => {

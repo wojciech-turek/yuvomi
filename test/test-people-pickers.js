@@ -325,7 +325,6 @@ test('schedule: members and existing plan owners stay on offer', () => {
 
 const { __test: calendar } = await import('../public/pages/calendar.js');
 const { __test: documents } = await import('../public/pages/documents.js');
-const { __test: dashboard } = await import('../public/pages/dashboard.js');
 
 test('calendar: editing an event keeps its stored visibility in the form when at most one member is listed', () => {
   // state.users (aus /family/members) ist hier leer - wie in jedem Haushalt,
@@ -383,27 +382,9 @@ test('documents: without stored grants only members are offered', async () => {
   assert.deepEqual([...html.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1])), [ANNA.id]);
 });
 
-test('dashboard: the schedule slice brings the names of every plan owner, and the tile shows them', async () => {
-  // Clara (Hauspersonal) hat einen bestehenden Plan; data.users der Kachel
-  // kommt aus der strengen Mitgliederliste und kennt sie nicht.
-  globalThis.__apiStub = {
-    get: async (path) => {
-      if (path.startsWith('/schedule/entries')) {
-        return { data: { entries: [{ user_id: CLARA.id, date_key: '2030-05-01', source: 'pattern', shift_type: { id: 1, name: 'Frueh', short_code: 'F', color: '#123456' } }] } };
-      }
-      if (path === '/schedule/shift-types') return { data: [{ id: 1 }] };
-      if (path === '/auth/users') return { data: [ANNA, CLARA] };
-      return { data: null };
-    },
-  };
-  try {
-    const slice = await dashboard.loadScheduleSlice('2030-05-01');
-    const html = dashboard.renderScheduleWidget(slice, [ANNA], '1x2');
-    assert.match(html, /class="schedule-widget-row__name">Clara</, 'the row of a stored plan owner carries a name');
-  } finally {
-    delete globalThis.__apiStub;
-  }
-});
+// TAFLA (2026-10-19): the schedule tile of the old dashboard board, which
+// named every plan owner of the day, went with the board. Dziś shows only the
+// viewer's own shift (`myShiftsToday` from the server, utils/today-sheet.js).
 
 test('budget: the responsible filter chip keeps its name after a month change', () => {
   // Der Filter wird am Avatar einer Buchung gesetzt, die Clara nennt. Im

@@ -59,13 +59,6 @@ export function rememberLayoutHint(cfg, query = null) {
   } catch { /* z.B. voller oder gesperrter Speicher: der Hinweis ist entbehrlich */ }
 }
 
-/** Gemerkte Formen, sonst die uebergebenen Standardformen. */
-export function layoutHintSizes(fallbackSizes) {
-  const { sizes } = readHint();
-  if (Array.isArray(sizes) && sizes.length && sizes.every((s) => typeof s === 'string')) return sizes;
-  return fallbackSizes;
-}
-
 /** Gemerkter Abfragepfad, sonst der uebergebene Standardpfad. */
 export function layoutHintQuery(fallbackQuery) {
   const { query } = readHint();
