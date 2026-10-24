@@ -2428,6 +2428,28 @@ async function scrollEveryPort(page) {
   });
 }
 
+/**
+ * Hat ein Port DES KOPFES gescrollt? Das ist sein Scrollport (ein Vorfahr) und,
+ * in der gedeckelten Bauart, ein Port in dem gedeckelten Modul-Root, der den
+ * Kopf traegt - dieselbe Unterscheidung wie `wireCollapsingHeader`. Das
+ * Mehr-Blatt und die Suche haben eigene Ports; unter dem Kopf laeuft dabei
+ * nichts durch.
+ */
+async function headPortScrolled(page) {
+  return page.evaluate(() => {
+    const head = document.querySelector('.page-toolbar');
+    if (!head) return false;
+    const scrolls = (el) => /^(auto|scroll)$/.test(getComputedStyle(el).overflowY);
+    let capped = null;
+    let el = head.parentElement;
+    for (; el && el !== document.body && !scrolls(el); el = el.parentElement) {
+      if (!capped && getComputedStyle(el).overflowY === 'hidden') capped = el;
+    }
+    if (el && el.scrollTop > 0) return true;
+    return Boolean(capped) && [...capped.querySelectorAll('*')].some((p) => scrolls(p) && p.scrollTop > 0);
+  });
+}
+
 test('Sonde 8 - ein Kopf mit Lead-Zone traegt seine Linie erst angedockt, und dockt auch an', async () => {
   const page = await openPage(harness, { device: 'mobile', theme: 'light', locale: 'de' });
   const findings = [];
@@ -2449,9 +2471,22 @@ test('Sonde 8 - ein Kopf mit Lead-Zone traegt seine Linie erst angedockt, und do
     // durchgehend. Ein Kopf, der DANN keine traegt, hat gar keine Kante - das
     // war der Zustand der Rezepte, verursacht von einem leeren Slot, den die
     // Zeilenmessung fuer eine zweite Zeile hielt.
+    //
+    // TAFLA (2026-10-24, spec-components „Nagłówek": „no divider"): in Ruhe
+    // steht unter dem Kopf KEIN Trenner mehr - die Kante kommt, sobald Inhalt
+    // unter ihm liegt. Die Absicht der Regel bleibt: ein Kopf, unter dem Inhalt
+    // durchlaeuft, zeigt dann eine Kante. Geprueft wird deshalb nach dem
+    // Scrollen, und nur, wenn ein Port des Kopfes ueberhaupt gescrollt hat.
     if (!before.lead) {
-      if (!before.line) {
-        findings.push(`${name}: ohne Lead-Zone und ohne Linie - der Kopf hat in keinem Zustand eine Kante.`);
+      if (!before.docked && before.line) {
+        findings.push(`${name}: ohne Lead-Zone und ungescrollt, traegt aber schon die Linie (Tafla: kein Trenner in Ruhe).`);
+      }
+      await scrollEveryPort(page);
+      await new Promise((r) => setTimeout(r, 700));
+      const moved = await headPortScrolled(page);
+      const after = await headDocking(page);
+      if (moved && !after.line) {
+        findings.push(`${name}: ohne Lead-Zone, Inhalt unter dem Kopf, aber ohne Linie - der Kopf hat in keinem Zustand eine Kante.`);
       }
       continue;
     }

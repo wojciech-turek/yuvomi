@@ -965,6 +965,16 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // eine vermessene Hoehe - sie ist ihre ganze Lead-Zone. Ihre Linie bleibt
     // in beiden Zustaenden: sie ist die Kante des angedockten Kopfes.
     const fold = toolbar.classList.contains('page-toolbar--fold-row') && foldH > 0;
+    // EIN EINZEILIGER KOPF TRAEGT SEINE KANTE, SOBALD INHALT UNTER IHM LIEGT
+    // (Tafla: kein Trenner in Ruhe, spec-components „Nagłówek"). Bis dahin
+    // stand die Linie hier durchgehend; seit Tafla haette er sonst in keinem
+    // Zustand eine Kante (Sonde 8).
+    // Auch die Faltzeile (einzeilig): ihre Linie steht, solange ihr Port
+    // gescrollt ist, ob sie faltet oder - zu wenig Reserve - stehen bleibt.
+    if (!lead) {
+      toolbar.classList.toggle('is-docked', port.scrollTop > 0);
+      if (!fold) return;
+    }
     if (!fold && !toolbar.classList.contains('page-toolbar--capped')) return;
     const states = fold ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
     // Nur kollabieren, wenn der Port das Ausklappen danach auch verkraftet -
@@ -1001,9 +1011,13 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     else if (top < 8) setCollapsed(false, states);
   };
   // Die Leiste lauscht am Scrollport der Seite selbst - nur an IHM: innere
-  // Streifen und Listen der Seite sind nicht ihr Scroll.
+  // Streifen und Listen der Seite sind nicht ihr Scroll. Ein einzeiliger Kopf
+  // der scrollenden Bauart lauscht dort auch: er braucht nur zu wissen, ob
+  // Inhalt unter ihm liegt (seine Kante, siehe onInnerScroll).
   const onBarScroll = (e) => {
-    if (e.target === barPort) onInnerScroll(e);
+    if (e.target !== barPort) return;
+    if (barMode) onInnerScroll(e);
+    else if (!lead) toolbar.classList.toggle('is-docked', barPort.scrollTop > 0);
   };
   const unbindBar = () => {
     barPort?.removeEventListener('scroll', onBarScroll);
@@ -1086,11 +1100,12 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     barMode = !capped && Boolean(scrollport) && lead > 0 && Boolean(back?.getClientRects().length);
     toolbar.classList.toggle('page-toolbar--bar', barMode);
     toolbar.classList.toggle('page-toolbar--capped', (Boolean(capped) || barMode) && lead > 0);
-    if (barMode && !barPort) {
+    const listen = Boolean(scrollport) && !capped && (barMode || !lead);
+    if (listen && !barPort) {
       barPort = scrollport;
       barPort.addEventListener('scroll', onBarScroll, { passive: true });
       for (const type of GESTURES) barPort.addEventListener(type, onGesture, { capture: true, passive: true });
-    } else if (!barMode && barPort) {
+    } else if (!listen && barPort) {
       unbindBar();
     }
 
@@ -1244,7 +1259,11 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     io?.disconnect();
     io = null;
     if (!lead || !firstEl || !scrollport || capped || barMode) {
-      toolbar.classList.toggle('is-docked', !lead);
+      // Ohne Lead-Zone: die Kante steht, sobald Inhalt unter dem Kopf liegt
+      // (Tafla). In der gedeckelten Bauart weiss das nur der Scroll des
+      // inneren Ports (onInnerScroll) - hier bleibt sein letzter Stand.
+      const under = capped ? toolbar.classList.contains('is-docked') : (scrollport?.scrollTop ?? 0) > 0;
+      toolbar.classList.toggle('is-docked', !lead && under);
       return;
     }
     // DER BEOBACHTUNGSRAHMEN IST UM EINEN PIXEL KLEINER ALS DER SCROLLPORT,
