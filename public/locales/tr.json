@@ -119,8 +119,6 @@
         "quickActions": "Hızlı işlemler",
         "recipes": "Tarifler",
         "more": "Daha Fazla",
-        "moreBadge": "{{count}} açık",
-        "moreBadge_one": "{{count}} açık",
         "moreActiveLabel": "Daha fazla, {{section}} aktif",
         "moreCatalogHint": "Tüm modüller. Favorilerini ayarlardan özelleştir.",
         "documents": "Belgeler",

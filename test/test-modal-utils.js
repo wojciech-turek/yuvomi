@@ -1432,7 +1432,7 @@ test('Sheet-Drag: ein Tipp schreibt nichts (Schwelle), auch nicht beim Loslassen
   assert.deepEqual(sheet.writes, []);
 });
 
-test('Sheet-Griff: sichtbar im hellen Theme, in der Kopfzone statt ueber einem leeren Streifen, gleich an Dialog und Mehr-Blatt (Re-Critique 2026-09-27, P1 #1)', () => {
+test('Sheet-Griff: sichtbar im hellen Theme, in der Kopfzone statt ueber einem leeren Streifen (Re-Critique 2026-09-27, P1 #1)', () => {
   const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
   const layout = read('../public/styles/layout.css');
   const glass = read('../public/styles/glass.css');
@@ -1454,27 +1454,7 @@ test('Sheet-Griff: sichtbar im hellen Theme, in der Kopfzone statt ueber einem l
   assert.match(body(mobile, '.modal-panel'), /padding-top:\s*0/);
   assert.match(grip, /top:\s*var\(--space-2\)/);
   assert.match(body(mobile, '.modal-panel > .modal-panel__header'), /padding-top:\s*var\(--space-3\)/);
-  // Das Mehr-Blatt traegt denselben Griff.
-  const more = body([...eachRule(layout)], '.more-sheet__handle');
-  assert.match(more, /background-color:\s*var\(--sheet-grabber\)/);
-  assert.match(more, /height:\s*5px/);
-});
-
-test('Sheet-Grammatik: das Mehr-Blatt zieht ueber denselben Helfer wie der Dialog und federt per translate zurueck', () => {
-  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
-  const router = read('../public/router.js');
-  const layout = read('../public/styles/layout.css');
-  assert.match(router, /wireSheetDrag\(sheet, \{[\s\S]{0,200}resetAfterDismiss: true/);
-  assert.doesNotMatch(router, /clientY - _touchStartY > 60/, 'die alte Geste (erst bei touchend, ab 60px) ist weg');
-  const more = [...eachRule(layout)].find((r) => r.selector === '.more-sheet' && !r.at.length)?.body ?? '';
-  assert.match(more, /translate var\(--duration-lg\) var\(--ease-out\)/, 'Rueckfedern mit Token-Dauer und -Kurve');
-  // Derselbe Radius wie das Dialog-Sheet - aus dessen Regel gelesen, nicht als
-  // Literal: bis R18 stand hier `--radius-lg`, und der Guard waere beim Wechsel
-  // BEIDER Flaechen auf `--radius-xl` nur am Mehr-Blatt rot geworden.
-  const dialog = [...eachRule(layout)].find((r) => r.selector === '.modal-panel' && !r.at.length)?.body ?? '';
-  const radius = (body) => body.match(/border-radius:\s*([^;]+)/)?.[1].trim();
-  assert.ok(radius(dialog), 'das Dialog-Sheet traegt einen Radius');
-  assert.equal(radius(more), radius(dialog), 'Radius des Dialog-Sheets');
+  // 2026-10-24, Tafla: das Mehr-Blatt (es trug denselben Griff) ist entfernt.
 });
 
 /* DER ERSTFOKUS NIMMT KEINEN SPAETER GESETZTEN FOKUS WEG (#1156).

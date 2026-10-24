@@ -1064,68 +1064,6 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   color: var(--color-accent);
 }
 
-/* ── More-Backdrop ── */
-.more-backdrop {
-  /* BLENDET AUS, STATT ZU SPRINGEN (Nav-Polish 2026-10-15). Hier stand
-   * `display: none` und am offenen Zustand eine Einblend-Animation: beim
-   * Schliessen verschwand die Abdunklung im ersten Frame, waehrend das Blatt
-   * noch `--sheet-out` lang ausfuhr. Jetzt geht sie im selben Paar wie das
-   * Blatt (`--sheet-out`). `visibility` laeuft in derselben Transition mit
-   * und kippt erst an ihrem Ende - geschlossen ist der Backdrop unsichtbar,
-   * nimmt keinen Zeiger (`pointer-events: none`) und malt nichts. Fokus kann
-   * er nie tragen: ein leeres `div` mit `aria-hidden`. */
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity var(--sheet-out),
-    visibility var(--sheet-out);
-  position: fixed;
-  inset: 0;
-  background-color: var(--color-overlay);
-  z-index: calc(var(--z-nav) + 1);
-  backdrop-filter: var(--blur-2xs);
-  -webkit-backdrop-filter: var(--blur-2xs);
-  /* DIE ABDUNKLUNG FOLGT DEM ZUG (R18): utils/sheet-drag.js schreibt den Anteil
-   * des Zugs an der Blatthoehe als `--sheet-pull` (0..1). Vorher blieb sie voll,
-   * waehrend das Blatt schon halb aus dem Bild war. Nur `opacity`; ohne Zug
-   * steht die Eigenschaft nicht und der Wert ist 1. Geschlossen 0. */
-  opacity: 0;
-}
-
-.more-backdrop--visible {
-  opacity: calc(1 - var(--sheet-pull, 0));
-  visibility: visible;
-  pointer-events: auto;
-  /* Die Einfahrt behaelt ihre Blende (vorher die Animation `fade-in`, dieselben
-   * Werte; die Keyframes sind mit ihr entfallen). */
-  transition:
-    opacity var(--duration-sm) var(--ease-out),
-    visibility 0s;
-}
-
-/* Waehrend der Finger zieht, folgt die Abdunklung ihm ohne Verzug - wie das
- * Blatt selbst (`[data-sheet-drag="drag"]` unten). Mit der Transition liefe
- * sie dem Zug `--duration-sm` hinterher. */
-html:has(.more-sheet[data-sheet-drag="drag"]) .more-backdrop {
-  transition: none;
-}
-
-/* DIE KAPSEL BLEIBT HELL, SOLANGE IHR EIGENES BLATT OFFEN IST (A1, Kleinkram
- * der Re-Critique 2026-09-27). Der Backdrop lag ueber der Leiste und dimmte
- * den Mehr-Knopf mit, der das Blatt gerade traegt. Leiste und FAB heben sich
- * ueber ihn; ein Tipp daneben trifft weiter den Backdrop (die Zone ist
- * `pointer-events: none`, nur die Kapsel nimmt Treffer), ein Tipp auf einen
- * anderen Tab navigiert, und `navigate()` schliesst das Blatt. */
-html:has(.more-sheet[aria-hidden="false"]) .nav-bottom {
-  z-index: calc(var(--z-nav) + 2);
-}
-
-/* Der FAB liegt IN der Kapsel und darum eine Stufe ueber ihr - dieselbe
- * Ordnung wie sonst (--z-nav + 1 ueber --z-nav), nur beide gehoben. */
-html:has(.more-sheet[aria-hidden="false"]) :is(.page-fab, .page-fab-group) {
-  z-index: calc(var(--z-nav) + 3);
-}
-
 /* Der persistente Install-Promo-Banner (z-toast) weicht JEDEM fokussierten
  * Overlay — regulären Modals (.modal-overlay: Hilfe, Änderungen, Löschdialoge,
  * Formulare …), dem More-Sheet und dem Such-Overlay — statt deren Inhalt zu
@@ -1141,7 +1079,6 @@ html:has(.more-sheet[aria-hidden="false"]) :is(.page-fab, .page-fab-group) {
  * nicht die Handlung verdecken, fuer die Casey sie gerade geoeffnet hat; es
  * kehrt zurueck, sobald der Zustand endet. */
 html:has(.modal-overlay) yuvomi-install-prompt,
-html:has(.more-sheet[aria-hidden="false"]) yuvomi-install-prompt,
 html:has(.search-overlay--visible) yuvomi-install-prompt,
 html:has(.fab-actions--visible) yuvomi-install-prompt,
 html:has(.list-bulkbar) yuvomi-install-prompt {
@@ -1162,236 +1099,6 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * yuvomi-install-prompt.js). Die alte Formel würde hier sogar schaden: mit dem
  * in die Leiste gerückten Offset landete der Banner bei 70px und damit auf der
  * Tab-Bar. */
-
-/* ── More-Sheet ── */
-.more-sheet {
-  position: fixed;
-  /* DAS BLATT HOERT UEBER DER LEISTE AUF, DIE ES SONST VERDECKT.
-   *
-   * Vorher lag es auf `bottom: 0` und damit UEBER der Tab-Leiste. Gemessen bei
-   * 390x844: `elementFromPoint` lieferte am Mittelpunkt des Mehr-Knopfs
-   * (x 266,6-329,0 / y 776,9-835,0) nach dem Oeffnen `.more-item--logout` -
-   * derselbe Pixel oeffnete das Blatt und beendete danach die Sitzung
-   * (Critique 2026-08-13, P0). Der Bestaetigungsdialog fing es ab; die Stelle
-   * blieb trotzdem falsch.
-   *
-   * EINE UNTERKANTE UEBER DER LEISTE MACHT DEN FEHLER UNMOEGLICH statt ihn
-   * abzupolstern: in dem Streifen liegt jetzt entweder der Mehr-Knopf selbst
-   * (tippt man ihn erneut, schliesst das Blatt) oder der Backdrop (der
-   * schliesst es auch). Derselbe Pixel oeffnet und schliesst - und kein
-   * Bedienelement des Blattes steht mehr dort, wo ein Ziel der Leiste war.
-   * Das ist zugleich das native Muster: der More-Tab legt sich nicht auf seine
-   * eigene Leiste. Ein Sicherheitsabstand als padding-bottom haette dieselben
-   * 80px (64px Kapsel plus 16px Luft) gekostet und den Fehler nur eine Zeile weiter geschoben. */
-  bottom: var(--nav-bottom-height);
-  /* EIN BLATT, EINE FORM (Re-Critique 2026-09-27, A1 P2-3): Einrueckung,
-   * Material und Radius wie das Dialog-Sheet (`.modal-overlay`-Polster,
-   * `.modal-panel` + glass.css) - vorher randlos, oben 26px, nur eine
-   * Oberkante. Die Unterkante bleibt ueber der Leiste (Absatz darueber). */
-  left: max(var(--space-3), env(safe-area-inset-left));
-  right: max(var(--space-3), env(safe-area-inset-right));
-  /* SO BREIT WIE DIE KAPSEL, AUF DER ES STEHT (Nav-Polish 2026-10-15). Bei
-   * 768px mass das Blatt 744px ueber einer 560px-Kapsel und las als zweite,
-   * fremde Flaeche statt als ihr Ueberlauf. Gedeckelt auf --nav-capsule-max
-   * und ueber die Auto-Raender zwischen left/right zentriert, wie die Kapsel
-   * selbst; unter 584px greift die Grenze nicht (390px: unveraendert 366px). */
-  max-inline-size: var(--nav-capsule-max);
-  margin-inline: auto;
-  background-color: var(--color-surface);
-  border: 1px solid var(--glass-border);
-  /* Dieselbe Stufe wie der Dialog (R18, Begruendung an `.modal-panel`). */
-  border-radius: var(--radius-xl);
-  box-shadow: var(--glass-shadow-lg);
-  /* DER SEITENRAND IST HIER SPALTENBREITE, KEIN LUXUS. Seit das Raster vier
-   * statt drei Spalten fuehrt, entscheidet jeder Pixel Innenabstand darueber,
-   * ob ein deutscher Modulname einzeilig steht: die 4px, die von --space-4 auf
-   * --space-3 fallen, gehen zur Haelfte in jede Zelle. Unten bleibt der volle
-   * Wert - dort schliesst das Blatt gegen die Tab-Leiste ab, und die Fuge
-   * zwischen zwei schwebenden Flaechen ist der einzige Rand, den man sieht. */
-  padding: var(--space-2) var(--space-3) var(--space-4);
-  z-index: calc(var(--z-nav) + 2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  /* EIN BLATT, DAS AM UNTEREN RAND KLEBT, WAECHST NACH OBEN AUS DEM SCHIRM.
-   * Ohne diese Grenze mass es bei 320x568 eine Oberkante von -142,6px, und das
-   * Suchfeld lag komplett ausserhalb - per Tab erreichbar, per Auge nicht, und
-   * ohne jeden Scrollweg dorthin (Critique 2026-08-13, P0). Die --space-8 sind
-   * kein Rand, sondern der Beweis, dass es ein Blatt ist: der Streifen Seite
-   * darueber sagt, dass hinter dem Blatt noch etwas liegt, und ist die Flaeche,
-   * auf die man tippt, um es zu schliessen. dvh statt vh, weil die mobile
-   * Adressleiste die Hoehe waehrend der Sitzung aendert - ueber den Token, weil
-   * die Rechnung var() traegt und ein vh-Zwilling dann nichts rettet (#1276). */
-  max-block-size: calc(var(--viewport-height) - var(--nav-bottom-height) - var(--space-8));
-  /* EIN BLATT, EINE BEWEGUNG (R16): das Mehr-Blatt kommt wie das Dialog-Sheet
-   * - `--sheet-lift` Hub + Blende, `--sheet-in`/`--sheet-out` (tokens.css).
-   * Vorher fuhr es den vollen Weg (`translateY(100% + Leiste)`, 250ms) und
-   * war damit die zweite von drei Bewegungen fuer "Blatt von unten". Der
-   * Vollhub vertraegt die Feder nicht (sie wirft ihn ueber die Ruhelage).
-   *
-   * Geschlossen ist es durchsichtig UND nimmt keinen Zeiger; `inert` setzt
-   * router.js (`setOverlayInteractive`). Hier steht der AUSGANG (die Regel
-   * gilt, sobald `aria-hidden="false"` faellt), die Einfahrt an der offenen
-   * Regel unten.
-   * `translate` traegt den Zug des Fingers (utils/sheet-drag.js) und federt
-   * mit eigener Kurve zurueck; nach einer Wischgeste bleibt es stehen, und
-   * das Blatt blendet von dort aus, wohin der Finger es zog. */
-  transform: translateY(var(--sheet-lift));
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform var(--sheet-out),
-    opacity var(--sheet-out),
-    translate var(--duration-lg) var(--ease-out);
-}
-
-/* Der Deckel gehoert dem Blatt, das Scrollen dem Koerper: Griff und Suche
- * bleiben stehen, wo die Hand sie sucht, und nur die Gruppen wandern.
- * `min-block-size: 0` ist Pflicht - ein Flex-Kind schrumpft sonst nicht unter
- * seinen Inhalt, und die Grenze oben bliebe wirkungslos. */
-.more-sheet__body {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Der Sichtbarkeitsbeweis am Rand: die zwei Pixel Luft verhindern, dass der
-   * Fokusring der obersten Kachel am Scrollport abgeschnitten wird. */
-  padding-block: var(--space-0h);
-  margin-block: calc(-1 * var(--space-0h));
-}
-
-/* Die Module als GRUPPIERTE ZEILENLISTE (R19, Ulas 2026-10-16) - das Muster
- * der iOS-Einstellungen: je Sektion der Seitenleiste eine eingelassene Liste
- * mit Namen darueber. Vorher je Sektion ein Vierer-Raster; mit ein bis zwei
- * Kacheln je Gruppe stand mehr Luecke als Ziel im Blatt (724px bei 390x844).
- * Eine Liste ist so hoch, wie sie Eintraege hat, und braucht keine
- * Silbentrennung im Namen.
- *
- * Die Luft zwischen zwei Gruppen ist groesser als die zwischen Name und
- * Liste (--space-3 gegen --space-1): der Name gehoert zu SEINER Liste. Eine
- * Gruppe ohne Namen (eine Sektion mit nur einem Eintrag, navSectionLabelKey)
- * steht mit derselben Luft da, nur ohne Kopf. */
-.more-sheet__group + .more-sheet__group {
-  margin-block-start: var(--space-3);
-}
-
-.more-sheet__section-label {
-  color: var(--color-text-tertiary);
-  /* Die Textkante steht auf der Textkante der Zeilen darunter (Polster der
-   * Zeile), 4px binden das Label an seine Liste. */
-  padding-inline: var(--space-3);
-  margin-block-end: var(--space-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Der Traeger der Zeilen: EINE Flaeche je Gruppe, nicht eine je Zeile
- * (Zeilenlisten-Regel). Hell Surface wie das Blatt mit dem leisesten
- * Schatten, dunkel eine Stufe darueber (--sheet-tile-bg, tokens.css).
- * Konzentrisch zum Blatt: 26px aussen minus 12px Seitenpolster.
- * `overflow: clip` haelt den Druckzustand der ersten und letzten Zeile in
- * der Rundung. */
-.more-sheet__list {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--sheet-tile-bg);
-  border-radius: calc(var(--radius-xl) - var(--space-3));
-  box-shadow: var(--shadow-xs);
-  overflow: clip;
-}
-
-.more-sheet[aria-hidden="false"] {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
-  /* Der Hub federt, die Blende nicht (`--sheet-fade-in`, tokens.css). */
-  transition:
-    transform var(--sheet-in),
-    opacity var(--sheet-fade-in),
-    translate var(--duration-lg) var(--ease-out);
-}
-
-/* ── More-Sheet Drag-Handle ── */
-.more-sheet__handle {
-  grid-column: 1 / -1;
-  /* flex-shrink: 0, weil das Blatt seit der Obergrenze ein schrumpfender
-   * Flex-Container ist: bei 320px war der Griff auf 2,3px zusammengedrueckt. */
-  flex-shrink: 0;
-  /* Derselbe Griff wie am Dialog-Sheet (layout.css, Mobile-Block der
-   * `.modal-panel`): 36x5, 8px unter der Oberkante, Farbe `--sheet-grabber`. */
-  width: 36px;
-  height: 5px;
-  border-radius: var(--radius-full);
-  background-color: var(--sheet-grabber);
-  margin: 0 auto var(--space-2);
-}
-
-/* ── More-Sheet Suchleiste ── */
-.more-sheet__search {
-  grid-column: 1 / -1;
-  flex-shrink: 0;
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  /* Sieht aus wie das EINE Suchfeld (page-search.css), weil es sich wie eins
-   * anfuehlt: gefuellte Kapsel statt 16px-Ecke mit Kante (Komponenten-Kanon,
-   * 2026-09-26). Es ist ein Knopf, der die globale Suche oeffnet. */
-  border-radius: var(--radius-full);
-  background-color: var(--color-fill-field);
-  border: 1.5px solid transparent;
-  color: var(--color-text-secondary);
-  cursor: text;
-  font-family: inherit;
-  text-align: left;
-  margin-bottom: var(--space-1);
-  -webkit-tap-highlight-color: transparent;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast), transform var(--duration-xs) var(--ease-out);
-  user-select: none;
-}
-
-/* Der Hover eines FELDES lebt an seiner Kante, nicht an seiner Flaeche
- * (Dark-Kur 2026-08-17): ein Flaechenschritt drueckte den Platzhalter im Dark
- * unter AA (gemessen 3.82:1). Seit dem Komponenten-Kanon (2026-09-26) ist die
- * Kante in Ruhe transparent und der Hover faerbt sie ein - dieselbe Regel wie
- * am EINEN Suchfeld (page-search.css); der Platzhalter steht in
- * Sekundaertext auf --color-fill-field. */
-.more-sheet__search:hover {
-  border-color: var(--color-border-control);
-}
-
-.more-sheet__search:active {
-  border-color: var(--color-accent);
-  transform: scale(0.985);
-}
-
-.more-sheet__search:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) var(--tint-shadow), transparent);
-}
-
-.more-sheet__search-icon {
-  width: var(--space-4);
-  height: var(--space-4);
-  flex-shrink: 0;
-  transition: color var(--transition-fast);
-}
-
-.more-sheet__search:hover .more-sheet__search-icon,
-.more-sheet__search:active .more-sheet__search-icon {
-  color: var(--color-accent);
-}
-
-.more-sheet__search-placeholder {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  flex: 1;
-}
 
 /* ── Das Markensiegel (Block 2, 2026-08-10; ein Gesicht seit 2026-08-17) ──
  * Yuvomis Ausweisform, abgeleitet aus der Bildmarke (drei transluzente
@@ -1517,8 +1224,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * Nav-Selektoren bleiben daneben stehen: die Sidebar-Suche baut ihr Zeichen als
  * rohen Lucide-Platzhalter, gehört aber in dieselbe Leiste. */
 .module-glyph,
-.nav-item__icon,
-.more-item__icon {
+.nav-item__icon {
   stroke-width: var(--icon-stroke);
   vector-effect: non-scaling-stroke;
 }
@@ -1584,225 +1290,6 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   .module-seal--head {
     transition: none;
   }
-}
-
-/* ── More-Item: Modulzeile (Siegel · Name · Badge · Pfeil) ──
- * Die Zeile der iOS-Einstellungen: das Vollton-Siegel vorn nennt das Modul,
- * der Name steht in der Lesegroesse der App auf EINER Zeile, Zaehlbadge und
- * Pfeil sitzen am Ende. Die ganze Zeile ist das Ziel, mindestens
- * --target-base hoch (am Finger 48px). */
-.more-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: var(--target-base);
-  padding: var(--space-1h) var(--space-2) var(--space-1h) var(--space-3);
-  color: var(--color-text-primary);
-  text-decoration: none;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background-color var(--transition-fast);
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Die Trennlinie beginnt an der TEXTKANTE, nicht an der Zeilenkante (iOS):
- * Siegel stehen frei untereinander, die Namen sind getrennt. Polster vorn plus
- * Siegel plus Fuge. */
-.more-item + .more-item::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: calc(var(--space-3) + var(--target-sm) + var(--space-3)) 0;
-  block-size: 1px;
-  background-color: var(--color-border-subtle);
-}
-
-/* Gedrueckt wird die ZEILE: eine Flaeche, kein Schrumpfen - in einer Liste
- * stuende eine skalierte Zeile neben ihren Trennlinien. */
-.more-item:active {
-  background-color: var(--color-surface-hover);
-}
-
-/* Nur an einem echten Zeiger. Ohne die Abfrage blieb die zuletzt angetippte
- * Zeile nach dem Tap auf --color-surface-hover stehen und behauptete "du bist
- * hier", waehrend aria-current auf einer anderen lag - zwei widersprechende
- * Ortsangaben, eine davon ein Rest (Critique 2026-08-13). */
-@media (hover: hover) {
-  .more-item:hover {
-    background-color: var(--color-surface-elevated-hover);
-  }
-}
-
-/* Zählbadge: was in diesem Modul wartet - am Zeilenende vor dem Pfeil, wie
- * die Zahl in den iOS-Einstellungen. */
-.more-item__badge {
-  min-width: 20px;
-  padding-inline: var(--space-1h);
-  border-radius: var(--radius-full);
-  font-size: var(--type-caption);
-  font-weight: var(--font-weight-semibold);
-  line-height: 20px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  /* NEUTRAL, obwohl das Mehr-Blatt eine Mischstelle ist: die Herkunft nennt in
-   * dieser Zeile bereits das Vollton-Siegel davor. Die ZAHL nennt keine -
-   * sie zaehlt (Skalen-Regel, Gegenrichtung). */
-  background-color: var(--color-fill-well);
-  color: var(--color-text-secondary);
-}
-
-.more-item__chevron {
-  width: var(--icon-md);
-  height: var(--icon-md);
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-}
-
-.more-item[aria-current="page"] {
-  color: var(--color-accent);
-}
-
-/* Das Markensiegel traegt das Modul (Block 2): Vollton-Scheibe im
- * Familienton. Form und Material kommen vom .module-seal-Baustein; hier
- * stehen nur die Zeilengroesse und die Akzent-Weiterleitung. 32px in einer
- * 48px-Zeile - das Verhaeltnis der iOS-Einstellungen (29 in 44). */
-.more-item__icon-well {
-  --seal-accent: var(--item-module-accent, var(--color-text-secondary));
-  --seal-icon: var(--icon-md);
-  width: var(--target-sm);
-  height: var(--target-sm);
-  flex-shrink: 0;
-  /* Tafla: kein Inset-Specular mehr - ohne Scheibe gaebe es nichts, worauf
-   * das Licht faellt (vorher --glass-inset-elevated + -bottom-base). */
-}
-
-/* Aktives Modul (Sheet auf dieser Route geöffnet): Akzent-Ring am Siegel
- * plus Akzent-Name - zwei Kanaele, keiner davon nur Farbe der Flaeche. */
-.more-item[aria-current="page"] .more-item__icon-well {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.more-item__icon {
-  width: var(--icon-md);
-  height: var(--icon-md);
-  flex-shrink: 0;
-}
-
-/* Der Name: Lesegroesse, eine Zeile. In der Zeile hat er die ganze Breite
- * zwischen Siegel und Pfeil (rund 250px bei 390) - „Haushaltshilfe" bricht
- * nicht mehr, und ein ueberlanger Name eines Erweiterungsmoduls endet in
- * einer Ellipse statt die Zeile zu sprengen. */
-.more-item__label {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  font-size: var(--type-body);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.more-item[aria-current="page"] .more-item__label {
-  font-weight: var(--font-weight-semibold);
-}
-
-/* ── More-Sheet Divider: trennt Modul-Raster von der System-Reihe ──
- * Seit die Bereichskoepfe weg sind, ist diese Haarlinie die EINZIGE Zaesur im
- * Blatt - vorher lag sie zwischen zwei ohnehin verschiedenen Bloecken und
- * durfte flach anliegen. Der Abstand ist deshalb ihr Auftrag, nicht ihr Rand:
- * ohne ihn stossen die Kachelreihe und die Systemreihe im selben Rhythmus
- * aneinander wie zwei Kachelreihen untereinander. */
-.more-sheet__divider {
-  height: 1px;
-  background-color: var(--color-border-subtle);
-  margin-block: var(--space-2h);
-}
-
-/* ── System-Reihe: Einstellungen | Hilfe | Änderungen | Abmelden ──
- * Dieselben vier Spalten wie das Modul-Raster darueber, damit das Blatt EINE
- * Matrix ist und nicht zwei Raster mit verschiedenen Massen. Getrennt wird
- * ueber Material, nicht ueber Geometrie: die Module tragen Kasten und farbiges
- * Siegel, diese vier stehen monochrom auf blankem Grund.
- * Die Spaltenzahl kommt aus der Besetzung (router.js setzt --more-system-cols),
- * weil Einstellungen ein abschaltbares Modul ist und drei Ziele in vier Spalten
- * eine Luecke lassen, die wie ein fehlendes Element aussieht. */
-.more-sheet__system {
-  display: grid;
-  grid-template-columns: repeat(var(--more-system-cols, 4), minmax(0, 1fr));
-  gap: var(--space-1h);
-}
-
-/* System-Item: Icon-über-Label, monochrom — leichter als die farbigen
- * Modul-App-Icons, klar als „Meta/System" lesbar. */
-.more-action {
-  position: relative; /* Anker für den Update-Punkt (.nav-dot, #490) */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-1h) var(--space-1);
-  /* Konzentrisch zum Blatt: die Systemzeile schliesst es unten ab, dort
-   * stehen 16px Polster - 26px minus 16px. */
-  border-radius: calc(var(--radius-xl) - var(--space-4));
-  background-color: transparent;
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: center;
-  min-height: var(--target-base);
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
-}
-
-.more-action:active {
-  background-color: var(--color-surface-hover);
-  transform: scale(0.96);
-}
-
-/* Aktives System-Ziel (z. B. Einstellungen offen) markieren. */
-.more-action[aria-current="page"] {
-  color: var(--color-accent);
-  font-weight: var(--font-weight-semibold);
-}
-
-.more-action__icon {
-  width: var(--icon-lg);
-  height: var(--icon-lg);
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-}
-
-.more-action[aria-current="page"] .more-action__icon {
-  color: var(--color-accent);
-}
-
-/* Wortgleich .more-item__label: dieselbe Spaltenbreite, dieselbe Sprache,
- * dieselbe Antwort. „Einstellungen" ist mit 13 Zeichen fast so lang wie
- * „Haushaltshilfe" und braucht dieselbe Trennung, nicht eine zweite Regel.
- * OHNE die reservierte zweite Zeile: die System-Ziele sind EINE Reihe, und
- * innerhalb einer Reihe gleicht das Raster die Hoehen ohnehin an. Was die
- * Kacheln oben brauchen (fluchtende Kanten ueber mehrere Reihen), gaebe hier
- * nur leere Hoehe. */
-.more-action__label {
-  font-size: var(--type-micro);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.15;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  hyphens: auto;
-  hyphenate-limit-chars: 6 4 4;
-  -webkit-hyphenate-limit-before: 4;
-  -webkit-hyphenate-limit-after: 4;
-  overflow-wrap: anywhere;
 }
 
 /* ── Such-Overlay ── */
@@ -2148,7 +1635,7 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 @media (hover: hover) {
-  /* Wie .more-sheet__search: erhoehte Ruheflaeche, also die Stufe darueber. */
+  /* Erhoehte Ruheflaeche, also die Stufe darueber. */
   .search-scope:hover {
     background-color: var(--color-surface-hover);
   }
@@ -2364,12 +1851,6 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   margin-inline-start: auto;
 }
 
-/* Listenzeile im „Mehr"-Sheet: kein Icon-Well, der Punkt hängt an der Zeile. */
-.more-action > .nav-dot {
-  top: var(--space-1);
-  right: var(--space-1);
-}
-
 /* ── Nav-Item: Aktiv ── */
 .nav-item[aria-current="page"] {
   color: var(--color-accent);
@@ -2458,7 +1939,6 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * Ein zweiter Kanal, kein Ersatz: die Fläche trägt den Zustand weiter, die
  * Füllung verstärkt ihn. Kontrast kann sie nicht kosten - sie macht das Symbol
  * dichter, nicht blasser, und zwar in seiner eigenen Farbe. */
-.more-item[aria-current="page"] .more-item__icon-well svg,
 .sub-tab--active svg,
 .list-tab--active svg,
 .filter-chip--active svg,
@@ -7597,10 +7077,9 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
 }
 
 /* Waehrend der Finger zieht, fuehrt er - keine Transition. Ohne die Marke
- * federt `translate` zurueck (Dialog-Sheet oben, Mehr-Blatt an `.more-sheet`).
+ * federt `translate` zurueck (Dialog-Sheet oben).
  * Geteilte Grammatik: utils/sheet-drag.js. */
-.modal-panel[data-sheet-drag="drag"],
-.more-sheet[data-sheet-drag="drag"] {
+.modal-panel[data-sheet-drag="drag"] {
   transition: none;
 }
 
@@ -10473,11 +9952,6 @@ html:has(.app-page.is-selecting) {
     -webkit-backdrop-filter: none;
   }
 
-  .more-backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
   /* Ohne Blur braucht der Modal-Backdrop wieder volle Deckkraft, damit das
    * dahinterliegende Modul nicht unscharf-frei durchscheint. Dasselbe fuer
    * den Grund des nativen Dialogs (D7). */
@@ -10833,8 +10307,7 @@ textarea.input { resize: vertical; }
  * ============================================================ */
 
 /* SVG-Icons füllen ihren Eltern-Container */
-.nav-item__icon svg,
-.more-item__icon svg {
+.nav-item__icon svg {
   width: 100%;
   height: 100%;
   display: block;
@@ -11052,54 +10525,8 @@ textarea.input { resize: vertical; }
     opacity: 1;
   }
 
-  /* More-Sheet: kein vestibulär belastender Slide-up. Der Transform snappt
-   * ohne Bewegung; das Erscheinen trägt ein sanfter Opacity-Fade (die
-   * kanonische Reduced-Motion-Alternative). Backdrop faded weiterhin nur
-   * Opacity (bewegungsfrei) und bleibt daher unverändert. */
-  .more-sheet {
-    transition: opacity var(--transition-fast);
-    opacity: 0;
-    transform: none;
-  }
-
-  /* Der volle Shorthand an DERSELBEN Spezifitaet wie die offene Regel oben
-   * (die Regel `.more-sheet` darueber verloere gegen sie, der Hub kaeme unter
-   * reduzierter Bewegung zurueck). Hier stand `transition-property: opacity`:
-   * damit nahm die Blende Dauer und Kurve vom ERSTEN Eintrag der offenen Liste
-   * - dem Hub mit seiner Feder (gemessen `cubic-bezier(0.34, 1.56, ...)` unter
-   * reduzierter Bewegung, Critique 2026-10-16). */
-  .more-sheet[aria-hidden="false"] {
-    opacity: 1;
-    transform: none;
-    transition: opacity var(--transition-fast);
-  }
-
-  /* Der Backdrop bewegt sich nie, er blendet nur - dieselbe Ersatz-Blende wie
-   * das Blatt (Abmeldung in reset.css). `visibility` laeuft MIT: stand hier nur
-   * `opacity`, kippte sie beim Schliessen im ersten Frame auf hidden, und die
-   * Abdunklung war weg, waehrend das Blatt noch ausblendete - genau der Sprung,
-   * den die Grundregel oben behebt (Codex-Review zu #2025). visibility ist
-   * diskret und bewegt nichts; reset.css gibt beiden Eigenschaften dieselbe
-   * Ersatz-Dauer. */
-  .more-backdrop {
-    transition:
-      opacity var(--transition-fast),
-      visibility var(--transition-fast);
-  }
-
-  .more-backdrop--visible {
-    transition:
-      opacity var(--transition-fast),
-      visibility 0s;
-  }
-
-  .more-sheet__search:active,
-  .more-action:active {
-    transform: none;
-  }
-
-  /* Das aus der More-Sheet-Suche geöffnete Voll-Overlay teilt denselben
-   * translateY-Slide — ebenfalls durch einen bewegungsfreien Fade ersetzen. */
+  /* Das Such-Overlay faehrt per translateY ein - unter reduzierter Bewegung
+   * durch einen bewegungsfreien Fade ersetzen. */
   .search-overlay {
     transition: opacity var(--transition-fast);
     opacity: 0;

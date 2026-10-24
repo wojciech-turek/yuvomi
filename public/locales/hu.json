@@ -119,8 +119,6 @@
         "quickActions": "Gyors műveletek",
         "recipes": "Receptek",
         "more": "Több",
-        "moreBadge": "{{count}} nyitott",
-        "moreBadge_one": "{{count}} nyitott",
         "moreActiveLabel": "Több, {{section}} aktív",
         "moreCatalogHint": "Minden modul. A kedvenceket a beállításokban szabhatod testre.",
         "documents": "Dokumentumok",

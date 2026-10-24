@@ -119,8 +119,6 @@
         "quickActions": "Hurtighandlinger",
         "recipes": "Oppskrifter",
         "more": "Mer",
-        "moreBadge": "{{count}} åpne",
-        "moreBadge_one": "{{count}} åpne",
         "moreActiveLabel": "Mer, {{section}} aktiv",
         "moreCatalogHint": "Alle moduler. Tilpass dine favoritter i innstillingene.",
         "documents": "Dokumenter",

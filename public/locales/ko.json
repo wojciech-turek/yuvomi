@@ -118,8 +118,6 @@
         "navigation": "탐색",
         "quickActions": "빠른 작업",
         "more": "더보기",
-        "moreBadge": "대기 {{count}}개",
-        "moreBadge_one": "대기 {{count}}개",
         "moreActiveLabel": "더보기, {{section}} 활성",
         "moreCatalogHint": "모든 모듈. 즐겨찾기는 설정에서 변경할 수 있습니다.",
         "recipes": "레시피",

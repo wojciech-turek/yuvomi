@@ -119,8 +119,6 @@
         "quickActions": "Snelle acties",
         "recipes": "Recepten",
         "more": "Meer",
-        "moreBadge": "{{count}} open",
-        "moreBadge_one": "{{count}} open",
         "moreActiveLabel": "Meer, {{section}} actief",
         "moreCatalogHint": "Alle modules. Pas je favorieten aan in de instellingen.",
         "documents": "Documenten",

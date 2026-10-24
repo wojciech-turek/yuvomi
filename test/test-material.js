@@ -158,8 +158,10 @@ const radiusOf = (rule) => rule.body.match(/border-radius\s*:\s*([^;]+)/)?.[1].t
  * zuruecksetzt, waere sonst der stille Rueckfall (so stand es an
  * `.modal-panel` ab 768px).
  */
-test('R18: Dialog, Mehr-Blatt und Such-Palette tragen die Stufe der schwebenden Flaechen', () => {
-  for (const selector of ['.modal-panel', '.more-sheet', '.search-overlay__panel']) {
+test('R18: Dialog und Such-Palette tragen die Stufe der schwebenden Flaechen', () => {
+  // 2026-10-24, Tafla: das Mehr-Blatt ist entfernt (Więcej ist die Seite /more);
+  // die Regel gilt weiter fuer die schwebenden Flaechen, die bleiben.
+  for (const selector of ['.modal-panel', '.search-overlay__panel']) {
     const radii = [LAYOUT, GLASS].flatMap((css) => rulesFor(css, selector)).map(radiusOf).filter(Boolean);
     assert.ok(radii.length >= 1, `${selector}: keine Regel mit border-radius gefunden`);
     assert.deepEqual([...new Set(radii)], ['var(--radius-xl)'], `${selector} traegt ${radii.join(', ')}`);
@@ -196,10 +198,8 @@ test('R18: die Innenradien der schwebenden Flaechen sind konzentrisch', () => {
   const menu = px('var(--radius-glass-inner)');
   // [innen, aussen, Abstand zur Kante der Flaeche, Name]
   const pairs = [
-    // R19: das Mehr-Blatt ist eine gruppierte Zeilenliste - die Rundung traegt
-    // der Traeger der Zeilen, nicht mehr jede Kachel.
-    [first(LAYOUT, '.more-sheet__list'), outer, px('var(--space-3)'), 'Zeilenliste im Mehr-Blatt (12px Seitenpolster)'],
-    [first(LAYOUT, '.more-action'), outer, px('var(--space-4)'), 'Systemzeile im Mehr-Blatt (16px Polster unten)'],
+    // 2026-10-24, Tafla: Zeilenliste und Systemzeile des Mehr-Blatts sind mit
+    // dem Blatt entfallen; die uebrigen Paare tragen die Regel weiter.
     [first(LAYOUT, '.search-section__rows', (at) => /min-width:\s*768px/.test(at)), outer, px('var(--space-4)'),
       'Treffertraeger der Palette (16px Polster)'],
     [px('var(--radius-sm)'), outer, px('var(--space-4)'), 'Feld im Dialog und auf der Zugangstafel (16px Polster)'],
@@ -217,7 +217,9 @@ test('R18: die Innenradien der schwebenden Flaechen sind konzentrisch', () => {
  * Flaeche mehr: hell stand er als kuehler Graustreifen ueber der weissen Tafel.
  */
 test('R18: die Tafel faengt oben Licht, ihr Kopf ist keine Fremdflaeche, und sie traegt keinen Blur', () => {
-  for (const selector of ['.modal-panel::after', '.more-sheet::after', '.search-overlay__panel::after']) {
+  // 2026-10-24, Tafla: das Mehr-Blatt ist entfernt (Więcej ist die Seite /more);
+  // die Regel gilt weiter fuer die schwebenden Flaechen, die bleiben.
+  for (const selector of ['.modal-panel::after', '.search-overlay__panel::after']) {
     const rule = rulesFor(GLASS, selector)[0];
     assert.ok(rule, `${selector} fehlt`);
     assert.match(rule.body, /box-shadow:\s*var\(--glass-inset-elevated\)/, `${selector}: Lichtkante aus dem Inset-Token`);

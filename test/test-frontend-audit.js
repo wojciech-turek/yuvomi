@@ -2738,14 +2738,16 @@ test('router hides inactive overlays from keyboard focus', () => {
  * TAFLA (2026-10-20): the Więcej tab is a destination (/more), not the
  * trigger of the More sheet. Its accessible contract is therefore a link's:
  * it navigates and carries aria-current on its page, and announces no popup
- * (aria-haspopup/-controls would promise a dialog that no longer opens). The
- * sheet keeps its focus trap for as long as it is built.
+ * (aria-haspopup/-controls would promise a dialog that no longer opens).
+ * 2026-10-24, Tafla: the More sheet itself is removed - nothing opened it any
+ * more, so its focus-trap assertions went with it. What stays guarded is the
+ * tab's destination and that no sheet code comes back.
  */
-test('mobile More tab navigates to the Więcej page; the sheet keeps its focus trap', () => {
+test('mobile More tab navigates to the Więcej page; the old sheet is gone', () => {
   const source = read('../public/router.js');
 
   assert.match(source, /\{ path: '\/more',\s+page: '\/pages\/more\.js'/, 'the /more route exists');
-  assert.match(source, /if \(!e\.target\.closest\('#more-btn'\)\) return;[\s\S]{0,200}?navigate\(MORE_PATH\)/,
+  assert.match(source, /if \(!e\.target\.closest\?\.\('#more-btn'\)\) return;[\s\S]{0,200}?navigate\(MORE_PATH\)/,
     'the tab goes to /more');
   const moreBtnFn = /function moreNavButtonEl\(\)[\s\S]*?\n\}/.exec(source)?.[0] ?? '';
   assert.ok(moreBtnFn, 'moreNavButtonEl() not found');
@@ -2753,13 +2755,10 @@ test('mobile More tab navigates to the Więcej page; the sheet keeps its focus t
     'a navigating tab announces no popup');
   assert.match(source, /setMoreButtonState\(moreBtn, activeSecondary, path === MORE_PATH\)/,
     'on /more the tab is the current page');
-  assert.match(source, /const currentMoreBtn = \(\) => container\.querySelector\('#more-btn'\) \|\| moreBtn/);
-  assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'true'\)/);
-  assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'false'\)/);
+  assert.doesNotMatch(source, /more-sheet|more-backdrop|_closeMoreSheet|initMoreSheet/,
+    'the More sheet is gone - /more is the one Więcej');
+  // The search overlay still traps focus the shared way.
   assert.match(source, /function\s+createFocusTrap/);
-  assert.match(source, /moreSheetTrap/);
-  assert.match(source, /addEventListener\('keydown',\s*moreSheetTrap/);
-  assert.match(source, /removeEventListener\('keydown',\s*moreSheetTrap/);
 });
 
 test('More button active state keeps visible More identity and accessible active context', () => {
@@ -2796,7 +2795,7 @@ test('Strich der Modulzeichen liegt in der Mitte der Lucide-Spanne von --icon-md
   assert.ok(Math.abs(Number(stroke[1]) - mid) <= 0.05,
     `--icon-stroke ${stroke[1]} liegt nicht in der Mitte der Lucide-Spanne (${mid.toFixed(2)})`);
   const layout = read('../public/styles/layout.css');
-  assert.match(layout, /\.module-glyph,\s*\.nav-item__icon,\s*\.more-item__icon\s*\{\s*stroke-width:\s*var\(--icon-stroke\);\s*vector-effect:\s*non-scaling-stroke;/,
+  assert.match(layout, /\.module-glyph,\s*\.nav-item__icon\s*\{\s*stroke-width:\s*var\(--icon-stroke\);\s*vector-effect:\s*non-scaling-stroke;/,
     'die Modulzeichen tragen --icon-stroke als feste gerenderte Breite');
 });
 
@@ -2851,8 +2850,8 @@ test('Mehr-Knopf in Ruhe traegt keinen Ton: der Zustand nimmt den Modulton zurue
   assert.doesNotMatch(elseBranch, /setProperty\('--item-module-accent'/, 'in Ruhe setzt niemand einen Ton');
   // Und nirgends im Router bekommt ein Nav-Eintrag den App-Akzent als Modulton.
   assert.doesNotMatch(source, /setProperty\('--item-module-accent',\s*'var\(--color-accent\)'\)/);
-  // Liegt die aktive Route im Blatt, traegt der Knopf weiter ihren Ton.
-  assert.match(body, /if \(inMoreSheet\) \{[\s\S]*?setProperty\('--item-module-accent', moduleAccentVar\(activeSecondary\.module\)\)/);
+  // Liegt die aktive Route hinter Więcej, traegt der Knopf weiter ihren Ton.
+  assert.match(body, /if \(inMore\) \{[\s\S]*?setProperty\('--item-module-accent', moduleAccentVar\(activeSecondary\.module\)\)/);
 });
 
 test('Sidebar-Pille: EIN Material in hell und dunkel - Akzent-Toenung, Akzent-Rand, Schatten ohne Weissring', () => {
@@ -3096,25 +3095,13 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   );
 });
 
-test('More-Sheet honours prefers-reduced-motion (no vestibular slide-up)', () => {
+// 2026-10-24, Tafla: das Mehr-Blatt ist entfernt (/more ist die Seite Więcej);
+// von dem Paar bleibt das Such-Overlay, und fuer das gilt die Regel weiter.
+test('Such-Overlay honours prefers-reduced-motion (no vestibular slide-up)', () => {
   const layout = read('../public/styles/layout.css');
 
-  // Normalzustand: der Slide trägt einen transform-Transition.
-  assert.match(cssRuleBody(layout, '.more-sheet'), /transition:\s*transform/);
-
-  // Reduced-Motion: der translateY-Slide wird durch einen bewegungsfreien
-  // Opacity-Fade ersetzt — der Transform snappt ohne Bewegung.
-  assert.match(
-    layout,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.more-sheet\s*\{[\s\S]*?transition:\s*opacity[\s\S]*?opacity:\s*0/,
-  );
-  assert.match(
-    layout,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.more-sheet\[aria-hidden="false"\]\s*\{[\s\S]*?opacity:\s*1/,
-  );
-
-  // Das Such-Overlay der More-Sheet teilt denselben Slide und muss ebenfalls
-  // bewegungsfrei faden.
+  // Der translateY-Slide wird unter reduzierter Bewegung durch einen
+  // bewegungsfreien Opacity-Fade ersetzt.
   assert.match(cssRuleBody(layout, '.search-overlay'), /transition:\s*transform/);
   assert.match(
     layout,
@@ -3210,26 +3197,6 @@ test('mobile bottom navigation remains visible while content scrolls', () => {
 
   assert.doesNotMatch(source, /initNavHideOnScroll/);
   assert.doesNotMatch(layout, /\.nav-bottom--hidden\s*\{/);
-});
-
-test('More sheet closes route clicks through delegated handler after rebuilds', () => {
-  const source = read('../public/router.js');
-
-  assert.match(source, /sheet\.addEventListener\('click',\s*\(e\) =>/);
-  assert.match(source, /e\.target\.closest\('\[data-route\]'\)/);
-  assert.doesNotMatch(source, /sheet\.querySelectorAll\('\[data-route\]'\)\.forEach/);
-});
-
-test('More sheet search trigger is a native button with visible focus styling', () => {
-  const router = read('../public/router.js');
-  const layout = read('../public/styles/layout.css');
-  const focusRule = cssRuleBody(layout, '.more-sheet__search:focus-visible');
-
-  assert.match(router, /const moreSearchBar = document\.createElement\('button'\)/);
-  assert.match(router, /moreSearchBar\.type = 'button'/);
-  assert.doesNotMatch(router, /moreSearchBar\.setAttribute\('role',\s*'button'\)/);
-  assert.match(focusRule, /outline:/);
-  assert.match(focusRule, /box-shadow:/);
 });
 
 test('SPA navigation can move focus to main content after route changes', () => {
@@ -7231,13 +7198,6 @@ test('phase 4 settings theme toggle uses Lucide placeholders instead of inline S
   assert.match(settings, /icon: 'sun'/);
   assert.match(settings, /icon: 'moon'/);
   assert.match(settings, /<i data-lucide="\$\{icon\}"/);
-});
-
-test('phase 4 opens search from More sheet in a single handoff', () => {
-  const routerSource = read('../public/router.js');
-
-  assert.match(routerSource, /closeSheet\(\{\s*restoreFocus:\s*false\s*\}\)/);
-  assert.match(routerSource, /requestAnimationFrame\(\(\) => \{\s*openSearch\(\);/);
 });
 
 test('⌘K bei offener Suche: kein zweiter Focus-Trap, und Schliessen gibt den Fokus an den Ausloeser zurueck', () => {
@@ -17330,35 +17290,6 @@ test('rebuildNavigation zeichnet die Nav-Zahlen nach (#868)', () => {
 });
 
 /**
- * DAS MEHR-BLATT ZEICHNET ZUERST AUS DEM SPEICHER (#868).
- *
- * Ein Folgefehler des Fixes selbst, den erst eine Review fand: seit der
- * Shell-Aufbau die Zaehlstaende holt (fuer die Nav-Badges), stempelt er auch
- * deren TTL. Beim ersten Oeffnen des Mehr-Blattes innerhalb der naechsten 60
- * Sekunden gab `refreshModuleCounts()` deshalb `false` zurueck („nichts
- * Neues"), und die Wache darunter uebersprang das Zeichnen - die Kacheln
- * blieben leer, obwohl die Zahlen im Speicher lagen.
- *
- * Also derselbe Fehler wie der gemeldete, nur eine Ebene versetzt: eine Zahl,
- * die da ist, aber nicht gezeigt wird.
- *
- * Guard-Ebene: Struktur (aus dem Quelltext gelesen).
- */
-test('das Mehr-Blatt zeichnet erst aus dem Speicher, dann nach (#868)', () => {
-  const router = read('../public/router.js');
-  const fn = /function openSheet\(\)[\s\S]*?\n  \}/.exec(router);
-  assert.ok(fn, 'openSheet() ist nicht mehr auffindbar');
-
-  const bare = fn[0].indexOf('paintMoreSheetBadges(sheet);');
-  const guarded = fn[0].indexOf('if (fresh');
-  assert.ok(bare !== -1,
-    'das Blatt zeichnet die schon bekannten Zahlen nicht - innerhalb der TTL '
-    + 'bleiben die Kacheln leer, obwohl die Zahlen im Speicher liegen');
-  assert.ok(guarded !== -1 && bare < guarded,
-    'das Zeichnen aus dem Speicher muss VOR dem Nachziehen stehen');
-});
-
-/**
  * DIE DREI-TAGE-GRENZE STEHT AN ZWEI ENDEN UND MUSS DIESELBE SEIN (#868).
  *
  * Der Server zaehlt sie fuer den Startwert (`birthdaySoonCount` in
@@ -22110,34 +22041,6 @@ test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche - 
   const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat/.test(r.selector));
   assert.match(bare?.body ?? '', /border:\s*0/, 'die Felder sind nackt');
   assert.match(bare?.body ?? '', /background-color:\s*transparent/, 'die Felder sind nackt');
-});
-
-// Critique 2026-10-16 (Jordan): das Mehr-Blatt zeigte 16 Ziele als flaches
-// Raster ohne die Sektionen der Seitenleiste. Jetzt je Sektion eine benannte
-// Gruppe - dieselben Namen und dieselbe Schriftrolle wie die Seitenleiste.
-// R19 (Ulas 2026-10-16): die Gruppen sind ZEILENLISTEN wie in den
-// iOS-Einstellungen, kein Vierer-Raster mehr (724px hoch, Gruppen mit ein bis
-// zwei Kacheln in vier Spalten).
-test('Mehr-Blatt: die Module stehen als Zeilenliste in den Sektionen der Seitenleiste', () => {
-  const router = read('../public/router.js');
-  const body = router.slice(router.indexOf('function buildMoreSheetBody()'), router.indexOf('\n}\n', router.indexOf('function buildMoreSheetBody()')));
-  assert.match(body, /nodes\.push\(\.\.\.moreSheetSections\(modules, labelCounts\)\);/, 'das Blatt baut seine Module ueber die Sektionen');
-  const fn = router.slice(router.indexOf('function moreSheetSections('), router.indexOf('function buildMoreSheetBody()'));
-  assert.match(fn, /navSectionLabelKey\(section, /, 'die Namen (und die Kopf-Regel) der Seitenleiste');
-  assert.match(fn, /setAttribute\('role', 'group'\)[\s\S]*?setAttribute\('aria-labelledby', labelId\)/, 'hoerbar gruppiert wie die Seitenleiste');
-  assert.match(fn, /className = 'more-sheet__list'/, 'je Gruppe EINE Zeilenliste');
-  assert.doesNotMatch(router, /more-sheet__grid/, 'kein Raster mehr im Blatt');
-  const typo = [...eachRule(read('../public/styles/typography.css'))];
-  const role = typo.find((r) => r.selector.split(',').map((x) => x.trim()).includes('.nav-section-label'));
-  assert.ok(role && role.selector.includes('.more-sheet__section-label'), 'dieselbe Schriftrolle wie die Sektionsnamen der Seitenleiste');
-  const layout = [...eachRule(read('../public/styles/layout.css'))].filter((r) => !r.at.length);
-  const rule = (sel) => layout.find((r) => r.selector.trim() === sel)?.body ?? '';
-  assert.doesNotMatch(read('../public/styles/layout.css'), /\.more-sheet__grid\b/, 'die Rasterregel ist weg');
-  assert.match(rule('.more-item'), /display:\s*flex;[\s\S]*align-items:\s*center/, 'die Zeile: Siegel, Name, Badge, Pfeil nebeneinander');
-  assert.match(rule('.more-item'), /min-block-size:\s*var\(--target-base\)/, 'jede Zeile ist ein volles Ziel (am Finger 48px)');
-  assert.doesNotMatch(rule('.more-item'), /flex-direction:\s*column/, 'keine Kachel (Icon ueber Name) mehr');
-  assert.match(rule('.more-item__label'), /white-space:\s*nowrap/, 'der Name steht auf einer Zeile, ohne Silbentrennung');
-  assert.match(router, /chevron\.dataset\.lucide = 'chevron-right'/, 'der Pfeil am Zeilenende sagt: fuehrt weiter');
 });
 
 // R19 (Critique 2026-10-16, "Notizen-Pin-Gewichte"): die Nadel zeichnete mit

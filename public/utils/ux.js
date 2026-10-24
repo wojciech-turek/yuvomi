@@ -1747,7 +1747,7 @@ export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
 
   const inContent = (el) => el instanceof Element
     && Boolean(el.closest('.app-content'))
-    && !el.closest('dialog, [popover], .modal-overlay, .more-sheet');
+    && !el.closest('dialog, [popover], .modal-overlay');
 
   const onGesture = (e) => { if (inContent(e.target)) gestureAt = now(); };
   let pinned = false;

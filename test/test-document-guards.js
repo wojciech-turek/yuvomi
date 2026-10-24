@@ -1220,7 +1220,7 @@ const SHAPE_EXEMPT = new Map([
   ['group-toggle__btn', 'Zustandsschalter: Segment der Aufgaben-Gruppierung'],
   ['cal-toolbar__view-btn', 'Zustandsschalter: Segment der Kalender-Ansicht'],
   ['ydp__trigger', 'Griff: Feld-Oeffner des Datepickers, traegt Feldkante'],
-  ['more-sheet__search', 'Griff: Suchfeld des More-Sheets, traegt Feldkante'],
+  // 'more-sheet__search' stand hier bis 2026-10-24 (Tafla): das Mehr-Blatt ist entfernt.
   // Das Kanon-Segment (panel.css, DESIGN.md: konzentrisch eingesetzte
   // .segmented__item im radius-md-Traeger). Es stand bis 2026-09-25 auf keiner
   // gemessenen Route im Bild; seit der Dokumente-Critique traegt der Status
@@ -1229,7 +1229,7 @@ const SHAPE_EXEMPT = new Map([
   // 3. Zellen eines Rasters
   // `.month-day` stand hier, bis die Monatszelle 2026-09-24 vom role="button" zur
   // gridcell eines ARIA-Grids wurde - Sonde 3 misst sie seitdem nicht mehr.
-  ['more-action', 'Rasterzelle: Kachel im More-Sheet-Raster'],
+  // 'more-action' stand hier bis 2026-10-24 (Tafla): das Mehr-Blatt ist entfernt.
   ['metric-card--select', 'Rasterzelle: waehlbare Kennzahlkachel (.metric-card, Block-2-Konsolidierung)'],
   // Die Zyklus-Kachel ist seit #1181 ein <button>, der als GANZE Kachel zum
   // Zyklus-Tab durchklickt (health.css:1311). Sie steht in derselben

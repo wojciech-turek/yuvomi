@@ -118,8 +118,6 @@
         "navigation": "Navigation",
         "quickActions": "Schnellaktionen",
         "more": "Mehr",
-        "moreBadge": "{{count}} offen",
-        "moreBadge_one": "{{count}} offen",
         "moreActiveLabel": "Mehr, {{section}} aktiv",
         "moreCatalogHint": "Alle Module. Favoriten passt du in den Einstellungen an.",
         "recipes": "Rezepte",

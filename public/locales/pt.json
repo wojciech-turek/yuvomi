@@ -119,8 +119,6 @@
         "quickActions": "Ações rápidas",
         "recipes": "Receitas",
         "more": "Mais",
-        "moreBadge": "{{count}} pendentes",
-        "moreBadge_one": "{{count}} pendente",
         "moreActiveLabel": "Mais, {{section}} ativo",
         "moreCatalogHint": "Todos os módulos. Personalize os favoritos nas definições.",
         "documents": "Documentos",

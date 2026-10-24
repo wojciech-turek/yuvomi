@@ -118,8 +118,6 @@
         "navigation": "Navigasi",
         "quickActions": "Tindakan cepat",
         "more": "Lainnya",
-        "moreBadge": "{{count}} terbuka",
-        "moreBadge_one": "{{count}} terbuka",
         "moreActiveLabel": "Lainnya, {{section}} aktif",
         "moreCatalogHint": "Semua modul. Sesuaikan favorit di pengaturan.",
         "recipes": "Resep",

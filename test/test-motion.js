@@ -295,20 +295,20 @@ test('eine Kurvenfamilie: die Shorthands und das Sheet-Paar bestehen aus Tokens'
   assert.ok(dur('--sheet-in') <= 300, 'keine Bewegung ueber 300ms im Arbeitsfluss');
 });
 
-test('ein Blatt von unten: Dialog-Sheet, Mehr-Blatt und mobile Suche fahren aus EINEM Token-Paar', () => {
+test('ein Blatt von unten: Dialog-Sheet und mobile Suche fahren aus EINEM Token-Paar', () => {
+  // 2026-10-24, Tafla: das Mehr-Blatt ist entfernt (Więcej ist die Seite /more).
+  // Das Paar gilt weiter fuer die beiden Blaetter, die bleiben.
   const items = motionItems().filter((m) => !m.reduced);
   const uses = (selector, token) => items.some((m) => m.selector === selector && m.item.includes(`var(${token})`));
   // Eintritt
   assert.ok(items.some((m) => m.file === 'glass.css' && /^\.modal-panel:not\(\.modal-panel--closing\)$/.test(m.selector) && /glass-sheet-in var\(--sheet-in\)/.test(m.item)), 'Dialog-Sheet: Einfahrt aus --sheet-in');
-  assert.ok(uses('.more-sheet[aria-hidden="false"]', '--sheet-in'), 'Mehr-Blatt: Einfahrt aus --sheet-in');
   assert.ok(uses('.search-overlay--visible', '--sheet-in'), 'Suche: Einfahrt aus --sheet-in');
   // Austritt
   assert.ok(items.some((m) => m.selector === '.modal-panel.modal-panel--closing' && /sheet-out var\(--sheet-out\)/.test(m.item)), 'Dialog-Sheet: Ausgang aus --sheet-out');
-  assert.ok(uses('.more-sheet', '--sheet-out'), 'Mehr-Blatt: Ausgang aus --sheet-out');
   assert.ok(uses('.search-overlay', '--sheet-out'), 'Suche: Ausgang aus --sheet-out');
   // Der Hub: kein Vollhub mehr - die Feder wuerfe ihn ueber die Ruhelage.
   const layout = [...eachRule(css('layout.css'))];
-  for (const sel of ['.more-sheet', '.search-overlay']) {
+  for (const sel of ['.search-overlay']) {
     const body = layout.find((r) => r.selector === sel && !r.at.length)?.body ?? '';
     assert.match(body, /transform:\s*translateY\(var\(--sheet-lift\)\)/, `${sel}: kurzer Hub`);
     assert.doesNotMatch(body, /translateY\((?:calc\()?100%/, `${sel}: kein Vollhub`);
@@ -585,10 +585,11 @@ test('swapPage R20: was ausfaehrt, steht vor dem alten Bild am Ende - kein Mehr-
     delete globalThis.document;
     delete globalThis.matchMedia;
   }
+  // 2026-10-24, Tafla: das Mehr-Blatt - das einzige, was beim Seitenwechsel
+  // ausfuhr - ist entfernt; der Router reicht deshalb kein `settle` mehr. Der
+  // Mechanismus oben bleibt geprueft, und das Blatt kommt nicht zurueck.
   const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
-  assert.match(router, /await swapPage\(swap, \{[^}]*settle: settleClosingOverlays,/, 'der Router reicht das Beenden der Ausfahrt nicht an swapPage');
-  assert.match(router, /function settleClosingOverlays\(\) \{[\s\S]*?\.more-sheet, \.more-backdrop[\s\S]*?anim\.finish\(\)/,
-    'settleClosingOverlays beendet die Ausfahrt von Mehr-Blatt und Abdunklung nicht');
+  assert.doesNotMatch(router, /more-sheet|more-backdrop|settleClosingOverlays/, 'kein Mehr-Blatt mehr, das im Standbild stehen koennte');
 });
 
 test('swapPage: ein zweiter Wechsel vor dem Ende des ersten behaelt den Kopfnamen', async () => {
@@ -1795,7 +1796,7 @@ const SHARED_PRESSABLE = [
   ['.settings-overview__row', '.settings-overview__row'],
   ['.metric-card--tile', 'own'],
   ['.card--interactive', 'own'],
-  ['.more-item', 'own'],
+  // 2026-10-24, Tafla: `.more-item` ist mit dem Mehr-Blatt entfallen.
 ];
 /** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken.
  *  232 -> 225 (Tafla, 2026-10-24): Wand, Kochmodus und die Modulseiten sind neu geschrieben;
@@ -2150,11 +2151,9 @@ test('Blatt-Geste: ohne animate oder unter reduzierter Bewegung bleibt es beim A
   }
 });
 
-test('Blatt-Geste: Verdrahtung - das Mehr-Blatt reicht seinen Backdrop durch, dessen Deckkraft folgt der Custom Property', () => {
-  assert.match(publicSource('router.js'), /wireSheetDrag\(sheet, \{[\s\S]{0,200}resetAfterDismiss: true,[\s\S]{0,160}dim: \(\) => backdrop,/);
-  // Der Zug wirkt am OFFENEN Backdrop; geschlossen steht er auf 0 (Nav-Polish 2026-10-15).
-  const backdrop = ruleBodies('layout.css', '.more-backdrop--visible').join(';');
-  assert.match(backdrop, /opacity:\s*calc\(1 - var\(--sheet-pull, 0\)\)/, 'nur opacity - kein Layout, kein Neuzeichnen der Flaeche');
+// 2026-10-24, Tafla: die Verdrahtung des Mehr-Blatts (Backdrop per `dim`) ist
+// mit dem Blatt entfallen. Was fuer den Helfer selbst galt, bleibt geprueft.
+test('Blatt-Geste: der Helfer schreibt translate statt transform und raeumt erst im rAF', () => {
   // Der Tipp-/Esc-Ausgang bleibt der kurze Hub (Entscheidung 05.10.).
   assert.match(keyframesBody('sheet-out'), /translateY\(var\(--sheet-lift\)\)/);
   // Der Helfer schreibt weiter `translate`, nie `transform` (eine gefuellte Einfahrt schluege es).
@@ -2171,38 +2170,6 @@ test('mobiler Tab-Indikator gleitet wie jede Kapsel einer Leiste: --duration-lg 
   // (Nav-Polish 2026-10-15, M3).
   const ind = ruleBodies('layout.css', '.nav-bottom__indicator').join(';');
   assert.match(ind, /transition:\s*transform var\(--duration-lg\) var\(--ease-out\),\s*opacity var\(--transition-fast\)/);
-});
-
-test('Mehr-Blatt: der Backdrop blendet mit dem Blatt aus, statt im ersten Frame zu verschwinden', () => {
-  // Nav-Polish 2026-10-15 (M2). `display: none` am geschlossenen Backdrop schnitt
-  // die Abdunklung beim Schliessen sofort ab, waehrend das Blatt noch
-  // `--sheet-out` lang ausfuhr. Geschlossen: unsichtbar per Deckkraft und
-  // visibility, ohne Zeiger; der Ausgang laeuft im Paar des Blatts.
-  const closed = ruleBodies('layout.css', '.more-backdrop').join(';');
-  assert.doesNotMatch(closed, /display:\s*none/, 'kein display:none - es schneidet die Blende ab');
-  assert.match(closed, /opacity:\s*0\s*(;|$)/);
-  assert.match(closed, /visibility:\s*hidden/);
-  assert.match(closed, /pointer-events:\s*none/, 'geschlossen faengt er keinen Tipp ab');
-  assert.match(closed, /transition:\s*opacity var\(--sheet-out\),\s*visibility var\(--sheet-out\)/, 'Ausgang = Ausgang des Blatts');
-  const open = ruleBodies('layout.css', '.more-backdrop--visible').join(';');
-  assert.match(open, /visibility:\s*visible/);
-  assert.match(open, /pointer-events:\s*auto/);
-  assert.match(open, /visibility 0s/, 'beim Oeffnen sofort sichtbar');
-  assert.doesNotMatch(open, /animation:/);
-  // Waehrend des Zugs folgt die Deckkraft dem Finger ohne Transition.
-  assert.match(css('layout.css'), /html:has\(\.more-sheet\[data-sheet-drag="drag"\]\) \.more-backdrop \{\s*transition: none;/);
-});
-
-test('Mehr-Blatt: auch unter reduzierter Bewegung blendet der Backdrop aus, statt im ersten Frame zu verschwinden', () => {
-  // Codex-Review zu #2025: die Ersatz-Blende stand als `transition: opacity ...`
-  // fuer beide Zustaende; beim Schliessen kippte visibility sofort auf hidden,
-  // und die Abdunklung war weg, waehrend das Blatt noch ausblendete.
-  const rm = reducedMotionRules().filter((r) => r.file === 'layout.css');
-  const closed = rm.filter((r) => r.selectors.includes('.more-backdrop')).map((r) => r.body).join(';');
-  const open = rm.filter((r) => r.selectors.includes('.more-backdrop--visible')).map((r) => r.body).join(';');
-  assert.match(closed, /transition:\s*opacity var\(--transition-fast\),\s*visibility var\(--transition-fast\)/,
-    'geschlossen laeuft visibility mit der Blende, statt sofort zu kippen');
-  assert.match(open, /transition:\s*opacity var\(--transition-fast\),\s*visibility 0s/, 'geoeffnet sofort sichtbar');
 });
 
 // --------------------------------------------------------------------------
@@ -2357,12 +2324,13 @@ test('jede @keyframes hat einen Nutzer - im Stylesheet oder im Skript', () => {
   assert.deepEqual(dead, [], 'Keyframes ohne Nutzer - loeschen statt mit einem Kommentar am Leben halten');
 });
 
-test('Mehr-Blatt und Suche: der Hub federt, die Blende der Einfahrt nicht (Critique 2026-10-16, A5)', () => {
+test('Suche: der Hub federt, die Blende der Einfahrt nicht (Critique 2026-10-16, A5)', () => {
+  // 2026-10-24, Tafla: das Mehr-Blatt ist entfernt (Więcej ist die Seite /more).
   const tokens = shorthandTokens();
   assert.match(tokens.find((tok) => tok.name === '--sheet-fade-in')?.value ?? '', /^var\(--duration-xl\) var\(--ease-out\)$/, 'Dauer wie --sheet-in, ruhige Kurve');
   // Die Grundregeln (mobil: das Blatt von unten); die Desktop-Palette der Suche blendet nur.
   const base = [...eachRule(css('layout.css'))].filter((r) => !r.at.length);
-  for (const sel of ['.more-sheet[aria-hidden="false"]', '.search-overlay--visible']) {
+  for (const sel of ['.search-overlay--visible']) {
     const body = base.find((r) => r.selector === sel && /transition\s*:/.test(r.body))?.body ?? '';
     const opacity = splitCommas(body.match(/transition\s*:\s*([^;]+)/)?.[1] ?? '').filter((item) => /^opacity\b/.test(item));
     assert.ok(opacity.length, `${sel}: Blende gefunden`);
@@ -2370,8 +2338,9 @@ test('Mehr-Blatt und Suche: der Hub federt, die Blende der Einfahrt nicht (Criti
   }
   // Unter reduzierter Bewegung: ein eigener Shorthand. `transition-property:
   // opacity` allein nahm Dauer und Kurve vom ersten Listeneintrag der offenen
-  // Regel - dem federnden Hub.
-  const reduced = [...eachRule(css('layout.css'))].filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)) && r.selector === '.more-sheet[aria-hidden="false"]');
+  // Regel - dem federnden Hub. (Geprueft am Mehr-Blatt, bis es entfiel; die
+  // Suche schreibt ihren Shorthand an der geschlossenen Regel.)
+  const reduced = [...eachRule(css('layout.css'))].filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)) && r.selector === '.search-overlay');
   assert.ok(reduced.length, 'Vorbedingung: die Regel ist gefunden');
   for (const r of reduced) {
     assert.doesNotMatch(r.body, /transition-property\s*:/, 'keine Eigenschaft ohne eigene Kurve');
