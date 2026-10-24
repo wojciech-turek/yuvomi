@@ -766,10 +766,10 @@ export const SETTINGS_SECTIONS = freezeEntries([
 export const SETTINGS_LEAVES = freezeEntries([
   // Konto
   { id: 'personal-account', domainId: 'personal', path: '/settings/personal/account', labelKey: 'settings.pageAccount', descriptionKey: 'settings.pageAccountDescription', icon: 'circle-user' },
-  { id: 'personal-appearance', domainId: 'personal', path: '/settings/personal/appearance', labelKey: 'settings.pageAppearance', descriptionKey: 'settings.pageAppearanceDescription', icon: 'palette' },
+  { id: 'personal-appearance', domainId: 'personal', path: '/settings/personal/appearance', labelKey: 'settings.pageAppearance', descriptionKey: 'settings.pageAppearanceDescription', icon: 'sun-moon' },
   { id: 'personal-device', domainId: 'personal', path: '/settings/personal/device', labelKey: 'settings.pageDevice', descriptionKey: 'settings.pageDeviceDescription', icon: 'smartphone' },
   { id: 'personal-notifications', domainId: 'personal', path: '/settings/personal/notifications', labelKey: 'settings.pageNotifications', descriptionKey: 'settings.pageNotificationsDescription', icon: 'bell' },
-  { id: 'personal-weather', domainId: 'personal', path: '/settings/personal/weather', labelKey: 'settings.pageWeather', descriptionKey: 'settings.pageWeatherDescription', icon: 'cloud-sun' },
+  { id: 'personal-weather', domainId: 'personal', path: '/settings/personal/weather', labelKey: 'settings.pageWeather', descriptionKey: 'settings.pageWeatherDescription', icon: 'map-pin' },
   // Haushalt
   { id: 'admin-family', domainId: 'admin', path: '/settings/admin/family', labelKey: 'settings.pageFamilyRoles', descriptionKey: 'settings.pageFamilyRolesDescription', icon: 'users' },
   { id: 'admin-permissions', domainId: 'admin', path: '/settings/admin/permissions', labelKey: 'settings.pagePermissions', descriptionKey: 'settings.pagePermissionsDescription', icon: 'shield-check' },
@@ -778,7 +778,7 @@ export const SETTINGS_LEAVES = freezeEntries([
   { id: 'admin-backup', domainId: 'admin', path: '/settings/admin/backup', labelKey: 'settings.pageBackupRestore', descriptionKey: 'settings.pageBackupRestoreDescription', icon: 'database-backup' },
   { id: 'admin-system', domainId: 'admin', path: '/settings/admin/system', labelKey: 'settings.pageSystem', descriptionKey: 'settings.pageSystemDescription', icon: 'info' },
   { id: 'admin-api', domainId: 'admin', path: '/settings/admin/api', labelKey: 'settings.pageApiAccess', descriptionKey: 'settings.pageApiAccessDescription', icon: 'key-round' },
-  { id: 'admin-integrations', domainId: 'admin', path: '/settings/admin/integrations', labelKey: 'settings.pageIntegrations', descriptionKey: 'settings.pageIntegrationsDescription', icon: 'plug' },
+  { id: 'admin-integrations', domainId: 'admin', path: '/settings/admin/integrations', labelKey: 'settings.pageIntegrations', descriptionKey: 'settings.pageIntegrationsDescription', icon: 'cloud-sun' },
   { id: 'admin-ai', domainId: 'admin', path: '/settings/admin/ai', labelKey: 'settings.pageAi', descriptionKey: 'settings.pageAiDescription', icon: 'sparkles' },
   // Module - in der Reihenfolge der Seitenleiste ohne eigene Anordnung
   // (settingsSheetsForDomain sortiert nach Gruppe und Haushalts-Reihenfolge).

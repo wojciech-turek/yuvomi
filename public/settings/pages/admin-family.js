@@ -7,13 +7,16 @@ import {
 } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
+import { personToken } from '/utils/person-color.js';
 import { prefersInkText } from '/utils/contrast.js';
 import { AVATAR_COLORS } from '/utils/color.js';
 import { sortMembers } from '/utils/member-order.js';
 import { makeSortable } from '/utils/sortable.js';
 import { vibrate } from '/utils/ux.js';
 import { openModal, closeModal, confirmModal, refocusAfterRender } from '/components/modal.js';
-import { createRetryState, formSwitchRowHtml, settingSwitchRowHtml } from '/settings/components.js';
+import {
+  createRetryState, formSwitchRowHtml, settingSwitchRowHtml, taflaRowHtml, taflaGroupHtml,
+} from '/settings/components.js';
 import { formRowHtml, formRowsHtml } from '/utils/form-row.js';
 import {
   renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect,
@@ -148,7 +151,22 @@ function bindAvatarPicker(container, prefix) {
   });
 }
 
-function memberHtml(u, currentUserId, { orderable = false, aligned = false } = {}) {
+/**
+ * Die Scheibe einer Zeile (Tafla): das Bild, sonst das Initial in der
+ * kuratierten Personenfarbe (utils/person-color.js) - Tinte auf Toenung, in
+ * beiden Themes AA. Die frei gewaehlte Avatarfarbe ist die Richtung, die
+ * Palette liefert die lesbare Fassung; der Bearbeiten-Dialog zeigt weiter die
+ * gewaehlte Farbe selbst.
+ */
+function memberDiscHtml(u, household = []) {
+  if (u?.avatar_data) return avatarHtml(u, 'settings-avatar settings-avatar--sm');
+  const token = personToken(u ?? {}, household.filter((m) => m.is_household_member !== false));
+  return `
+    <div class="settings-avatar settings-avatar--sm settings-avatar--person" title="${esc(u?.display_name || '')}"
+      style="--disc-ink: ${token.ink}; --disc-tint: ${token.tint}">${esc(initials(u?.display_name, '?'))}</div>`;
+}
+
+function memberHtml(u, currentUserId, { orderable = false, aligned = false, household = [] } = {}) {
   // Der Griff der Haushaltsreihenfolge (#1644). Ein BUTTON wie in der
   // Einkaufsliste: er traegt den Tastaturpfad selbst (Pfeiltasten bei Fokus),
   // statt ein Auf/Ab-Paar neben Bearbeiten und Entfernen zu stellen. Nur an
@@ -197,7 +215,7 @@ function memberHtml(u, currentUserId, { orderable = false, aligned = false } = {
       </button>`;
   return `
     <li class="settings-member${former ? ' settings-member--former' : ''}${orderable ? ' settings-member--orderable' : ''}" data-id="${u.id}">${handle}
-      ${avatarHtml(u, 'settings-avatar settings-avatar--sm')}
+      ${memberDiscHtml(u, household)}
       <div class="settings-member__info">
         <span class="settings-member__name" data-member-name>${esc(u.display_name)}${u.id === currentUserId ? ` <span class="settings-member__self">${esc(t('settings.memberYou'))}</span>` : ''}</span>
         <span class="settings-member__meta">@${esc(u.username)} · ${esc(familyRole)}${systemRole}${formerBadge}</span>
@@ -359,42 +377,46 @@ function addInviteFormHtml() {
         </div>`;
 }
 
+/* TAFLA (2026-10-20, Artboard Domownicy). Gruppen in Tafla-Karten: die
+ * Menschen im Haus (mit "Dodaj domownika" als Zeile in der Karte), die
+ * Einladungen ("Zaproś kogoś", mit dem Weg zu den Rechten), das Logowanie
+ * dwuetapowe (Pflicht und wer es hat - ein Erinnern daran gibt es nicht, also
+ * steht kein "Przypomnij" da), die Konten der Kinder und der Tablet in der
+ * Kueche. Die Verwaltung bleibt dieselbe: Bearbeiten, Entfernen, Reihenfolge,
+ * Dialoge. */
 function renderPage(container) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="settings-section">
-      <h2 class="settings-section__title">${t('settings.sectionFamily')}</h2>
-      <div class="settings-card" id="members-card">
-        <ul class="settings-members row-divided" id="members-list"></ul>
-        <p class="form-hint" id="members-order-hint" hidden>${t('settings.memberOrderHint')}</p>
+    <section class="settings-section family-page">
+      <section class="tafla-group" id="members-card" aria-labelledby="members-title">
+        <h2 class="sr-only" id="members-title">${t('settings.sectionFamily')}</h2>
+        <div class="tafla-card family-card">
+          <ul class="settings-members row-divided" id="members-list"></ul>
+          <div class="settings-member-actions">
+            <button class="settings-add-btn tafla-row tafla-row--accent" id="add-member-btn" hidden><span class="tafla-row__lead" aria-hidden="true"><i data-lucide="user-plus"></i></span><span class="tafla-row__body"><span class="tafla-row__title">${t('settings.addMember')}</span></span></button>
+          </div>
+        </div>
+        <p class="tafla-group__footer" id="members-order-hint" hidden>${t('settings.memberOrderHint')}</p>
         <div class="sr-only" role="status" aria-live="polite" id="members-order-announce"></div>
-        ${/* EINLADEN STEHT BEI DEN EINLADUNGEN (R20, Re-Critique 2026-10-17,
-             A3 P3). R19 hatte Einladen gefuellt neben "Mitglied hinzufuegen"
-             unter die Mitgliederliste gestellt; die Karte "Einladungen"
-             darunter blieb ohne Handlung, und der Knopf, der eine Einladung
-             anlegt, stand in der Karte, die keine zeigt. Jetzt traegt jede
-             Karte ihren Weg: die Mitglieder das direkte Anlegen (ruhig), die
-             Einladungen das Einladen (gefuellt, der haeufigere Weg - die
-             eingeladene Person waehlt ihr Passwort selbst). */ ''}
-        <div class="settings-member-actions">
-          <button class="btn btn--secondary settings-add-btn" id="add-member-btn" hidden><i data-lucide="user-plus" aria-hidden="true"></i>${t('settings.addMember')}</button>
-        </div>
-      </div>
+      </section>
 
-      <div class="settings-card" id="invites-card">
-        <h3 class="settings-card__title">${t('settings.invites.title')}</h3>
-        <p class="form-hint">${t('settings.invites.intro')}</p>
-        <ul class="settings-members row-divided" id="invites-list"></ul>
-        <div class="settings-member-actions">
-          <button class="btn btn--primary settings-add-btn" id="add-invite-btn" hidden><i data-lucide="mail-plus" aria-hidden="true"></i>${t('settings.invites.add')}</button>
+      <section class="tafla-group" id="invites-card" aria-labelledby="invites-title">
+        <h3 class="tafla-group__title" id="invites-title">${t('settings.invites.title')}</h3>
+        <div class="tafla-card family-card">
+          <ul class="settings-members row-divided" id="invites-list"></ul>
+          <div class="settings-member-actions">
+            <button class="settings-add-btn tafla-row tafla-row--accent" id="add-invite-btn" hidden><span class="tafla-row__lead" aria-hidden="true"><i data-lucide="mail-plus"></i></span><span class="tafla-row__body"><span class="tafla-row__title">${t('settings.invites.add')}</span></span></button>
+          </div>
+          ${taflaRowHtml({ title: t('settings.pagePermissions'), glyph: 'shield-check', chevron: true, href: '/settings/admin/permissions' })}
         </div>
-      </div>
+        <p class="tafla-group__footer">${t('settings.invites.intro')} ${t('settings.familyHelperHint')}</p>
+      </section>
 
       <!-- Zeilen im Traeger (R17, E9): der Schalter, darunter als zweite Zeile
            die Liste, wen die Pflicht trifft - beides zusammen ist die
            Entscheidung (#672). -->
       <div id="two-factor-household-card">
-        <h3 class="settings-card__title settings-group__title">${t('settings.twoFactorTitle')}</h3>
+        <h3 class="settings-card__title settings-group__title tafla-group__title">${t('settings.twoFactorTitle')}</h3>
         <div class="row-carrier settings-group">
           ${settingSwitchRowHtml({
             label: t('settings.twoFactorRequireLabel'),
@@ -410,8 +432,58 @@ function renderPage(container) {
         </div>
       </div>
 
+      ${taflaGroupHtml({
+        id: 'family-kids',
+        title: t('settings.familyKidsTitle'),
+        rows: [taflaRowHtml({
+          title: t('settings.familyKidsRow'),
+          glyph: 'baby',
+          value: t('settings.familyKidsNone'),
+          chevron: true,
+          button: true,
+          attrs: { id: 'family-kids-add', 'aria-haspopup': 'dialog' },
+        })],
+        footer: t('settings.familyKidsFooter'),
+      })}
+
+      ${taflaGroupHtml({
+        id: 'family-devices',
+        title: t('settings.familyDevicesTitle'),
+        rows: [taflaRowHtml({
+          title: t('settings.pageDisplays'),
+          glyph: 'tablet',
+          chevron: true,
+          href: '/settings/admin/displays',
+          attrs: { id: 'family-tablet-row' },
+        })],
+      })}
     </section>
   `);
+  fillTabletValue(container);
+}
+
+/** Der Wert der Zeile Tablet: gekoppelt oder nicht (GET /displays, Admin) -
+ * dieselbe Regel wie in der Wurzel (overview-values.js, tabletValue). */
+async function fillTabletValue(container) {
+  try {
+    const displays = (await api.get('/displays'))?.data;
+    if (!Array.isArray(displays) || !displays.length) return;
+    const paired = displays.some((d) => (d.devices ?? []).some((device) => !device.revoked_at));
+    const value = paired ? t('settings.valueTabletPaired') : t('settings.valueTabletNotPaired');
+    const row = container.querySelector('#family-tablet-row');
+    if (!value || !row) return;
+    row.querySelector('.tafla-row__body')?.insertAdjacentHTML('afterend', `<span class="tafla-row__value">${esc(value)}</span>`);
+  } catch {
+    // Ohne Antwort bleibt die Zeile ohne Wert - sie fuehrt trotzdem hin.
+  }
+}
+
+/** Wie viele Kinder ein eigenes Konto haben - sonst "Nie teraz". */
+function paintKids(container, users) {
+  const value = container.querySelector('#family-kids-add .tafla-row__value');
+  if (!value) return;
+  const kids = users.filter((u) => u.family_role === 'child' && !u.deactivated_at).length;
+  value.textContent = kids ? t('settings.familyKidsCount', { count: kids }) : t('settings.familyKidsNone');
 }
 
 /**
@@ -480,7 +552,7 @@ function renderMemberList(container, users, currentUserId, currentUser = null) {
     // zwischen zwei Abrufen lokal weiterlebt - ein eben angelegtes Mitglied
     // haengt am Ende des Arrays und gehoert ins Alphabet der Unplatzierten.
     const ordered = orderedMembers(users);
-    list.insertAdjacentHTML('beforeend', ordered.map((u) => memberHtml(u, currentUserId, { orderable: canOrder.has(u.id), aligned: canOrder.size > 0 })).join(''));
+    list.insertAdjacentHTML('beforeend', ordered.map((u) => memberHtml(u, currentUserId, { orderable: canOrder.has(u.id), aligned: canOrder.size > 0, household: users })).join(''));
   }
   window.lucide?.createIcons({ el: list });
 }
@@ -1175,7 +1247,7 @@ function syncSsoOnlyField(container) {
   if (email) email.required = on;
 }
 
-function openAddMemberModal(container, currentUser, users) {
+function openAddMemberModal(container, currentUser, users, { presetRole = null } = {}) {
   openModal({
     title: t('settings.newMemberTitle'),
     size: 'md',
@@ -1186,6 +1258,12 @@ function openAddMemberModal(container, currentUser, users) {
         ?.addEventListener('change', () => syncSsoOnlyField(panel));
       syncSsoOnlyField(panel);
       bindChildStartHint(panel, 'new-family-role', 'new-member-child-hint');
+      // "Konta dzieci" oeffnet denselben Dialog mit der Rolle Kind (Tafla).
+      const roleSelect = panel.querySelector('#new-family-role');
+      if (presetRole && roleSelect) {
+        roleSelect.value = presetRole;
+        roleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       panel.querySelector('#cancel-add-member')?.addEventListener('click', () => closeModal());
 
       form.addEventListener('submit', async (event) => {
@@ -1239,6 +1317,12 @@ function bindEvents(container, currentUser, users) {
     addMemberBtn.hidden = false;
     addMemberBtn.addEventListener('click', () => openAddMemberModal(container, currentUser, users));
   }
+  const kidsBtn = container.querySelector('#family-kids-add');
+  if (kidsBtn && !kidsBtn.dataset.wired) {
+    kidsBtn.dataset.wired = 'true';
+    kidsBtn.addEventListener('click', () => openAddMemberModal(container, currentUser, users, { presetRole: 'child' }));
+  }
+  paintKids(container, users);
 
   bindDeleteButtons(container, currentUser, users);
   bindEditButtons(container, currentUser, users);
@@ -1304,7 +1388,7 @@ async function loadTwoFactorHousehold(container) {
       <i data-lucide="${member.enabled ? 'shield-check' : 'shield-off'}" aria-hidden="true"
          class="settings-2fa__member-icon settings-2fa__member-icon--${member.enabled ? 'on' : 'off'}"></i>
       <span class="settings-2fa__member-name">${esc(member.display_name)}</span>
-      <span class="settings-2fa__member-state">${member.enabled
+      <span class="settings-2fa__member-state tafla-pill tafla-pill--${member.enabled ? 'success' : 'warning'}">${member.enabled
         ? t('settings.twoFactorMemberOn')
         : t('settings.twoFactorMemberOff')}</span>
     </li>

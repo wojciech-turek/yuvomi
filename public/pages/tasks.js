@@ -5,7 +5,7 @@
  */
 
 import { api } from '/api.js';
-import { renderRRuleFields, bindRRuleEvents, getRRuleValues } from '/rrule-ui.js';
+import { renderRRuleFields, bindRRuleEvents, getRRuleValues, describeRRule } from '/rrule-ui.js';
 import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { whenHistorySettled } from '/utils/overlay-history.js';
 import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut, expandIn, wireScrollFade } from '/utils/ux.js';
@@ -37,7 +37,8 @@ import { todayKey, parseLocalDateKey } from '/utils/date.js';
 import { makeSortable } from '/utils/sortable.js';
 import { mountMasterDetail, splitViewDetailHtml, setSelectionBulk } from '/utils/master-detail.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { historyDayLabel } from '/utils/day-label.js';
+import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel } from '/utils/day-label.js';
+import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import {
   PRIORITIES, PRIO_ORDER, STATUSES, FILTER_STATUSES, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
   FALLBACK_CATEGORY, isArchived, formatDueDate, normalizeTagList, seriesDoneText,
@@ -138,17 +139,8 @@ let taskDocuments = null;
 // --------------------------------------------------------
 
 // Sichtbarkeits-Indikator (#474): nur für eingeschränkte Elemente ein dezentes
-// Icon — „Alle" bleibt icon-los (keine visuelle Flut, „Kraft ohne Lärm").
-function renderVisibilityBadge(visibility) {
-  if (!visibility || visibility === 'all') return '';
-  const icon  = visibility === 'private' ? 'lock' : 'users';
-  const label = visibility === 'private'
-    ? t('common.visibility.private')
-    : t('common.visibility.assignees');
-  return `<span class="due-date task-card__visibility" title="${esc(label)}" aria-label="${esc(label)}">
-            <i data-lucide="${icon}" class="icon-sm" aria-hidden="true"></i>
-          </span>`;
-}
+// Icon — „Alle" bleibt icon-los. Seit Tafla steht er in der Metazeile der
+// Zeile (`taskMetaHtml`).
 
 /**
  * Gruppiert die Aufgaben und gibt je Gruppe `{ id, label, tasks }`.
@@ -245,17 +237,17 @@ function groupBy(tasks, mode, categories = state.categories) {
       .map(([key, list]) => ({ id: key, label: catLabel(key, categories), tasks: list }));
   }
 
-  // mode === 'due'
-  const groupOverdue  = t('tasks.groupOverdue');
-  const groupToday    = t('tasks.groupToday');
-  const groupThisWeek = t('tasks.groupThisWeek');
-  const groupNextWeek = t('tasks.groupNextWeek');
-  const groupLater    = t('tasks.groupLater');
-  const groupNoDate   = t('tasks.groupNoDate');
-
+  // mode === 'due' - DIE ZEITKOERBE (Tafla, 2026-10-20): Zaległe · Dziś ·
+  // Jutro · Ten tydzień · Później · Bez terminu. "Ten tydzień" sind die Tage
+  // zwei bis sechs voraus - genau die, die eine Zeile mit ihrem Wochentag
+  // nennt ("śr 21 paź"); ab sieben ist ein Wochentag mehrdeutig, das ist
+  // "Później". Erledigtes (nur bei einem Statusfilter mit "Zrobione") steht
+  // am Ende in einem eigenen Korb: eine erledigte Aufgabe von gestern ist
+  // nicht "zaległe".
   for (const task of tasks) {
     let key;
-    if (!task.due_date)                  key = groupNoDate;
+    if (task.status === 'done')          key = 'done';
+    else if (!task.due_date)             key = 'noDate';
     else {
       // Beide Seiten als KALENDERTAG rechnen, nicht als Instant.
       //
@@ -268,70 +260,42 @@ function groupBy(tasks, mode, categories = state.categories) {
       const diff = Math.round(
         (parseLocalDateKey(task.due_date) - parseLocalDateKey(todayKey())) / 86400000,
       );
-      if (diff < 0)       key = groupOverdue;
-      else if (diff === 0) key = groupToday;
-      else if (diff <= 3)  key = groupThisWeek;
-      else if (diff <= 7)  key = groupNextWeek;
-      else                 key = groupLater;
+      if (diff < 0)        key = 'overdue';
+      else if (diff === 0) key = 'today';
+      else if (diff === 1) key = 'tomorrow';
+      else if (diff <= 6)  key = 'thisWeek';
+      else                 key = 'later';
     }
     (groups[key] = groups[key] || []).push(task);
   }
 
   const order = [
-    ['overdue',  groupOverdue],
-    ['today',    groupToday],
-    ['thisWeek', groupThisWeek],
-    ['nextWeek', groupNextWeek],
-    ['later',    groupLater],
-    ['noDate',   groupNoDate],
+    ['overdue',  () => t('tasks.groupOverdue')],
+    ['today',    () => t('tasks.groupToday')],
+    ['tomorrow', () => t('tasks.groupTomorrow')],
+    ['thisWeek', () => t('tasks.groupThisWeek')],
+    ['later',    () => t('tasks.groupLater')],
+    ['noDate',   () => t('tasks.groupNoDate')],
+    ['done',     () => statusLabel('done')],
   ];
   return order
-    .filter(([, label]) => groups[label])
-    .map(([id, label]) => ({ id, label, tasks: groups[label] }));
+    .filter(([id]) => groups[id])
+    .map(([id, label]) => ({ id, label: label(), tasks: groups[id] }));
 }
+
+/** Die Korb-Ids in ihrer Reihenfolge - fuer "Na dziś wszystko" und die Tests. */
+const DUE_BUCKETS = Object.freeze(['overdue', 'today', 'tomorrow', 'thisWeek', 'later', 'noDate', 'done']);
 
 // --------------------------------------------------------
 // Render-Bausteine
 // --------------------------------------------------------
 
-// Die Stufe steht am PUNKT, nicht am Etikett: seit die Fuellung entfallen ist
-// (Skalen-Regel, DESIGN.md) traegt `.priority-badge` keine Farbe mehr, und eine
-// Modifier-Klasse ohne Regel ist tote Auszeichnung.
-function renderPriorityBadge(priority) {
-  if (priority === 'none') return '';
-  return `<span class="priority-badge">
-    <span class="priority-dot priority-dot--${priority}"></span>
-    ${PRIORITY_LABELS()[priority] ?? priority}
-  </span>`;
-}
-
-function renderDueDate(dateStr, timeStr, isDone = false) {
-  const d = formatDueDate(dateStr, timeStr, isDone);
-  if (!d) return '';
-  // Das Label steht in einem eigenen Span, damit es mit Ellipse enden kann
-  // (R9 M1): am Flex-Chip selbst greift `text-overflow` nicht, dort wurde
-  // „Überfällig - 24.09." hart abgeschnitten.
-  return `<span class="due-date ${d.cls}">
-    <i data-lucide="clock" class="icon-sm" aria-hidden="true"></i> <span class="due-date__label">${d.label}</span>
-  </span>`;
-}
-
-/* Der Start-Badge vergleicht KEYS, und "heute" ist der Tag des Haushalts.
- *
- * Hier stand `new Date(); setHours(0, 0, 0, 0)` gegen `new Date(key + 'T00:00:00')`:
- * beides Mitternacht der GERAETE-Zone. Mit Haushalt in Berlin und Telefon in
- * New York stand kurz nach Berliner Mitternacht an einer ab heute laufenden
- * Aufgabe noch "Beginnt am ...". Und `formatDate` bekam das Date statt des Keys
- * und rechnete es in die Anzeigezone um - mit Geraet in Berlin und Haushalt auf
- * Honolulu zeigte der Badge den Vortag. */
-function renderStartDateBadge(startDateStr) {
-  if (!startDateStr) return '';
-  const startKey = String(startDateStr).slice(0, 10);
-  if (startKey <= todayKey()) return '';
-  return `<span class="due-date">
-    <i data-lucide="calendar-clock" class="icon-sm" aria-hidden="true"></i> <span class="due-date__label">${t('tasks.startsOn', { date: formatDate(startKey) })}</span>
-  </span>`;
-}
+/* TAFLA (2026-10-20): Prioritaetswort, Uhr-Abzeichen und Start-Abzeichen sind
+ * aus der Zeile. Das Wann steht in Worten in der Metazeile (`taskWhen`), die
+ * Prioritaet nur als Fahne bei Hoch und Dringend (`taskTrailHtml`). Der Beginn
+ * vergleicht weiter KEYS mit dem Tag des Haushalts (`todayKey()`), und das
+ * Datum kommt aus dem Key (`shortDayLabel`), nie aus einem Date der
+ * Geraete-Zone - die Lehre aus dem alten Start-Badge. */
 
 function renderSwipeRow(task, innerHtml) {
   const isDone = task.status === 'done';
@@ -457,7 +421,119 @@ async function wireSyncTarget(panel, task) {
 function renderLockedBadge(task) {
   if (!task.locked) return '';
   const label = esc(t('tasks.lockedBadge'));
-  return `<span class="due-date" role="img" aria-label="${label}" title="${label}"><i data-lucide="lock" class="icon-sm" aria-hidden="true"></i></span>`;
+  return `<span class="task-card__glyph" role="img" aria-label="${label}" title="${label}"><i data-lucide="lock" aria-hidden="true"></i></span>`;
+}
+
+// --------------------------------------------------------
+// Die Tafla-Zeile (2026-10-20): Kreis, Titel, eine Metazeile in Worten,
+// hinten nur die Fahne (Hoch/Dringend) und die Person nach der Personenregel.
+// --------------------------------------------------------
+
+/** Wer schaut, fuer die Personenregel - am Wandtablett niemand: dort zeigt jede Person ihre Scheibe. */
+function rowViewerId() {
+  return actingAsDisplay() ? null : state.currentUserId;
+}
+
+/** "do 19:00" fuer eine Aufgabe mit Uhrzeit, sonst ''. */
+function dueByText(task) {
+  const time = task.due_time ? String(task.due_time).slice(0, 5) : '';
+  return /^\d{2}:\d{2}$/.test(time) ? t('tasks.dueBy', { time: formatTime(time) }) : '';
+}
+
+/** Die erste Zeile der Beschreibung ohne Markdown-Zeichen - der Zusatz der Metazeile. */
+function descriptionLead(description) {
+  const line = String(description ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return line.replace(/^(?:[-*+]\s+(?:\[[ xX]\]\s+)?|#+\s+|\d+[.)]\s+|>\s+)/, '').replace(/[*_`~]/g, '').slice(0, 120);
+}
+
+/** "co tydzień" - die Wiederholung klein, wie sie in einer Metazeile steht. */
+function rhythmText(task) {
+  if (!task.is_recurring && !task.recurrence_rule) return '';
+  const text = describeRRule(task.recurrence_rule, { fromCompletion: !!task.recurrence_from_completion });
+  return text ? text[0].toLocaleLowerCase(getLocale()) + text.slice(1) : '';
+}
+
+/**
+ * Das Wann einer Zeile, abhaengig vom Korb, in dem sie steht:
+ * - ueberfaellig: die Pille "zaległe" und seit wann ("od pt 16 paź");
+ * - in Dziś/Jutro sagt der Kopf den Tag, die Zeile nur die Uhrzeit ("do 19:00");
+ * - ohne Korb (nach Kategorie gruppiert) traegt was bis uebermorgen faellig
+ *   ist sein Wort in einer Pille ("dziś", "jutro", "pojutrze");
+ * - sonst das Datum in Worten, mit Wochentag bis sechs Tage voraus.
+ * @returns {{ pill: {tone: string, text: string}|null, text: string }}
+ */
+function taskWhen(task, bucket) {
+  const due = String(task.due_date ?? '').slice(0, 10);
+  const by = dueByText(task);
+  const finished = task.status === 'done' || isArchived(task);
+  if (!due) {
+    const start = String(task.start_date ?? '').slice(0, 10);
+    return { pill: null, text: start && start > todayKey() ? t('tasks.startsOn', { date: shortDayLabel(start) }) : '' };
+  }
+  const days = daysFromToday(due);
+  if (!finished && days < 0) {
+    return {
+      pill: { tone: 'danger', text: t('tasks.overduePill') },
+      text: days === -1 ? t('tasks.overdueSinceYesterday') : t('tasks.overdueSince', { date: shortDayLabel(due) }),
+    };
+  }
+  if (bucket === 'today' || bucket === 'tomorrow') return { pill: null, text: by };
+  if (!bucket && !finished && days >= 0 && days <= 2) {
+    return { pill: { tone: 'warning', text: relativeDayWord(due) }, text: by };
+  }
+  const date = days >= 0 && days <= 6 ? shortDayLabel(due) : shortDayLabel(due, { weekday: false });
+  return { pill: null, text: [date, by].filter(Boolean).join(' · ') };
+}
+
+/** "#dom" - die Kategorie als schlichtes Etikett, wie ein Tag geschrieben. */
+function hashTag(label) {
+  const text = String(label ?? '').trim();
+  return text ? `#${text.toLocaleLowerCase(getLocale())}` : '';
+}
+
+/**
+ * Die Metazeile: Pille, Wiederholungszeichen und EIN Text, der mit Ellipse
+ * endet - Wann · Rhythmus · #Kategorie · #Tag · razem · Beschreibung. Dahinter
+ * leise Zeichen fuer Anhang, Sperre und eingeschraenkte Sichtbarkeit.
+ */
+function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
+  const when = taskWhen(task, bucket);
+  const parts = [when.text, rhythmText(task)];
+  if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(hashTag(catLabel(task.category)));
+  const tag = (task.tags ?? []).find(Boolean);
+  if (tag) parts.push(hashTag(tag));
+  if (whoOf(task.assigned_users).kind === 'razem' && includesViewer(task.assigned_users, rowViewerId())) parts.push(t('tasks.together'));
+  parts.push(descriptionLead(task.description));
+  const text = parts.filter(Boolean).join(' · ');
+  const archived = isArchived(task);
+  const glyphs = [
+    archived ? `<span class="task-card__glyph task-card__archived" role="img" aria-label="${esc(t('tasks.statusArchived'))}"><i data-lucide="archive" aria-hidden="true"></i></span>` : '',
+    task.document_count > 0 ? `<span class="task-card__glyph task-card__docs" role="img" aria-label="${esc(t('tasks.documentsCount', { count: task.document_count }))}"><i data-lucide="paperclip" aria-hidden="true"></i></span>` : '',
+    renderLockedBadge(task),
+    task.visibility && task.visibility !== 'all'
+      ? `<span class="task-card__glyph task-card__visibility" role="img" aria-label="${esc(task.visibility === 'private' ? t('common.visibility.private') : t('common.visibility.assignees'))}"><i data-lucide="${task.visibility === 'private' ? 'lock-keyhole' : 'users'}" aria-hidden="true"></i></span>`
+      : '',
+  ].join('');
+  if (!when.pill && !text && !glyphs && !(task.is_recurring || task.recurrence_rule)) return '';
+  return `
+          <div class="task-card__meta">
+            ${when.pill ? `<span class="status-pill status-pill--${when.pill.tone}">${esc(when.pill.text)}</span>` : ''}
+            ${task.is_recurring || task.recurrence_rule ? `<i data-lucide="repeat" class="task-card__meta-icon" role="img" aria-label="${esc(t('tasks.recurring'))}"></i>` : ''}
+            ${text ? `<span class="task-card__meta-text">${esc(text)}</span>` : ''}
+            ${glyphs}
+          </div>`;
+}
+
+/** Hinten in der Zeile: die Fahne nur fuer Hoch und Dringend, dann die Person. */
+function taskTrailHtml(task) {
+  const flag = task.priority === 'high' || task.priority === 'urgent'
+    ? `<span class="task-card__flag task-card__flag--${task.priority}" role="img" aria-label="${esc(t('tasks.flagLabel', { priority: PRIORITY_LABELS()[task.priority] ?? task.priority }))}"><i data-lucide="flag" aria-hidden="true"></i></span>`
+    : '';
+  const who = whoDiscHtml(whoOf(task.assigned_users, rowViewerId()), {
+    household: state.users,
+    razemLabel: (people) => t('tasks.togetherWith', { names: people.map((p) => firstName(p.display_name)).join(', ') }),
+  });
+  return flag || who ? `<span class="task-card__trail">${flag}${who}</span>` : '';
 }
 
 /**
@@ -481,9 +557,10 @@ function renderLockedBadge(task) {
  * Zeile, an der eine Anzahl OHNE ihren Gegenstand stand.
  */
 function renderTaskCard(task, opts = {}) {
-  const { expandedSubtasks = false, selecting = false, selected = false, showCategory = true, reorderable = false } = opts;
+  const { expandedSubtasks = false, selecting = false, selected = false, showCategory = true, reorderable = false, bucket = null } = opts;
   const isDone = task.status === 'done';
   const archived = isArchived(task);
+  const meta = taskMetaHtml(task, { bucket, showCategory });
   // Gesperrte Aufgabe (#830): abhaken bleibt, umschreiben nicht. Die Knoepfe,
   // die in einem 403 endeten, stehen deshalb gar nicht erst da.
   const canEdit = canEditTaskDefinition(task);
@@ -564,7 +641,7 @@ function renderTaskCard(task, opts = {}) {
     : '';
 
   return `
-    <div class="task-card ${isDone ? 'task-card--done' : ''} ${archived ? 'task-card--archived' : ''}${selected ? ' task-card--selected' : ''}" data-task-id="${task.id}" data-md-id="${task.id}">
+    <div class="task-card ${isDone ? 'task-card--done' : ''} ${archived ? 'task-card--archived' : ''}${selected ? ' task-card--selected' : ''}${meta ? '' : ' task-card--single'}" data-task-id="${task.id}" data-md-id="${task.id}">
       <div class="list-row list-row--roomy task-card__main">
         ${/* IM AUSWAHLMODUS ERSETZT DER AUSWAHLKREIS DEN STATUSKREIS - er
              steht nicht daneben (Re-Critique 2026-09-27, D5; Muster: Apples
@@ -612,30 +689,19 @@ function renderTaskCard(task, opts = {}) {
           <button type="button" class="task-card__title u-row-title" data-action="open-task" data-id="${task.id}" data-md-focus>
             ${esc(task.title)}
           </button>
-          <div class="task-card__meta">
-            ${archived ? `<span class="due-date task-card__archived"><i data-lucide="archive" class="icon-sm" aria-hidden="true"></i>${t('tasks.statusArchived')}</span>` : ''}
-            ${renderPriorityBadge(task.priority)}
-            ${task.due_date ? '' : renderStartDateBadge(task.start_date)}
-            ${renderDueDate(task.due_date, task.due_time, isDone || archived)}
-            ${/* `role="img"`, sonst wertet keine Hilfstechnik das `aria-label` aus:
-                an einem generischen <span> ohne Rolle ist es wirkungslos. Solange
-                die Ziffer noch danebenstand, las der Screenreader wenigstens sie -
-                seit der Dichte-Runde traegt das Label die Anzahl allein. Dieselbe
-                Marke im Budget (budget.js, `.budget-recur-mark`) macht es richtig;
-                hier standen zwei Kopien ohne Rolle (PR-Review #754). */ ''}
-            ${task.is_recurring ? `<span class="due-date" role="img" aria-label="${esc(t('tasks.recurring'))}"><i data-lucide="repeat" class="icon-sm" aria-hidden="true"></i></span>` : ''}
-            ${task.document_count > 0 ? `<span class="due-date task-card__docs" role="img" aria-label="${esc(t('tasks.documentsCount', { count: task.document_count }))}"><i data-lucide="paperclip" class="icon-sm" aria-hidden="true"></i></span>` : ''}
-            ${renderLockedBadge(task)}
-            ${renderVisibilityBadge(task.visibility)}
-            ${showCategory && task.category !== FALLBACK_CATEGORY ? `<span class="due-date task-card__category">${esc(catLabel(task.category))}</span>` : ''}
-            ${renderTagBadges(task.tags, ROW_TAG_BADGES_VISIBLE, task.priority)}
-          </div>
+          ${/* TAFLA (2026-10-20): EINE Metazeile in Worten statt einer Reihe
+                Abzeichen - kein Prioritaetswort, keine Uhr, keine Etiketten-
+                Knoepfe. Die Kategorie steht als "#dom" im Text, die Faelligkeit
+                als Wort ("od pt 16 paź", "do 19:00", "śr 21 paź"), ueberfaellig
+                als Pille "zaległe". Die Tag-Filter-Knoepfe bleiben dem Brett. */ ''}
+          ${meta}
         </div>
 
-        ${/* 24px STATT 28 (R9 M1): mobil steht der Stapel in der Metazeile
-              (tasks.css, Raster unter 640px), und die ist 25px hoch - eine
-              28er-Scheibe haette jede Zeile um 3px gestreckt. */ ''}
-        ${renderAvatarStack(task.assigned_users ?? [], { size: 24 })}
+        ${/* Hinten: die Fahne nur fuer Hoch und Dringend, dann die Person nach
+              der Personenregel (utils/row-person.js) - die eigene Aufgabe ohne
+              Scheibe, die einer anderen Person mit ihrem Initial, eine geteilte
+              mit der Razem-Scheibe. Der Avatar-Stapel ist damit aus der Zeile. */ ''}
+        ${taskTrailHtml(task)}
 
         ${/* Bleibt auch mit vorhandenen Unteraufgaben: bis D#1017 verschwand der
               Einstieg nach der ersten, und der zweite Einstieg lag am Ende der
@@ -789,29 +855,25 @@ function renderTaskGroups(tasks, groupMode) {
     // Maskierung geworden und „a&b" haette als „a&amp;b" auf dem Schirm gestanden.
     // EIN Leerzustand fuer jede leere Suche (searchEmptyHTML, R19): hier stand
     // "Keine Treffer" OHNE Ausweg, im Brett daneben "Suche leeren".
-    return isFiltered
-      ? searchEmptyHTML({ query: state.searchQuery, resetAttrs: { 'data-tasks-reset-search': '' } })
-      : emptyStateHTML({
-        icon: 'circle-check-big',
-        title: t('tasks.emptyTitle'),
-        description: t('tasks.emptyDescription'),
-        hint: t('emptyHint.tasks'),
-        // Der CTA klickt den FAB, und den gibt es bei `tasks: read` nicht mehr.
-        // Ohne diese Zeile blieb er als einziger Knopf einer leeren Seite
-        // stehen und tat beim Antippen nichts.
-        action: readOnly() ? undefined : { label: t('tasks.emptyAction'), icon: 'plus', attrs: { id: 'empty-cta-tasks' } },
-      });
+    if (isFiltered) return searchEmptyHTML({ query: state.searchQuery, resetAttrs: { 'data-tasks-reset-search': '' } });
+    // Ein Segment oder Filter, der nichts uebrig laesst: eine leise Zeile,
+    // kein Leerzustand des Moduls - es gibt ja Aufgaben, nur nicht hier.
+    if (!isUnfilteredView()) {
+      return `<p class="tasks-quiet-empty">${esc(t('tasks.whoEmpty'))}</p>`;
+    }
+    return state.everDone ? allDoneHtml() : firstRunHtml();
   }
 
   const now = taskSortNow();
   const groups = groupBy(tasks, groupMode);
   const reorderable = canReorderTasks(groupMode);
   const compare = groupMode === 'category' ? sortTasksManual : sortTasks;
-  return groups.map(({ id, label, tasks: groupTasks }) => {
+  const todayDone = groupMode === 'due' ? todayDoneHtml(groups, now) : '';
+  return todayDone + groups.map(({ id, label, tasks: groupTasks }) => {
     const sorted = [...groupTasks].sort((a, b) => compare(a, b, now));
     const collapsed = isGroupCollapsed(groupMode, id);
     return `
-    <div class="task-group list-group" data-group-id="${esc(id)}">
+    <div class="task-group list-group${groupMode === 'due' && id === 'overdue' ? ' task-group--overdue' : ''}" data-group-id="${esc(id)}">
       <!-- Gruppenkopf als echte Ueberschrift (Critique 2026-08-10): /tasks
            hatte genau EIN h-Element im ganzen Dokument, und wer per H-Taste
            navigiert, kam damit auf den Seitentitel und nicht weiter. Der
@@ -844,10 +906,73 @@ function renderTaskGroups(tasks, groupMode) {
           expandedSubtasks: state.subtasksExpandedByDefault,
           showCategory: groupMode !== 'category',
           reorderable,
+          bucket: groupMode === 'due' ? id : null,
         }))).join('')}
       </div>`}
     </div>`;
   }).join('');
+}
+
+/*
+ * DIE LEEREN ZUSTAENDE (Tafla, spec "Pusty stan"): kein Kasten, eine
+ * zentrierte Spalte - Zeichen 32 in ink-3, eine warme Zeile, eine Zeile in
+ * ink-2. Der erste Start bietet drei Startvorschlaege im Stil der KI-Chips an
+ * (sie oeffnen das Formular mit dem Titel), statt eines Anlegen-Knopfs: das
+ * Plus der Shell deckt das Anlegen ab. "Wszystko zrobione" ist ein eigener
+ * Zustand und bietet nichts an.
+ */
+function firstRunHtml() {
+  const starters = readOnly() ? [] : ['tasks.starterBins', 'tasks.starterBills', 'tasks.starterCar'].map((key) => t(key));
+  return `
+    <section class="tasks-empty" aria-labelledby="tasks-empty-title">
+      <span class="tasks-empty__glyph" aria-hidden="true"><i data-lucide="list-checks"></i></span>
+      <h2 class="tasks-empty__title" id="tasks-empty-title">${esc(t('tasks.firstRunTitle'))}</h2>
+      <p class="tasks-empty__text">${esc(t('tasks.firstRunText'))}</p>
+      ${starters.length ? `
+      <div class="tasks-empty__chips" role="group" aria-label="${esc(t('tasks.firstRunIdeas'))}">
+        ${starters.map((title) => `<button type="button" class="tasks-chip" data-task-starter="${esc(title)}"><i data-lucide="plus" aria-hidden="true"></i><span>${esc(title)}</span></button>`).join('')}
+      </div>` : ''}
+    </section>`;
+}
+
+function allDoneHtml() {
+  return `
+    <section class="tasks-empty tasks-empty--done" aria-labelledby="tasks-empty-title">
+      <span class="tasks-empty__glyph tasks-empty__glyph--done" aria-hidden="true"><i data-lucide="check"></i></span>
+      <h2 class="tasks-empty__title" id="tasks-empty-title">${esc(t('tasks.allDoneTitle'))}</h2>
+      <p class="tasks-empty__text">${esc(t('tasks.allDoneText'))}</p>
+    </section>`;
+}
+
+/**
+ * "Na dziś wszystko" (Artboard Zadania, Seitenzustand): stehen weder
+ * Ueberfaelliges noch Heutiges an, aber spaeter etwas, sagt der Korb "Dziś"
+ * genau das - und was als Naechstes kommt ("Następne: Umówić przegląd auta ·
+ * czw 22 paź"). Ohne spaetere Aufgabe mit Termin bleibt er weg.
+ */
+function todayDoneHtml(groups, now) {
+  if (state.searchQuery.trim()) return '';
+  if (groups.some((g) => g.id === 'overdue' || g.id === 'today')) return '';
+  const upcoming = groups.filter((g) => g.id === 'tomorrow' || g.id === 'thisWeek' || g.id === 'later')
+    .flatMap((g) => g.tasks).sort((a, b) => sortTasks(a, b, now));
+  const next = upcoming[0];
+  if (!next) return '';
+  const due = String(next.due_date).slice(0, 10);
+  const days = daysFromToday(due);
+  const when = days <= 2 ? relativeDayWord(due) : shortDayLabel(due, { weekday: days <= 6 });
+  return `
+    <div class="task-group list-group task-group--today-done" data-group-id="today">
+      <h2 class="list-group__title"><span class="list-group__label">${esc(t('tasks.groupToday'))}</span></h2>
+      <div class="row-carrier">
+        <div class="tasks-today-done">
+          <span class="tasks-today-done__check" aria-hidden="true"><i data-lucide="check"></i></span>
+          <div class="tasks-today-done__body">
+            <p class="tasks-today-done__title">${esc(t('tasks.todayAllDone'))}</p>
+            <p class="tasks-today-done__next">${esc(t('tasks.todayNext', { title: next.title, when }))}</p>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // --------------------------------------------------------
@@ -938,10 +1063,8 @@ function wireTagEditor(panel) {
 // Avatar-Stack: eine Karte, die 32 Etiketten ausrollt, ist keine Karte mehr.
 const TAG_BADGES_VISIBLE = 3;
 
-/* In der LISTENZEILE steht genau ein Etikett, im Kanban bleiben es drei: dort
- * ist die Karte die ganze Darstellung der Aufgabe und hat die Höhe dafür, hier
- * teilt sich das Etikett die Zeile mit Priorität, Fälligkeit und Avatar. */
-const ROW_TAG_BADGES_VISIBLE = 1;
+/* Die Etiketten-Knoepfe stehen nur noch im Brett (bis drei); die Listenzeile
+ * nennt ihren ersten Tag als "#tag" im Text ihrer Metazeile (Tafla). */
 
 /**
  * Tag-Chips einer Aufgabe für Karten und Kanban.
@@ -1476,7 +1599,14 @@ let state = {
   // Status, Priorität und Person halten mehrere Werte (#671); innerhalb einer
   // Achse wirken sie ODER, zwischen den Achsen UND. Tags bleiben UND-verknüpft.
   filters:         defaultFilters(),
-  groupMode:       'category',   // 'category' | 'due'
+  // Tafla (2026-10-20): die Zeitkoerbe sind die Vorgabe; die Wahl im Blatt
+  // merkt sich das Geraet (GROUP_MODE_KEY).
+  groupMode:       'due',        // 'due' | 'category'
+  // Die Stelle des Segments "Czyje zadania": 'all' | 'mine' | 'together' | 'u:<id>'.
+  who:             'all',
+  // Hat der Haushalt je etwas erledigt? Trennt "Wszystko zrobione" vom ersten
+  // Start, wenn die Liste leer ist (null = noch nicht gefragt).
+  everDone:        null,
   viewMode:        'list',       // 'list' | 'kanban' | 'history' (resolved at render time)
   // Der Verlauf (#791) hat einen eigenen Bestand, weil er etwas anderes zeigt
   // als `tasks`: nicht Aufgaben, sondern Vorgänge. Er wird geblättert statt
@@ -1596,7 +1726,7 @@ function writeDueTodayToUrl(on) {
  * loadTasks(). state.tasks bleibt ungefiltert, damit Zähler wie das
  * Überfällig-Badge die Gesamtlage melden und nicht die Suchtreffer.
  */
-function filteredTasks() {
+function searchedTasks() {
   const q = state.searchQuery.trim().toLowerCase();
   const base = state.dueToday
     ? state.tasks.filter((task) => isDueByToday(task))
@@ -1607,6 +1737,164 @@ function filteredTasks() {
     (task.description || '').toLowerCase().includes(q) ||
     (task.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
   );
+}
+
+/**
+ * Was die Ansicht zeigt: Suche und "Bis heute faellig", dann das Segment
+ * "Czyje zadania" (Wszystkie · Moje · <Person> · Razem). Liste, Brett und die
+ * Austritts-Bewegung fragen alle hier, damit sie dieselben Zeilen meinen.
+ */
+function filteredTasks() {
+  return applyWho(searchedTasks());
+}
+
+// --------------------------------------------------------
+// "Czyje zadania" (Tafla, 2026-10-20)
+//
+// Ein neutrales Segment ueber der Liste: Wszystkie · Moje · eine Stelle je
+// weiterem Mitglied · Razem. Es TEILT die Liste: "Moje" sind Aufgaben nur fuer
+// mich, "<Person>" nur fuer sie, "Razem" alle mit mehr als einer Person;
+// niemandem zugewiesene stehen nur unter "Wszystkie". Ab mehr als drei
+// Mitgliedern stehen die Personen in einem Menue ("Osoby"), damit das Segment
+// bei vier Stellen bleibt. Rein clientseitig und je Geraet gemerkt; der
+// Personenfilter im Blatt (assigned_to, serverseitig) bleibt daneben die
+// feinere Achse. Am Wandtablett und im Solo-Haushalt gibt es kein "mir" und
+// damit kein Segment.
+// --------------------------------------------------------
+
+const WHO_KEY = 'yuvomi:taskWho';
+const WHO_INLINE_MAX = 3;
+
+/** Gibt es das Segment? Nicht am Display, nicht allein, nicht ohne Anmeldung. */
+function whoAvailable() {
+  return !actingAsDisplay() && state.currentUserId != null
+    && state.users.some((u) => Number(u.id) !== Number(state.currentUserId));
+}
+
+/** Die anderen Mitglieder, in der Reihenfolge des Haushalts. */
+function whoOthers() {
+  return state.users.filter((u) => Number(u.id) !== Number(state.currentUserId));
+}
+
+function assigneeIds(task) {
+  return [...new Set((task.assigned_users ?? []).filter((p) => p?.id != null).map((p) => Number(p.id)))];
+}
+
+/** Gehoert die Aufgabe zur Stelle `who` des Segments? */
+function matchesWho(task, who = state.who) {
+  if (!who || who === 'all') return true;
+  const ids = assigneeIds(task);
+  if (who === 'together') return ids.length > 1;
+  if (who === 'mine') return ids.length === 1 && ids[0] === Number(state.currentUserId);
+  const person = /^u:(\d+)$/.exec(who);
+  return person ? ids.length === 1 && ids[0] === Number(person[1]) : true;
+}
+
+function applyWho(tasks) {
+  return whoAvailable() ? tasks.filter((task) => matchesWho(task)) : tasks;
+}
+
+/** Die gemerkte Stelle, sofern es sie in diesem Haushalt (noch) gibt. */
+function restoreWho() {
+  let saved = 'all';
+  try { saved = localStorage.getItem(WHO_KEY) || 'all'; } catch {}
+  const person = /^u:(\d+)$/.exec(saved);
+  const known = ['all', 'mine', 'together'].includes(saved)
+    || (person && whoOthers().some((u) => Number(u.id) === Number(person[1])));
+  state.who = known ? saved : 'all';
+}
+
+function setWho(container, who) {
+  state.who = who;
+  try { localStorage.setItem(WHO_KEY, who); } catch {}
+  renderTaskList(container);
+}
+
+/** Die Stellen des Segments mit ihrer Zahl (gezaehlt vor dem Segment, nach Suche und Filtern). */
+function whoSegments() {
+  const base = searchedTasks();
+  const count = (who) => base.filter((task) => matchesWho(task, who)).length;
+  const others = whoOthers();
+  const segments = [
+    { who: 'all', label: t('tasks.whoAll'), count: null },
+    { who: 'mine', label: t('tasks.whoMine'), count: count('mine') },
+  ];
+  if (others.length && others.length <= WHO_INLINE_MAX - 1) {
+    for (const u of others) segments.push({ who: `u:${u.id}`, label: firstName(u.display_name), count: count(`u:${u.id}`) });
+  } else if (others.length) {
+    segments.push({
+      who: 'people', menu: true, label: t('tasks.whoPeople'), count: null,
+      people: others.map((u) => ({ who: `u:${u.id}`, label: u.display_name, count: count(`u:${u.id}`) })),
+    });
+  }
+  segments.push({ who: 'together', label: t('tasks.whoTogether'), count: count('together') });
+  return segments;
+}
+
+/** Das Segment als Markup (ein `role="group"` aus `aria-pressed`-Knoepfen, wie im Artboard). */
+function whoSegmentHtml() {
+  const segments = whoSegments();
+  const seg = (s) => {
+    if (s.menu) {
+      const picked = s.people.find((p) => p.who === state.who);
+      // Ein Menueknopf, kein Umschalter: kein aria-pressed (das gehoert den
+      // Segmenten). Die Wahl steht im Namen und in der Kapsel (--picked).
+      const menuLabel = picked ? `${s.label}: ${picked.label}` : s.label;
+      return `
+        <button type="button" class="tasks-who__seg popover-menu__trigger${picked ? ' tasks-who__seg--picked' : ''}" popovertarget="tasks-who-menu"
+                aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}" data-who-menu>
+          <span class="tasks-who__thumb">${esc(picked ? firstName(picked.label) : s.label)}<i data-lucide="chevron-down" class="tasks-who__chevron" aria-hidden="true"></i></span>
+        </button>
+        <div class="popover-menu" id="tasks-who-menu" popover role="menu">
+          ${s.people.map((p) => `
+          <button type="button" role="menuitemradio" aria-checked="${p.who === state.who}" class="popover-menu__item" data-who="${esc(p.who)}">
+            <i data-lucide="user" class="icon-md" aria-hidden="true"></i><span>${esc(p.label)}</span>
+            <span class="popover-menu__item-trail tasks-who__menu-count">${p.count}</span>
+          </button>`).join('')}
+        </div>`;
+    }
+    const on = state.who === s.who;
+    const aria = s.count == null ? s.label : t('tasks.whoCountAria', { label: s.label, count: s.count });
+    return `
+        <button type="button" class="tasks-who__seg" data-who="${esc(s.who)}" aria-pressed="${on}" aria-label="${esc(aria)}">
+          <span class="tasks-who__thumb">${esc(s.label)}${s.count ? ` <span class="tasks-who__count">${s.count}</span>` : ''}</span>
+        </button>`;
+  };
+  return segments.map(seg).join('');
+}
+
+/**
+ * Das Segment neu zeichnen - nach jedem Laden, weil die Zahlen am Bestand
+ * haengen. Der Fokus bleibt auf der Stelle, die ihn hatte.
+ */
+function syncWhoSegment(container) {
+  const host = container?.querySelector?.('#tasks-who');
+  if (!host) return;
+  const show = whoAvailable() && state.viewMode !== 'history';
+  host.hidden = !show;
+  if (!show) {
+    host.replaceChildren();
+    return;
+  }
+  const focused = host.contains(document.activeElement) ? document.activeElement.dataset.who ?? 'menu' : null;
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', whoSegmentHtml());
+  window.lucide?.createIcons({ el: host });
+  if (focused) {
+    const back = focused === 'menu' ? host.querySelector('[data-who-menu]') : host.querySelector(`.tasks-who__seg[data-who="${CSS.escape(focused)}"]`);
+    back?.focus();
+  }
+}
+
+function wireWhoSegment(container) {
+  const host = container.querySelector('#tasks-who');
+  if (!host) return;
+  host.addEventListener('click', (e) => {
+    const pick = e.target.closest('[data-who]');
+    if (!pick || !host.contains(pick)) return;
+    host.querySelector('#tasks-who-menu')?.hidePopover?.();
+    setWho(container, pick.dataset.who);
+  });
 }
 
 // --------------------------------------------------------
@@ -2978,13 +3266,14 @@ function renderKanbanCard(task) {
            .kanban-card[data-task-id]. -->
       <button type="button" class="kanban-card__title u-card-title u-compact">${esc(task.title)}</button>
       <div class="kanban-card__meta">
-        ${renderPriorityBadge(task.priority)}
         ${due ? `<span class="due-date ${due.cls}"><i data-lucide="clock" class="icon-sm" aria-hidden="true"></i> ${due.label}</span>` : ''}
         ${renderLockedBadge(task)}
         ${renderTagBadges(task.tags, TAG_BADGES_VISIBLE, task.priority)}
       </div>
       <div class="kanban-card__footer">
-        ${renderAvatarStack(task.assigned_users ?? [], { size: 22 }) || '<span></span>'}
+        ${/* Tafla: dieselbe Fahne (nur Hoch/Dringend) und dieselbe
+              Personenregel wie die Listenzeile - kein Prioritaetswort. */ ''}
+        ${taskTrailHtml(task) || '<span></span>'}
         ${/* Der Weiterschalt-Knopf ist reine Handlung: WO die Aufgabe steht,
               sagt ihre Spalte, nicht dieser Knopf. Bei `tasks: read` faellt er
               weg - zusammen mit dem Ziehen, das dieselbe Bewegung macht. */ ''}
@@ -3793,6 +4082,8 @@ function renderTaskList(container, { paneQuiet = false } = {}) {
   // Kontakten): die Shell nimmt daran Kapsel und FAB weg (layout.css,
   // "Auswahlmodus"), die Zeilen ihren Wisch-Pfeil.
   container.querySelector('.tasks-page')?.classList.toggle('is-selecting', state.bulkSelectMode);
+  // Das Segment "Czyje zadania" zaehlt den Bestand, der gerade steht.
+  syncWhoSegment(container);
   // VOR dem Ladefehler der Aufgaben: der Verlauf hat seinen eigenen Bestand und
   // seinen eigenen Fehler. Ein gescheitertes `/tasks` sagt nichts darüber, ob
   // die Vorgänge zu haben sind - stünde die Weiche danach, zeigte der Verlauf
@@ -3843,9 +4134,27 @@ function renderTaskList(container, { paneQuiet = false } = {}) {
   // Kein Hinweis auf eine Geste, die der Auswahlmodus gerade abschaltet.
   if (!state.bulkSelectMode) maybeShowSwipeHint(container);
   wireTaskSearchReset(container, listEl);
-  listEl.querySelector('#empty-cta-tasks')?.addEventListener('click', () => {
-    document.querySelector('.page-fab')?.click();
-  });
+  // Die Startvorschlaege des leeren Moduls oeffnen das Formular mit dem Titel.
+  listEl.querySelectorAll('[data-task-starter]').forEach((chip) => chip.addEventListener('click', () => {
+    openNewTaskForm(container, chip.dataset.taskStarter);
+  }));
+  // Leer ohne Filter: hat der Haushalt je etwas erledigt? Dann heisst die
+  // leere Liste "Wszystko zrobione", sonst bleibt der erste Start stehen.
+  if (state.everDone === null && !state.tasks.length && isUnfilteredView()) {
+    state.everDone = false;
+    api.get('/tasks/completions?limit=1')
+      .then((res) => {
+        if (!(res.data ?? []).length) return;
+        state.everDone = true;
+        if (listEl.isConnected && !state.tasks.length) renderTaskList(container);
+      })
+      .catch(() => {});
+  }
+}
+
+/** Steht die Liste ohne Suche, Segment und Filter da (Ruhezustand)? */
+function isUnfilteredView() {
+  return !state.searchQuery.trim() && (state.who === 'all' || !whoAvailable()) && activeFilterCount() === 0;
 }
 
 /**
@@ -4041,7 +4350,7 @@ function filterSheetGroups() {
   // jetzt als eigener Abschnitt hinter allen Achsen.
   const viewRows = [];
   if (state.viewMode === 'list') {
-    const modes = [['category', 'tasks.categoryLabel', 'folder'], ['due', 'tasks.dueDateLabel', 'calendar-clock']];
+    const modes = [['due', 'tasks.dueDateLabel', 'calendar-clock'], ['category', 'tasks.categoryLabel', 'folder']];
     viewRows.push(`
         <div class="segmented tasks-group-mode" id="group-mode-toggle" role="radiogroup" aria-label="${esc(t('tasks.groupToggleLabel'))}">
           ${modes.map(([mode, key, icon]) => {
@@ -4137,6 +4446,7 @@ function openTaskFilters(container) {
       mode: 'select',
       onChange: (mode) => {
         state.groupMode = mode;
+        try { localStorage.setItem(GROUP_MODE_KEY, mode); } catch {}
         renderTaskList(container);
       },
     });
@@ -4238,6 +4548,7 @@ const COLLAPSED_GROUPS_KEY = 'yuvomi:taskCollapsedGroups';
 const COLLAPSED_KANBAN_KEY = 'yuvomi:taskCollapsedKanbanCols';
 const SHOW_FUTURE_KEY = 'yuvomi:taskShowFuture';
 const ASSIGNED_TO_ME_KEY = 'yuvomi:taskAssignedToMe';
+const GROUP_MODE_KEY = 'yuvomi:taskGroupMode';
 
 // „Mir zugewiesen" ist ein Schnellzugriff auf den assigned_to-Filter mit der
 // eigenen User-ID. Wird pro Gerät gemerkt und beim Laden aus dem gespeicherten
@@ -4970,15 +5281,27 @@ function wireToolbar(container) {
   });
 }
 
+/**
+ * Der EINE Anlegeweg dieser Seite: der FAB (bzw. "Pełny formularz" im
+ * Erfassen-Blatt der Shell) und die Startvorschlaege des leeren Moduls, die
+ * den Titel schon mitbringen.
+ */
+function openNewTaskForm(container, title = '') {
+  // Der FAB liegt in der Shell-Layer (am Zeigergeraet im Kopf angedockt) und
+  // wird ueber html[data-module-readonly] per CSS ausgeblendet (layout.css).
+  // Der Riegel bleibt trotzdem: eine CSS-Regel ist keine Sperre.
+  if (readOnly()) return;
+  openTaskModal({ users: state.users }, container);
+  if (!title) return;
+  const field = document.querySelector('#task-title');
+  if (field) {
+    field.value = title;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
 function wireNewTaskBtn(container) {
-  const handler = () => {
-    // Der FAB liegt in der Shell-Layer (am Zeigergeraet im Kopf angedockt) und
-    // wird ueber html[data-module-readonly] per CSS ausgeblendet (layout.css).
-    // Der Riegel bleibt trotzdem: eine CSS-Regel ist keine Sperre.
-    if (readOnly()) return;
-    openTaskModal({ users: state.users }, container);
-  };
-  findPageFab('fab-new-task')?.addEventListener('click', handler);
+  findPageFab('fab-new-task')?.addEventListener('click', () => openNewTaskForm(container));
 }
 
 /**
@@ -5423,6 +5746,15 @@ function wireTaskList(container) {
       if (state.bulkSelectMode && !readOnly()) {
         const circle = e.target.closest('.task-card__main')?.querySelector('[data-action="toggle-select"]');
         if (circle) toggleTaskSelection(circle, container);
+        return;
+      }
+      // TAFLA: DIE GANZE ZEILE OEFFNET DAS DETAIL (spec "Lista grupowana").
+      // Ein Tipp auf Metazeile, Fahne oder Scheibe tat nichts - nur der Titel
+      // war Ziel. Der Titel-Knopf bleibt der Tastaturweg; hier geht der Tipp
+      // an ihn weiter, damit es EIN Oeffnen gibt (Liste + Detail eingeschlossen).
+      const main = e.target.closest('.task-card__main');
+      if (main && !e.target.closest('button, a, input, label, [popovertarget], .popover-menu')) {
+        main.querySelector('.task-card__title[data-action="open-task"]')?.click();
       }
       return;
     }
@@ -6098,6 +6430,9 @@ export async function render(container, { user, signal } = {}) {
 
   // showFuture aus localStorage wiederherstellen
   try { state.showFuture = localStorage.getItem(SHOW_FUTURE_KEY) === '1'; } catch {}
+  // Gruppierung: die Zeitkoerbe, ausser das Geraet hat Kategorie gewaehlt.
+  try { state.groupMode = localStorage.getItem(GROUP_MODE_KEY) === 'category' ? 'category' : 'due'; } catch { state.groupMode = 'due'; }
+  state.everDone = null;
   // „Bis heute faellig" kommt nur aus der Adresse (siehe state.dueToday).
   applyDueTodayFromAddress(window.location.search);
 
@@ -6177,6 +6512,7 @@ export async function render(container, { user, signal } = {}) {
               (utils/bulk-pill.js, updateBulkActionsBar), wie in Einkauf,
               Kontakten und Vorrat - nicht mehr als eigene Leiste ueber der
               Liste (Re-Critique 2026-09-27, D5). */ ''}
+        <div class="tasks-who" id="tasks-who" role="group" aria-label="${esc(t('tasks.whoLabel'))}" hidden></div>
         <div class="sr-only" role="status" aria-live="polite" id="tasks-reorder-announce"></div>
         <div class="split-view tasks-split">
         <div id="task-list" class="split-view__list">
@@ -6241,6 +6577,7 @@ export async function render(container, { user, signal } = {}) {
     state.defaultPoints = Number(meta.default_points) || 0;
     state.subtasksExpandedByDefault = preferencesData.data?.tasks_subtasks_expanded === true;
     state.defaultSyncTarget = preferencesData.data?.tasks_default_target || '';
+    restoreWho();
   } catch (err) {
     console.error('[Tasks] Ladefehler:', err.message);
     // Der Toast allein war die falsche Antwort: er verging, und darunter blieb
@@ -6267,6 +6604,7 @@ export async function render(container, { user, signal } = {}) {
   wireToolbar(container);
   wireNewTaskBtn(container);
   wireTaskList(container);
+  wireWhoSegment(container);
   wireBulkEscape(container);
   wireTagBadgeFilter(container);
   renderFilters(container);
@@ -6296,6 +6634,9 @@ export async function render(container, { user, signal } = {}) {
 // Testfläche: nur reine Funktionen, deren Vertrag außerhalb dieser Datei zählt.
 export const __test = {
   groupBy, groupKey, formatDueDate, normalizeFilterSet, taskQuery, state,
+  // Tafla (2026-10-20): die Zeitkoerbe, das Wann der Zeile, das Segment
+  // "Czyje zadania" und der leere Korb "Na dziś wszystko".
+  DUE_BUCKETS, taskWhen, taskMetaHtml, taskTrailHtml, matchesWho, whoSegments, whoAvailable, todayDoneHtml,
   // E13: am Desktop haengen die Filter als Popover am Knopf (utils/filter-sheet.js).
   openTaskFilters,
   // R17: die neue Aufgabe kommt an (Gruppe auf, Zeile zieht ein, rollt ins Bild, ausgewaehlt).

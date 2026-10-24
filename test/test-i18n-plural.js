@@ -284,6 +284,13 @@ const PLURAL_EXCEPTIONS = {
   // folgt kein Substantiv, pl/en sind numerusneutral.
   'meals.meterMissing': 'NO_NOUN',
   'meals.meterListedCount': 'NO_NOUN',
+  // Tafla Więcej (2026-10-20): "Jeszcze 1: OC auta za 22 dni" (more.js:596) -
+  // the number counts the hidden rows, the colon hands over to the first
+  // one; no noun follows the number.
+  'more.inboxMore': 'NO_NOUN',
+  // "Najwyżej 4." in the pin sheet (more.js:851, count = PIN_MAX) - the
+  // tiles are named by the sheet, not after the number.
+  'more.pinnedHint': 'NO_NOUN',
 
   // --- Zahl in Klammern / hinter Doppelpunkt ------------------------------
   'category.errorInUse': 'PARENTHETICAL',
@@ -333,6 +340,10 @@ const PLURAL_EXCEPTIONS = {
   // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
   'capture.primary.shoppingMany': 'GUARDED',
   'capture.saved.shoppingMany': 'GUARDED',
+  // notifications.js:133-138 (wasteWhen) - 0 and 1 days take their own keys
+  // (reminderSameDay, reminderDayBefore); this one sees only 2..14
+  // (MAX_OFFSET_DAYS, server/services/waste-reminders.js:38).
+  'settings.reminderDaysBefore': 'GUARDED',
 
   // --- echte Luecken, eingefroren statt behoben ---------------------------
   // Alle unten sind bei n=1 grammatisch falsch und n=1 ist erreichbar.

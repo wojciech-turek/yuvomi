@@ -452,6 +452,29 @@ function parseHiddenModules(raw) {
   return parseDisabledModules(raw);
 }
 
+/**
+ * Die gepinnten Kacheln der Seite Więcej (Tafla) - pro Person, ohne
+ * Admin-Check. `null` heisst "nie gewaehlt": dann nimmt die Seite ihre
+ * Vorgabe aus den eingeschalteten Modulen. Ein leeres Array ist eine Wahl
+ * (nichts gepinnt). Hoechstens vier, nur bekannte Kacheln, ohne Doppel.
+ */
+const MORE_PIN_IDS = ['notes', 'budget', 'birthdays', 'health', 'housekeeping', 'documents', 'waste', 'split-expenses'];
+const MORE_PIN_MAX = 4;
+
+function normalizeMorePins(list) {
+  return [...new Set(list.filter((id) => typeof id === 'string' && MORE_PIN_IDS.includes(id)))].slice(0, MORE_PIN_MAX);
+}
+
+function parseMorePins(raw) {
+  if (raw == null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? normalizeMorePins(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseScheduleHiddenTemplates(raw) {
   if (!raw) return [];
   try {
@@ -632,6 +655,7 @@ router.get('/', (req, res) => {
         hidden_modules: hiddenModules,
         module_order: moduleOrder,
         mobile_nav_order: mobileNavOrder,
+        more_pins: parseMorePins(cfgUserGet('more_pins', req.authUserId)),
         housekeeping_payment_tasks: cfgGet('housekeeping_payment_tasks') === '1',
         budget_mode: VALID_BUDGET_MODES.includes(cfgGet('budget_mode')) ? cfgGet('budget_mode') : DEFAULT_BUDGET_MODE,
         calendar_default_duration: Number(cfgGet('calendar_default_duration')) || DEFAULT_CALENDAR_DURATION,
@@ -721,7 +745,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -1042,6 +1066,17 @@ router.put('/', (req, res) => {
         req.authUserId,
         JSON.stringify(normalizeMobileNavOrder(mobile_nav_order)),
       );
+    }
+
+    // Persoenlich wie hidden_modules: wer was in Więcej pinnt, betrifft nur ihn.
+    if (more_pins !== undefined) {
+      if (more_pins === null) {
+        cfgUserDelete('more_pins', req.authUserId);
+      } else if (!Array.isArray(more_pins)) {
+        return res.status(400).json({ error: 'more_pins muss ein Array sein', code: 400 });
+      } else {
+        cfgUserSet('more_pins', req.authUserId, JSON.stringify(normalizeMorePins(more_pins)));
+      }
     }
 
     if (housekeeping_payment_tasks !== undefined) {
@@ -1469,6 +1504,7 @@ router.put('/', (req, res) => {
         hidden_modules: savedHiddenModules,
         module_order: savedModuleOrder,
         mobile_nav_order: savedMobileNavOrder,
+        more_pins: parseMorePins(cfgUserGet('more_pins', req.authUserId)),
         housekeeping_payment_tasks: savedHousekeepingPaymentTasks,
         budget_mode: VALID_BUDGET_MODES.includes(cfgGet('budget_mode')) ? cfgGet('budget_mode') : DEFAULT_BUDGET_MODE,
         calendar_default_duration: Number(cfgGet('calendar_default_duration')) || DEFAULT_CALENDAR_DURATION,

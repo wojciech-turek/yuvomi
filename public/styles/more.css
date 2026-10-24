@@ -1,0 +1,550 @@
+/* --------------------------------------------------------
+ * Więcej (Tafla, 2026-10-20) - the fifth tab as a page.
+ *
+ * Large title, the search field, "Sprawy domowe" (one plain verb per row),
+ * the profile row, "Przypięte" preview tiles, then one grouped list per
+ * kind of module and the way into the kitchen wall and Ustawienia. Markup in
+ * pages/more.js. Runs on the Tafla tokens only: four type sizes, the 8-pt
+ * grid, radius 20 cards, the 28 + 12 leading slot (titles at x=56), one
+ * violet voice for what you can act on, glyphs in ink-2.
+ * -------------------------------------------------------- */
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Header and search ──────────────────────────────────── */
+
+.more-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.more-head__title {
+  margin: 0;
+  font-size: var(--type-large-title);
+  line-height: var(--type-large-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* A 36 field look in a 44 hit box (the global search opens on tap). */
+.more-search {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: var(--target-base);
+  margin-block: calc((36px - var(--target-base)) / 2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.more-search__field {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-align: start;
+}
+
+.more-search__field svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.more-search:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+/* ── Sections ───────────────────────────────────────────── */
+
+.more-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.more-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--type-title-lh);
+}
+
+.more-section__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.more-section__count {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+/* The quiet group header of a grouped list: 17/600, 8 above the card. */
+.more-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.more-group__title {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Cards and rows ("Lista grupowana + wiersz") ────────── */
+
+.more-card {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.more-card > li {
+  position: relative;
+}
+
+/* Hairlines inset to the title column (28 slot + 12 gap + 16 padding). */
+.more-card > li + li::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: 48px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+
+.more-row--two {
+  min-block-size: 64px;
+}
+
+a.more-row,
+button.more-row {
+  cursor: pointer;
+}
+
+.more-row:focus-visible,
+.more-row__link:focus-visible,
+.more-tile:focus-visible,
+.more-profile:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+@media (hover: hover) {
+  a.more-row:hover,
+  button.more-row:hover,
+  .more-row__link:hover,
+  .more-profile:hover,
+  .more-tile:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.more-row__glyph {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  inline-size: 28px;
+  color: var(--color-text-secondary);
+}
+
+.more-row__glyph svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+/* The tappable middle of an inbox row: it opens the module; the verb beside
+ * it does the job. */
+.more-row__link {
+  flex: 1;
+  min-inline-size: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.more-row__body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.more-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.more-row__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.more-row__value {
+  flex: none;
+  max-inline-size: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+}
+
+.more-row__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.more-row__chevron svg {
+  inline-size: 16px;
+  block-size: 16px;
+  stroke-width: 2;
+}
+
+/* The money unit and other quiet parts of a title stay ink-2. */
+.more-quiet {
+  color: var(--color-text-secondary);
+}
+
+/* A row whose title is itself the action ("Uruchom tryb ściany"). */
+.more-row--accent .more-row__title {
+  color: var(--color-accent);
+}
+
+/* The one plain verb of an inbox row. */
+.more-verb {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-base);
+  padding: 0;
+  border: 0;
+  text-decoration: none;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.more-verb:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* "Jeszcze 1: …" - the expander lives inside the card, in ink-2. */
+.more-row--expander {
+  color: var(--color-text-secondary);
+}
+
+.more-row--expander .more-row__chevron svg {
+  transition: transform var(--duration-sm) var(--ease-out);
+}
+
+.more-row--expander[aria-expanded="true"] .more-row__chevron svg {
+  transform: rotate(180deg);
+}
+
+/* ── Profile ────────────────────────────────────────────── */
+
+.more-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.more-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: var(--radius-full);
+  background: var(--avatar-tint, var(--color-fill));
+  color: var(--avatar-ink, var(--color-text-primary));
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.more-avatar img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.more-profile__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Pinned preview tiles ("Kafelek podglądu") ──────────── */
+
+.more-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.more-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  block-size: 100%;
+  min-block-size: 96px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.more-tile__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.more-tile__label svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.more-tile__label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-tile__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.more-tile__value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The one hero number of the page sits in rounded numerals. */
+.more-tile__number {
+  font-family: var(--font-rounded);
+  font-weight: var(--font-weight-semibold);
+}
+
+.more-tile__note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.more-plain {
+  flex: none;
+  min-block-size: var(--target-base);
+  margin-block: calc((var(--type-title-lh) - var(--target-base)) / 2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+/* ── Pin sheet (Edytuj przypięte) ───────────────────────── */
+
+.more-pin-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.more-pin-sheet__hint {
+  margin: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+}
+
+.more-pin-sheet .more-card {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 var(--space-px) var(--color-separator);
+}
+
+/* The iOS switch: 51x31 track in a --target-base hit box (as in Dziś). */
+.more-switch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  inline-size: 51px;
+  block-size: var(--target-base);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.more-switch__track {
+  position: relative;
+  display: block;
+  inline-size: 51px;
+  block-size: 31px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 1px var(--color-separator);
+}
+
+.more-switch__knob {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 27px;
+  block-size: 27px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-on-accent);
+  box-shadow: var(--shadow-e1);
+}
+
+.more-switch[aria-checked="true"] .more-switch__track {
+  background: var(--color-btn-primary);
+  box-shadow: none;
+}
+
+.more-switch[aria-checked="true"] .more-switch__knob {
+  inset-inline-start: 22px;
+}
+
+.more-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .more-switch__track,
+  .more-switch__knob {
+    transition: background-color var(--duration-sm) var(--ease-out), inset-inline-start var(--duration-sm) var(--ease-out);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .more-row--expander .more-row__chevron svg {
+    transition: none;
+  }
+}
+
+/* ── Loading ────────────────────────────────────────────── */
+
+.more-skeleton__card {
+  block-size: 64px;
+  border-radius: var(--radius-lg);
+}
+
+.more-skeleton__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.more-skeleton__tile {
+  block-size: 96px;
+  border-radius: var(--radius-lg);
+}

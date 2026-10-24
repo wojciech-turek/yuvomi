@@ -110,6 +110,8 @@ let navMinimizer = null;
 // index.html und lag damit auch angemeldet auf jedem Start im Weg; als
 // Seitenblatt laedt der Router es nur hier und wartet darauf (loadPageStyle).
 const AUTH_STYLE = '/styles/auth.css';
+// Die Seite hinter dem Więcej-Tab (Tafla).
+const MORE_PATH = '/more';
 const ROUTES = [
   { path: '/login',    page: '/pages/login.js',    requiresAuth: false, module: null, style: AUTH_STYLE, titleKey: null },
   { path: '/setup',    page: '/pages/setup.js',    requiresAuth: false, module: null, style: AUTH_STYLE, titleKey: null },
@@ -133,6 +135,9 @@ const ROUTES = [
   { path: '/housekeeping', page: '/pages/housekeeping.js', requiresAuth: true, module: 'housekeeping', titleKey: 'nav.housekeeping' },
   { path: '/waste', page: '/pages/waste.js', requiresAuth: true, module: 'waste', titleKey: 'nav.waste' },
   { path: '/rewards',  page: '/pages/rewards.js',    requiresAuth: true, module: 'rewards',   titleKey: 'nav.rewards' },
+  // Więcej (Tafla): the fifth tab is a page now, not an overflow sheet. No
+  // module of its own - it gathers the enabled ones.
+  { path: '/more',     page: '/pages/more.js',      requiresAuth: true, module: null, style: '/styles/more.css', titleKey: 'nav.more' },
 ];
 
 // Settings ist eine Sektion mit einer Wurzel und je einer exakten Route pro
@@ -1874,7 +1879,9 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
     // Route-Announcer: Screenreader über Seitenwechsel informieren (gezielt, nicht gesamter Inhalt)
     const announcer = document.getElementById('route-announcer');
     if (announcer) {
-      const pageLabel = navCatalog().find((n) => n.path === route.path)?.label ?? route.path;
+      // Ziele ausserhalb des Katalogs (/more) nennen ihren Titel, nicht den Pfad.
+      const pageLabel = navCatalog().find((n) => n.path === route.path)?.label
+        ?? (route.titleKey ? t(route.titleKey) : route.path);
       announcer.textContent = '';
       setTimeout(() => { announcer.textContent = pageLabel; }, 50);
     }
@@ -2674,7 +2681,9 @@ function isPushedRoute(rawPath = routerState.currentPath || location.pathname) {
 
 /**
  * Der 36pt-Rueckweg im Kopf einer geschobenen Seite (Tafla: „Wróć: Więcej").
- * Er oeffnet das Mehr-Blatt - den Ort, von dem die Seite kam. Nur im ersten
+ * Er fuehrt auf die Seite Więcej (/more) - den Ort, von dem die Seite kam.
+ * Eine Seite mit eigenem Rueckweg (`.page-back` schon im Kopf, z. B. ein
+ * Blatt der Einstellungen: „Wróć: Ustawienia") bekommt keinen zweiten. Nur im ersten
  * Kopf der Seite und nur unter 1024px (layout.css); am Desktop fuehrt die
  * Seitenleiste.
  */
@@ -2696,7 +2705,7 @@ function syncPageBack(toolbar) {
   icon.dataset.lucide = 'chevron-left';
   icon.setAttribute('aria-hidden', 'true');
   back.appendChild(icon);
-  back.addEventListener('click', () => document.getElementById('more-btn')?.click());
+  back.addEventListener('click', () => navigate(MORE_PATH));
   toolbar.prepend(back);
   window.lucide?.createIcons({ el: back });
 }
@@ -3461,11 +3470,13 @@ function initMoreSheet(container, openSearch) {
     if (restoreFocus) returnFocus(lastFocusedBeforeSheet || currentMoreBtn());
   }
 
+  // TAFLA: the Więcej tab goes to its page (/more) instead of opening this
+  // sheet. Nothing opens the sheet any more; its code can go in a follow-up.
   container.addEventListener('click', (e) => {
     if (!e.target.closest('#more-btn')) return;
     e.preventDefault();
-    const isOpen = sheet.getAttribute('aria-hidden') === 'false';
-    isOpen ? closeSheet() : openSheet();
+    if (sheet.getAttribute('aria-hidden') === 'false') closeSheet({ restoreFocus: false });
+    navigate(MORE_PATH);
   });
 
   backdrop.addEventListener('click', () => closeSheet());
@@ -4524,11 +4535,9 @@ function moreNavButtonEl() {
   // der aktive Tab. Ohne Angabe bleibt er tertiaer, wie die Regel es vorsieht.
   moreBtn.setAttribute('aria-label', t('nav.more'));
   moreBtn.setAttribute('title', t('nav.more'));
-  // Öffnet das „Mehr"-Sheet (role=dialog): aria-haspopup kündigt das Popup an,
-  // aria-expanded/-controls spiegeln den Offen-Zustand (Audit P3, Sam-Persona).
-  moreBtn.setAttribute('aria-haspopup', 'dialog');
-  moreBtn.setAttribute('aria-expanded', 'false');
-  moreBtn.setAttribute('aria-controls', 'more-sheet');
+  // TAFLA: Więcej is a destination (/more), not a disclosure - the tab
+  // navigates and carries aria-current there (setMoreButtonState), so it
+  // announces no popup and controls no sheet.
 
   const iconWrap = document.createElement('div');
   iconWrap.className = 'nav-item__icon-wrap';
@@ -4815,18 +4824,19 @@ function kitchenNavAriaLabel(path) {
  * Aktiven Nav-Link hervorheben und More-Button als aktiv markieren
  * wenn die aktive Route im More-Sheet liegt.
  */
-function setMoreButtonState(moreBtn, activeSecondary) {
-  const inMoreSheet = !!activeSecondary;
-  const moreLabel = activeSecondary
+function setMoreButtonState(moreBtn, activeSecondary, onMorePage = false) {
+  // Auf /more selbst ist der Tab das Ziel (Tafla): aktiv, ohne Abschnittsnamen.
+  const inMoreSheet = onMorePage || !!activeSecondary;
+  const moreLabel = activeSecondary && !onMorePage
     ? t('nav.moreActiveLabel', { section: activeSecondary.label })
     : t('nav.more');
 
   moreBtn.classList.toggle('nav-item--active', inMoreSheet);
   if (inMoreSheet) {
     moreBtn.setAttribute('aria-current', 'page');
-    if (activeSecondary.accent) {
+    if (activeSecondary?.accent) {
       moreBtn.style.setProperty('--item-module-accent', activeSecondary.accent);
-    } else if (activeSecondary.module) {
+    } else if (activeSecondary?.module) {
       moreBtn.style.setProperty('--item-module-accent', moduleAccentVar(activeSecondary.module));
     }
   } else {
@@ -4908,7 +4918,7 @@ function updateNav(rawPath) {
     const activeSecondary = secondaryMobileItems().find((item) => (
       item.navId === 'kitchen' ? isKitchenRoute(path) : item.path === path
     ));
-    setMoreButtonState(moreBtn, activeSecondary);
+    setMoreButtonState(moreBtn, activeSecondary, path === MORE_PATH);
   }
 
   if (window.lucide) {
@@ -5506,6 +5516,17 @@ window.yuvomi = {
   // Das globale Erfassen (Tafla) - fuer die Pille „Dodaj" der Uebersicht am
   // Desktop; dasselbe Blatt wie das + neben der Kapsel.
   openCapture: () => openCaptureFromShell(),
+  // Hilfe, Aenderungsverlauf und Abmelden fuer die Seiten Więcej und
+  // Ustawienia (Tafla) - dieselben Wege wie Seitenleiste und Mehr-Blatt.
+  showHelp: () => showHelpModal(),
+  showChangelog: () => showChangelogModal(),
+  logout: () => confirmAndLogout(),
+  // Die Ziele der Navigation, wie sie diese Person sieht (an, erlaubt, nicht
+  // ausgeblendet) - die Seite Więcej listet daraus die Module, die nicht auf
+  // dem Tab-Balken stehen. Eine Kopie, kein Verweis auf den Katalog.
+  navDestinations: () => navItems().map(({ path, navHref, label, icon, module, section, kitchenGroup }) => ({
+    path, navHref, label, icon, module, section, kitchenGroup: Boolean(kitchenGroup),
+  })),
   showToast,
   friendlyError,
   setThemeColor,
