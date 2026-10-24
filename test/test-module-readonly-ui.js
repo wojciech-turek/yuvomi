@@ -268,16 +268,22 @@ test('Boardkarte mit `tasks: read`: kein Weiterschalt-Knopf', () => {
   });
 });
 
-test('Leere Aufgabenliste mit `tasks: read`: kein Anlegen-CTA', () => {
+// Tafla (2026-10-20, spec "Pusty stan"): der erste Start hat keinen
+// Anlegen-Knopf mehr (das Plus der Shell deckt das ab), sondern drei
+// Startvorschlaege, die das Formular mit dem Titel oeffnen. Die Regel bleibt:
+// bei `tasks: read` steht kein Angebot, das schreibt - der Text schon.
+test('Leere Aufgabenliste mit `tasks: read`: keine Startvorschlaege', () => {
   tasks.state.searchQuery = '';
+  tasks.state.who = 'all';
+  tasks.state.everDone = null;
   withAccess({ tasks: 'write' }, () => {
-    assert.match(tasks.renderTaskGroups([], 'category'), /empty-cta-tasks/);
+    assert.match(tasks.renderTaskGroups([], 'category'), /data-task-starter=/);
   });
   withAccess({ tasks: 'read' }, () => {
     const html = tasks.renderTaskGroups([], 'category');
-    assert.doesNotMatch(html, /empty-cta-tasks/,
-      'der CTA klickt den FAB, und den gibt es hier nicht mehr');
-    assert.match(html, /tasks\.emptyTitle/, 'der erklärende Leerzustand bleibt');
+    assert.doesNotMatch(html, /data-task-starter=|empty-cta-tasks/,
+      'ein Vorschlag oeffnet das Formular, und das gibt es hier nicht');
+    assert.match(html, /tasks\.firstRunTitle/, 'der erklärende Leerzustand bleibt');
   });
 });
 
@@ -461,7 +467,10 @@ test('das Zustandszeichen reagiert nicht auf Ueberfahren, und der Ring behaelt s
   // Kaskade in Ladereihenfolge (index.html: list-row.css vor dem Seiten-CSS).
   const KASKADE = `${readFileSync(new URL('../public/styles/list-row.css', import.meta.url), 'utf8')}\n${TASKS_CSS}`;
   for (const [name, klassen, ruhend] of [
-    ['erledigt', ['task-status-btn', 'task-status-btn--done', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'var(--color-success)'],
+    // Tafla (2026-10-20): erledigt ist VIOLETT, nicht gruen ("Done is violet",
+    // DESIGN.md) - die Fuellrolle des Akzents. Die Zusage bleibt: der Ring
+    // behaelt die Farbe seines Zustands, auch unter dem Zeiger.
+    ['erledigt', ['task-status-btn', 'task-status-btn--done', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'var(--color-btn-primary)'],
     ['in Arbeit', ['task-status-btn', 'task-status-btn--in_progress', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'var(--color-warning)'],
   ]) {
     assert.equal(effektiverWert(KASKADE, klassen, 'border-color', ':hover::after'), null,

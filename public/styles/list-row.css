@@ -807,10 +807,14 @@
  * Zeile bleiben beim Modul: sie haengen an dessen Markup. Das eckige
  * `.item-check` des Einkaufs ist ein Kaestchen, kein Kreis, und bleibt eigen.
  * Guard: test-frontend-audit.js, "der Abhakkreis steht einmal". */
+/* TAFLA (2026-10-20, spec "Kółko odhaczania"): 24 sichtbar wie das Kaestchen
+ * des Einkaufs (shopping.css `.item-check::before`, dieselbe Kante - EINE
+ * Tonregel fuer alles Abhakbare); erledigt fuellt ihn das Violett
+ * (`--color-btn-primary`) mit weissem Haken - das setzt das Modul. */
 .check-ring::after {
   content: '';
-  width: var(--space-5);
-  height: var(--space-5);
+  width: var(--space-6);
+  height: var(--space-6);
   border-radius: var(--radius-full);
   border: 2px solid var(--color-text-tertiary);
   transition: border-color var(--transition-fast), background-color var(--transition-fast);

@@ -1638,7 +1638,7 @@ Kernseite fuehrt es. Die Zuordnung aller Seiten:
 | `tasks.js` Aufgaben | Liste + Detail | `full` + `list-detail` in Liste und Verlauf (#1550: neben dem Eintrag seine Aufgabe); Kanban ist Flaeche |
 | `recipes.js` Rezepte | Liste + Detail | `reading` + `list-detail` |
 | `inventory.js` Inventar | Liste + Detail | `reading` + `list-detail` (vorher `data`); seit R17 EINE Liste aller Gegenstaende nach Kategorie gruppiert, die Kategorien als Filter-Chips darueber (`?category=` waehlt den Chip vor und wird ersetzt, nicht gestapelt), kein Kategorie-Zwischenschritt; kurze Angaben im Detail zweispaltig ab 35rem Spaltenbreite (`@container detail-pane`) |
-| `calendar.js` Kalender | Liste + Detail | `full` + `list-detail` in der Agenda; Monat, Woche, Tag sind Flaeche; der Tag fuehrt ab der Schwelle eine Seitenspalte mit den Folgetagen (`.day-rail`); ab 86.25rem Kalenderflaeche (ca. 1600er Fenster) steht in Monat, Woche und Tag links die Seitenleiste (Mini-Monat, Kalender und Personen aus derselben Quelle wie das Filterblatt, „Als Naechstes“), und die Seite rueckt dafuer von der Inhaltsspalte auf den Seitenrand (R19). Heute ist im Mini-Monat wie im Raster die gefuellte Akzent-Scheibe (`--color-accent`), der gewaehlte Tag ein Ring derselben Farbe; Personen-Chips lassen einen gemeinsamen Nachnamen weg (`sharedSurname`, Re-Kritik 2026-10-17) |
+| `calendar.js` Kalender | Liste + Detail | `full` + `list-detail` in der Agenda; Monat, Woche, Tag sind Flaeche; der Tag fuehrt ab der Schwelle eine Seitenspalte mit den Folgetagen (`.day-rail`); ab 86.25rem Kalenderflaeche (ca. 1600er Fenster) steht in Monat, Woche und Tag links die Seitenleiste (Mini-Monat, Kalender und Personen aus derselben Quelle wie das Filterblatt, „Als Naechstes“), und die Seite rueckt dafuer von der Inhaltsspalte auf den Seitenrand (R19). Heute ist im Mini-Monat wie im Raster die gefuellte Akzent-Scheibe (seit Tafla die Fuellrolle `--color-btn-primary` unter `--color-on-accent`), der gewaehlte Tag ein Ring in `--color-accent`; Personen-Chips lassen einen gemeinsamen Nachnamen weg (`sharedSurname`, Re-Kritik 2026-10-17) |
 | `health.js` Gesundheit | Liste + Detail | `dashboard` + `list-detail` (Uebersicht + Bereiche links, Pfad-Adresse) |
 | `settings.js` Einstellungen | Liste + Detail | eigene Shell: Liste + Blatt ab der Split-Schwelle (`settings-surface`, Kompositions-Ausnahme) |
 | `split-expenses.js` Aufteilung | Liste + Detail | `split`, eigene Geometrie |
@@ -1864,7 +1864,7 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
 | Mobiles Blatt (Dialog, Mehr) | EINE Grammatik: Griff 36x5 in der Kopfzone (`--sheet-grabber`: hell `--color-border-strong`, dunkel Glas-Weiss), Griff-Oberkante bis Titel 16px; 1:1 mitgehen, schliessen ab 80px Weg ODER Flick > 0.5px/ms, sonst zurueckfedern (`--duration-lg` + `--ease-out`), nach oben Gummiband; der Zug liegt auf `translate`. Ein- und Ausfahrt aus EINEM Paar (`--sheet-in`/`--sheet-out`, Hub `--sheet-lift`), auch die mobile Suche. Der Backdrop des Mehr-Blatts blendet im Ausgang des Blatts aus (`opacity` + `visibility` ueber `--sheet-out`, geschlossen ohne Zeiger), statt per `display: none` im ersten Frame zu verschwinden | `wireSheetDrag(sheet, { scroller, onDismiss })` (utils/sheet-drag.js) | leerer Griff-Streifen, Glas-Weiss auf weisser Tafel, Faktor 0.6, Schliessen erst bei `touchend`, Zurueckspringen ohne Transition |
 | Mehrfachauswahl in einer Liste | Auswahlkreis ERSETZT Statuskreis und Zeilen-Picker (Apple Erinnerungen); Leiste = Bulk-Pille mit "Fertig"; Name je Zeile mit Objekt ("<Titel> auswaehlen"); Loeschen im Pillen-Stil, Rueckfrage in der Pille, eine Folge, die die Frage nicht traegt, als Detailzeile darunter (Dokumente: kein Papierkorb) | `.select-circle` (layout.css) + `setBulkPill({ label, actions })` / `clearBulkPill()` (utils/bulk-pill.js), `confirm: { question, detail? }` | native blaue Checkbox neben dem Statuskreis, eigene Aktionsleiste, gefuellte rote Loeschen-Kapsel |
 | Aktionen an Karte oder Zeile | dauerhaft sichtbar, ruhig per Tertiaerfarbe; reduziert wird ihre ZAHL (hoechstens zwei + Mehr-Knopf, Zeile oben), nie ihre Sichtbarkeit | `.row-action`, `rowMenuHtml()` | Einblenden erst per `:hover`/`:focus-within` |
-| Erledigen an einer Zeile | EIN Abhakkreis: 20px, 2px, in Ruhe `--color-text-tertiary`; unter dem Zeiger laedt der Modulton ein, erledigt ist `--color-success` (Gruen bestaetigt, es steht nie in Ruhe da); `--static` = Zeichen ohne Einladung. Das Kaestchen des Einkaufs (`.item-check`) ist ein Kaestchen und bleibt eigen | `.check-ring` (list-row.css) an `.task-status-btn` und `.housekeeping-task__check`; Trefferflaeche und Zustand beim Modul | zweiter Ring je Modul (24px, in Ruhe gruen) |
+| Erledigen an einer Zeile | EIN Abhakkreis: 24px (Tafla 2026-10-20, vorher 20; dieselbe Groesse wie das Einkaufskaestchen), 2px, in Ruhe `--color-text-tertiary`; unter dem Zeiger laedt der Modulton ein, erledigt ist seit Tafla VIOLETT (`--color-btn-primary` mit weissem Haken; vorher `--color-success`); `--static` = Zeichen ohne Einladung. Das Kaestchen des Einkaufs (`.item-check`) ist ein Kaestchen und bleibt eigen | `.check-ring` (list-row.css) an `.task-status-btn` und `.housekeeping-task__check`; Trefferflaeche und Zustand beim Modul | zweiter Ring je Modul (24px, in Ruhe gruen) |
 | Was eine Zeile tut (R16, R17 E7) | **In Abhak-Listen des Einkaufs hakt der Zeilen-Tipp ab; sonst oeffnet er** (wo es ein Leseblatt gibt, das Leseblatt: Kalender, Kontakte, Inventar, seit R17 Geburtstage unter der Spaltenschwelle; sonst Bearbeiten, mit Leserecht die Leseansicht) - als echter Knopf (`.list-row__main--interactive`). Im Einkauf bleibt ein EIGENER Weg in die Artikel-Details (bis 2026-10-07 der Stift, seither der Eintrag "Bearbeiten" im Mehr-Knopf der Zeile): die ganze Zeile ist dort das Abhak-Ziel (einhaendig im Laden, 358 statt 48px; R16, von E7 ausdruecklich ausgenommen). **Im Leseblatt sitzt Bearbeiten an EINER Stelle:** als Primaerknopf am Ende des Fusses (`edit.primary`; Termin, Inventar, Kontakt, Geburtstag), in der Detailspalte als Kopfaktion; die Aufgabe ist die benannte Ausnahme (Hauptabsicht Erledigen). **Loeschen = Wisch mobil + ein fester Ort am Desktop:** den Dialogfuss (Desktop, Tastatur) und auf Touch den Wisch zum Zeilenende. Eine Zeilenaktion, die nur den Zeilenkoerper doppelt (Stift), entfaellt; sichtbare Zeilenaktionen bleiben sichtbar (ignore.md), reduziert wird ihre ZAHL | `wireSwipeRows()` (utils/swipe-row.js), `scheduleUndoableDelete()` (utils/ux.js), `decorateFooterDelete()` (modal.js) | Stift + Papierkorb als 2 x 48px am Zeilenende, vier Grammatiken je Modulgruppe |
 | Bearbeiten in einer Leseansicht | **EIN gefuellter Primaerknopf am Ende des Fusses** - Blatt, Popover und Detailspalte (R19, `withPrimaryEdit` in components/detail-view.js). Andere Primaerknoepfe desselben Fusses treten zurueck (Rezept: Einplanen sekundaer). **Einzige Ausnahme: die Aufgabe** (Ulas 2026-10-16) - wer sie oeffnet, will sie meist abhaken; Erledigen (erledigt: Wieder oeffnen) bleibt der EINE gefuellte Knopf am Ende, Bearbeiten steht sekundaer davor, mobil als Stift (`keepPrimary: true` an `openDetailView`). Rezepte oeffnen mobil als Leseblatt statt aufzuklappen | `withPrimaryEdit(actions, edit, { keepPrimary })`, `detailFooterEl()` | Bearbeiten umrandet im Kopf, zwei gefuellte Knoepfe in einem Fuss |
 | Suche ohne Treffer | EIN Leerzustand (R19): Titel "Keine Treffer", ein Satz (mit Filtern ein zweiter), Begriff und Filter als Chips (`.empty-state__term`), EINE Aktion "Suche zuruecksetzen" (hebt alles auf, was die Chips nennen), Zusatzwege dahinter | `searchEmptyOptions()` / `searchEmptyEl()` / `searchEmptyHTML()` / `mountSearchEmpty()` (utils/empty-state.js); Guard `test:search-empty` | eigener Titel/Satz je Modul, Begriff in Anfuehrungszeichen, kein Ausweg |
@@ -2191,8 +2191,11 @@ gross und dehnt seine Flaeche per `::before` auf `--target-base` aus; eine Box-M
 ihn als Verstoss, obwohl der Finger 44px findet. Das ist zugleich das Rezept fuer „kompakt
 aussehen, voll treffen".
 
-**Wo gedehnt wird, gehoert die sichtbare Flaeche immer dem eigenen Ziel** (2026-09-24). Die
-Aufgabe in Agenda und Tagesliste (`.agenda-tasks .cal-task-chip`) bleibt die 24px-Bar und dehnt
+**Wo gedehnt wird, gehoert die sichtbare Flaeche immer dem eigenen Ziel** (2026-09-24). *Tafla
+(2026-10-20): in Liste und Tagesliste ist die Aufgabe keine Bar mehr, sondern eine 48 hohe
+Abhakzeile (Kreis mit `--target-base`, der Titel fuellt die Zeilenhoehe) - die Dehnung unten
+gilt dort nicht mehr; Guard `test:calendar`, "Aufgaben-Chip: Trefferflaeche".* Die
+Aufgabe in Agenda und Tagesliste (`.agenda-tasks .cal-task-chip`) blieb die 24px-Bar und dehnte
 ihre Flaeche per `::before` senkrecht auf `--target-base`; die Polsterung der Liste ist genau
 diese Dehnung (`--task-hit-grow`), sonst griffe die Flaeche in den Termin darueber. Zwischen zwei
 Aufgaben duerfen sich die Dehnungen ueberlappen (8px Zeilenabstand statt 20-24px, sonst stand
@@ -3668,8 +3671,9 @@ Seitentausch - liegt geteilt in `utils/swipe-row.js`.
 
 **Der Zeitraum-Wisch ist dieselbe Geste auf einer Flaeche statt einer Zeile** (Critique
 2026-09-24, P1). Waagerecht ueber Monat, Woche oder Tag blaettert einen Zeitraum weiter
-(`utils/period-swipe.js`); die Agenda ist eine fortlaufende Liste ohne Nachbarn und bleibt
-aussen vor. Schwelle, Richtungssperre und Haptik sind die der Wischzeilen, damit der Weg
+(`utils/period-swipe.js`); die Agenda war eine fortlaufende Liste ohne Nachbarn und blieb
+aussen vor - seit Tafla (2026-10-20) traegt die Liste einen Wochenstreifen und blaettert mit
+ihm wochenweise, also wischt sie mit. Schwelle, Richtungssperre und Haptik sind die der Wischzeilen, damit der Weg
 derselbe ist, den die Hand schon kennt. Drei Grenzen, alle gemessen statt vermutet: **der
 Rand gehoert dem System** (ein Kontakt in den aeusseren 20px ist die Zurueck-Geste von iOS
 und Android und wird gar nicht angenommen), **senkrecht gewinnt** (wer zuerst senkrecht zieht,
@@ -4269,9 +4273,10 @@ einen Tag in die Tagesansicht - wer lesen wollte, was am Dienstag steht, verlies
   Zeilen je Zelle; die Liste darunter wird dafuer kuerzer, das Einklappen gibt sie zurueck.
 
 **Die Pfeile sagen, was sie tun.** „Vorheriger Monat", „Naechste Woche", „Naechste 3 Tage"
-(Telefon-Woche), „Naechste 30 Tage" (Agenda) als Name und Tooltip - vorher hiessen sie in
-jeder Ansicht „Zurueck"/„Weiter", und in der Agenda sprang „Weiter" still dreissig Tage. Die
-Agenda nennt im Kopf dazu ihre Spanne („24.09. - 24.10.2026") statt nur ihren Anfang.
+(Telefon-Woche) als Name und Tooltip - vorher hiessen sie in jeder Ansicht „Zurueck"/„Weiter".
+Seit Tafla (2026-10-20) geht die Liste („Lista", vorher Agenda) wochenweise („Naechste
+Woche") und nennt im Kopf den Monat ihres Wochenstreifens („październik 2026"); welche Tage
+sie zeigt, sagt der Streifen darunter. Vorher sprang sie dreissig Tage und nannte ihre Spanne.
 
 **Das Raster hat so viele Zeilen, wie der Monat braucht** (vier bis sechs, alle Breiten).
 Ladefenster und Zeichnung lesen dieselbe Rechnung (`monthGridSpan`); fest 42 Tage zeigten im
@@ -4483,6 +4488,57 @@ trifft, wo der erste hinzielte. Ansagen nennen Start, Stopp und Ende, nicht jede
 
 **Dass die Flaeche lebt, sagt eine absolute Uhrzeit**, kein „vor 3 Minuten": eine relative
 Angabe braeuchte einen zweiten Timer, nur damit sie sich selbst aktuell haelt.
+
+### Zadania und Kalendarz in Tafla (2026-10-20)
+
+**Zadania** (`pages/tasks.js`, `tasks.css`; Artboard Zadania):
+- **Zeitkoerbe als Vorgabe**: Zaległe · Dziś · Jutro · Ten tydzień (zwei bis sechs Tage voraus,
+  die Tage, die eine Zeile mit Wochentag nennt) · Później · Bez terminu; Erledigtes in einem
+  eigenen Korb am Ende. Die Kategorie-Gruppierung bleibt im Filterblatt und wird je Geraet
+  gemerkt. Zaległe traegt sein Wort in `--color-danger`.
+- **Die Zeile** ist eine Flexzeile auf jeder Breite (die R9-Mobil-Rasterregel ist abgeloest):
+  Kreis in der 28er-Spalte (Trefflaeche zentriert darueber), Titel bei x=56, EINE Metazeile in
+  Worten („od pt 16 paź", „do 19:00", „śr 21 paź · #dom · razem"), ueberfaellig als Pille
+  „zaległe", die Kategorie als „#tag"-Text; hinten nur die Fahne (Hoch/Dringend) und die
+  Personenscheibe nach der Personenregel (`utils/row-person.js` auf `person-color.js`). Kein
+  Prioritaetswort, kein Avatar-Stapel; auf Touch (`hover: none`) kein Mehr-Knopf und kein
+  Griff - Bearbeiten, Unteraufgabe und Ablegen stehen im Detailblatt, das ein Tipp auf die
+  ganze Zeile oeffnet. Der Wisch nach rechts ist das violette Band „Zrobione".
+  Bewusste Abweichung vom Artboard: Titel bleiben nach der R19-Titelregel hoechstens
+  ZWEIzeilig statt einzeilig - eine Regel fuer alle Listen.
+- **„Czyje zadania"**: neutrales Segment Wszystkie · Moje · <weiteres Mitglied> · Razem
+  (ab vier Mitgliedern die Personen als Menue „Osoby"), es TEILT die Liste (Moje = nur ich,
+  Person = nur sie, Razem = mehr als eine Person; Niemandem-Zugewiesenes nur unter
+  Wszystkie); clientseitig, je Geraet gemerkt; nicht am Wandtablett und nicht allein.
+- **Leere Zustaende**: erster Start mit drei Startvorschlaegen (oeffnen das Formular mit
+  Titel), „Wszystko zrobione", wenn der Haushalt je etwas erledigt hat, und der leere Korb
+  „Na dziś wszystko · Następne: …".
+- **Ein relativer Tag** fuer beide Seiten: `utils/day-label.js` `relativeDayWord`
+  (dziś/jutro/pojutrze/Wochentag/za N dni; wczoraj/N dni temu), `shortDayLabel`
+  („śr 21 paź"), `listDayHeading`; das Detailblatt sagt die Faelligkeit in denselben Worten.
+
+**Kalendarz** (`pages/calendar.js`, `calendar.css`; Artboard Kalendarz):
+- **Die Liste** (vorher Agenda; Telefon-Vorgabe) ist eine weisse Karte je Tag unter einem
+  klebenden Wochenstreifen (Personenpunkte, heute violett gefuellt): oben Baender (ganztaegig,
+  mehrtaegig mit Uhrzeit am ersten/letzten Tag, Feiertag, Schicht, Abfuhr), dann Termine mit
+  Zeitschiene (Beginn 17/600 ueber Ende 13) und 3pt-Personenkante, heute die violette
+  Jetzt-Linie zwischen Vorbei (Tinte-2) und Kommend, „Do zrobienia" mit echten Abhakzeilen
+  (mit Rueckgaengig), „Oboje zajęci 18:30 - 19:30", wenn alle Erwachsenen zugleich mit
+  VERSCHIEDENEM beschaeftigt sind (ab drei „Wszyscy zajęci"; gemeinsame Termine zaehlen nicht),
+  und „Wolny wieczór" an freien Abenden der Woche voraus. Die Woche voraus steht auch leer da.
+- **Die Terminfarbe ist die Person** (`eventEdgeColor`): eine Person ihre Personenfarbe, mehrere
+  Violett; nur ein Termin ohne Person behaelt die bisherige Achse (eigene Farbe, Kalender,
+  Grau). Liste, Woche, Monat und Streifen lesen denselben Wert (`--ev-color`).
+- **Woche und Monat** behalten ihren Bau: Wochentage in Satzschreibung (13/400 Tinte-2, die
+  Versal-Labels sind weg), heute in `--color-btn-primary` unter `--color-on-accent`, die
+  Jetzt-Linie violett statt rot (Rot ist in Tafla ein Zustand, keine Uhr).
+
+Guards, die dabei auf die neue Regel umgestellt wurden (Absicht jeweils erhalten):
+`test:frontend-audit` (ein Abhakkreis, jetzt 24; Griffspalte; Etiketten nur noch im Brett;
+Kopfgroesse der Liste; kein Ortszeichen), `test:mobile-room-work` (M1 als Flexzeile),
+`test:module-readonly-ui` (erledigt violett; leerer Zustand ohne schreibende Vorschlaege bei
+Nur-lesen), `test:detail-view` (Kopfworte), `test:task-groups` (Start-Datum aus dem Key),
+`test:calendar` (Tageskopf, Wochenschritt, Zeitschiene, Band, Abhakzeile, heute-Fuellung).
 
 ### Kuchnia in Tafla (2026-10-19)
 
