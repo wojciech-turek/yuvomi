@@ -828,12 +828,14 @@ test('eventWhenRelative: der eintägige Termin nennt den Tag in Worten, die Span
   assert(typeof head.dot === 'string' && head.dot.length > 0, 'der Punkt traegt die Kalenderfarbe');
   assert(head.people.length === 1 && head.peopleLabel === 'calendar.assignedLabel', 'Personen als Avatare');
 
-  // Agenda: das relative Wort fuehrt, dahinter Wochentag und Datum.
+  // Agenda: das relative Wort fuehrt, dahinter Wochentag und Datum. Seit Tafla
+  // (2026-10-20) aus dem EINEN relativen Helfer (`listDayHeading`): "Dziś ·
+  // wtorek 20 paź", ohne relatives Wort der Wochentag vorn ("Piątek · 23 paź").
   const heute = agendaDayHeadHtml(today);
-  assert(/<span class="agenda-day__date">common\.today<\/span>\s*<span class="agenda-day__weekday">[^<]+<\/span>/.test(heute), `"Heute - Donnerstag, 8. Oktober": ${heute}`);
-  assert(heute.includes(dayHeading(today).full), 'der volle Tag steht dahinter');
+  assert(/<span class="agenda-day__date">Calendar\.relDay\.today<\/span>\s*<span class="agenda-day__weekday">· [^<]+<\/span>/.test(heute), `"Dziś · wtorek 20 paź": ${heute}`);
   const spaeter = agendaDayHeadHtml(far);
-  assert(spaeter === `<span class="agenda-day__date">${dayHeading(far).full}</span>`, `ohne relatives Wort nur der volle Tag: ${spaeter}`);
+  assert(/^<span class="agenda-day__date">[^<]+<\/span>\s*<span class="agenda-day__weekday">· [^<]+<\/span>$/.test(spaeter), `ohne relatives Wort Wochentag und Datum: ${spaeter}`);
+  assert(!/relDay|common\./.test(spaeter), 'kein relatives Wort 16 Tage voraus');
   assert(!/\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4}/.test(spaeter), 'kein Zahlendatum mehr im Tageskopf');
 });
 
@@ -2037,7 +2039,8 @@ test('Schrittweite: eingeklappter Telefon-Monat geht eine Woche, sonst gilt die 
   assert(step('month', { mobile: false, monthCollapsed: true }).unit === 'month',
     'auf dem Desktop gibt es kein Einklappen - ein liegengebliebener Zustand nach dem Drehen zaehlt nicht');
   assert(step('week', { mobile: true }).days === 3 && step('week', { mobile: false }).days === 7, 'Woche: 3 Tage mobil, 7 sonst');
-  assert(step('day').days === 1 && step('agenda').days === 30, 'Tag 1, Agenda 30');
+  // Tafla (2026-10-20): die Liste blaettert wochenweise, wie ihr Wochenstreifen.
+  assert(step('day').days === 1 && step('agenda').unit === 'week' && step('agenda').days === 7, 'Tag 1, Liste eine Woche');
 
   const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   const nav = src.slice(src.indexOf('async function navigate('), src.indexOf('async function goToday('));
@@ -2059,7 +2062,7 @@ test('Pfeilnamen folgen der Schrittweite, die Agenda nennt ihre Spanne', () => {
   assert(labels(step('week')).next === 'calendar.nextWeek', 'Woche am Desktop');
   assert(labels(step('week', { mobile: true })).next === 'calendar.nextDays{"count":3}', 'Drei-Tage-Fenster am Telefon');
   assert(labels(step('day')).prev === 'calendar.prevDay', 'Tag');
-  assert(labels(step('agenda')).next === 'calendar.nextDays{"count":30}', 'Agenda: dreissig Tage');
+  assert(labels(step('agenda')).next === 'calendar.nextWeek', 'Liste: eine Woche (Tafla, Wochenstreifen)');
 
   const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   const nav = src.slice(src.indexOf('function periodNavHtml('), src.indexOf('const CAL_SHORTCUT_KEYS'));
@@ -2067,8 +2070,11 @@ test('Pfeilnamen folgen der Schrittweite, die Agenda nennt ihre Spanne', () => {
   const upd = src.slice(src.indexOf('function updateLabel('), src.indexOf('function updateLabel(') + 2200);
   assert(/syncPeriodArrows\(\)/.test(upd), 'updateLabel() benennt die Pfeile nach einem Ansichtswechsel nicht um');
   assert(!/agendaFrom/.test(src), 'die Agenda nennt wieder nur ihren Anfang („Ab ...")');
-  assert(/view === 'agenda'\)[\s\S]{0,200}getAgendaRange\(state\.cursor\)[\s\S]{0,200}dayRangeLabel/.test(upd),
-    'das Agenda-Label nennt nicht die Spanne, die getAgendaRange() laedt');
+  // Tafla: die Liste nennt den Monat ihres Wochenstreifens ("październik
+  // 2026"); welche Tage sie zeigt, sagt der Streifen darunter - der Zusage
+  // "der Kopf sagt, was die Pfeile weiterschalten" bleibt sie treu.
+  assert(/view === 'agenda'\)[\s\S]{0,300}startOfWeekOf\(state\.cursor\)[\s\S]{0,200}formatMonthYear/.test(upd),
+    'das Listen-Label nennt den Monat des Wochenstreifens');
 });
 
 // DIE TITELFASSUNG LAESST DER TAGESLISTE PLATZ (Critique 2026-09-24, Rest 2):
@@ -2102,13 +2108,17 @@ test('Titelfassung am Telefon: die Wochen teilen sich 320px, keine Zeile unter 4
 // EINE KANTE FUER DEN TAG (Critique 2026-09-24, Konsistenz): Datum und
 // Terminkarte standen bei x=12, Aufgaben- und Feiertags-Chips mit eigenem
 // 12px-Einzug bei x=24 - eine dritte Fluchtlinie, weder Karte noch Text.
+// Tafla (2026-10-20): die Fluchtlinien stehen jetzt IN der Tageskarte - Kopf
+// und Zeilen bei 16, die Titel bei 84 (nach der 56er Zeitschiene). Aufgaben
+// stehen als Abhakzeilen in derselben Schiene wie die Termine; ihr Block hat
+// keinen eigenen seitlichen Einzug, die Zeilen polstern sich selbst.
 test('Agenda und Tagesliste: Aufgaben und Feiertage ruecken nicht ein', () => {
   const rules = [...eachRule(calendarCss)].filter((r) => r.at.length === 0);
   for (const sel of ['.agenda-tasks', '.agenda-holidays']) {
     const rule = rules.find((r) => r.selector.trim() === sel);
     assert(rule, `${sel} fehlt`);
     const pad = /(?:^|[;\s{])padding:\s*([^;]+);/.exec(rule.body)?.[1]?.trim().split(/\s+/);
-    assert(pad && pad.length === 2 && pad[1] === '0', `${sel} rueckt mit ${pad?.[1]} ein - die Chips stehen nicht an der Kante von Datum und Karte`);
+    assert(pad && pad.length >= 2 && pad[1] === '0', `${sel} rueckt mit ${pad?.[1]} ein - die Zeilen stehen nicht an der Kante der Karte`);
   }
 });
 
@@ -3122,12 +3132,15 @@ function dayEventTimeText(html, id) {
 
 // Die Zeit-Zelle EINER Agenda-Zeile, ueber id UND Tag - derselbe Termin steht
 // mit derselben id an beiden Tagen.
+// Tafla (2026-10-20): die Listenzeile zeigt die Zeit als Schiene (Beginn
+// ueber Ende), das Band eines Mehrtagestermins sie in seiner Metazeile; den
+// Zeit-Text DIESES Tages in Worten traegt ihr gesprochener Name ("Titel, Zeit,
+// ..."). Dort liest der Vergleich - dieselbe Frage, dieselbe Antwort.
 function agendaTimeText(html, id, dayStr) {
   const from = html.indexOf(`data-id="${id}" data-date="${dayStr}"`);
   if (from === -1) return '';
-  const cell = html.indexOf('calendar-meta-item--time', from);
-  if (cell === -1) return '';
-  return (/<span>([^<]*)<\/span>/.exec(html.slice(cell)) ?? ['', ''])[1].trim();
+  const label = /aria-label="([^"]*)"/.exec(html.slice(from))?.[1] ?? '';
+  return label.split(', ')[1]?.trim() ?? '';
 }
 
 test('renderWeekView: der Zeit-Text nennt in jeder Spalte den Anteil DIESES Tages (PR #1323, Befund 1)', () => {
@@ -4331,19 +4344,16 @@ test('Telefon-Monat: die Auswahl wird angesagt - aus einer Live-Region, die den 
 test('Aufgaben-Chip: Trefferflaeche in der Liste auf --target-base, im Ganztags-Stapel mindestens 24px', () => {
   const css = readFileSync(new URL('../public/styles/calendar.css', import.meta.url), 'utf8');
   const rules = [...eachRule(css)];
-  const before = rules.find((r) => r.selector.trim() === '.agenda-tasks .cal-task-chip::before');
-  assert(before && /inset-block:\s*calc\(-1 \* var\(--task-hit-grow\)\)/.test(before.body), 'die Liste dehnt die Aufgabe nicht per ::before');
-  const list = rules.find((r) => r.selector.trim() === '.agenda-tasks');
-  assert(list && /--task-hit-grow:\s*calc\(\(var\(--target-base\) - var\(--space-6\)\) \/ 2\)/.test(list.body),
-    'die Dehnung muss aus --target-base kommen');
-  // Seit 2026-09-24 duerfen sich die Dehnungen zweier Aufgaben ueberlappen
-  // (8px Zeilenabstand statt 20-24px) - aber nur UNTER den Chips: die sichtbare
-  // Bar trifft immer sich selbst.
-  assert(/row-gap:\s*var\(--space-2\)/.test(list.body), 'der Zeilenabstand der Aufgaben ist wieder die doppelte Dehnung (48px-Takt)');
-  assert(/isolation:\s*isolate/.test(list.body) && /z-index:\s*-1/.test(before.body),
-    'ueberlappende Dehnungen muessen unter den Chips liegen, sonst trifft ein Tipp auf die untere Bar die obere Aufgabe');
+  // Tafla (2026-10-20): in der Liste ist die Aufgabe keine 24er-Bar mehr,
+  // die per ::before auf die Zielgroesse gedehnt wird, sondern eine 48 hohe
+  // Abhakzeile: der Titel (der Chip, oeffnet die Aufgabe) fuellt die Zeile in
+  // der Hoehe, der Kreis daneben ist ein Knopf mit --target-base.
+  const row = rules.find((r) => r.selector.trim() === '.agenda-task' && !r.at.length);
+  assert(row && /min-height:\s*48px/.test(row.body), 'die Abhakzeile ist 48 hoch');
   const chip = rules.find((r) => r.selector.trim() === '.agenda-tasks .cal-task-chip');
-  assert(chip && /overflow:\s*visible/.test(chip.body), 'der Chip schneidet sein eigenes ::before ab (overflow)');
+  assert(chip && /align-self:\s*stretch/.test(chip.body), 'der Titel trifft ueber die volle Zeilenhoehe');
+  const check = rules.find((r) => r.selector.trim() === '.agenda-task__check' && !r.at.length);
+  assert(check && /block-size:\s*var\(--target-base\)/.test(check.body), 'der Kreis trifft mit --target-base');
   const stack = rules.find((r) => r.selector.trim() === '.allday-cell .cal-task-chip');
   assert(stack && /min-height:\s*var\(--space-6\)/.test(stack.body), 'im Ganztags-Stapel bleibt die Aufgabe unter 24px');
   const focus = rules.find((r) => /\.week-event:focus-visible/.test(r.selector) && /\.day-event:focus-visible/.test(r.selector));
@@ -4386,7 +4396,11 @@ test('Zeitformat: Raster, Liste, gesprochener Name und Schicht gehen durch dense
     const esc = (text) => escStub(text);
     assert(html.week.includes(`class="week-event__when">${range}<`), `Woche: Rasterfassung erwartet: ${html.week}`);
     assert(html.day.includes(`class="day-event__meta">${range}<`), `Tag: Rasterfassung erwartet: ${html.day}`);
-    assert(html.agenda.includes(`<span>${esc(`${range} Uhr`)}</span>`), `Agenda: Listenfassung mit Suffix erwartet: ${html.agenda}`);
+    // Tafla: die Liste zeigt Beginn und Ende als Zeitschiene, beide durch
+    // formatTime() (Rasterfassung ohne Suffix); die Listenfassung mit Suffix
+    // steht im gesprochenen Namen (unten, fuer jede Ansicht gleich).
+    assert(html.agenda.includes('class="agenda-event__start">2026-09-24T09:00<')
+      && html.agenda.includes('class="agenda-event__end">2026-09-24T10:30<'), `Agenda: Zeitschiene ueber formatTime() erwartet: ${html.agenda}`);
     for (const [view, markup] of Object.entries(html)) {
       assert(markup.includes(esc(`Zahnarzt, ${range} Uhr`)),
         `${view}: der gesprochene Name nennt die Zeit in der Listenfassung - ein Termin klingt ueberall gleich`);
@@ -5184,8 +5198,11 @@ test('Monatszelle und Liste: „Tag 2 von 3" und „und N weitere" (Re-Kritik 20
     `vier Eintraege, drei Titel, der Rest als Zahl: ${cell}`);
   const all = calendarHelpers.monthDayAriaLabel('2026-10-14', 2, [{ title: 'A' }, { title: 'B' }]);
   assert(!all.includes('monthDayMoreTitles'), `alle genannt, kein Rest: ${all}`);
+  // Tafla: ein Mehrtagestermin steht als Band oben in der Tageskarte, und
+  // seine Metazeile nennt den Tag sichtbar ("· Wojtek · Dzień 2 z 3").
   const row = calendarHelpers.renderAgendaEvent(ev, '2026-10-14');
-  assert(/class="calendar-meta-item__day">calendar\.multiDayPosition\{&quot;day&quot;:2,&quot;total&quot;:3\}</.test(row),
+  assert(/class="agenda-event agenda-event--banner"/.test(row), `das Band: ${row}`);
+  assert(/class="agenda-event__meta">[^<]*calendar\.multiDayPosition\{&quot;day&quot;:2,&quot;total&quot;:3\}/.test(row),
     `die Listenzeile nennt den Tag sichtbar: ${row}`);
 });
 
@@ -6029,7 +6046,11 @@ await test('Re-Kritik: Personen-Chips ohne geteilten Nachnamen; heute ist im Min
   const css = readFileSync(new URL('../public/styles/calendar.css', import.meta.url), 'utf8');
   const rules = [...eachRule(css)].filter((r) => !r.at.length);
   const today = rules.find((r) => r.selector.trim() === '.cal-mini__day[aria-current="date"]');
-  assert(/background-color:\s*var\(--color-accent\)/.test(today?.body ?? ''), 'heute: gefuellte Akzent-Scheibe wie im Raster');
+  // Tafla: eine violette FLAECHE nimmt die Fuellrolle (--color-btn-primary),
+  // in Mini-Monat, Monatsraster, Woche und Wochenstreifen gleich.
+  assert(/background-color:\s*var\(--color-btn-primary\)/.test(today?.body ?? ''), 'heute: gefuellte Akzent-Scheibe wie im Raster');
+  const grid = rules.find((r) => r.selector.trim() === '.month-day--today .month-day__number');
+  assert(/background-color:\s*var\(--color-btn-primary\)/.test(grid?.body ?? ''), 'das Raster nimmt dieselbe Fuellrolle');
   const cursor = rules.find((r) => r.selector.trim() === '.cal-mini__day.is-cursor');
   assert(/box-shadow:\s*inset 0 0 0 var\(--space-0h\) var\(--color-accent\)/.test(cursor?.body ?? ''), 'der gewaehlte Tag als Ring');
   assert(!/background-color/.test(cursor?.body ?? ''), 'der gewaehlte Tag ist keine zweite Scheibe');
@@ -6101,7 +6122,10 @@ await test('Seitenleiste: scheitert „Als Naechstes", sagt die Leiste das und l
     get: async (url) => {
       calls.push(url);
       if (fail) throw Object.assign(new Error('Service Unavailable'), { status: 503 });
-      return { data: [{ id: 9, title: 'Zahnarzt', start_datetime: '2026-10-20T10:00:00Z', end_datetime: '2026-10-20T11:00:00Z', assigned_users: [] }] };
+      // Weit in der Zukunft: `upNextEvents` vergleicht mit der ECHTEN Uhr
+      // (Date.now), und ein fester Termin am 2026-10-20 fiel ab dem 21. still
+      // aus der Liste - der Test lief dann gegen die Uhr statt gegen den Code.
+      return { data: [{ id: 9, title: 'Zahnarzt', start_datetime: '2036-10-20T10:00:00Z', end_datetime: '2036-10-20T11:00:00Z', assigned_users: [] }] };
     },
   };
   try {
@@ -6235,6 +6259,97 @@ test('R20: die Seitenleiste reserviert ihre Spalte schon im ersten Markup', () =
   const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   assert(/class="calendar-page app-page app-page--full\$\{sidebarWanted\(\) \? ' has-cal-sidebar' : ''\}" id="calendar-page"/.test(src), 'die Seite traegt has-cal-sidebar schon im Markup');
   assert(/<aside class="cal-sidebar" id="cal-sidebar" aria-label="[^"]*"\$\{sidebarWanted\(\) \? '' : ' hidden'\}><\/aside>/.test(src), 'die leere Leiste ist nicht verborgen');
+});
+
+// --------------------------------------------------------
+// TAFLA (2026-10-20): die Liste - EIN relativer Tag, die Personenkante,
+// "Oboje zajęci", "Wolny wieczór", die Tageskarte und der Wochenstreifen.
+// --------------------------------------------------------
+const tafelDays = await import('/utils/day-label.js');
+
+test('Tafla: EIN relativer Tag - dziś, jutro, pojutrze, Wochentag, za N dni, zurueck wczoraj und N dni temu', () => {
+  const { relativeDayWord, listDayHeading, daysFromToday } = tafelDays;
+  const today = '2026-10-19';
+  assert(relativeDayWord('2026-10-19', today) === 'calendar.relDay.today', 'heute');
+  assert(relativeDayWord('2026-10-20', today) === 'calendar.relDay.tomorrow', 'morgen');
+  assert(relativeDayWord('2026-10-21', today) === 'calendar.relDay.dayAfterTomorrow', 'uebermorgen');
+  const weekday = relativeDayWord('2026-10-23', today);
+  assert(weekday && !/relDay/.test(weekday) && weekday === weekday.toLowerCase(), `drei bis sechs Tage: der Wochentag, klein: ${weekday}`);
+  assert(relativeDayWord('2026-10-28', today) === 'calendar.relDay.inDays{"count":9}', 'ab sieben Tagen: za N dni');
+  assert(relativeDayWord('2026-10-18', today) === 'calendar.relDay.yesterday', 'gestern');
+  assert(relativeDayWord('2026-10-16', today) === 'calendar.relDay.daysAgo{"count":3}', 'davor: N dni temu');
+  assert(daysFromToday('2026-10-26', today) === 7 && daysFromToday('2027-01-01', '2026-12-31') === 1, 'auf den Keys gerechnet, ueber den Jahreswechsel');
+  const head = listDayHeading('2026-10-20', today);
+  assert(head.relative && head.lead === 'Calendar.relDay.tomorrow' && !/relDay/.test(head.rest), `Kopf: relatives Wort vorn: ${JSON.stringify(head)}`);
+  const later = listDayHeading('2026-10-23', today);
+  assert(!later.relative && !/relDay/.test(later.lead + later.rest), `Kopf: sonst der Wochentag vorn: ${JSON.stringify(later)}`);
+});
+
+test('Tafla: die Terminfarbe ist die Person - gemeinsam violett, ohne Person die Terminfarbe', () => {
+  withOvernightState({ users: [{ id: 1, display_name: 'Wojtek', avatar_color: '#2563EB' }, { id: 2, display_name: 'Mariola', avatar_color: '#DB2777' }] }, () => {
+    const w = calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 1, avatar_color: '#2563EB' }], color: '#3CA368' });
+    assert(/^var\(--person-\d\)$/.test(w), `eine Person: ihre Personenfarbe, auch ueber eine eigene Terminfarbe: ${w}`);
+    const m = calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 2, avatar_color: '#DB2777' }] });
+    assert(/^var\(--person-\d\)$/.test(m) && m !== w, `zwei Menschen, zwei Farben: ${w} / ${m}`);
+    assert(calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 1 }, { id: 2 }] }) === 'var(--color-accent)', 'gemeinsam: violett');
+    assert(calendarHelpers.eventEdgeColor({ color: '#3CA368', assigned_users: [] }) === '#3CA368', 'ohne Person: die Terminfarbe');
+  });
+});
+
+test('Tafla: "Oboje zajęci" nur, wenn alle Erwachsenen zugleich mit Verschiedenem beschaeftigt sind', () => {
+  const ev = (id, from, to, who) => ({
+    id, title: `T${id}`, start_datetime: `2026-10-23T${from}`, end_datetime: `2026-10-23T${to}`, all_day: 0,
+    assigned_users: who.map((i) => ({ id: i })),
+  });
+  withOvernightState({ users: [{ id: 1, display_name: 'Wojtek' }, { id: 2, display_name: 'Mariola' }, { id: 3, display_name: 'Kuchnia', access_scope: 'display' }] }, () => {
+    const busy = calendarHelpers.busyTogetherWindow([ev(1, '18:00', '19:30', [1]), ev(2, '18:30', '20:45', [2])], '2026-10-23');
+    assert(busy && busy.from === 18 * 60 + 30 && busy.to === 19 * 60 + 30 && !busy.everyone,
+      `die Spanne, in der BEIDE weg sind (das Display zaehlt nicht): ${JSON.stringify(busy)}`);
+    assert(calendarHelpers.busyTogetherWindow([ev(3, '19:00', '22:00', [1, 2])], '2026-10-23') === null, 'gemeinsam unterwegs ist kein Konflikt');
+    assert(calendarHelpers.busyTogetherWindow([ev(4, '08:00', '09:00', [1]), ev(5, '10:00', '11:00', [2])], '2026-10-23') === null, 'nacheinander ist kein Konflikt');
+    assert(calendarHelpers.busyTogetherWindow([ev(6, '08:00', '09:00', [1])], '2026-10-23') === null, 'einer allein ist kein Konflikt');
+  });
+  withOvernightState({ users: [{ id: 1 }, { id: 2 }, { id: 3 }] }, () => {
+    const all = calendarHelpers.busyTogetherWindow([ev(1, '18:00', '20:00', [1]), ev(2, '18:00', '20:00', [2]), ev(3, '19:00', '21:00', [3])], '2026-10-23');
+    assert(all && all.everyone && all.from === 19 * 60 && all.to === 20 * 60, `ab drei Erwachsenen: "Wszyscy zajęci": ${JSON.stringify(all)}`);
+  });
+  withOvernightState({ users: [{ id: 1 }] }, () => {
+    assert(calendarHelpers.busyTogetherWindow([ev(1, '18:00', '20:00', [1])], '2026-10-23') === null, 'allein im Haushalt: nie');
+  });
+});
+
+test('Tafla: "Wolny wieczór" - kein Termin beruehrt den Abend, nur in der Woche voraus', () => {
+  const ev = (from, to) => ({ id: 1, title: 'T', start_datetime: `2026-06-16T${from}`, end_datetime: `2026-06-16T${to}`, all_day: 0, assigned_users: [] });
+  withOvernightState({ today: '2026-06-15' }, () => {
+    assert(calendarHelpers.eveningIsFree([ev('08:00', '09:00')], '2026-06-16'), 'ein Vormittagstermin laesst den Abend frei');
+    assert(!calendarHelpers.eveningIsFree([ev('16:30', '17:30')], '2026-06-16'), 'was in den Abend reicht, nimmt ihn');
+    assert(calendarHelpers.showsFreeEvening([], '2026-06-16'), 'morgen ohne Termin: ja');
+    assert(!calendarHelpers.showsFreeEvening([], '2026-06-30'), 'zwei Wochen voraus: kein Wort');
+    assert(!calendarHelpers.showsFreeEvening([], '2026-06-14'), 'gestern: kein Wort');
+  });
+});
+
+test('Tafla: die Tageskarte - Band, Zeitschiene mit Personenkante, Abhakzeilen, Wochenstreifen', () => {
+  const timed = { id: 71, title: 'Joga', start_datetime: '2026-06-16T17:00', end_datetime: '2026-06-16T18:00', all_day: 0, location: 'Studio', assigned_users: [{ id: 2, display_name: 'Mariola Kowalska' }] };
+  const allDay = { id: 72, title: 'Delegacja', start_datetime: '2026-06-16', end_datetime: '2026-06-16', all_day: 1, assigned_users: [{ id: 1, display_name: 'Wojtek' }] };
+  const task = { id: 73, title: 'Kupić wino', due_date: '2026-06-16', status: 'open', priority: 'none', assigned_users: [{ id: 1, display_name: 'Wojtek' }, { id: 2, display_name: 'Mariola' }] };
+  withOvernightState({ today: '2026-06-15', cursor: '2026-06-15', currentUserId: 2, events: [timed, allDay], tasks: [task],
+    users: [{ id: 1, display_name: 'Wojtek' }, { id: 2, display_name: 'Mariola Kowalska' }] }, () => {
+    const html = calendarHelpers.dayGroupHtml({ date: '2026-06-16', events: [timed, allDay], tasks: [task], holidays: [], schedule: [], waste: [] });
+    assert(/class="agenda-card"/.test(html), 'eine Karte je Tag');
+    assert(/class="agenda-event agenda-event--banner"[^>]*data-id="72"/.test(html), `ganztaegig als Band oben: ${html}`);
+    assert(/class="agenda-event__start">2026-06-16T17:00<\/span>/.test(html) && /class="agenda-event__end">2026-06-16T18:00</.test(html),
+      'die Zeitschiene: Beginn ueber Ende');
+    assert(/data-id="71"[^>]*style="--ev-color:var\(--person-\d\);"/.test(html), 'die Kante in der Personenfarbe');
+    assert(/class="agenda-event__meta">Studio · Mariola</.test(html), 'Ort · Vorname - kein Uhr- und kein Ortszeichen');
+    assert(/calendar\.toDo/.test(html) && /class="agenda-task" data-task-row="73"/.test(html), '"Do zrobienia" mit der Aufgabe als Zeile');
+    assert(/person-disc--razem/.test(html), 'die geteilte Aufgabe traegt die Razem-Scheibe');
+    assert(!/class="agenda-now"/.test(html), 'die Jetzt-Linie steht nur heute');
+    const strip = calendarHelpers.agendaStripHtml();
+    assert((strip.match(/data-strip-day="/g) || []).length === 7, 'sieben Tage im Streifen');
+    assert(/class="cal-strip__day is-today"[^>]*data-strip-day="2026-06-15"[^>]*aria-current="date"/.test(strip), 'heute ist markiert');
+    assert(/data-strip-day="2026-06-16"[\s\S]*?--dot:var\(--person-\d\)/.test(strip), 'die Punkte in den Personenfarben des Tages');
+  });
 });
 
 // --------------------------------------------------------

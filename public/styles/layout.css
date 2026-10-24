@@ -8041,9 +8041,11 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
     height: var(--space-5);
   }
 
-  /* Kein Trenner unter dem Kopf in Ruhe (Tafla: „no divider"); eingeklappt
-   * beim Lesen traegt er weiter die Kante zum Inhalt. */
-  .page-toolbar:not(.is-collapsed) {
+  /* Kein Trenner unter dem Kopf in Ruhe (Tafla: „no divider"). Sobald Inhalt
+   * unter ihm liegt - eingeklappt, angedockt oder, einzeilig, gescrollt
+   * (`is-docked`, wireCollapsingHeader) -, traegt er die Kante zum Inhalt:
+   * ohne sie haette ein einzeiliger Kopf in keinem Zustand eine (Sonde 8). */
+  .page-toolbar:not(.is-collapsed):not(.is-docked) {
     border-bottom-color: transparent;
   }
 }

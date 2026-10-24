@@ -55,6 +55,12 @@ export const DISPLAY_SCOPES = Object.freeze([
   // kitchen iPad, so the wall may READ meals and recipes. Still no write scope:
   // cook mode stores nothing.
   'meals:read',
+  // The Tafla wall (owner decision, 2026-10-19): the kitchen tablet shows the
+  // shopping card ("23 na liście · mleko · śmietanka", "Kończy się: masło") and
+  // the dinner meter ("Masz 5 z 6"), which compares tonight's ingredients with
+  // the pantry. Both are kitchen data of the whole household, read only.
+  'shopping:read',
+  'pantry:read',
 ]);
 
 /**
@@ -82,6 +88,14 @@ export const DISPLAY_SCOPES = Object.freeze([
 export const DISPLAY_WRITE_ROUTES = Object.freeze([
   Object.freeze({ method: 'PATCH', pattern: /^\/tasks\/\d+\/status$/ }),
   Object.freeze({ method: 'POST', pattern: /^\/rewards\/redemptions$/ }),
+  // THE WALL'S OWN WRITES (Tafla, 2026-10-19), behind the household switch
+  // "Pozwól odhaczać na ścianie" (services/wall-settings.js, `refuseWallWrite`,
+  // checked in each route - off by default): a running-out item onto a list
+  // (the "+" chips of the shopping card; the route takes only a name from a
+  // display) and the answer to the weekly question. The tick and the
+  // redemption above are behind the same switch: every write of a display is.
+  Object.freeze({ method: 'POST', pattern: /^\/shopping\/\d+\/items$/ }),
+  Object.freeze({ method: 'POST', pattern: /^\/ai\/questions\/\d+\/(?:answer|dismiss)$/ }),
 ]);
 
 /** Die Module daraus, ohne Zugriffsart - fuer die Rechteaufloesung. */
@@ -139,6 +153,10 @@ export const DISPLAY_READ_PATHS = Object.freeze([
   // hinein und liefert Name, Farbe, Bild und die zwei Flaggen; die
   // Kontaktdaten, die `/family/members` mitgibt, bleiben draussen.
   '/displays/people',
+  // The weekly question (Tafla wall, Sunday evenings). Reading it is no
+  // household data beyond the question itself; answering is a write behind
+  // the wall switch (DISPLAY_WRITE_ROUTES).
+  '/ai/questions/open',
 ]);
 
 /**
@@ -207,6 +225,8 @@ export const DISPLAY_PREFERENCE_KEYS = Object.freeze([
   'disabled_modules', 'hidden_modules', 'module_order', 'mobile_nav_order',
   'dashboard_widgets', 'dashboard_today_glance',
   'tasks_subtasks_expanded',
+  // What the wall draws and whether it offers its check rings (Tafla).
+  'wall_allow_ticking', 'wall_sections',
   'holiday_show_public', 'holiday_show_school', 'holiday_public_color', 'holiday_school_color',
   'screensaver_enabled',
 ]);

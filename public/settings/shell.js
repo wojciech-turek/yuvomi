@@ -1,5 +1,8 @@
-import { t } from '/i18n.js';
+import { t, getLocale } from '/i18n.js';
 import { moduleAccentVar } from '/utils/module-accent.js';
+import { getHouseholdSize } from '/utils/household.js';
+import { personToken } from '/utils/person-color.js';
+import { loadOverviewValues } from './overview-values.js';
 import { renderSkeletonList, placeSkeletonUntilContent } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { swapRegion } from '/utils/content-swap.js';
@@ -11,6 +14,7 @@ import {
   filterSettingsDomains,
   findSettingsLeaf,
   firstSettingsSheet,
+  normalizeSettingsSearch,
   searchSettings,
   settingsOptionUrl,
   settingsOverviewUrl,
@@ -387,38 +391,161 @@ function updateNavigationActiveState(navigation, activeLeaf) {
  * Split-Schwelle (Kopfregel mobil, 2026-09-26; Critique A7 P1). Darueber ist
  * dieselbe Liste die Seitenleiste, und rechts steht ein Blatt (S3).
  *
+ * TAFLA (2026-10-20): vier Gruppen statt der drei Bereiche - Ty, Dom, Moduly,
+ * Zaawansowane (zugeklappt) -, darueber die Ausweiskarte, darunter "Wyloguj".
+ * Jede Zeile traegt am Ende ihren WERT (overview-values.js), damit die Liste
+ * selbst sagt, wie etwas eingestellt ist. Die Zeichen sind nackt in Tinte-2.
+ *
  * DIE BEREICHSEBENE GIBT ES NICHT MEHR. Ein Deep-Link `?view=domain&domain=x`
  * (Breadcrumb, Rueckweg aus dem Blatt, alte Lesezeichen) landet auf derselben
  * Liste, gescrollt auf den Abschnitt - am Desktop auf dem ersten Blatt des
  * Bereichs.
  */
-function createOverviewRow(entry) {
-  const link = createLink(entry.path, 'settings-overview__row');
+function createOverviewRow(entry, { valueKey = null, label = null, href = null, icon = null } = {}) {
+  const link = createLink(href ?? entry.path, 'settings-overview__row');
   link.dataset.leafId = entry.id;
-  link.appendChild(createLeafMark(entry, 'settings-overview__row-mark'));
+  const mark = createLeafMark(icon ? { ...entry, icon } : entry, 'settings-overview__row-mark');
+  link.appendChild(mark);
 
   const copy = document.createElement('span');
   copy.className = 'settings-overview__row-copy';
 
-  const label = document.createElement('span');
-  label.className = 'settings-overview__row-title';
-  label.textContent = settingsLeafLabel(entry, t);
+  const title = document.createElement('span');
+  title.className = 'settings-overview__row-title';
+  title.textContent = label ?? settingsLeafLabel(entry, t);
+  if (label) link.dataset.searchText = label;
 
   const description = document.createElement('span');
   description.className = 'settings-overview__row-description';
   description.textContent = settingsLeafDescription(entry, t);
 
-  copy.append(label, description);
-  link.append(
-    copy,
-    createIcon('chevron-right', 'settings-overview__row-chevron'),
-  );
+  copy.append(title, description);
+  link.appendChild(copy);
+  if (valueKey) {
+    const value = document.createElement('span');
+    value.className = 'settings-overview__row-value';
+    value.dataset.valueFor = valueKey;
+    link.appendChild(value);
+  }
+  link.appendChild(createIcon('chevron-right', 'settings-overview__row-chevron'));
   return link;
 }
 
 /** Id des Abschnitts eines Bereichs - Sprungziel der Deep-Links. */
 function overviewSectionId(domainId) {
   return `settings-domain-${domainId}`;
+}
+
+/**
+ * Welche Zeile in welcher Gruppe steht, und welcher Wert an ihr haengt.
+ * Blaetter, die hier nicht stehen, fallen in "Ustawienia modulow" (Moduly) -
+ * jedes Blatt bleibt erreichbar, auch ein neues.
+ */
+const OVERVIEW_GROUPS = [
+  { id: 'personal', labelKey: 'settings.groupYou', leaves: ['personal-appearance', 'personal-color', 'personal-notifications', 'personal-device', 'personal-weather'] },
+  { id: 'admin', labelKey: 'settings.groupHome', leaves: ['admin-family', 'admin-displays', 'admin-ai', 'admin-integrations'], footerKey: 'settings.groupHomeFooter', footerWhen: 'admin-ai' },
+  { id: 'modules', labelKey: 'settings.domainModules', leaves: ['modules-active', 'modules-navigation'], rest: true },
+  { id: 'advanced', labelKey: 'settings.groupAdvanced', leaves: ['admin-email', 'admin-api', 'admin-backup', 'admin-system', 'admin-permissions', 'modules-install'], collapsed: true },
+];
+
+const OVERVIEW_VALUE_KEYS = {
+  'personal-appearance': 'theme',
+  'personal-color': 'color',
+  'personal-notifications': 'push',
+  'personal-weather': 'weather-personal',
+  'admin-family': 'members',
+  'admin-displays': 'tablet',
+  'admin-ai': 'ai',
+  'admin-integrations': 'weather',
+  'modules-active': 'modules',
+  'admin-backup': 'backup',
+};
+
+const ACCOUNT_LEAF_ID = 'personal-account';
+
+/**
+ * Eine Zeile, die eine Gruppe in ihrer Karte aufklappt ("Ustawienia modulow",
+ * "Zaawansowane"). Der Aufklapper steht IN der Karte (Komponente "Lista
+ * grupowana + wiersz"), das Feld darunter traegt die Zeilen.
+ */
+function createExpander({ id, title, meta = '', icon, rows }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-overview__expandable';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `settings-overview__row settings-overview__row--expander${meta ? ' settings-overview__row--two' : ''}`;
+  button.dataset.overviewExpander = '';
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', id);
+  const mark = document.createElement('span');
+  mark.className = 'settings-overview__row-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.appendChild(createIcon(icon, 'settings-overview__row-mark-glyph'));
+  const copy = document.createElement('span');
+  copy.className = 'settings-overview__row-copy';
+  const label = document.createElement('span');
+  label.className = 'settings-overview__row-title';
+  label.textContent = title;
+  copy.appendChild(label);
+  const metaEl = document.createElement('span');
+  metaEl.className = 'settings-overview__row-meta';
+  metaEl.textContent = meta;
+  metaEl.hidden = !meta;
+  copy.appendChild(metaEl);
+  button.append(mark, copy, createIcon('chevron-down', 'settings-overview__row-chevron settings-overview__row-chevron--down'));
+
+  const panel = document.createElement('div');
+  panel.className = 'settings-overview__panel';
+  panel.id = id;
+  panel.hidden = true;
+  panel.append(...rows);
+
+  button.addEventListener('click', () => {
+    const open = button.getAttribute('aria-expanded') !== 'true';
+    button.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+  });
+  wrap.append(button, panel);
+  return wrap;
+}
+
+/** Die Ausweiskarte: Avatar 56, Name, Rolle und Haushaltsgroesse -> Konto. */
+function createIdentityCard(user, accountLeaf) {
+  const card = createLink(accountLeaf.path, 'settings-identity');
+  card.dataset.leafId = accountLeaf.id;
+  const name = user?.display_name ?? '';
+  const size = getHouseholdSize();
+  const role = user?.role === 'admin' ? t('more.roleAdmin') : t('more.roleMember');
+  const meta = size ? `${role} · ${t('more.peopleAtHome', { count: size })}` : role;
+  card.setAttribute('aria-label', t('settings.identityLabel', { name, meta }));
+
+  const avatar = document.createElement('span');
+  avatar.className = 'settings-identity__avatar';
+  avatar.setAttribute('aria-hidden', 'true');
+  const token = personToken(user ?? {});
+  avatar.style.setProperty('--identity-ink', token.ink);
+  avatar.style.setProperty('--identity-tint', token.tint);
+  if (user?.avatar_data) {
+    const img = document.createElement('img');
+    img.src = user.avatar_data;
+    img.alt = '';
+    avatar.appendChild(img);
+  } else {
+    avatar.textContent = ([...String(name).trim()][0] ?? '?').toLocaleUpperCase(getLocale());
+  }
+
+  const copy = document.createElement('span');
+  copy.className = 'settings-identity__copy';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'settings-identity__name';
+  nameEl.textContent = name;
+  const metaEl = document.createElement('span');
+  metaEl.className = 'settings-identity__meta';
+  metaEl.textContent = meta;
+  copy.append(nameEl, metaEl);
+  card.append(avatar, copy, createIcon('chevron-right', 'settings-overview__row-chevron'));
+  return card;
 }
 
 function renderOverview(content, domains, user) {
@@ -434,11 +561,51 @@ function renderOverview(content, domains, user) {
   status.hidden = true;
   overview.appendChild(status);
 
+  const visible = new Map();
   for (const domain of domains) {
+    // Dieselben Blaetter, die die Rolle sieht (S1): ein Mitglied bekommt keine
+    // Haushaltszeile - auch nicht ueber eine Tafla-Gruppe.
     const leaves = settingsSheetsForDomain(domain.id, user);
-    if (!leaves.length) continue;
+    for (const entry of leaves) visible.set(entry.id, entry);
+  }
 
-    const domainLabel = t(domain.labelKey);
+  const accountLeaf = visible.get(ACCOUNT_LEAF_ID);
+  if (accountLeaf) overview.appendChild(createIdentityCard(user, accountLeaf));
+
+  const placed = new Set([ACCOUNT_LEAF_ID]);
+  for (const group of OVERVIEW_GROUPS) for (const id of group.leaves) placed.add(id);
+
+  for (const domain of OVERVIEW_GROUPS) {
+    const rows = [];
+    for (const id of domain.leaves) {
+      if (id === 'personal-color') {
+        if (!accountLeaf) continue;
+        rows.push(createOverviewRow(accountLeaf, {
+          valueKey: OVERVIEW_VALUE_KEYS[id],
+          label: t('settings.rowColor'),
+          href: settingsOptionUrl(accountLeaf, 'settings.colorLabel'),
+          icon: 'palette',
+        }));
+        continue;
+      }
+      const entry = visible.get(id);
+      if (entry) rows.push(createOverviewRow(entry, { valueKey: OVERVIEW_VALUE_KEYS[id] ?? null }));
+    }
+    // Die Modulblaetter und alles Neue (Erweiterungen): ein Aufklapper in
+    // der Karte, damit die Liste ruhig bleibt.
+    if (domain.rest) {
+      const rest = [...visible.values()].filter((entry) => !placed.has(entry.id));
+      if (rest.length) {
+        rows.push(createExpander({
+          id: 'settings-overview-module-sheets',
+          title: t('settings.moduleSheets'),
+          icon: 'sliders-horizontal',
+          rows: rest.map((entry) => createOverviewRow(entry)),
+        }));
+      }
+    }
+    if (!rows.length) continue;
+
     const section = document.createElement('section');
     section.className = 'settings-overview__section';
     section.id = overviewSectionId(domain.id);
@@ -447,17 +614,29 @@ function renderOverview(content, domains, user) {
     const heading = document.createElement('h2');
     heading.className = 'settings-overview__heading';
     heading.id = `${section.id}-heading`;
-    heading.append(
-      createIcon(domain.icon, 'settings-overview__heading-icon'),
-      document.createTextNode(domainLabel),
-    );
+    heading.textContent = t(domain.labelKey);
     section.setAttribute('aria-labelledby', heading.id);
 
     const list = document.createElement('div');
     list.className = 'settings-overview__list';
-    for (const entry of leaves) list.appendChild(createOverviewRow(entry));
-
+    if (domain.collapsed) {
+      list.appendChild(createExpander({
+        id: 'settings-overview-advanced',
+        title: t('settings.groupAdvancedSummary'),
+        icon: 'server',
+        rows,
+      }));
+      list.querySelector('.settings-overview__row-meta').dataset.valueFor = 'backup-summary';
+    } else {
+      list.append(...rows);
+    }
     section.append(heading, list);
+    if (domain.footerKey && visible.has(domain.footerWhen)) {
+      const footer = document.createElement('p');
+      footer.className = 'settings-overview__footer';
+      footer.textContent = t(domain.footerKey);
+      section.appendChild(footer);
+    }
     overview.appendChild(section);
   }
 
@@ -471,19 +650,59 @@ function renderOverview(content, domains, user) {
   const optionsHeading = document.createElement('h2');
   optionsHeading.className = 'settings-overview__heading';
   optionsHeading.id = 'settings-overview-options-heading';
-  optionsHeading.append(
-    createIcon('sliders-horizontal', 'settings-overview__heading-icon'),
-    document.createTextNode(t('settings.searchOptionsHeading')),
-  );
+  optionsHeading.textContent = t('settings.searchOptionsHeading');
   optionsSection.setAttribute('aria-labelledby', optionsHeading.id);
   const optionsList = document.createElement('div');
   optionsList.className = 'settings-overview__list';
   optionsSection.append(optionsHeading, optionsList);
   overview.appendChild(optionsSection);
 
+  // Abmelden: leise, in Tinte-2, am Ende. Ein Tablett meldet sich nicht ab -
+  // es wird widerrufen (#1208), der Server beantwortete es mit 403.
+  if (user?.access_scope !== 'display') {
+    const foot = document.createElement('div');
+    foot.className = 'settings-overview__foot';
+    const logout = document.createElement('button');
+    logout.type = 'button';
+    logout.className = 'settings-overview__logout';
+    logout.textContent = t('settings.logout');
+    logout.addEventListener('click', () => window.yuvomi?.logout?.());
+    foot.appendChild(logout);
+    overview.appendChild(foot);
+  }
+
   overviewUsers.set(overview, user);
   content.replaceChildren(overview);
+  fillOverviewValues(overview, user);
   return overview;
+}
+
+/** Setzt die Werte in die Zeilen, sobald sie einzeln ankommen. */
+function fillOverviewValues(overview, user) {
+  loadOverviewValues(user, (key, value) => {
+    if (!overview.isConnected && !overview.parentNode) return;
+    const text = typeof value === 'string' ? value : value?.text;
+    if (!text) return;
+    for (const slot of overview.querySelectorAll(`[data-value-for="${key}"]`)) {
+      slot.replaceChildren();
+      if (value?.ink) {
+        const dot = document.createElement('span');
+        dot.className = 'settings-overview__row-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        dot.style.setProperty('--row-dot', value.ink);
+        slot.appendChild(dot);
+      }
+      slot.appendChild(document.createTextNode(text));
+    }
+    if (key === 'backup') {
+      const summary = overview.querySelector('[data-value-for="backup-summary"]');
+      if (summary) {
+        summary.textContent = t('settings.valueBackupSummary', { when: text });
+        summary.hidden = false;
+        summary.closest('.settings-overview__row')?.classList.add('settings-overview__row--two');
+      }
+    }
+  }).catch((error) => console.error('[Settings] Overview values failed:', error));
 }
 
 /** Nutzer der gerenderten Wurzel - die Suche filtert nach seinen Rechten. */
@@ -512,23 +731,40 @@ function createOptionRow({ leaf, href, label }) {
  * faellt mit weg, damit keine leeren Ueberschriften stehen bleiben; die Zahl
  * geht in die Live-Region, ein leeres Ergebnis nennt der geteilte Leerzustand.
  * Gesucht wird ueber dieselbe Funktion wie in der Seitenleiste (searchSettings).
+ * Waehrend der Suche stehen die zugeklappten Felder offen und ihre Aufklapper,
+ * die Ausweiskarte und "Wyloguj" treten zurueck.
  */
 function filterOverview(content, value) {
   const overview = content.querySelector('.settings-overview');
   if (!overview) return;
   const query = String(value ?? '').trim();
+  const needle = normalizeSettingsSearch(query);
   const hits = searchSettings(query, { user: overviewUsers.get(overview), translate: t });
   const leafIds = new Set(hits.leaves.map((leaf) => leaf.id));
   const status = overview.querySelector('.settings-overview__status');
+  // Eine Zeile mit eigener Beschriftung (Twój kolor) trifft ueber diese, jede
+  // andere ueber ihr Blatt.
+  const matches = (row) => (row.dataset.searchText
+    ? normalizeSettingsSearch(row.dataset.searchText).includes(needle)
+    : leafIds.has(row.dataset.leafId));
   for (const section of overview.querySelectorAll('.settings-overview__section:not(.settings-overview__section--options)')) {
     let visible = 0;
-    for (const row of section.querySelectorAll('.settings-overview__row')) {
-      const match = !query || leafIds.has(row.dataset.leafId);
+    for (const row of section.querySelectorAll('.settings-overview__row[data-leaf-id]')) {
+      const match = !query || matches(row);
       row.hidden = !match;
       if (match) visible += 1;
     }
+    for (const expander of section.querySelectorAll('[data-overview-expander]')) {
+      const panel = section.querySelector(`#${CSS.escape(expander.getAttribute('aria-controls'))}`);
+      expander.hidden = Boolean(query);
+      if (panel) panel.hidden = query ? false : expander.getAttribute('aria-expanded') !== 'true';
+    }
     section.hidden = visible === 0;
   }
+  const identity = overview.querySelector('.settings-identity');
+  if (identity) identity.hidden = Boolean(query) && !leafIds.has(identity.dataset.leafId);
+  const foot = overview.querySelector('.settings-overview__foot');
+  if (foot) foot.hidden = Boolean(query);
 
   const optionsSection = overview.querySelector('.settings-overview__section--options');
   const extra = [
@@ -577,14 +813,14 @@ function revealOverviewSection(content, domainId) {
  * Neu gebaut wird nur beim Zustandswechsel: eine getippte Suche ueberlebt den
  * Deep-Link-Sprung innerhalb der Wurzel.
  */
-function renderToolbar(toolbar, content, { activeLeaf, domain }) {
+function renderToolbar(toolbar, content, { activeLeaf, domain, user = null }) {
   if (activeLeaf && domain) {
+    // TAFLA: der Rueckweg ist ein 36pt-Kreis wie der geschobener Seiten
+    // („Wróć: Ustawienia", settings.css). Den Kreis „Wróć: Więcej" der Shell
+    // nimmt capture.css zurueck, solange dieser im Kopf steht.
     const back = createLink(settingsOverviewUrl(domain.id), 'settings-toolbar__back');
     back.setAttribute('aria-label', t('settings.backToSettings'));
-    const label = document.createElement('span');
-    label.className = 'settings-toolbar__back-label';
-    label.textContent = t('settings.title');
-    back.append(createIcon('chevron-left', 'settings-toolbar__back-icon'), label);
+    back.append(createIcon('chevron-left', 'settings-toolbar__back-icon'));
     // DER MODULKOPF WIE UEBERALL (D8, Critique 2026-10-16). Am Desktop stand
     // ueber einem Blatt kein Kopf - die Einstellungen waren das einzige Modul
     // ohne Siegel und Titelzeile, und ihr Blatt begann 12px hoeher als jedes
@@ -615,6 +851,14 @@ function renderToolbar(toolbar, content, { activeLeaf, domain }) {
   // Titelzeile statt auf einer eigenen (Kopfregel mobil 1a, layout.css).
   toolbar.classList.add('page-toolbar--title-tools');
   toolbar.replaceChildren(title);
+  // Die Wurzel kommt von Więcej (Tafla): „Wróć: Więcej" als Kreis vor dem
+  // Titel. Ein Tablett hat kein Więcej - dort entfaellt er.
+  if (user?.access_scope !== 'display') {
+    const back = createLink('/more', 'page-back settings-toolbar__root-back');
+    back.setAttribute('aria-label', t('nav.backTo', { section: t('nav.more') }));
+    back.append(createIcon('chevron-left', 'settings-toolbar__back-icon'));
+    toolbar.prepend(back);
+  }
   toolbar.insertAdjacentHTML('beforeend', renderPageSearch({
     id: 'settings-search',
     label: t('settings.searchLabel'),
@@ -1267,6 +1511,16 @@ export async function renderSettingsShell(container, {
     content = document.createElement('div');
     content.className = 'settings-shell__content';
     content.id = 'settings-sheet';
+    // Die Tafla-Zeilen der Blaetter sind Markup (components.js taflaRowHtml)
+    // und kommen ohne eigenen Klick-Handler: ihre Links gehen hier durch den
+    // Router - wie jeder Link der Shell (bindSpaNavigation), kein Neuladen.
+    content.addEventListener('click', (event) => {
+      const link = event.target.closest?.('a.tafla-row[href^="/"]');
+      if (!link || event.defaultPrevented || event.button !== 0
+        || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !window.yuvomi?.navigate) return;
+      event.preventDefault();
+      window.yuvomi.navigate(link.getAttribute('href'));
+    });
     shell.append(navigation, content);
     body.appendChild(shell);
     page.append(toolbar, body);
@@ -1338,7 +1592,7 @@ export async function renderSettingsShell(container, {
   const paintOverview = () => {
     renderOverview(content, domains, user);
     hydrateIcons(content);
-    if (toolbar) renderToolbar(toolbar, content, {});
+    if (toolbar) renderToolbar(toolbar, content, { user });
   };
   if (drill) await swapRegion(content, paintOverview, { direction: drill });
   else paintOverview();

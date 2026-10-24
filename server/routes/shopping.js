@@ -30,6 +30,7 @@ import { localCategory, guessCategory, rememberCategory, rememberedCategory } fr
 import { groupPurchases, weight, dueItems } from '../ai/shopping-stats.js';
 import { featureOn } from '../ai/settings.js';
 import { PL_GROCERIES } from '../services/pl-groceries.js';
+import { refuseWallWrite } from '../services/wall-settings.js';
 
 const log = createLogger('Shopping');
 
@@ -1190,6 +1191,17 @@ router.patch('/:listId/items/reorder', (req, res) => {
 // --------------------------------------------------------
 router.post('/:listId/items', (req, res) => {
   try {
+    // A PAIRED DISPLAY ADDS ONE THING (Tafla wall, 2026-10-19): a running-out
+    // item by its name, from the "+" chips of the shopping card - and only
+    // while the household allows writing on the wall. Quantity, notes, link
+    // and category are not the wall's to set; the item sorts itself.
+    if (req.authMethod === 'display') {
+      if (refuseWallWrite(req, res, { db: db.get() })) return;
+      const extra = Object.keys(req.body ?? {}).filter((key) => !['name', 'category_source'].includes(key));
+      if (extra.length || (req.body?.category_source ?? 'default') !== 'default') {
+        return res.status(403).json({ error: 'A paired display can only add an item by its name.', code: 403, reason: 'display_action' });
+      }
+    }
     const list = db.get()
       .prepare('SELECT id FROM shopping_lists WHERE id = ?')
       .get(req.params.listId);

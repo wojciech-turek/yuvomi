@@ -545,8 +545,9 @@ test('Heute-Blatt: Kein-Echo gegen die Vorrats-Kachel, Rechte und Modulschalter'
   });
 });
 
-test('Heute-Blatt: die Vorratszeile hat ihren Ton in Cockpit und Wand', () => {
+// TAFLA (2026-10-19): die Zeilen der Wand tragen keinen Modulton mehr (Artboard
+// „Ściana": Zeit, Titel, Pille, Scheibe) - die Wand-Haelfte ist gegangen.
+test('Heute-Blatt: die Vorratszeile hat ihren Ton im Cockpit', () => {
   const css = src('../public/styles/dashboard.css');
   assert.match(css, /\.today-cockpit-card--pantry\s*\{\s*--today-card-accent:\s*var\(--module-pantry\)/);
-  assert.match(css, /\.wall-row--pantry\s*\{\s*--wall-row-accent:\s*var\(--module-pantry\)/);
 });

@@ -294,50 +294,38 @@ test('Uebersicht: die Mahlzeiten-Kachel bekommt `users` der Dashboard-Antwort - 
 // zaehlt der Koch am Wandtablett unter "Wer heute dran ist" mit. Der Abschnitt
 // zaehlt `who` ueber alle Zeilen des Tages; faellt `who` an der Mahlzeit-Zeile
 // weg, verschwindet, wer heute NUR kocht, ohne dass sonst etwas rot wuerde.
-test('Wandtablett, "Wer heute dran ist": der Koch der heutigen Mahlzeit zaehlt mit', () => {
+// TAFLA (2026-10-19): „Wer heute dran ist" ist von der Wand gegangen. Der Koch
+// steht dort, wo er gemeint ist: an der Mahlzeit - als Scheibe an ihrer Zeile
+// und als „Gotuje Ben" an der Abendessen-Karte (Hauptkarte ab 15:00, davor die
+// ruhige Karte). Faellt der Koch an einer der beiden weg, wird dieser Fall rot.
+test('Wandtablett: wer kocht, steht an der Mahlzeit - an der Zeile und an der Abendessen-Karte', () => {
   const heute = (over) => ['breakfast', 'lunch', 'dinner'].map((meal_type, i) => ({
     id: 30 + i, meal_type, title: `Gericht ${i}`, cook_user_id: null, cook_name: null, cook_color: null, ...over,
   }));
   const ANNA_WAND = { id: 1, display_name: 'Anna Beispiel', avatar_color: '#FF9500', avatar_data: null };
   const BEN_WAND = { id: 2, display_name: 'Ben Beispiel', avatar_color: '#34C759', avatar_data: null };
-  const wer = (todayMeals, urgentTasks = [], wallTasks = []) => {
-    // Ohne App-Huelle, wie test-dashboard.js die Wand rendert: `window.yuvomi`
-    // traegt hier nur den Toast-Stub, keine Modul-Abfrage.
+  // Mittags: das Mittagessen (12:30) steht noch im Plan, das Abendessen als Karte.
+  const mittag = new Date();
+  mittag.setHours(12, 0, 0, 0);
+  const wand = (todayMeals) => {
     const zuvor = globalThis.window.yuvomi;
     globalThis.window.yuvomi = null;
     try {
-      const html = dashboard.renderWallSurface({ todayMeals, urgentTasks, wallTasks, users: [ANNA_WAND, BEN_WAND] }, null, {});
-      return abschnitt(html, 'class="wall__who"', '</section>');
+      return dashboard.renderWallSurface({ todayMeals, users: [ANNA_WAND, BEN_WAND] }, null, { now: mittag });
     } finally {
       globalThis.window.yuvomi = zuvor;
     }
   };
-  const mitglieder = (html) => [...html.matchAll(/<span aria-hidden="true">(\d+)<\/span>[\s\S]*?<span class="wall-who__name">([^<]*)<\/span>/g)]
-    .map((m) => `${m[2]}:${m[1]}`);
+  const mitKoch = wand(heute({ cook_user_id: 2, cook_name: 'Ben Beispiel', cook_color: '#34C759' }));
+  const karte = abschnitt(mitKoch, 'class="wall-card wall-card--hearth wall-dinner"', '</section>');
+  assert.ok(karte, 'Vorbedingung: die Abendessen-Karte ist gebaut');
+  assert.match(karte, /today\.cooks/, 'die Karte nennt, wer kocht');
+  const plan = abschnitt(mitKoch, 'class="wall-card wall-plan"', '</section>');
+  assert.match(plan, /aria-label="Ben Beispiel"/, 'die Zeile des Mittagessens traegt Bens Scheibe');
 
-  setHouseholdSize(2);
-  try {
-    const nurKoch = wer(heute({ cook_user_id: 2, cook_name: 'Ben Beispiel', cook_color: '#34C759' }));
-    assert.ok(nurKoch, 'Vorbedingung: der Abschnitt ist gebaut');
-    assert.deepEqual(mitglieder(nurKoch), ['Ben:1'], 'wer heute nur kocht, ist heute dran - mit einer Sache');
-    assert.doesNotMatch(nurKoch, /wall-who__none/);
-
-    // Kochen zaehlt NEBEN einer Aufgabe, nicht statt ihrer.
-    const aufgabe = { id: 5, title: 'Muell', status: 'open', due_date: toLocalDateKey(new Date()), due_time: '08:00', assigned_users: [{ id: 2, display_name: 'Ben Beispiel', color: '#34C759' }] };
-    // Die Aufgaben einer Person zaehlt die Wand seit #1817 aus `wallTasks`.
-    const anDerWand = [{ user_id: 2, open_count: 1, done_count: 0, open: [{ id: 5, title: 'Muell' }], done: [] }];
-    const beides = wer(heute({ cook_user_id: 2, cook_name: 'Ben Beispiel', cook_color: '#34C759' }), [aufgabe], anDerWand);
-    const ohneKochen = wer(heute(), [aufgabe], anDerWand);
-    assert.deepEqual(mitglieder(ohneKochen), ['Ben:1'], 'Vorbedingung: die Aufgabe allein zaehlt eins');
-    assert.deepEqual(mitglieder(beides), ['Ben:2'], 'Aufgabe und Kochen sind zwei Dinge');
-
-    // Gegenfall: ohne Koch ist niemand dran.
-    const niemand = wer(heute());
-    assert.match(niemand, /wall-who__none/, 'eine Mahlzeit ohne Koch setzt niemanden auf die Liste');
-    assert.deepEqual(mitglieder(niemand), []);
-  } finally {
-    clearHouseholdSize();
-  }
+  const ohne = wand(heute());
+  assert.ok(!/today\.cooks/.test(ohne), 'ohne Koch nennt die Karte niemanden');
+  assert.ok(!/aria-label="Ben Beispiel"/.test(ohne), 'und keine Zeile traegt eine Scheibe');
 });
 
 test('Uebersicht: der Name des Kochs laeuft durch esc()', () => {

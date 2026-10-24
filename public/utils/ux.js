@@ -826,6 +826,18 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
   let openH = 0;
   let dockTitle = null;
   let headSeal = null;
+  // DIE LEISTE DER GESCHOBENEN SEITEN (Tafla, ROUND2 „Pushed pages"). Traegt
+  // der Kopf einer SCROLLENDEN Seite den Rueckweg (router.js, `.page-back`),
+  // klappt er wie die gedeckelten Koepfe ein: Rueckweg, Inline-Titel und
+  // Kreise werden EINE Leiste, die stehen bleibt, und eine Reiterzeile klebt
+  // darunter - Apples Navigationsleiste. Mit dem negativen `top` der scrollenden
+  // Bauart waere die Rueckweg-Zeile samt ihren Kreisen weggewandert.
+  // Der Hoehenwechsel ist hier gefahrlos, weil der Kopf seinen Platz im Fluss
+  // behaelt: eingeklappt traegt er die Differenz als Rand unten
+  // (`--bar-collapse-gap`), der Inhalt darunter ruehrt sich nicht, und der
+  // Scroll-Offset bleibt, was er war - kein Sprung, kein Pendeln.
+  let barMode = false;
+  let barPort = null;
 
   // DAS ABSENDER-SIEGEL: genau eines, unmittelbar vor dem Seitentitel.
   //
@@ -900,9 +912,33 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     if (states.every((c) => toolbar.classList.contains(c) === on)) return;
     const moving = [...toolbar.children, ...followingNeighbours(toolbar)];
     const before = flipSnapshotElements(moving);
+    // Der Platz im Fluss vor dem Wechsel: Hoehe plus Rand unten.
+    const flowBefore = barMode
+      ? toolbar.getBoundingClientRect().height + (parseFloat(getComputedStyle(toolbar).marginBlockEnd) || 0)
+      : 0;
+    // Die Messung dazwischen sieht den Kopf schon eingeklappt, den Rand noch
+    // nicht - fuer diesen einen Layout-Durchgang ruht die Scroll-Verankerung
+    // des Ports. Sonst glich Chrome den scheinbar hochgerueckten Inhalt aus
+    // (gemessen: Scroll 30 -> 0, der Kopf klappte sofort wieder auf).
+    const port = barMode ? barPort : null;
+    if (port) port.style.overflowAnchor = 'none';
     if (on) toolbar.classList.add(...states, 'was-collapsed');
     else toolbar.classList.remove(...states);
+    // Die Leiste haelt ihren Platz (siehe `barMode`): VOR dem FLIP gesetzt,
+    // damit es den Inhalt darunter dort misst, wo er bleibt.
+    if (barMode && on) {
+      // Auch negativ: ein Kopf, der mit negativem Rand auf seinem Inhalt
+      // aufsitzt (Schichtplan quer: -16px), behaelt genau diesen Platz.
+      const gap = Math.round(flowBefore - toolbar.getBoundingClientRect().height);
+      toolbar.style.setProperty('--bar-collapse-gap', `${gap}px`);
+    } else {
+      toolbar.style.removeProperty('--bar-collapse-gap');
+    }
     holdThenGlide(before);
+    if (port) {
+      port.getBoundingClientRect();
+      port.style.removeProperty('overflow-anchor');
+    }
   };
 
   // Hysterese, damit der Kopf nicht um seine eigene Schwelle flattert.
@@ -929,6 +965,16 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // eine vermessene Hoehe - sie ist ihre ganze Lead-Zone. Ihre Linie bleibt
     // in beiden Zustaenden: sie ist die Kante des angedockten Kopfes.
     const fold = toolbar.classList.contains('page-toolbar--fold-row') && foldH > 0;
+    // EIN EINZEILIGER KOPF TRAEGT SEINE KANTE, SOBALD INHALT UNTER IHM LIEGT
+    // (Tafla: kein Trenner in Ruhe, spec-components „Nagłówek"). Bis dahin
+    // stand die Linie hier durchgehend; seit Tafla haette er sonst in keinem
+    // Zustand eine Kante (Sonde 8).
+    // Auch die Faltzeile (einzeilig): ihre Linie steht, solange ihr Port
+    // gescrollt ist, ob sie faltet oder - zu wenig Reserve - stehen bleibt.
+    if (!lead) {
+      toolbar.classList.toggle('is-docked', port.scrollTop > 0);
+      if (!fold) return;
+    }
     if (!fold && !toolbar.classList.contains('page-toolbar--capped')) return;
     const states = fold ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
     // Nur kollabieren, wenn der Port das Ausklappen danach auch verkraftet -
@@ -946,7 +992,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // eingeklappte Reserve gemessen, pendelte eine Liste, deren Reserve
     // zwischen Schwelle und Schwelle + Differenz liegt. `openH` ist die Hoehe
     // der letzten ausgeklappten Messung.
-    const shorter = !fold && toolbar.classList.contains('is-collapsed') && openH > 0
+    const shorter = !fold && !barMode && toolbar.classList.contains('is-collapsed') && openH > 0
       ? Math.max(0, openH - toolbar.getBoundingClientRect().height)
       : 0;
     const unfolded = fold
@@ -963,6 +1009,20 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // (layout.css, `page-title-settle-back`) - nicht schon beim Seitenaufbau.
     if (top > 24) setCollapsed(true, states);
     else if (top < 8) setCollapsed(false, states);
+  };
+  // Die Leiste lauscht am Scrollport der Seite selbst - nur an IHM: innere
+  // Streifen und Listen der Seite sind nicht ihr Scroll. Ein einzeiliger Kopf
+  // der scrollenden Bauart lauscht dort auch: er braucht nur zu wissen, ob
+  // Inhalt unter ihm liegt (seine Kante, siehe onInnerScroll).
+  const onBarScroll = (e) => {
+    if (e.target !== barPort) return;
+    if (barMode) onInnerScroll(e);
+    else if (!lead) toolbar.classList.toggle('is-docked', barPort.scrollTop > 0);
+  };
+  const unbindBar = () => {
+    barPort?.removeEventListener('scroll', onBarScroll);
+    for (const type of GESTURES) barPort?.removeEventListener(type, onGesture, { capture: true });
+    barPort = null;
   };
   const update = () => {
     // VOR der Messung: das Siegel steht in der Titelzeile und zählt zu ihr.
@@ -1034,7 +1094,20 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     lead = lines.length > 1 ? Math.max(0, Math.round(lastTop - padTop)) : 0;
     toolbar.style.setProperty('--page-toolbar-lead', `${lead}px`);
     toolbar.classList.toggle('page-toolbar--stacked', lead > 0);
-    toolbar.classList.toggle('page-toolbar--capped', Boolean(capped) && lead > 0);
+    // Geschobene Seite der scrollenden Bauart: der Rueckweg steht (unter
+    // 1024px sichtbar), und es gibt etwas einzuklappen.
+    const back = toolbar.querySelector(':scope > .page-back');
+    barMode = !capped && Boolean(scrollport) && lead > 0 && Boolean(back?.getClientRects().length);
+    toolbar.classList.toggle('page-toolbar--bar', barMode);
+    toolbar.classList.toggle('page-toolbar--capped', (Boolean(capped) || barMode) && lead > 0);
+    const listen = Boolean(scrollport) && !capped && (barMode || !lead);
+    if (listen && !barPort) {
+      barPort = scrollport;
+      barPort.addEventListener('scroll', onBarScroll, { passive: true });
+      for (const type of GESTURES) barPort.addEventListener(type, onGesture, { capture: true, passive: true });
+    } else if (!listen && barPort) {
+      unbindBar();
+    }
 
     // DER ANGEDOCKTE TITEL - nur in der scrollenden Architektur.
     //
@@ -1124,7 +1197,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     const docked = toolbar.classList.contains('is-docked');
     const wasFolded = toolbar.classList.contains('page-toolbar--dock-fold');
     let fold = false;
-    if (lead > 0 && !capped && heading && actions) {
+    if (lead > 0 && !capped && !barMode && heading && actions) {
       if (wasFolded && docked) {
         fold = true;
         // Rendert das Modul seine Aktionen angedockt neu (Ansicht gewechselt,
@@ -1158,7 +1231,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // ueber 11 Breiten 320-1023px mit und ohne Touch: keine Route erreichte die
     // Bauart mehr - sie ist mit ihren Regeln (layout.css) entfallen.
 
-    if (lead > 0 && !capped && heading && (roomForDockTitle || fold)) {
+    if (lead > 0 && !capped && !barMode && heading && (roomForDockTitle || fold)) {
       if (!dockTitle) {
         dockTitle = document.createElement('span');
         dockTitle.className = 'page-toolbar__dock-title';
@@ -1185,8 +1258,12 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // Kollaps-Zustand und wird von onInnerScroll gesetzt.
     io?.disconnect();
     io = null;
-    if (!lead || !firstEl || !scrollport || capped) {
-      toolbar.classList.toggle('is-docked', !lead);
+    if (!lead || !firstEl || !scrollport || capped || barMode) {
+      // Ohne Lead-Zone: die Kante steht, sobald Inhalt unter dem Kopf liegt
+      // (Tafla). In der gedeckelten Bauart weiss das nur der Scroll des
+      // inneren Ports (onInnerScroll) - hier bleibt sein letzter Stand.
+      const under = capped ? toolbar.classList.contains('is-docked') : (scrollport?.scrollTop ?? 0) > 0;
+      toolbar.classList.toggle('is-docked', !lead && under);
       return;
     }
     // DER BEOBACHTUNGSRAHMEN IST UM EINEN PIXEL KLEINER ALS DER SCROLLPORT,
@@ -1272,6 +1349,8 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
       ro.disconnect();
       mo.disconnect();
       capped?.removeEventListener('scroll', onInnerScroll, { capture: true });
+      unbindBar();
+      toolbar.style.removeProperty('--bar-collapse-gap');
       for (const type of GESTURES) capped?.removeEventListener(type, onGesture, { capture: true });
       gestureTarget = null;
       toolbar.removeEventListener('beforetoggle', onMenuToggle, { capture: true });
@@ -1285,7 +1364,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
       toolbar.style.removeProperty('--page-toolbar-lead');
       toolbar.style.removeProperty('--fold-row-h');
       foldH = 0;
-      toolbar.classList.remove('page-toolbar--stacked', 'page-toolbar--capped', 'is-collapsed', 'is-docked', 'was-collapsed', 'page-toolbar--dock-fold', 'page-toolbar--fold-row');
+      toolbar.classList.remove('page-toolbar--stacked', 'page-toolbar--capped', 'is-collapsed', 'is-docked', 'was-collapsed', 'page-toolbar--dock-fold', 'page-toolbar--fold-row', 'page-toolbar--bar');
     },
   };
 }

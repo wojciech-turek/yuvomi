@@ -757,11 +757,16 @@ test('R14 P2: mobil deckelt das Blatt bei zwei Zeilen, die Sammelzeile zaehlt al
   assert.equal(wall.rows.filter((r) => r.overdue).length, 5, 'die Wand bekommt ihre Zeilen, wenn sie es sagt');
 }));
 
-test('R14 P2: die Sammelzeile ist verdrahtet, und der Wand-Aufruf sammelt nicht', () => {
+test('R14 P2: die Sammelzeile ist verdrahtet, und der Wand-Aufruf sammelt nicht', async () => {
   assert.equal(typeof __test.wireTodayOverdue, 'function');
   assert.match(dashboardSource, /function wireLinks\([^)]*\) \{[\s\S]{0,200}wireTodayOverdue\(container\)/);
-  assert.match(dashboardSource, /buildTodayCockpitModel\(data, \[\], \{ cap, now, groupOverdue: false \}\)/,
-    'die Wand ist eine Anzeige ohne Bedienung - dort klappt nichts auf');
+  // TAFLA (2026-10-19): die Wand baut nicht mehr auf dem Cockpit-Modell auf,
+  // sondern auf dem Tagesplan (utils/wall-plan.js) - und dort gibt es keine
+  // Sammelzeile, die aufklappt: Zaelliges steht als eigene Zeile mit Pille.
+  const wallPlan = await readFile(new URL('../public/utils/wall-plan.js', import.meta.url), 'utf8');
+  const wallView = await readFile(new URL('../public/components/wall-view.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(wallPlan, /groupOverdue|buildTodayCockpitModel/, 'die Wand sammelt nicht');
+  assert.doesNotMatch(wallView, /aria-expanded|data-today-overdue/, 'die Wand ist eine Anzeige - dort klappt nichts auf');
 });
 
 test('R14 P2: mobil bricht die Heute-Zeile nicht neben ihrem Label um, und die violette Haarlinie ist weg', async () => {

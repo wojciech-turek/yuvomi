@@ -475,7 +475,10 @@ test('R16: die Kennzahl-Kurzzeile ist ein geteilter Baustein, und Inventar und H
   }
 });
 
-// #1917: DIE SCROLL-KANTE AM KLEBENDEN FUSS DER WAND. Der Fuss klebt seit #1559
+// #1917: DIE SCROLL-KANTE AM KLEBENDEN FUSS DER WAND. Seit Tafla (2026-10-19)
+// heisst der Fuss Dock (`.wall__dock`), und das Telefon ist eine Media-Query
+// (max-width: 767px) statt der Container-Grenze der alten Wand - die Regel ist
+// dieselbe. Der Fuss klebt seit #1559
 // mit deckendem Grund und schnitt "Wer heute dran ist" an einer unsichtbaren
 // harten Kante ab (390x844: ein Gesicht ganz, eines halb verdeckt). Der Verlauf
 // darueber ist ein Pseudo-Element, statisch und in jedem Browser derselbe; hier
@@ -485,7 +488,7 @@ test('R16: die Kennzahl-Kurzzeile ist ein geteilter Baustein, und Inventar und H
 test('#1917: der Fuss der Wand hat eine Scroll-Kante - kein Tipp, und sein Endabstand ist genau ihre Hoehe', () => {
   const css = read('../public/styles/dashboard.css');
   const all = rules(css);
-  const EDGE = '.wall__foot::before';
+  const EDGE = '.wall__dock::before';
   const HEIGHT = '--wall-foot-edge';
 
   const wall = topLevel(css, '.wall');
@@ -493,8 +496,8 @@ test('#1917: der Fuss der Wand hat eine Scroll-Kante - kein Tipp, und sein Endab
   assert.ok(decl(wall[0].body, '--wall-gap'), 'der Abstand der Flaeche ist eine Variable');
   assert.equal(decl(wall[0].body, 'gap'), 'var(--wall-gap)', 'und die Flaeche nimmt ihn als ihren Abstand');
 
-  const foot = topLevel(css, '.wall__foot');
-  assert.equal(foot.length, 1, 'Reichweite: genau eine Basisregel .wall__foot');
+  const foot = topLevel(css, '.wall__dock');
+  assert.equal(foot.length, 1, 'Reichweite: genau eine Basisregel .wall__dock');
   assert.equal(decl(foot[0].body, 'position'), 'sticky');
   // Ein deckendes Polster ueber den Knoepfen waere wieder die harte Kante, nur
   // einen Streifen hoeher: der Verlauf endete an ihm statt an den Knoepfen.
@@ -527,22 +530,22 @@ test('#1917: der Fuss der Wand hat eine Scroll-Kante - kein Tipp, und sein Endab
   // Gesetzt wird die Zahl nur am Fuss selbst (Kante und Rand lesen sie dort),
   // und nirgends ueberschreibt jemand Rand oder Hoehe an ihr vorbei.
   const setters = all.filter((r) => decl(r.body, HEIGHT) !== null);
-  assert.deepEqual([...new Set(setters.map((r) => r.selector))], ['.wall__foot'], `${HEIGHT} wohnt am Fuss`);
+  assert.deepEqual([...new Set(setters.map((r) => r.selector))], ['.wall__dock'], `${HEIGHT} wohnt am Dock`);
   assert.equal(decl(foot[0].body, HEIGHT), 'var(--wall-gap)',
     'auf der Wand ist die Kante der Abstand selbst: Rand 0, die Flaeche wird nicht hoeher (eine Wand scrollt nicht)');
   const raised = setters.filter((r) => r.at.length > 0);
   assert.equal(raised.length, 1, 'genau eine Stelle hebt die Kante');
-  assert.deepEqual(raised[0].at, ['@container wall (max-width: 519px)'],
-    'nur am Telefon, an derselben Grenze wie Zeilentitel und Zeitspanne - dort scrollt die Flaeche ohnehin');
+  assert.deepEqual(raised[0].at, ['@media (max-width: 767px)'],
+    'nur am Telefon, an derselben Grenze, an der die Wand stapelt - dort scrollt die Flaeche ohnehin');
   assert.match(decl(raised[0].body, HEIGHT), /^var\(--space-\d+\)$/, 'die Hoehe am Telefon ist ein Abstands-Token');
   const token = decl(raised[0].body, HEIGHT).match(/--space-\d+/)[0];
   const px = (name) => parseFloat(read('../public/styles/tokens.css').match(new RegExp(`${name}:\\s*(\\d+)px`))?.[1] ?? 'NaN');
   assert.ok(px(token) >= px('--space-12'),
     `am Telefon traegt die Kante erst ab der Hoehe eines Gesichts (48px), ${token} sind ${px(token)}px`);
-  for (const r of all.filter((x) => x.selector === '.wall__foot' && x.at.length > 0)) {
-    assert.equal(decl(r.body, 'margin-block'), null, `${r.at.join(' ')} .wall__foot ueberschreibt den Endabstand`);
-    assert.equal(decl(r.body, 'margin-block-start'), null, `${r.at.join(' ')} .wall__foot ueberschreibt den Endabstand`);
-    assert.equal(decl(r.body, 'margin'), null, `${r.at.join(' ')} .wall__foot ueberschreibt den Endabstand`);
+  for (const r of all.filter((x) => x.selector === '.wall__dock' && x.at.length > 0)) {
+    assert.equal(decl(r.body, 'margin-block'), null, `${r.at.join(' ')} .wall__dock ueberschreibt den Endabstand`);
+    assert.equal(decl(r.body, 'margin-block-start'), null, `${r.at.join(' ')} .wall__dock ueberschreibt den Endabstand`);
+    assert.equal(decl(r.body, 'margin'), null, `${r.at.join(' ')} .wall__dock ueberschreibt den Endabstand`);
   }
 });
 
@@ -698,6 +701,34 @@ test('R19: Schichtplan, Belohnungen und Haushaltshilfe fuehren ihre Reiter in de
   assert.ok(own.some((r) => at(r, 767) && r.selector.endsWith('> .module-seal--head') && decl(r.body, 'display') === 'none'),
     'das Siegel geht mit (die vier Reiter der Haushaltshilfe brauchen 351 von 358px)');
   assert.ok(read('../DESIGN.md').includes('page-toolbar--tabs-title'), 'DESIGN.md nennt die Variante');
+});
+
+// Tafla (ROUND2 „Pushed pages", Befund 2026-10-24 bei 390px): auf Seiten hinter
+// Więcej traegt die Rueckweg-Zeile die Kopfkreise, der grosse Titel steht allein
+// auf voller Breite - „Odbiór odpadó…" teilte seine Zeile mit zwei Kreisen, und
+// Nagrody/Grafik hatten unter 768px gar keinen Titel (R19 nahm ihn aus dem Bild).
+test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller Breite und sichtbar', () => {
+  const capture = rules(read('../public/styles/capture.css'));
+  const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && !r.at.some((a) => /max-height/.test(a));
+  const pushed = capture.filter((r) => compact(r) && r.selector.includes(':has(> .page-back)') && !r.selector.includes('is-collapsed'));
+  const back = pushed.find((r) => r.selector.endsWith('> .page-back') && !r.selector.includes('period-inline'));
+  assert.equal(back && decl(back.body, 'order'), '-2', 'der Rueckweg fuehrt Zeile 1');
+  assert.equal(decl(back.body, 'margin-inline-end'), 'auto', 'und schiebt die Kreise an ihr Ende');
+  const circles = pushed.find((r) => /> :is\(\.page-toolbar__actions, \.page-search\)$/.test(r.selector));
+  assert.equal(circles && decl(circles.body, 'order'), '-1', 'Aktionen und Such-Icon stehen VOR dem Titel - in Zeile 1');
+  const title = pushed.find((r) => r.selector.endsWith('> .page-toolbar__title') && !r.selector.includes('tabs-title'));
+  assert.equal(title && decl(title.body, 'flex'), '1 0 100%', 'der Titel nimmt Zeile 2 ganz');
+  const tabsTitle = pushed.find((r) => r.selector.includes('.page-toolbar--tabs-title') && r.selector.endsWith('> .page-toolbar__title'));
+  assert.equal(tabsTitle && decl(tabsTitle.body, 'clip-path'), 'none', 'Reiter-Koepfe mit Rueckweg-Zeile zeigen ihren Titel (R19 gilt nur ohne sie)');
+  assert.equal(decl(tabsTitle.body, 'position'), 'static');
+  const collapsed = capture.filter((r) => compact(r) && r.selector.includes('is-collapsed') && r.selector.includes(':has(> .page-back)'));
+  const inline = collapsed.find((r) => r.selector.endsWith('> .page-toolbar__title'));
+  assert.equal(inline && decl(inline.body, 'order'), '-1', 'eingeklappt: Rueckweg, Titel, Kreise in EINER Leiste');
+  // Die scrollenden Seiten klappen auf demselben Weg ein (wireCollapsingHeader,
+  // `--bar`) und halten dabei ihren Platz im Fluss - der Inhalt springt nicht.
+  const bar = capture.find((r) => compact(r) && r.selector === '.page-toolbar--bar.is-collapsed');
+  assert.equal(bar && decl(bar.body, 'margin-block-end'), 'var(--bar-collapse-gap, 0px)', 'eingeklappt traegt die Leiste den Hoehenverlust als Rand');
+  assert.match(read('../public/utils/ux.js'), /toolbar\.style\.setProperty\('--bar-collapse-gap'/, 'wireCollapsingHeader misst den Rand');
 });
 
 // R20 (E1-Befund, gemessen 2026-10-17): der Nachlauf-Platzhalter hinter dem

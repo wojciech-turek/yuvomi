@@ -375,10 +375,12 @@ test('die Rechte-Nutzlast traegt die Scope-Liste als Modulrechte', async () => {
   assert.equal(me.status, 200);
   const modules = me.body.permissions.modules;
 
-  for (const key of ['calendar', 'tasks', 'rewards']) {
+  // Einkauf und Vorrat seit Tafla (2026-10-19): die Einkaufskarte und der
+  // Zaehler am Abendessen der Kuechenwand (display-scopes.js).
+  for (const key of ['calendar', 'tasks', 'rewards', 'shopping', 'pantry']) {
     assert.equal(modules[key], 'read', `${key} muss lesbar sein`);
   }
-  for (const key of ['budget', 'documents', 'health', 'notes', 'shopping', 'housekeeping']) {
+  for (const key of ['budget', 'documents', 'health', 'notes', 'housekeeping']) {
     assert.equal(modules[key], 'none', `${key} muss gesperrt sein`);
   }
   // `read` und nicht `write`: daran haengt, dass der Anlege-Knopf verschwindet.
@@ -391,7 +393,7 @@ test('gesperrte Module nehmen ihre Kacheln mit', async () => {
   // gesperrt und die Kacheln trotzdem sichtbar.
   const me = await asDisplay(displayToken)('GET', '/auth/me');
   const widgets = me.body.permissions.widgets;
-  for (const id of ['budget', 'notes', 'shopping', 'health']) {
+  for (const id of ['budget', 'notes', 'health']) {
     assert.equal(widgets[id], 'none', `Kachel ${id} muss gesperrt sein`);
   }
 });
@@ -1212,7 +1214,8 @@ test('der Hinweis in den Einstellungen nennt genau die Bereiche, die ein Display
   // steht absichtlich als Literal da: kommt ein Scope dazu oder faellt einer
   // weg, wird dieser Fall rot und fragt, ob docs/SPEC.md (Display Accounts) und
   // der CHANGELOG die neue Menge nennen. Der Hinweis selbst zieht von allein nach.
-  const BEREICHE = ['calendar', 'tasks', 'rewards', 'weather', 'meals'];
+  // Tafla (2026-10-19): Einkauf und Vorrat fuer die Kuechenwand.
+  const BEREICHE = ['calendar', 'tasks', 'rewards', 'weather', 'meals', 'shopping', 'pantry'];
   const { DISPLAY_AREA_MODULES } = await import('../server/display-scopes.js');
 
   const liste = await admin('GET', '/displays');

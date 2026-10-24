@@ -2734,10 +2734,25 @@ test('router hides inactive overlays from keyboard focus', () => {
   assert.match(source, /returnFocus/);
 });
 
-test('mobile More sheet trigger controls its dialog and traps keyboard focus', () => {
+/*
+ * TAFLA (2026-10-20): the Więcej tab is a destination (/more), not the
+ * trigger of the More sheet. Its accessible contract is therefore a link's:
+ * it navigates and carries aria-current on its page, and announces no popup
+ * (aria-haspopup/-controls would promise a dialog that no longer opens). The
+ * sheet keeps its focus trap for as long as it is built.
+ */
+test('mobile More tab navigates to the Więcej page; the sheet keeps its focus trap', () => {
   const source = read('../public/router.js');
 
-  assert.match(source, /moreBtn\.setAttribute\('aria-controls',\s*'more-sheet'\)/);
+  assert.match(source, /\{ path: '\/more',\s+page: '\/pages\/more\.js'/, 'the /more route exists');
+  assert.match(source, /if \(!e\.target\.closest\('#more-btn'\)\) return;[\s\S]{0,200}?navigate\(MORE_PATH\)/,
+    'the tab goes to /more');
+  const moreBtnFn = /function moreNavButtonEl\(\)[\s\S]*?\n\}/.exec(source)?.[0] ?? '';
+  assert.ok(moreBtnFn, 'moreNavButtonEl() not found');
+  assert.doesNotMatch(moreBtnFn, /aria-haspopup|aria-controls|aria-expanded/,
+    'a navigating tab announces no popup');
+  assert.match(source, /setMoreButtonState\(moreBtn, activeSecondary, path === MORE_PATH\)/,
+    'on /more the tab is the current page');
   assert.match(source, /const currentMoreBtn = \(\) => container\.querySelector\('#more-btn'\) \|\| moreBtn/);
   assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'true'\)/);
   assert.match(source, /currentMoreBtn\(\)\.setAttribute\('aria-expanded',\s*'false'\)/);
@@ -3157,7 +3172,7 @@ test('bottom-nav target fills the 44x44 touch-comfort zone', () => {
   assert.match(tokens, /--nav-height-mobile:\s*6[0-4]px/);
 });
 
-test('bottom nav keeps a navigation landmark with a disclosure button, not a tablist', () => {
+test('bottom nav keeps a navigation landmark with a navigating Więcej tab, not a tablist', () => {
   const source = read('../public/router.js');
 
   // Landmark statt ARIA-Tablist (Navigation, keine Tabs in einem Tabpanel).
@@ -3165,9 +3180,10 @@ test('bottom nav keeps a navigation landmark with a disclosure button, not a tab
   assert.doesNotMatch(source, /'role',\s*'tablist'/);
   assert.doesNotMatch(source, /setAttribute\('role', 'tab'\)/);
 
-  // More bleibt ein korrekter Disclosure-Button.
-  assert.match(source, /moreBtn\.setAttribute\('aria-expanded', 'false'\)/);
-  assert.match(source, /moreBtn\.setAttribute\('aria-controls', 'more-sheet'\)/);
+  // TAFLA: Więcej is a destination (/more) - a navigating tab with
+  // aria-current, no longer a disclosure button for the sheet.
+  assert.match(source, /navigate\(MORE_PATH\)/);
+  assert.doesNotMatch(source, /moreBtn\.setAttribute\('aria-controls', 'more-sheet'\)/);
 });
 
 test('kitchen tab discloses its (variable) destination in the accessible name', () => {
@@ -5704,10 +5720,16 @@ test('ein Etikett verschwindet, wenn es heisst wie die eigene Prioritaet', () =>
   assert.match(fn[0], /toLocaleLowerCase|toLowerCase/,
     'gross/klein darf den Vergleich nicht entscheiden - „Dringend" und „dringend" sind dasselbe Wort');
 
-  // BEIDE Aufrufstellen, sonst greift der Fix nur in einer Ansicht.
+  // JEDE Aufrufstelle, sonst greift der Fix nur in einer Ansicht. Seit Tafla
+  // (2026-10-20) ist das nur noch das Brett: die Listenzeile traegt keine
+  // Etiketten-Knoepfe und kein Prioritaetswort mehr (nur die Fahne), ihr erster
+  // Tag steht als "#tag" im Text - es gibt dort kein Wort, das sich doppeln kann.
   const aufrufe = [...src.matchAll(/renderTagBadges\(([^)]*)\)/g)]
     .map((m) => m[1]).filter((args) => !args.includes('limit ='));
-  assert.ok(aufrufe.length >= 2, `erwartet mindestens zwei Aufrufstellen, gefunden ${aufrufe.length}`);
+  assert.ok(aufrufe.length >= 1, `erwartet mindestens eine Aufrufstelle (das Brett), gefunden ${aufrufe.length}`);
+  const zeile = src.slice(src.indexOf('function renderTaskCard('), src.indexOf('function effectiveDue('));
+  assert.doesNotMatch(zeile, /renderTagBadges\(|PRIORITY_LABELS\(\)\[task\.priority\][^\n]*priority-badge/,
+    'die Listenzeile baut keine Etiketten-Knoepfe und kein Prioritaetswort');
   for (const args of aufrufe) {
     assert.match(args, /task\.priority/,
       `eine Aufrufstelle gibt die Prioritaet nicht mit (\`${args}\`) - dort steht das Etikett `
@@ -7511,8 +7533,10 @@ test('calendar metadata uses lucide icon markup instead of visible emoji', () =>
   const source = read('../public/pages/calendar.js');
 
   assert.doesNotMatch(source, /📍|🗓|📅|🎂|👤/, 'calendar metadata must not render visible emoji icons');
-  assert.match(source, /calendarMetaIconHtml\('map-pin'\)/, 'location metadata should use the shared metadata icon helper');
-  assert.match(source, /class="calendar-meta-icon icon-sm"/, 'metadata icons should use tokenized icon classes');
+  // Tafla (2026-10-20, Artboard Kalendarz): die Listenzeile traegt keine Uhr-,
+  // Orts- und Kalenderzeichen mehr - ihre Metazeile ist Text ("Park Wodny ·
+  // Wojtek", Sichtbarkeit als Wort), und der Helfer dafuer ist mit ihnen gegangen.
+  assert.match(source, /<span class="agenda-event__meta">\$\{esc\(meta\)\}<\/span>/, 'the list meta line is plain text');
 });
 
 // R19 (Critique 2026-10-16, "Zeitraum-Stepper: drei Bauarten"): EIN Stepper -
@@ -18543,7 +18567,13 @@ test('Zeilen: der Griff der Einzelzeile haelt seinen Platz, die Bedienzone sprin
   const tasks = read('../public/styles/tasks.css');
   assert.doesNotMatch(tasks, /\.swipe-row:not\(:only-child\) \.task-card__main:has\(> \.list-row__drag\)/,
     'die Griffspalte der Aufgabenzeile gilt auch in der Einzelzeile');
-  assert.match(tasks, /\.task-card__main:has\(> \.list-row__drag\) \{\s*grid-template-columns: auto minmax\(0, 1fr\) auto auto;/);
+  // Tafla (2026-10-20): die Aufgabenzeile ist kein Raster mehr, sondern EINE
+  // Flexzeile auf jeder Breite - der Griff steht in ihr wie jedes andere Ende
+  // und nimmt seinen Platz auch in der Einzelzeile (unsichtbar, s. o.). Auf
+  // Touch steht er gar nicht (spec "Lista grupowana": kein Griff auf Touch).
+  assert.doesNotMatch(tasks, /\.task-card__main:has\(> \.list-row__drag\) \{\s*grid-template-columns/,
+    'keine eigene Griffspalte mehr - die Zeile ist ein Flex-Fluss');
+  assert.match(tasks, /\.tasks-page \.task-card__main \{[^}]*display:\s*flex/);
 });
 
 test('PAGE-020: eine Aussenkante je Modul - kein Reiter schaltet das Mass oder den Kopf um', () => {
@@ -20502,8 +20532,10 @@ test('R16: der Abhakkreis steht einmal - eine Groesse, eine Tonregel', () => {
   const listRow = rulesOf(read('../public/styles/list-row.css'));
   const ring = listRow.find((rule) => rule.selector.trim() === '.check-ring::after');
   assert.ok(ring, 'list-row.css fuehrt den Ring als `.check-ring::after`');
-  assert.match(ring.body, /width:\s*var\(--space-5\)/);
-  assert.match(ring.body, /height:\s*var\(--space-5\)/);
+  // Tafla (2026-10-20, spec "Kółko odhaczania"): 24 sichtbar statt 20 - die
+  // Groesse des Einkaufskaestchens; die eine Regel und die eine Tonregel bleiben.
+  assert.match(ring.body, /width:\s*var\(--space-6\)/);
+  assert.match(ring.body, /height:\s*var\(--space-6\)/);
   assert.match(ring.body, /border:\s*2px solid var\(--color-text-tertiary\)/, 'in Ruhe neutral, nicht im Modulton');
   assert.ok(listRow.some((rule) => rule.selector.trim() === '.check-ring:not(.check-ring--static):hover::after'
     && /--module-accent/.test(rule.body)), 'der Modulton laedt ein, das Zeichen ist ausgenommen');
@@ -22026,12 +22058,12 @@ test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und
   // Tafla: the group head is the inset list's 17/600 head with its count.
   assert.match(notes, /<h2 class="inset-group__head notes-group__title" id="\$\{id\}">/, 'Notizen: „Przypięte" ist ein Gruppenkopf, kein Abschnittstitel');
   assert.doesNotMatch(notes, /notes-group__title u-section-title/);
-  // Der Tageskopf der Agenda ist die begruendete eigene Stufe (Zeitachse,
-  // calendar.css) - aber sein Kasten traegt die Groesse seiner Schrift, nicht
-  // die 24px der h2-Rolle.
+  // Der Tageskopf der Agenda traegt am Kasten die Groesse seiner Schrift,
+  // nicht die 24px der h2-Rolle. Seit Tafla (2026-10-20) ist er ein
+  // Gruppenkopf wie jeder andere: Body 17, "Dziś · wtorek 20 paź".
   const agenda = [...eachRule(read('../public/styles/calendar.css'))]
     .find(({ selector, at }) => selector.trim() === '.agenda-day__header' && at.length === 0);
-  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--text-sm\)/);
+  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-body\)/);
 });
 
 test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {
@@ -22177,11 +22209,13 @@ test('R20: der Auswahlmodus nimmt Kapsel, FAB und Wisch-Pfeil weg, die ganze Zei
 // Initialen zu.
 test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Initialen frei', () => {
   const dash = read('../public/pages/dashboard.js');
-  assert.match(dash, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
+  // TAFLA (2026-10-19): das Markup der Wand steht in components/wall-view.js.
+  const wallView = read('../public/components/wall-view.js');
+  assert.match(wallView, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
   // TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (enterWallFromToday).
   const enter = dash.slice(dash.indexOf('function enterWallFromToday('));
   assert.match(enter.slice(0, 200), /_wallFocusIntent = 'enter'/, 'der Start merkt sich, wohin der Fokus soll');
-  const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function renderWallWeather('));
+  const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function updateWallClock('));
   assert.match(wall, /captureRebuildFocus\(/, 'der stille Neuaufbau nimmt den Fokus mit');
   assert.match(wall, /takeWallFocusIntent\('enter'\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
   const leave = dash.slice(dash.indexOf('function wireWallExit('), dash.indexOf('function wireWallExit(') + 400);
@@ -22192,11 +22226,12 @@ test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Ini
   assert.match(timer, /role="group" aria-labelledby="wall-timer-presets-label"/, 'die sichtbare Zeile ist der Name der Gruppe');
   assert.match(timer, /class="wall__timer-presets-label" id="wall-timer-presets-label"/);
 
-  const css = [...eachRule(read('../public/styles/dashboard.css'))].filter((r) => !r.at.length);
-  const count = css.find((r) => r.selector.trim() === '.wall-who__count');
-  assert.match(count?.body ?? '', /inset-inline-start:\s*calc\(100% - var\(--space-3\)\)/, 'die Marke waechst vom Gesicht weg, nicht ueber die Buchstaben');
-  assert.doesNotMatch(count?.body ?? '', /inset-inline-end/);
-  assert.ok(css.some((r) => r.selector.trim() === '.wall-who__list--tasks .wall-who__mark' && /display:\s*contents/.test(r.body)), 'mit Titeln steht die Marke hinter dem Namen');
+  // TAFLA (2026-10-19): die Zaehlmarke an den Gesichtern ist mit „Wer heute
+  // dran ist" gegangen. Was von der Regel bleibt: auf einer Personenscheibe
+  // der Wand liegt nichts ueber den Initialen - sie traegt nur ihren Text.
+  const css = [...eachRule(read('../public/styles/dashboard.css'))];
+  assert.ok(!css.some((r) => /wall-who__count|wall-who__mark/.test(r.selector)), 'keine Marke ueber den Gesichtern mehr');
+  assert.ok(!css.some((r) => /\.wall-disc[^,{]*::(?:before|after)/.test(r.selector)), 'nichts legt sich ueber die Initialen');
 });
 
 // R20 D6 (Re-Critique 2026-10-17, A3 Sam): Enter auf einen leeren Monatstag

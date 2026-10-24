@@ -130,9 +130,9 @@ export function asksHouseholdAudience(query) {
  * sie nicht kennt, JA; ein neues Modul der Uebersicht waere von selbst an die
  * Wand gereist. Diese Liste sagt NEIN, bis jemand ihn hier eintraegt.
  *
- * DER MASSSTAB IST DIE FLAECHE, nicht die Harmlosigkeit: hier steht, was das
- * Programm, „Wer heute dran ist" und ihre Zeilen LESEN (public/pages/
- * dashboard.js `renderWallSurface`, public/utils/today-sheet.js). Der
+ * DER MASSSTAB IST DIE FLAECHE, nicht die Harmlosigkeit: hier steht, was die
+ * Tafla-Wand und ihre Zeilen LESEN (public/utils/wall-plan.js ueber
+ * public/utils/today-plan.js und public/utils/today-sheet.js). Der
  * Wochenstreifen, die Familienkarte und die Zahlen der Kacheln sind
  * Haushaltsdaten und stehen trotzdem nicht hier - die Wand zeichnet sie nicht.
  *
@@ -154,18 +154,29 @@ export function asksHouseholdAudience(query) {
  * liefert, ueber den niemand entschieden hat.
  */
 export const HOUSEHOLD_AUDIENCE_SHOWS = Object.freeze({
-  // Die Gesichter unter „Wer heute dran ist" und am Koch einer Mahlzeit.
+  // Die Personenscheiben an den Zeilen und am Koch einer Mahlzeit.
   users: true,
-  // Das Programm: Termine, Aufgaben, die Mahlzeit, der Geburtstag von heute.
+  // Der Tag: der Geburtstag von heute (das Blatt gleicht ihn mit den Terminen
+  // ab, daher `upcomingEvents`), die Mahlzeiten.
   upcomingEvents: true,
   birthdays: true,
-  urgentTasks: true,
-  tasksDoneToday: true,
   todayMeals: true,
-  // Die Titel unter jeder Person (#1817).
-  wallTasks: true,
-  // Die Schlusszeile „n Artikel offen" - die Zahl, nicht die Listen.
+  // Die Zahl der Einkaufskarte („23 na liście").
   shoppingOpenCount: true,
+  // Seit Tafla NICHT MEHR: `urgentTasks`, `tasksDoneToday` und `wallTasks`.
+  // Die Wand zeichnet weder das alte Programm noch „Wer heute dran ist" (die
+  // Scheiben an den Zeilen sagen, wer dran ist) - was sie nicht zeichnet,
+  // traegt ihre Antwort nicht.
+  // THE TAFLA WALL (2026-10-19) draws the day plan of Dziś in its own card,
+  // the dinner hero with its meter and the shopping card with the first items
+  // ("mleko · śmietanka · brokuł"). The plan rows come in their household
+  // version (`audience=household` narrows tasks and events in the route);
+  // shopping lists have no visibility of their own.
+  planTasks: true,
+  planEvents: true,
+  tomorrowMeals: true,
+  dinnerPlan: true,
+  shoppingLists: true,
   wastePickups: true,
   pantryExpiring: Object.freeze(['todayItems', 'todayCount']),
   housekeeping: Object.freeze(['present', 'presentSince', 'workerName']),

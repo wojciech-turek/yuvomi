@@ -279,21 +279,25 @@ test('wer Einkauf nicht sehen darf, bekommt die leere Fassung - mit und ohne Aus
   }
 });
 
-test('ein gekoppeltes Display bekommt keinen Einkauf - auch nicht ueber die Auswahl der Haushaltsvorgabe', async () => {
-  // Das Display folgt der Vorgabe des Haushalts, sein Browser schickt deren
-  // `shopping_list` also mit (#1808 fuer `events_scope`). Es hat aber keinen
-  // Einkaufs-Scope: die Auswahl darf dort kein Feld fuellen.
+// TAFLA (2026-10-19): HIER STAND „ein gekoppeltes Display bekommt keinen
+// Einkauf". Die Kuechenwand zeigt seitdem die Einkaufskarte („23 na liście ·
+// mleko · śmietanka"), das Display liest den Einkauf (`shopping:read`,
+// display-scopes.js). Was bleibt: es liest ihn nur LESEND und genau so, wie ein
+// Mitglied ihn liest - dieselben Listen, dieselben Zahlen, auch mit der
+// Auswahl der Haushaltsvorgabe.
+test('ein gekoppeltes Display liest den Einkauf wie ein Mitglied - auch ueber die Auswahl der Haushaltsvorgabe', async () => {
   const { DISPLAY_SCOPES } = await import('../server/services/display-accounts.js');
-  assert.ok(!DISPLAY_SCOPES.some((scope) => scope.startsWith('shopping:')), 'Vorbedingung: das Display hat keinen Einkaufs-Scope');
-  assert.deepEqual(tileNames(await getJson(query(GARTEN))), ['Garten'], 'Gegenprobe: ohne Display fuellt dieselbe Anfrage die Kachel');
+  assert.ok(DISPLAY_SCOPES.includes('shopping:read'), 'Vorbedingung: das Display liest den Einkauf');
+  assert.ok(!DISPLAY_SCOPES.includes('shopping:write'), 'und schreibt ihn nicht ueber ein Modul-Recht');
+  const plain = {};
+  for (const path of ['/', query(GARTEN), query(GARTEN, FEST)]) plain[path] = await getJson(path);
   displayScopes = [...DISPLAY_SCOPES];
   try {
     for (const path of ['/', query(GARTEN), query(GARTEN, FEST)]) {
       const body = await getJson(path);
-      assert.deepEqual(body.shoppingLists, [], path);
-      assert.deepEqual(numbers(body), [0, 0], path);
-      assert.equal('shoppingTile' in body, false, path);
-      assert.ok(!JSON.stringify(body).includes('Garten'), `${path}: kein Listenname in der Antwort`);
+      assert.deepEqual(body.shoppingLists, plain[path].shoppingLists, path);
+      assert.deepEqual(numbers(body), numbers(plain[path]), path);
+      assert.deepEqual(tileNames(body), tileNames(plain[path]), path);
     }
   } finally {
     displayScopes = null;
@@ -618,7 +622,8 @@ test('Heute-Blatt und Wand zaehlen ueber ALLE Listen - auch wenn die Kachel eine
   // baut ihr Blatt mit leerem Layout auf denselben Daten, dort spricht der
   // Einkauf also immer. Mit der ersten Fassung: "1" bei einer gewaehlten
   // Liste, und mit nur der fertig gekauften verschwand die Zeile.
-  for (const cap of [dash.PROGRAM_ROW_CAP, dash.WALL_ROW_CAP]) {
+  // Seit Tafla hat die Wand keinen eigenen Deckel mehr - das Blatt traegt ihn.
+  for (const cap of [dash.PROGRAM_ROW_CAP]) {
     for (const path of ['/', query(GARTEN), query(FEST), query(GARTEN, WOCHE)]) {
       const row = await sheetShoppingRow(await getJson(path), cap);
       assert.ok(row, `${path}: die Einkaufszeile steht da`);

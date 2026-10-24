@@ -908,6 +908,61 @@ test('wireCollapsingHeader R20: der Inhalt unter dem Kopf springt nicht, er glei
   }
 });
 
+// Tafla (ROUND2 „Pushed pages", 2026-10-24): der Kopf einer SCROLLENDEN Seite
+// mit Rueckweg klappt auf demselben Weg ein wie die gedeckelten - Rueckweg,
+// Inline-Titel, Kreise bleiben als Leiste stehen. Den Hoehenverlust traegt er
+// als Rand unten, damit der Inhalt im Port nicht springt.
+test('wireCollapsingHeader: geschobene scrollende Seite - die Leiste klappt ein und haelt ihren Platz', () => {
+  const s = collapsingStub();
+  try {
+    const props = new Map();
+    s.toolbar.style = {
+      setProperty: (k, v) => props.set(k, v),
+      removeProperty: (k) => props.delete(k),
+    };
+    // Die Seite scrollt als Ganzes: der Modul-Root deckelt nicht.
+    s.root.cs.overflowY = 'visible';
+    const shell = s.root.parentElement;
+    shell.scrollHeight = 1600;
+    shell.clientHeight = 500;
+    const back = new s.FakeEl('back', { rect: { top: 8, bottom: 56 } });
+    s.toolbar.children.splice(0, 0, back);
+    back.parentElement = s.toolbar;
+    // Zeile 1 Rueckweg, Zeile 2 Titel, Zeile 3 Reiter (Nagrody bei 390px).
+    s.toolbar.children[1].rect = { top: 64, bottom: 105 };
+    s.tab.rect = { top: 113, bottom: 161 };
+    Object.defineProperty(s.toolbar, 'rect', {
+      get: () => (s.toolbar.classList.contains('is-collapsed') ? { top: 0, bottom: 121 } : { top: 0, bottom: 170 }),
+      set: () => {},
+    });
+    s.toolbar.querySelector = (sel) => (sel === ':scope > .page-back' ? back : null);
+    const fireShell = (type, target) => { for (const fn of shell.handlers[type] ?? []) fn({ target }); };
+    wireCollapsingHeader(s.toolbar);
+    assert.ok(s.toolbar.classList.contains('page-toolbar--bar'), 'mit Rueckweg ist der scrollende Kopf eine Leiste');
+    assert.ok(s.toolbar.classList.contains('page-toolbar--capped'), 'sie klebt bei 0 und klappt wie die gedeckelten');
+    fireShell('touchstart', s.cell);
+    shell.scrollTop = 120;
+    fireShell('scroll', shell);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), true, 'Nutzer-Scroll der Seite klappt ein');
+    assert.equal(props.get('--bar-collapse-gap'), '49px', 'die 49px, die der Kopf verliert, bleiben als Rand - der Inhalt springt nicht');
+    shell.scrollTop = 0;
+    fireShell('scroll', shell);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), false, 'oben klappt sie wieder auf');
+    assert.equal(props.has('--bar-collapse-gap'), false, 'und gibt den Rand zurueck');
+  } finally { s.restore(); }
+});
+
+test('wireCollapsingHeader: ohne Rueckweg bleibt der scrollende Kopf beim negativen top', () => {
+  const s = collapsingStub();
+  try {
+    s.root.cs.overflowY = 'visible';
+    wireCollapsingHeader(s.toolbar);
+    assert.equal(s.toolbar.classList.contains('page-toolbar--bar'), false);
+    assert.equal(s.toolbar.classList.contains('page-toolbar--capped'), false);
+    assert.ok(s.toolbar.classList.contains('page-toolbar--stacked'));
+  } finally { s.restore(); }
+});
+
 test('wireCollapsingHeader: ein Ansichtswechsel haelt den eingeklappten Kopf, wo der neue Port ihn tragen kann', () => {
   const s = collapsingStub();
   try {
@@ -1307,7 +1362,16 @@ test('wireCollapsingHeader: ein einzeiliger Kopf mit mittig versetztem Inhalt be
     assert.equal(s.toolbar.props.get('--page-toolbar-lead'), '0px');
     assert.equal(s.toolbar.classList.contains('page-toolbar--stacked'), false,
       'ohne zweite Zeile kein --stacked: es verbirgt die Trennlinie, und nichts holt sie zurueck');
-    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'ohne Lead-Zone steht die Linie durchgehend');
+    // Tafla (2026-10-24): kein Trenner in Ruhe - die Kante kommt, sobald Inhalt
+    // unter dem Kopf liegt (vorher: durchgehend). Dass sie DANN kommt, prueft
+    // der naechste Test und Sonde 8 im Dokument.
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'ungescrollt: kein Trenner (Tafla)');
+    const port = s.toolbar.parentElement;
+    const scroll = (top) => { port.scrollTop = top; for (const fn of port.handlers.scroll ?? []) fn({ target: port }); };
+    scroll(40);
+    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'liegt Inhalt unter dem Kopf, traegt er seine Kante');
+    scroll(0);
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben wieder ohne');
   } finally { s.restore(); }
 });
 

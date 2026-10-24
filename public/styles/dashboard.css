@@ -1618,8 +1618,7 @@
 
   /* Die Sonne dreht ihre Strahlen um die stehende Scheibe. Eine volle
    * Umdrehung in 72 s: aus dem Augenwinkel Ruhe, beim Hinsehen Leben. */
-  [data-weather-motion="rays"] svg.weather-widget__icon > path,
-  [data-weather-motion="rays"] svg.wall-weather__icon > path {
+  [data-weather-motion="rays"] svg.weather-widget__icon > path {
     transform-box: view-box;
     transform-origin: 50% 50%;
     animation: weather-rays 72s linear infinite;
@@ -1628,8 +1627,7 @@
   /* Die Wolke zieht. Am ganzen Element, weil bei `cloud-sun` und `cloud-moon`
    * die Wolke selbst ein <path> ist - eine Regel auf den Kindknoten hätte
    * Wolke und Gestirn gegeneinander verschoben. */
-  [data-weather-motion="drift"] .weather-widget__icon,
-  [data-weather-motion="drift"] .wall-weather__icon {
+  [data-weather-motion="drift"] .weather-widget__icon {
     animation: weather-drift 11s ease-in-out infinite;
   }
 
@@ -1638,19 +1636,14 @@
    * negativen Verzögerungen setzen den Versatz OHNE Anlaufphase: mit positiven
    * Werten stünde beim ersten Rendern eine Sekunde lang gar kein Tropfen im
    * Bild. */
-  [data-weather-motion="fall"] svg.weather-widget__icon > path:not(:first-child),
-  [data-weather-motion="fall"] svg.wall-weather__icon > path:not(:first-child) {
+  [data-weather-motion="fall"] svg.weather-widget__icon > path:not(:first-child) {
     animation: weather-fall 2.2s ease-in infinite;
   }
 
-  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(3),
-  [data-weather-motion="fall"] svg.wall-weather__icon > path:nth-child(3) { animation-delay: -0.7s; }
-  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(4),
-  [data-weather-motion="fall"] svg.wall-weather__icon > path:nth-child(4) { animation-delay: -1.4s; }
-  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(5),
-  [data-weather-motion="fall"] svg.wall-weather__icon > path:nth-child(5) { animation-delay: -0.35s; }
-  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(6),
-  [data-weather-motion="fall"] svg.wall-weather__icon > path:nth-child(6) { animation-delay: -1.75s; }
+  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(3) { animation-delay: -0.7s; }
+  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(4) { animation-delay: -1.4s; }
+  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(5) { animation-delay: -0.35s; }
+  [data-weather-motion="fall"] svg.weather-widget__icon > path:nth-child(6) { animation-delay: -1.75s; }
 }
 
 @keyframes weather-rays {
@@ -5607,27 +5600,23 @@ button.today-cockpit__more--link {
 }
 
 /* --------------------------------------------------------
- * Wand-Modus (Block D)
+ * Wand-Modus (Tafla, 2026-10-19)
  *
- * DER WACHE ZUSTAND DES DASHBOARDS - keine zweite Seite, sondern dieselbe
- * Fläche in anderer Gangart. Gelesen wird sie aus zwei Metern und ohne
- * Berührung; alles hier folgt aus diesem einen Satz.
+ * DIE KUECHENWAND, aus zwei Metern gelesen: Uhr in Plakatgroesse, die
+ * Teraz-Zeile, das Abendessen als Hauptkarte, die Dziś-Karte und der Einkauf,
+ * unten der Ausstieg und die Minutnik-Scheiben. Artboard „Ściana" (1180x820):
+ * Raender 40, zwoelf Spalten mit 24 Abstand, nichts unter 24px.
  *
- * ZWEI SKALEN, ZWEI GRÜNDE. Die Uhr wird von der BREITE begrenzt (sie ist eine
- * einzelne lange Ziffernfolge), also steht bei ihr `vw`. Alles andere hängt an
- * `vmin`, und das ist eine Messung, keine Vorliebe: mit `vh` wurden die Zeilen
- * auf einem Tablet im HOCHFORMAT (768x1024) größer, weil dort Höhe reichlich
- * ist - und liefen dann seitlich in die Enge und unten aus dem Bild. `vmin`
- * bindet die Größe an die knappe Seite und hält beide Lagen im Schirm. An einer
- * Wand kann niemand scrollen, das Bild muss passen.
+ * DIE VIER SCHRIFTSTUFEN der Wand stehen in tokens.css (`--wall-display` 112,
+ * `--wall-title` 44, `--wall-body` 30, `--wall-label` 24) und haengen an
+ * `vmin` - an der knappen Seite, damit Quer- und Hochformat im Bild bleiben.
+ * Die frueheren Wand-Variablen dieser Datei (`--wall-clock`, `--wall-row-*`,
+ * `--wall-section`, `--wall-timer`) sind darin aufgegangen.
  *
- * Die Enden sind in beiden Fällen Tokens: die 48/72px-Display-Stufen bekommen
- * hier die Rolle, für die docs/SPEC.md sie ausdrücklich reserviert hat, und die
- * sie heute nirgends sonst hat.
- *
- * DIE ANTI-REFERENZ ist die „Smart-Home-Dashboard"-Optik (Kacheln voller
- * Messwerte, Ringe, Sensorwerte ohne Anlass). Deshalb gibt es hier genau EINEN
- * gefüllten Träger - die Programmliste - und sonst Inhalt auf der Bühne.
+ * DAS HOEHENBUDGET: auf dem Tablett ist die Wand genau so hoch wie das Bild
+ * (`--viewport-height`), die Buehne nimmt den Rest zwischen Kopf und Dock, und
+ * die Dziś-Liste zeigt, was hineinpasst (components/wall-view.js,
+ * `fitWallLists`). Am Telefon waechst die Flaeche mit ihrem Inhalt und scrollt.
  * -------------------------------------------------------- */
 
 /* Die Shell tritt ab. Sidebar und Tab-Leiste sind Arm-Längen-Möbel; auf zwei
@@ -5643,29 +5632,16 @@ button.today-cockpit__more--link {
   margin-left: 0;
 }
 
-/* Auch die Installations-Einladung tritt ab. Sie ist eine Aufforderung auf
- * Arm-Länge und legt sich sonst über die ruhige Fläche - auf einer Anzeige, die
- * niemand bedient, ist das die lauteste Karte im Bild. Sie erscheint auf jeder
- * anderen Route weiter. */
+/* Auch die Installations-Einladung tritt ab: auf einer Anzeige, die niemand
+ * bedient, waere sie die lauteste Karte im Bild. */
 [data-wall-mode] yuvomi-install-prompt {
   display: none;
 }
 
-/* Meldungen stehen auf der Wand OBEN (#1559). Unten liegt der Fuss mit
- * Ausstieg und Timer-Startknoepfen, und der Stapel rechnet dort mit einer
- * Tab-Leiste, die hier gar nicht steht: der Hinweis beim Einschalten lag am
- * Telefon acht Sekunden lang auf „5 Min" und nahm den Tipp. Oben steht nur die
- * Uhr, die nichts annimmt.
- *
- * DAS IST DIE AUSGANGSLAGE, NICHT DAS LETZTE WORT (#1917). Die Uhr nimmt
- * keinen Tipp, aber sie ist das, wofuer die Flaeche da ist, und bis rund 834px
- * Breite lag der Hinweis acht Sekunden auf ihr (390x844: Uhrzeit und Datum zu
- * 100 % verdeckt). Uhr und Fuss tragen deshalb `data-toast-keepout`
- * (pages/dashboard.js), und utils/toast-placement.js schiebt den Stapel von
- * hier aus an die naechste freie Kante - am Telefon direkt unter das Datum,
- * am Desktop bleibt er stehen, weil er neben der Uhr Platz hat. Gesetzt wird
- * die Lage wie neben einem Dialog ueber `[data-dock]`; diese Regel gilt, solange
- * der Platzierer nichts zu sagen hat. */
+/* Meldungen stehen auf der Wand OBEN (#1559): unten liegen Ausstieg und
+ * Minutnik. Uhr, Datumszeile und Dock tragen `data-toast-keepout`
+ * (components/wall-view.js); utils/toast-placement.js schiebt den Stapel von
+ * hier aus an die naechste freie Kante. */
 [data-wall-mode] .shell-bottom-stack:not([data-dock]) {
   top: calc(var(--safe-area-inset-top) + var(--space-4));
   bottom: auto;
@@ -5684,747 +5660,742 @@ button.today-cockpit__more--link {
 }
 
 .wall {
-  /* Die Distanz-Skala der Fläche - einmal hier, nirgends als Einzelwert. */
-  --wall-clock:      clamp(var(--text-5xl), 9vw, var(--text-6xl));
-  --wall-clock-date: clamp(var(--text-xl), 2.6vw, var(--text-4xl));
-  /* Abschnittstitel an `vmin` wie die Zeilen, nicht an `vw` (Critique
-   * 2026-09-23): an `vw` gebunden kappten sie bei 1280px auf 20px - aus zwei
-   * Metern die kleinste Schrift der Flaeche, kleiner als die Unterzeilen, die
-   * sie ueberschreiben. Jetzt 24px bei 1280x800, 28px ab rund 930px Hoehe:
-   * weiter unter dem Zeilentitel, damit die Rangfolge Uhr - Zeile - Titel
-   * haelt. */
-  --wall-section:    clamp(var(--text-xl), 3vmin, var(--text-3xl));
-  --wall-row-title:  clamp(var(--text-xl), 4vmin, var(--text-4xl));
-  --wall-row-sub:    clamp(var(--text-sm), 2.2vmin, var(--text-2xl));
-  --wall-pad:        clamp(var(--space-4), 3vmin, var(--space-10));
-  /* Der Kuechentimer (#844) liegt zwischen Programmzeile und Uhr: er muss aus
-   * zwei Metern ablesbar sein, ohne der Uhr den Rang abzulaufen. */
-  --wall-timer:      clamp(var(--text-4xl), 7vw, var(--text-5xl));
-
-  /* Der Abstand zwischen Uhr, Buehne und Fuss. Als Variable, weil der Fuss
-   * aus ihm die Hoehe seiner Scroll-Kante und seinen Endabstand rechnet
-   * (`.wall__foot`, #1917). */
-  --wall-gap:        clamp(var(--space-4), 3vmin, var(--space-8));
+  --wall-gap: var(--space-6);
+  --wall-disc: var(--space-10);
 
   display: flex;
   flex-direction: column;
   gap: var(--wall-gap);
   min-height: 100dvh;
-  padding: var(--wall-pad);
+  padding: max(var(--space-6), var(--safe-area-inset-top)) max(var(--space-10), env(safe-area-inset-right, 0px))
+    max(var(--space-3), var(--safe-area-inset-bottom)) max(var(--space-10), env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
   background: var(--color-bg);
-  /* Container statt Viewport-Breakpoint (Token-Doktrin §11c): die Fläche fragt
-   * ihren EIGENEN Platz, nicht den des Fensters.
-   *
-   * ER STEHT HIER UND NICHT AN `.wall__stage` SELBST, und das ist keine
-   * Geschmacksfrage: ein Element kann seinen eigenen Container nicht abfragen -
-   * `@container` sucht immer einen VORFAHREN. Mit der Deklaration an der Bühne
-   * blieb die Regel darunter wirkungslos und die Wand einspaltig, bei jeder
-   * Breite und ohne Fehlermeldung. */
-  container: wall / inline-size;
+  color: var(--color-text-primary);
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Die Flaeche ist der Landeplatz des Fokus nach dem Start (dashboard.js,
- * `_wallFocusIntent`), kein Bedienelement: kein Ring um den ganzen Schirm.
- * Der naechste Tab-Schritt zeigt den Ring am ersten Knopf. */
+/* Die Flaeche ist der Landeplatz des Fokus nach dem Start, kein Bedienelement. */
 .wall:focus {
   outline: none;
 }
 
-/* ── Der Anker: Uhrzeit und Datum ── */
-/* Die Uhr ist im Wand-Modus keine Kachel im Raster, sondern der Kopf der
- * Fläche: kein Surface, kein Rahmen, linksbündig wie jeder Seitenkopf. Ihre
- * IDs bleiben die des Widgets - der Minutentakt kennt nur einen Ort. */
-.clock-widget--wall {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: var(--space-1);
-  padding: 0;
-  text-align: left;
-}
-
-.clock-widget--wall .clock-widget__time {
-  font-size: var(--wall-clock);
-  font-weight: var(--font-weight-bold);
-}
-
-.clock-widget--wall .clock-widget__date {
-  font-size: var(--wall-clock-date);
-  color: var(--color-text-secondary);
-}
-
-/* ── Bühne: Programm links, „Wer" und Wetter rechts ── */
-.wall__stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(var(--space-4), 2.5vw, var(--space-10));
-  flex: 1;
-  min-height: 0;
-  align-content: start;
-}
-
-/* Ab dieser Breite trägt die Fläche zwei Spalten: Programm links (die Zeilen
- * brauchen Lauflänge), „Wer" und Wetter rechts. Ein neuer Viewport-Breakpoint
- * wäre ein fünfter neben den vier verbindlichen - deshalb Container. */
-@container wall (min-width: 768px) {
-  .wall__stage:not(.wall__stage--single) {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+/* AUF DEM TABLETT GENAU DAS BILD. Hoehe aus `--viewport-height` (tokens.css
+ * schaltet dort auf dvh, wo der Browser es kann). */
+@media (min-width: 768px) and (min-height: 500px) {
+  .wall {
+    block-size: var(--viewport-height);
   }
 }
 
-/* DER NEBENRAUM DREHT SICH MIT DER BÜHNE.
- *
- * Steht die Bühne zweispaltig, ist der Nebenraum die schmale Spalte rechts und
- * stapelt „Wer" über „Wetter". Steht sie einspaltig (Hochformat), stapelten die
- * beiden untereinander UNTER dem Programm - und schoben Datenstand und Ausstieg
- * um 59px aus dem Bild (gemessen auf 768x1024). Dann stehen sie
- * nebeneinander: dieselbe Information, die Höhe des größeren statt der Summe.
- * Nur auf sehr schmalen Flächen bleibt gestapelt, dort ist eine halbe Spalte
- * keine Spalte mehr. */
-.wall__aside {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(var(--space-4), 3vmin, var(--space-8));
-  min-width: 0;
-  align-content: start;
-}
-
-@container wall (min-width: 520px) {
-  .wall__aside {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container wall (min-width: 768px) {
-  .wall__aside {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.wall__section-title {
-  margin: 0 0 var(--space-3);
-  font-size: var(--wall-section);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-  color: var(--color-text-secondary);
-}
-
-/* ── Das Tagesprogramm ── */
-/* WENIGE ZEILEN, GROESSERE ZEILEN (Critique 2026-09-23). Der Deckel von vier
- * Zeilen plus Einkauf ist fuer den vollen Tag gerechnet (WALL_ROW_CAP); an
- * einem ruhigen Tag mit zwei Zeilen blieben bei 1280x800 die unteren 40 % der
- * Wand leer, waehrend die Zeilen in der Groesse standen, die fuer fuenf
- * gebraucht wird. Bis drei Eintraege tritt die Zeile deshalb eine Stufe auf die
- * Display-Stufe: der Zeilentitel waechst bis 48px (5.5vmin, bei 800px Hoehe
- * 44px), die Unterzeile mit. Drei so hohe Zeilen passen bei 1280x800 mit Uhr,
- * Titel und Fuss ins Bild (rund 660px) - die Rechnung, die WALL_ROW_CAP fuer
- * den vollen Tag fuehrt, gilt hier fuer den leeren. Ab der vierten Zeile gilt
- * wieder die Grundskala, damit der volle Tag unten nicht aus dem Bild laeuft.
- * Gezaehlt wird am Traeger selbst (`:has`), nicht im Skript: die Liste weiss,
- * wie lang sie ist. */
-.wall-program__list:not(:has(> :nth-child(4))) {
-  --wall-row-title: clamp(var(--text-2xl), 5.5vmin, var(--text-5xl));
-  --wall-row-sub:   clamp(var(--text-base), 2.8vmin, var(--text-3xl));
-}
-
-/* Zeilenliste in EINEM Träger, getrennt per Haarlinie über den +-Kombinator -
- * dieselbe Grammatik wie das Cockpit, nur in Distanzgröße. */
-.wall-program__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  background: var(--color-surface);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-.wall-row {
-  --wall-row-accent: var(--module-accent);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: clamp(var(--space-3), 1.6vmin, var(--space-5));
-  padding: clamp(var(--space-2), 1.4vmin, var(--space-4)) clamp(var(--space-4), 2vw, var(--space-6));
-}
-
-.wall-row + .wall-row {
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.wall-row__seal {
-  --seal-accent: var(--wall-row-accent);
-  --seal-icon: var(--icon-xl);
-  width: var(--target-lg);
-  height: var(--target-lg);
-}
-
-.wall-row__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0h);
-  min-width: 0;
-}
-
-/* EINE ZEILE, NICHT ZWEI. Auf zwei Metern erkennt man einen Eintrag an seinem
- * Anfang; ein Umbruch kostet dagegen die Höhe einer ganzen weiteren Zeile, und
- * die Fläche hat genau sechs davon, bevor sie scrollen müsste - was sie an
- * einer Wand nicht kann. */
-.wall-row__title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-  overflow: hidden;
-  font-size: var(--wall-row-title);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-text-primary);
-}
-
-/* Auf einer Fläche, die schmaler ist als jedes Wandtablet - jemand hat den
- * Schalter auf dem Telefon erwischt -, ist eine Zeile zu wenig: dort stand
- * „Rechnung Stadtwerke…". Die Höhenrechnung oben gilt für die Wand, und dort
- * greift diese Regel nie. */
-@container wall (max-width: 519px) {
-  .wall-row__title {
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-}
-
-/* AUCH DIE UNTERZEILE BLEIBT EINE ZEILE (#1698). Bis dahin stand dort ein
- * Wort aus der App („Termin", „Aufgabe"); seit sie den Namen des Kalenders
- * traegt, steht dort Nutzereingabe - „Familienkalender Schule und Vereine"
- * braeche um und kostete die Hoehe, die WALL_ROW_CAP fuer vier Zeilen
- * gerechnet hat. */
-.wall-row__sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--wall-row-sub);
-  line-height: var(--line-height-tight);
-  color: var(--color-text-secondary);
-}
-
-/* Die Zustandszeile des leeren Tages spricht in einem Satz („Als Naechstes
- * morgen: …") und steht allein - sie darf umbrechen wie bisher. */
-.wall-row--state .wall-row__sub {
-  white-space: normal;
-}
-
-.wall-row__time {
-  font-size: var(--wall-row-sub);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--color-text-secondary);
-}
-
-/* GOTUJ on the wall: one large target beside today's meal (cook-mode.js). */
-.wall-row__cook {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: 56px;
-  padding: var(--space-2) var(--space-5);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-full);
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  font-size: var(--wall-row-sub);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-/* DAS ENDE WEICHT, WO DIE ZEILE ZU SCHMAL IST (#1698). Auf dem Wandtablet
- * nimmt „9:30 PM - 11:30 PM" 161 von 617px Zeilenbreite. Auf einer Flaeche
- * unter Tablettbreite - jemand hat den Schalter auf dem Telefon erwischt -
- * waren es 132 von 254px: die Uhrzeit breiter als der Titel, der dann nach elf
- * Zeichen umbrach. Dort bleibt der Beginn allein, wie vor #1698. Dieselbe
- * Grenze wie beim Titel darueber. */
-@container wall (max-width: 519px) {
-  .wall-row__time-end {
-    display: none;
-  }
-}
-
-.wall-row__time--overdue {
-  color: var(--color-danger-ink);
-  font-weight: var(--font-weight-semibold);
-}
-
-.wall-row--task     { --wall-row-accent: var(--module-tasks); }
-.wall-row--event    { --wall-row-accent: var(--module-calendar); }
-.wall-row--shopping { --wall-row-accent: var(--module-shopping); }
-.wall-row--dinner   { --wall-row-accent: var(--module-meals); }
-/* Die Quellen des Beitrags-Vertrags (public/utils/today-sheet.js): derselbe
- * Satz Raeume wie im Cockpit, damit Wand und Blatt dieselbe Herkunft zeigen. */
-.wall-row--health       { --wall-row-accent: var(--module-health); }
-.wall-row--rewards      { --wall-row-accent: var(--module-rewards); }
-.wall-row--waste        { --wall-row-accent: var(--module-waste); }
-.wall-row--birthdays    { --wall-row-accent: var(--module-birthdays); }
-.wall-row--schedule     { --wall-row-accent: var(--module-schedule); }
-.wall-row--housekeeping { --wall-row-accent: var(--module-housekeeping); }
-.wall-row--budget       { --wall-row-accent: var(--module-budget); }
-.wall-row--inventory    { --wall-row-accent: var(--module-inventory); }
-.wall-row--documents    { --wall-row-accent: var(--module-documents); }
-.wall-row--pantry       { --wall-row-accent: var(--module-pantry); }
-
-/* Überlauf („+N weitere") und Coda („danach nichts mehr") sprechen als eine
- * ruhige Fußzeile UNTER dem Träger - sie erzählen zu Ende, sie sind keine
- * siebte Zeile. */
-.wall-program__foot {
-  margin: var(--space-3) 0 0;
-  font-size: var(--wall-row-sub);
-  color: var(--color-text-tertiary);
-}
-
-/* ── Wer heute dran ist ── */
-/* Gesichter, darunter die Aufgaben von heute beim Namen (#1817). Die Zahl am
- * Rand sagt, was noch offen ist. Ohne Titel - niemand hat eine Aufgabe, oder
- * die Flaeche hat keinen Platz dafuer (`fitWallWho`) - bleibt es bei der
- * Reihe von Gesichtern. */
-.wall-who__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
-  gap: var(--space-4) var(--space-2);
-}
-
-.wall-who__member {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-  text-align: center;
-}
-
-.wall-who__mark {
-  position: relative;
-  display: inline-flex;
-}
-
-.wall-who__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: clamp(var(--target-lg), 6vmin, var(--space-16));
-  aspect-ratio: 1;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  font-size: var(--wall-row-sub);
-  font-weight: var(--font-weight-semibold);
-}
-
-.wall-who__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* Der Zähler ist auf Distanz gebaut, nicht als Mikro-Badge: eine 13px-Marke
- * an einem 56px-Gesicht wäre aus zwei Metern reine Dekoration. Er liegt auf
- * Surface mit Kante, weil er auf der Bühne steht (1,18:1 ohne Kante). */
-/* DIE MARKE LEHNT AM GESICHT, SIE LIEGT NICHT DARAUF (R20, Re-Critique
- * 2026-10-17 A1 P2-6). Am Ende verankert (`inset-inline-end: -8px`) wuchs sie
- * nach innen und deckte bei 1280x800 79 bis 118px² der Initialen zu („LE"
- * las sich als „L"). Jetzt haelt ihr ANFANG drei Viertel des Gesichts frei
- * (`inset-inline-start: 100% - 12px`), und eine zweistellige Zahl waechst nach
- * aussen statt ueber die Buchstaben. */
-.wall-who__count {
-  position: absolute;
-  inset-block-start: calc(var(--space-1) * -1);
-  inset-inline-start: calc(100% - var(--space-3));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--space-8);
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--wall-row-sub);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-base);
-}
-
-.wall-who__name {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--wall-row-sub);
-  color: var(--color-text-secondary);
-}
-
-/* MIT TITELN wird aus der Reihe von Gesichtern ein Raster von Personen: das
- * Gesicht mit dem Namen daneben als Kopf, darunter die Zeilen in voller
- * Spaltenbreite. Ein Titel ist laenger als ein Vorname - unter einem 48px-
- * Gesicht in einer 72px-Spalte stuende „Spuelma…".
- *
- * HOECHSTENS ZWEI NEBENEINANDER, und keine schmaler als drei Gesichter breit.
- * `auto-fill` allein stellte auf einem grossen Schirm drei schmale Spalten
- * hin und schnitt „Pack sports bag for t…" ab, waehrend die vierte Person
- * allein in der zweiten Reihe stand (gemessen 1920x1080). Der Platz gehoert
- * den Titeln, nicht einer dritten Spalte. */
-.wall-who__list--tasks {
-  --wall-who-cols: 2;
-  --wall-who-min: calc(var(--space-16) * 3);
-  --wall-who-gap: var(--space-5);
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(max(var(--wall-who-min), (100% - (var(--wall-who-cols) - 1) * var(--wall-who-gap)) / var(--wall-who-cols)), 1fr)
-  );
-  gap: var(--space-4) var(--wall-who-gap);
-  align-items: start;
-}
-
-/* Ab fuenf Personen drei nebeneinander: zwei Spalten ergaeben drei Reihen, und
- * auf 1280x800 bliebe dann unter keinem Gesicht mehr Platz fuer einen Titel
- * (gemessen: 214px fuer die Liste, drei Koepfe allein brauchen 176px). Eine
- * schmalere Spalte, die den Anfang jeder Aufgabe nennt, sagt mehr als sechs
- * Gesichter ohne ein Wort. Gezaehlt wird am Traeger (`:has`), wie beim
- * Programm. */
-.wall-who__list--tasks:has(> :nth-child(5)) {
-  --wall-who-cols: 3;
-  --wall-who-min: calc(var(--space-16) * 2);
-  --wall-who-gap: var(--space-4);
-}
-
-.wall-who__list--tasks .wall-who__member {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
-  text-align: start;
-}
-
-/* MIT TITELN STEHT DER NAME NEBEN DEM GESICHT - dort, wohin die Marke nach
- * aussen waechst. Sie tritt deshalb aus der Ecke in die Kopfzeile, direkt
- * hinter den Namen („Leo 3"): `display: contents` hebt den Traeger auf, die
- * Marke wird dritte Spalte. */
-.wall-who__list--tasks .wall-who__member {
-  /* Die vierte, freie Spalte nimmt die Breite der Aufgabentitel auf, die
-   * ueber alle Spalten laufen - sonst wuchsen Name und Marke mit ihnen. */
-  grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr);
-}
-
-.wall-who__list--tasks .wall-who__mark {
-  display: contents;
-}
-
-.wall-who__list--tasks .wall-who__count {
-  position: static;
-  grid-row: 1;
-  grid-column: 3;
-  justify-self: start;
-}
-
-.wall-who__list--tasks .wall-who__name {
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.wall-who__tasks {
-  grid-column: 1 / -1;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0h);
-  min-width: 0;
-}
-
-/* EINE ZEILE JE AUFGABE, wie im Programm: ein Umbruch kostete die Hoehe einer
- * weiteren Aufgabe, und die Zeilenzahl ist hier das knappe Gut. */
-.wall-who__task {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1h);
-  min-width: 0;
-  white-space: nowrap;
-  font-size: var(--wall-row-sub);
-  line-height: var(--line-height-snug);
-  color: var(--color-text-primary);
-}
-
-/* Erledigtes tritt zurueck, bleibt aber lesbar: Sekundaerfarbe statt
- * Deckkraft, damit der Kontrast auf der Buehne der einer Unterzeile ist. Der
- * Haken traegt den Zustand, kein Durchstreichen - durchgestrichene Schrift
- * liest auf zwei Metern niemand. */
-.wall-who__task--done {
-  color: var(--color-text-secondary);
-}
-
-.wall-who__task-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wall-who__task-check {
+/* ── Kopf: Uhr, Datum, Teraz, Wetter ── */
+.wall__head {
   flex: none;
-  width: 1em;
-  height: 1em;
-  color: var(--color-success-ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10);
+  min-height: calc(var(--wall-display) * 1.14);
 }
 
-.wall-who__task--more {
-  color: var(--color-text-tertiary);
+.wall__head-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
 }
 
-/* Alles erledigt: die Marke am Gesicht traegt den Haken statt einer Zahl. */
-.wall-who__count--done {
-  min-height: var(--space-8);
-  color: var(--color-success-ink);
+.wall__clock,
+.wall__timer-value {
+  flex: none;
+  font-family: var(--font-rounded);
+  font-size: var(--wall-display);
+  line-height: 1.14;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-display);
+  white-space: nowrap;
 }
 
-.wall-who__count--done svg {
-  width: 1em;
-  height: 1em;
+.wall__head-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.wall-who__more,
-.wall-who__none {
-  margin: var(--space-2) 0 0;
-  font-size: var(--wall-row-sub);
-  color: var(--color-text-tertiary);
+.wall__date,
+.wall__teraz {
+  margin: 0;
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ── Wetter ── */
-.wall-weather__now {
+.wall__date {
+  color: var(--color-text-secondary);
+}
+
+.wall__clock-small {
+  font-family: var(--font-rounded);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.wall__teraz-lead {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
+.wall__weather {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.wall__weather-now {
+  margin: 0;
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.wall-weather__icon {
-  flex-shrink: 0;
-  width: clamp(var(--icon-xl), 5vmin, var(--space-16));
-  height: clamp(var(--icon-xl), 5vmin, var(--space-16));
-  /* AUS ZWEI METERN IST FARBE DIE SCHNELLERE AUSKUNFT ALS FORM: eine Wolke von
-   * einer Sonne zu unterscheiden kostet auf die Entfernung einen Moment, der
-   * Ton nicht. Anders als auf der Karte tragen hier deshalb AUCH die vier
-   * Vorhersagetage ihren eigenen Ton - die Wand hat vier Spalten statt fuenf,
-   * viel Luft und keinen Spannenbalken, der die Auskunft sonst uebernaehme. */
-  color: var(--weather-tone, var(--color-text-secondary));
+.wall__weather-icon {
+  inline-size: var(--space-16);
+  block-size: var(--space-16);
+  color: var(--color-text-secondary);
+  stroke-width: 1.25;
 }
 
-.wall-weather__body {
+.wall__weather-temp {
+  font-family: var(--font-rounded);
+  font-size: var(--wall-title);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+}
+
+.wall__weather-line {
+  margin: 0;
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Der laufende Minutnik nimmt den Platz der Uhr. */
+.wall__timer {
+  flex: none;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
-.wall-weather__temp {
-  font-size: var(--wall-row-title);
+.wall__timer-label {
+  font-size: var(--wall-label);
+  line-height: 1.25;
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-secondary);
+}
+
+.wall__timer[data-state="done"] .wall__timer-value {
+  color: var(--color-accent);
+  animation: wall-timer-pulse 1s ease-in-out infinite;
+}
+
+@keyframes wall-timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ── Buehne ── */
+.wall__stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--wall-gap);
+  row-gap: var(--wall-gap);
+}
+
+.wall__stage > * {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.wall__stage[data-layout="hero"] > .wall-hero { grid-column: 1 / 7; }
+.wall__stage[data-layout="hero"] > .wall__aside { grid-column: 7 / 13; }
+.wall__stage[data-layout="split"] > .wall-plan { grid-column: 1 / 8; }
+.wall__stage[data-layout="split"] > .wall__aside { grid-column: 8 / 13; }
+
+.wall__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wall-gap);
+  min-height: 0;
+}
+
+.wall__aside > .wall-plan {
+  flex: 1 1 auto;
+}
+
+.wall__aside > :not(.wall-plan) {
+  flex: none;
+}
+
+/* ── Karten ── */
+.wall-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--color-surface);
+  min-height: 0;
+}
+
+.wall-card--hearth {
+  background: var(--color-hearth);
+  box-shadow: var(--shadow-e1);
+}
+
+.wall-card__label {
+  margin: 0;
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wall-card__label--ink {
   color: var(--color-text-primary);
 }
 
-.wall-weather__range {
+/* ── Abendessen als Hauptkarte (15:00 bis Essen + 2h) ── */
+.wall-hero {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--color-hearth);
+  box-shadow: var(--shadow-e1);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wall-hero__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: 0;
+}
+
+.wall-hero__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.wall-hero__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wall-hero__eyebrow {
+  margin: 0;
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wall-hero__title {
+  margin: 0;
+  font-size: var(--wall-title);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.wall-hero__plate {
+  flex: none;
+  inline-size: calc(var(--space-16) * 2.5);
+  block-size: calc(var(--space-16) * 2.5);
+  border-radius: calc(var(--radius-sm) + 12px);
+  background: var(--color-surface);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+}
+
+.wall-hero__plate-img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.wall-hero__plate-icon {
+  inline-size: calc(var(--space-16) + var(--space-6));
+  block-size: calc(var(--space-16) + var(--space-6));
+  stroke-width: 1.25;
+}
+
+.wall-hero__cook,
+.wall-dinner__cook {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  color: var(--color-text-secondary);
+}
+
+.wall-hero__meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wall-meter {
   display: flex;
   gap: var(--space-1);
-  font-size: var(--wall-row-sub);
-  font-variant-numeric: tabular-nums;
+  inline-size: calc(var(--space-16) * 3 + var(--space-2));
 }
 
-.wall-weather__range-high {
-  color: var(--color-text-primary);
+.wall-meter__seg {
+  flex: 1;
+  block-size: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-text-primary);
 }
 
-.wall-weather__range-low {
-  color: var(--color-text-tertiary);
+.wall-meter__seg--missing {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--color-field-border);
 }
 
-.wall-weather__desc {
+.wall-hero__meter-text {
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  color: var(--color-text-secondary);
+}
+
+/* GOTUJ - die eine Primaeraktion der Flaeche, 88pt hoch. */
+.wall-cook {
+  align-self: flex-start;
+  box-sizing: border-box;
+  min-inline-size: calc(var(--space-16) * 5);
+  block-size: calc(var(--space-16) + var(--space-6));
+  padding: 0 var(--space-8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: var(--wall-body);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-accent-glow);
+  cursor: pointer;
+}
+
+.wall-cook svg {
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+}
+
+.wall-cook:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Das Abendessen vor seinem Fenster: dieselbe Waerme, kleiner. */
+.wall-dinner {
+  gap: var(--space-3);
+}
+
+.wall-dinner__title {
+  margin: 0;
+  font-size: var(--wall-title);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.wall-dinner .wall-cook {
+  min-inline-size: calc(var(--space-16) * 3);
+  block-size: calc(var(--space-16) + var(--space-2));
+  margin-top: var(--space-2);
+}
+
+/* ── Die Dziś-Karte ── */
+.wall-plan {
+  padding: var(--space-6) 0;
+  overflow: hidden;
+}
+
+.wall-plan > .wall-card__label {
+  padding: 0 var(--space-6);
+}
+
+.wall-plan__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.wall-row {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: calc(var(--space-16) + var(--space-8)) minmax(0, 1fr) var(--wall-disc);
+  column-gap: var(--space-4);
+  align-items: center;
+  min-block-size: calc(var(--space-12) + var(--space-2));
+  padding: 0 var(--space-6);
+  box-sizing: border-box;
+}
+
+
+.wall-row[hidden] {
+  display: none;
+}
+
+.wall-row + .wall-row::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: calc(var(--space-6) + var(--space-16) + var(--space-8) + var(--space-4)) 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.wall-row--edge-accent::after,
+.wall-row--edge-person::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--space-1);
+  background: var(--wall-row-edge, var(--color-accent));
+}
+
+.wall-row--edge-accent::after {
+  background: var(--color-accent);
+}
+
+.wall-row__time {
+  font-family: var(--font-rounded);
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.wall-row__main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.wall-row__title {
+  min-width: 0;
+  font-size: var(--wall-body);
+  line-height: 1.27;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--wall-row-sub);
+}
+
+.wall-row__who {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.wall-row--more .wall-row__title {
+  font-size: var(--wall-label);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
 
-.wall-weather__forecast {
-  list-style: none;
-  margin: var(--space-4) 0 0;
+.wall-disc.person-disc--lg {
+  --person-disc-size: var(--wall-disc);
+  font-size: var(--wall-label);
+}
+
+.wall-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--space-10);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--wall-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.wall-pill--danger { background: var(--color-danger-tint); color: var(--color-danger); }
+.wall-pill--warning { background: var(--color-warning-tint); color: var(--color-warning); }
+
+/* Der Ring (nur mit „Pozwól odhaczać na ścianie"): 48pt Kreis vor der Zeile. */
+.wall-ring {
+  inline-size: var(--space-12);
+  block-size: var(--space-12);
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
+  place-items: center;
+  border: 2px solid var(--color-field-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
 }
 
-.wall-weather__day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
+.wall-ring svg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
 }
 
-.wall-weather__day-label {
-  font-size: var(--wall-row-sub);
-  color: var(--color-text-secondary);
+.wall-ring--done {
+  border-color: var(--color-btn-primary);
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
 }
 
-.wall-weather__day-icon {
-  width: var(--icon-xl);
-  height: var(--icon-xl);
-  color: var(--weather-tone, var(--color-text-secondary));
+.wall-ring:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
-.wall-weather__day-temps {
-  display: flex;
-  gap: var(--space-1);
-  font-size: var(--wall-row-sub);
-  font-variant-numeric: tabular-nums;
-}
-
-.wall-weather__day-high {
-  color: var(--color-text-primary);
-}
-
-.wall-weather__day-low {
-  color: var(--color-text-tertiary);
-}
-
-/* ── Ladefehler ── */
-/* Er muss aus zwei Metern als Fehler zu erkennen sein und trägt deshalb keinen
- * Retry-Knopf: den drückt an der Wand niemand. Die Fläche versucht es im Takt
- * von WALL_HEAL_MS selbst weiter - der Satz darunter sagt das zu. */
-.wall__error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-10) var(--space-4);
-  text-align: center;
-}
-
-.wall__error-icon {
-  width: clamp(var(--icon-xl), 6vmin, var(--space-16));
-  height: clamp(var(--icon-xl), 6vmin, var(--space-16));
-  color: var(--color-text-tertiary);
-}
-
-.wall__error-title {
+.wall-plan__state {
   margin: 0;
-  font-size: var(--wall-row-title);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.wall__error-sub {
-  margin: 0;
-  font-size: var(--wall-row-sub);
-  color: var(--color-text-secondary);
-}
-
-.wall__loading {
-  min-height: 40vh;
-}
-
-/* ── Fuß: Datenstand und der leise Ausstieg ── */
-/* DREI SPALTEN, DIE MITTE STEHT FEST. Hier stand `flex` mit `space-between`:
- * die Mitte lag damit zwischen Stand und Ausstieg, nicht in der Mitte - und der
- * Ausstieg waechst beim Wecken um seine Beschriftung. Die Startknoepfe rutschten
- * dabei um 91px (gemessen 1440): wer die schlafende Wand auf „5 Min" antippte
- * (das weckt nur, wall-timer.js) und an derselben Stelle nachtippte, startete
- * „10 Min". Zwei gleich breite Aussenspalten halten die Mitte unbewegt, egal was
- * rechts oder links waechst. */
-.wall__foot {
-  display: grid;
-  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+  padding: var(--space-4) var(--space-6);
+  display: flex;
   align-items: center;
   gap: var(--space-4);
-  /* DER FUSS KLEBT AN DER UNTERKANTE, WENN DIE FLAECHE LAENGER IST ALS DAS BILD
-   * (#1559). Auf 390x844 lag der Ausstieg bei y=832-880, auf 375x667 ganz
-   * darunter: der einzige Weg hinaus nur per Scrollen erreichbar, und nichts
-   * sagte das. Keine Regel nach Geraeteklasse (d697fa1e4) - `sticky` greift nur,
-   * wenn der Platz fehlt; passt die Wand ins Bild, steht der Fuss wie bisher
-   * unter der Buehne.
-   *
-   * Polster und Gegenrand heben sich im Fluss auf: der Fuss nimmt keine Zeile
-   * mehr Platz ein als vorher (1280x800 passt weiter, siehe
-   * test:dashboard-surface-browser). Klebt er, fuellt sein Grund den Streifen
-   * bis zur Kante - der Inhalt scrollt DARUNTER durch, nicht zwischen Knopf und
-   * Kante hindurch -, und unten haelt er den Abstand der Flaeche, mindestens
-   * aber die Safe-Area (Home-Indikator). `--nav-tail` ist im Wandmodus 0
-   * (layout.css, Leiste ausgeblendet) - dieselbe Regel wie jede klebende
-   * Fusszeile im Inhalt (test:mobile-chrome).
-   *
-   * OBEN HAT ER KEIN POLSTER MEHR, DAFUER DEN ENDABSTAND DER FLAECHE (#1917).
-   * Dort stand ein deckender Streifen von `--space-2` mit Gegenrand, und er
-   * machte die Oberkante hart. Jetzt haelt der Fuss zum Inhalt davor genau die
-   * Hoehe seiner Scroll-Kante: der Abstand der Flaeche (`gap`) plus dieser
-   * Rand ergeben `--wall-foot-edge`. Am Scrollende und bei passender Wand
-   * steht der letzte Eintrag damit frei UEBER der Kante.
-   *
-   * ER WOHNT HIER UND NICHT AM SCROLLPORT (`.app-content`): ein Nachlauf dort
-   * laege HINTER dem Fuss. Der Fuss klebt nur innerhalb der Flaeche; endete
-   * die Flaeche ueber der Unterkante des Scrollports, hoebe sie den Fuss am
-   * Scrollende mit an, und die Kante laege weiter auf der letzten Zeile. Der
-   * Endabstand des Inhalts ist der Abstand VOR dem Fuss.
-   *
-   * `--wall-foot-edge` IST DIE EINE ZAHL FUER BEIDES: die Kante liest sie als
-   * Hoehe, der Rand hier als Endabstand - sie koennen nicht auseinanderlaufen.
-   * Auf der Wand ist sie der Abstand der Flaeche selbst: der Rand ist dann 0,
-   * die Flaeche keinen Pixel hoeher als zuvor (1280x800 passt weiter - eine
-   * Wand scrollt nicht), und die Kante liegt im leeren Streifen. Am Telefon
-   * hebt die Containerregel darunter sie auf die Hoehe eines Gesichts. */
-  --wall-foot-edge: var(--wall-gap);
+  font-size: var(--wall-title);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+}
 
+.wall-plan__state-icon {
+  inline-size: var(--space-12);
+  block-size: var(--space-12);
+  color: var(--color-accent);
+}
+
+/* ── Einkauf ── */
+.wall-shop {
+  justify-content: center;
+}
+
+.wall-shop__line {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  white-space: nowrap;
+}
+
+.wall-shop__count {
+  flex: none;
+  font-size: var(--wall-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.wall-shop__names {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--wall-label);
+  color: var(--color-text-secondary);
+}
+
+.wall-shop__low {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wall-shop__low > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wall-shop__low svg,
+.wall-shop__low-label svg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+  flex: none;
+}
+
+.wall-shop__low--chips {
+  gap: var(--space-3);
+}
+
+.wall-shop__low-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Mit dem Schalter: „+ masło" als 56pt Chip, ein Tipp setzt es auf die Liste. */
+.wall-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: calc(var(--space-12) + var(--space-2));
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--wall-label);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.wall-chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ── Frage der Woche (Sonntagabend) ── */
+.wall-question__text {
+  margin: 0;
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+}
+
+.wall-question__options,
+.wall-pick__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.wall-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--space-16);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--wall-label);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.wall-option--plain {
+  background: transparent;
+  color: var(--color-accent);
+}
+
+.wall-option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* „Kto to zrobił?" am Display: ein Dialog mit einem grossen Knopf je Person. */
+.wall-pick {
+  max-inline-size: min(40rem, calc(100% - var(--space-12)));
+  padding: var(--space-8);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-e3);
+}
+
+.wall-pick::backdrop {
+  background: var(--color-scrim);
+}
+
+.wall-pick__title {
+  margin: 0;
+  font-size: var(--wall-body);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+}
+
+.wall-pick__person {
+  padding-inline-start: var(--space-3);
+}
+
+/* ── Dock: Ausstieg und Minutnik ──
+ *
+ * DAS DOCK KLEBT, WENN DIE FLAECHE LAENGER IST ALS DAS BILD (#1559): am
+ * Telefon laeuft die Wand ueber den Schirm, und der Ausstieg darf dort nicht
+ * erst per Scrollen erreichbar sein. Auf dem Tablett ist die Wand genau so
+ * hoch wie das Bild, `sticky` greift dann nie. Ueber dem Dock laeuft der Inhalt
+ * in einer statischen Kante zum Grund aus (#1917); ihre Hoehe
+ * `--wall-foot-edge` ist zugleich der Endabstand vor dem Dock. */
+.wall__dock {
+  --wall-foot-edge: var(--wall-gap);
   position: sticky;
-  bottom: var(--nav-tail);
+  /* --nav-tail: im Wandmodus 0, die Kapsel ist ausgeblendet (layout.css). */
+  bottom: var(--nav-tail, 0px);
   z-index: 1;
-  margin-block: calc(var(--wall-foot-edge) - var(--wall-gap)) calc(-1 * var(--wall-pad));
-  padding-block: 0 max(var(--wall-pad), var(--safe-area-inset-bottom));
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--wall-gap);
+  min-block-size: calc(var(--space-16) + var(--space-6));
+  margin-block: calc(var(--wall-foot-edge) - var(--wall-gap)) calc(-1 * max(var(--space-3), var(--safe-area-inset-bottom)));
+  padding-block: 0 max(var(--space-3), var(--safe-area-inset-bottom));
   background: var(--color-bg);
 }
 
-/* Das Telefon - dieselbe Grenze wie bei Zeilentitel und Zeitspanne oben:
- * schmaler als jedes Wandtablet, alles gestapelt, die Flaeche scrollt ohnehin
- * (`wallIsStacked`). Nur dort kostet der Endabstand nichts, was die Wand
- * braucht, und nur dort verdeckte der Fuss Gesichter. */
-@container wall (max-width: 519px) {
-  .wall__foot {
-    --wall-foot-edge: var(--space-12);
-  }
-}
-
-/* DIE SCROLL-KANTE DES FUSSES (#1917). Am Telefon ist die Flaeche laenger als
- * das Bild, der Fuss klebt, und sein deckender Grund schnitt "Wer heute dran
- * ist" an einer unsichtbaren harten Kante ab: bei 390x844 ein Gesicht ganz
- * und eines halb verdeckt, ohne jedes Zeichen, dass es darunter weitergeht.
- * Abgeschnitten war nichts - es fehlte die Kante. Jetzt laeuft der Inhalt in
- * einem Verlauf vom Grund der Flaeche unter die Leiste aus.
- *
- * EINE FESTE KANTE, IN JEDEM BROWSER DIESELBE (`--wall-foot-edge`): am Telefon
- * so hoch wie ein Gesicht. Niedriger traegt sie dort nicht - mit dem Abstand
- * der Flaeche allein (16px) sah man von ihr nichts, sobald die Kante des
- * Fusses in eine Luecke zwischen zwei Zeilen fiel (gemessen 390x844). Sie
- * braucht keinen Zustand, kein Skript und keine Bewegung: der Endabstand des
- * Fusses ist genau ihre Hoehe, am Ende des Scrollwegs und bei passender Wand
- * liegt sie also auf leerem Grund derselben Farbe und ist unsichtbar.
- *
- * Kein Tipp bleibt an ihr haengen (`pointer-events: none`). Die Farbe ist die
- * des Grundes selbst, in beiden Themen und nachts dieselbe Variable; es
- * entsteht keine neue Flaeche und kein Licht (DESIGN.md, Der Wand-Modus:
- * genau ein gefuellter Traeger). Die Achse ist die Blockachse, in RTL gleich. */
-.wall__foot::before {
+.wall__dock::before {
   content: "";
   position: absolute;
   inset-inline: 0;
@@ -6434,271 +6405,113 @@ button.today-cockpit__more--link {
   pointer-events: none;
 }
 
-.wall__foot > :first-child {
-  justify-self: start;
-}
-
-.wall__foot > :last-child {
-  justify-self: end;
-}
-
-.wall__foot-end {
+.wall__dock-start,
+.wall__dock-end {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
+  min-width: 0;
 }
 
-/* Eine Zeile braucht Platz fuer beides: fuenf Startknoepfe (340px) und je
- * Aussenspalte die Gruppe am Ende - den Ausstieg samt Beschriftung (220px, de)
- * und seit #1766 daneben den Schoner-Knopf (48px plus 8px Abstand), zusammen
- * 276px. Fehlt der Platz, werden die Aussenspalten ungleich und die Mitte
- * rutscht wieder (gemessen: bei einer 800px breiten Flaeche um 26px). Die
- * Bedienung bekommt dann eine eigene Zeile ueber Stand und Ausstieg; der alte
- * Fuss lief bei 390px sogar rechts aus dem Bild (Ausstieg wach bei 356-478).
- * Gefragt wird die FLAECHE (`container: wall`, siehe `.wall`), nicht das
- * Fenster.
- *
- * DIE SCHWELLE BLEIBT, DIE RESERVE SCHRUMPFT. Ab 1024px Flaeche hat jede
- * Aussenspalte 326px (1024 - 340 - 2 x 16, halbiert): fuer de 50px Luft statt
- * 106. Gemessen mit Knopf, alle Sprachen: bei 1024px Flaeche stehen die
- * Startknoepfe in 23 von 26 mittig, ab 1192px in allen. Dazwischen reicht es
- * den drei laengsten Ausstiegen nicht (ru bis 14px, pt-BR bis 9px, el bis
- * 58px versetzt; el rutschte dort schon ohne Knopf). Der Versatz steht still -
- * die Gruppe ist schlafend und wach gleich breit -, der Nachtipp trifft also
- * denselben Knopf. Eine hoehere Schwelle naehme dafuer jeder Sprache bis
- * rund 1140px die eine Zeile. */
-@container wall (max-width: 1023px) {
-  .wall__foot {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: var(--space-2);
-  }
-
-  .wall__foot > :nth-child(2) {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    justify-self: center;
-  }
-
-  /* MIT DEM SCHONER-KNOPF REICHT DIE ZWEITE ZEILE NICHT MEHR IN JEDER SPRACHE
-   * (#1766). Auf 390px bleiben 342px: Stand, Knopf und Ausstieg brauchen in de
-   * 366. Das Raster oben drueckt die Stand-Spalte dann unter die Breite ihres
-   * laengsten Wortes, und der Stand liegt UNTER dem Knopf (gemessen: ru 43px,
-   * uk 20px). Hier bricht deshalb der Inhalt um, nicht die Spalte: der Stand
-   * gibt zuerst nach und laeuft auf zwei Zeilen (die Fusshoehe bleibt, er ist
-   * auch zweizeilig niedriger als der Knopf), aber nie unter sein laengstes
-   * Wort. Reicht selbst das nicht, rutscht die Gruppe als Ganzes in eine
-   * dritte Zeile. Ohne den Knopf - also auch solange ein Timer laeuft - gilt
-   * das Raster wie bisher. */
-  .wall__foot:has(.wall__foot-btn--icon) {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .wall__foot:has(.wall__foot-btn--icon) > :first-child {
-    flex: 1 1 0;
-    min-inline-size: min-content;
-  }
-
-  .wall__foot:has(.wall__foot-btn--icon) > :nth-child(2) {
-    order: -1;
-    flex: 0 0 100%;
-    min-inline-size: 0;
-    justify-content: center;
-  }
-
-  .wall__foot:has(.wall__foot-btn--icon) > :last-child {
-    margin-inline-start: auto;
-  }
-}
-
-/* Woher man weiß, dass die Fläche lebt: eine absolute Uhrzeit, keine
- * „vor 3 Minuten"-Angabe, die einen zweiten Timer bräuchte. */
-.wall__updated {
-  margin: 0;
-  min-height: 1em;
-  font-size: var(--type-caption);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-tertiary);
-}
-
-/* Die Gestalt der Fuß-Knöpfe - Ausstieg (#915) und Timer-Abbruch (#844) tragen
- * sie beide. Sie hieß bis #844 `.wall__exit`: ein Name, der die eine Stelle
- * meinte, an der es sie gab. Ein zweiter Knopf hätte daneben entweder die
- * fremde Klasse getragen oder ihre Werte kopiert; beides ist ein Vokabular, das
- * beim nächsten Anfassen auseinanderläuft.
- *
- * LEISE, ABER MIT WORT; HELL AUF BERÜHRUNG. Ein dauerhaft voller Knopf
- * widerspräche der ruhigen Fläche, ein unsichtbarer wäre eine Falle. Bis #1559
- * stand im Ruhezustand nur das Zeichen da, und das WAR die Falle: wer den
- * Modus aus Versehen eingeschaltet hatte, sah ein graues Symbol ohne Namen und
- * fand nicht hinaus (D#1494). Das Wort steht deshalb immer da, in
- * Sekundärfarbe ohne Kapsel - die Ruhe kommt aus der Farbe, nicht aus dem
- * Weglassen. Jede Berührung setzt `data-wall-awake` und hebt den Knopf für
- * sechs Sekunden auf die volle Kapsel.
- *
- * Das Polster ist in beiden Zuständen dasselbe: der Knopf ändert beim Wecken
- * seine Breite nicht, nur Grund, Kante und Schrift. Bewegt wird nur Farbe. */
-.wall__foot-btn {
+/* Der Ausstieg: eine ruhige Kapsel auf --color-fill, immer mit Wort. */
+.wall-ghost {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target-lg);
-  padding: 0 var(--space-4);
-  border: 1px solid transparent;
+  gap: var(--space-3);
+  block-size: calc(var(--space-12) + var(--space-2));
+  padding: 0 var(--space-6);
+  border: 0;
   border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: inherit;
-  font-size: var(--type-secondary);
-  cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.wall__foot-btn svg {
-  width: var(--icon-lg);
-  height: var(--icon-lg);
-  flex-shrink: 0;
-}
-
-.wall__foot-btn:hover,
-.wall__foot-btn:focus-visible,
-.wall[data-wall-awake] .wall__foot-btn {
-  border-color: var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-fill);
   color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.wall__foot-btn:focus-visible {
+.wall-ghost svg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+}
+
+.wall-ghost--icon {
+  inline-size: calc(var(--space-12) + var(--space-2));
+  padding: 0;
+  justify-content: center;
+}
+
+.wall-ghost--primary {
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
+}
+
+.wall-ghost:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
 
-/* DER SCHONER-START TRAEGT NUR SEIN ZEICHEN, IN JEDER BREITE (#1766). Mit Wort
- * war die Gruppe aus Schoner und Ausstieg in de 416px breit und in jeder Sprache
- * anders: die Aussenspalten wurden ungleich und die Startknoepfe rutschten
- * (gemessen bis 100px, el bei 1280), auf 390px lag der Stand unter dem Knopf.
- * Ein Kreis von `--target-lg` ist in jeder Sprache gleich breit.
- *
- * Das widerspricht dem Satz oben nicht: „mit Wort" gilt dem AUSSTIEG, weil ein
- * namenloses Zeichen dort der einzige Weg hinaus war. Der Schoner ist ein
- * Zusatzweg - wer ihn nicht erkennt, verliert nichts, er startet nach der
- * Wartezeit ohnehin von selbst. Den Namen tragen `aria-label` und `title`. */
-.wall__foot-btn--icon {
-  justify-content: center;
-  inline-size: var(--target-lg);
-  padding: 0;
-  flex-shrink: 0;
+.wall__stale {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--wall-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-warning);
 }
 
-/* ── Küchentimer (#844) ──────────────────────────────────────────────────────
- *
- * Das ERSTE Bedienelement der Fläche, das nicht wieder hinausführt. Es steht
- * hier, weil es die Zusage des Modus nicht bricht, sondern ihren Rand markiert:
- * die Wand navigiert nicht und ändert nichts am Haushalt - ein Timer tut beides
- * nicht. Die Regel dazu steht im Kopf von `utils/wall-mode.js`.
- *
- * Der laufende Timer ist IMMER voll da, anders als der Ausstieg: er ist der
- * Grund, warum jemand ihn gestartet hat. Die Startknöpfe dagegen sind wie der
- * Ausstieg - leise, bis jemand die Fläche berührt. Eine Wand, auf der dauerhaft
- * fünf Minutenknöpfe leuchten, wäre keine ruhige Anzeige mehr. */
-.wall__timer {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  padding: var(--space-2) 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.wall__timer-value {
-  font-size: var(--wall-timer);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
-  color: var(--color-text-primary);
-}
-
-/* Abgelaufen: die Ziffer wird zum Wort, und die Farbe trägt die Nachricht mit.
- * Erfolgsgrün, nicht Warnrot - der Timer hat getan, was er sollte. */
-.wall__timer[data-state="done"] .wall__timer-value {
-  color: var(--color-success);
-  animation: wall-timer-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes wall-timer-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.45; }
+.wall__stale svg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
 }
 
 .wall__timer-presets {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
-/* Der Gegenstand der Kapseln (R20): in der Stimme des Stand-Stempels links
- * daneben - Tertiaer, Bildunterschrift -, damit er benennt, ohne zu rufen. */
 .wall__timer-presets-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-inline-end: var(--space-1);
-  font-size: var(--type-caption);
-  color: var(--color-text-tertiary);
+  margin-inline-end: var(--space-2);
+  font-size: var(--wall-label);
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
-.wall__timer-presets-label svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-}
-
-/* Am Telefon steht das Wort ueber den Kapseln: daneben drueckte es sie bei
- * 390px auf zwei Zeilen („3 / Min"), und die Gruppe lief 3px ueber den Fuss. */
-@container wall (max-width: 559px) {
-  .wall__timer-presets {
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 0;
-  }
-
-  .wall__timer-presets-label {
-    flex: 0 0 100%;
-    justify-content: center;
-    margin-inline-end: 0;
-  }
-}
-
-/* Leise da, hell auf Berührung - dieselbe Grammatik wie der Fuß-Knopf daneben,
- * nur schmaler: fünf davon stehen nebeneinander.
- *
- * LEISE HEISST SICHTBAR (Critique 2026-09-23). Hier stand `color: transparent`:
- * fünf klickbare Flächen, von denen im Ruhezustand nichts zu sehen war - und ein
- * Tipp auf die schlafende Wand startete einen Timer, den niemand gewählt hatte.
- * Das ist die Defektklasse, die `.impeccable/critique/ignore.md` als
- * „unsichtbare, klickbare Bänder" führt; Ruhe entsteht durch Kontrast, nicht
- * durch Unsichtbarkeit. Die Beschriftung steht deshalb in Tertiärfarbe da, eine
- * Stufe unter dem Zeichen des Ausstiegs (Sekundär), ohne Kapsel. Dass der erste
- * Tipp auf eine schlafende Wand nur weckt, regelt wall-timer.js. */
+/* DIE SCHEIBEN RUHEN SICHTBAR (Tafla): 80pt auf --color-fill, die Zahl in
+ * Tinte. Ein Tipp startet (wall-timer.js). */
 .wall__timer-preset {
-  min-height: var(--target-lg);
-  min-width: var(--target-lg);
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
+  flex: none;
+  inline-size: calc(var(--space-16) + var(--space-4));
+  block-size: calc(var(--space-16) + var(--space-4));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-family: inherit;
-  font-size: var(--type-secondary);
-  font-variant-numeric: tabular-nums;
+  background: var(--color-fill);
+  color: var(--color-text-primary);
+  font: inherit;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.wall__timer-preset:hover,
-.wall__timer-preset:focus-visible,
-.wall[data-wall-awake] .wall__timer-preset {
-  border-color: var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
+.wall__timer-preset-num {
+  font-size: var(--wall-body);
+  line-height: 1.2;
+}
+
+.wall__timer-preset-unit {
+  font-size: var(--wall-label);
+  line-height: 1.1;
+  color: var(--color-text-secondary);
 }
 
 .wall__timer-preset:focus-visible {
@@ -6706,93 +6519,164 @@ button.today-cockpit__more--link {
   outline-offset: var(--focus-ring-offset);
 }
 
-/* ── Nachtabsenkung (22:00 bis 06:00) ──
+/* ── Laden und Fehler ── */
+.wall__error {
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8);
+}
+
+.wall__error-icon {
+  inline-size: var(--space-12);
+  block-size: var(--space-12);
+  color: var(--color-text-secondary);
+}
+
+.wall__error-title {
+  margin: 0;
+  font-size: var(--wall-title);
+  line-height: 1.27;
+  font-weight: var(--font-weight-semibold);
+}
+
+.wall__error-sub {
+  margin: 0;
+  font-size: var(--wall-body);
+  color: var(--color-text-secondary);
+}
+
+.wall__loading {
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--color-fill);
+  min-block-size: calc(var(--space-16) * 4);
+}
+
+/* ── Szene Noc (22:00 bis 06:00) ──
  *
- * Das Tablet hängt im Flur und leuchtet um drei. Das Problem ist die
- * LEUCHTDICHTE, nicht der Farbmodus - ein dunkles Theme leuchtet immer noch.
- * Die Absenkung macht deshalb zweierlei: der dunkle Grund wird erzwungen
- * (`data-theme="dark"` an der Wurzel, ohne die Theme-Wahl zu überschreiben -
- * utils/wall-mode.js), und die HELLE FLÄCHE VERSCHWINDET: der einzige gefüllte
- * Träger der Seite wird zur Kante, die Tinte geht eine Stufe zurück. Beides
- * bleibt AA - die Stufen sind gegen ihren echten Grund geeicht (tokens.css).
- * Was NICHT passiert: nichts wird versteckt. Wer um 06:05 vorbeigeht, liest
- * dieselbe Fläche wie um 18:00, nur leiser. */
-[data-wall-night] .wall-program__list {
+ * Das Problem im dunklen Flur ist die Leuchtdichte. Nachts bleibt nur die Uhr,
+ * bernsteinfarben auf fast Schwarz (`--wall-night-bg`, `--wall-night-ink`,
+ * 5.40:1), dazu das Datum und was morgen als Erstes ansteht; Ausstieg und
+ * Minutnik bleiben bedienbar. Die Wahl des Themes bleibt unberuehrt
+ * (utils/wall-mode.js erzwingt nachts nur das dunkle). */
+.wall[data-scene="noc"] {
+  background: var(--wall-night-bg);
+  color: var(--wall-night-ink);
+}
+
+.wall[data-scene="noc"] .wall__head {
+  flex: 1 1 auto;
+}
+
+.wall[data-scene="noc"] .wall__date,
+.wall[data-scene="noc"] .wall__teraz,
+.wall[data-scene="noc"] .wall__clock-small,
+.wall[data-scene="noc"] .wall__timer-label,
+.wall[data-scene="noc"] .wall__timer-presets-label,
+.wall[data-scene="noc"] .wall__timer-preset-unit {
+  color: var(--wall-night-ink);
+}
+
+.wall[data-scene="noc"] .wall-ghost,
+.wall[data-scene="noc"] .wall__timer-preset {
   background: transparent;
-  box-shadow: none;
-  border: 1px solid var(--color-border-subtle);
+  color: var(--wall-night-ink);
+  box-shadow: inset 0 0 0 1px var(--wall-night-ink);
 }
 
-/* HIER STAND `--seal-base: var(--color-bg)` fuer das Wand-Siegel: die
- * Nachtflaeche gibt ihren Traeger auf, also musste die Toenung gegen den
- * Seitengrund mischen statt gegen die Liste. Mit dem Vollton-Siegel gibt es
- * keine Mischung mehr - die Scheibe traegt ihre Farbe selbst und ist nachts so
- * lesbar wie tags. */
-
-[data-wall-night] .clock-widget--wall .clock-widget__time {
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
+.wall[data-scene="noc"] .wall__stage {
+  flex: 0 0 auto;
 }
 
-[data-wall-night] .wall-row__title,
-[data-wall-night] .wall-weather__temp,
-[data-wall-night] .wall-weather__range-high,
-[data-wall-night] .wall-weather__day-high,
-[data-wall-night] .wall-who__task,
-[data-wall-night] .wall-who__list--tasks .wall-who__name {
-  color: var(--color-text-secondary);
+.wall[data-scene="noc"] .wall__dock {
+  background: var(--wall-night-bg);
 }
 
-[data-wall-night] .wall-row__sub,
-[data-wall-night] .wall-row__time,
-[data-wall-night] .clock-widget--wall .clock-widget__date,
-[data-wall-night] .wall-who__name,
-[data-wall-night] .wall-weather__desc,
-[data-wall-night] .wall-weather__day-label,
-[data-wall-night] .wall-who__task--done,
-[data-wall-night] .wall-who__task--more,
-[data-wall-night] .wall-who__task-check,
-[data-wall-night] .wall-who__count--done {
-  color: var(--color-text-tertiary);
+.wall[data-scene="noc"] .wall__dock::before {
+  background: linear-gradient(to bottom, transparent, var(--wall-night-bg));
 }
 
-/* Die Aufgaben unter den Gesichtern (#1817) gehen mit: der offene Titel und
- * der Name darueber eine Stufe zurueck (oben), Erledigtes und die Zaehlzeile
- * eine weitere - und der Haken gibt sein Gruen ab wie das Wetterzeichen sein
- * Bernstein, am Titel wie an der Marke des Gesichts. Die Reihenfolge der
- * beiden Regeln oben traegt die Stufen: `--done` und `--more` stehen in der
- * spaeteren und gewinnen gegen `.wall-who__task`. */
-
-/* NACHTS GIBT DIE WAND IHRE FARBE AB, und der Wetterton macht da keine
- * Ausnahme. Der Nachtmodus senkt jede Stimme dieser Flaeche um eine Stufe,
- * damit ein Wandtablet im dunklen Flur nicht leuchtet - ein bernsteinfarbenes
- * Sonnenzeichen waere dann der hellste Punkt im Raum. Die Bewegung geht mit:
- * was niemand ansieht, muss auch nicht ziehen. */
-[data-wall-night] .wall-weather__icon,
-[data-wall-night] .wall-weather__day-icon {
-  color: var(--color-text-tertiary);
-}
-
-[data-wall-night] .wall-weather__icon,
-[data-wall-night] svg.wall-weather__icon > path,
-[data-wall-night] svg.wall-weather__icon > path:not(:first-child) {
-  animation: none;
-}
-
-/* HIER STAND `background: transparent` FÜR DEN ZÄHLER - eine Absenkung zu viel.
- * Ohne seinen Grund lag die Ziffer direkt auf der gesättigten Avatarfarbe und
- * war nachts nicht mehr zu lesen; die Kante blieb als Ring darüber stehen. Der
- * Zähler behält seinen Surface-Grund: seine Fläche ist ein Kreis von 32px, die
- * Absenkung holt ihr Licht aus dem Träger der Programmliste, nicht von hier. */
-
-@media (prefers-reduced-motion: reduce) {
-  .wall__foot-btn,
-  .wall__timer-preset {
-    transition: none;
+/* ── Am Telefon: alles untereinander, die Flaeche scrollt ── */
+@media (max-width: 767px) {
+  .wall {
+    padding-inline: max(var(--space-4), env(safe-area-inset-left, 0px));
   }
 
-  /* Der Puls des fertigen Timers ist Dekoration, die Farbe trägt die Nachricht
-   * ohnehin allein. */
+  /* Am Telefon scrollt die Flaeche: die Kante traegt erst ab einer Zeilenhoehe. */
+  .wall__dock {
+    --wall-foot-edge: var(--space-12);
+  }
+
+  .wall__head,
+  .wall__head-main {
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+
+  .wall__weather {
+    align-items: flex-start;
+  }
+
+  .wall__stage > *,
+  .wall__stage[data-layout] > .wall-hero,
+  .wall__stage[data-layout] > .wall-plan,
+  .wall__stage[data-layout] > .wall__aside {
+    grid-column: 1 / -1;
+  }
+
+  .wall__date,
+  .wall__teraz {
+    white-space: normal;
+  }
+
+  .wall-hero__plate {
+    inline-size: calc(var(--space-16) + var(--space-8));
+    block-size: calc(var(--space-16) + var(--space-8));
+  }
+
+  /* Das Dock klebt am Telefon - es bleibt deshalb kompakt: die Scheiben 64
+   * statt 80, ueber die ganze Breite verteilt; das Wort „Minutnik" bleibt der
+   * Name der Gruppe fuer den Screenreader. */
+  .wall__dock {
+    gap: var(--space-3);
+  }
+
+  .wall__dock-end,
+  .wall__timer-presets {
+    inline-size: 100%;
+  }
+
+  .wall__timer-presets {
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .wall__timer-presets-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wall__timer-preset {
+    inline-size: var(--space-16);
+    block-size: var(--space-16);
+  }
+
+  .wall__timer-preset-num {
+    font-size: var(--wall-label);
+  }
+
+  .wall-ghost {
+    block-size: var(--space-12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Der Puls des fertigen Minutniks ist Dekoration, Farbe und Wort tragen die
+   * Nachricht allein. */
   .wall__timer[data-state="done"] .wall__timer-value {
     animation: none;
   }

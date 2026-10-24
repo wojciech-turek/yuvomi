@@ -701,11 +701,13 @@ router.get('/', (req, res) => {
    * stops at five and skips what ended, `weekEvents` carries no place: the day
    * plan lists every event of today (the ended ones collapse into "Wcześniej")
    * and "Jutro" the first of tomorrow, with place and people. Same visibility,
-   * birthday and "only mine" rules as the list above; never for the wall. */
-  if (allows('calendar') && !householdAudience) try {
+   * birthday and "only mine" rules as the list above. The wall (Tafla) reads
+   * the household version: only what everybody may see, like every list in
+   * its answer. */
+  if (allows('calendar')) try {
     result.planEvents = serializeEvents(getEventsOverlappingDays(d, {
       userId, fromKey: todayLocalKey, days: 2,
-      assignedTo: eventsAssignedTo, includeBirthdays, household: false, limit: 120,
+      assignedTo: eventsAssignedTo, includeBirthdays, household: householdAudience, limit: 120,
     }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) })
       .map(planEventFields);
   } catch (err) {
@@ -880,8 +882,8 @@ router.get('/', (req, res) => {
         END
     `).all(todayLocalKey, ...visibleTypes);
     // Tomorrow's meals for "Jutro" (Tafla, 2026-10-19): the same reading one
-    // day on - the plan's peek names tomorrow's dinner.
-    if (!householdAudience) {
+    // day on - the plan's peek and the evening wall name tomorrow's dinner.
+    {
       result.tomorrowMeals = d.prepare(`
         SELECT m.id, m.date, m.meal_type, m.title, m.recipe_id, m.cook_user_id,${MEAL_COOK_COLUMNS_SQL}
         FROM meals m
@@ -889,9 +891,10 @@ router.get('/', (req, res) => {
         WHERE m.date = ? AND m.meal_type IN (${placeholders})
         ORDER BY CASE m.meal_type WHEN 'breakfast' THEN 0 WHEN 'lunch' THEN 1 WHEN 'dinner' THEN 2 ELSE 3 END
       `).all(shiftDateKey(todayLocalKey, 1), ...visibleTypes);
-      const dinner = result.todayMeals.find((meal) => meal.meal_type === 'dinner') ?? null;
-      result.dinnerPlan = dinnerPlanFor(d, dinner, { pantry: allows('pantry'), shopping: allows('shopping') });
     }
+    // The meter of tonight's dinner - on Dziś and on the wall's dinner hero.
+    const dinner = result.todayMeals.find((meal) => meal.meal_type === 'dinner') ?? null;
+    result.dinnerPlan = dinnerPlanFor(d, dinner, { pantry: allows('pantry'), shopping: allows('shopping') });
   } catch (err) {
     log.error('todayMeals error:', err.message);
     result.todayMeals = result.todayMeals ?? [];
@@ -1559,9 +1562,10 @@ router.get('/', (req, res) => {
     result.tasksDoneToday = 0;
   }
 
-  // The day plan's tasks (Tafla, 2026-10-19), see `planTasksFor`. Personal by
-  // design: the wall reads `wallTasks` and never gets this list.
-  if (allows('tasks') && !householdAudience) try {
+  // The day plan's tasks (Tafla, 2026-10-19), see `planTasksFor`. Personal on
+  // Dziś; the wall's Dziś card reads the household version - `taskVisibleSql`
+  // is the household rule there, so only tasks everybody may see arrive.
+  if (allows('tasks')) try {
     result.planTasks = planTasksFor(d, {
       today: todayLocalKey,
       tomorrow: shiftDateKey(todayLocalKey, 1),
