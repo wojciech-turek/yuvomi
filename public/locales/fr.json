@@ -7042,7 +7042,7 @@
         "onList": "{{n}} on the list",
         "stale": "data from {{minutes}} min ago",
         "minutesShort": "min",
-        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
+        "readOnly": "Le mur ne fait qu'afficher. Vous pouvez activer le cochage dans Paramètres › Tablettes murales."
     },
     "more": {
         "searchLabel": "Search everything",

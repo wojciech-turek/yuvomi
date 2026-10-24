@@ -7041,7 +7041,7 @@
         "onList": "{{n}} on the list",
         "stale": "data from {{minutes}} min ago",
         "minutesShort": "min",
-        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
+        "readOnly": "Màn hình tường chỉ hiển thị. Bạn có thể bật đánh dấu hoàn thành trong Cài đặt › Máy tính bảng gắn tường."
     },
     "more": {
         "searchLabel": "Search everything",

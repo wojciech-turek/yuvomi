@@ -7041,7 +7041,7 @@
         "onList": "{{n}} on the list",
         "stale": "data from {{minutes}} min ago",
         "minutesShort": "min",
-        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
+        "readOnly": "墙面只做显示。可在 设置 › 壁挂平板 中开启勾选。"
     },
     "more": {
         "searchLabel": "Search everything",

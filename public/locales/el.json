@@ -7041,7 +7041,7 @@
         "onList": "{{n}} on the list",
         "stale": "data from {{minutes}} min ago",
         "minutesShort": "min",
-        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
+        "readOnly": "Ο τοίχος μόνο εμφανίζει. Το τσεκάρισμα ενεργοποιείται στις Ρυθμίσεις › Επιτοίχια tablet."
     },
     "more": {
         "searchLabel": "Search everything",

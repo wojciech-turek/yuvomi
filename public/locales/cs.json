@@ -7232,7 +7232,7 @@
         "onList": "{{n}} on the list",
         "stale": "data from {{minutes}} min ago",
         "minutesShort": "min",
-        "readOnly": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet."
+        "readOnly": "Stěna jen zobrazuje. Odškrtávání zapnete v Nastavení › Nástěnné tablety."
     },
     "more": {
         "searchLabel": "Search everything",
