@@ -3248,7 +3248,7 @@
         "mealTypeNamesHint": "What your household calls the four meals. Leave empty for the built-in name. The name shows in every language exactly as you type it.",
         "mealTypeNamesSaved": "Names saved.",
         "pageDisplays": "Kitchen tablet",
-        "pageDisplaysDescription": "What the kitchen wall shows, whether it can tick things off, and pairing the tablet.",
+        "pageDisplaysDescription": "What the wall shows, touch and pairing.",
         "sheetDashboardDescription": "Set the grace period for expired countdowns on the overview.",
         "sheetCalendarDescription": "Your own event defaults, subscriptions and exports, plus holidays, week start and calendar sync.",
         "sheetScheduleDescription": "Choose which quickstart templates the shift planner offers.",
