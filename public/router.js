@@ -5516,6 +5516,8 @@ window.yuvomi = {
   // Das globale Erfassen (Tafla) - fuer die Pille „Dodaj" der Uebersicht am
   // Desktop; dasselbe Blatt wie das + neben der Kapsel.
   openCapture: () => openCaptureFromShell(),
+  showToast,
+  friendlyError,
   // Hilfe, Aenderungsverlauf und Abmelden fuer die Seiten Więcej und
   // Ustawienia (Tafla) - dieselben Wege wie Seitenleiste und Mehr-Blatt.
   showHelp: () => showHelpModal(),
@@ -5527,8 +5529,6 @@ window.yuvomi = {
   navDestinations: () => navItems().map(({ path, navHref, label, icon, module, section, kitchenGroup }) => ({
     path, navHref, label, icon, module, section, kitchenGroup: Boolean(kitchenGroup),
   })),
-  showToast,
-  friendlyError,
   setThemeColor,
   setDisabledModules,
   setHiddenModules,
