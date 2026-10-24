@@ -277,6 +277,51 @@
   }
 }
 
+/* HOECHSTENS ZWEI KREISE IM KOPF (Tafla, „Nagłówek", 2026-10-24). Unter 768px
+ * stehen Lupe und Filter neben dem Large Title; das Werkzeugmenue waere der
+ * dritte Kreis. Seine Wege stehen dort im Filterblatt (filterSheetGroups,
+ * `.tasks-sheet-phone`): die Ansicht als Segment, Mehrfachauswahl und die
+ * beiden Verwaltungen als Verweiszeilen. Das Menue kommt in zwei Lagen zurueck,
+ * in denen es der einzige Weg ist:
+ *   - waehrend der Auswahl: es traegt Ablegen und die Tag-Aktionen, die in der
+ *     Pille keinen Platz haben. Dafuer geht der Filter (zwei Kreise bleiben).
+ *   - im Verlauf: Suche und Filter sind dort weg (syncViewChrome), das Menue
+ *     ist der Weg zurueck zur Liste.
+ * Ab 768px traegt der Kopf das Segment und hat die Suche als Feld: Filter und
+ * Menue sind dort die zwei Kreise. */
+@media (max-width: 767px) {
+  .tasks-page:not(.is-selecting):not([data-tasks-view="history"]) .tasks-toolbar .page-tools-btn {
+    display: none;
+  }
+
+  .tasks-page.is-selecting .tasks-toolbar .tasks-toolbar__filter {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .filter-sheet .tasks-sheet-phone {
+    display: none;
+  }
+}
+
+/* Der Name des zweiten Segments im Blatt (nur Telefon, siehe oben): die
+ * Stimme einer Feldbeschriftung, 13/600 ink-2, dicht ueber seinem Segment. */
+.tasks-sheet-label {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.filter-sheet__group--view > .tasks-sheet-label {
+  margin-top: var(--space-4);
+}
+
+.filter-sheet__group--view > .tasks-sheet-label + .tasks-group-mode {
+  margin-top: var(--space-2);
+}
+
 /* --------------------------------------------------------
  * Filterblatt (utils/filter-sheet.js)
  * -------------------------------------------------------- */
@@ -301,12 +346,15 @@
 
 /* Die Gruppierungswahl im Blatt fuellt ihre Zeile: zwei gleich breite
  * Haelften lesen sich als EINE Wahl zwischen zwei Dingen. */
-.tasks-group-mode {
+.tasks-group-mode,
+.tasks-sheet-view {
   display: flex;
 }
 
-.tasks-group-mode .segmented__item {
+.tasks-group-mode .segmented__item,
+.tasks-sheet-view .segmented__item {
   flex: 1 1 0;
+  min-width: 0;
 }
 
 /* --------------------------------------------------------
