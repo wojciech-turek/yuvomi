@@ -144,7 +144,9 @@ function addDays(key, days) {
 function whenLabel(days) {
   if (days === 0) return t('more.today');
   if (days === 1) return t('more.tomorrow');
-  return t('more.inDays', { days: t('dashboard.daysLeft', { count: days }) });
+  // One counted phrase per locale ("in 8 Tagen", "za 8 dní", "خلال يومين"):
+  // gluing "in" onto "8 Tage" breaks case and dual in de, cs and ar.
+  return t('documents.inDays', { count: days });
 }
 
 /** "wt 27 paź" - short weekday, day, short month, without trailing dots. */
