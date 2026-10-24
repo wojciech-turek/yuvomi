@@ -679,8 +679,9 @@
   height: var(--space-3);
   /* In Ruhe ist der Haken nicht da (transparente Tinte), also auch nicht
    * gezeichnet - er erscheint als Einladung unter Zeiger und Fokus und auf
-   * der Quittung. */
+   * der Quittung. Klicks nimmt der Knopf, nie das Zeichen darin. */
   opacity: 0;
+  pointer-events: none;
 }
 
 .housekeeping-task__check:hover svg,
