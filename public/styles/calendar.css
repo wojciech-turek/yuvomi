@@ -548,7 +548,7 @@
  * Ansicht, ihre Zahl als Badge an deren Kreis.
  *
  * Zeile 2: der Zeitraum als leise Zeile ueber dem Wochenstreifen (13/600
- * Tinte-2, „Październik 2026"), am Ende „Dziś" als schlichtes Wort, solange
+ * Tinte-2, „Październik 2026"), am Ende „Dzisiaj" als schlichtes Wort, solange
  * man neben dem laufenden Zeitraum steht (Pasek tygodnia). Die Pfeile stehen
  * nicht mehr im Kopf: geblaettert wird per Wisch (period-swipe.js), per Taste
  * (j/k und Pfeiltasten, router.js) und ueber die beiden Eintraege im
@@ -629,7 +629,7 @@
     color: var(--color-text-secondary);
   }
 
-  /* „Dziś" (Pasek tygodnia): ein schlichtes Wort in der Akzentstimme. Seine
+  /* „Dzisiaj" (Pasek tygodnia): ein schlichtes Wort in der Akzentstimme. Seine
    * Zielhoehe bringt `.btn` mit (--target-base); die negative Marge haelt die
    * Zeile so hoch wie ihren 18px-Text, ob das Wort steht oder nicht. Im
    * laufenden Zeitraum ist es verborgen und inert (syncTodayButton). */
@@ -662,7 +662,7 @@
   /* EINGEKLAPPT EINE ZEILE (R17 Schritt 5, Critique 2026-10-07 A1 P1).
    * Der Titel geht (layout.css), der Zeitraum rueckt in die frei gewordene
    * Titelzeile vor Lupe und Ansicht und wird dort ihr Titel - 17/600 in
-   * Tinte wie der Titel der Glasleiste. „Dziś" bleibt stehen. */
+   * Tinte wie der Titel der Glasleiste. „Dzisiaj" bleibt stehen. */
   .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed > .page-toolbar__center {
     order: 0;
     flex: 1 1 0;
