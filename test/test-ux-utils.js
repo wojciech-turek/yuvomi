@@ -963,6 +963,24 @@ test('wireCollapsingHeader: ohne Rueckweg bleibt der scrollende Kopf beim negati
   } finally { s.restore(); }
 });
 
+// Tafla (2026-10-24, Sonde 8 auf /notes): traegt der Port das Einklappen nicht
+// (zu wenig Reserve), bleibt der Kopf offen - seine Kante kommt trotzdem,
+// sobald die Liste gescrollt ist. Vorher hing sie allein am Einklappen.
+test('wireCollapsingHeader: die Kante des gedeckelten Kopfes folgt dem Scroll, auch ohne Einklappen', () => {
+  const s = collapsingStub();
+  try {
+    s.port.scrollHeight = 580;
+    s.port.clientHeight = 500;
+    wireCollapsingHeader(s.toolbar);
+    s.fire('touchstart', s.cell);
+    s.scrollTo(s.port, 60);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), false, '80px Reserve tragen das Einklappen nicht');
+    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'die Liste laeuft unter der Kopfkante - die Linie steht');
+    s.scrollTo(s.port, 0);
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben wieder ohne Trenner');
+  } finally { s.restore(); }
+});
+
 test('wireCollapsingHeader: ein Ansichtswechsel haelt den eingeklappten Kopf, wo der neue Port ihn tragen kann', () => {
   const s = collapsingStub();
   try {

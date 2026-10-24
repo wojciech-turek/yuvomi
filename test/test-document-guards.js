@@ -3320,6 +3320,7 @@ test('Sonde 12 - Glas sitzt auf Chrome, nie im Seiteninhalt', async () => {
   const findings = [];
   const declaredFindings = [];
   const seen = new Set();
+  const seenOn = { mobile: new Set(), desktop: new Set() };
   let declaredSeen = 0;
   for (const device of ['mobile', 'desktop']) {
     const page = await openPage(harness, { device, theme: 'light', locale: 'de' });
@@ -3331,6 +3332,7 @@ test('Sonde 12 - Glas sitzt auf Chrome, nie im Seiteninhalt', async () => {
       // Sie bleibt, weil sie die einzige ist, die es merkt, wenn diese Regel faellt.
       for (const g of await glassSurfaces(page)) {
         seen.add(g.sel);
+        seenOn[device].add(g.sel);
         if (g.inMain) findings.push(`${device}/${name}: ${g.sel}`);
       }
       // Ebene 2 - die ABSICHT. Sie kann rot werden, wo Ebene 1 es nie kann.
@@ -3346,8 +3348,21 @@ test('Sonde 12 - Glas sitzt auf Chrome, nie im Seiteninhalt', async () => {
   }
   // Eine Sonde, die nichts gesehen hat, darf nicht urteilen - je Ebene einzeln,
   // sonst deckt der Reichweiten-Nachweis der einen die Blindheit der anderen zu.
-  assert.ok(seen.size >= 5,
-    `Nur ${seen.size} Glasflaechen im Dokument gesehen - Ebene 1 hat nichts gemessen.`);
+  /* WAS TAFLA AN GLAS TRAEGT, MIT NAMEN (2026-10-24). Hier stand `seen.size
+   * >= 5`: vor Tafla trugen FABs, Kopf-Pille und Toast Glas. Tafla nimmt es
+   * mit Absicht von ihnen - das + ist Violett mit Glanz, der Toast dunkel und
+   * deckend, die Blaetter weiss (KIT, chrome.py) - und laesst es dort, wo die
+   * Navigation ueber dem Inhalt schwebt: an der Tab-Kapsel (voll und minimiert)
+   * am Finger und an der Seitenleiste am Zeiger. Gemessen wurden 3 Flaechen
+   * (Kapsel, minimierte Kapsel, Seitenleiste). Die Sonde fragt deshalb nach
+   * diesen beiden Traegern - faellt das Glas an einem davon weg, oder sieht
+   * Ebene 1 gar keines, wird sie rot. Ebene 2 unten bleibt unveraendert streng. */
+  const has = (device, part) => [...seenOn[device]].some((sel) => sel.includes(part));
+  assert.ok(seen.size > 0, 'Keine Glasflaeche im Dokument gesehen - Ebene 1 hat nichts gemessen.');
+  assert.ok(has('mobile', 'nav-bottom__items'),
+    `Am Finger traegt die Tab-Kapsel kein Glas mehr (gesehen: ${[...seenOn.mobile].join(', ') || 'nichts'}).`);
+  assert.ok(has('desktop', 'nav-sidebar'),
+    `Am Zeiger traegt die Seitenleiste kein Glas mehr (gesehen: ${[...seenOn.desktop].join(', ') || 'nichts'}).`);
   assert.ok(declaredSeen >= 5,
     `Nur ${declaredSeen} Regeln mit deklariertem Blur gefunden - Ebene 2 hat nichts gemessen. `
     + 'Traegt das CSSOM die Regeln noch, oder ist die Blur-Schreibweise eine andere?');
@@ -4159,7 +4174,20 @@ async function fabAtScrollEnd(page) {
     const outer = document.querySelector('.app-content');
     const scroller = window.__yuvomiScrollport();
     const inner = scroller === outer ? null : scroller;
-    const fab = document.querySelector('.page-fab:not([hidden])');
+    /* DER SCHWEBENDE KNOPF AM FINGER IST SEIT TAFLA DAS + DER SHELL (2026-10-24).
+     *
+     * `#capture-plus` steht abgesetzt neben der Tab-Kapsel, fixiert ueber dem
+     * Inhalt, auf jeder Seite - das globale Erfassen. Die Seiten-FABs sind am
+     * Telefon nicht mehr zu sehen oder docken als Geisterkreis im Kopf an. Die
+     * Sonde fragte nach `.page-fab` und sah deshalb mobil keinen Knopf mehr
+     * („Nur 0 Zustaende am Scroll-Ende"); sie misst jetzt das +, und am Zeiger
+     * (dort ist es ausgeblendet) weiter den Seiten-FAB. */
+    const plusEl = document.querySelector('.capture-plus');
+    const plusBox = plusEl?.getBoundingClientRect();
+    const plus = plusEl && plusBox.width > 0 && plusBox.height > 0
+      && getComputedStyle(plusEl).visibility !== 'hidden' ? plusEl : null;
+    const pageFab = document.querySelector('.page-fab:not([hidden])');
+    const fab = plus ?? pageFab;
     const o = outer.getBoundingClientRect();
     /* GEKLIPPT WIRD AM SCROLLPORT, DER WIRKLICH SCROLLT.
      *
@@ -4179,7 +4207,18 @@ async function fabAtScrollEnd(page) {
       viewportHoehe: window.innerHeight,
       amEnde: !scroller || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 2,
       scrollbar: !!scroller && scroller.scrollHeight > scroller.clientHeight + 4,
+      // Ein Seiten-FAB, der am Finger als Kreis im Kopf andockt (Tafla), ist
+      // ein zweiter, ortsfester Weg - kein schwebender.
+      kopfFab: !!plus && !!pageFab && !pageFab.closest('.fab-layer'),
+      // Das globale Anlegen am Zeiger: der „Dodaj"-Kreis der Seitenleiste.
+      seitenleistenPlus: Boolean(document.querySelector('.nav-sidebar__add')?.getClientRects().length),
     };
+    if (plus) {
+      // Das + gehoert in die Nav-Zone: seine Mitte liegt auf der Hoehe der Kapsel.
+      const nav = document.querySelector('.nav-bottom__items')?.getBoundingClientRect();
+      const mid = plusBox.top + plusBox.height / 2;
+      res.plusInNav = !!nav && mid >= nav.top && mid <= nav.bottom;
+    }
     if (!fab) return { ...res, keinFab: true };
 
     const f = fab.getBoundingClientRect();
@@ -4204,7 +4243,7 @@ async function fabAtScrollEnd(page) {
      * erkennt das Andocken (`position` taugt nicht - der Dashboard-FAB ist
      * `static` und schwebt trotzdem, weil `.fab-layer` um ihn herum fixiert
      * ist), die Groesse erkennt das Einklappen. */
-    const schwebend = !!fab.closest('.fab-layer') && f.width > 0 && f.height > 0;
+    const schwebend = fab === plus || (!!fab.closest('.fab-layer') && f.width > 0 && f.height > 0);
     if (!schwebend) {
       return { ...res, keinFab: true, angedockt: !fab.closest('.fab-layer'), eingeklappt: f.width < 1 || f.height < 1 };
     }
@@ -4259,12 +4298,16 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       const eingeklappt = [];
       const schwebend = [];
       let ohneFab = 0;
+      const ohnePlusInNav = [];
+      let dzisAnlegen = null;
 
       for (const name of sweep('Sonde 18')) {
         await gotoRoute(page, ALL_ROUTES[name]);
         const m = await fabAtScrollEnd(page);
         if (m.angedockt) angedockt.push(name);
         if (m.eingeklappt) eingeklappt.push(name);
+        if (device === 'mobile' && !m.plusInNav) ohnePlusInNav.push(name);
+        if (name === 'dashboard') dzisAnlegen = device === 'mobile' ? m.plusInNav : m.seitenleistenPlus;
         // Unabhaengig vom Scrollstand: ob ein Knopf schwebt, ist eine Frage
         // der Seite, nicht davon, ob die Messung ihr Ende erreicht hat.
         if (!m.keinFab) schwebend.push(name);
@@ -4347,18 +4390,33 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Einkauf dockt seit der Kopfregel mobil (2026-09-26) an, Aufgaben,
          * Notizen, Kontakte, Kalender und Budget seit #1483 ("one add button"),
          * die Uebersicht seit R14. Eingeklappt ist keiner mehr. */
-        const ANGEDOCKT_AM_ZEIGER = ['dashboard', 'tasks', 'calendar', 'shopping', 'meals', 'recipes',
+        /* 2026-10-24, Tafla: Dziś (`dashboard`) traegt keinen Seiten-FAB mehr.
+         * Sein Anlegen ist das globale + - am Zeiger der „Dodaj"-Kreis oben in
+         * der Seitenleiste (`.nav-sidebar__add`, Erfassen-Blatt), am Finger das
+         * + neben der Kapsel. Dass der Weg da ist, prueft die Zeile darunter;
+         * nichts schwebt (die Regel oben bleibt). */
+        const ANGEDOCKT_AM_ZEIGER = ['tasks', 'calendar', 'shopping', 'meals', 'recipes',
           'pantry', 'notes', 'contacts', 'birthdays', 'budget', 'documents'];
         assert.deepEqual({ angedockt: [...angedockt].sort(), eingeklappt },
           { angedockt: [...ANGEDOCKT_AM_ZEIGER].sort(), eingeklappt: [] },
           `Erwartet auf dem Zeiger: ${ANGEDOCKT_AM_ZEIGER.length} FABs in der Kopfleiste und kein eingeklappter, `
           + `dazu ${ohneFab} Seiten ohne FAB. Aendert sich das, aendert sich die Reichweite dieser Sonde.`);
+        assert.equal(dzisAnlegen, true, 'Dziś hat am Zeiger seinen Weg zum Anlegen: das + oben in der Seitenleiste');
       } else {
-        // 15 Routen minus die drei ohne FAB.
-        assert.ok(seen >= 12,
-          `Nur ${seen} Zustaende am Scroll-Ende gemessen - erwartet sind mindestens 12. Entweder `
-          + 'fehlt Modulen ihr FAB, oder keine Seite kam an ihr Scroll-Ende.');
-        assert.deepEqual(angedockt, [], 'am Finger dockt kein FAB an - der Platz dafuer ist die Nav-Kapsel');
+        /* 2026-10-24, Tafla: am Finger schwebt das + der Shell auf JEDER Seite
+         * (bis dahin: 15 Routen minus die drei ohne FAB = 12). Jede Modulroute
+         * misst deshalb ihr Scroll-Ende unter dem +; die Einstellungs-Blaetter
+         * kommen dazu. Weniger heisst: einer Seite fehlt das +, oder sie kam
+         * nicht an ihr Ende. */
+        assert.ok(seen >= ROUTE_NAMES.length,
+          `Nur ${seen} Zustaende am Scroll-Ende gemessen - erwartet sind mindestens ${ROUTE_NAMES.length} `
+          + '(jede Modulroute). Entweder fehlt einer Seite das +, oder keine Seite kam an ihr Scroll-Ende.');
+        /* Die Bedeutung von `angedockt == []` bleibt: am Finger lebt die
+         * Hauptaktion in der Nav-Zone. Seit Tafla ist das das + neben der
+         * Kapsel - auf jeder Seite, auf Kapselhoehe. Ein Seiten-FAB darf
+         * zusaetzlich als Geisterkreis im Kopf andocken (dockFabAsGhost); er
+         * schwebt nicht und verdeckt nichts. */
+        assert.deepEqual(ohnePlusInNav, [], 'am Finger steht das + in der Nav-Zone, auf jeder Seite');
       }
 
       assert.deepEqual(findings, [],

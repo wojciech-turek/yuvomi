@@ -2833,7 +2833,9 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > Titel (Więcej, Zadania) klappen unter 1024px ein - der Titel faellt auf 22px, die Zeile bleibt
 > gleich hoch; steht der grosse Titel im Inhalt (Einstellungs-Blatt, `[data-large-title]`),
 > erscheint er klein neben dem Rueckweg, sobald er unter der Leiste liegt („‹ Wygląd"). In jeder
-> eingeklappten Leiste bleiben die Kreise, am Telefon auch das Such-Icon (2026-10-24). Budget
+> eingeklappten Leiste bleiben die Kreise, am Telefon auch das Such-Icon (2026-10-24). Die Kante
+> eines gedeckelten Kopfes folgt dem Scroll seiner Liste, auch wenn deren Reserve das Einklappen
+> nicht traegt (Lead-Zone + 48px; /notes mit 91px gegen 56px). Budget
 > (`--period-inline`) behaelt Titel und Zeitraum in Zeile 2. Fuehrt ein Modul selbst zurueck
 > („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (capture.css). Kuchnia: „Kuchnia" als
 > grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·

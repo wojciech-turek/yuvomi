@@ -964,68 +964,79 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // blieb es bis zum naechsten senkrechten Scroll. Wer waagerecht Reserve
     // hat und senkrecht keine, ist nicht gemeint.
     if (reserve <= 0 && port.scrollWidth > port.clientWidth) return;
-    // EINKLAPPEN KANN NUR EIN VERMESSENER KOPF. `--capped` setzt `update()`,
-    // sobald es eine Lead-Zone gemessen hat; davor ist `lead` 0. Kam ein
-    // Scroll-Ereignis vor der ersten Messung an (der Kalender stellt seine
-    // Woche beim ersten Render auf „jetzt"), setzte es `is-collapsed` auf einen
-    // unvermessenen Kopf - und `update()` misst einen eingeklappten Kopf nie
-    // (siehe dort). Der Kopf blieb dann ausgeklappt sichtbar, aber als
-    // eingeklappt markiert, ohne Lead-Zone, bis zum Neuladen.
-    // Eine Faltzeile (siehe `foldRow` in update) hat keine Lead-Zone, aber
-    // eine vermessene Hoehe - sie ist ihre ganze Lead-Zone. Ihre Linie bleibt
-    // in beiden Zustaenden: sie ist die Kante des angedockten Kopfes.
-    const fold = toolbar.classList.contains('page-toolbar--fold-row') && foldH > 0;
-    // EIN EINZEILIGER KOPF TRAEGT SEINE KANTE, SOBALD INHALT UNTER IHM LIEGT
-    // (Tafla: kein Trenner in Ruhe, spec-components „Nagłówek"). Bis dahin
-    // stand die Linie hier durchgehend; seit Tafla haette er sonst in keinem
-    // Zustand eine Kante (Sonde 8).
-    // Auch die Faltzeile (einzeilig): ihre Linie steht, solange ihr Port
-    // gescrollt ist, ob sie faltet oder - zu wenig Reserve - stehen bleibt.
-    if (!lead) {
-      toolbar.classList.toggle('is-docked', port.scrollTop > 0);
-      // Der Titel im Inhalt: eingeklappt, sobald er unter der Leiste liegt -
-      // eine Frage der Lage, nicht der Geste.
-      if (titleCollapse && extTitle) {
-        setCollapsed(extTitle.getBoundingClientRect().bottom <= toolbar.getBoundingClientRect().bottom + 1, ['is-collapsed']);
+    try {
+      // EINKLAPPEN KANN NUR EIN VERMESSENER KOPF. `--capped` setzt `update()`,
+      // sobald es eine Lead-Zone gemessen hat; davor ist `lead` 0. Kam ein
+      // Scroll-Ereignis vor der ersten Messung an (der Kalender stellt seine
+      // Woche beim ersten Render auf „jetzt"), setzte es `is-collapsed` auf einen
+      // unvermessenen Kopf - und `update()` misst einen eingeklappten Kopf nie
+      // (siehe dort). Der Kopf blieb dann ausgeklappt sichtbar, aber als
+      // eingeklappt markiert, ohne Lead-Zone, bis zum Neuladen.
+      // Eine Faltzeile (siehe `foldRow` in update) hat keine Lead-Zone, aber
+      // eine vermessene Hoehe - sie ist ihre ganze Lead-Zone. Ihre Linie bleibt
+      // in beiden Zustaenden: sie ist die Kante des angedockten Kopfes.
+      const fold = toolbar.classList.contains('page-toolbar--fold-row') && foldH > 0;
+      // EIN EINZEILIGER KOPF TRAEGT SEINE KANTE, SOBALD INHALT UNTER IHM LIEGT
+      // (Tafla: kein Trenner in Ruhe, spec-components „Nagłówek"). Bis dahin
+      // stand die Linie hier durchgehend; seit Tafla haette er sonst in keinem
+      // Zustand eine Kante (Sonde 8).
+      // Auch die Faltzeile (einzeilig): ihre Linie steht, solange ihr Port
+      // gescrollt ist, ob sie faltet oder - zu wenig Reserve - stehen bleibt.
+      if (!lead) {
+        toolbar.classList.toggle('is-docked', port.scrollTop > 0);
+        // Der Titel im Inhalt: eingeklappt, sobald er unter der Leiste liegt -
+        // eine Frage der Lage, nicht der Geste.
+        if (titleCollapse && extTitle) {
+          setCollapsed(extTitle.getBoundingClientRect().bottom <= toolbar.getBoundingClientRect().bottom + 1, ['is-collapsed']);
+          return;
+        }
+        if (!fold && !titleCollapse) return;
+      }
+      if (!fold && !toolbar.classList.contains('page-toolbar--capped')) return;
+      // Ohne Lead-Zone haengt die Kante am Scrollstand (oben), nicht am Einklappen.
+      const states = fold || !lead ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
+      // Nur kollabieren, wenn der Port das Ausklappen danach auch verkraftet -
+      // sonst schiebt die zurückkehrende Kopfhöhe den Scroll auf 0, der Kopf
+      // klappt wieder aus und beides pendelt gegeneinander.
+      // Die Faltzeile misst die Reserve AUSGEKLAPPT: gefaltet ist der Port um
+      // ihren negativen Rand laenger und die Reserve um genau so viel kuerzer.
+      // Gegen die gefaltete Reserve gemessen, klappte eine knappe Liste (Rezepte
+      // mit einem aufgeklappten Rezept: 166px ausgeklappt, 102px gefaltet) beim
+      // naechsten Scroll-Ereignis wieder aus - und dann wieder ein. Der
+      // berechnete Rand gilt auch mitten in der Bewegung.
+      // Dasselbe gilt fuer einen gedeckelten Kopf, der eingeklappt wirklich
+      // kuerzer ist (Kalender mobil seit R17: 117 -> 65px): der Port ist dann um
+      // die Differenz hoeher und die Reserve um genau so viel kleiner. Gegen die
+      // eingeklappte Reserve gemessen, pendelte eine Liste, deren Reserve
+      // zwischen Schwelle und Schwelle + Differenz liegt. `openH` ist die Hoehe
+      // der letzten ausgeklappten Messung.
+      const shorter = !fold && !barMode && toolbar.classList.contains('is-collapsed') && openH > 0
+        ? Math.max(0, openH - toolbar.getBoundingClientRect().height)
+        : 0;
+      const unfolded = fold
+        ? reserve - Math.min(0, parseFloat(getComputedStyle(toolbar).marginBlockEnd) || 0)
+        : reserve + shorter;
+      if (unfolded < (fold ? foldH : lead) + 48) {
+        setCollapsed(false, states);
         return;
       }
-      if (!fold && !titleCollapse) return;
+      // Ab hier nur noch der Nutzer (siehe `gestureTarget` oben).
+      if (!gestureTarget || !port.contains(gestureTarget)) return;
+      const top = port.scrollTop;
+      // `was-collapsed`: ab jetzt darf der Titel beim Ausklappen einblenden
+      // (layout.css, `page-title-settle-back`) - nicht schon beim Seitenaufbau.
+      if (top > 24) setCollapsed(true, states);
+      else if (top < 8) setCollapsed(false, states);
+    } finally {
+      // DIE KANTE FOLGT DEM INHALT, AUCH MIT LEAD-ZONE (Tafla, 2026-10-24).
+      // Bis dahin stand sie nur mit dem Einklappen - und das verweigert ein
+      // Port, der das Ausklappen danach nicht traegt (oben). Auf /notes mit
+      // 91px Reserve gegen 56px Lead-Zone lief die Liste dann unter einem Kopf
+      // ohne Kante (Sonde 8). Jetzt steht sie, sobald der Port gescrollt ist.
+      if (lead > 0 && toolbar.classList.contains('page-toolbar--capped')) {
+        toolbar.classList.toggle('is-docked', toolbar.classList.contains('is-collapsed') || port.scrollTop > 0);
+      }
     }
-    if (!fold && !toolbar.classList.contains('page-toolbar--capped')) return;
-    // Ohne Lead-Zone haengt die Kante am Scrollstand (oben), nicht am Einklappen.
-    const states = fold || !lead ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
-    // Nur kollabieren, wenn der Port das Ausklappen danach auch verkraftet -
-    // sonst schiebt die zurückkehrende Kopfhöhe den Scroll auf 0, der Kopf
-    // klappt wieder aus und beides pendelt gegeneinander.
-    // Die Faltzeile misst die Reserve AUSGEKLAPPT: gefaltet ist der Port um
-    // ihren negativen Rand laenger und die Reserve um genau so viel kuerzer.
-    // Gegen die gefaltete Reserve gemessen, klappte eine knappe Liste (Rezepte
-    // mit einem aufgeklappten Rezept: 166px ausgeklappt, 102px gefaltet) beim
-    // naechsten Scroll-Ereignis wieder aus - und dann wieder ein. Der
-    // berechnete Rand gilt auch mitten in der Bewegung.
-    // Dasselbe gilt fuer einen gedeckelten Kopf, der eingeklappt wirklich
-    // kuerzer ist (Kalender mobil seit R17: 117 -> 65px): der Port ist dann um
-    // die Differenz hoeher und die Reserve um genau so viel kleiner. Gegen die
-    // eingeklappte Reserve gemessen, pendelte eine Liste, deren Reserve
-    // zwischen Schwelle und Schwelle + Differenz liegt. `openH` ist die Hoehe
-    // der letzten ausgeklappten Messung.
-    const shorter = !fold && !barMode && toolbar.classList.contains('is-collapsed') && openH > 0
-      ? Math.max(0, openH - toolbar.getBoundingClientRect().height)
-      : 0;
-    const unfolded = fold
-      ? reserve - Math.min(0, parseFloat(getComputedStyle(toolbar).marginBlockEnd) || 0)
-      : reserve + shorter;
-    if (unfolded < (fold ? foldH : lead) + 48) {
-      setCollapsed(false, states);
-      return;
-    }
-    // Ab hier nur noch der Nutzer (siehe `gestureTarget` oben).
-    if (!gestureTarget || !port.contains(gestureTarget)) return;
-    const top = port.scrollTop;
-    // `was-collapsed`: ab jetzt darf der Titel beim Ausklappen einblenden
-    // (layout.css, `page-title-settle-back`) - nicht schon beim Seitenaufbau.
-    if (top > 24) setCollapsed(true, states);
-    else if (top < 8) setCollapsed(false, states);
   };
   // Die Leiste lauscht am Scrollport der Seite selbst - nur an IHM: innere
   // Streifen und Listen der Seite sind nicht ihr Scroll. Ein einzeiliger Kopf
@@ -1298,8 +1309,11 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
       // Ohne Lead-Zone: die Kante steht, sobald Inhalt unter dem Kopf liegt
       // (Tafla). In der gedeckelten Bauart weiss das nur der Scroll des
       // inneren Ports (onInnerScroll) - hier bleibt sein letzter Stand.
+      // Mit Lead-Zone (gedeckelt, Leiste) gehoert die Kante dem Scroll-Handler
+      // (onInnerScroll) - eine Messung nimmt sie ihm nicht weg.
       const under = capped ? toolbar.classList.contains('is-docked') : (scrollport?.scrollTop ?? 0) > 0;
-      toolbar.classList.toggle('is-docked', !lead && under);
+      if (!lead) toolbar.classList.toggle('is-docked', under);
+      else if (!toolbar.classList.contains('page-toolbar--capped')) toolbar.classList.remove('is-docked');
       return;
     }
     // DER BEOBACHTUNGSRAHMEN IST UM EINEN PIXEL KLEINER ALS DER SCROLLPORT,
