@@ -480,7 +480,9 @@ sections); the approved artboards and spec live with the design brief (BUILD.md)
   bare marks (dots, the detail strip, the today ring) stay `--color-accent`.
 - **Status as words.** success / warning / danger each come with a `-tint` and appear as
   a word in a tinted pill ("zaległe", "jutro"), never as bare colour and never repeated
-  down a list; money is ink. Success only for income, a positive balance and "kwita".
+  down a list; money is ink. Success only for income, a change for the better (trend) and
+  "kwita"; a positive balance is ink too (2026-10-24, like account balances since R18),
+  only a negative one is red.
 - **The four-size scale** (Large title 34/41, Title 22/28, Body 17/22, Footnote 13/18;
   weights 400/600; `--type-large-title`, `--type-title`, `--type-body`, `--type-footnote`
   with `-lh`), the wall's four fluid steps (`--wall-display` 112, `--wall-title` 44,
