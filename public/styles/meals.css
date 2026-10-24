@@ -2239,9 +2239,12 @@
   height: 20px;
 }
 
-/* Das Menue der Herd-Karte: mit Zeiger ein Kreis neben "Gotuj"; am Finger
- * oeffnet langes Druecken dasselbe Menue, der Knopf bleibt fuer Tastatur und
- * VoiceOver erreichbar (geclippt wie .sr-only, sichtbar beim Fokus). */
+/* Das Menue der Herd-Karte: ein Kreis neben "Gotuj", auf jedem Geraet. Am
+ * Finger oeffnet langes Druecken auf die Karte dasselbe Menue - aber eine
+ * Geste ist kein Weg, den man sieht. Bis 2026-10-24 stand der Knopf am Finger
+ * nur fuer Tastatur und VoiceOver da (1px geclippt, sichtbar beim Fokus) und
+ * lag damit in jeder Lage unter "Gotuj": kein Ziel, das man allein trifft
+ * (Sonde 4, mobil). Jetzt ist er ein volles 52er-Ziel in der Aktionszeile. */
 .meals-hero__more {
   flex: none;
   width: 52px;
@@ -2251,21 +2254,9 @@
   justify-content: center;
   border: 0;
   border-radius: var(--radius-full);
-  background-color: var(--color-surface);
+  background-color: var(--color-raised);
   color: var(--color-text-primary);
   cursor: pointer;
-}
-
-@media (hover: none) {
-  .meals-hero__more:not(:focus-visible) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
 }
 
 /* ---- Tage: Ueberschrift + gruppierte Karte ---- */

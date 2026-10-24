@@ -1892,9 +1892,8 @@ function heroHtml(meal) {
                 aria-label="${esc(t('meals.cookNamedAria', { title: meal.title }))}">
           <i data-lucide="chef-hat" aria-hidden="true"></i><span>${esc(t('meals.cook'))}</span>
         </button>
-        ${/* Das Menue der Mahlzeit: am Finger per langem Druck auf die Karte,
-            mit Zeiger und Tastatur ueber diesen Knopf (am Finger nur fuer
-            Tastatur und VoiceOver sichtbar, siehe meals.css). */ ''}
+        ${/* Das Menue der Mahlzeit: ueber diesen Knopf auf jedem Geraet, am
+            Finger zusaetzlich per langem Druck auf die Karte (meals.css). */ ''}
         <button type="button" class="row-action meals-hero__more" data-action="phone-meal-menu" data-meal-id="${meal.id}"
                 aria-label="${esc(t('meals.mealMenu', { title: meal.title }))}"><i data-lucide="ellipsis" aria-hidden="true"></i></button>
       </div>
