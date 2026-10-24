@@ -815,11 +815,10 @@ function revealOverviewSection(content, domainId) {
  */
 function renderToolbar(toolbar, content, { activeLeaf, domain, user = null }) {
   if (activeLeaf && domain) {
-    // TAFLA: der Rueckweg ist der 36pt-Kreis geschobener Seiten (`.page-back`,
-    // capture.css; „Wróć: Ustawienia"). Steht er im Kopf, legt der Router
-    // keinen zweiten an (router.js, syncPageBack).
+    // TAFLA: der Rueckweg ist ein 36pt-Kreis wie der geschobener Seiten
+    // („Wróć: Ustawienia", settings.css). Den Kreis „Wróć: Więcej" der Shell
+    // nimmt capture.css zurueck, solange dieser im Kopf steht.
     const back = createLink(settingsOverviewUrl(domain.id), 'settings-toolbar__back');
-    back.classList.add('page-back');
     back.setAttribute('aria-label', t('settings.backToSettings'));
     back.append(createIcon('chevron-left', 'settings-toolbar__back-icon'));
     // DER MODULKOPF WIE UEBERALL (D8, Critique 2026-10-16). Am Desktop stand

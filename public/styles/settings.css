@@ -632,20 +632,34 @@
   flex: 0 0 auto;
 }
 
-/* TAFLA: der Rueckweg ist der Kreis geschobener Seiten (`.page-back`,
- * capture.css) - Tinte, kein Violett; die Geometrie kommt vom Kreis. */
-.settings-toolbar__back.page-back {
+/* TAFLA: der Rueckweg des Blatts ("Wróć: Ustawienia") ist ein 36er Kreis
+ * wie der geschobener Seiten (`.page-back`, capture.css) - Tinte, kein
+ * Violett. Eigene Klasse, nicht `.page-back`: capture.css nimmt den Kreis der
+ * Shell zurueck, sobald ein Modul selbst zurueckfuehrt
+ * (`:has(> .settings-toolbar__back) > .page-back`). */
+.settings-toolbar__back {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
   margin-inline-start: calc(-1 * var(--ghost-circle-inset));
   padding: var(--ghost-circle-inset);
+  background-color: var(--color-fill);
+  background-clip: content-box;
   color: var(--color-text-primary);
 }
 
-.settings-toolbar__back.page-back .settings-toolbar__back-icon {
+.settings-toolbar__back .settings-toolbar__back-icon {
   width: var(--space-5);
   height: var(--space-5);
+  stroke-width: var(--tab-icon-stroke-active);
 }
 
-.settings-toolbar__back:hover,
+/* Der Kreis steht in einer eigenen Zeile ueber dem Blatt (wie `.page-back`). */
+.settings-shell-header > .settings-toolbar__back {
+  margin-inline-end: 100%;
+}
+
 .settings-breadcrumb__link:hover {
   color: var(--color-accent);
 }
