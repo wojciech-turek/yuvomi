@@ -22,6 +22,7 @@ import { householdMemberSql, memberOrderSql, memberPositionSql, newNonMembers, n
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { visibilityWhere } from '../services/visibility.js';
 import { displayActingPerson, isDisplayRequest } from '../services/display-acting.js';
+import { refuseWallWrite } from '../services/wall-settings.js';
 
 const log = createLogger('Rewards');
 const router = express.Router();
@@ -510,8 +511,16 @@ router.post('/redemptions', (req, res) => {
     // Person. Ob ueberhaupt jemand freigeben muss, bleibt unveraendert die
     // Einstellung des Haushalts (`rewards_require_approval`) - ein Display
     // verschiebt diese Grenze nicht, in keine Richtung.
+    //
+    // ERST DER SCHALTER DES HAUSHALTS (Tafla, 2026-10-19): die Wand ist
+    // schreibgeschuetzt, bis ein Admin „Pozwól odhaczać na ścianie" einschaltet
+    // - fuer jede Schreibroute des Tabletts, auch fuer diese. Wie beim Abhaken
+    // steht die Frage vor allem anderen: sie handelt vom Haushalt, nicht von
+    // der Person oder der Praemie. Die Geld-Anfrage darueber bleibt am Tablett
+    // ohnehin immer zu (`money_not_on_display`).
     let targetId;
     if (isDisplayRequest(req)) {
+      if (refuseWallWrite(req, res, { db: d })) return;
       const actor = displayActingPerson(req, req.body?.user_id, 'rewards', { db: d });
       if (!actor.ok) return res.status(actor.status).json({ error: actor.error, code: actor.status, ...(actor.reason ? { reason: actor.reason } : {}) });
       targetId = actor.userId;

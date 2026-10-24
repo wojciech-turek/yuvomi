@@ -21,6 +21,7 @@ import { listVisibleCategories } from '../services/note-categories.js';
 import { syncPreventionRemindersForSubject } from '../services/prevention-reminders.js';
 import { syncAllFastingReminders } from '../services/fasting-reminders.js';
 import { isScreensaverEnabled } from './screensaver.js';
+import { normalizeWallSections, parseWallSections } from '../services/wall-settings.js';
 // Geteilte isomorphe Util (#620, Allowlist in test/test-layer-boundary.js):
 // dasselbe Kennungsformat, das Event-Modal und Einstellungen verwenden.
 import { parseSyncTargetValue } from '../../public/utils/sync-target.js';
@@ -671,6 +672,11 @@ router.get('/', (req, res) => {
         health_prevention_notify_caregivers: cfgUserGet('health_prevention_notify_caregivers', req.authUserId) === '1',
         rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
+        // The kitchen wall (Tafla, 2026-10-19): may it tick things off, and
+        // which sections does it show. Household-wide; the display reads both
+        // (DISPLAY_PREFERENCE_KEYS) to draw itself, the routes enforce the first.
+        wall_allow_ticking: cfgGet('wall_allow_ticking') === '1',
+        wall_sections: parseWallSections(cfgGet('wall_sections')),
         tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
         countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -
@@ -739,7 +745,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -1211,6 +1217,29 @@ router.put('/', (req, res) => {
       cfgSet('tasks_subtasks_expanded', tasks_subtasks_expanded ? '1' : '0');
     }
 
+    // The kitchen wall (Tafla, 2026-10-19). Admin only: a household choice
+    // about what a shared screen may do, not a personal view.
+    if (wall_allow_ticking !== undefined) {
+      if (!isAdminRequest(req)) {
+        return res.status(403).json({ error: 'Admin access required.', code: 403 });
+      }
+      if (typeof wall_allow_ticking !== 'boolean') {
+        return res.status(400).json({ error: 'wall_allow_ticking must be a boolean', code: 400 });
+      }
+      cfgSet('wall_allow_ticking', wall_allow_ticking ? '1' : '0');
+    }
+
+    if (wall_sections !== undefined) {
+      if (!isAdminRequest(req)) {
+        return res.status(403).json({ error: 'Admin access required.', code: 403 });
+      }
+      const sections = normalizeWallSections(wall_sections, parseWallSections(cfgGet('wall_sections')));
+      if (!sections) {
+        return res.status(400).json({ error: 'wall_sections must map known wall sections to booleans', code: 400 });
+      }
+      cfgSet('wall_sections', JSON.stringify(sections));
+    }
+
     // Standard-Punktwert für neue Aufgaben (#578). 0 schaltet den Standard ab.
     if (tasks_default_points !== undefined) {
       if (!isAdminRequest(req)) {
@@ -1489,6 +1518,11 @@ router.put('/', (req, res) => {
         health_prevention_notify_caregivers: cfgUserGet('health_prevention_notify_caregivers', req.authUserId) === '1',
         rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
+        // The kitchen wall (Tafla, 2026-10-19): may it tick things off, and
+        // which sections does it show. Household-wide; the display reads both
+        // (DISPLAY_PREFERENCE_KEYS) to draw itself, the routes enforce the first.
+        wall_allow_ticking: cfgGet('wall_allow_ticking') === '1',
+        wall_sections: parseWallSections(cfgGet('wall_sections')),
         tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
         countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -

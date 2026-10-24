@@ -1,0 +1,38 @@
+{
+  "wall.allDone": {
+    "en": "All done for today",
+    "pl": "Na dziś wszystko"
+  },
+  "wall.dinnerAt": {
+    "en": "Dinner · {{time}}",
+    "pl": "Kolacja · {{time}}"
+  },
+  "wall.cookAria": {
+    "en": "Cook: {{title}}",
+    "pl": "Gotuj: {{title}}"
+  },
+  "wall.runningOut": {
+    "en": "Running low: {{items}}",
+    "pl": "Kończy się: {{items}}"
+  },
+  "wall.runningOutLabel": {
+    "en": "Running low:",
+    "pl": "Kończy się:"
+  },
+  "wall.onList": {
+    "en": "{{n}} on the list",
+    "pl": "{{n}} na liście"
+  },
+  "wall.stale": {
+    "en": "data from {{minutes}} min ago",
+    "pl": "dane sprzed {{minutes}} min"
+  },
+  "wall.minutesShort": {
+    "en": "min",
+    "pl": "min"
+  },
+  "wall.readOnly": {
+    "en": "The wall only shows things. Ticking off can be turned on in Settings › Kitchen tablet.",
+    "pl": "Ściana tylko pokazuje. Odhaczanie włączysz w Ustawieniach › Tablet w kuchni."
+  }
+}

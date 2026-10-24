@@ -310,52 +310,49 @@ test('Kopf in der kompakten Hoehenklasse (640x400): nur die Datumszeile bleibt s
   assert.ok(m.overview.height <= 72, `Der Kopf ist in 400px Hoehe ${m.overview.height}px hoch`);
 });
 
-test('Wand-Modus: der Stand-Anker steht weiter auf der Wand', async () => {
+// TAFLA (2026-10-19): hier stand „der Stand-Anker steht weiter auf der Wand"
+// („Zaktualizowano 18:11" im Fuss). Das Artboard „Ściana" hat kein
+// „Updated" mehr - die Wand sagt ihren Datenstand nur, wenn er alt ist
+// („dane sprzed 12 min", test:wall-tafla).
+test('Wand-Modus: ein frischer Datenstand steht nicht auf der Wand', async () => {
   const page = await openPage(harness, { device: 'desktop' });
   await page.evaluate(() => localStorage.setItem('yuvomi-wall-mode', '1'));
   await gotoRoute(page, '/');
-  await page.waitForFunction(() => document.querySelector('.wall__updated')?.textContent.trim(), { timeout: 10000 })
-    .catch(() => {});
-  const stamp = await page.evaluate(() => {
-    const el = document.querySelector('.wall__updated');
-    const r = el?.getBoundingClientRect();
-    return { text: el?.textContent.trim() ?? '', shown: !!r && r.width > 1 && r.height > 1 };
-  });
+  await page.waitForSelector('.wall-plan, .wall-hero, .wall__stage', { timeout: 10000 }).catch(() => {});
+  const m = await page.evaluate(() => ({
+    wall: !!document.querySelector('.wall'),
+    updated: !!document.querySelector('.wall__updated'),
+    stale: !!document.querySelector('.wall__stale'),
+  }));
   await page.evaluate(() => localStorage.removeItem('yuvomi-wall-mode'));
   await page.close();
-  assert.match(stamp.text, /\d{1,2}:\d{2}/, `Kein Stand auf der Wand: "${stamp.text}"`);
-  assert.ok(stamp.shown, 'Der Stand steht nicht sichtbar auf der Wand');
+  assert.ok(m.wall, 'Reichweite: die Wand steht');
+  assert.ok(!m.updated && !m.stale, 'frisch geladen: kein Stand, keine Warnung');
 });
 
-test('Wand-Modus 1280x800: Abschnittstitel aus zwei Metern lesbar, ein ruhiger Tag spricht groesser', async () => {
+test('Wand-Modus 1280x800: nichts unter 24px, und das Dock liegt im Bild', async () => {
   const page = await openPage(harness, { device: 'desktop' });
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
   await page.evaluate(() => localStorage.setItem('yuvomi-wall-mode', '1'));
   await gotoRoute(page, '/');
-  await page.waitForSelector('.wall-program__list .wall-row', { timeout: 10000 }).catch(() => {});
+  await page.waitForSelector('.wall-plan__list .wall-row, .wall-plan__state', { timeout: 10000 }).catch(() => {});
   await freeze(page);
   const m = await page.evaluate(() => {
-    const px = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0);
-    const list = document.querySelector('.wall-program__list');
-    const rows = list ? list.children.length : 0;
-    const foot = document.querySelector('.wall__foot')?.getBoundingClientRect();
-    return {
-      rows,
-      section: px(document.querySelector('.wall__section-title')),
-      rowTitle: px(document.querySelector('.wall-row__title')),
-      fits: !!foot && foot.bottom <= innerHeight + 1,
-    };
+    const wall = document.querySelector('.wall');
+    const sizes = [...(wall?.querySelectorAll('*') ?? [])]
+      .filter((el) => el.childNodes.length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+      .filter((el) => el.getClientRects().length && !el.closest('.sr-only'))
+      .map((el) => ({ text: el.textContent.trim().slice(0, 30), px: parseFloat(getComputedStyle(el).fontSize) }));
+    const dock = document.querySelector('.wall__dock')?.getBoundingClientRect();
+    return { sizes, fits: !!dock && dock.bottom <= innerHeight + 1, scrolls: (wall?.scrollHeight ?? 0) > innerHeight + 1 };
   });
   await page.evaluate(() => localStorage.removeItem('yuvomi-wall-mode'));
   await page.close();
-  assert.ok(m.rows > 0, 'Reichweite: die Wand zeigt kein Programm');
-  // Vorher 20px - an `vw` gebunden und bei 1280px gekappt.
-  assert.ok(m.section >= 24, `Abschnittstitel ${m.section}px`);
-  assert.ok(m.fits, 'Der Fuss mit Stand und Ausstieg liegt nicht mehr im Bild');
-  if (m.rows <= 3) {
-    // Vorher 32px, egal wie viel auf der Wand stand.
-    assert.ok(m.rowTitle >= 40, `${m.rows} Zeilen, aber der Zeilentitel steht bei ${m.rowTitle}px`);
-  }
+  assert.ok(m.sizes.length > 5, `Reichweite: ${m.sizes.length} Texte gelesen`);
+  const small = m.sizes.filter((x) => x.px < 24);
+  assert.deepEqual(small, [], 'auf der Wand steht nichts unter 24px');
+  assert.ok(m.fits, 'Das Dock mit Ausstieg und Minutnik liegt nicht im Bild');
+  assert.ok(!m.scrolls, 'Die Wand passt in das Bild - sie scrollt nicht');
 });
 
 /* DER AUSSTIEG LIEGT IN JEDER GROESSE IM BILD (#1559). Die Sonde darueber mass
@@ -377,13 +374,13 @@ for (const viewport of WALL_VIEWPORTS) {
     await page.setViewport(viewport);
     await page.evaluate(() => localStorage.setItem('yuvomi-wall-mode', '1'));
     await gotoRoute(page, '/');
-    await page.waitForSelector('.wall-program__list .wall-row', { timeout: 10000 }).catch(() => {});
+    await page.waitForSelector('.wall-plan__list .wall-row, .wall-plan__state', { timeout: 10000 }).catch(() => {});
     await freeze(page);
     const m = await page.evaluate(() => {
       const btn = document.getElementById('wall-exit');
       if (!btn) return null;
       const r = btn.getBoundingClientRect();
-      const label = btn.querySelector('.wall__foot-btn-label');
+      const label = btn.querySelector('span');
       const lr = label?.getBoundingClientRect();
       const lcs = label ? getComputedStyle(label) : null;
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);

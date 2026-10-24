@@ -22193,11 +22193,13 @@ test('R20: der Auswahlmodus nimmt Kapsel, FAB und Wisch-Pfeil weg, die ganze Zei
 // Initialen zu.
 test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Initialen frei', () => {
   const dash = read('../public/pages/dashboard.js');
-  assert.match(dash, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
+  // TAFLA (2026-10-19): das Markup der Wand steht in components/wall-view.js.
+  const wallView = read('../public/components/wall-view.js');
+  assert.match(wallView, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
   // TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (enterWallFromToday).
   const enter = dash.slice(dash.indexOf('function enterWallFromToday('));
   assert.match(enter.slice(0, 200), /_wallFocusIntent = 'enter'/, 'der Start merkt sich, wohin der Fokus soll');
-  const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function renderWallWeather('));
+  const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function updateWallClock('));
   assert.match(wall, /captureRebuildFocus\(/, 'der stille Neuaufbau nimmt den Fokus mit');
   assert.match(wall, /takeWallFocusIntent\('enter'\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
   const leave = dash.slice(dash.indexOf('function wireWallExit('), dash.indexOf('function wireWallExit(') + 400);
@@ -22208,11 +22210,12 @@ test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Ini
   assert.match(timer, /role="group" aria-labelledby="wall-timer-presets-label"/, 'die sichtbare Zeile ist der Name der Gruppe');
   assert.match(timer, /class="wall__timer-presets-label" id="wall-timer-presets-label"/);
 
-  const css = [...eachRule(read('../public/styles/dashboard.css'))].filter((r) => !r.at.length);
-  const count = css.find((r) => r.selector.trim() === '.wall-who__count');
-  assert.match(count?.body ?? '', /inset-inline-start:\s*calc\(100% - var\(--space-3\)\)/, 'die Marke waechst vom Gesicht weg, nicht ueber die Buchstaben');
-  assert.doesNotMatch(count?.body ?? '', /inset-inline-end/);
-  assert.ok(css.some((r) => r.selector.trim() === '.wall-who__list--tasks .wall-who__mark' && /display:\s*contents/.test(r.body)), 'mit Titeln steht die Marke hinter dem Namen');
+  // TAFLA (2026-10-19): die Zaehlmarke an den Gesichtern ist mit „Wer heute
+  // dran ist" gegangen. Was von der Regel bleibt: auf einer Personenscheibe
+  // der Wand liegt nichts ueber den Initialen - sie traegt nur ihren Text.
+  const css = [...eachRule(read('../public/styles/dashboard.css'))];
+  assert.ok(!css.some((r) => /wall-who__count|wall-who__mark/.test(r.selector)), 'keine Marke ueber den Gesichtern mehr');
+  assert.ok(!css.some((r) => /\.wall-disc[^,{]*::(?:before|after)/.test(r.selector)), 'nichts legt sich ueber die Initialen');
 });
 
 // R20 D6 (Re-Critique 2026-10-17, A3 Sam): Enter auf einen leeren Monatstag

@@ -36,11 +36,13 @@ const TIMER_KEY = 'yuvomi-wall-timer';
 /**
  * Die waehlbaren Dauern, in Minuten.
  *
- * Fuenf Knoepfe, keine Zahleneingabe: aus zwei Metern ist ein Tastenfeld nicht
+ * Vier Scheiben, keine Zahleneingabe: aus zwei Metern ist ein Tastenfeld nicht
  * bedienbar, und die Kueche braucht keine Minute 17. Die Reihe deckt das
- * Uebliche - Ei, Nudeln, Ziehzeit, Ofen.
+ * Uebliche - Ei, Nudeln, Ziehzeit. TAFLA (2026-10-19): 3/5/10/15 als 80pt
+ * Scheiben im Dock der Wand; die 30 ist gegangen, sie passte nicht mehr neben
+ * den Ausstieg und war die seltenste.
  */
-export const WALL_TIMER_PRESETS = [3, 5, 10, 15, 30];
+export const WALL_TIMER_PRESETS = [3, 5, 10, 15];
 
 /**
  * Solange ein Timer laeuft, traegt die Wurzel dieses Attribut. Der
@@ -120,26 +122,23 @@ export function formatWallTimer(remainingMs) {
  */
 export function renderWallTimer({ state, remainingMs } = readWallTimer()) {
   if (state === 'idle') {
-    // Die Startknoepfe stehen direkt da, ohne Auswahl-Ebene davor. Ein Menue
+    // Die Startscheiben stehen direkt da, ohne Auswahl-Ebene davor. Ein Menue
     // waere ein zweiter Tipp aus zwei Metern - und sein offener Zustand lebte
-    // nur im DOM, das der stille Refresh regelmaessig neu baut.
+    // nur im DOM, das der stille Refresh regelmaessig neu baut. TAFLA: 80pt
+    // Scheiben auf --color-fill, die Zahl gerundet, darunter „min".
     const buttons = WALL_TIMER_PRESETS.map((minutes) => `
         <button type="button" class="wall__timer-preset" data-wall-timer-start="${minutes}">
-          ${t('dashboard.wallTimerMinutes', { count: minutes })}
+          <span class="wall__timer-preset-num u-rounded">${minutes}</span>
+          <span class="wall__timer-preset-unit">${t('wall.minutesShort')}</span>
         </button>`).join('');
     return {
       display: '',
       controls: `
       <div class="wall__timer-presets" role="group" aria-labelledby="wall-timer-presets-label">
-        ${/* DAS WORT STEHT DA (R20, Re-Critique 2026-10-17 A1 P2-6). Fuenf
-             Kapseln „3 Min" bis „30 Min" ohne Gegenstand lasen sich aus zwei
-             Metern wie Zeitfilter des Programms; „Kuechentimer" stand nur im
-             Namen der Gruppe, also nur fuer den Screenreader. Jetzt ist die
-             sichtbare Zeile der Name. */''}
-        <span class="wall__timer-presets-label" id="wall-timer-presets-label">
-          <i data-lucide="timer" aria-hidden="true"></i>
-          <span>${t('dashboard.wallTimerLabel')}</span>
-        </span>
+        ${/* DAS WORT STEHT DA (R20, Re-Critique 2026-10-17 A1 P2-6): die
+             sichtbare Zeile ist der Name der Gruppe, damit die Scheiben sich
+             nicht wie Zeitfilter des Plans lesen. */''}
+        <span class="wall__timer-presets-label" id="wall-timer-presets-label">${t('dashboard.wallTimerLabel')}</span>
         ${buttons}
       </div>`,
     };
@@ -152,16 +151,20 @@ export function renderWallTimer({ state, remainingMs } = readWallTimer()) {
   // und schweigt (aria-live off). Die ZUSTANDSWECHSEL sagt `wireWallTimer`
   // ueber die Region des Aufrufers an: eine Region, die mit jedem Render neu
   // entsteht, wird von Screenreadern nicht verlaesslich gehoert.
+  //
+  // TAFLA: die Anzeige nimmt den Platz der Uhr ein (Plakatgroesse, die Uhr
+  // rueckt in die Datumszeile, components/wall-view.js).
   return {
     display: `
       <div class="wall__timer" data-state="${done ? 'done' : 'running'}" role="timer">
-        <span class="wall__timer-value">${done ? t('dashboard.wallTimerDone') : formatWallTimer(remainingMs)}</span>
+        <span class="wall__timer-label">${t('dashboard.wallTimerLabel')}</span>
+        <span class="wall__timer-value u-rounded">${done ? t('dashboard.wallTimerDone') : formatWallTimer(remainingMs)}</span>
       </div>`,
     controls: `
-      <button type="button" class="wall__foot-btn" id="wall-timer-stop"
+      <button type="button" class="wall-ghost${done ? ' wall-ghost--primary' : ''}" id="wall-timer-stop"
               aria-label="${t(done ? 'dashboard.wallTimerAcknowledge' : 'dashboard.wallTimerCancel')}">
         <i data-lucide="${done ? 'check' : 'x'}" aria-hidden="true"></i>
-        <span class="wall__foot-btn-label" aria-hidden="true">${t(done ? 'dashboard.wallTimerAcknowledge' : 'dashboard.wallTimerCancel')}</span>
+        <span aria-hidden="true">${t(done ? 'dashboard.wallTimerAcknowledge' : 'dashboard.wallTimerCancel')}</span>
       </button>`,
   };
 }
@@ -263,30 +266,15 @@ export function wireWallTimer(wall, rerender, signal, { announce = () => {} } = 
   };
 
   wall.querySelectorAll('[data-wall-timer-start]').forEach((btn) => {
-    /* DER ERSTE ZEIGER AUF EINER SCHLAFENDEN WAND WECKT NUR (Critique
-     * 2026-09-23). Die Wand bringt ihren Betrachtern bei, dass eine Beruehrung
-     * sie weckt (`data-wall-awake`, wireWallSurface) - und die Startknoepfe
-     * liegen im Fussband, genau dort, wo so eine Beruehrung landet. Ein Tipp,
-     * der die Flaeche wecken sollte, startete einen Timer, der Minuten spaeter
-     * im leeren Flur laeutet und bis dahin den Screensaver blockiert.
-     *
-     * Gemessen wird der Zustand BEIM pointerdown: das Wecken haengt als
-     * Bubble-Listener am window und setzt das Attribut erst danach, der click
-     * kaeme also immer auf eine wache Wand. Die Tastatur (click mit detail 0,
-     * ohne pointerdown) ist davon ausgenommen - wer fokussiert, sieht den
-     * Knopf per :focus-visible bereits voll.
-     *
-     * Der Ausstieg und der Abbruch-Knopf sind NICHT gedrosselt: der eine ist
-     * der Notausgang der Flaeche, der andere beendet einen Timer, den man
-     * laufen sieht. */
-    let pressedWhileAsleep = false;
-    btn.addEventListener('pointerdown', () => {
-      pressedWhileAsleep = !wall.hasAttribute('data-wall-awake');
-    }, { signal });
-    btn.addEventListener('click', (event) => {
-      const wakeOnly = pressedWhileAsleep && event.detail !== 0;
-      pressedWhileAsleep = false;
-      if (wakeOnly) return;
+    /* TAFLA (2026-10-19): DER ERSTE TIPP STARTET. Bis dahin weckte der erste
+     * Zeiger auf eine schlafende Wand nur (Critique 2026-09-23): die
+     * Startknoepfe ruhten fast unsichtbar im Fussband, und ein Tipp, der die
+     * Flaeche wecken sollte, startete einen Timer, den niemand gesehen hatte.
+     * Die Tafla-Scheiben ruhen dagegen voll sichtbar (80pt auf --color-fill,
+     * dieselbe Tinte wie wach) - einen Tipp, der nur weckt, hielte man dort
+     * fuer einen Defekt. Der Foto-Screensaver faengt seinen Tipp weiter selbst
+     * ab (photo-screensaver.js), dort startet nichts. */
+    btn.addEventListener('click', () => {
       // Angelegt bei der ersten Geste - eine Autoplay-Sperre laesst Ton nur
       // daraus zu, und spaeter gibt es keine mehr.
       audioCtx = audioCtx ?? makeAudioContext();

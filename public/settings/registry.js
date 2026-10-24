@@ -233,9 +233,12 @@ export const SETTINGS_SECTIONS = freezeEntries([
     scope: 'household',
     labelKey: 'settings.pageDisplays',
     descriptionKey: 'settings.pageDisplaysDescription',
+    // Tafla: die Suche findet auch den Schalter der Wand („odhaczać") und die
+    // Fotos unter ihrem neuen Namen.
     options: [
       'settings.displayPairingCodeLabel',
-      'settings.displayScreensaverLabel',
+      'settings.tabletPhotos',
+      'settings.tabletAllowTicking',
     ],
     adminOnly: true,
     loader: () => import('/settings/pages/admin-displays.js'),

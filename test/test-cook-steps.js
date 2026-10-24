@@ -4,7 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitSteps, findTimers, formatTimer } from '../public/utils/cook-steps.js';
+import { splitSteps, findTimers, formatTimer, stepSegments, stepIngredientIndexes } from '../public/utils/cook-steps.js';
 
 test('numbered lines are steps; unnumbered lines continue the step before', () => {
   assert.deepEqual(
@@ -45,4 +45,24 @@ test('timer display', () => {
   assert.equal(formatTimer(45), '0:45');
   assert.equal(formatTimer(900), '15:00');
   assert.equal(formatTimer(3725), '1:02:05');
+});
+
+test('a step splits into text and timer pieces, in order (Tafla: the timer is a pill in the sentence)', () => {
+  assert.deepEqual(stepSegments('Duś 20 min na małym ogniu.'), [
+    { text: 'Duś ' }, { timer: { label: '20 min', seconds: 1200 } }, { text: ' na małym ogniu.' },
+  ]);
+  assert.deepEqual(stepSegments('Wymieszaj.'), [{ text: 'Wymieszaj.' }]);
+  assert.equal(stepSegments('Gotuj 2-3 minuty, potem piecz 1 godz.').filter((p) => p.timer).length, 2);
+});
+
+test('"Do tego kroku": the ingredients a step mentions, across Polish endings and diacritics', () => {
+  const ingredients = [
+    { name: 'makaron spaghetti' }, { name: 'Passata' }, { name: 'Sól' }, { name: 'pieprz' },
+    { name: 'oregano' }, { name: 'mięso mielone' }, { name: 'cebula' }, { name: 'śmietanka' },
+  ];
+  assert.deepEqual(stepIngredientIndexes('Wlej passatę, dopraw solą, pieprzem i oregano.', ingredients), [1, 2, 3, 4]);
+  assert.deepEqual(stepIngredientIndexes('Dodaj mięso mielone i smaż.', ingredients), [5]);
+  assert.deepEqual(stepIngredientIndexes('Posiekaj cebulę.', ingredients), [6]);
+  assert.deepEqual(stepIngredientIndexes('Ugotuj makaron al dente.', ingredients), [0]);
+  assert.deepEqual(stepIngredientIndexes('Odstaw na chwilę.', ingredients), [], 'a step without ingredients names none');
 });

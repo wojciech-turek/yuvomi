@@ -4385,6 +4385,64 @@ Zeile des Aufklappers nennt sie.
   („LE", „LI"), aus der Liste aller Konten, also in jeder Ansicht gleich.
 
 ### Der Wand-Modus (Signature Component)
+
+> **Tafla (2026-10-19, artboards „Ściana", „Gotowanie", „TabletKuchnia"): the wall as it
+> is now.** Model `public/utils/wall-plan.js`, markup `public/components/wall-view.js`,
+> wiring in `pages/dashboard.js`, guards `test:wall-tafla` (plus `test:wall-tasks`,
+> `test:wall-timer`, `test:display-actions`).
+>
+> - **Header band:** the poster clock (`--wall-display`, rounded, tabular), the date and the
+>   Teraz line ("**Za 19 min** kolacja · 20:00 Wieczór filmowy", the lead in the accent), the
+>   weather on the right (glyph, temperature, one line - no city, no "Updated"). A running
+>   timer takes the clock slot at the same size; the clock drops into the date line.
+> - **Scenes by the household clock:** Rano (until 10), Dzień, **Kolacja** - tonight's dinner
+>   as the hearth hero from 15:00 until dinner + 2h (plate, cook, meter, an 88pt "Gotuj"; only
+>   with a planned dinner), Wieczór (with "Jutro"), **Noc** 22-6 (only the clock in
+>   `--wall-night-ink` on `--wall-night-bg`, the date and tomorrow's first item, the dock).
+> - **Dziś card:** the day plan of Dziś (`utils/today-plan.js`) in its household version,
+>   built WITHOUT a viewer - the wall is nobody's screen, so every assigned row carries its
+>   person disc (40), two people the split disc, a shared event the violet edge. Teraz counts
+>   everybody's events (Dziś counts only yours).
+> - **A height budget instead of `WALL_ROW_CAP = 4`:** the list fills the height of its card
+>   and what does not fit becomes "+N więcej" (`planWallRows`, measured by `fitWallLists`).
+> - **Zakupy card:** "23 na liście", the first items, "Kończy się: …" (the shopping predictions).
+> - **Dock:** "Zamknij tryb ściany" and the timer discs 3/5/10/15 (80pt on `--color-fill`,
+>   visible at rest - the first tap starts). It sticks at the bottom when the wall is taller
+>   than the screen (phone) and keeps the scroll edge (#1559, #1917).
+> - **Stale data:** "dane sprzed N min" (warning) once the last good load is 12 minutes old;
+>   the wall reloads every 5 minutes. Nothing on the wall is set below the 24px step.
+> - **Weekly question** on Sunday from 18:00, where the wall may answer.
+>
+> **READ-ONLY BY DEFAULT, WITH A HOUSEHOLD SWITCH.** "Pozwól odhaczać na ścianie"
+> (`sync_config.wall_allow_ticking`, admin only, default off) and the wall sections
+> (`wall_sections`) live in `/preferences`; the display reads both. Off: no rings, no "+"
+> chips, no answering - and the SERVER refuses the paired display (`refuseWallWrite`,
+> `services/wall-settings.js`: tick, redeem a reward, add a running-out item by name,
+> answer/skip the question, all 403 `wall_read_only`; `/displays/people` names nobody to
+> tick or redeem for). On: 48pt
+> rings on task rows (the display names who did it - the one assignee, else a chooser),
+> "+" chips for running-out items, the question. **Timers and Gotuj always work.** The
+> display may READ shopping and pantry since Tafla (the shopping card, the dinner meter).
+>
+> **Cook mode** (`components/cook-mode.js`) stands on the dark stage in both themes: step
+> number 112 rounded violet, step text 44 with its durations as start pills in the sentence,
+> "Do tego kroku" (the ingredients the step names), "Następnie", a timer band (presets when
+> idle, up to two timers with ring, "+1 min", "Stop"), a segmented progress bar, tap zones
+> (left third back, the rest on), "Smacznego!" at the end; from the wall it returns there by
+> itself after 2 min. **Settings › Tablet w kuchni** (`settings/pages/admin-displays.js`)
+> carries the status card, "Na ścianie", "Dotyk", "Noc" (fixed 22-6, an info row) and pairing.
+>
+> **Superseded below** (kept as history, each replaced by the bullets above): the distance
+> scale `--wall-clock`/`--wall-row-*` (now the four `--wall-*` steps of tokens.css); "Genau
+> EIN gefuellter Traeger" (the hero and the cards are filled carriers); "Unter jedem Gesicht
+> stehen die Aufgaben" and the ladder `fitWallWho` ("who's up" is gone); the quiet exit that
+> wakes on touch (`data-wall-awake` - the exit is a ghost pill, always full); "die erste
+> Beruehrung weckt nur" (the discs rest visibly, the first tap starts; guard changed in
+> `test:wall-timer` with the reason); "eine absolute Uhrzeit" as the living sign (no
+> "Updated" any more - the stale note speaks only when the data is old). The rules that stay:
+> one surface on `/`, device-local switch, night by the household clock with the forced dark
+> theme, the shell steps aside, toasts at the top with the keep-out zones, the sticky dock.
+
 **Der WACHE Zustand des Dashboards - keine zweite Seite, sondern dieselbe Flaeche in anderer
 Gangart.** Gelesen wird sie aus zwei Metern und ohne Beruehrung; alles Weitere folgt aus
 diesem einen Satz. Der Screensaver bleibt der ruhende Zustand und legt sich nach seiner

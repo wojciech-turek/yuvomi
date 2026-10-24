@@ -1,0 +1,70 @@
+{
+  "cook.finish": {
+    "en": "Finish",
+    "pl": "Zakończ"
+  },
+  "cook.forStep": {
+    "en": "For this step",
+    "pl": "Do tego kroku"
+  },
+  "cook.allIngredients": {
+    "en": "All ingredients ({{n}})",
+    "pl": "Wszystkie składniki ({{n}})"
+  },
+  "cook.stepIngredients": {
+    "en": "Just this step",
+    "pl": "Tylko do tego kroku"
+  },
+  "cook.timers": {
+    "en": "Timers",
+    "pl": "Minutniki"
+  },
+  "cook.stepsNav": {
+    "en": "Recipe steps",
+    "pl": "Kroki przepisu"
+  },
+  "cook.presetTimer": {
+    "en": "{{n}} min",
+    "pl": "{{n}} min"
+  },
+  "cook.addMinute": {
+    "en": "+1 min",
+    "pl": "+1 min"
+  },
+  "cook.addMinuteAria": {
+    "en": "{{label}}: add a minute",
+    "pl": "{{label}}: dodaj minutę"
+  },
+  "cook.stop": {
+    "en": "Stop",
+    "pl": "Stop"
+  },
+  "cook.stopAria": {
+    "en": "{{label}}: stop the timer",
+    "pl": "{{label}}: zatrzymaj minutnik"
+  },
+  "cook.timerReady": {
+    "en": "{{label}} done",
+    "pl": "{{label}} gotowe"
+  },
+  "cook.enjoy": {
+    "en": "Enjoy your meal!",
+    "pl": "Smacznego!"
+  },
+  "cook.backToWall": {
+    "en": "Back to the wall",
+    "pl": "Wróć do ściany"
+  },
+  "cook.backToSteps": {
+    "en": "Back to the steps",
+    "pl": "Wróć do kroków"
+  },
+  "cook.autoReturn": {
+    "en": "The wall comes back by itself in 2 min.",
+    "pl": "Ściana wróci sama za 2 min."
+  },
+  "cook.stepTimer": {
+    "en": "Step {{n}}",
+    "pl": "Krok {{n}}"
+  }
+}

@@ -996,18 +996,9 @@ test('Heute-Blatt: unter dem Deckel bleibt, was offen ist', () => withSheetEnv({
   nodeAssert.equal(model.coda, null);
 }));
 
-test('Wand: dieselben Quellen, dieselbe Coda-Regel wie das Cockpit', () => withSheetEnv({}, (__test) => {
-  const data = { upcomingEvents: [eveningEvent()], health: openDoses(), users: [] };
-  const html = __test.renderWallSurface(data, null, { now: todayAt(9) });
-  nodeAssert.match(html, /wall-row--health/, 'die Dosis steht auch an der Wand');
-  nodeAssert.ok(!/todayNothingElse/.test(html), 'und die Wand gibt keine falsche Entwarnung');
-  const done = __test.renderWallSurface(
-    { upcomingEvents: [eveningEvent()], health: { ...openDoses(), dosesTaken: 2, nextDose: null }, users: [] },
-    null, { now: todayAt(9) },
-  );
-  nodeAssert.match(done, /todayNothingElse/, 'alles genommen: die Wand schliesst mit der Coda');
-}));
-
+// TAFLA (2026-10-19): hier stand „Wand: dieselben Quellen, dieselbe Coda-Regel wie das Cockpit". Die Tafla-Wand (Artboard „Ściana") liest nicht mehr das Cockpit-Programm, sondern den Tagesplan von Dziś
+// (utils/today-plan.js) in der Haushaltsfassung - ohne Dosen (test:wall-tafla,
+// test:wall-tasks „Persoenliches").
 /* #1449: BEENDETE TERMINE TRETEN ZURUECK. Das Blatt verspricht, was heute NOCH
  * ansteht; ein Termin, dessen Ende hinter uns liegt, verlaesst es. Die
  * Termin-Kachel behaelt ihn, aber zurueckgetreten und oberhalb des Kommenden -
@@ -2578,22 +2569,25 @@ async function withWallWindow(fn) {
   }
 }
 
-test('Wand-Modus: die Programmzeilen sind reine Anzeige - kein Link, kein Button', async () => {
+test('Wand-Modus: die Zeilen der Dziś-Karte sind reine Anzeige - kein Link, und ohne den Schalter kein Knopf', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   await withWallWindow(() => {
-    const html = __test.renderWallSurface({ urgentTasks: wallTasks(3), users: [] }, null, {});
-    const list = html.slice(html.indexOf('wall-program__list'), html.indexOf('</ol>'));
+    // TAFLA: die Wand liest den Tagesplan (planTasks), standardmaessig ohne
+    // Ringe - „Pozwól odhaczać na ścianie" ist aus.
+    // Mittags: nachts zeigt die Wand nur die Uhr (Szene Noc).
+    const html = __test.renderWallSurface({ planTasks: wallTasks(3), users: [] }, null, { now: todayAt(12) });
+    const list = html.slice(html.indexOf('wall-plan__list'), html.indexOf('</ul>'));
     // Reichweite zuerst: ein Selektor, der nichts findet, meldet sonst
     // fehlerfrei „keine Verstöße".
-    const rows = list.match(/class="wall-row /g) ?? [];
-    nodeAssert.equal(rows.length, 3, 'drei Programmzeilen gelesen');
+    const rows = list.match(/data-wall-row>/g) ?? [];
+    nodeAssert.equal(rows.length, 3, 'drei Zeilen gelesen');
     nodeAssert.ok(!/<a\b|href=|data-route=|<button/.test(list),
-      'eine Zeile im Wand-Modus navigiert nicht und öffnet kein Modal');
-    // Der EINE Bedienpunkt der Fläche liegt außerhalb der Liste.
+      'eine Zeile der Wand navigiert nicht und hakt ohne den Schalter nichts ab');
     nodeAssert.match(html, /id="wall-exit"/, 'der Ausstieg ist da');
+    const ticking = __test.renderWallSurface({ planTasks: wallTasks(3), users: [] }, null, { mayWrite: true, now: todayAt(12) });
+    nodeAssert.equal((ticking.match(/data-wall-tick=/g) ?? []).length, 3, 'mit dem Schalter traegt jede Aufgabe ihren Ring');
   });
 });
-
 test('Wand-Modus: der Ausstieg steht in JEDEM Zustand im DOM', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   await withWallWindow(() => {
@@ -2647,10 +2641,10 @@ test('Wand-Modus: der Fehlerzustand trägt keinen Retry-Knopf, aber die Uhr', as
     nodeAssert.match(html, /wall__error-title/, 'der Fehler spricht als eigener Zustand');
     // Am Wandtablet drückt niemand „erneut versuchen" - geheilt wird von selbst.
     nodeAssert.ok(!/dashboard-retry|widget-retry/.test(html), 'kein Retry-Knopf auf zwei Metern');
-    nodeAssert.match(html, /clock-widget--wall/, 'die Uhr bleibt: sie braucht kein Netz');
+    nodeAssert.match(html, /class="wall__clock/, 'die Uhr bleibt: sie braucht kein Netz');
+    nodeAssert.match(html, /data-wall-timer-start/, 'und der Minutnik auch');
   });
 });
-
 /* SPERRZONEN FUER MELDUNGEN (#1917). Der Hinweis beim Einschalten lag bis rund
  * 834px Breite acht Sekunden auf der Uhr. Die Toast-Lage weicht jetzt allem,
  * was ihr Attribut traegt - hier steht, DASS die Wand es setzt: an den beiden
@@ -2667,7 +2661,9 @@ test('Wand-Modus: Uhrzeit, Datum und Fuss sind Sperrzonen der Toast-Lage, die Ka
       const marked = [...html.matchAll(/<(\w+)\b[^>]*>/g)].map((m) => m[0])
         .filter((tag) => new RegExp(`\\s${attr}(?=[\\s>])`).test(tag))
         .map((tag) => tag.match(/class="([^"]+)"/)?.[1] ?? '');
-      nodeAssert.deepEqual(marked.sort(), ['clock-widget__date', 'clock-widget__time', 'wall__foot'],
+      // TAFLA: die Uhr, die Textspalte des Kopfs (Datum und Teraz-Zeile) und
+      // das Dock - der Rahmen des Kopfs nicht, er ist so breit wie die Flaeche.
+      nodeAssert.deepEqual(marked.sort(), ['wall__clock u-rounded', 'wall__dock', 'wall__head-text'],
         `in jedem Zustand der Wand (${JSON.stringify(options)})`);
     }
     // Ausserhalb der Wand steht die Uhr als Kachel im Raster; dort laege eine
@@ -2684,128 +2680,35 @@ test('Wand-Modus: Uhrzeit, Datum und Fuss sind Sperrzonen der Toast-Lage, die Ka
  * vollen Tag schob sie Fuss samt „Timer abbrechen" und Ausstieg auf 808-856px -
  * unter den Bildrand einer Flaeche, die nicht scrollt. Solange der Timer steht,
  * zeigt das Programm eine Zeile weniger, und „+N weitere" zaehlt sie mit. */
-test('Wand-Modus: ein laufender Timer nimmt dem Programm eine Zeile', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const { startWallTimer, clearWallTimer } = await import('../public/components/wall-timer.js');
-  const store = new Map();
-  const prev = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
-  });
-  try {
-    await withWallWindow(() => {
-      const data = { urgentTasks: wallTasks(9), users: [] };
-      const rows = (html) => (html.match(/class="wall-row /g) ?? []).length;
-      nodeAssert.equal(rows(__test.renderWallSurface(data, null, {})), __test.WALL_ROW_CAP, 'Vorbedingung: ohne Timer der volle Deckel');
-      startWallTimer(5);
-      const running = __test.renderWallSurface(data, null, {});
-      nodeAssert.match(running, /wall__timer-value/, 'Vorbedingung: die Timer-Anzeige steht');
-      nodeAssert.equal(rows(running), __test.WALL_ROW_CAP - 1, 'mit laufendem Timer eine Zeile weniger');
-      clearWallTimer();
-      nodeAssert.equal(rows(__test.renderWallSurface(data, null, {})), __test.WALL_ROW_CAP, 'nach dem Timer wieder der volle Deckel');
-    });
-  } finally {
-    if (prev) Object.defineProperty(globalThis, 'localStorage', prev);
-    else delete globalThis.localStorage;
-  }
-});
-
-test('Wand-Modus: der Deckel greift, und der Überlauf sagt die Wahrheit', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  await withWallWindow(() => {
-    const data = { urgentTasks: wallTasks(9), users: [] };
-    const html = __test.renderWallSurface(data, null, {});
-    const rows = html.match(/class="wall-row /g) ?? [];
-    nodeAssert.ok(rows.length > 0, 'Reichweite: Zeilen wurden überhaupt gelesen');
-    nodeAssert.equal(rows.length, __test.WALL_ROW_CAP, 'der Wand-Deckel greift');
-    nodeAssert.ok(__test.WALL_ROW_CAP < __test.PROGRAM_ROW_CAP,
-      'die Wand zeigt weniger Zeilen als das Cockpit - sie muss ohne Scrollen passen');
-    nodeAssert.match(html, /wall-program__foot/, 'der Überlauf spricht als Fußzeile');
-
-    // Die Zahl zählt gegen ALLE Zeilen des Tages, nicht gegen die gezeigten.
-    // Am Modell geprüft und nicht am Text: `t()` ist in dieser Suite nicht
-    // initialisiert und gäbe den Schlüssel zurück - eine Zusicherung über den
-    // gerenderten Satz wäre eine über den Schlüsselnamen.
-    const model = __test.buildTodayCockpitModel(data, [], { cap: __test.WALL_ROW_CAP });
-    nodeAssert.equal(model.allRows.length, 9, 'das Modell kennt den ganzen Tag');
-    nodeAssert.equal(model.overflow, 9 - __test.WALL_ROW_CAP, 'der Überlauf nennt die echte Restzahl');
-  });
-});
-
-test('Wand-Modus: „Wer heute dran ist" zählt den ganzen Tag, nicht nur die sichtbaren Zeilen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  await withWallWindow(() => {
-    // Mia hat GENAU EINEN Termin, und der liegt hinter dem Deckel. Zählte der
-    // Abschnitt nur die gezeigten Zeilen, verschwände sie aus der Antwort.
-    //
-    // EIN TERMIN, KEINE AUFGABE, und ohne `wallTasks` für sie: seit #1817
-    // kommen die Aufgaben einer Person aus `wallTasks`, und mit einem Eintrag
-    // dort stünde Mia ohnehin da - gleich, welche Zeilen die Schleife liest.
-    const spaet = { id: 42, display_name: 'Mia Muster', avatar_color: '#CE2A63' };
-    const day = '2031-05-06';
-    const events = Array.from({ length: 8 }, (_, i) => ({
-      id: i + 1,
-      title: `Termin ${i + 1}`,
-      start_datetime: `${day}T${String(8 + i).padStart(2, '0')}:00`,
-      end_datetime: `${day}T${String(8 + i).padStart(2, '0')}:30`,
-      all_day: 0,
-      assigned_users: i === 7 ? [spaet] : [],
-    }));
-    const html = __test.renderWallSurface({ upcomingEvents: events, urgentTasks: [], users: [spaet] }, null, { now: new Date(`${day}T06:00:00`) });
-    nodeAssert.ok(!html.includes('Termin 8'), 'Vorbedingung: Mias Termin steht NICHT unter den gezeigten Zeilen');
-    nodeAssert.match(html, /wall-who__member/, 'Reichweite: der Abschnitt wurde gebaut');
-    nodeAssert.match(html, /Mia/, 'wer hinter dem Deckel steht, steht trotzdem in der Antwort');
-    nodeAssert.match(html, /wall-who__count/, 'die Zahl beantwortet „wie viel"');
-  });
-});
-
-test('Wand-Modus: „Wer heute dran ist" entfällt im Solo-Haushalt', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const { setHouseholdSize, clearHouseholdSize } = await import('../public/utils/household.js');
-  const prevDocument = global.document;
-  global.document = { documentElement: { classList: { toggle() {}, add() {}, remove() {} } } };
-  try {
-    await withWallWindow(() => {
-      const alleine = { id: 1, display_name: 'Miriam Solo', avatar_color: '#6C3AED' };
-      const data = { urgentTasks: wallTasks(2, { assignTo: () => alleine }), users: [alleine] };
-
-      setHouseholdSize(2);
-      nodeAssert.match(__test.renderWallSurface(data, null, {}), /wall-who__member/,
-        'Reichweite: im Mehrpersonen-Haushalt steht der Abschnitt da');
-
-      setHouseholdSize(1);
-      nodeAssert.ok(!/wall__who/.test(__test.renderWallSurface(data, null, {})),
-        'was nur eine sinnvolle Belegung hat, wird nicht gezeigt');
-    });
-  } finally {
-    clearHouseholdSize();
-    global.document = prevDocument;
-  }
-});
-
+// TAFLA (2026-10-19): hier stand „ein laufender Timer nimmt dem Programm eine Zeile" (WALL_ROW_CAP - 1). Die Tafla-Wand (Artboard „Ściana") hat keinen Zeilendeckel mehr: der laufende Minutnik
+// nimmt den Platz der Uhr, und die Dziś-Karte passt sich ihrer Hoehe an
+// (planWallRows/fitWallLists, test:wall-tafla).
+// TAFLA (2026-10-19): hier stand „der Deckel greift, und der Überlauf sagt die Wahrheit". Die Tafla-Wand (Artboard „Ściana") zeigt, was in die Hoehe der Karte passt; der Rest ist
+// „+N więcej" aus derselben Zahl (planWallRows, test:wall-tafla).
+// TAFLA (2026-10-19): hier stand „Wer heute dran ist zählt den ganzen Tag". Die Tafla-Wand (Artboard „Ściana") hat den Abschnitt nicht mehr - die Scheibe an jeder Zeile
+// sagt, wer dran ist (test:wall-tasks, Abschnitt 2-5).
 test('Wand-Modus: leerer Tag spricht, statt zu verschwinden', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   await withWallWindow(() => {
-    const html = __test.renderWallSurface({ urgentTasks: [], upcomingEvents: [], users: [] }, null, {});
+    const html = __test.renderWallSurface({ planTasks: [], planEvents: [], users: [] }, null, { now: todayAt(12) });
     // Eine leere Fläche liest sich aus zwei Metern wie ein Defekt.
-    nodeAssert.match(html, /wall-row--state/, 'der leere Tag bekommt seine eigene Zeile');
+    nodeAssert.match(html, /wall-plan__state/, 'der leere Tag bekommt seine eigene Zeile');
   });
 });
-
-test('Wand-Modus und Cockpit erzählen denselben Tag (ein Modell, zwei Formen)', async () => {
+test('Wand-Modus und Dziś erzählen denselben Tag (ein Modell, zwei Formen)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
+  const plan = await import('../public/utils/today-plan.js');
   await withWallWindow(() => {
-    const data = { urgentTasks: wallTasks(3), users: [] };
+    // TAFLA: beide lesen den Tagesplan aus utils/today-plan.js - die Wand
+    // ohne Betrachter, Dziś fuer die angemeldete Person.
+    const data = { planTasks: wallTasks(3), users: [] };
     const titles = (html) => (html.match(/Aufgabe \d+/g) ?? []);
-    const wand = titles(__test.renderWallSurface(data, null, {}));
-    const cockpit = titles(__test.renderTodayCockpit(data, []));
+    const wand = titles(__test.renderWallSurface(data, null, { now: todayAt(12) }));
+    const dzis = plan.buildPlan(data, plan.planContext({ viewer: null, now: todayAt(12) })).open.map((row) => row.title);
     nodeAssert.equal(wand.length, 3, 'Reichweite: die Wand hat drei Zeilen gelesen');
-    nodeAssert.deepEqual(wand, cockpit.slice(0, wand.length),
-      'dieselben Zeilen in derselben Reihenfolge - keine zweite Wahrheit');
+    nodeAssert.deepEqual(wand, dzis, 'dieselben Zeilen in derselben Reihenfolge - keine zweite Wahrheit');
   });
 });
-
 test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', async () => {
   const { isWallNight, isWallRoute, WALL_NIGHT_FROM, WALL_NIGHT_TO } = await import('../public/utils/wall-mode.js');
   const at = (h, m = 0) => new Date(2026, 7, 11, h, m);
@@ -3618,30 +3521,8 @@ test('jedes Wetter-Icon des Servers findet eine Lage, und die Sonne dreht sich',
  * Vorhersagetag seinen eigenen (anders als auf der Karte, wo der Balken das
  * uebernimmt).
  */
-test('der Wand-Modus faerbt jeden Wettertag, nicht nur den aktuellen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  await withWallWindow(() => {
-    const weather = {
-      provider: 'open-meteo', city: 'Dortmund', units: 'metric',
-      current: { temp: 21, icon: 'cloud-lightning', desc: 'wmo.95', feels_like: 20, humidity: 70, wind_speed: 9 },
-      forecast: [
-        { date: '2026-08-17', icon: 'cloud-lightning', desc: 'wmo.95', temp_min: 16, temp_max: 21 },
-        { date: '2026-08-18', icon: 'sun', desc: 'wmo.0', temp_min: 14, temp_max: 26 },
-        { date: '2026-08-19', icon: 'cloud-snow', desc: 'wmo.71', temp_min: -2, temp_max: 1 },
-      ],
-    };
-    const html = __test.renderWallSurface({ urgentTasks: [], upcomingEvents: [], users: [] }, weather, {});
-    const section = html.slice(html.indexOf('wall__weather'));
-    const tones = [...section.matchAll(/data-weather-tone="([a-z]+)"/g)].map((m) => m[1]);
-    // Die Sektion selbst + drei Tage. Ohne die Reichweitenpruefung meldete ein
-    // leerer Treffer fehlerfrei „alles gut".
-    nodeAssert.equal(tones.length, 4, `vier Toene erwartet, gelesen: ${tones.join(', ')}`);
-    nodeAssert.deepEqual(tones, ['storm', 'storm', 'clear', 'snow'],
-      'die Sektion traegt die aktuelle Lage, jeder Tag seine eigene');
-    nodeAssert.match(section, /data-weather-motion="flash"/, 'die Wand kennt die Gangart der aktuellen Lage');
-  });
-});
-
+// TAFLA (2026-10-19): hier stand „der Wand-Modus faerbt jeden Wettertag". Die Tafla-Wand (Artboard „Ściana") nennt das Wetter im Kopf: Zeichen, Temperatur, eine
+// Zeile - ohne Vorhersagetage und ohne Wetterton.
 test('die Temperaturbaender liegen in jeder Einheit auf denselben Grenzen', async () => {
   const { __test: { weatherTempBand } } = await import('../public/pages/dashboard.js');
   // Dieselbe Wetterlage, drei Einheiten: -1 °C ist 30,2 °F ist 272,15 K, und
@@ -3807,14 +3688,6 @@ test('Wetter-Karte: die Reihe beginnt beschriftet mit morgen, nicht mit "Heute"'
   assert(!html.includes('weather-forecast__label--today'), 'kein Tag der Reihe ist heute');
 });
 
-test('Wetter-Wand: dieselbe Regel, nicht nur auf der Karte', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const html = __test.renderWallWeather(WEATHER_FIXTURE);
-  const labels = [...html.matchAll(/class="wall-weather__day-label">([^<]*)</g)].map((m) => m[1]);
-  assert(labels.length === 3, `drei Vorhersagetage erwartet, bekam ${labels.length}`);
-  assert(labels[0] !== 'common.today', 'die Wand beschriftet morgen als "Heute"');
-});
-
 /* Hoch und Tief des laufenden Tages: die Karte trug fuer jeden Folgetag eine
  * Spanne, fuer heute aber nur den Momentanwert - genau die Luecke aus #851. */
 test('Wetter: der Hauptblock traegt Hoch und Tief des laufenden Tages', async () => {
@@ -3967,52 +3840,47 @@ test('Wand-Modus: der Schoner-Knopf traegt nur sein Zeichen, Name und Tooltip st
     nodeAssert.ok(button, 'Reichweite: der Knopf steht im Markup');
     nodeAssert.match(button, /aria-label="dashboard\.wallScreensaverStart"/, 'zugaenglicher Name');
     nodeAssert.match(button, /title="dashboard\.wallScreensaverStart"/, 'Tooltip fuer den Zeiger');
-    nodeAssert.match(button, /class="wall__foot-btn wall__foot-btn--icon"/, 'die Icon-Form des Fussknopfs');
+    nodeAssert.match(button, /class="wall-ghost wall-ghost--icon"/, 'die Icon-Form der Dock-Kapsel');
     nodeAssert.match(button, /data-lucide="image"/, 'das Zeichen');
     // Ein sichtbares Wort machte die Gruppe wieder so breit wie die Sprache
     // (gemessen: de 416px, die Startknoepfe rutschten um bis zu 100px).
-    nodeAssert.ok(!/wall__foot-btn-label/.test(button), 'kein sichtbares Wort im Schoner-Knopf');
+    nodeAssert.ok(!/<span>/.test(button), 'kein sichtbares Wort im Schoner-Knopf');
     // Der Ausstieg daneben behaelt seines (#1559).
     const exit = html.match(/<button[^>]*id="wall-exit"[\s\S]*?<\/button>/)?.[0] ?? '';
-    nodeAssert.match(exit, /wall__foot-btn-label[^>]*>dashboard\.wallExit</, 'der Ausstieg bleibt beschriftet');
+    nodeAssert.match(exit, /<span>dashboard\.wallExit<\/span>/, 'der Ausstieg bleibt beschriftet');
   });
 });
 
-test('rebuildWall gibt screensaverEnabled an renderWallSurface weiter (Verdrahtungsschutz, #1766)', async () => {
+test('rebuildWall schreibt die Flaeche, die rebuildDashboard mit screensaverEnabled baut (Verdrahtungsschutz, #1766)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
+  const { readFileSync } = await import('node:fs');
+  // TAFLA: render() baut das Markup (renderWallSurface, mit dem Flag) und
+  // reicht es als `surface` an rebuildWall - der Fall darunter misst die ganze
+  // Kette ueber render(). Hier: das Flag steht im Aufruf, und rebuildWall
+  // schreibt genau die Flaeche, die es bekommt.
+  const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  nodeAssert.match(page, /surface: renderWallSurface\(data, weather, \{ failed: loadFailed, updatedAt: lastLoadedAt, screensaverEnabled,/,
+    'rebuildDashboard reicht screensaverEnabled an renderWallSurface');
   await withWallWindow(() => {
     let captured = '';
-    // Minimale Shell-Attrappe: rebuildWall schreibt via setHtml(shell, html) hinein.
     const shell = {
       replaceChildren() { captured = ''; },
       insertAdjacentHTML(_pos, html) { captured += html; },
+      querySelectorAll: () => [],
     };
-    // wireWallSurface bricht sofort ab, wenn container.querySelector('.wall') null liefert.
-    // Die Verdrahtung des Klicks misst der Fall weiter unten ueber render().
     const container = { querySelector: () => null };
     const signal = { addEventListener() {} };
-    const build = (screensaverEnabled) => __test.rebuildWall(container, shell, {
-      data: { urgentTasks: wallTasks(1), users: [] },
-      weather: null,
-      failed: false,
-      updatedAt: null,
-      rerender: () => {},
-      signal,
-      fit: { show() {} },
-      screensaverEnabled,
-    });
-    // Kein laufender Timer: safeGet gibt null zurueck, readWallTimer liefert state:'idle'.
     const idle = { getItem: () => null, setItem() {}, removeItem() {} };
-    withLocalStorageSync(idle, () => build(true));
-    nodeAssert.match(captured, /id="wall-screensaver-start"/,
-      'screensaverEnabled:true kommt in der Shell-HTML an');
-    withLocalStorageSync(idle, () => build(false));
-    nodeAssert.match(captured, /id="wall-exit"/, 'Reichweite: die Shell wurde neu gefuellt');
-    nodeAssert.ok(!/id="wall-screensaver-start"/.test(captured),
-      'screensaverEnabled:false erzeugt keinen Knopf in der Shell');
+    for (const screensaverEnabled of [true, false]) {
+      withLocalStorageSync(idle, () => __test.rebuildWall(container, shell, {
+        surface: __test.renderWallSurface({ planTasks: wallTasks(1), users: [] }, null, { screensaverEnabled }),
+        rerender: () => {}, signal, fit: { show() {} }, actions: {},
+      }));
+      nodeAssert.match(captured, /id="wall-exit"/, 'Reichweite: die Shell wurde neu gefuellt');
+      nodeAssert.equal(/id="wall-screensaver-start"/.test(captured), screensaverEnabled, `screensaverEnabled:${screensaverEnabled}`);
+    }
   });
 });
-
 // DIE DREI GELENKE DES SCHONER-KNOPFS, UEBER render() GEMESSEN (#1766).
 // Die Faelle oben rufen `renderWallSurface` und `rebuildWall` direkt und reichen
 // das Flag selbst hinein. Was die Seite daraus macht, sieht keiner von ihnen:

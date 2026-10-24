@@ -190,12 +190,22 @@ test('health.doses: each own dose of today with its log row, nobody else\'s', at
   assert.equal(health.doses[1].log_id, null);
 }));
 
-test('the wall\'s household answer carries none of the plan fields', atNow(async () => {
+// TAFLA WALL (2026-10-19): this test said "the household answer carries none of
+// the plan fields" - the old wall drew its own program. The Tafla wall draws
+// the day plan of Dziś, so the household answer now carries the plan in its
+// HOUSEHOLD version: only what everybody may see (visibility 'all'), never a
+// private task, never anybody's doses. The guard keeps that intent.
+test('the wall\'s household answer carries the plan - only what everybody may see, never doses', atNow(async () => {
+  addTask('Dla wszystkich', { due: '2026-10-19', people: [MARIOLA] });
+  addTask('Tylko przypisani', { due: '2026-10-19', people: [MARIOLA], visibility: 'assignees' });
+  addTask('Prywatne', { due: '2026-10-19', visibility: 'private' });
+  viewer = MARIOLA;
+  const personal = await getJson('/');
   const answer = await getJson('/?audience=household');
-  assert.deepEqual(answer.planTasks, []);
-  assert.deepEqual(answer.planEvents, []);
-  assert.deepEqual(answer.tomorrowMeals, []);
-  assert.equal(answer.dinnerPlan, null);
+  assert.ok(personal.planTasks.some((task) => task.title === 'Tylko przypisani'), 'Reichweite: Mariola sees her own');
+  const titles = answer.planTasks.map((task) => task.title);
+  assert.ok(titles.includes('Dla wszystkich'), 'the household plan has the shared task');
+  assert.ok(!titles.includes('Tylko przypisani') && !titles.includes('Prywatne'), 'and nothing private, even from the session of its assignee');
   assert.deepEqual(answer.health.doses, [], 'doses never reach a shared surface');
 }));
 

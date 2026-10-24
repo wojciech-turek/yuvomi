@@ -1,8 +1,12 @@
 /**
- * Modul: Cook mode
- * Zweck: Full-screen recipe view for the kitchen iPad (components/cook-mode.js).
- *        Large type readable from a step away, targets at least 56px for wet
- *        hands, ingredients beside the step in landscape and above it in portrait.
+ * Modul: Cook mode (Tafla, 2026-10-19)
+ * Zweck: The dark cook stage (components/cook-mode.js), artboard "Gotowanie".
+ *        #141311 in BOTH themes - the tokens in tokens.css 4d never flip. On
+ *        the iPad (and any wider screen) the stage is a 12-column grid with the
+ *        wall's four type steps: the step number 112 rounded violet, the step
+ *        text 44/56, labels and buttons 30 and 24. On the phone everything
+ *        stacks and takes the iPhone steps; targets stay at least 56 for wet
+ *        hands, the two navigation buttons 64 (88 on the iPad).
  */
 
 .cook-mode-open,
@@ -10,7 +14,21 @@
   overflow: hidden;
 }
 
-.cook-mode {
+.cook {
+  /* The type of the stage: the wall's steps on the iPad, the iPhone's below. */
+  --cook-num: var(--type-large-title);
+  --cook-step: var(--type-title);
+  --cook-step-lh: var(--type-title-lh);
+  --cook-body: var(--type-body);
+  --cook-label: var(--type-footnote);
+  --cook-nav: var(--space-16);
+  --cook-disc: calc(var(--space-12) + var(--space-2));
+  --cook-gap: var(--space-4);
+  /* White at 10/12 % of the stage ink: the quiet pills, the empty segments. */
+  --cook-quiet: color-mix(in srgb, var(--cook-ink) 10%, transparent);
+  --cook-track: color-mix(in srgb, var(--cook-ink) 12%, transparent);
+  --cook-rule: color-mix(in srgb, var(--cook-ink) 16%, var(--cook-panel));
+
   position: fixed;
   inset: 0;
   inline-size: 100%;
@@ -19,310 +37,631 @@
   max-block-size: none;
   margin: 0;
   border: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cook-gap);
+  padding: max(var(--space-4), env(safe-area-inset-top, 0px)) max(var(--space-4), env(safe-area-inset-right, 0px))
+    max(var(--space-4), env(safe-area-inset-bottom, 0px)) max(var(--space-4), env(safe-area-inset-left, 0px));
+  background: var(--cook-stage);
+  color: var(--cook-ink);
+  color-scheme: dark;
+  font-size: var(--cook-body);
+  font-variant-numeric: tabular-nums;
+  overflow-y: auto;
+}
+
+.cook::backdrop {
+  background: var(--cook-stage);
+}
+
+:where(.cook) button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(.cook) button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--cook-accent);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.cook__label {
+  margin: 0;
+  font-size: var(--cook-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--cook-ink-2);
+}
+
+.cook__muted {
+  margin: 0;
+  color: var(--cook-ink-2);
+}
+
+/* ── Top bar: Zakończ, title and progress ──
+ * On the phone the title and the progress take their own row under the pill;
+ * from the iPad on they stand centred between the two ends. */
+.cook__top {
+  flex: none;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  background: var(--color-bg);
-  color: var(--color-text-primary);
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "start end" "mid mid";
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
 }
 
-.cook-mode::backdrop {
-  background: var(--color-bg);
+.cook__top-start { grid-area: start; }
+.cook__top-mid { grid-area: mid; }
+.cook__top-end { grid-area: end; }
+
+.cook__top-mid {
+  min-width: 0;
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.cook-mode__head {
+.cook__heading {
+  margin: 0;
+  max-inline-size: 100%;
+  font-size: var(--cook-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--cook-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cook__progress-slot {
+  display: flex;
+  justify-content: center;
+  inline-size: 100%;
+}
+
+.cook__progress {
+  display: flex;
+  gap: var(--space-1);
+  inline-size: min(25rem, 100%);
+}
+
+.cook__seg {
+  flex: 1;
+  block-size: 6px;
+  border-radius: var(--radius-full);
+  background: var(--cook-track);
+}
+
+.cook__seg--done {
+  background: var(--cook-accent-fill);
+}
+
+.cook__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-base, 44px);
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cook-quiet);
+  font-size: var(--cook-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.cook__pill svg {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+}
+
+.cook__pill--small {
+  padding: 0 var(--space-4);
+}
+
+.cook__plain {
+  min-block-size: var(--target-base, 44px);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--cook-accent);
+  font-size: var(--cook-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Main: Do tego kroku and the step ── */
+.cook__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cook-gap);
+}
+
+/* On the phone the step comes first, its ingredients under it. */
+.cook__stage {
+  order: -1;
+}
+
+.cook__panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--cook-panel);
+  min-height: 0;
+}
+
+.cook__ings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.cook__ing {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--color-border);
+  inline-size: 100%;
+  min-block-size: var(--cook-disc);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
 }
 
-.cook-mode__titles {
+.cook__ring {
+  flex: none;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
   display: grid;
-  gap: 2px;
-  min-width: 0;
+  place-items: center;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 2px var(--color-field-border);
+  color: transparent;
+}
+
+.cook__ring svg {
+  inline-size: 60%;
+  block-size: 60%;
+  stroke-width: 2.5;
+}
+
+.cook__ing[aria-pressed="true"] {
+  color: var(--cook-ink-2);
+}
+
+.cook__ing[aria-pressed="true"] .cook__ring {
+  background: var(--cook-accent-fill);
+  box-shadow: none;
+  color: var(--color-on-accent);
+}
+
+.cook__ing-name {
   flex: 1;
-}
-
-.cook-mode__eyebrow {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
-
-.cook-mode__title {
-  margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
+  min-width: 0;
+  font-size: var(--cook-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cook-mode__close {
-  inline-size: 56px;
-  block-size: 56px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  cursor: pointer;
+.cook__panel-foot {
+  border-top: 1px solid var(--cook-rule);
 }
 
-.cook-mode__timers {
-  display: flex;
+.cook__panel-more {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.cook-mode__timer {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
-  column-gap: var(--space-2);
-  min-block-size: 56px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-xl);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-
-.cook-mode__timer small {
-  grid-column: 1 / -1;
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
-}
-
-.cook-mode__timer--done {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
-  animation: cook-mode-pulse 1s ease-in-out infinite;
-}
-
-.cook-mode__timer--done small {
-  color: inherit;
-}
-
-.cook-mode__body {
-  display: grid;
-  grid-template-columns: minmax(240px, 32%) 1fr;
-  min-block-size: 0;
-}
-
-.cook-mode__ingredients {
-  overflow: auto;
-  padding: var(--space-6);
-  border-right: 1px solid var(--color-border);
-}
-
-.cook-mode__ingredients h3 {
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-lg);
-}
-
-.cook-mode__ingredients ul {
-  list-style: none;
-  margin: 0;
+  min-block-size: var(--cook-disc);
   padding: 0;
-  display: grid;
-  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--cook-accent);
+  font-size: var(--cook-label);
+  font-weight: var(--font-weight-semibold);
 }
 
-.cook-mode__ing {
-  inline-size: 100%;
-  min-block-size: 52px;
+.cook__stage {
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: var(--text-lg);
-  text-align: start;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The whole stage is a tap zone (cook-mode.js): no text selection on a tap. */
+  user-select: none;
+  -webkit-user-select: none;
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .cook-mode__ing:hover {
-    background: var(--color-surface-hover);
-  }
+.cook__num {
+  margin: 0;
+  font-size: var(--cook-num);
+  line-height: 1;
+  letter-spacing: var(--tracking-display);
+  color: var(--cook-accent);
 }
 
-.cook-mode__ing-qty {
-  color: var(--color-text-secondary);
+.cook__step-text {
+  margin: 0;
+  font-size: var(--cook-step);
+  line-height: var(--cook-step-lh);
+  font-weight: var(--font-weight-regular);
+}
+
+/* "▶ 20 min" inside the sentence: tap to start that timer. */
+.cook__inline-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-base, 44px);
+  margin: 0 var(--space-1);
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cook-accent-fill);
+  color: var(--color-on-accent);
+  font-size: var(--cook-body);
+  font-weight: var(--font-weight-semibold);
+  vertical-align: middle;
   white-space: nowrap;
 }
 
-.cook-mode__ing[aria-pressed="true"] {
-  color: var(--color-text-tertiary);
+.cook__inline-timer svg {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  fill: currentColor;
 }
 
-.cook-mode__ing[aria-pressed="true"] .cook-mode__ing-name {
-  text-decoration: line-through;
-}
-
-.cook-mode__steps {
-  overflow: auto;
-  padding: var(--space-8) var(--space-10);
-  display: grid;
-  align-content: start;
-  gap: var(--space-6);
-}
-
-.cook-mode__stepno {
+.cook__then {
   margin: 0;
-  font-size: var(--text-lg);
-  color: var(--color-accent);
+  font-size: var(--cook-body);
+  color: var(--cook-ink-2);
+}
+
+.cook__then-label {
   font-weight: var(--font-weight-semibold);
 }
 
-.cook-mode__step {
-  margin: 0;
-  font-size: var(--text-3xl);
-  line-height: 1.35;
-  max-inline-size: 34ch;
-  text-wrap: pretty;
+/* ── Bottom: the timer band and the two navigation buttons ── */
+.cook__bottom {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cook-gap);
 }
 
-.cook-mode__timer-chips {
+.cook__band {
+  box-sizing: border-box;
   display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-block-size: calc(var(--space-16) + var(--space-6));
+  padding: var(--space-3) var(--space-4);
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--cook-panel);
+}
+
+.cook__presets {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
 }
 
-.cook-mode__timer-chip {
-  display: inline-flex;
+.cook__preset {
+  flex: none;
+  inline-size: var(--cook-disc);
+  block-size: var(--cook-disc);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  min-block-size: 56px;
-  padding: var(--space-2) var(--space-5);
-  border: 1px solid var(--color-accent);
+  justify-content: center;
+  border: 0;
   border-radius: var(--radius-full);
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
+  background: var(--cook-quiet);
 }
 
-.cook-mode__upnext {
-  margin: 0;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-  font-size: var(--text-lg);
-  color: var(--color-text-secondary);
-  max-inline-size: 48ch;
+.cook__preset-num {
+  font-size: var(--cook-body);
+  line-height: 1.1;
 }
 
-.cook-mode__upnext span {
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+.cook__preset-unit {
+  font-size: var(--cook-label);
+  line-height: 1.1;
+  color: var(--cook-ink-2);
 }
 
-.cook-mode__muted {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-lg);
-}
-
-.cook-mode__nav {
+.cook__timer {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--color-border);
+  gap: var(--space-3);
 }
 
-.cook-mode__counter {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
-  font-size: var(--text-lg);
+.cook__timer-ring {
+  flex: none;
+  inline-size: var(--space-12);
+  block-size: var(--space-12);
 }
 
-.cook-mode__navbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: 60px;
-  min-inline-size: 140px;
-  justify-content: center;
-  padding: var(--space-2) var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--text-lg);
+.cook__timer-track,
+.cook__timer-arc {
+  fill: none;
+  stroke-width: 6;
+}
+
+.cook__timer-track {
+  stroke: var(--cook-track);
+}
+
+.cook__timer-arc {
+  stroke: var(--cook-accent-fill);
+  stroke-linecap: round;
+}
+
+.cook__timer-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+}
+
+.cook__timer-label {
+  font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
-  cursor: pointer;
+  color: var(--cook-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cook-mode__navbtn:disabled {
+.cook__timer-left {
+  font-size: var(--cook-step);
+  line-height: var(--cook-step-lh);
+}
+
+/* Done: the half fills violet with "… gotowy" and pulses once a second. */
+.cook__timer--done {
+  justify-content: center;
+  align-self: stretch;
+  border: 0;
+  border-radius: calc(var(--radius-lg) + 12px);
+  background: var(--cook-accent-fill);
+  color: var(--color-on-accent);
+  font-size: var(--cook-step);
+  font-weight: var(--font-weight-semibold);
+  animation: cook-done-pulse 1s ease-in-out infinite;
+}
+
+@keyframes cook-done-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+.cook__band-rule {
+  flex: none;
+  inline-size: 1px;
+  align-self: stretch;
+  background: var(--cook-rule);
+}
+
+.cook__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.cook__back {
+  flex: none;
+  inline-size: var(--cook-nav);
+  block-size: var(--cook-nav);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cook-quiet);
+}
+
+.cook__back:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.cook-mode__navbtn--primary {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+.cook__next {
+  flex: 1;
+  min-width: 0;
+  block-size: var(--cook-nav);
+  padding: 0 var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--cook-accent-fill);
+  color: var(--color-on-accent);
+  font-size: var(--cook-body);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-accent-glow);
 }
 
-@media (max-width: 767px) {
-  .cook-mode__body {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  .cook-mode__ingredients {
-    max-block-size: 34vh;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border);
-    padding: var(--space-4);
-  }
-
-  .cook-mode__steps {
-    padding: var(--space-5);
-  }
-
-  .cook-mode__head,
-  .cook-mode__nav {
-    padding: var(--space-3) var(--space-4);
-  }
-
-  .cook-mode__navbtn {
-    min-inline-size: 0;
-  }
+.cook__back svg,
+.cook__next svg {
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
 }
 
-@media (min-width: 1024px) {
-  .cook-mode__step {
-    font-size: var(--text-4xl);
-  }
+/* ── The end: Smacznego! ── */
+.cook--ended .cook__main,
+.cook--ended .cook__bottom,
+.cook--ended .cook__top-mid {
+  visibility: hidden;
 }
 
-@keyframes cook-mode-pulse {
-  50% { opacity: 0.75; }
+.cook__end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  text-align: center;
+  pointer-events: none;
+}
+
+.cook__end[hidden] {
+  display: none;
+}
+
+.cook__end > * {
+  pointer-events: auto;
+}
+
+.cook__end-title {
+  margin: 0;
+  font-size: var(--cook-num);
+  line-height: 1.1;
+  letter-spacing: var(--tracking-display);
+  animation: cook-bloom var(--dur-peak, 600ms) var(--ease-spring, ease-out) both;
+}
+
+@keyframes cook-bloom {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.cook__end-sub,
+.cook__end-note {
+  margin: 0;
+  font-size: var(--cook-body);
+  color: var(--cook-ink-2);
+}
+
+.cook__end-note {
+  font-size: var(--cook-label);
+}
+
+.cook__end-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.cook__next--end {
+  flex: none;
+  min-inline-size: calc(var(--space-16) * 4);
+}
+
+/* ── iPad and wider: the artboard's 12-column stage ── */
+@media (min-width: 768px) and (min-height: 500px) {
+  .cook {
+    --cook-num: var(--wall-display);
+    --cook-step: var(--wall-title);
+    --cook-step-lh: 1.27;
+    --cook-body: var(--wall-body);
+    --cook-label: var(--wall-label);
+    --cook-nav: calc(var(--space-16) + var(--space-6));
+    --cook-disc: calc(var(--space-16) + var(--space-4));
+    --cook-gap: var(--space-6);
+
+    padding: max(var(--space-6), env(safe-area-inset-top, 0px)) max(var(--space-10), env(safe-area-inset-right, 0px))
+      max(var(--space-6), env(safe-area-inset-bottom, 0px)) max(var(--space-10), env(safe-area-inset-left, 0px));
+    overflow: hidden;
+  }
+
+  .cook__top {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-areas: "start mid end";
+    min-block-size: calc(var(--space-16) + var(--space-2));
+  }
+
+  .cook__top-end {
+    justify-self: end;
+  }
+
+  .cook__progress {
+    inline-size: min(25rem, 36vw);
+  }
+
+  .cook__pill {
+    min-block-size: calc(var(--space-12) + var(--space-2));
+    padding: 0 var(--space-6) 0 var(--space-5);
+  }
+
+  .cook__main {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--space-6);
+    align-items: start;
+  }
+
+  .cook__panel {
+    grid-column: 1 / 5;
+    grid-row: 1;
+    max-block-size: 100%;
+    padding: var(--space-6);
+  }
+
+  .cook__ing {
+    min-block-size: calc(var(--space-12) + var(--space-2));
+  }
+
+  .cook__ring {
+    inline-size: var(--space-10);
+    block-size: var(--space-10);
+  }
+
+  .cook__stage {
+    grid-column: 5 / 13;
+    grid-row: 1;
+    gap: var(--space-8);
+    min-block-size: 100%;
+  }
+
+  .cook__inline-timer {
+    min-block-size: var(--space-12);
+  }
+
+  .cook__bottom {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--space-6);
+    align-items: center;
+  }
+
+  .cook__band {
+    grid-column: 1 / 9;
+    min-block-size: calc(var(--space-16) * 2 - var(--space-2));
+    padding: 0 var(--space-6);
+    gap: var(--space-6);
+  }
+
+  .cook__timer-ring {
+    inline-size: calc(var(--space-16) + var(--space-2));
+    block-size: calc(var(--space-16) + var(--space-2));
+  }
+
+  .cook__nav {
+    grid-column: 9 / 13;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cook-mode__timer--done {
+  .cook__timer--done,
+  .cook__end-title {
     animation: none;
   }
 }
