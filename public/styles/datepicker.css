@@ -272,11 +272,12 @@ yuvomi-datepicker {
 }
 
 .ydp-cal__day[aria-selected="true"] {
-  background: var(--color-accent);
-  /* Die Modul-Akzente hellen im Dark-Modus durchgehend auf; auf den hellsten
-   * (Notizen, Vorrat) trug weisser Text nur 1,44:1. --color-ink-on-vivid kippt
-   * mit dem Modus und hält in beiden Themes mindestens 4,99:1. */
-  color: var(--color-ink-on-vivid);
+  /* 2026-10-24, Tafla: der gewaehlte Tag bleibt violett, aber als FLAECHE mit
+   * Ziffer - die Fuell-Rolle --color-btn-primary mit Weiss (6.1 / dunkel
+   * 4.83:1). Vorher --color-accent (die Text-Rolle, die dunkel aufhellt) mit
+   * --color-ink-on-vivid: im Dunkeln ein helles Feld mit schwarzer Ziffer. */
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -355,9 +356,10 @@ yuvomi-datepicker {
   background: var(--color-surface-hover);
 }
 
+/* 2026-10-24, Tafla: wie der gewaehlte Tag - Fuell-Rolle, weisse Schrift. */
 .ydp-time__opt[aria-selected="true"] {
-  background: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
   font-weight: var(--font-weight-semibold);
 }
 

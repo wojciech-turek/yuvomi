@@ -473,7 +473,11 @@ sections); the approved artboards and spec live with the design brief (BUILD.md)
   today, checked circles, links, focus ring, AI chips; at most ~10 % of a screen. Light
   `#6C3AED`; in dark the voice is split: `--color-btn-primary` `#7C52F2` as a FILL under
   white, `--color-accent` `#B49CFF` as TEXT or icon. Quiet wash: `--color-accent-tint`.
-  Done is violet, not green.
+  Done is violet, not green. Anything violet that carries a digit, letter or glyph is the
+  FILL role with `--color-on-accent` (2026-10-24 sweep: nav count, filter count,
+  `.btn--active`, selected day and time in the date picker, recurrence day, selection
+  circle, swipe "edit", current icon tile, skip link, sidebar avatar without a colour);
+  bare marks (dots, the detail strip, the today ring) stay `--color-accent`.
 - **Status as words.** success / warning / danger each come with a `-tint` and appear as
   a word in a tinted pill ("zaległe", "jutro"), never as bare colour and never repeated
   down a list; money is ink. Success only for income, a positive balance and "kwita".
