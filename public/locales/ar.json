@@ -7274,7 +7274,8 @@
         "keySaved": "saved",
         "keyMissing": "none",
         "keyFromServer": "from the server",
-        "keyRemove": "Remove key"
+        "keyRemove": "Remove key",
+        "capChange": "Change the limit"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

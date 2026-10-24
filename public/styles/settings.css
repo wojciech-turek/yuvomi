@@ -4696,22 +4696,13 @@
 
 /* Die eine Heldenzahl der Seite: was der Monat gekostet hat, in runden Ziffern. */
 .settings-page .ai-usage {
-  display: grid;
   gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-4);
-  border: 0;
+  padding: var(--space-4) var(--space-4) var(--space-1);
   color: var(--color-text-primary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.settings-page .ai-usage:focus-visible {
-  outline-offset: var(--focus-ring-offset-inset);
 }
 
 .settings-page .ai-usage__line {
+  margin: 0;
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
@@ -4738,9 +4729,6 @@
   white-space: nowrap;
 }
 
-.settings-page .ai-usage__line .tafla-row__chevron {
-  align-self: center;
-}
 
 .settings-page .ai-usage__bar {
   display: block;
@@ -4759,9 +4747,15 @@
 }
 
 .settings-page .ai-usage__note {
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--type-footnote);
   line-height: var(--type-footnote-lh);
+}
+
+.settings-page .ai-usage__edit {
+  justify-self: start;
+  padding: 0;
 }
 
 .settings-page .ai-memory-panel {

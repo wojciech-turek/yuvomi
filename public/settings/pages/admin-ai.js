@@ -103,17 +103,19 @@ function usageCardHtml(cfg) {
   const usage = cfg.usage ?? {};
   const used = Number(usage.monthUsd) || 0;
   const cap = Number(usage.capUsd ?? cfg.capUsd ?? 0);
-  const label = t('ai.usageAria', { used: money(used), cap: money(cap) });
+  // Die Karte ist eine Anzeige, kein Knopf (eine Knopfform, Sonde 3): den
+  // Limit aendert der leise Weg darunter.
   return `
-    <button type="button" class="tafla-card ai-usage" id="ai-cap-edit" aria-haspopup="dialog" aria-label="${esc(label)}">
-      <span class="ai-usage__line">
+    <div class="tafla-card ai-usage">
+      <p class="ai-usage__line">
         <span class="ai-usage__hero">${esc(money(used))}</span>
         <span class="ai-usage__of">${esc(t('ai.usageOf', { cap: money(cap) }))}</span>
-        <span class="tafla-row__chevron" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
-      </span>
+      </p>
       <span class="ai-usage__bar" aria-hidden="true"><span class="ai-usage__fill"></span></span>
-      <span class="ai-usage__note">${esc(t('ai.usageRenews', { date: renewDate() }))}</span>
-    </button>`;
+      <p class="ai-usage__note">${esc(t('ai.usageRenews', { date: renewDate() }))}</p>
+      <button type="button" class="tafla-plain ai-usage__edit" id="ai-cap-edit" aria-haspopup="dialog"
+        aria-label="${esc(t('ai.usageAria', { used: money(used), cap: money(cap) }))}">${esc(t('ai.capChange'))}</button>
+    </div>`;
 }
 
 function featureUsageHtml(cfg) {
@@ -287,10 +289,14 @@ function renderPage(container, cfg, memories) {
     }
   });
 
-  container.querySelector('#ai-cap-edit').addEventListener('click', () => openCapSheet(current, async (capUsd) => {
-    await saveConfig({ capUsd });
-    toast(t('ai.saved'), 'success');
-  }));
+  // Delegiert: die Nutzungskarte wird nach jedem Speichern neu gezeichnet.
+  container.addEventListener('click', (event) => {
+    if (!event.target.closest('#ai-cap-edit')) return;
+    openCapSheet(current, async (capUsd) => {
+      await saveConfig({ capUsd });
+      toast(t('ai.saved'), 'success');
+    });
+  });
 
   container.addEventListener('click', (event) => {
     const keyRow = event.target.closest('[data-key-edit]');
