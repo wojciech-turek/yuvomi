@@ -26,6 +26,10 @@ const de = JSON.parse(read('../public/locales/de.json'));
 // P0 — Leerzustände
 // --------------------------------------------------------
 
+// Vor dem ersten Test: "beide Kebab-Ausloeser" (weiter oben) las fnBody vor
+// seiner Deklaration (TDZ) und scheiterte unabhaengig von dem, was er prueft.
+const fnBody = (name, next) => page.slice(page.indexOf(`function ${name}(`), page.indexOf(`function ${next}(`));
+
 test('der Leerzustand unterscheidet Suche, Filter, Archiv und Erstnutzung', () => {
   // Vorher gab es EINEN Zustand: eine Suche ohne Treffer behauptete "Noch keine
   // Dokumente" und bot Hochladen an, während der Ordner-Browser daneben 6 zählte.
@@ -200,7 +204,9 @@ test('die Listenansicht trägt Datum und Größe als eigene Spalten', () => {
   // Vorher zeigte die Zeile kein Datum — der Wechsel Raster→Liste nahm Information weg.
   assert.match(page, /document-row__stats/);
   assert.match(page, /document-row__date/);
-  assert.match(page, /renderMeta\(doc, \{ showSize: false \}\)/);
+  // Tafla (2026-10-20): die Zeile nennt zusaetzlich Dateityp und Datum in der
+  // Meta ("PDF · dziś") - sichtbar nur in der schmalen Zeile, wo die Spalte fehlt.
+  assert.match(page, /renderMeta\(doc, \{ showSize: false, when: true \}\)/);
   assert.match(css, /\.document-row__stats\s*\{/);
 });
 
@@ -1164,7 +1170,6 @@ const roving = await import('../public/utils/roving-toolbar.js').catch(() => nul
 const topRules = (source) => [...eachRule(source)].filter((rule) => rule.at.length === 0);
 const rulesFor = (source, selector) => [...eachRule(source)]
   .filter((rule) => rule.selector.split(',').map((s) => s.trim()).includes(selector));
-const fnBody = (name, next) => page.slice(page.indexOf(`function ${name}(`), page.indexOf(`function ${next}(`));
 const LOCALES = readdirSync(resolve(HERE, '../public/locales')).filter((f) => f.endsWith('.json'));
 
 test('Kategorie und Ordner sagen, wofuer sie stehen - im Dialog und im Filter', () => {
@@ -2017,4 +2022,37 @@ test('R20: der Leerzustand nimmt im Raster die ganze Breite, und der Titel haelt
   const title = rules.find((r) => r.selector.trim() === '.documents-list--grid .document-card__title');
   assert.ok(title, 'keine Rasterregel fuer den Kartentitel');
   assert.match(title.body, /min-block-size:\s*2lh/, 'ein einzeiliger Titel haelt die zweite Zeile frei');
+});
+
+// Tafla (2026-10-20): der Ueberblick vor der Liste - EINE Frist, Ordner als
+// Zeilen, das Archiv als Zeile.
+test('Tafla: die Frist-Karte zeigt das eine Dokument, das zuerst ablaeuft, mit EINER Handlung', () => {
+  const pick = fnBody('nearestExpiringDocument', 'reminderDateKey');
+  assert.match(pick, /dateStatus\(doc\.expires_at\)/, 'dieselbe Regel wie Zeile und Betrachter');
+  assert.match(pick, /status\.state === 'valid'\) continue/, 'nur was handeln verlangt (abgelaufen oder binnen 30 Tagen)');
+  assert.match(pick, /status\.days < best\.status\.days/, 'das naechste zuerst');
+  const card = fnBody('expiryCardHtml', 'folderIsPrivate');
+  assert.equal((card.match(/class="pill-btn pill-btn--secondary"/g) || []).length, 2, 'zwei Fassungen ...');
+  assert.match(card, /const action = canRemind\s*\?/, '... von denen genau EINE steht');
+  assert.match(card, /status-pill--warning[\s\S]*documents\.inDays/, 'der Abstand ist ein Wort in der Pille');
+  assert.match(card, /mayManage\(doc\)/, 'erinnern darf nur, wer das Dokument aendern darf (wie der Server)');
+  const remind = fnBody('remindWeekBefore', 'bindOverview');
+  assert.match(remind, /expiry_reminder_days: WEEK_BEFORE_DAYS/, 'dasselbe Feld wie der Dialog');
+  assert.match(remind, /visibility === 'restricted'\) body\.allowed_member_ids/,
+    'eine eingeschraenkte Freigabe reist mit - der Server setzt die Berechtigten bei jedem PUT neu');
+});
+
+test('Tafla: unterhalb 1024px fuehren Ordnerzeilen, das Archiv und ein Zurueck statt Chip, Segment und Pfad', () => {
+  const rows = fnBody('folderRowsHtml', 'overviewBackHtml');
+  assert.match(rows, /class="inset-row inset-row--single documents-folder-row" data-folder-select=/, 'Ordner sind Zeilen');
+  assert.match(rows, /data-overview-archive/, 'das Archiv ist eine Zeile');
+  assert.match(rows, /folderIsPrivate\(folder\.id\)/, 'das Schloss sagt, dass ein Ordner nur Privates traegt');
+  const mobile = [...eachRule(css)].filter((rule) => rule.at.some((a) => /max-width: 1023px/.test(a)));
+  const hidden = mobile.find((rule) => /\.documents-page \.documents-status/.test(rule.selector));
+  assert.ok(hidden, 'Segment und Ordner-Chip gehen dort');
+  assert.match(hidden.selector, /\.documents-page \.documents-folder-chip/);
+  assert.match(hidden.selector, /\.documents-page \.documents-breadcrumb/);
+  assert.match(hidden.body, /display:\s*none/);
+  const head = fnBody('renderListHead', 'remindWeekBefore');
+  assert.match(head, /rowActionHtml\(\{ icon: 'ellipsis'[^\n]*'aria-haspopup': 'menu'/, 'das Ordnermenue bleibt erreichbar - am Listenkopf');
 });

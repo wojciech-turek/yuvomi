@@ -6587,17 +6587,20 @@ test('showToast is never called with an unsupported variant', () => {
 // darunter ab Spalte 1 weiter und mischten sich bei 1440 zwischen die
 // angepinnten. Jede Gruppe beginnt wieder eine eigene Zeile, und wo der
 // Browser grid-lanes kann, packt er die Karten ohne Luecke.
-test('R19: jede Notizgruppe beginnt eine eigene Zeile, grid-lanes als Fortschritt', () => {
+test('R19/Tafla: Notatki sind zwei Gruppen - angepinnte Kacheln, dann die Liste', () => {
+  // Tafla (2026-10-20) ersetzt das Masonry-Raster (R19: grid-lanes, Koepfe
+  // ueber alle Spalten) durch zwei Gruppen: "Przypięte" als 2-up-Vorschau-
+  // kacheln, "Ostatnie" als EINE gruppierte Liste. Die Absicht von R19 bleibt:
+  // jede Gruppe steht fuer sich, nichts mischt sich zwischen die Angepinnten.
   const page = read('../public/pages/notes.js');
   assert.doesNotMatch(page, /syncGroupFlow|groupFlow|notes-group__title--inline|note-card--trailing/, 'kein Einreihen des Kopfes mehr');
-  assert.match(page, /heading\(t\('notes\.groupPinned'\)\)[\s\S]{0,120}heading\(t\('notes\.groupOthers'\)\)/, 'beide Gruppenlabel bleiben');
+  assert.match(page, /t\('notes\.groupPinned'\)[\s\S]{0,200}class="preview-tiles notes-tiles"/, 'die Angepinnten als Kacheln');
+  assert.match(page, /t\('notes\.groupRecent'\)[\s\S]{0,200}<ul class="inset-card notes-list">/, 'der Rest als eine Liste');
   const css = read('../public/styles/notes.css');
   const rules = [...eachRule(css)];
-  assert.match(rules.find((r) => r.selector.trim() === '.notes-group__title' && !r.at.length)?.body ?? '', /grid-column:\s*1 \/ -1/, 'der Kopf spannt ueber alle Spalten');
   assert.ok(!rules.some((r) => /notes-group__title--inline|note-card--trailing/.test(r.selector)), 'keine Einreihe-Regeln');
-  const lanes = rules.find((r) => r.selector.trim() === '.notes-grid' && r.at.some((a) => /@supports \(display: grid-lanes\)/.test(a)));
-  assert.match(lanes?.body ?? '', /display:\s*grid-lanes/, 'grid-lanes unter @supports');
-  assert.match(css, /\.notes-grid\[aria-busy="true"\] \{\s*display: block;/, 'das Laden schlaegt grid-lanes');
+  assert.doesNotMatch(css, /grid-lanes|masonry/, 'kein Masonry mehr');
+  assert.match(css, /\.notes-grid\[aria-busy="true"\] \{\s*display: block;/, 'das Laden zeigt die geteilte Skelettliste');
 });
 
 test('responsive adaptation keeps Notes vertical and prevents intrinsic-width overflow', () => {
@@ -6608,24 +6611,14 @@ test('responsive adaptation keeps Notes vertical and prevents intrinsic-width ov
   // The shared search control guards its own intrinsic-width overflow.
   assert.match(pageSearch, /\.page-search\s*\{[\s\S]*min-width:\s*0/);
   assert.match(notes, /\.notes-toolbar\s+\.page-toolbar__title\s*\{[\s\S]*flex:\s*0\s+0\s+auto/);
-  assert.match(notes, /\.notes-grid\s*\{[\s\S]*display:\s*grid/);
-  assert.match(notes, /\.notes-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-  assert.doesNotMatch(notes, /\.notes-grid\s*\{[\s\S]*?columns:\s*2/);
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*520px\)[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
-  );
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*720px\)[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/
-  );
-  // #1765: never more than four columns, and the four-column step sits at 1200px.
+  // Tafla (2026-10-20): the list is one column of groups; only the pinned
+  // tiles form a grid (2-up from inset-list.css, 3 and 4 on wider containers,
+  // never more than four, #1765).
+  assert.match(notes, /\.notes-grid\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column/);
+  assert.match(read('../public/styles/inset-list.css'), /\.preview-tiles\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(notes, /@container notes-page \(min-width:\s*600px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(notes, /@container notes-page \(min-width:\s*900px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(notes, /repeat\(5/);
-  assert.doesNotMatch(notes, /@container notes-page \(min-width:\s*900px\)/);
-  assert.match(
-    notes,
-    /@container notes-page \(min-width:\s*1200px\)\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/
-  );
   assert.match(
     dashboard,
     /\.notes-grid-widget\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
@@ -6871,9 +6864,12 @@ test('hardening keeps Birthday rows on one line with extreme localized content',
   // Teil des Nachbaus, der dieser Liste das Lesemass gekostet hat. Geprueft
   // wird deshalb die UEBERNAHME plus die Zusicherung an ihrem einen Ort, und
   // dass der eigene Container-Name daneben ausdruecklich stehen bleibt.
-  assert.match(read('../public/pages/birthdays.js'), /class="row-carrier birthdays-list"/,
-    'die Liste traegt den geteilten Traeger, statt ihn nachzubauen');
-  assert.match(cssRuleBody(read('../public/styles/list-row.css'), '.row-carrier'), /container-type:\s*inline-size/,
+  // Tafla (2026-10-20): the cards are the MONTH GROUPS now - each one the
+  // shared inset card (inset-list.css), not a rebuilt surface - and the list
+  // host is a plain column that owns the container itself.
+  assert.match(read('../public/pages/birthdays.js'), /<div class="inset-card birthdays-card">/,
+    'jede Monatsgruppe traegt die geteilte Karte, statt sie nachzubauen');
+  assert.match(cssRuleBody(birthdays, '.birthdays-list'), /container-type:\s*inline-size/,
     'ohne Container am Traeger fragt der Query ins Leere und die Notiz bliebe fuer immer aus');
   assert.match(cssRuleBody(birthdays, '.birthdays-list'), /container-name:\s*birthdays-list list-rows/,
     'beide Namen ausdruecklich - sonst gewinnt der spaeter geladene und der andere ist lautlos tot');
@@ -6947,24 +6943,21 @@ test('Notes keeps user colours off the reading surface', () => {
   const notesPage = read('../public/pages/notes.js');
   const notesCss = read('../public/styles/notes.css');
 
-  // Der Guard hielt bis Runde 3 die Zusage „die Textfarbe wird zur Laufzeit
-  // aus der Zettelfarbe gerechnet" (getReadableTextColor). Die neue Welt gibt
-  // eine staerkere: die Zettelfarbe traegt die Flaeche gar nicht mehr allein,
-  // sie wird auf der Objekt-Stufe der Toenungsskala auf die Kartenflaeche
-  // gemischt (--tint-surface, tokens.css 6b) - damit
-  // haengt die Lesbarkeit an keiner Nutzerfarbe mehr, auch nicht an
-  // Alt-Hex-Werten ausserhalb der Palette (DESIGN.md, User-Farben-Regel).
+  // Tafla (2026-10-20): the sticky colour no longer paints anything. Until
+  // then it was mixed onto the card at --tint-surface (the measured recipe
+  // this guard held); now a note is ink on the white card like every row,
+  // and the author shows as the person disc (person-color.js), not as a
+  // user-colour dot. Still true: no text colour computed at runtime.
   assert.doesNotMatch(notesPage, /function isLightColor/);
   assert.doesNotMatch(notesPage, /getReadableTextColor/,
     'Eine zur Laufzeit gerechnete Textfarbe waere wieder eine ungemessene Paarung.');
-  assert.match(notesPage, /style="--note-color:\$\{esc\(note\.color\)\};"/,
-    'Die Zettelfarbe reist als CSS-Variable, nicht als background-color.');
-  assert.match(notesPage, /style="--avatar-color:\$\{esc\(avatarColor\)\};"/);
+  assert.doesNotMatch(notesPage, /--note-color|--avatar-color/, 'keine Zettel- oder Avatarfarbe am Markup');
+  assert.doesNotMatch(notesCss, /--note-color/, 'keine Zettelfarbe im Stylesheet');
+  assert.match(notesPage, /personDisc\(/, 'der Urheber ist die Personenscheibe');
 
   const cardRule = notesCss.match(/\n\.note-card\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.match(cardRule, /background:\s*color-mix\(in srgb, var\(--note-color[^)]*\) var\(--tint-surface\), var\(--color-surface\)\)/);
   assert.match(cardRule, /color:\s*var\(--color-text-primary\)/);
-  assert.match(cardRule, /border:\s*none/, 'Karten sind randlos auf dem Grouped-Grund.');
+  assert.doesNotMatch(cardRule, /background/, 'die Flaeche ist die Karte der Gruppe (inset-list.css)');
 
   assert.doesNotMatch(
     notesCss.match(/\.note-card__content\s*\{[\s\S]*?\n\}/)?.[0] ?? '',
@@ -8413,13 +8406,9 @@ test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrun
     // Kalendersuche ist entfallen, das Feld steht im Kopf.
     // Die Icon-Form der Kopfsuche stand hier bis Tafla (2026-10-19): sie ist
     // seither ein Geisterkreis ohne jede Kante (--fill im 44er Ziel).
-    ['.search-overlay__header', 'Kopf des Such-Overlays; Trennlinie zur Trefferliste'],
     // `.search-overlay__panel` stand hier bis R18 (2026-10-07): die Palette traegt
     // seither die Glaskante der schwebenden Flaechen (--glass-border), keine
     // Kartenkante mehr.
-    ['.search-result + .search-result', 'Trennlinie zwischen zwei Treffern'],
-    ['.search-scope', 'Bereichs-Chip in der Suche; ein Knopf, kein Feld'],
-    ['.search-scope:hover', 'Hover desselben Chips'],
     ['.rrule-fields', 'Gruppe der Wiederholungsfelder; Gruppenkante, die Felder darin tragen ihre eigene'],
     ['.schedule-day-row-fields', 'Gruppe der Felder eines Wochentags; linke Gruppenlinie'],
     ['.note-category-selection', 'Chip der gewaehlten Notiz-Kategorie; Knopf, kein Feld'],
@@ -10033,9 +10022,17 @@ test('der Housekeeping-Check-Knopf bleibt in beide Richtungen bedienbar (#1133)'
   // `toggleSession()` kann ein- UND auschecken, und `[data-worker-check]` ist
   // sein EINZIGER Ausloeser (eine zweite Fundstelle waere hier ein Signal,
   // dass diese Zusicherung nicht mehr die ganze Wahrheit ist).
+  // Tafla (2026-10-20): the hero card of the visit page carries the button
+  // for the person it speaks about, the strip for any further people - two
+  // markup sites, one handler. Both are checked below.
   const ausloeser = page.match(/data-worker-check/g) ?? [];
-  assert.equal(ausloeser.length, 2,
-    'Knopf-Markup und Handler-Selektor - mehr Stellen heben diesen Guard aus');
+  assert.equal(ausloeser.length, 3,
+    'Knopf-Markup (Heldenkarte, Personenzeile) und Handler-Selektor - mehr Stellen heben diesen Guard aus');
+  const held = page.slice(page.indexOf('<button class="pill-btn pill-btn--secondary housekeeping-check-small housekeeping-hero__check"'),
+    page.indexOf('</button>', page.indexOf('housekeeping-hero__check"')));
+  assert.ok(held, 'der Check-Knopf der Heldenkarte muss auffindbar bleiben');
+  assert.doesNotMatch(held, /disabled/, 'auch der Knopf der Heldenkarte ist nie gesperrt (#1133)');
+  assert.match(held, /checkedIn \? t\('housekeeping\.checkOut'\)/, 'und bietet eingecheckt das Auschecken an');
 
   // Der Knopf trug im eingecheckten Zustand `disabled`. Damit war der
   // Auscheck-Zweig von toggleSession() unerreichbar: toter Code hinter einem
@@ -10073,11 +10070,15 @@ test('Housekeeping: Bezahlen laeuft durch EINE Funktion, die vorher bestaetigt (
     .find((i) => /^(?:export )?(?:async )?function /.test(lines[i]));
   assert.equal(lines[kopf].match(/function (\w+)/)?.[1], 'payVisit', 'der Post gehoert in payVisit()');
   const bisZumPost = lines.slice(kopf, posts[0]).join('\n');
-  assert.match(bisZumPost, /const confirmed = await confirmOverModal\(t\('housekeeping\.markPaidConfirm'\)/,
+  // Tafla (2026-10-20): the hero's "Zapłacone" settles all unpaid visits of a
+  // person in one go - payVisit(first, onPaid, { also }) asks ONCE for the
+  // batch (its own plural question), then posts each through the same line.
+  assert.match(bisZumPost, /t\('housekeeping\.markPaidConfirm'\)/, 'die Frage fuer einen Besuch bleibt');
+  assert.match(bisZumPost, /const confirmed = await confirmOverModal\(question,/,
     'payVisit fragt vor dem Post - ueber confirmOverModal, damit der Besuchsbericht darunter ueberlebt');
   assert.match(bisZumPost, /if \(!confirmed\) return;/, 'ein Nein bucht nichts');
-  assert.match(bisZumPost, /visit\.payment_task_id\s*\?\s*t\('housekeeping\.markPaidConfirmDetailTask'\)\s*:\s*t\('housekeeping\.markPaidConfirmDetail'\)/,
-    'die Rueckfrage nennt die Zahlungsaufgabe, wenn es eine gibt');
+  assert.match(bisZumPost, /batch\.some\(\(each\) => each\.payment_task_id\)\s*\?\s*t\('housekeeping\.markPaidConfirmDetailTask'\)\s*:\s*t\('housekeeping\.markPaidConfirmDetail'\)/,
+    'die Rueckfrage nennt die Zahlungsaufgabe, wenn einer der Besuche eine hat');
 
   // Und alle Ausloeser gehen durch sie hindurch. Seit D6 (Critique 2026-10-16)
   // ist `[data-pay-report]` der Eintrag `[data-pay-visit]` im Mehr-Knopf -
@@ -10285,9 +10286,11 @@ test('contacts keep one primary call action and disclose the rest through a labe
   const contactsCss = read('../public/styles/contacts.css');
 
   // Genau eine stets sichtbare Primäraktion pro Zeile: Anrufen (falls Telefon da).
-  // Nutzt die geteilte .row-action-Grammatik mit semantischer Erfolgs-Färbung
-  // (grün) über row-action--success (Audit F1).
-  assert.match(contactsPage, /href="tel:[\s\S]*class="row-action row-action--success"/);
+  // Nutzt die geteilte .row-action-Grammatik (Audit F1). Tafla (2026-10-20):
+  // ein NEUTRALER Geisterkreis (36 Fill auf 44 Treffer, Glyphe in Tinte) statt
+  // der gruenen Erfolgs-Faerbung - Gruen ist ein Status, keine Handlung.
+  assert.match(contactsPage, /href="tel:[\s\S]*class="row-action contact-item__call"/);
+  assert.doesNotMatch(contactsPage, /row-action--success/, 'kein Status-Gruen an einer Handlung');
   // Sekundäraktionen leben im „Mehr"-Menü als BESCHRIFTETE Einträge (Icon + Text),
   // identisch auf Desktop und Mobile. Seit R16 (Re-Critique 2026-09-28) ist es
   // das geteilte Menü aus utils/popover-menu.js - Popover, Pfeiltasten und
@@ -20719,7 +20722,10 @@ test('R16: die einzeilige Kopfzeile ist am Desktop in jedem Modul ein volles Zie
 test('R16: die Abschnittstitel der Haushaltshilfe stehen auf der Buehne, ueber der Karte', () => {
   const page = withoutHtmlComments(read('../public/pages/housekeeping.js'));
   assert.doesNotMatch(page, /<section class="housekeeping-card/, 'kein Abschnitt ist selbst die Karte');
-  const koepfe = page.match(/<section class="housekeeping-section[^"]*">\s*<div class="housekeeping-section-heading">[\s\S]*?<h2 class="u-section-title">[\s\S]*?<div class="housekeeping-card">/g) ?? [];
+  // Tafla (2026-10-20): the visit page's sections are inset groups - the
+  // 17/600 head on the stage, the card (`inset-card` or the chart's
+  // `housekeeping-card`) below. Same rule, the head is the Tafla one.
+  const koepfe = page.match(/<section class="housekeeping-section[^"]*"[^>]*>\s*(?:<div class="housekeeping-section-heading">[\s\S]*?<h2 class="u-section-title">|<h2 class="inset-group__head"[^>]*>)[\s\S]*?<div class="(?:housekeeping-card|inset-card[^"]*)">/g) ?? [];
   // Drei, nicht mehr vier (#1723): der Reiter heisst seither wie die Liste
   // darunter ("Haushaltshilfen"), und eine sichtbare Ueberschrift, die den
   // Reiter wiederholt, verbietet test-typography.js. Sie bleibt als `.sr-only`
@@ -20728,7 +20734,9 @@ test('R16: die Abschnittstitel der Haushaltshilfe stehen auf der Buehne, ueber d
   const liste = page.match(/<section class="housekeeping-section">\s*<h2 class="sr-only">\$\{esc\(t\('housekeeping\.staffTitle'\)\)\}<\/h2>\s*<div class="housekeeping-card">/g) ?? [];
   assert.equal(liste.length, 1, 'die Liste der Haushaltshilfen traegt ihre Ueberschrift unsichtbar, vor der Flaeche');
   for (const kopf of koepfe) {
-    assert.ok(kopf.indexOf('u-section-title') < kopf.indexOf('class="housekeeping-card"'));
+    const titel = Math.max(kopf.indexOf('u-section-title'), kopf.indexOf('inset-group__head'));
+    const karte = Math.max(kopf.lastIndexOf('class="housekeeping-card"'), kopf.lastIndexOf('class="inset-card'));
+    assert.ok(titel >= 0 && titel < karte, 'der Titel steht vor der Flaeche');
   }
   const css = rulesOf(read('../public/styles/housekeeping.css'));
   const flaeche = css.filter((rule) => selectorsOf(rule).some((sel) => /^\.housekeeping-section(?:-heading)?$/.test(sel)) && /background(?:-color)?:|box-shadow:/.test(rule.body));
@@ -21447,17 +21455,15 @@ test('R18: die Einkaufszeile fuehrt die Menge in der Namenszeile und kappt den N
   assert.deepEqual(cut.map((rule) => rule.selector.trim()), [], 'der Artikelname bricht um, er wird nicht gekappt');
 });
 
-test('R18: die Leseansicht einer Notiz ist der Dialogkoerper in Zettelfarbe, mit EINEM Weg zum Bearbeiten', () => {
+test('R18: die Leseansicht einer Notiz ist der Dialogkoerper, mit EINEM Weg zum Bearbeiten', () => {
   const rules = r18Rules('notes.css');
   const view = rules.find((rule) => rule.at.length === 0 && rule.selector.trim() === '.note-read-view');
   assert.ok(view, '.note-read-view fehlt');
   assert.doesNotMatch(view.body, /(?:^|;)\s*border(?:-[\w-]+)?\s*:/, 'kein Kasten: die roetliche Kante ueber dem roten "Loeschen" las sich als Fehlermeldung');
   assert.doesNotMatch(view.body, /border-radius/);
-  assert.match(view.body, /margin:\s*calc\(-1 \* var\(--space-4\)\)/, 'die Ansicht zieht sich ueber die Polsterung des Dialogkoerpers');
-  assert.match(cssRuleBody(read('../public/styles/layout.css'), '.modal-panel__body'), /padding:\s*var\(--space-4\)/,
-    'die Polsterung des Dialogkoerpers ist der Wert, den die Leseansicht ausgleicht');
-  assert.match(view.body, /background:\s*color-mix\(in srgb, var\(--note-color, transparent\) var\(--tint-surface\), transparent\)/,
-    'dieselbe Toenung wie vorher - die Kontrastrechnung der Zettelfarben gilt weiter');
+  // Tafla (2026-10-20): no sticky colour any more, so the reader is the
+  // dialog's own white surface - no tint, and no bleed over the padding.
+  assert.doesNotMatch(view.body, /background|--note-color/, 'keine Zettelfarbe in der Leseansicht');
   assert.ok(rules.some((rule) => rule.selector.trim() === '.note-modal[data-view="read"] .note-mode-switch'
     && /display:\s*none/.test(rule.body)), 'in der Leseansicht steht nur der Primaerknopf "Bearbeiten", nicht zusaetzlich der Reiter');
   const page = read('../public/pages/notes.js');
@@ -21987,14 +21993,21 @@ test('die offene Auswahlliste traegt Flaeche und Farbschema des Themes (#2022)',
  * Guard-Ebene: Struktur (Stylesheet und Quelltext); der Browserlauf liegt im
  * Handoff (impl-G3).
  * ──────────────────────────────────────────────────────────────────────────── */
-test('D6: der Mehr-Knopf der Geburtstagszeile steht auch auf Touch - kein Wegklappen per Geste', () => {
+test('D6/Tafla: am Finger traegt die Geburtstagszeile kein "⋯" - Bearbeiten bleibt ein Tipp, nicht nur eine Geste', () => {
+  // D6 (2026-10-16) liess den Mehr-Knopf auf Touch stehen, damit Bearbeiten
+  // nicht NUR per Wischgeste ging. Tafla (spec "Lista grupowana + wiersz": on
+  // touch there is no ⋯) nimmt ihn aus dem Bild; die Absicht von D6 haelt
+  // weiter, weil ein Tipp auf die Zeile den Editor oeffnet (Loeschen steht
+  // darin) - geprueft unten. Weg nur per clip-path, nie aus dem Fokusbaum.
   const css = read('../public/styles/birthdays.css');
-  const hides = [...eachRule(css)].filter(({ selector, body }) => /\.birthday-item__actions(?![\w-])/.test(selector)
-    && /clip-path\s*:\s*inset|display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0\b/.test(body))
-    .map(({ selector, at }) => `${at.join(' ')} ${selector}`.trim());
-  assert.deepEqual(hides, [], 'birthdays.css versteckt den Mehr-Knopf - auf Touch bliebe nur Wischen (R18/D6)');
-  assert.match(read('../public/pages/birthdays.js'), /rowMenuHtml\(\{\s*id: `birthday-menu-\$\{birthday\.id\}`/,
-    'die Zeile traegt den geteilten Mehr-Knopf');
+  const touch = [...eachRule(css)].filter(({ selector, at }) => /\.birthday-item__actions(?![\w-])/.test(selector)
+    && at.some((a) => /hover:\s*none/.test(a)));
+  assert.ok(touch.some(({ body }) => /clip-path\s*:\s*inset\(50%\)/.test(body)), 'am Finger aus dem Bild');
+  assert.ok(!touch.some(({ body }) => /display\s*:\s*none|visibility\s*:\s*hidden/.test(body)), 'aber im Fokusbaum');
+  const page = read('../public/pages/birthdays.js');
+  assert.match(page, /rowMenuHtml\(\{\s*id: `birthday-menu-\$\{birthday\.id\}`/, 'am Zeiger traegt die Zeile den geteilten Mehr-Knopf');
+  assert.match(page, /<button type="button" class="list-row__main list-row__main--interactive" data-open="\$\{birthday\.id\}" data-md-focus>/,
+    'die Zeile selbst oeffnet - Bearbeiten ist kein versteckter Weg');
 });
 
 test('D6: eine Zeile mit sichtbarem Mehr-Knopf zeigt keinen Wisch-Chevron', () => {
@@ -22037,10 +22050,13 @@ test('Notizen: eine Kartenhaut fuer angepinnt und nicht angepinnt; Loeschen im M
 
 test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und Notizen', () => {
   const contacts = read('../public/pages/contacts.js');
-  assert.match(contacts, /<h2 class="list-group__title contact-group__header">\$\{esc\(catLabel\(cat\)\)\}<\/h2>/,
-    'Kontakte: der geteilte Gruppenkopf, ohne Kategorie-Zeichen davor');
+  // Tafla (2026-10-20): Kontakte gruppieren nach BUCHSTABEN wie das Telefonbuch;
+  // der Kopf ist der Buchstabe als Footnote 13/600 Tinte-2, ohne Zeichen.
+  assert.match(contacts, /<h2 class="contact-group__header">\$\{esc\(letter\)\}<\/h2>/,
+    'Kontakte: der Buchstabe als Gruppenkopf, ohne Kategorie-Zeichen davor');
   const notes = read('../public/pages/notes.js');
-  assert.match(notes, /<h2 class="notes-group__title list-group__title">/, 'Notizen: „Angepinnt" ist ein Gruppenkopf, kein Abschnittstitel');
+  // Tafla: the group head is the inset list's 17/600 head with its count.
+  assert.match(notes, /<h2 class="inset-group__head notes-group__title" id="\$\{id\}">/, 'Notizen: „Przypięte" ist ein Gruppenkopf, kein Abschnittstitel');
   assert.doesNotMatch(notes, /notes-group__title u-section-title/);
   // Der Tageskopf der Agenda traegt am Kasten die Groesse seiner Schrift,
   // nicht die 24px der h2-Rolle. Seit Tafla (2026-10-20) ist er ein

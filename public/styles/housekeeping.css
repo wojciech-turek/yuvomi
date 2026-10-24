@@ -677,6 +677,17 @@
   position: relative;
   width: var(--space-3);
   height: var(--space-3);
+  /* In Ruhe ist der Haken nicht da (transparente Tinte), also auch nicht
+   * gezeichnet - er erscheint als Einladung unter Zeiger und Fokus und auf
+   * der Quittung. Klicks nimmt der Knopf, nie das Zeichen darin. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.housekeeping-task__check:hover svg,
+.housekeeping-task__check:focus-visible svg,
+.housekeeping-task__check.housekeeping-task__check--done svg {
+  opacity: 1;
 }
 
 .housekeeping-task__check:hover,
@@ -1090,4 +1101,224 @@
   .page-columns__rail:has(> .housekeeping-task-summary) {
     display: none;
   }
+}
+
+/* --------------------------------------------------------
+ * TAFLA (2026-10-20): Sprzątanie as one calm page.
+ *
+ * The visit page ("Wizyty") opens with the hero card (inset-list.css
+ * `.hero-card`): when she comes next - guessed from the weekday the last
+ * visits share -, check-in/out in its corner, and what is owed with ONE
+ * primary "Zapłacone". Then the chores for that visit as checkable rows, the
+ * last visits as 48 rows with the amount in ink, and the other areas
+ * (Prace domowe, Raporty, Pomoce domowe) behind one card of rows. On phones
+ * the tab bar steps aside on this view (the page carries its large title);
+ * in the other areas it stands in the title line as before (R19).
+ * -------------------------------------------------------- */
+
+@media (max-width: 1023px) {
+  .housekeeping-page[data-tab="dashboard"] .housekeeping-tabs {
+    display: none;
+  }
+
+  /* The title line belongs to the title again (`--tabs-title` lends it to the
+   * bar, layout.css): same edge, same header, only the bar steps aside. */
+  .housekeeping-page[data-tab="dashboard"] .page-toolbar.page-toolbar--tabs-title:not(.page-toolbar--in-group) > .page-toolbar__title {
+    position: static;
+    flex: 1 1 auto;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+
+.housekeeping-page[data-tab="dashboard"] .housekeeping-content {
+  gap: var(--space-6);
+}
+
+.housekeeping-hero__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.housekeeping-hero__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.housekeeping-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Check-in / check-out in the card's corner: a secondary pill, never violet fill. */
+.housekeeping-hero__check {
+  flex: none;
+  min-height: var(--target-base);
+  padding-inline: var(--space-4);
+}
+
+.housekeeping-hero .housekeeping-check-small--static {
+  flex: none;
+}
+
+.housekeeping-hero__pay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.housekeeping-hero__owed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Money is ink: the amount owed is body 600, not a status colour. */
+.housekeeping-hero__amount {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.housekeeping-hero__paid {
+  flex: none;
+  min-width: 7.5rem;
+}
+
+/* Chores for the next visit: 48 rows, the 44 check circle drawn in the 28
+ * slot so the name starts at x=56 like every row title. */
+.housekeeping-chore {
+  gap: var(--space-3);
+}
+
+.housekeeping-chore .housekeeping-task__check {
+  margin-inline: calc((var(--target-lg) - 28px) / -2);
+}
+
+.housekeeping-chore__name {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.housekeeping-chore__name:focus-visible,
+.housekeeping-chore__add:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+.housekeeping-chore--add {
+  padding: 0;
+}
+
+.housekeeping-chore__add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: 48px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.housekeeping-chore__add .inset-row__lead,
+.housekeeping-chore__add .inset-row__title {
+  color: var(--color-accent);
+}
+
+/* The last visits on this page: an inset card of 48 rows. The staff log keeps
+ * its padded card (the negative margin below is for that one). */
+.housekeeping-section > .inset-card.housekeeping-staff-log-list {
+  margin-inline: 0;
+}
+
+.housekeeping-section > .inset-card.housekeeping-staff-log-list > * {
+  padding-inline: var(--space-4);
+}
+
+.housekeeping-section > .inset-card.housekeeping-staff-log-list > .housekeeping-muted {
+  margin: 0;
+  padding-block: var(--space-3);
+}
+
+.housekeeping-visit-row--compact {
+  min-height: 48px;
+  padding-block: 0;
+}
+
+.housekeeping-visit-row--compact {
+  position: relative;
+}
+
+/* Hairlines inset to the title column, like every inset card. */
+.housekeeping-visit-row--compact.housekeeping-staff-log-row + .housekeeping-staff-log-row {
+  border-top: 0;
+}
+
+.housekeeping-visit-row--compact + .housekeeping-visit-row--compact::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  pointer-events: none;
+}
+
+.housekeeping-visit-row--compact .list-row__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline-start: 40px;
+  min-height: 48px;
+}
+
+.housekeeping-visit-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.housekeeping-visit-row--compact .list-row__meta {
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.housekeeping-visit-row__menu-space {
+  flex: none;
+  inline-size: var(--target-base);
+}
+
+/* The other areas, behind one card. */
+.housekeeping-more {
+  max-width: var(--page-measure, none);
 }

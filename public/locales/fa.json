@@ -1407,7 +1407,8 @@
         "checkConflict": "یادداشت در این میان تغییر کرده است. دوباره بارگذاری می‌شود.",
         "pinnedState": "سنجاق‌شده",
         "checklistDone": "انجام‌شده",
-        "checklistOpen": "باز"
+        "checklistOpen": "باز",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "توپر (Ctrl+B)",
@@ -3530,7 +3531,8 @@
         "twoFactorCancel": "لغو",
         "ssoOnlyHint": "ورود به این خانوار فقط از طریق SSO انجام می‌شود.",
         "guestPasswordLogin": "ورود مهمان با رمز عبور",
-        "accountCannotSignIn": "این حساب نمی‌تواند وارد شود. لطفاً با مدیر خانوار خود تماس بگیرید."
+        "accountCannotSignIn": "این حساب نمی‌تواند وارد شود. لطفاً با مدیر خانوار خود تماس بگیرید.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "به Yuvomi خوش آمدید",
@@ -3714,7 +3716,11 @@
         "importSubmit": "افزودن {{count}}",
         "importSuccess": "{{count}} تولد افزوده شد.",
         "importNothingSelected": "لطفاً حداقل یک مخاطب انتخاب کنید.",
-        "importSelected": "{{count}} مخاطب انتخاب شد"
+        "importSelected": "{{count}} مخاطب انتخاب شد",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "بدون وعده",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "این حساب DMS دیگر وجود ندارد.",
         "errorDmsDocumentGone": "این سند دیگر در DMS وجود ندارد.",
         "errorDmsAlreadyLinked": "این سند DMS از قبل پیوند داده شده است.",
-        "errorDmsAlreadyStored": "این سند از قبل در یک DMS ذخیره شده است."
+        "errorDmsAlreadyStored": "این سند از قبل در یک DMS ذخیره شده است.",
+        "inDays_one": "{{count}} روز دیگر",
+        "inDays": "{{count}} روز دیگر",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "هیچ‌کس",
@@ -4345,7 +4365,21 @@
         "errorAmountsHidden": "فقط کسی که اجازه دیدن مبالغ کمک منزل را دارد می‌تواند پرداخت را ثبت کند.",
         "notHereToday": "امروز هنوز نیامده",
         "tabVisits": "بازدیدها",
-        "tabChores": "کارهای خانه"
+        "tabChores": "کارهای خانه",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "splitExpenses": {
         "title": "هزینه‌های مشترک",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "یادآورهای بعدی",
                 "empty": "امروز مصرف دیگری نیست"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "علائم حیاتی",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "فایل فقط سطر عنوان دارد و هیچ دوره‌ای ندارد.",
         "errorCycleImportTooManyRows": "هر درون‌ریزی حداکثر {{limit}} دوره می‌تواند داشته باشد. فایل را تقسیم کنید.",
         "errorVitalImpossible": "این مقدار ممکن نیست. لطفاً ورودی را بررسی کنید.",
-        "errorVitalBpOrder": "مقدار سیستولیک باید بیشتر از دیاستولیک باشد."
+        "errorVitalBpOrder": "مقدار سیستولیک باید بیشتر از دیاستولیک باشد.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "جمع‌آوری زباله",

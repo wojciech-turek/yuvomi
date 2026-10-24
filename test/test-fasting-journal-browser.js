@@ -23,12 +23,20 @@ const fill = (page, selector, value) => page.$eval(selector, (el, next) => {
 // Gesundheit die Pille aus dem Fasten-Kopf in ihren Seiten- bzw. Detailkopf
 // (health-hoist.js) - gesucht wird sie deshalb im Dokument, nicht im Kopf.
 const PERSON = '.health-person-switcher:has(#health-person-menu-fasting)';
-const currentPerson = (page) => page.$eval(`${PERSON} [role="menuitemradio"][aria-checked="true"]`, (el) => el.dataset.personId);
+// Tafla (2026-10-20): up to three people the switcher is a segmented control
+// (`.health-person-seg`, buttons with aria-pressed); from four on it is the
+// pill with its menu (menuitemradio). The helpers drive either form.
+const currentPerson = (page) => page.$eval(
+  `${PERSON} [role="menuitemradio"][aria-checked="true"], ${PERSON} .health-person-seg__item[aria-pressed="true"]`,
+  (el) => el.dataset.personId,
+);
 const choosePerson = (page, id) => page.evaluate((next, person) => {
-  const menu = document.querySelector(`${person} .popover-menu`);
+  const menu = document.querySelector(`${person} .popover-menu, ${person} .health-person-seg`);
   let item = menu.querySelector(`[data-person-id="${next}"]`);
   if (!item) {
-    menu.insertAdjacentHTML('beforeend', `<button type="button" role="menuitemradio" aria-checked="false" class="popover-menu__item" data-person-id="${next}">${next}</button>`);
+    menu.insertAdjacentHTML('beforeend', menu.classList.contains('health-person-seg')
+      ? `<button type="button" class="health-person-seg__item" aria-pressed="false" data-person-id="${next}">${next}</button>`
+      : `<button type="button" role="menuitemradio" aria-checked="false" class="popover-menu__item" data-person-id="${next}">${next}</button>`);
     item = menu.lastElementChild;
   }
   item.click();

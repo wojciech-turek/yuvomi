@@ -578,10 +578,15 @@ function dashboardHtml({ lastVisit } = {}) {
 }
 
 test('ein Besuch, eine Zeile: das Datum fuehrt, die Person steht im Meta - in Uebersicht, Berichten und Protokoll', async () => {
+  // Tafla (2026-10-20): the visit page draws the compact row - the date with
+  // its weekday leads, the amount trails in ink, and with ONE person her name
+  // is not repeated in every row (the hero card names her).
   const uebersicht = visitRows(dashboardHtml());
   assert.equal(uebersicht.length, 1, 'die Uebersicht zeigt ihren Besuch als Besuchszeile');
-  assert.equal(uebersicht[0].name, openVisit.check_in, 'Uebersicht: das Datum ist der Name');
-  assert.match(uebersicht[0].meta, /^Maria Silva · /, 'Uebersicht: die Person steht im Meta');
+  assert.match(uebersicht[0].row, /housekeeping-visit-row--compact/, 'Uebersicht: die kompakte Tafla-Zeile');
+  assert.doesNotMatch(uebersicht[0].name, /Maria/, 'Uebersicht: das Datum ist der Name, nicht die Person');
+  assert.equal(uebersicht[0].meta, undefined, 'eine Person: kein Name in jeder Zeile');
+  assert.match(uebersicht[0].row, /inset-row__value inset-row__value--ink">[^<]*40/, 'der Betrag steht in Tinte am Ende');
 
   installApi();
   const content = await freshReports();
@@ -643,45 +648,70 @@ test('Uebersicht: das Zahlungsdiagramm zeigt Saeulen mit Legende, leere Monate o
   assert.match(html, /role="listitem" aria-label="[^"]*housekeeping\.paymentPending/, 'jede Saeule nennt ihren offenen Teil im Namen');
 });
 
-test('Uebersicht: der letzte Besuch nennt im laufenden Jahr kein Jahr, in einem anderen schon', () => {
-  const jahr = new Date().getFullYear();
-  const vorher = globalThis.__formatDayMonth;
-  globalThis.__formatDayMonth = (d) => `KURZ(${d})`;
-  try {
-    const wert = (html) => /metric-card__label">housekeeping\.lastVisit<\/div>\s*<div class="metric-card__value">([^<]*)</.exec(html)?.[1];
-    assert.equal(wert(dashboardHtml({ lastVisit: `${jahr}-01-15T08:30:00Z` })), `KURZ(${jahr}-01-15T08:30:00Z)`,
-      'im laufenden Jahr die Kurzform - sie passt in die Viertelzeile');
-    assert.equal(wert(dashboardHtml({ lastVisit: `${jahr - 1}-12-20T08:30:00Z` })), `${jahr - 1}-12-20T08:30:00Z`,
-      'aus einem anderen Jahr bleibt das volle Datum - dann ist das Jahr die Auskunft');
-  } finally {
-    globalThis.__formatDayMonth = vorher;
-  }
+
+// TAFLA (2026-10-20): the visit page opens with the hero card. The metric row
+// ("Wizyty w miesiącu", "Ostatnia wizyta" ...) and its year rule are gone; the
+// card says when she comes next - guessed from the weekday the last visits
+// share -, or that she is here, or when she was last, and what is owed.
+function heroVisits(dates, { paid = [] } = {}) {
+  return dates.map((check_in, i) => ({
+    id: 100 + i, worker_id: 7, worker_name: 'Maria Silva', check_in,
+    check_out: new Date(Date.parse(check_in) + 4 * 3600_000).toISOString(),
+    total_amount: 180, paid_at: paid.includes(i) ? '2026-10-02T10:00:00Z' : null,
+    can_edit: true, can_delete: true, can_mark_paid: !paid.includes(i),
+  }));
+}
+
+test('Heldenkarte: die naechste Wizyte aus dem gemeinsamen Wochentag, sonst der letzte Besuch', () => {
+  const state = hk.state();
+  state.tab = 'dashboard';
+  state.currency = 'PLN';
+  const worker = { id: 7, display_name: 'Maria Silva', current_session: null, today_session: null };
+  state.workers = [worker];
+  // Three Thursdays (15, 8, 1 Oct 2026), the last two unpaid.
+  state.recentVisits = heroVisits(['2026-10-15T07:00:00.000Z', '2026-10-08T07:00:00.000Z', '2026-10-01T07:00:00.000Z'], { paid: [2] });
+  state.previousVisits = [];
+  const guess = hk.nextVisitGuess(worker, { today: '2026-10-19' });
+  assert.equal(guess?.dateKey, '2026-10-22', 'Montag, 19.: der naechste Donnerstag');
+  assert.equal(guess.delta, 3);
+  assert.equal(guess.minutes, 240, 'so lang wie die letzten Besuche');
+  const html = hk.visitHeroHtml(worker, guess);
+  assert.match(html, /housekeeping\.heroNextVisit/);
+  assert.match(html, /housekeeping\.dayAtTime/);
+  assert.match(html, /housekeeping\.amountDue\{&quot;amount&quot;:&quot;360(?![,.]00)/, 'zwei offene Besuche: 360, ganze Betraege ohne Stellen');
+  assert.match(html, /housekeeping\.visitCount\{&quot;count&quot;:2\}/);
+  assert.match(html, /data-pay-all/, 'EIN Primaerknopf bucht beide');
+  assert.match(html, /pill-btn pill-btn--primary/);
+  assert.match(html, /data-worker-check="7"[\s\S]*housekeeping\.checkIn/, 'Einchecken in der Ecke');
+
+  // Different weekdays: no pattern, no guess - the card names the last visit.
+  state.recentVisits = heroVisits(['2026-10-15T07:00:00.000Z', '2026-10-07T07:00:00.000Z']);
+  assert.equal(hk.nextVisitGuess(worker, { today: '2026-10-19' }), null, 'kein Muster, keine Behauptung');
+  assert.match(hk.visitHeroHtml(worker, null), /hero-card__eyebrow">housekeeping\.lastVisit</);
+
+  // Here now: the card says so and offers check-out.
+  const here = { ...worker, current_session: { check_in: '2026-10-19T07:05:00.000Z' } };
+  const now = hk.visitHeroHtml(here, null);
+  assert.match(now, /housekeeping\.heroHereNow/);
+  assert.match(now, /housekeeping\.heroSince/);
+  assert.match(now, /housekeeping\.checkOut/);
+  state.previousVisits = [];
 });
 
-// Codex P2 zu R10 L10: die Anzeige rechnet in die Haushaltszone, der
-// Jahresvergleich nahm das Jahr des rohen UTC-Strings und das der Geraetezone.
-// `<Jahr>-01-01T00:30Z` steht in New York am 31.12. des Vorjahrs - und verlor
-// trotzdem sein Jahr; umgekehrt in Tokio.
-test('Uebersicht: ob der letzte Besuch sein Jahr nennt, entscheidet die Haushaltszone wie die Anzeige', async () => {
+test('Heldenkarte: der Wochentag ist der des Haushalts, nicht der von UTC', async () => {
   const { setDisplayTimeZone, _resetDisplayTimeZoneCache } = await import('../public/utils/timezone.js');
-  const { todayKey } = await import('../public/utils/date.js');
-  const vorher = globalThis.__formatDayMonth;
-  globalThis.__formatDayMonth = (d) => `KURZ(${d})`;
-  const wert = (html) => /metric-card__label">housekeeping\.lastVisit<\/div>\s*<div class="metric-card__value">([^<]*)</.exec(html)?.[1];
+  const state = hk.state();
+  const worker = { id: 7, display_name: 'Maria Silva', current_session: null, today_session: null };
+  state.workers = [worker];
+  state.previousVisits = [];
+  // 02:00 UTC on a Friday is Thursday evening in New York and Friday in Tokyo.
+  state.recentVisits = heroVisits(['2026-10-16T02:00:00.000Z', '2026-10-09T02:00:00.000Z', '2026-10-02T02:00:00.000Z']);
   try {
     setDisplayTimeZone('America/New_York');
-    let jahr = Number(todayKey().slice(0, 4));
-    const silvester = `${jahr}-01-01T00:30:00Z`;
-    assert.equal(wert(dashboardHtml({ lastVisit: silvester })), silvester,
-      'New York: der Besuch liegt am 31.12. des Vorjahrs - das Jahr bleibt stehen');
-
+    assert.equal(hk.nextVisitGuess(worker, { today: '2026-10-19' })?.dateKey, '2026-10-22', 'New York: donnerstags');
     setDisplayTimeZone('Asia/Tokyo');
-    jahr = Number(todayKey().slice(0, 4));
-    const neujahr = `${jahr - 1}-12-31T20:00:00Z`;
-    assert.equal(wert(dashboardHtml({ lastVisit: neujahr })), `KURZ(${neujahr})`,
-      'Tokio: derselbe Zeitpunkt ist dort schon der 1.1. des laufenden Jahres - Kurzform');
+    assert.equal(hk.nextVisitGuess(worker, { today: '2026-10-19' })?.dateKey, '2026-10-23', 'Tokio: freitags');
   } finally {
-    globalThis.__formatDayMonth = vorher;
     setDisplayTimeZone(null);
     _resetDisplayTimeZoneCache();
   }
@@ -717,7 +747,9 @@ test('die vier Kennzahlen stehen auf jeder Breite in einer Zeile, schmal mit Lab
 // und liess bei 1440 rund 470px leer - Besuche und Zahlungen untereinander.
 test('Uebersicht am Desktop: Besuche | Zahlungen nebeneinander, sobald die Spalte reicht, ausserhalb des Lesemasses', () => {
   const html = dashboardHtml({ lastVisit: '2026-09-20T08:30:00Z' });
-  const cols = /<div class="housekeeping-dashboard-columns">([\s\S]*)<\/div>\s*$/.exec(html.trim());
+  // Tafla: the area rows (Prace domowe, Raporty, Pomoce domowe) follow the
+  // two cards, so the carrier is no longer the last element.
+  const cols = /<div class="housekeeping-dashboard-columns">([\s\S]*)<\/div>\s*<ul class="inset-card housekeeping-more"/.exec(html.trim());
   assert.ok(cols, 'die beiden Karten stehen in EINEM Spaltentraeger');
   assert.match(cols[1], /housekeeping\.recentVisits[\s\S]*housekeeping\.payments/, 'Besuche links, Zahlungen rechts');
   const rules = [...eachRule(HK_STYLES)];
@@ -1143,9 +1175,11 @@ test('R20: ohne Betragsrecht keine Euro-Zeile, kein Zahlungsdiagramm, keine Lohn
     assert.match(html, /housekeeping-dashboard-columns housekeeping-dashboard-columns--single/, 'die Besuche nehmen die Zeile allein');
     assert.doesNotMatch(html, /housekeeping\.pendingPayments/, 'keine offenen Zahlungen');
     assert.doesNotMatch(html, /€|EUR/, 'kein Betrag, auch kein „0,00"');
-    assert.match(html, /housekeeping\.notHereToday/, 'die Personenzeile sagt, ob sie da ist, statt den Lohn zu nennen');
+    // Tafla: the hero card names the person and no amount (no "Do zapłaty").
+    assert.match(html, /hero-card__sub">Maria Silva</, 'die Karte nennt die Person, nicht ihren Lohn');
+    assert.doesNotMatch(html, /housekeeping\.amountDue|data-pay-all/, 'kein Betrag, kein Bezahlen');
     const [row] = visitRows(html);
-    assert.equal(row.meta, 'Maria Silva · 2026-08-06T08:00:00.000Z-2026-08-06T11:00:00.000Z', 'Person und Zeit statt Betrag und Zahlstatus');
+    assert.match(row.row, /inset-row__value">2026-08-06T08:00:00\.000Z-2026-08-06T11:00:00\.000Z</, 'die Zeit statt Betrag und Zahlstatus');
     assert.equal(hk.visitWorkDetailsHtml(visit), '', 'der Bericht nennt keinen Tagessatz');
 
     // Und auch mit Recht: eine `null` aus einer Antwort wird nie „0,00 €".

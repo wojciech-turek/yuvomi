@@ -1407,7 +1407,8 @@
         "checkConflict": "Catatan telah berubah sementara itu. Catatan akan dimuat ulang.",
         "pinnedState": "Disematkan",
         "checklistDone": "Selesai",
-        "checklistOpen": "Terbuka"
+        "checklistOpen": "Terbuka",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Tebal (Ctrl+B)",
@@ -3530,7 +3531,8 @@
         "twoFactorCancel": "Batal",
         "ssoOnlyHint": "Masuk ke rumah tangga ini hanya melalui SSO.",
         "guestPasswordLogin": "Masuk tamu dengan kata sandi",
-        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda."
+        "accountCannotSignIn": "Akun ini tidak dapat masuk. Silakan hubungi administrator rumah tangga Anda.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Selamat datang di Yuvomi",
@@ -3714,7 +3716,11 @@
         "importSubmit": "Tambahkan {{count}}",
         "importSuccess": "{{count}} ulang tahun ditambahkan.",
         "importNothingSelected": "Pilih setidaknya satu kontak.",
-        "importSelected": "{{count}} kontak dipilih"
+        "importSelected": "{{count}} kontak dipilih",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Tanpa waktu makan",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Akun DMS ini sudah tidak ada.",
         "errorDmsDocumentGone": "Dokumen ini sudah tidak ada di DMS.",
         "errorDmsAlreadyLinked": "Dokumen DMS ini sudah ditautkan.",
-        "errorDmsAlreadyStored": "Dokumen ini sudah tersimpan di DMS."
+        "errorDmsAlreadyStored": "Dokumen ini sudah tersimpan di DMS.",
+        "inDays_one": "dalam {{count}} hari",
+        "inDays": "dalam {{count}} hari",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Tidak ada",
@@ -4345,7 +4365,21 @@
         "errorAmountsHidden": "Hanya yang boleh melihat jumlah untuk asisten rumah tangga yang dapat menandai pembayaran.",
         "notHereToday": "Hari ini belum datang",
         "tabVisits": "Kunjungan",
-        "tabChores": "Pekerjaan rumah"
+        "tabChores": "Pekerjaan rumah",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "splitExpenses": {
         "title": "Pengeluaran Bersama",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Pengingat berikutnya",
                 "empty": "Tidak ada minum obat lagi hari ini"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Tanda vital",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "File hanya berisi baris judul tanpa menstruasi.",
         "errorCycleImportTooManyRows": "Satu impor boleh berisi paling banyak {{limit}} menstruasi. Bagi file-nya.",
         "errorVitalImpossible": "Nilai ini tidak mungkin. Periksa kembali isianmu.",
-        "errorVitalBpOrder": "Nilai sistolik harus lebih tinggi daripada diastolik."
+        "errorVitalBpOrder": "Nilai sistolik harus lebih tinggi daripada diastolik.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Pengumpulan sampah",

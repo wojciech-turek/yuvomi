@@ -14,125 +14,88 @@
 }
 
 /* --------------------------------------------------------
- * Liste (nach Nähe sortiert) — EIN Träger, Zeilen per Haarlinie
- * (Zeilenlisten-Regel, tokens.css). Vorher trug jede Zeile ihre eigene Karte:
- * sechs Geburtstage waren sechs Objekte statt einer Liste.
- * -------------------------------------------------------- */
-/* SIE TRÄGT `.row-carrier` (Critique 2026-08-13, zweite Runde). Fläche, Radius,
- * Schatten, `overflow` und `container-type` standen hier Wert für Wert ein
- * zweites Mal - ein Nachbau, den die erste Runde nicht fand, weil sie nach dem
- * KLASSENNAMEN gesucht hat und nicht nach der Signatur. Der Preis war sichtbar:
- * weil die Klasse fehlte, bekam die Liste das neue Lesemaß nicht und stand bei
- * 1440px auf 1156px, während die Kontaktliste daneben 720px trug. Der 436px-
- * Sprung beim Modulwechsel, den die erste Runde als behoben gemeldet hat, war
- * damit nur ein Modul weitergewandert.
+ * Liste (Tafla, 2026-10-20): Heldenkarte, dann Monatsgruppen
+ *
+ * Oben die E1-Karte des naechsten Geburtstags (`.hero-card`, inset-list.css),
+ * darunter je Monat eine Gruppe der gruppierten Liste: Kopf "Listopad 2"
+ * ausserhalb, die Zeilen in EINER weissen Karte (`.inset-card`). Die Zeile
+ * bleibt `.list-row` in `.swipe-row` (Wischen, Liste + Detail); hier steht nur
+ * das Mass der Tafla-Zeile: 64 hoch, 0 16 Polster, 28er-Scheibe + 12 Abstand,
+ * der Name bei x=56, Haarlinien auf dieselbe Kante eingerueckt.
  *
  * Horizontal inset is owned by .app-page__body (page-inline-pad); width cap by
- * .page-section.page-measure / --page-measure from composition mode. */
+ * .page-section.page-measure / --page-measure from composition mode.
+ * -------------------------------------------------------- */
 .birthdays-list {
-  /* ZWEI Container-Namen, und beide sind nötig: `list-rows` kommt aus
-   * `.row-carrier` und ist der geteilte Name, unter dem die Zeilenbausteine
-   * ihre Fragen stellen; `birthdays-list` ist der eigene, unter dem die
-   * Countdown-Chips dieses Moduls ihre stellen. Ohne die ausdrückliche
-   * Nennung beider gewönne der später geladene Wert und der andere wäre
-   * lautlos tot. */
+  /* ZWEI Container-Namen: `list-rows` ist der geteilte Name, unter dem die
+   * Zeilenbausteine (list-row.css) ihre Fragen stellen, `birthdays-list` der
+   * eigene. Der Traeger ist seit Tafla keine Karte mehr (die Karten sind die
+   * Monatsgruppen), der Container gehoert deshalb hierher. */
+  container-type: inline-size;
   container-name: birthdays-list list-rows;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
-/* DIE GEBURTSTAGSZEILE IST EINE `.list-row` - hier steht nur die Abweichung.
- *
- * Sie stand bei 121,6px im Schnitt und schwankte um 24,6px, und beides kam aus
- * DREI Textzeilen übereinander: der Name brach unter dem Countdown-Chip um
- * (`overflow-wrap: anywhere` bei 250px Spalte, „Tante Claire Becker" = zwei
- * Zeilen), darunter stand die Datumszeile, darunter die Notiz. Der Chip stand
- * im Namensraum und nahm ihm 90px, obwohl er zur Metazeile gehört - genau die
- * Rolle, die die Aufgabenzeile ihrem Prioritäts-Chip gibt.
- *
- * Name und Chip teilen sich jetzt nicht mehr eine Zeile: der Name bekommt die
- * volle Spalte, der Chip führt die Metazeile an.
- *
- * Anzeige, Ausrichtung, Gap und Polsterung stehen deshalb nicht mehr hier: sie
- * sind `.list-row` (list-row.css). Was bleibt, steht unten - die getönte
- * Heute-Fläche, das Medium und die Metazeile mit dem Chip darin. */
-
-/* Trennlinie an den direkten Kindern des Traegers, NICHT an der Zeile selbst -
- * dasselbe Muster wie `.list-rows > * + *` im Einkauf, und aus demselben
- * Grund: seit der Wischbedienung (Runde 4, C-2) liegt zwischen Traeger und
- * Zeile der `.swipe-row`-Wrapper. `.birthday-item + .birthday-item` fand danach
- * keine Geschwister mehr und alle Haarlinien waren verschwunden. `> * + *`
- * misst den Traeger und ist gegen solche Zwischenebenen immun. */
-.birthdays-list > * + * {
-  border-top: 1px solid var(--color-border-subtle);
+/* Haarlinien zwischen den Zeilen einer Monatskarte, eingerueckt auf x=56.
+ * An den Wisch-Huellen, nicht an der Zeile: zwischen Karte und Zeile liegt
+ * `.swipe-row`. */
+.birthdays-card > .swipe-row {
+  position: relative;
 }
 
-/* MONATSKOEPFE IN DER LISTE (R19): Gruppentitel IN einer Liste ist
- * `.list-group__title` (DESIGN.md "Ueberschrift ueber Inhalt"); hier steht nur
- * die Einrueckung auf der Zeilenkante und die Luft ueber und unter ihm. */
-.birthdays-month {
-  padding: var(--space-3) var(--space-3) var(--space-1);
+.birthdays-card > .swipe-row + .swipe-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  z-index: 1;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  pointer-events: none;
 }
 
-/* DER NAECHSTE GEBURTSTAG (R19): sein Countdown traegt die Modulton-Tinte und
- * fuehrt - auch wenn er weiter als eine Woche weg ist. Heute behaelt seine
- * eigene, lautere Form (`--today`). */
-.birthday-item--next .birthday-chip {
-  color: color-mix(in srgb, var(--module-accent) var(--tint-ink), var(--color-text-primary));
-  font-weight: var(--font-weight-semibold);
+.birthday-item {
+  min-height: 64px;
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
 }
 
-/* Dass der Wischwrapper weder Radius noch Abstand traegt, steht jetzt in seiner
- * Basisregel (layout.css) - hier war es der Modul-Reset, den die Aufgaben und
- * der Einkauf nicht hatten. */
-
-/* „Heute"-Höhepunkt: der einzige emotionale Peak des Moduls. Er trägt jetzt die
- * getönte Zeilenfläche des 16-%-Rezepts statt Kante + Verlauf + Extraschatten -
- * in einem Träger ist die Fläche das einzige Mittel, das keine Kante braucht. */
+/* Der heutige Geburtstag: die Torte am Namen und das Wort in der Pille sagen
+ * es; die Zeile bleibt weiss (Tafla: Zustand ist ein Wort, keine Flaeche). */
 .birthday-item--today {
-  background: color-mix(in srgb, var(--module-accent) var(--tint-surface), var(--color-surface));
+  background: var(--color-surface);
+}
+
+.birthday-item__media {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  inline-size: 28px;
 }
 
 /* `unicode-bidi: plaintext`: ein arabischer Name in einer sonst lateinischen
  * Liste muss seine eigene Leserichtung behalten. */
 .birthday-item__name {
   min-width: 0;
-  /* Hoechstens zwei Zeilen, dann Ellipse: die Titelregel (typography.css,
-   * R19) - hier stand eine eigene einzeilige Fassung. Die Torte steht als
-   * Zeichen im Textfluss hinter dem Namen. */
+  /* Groesse und Gewicht (17/400) kommen aus der Zeilentitel-Rolle
+   * (typography.css). Hoechstens zwei Zeilen, dann Ellipse: die Titelregel (typography.css,
+   * R19). Die Torte steht als Zeichen im Textfluss hinter dem Namen. */
   unicode-bidi: plaintext;
 }
 
 .birthday-cake {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  margin-inline-start: var(--space-1h);
+  margin-inline-start: var(--space-1);
   vertical-align: text-bottom;
-  color: var(--module-accent);
+  color: var(--color-text-secondary);
 }
 
-/* EINE Metazeile, und sie bricht nicht um: Countdown-Chip, dann Datum und
- * Alter, dann - wo Platz ist - die Notiz. `--space-1` und nicht `--space-2`:
- * die Teile sind durch einen Mittelpunkt getrennt, und der bringt seinen
- * eigenen Abstand mit.
- *
- * DIE BEGRÜNDUNG FÜR DEN ENGEN ABSTAND WAR EINE FLÄCHE, DIE ES NICHT MEHR GIBT.
- * Hier stand „der Chip hat eigene Polsterung und eine eigene Fläche, zwischen
- * ihm und dem Text liest sich der Abstand optisch als das Doppelte" - richtig,
- * solange alle drei Countdown-Stufen eine Kapsel trugen. Seit v2.23.0 trägt nur
- * noch „Heute" eine (Skalen-Regel), und ohne sie stand „in 12 Tagen 30.08.2026
- * · wird 37 Lindas Schwester" als ein einziger Zug da: die Kapsel war der
- * Trenner gewesen, ohne dass es jemand aufgeschrieben hatte.
- *
- * Getrennt wird deshalb jetzt ausdrücklich, mit dem Mittelpunkt über den
- * `+`-Kombinator - derselbe Träger, den `ageMeta()` schon INNERHALB von
- * `__when` benutzt („30.08.2026 · wird 37") und den die Vorratsmeldungen seit
- * derselben Etappe tragen. Der Trenner gehört dem ZWISCHENRAUM, nicht dem
- * Teil davor oder danach, deshalb `::before` am zweiten Element.
- *
- * Die Notiz gewinnt dabei mit: sie hing schon vorher direkt am Alter („wird 37
- * Lindas Schwester"), und das war nie beabsichtigt - es ist nur nie
- * aufgefallen, weil links davon eine Kapsel stand und die Zeile dadurch
- * gegliedert aussah. */
+/* EINE Metazeile, die nicht umbricht: "notiz · kończy 60" (beim naechsten
+ * vorne das Datum). Der Namenstag haengt mit dem Mittelpunkt daran. */
 .birthday-item__meta {
   display: flex;
   align-items: center;
@@ -140,22 +103,30 @@
   flex-wrap: nowrap;
   min-width: 0;
   overflow: hidden;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
   unicode-bidi: plaintext;
 }
 
 .birthday-item__meta > * + *::before {
   content: '·';
   margin-inline-end: var(--space-1);
-  color: var(--color-text-tertiary);
-}
-
-.birthday-item__meta > .birthday-chip {
-  flex-shrink: 0;
 }
 
 .birthday-item__when {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+
+.birthday-item__when:empty {
+  display: none;
+}
+
+.birthday-item__when:empty + *::before {
+  content: none;
 }
 
 .birthday-item__name-day {
@@ -163,24 +134,8 @@
   flex-shrink: 0;
 }
 
-/* DIE NOTIZ IST EINE FRAGE DER BREITE, NICHT DES GERÄTS - deshalb der Container
- * am Träger und nicht der Viewport: massgeblich ist, was die ZEILE hat.
- *
- * GEMESSEN bei 390px, de, Demo-Haushalt: der Metazeile bleiben 262px, „in 31
- * Tagen" belegt 90px und „12.09.2026 · wird 8" 150px - für die Notiz bleiben
- * 22px, und darunter kappt sie das Datum vor sich mit. Ein angeschnittenes
- * Datum ist schlimmer als eine Notiz, die erst weiter oben erscheint. Wer die
- * Notiz sucht, öffnet den Eintrag; wer die Liste überfliegt, sucht das Datum.
- *
- * Die Notiz behält `overflow-wrap: anywhere` NICHT: sie steht jetzt in einer
- * Zeile, die nicht umbricht, und wird dort gekappt statt gebrochen.
- *
- * WARUM 560px UND NICHT 400: die Schwelle muss in BEIDEN Gerätewelten halten.
- * Bis R18 waren am Finger die Zeilenknöpfe weggeklappt; seit dem steht in
- * beiden Welten derselbe eine Mehr-Knopf. Ein Container weiss nicht, welche
- * Welt er bedient - 560px ist der Wert, ab dem die Notiz in beiden steht, ohne
- * dem Datum vor ihr Platz zu nehmen (gemessen: 128px freie Breite am Zeiger,
- * 240px am Finger). */
+/* Die alte Notiz-Spalte ist in die Metazeile gewandert (vor dem Alter); die
+ * Regel bleibt fuer Markup aus aelteren Aufrufern. */
 .birthday-item__notes {
   display: none;
   min-width: 0;
@@ -196,10 +151,8 @@
   }
 }
 
-/* A birthday plus a name day can overflow the metadata row on a narrow card.
- * Wider layouts keep both dates inline; below 840px the name day gets its own
- * wrapping row. Notes remain the least important metadata, matching the
- * original mobile rule, so they yield the space first. */
+/* Unter 840px rueckt ein Namenstag in eine eigene Zeile der Meta, statt das
+ * Datum davor abzuschneiden. */
 @container birthdays-list (max-width: 840px) {
   .birthday-item__meta--with-name-day {
     flex-wrap: wrap;
@@ -215,10 +168,22 @@
     content: none;
     margin-inline-end: 0;
   }
+}
 
-  .birthday-item__meta--with-name-day > .birthday-item__notes {
-    display: none;
-  }
+/* Das Zeilenende: das Datum (17, Tinte-2, tabellarisch) oder - nur beim
+ * naechsten - der Countdown als Wort in der Pille. */
+.birthday-item__trail {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.birthday-item__date {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .birthday-item__actions {
@@ -227,82 +192,76 @@
   flex-shrink: 0;
 }
 
-/* DER MEHR-KNOPF STEHT AUCH AUF TOUCH (R18, D6, Critique 2026-10-16).
- *
- * Bis hierher klappte eine `(hover: none)`-Regel den Traeger per `clip-path`
- * weg: die Wischrichtungen sollten die beiden Zeilenaktionen tragen, und zwei
- * Knoepfe waren in der Grouped-Liste die lauteste Stelle. Seit R18 sind es
- * nicht mehr zwei Knoepfe, sondern EIN ruhiger Mehr-Knopf - und "nur per
- * Geste" ist genau der versteckte Weg, den D6 ausschliesst (Casey, einhaendig:
- * "Geburtstag bearbeiten mobil nur per Wischgeste"). Wischen bleibt
- * Zusatzweg; den Wisch-Chevron nimmt layout.css der Zeile mit Mehr-Knopf ab,
- * deshalb gibt es hier auch keine Reserve mehr am Zeilenende. */
+/* AM FINGER KEIN "⋯" IN DER ZEILE (Tafla, spec "Lista grupowana + wiersz").
+ * D6 (2026-10-16) liess ihn stehen, damit Bearbeiten nicht NUR per Geste ging.
+ * Das gilt weiter ohne ihn: ein Tipp auf die Zeile oeffnet den Editor (bei
+ * Nur-lesen die Leseansicht), Loeschen steht im Editor und im Blatt, Wischen
+ * bleibt Zusatzweg. Aus dem Bild, nicht aus dem Fokusbaum. */
+@media (hover: none) {
+  .birthday-item__actions:not(:focus-within) {
+    pointer-events: none;
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
-/* --------------------------------------------------------
- * Countdown-Chip — einheitliches Wort-Register, kontrastgeprüft (AA).
- * -------------------------------------------------------- */
-/* Die Kapsel gehoert seit 2026-08-18 nur noch der Vollton-Stufe („Heute"):
- * eine Polsterung ohne Fuellung ist ein Loch, kein Chip. Was hier bleibt, ist
- * das gemeinsame Register - Groesse, Gewicht, kein Umbruch -, damit die drei
- * Stufen dieselbe Zeile fuehren wie der Prioritaets-Chip der Aufgabenzeile. */
+/* Der Countdown-Chip ist seit Tafla die Status-Pille (`.status-pill`,
+ * inset-list.css) und steht nur am naechsten Geburtstag; `.birthday-chip`
+ * bleibt der Name, unter dem Detail und Tests ihn finden. */
 .birthday-chip {
   flex-shrink: 0;
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
 
-/* ── DREI STUFEN, DIE AUCH DREI SIND ──
- *
- * `countdownChip()` in birthdays.js sagt seit jeher „`mod` steuert die visuelle
- * Stufe" und kennt drei: heute, in bis zu sieben Tagen, spaeter. Die CSS-Regeln
- * fuer `--default` und `--soon` waren BITWEISE identisch - eine Skala mit einer
- * Stufe, die es nicht gab. Sie ist niemandem aufgefallen, weil beide getoent
- * waren und eine Toenung ohnehin kaum etwas sagt.
- *
- * Die Leiter laeuft jetzt ueber die AUFFAELLIGKEIT, nicht ueber den Farbton:
- * heute traegt den Modulton im Vollton, „bald" tritt in die Primaertinte vor,
- * alles Weitere bleibt Sekundaertinte. Ein Geburtstag in 40 Tagen ist keine
- * Farbaussage, und drei Toenungen derselben Rose waeren genau der Fall, den
- * die Vollton-Regel misst.
- *
- * Der Modulton ist hier ausdruecklich richtig: die Zeile beantwortet „wann",
- * und der eine Tag, an dem die Antwort HEUTE lautet, ist der Anlass des ganzen
- * Moduls. */
-.birthday-chip--default {
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-medium);
+/* --------------------------------------------------------
+ * Heldenkarte: der naechste Geburtstag
+ * -------------------------------------------------------- */
+.birthday-hero__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.birthday-chip--soon {
-  color: var(--color-text-primary);
+.birthday-hero__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
-/* Vollton nach der Hausbauart: Ton als Flaeche, feste Tinte darauf. Vorher
- * stand hier der zu Schwarz vertiefte Akzent mit --color-text-on-accent, weil
- * reines Weiss auf dem hellen Dark-Ton nur ~2,7:1 trug. Genau dafuer gibt es
- * --color-ink-on-vivid (light weiss, dark dunkle Tinte): der ungemischte
- * Modulton haelt damit 5,08:1 light und 7,35:1 dark - im Dark ueber dem, was
- * die Vertiefung schaffte (4,87:1), und ohne eine zweite Farbrechnung, die
- * nur an dieser Stelle vorkam. */
-.birthday-chip--today {
-  background: var(--module-accent);
-  color: var(--color-ink-on-vivid);
-  padding: var(--space-0h) var(--space-2);
-  border-radius: var(--radius-full);
+/* Die Aufgabe, die zur Person gehoert: eine leise Zeile, die zur Aufgabe
+ * fuehrt. Volle Zielhoehe, ohne die Karte zu strecken. */
+.birthday-hero__task {
+  align-self: flex-start;
+  /* Nicht breiter als die Karte: sonst greift die Ellipse darunter nie. */
+  max-width: 100%;
+  min-width: 0;
+  min-block-size: var(--target-base);
+  margin-block: calc((var(--type-footnote-lh) - var(--target-base)) / 2);
+  text-decoration: none;
+}
+
+.birthday-hero__task span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthday-hero__note {
+  align-self: flex-start;
 }
 
 /* --------------------------------------------------------
  * Avatare
  * -------------------------------------------------------- */
-/* 52px WAR EIN ROHWERT UND EIN DRITTES MASS. Kontakte, das Nachbarmodul
- * derselben Familie, tragen ihr Zeilenbild seit jeher auf `--target-md`
- * (`.contact-item__icon`) - hier standen 52 hartkodierte Pixel, die die Zeile
- * allein schon auf 76px hoben, bevor der Text mitzählte. */
+/* Die Zeilenscheibe ist die 28er-`.initial-disc` (inset-list.css): Fill und
+ * Tinte-2 fuer jeden ohne Konto, die Personenfarbe (Tinte auf Toenung) nur fuer
+ * Haushaltsmitglieder, ein Bild, wenn es eines gibt. */
 .birthday-avatar {
-  width: var(--target-md);
-  height: var(--target-md);
-  border-radius: var(--radius-full);
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -311,15 +270,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* EIN KONTAKT OHNE HAUSHALTS-VERKNUEPFUNG HAT KEINE IDENTITAETSFARBE, und
-   * genau das soll die Scheibe sagen. v2.19 hat das schon so begruendet
-   * („contacts without a link keep the neutral tint on purpose"), aber der
-   * „neutrale" Ton war der MODULTON - eine Farbaussage, nur eine leise. Wer
-   * verknuepft ist, traegt seine Mitgliedsfarbe; wer es nicht ist, traegt gar
-   * keine. Vollton-Regel, zweiter Zweig (DESIGN.md, Colors). */
-  background: var(--color-fill-well);
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-bold);
 }
 
 /* --------------------------------------------------------

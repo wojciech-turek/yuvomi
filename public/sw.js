@@ -67,6 +67,7 @@ const APP_SHELL = [
   '/styles/page-search.css',
   '/styles/kitchen-tabs.css',
   '/styles/list-row.css',
+  '/styles/inset-list.css',
   '/styles/panel.css',
   '/styles/user-multi-select.css',
   '/styles/datepicker.css',

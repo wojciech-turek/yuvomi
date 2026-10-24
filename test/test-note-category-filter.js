@@ -531,10 +531,15 @@ test('OpenAPI documents note category payloads and permission capabilities', () 
 test('R20: die Filterreihe haelt ihren Platz, bis die Daten da sind', () => {
   const page = readFileSync(new URL('../public/pages/notes.js', import.meta.url), 'utf8');
   const markup = page.match(/<div class="notes-filters page-chip-row" id="notes-filters"[^>]*>/)?.[0] ?? '';
-  assert.doesNotMatch(markup, /\shidden\b/, 'nicht verborgen im ersten Bild');
+  // Tafla (2026-10-20): the author chips start at three authors, so with two
+  // adults the row stands only when there are categories. The placeholder
+  // holds its place when the row stood last time on this device - otherwise
+  // the two-adult home would see a reserved row vanish on every visit.
+  assert.match(markup, /\$\{filtersStoodLastTime\(\) \? '' : ' hidden'\}/, 'verborgen nur, wenn die Reihe zuletzt fehlte');
   assert.match(markup, /aria-hidden="true" data-pending/, 'ein stummer Platzhalter');
-  assert.match(page, /row\.hidden = creators\.length < 2 && filterCategories\.length === 0;\s*row\.removeAttribute\('aria-hidden'\);\s*delete row\.dataset\.pending;/,
-    'nach dem Laden entscheidet renderFilters, und die Reihe spricht wieder');
+  assert.match(page, /row\.hidden = !showCreators && filterCategories\.length === 0;\s*row\.removeAttribute\('aria-hidden'\);\s*delete row\.dataset\.pending;\s*rememberFiltersStood\(!row\.hidden\);/,
+    'nach dem Laden entscheidet renderFilters, die Reihe spricht wieder, und das Geraet merkt es sich');
+  assert.match(page, /const showCreators = creators\.length >= 3;/, 'Autorenchips erst ab drei Personen');
   const css = readFileSync(new URL('../public/styles/notes.css', import.meta.url), 'utf8');
   assert.match(css, /\.notes-filters__skeleton \{[^}]*block-size: var\(--target-md\)/);
 });

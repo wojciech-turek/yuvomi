@@ -1557,7 +1557,8 @@
         "checkConflict": "Нотатку тим часом змінено. Її буде завантажено знову.",
         "pinnedState": "Закріплена",
         "checklistDone": "Виконано",
-        "checklistOpen": "Відкрито"
+        "checklistOpen": "Відкрито",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Жирний (Ctrl+B)",
@@ -3740,7 +3741,8 @@
         "twoFactorCancel": "Скасувати",
         "ssoOnlyHint": "Вхід до цього домогосподарства відбувається виключно через SSO.",
         "guestPasswordLogin": "Вхід гостя за паролем",
-        "accountCannotSignIn": "Цей обліковий запис не може увійти. Зверніться до адміністратора вашого домогосподарства."
+        "accountCannotSignIn": "Цей обліковий запис не може увійти. Зверніться до адміністратора вашого домогосподарства.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Ласкаво просимо до Yuvomi",
@@ -4044,7 +4046,11 @@
         "importSubmit": "Додати {{count}}",
         "importSuccess": "Додано днів народження: {{count}}.",
         "importNothingSelected": "Виберіть принаймні один контакт.",
-        "importSelected": "Вибрано контактів: {{count}}"
+        "importSelected": "Вибрано контактів: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "onboarding": {
         "step1Title": "Ласкаво просимо до {{name}}",
@@ -4352,7 +4358,23 @@
         "errorDmsAccountGone": "Цього облікового запису DMS більше немає.",
         "errorDmsDocumentGone": "Цього документа більше немає в DMS.",
         "errorDmsAlreadyLinked": "Цей документ із DMS уже пов’язано.",
-        "errorDmsAlreadyStored": "Цей документ уже зберігається в DMS."
+        "errorDmsAlreadyStored": "Цей документ уже зберігається в DMS.",
+        "inDays_one": "через {{count}} день",
+        "inDays": "через {{count}} дн.",
+        "inDays_few": "через {{count}} дні",
+        "inDays_many": "через {{count}} дн.",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Кухня",
@@ -4593,7 +4615,25 @@
         "errorAmountsHidden": "Позначити оплату може лише той, кому видно суми помічниці по дому.",
         "notHereToday": "Сьогодні ще не прийшла",
         "tabVisits": "Відвідування",
-        "tabChores": "Хатні справи"
+        "tabChores": "Хатні справи",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "інші",
@@ -5282,7 +5322,25 @@
             "reminders": {
                 "title": "Наступні нагадування",
                 "empty": "На сьогодні прийомів більше немає"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Показники",
@@ -6119,7 +6177,10 @@
         "errorCycleImportNoRows": "У файлі лише рядок заголовка і жодної менструації.",
         "errorCycleImportTooManyRows": "Один імпорт може містити не більше {{limit}} менструацій. Розділіть файл.",
         "errorVitalImpossible": "Таке значення неможливе. Перевірте введення.",
-        "errorVitalBpOrder": "Систолічне значення має бути більшим за діастолічне."
+        "errorVitalBpOrder": "Систолічне значення має бути більшим за діастолічне.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Вивезення сміття",

@@ -603,7 +603,8 @@
   width: 100%;
   transform: scaleX(var(--fill, 0));
   transform-origin: left center;
-  background: var(--color-accent);
+  /* Tafla: Fuellrolle der Stimme, nicht ihre Textrolle. */
+  background: var(--color-btn-primary);
   transition: transform var(--transition-base);
 }
 

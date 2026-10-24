@@ -340,6 +340,9 @@ const PLURAL_EXCEPTIONS = {
   // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
   'capture.primary.shoppingMany': 'GUARDED',
   'capture.saved.shoppingMany': 'GUARDED',
+  // health.js visitPill() - d<0 ("zaległe"), d===0 und d===1 gehen vorher ab,
+  // die Pille steht nur bis d<=3: diese Zeile sieht nur 2 und 3 (Tafla, Wizyty).
+  'health.overview.pillInDays': 'GUARDED',
   // notifications.js:133-138 (wasteWhen) - 0 and 1 days take their own keys
   // (reminderSameDay, reminderDayBefore); this one sees only 2..14
   // (MAX_OFFSET_DAYS, server/services/waste-reminders.js:38).

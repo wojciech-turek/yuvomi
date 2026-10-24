@@ -2436,3 +2436,245 @@
     transition: none;
   }
 }
+
+/* --------------------------------------------------------
+ * TAFLA (2026-10-20): der Ueberblick und die Zeile
+ *
+ * Oben die eine Frist, die zuerst ablaeuft (E1-Karte, `.hero-card` aus
+ * inset-list.css, EINE Handlung), darunter - unterhalb 1024px, wo die
+ * Ordnerspalte fehlt - die Ordner der Ebene als gruppierte Zeilen (48, Zaehler
+ * rechts, Schloss vor dem Zaehler, wenn der Ordner nur Privates enthaelt),
+ * "Ordner hinzufuegen" und das Archiv. Ordner-Chip und Status-Segment der
+ * Filterzeile ersetzt dort der Ueberblick; die Facetten-Chips (Fristen,
+ * Kategorien) bleiben als Filter der Liste.
+ * -------------------------------------------------------- */
+.documents-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-inline: var(--page-inline-pad);
+  padding-block: var(--space-2) var(--space-4);
+}
+
+.documents-overview[hidden] {
+  display: none;
+}
+
+.documents-expiry-card__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.documents-expiry-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.documents-expiry-card__reminder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.documents-expiry-card__reminder svg {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+/* Die Handlung steht unter dem Titel, an seiner Kante (28 + 12). */
+.documents-expiry-card__actions {
+  display: flex;
+  padding-inline-start: calc(28px + var(--space-3));
+}
+
+/* Ein Verb als letzte Zeile ("Dodaj folder") spricht ganz im Akzent - das
+ * faerbt die geteilte `.inset-row--action` samt Titel (inset-list.css). */
+
+.documents-folder-row__count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.documents-folder-row__count svg {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+/* Der Kopf der Liste: "Ostatnie 14", der Ordnername oder "Zarchiwizowany";
+ * im Ordner rechts dessen Menue als Geisterkreis. */
+.documents-list-head {
+  align-items: center;
+  min-block-size: var(--type-body-lh);
+  margin-block-end: var(--space-2);
+}
+
+.documents-list-head__menu {
+  margin-inline-start: auto;
+  margin-block: calc((var(--target-base) - var(--type-body-lh)) / -2);
+}
+
+/* Der Weg eine Ebene hoeher: ein schlichtes Verb an der Titelkante der Seite. */
+.documents-overview__back {
+  display: flex;
+  margin-block-end: calc(var(--space-6) * -1 + var(--space-2));
+}
+
+.documents-overview__back .pill-btn {
+  margin-inline-start: calc(var(--space-1) * -1);
+}
+
+.documents-list-head[hidden] {
+  display: none;
+}
+
+/* Am breiten Schirm fuehrt die Ordnerspalte die Ablage - dort keine zweite. */
+@media (min-width: 1024px) {
+  .documents-folder-group,
+  .documents-overview__back {
+    display: none;
+  }
+
+  .documents-overview:not(:has(.documents-expiry-card)) {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* Ordner sind Zeilen, Aktiv/Archiv eine Zeile, der Pfad ein Zurueck: Chip,
+   * Segment und Pfad gehen. */
+  .documents-page .documents-folder-chip,
+  .documents-page .documents-status,
+  .documents-page .documents-breadcrumb {
+    display: none;
+  }
+
+  .documents-page .documents-filters__chips:not(:has(.filter-chip:not(.documents-folder-chip))) {
+    display: none;
+  }
+
+  /* Ohne Segment und Ordner-Chip steht die Spur allein - ohne Naht davor. */
+  .documents-filters__chips {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  /* Traegt die Zeile keinen Chip, faellt sie ganz (samt Polster). */
+  .documents-filters:not(:has(.documents-filter-chips:not(:empty))) {
+    display: none;
+  }
+
+  .documents-filters {
+    border-bottom: 0;
+    padding-block: 0 var(--space-3);
+  }
+}
+
+/* Die Zeile wie jede Tafla-Zeile: Zeichen in einem 28er-Platz statt der
+ * 42er-Kachel, Titel 17/400 einzeilig, Meta 13/400 Tinte-2 ("PDF · dziś"),
+ * Haarlinien auf die Titelkante eingerueckt, die Liste flach (Gruppen tragen
+ * keinen Schatten). Am breiten Schirm bleiben Kachel und Datumsspalte. */
+.documents-list--list.row-carrier {
+  box-shadow: none;
+}
+
+.document-row__when {
+  display: none;
+}
+
+.document-row__who {
+  flex-shrink: 0;
+}
+
+@container list-rows (max-width: 30rem) {
+  .document-row {
+    position: relative;
+    gap: var(--space-3);
+    min-height: 64px;
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .document-row__icon {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .document-row__icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .document-row__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--type-body);
+    line-height: var(--type-body-lh);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .document-row__meta {
+    column-gap: var(--space-1);
+    color: var(--color-text-secondary);
+  }
+
+  .document-row__meta > .document-row__when {
+    display: inline-flex;
+  }
+
+  /* Zeichen weg, Eintraege mit " · " verbunden (spec "Lista grupowana"). */
+  .document-row__meta > span:not(.doc-badge) svg {
+    display: none;
+  }
+
+  /* Der Punkt ist ein Flex-Kind des Eintrags: dessen Abstand (4) steht
+   * dahinter, der Spaltenabstand der Meta (4) davor. */
+  .document-row__meta > span:not(.doc-badge) + span:not(.doc-badge)::before {
+    content: '·';
+  }
+
+  .document-row__meta > .doc-badge + span:not(.doc-badge) {
+    margin-inline-start: var(--space-1);
+  }
+
+  /* Haarlinie auf der Titelkante (16 + 28 + 12 = 56) statt ueber die ganze Zeile. */
+  .documents-list--list > .document-row + .document-row {
+    border-top: 0;
+  }
+
+  .documents-list--list > .document-row + .document-row::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 56px 0;
+    block-size: 0.5px;
+    background: var(--color-separator);
+    pointer-events: none;
+  }
+}
+
+/* AM FINGER OHNE AUGE. Ein Tipp auf die Zeile oeffnet den Betrachter; das Auge
+ * einer Leiste ohne Kebab (fremdes Dokument, `data-read-bar`) war dort ein
+ * zweiter Knopf fuer dieselbe Geste. Es geht aus dem Bild, nicht aus dem
+ * Fokusbaum: es bleibt der Tab-Stopp der Leiste fuer Tastatur und VoiceOver. */
+@media (hover: none) {
+  @container list-rows (max-width: 30rem) {
+    .document-row__actions[data-read-bar]:not(:focus-within) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

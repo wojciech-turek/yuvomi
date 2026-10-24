@@ -1407,7 +1407,8 @@
         "checkConflict": "그 사이에 메모가 변경되었습니다. 다시 불러옵니다.",
         "pinnedState": "고정됨",
         "checklistDone": "완료",
-        "checklistOpen": "미완료"
+        "checklistOpen": "미완료",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "굵게 (Ctrl+B)",
@@ -3530,7 +3531,8 @@
         "twoFactorCancel": "취소",
         "ssoOnlyHint": "이 가정의 로그인은 SSO로만 이루어집니다.",
         "guestPasswordLogin": "비밀번호로 게스트 로그인",
-        "accountCannotSignIn": "이 계정은 로그인할 수 없습니다. 가정의 관리자에게 문의해 주세요."
+        "accountCannotSignIn": "이 계정은 로그인할 수 없습니다. 가정의 관리자에게 문의해 주세요.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi에 오신 것을 환영합니다",
@@ -3714,7 +3716,11 @@
         "importSubmit": "{{count}}개 추가",
         "importSuccess": "생일 {{count}}개를 추가했습니다.",
         "importNothingSelected": "연락처를 하나 이상 선택하세요.",
-        "importSelected": "연락처 {{count}}개 선택됨"
+        "importSelected": "연락처 {{count}}개 선택됨",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "식사 없음",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "이 DMS 계정은 더 이상 존재하지 않습니다.",
         "errorDmsDocumentGone": "이 문서는 DMS에 더 이상 존재하지 않습니다.",
         "errorDmsAlreadyLinked": "이 DMS 문서는 이미 연결되어 있습니다.",
-        "errorDmsAlreadyStored": "이 문서는 이미 DMS에 저장되어 있습니다."
+        "errorDmsAlreadyStored": "이 문서는 이미 DMS에 저장되어 있습니다.",
+        "inDays_one": "{{count}}일 후",
+        "inDays": "{{count}}일 후",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "없음",
@@ -4345,7 +4365,21 @@
         "errorAmountsHidden": "가사 도우미 금액을 볼 수 있는 사람만 지급을 표시할 수 있습니다.",
         "notHereToday": "오늘은 아직 오지 않음",
         "tabVisits": "방문",
-        "tabChores": "집안일"
+        "tabChores": "집안일",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "splitExpenses": {
         "title": "공동 지출",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "다음 알림",
                 "empty": "오늘 남은 복용 없음"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "생체 신호",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "파일에 머리글 행만 있고 생리 기간이 없습니다.",
         "errorCycleImportTooManyRows": "한 번에 최대 {{limit}}개의 생리 기간만 가져올 수 있습니다. 파일을 나누세요.",
         "errorVitalImpossible": "불가능한 값입니다. 입력한 내용을 확인해 주세요.",
-        "errorVitalBpOrder": "수축기 값은 이완기 값보다 커야 합니다."
+        "errorVitalBpOrder": "수축기 값은 이완기 값보다 커야 합니다.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "쓰레기 수거",

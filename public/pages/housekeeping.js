@@ -1,14 +1,14 @@
 /**
  * Modul: Housekeeping
- * Zweck: Dashboard, chore management, reports, and housekeeping staff
+ * Zweck: Visits (Tafla page: next visit, what is owed, chores), chores, reports, staff
  * Abhängigkeiten: /api.js, /i18n.js, /utils/html.js
  */
 
 import { api, auth } from '/api.js';
-import { t, formatDate, formatDayMonth, formatTime, getLocale, getNumberFormat } from '/i18n.js';
+import { t, formatDate, formatDayMonth, formatTime, formatUnit, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { periodStepperHtml, syncPeriodReset, swapPeriod } from '/utils/period-stepper.js';
-import { metricGlanceHtml, wireMetricGlance } from '/utils/metric-glance.js';
+import { metricGlanceHtml } from '/utils/metric-glance.js';
 import { initials } from '/utils/initials.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { emptyStateHTML, mountLoadError } from '/utils/empty-state.js';
@@ -25,7 +25,8 @@ import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
 import { holdDocumentAttachStyle } from '/components/document-attach.js';
 import { isNavModuleReadOnly, canSeeHousekeepingAmounts } from '/permissions.js';
 import { pathAccess, mayWritePath } from '/utils/module-access.js';
-import { todayKey } from '/utils/date.js';
+import { todayKey, addLocalDays } from '/utils/date.js';
+import { shortDayMonth, shortWeekdayDayMonth } from '/utils/day-label.js';
 import { displayTimeZone, zonedDateKey } from '/utils/timezone.js';
 import { USER_COLOR_DEFAULT } from '/utils/color.js';
 import { renderPageColumns } from '/utils/page-layout.js';
@@ -57,10 +58,6 @@ function localDayParams() {
   return new URLSearchParams({ timezone: dayTimeZone() });
 }
 
-// Aufklapp-Zustand der Kennzahl-Kurzzeile der Uebersicht (mobil, R16): haelt
-// ueber den Neuaufbau der Uebersicht nach einem Check-in.
-let _metricsExpanded = false;
-
 let state = {
   tab: 'dashboard',
   dashboard: null,
@@ -71,6 +68,10 @@ let state = {
   reportMonth: null,
   currentMonth: null,
   recentVisits: [],
+  // Tafla (2026-10-20): the month before, for the hero's "Do zapłaty" and the
+  // next-visit guess early in a month. Loaded beside loadData() (see
+  // loadPreviousVisits), never by it - the report tests count its requests.
+  previousVisits: [],
   templates: [],
   worker: null,
   workers: [],
@@ -172,6 +173,7 @@ const READ_SAFE_CONTROLS = [
   '#housekeeping-report-next',
   '#housekeeping-report-current',
   '#housekeeping-staff-month',
+  '[data-goto-tab]',
 ].join(', ');
 
 // Was als Bedienelement zaehlt. Ein `label` nicht: sein Klick kommt als eigener
@@ -346,6 +348,21 @@ async function loadData() {
   state.canManageWorkers = workers.can_manage === true;
   state.worker = state.workers[0] || null;
   state.currency = prefs.data?.currency ?? 'EUR';
+}
+
+/**
+ * The month before the current one (Tafla hero, 2026-10-20). Separate from
+ * loadData() on purpose: the hero needs it, the reports and their tests do
+ * not, and a failure here only shortens what the hero can count.
+ */
+async function loadPreviousVisits() {
+  try {
+    const month = shiftMonth(currentMonthKey(), -1);
+    const res = await api.get(reportVisitsPath(month));
+    state.previousVisits = res?.data?.visits || [];
+  } catch {
+    state.previousVisits = [];
+  }
 }
 
 // TEXT-REITER OHNE ICON (D3, Critique 2026-10-16): vier Bereiche sind Text-
@@ -565,8 +582,8 @@ function presenceSignHtml(checkedIn) {
       </span>`;
 }
 
-function renderWorkerSummary() {
-  if (!state.workers.length) {
+function renderWorkerSummary(workers = state.workers) {
+  if (!workers.length) {
     // Der Leerzustand bot „Profil anlegen" an; ohne das Recht dazu (`read`
     // oder kein Admin) faellt die Aktion weg, und die Auskunft sagt, wer es
     // anlegt, statt zu etwas aufzufordern, das am 403 endet.
@@ -582,7 +599,7 @@ function renderWorkerSummary() {
       },
     });
   }
-  const rows = state.workers.map((worker) => {
+  const rows = workers.map((worker) => {
     // Derselbe Knopf fuehrt beide Richtungen: toggleSession() liest die offene
     // Sitzung und checkt aus, sonst ein. Er trug im eingecheckten Zustand ein
     // disabled-Attribut - und weil er der EINZIGE Ausloeser ist, war der
@@ -618,6 +635,217 @@ function renderWorkerSummary() {
   `;
 }
 
+// --------------------------------------------------------
+// Tafla: Sprzątanie as one calm page (2026-10-20)
+// --------------------------------------------------------
+
+/** Minutes a visit lasted - recorded minutes first, else check-in to check-out. */
+function visitMinutes(visit) {
+  if (Number.isFinite(Number(visit?.minutes_worked)) && Number(visit.minutes_worked) > 0) return Number(visit.minutes_worked);
+  const from = Date.parse(visit?.check_in ?? '');
+  const to = Date.parse(visit?.check_out ?? '');
+  return Number.isFinite(from) && Number.isFinite(to) && to > from ? Math.round((to - from) / 60000) : 0;
+}
+
+/** "4 h" / "3,5 h" (narrow) or "4 godziny" (long), in half hours. */
+function hoursText(minutes, unitDisplay = 'narrow') {
+  if (!minutes) return '';
+  const hours = Math.max(0.5, Math.round(minutes / 30) / 2);
+  return formatUnit(hours, 'hour', { unitDisplay, maximumFractionDigits: 1 });
+}
+
+/** The visits this page knows, newest first: the current month and the one before. */
+function knownVisits() {
+  const seen = new Set();
+  return [...(state.recentVisits || []), ...(state.previousVisits || [])]
+    .filter((visit) => visit?.check_in && !seen.has(String(visit.id)) && seen.add(String(visit.id)))
+    .sort((a, b) => Date.parse(b.check_in) - Date.parse(a.check_in));
+}
+
+/** Weekday (0 = Sunday) of a visit in the household's zone. */
+function visitWeekday(visit) {
+  const key = zonedDateKey(visit.check_in);
+  return key ? new Date(`${key}T12:00:00Z`).getUTCDay() : -1;
+}
+
+/**
+ * The next visit, when the visits say it: the last two (or three) finished
+ * visits of this person fell on the same weekday. Then the next one is that
+ * weekday, at the time the last one started, for about as long as they
+ * lasted. No pattern, no guess - the hero then names the last visit instead.
+ * The profile has no visiting days, so this is all the app can know.
+ *
+ * @returns {null | { dateKey: string, delta: number, visit: object, minutes: number }}
+ */
+function nextVisitGuess(worker, { today = todayKey() } = {}) {
+  if (!worker) return null;
+  const finished = knownVisits()
+    .filter((visit) => visit.check_out && (visit.worker_id == null || String(visit.worker_id) === String(worker.id)));
+  if (finished.length < 2) return null;
+  const recent = finished.slice(0, 3);
+  const weekday = visitWeekday(recent[0]);
+  if (weekday < 0 || !recent.every((visit) => visitWeekday(visit) === weekday)) return null;
+  const todayWeekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  let delta = (weekday - todayWeekday + 7) % 7;
+  // Today is the day, but she already came (or is here): the next one is a week on.
+  if (delta === 0 && (worker.today_session || worker.current_session || zonedDateKey(recent[0].check_in) === today)) delta = 7;
+  const minutes = Math.round(recent.reduce((sum, visit) => sum + visitMinutes(visit), 0) / recent.length);
+  return { dateKey: addLocalDays(today, delta), delta, visit: recent[0], minutes };
+}
+
+/** "Czwartek, 9:00" / "Dziś, 9:00" / "Jutro, 9:00". */
+function guessTitle(guess) {
+  let day;
+  if (guess.delta === 0) day = t('common.today');
+  else if (guess.delta === 1) day = t('common.tomorrow');
+  else {
+    const name = new Intl.DateTimeFormat(getLocale(), { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${guess.dateKey}T12:00:00Z`));
+    day = name.charAt(0).toLocaleUpperCase(getLocale()) + name.slice(1);
+  }
+  return t('housekeeping.dayAtTime', { day, time: formatTime(guess.visit.check_in) });
+}
+
+/** "8 i 15 paź": days of one month share their month name, else full short dates. */
+function visitDatesText(visits) {
+  const keys = visits.map((visit) => zonedDateKey(visit.check_in)).filter(Boolean).sort();
+  if (!keys.length || keys.length > 3) return '';
+  const list = (items) => new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(items);
+  const sameMonth = keys.every((key) => key.slice(0, 7) === keys[0].slice(0, 7));
+  if (sameMonth && keys.length > 1) {
+    const parts = new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short', timeZone: 'UTC' })
+      .formatToParts(new Date(`${keys.at(-1)}T12:00:00Z`));
+    const dayFirst = parts.findIndex((p) => p.type === 'day') < parts.findIndex((p) => p.type === 'month');
+    if (dayFirst && keys[0].slice(0, 4) === todayKey().slice(0, 4)) {
+      const month = parts.find((p) => p.type === 'month')?.value ?? '';
+      return `${list(keys.map((key) => String(Number(key.slice(8, 10)))))} ${month}`;
+    }
+  }
+  return list(keys.map((key) => shortDayMonth(key)));
+}
+
+/** The person the hero speaks about: the one in the house, else the first. */
+function heroWorker() {
+  return state.workers.find((worker) => worker.current_session) ?? state.workers[0] ?? null;
+}
+
+/**
+ * The hero card ("Następna wizyta", E1): when she comes next - or that she is
+ * here now, or when she was last - and what is owed, with ONE primary that
+ * marks it paid. Check-in / check-out ride in the card's corner (the same
+ * toggleSession() button the strip carries, both directions, never
+ * disabled - #1133); at `read` an open session stays as the static sign.
+ */
+function visitHeroHtml(worker, guess) {
+  const ro = readOnly();
+  const checkedIn = !!worker.current_session;
+  const name = worker.display_name || t('housekeeping.unnamedWorker');
+  let eyebrow;
+  let title;
+  let sub = name;
+  if (checkedIn) {
+    eyebrow = t('housekeeping.heroHereNow');
+    title = t('housekeeping.heroSince', { time: formatTime(worker.current_session.check_in) });
+  } else if (guess) {
+    eyebrow = t('housekeeping.heroNextVisit');
+    title = guessTitle(guess);
+    const about = hoursText(guess.minutes, 'long');
+    if (about) sub = `${name} · ${t('housekeeping.aboutDuration', { duration: about })}`;
+  } else {
+    const last = knownVisits().find((visit) => visit.worker_id == null || String(visit.worker_id) === String(worker.id));
+    eyebrow = t('housekeeping.lastVisit');
+    title = last ? shortWeekdayDayMonth(last.check_in) : t('housekeeping.noVisits');
+  }
+  const check = ro ? presenceSignHtml(checkedIn) : `
+        <button class="pill-btn pill-btn--secondary housekeeping-check-small housekeeping-hero__check" type="button"
+                data-worker-check="${esc(worker.id)}">
+          <i data-lucide="${checkedIn ? 'log-out' : 'log-in'}" aria-hidden="true"></i>
+          <span>${esc(checkedIn ? t('housekeeping.checkOut') : t('housekeeping.checkIn'))}</span>
+        </button>`;
+
+  // What is owed: this person's unpaid visits of the two months the page knows.
+  const unpaid = knownVisits().filter((visit) => !visit.paid_at && !amountsHidden(visit.total_amount)
+    && (visit.worker_id == null || String(visit.worker_id) === String(worker.id)));
+  const owed = unpaid.reduce((sum, visit) => sum + Number(visit.total_amount || 0), 0);
+  const payable = !ro && unpaid.length > 0 && unpaid.every((visit) => visit.can_mark_paid);
+  const dates = visitDatesText(unpaid);
+  const pay = unpaid.length && owed > 0 ? `
+      <hr class="hero-card__divider">
+      <div class="housekeeping-hero__pay">
+        <div class="housekeeping-hero__owed">
+          <p class="housekeeping-hero__amount">${esc(t('housekeeping.amountDue', { amount: chartMoney(owed) }))}</p>
+          <p class="hero-card__meta">${esc([t('housekeeping.visitCount', { count: unpaid.length }), dates].filter(Boolean).join(' · '))}</p>
+        </div>
+        ${payable ? `<button type="button" class="pill-btn pill-btn--primary housekeeping-hero__paid" data-pay-all>${esc(t('housekeeping.markAllPaid'))}</button>` : ''}
+      </div>` : '';
+
+  return `
+    <section class="hero-card housekeeping-hero" aria-labelledby="housekeeping-hero-title">
+      <div class="housekeeping-hero__head">
+        <div class="housekeeping-hero__top">
+          <div class="housekeeping-hero__text">
+            <p class="hero-card__eyebrow">${esc(eyebrow)}</p>
+            <h2 class="hero-card__title" id="housekeeping-hero-title">${esc(title)}</h2>
+          </div>
+          ${check}
+        </div>
+        <p class="hero-card__sub">${esc(sub)}</p>
+      </div>${pay}
+    </section>`;
+}
+
+/**
+ * The chores for the next visit as checkable rows: what is overdue or due by
+ * the guessed visit (or due at all, without a guess). The circle completes the
+ * chore (completeTask, with its undo toast), the name opens it; the last row
+ * adds one. At `read` the circle and the add row are gone, the names stay.
+ */
+function visitChoresHtml(guess) {
+  const ro = readOnly();
+  const due = (state.tasks || []).filter((task) => task.urgency_status !== 'ok'
+    || (guess && task.due_date && zonedDateKey(task.due_date) <= guess.dateKey));
+  if (!due.length && ro) return '';
+  const rows = due.map((task) => `
+        <li class="inset-row inset-row--single housekeeping-chore${task.urgency_status === 'overdue' ? ' housekeeping-chore--overdue' : ''}">
+          ${ro ? '<span class="inset-row__lead" aria-hidden="true"></span>' : `
+          <button class="housekeeping-task__check check-ring housekeeping-chore__check" type="button" data-complete-task="${esc(task.id)}"
+                  aria-label="${esc(t('housekeeping.completeTask', { name: task.name }))}">
+            <i data-lucide="check" aria-hidden="true"></i>
+          </button>`}
+          ${ro ? `<span class="inset-row__title">${esc(task.name)}</span>` : `
+          <button type="button" class="housekeeping-chore__name inset-row__title" data-edit-task="${esc(task.id)}">${esc(task.name)}</button>`}
+        </li>`).join('');
+  const add = ro ? '' : `
+        <li class="inset-row inset-row--single inset-row--action housekeeping-chore housekeeping-chore--add">
+          <button type="button" class="housekeeping-chore__add" data-create-task>
+            <span class="inset-row__lead"><i data-lucide="plus" aria-hidden="true"></i></span>
+            <span class="inset-row__title">${esc(t('housekeeping.addTask'))}</span>
+          </button>
+        </li>`;
+  return `
+    <section class="inset-group housekeeping-chores" aria-labelledby="housekeeping-chores-title">
+      <h2 class="inset-group__head" id="housekeeping-chores-title">${esc(guess ? t('housekeeping.forNextVisit') : t('housekeeping.pendingChores'))}${due.length ? `<span class="inset-group__count">${due.length}</span>` : ''}</h2>
+      <ul class="inset-card housekeeping-chores__list">${rows}${add}
+      </ul>
+    </section>`;
+}
+
+/** The other areas, behind one card of rows (Tafla: no tab bar on this view on phones). */
+function moreAreasHtml() {
+  const glyph = { tasks: 'list-checks', reports: 'chart-column', staff: 'users-round' };
+  const row = (tab, label, value) => `
+        <li><button type="button" class="inset-row inset-row--single" data-goto-tab="${esc(tab)}">
+          <span class="inset-row__lead"><i data-lucide="${glyph[tab]}" aria-hidden="true"></i></span>
+          <span class="inset-row__title">${esc(label)}</span>
+          <span class="inset-row__trail">${value ? `<span class="inset-row__value">${esc(value)}</span>` : ''}<span class="inset-row__chevron"><i data-lucide="chevron-right" aria-hidden="true"></i></span></span>
+        </button></li>`;
+  return `
+    <ul class="inset-card housekeeping-more" aria-label="${esc(t('housekeeping.bottomNav'))}">
+      ${row('tasks', t('housekeeping.tabChores'), String(state.tasks?.length ?? 0))}
+      ${row('reports', t('housekeeping.reports'), formatMonthLabel(currentMonthKey(), { month: 'long' }))}
+      ${row('staff', t('housekeeping.staffTitle'), state.workers.length > 1 ? String(state.workers.length) : (state.workers[0]?.display_name ?? ''))}
+    </ul>`;
+}
+
 function renderDashboard(content) {
   content.replaceChildren();
   const data = state.dashboard || {};
@@ -628,50 +856,19 @@ function renderDashboard(content) {
     });
     return;
   }
-  // DATUM ALS WERT, UHRZEIT ALS FUSSNOTE.
-  // Beides zusammen in der Kennzahl ergab „18.08.2026 · 08:30" und lief in
-  // Title 1 gemessen 38px ueber die Kartenkante - eine Kennzahl traegt EINE
-  // Aussage, die Praezisierung darunter gehoert in `.metric-card__note`
-  // (dieselbe Rolle wie „7 aktiv" bei den Abos).
-  const hasLastVisit = Boolean(data.last_visit?.check_in);
-  // OHNE JAHR, WENN ES DAS LAUFENDE IST (R10 L10): mobil stehen die vier
-  // Kennzahlen in EINER Zeile, und „23.09.2026" passt in eine Viertelzeile nicht
-  // (gemessen 112px Bedarf gegen 67px). Liegt der letzte Besuch in einem
-  // anderen Jahr, bleibt es stehen - dann ist es die Auskunft.
-  // BEIDE JAHRE IN DER ANZEIGEZONE: formatDate/formatDayMonth rechnen in die
-  // Haushaltszone, also muss der Vergleich es auch. Mit dem Jahr des rohen
-  // UTC-Strings und dem der Geraetezone erschien `2026-01-01T00:30Z` in New
-  // York als „31.12." - der Tag aus 2025, das Jahr trotzdem weggelassen.
-  const lastVisit = !hasLastVisit
-    ? t('housekeeping.noVisits')
-    : zonedDateKey(data.last_visit.check_in).slice(0, 4) === todayKey().slice(0, 4)
-      ? formatDayMonth(data.last_visit.check_in)
-      : formatDate(data.last_visit.check_in);
-  const lastVisitTime = hasLastVisit ? formatTime(data.last_visit.check_in) : '';
+  const worker = heroWorker();
+  const guess = worker?.current_session ? null : nextVisitGuess(worker);
+  const others = state.workers.filter((item) => item !== worker);
   const maxPayment = Math.max(1, ...(data.monthly_payments || []).map((row) => row.total));
   const bars = (data.monthly_payments || []).map((row) => {
-    // ANTEIL, KEINE PIXELHOEHE. Hier stand `style="height:${...}px"` mit einer
-    // im JS gerechneten Zahl - ein hartkodierter Designwert im Markup, und der
-    // Balken skalierte deshalb nicht mit seiner Karte. Der Wert ist DATEN
-    // (0..1), die Geometrie gehoert dem Stylesheet; dieselbe Bauart wie
-    // `--span-from/--span-to` am Wetterbalken und `--bar-scale` im Budget.
-    // Der Mindestanteil haelt einen kleinen Betrag sichtbar. Ein Monat OHNE
-    // Zahlung bleibt leer (R19): seit der Server alle sechs Monate liefert,
-    // stuende sonst ueber jeder Null ein Stummel, als waere etwas gezahlt.
+    // ANTEIL, KEINE PIXELHOEHE: der Wert ist DATEN (0..1), die Geometrie
+    // gehoert dem Stylesheet (`--bar-scale`). Ein Monat ohne Zahlung bleibt
+    // leer (R19); bezahlt unten, offen darueber (R20, `--paid-share`).
     const scale = row.total > 0 ? Math.max(0.06, row.total / maxPayment) : 0;
-    // BEZAHLT UNTEN, OFFEN DARUEBER (R20, Re-Critique 2026-10-17 a5 P2-5).
-    // Die Saeule ist die Summe der Besuche eines Monats; ihr bezahlter Teil
-    // steht voll, der offene als Tint derselben Serie - die Legende darunter
-    // nennt beide, und "Offene Zahlungen" im Abschnittskopf findet sich in
-    // der Saeule wieder. Vorher war die Saeule eine Kapsel in einer vollen
-    // Bahn (las sich als Fortschritt), und ueber jedem leeren Monat stand
-    // "0,00 €". Ein Monat ohne Besuch traegt jetzt nur die Grundlinie.
     const paidShare = row.total > 0 ? Math.max(0, Math.min(1, (row.total - (row.pending || 0)) / row.total)) : 0;
     const name = row.total > 0
       ? `${formatMonthLabel(row.month)}: ${money(row.total)}${row.pending > 0 ? ` (${t('housekeeping.paymentPending')} ${money(row.pending)})` : ''}`
       : `${formatMonthLabel(row.month)}: ${money(0)}`;
-    // Wert sichtbar am Balken statt nur im Hover-title: das Chart trug sonst
-    // keine ablesbare Achse oder Zahl (Audit A2-23).
     return `
       <div class="housekeeping-chart__bar-wrap" role="listitem" aria-label="${esc(name)}">
         <span class="housekeeping-chart__value" aria-hidden="true">${row.total > 0 ? esc(chartMoney(row.total)) : ''}</span>
@@ -683,78 +880,34 @@ function renderDashboard(content) {
     `;
   }).join('');
 
-  const recentVisits = (state.recentVisits || []).slice(0, 5);
+  // Ostatnie wizyty: the date with the weekday and the hours lead, the amount
+  // trails in ink; the person stands in the row only when there are several.
+  const recentVisits = knownVisits().slice(0, 5);
+  const reserveMenu = recentVisits.some((visit) => visitMenuHtml(visit, '') !== '');
   const recentRows = recentVisits.map((visit) => visitRowHtml(visit, {
-    dateText: formatDate(visit.check_in),
+    reserveMenu,
+    dateText: shortWeekdayDayMonth(visit.check_in),
+    visitDate: formatDate(visit.check_in),
+    showWorker: state.workers.length > 1,
+    compact: true,
     className: 'housekeeping-staff-log-row',
   })).join('');
 
   content.insertAdjacentHTML('beforeend', `
-    ${renderWorkerSummary()}
-    ${/* MOBIL EINE KURZZEILE (R16, utils/metric-glance.js): die vier Kacheln
-          standen als 2x2 vor den Besuchen (erste Besuchszeile y=475 von 844).
-          Die Zeile nennt die Besuche im Monat, daneben den letzten Besuch und
-          - nur wenn es welche gibt - die faelligen Aufgaben; ein Tipp klappt
-          die Kacheln auf. Ab 640px stehen die Kacheln wie bisher. */ ''}
-    ${metricGlanceHtml({
-    id: 'housekeeping-glance-more',
-    controls: 'housekeeping-metrics',
-    expanded: _metricsExpanded,
-    label: t('housekeeping.visitsThisMonth'),
-    value: String(data.visits_this_month ?? 0),
-    flows: [
-      hasLastVisit ? { label: t('housekeeping.lastVisit'), amount: lastVisit } : null,
-      (data.pending_tasks ?? 0) > 0 ? { label: t('housekeeping.pendingChores'), amount: String(data.pending_tasks) } : null,
-    ],
-  })}
-    <section class="metric-grid metric-grid--quad budget-glance-details${_metricsExpanded ? ' is-expanded' : ''}" id="housekeeping-metrics">
-      <article class="metric-card">
-        <div class="metric-card__label">${esc(t('housekeeping.visitsThisMonth'))}</div>
-        <div class="metric-card__value">${esc(data.visits_this_month ?? 0)}</div>
-      </article>
-      <article class="metric-card">
-        <div class="metric-card__label">${esc(t('housekeeping.lastVisit'))}</div>
-        <div class="metric-card__value">${esc(lastVisit)}</div>
-        ${lastVisitTime ? `<div class="metric-card__note">${esc(lastVisitTime)}</div>` : ''}
-      </article>
-      <article class="metric-card${(data.pending_tasks ?? 0) > 0 ? '' : ' metric-card--empty'}">
-        <div class="metric-card__label">${esc(t('housekeeping.pendingChores'))}</div>
-        <div class="metric-card__value">${esc(data.pending_tasks ?? 0)}</div>
-      </article>
-      <article class="metric-card${(data.finished_tasks_this_month ?? 0) > 0 ? '' : ' metric-card--empty'}">
-        <div class="metric-card__label">${esc(t('housekeeping.finishedChores'))}</div>
-        <div class="metric-card__value">${esc(data.finished_tasks_this_month ?? 0)}</div>
-      </article>
-    </section>
-    <!-- DIE LISTE VOR DEM DIAGRAMM (R10 L10, A3 P2-10): mobil begannen die
-         letzten Besuche bei y=760 von 844, hinter Personal, Kennzahlen und dem
-         252px hohen Zahlungsdiagramm. Die Besuche sind, was man hier nachsieht;
-         der Verlauf der Zahlungen ist die Einordnung darunter. -->
-    <!-- BESUCHE | ZAHLUNGEN (Re-Critique 2026-09-28, P5): ab 1280px stehen
-         beide Karten nebeneinander, und die Uebersicht bekommt das breite Mass
-         (housekeeping.css, [data-tab="dashboard"]) - im Lesemass einer
-         Textseite blieben bei 1440 rund 470px leer. Darunter bleibt die
-         Reihenfolge Liste vor Diagramm. -->
-    <!-- ABSCHNITTSTITEL AUF DER BUEHNE (R16 Schritt 2b; DESIGN.md
-         "Ueberschrift ueber Inhalt"): der Titel stand IN der Karte, als
-         einziges Modul neben dem Budget. Der Abschnitt (.housekeeping-section)
-         traegt keine Flaeche, die Karte darunter nur noch den Inhalt. -->
+    ${worker ? visitHeroHtml(worker, guess) : ''}
+    ${others.length ? renderWorkerSummary(others) : ''}
+    ${visitChoresHtml(guess)}
+    ${/* BESUCHE | ZAHLUNGEN (Re-Critique 2026-09-28, P5): ab 60rem stehen beide
+          Karten nebeneinander; darunter die Liste vor dem Diagramm (R10 L10). */ ''}
     <div class="housekeeping-dashboard-columns${amountsHidden(data.monthly_payments) ? ' housekeeping-dashboard-columns--single' : ''}">
-    <section class="housekeeping-section">
-      <div class="housekeeping-section-heading">
-        <h2 class="u-section-title">${esc(t('housekeeping.recentVisits'))}</h2>
-      </div>
-      <div class="housekeeping-card">
-      <div class="housekeeping-staff-log-list">
+    <section class="housekeeping-section inset-group" aria-labelledby="housekeeping-recent-title">
+      <h2 class="inset-group__head" id="housekeeping-recent-title">${esc(t('housekeeping.recentVisits'))}</h2>
+      <div class="inset-card housekeeping-staff-log-list">
         ${recentRows || `<p class="housekeeping-muted">${esc(t('housekeeping.noVisits'))}</p>`}
       </div>
-      </div>
     </section>
-    ${amountsHidden(data.monthly_payments) ? '' : `<section class="housekeeping-section">
-      <div class="housekeeping-section-heading">
-        <h2 class="u-section-title">${esc(t('housekeeping.payments'))}</h2>
-        <span>${esc(t('housekeeping.pendingPayments'))}: ${esc(money(data.pending_payments || 0))}</span>
-      </div>
+    ${amountsHidden(data.monthly_payments) ? '' : `<section class="housekeeping-section inset-group" aria-labelledby="housekeeping-payments-title">
+      <h2 class="inset-group__head" id="housekeeping-payments-title">${esc(t('housekeeping.payments'))}</h2>
       <div class="housekeeping-card">
       <div class="housekeeping-chart"${bars ? ' role="list"' : ''} aria-label="${esc(t('housekeeping.monthlyPayments'))}">
         ${bars || `<p class="housekeeping-muted">${esc(t('housekeeping.noPaymentData'))}</p>`}
@@ -766,20 +919,49 @@ function renderDashboard(content) {
       </div>
     </section>`}
     </div>
+    ${moreAreasHtml()}
   `);
   if (window.lucide) window.lucide.createIcons({ el: content });
-  wireMetricGlance(content, 'housekeeping-glance-more', (expanded) => { _metricsExpanded = expanded; });
+  const refresh = async () => {
+    await loadData();
+    await loadPreviousVisits();
+    if (content.isConnected) renderDashboard(content);
+  };
+  // The other areas: a row clicks its (hidden) tab, so wireTablist keeps
+  // owning the switch, the focus and the indicator.
+  content.querySelectorAll('[data-goto-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = document.querySelector(`.housekeeping-tab[data-tab-id="${btn.dataset.gotoTab}"]`);
+      if (tab) tab.click();
+      else { state.tab = btn.dataset.gotoTab; renderCurrentTab(content.closest?.('.page-transition') || document.body); }
+    });
+  });
   // `if (!readOnly())` statt `return`: die lesende Verdrahtung (Bericht
   // oeffnen) steht dahinter und muss bleiben - dieselbe Form wie in health.js.
   if (!readOnly()) {
     content.querySelectorAll('[data-worker-check]').forEach((btn) => {
       btn.addEventListener('click', () => toggleSession(document.querySelector('.page-transition') || document.body, btn.dataset.workerCheck));
     });
+    content.querySelectorAll('[data-complete-task]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const task = state.tasks.find((it) => String(it.id) === btn.dataset.completeTask);
+        if (task) completeTask(task, content, btn);
+      });
+    });
+    content.querySelectorAll('[data-edit-task]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const task = state.tasks.find((it) => String(it.id) === btn.dataset.editTask);
+        if (task) openTaskEditModal(task, content);
+      });
+    });
+    content.querySelector('[data-create-task]')?.addEventListener('click', () => openTaskCreateModal(content));
+    content.querySelector('[data-pay-all]')?.addEventListener('click', () => {
+      const unpaid = knownVisits().filter((visit) => !visit.paid_at && visit.can_mark_paid
+        && (visit.worker_id == null || String(visit.worker_id) === String(worker.id)));
+      if (unpaid.length) payVisit(unpaid[0], refresh, { also: unpaid.slice(1) });
+    });
   }
-  wireVisitRows(content, state.recentVisits || [], async () => {
-    await loadData();
-    if (content.isConnected) renderDashboard(content);
-  }, { onEdit: (visit) => openVisitEditModal(visit, content, { onDone: renderDashboard }) });
+  wireVisitRows(content, knownVisits(), refresh, { onEdit: (visit) => openVisitEditModal(visit, content, { onDone: renderDashboard }) });
 }
 
 /**
@@ -793,6 +975,7 @@ async function createTask(payload, content) {
     window.yuvomi?.showToast(t('housekeeping.taskCreatedToast'), 'success');
     await loadData();
     if (content?.isConnected && state.tab === 'tasks') renderTasks(content);
+    else if (content?.isConnected && state.tab === 'dashboard') renderDashboard(content);
     return true;
   } catch (err) {
     window.yuvomi?.showToast(err.message, 'danger');
@@ -1006,6 +1189,7 @@ async function completeTask(task, content, button = null) {
     await settled;
     await loadData();
     if (content?.isConnected && state.tab === 'tasks') renderTasks(content);
+    else if (content?.isConnected && state.tab === 'dashboard') renderDashboard(content);
   } catch (err) {
     button?.classList.remove('housekeeping-task__check--done');
     button?.removeAttribute('aria-busy');
@@ -1020,6 +1204,7 @@ async function undoCompleteTask(taskId, previous, content) {
     window.yuvomi?.showToast(t('housekeeping.taskUndoneToast'), 'success');
     await loadData();
     if (content?.isConnected && state.tab === 'tasks') renderTasks(content);
+    else if (content?.isConnected && state.tab === 'dashboard') renderDashboard(content);
   } catch (err) {
     window.yuvomi?.showToast(err.message, 'danger');
   }
@@ -1197,8 +1382,10 @@ function focusTaskRowAfterDelete(content, taskId, index) {
 function deleteTask(task, content, afterRepaint = null) {
   if (readOnly()) return;
   const repaint = () => {
-    if (!(content?.isConnected && state.tab === 'tasks')) return;
-    renderTasks(content);
+    if (!content?.isConnected) return;
+    if (state.tab === 'tasks') renderTasks(content);
+    else if (state.tab === 'dashboard') renderDashboard(content);
+    else return;
     afterRepaint?.();
   };
   pendingTaskDeletes.add(String(task.id));
@@ -1243,23 +1430,31 @@ function deleteTask(task, content, afterRepaint = null) {
  * verschwunden zurueck. `closeOnConfirm: false` holt ihn auch nach dem Ja
  * zurueck - scheitert die Buchung, steht der Bericht noch da; geschlossen wird
  * erst in `onPaid`. Ohne offenes Modal verhaelt es sich wie `confirmModal`. */
-async function payVisit(visit, onPaid) {
+async function payVisit(visit, onPaid, { also = [] } = {}) {
   if (readOnly()) return;
-  const confirmed = await confirmOverModal(t('housekeeping.markPaidConfirm'), {
+  // Tafla (2026-10-20): the hero's "Zapłacone" settles every unpaid visit of
+  // the person at once - one question for the batch, the same post for each.
+  const batch = [visit, ...also];
+  const question = batch.length > 1
+    ? t('housekeeping.markPaidConfirmMany', { count: batch.length })
+    : t('housekeeping.markPaidConfirm');
+  const confirmed = await confirmOverModal(question, {
     closeOnConfirm: false,
-    confirmLabel: t('housekeeping.markPaid'),
-    detail: visit.payment_task_id
+    confirmLabel: batch.length > 1 ? t('housekeeping.markAllPaid') : t('housekeeping.markPaid'),
+    detail: batch.some((each) => each.payment_task_id)
       ? t('housekeeping.markPaidConfirmDetailTask')
       : t('housekeeping.markPaidConfirmDetail'),
   });
   if (!confirmed) return;
   try {
-    await api.post(`/housekeeping/visits/${visit.id}/pay`, {});
+    for (const each of batch) await api.post(`/housekeeping/visits/${each.id}/pay`, {});
     window.yuvomi?.showToast(t('housekeeping.visitPaidToast'), 'success');
     await onPaid();
     refocusAfterRender();
   } catch (err) {
     window.yuvomi?.showToast(err.message, 'danger');
+    // Part of a batch may have gone through: show what the server now knows.
+    if (batch.length > 1) await onPaid();
   }
 }
 
@@ -1309,9 +1504,34 @@ async function unpayVisit(visit, onUnpaid) {
  * @param {{ dateText: string, visitDate?: string, showWorker?: boolean,
  *           paymentText?: string, className?: string }} opts
  */
-function visitRowHtml(visit, { dateText, visitDate = dateText, showWorker = true, paymentText, className = '' } = {}) {
+function visitRowHtml(visit, { dateText, visitDate = dateText, showWorker = true, paymentText, className = '', compact = false, reserveMenu = false } = {}) {
   // Ohne Betragsrecht (R20) nennt die Zeile die Zeit statt Betrag und Zahlstatus.
   const hidden = amountsHidden(visit.total_amount);
+  if (compact) {
+    // TAFLA (2026-10-20), the visit page: one 48 row - "czw 15 paź · 4 h",
+    // the amount trailing in ink. No paid/pending word: status shows only
+    // where it asks for action, and the hero card above names what is owed.
+    // The person stands in a meta line only when there are several; without
+    // the amounts right the time range trails instead of money.
+    const hours = hoursText(visitMinutes(visit));
+    // Rows without a menu keep its slot while others carry one, so the
+    // amounts stand on one axis.
+    const menu = visitMenuHtml(visit, visitDate);
+    const trail = hidden
+      ? `<span class="inset-row__value">${esc(visitTimeText(visit))}</span>`
+      : `<span class="inset-row__value inset-row__value--ink">${esc(chartMoney(visit.total_amount))}</span>`;
+    return `
+    <article class="list-row housekeeping-visit-row housekeeping-visit-row--compact${className ? ` ${className}` : ''}">
+      <button type="button" class="list-row__main list-row__main--interactive" data-open-visit="${esc(visit.id)}">
+        <span class="housekeeping-visit-row__text">
+          <span class="list-row__name">${esc([dateText, hours].filter(Boolean).join(' · '))}</span>
+          ${showWorker ? `<span class="list-row__meta">${esc(visit.worker_name || t('housekeeping.unnamedWorker'))}</span>` : ''}
+        </span>
+        <span class="inset-row__trail">${trail}</span>
+      </button>
+      ${menu || (reserveMenu ? '<span class="housekeeping-visit-row__menu-space" aria-hidden="true"></span>' : '')}
+    </article>`;
+  }
   const meta = [
     showWorker ? (visit.worker_name || t('housekeeping.unnamedWorker')) : null,
     hidden ? visitTimeText(visit) : money(visit.total_amount),
@@ -2013,7 +2233,9 @@ function openTaskEditModal(task, content) {
           window.yuvomi?.showToast(t('housekeeping.taskUpdatedToast'), 'success');
           await loadData();
           closeModal({ force: true });
-          renderTasks(content);
+          // Opened from the visit page's chore rows (Tafla), it repaints that page.
+          if (state.tab === 'dashboard') renderDashboard(content);
+          else renderTasks(content);
         } catch (err) {
           window.yuvomi?.showToast(err.message, 'danger');
         }
@@ -2579,6 +2801,7 @@ export async function render(container, { signal } = {}) {
   `);
   try {
     await loadData();
+    await loadPreviousVisits();
     renderShell(container);
     const editVisitId = new URLSearchParams(window.location.search).get('editVisit');
     if (editVisitId) await openVisitFromDeepLink(editVisitId, container, signal);
@@ -2623,6 +2846,11 @@ export const __test = {
   renderShell,
   renderDashboard,
   renderWorkerSummary,
+  nextVisitGuess,
+  visitHeroHtml,
+  visitChoresHtml,
+  knownVisits,
+  loadPreviousVisits,
   renderTasks,
   openTaskCreateModal,
   completeTask,

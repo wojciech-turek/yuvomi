@@ -37,7 +37,8 @@
 .health-browse {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  /* Tafla: 24 zwischen den Gruppen (Tag, Dziennik). */
+  gap: var(--space-6);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -195,7 +196,7 @@
 .health-priority {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-6);
   padding-inline: var(--page-inline-pad);
 }
 
@@ -225,7 +226,7 @@
 .health-priority-skeleton {
   display: none;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-6);
   padding-inline: var(--page-inline-pad);
 }
 
@@ -234,8 +235,9 @@
 }
 
 .health-priority-skeleton__pill {
-  inline-size: 12rem;
-  block-size: var(--target-base);
+  /* Tafla: der Segment-Schalter, volle Breite, 36 hoch. */
+  inline-size: 100%;
+  block-size: 36px;
   border-radius: var(--radius-full);
 }
 
@@ -244,7 +246,6 @@
 }
 
 .health-priority-skeleton__card--due   { min-block-size: 14.5rem; }
-.health-priority-skeleton__card--quick { min-block-size: 11rem; }
 
 .health-priority > .health-overview__card {
   margin-bottom: 0;
@@ -298,7 +299,6 @@
   overflow: hidden;
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
 }
 
 /* Schmal ist die Seite selbst die Übersicht - eine Zeile zu ihr wäre ein
@@ -307,8 +307,10 @@
   display: none;
 }
 
+/* Tafla: "Dziennik" ist ein Gruppenkopf (17/600, inset-list.css), kein
+ * Abschnittstitel - 8 ueber der Karte, die Luecke davor gibt .health-browse. */
 .health-areas__title {
-  margin: var(--space-2) 0 0;
+  margin: 0;
 }
 
 .health-area-row {
@@ -316,18 +318,18 @@
   text-decoration: none;
 }
 
+/* Das Zeichen im 28er-Slot der Zeile (inset-list.css), Tinte-2, 20. */
 .health-area-row__icon {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: var(--icon-lg);
-  height: var(--icon-lg);
-  color: var(--module-accent);
+  width: 28px;
+  color: var(--color-text-secondary);
 }
 
 .health-area-row__icon svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
+  width: 20px;
+  height: 20px;
 }
 
 /* IMMER ZWEI ZEILEN HOCH (R18, #1770). Der Status kommt nach dem Namen an
@@ -370,9 +372,13 @@
 
 .health-area-row__chevron {
   flex: 0 0 auto;
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  color: var(--color-text-tertiary);
+  /* 3:1 als Grafik in einer antippbaren Zeile (WCAG 1.4.11), wie in Dziś. */
+  color: var(--color-text-quaternary);
+}
+
+.health-area-row__chevron svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ---- Ab der Split-Schwelle: Liste links, Bereich rechts ----
@@ -520,13 +526,14 @@
   flex-wrap: wrap;
 }
 
+/* Tafla: die Spur eines neutralen Segment-Schalters - --color-fill, ohne
+ * Kante (wie die Personenwahl und die Kuchnia-Segmente). */
 .health-vitals__ranges {
   display: inline-flex;
   gap: var(--space-1);
   padding: var(--space-1);
   border-radius: var(--radius-full);
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
+  background: var(--color-fill);
 }
 
 .health-vitals__range {
@@ -1027,7 +1034,9 @@
   margin-inline-start: auto;
 }
 
-.health-dose__status--taken { color: var(--color-success); }
+/* Tafla: erledigt ist kein Erfolgsgruen - das Wort in Tinte-2, der Haken violett. */
+.health-dose__status--taken { color: var(--color-text-secondary); }
+.health-dose__status--taken svg { color: var(--color-accent); }
 .health-dose__status--skipped { color: var(--color-text-secondary); }
 
 /* Bedarfsmedikation (#700). Dieselbe Zeile wie die geplante Dosis, nur ohne
@@ -1183,7 +1192,7 @@ button.health-med-card:hover {
 }
 
 .health-med-badge--muted {
-  background: var(--color-surface-2);
+  background: var(--color-fill);
   color: var(--color-text-secondary);
 }
 
@@ -1300,11 +1309,14 @@ button.health-med-card:hover {
   cursor: pointer;
 }
 
+/* Tafla: eine Auswahl spricht violett (Chip-Spec: --color-accent-tint mit
+ * Akzentschrift) - seit die Modultoene Tinte-2 sind, war "gewaehlt" hier ein
+ * grauer Rahmen auf grauer Toenung. */
 .health-weekday.is-active {
-  border-color: var(--module-accent);
-  background: color-mix(in srgb, var(--module-accent) var(--tint-state), transparent);
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-medium, 500);
+  border-color: transparent;
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ==========================================================================
@@ -1355,8 +1367,8 @@ button.health-med-card:hover {
 }
 
 .health-lab-card.is-active {
-  border-color: var(--module-accent);
-  box-shadow: 0 0 0 1px var(--module-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .health-lab-card__head {
@@ -1591,7 +1603,9 @@ button.health-med-card:hover {
 
 .health-lab-flag--low,
 .health-lab-flag--high   { color: var(--color-warning-ink); }
-.health-lab-flag--normal { color: var(--color-success); }
+/* Tafla: "im Rahmen" ist kein Erfolg, sondern Ruhe - Tinte-2. Gruen bleibt
+ * Einnahmen, Guthaben und "kwita" vorbehalten. */
+.health-lab-flag--normal { color: var(--color-text-secondary); }
 .health-lab-flag--none   { color: var(--color-text-tertiary, var(--color-text-secondary)); }
 
 /* Analyt-Trend */
@@ -1836,8 +1850,10 @@ button.health-med-card:hover {
   height: 36px;
   flex: 0 0 auto;
   border-radius: var(--radius-full);
-  background: var(--color-surface-2);
-  color: var(--module-accent);
+  /* Tafla: auf der Karte liegt die Scheibe auf --color-fill (im Dunkeln heller
+   * als die Karte, kein Loch), das Zeichen in Tinte-2. */
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
 }
 
 .health-activity-row__body {
@@ -1877,7 +1893,9 @@ button.health-med-card:hover {
   color: var(--color-text-secondary);
   padding: var(--space-0h) var(--space-2);
   border-radius: var(--radius-full);
-  background: var(--color-surface-2);
+  /* Tafla: Chips liegen auf --color-fill - im Dunkeln heller als die Karte,
+   * nicht ein Loch darin (vorher --color-surface-2). */
+  background: var(--color-fill);
 }
 
 .health-activity-row__note {
@@ -1889,17 +1907,27 @@ button.health-med-card:hover {
  * health-activity-row*, damit eine Aenderung hier die Aktivitaeten-Zeilen
  * nicht mehr stillschweigend mitzieht. Nur die Regeln, die die Vorsorge-Zeile
  * tatsaechlich braucht (kein __icon/__type - sie hat kein Icon je Zeile). */
+/* Tafla: der Verlauf einer Art ist eine gruppierte Karte, jede Gabe eine
+ * Zeile (Datum als Titel 17, Arzt und Charge darunter 13, rechts der Stift). */
 .health-prevention-row {
+  position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  min-block-size: 64px;
+  padding: var(--space-2) var(--space-4);
+  box-sizing: border-box;
   border: none;
   background: transparent;
 }
 
-.health-prevention-row + .health-prevention-row {
-  border-top: 1px solid var(--color-border-subtle);
+.health-prevention-row + .health-prevention-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: var(--space-4) 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
 }
 
 .health-prevention-row__body {
@@ -1919,22 +1947,27 @@ button.health-med-card:hover {
 }
 
 .health-prevention-row__when {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  color: var(--color-text-primary);
 }
 
 .health-prevention-row__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  column-gap: var(--space-1);
 }
 
+/* In der Zeile sind Arzt und Charge Meta-Text, keine Kapseln: 13 Tinte-2,
+ * mit " · " verbunden (spec "Lista grupowana + wiersz"). */
 .health-prevention-row__chip {
-  font-size: var(--text-xs);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
-  padding: var(--space-0h) var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-surface-2);
+}
+
+.health-prevention-row__chip + .health-prevention-row__chip::before {
+  content: '· ';
 }
 
 .health-prevention-row__note {
@@ -1993,34 +2026,50 @@ button.health-med-card:hover {
   margin-top: var(--space-4);
 }
 
+/* Tafla: was ansteht, ist EINE gruppierte Karte mit 64er-Zeilen - das
+ * Zeichen in Tinte-2 im 28er-Slot, Name und Datum, rechts das Wort. */
 .health-prevention-due-list {
   list-style: none;
   margin: 0 0 var(--space-4);
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 .health-prevention-due-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
+  min-block-size: 64px;
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+}
+
+.health-prevention-due-row + .health-prevention-due-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
 }
 
 .health-prevention-due-row__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
   flex: 0 0 auto;
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--module-health);
+  color: var(--color-text-secondary);
+}
+
+.health-prevention-due-row__icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .health-prevention-due-row__body {
@@ -2031,53 +2080,74 @@ button.health-med-card:hover {
 }
 
 .health-prevention-due-row__name {
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
   color: var(--color-text-primary);
 }
 
 .health-prevention-due-row__date {
-  font-size: var(--text-xs);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
 }
 
+/* Das Wort rechts: ruhig in Tinte-2, solange nichts draengt; als Pille im
+ * Warn- oder Gefahrton erst, wenn es bald faellig oder ueberfaellig ist. */
 .health-prevention-due-row__chip {
   flex: 0 0 auto;
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-medium);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  display: inline-flex;
+  align-items: center;
+  block-size: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-regular);
   color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .health-prevention-due-row--soon .health-prevention-due-row__chip {
-  background: var(--color-warning-light);
-  color: var(--color-warning-ink);
+  background: var(--color-warning-tint);
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
 }
 
 .health-prevention-due-row--overdue .health-prevention-due-row__chip {
-  background: var(--color-danger-light);
-  color: var(--color-danger-ink);
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
 }
 
 .health-prevention-group + .health-prevention-group {
-  margin-top: var(--space-4);
+  margin-top: var(--space-6);
 }
 
+/* Gruppenkopf der Art: 17/600 Tinte, 8 ueber der Karte, ohne Zeichen
+ * (Tafla: Koepfe tragen keine Glyphe). */
 .health-prevention-group__title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold, 600);
+  padding: 0 var(--space-4);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  margin: 0 0 var(--space-1);
+  margin: 0 0 var(--space-2);
+}
+
+.health-prevention-group__title svg {
+  display: none;
 }
 
 .health-prevention-row-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 /* ========================================================
@@ -2781,9 +2851,11 @@ button.health-med-card:hover {
   font-weight: 600;
   vertical-align: middle;
 }
+/* Typisch ist der Normalfall: eine leise Pille (Tafla - Gruen nur fuer Geld
+ * und "kwita"); untypisch bleibt das Wort im Warnton. */
 .cycle-stat__badge--typical {
-  background: var(--color-success-light);
-  color: var(--color-success-ink);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
 }
 .cycle-stat__badge--atypical {
   background: var(--color-warning-light);
@@ -3533,7 +3605,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 .cycle-history__chip {
   font-size: var(--type-micro);
   color: var(--color-text-secondary);
-  background: var(--color-surface-2);
+  background: var(--color-fill);
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
 }
@@ -3625,10 +3697,10 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 .health-choice svg { width: 15px; height: 15px; }
 
 .health-choice[aria-pressed="true"] {
-  border-color: var(--module-accent);
-  background: color-mix(in oklab, var(--module-accent) 12%, transparent);
-  color: var(--color-text-primary);
-  font-weight: 600;
+  border-color: transparent;
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Intensitaets-Punkte auf einem ausgewaehlten Symptom-Chip (Phase 2): drei
@@ -3871,7 +3943,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 .health-medlog__row svg {
   width: 14px;
   height: 14px;
-  color: var(--color-success);
+  color: var(--color-accent);
   flex-shrink: 0;
 }
 
@@ -4113,7 +4185,9 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   color: var(--color-text-secondary);
   padding: var(--space-0h) var(--space-2);
   border-radius: var(--radius-full);
-  background: var(--color-surface-2);
+  /* Tafla: Chips liegen auf --color-fill - im Dunkeln heller als die Karte,
+   * nicht ein Loch darin (vorher --color-surface-2). */
+  background: var(--color-fill);
 }
 
 .health-nutrition-row__note {
@@ -4131,5 +4205,245 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   .health-nutrition-progress__bar {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+/* ==========================================================================
+ * TAFLA (2026-10-20): die Uebersicht als ruhiger Tag
+ *
+ * Artboard Zdrowie: oben die Personenwahl als neutraler Segment-Schalter
+ * ("Ty | Wojtek"), dann "Dziś 1 z 2" als gruppierte Liste mit Kreisen, nur
+ * wenn es etwas zu sagen gibt "Zapasy" und "Wizyty", darunter der Satz zum
+ * Datenschutz, dann "Dziennik" - die Bereiche als stille Zeilen mit ihrem
+ * letzten Wert. Gruppe, Zeile, Pille und Fuss kommen aus inset-list.css; hier
+ * steht nur, was die Gesundheit selbst traegt.
+ * ========================================================================== */
+
+/* ---- Personenwahl: Segment-Schalter (bis drei Personen) ----
+ * Spur in --color-fill, die gewaehlte Person auf der erhabenen Flaeche, nie
+ * violett: die Wahl ist ein Ort, keine Handlung (wie die Kuchnia-Segmente). */
+.health-person-seg {
+  display: flex;
+  inline-size: 100%;
+  block-size: 36px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+}
+
+.health-person-seg__item {
+  position: relative;
+  flex: 1 1 0;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* 32 sichtbar, die Trefferflaeche reicht in die Spur und darueber hinaus. */
+.health-person-seg__item::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--target-base) - 32px) / -2) 0;
+}
+
+.health-person-seg__item[aria-pressed="true"] {
+  background: var(--color-raised);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-e1);
+}
+
+.health-person-seg__item:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+.health-priority > .health-person-switcher--seg {
+  align-self: stretch;
+}
+
+/* Im Kopf eines Bereichs (neben "‹ Zdrowie") und im Detailkopf: so breit wie
+ * die Namen, nicht wie die Zeile. */
+.health-toolbar__person .health-person-seg,
+.health-detail-head .health-person-seg {
+  inline-size: auto;
+}
+
+.health-toolbar__person .health-person-switcher--seg,
+.health-detail-head .health-person-switcher--seg {
+  min-inline-size: 0;
+}
+
+/* ---- Der Tag: Dziś, Zapasy, Wizyty ----
+ * Der Traeger ist keine Karte mehr: die Gruppen bringen ihre Karten mit
+ * (inset-list.css), dazwischen 24. Breit spannt er ueber das Raster und legt
+ * die Gruppen nebeneinander. */
+.health-overview__card.health-overview__card--due {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  column-span: all;
+}
+
+@container (min-width: 44rem) {
+  .health-overview__card.health-overview__card--due {
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    align-items: start;
+  }
+}
+
+.health-overview__group > .health-overview__card-title {
+  margin: 0;
+}
+
+/* Der Satz zum Datenschutz haengt am letzten Kasten darueber (8, nicht 24). */
+.health-overview__privacy {
+  grid-column: 1 / -1;
+  margin-block-start: calc(var(--space-2) - var(--space-6));
+}
+
+.health-overview__due-list .health-dose__name {
+  display: block;
+  min-width: 0;
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Der Kreis (spec "Kółko odhaczania", dieselbe Form wie auf Dziś): 24 auf
+ * einem 44er-Treffer, im 28er-Slot der Zeile. Offen eine Kante in der
+ * Feldtinte, genommen gefuellt in Violett mit weissem Haken - "erledigt" ist
+ * violett, nicht gruen. */
+.health-check {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: 0 calc((var(--target-base) - 28px) / -2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-on-accent);
+  cursor: pointer;
+}
+
+.health-check--static {
+  cursor: default;
+}
+
+.health-check:disabled {
+  cursor: default;
+}
+
+.health-check:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+.health-check__ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
+}
+
+.health-check__ring svg {
+  inline-size: 14px;
+  block-size: 14px;
+  stroke-width: 2.5;
+  opacity: 0;
+}
+
+.health-check--done .health-check__ring {
+  background: var(--color-btn-primary);
+  box-shadow: none;
+}
+
+.health-check--done .health-check__ring svg {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .health-check__ring {
+    transition: background-color var(--duration-sm) var(--ease-out), box-shadow var(--duration-sm) var(--ease-out);
+  }
+}
+
+
+/* Auf dem Telefon ziehen alle Karten des Rasters nach oben (der Tag) - ein
+ * leeres Raster kostet dann keinen Abstand vor dem Hinweis. */
+.health-overview__grid:not(:has(> *)) {
+  display: none;
+}
+
+/* ---- Der Rueckweg eines Bereichs (Tafla) ----
+ * Auf dem Telefon steht ueber einem Bereich der 36er-Geisterkreis wie auf jeder
+ * geschobenen Seite - hier zurueck zur Uebersicht "Zdrowie", nicht ins
+ * Mehr-Blatt. Der Kreis der Shell (`.page-back`, "Wróć: Więcej") tritt dafuer
+ * zurueck: zwei Rueckwege uebereinander waeren zwei Antworten auf eine Frage.
+ * Das Wort "Zdrowie" bleibt der Name des Links, sichtbar ist das Zeichen. */
+@media (max-width: 1023px) {
+  .health-page[data-health-pushed] .health-toolbar > .page-back {
+    display: none;
+  }
+
+  .health-toolbar__back {
+    position: relative;
+    flex: 0 0 auto;
+    justify-content: center;
+    inline-size: var(--target-base);
+    min-inline-size: var(--target-base);
+    margin: calc((var(--target-base) - 36px) / -2);
+    padding: 0;
+    color: var(--color-text-primary);
+  }
+
+  .health-toolbar:has(> .health-toolbar__back:not([hidden])) > .health-toolbar__back {
+    flex: 0 0 auto;
+  }
+
+  .health-toolbar__back > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .health-toolbar__back .health-toolbar__back-icon {
+    inline-size: 36px;
+    block-size: 36px;
+    padding: 8px;
+    box-sizing: border-box;
+    border-radius: var(--radius-full);
+    background: var(--color-fill);
+    stroke-width: 2.25;
   }
 }

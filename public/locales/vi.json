@@ -1391,7 +1391,8 @@
         "checkConflict": "Ghi chú đã thay đổi trong lúc này. Ghi chú sẽ được tải lại.",
         "pinnedState": "Đã ghim",
         "checklistDone": "Hoàn thành",
-        "checklistOpen": "Mở"
+        "checklistOpen": "Mở",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "In đậm (Ctrl+B)",
@@ -3514,7 +3515,8 @@
         "twoFactorCancel": "Hủy",
         "ssoOnlyHint": "Việc đăng nhập vào hộ gia đình này chỉ diễn ra qua SSO.",
         "guestPasswordLogin": "Đăng nhập khách bằng mật khẩu",
-        "accountCannotSignIn": "Tài khoản này không thể đăng nhập. Vui lòng liên hệ quản trị viên hộ gia đình của bạn."
+        "accountCannotSignIn": "Tài khoản này không thể đăng nhập. Vui lòng liên hệ quản trị viên hộ gia đình của bạn.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Chào mừng đến với Yuvomi",
@@ -3698,7 +3700,11 @@
         "importSubmit": "Thêm {{count}}",
         "importSuccess": "Đã thêm {{count}} sinh nhật.",
         "importNothingSelected": "Vui lòng chọn ít nhất một liên hệ.",
-        "importSelected": "Đã chọn {{count}} liên hệ"
+        "importSelected": "Đã chọn {{count}} liên hệ",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Không có bữa ăn",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Tài khoản DMS này không còn tồn tại.",
         "errorDmsDocumentGone": "Tài liệu này không còn tồn tại trong DMS.",
         "errorDmsAlreadyLinked": "Tài liệu DMS này đã được liên kết.",
-        "errorDmsAlreadyStored": "Tài liệu này đã được lưu trong một DMS."
+        "errorDmsAlreadyStored": "Tài liệu này đã được lưu trong một DMS.",
+        "inDays_one": "trong {{count}} ngày",
+        "inDays": "trong {{count}} ngày",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Dọn dẹp",
@@ -4341,7 +4361,21 @@
         "errorAmountsHidden": "Chỉ người được xem số tiền của người giúp việc mới có thể đánh dấu thanh toán.",
         "notHereToday": "Hôm nay chưa đến",
         "tabVisits": "Lượt đến",
-        "tabChores": "Việc nhà"
+        "tabChores": "Việc nhà",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "thêm",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Nhắc nhở tiếp theo",
                 "empty": "Hôm nay không còn lần dùng thuốc nào"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Chỉ số sinh tồn",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "Tệp chỉ có dòng tiêu đề và không có kỳ kinh nào.",
         "errorCycleImportTooManyRows": "Mỗi lần nhập chỉ được tối đa {{limit}} kỳ kinh. Hãy chia nhỏ tệp.",
         "errorVitalImpossible": "Giá trị này không thể có. Vui lòng kiểm tra lại.",
-        "errorVitalBpOrder": "Huyết áp tâm thu phải cao hơn tâm trương."
+        "errorVitalBpOrder": "Huyết áp tâm thu phải cao hơn tâm trương.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Thu gom rác",

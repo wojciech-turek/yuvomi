@@ -7,7 +7,7 @@
 import { auth } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { authHeroHtml, authErrorHtml, wirePasswordToggle } from '/utils/auth-ui.js';
+import { authHeroHtml, authErrorHtml, authSecureNoteHtml, wirePasswordToggle } from '/utils/auth-ui.js';
 
 const VERSION_URL = '/api/v1/version';
 const DEFAULT_APP_NAME = 'Yuvomi';
@@ -110,6 +110,7 @@ export async function render(container) {
           </p>
         </form>
       </div>
+      <p class="auth-secure" id="auth-secure">${authSecureNoteHtml(window.location, (host) => t('login.secureConnection', { host }))}</p>
       <p class="auth-version" id="auth-version"></p>
     </main>
   `);

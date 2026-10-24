@@ -1480,7 +1480,8 @@
         "checkConflict": "Poznámka byla mezitím změněna. Bude znovu načtena.",
         "pinnedState": "Připnuto",
         "checklistDone": "Hotovo",
-        "checklistOpen": "Otevřeno"
+        "checklistOpen": "Otevřeno",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Tučné (Ctrl+B)",
@@ -3633,7 +3634,8 @@
         "twoFactorCancel": "Zrušit",
         "ssoOnlyHint": "Přihlášení do této domácnosti probíhá výhradně přes SSO.",
         "guestPasswordLogin": "Přihlášení hosta heslem",
-        "accountCannotSignIn": "Tento účet se nemůže přihlásit. Obraťte se na správce vaší domácnosti."
+        "accountCannotSignIn": "Tento účet se nemůže přihlásit. Obraťte se na správce vaší domácnosti.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Vítejte v Yuvomi",
@@ -3963,7 +3965,25 @@
         "errorAmountsHidden": "Platbu může označit jen ten, kdo smí vidět částky za pomoc v domácnosti.",
         "notHereToday": "Dnes ještě nedorazila",
         "tabVisits": "Návštěvy",
-        "tabChores": "Práce"
+        "tabChores": "Práce",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "splitExpenses": {
         "title": "Společné výdaje",
@@ -4416,7 +4436,22 @@
         "errorDmsAccountGone": "Tento účet DMS už neexistuje.",
         "errorDmsDocumentGone": "Tento dokument už v DMS neexistuje.",
         "errorDmsAlreadyLinked": "Tento dokument z DMS je už propojený.",
-        "errorDmsAlreadyStored": "Tento dokument je už uložený v DMS."
+        "errorDmsAlreadyStored": "Tento dokument je už uložený v DMS.",
+        "inDays_one": "za {{count}} den",
+        "inDays": "za {{count}} dní",
+        "inDays_few": "za {{count}} dny",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "reminders": {
         "sectionTitle": "Připomínka",
@@ -4519,7 +4554,11 @@
         "importSubmit": "Přidat {{count}}",
         "importSuccess": "Přidáno narozenin: {{count}}.",
         "importNothingSelected": "Vyberte alespoň jeden kontakt.",
-        "importSelected": "Vybráno kontaktů: {{count}}"
+        "importSelected": "Vybráno kontaktů: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "rrule": {
         "freqNone": "Bez opakování",
@@ -5154,7 +5193,25 @@
             "reminders": {
                 "title": "Další připomenutí",
                 "empty": "Dnes už žádné další užití"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitální hodnoty",
@@ -5985,7 +6042,10 @@
         "errorCycleImportNoRows": "Soubor obsahuje jen řádek záhlaví a žádné menstruace.",
         "errorCycleImportTooManyRows": "Jeden import smí obsahovat nejvýše {{limit}} menstruací. Rozděl soubor.",
         "errorVitalImpossible": "Tato hodnota není možná. Zkontrolujte prosím zadání.",
-        "errorVitalBpOrder": "Systolická hodnota musí být vyšší než diastolická."
+        "errorVitalBpOrder": "Systolická hodnota musí být vyšší než diastolická.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Svoz odpadu",

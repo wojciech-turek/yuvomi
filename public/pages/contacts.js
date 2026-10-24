@@ -8,14 +8,15 @@ import { api } from '/api.js';
 import { openModal as openSharedModal, closeModal, advancedSection, refocusAfterRender } from '/components/modal.js';
 import { openDetailView } from '/components/detail-view.js';
 import { stagger, vibrate, wireScrollFade, scheduleUndoableDelete } from '/utils/ux.js';
-import { t, formatDate } from '/i18n.js';
+import { t, formatDate, getLocale } from '/i18n.js';
 import { esc, REQUIRED_MARK } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { pageToolsMenuHtml, pageToolsActionEl, popoverMenuHtml, installPopoverMenus } from '/utils/popover-menu.js';
 import { parseVCards } from '/utils/vcard.js';
-import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
+import { personToken } from '/utils/person-color.js';
 import { composeDisplayName, contactSortKey, splitDisplayName } from '/utils/contact-name.js';
 import { getPhoneFormatter, createAsYouType, countryFromRegion } from '/utils/phone.js';
 import { emptyStateHTML, searchEmptyHTML } from '/utils/empty-state.js';
@@ -34,7 +35,7 @@ import { mayWritePath } from '/utils/module-access.js';
 // /contacts/categories in state.categories geladen. Bestands-Kategorien tragen
 // label_key (i18n) + icon; benutzerdefinierte tragen name + Default-Icon 'tag'.
 // Der stabile key bleibt der Bezug auf die Kategorie; ihr Ton steht seit
-// Migration 152 in der Kategorie selbst (siehe catTintStyle unten).
+// Migration 152 in der Kategorie selbst (seit Tafla nur noch auf der Karte im Detail).
 const FALLBACK_CATEGORY = 'misc';
 
 function catByKey(key) {
@@ -66,33 +67,13 @@ function categoryIcon(key, sizeClass = 'icon-md') {
   return `<i data-lucide="${esc(name)}" class="contact-cat-icon ${sizeClass}" aria-hidden="true"></i>`;
 }
 
-// DER TON EINER KATEGORIE STEHT IN IHREN DATEN, seit Migration 152.
-//
-// Hier stand `catTintClass()`: aus dem Key wurde ein Klassenname, und
-// contacts.css führte sieben Regeln `.contact-group--<key>`. Das konnte per
-// Konstruktion nur die SEED-Kategorien treffen - eine selbst angelegte
-// Kategorie (seit #357) matchte keine Regel und fiel auf den Modulton zurück,
-// weshalb im Demo-Haushalt „Familie" und „Dienstleistungen" gleich aussahen.
-// Dieselbe Bauart, die die Vollton-Regel schon einmal eingeholt hat: ein
-// Zusammenhang, der über einen Namen läuft, deckt N Namen ab, nicht die Regel.
-//
-// `--cat-ink` begleitet den Ton, weil die Tinte nur auf einer gefüllten Scheibe
-// gilt; ohne Ton bleibt die Marke neutral (contacts.css).
-function catTintStyle(key) {
-  const color = catByKey(key)?.color;
-  return color
-    ? ` style="--cat:${esc(color)};--cat-ink:var(--color-ink-on-vivid)"`
-    : '';
-}
-
 // Avatar einer Zeile. Zwei Faelle, zwei Sprecher:
 //
 // EIN VERKNUEPFTER KONTAKT IST EIN MENSCH DES HAUSHALTS, und der traegt ueberall
 // SEINE Farbe (Identitaetsfarben-Regel, DESIGN.md) - dasselbe Bild und dieselbe
-// Scheibe wie im Kalender, in den Aufgaben und auf dem Dashboard. Hier stand
-// bis 2026-08-18 der Modul-Ton, also dieselbe rosa Scheibe fuer jedes Mitglied.
-// Die Tinte kommt aus `getReadableTextColor`, weil eine Avatarfarbe frei
-// gewaehlt ist und ihre Helligkeit deshalb unbestimmt.
+// Scheibe wie im Kalender, in den Aufgaben und auf Dziś. Seit Tafla ist das die
+// Personenfarbe aus person-color.js (Tinte auf Toenung, in beiden Themes
+// AA-gemessen) statt der frei gewaehlten Avatarfarbe mit gerechneter Tinte.
 //
 // ALLE ANDEREN nennen ihre KATEGORIE, und die traegt ihren kuratierten Ton als
 // Vollton-Scheibe; hat sie keinen (benutzerdefinierte Kategorie), bleibt die
@@ -106,13 +87,15 @@ function contactAvatar(c) {
   if (!c.family_user_id) {
     return `<span class="contact-item__icon contact-item__icon--initials" aria-hidden="true">${esc(initials(c.name, '?'))}</span>`;
   }
-  const color = c.family_avatar_color || AVATAR_FALLBACK_COLOR;
+  // Tafla: the member's PERSON colour (person-color.js, AA-measured ink on
+  // its tint) instead of the free avatar colour with a computed text colour.
+  const { ink, tint } = personToken({ id: c.family_user_id, avatar_color: c.family_avatar_color || AVATAR_FALLBACK_COLOR });
   const name  = c.family_display_name || c.name;
   const inner = c.family_avatar_data
     ? `<img src="${esc(c.family_avatar_data)}" alt="" loading="lazy">`
     : esc(initials(name, '?'));
   return `<span class="contact-item__icon contact-item__icon--member"
-    style="background-color:${esc(color)};color:${getReadableTextColor(color)}"
+    style="background-color:${tint};color:${ink}"
     aria-hidden="true">${inner}</span>`;
 }
 
@@ -707,25 +690,17 @@ function drawList(container, { animate = false } = {}) {
     return;
   }
 
-  // Nach Kategorie gruppieren
-  const groups = {};
-  for (const c of contacts) {
-    if (!groups[c.category]) groups[c.category] = [];
-    groups[c.category].push(c);
-  }
+  // ALPHABETISCHE ABSCHNITTE (Tafla, 2026-10-20): "A", "B", ... wie in den
+  // Kontakten des iPhones. Die Kategorie ist der Filter darueber (Chips) und
+  // steht im Detail; als Gruppe trennte sie Menschen, die man beim Namen sucht.
+  const groups = contactLetterGroups(contacts);
 
   container.replaceChildren();
-  container.insertAdjacentHTML('beforeend', Object.entries(groups)
-    .sort(([a], [b]) => catSortIndex(a) - catSortIndex(b))
-    .map(([cat, items]) => `
-      <div class="contact-group"${catTintStyle(cat)}>
-        ${/* EIN LISTEN-GRUPPENKOPF (D8, Critique 2026-10-16): Versal-Mikro-
-              Label ohne Zeichen wie in Aufgaben und Einkauf. Das Kategorie-
-              Zeichen davor war der einzige Gruppenkopf der App mit Icon -
-              jede Zeile darunter traegt es ohnehin in ihrer Marke. */ ''}
-        <h2 class="list-group__title contact-group__header">${esc(catLabel(cat))}</h2>
-        <div class="contact-group__list row-carrier">${items.map((c) => renderContactItem(c)).join('')}</div>
-      </div>
+  container.insertAdjacentHTML('beforeend', groups.map(({ letter, items }) => `
+      <section class="contact-group inset-group" aria-label="${esc(letter)}">
+        <h2 class="contact-group__header">${esc(letter)}</h2>
+        <div class="contact-group__list inset-card">${items.map((c) => renderContactItem(c)).join('')}</div>
+      </section>
     `).join(''));
 
   if (window.lucide) lucide.createIcons({ el: container });
@@ -737,6 +712,26 @@ function drawList(container, { animate = false } = {}) {
   // (geloescht) oder weggefiltert, faellt die Spalte auf den Leerzustand -
   // rechts stuende sonst ein Kontakt, den die Liste nicht mehr zeigt.
   md?.refresh();
+}
+
+/** The section letter of a name: its first letter, upper case, diacritics
+ *  kept ("Ł", "Ż" are letters of their own in Polish); "#" for the rest. */
+export function contactLetter(name) {
+  const first = [...String(name ?? '').trim()][0] ?? '';
+  return /\p{L}/u.test(first) ? first.toLocaleUpperCase(getLocale()) : '#';
+}
+
+/** Contacts sorted by name and cut into letter sections. */
+export function contactLetterGroups(list) {
+  const sorted = [...list].sort(byName);
+  const groups = [];
+  for (const c of sorted) {
+    const letter = contactLetter(c.name);
+    if (!groups.length || groups.at(-1).letter !== letter) groups.push({ letter, items: [] });
+    groups.at(-1).items.push(c);
+  }
+  // "#" goes last, like the index of a phone book.
+  return [...groups.filter((g) => g.letter !== '#'), ...groups.filter((g) => g.letter === '#')];
 }
 
 // Progressive Enhancement der Telefon-Anzeige: formatiert sichtbare Nummern und
@@ -836,9 +831,16 @@ async function wirePhoneHints(panel) {
   });
 }
 
-// Meta-Zeile: Telefon (schrumpft nicht) · E-Mail (wird gekürzt), damit die
-// Telefonnummer auf schmalem Viewport nie verschwindet.
+// Meta-Zeile (Tafla, 2026-10-20): WER die Person fuer uns ist - Position und
+// Firma, sonst die erste Zeile der Notiz ("sąsiadka z 4. piętra"), sonst die
+// Kategorie. Die Nummer muss hier nicht stehen: der Anrufen-Knopf daneben
+// waehlt sie, und das Detail zeigt sie ganz. Ohne all das steht die Nummer da,
+// damit die Zeile nie leer ist.
 function renderMeta(c) {
+  const role = [c.job_title, c.organization].filter(Boolean).join(' · ')
+    || String(c.notes ?? '').split('\n').map((line) => line.trim()).find(Boolean)
+    || (c.category && c.category !== FALLBACK_CATEGORY ? catLabel(c.category) : '');
+  if (role) return `<span class="contact-item__meta"><span class="contact-item__meta-role">${esc(role)}</span></span>`;
   if (!c.phone && !c.email) return '';
   // Rohwert steht im Markup UND in data-phone-raw: enhancePhones() ersetzt danach
   // nur den Anzeigetext (textContent) - der gespeicherte Wert bleibt unberührt.
@@ -884,8 +886,8 @@ function renderContactItem(c) {
   // Der Name nennt die Person: zwoelf Zeilen, die alle "Anrufen" heissen, sind
   // fuer einen Screenreader eine Zeile.
   const callBtn = c.phone
-    ? `<a href="tel:${esc(c.phone)}" data-phone-raw="${esc(c.phone)}" class="row-action row-action--success" aria-label="${esc(t('contacts.callNamed', { name: c.name }))}">
-         <i data-lucide="phone" aria-hidden="true"></i>
+    ? `<a href="tel:${esc(c.phone)}" data-phone-raw="${esc(c.phone)}" class="row-action contact-item__call" aria-label="${esc(t('contacts.callNamed', { name: c.name }))}">
+         <span class="contact-item__call-disc"><i data-lucide="phone" aria-hidden="true"></i></span>
        </a>`
     : '';
 
@@ -1264,7 +1266,7 @@ function mountContactCard(contact, inPane, root = document) {
 function contactCardEl(c) {
   const card = document.createElement('div');
   card.className = 'contact-card';
-  // Der Kategorie-Ton wie an der Gruppe der Liste (catTintStyle): die Karte
+  // Der Kategorie-Ton der Karte (die Liste gruppiert seit Tafla nach Buchstaben): die Karte
   // steht ausserhalb jeder Gruppe und setzt ihn deshalb selbst.
   const color = catByKey(c.category)?.color;
   if (color) {
@@ -2067,7 +2069,7 @@ function showImportResult({ imported, withBirthday, failedList, lastName, lastEr
  * `openDetailView` die Optionen abnimmt.
  */
 export const __test = {
-  renderContactItem, contactsEmptyStateHtml, toolbarActionsHtml,
+  renderContactItem, contactsEmptyStateHtml, toolbarActionsHtml, contactLetterGroups,
   // Re-Kritik 2026-09-28: die lesenden Eintraege des Kanon-Zeilenmenues.
   runContactMenuAction,
   // R8 H14: der Auswahlkreis als Programm.

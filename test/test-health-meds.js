@@ -385,10 +385,23 @@ test('Dosis-Knoepfe: Name nennt das Medikament, kein Haken-Kreis, beide Renderer
   const label = (tag) => tag.match(/aria-label="([^"]*)"/)?.[1] ?? '';
   healthHelpers.setViewStateForTest('meds', { meId: 1, personId: 1 });
   try {
+    // Tafla (2026-10-20): die Uebersicht traegt die Dosis als Zeile mit Kreis
+    // (EINE Handlung, wie auf Dziś) - Einnehmen und Ueberspringen mit Worten
+    // bleiben im Bereich Leki. Was fuer beide gilt: jede Handlung nennt das
+    // Medikament (A6 P2-3). Der Kreis wird unten eigens geprueft.
     const renderers = [
       ['Medikamente', (d, m) => healthHelpers.dueRowMarkup(d, m, null)],
-      ['Uebersicht', (d, m) => healthHelpers.overviewDueRowMarkup(d, m, null, true)],
     ];
+    const kreis = (html) => html.match(/<button[^>]*class="health-check[^"]*"[^>]*>/)?.[0] ?? '';
+    const ka = kreis(healthHelpers.overviewDueRowMarkup(dosis(1), med(1, 'Vitamin D3'), null, true));
+    const kb = kreis(healthHelpers.overviewDueRowMarkup(dosis(2), med(2, 'Eisen'), null, true));
+    assert.ok(ka && kb, 'Uebersicht: der Kreis ist ein Knopf');
+    assert.match(label(ka), /Vitamin D3/, 'Uebersicht: der Kreis nennt das Medikament');
+    assert.notEqual(label(ka), label(kb), 'Uebersicht: zwei Medikamente, zwei Namen');
+    assert.match(ka, /aria-pressed="false"/, 'Uebersicht: der Kreis sagt, ob die Dosis genommen ist');
+    const genommen = kreis(healthHelpers.overviewDueRowMarkup(dosis(1), med(1, 'Vitamin D3'), { id: 7, status: 'taken', taken_at: '2026-06-15T08:05' }, true));
+    assert.match(genommen, /aria-pressed="true"/);
+    assert.match(genommen, /data-log-id="7"/, 'ein genommener Kreis kennt seinen Eintrag - ein zweiter Tipp nimmt ihn zurueck');
     for (const [wo, render] of renderers) {
       const a = knoepfe(render(dosis(1), med(1, 'Vitamin D3')));
       const b = knoepfe(render(dosis(2), med(2, 'Eisen')));
@@ -571,14 +584,14 @@ test('R16: mobil bleiben zwei Vitalkennzahlen, der Titel fuehrt zu allen', async
     const { installMiniDom } = await import('./mini-dom.js');
     const raeumen = installMiniDom();
     try {
+      // Tafla (2026-10-20): auf dem Telefon IST die Uebersicht der Tag (Dziś,
+      // Zapasy, Wizyty, vor die Bereichsliste gezogen). Vitalwerte, Einnahme-
+      // treue, Erinnerungen und "Alle Werte anzeigen" wiederholten dort die
+      // Bereichszeilen (Pomiary, Leki) und stehen in ihren Bereichen.
       const phone = healthHelpers.overviewGridMarkup({ phone: true });
-      const at = (needle) => { const i = phone.indexOf(needle); assert.ok(i > 0, `${needle} fehlt`); return i; };
-      assert.ok(at('health.overview.vitals.title') < at('health-overview__more-toggle'), 'die Vitalwerte stehen vor der Zeile');
-      assert.ok(at('health-overview__more-toggle') < at('health.overview.adherence.title</h3>'), 'die Einnahmetreue liegt dahinter');
-      assert.match(phone, /health-overview__more-toggle"\s+aria-expanded="false" aria-controls="health-overview-more"/);
-      assert.match(phone, /id="health-overview-more" hidden>/, 'eingeklappt beim ersten Blick');
-      assert.match(phone, /health-vitals__more-names">health\.overview\.adherence\.title, health\.overview\.reminders\.title</,
-        'die Zeile nennt, was hinter ihr liegt');
+      assert.match(phone, /health-overview__card--due/, 'der Tag steht');
+      assert.doesNotMatch(phone, /health-overview__more|health\.overview\.vitals\.title|health\.overview\.adherence\.title/,
+        'keine zweite Kartenfolge unter der Bereichsliste');
       const wide = healthHelpers.overviewGridMarkup({ phone: false });
       assert.doesNotMatch(wide, /health-overview__more/, 'breit gibt es keine Zeile - dort stehen alle Karten');
       assert.ok(wide.indexOf('health.overview.adherence.title') < wide.indexOf('health.overview.vitals.title'), 'und in der bisherigen Reihenfolge');

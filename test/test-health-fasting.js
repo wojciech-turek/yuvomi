@@ -354,7 +354,8 @@ test('fasting picks the person with the shared health pill, not a full-width nat
   assert.doesNotMatch(fastingPage, /<select[^>]*data-fasting-person/, 'natives Personen-Select ist zurueck');
   assert.match(fastingPage, /personSwitcherMarkup\(view\.members, view\.subject, view\.self/,
     'das Fasten nutzt nicht die Pille der Gesundheit');
-  assert.match(fastingPage, /import \{ personSwitcherMarkup \} from '\/utils\/health-person-switcher\.js'/);
+  // Tafla: dazu der gemeinsame Fokus-Rueckweg nach einem Wechsel (Pille ODER Segment).
+  assert.match(fastingPage, /import \{ personSwitcherMarkup, personSwitcherFocusTarget \} from '\/utils\/health-person-switcher\.js'/);
 });
 
 /* R14 P3 (A6 P2-1): FASTEN SPRICHT DEN DIALEKT DER GESUNDHEIT. Ohne je gefastet

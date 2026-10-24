@@ -1407,7 +1407,8 @@
         "checkConflict": "Die Notiz wurde inzwischen geändert. Sie wird neu geladen.",
         "pinnedState": "Angepinnt",
         "checklistDone": "Erledigt",
-        "checklistOpen": "Offen"
+        "checklistOpen": "Offen",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Fett (Strg+B)",
@@ -3530,7 +3531,8 @@
         "twoFactorCancel": "Abbrechen",
         "ssoOnlyHint": "Die Anmeldung an diesem Haushalt läuft ausschließlich über Single Sign-On.",
         "guestPasswordLogin": "Als Gast mit Passwort anmelden",
-        "accountCannotSignIn": "Dieses Konto kann sich nicht anmelden. Wende dich an die Administration deines Haushalts."
+        "accountCannotSignIn": "Dieses Konto kann sich nicht anmelden. Wende dich an die Administration deines Haushalts.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Willkommen bei Yuvomi",
@@ -3714,7 +3716,11 @@
         "importSubmit": "{{count}} übernehmen",
         "importSuccess": "{{count}} Geburtstage übernommen.",
         "importNothingSelected": "Bitte mindestens einen Kontakt auswählen.",
-        "importSelected": "{{count}} Kontakte ausgewählt"
+        "importSelected": "{{count}} Kontakte ausgewählt",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Keine Mahlzeit",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Dieses DMS-Konto gibt es nicht mehr.",
         "errorDmsDocumentGone": "Dieses Dokument gibt es im DMS nicht mehr.",
         "errorDmsAlreadyLinked": "Dieses DMS-Dokument ist schon verknüpft.",
-        "errorDmsAlreadyStored": "Dieses Dokument liegt schon in einem DMS."
+        "errorDmsAlreadyStored": "Dieses Dokument liegt schon in einem DMS.",
+        "inDays_one": "in {{count}} Tag",
+        "inDays": "in {{count}} Tagen",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Niemand",
@@ -4345,7 +4365,21 @@
         "errorAmountsHidden": "Bezahlen kann nur, wer die Beträge der Haushaltshilfe sehen darf.",
         "notHereToday": "Heute noch nicht da",
         "tabVisits": "Besuche",
-        "tabChores": "Arbeiten"
+        "tabChores": "Arbeiten",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "splitExpenses": {
         "title": "Gemeinsame Ausgaben",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Nächste Erinnerungen",
                 "empty": "Heute keine weiteren Einnahmen"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitalwerte",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "Die Datei enthält nur eine Kopfzeile und keine Perioden.",
         "errorCycleImportTooManyRows": "Ein Import darf höchstens {{limit}} Perioden enthalten. Teile die Datei auf.",
         "errorVitalImpossible": "Dieser Wert ist nicht möglich. Bitte prüfe die Eingabe.",
-        "errorVitalBpOrder": "Der systolische Wert muss größer sein als der diastolische."
+        "errorVitalBpOrder": "Der systolische Wert muss größer sein als der diastolische.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Entsorgung",

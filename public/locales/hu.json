@@ -1391,7 +1391,8 @@
         "checkConflict": "A jegyzet időközben megváltozott. Újratöltjük.",
         "pinnedState": "Kitűzve",
         "checklistDone": "Kész",
-        "checklistOpen": "Nyitott"
+        "checklistOpen": "Nyitott",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Félkövér (Ctrl+B)",
@@ -3514,7 +3515,8 @@
         "twoFactorCancel": "Mégse",
         "ssoOnlyHint": "Az ebbe a háztartásba való belépés kizárólag SSO-val történik.",
         "guestPasswordLogin": "Vendég bejelentkezés jelszóval",
-        "accountCannotSignIn": "Ez a fiók nem tud bejelentkezni. Kérjük, forduljon a háztartás rendszergazdájához."
+        "accountCannotSignIn": "Ez a fiók nem tud bejelentkezni. Kérjük, forduljon a háztartás rendszergazdájához.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Üdvözöljük a Yuvomi-ban",
@@ -3698,7 +3700,11 @@
         "importSubmit": "{{count}} hozzáadása",
         "importSuccess": "{{count}} születésnap hozzáadva.",
         "importNothingSelected": "Válassz ki legalább egy névjegyet.",
-        "importSelected": "{{count}} névjegy kiválasztva"
+        "importSelected": "{{count}} névjegy kiválasztva",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Nincs étkezés",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Ez a DMS-fiók már nem létezik.",
         "errorDmsDocumentGone": "Ez a dokumentum már nem létezik a DMS-ben.",
         "errorDmsAlreadyLinked": "Ez a DMS-dokumentum már össze van kapcsolva.",
-        "errorDmsAlreadyStored": "Ez a dokumentum már egy DMS-ben van tárolva."
+        "errorDmsAlreadyStored": "Ez a dokumentum már egy DMS-ben van tárolva.",
+        "inDays_one": "{{count}} nap múlva",
+        "inDays": "{{count}} nap múlva",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Háztartás",
@@ -4341,7 +4361,21 @@
         "errorAmountsHidden": "Fizetést csak az jelölhet, aki láthatja a háztartási segítő összegeit.",
         "notHereToday": "Ma még nincs itt",
         "tabVisits": "Látogatások",
-        "tabChores": "Házimunkák"
+        "tabChores": "Házimunkák",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "továbbiak",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Következő emlékeztetők",
                 "empty": "Ma nincs több bevétel"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitálértékek",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "A fájlban csak fejlécsor van, menstruáció nincs.",
         "errorCycleImportTooManyRows": "Egy importálás legfeljebb {{limit}} menstruációt tartalmazhat. Oszd fel a fájlt.",
         "errorVitalImpossible": "Ez az érték nem lehetséges. Ellenőrizd a bevitelt.",
-        "errorVitalBpOrder": "A szisztolés értéknek nagyobbnak kell lennie a diasztolésnál."
+        "errorVitalBpOrder": "A szisztolés értéknek nagyobbnak kell lennie a diasztolésnál.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Hulladékgyűjtés",

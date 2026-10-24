@@ -1369,7 +1369,7 @@ test('Listenbewegung R17: Notizen, Dokumente, Kontakte, Budget, Inventar, Abos, 
   // Die Zeile muss das Attribut auch TRAGEN, an dem die Bewegung sie
   // wiedererkennt - ein Selektor ohne Treffer zeichnet still ohne Bewegung.
   const carried = [
-    ['notes', /class="note-card \$\{[^}]+\}"\s+data-id="\$\{note\.id\}"/],
+    ['notes', /class="note-card [^"]*"\s+data-id="\$\{note\.id\}"/],
     ['documents', /<article class="document-card\$\{[^}]+\}" data-id="\$\{doc\.id\}">/],
     ['documents', /<article class="list-row document-row\$\{[^}]+\}" data-id="\$\{doc\.id\}">/],
     ['contacts', /contact-item" data-id="\$\{c\.id\}"/],
@@ -1798,7 +1798,7 @@ const SHARED_PRESSABLE = [
   ['.more-item', 'own'],
 ];
 /** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken. */
-const UNGUARDED_HOVER_MAX = 232;
+const UNGUARDED_HOVER_MAX = 226;
 
 function hoverRules() {
   const out = [];

@@ -1557,7 +1557,8 @@
         "checkConflict": "Заметка была изменена. Она будет загружена заново.",
         "pinnedState": "Закреплена",
         "checklistDone": "Выполнено",
-        "checklistOpen": "Открыто"
+        "checklistOpen": "Открыто",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Жирный (Ctrl+B)",
@@ -3740,7 +3741,8 @@
         "twoFactorCancel": "Отмена",
         "ssoOnlyHint": "Вход в это домохозяйство выполняется исключительно через SSO.",
         "guestPasswordLogin": "Вход гостя по паролю",
-        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства."
+        "accountCannotSignIn": "Эта учётная запись не может войти. Обратитесь к администратору вашего домохозяйства.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Добро пожаловать в Yuvomi",
@@ -4003,7 +4005,11 @@
         "importSubmit": "Добавить {{count}}",
         "importSuccess": "Добавлено дней рождения: {{count}}.",
         "importNothingSelected": "Выберите хотя бы один контакт.",
-        "importSelected": "Выбрано контактов: {{count}}"
+        "importSelected": "Выбрано контактов: {{count}}",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Напоминание",
@@ -4352,7 +4358,23 @@
         "errorDmsAccountGone": "Этой учётной записи DMS больше нет.",
         "errorDmsDocumentGone": "Этого документа больше нет в DMS.",
         "errorDmsAlreadyLinked": "Этот документ из DMS уже привязан.",
-        "errorDmsAlreadyStored": "Этот документ уже хранится в DMS."
+        "errorDmsAlreadyStored": "Этот документ уже хранится в DMS.",
+        "inDays_one": "через {{count}} день",
+        "inDays": "через {{count}} дн.",
+        "inDays_few": "через {{count}} дня",
+        "inDays_many": "через {{count}} дн.",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Кухня",
@@ -4593,7 +4615,25 @@
         "errorAmountsHidden": "Отметить оплату может только тот, кому видны суммы помощницы по дому.",
         "notHereToday": "Сегодня ещё не пришла",
         "tabVisits": "Визиты",
-        "tabChores": "Дела по дому"
+        "tabChores": "Дела по дому",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "ещё",
@@ -5282,7 +5322,25 @@
             "reminders": {
                 "title": "Следующие напоминания",
                 "empty": "На сегодня приёмов больше нет"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Показатели",
@@ -6119,7 +6177,10 @@
         "errorCycleImportNoRows": "В файле только строка заголовка и нет ни одной менструации.",
         "errorCycleImportTooManyRows": "В одном импорте может быть не более {{limit}} менструаций. Разделите файл.",
         "errorVitalImpossible": "Такое значение невозможно. Проверьте ввод.",
-        "errorVitalBpOrder": "Систолическое значение должно быть больше диастолического."
+        "errorVitalBpOrder": "Систолическое значение должно быть больше диастолического.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Вывоз мусора",

@@ -1647,7 +1647,8 @@
         "checkConflict": "تم تغيير الملاحظة في هذه الأثناء. سيتم إعادة تحميلها.",
         "pinnedState": "مثبتة",
         "checklistDone": "منجز",
-        "checklistOpen": "مفتوح"
+        "checklistOpen": "مفتوح",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "عريض (Ctrl+B)",
@@ -3860,7 +3861,8 @@
         "twoFactorCancel": "إلغاء",
         "ssoOnlyHint": "تسجيل الدخول إلى هذا المنزل يتم حصريًا عبر الدخول الموحد SSO.",
         "guestPasswordLogin": "تسجيل دخول الضيف بكلمة مرور",
-        "accountCannotSignIn": "لا يمكن لهذا الحساب تسجيل الدخول. يرجى التواصل مع مسؤول منزلك."
+        "accountCannotSignIn": "لا يمكن لهذا الحساب تسجيل الدخول. يرجى التواصل مع مسؤول منزلك.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "مرحبًا بك في Yuvomi",
@@ -4127,7 +4129,11 @@
         "importSubmit": "إضافة {{count}}",
         "importSuccess": "تمت إضافة {{count}} عيد ميلاد.",
         "importNothingSelected": "يرجى اختيار جهة اتصال واحدة على الأقل.",
-        "importSelected": "تم تحديد {{count}} جهة اتصال"
+        "importSelected": "تم تحديد {{count}} جهة اتصال",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "تذكير",
@@ -4485,7 +4491,24 @@
         "errorDmsAccountGone": "حساب نظام إدارة المستندات هذا لم يعد موجودًا.",
         "errorDmsDocumentGone": "هذا المستند لم يعد موجودًا في نظام إدارة المستندات.",
         "errorDmsAlreadyLinked": "مستند نظام إدارة المستندات هذا مرتبط بالفعل.",
-        "errorDmsAlreadyStored": "هذا المستند محفوظ بالفعل في نظام إدارة المستندات."
+        "errorDmsAlreadyStored": "هذا المستند محفوظ بالفعل في نظام إدارة المستندات.",
+        "inDays_one": "خلال {{count}} يوم",
+        "inDays": "خلال {{count}} أيام",
+        "inDays_few": "خلال {{count}} أيام",
+        "inDays_two": "خلال يومين",
+        "inDays_many": "خلال {{count}} يومًا",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "المطبخ",
@@ -4726,7 +4749,29 @@
         "errorAmountsHidden": "لا يمكن تسجيل الدفع إلا لمن يُسمح له برؤية مبالغ المساعدة المنزلية.",
         "notHereToday": "لم تصل اليوم بعد",
         "tabVisits": "الزيارات",
-        "tabChores": "الأعمال المنزلية"
+        "tabChores": "الأعمال المنزلية",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_zero": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_two": "{{count}} visits",
+        "visitCount_few": "{{count}} visits",
+        "visitCount_many": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_zero": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_two": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_few": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_many": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "آخرون",
@@ -5424,7 +5469,25 @@
             "reminders": {
                 "title": "التذكيرات التالية",
                 "empty": "لا مزيد من الجرعات اليوم"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "المؤشرات الحيوية",
@@ -6267,7 +6330,10 @@
         "errorCycleImportNoRows": "يحتوي الملف على سطر العناوين فقط ولا يحتوي على دورات.",
         "errorCycleImportTooManyRows": "يمكن أن يحتوي الاستيراد على {{limit}} دورة كحد أقصى. قسّم الملف.",
         "errorVitalImpossible": "هذه القيمة غير ممكنة. يرجى التحقق من الإدخال.",
-        "errorVitalBpOrder": "يجب أن تكون القيمة الانقباضية أعلى من الانبساطية."
+        "errorVitalBpOrder": "يجب أن تكون القيمة الانقباضية أعلى من الانبساطية.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "جمع النفايات",

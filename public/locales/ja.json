@@ -1391,7 +1391,8 @@
         "checkConflict": "メモはその間に変更されました。再読み込みします。",
         "pinnedState": "ピン留め済み",
         "checklistDone": "完了",
-        "checklistOpen": "未完了"
+        "checklistOpen": "未完了",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "太字 (Ctrl+B)",
@@ -3514,7 +3515,8 @@
         "twoFactorCancel": "キャンセル",
         "ssoOnlyHint": "この世帯へのサインインは SSO のみです。",
         "guestPasswordLogin": "ゲストとしてパスワードでサインイン",
-        "accountCannotSignIn": "このアカウントはサインインできません。世帯の管理者にお問い合わせください。"
+        "accountCannotSignIn": "このアカウントはサインインできません。世帯の管理者にお問い合わせください。",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi へようこそ",
@@ -3769,7 +3771,11 @@
         "importSubmit": "{{count}} 件を追加",
         "importSuccess": "{{count}} 件の誕生日を追加しました。",
         "importNothingSelected": "少なくとも 1 件の連絡先を選択してください。",
-        "importSelected": "{{count}} 件の連絡先を選択"
+        "importSelected": "{{count}} 件の連絡先を選択",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "リマインダー",
@@ -4100,7 +4106,21 @@
         "errorDmsAccountGone": "この DMS アカウントはもう存在しません。",
         "errorDmsDocumentGone": "このドキュメントは DMS にもう存在しません。",
         "errorDmsAlreadyLinked": "この DMS ドキュメントはすでにリンクされています。",
-        "errorDmsAlreadyStored": "このドキュメントはすでに DMS に保存されています。"
+        "errorDmsAlreadyStored": "このドキュメントはすでに DMS に保存されています。",
+        "inDays_one": "あと{{count}}日",
+        "inDays": "あと{{count}}日",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "キッチン",
@@ -4341,7 +4361,21 @@
         "errorAmountsHidden": "支払いを記録できるのは、家事サポートの金額を見られる人だけです。",
         "notHereToday": "今日はまだ来ていません",
         "tabVisits": "訪問",
-        "tabChores": "家事"
+        "tabChores": "家事",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_other": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "他",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "次のリマインダー",
                 "empty": "本日の服薬はこれ以上ありません"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "バイタル",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "ファイルには見出し行しかなく生理期間がありません。",
         "errorCycleImportTooManyRows": "一度にインポートできる生理期間は最大{{limit}}件です。ファイルを分けてください。",
         "errorVitalImpossible": "この値はありえません。入力内容を確認してください。",
-        "errorVitalBpOrder": "収縮期の値は拡張期の値より大きくなければなりません。"
+        "errorVitalBpOrder": "収縮期の値は拡張期の値より大きくなければなりません。",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "ゴミ収集",

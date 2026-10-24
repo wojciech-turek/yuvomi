@@ -3883,6 +3883,136 @@ Die Startseite ist ausserhalb des Wand-Modus kein Kachelraster mehr, sondern EIN
 
 Das Tagesprogramm darunter gilt seitdem fuer die Wand.
 
+### Die Modulseiten (Tafla, 2026-10-20)
+The pages behind Więcej speak ONE vocabulary, `public/styles/inset-list.css` (global, next to
+`list-row.css`): `.inset-group` (17/600 head + 17/400 count, 8 above the card), `.inset-card`
+(white, radius 20, flat) with `.inset-row` (64, or 48 `--single`; 28 leading slot + 12 gap so
+every title sits at x=56; hairlines inset to 56; title 17/400, meta 13/400 ink-2, aside date,
+trailing value 17 ink-2, chevron 16 ink-3), `.preview-tiles`/`.preview-tile` (2-up, min 96),
+`.status-pill` (a word on its tint: warning/danger/success), `.initial-disc` (neutral 28 initial
+for people WITHOUT an account - only household members get person colours), `.hero-card` (E1, the
+one thing that matters now), `.pill-btn` (`--primary` fill = `--color-btn-primary` + white +
+glow, one per screen; `--secondary` accent-tint; `--plain`) and `.ghost-circle` (36 on a 44 hit).
+Dates in rows come from `utils/day-label.js`: `pastDateLabel` (time today, "wczoraj", then
+"16 paź" - a past day never gets a weekday), `shortDayMonth`, `shortWeekdayDayMonth` ("wt 27 paź").
+On touch a row carries no "⋯" and no pin: they leave the picture via `clip-path`, not the focus
+tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
+
+- **Notatki**: pinned notes as 2-up preview tiles (glyph, title 17/600, two lines of preview, the
+  author's disc when it is someone else's), then "Ostatnie" as one list of 64 rows (title + date,
+  one-line preview + disc). No sticky-note colours anywhere - not on the list, not in the reader
+  (the stored colour stays in the data; the editor no longer offers a picker). The author chips
+  start at three authors (with two adults the disc says who); the chip row's placeholder holds its
+  place only when it stood last time on this device. Checklists tick in the reader (one tap more
+  than on the old card). Guards moved: R19 masonry -> "two groups", note colour on card/reader ->
+  "no note colour", D8 group head -> `.inset-group__head`, M13 compact card -> "row with one-line
+  preview, no circles on touch", R20 placeholder -> remembered per device.
+- **Urodziny**: the nearest birthday is an E1 hero card ("Za 7 dni", name 22/600, "wtorek,
+  27 października · 60. urodziny"); when the household already prepared something it links the
+  open task whose title names the person (due before the day) and the note with gift ideas (title
+  names the person) - matched on declension-tolerant name stems, conservative on purpose. Below,
+  one inset group per month ("Listopad 2"), 64 rows with a 28 disc (neutral `.initial-disc`; only
+  a household member gets the person colour, no runtime text colour any more), meta "note ·
+  kończy 35", the date at the end ("wt 3 lis"), and ONE warning pill ("za 7 dni") on the nearest
+  row only. On touch the row's "⋯" leaves the picture (tap opens the editor, delete is in it,
+  swipe stays). Guards moved: R19 module-tone countdown -> pill on the nearest, carrier ->
+  `.inset-card` per month, D6 -> "no ⋯ on touch, the row itself opens".
+- **Kontakty**: alphabetical sections like the phone book ("A", "B" as Footnote 13/600 ink-2,
+  sticky), one inset card per letter, 64 rows with a 28 initial disc (neutral without an account,
+  person colour for a household member), the meta line says who the person is to us (position ·
+  company, else the note's first line, else the category; the number only when nothing else is
+  known), and a NEUTRAL 36 call ghost circle (no status green on an action). The category stays as
+  the chip filter and in the detail. "Pod ręką" (favourites) is omitted: contacts have no
+  favourite flag in the data. On touch the "⋯" leaves the picture (mail, map, export, delete are
+  in the opened contact). Guards moved: call "row-action--success" -> neutral `contact-item__call`,
+  D8 category head -> letter head.
+- **Szukaj** (the palette, router.js + layout.css): plain paper instead of the violet wash (desktop:
+  the warm `--color-scrim`), a radius-12 field with the magnifier and "Anuluj" as a plain word
+  beside it (grid places it there; in the DOM it stays after the results, so Tab still goes field
+  -> Anuluj). Results are grouped by module with a count ("Urodziny 1", 17/600 + 17/400), every
+  row carries its module's bare glyph in the 28 slot (no seal disc, no module tone; title at
+  x=56), rows are 48/64 with hairlines inset to the title, the matched words are 600 in the same
+  ink (no marker). The keyboard preselection tint shows only at a pointer. Empty state: the
+  "Ostatnio otwierane" places (rows with glyphs) and the "Przejdź do" tiles as quiet white tiles.
+  Recent SEARCH TERMS are deliberately not stored: the R19 security review keeps only places,
+  never a name or a data hit, on the device. Guard change: four `NOT_A_FIELD` exceptions removed
+  (those rules no longer draw a card edge).
+- **Light pass** (Budżet, Rozliczenia, Inwentarz, Odbiór odpadów, Grafik, Nagrody - mostly off
+  in this household; the tokens already shift them): the fill of a progress bar takes the FILL
+  role of the voice (`--color-btn-primary`; the text role is #B49CFF in dark), and the section
+  head's "…" (Budżet, Rozliczenia, Abonamenty) wears the header's ghost circle like the search
+  beside it. Expenses stay ink; only income and a positive balance carry success (contract).
+- **Sprzątanie**: the "Wizyty" view is one calm page under its large title. The E1 hero card says
+  when she comes next - guessed only when the last two or three finished visits share a weekday
+  (in the household zone); the profile has no visiting days, so without a pattern it names the
+  last visit, and while she is in the house it says "Teraz w domu · Od 9:05" -, check-in/out as a
+  secondary pill in its corner (the same `toggleSession()` button, both directions, #1133), then
+  "Do zapłaty 360 zł" in ink with "2 wizyty · 8 i 15 paź" and ONE primary "Zapłacone":
+  `payVisit(first, onPaid, { also })` asks once for the batch (plural question) and posts each
+  visit through the one pay line (#1136). Below: the chores due by that visit ("Na następną
+  wizytę", the decay tasks overdue or due by then) as checkable 48 rows with "Dodaj zadanie" as
+  the last row, the last visits as compact 48 rows ("czw 15 paź · 4 h", amount in ink, no
+  paid/pending word - status only where it asks for action), the payment chart, and the other
+  areas (Prace domowe, Raporty, Pomoce domowe) behind one card of rows. On phones the tab bar
+  steps aside on this view only; the other areas keep it as their title line (R19), so a tap on
+  "Wizyty" brings you back. The metric glance left this view (the reports keep it). The month
+  before is loaded beside `loadData()` for the hero. Guards moved: #1133 (two markup sites:
+  hero and strip, both checked), #1136 (one question for a batch), R16 section heads accept the
+  inset-group head, READ_SAFE_CONTROLS gains the area rows, the metric-glance and last-visit-year
+  tests became hero tests.
+- **Logowanie** (login, setup, join, forgot/reset password, tablet pairing - one `auth.css`): calm
+  paper instead of R18's glass panel over the brand light field. The head is the house (Lucide
+  `house`, inline in `utils/auth-ui.js`) in the accent on its tint (64 circle), the app name as a
+  34/600 large title, the tagline in 17 ink-2; fields 52 tall, radius 12, on `--color-fill` with
+  the label 13/600 ink-2 eight above - the 1px field edge stays (3:1 on paper and on the fill,
+  WCAG 1.4.11); ONE primary "Zaloguj się" (52, full width, glow); "Nie pamiętam hasła" as a plain
+  17/600 verb (still only when the server can send the mail); and a footnote at the foot with the
+  lock, "<host> · połączenie szyfrowane", written only when the page is served over https. The
+  block sits in the middle of the screen, the footnote (or the version line) at its foot. SSO,
+  SSO-only, the guest password way and the two-factor step are untouched. Guards moved: the
+  material tests measure every ink on paper instead of on the panel; the brand field lives on the
+  loading screen only; the auth head carries the house, not `brandMarkSvg()` (the sidebar keeps
+  the brand mark); the card title is 600, not 700.
+- **Zdrowie**: the overview is the day. Up to three people pick the person on a neutral segmented
+  control ("Ty | Wojtek", track `--color-fill`, the chosen one on `--color-raised`, never violet;
+  four and more keep the pill with its menu). "Dziś 1 z 2" lists today's doses as 64 rows with the
+  check circle of Dziś (tap = taken via the existing log API, tap again = back to pending, both with
+  a "Cofnij" toast; the stock moves with the dose as before); "Pominięcie" stays in Leki. "Zapasy"
+  appears only when a medicine is under its refill threshold (left amount, "wystarczy do 29 paź"; the
+  word pill only for "brak"), "Wizyty" only when a prevention item's reminder window is open (pill
+  only within three days or overdue). Under them a lock line "Dane o zdrowiu nigdy nie trafiają do
+  asystenta AI." - verified 2026-10-20: every AI call site (server/ai questions/insights, the admin
+  test, shopping category guess, pantry photo, meal ideas, meal ingredients) reads meals, recipes,
+  pantry, shopping and the AI's own tables, never a health table. Then "Dziennik": every area as a
+  quiet row with its latest value. On the phone the overview no longer repeats vitals, adherence,
+  reminders and "Szybki zapis" below the list (they live in their areas; the + covers capture); the
+  desktop grid keeps them. Areas get one back circle to Zdrowie (the shell's "Wróć: Więcej" steps
+  aside there). Done is violet, never success-green ("Przyjęto", a normal lab value, a typical cycle
+  go to ink-2/neutral). Guards moved: hoist plan without "quick", the one-wave request list gains
+  `/health/prevention/due`, the overview dose renderer is the circle (Leki keeps both labelled
+  buttons), the person switcher test reads the segment. Areas keep their structure and take the
+  tokens: Profilaktyka's "due" list and each type's history are flat white grouped cards with 64
+  rows (the word pill only when soon or overdue), selections (weekday toggles, symptom/mood chips,
+  the chosen lab report) speak violet, and chips/discs on cards sit on `--color-fill` instead of the
+  dark `--color-surface-2` well.
+- **Dokumenty**: an overview above the list. The E1 card shows the ONE document whose expiry
+  comes first (`dateStatus`, the same rule as row and viewer: expired or within 30 days) with the
+  distance as a word in a pill ("za 23 dni" / "po terminie") and ONE action: "Przypomnij tydzień
+  wcześniej" sets the existing `expiry_reminder_days` to 7 (owner or admin, like the server; a
+  restricted share travels along because PUT rewrites the access list); with a reminder already
+  ahead, a deadline under a week or someone else's document it is "Wyświetl". Below 1024px the
+  folders of the current level are 48 rows with counts (a lock before the count when every visible
+  document in it is private or restricted - folders have no visibility of their own), "Dodaj
+  folder" and "Archiwum"; folder chip, Aktywny/Zarchiwizowany segment and breadcrumb give way to
+  those rows and a plain "‹ back"; the folder's own menu sits on the list head. The list has a
+  head ("Ostatnie 14", the folder name, "Zarchiwizowany") and, in the narrow row, a 28 glyph slot,
+  one-line title, meta joined with " · " starting with "PDF · dziś", the uploader's disc on
+  someone else's document, inset hairlines and no shadow; on touch the redundant eye of a
+  read-only bar leaves the picture (clip-path, still the toolbar's tab stop). Category and
+  deadline chips stay as the list's filter. Guards: "Datum und Größe" now expects
+  `renderMeta(doc, { showSize: false, when: true })`; the TDZ in test-documents-ux (fnBody used
+  before its declaration) is fixed.
+
 ### Das Tagesprogramm (Signature Component)
 Das eine Blatt, das die Uebersicht anfuehrt: EIN Traeger auf `--color-surface` mit
 `--radius-xl` und `--shadow-lg`, Zeilen als Haarlinien, je Zeile ein Siegel fuer den Raum,
@@ -4001,6 +4131,14 @@ unter 768px mit „Widgets anpassen" in EINEM Anpassen-Menue (`settings-2`), ab 
 zwei Knoepfe; die Eintraege klicken die Knoepfe, ein Display behaelt seinen Wand-Knopf.
 
 ### Anmeldeseite
+> **Tafla (2026-10-20, Artboard "Logowanie"):** Lichtfeld und Glastafel sind fuer diese
+> Seiten zurueckgenommen - Glas bleibt Chrome, und ausser Scroll-Kante und Razem-Scheibe gibt es
+> keinen Verlauf. Die Seiten stehen auf dem Papier der App (`--color-bg`); der Kopf ist das Haus
+> in der Akzent-Tinte auf seiner Toenung statt der Bildmarke (die bleibt Seitenleiste, Ladebild
+> und Homescreen). Jede Tinte haelt auf dem Papier AA, die Feldkante 3:1 auf Papier UND Fuellung
+> (test:material). Das Folgende ist die Geschichte der R18-Fassung; Einzelheiten der neuen stehen
+> unter "Die Modulseiten (Tafla, 2026-10-20)", Abschnitt Logowanie.
+
 Die erste Seite der App ist Teil derselben Welt, keine Ausnahme - und sie hat einen Ort
 (R18, 2026-10-07; gilt fuer Anmeldung, Einrichtung, Einladung, Passwort-Reset und das
 Koppeln eines Wandtabletts). Zwei Ebenen, wie ueberall sonst: **Raumlicht und Glas.** Die

@@ -1573,7 +1573,8 @@
         "checkConflict": "Notatka została w międzyczasie zmieniona. Zostanie ponownie wczytana.",
         "pinnedState": "Przypięta",
         "checklistDone": "Zrobione",
-        "checklistOpen": "Otwarte"
+        "checklistOpen": "Otwarte",
+        "groupRecent": "Ostatnie"
     },
     "markdown": {
         "bold": "Pogrubienie (Ctrl+B)",
@@ -3727,7 +3728,7 @@
         "tagline": "Witaj ponownie w swoim planerze rodzinnym.",
         "usernameLabel": "Nazwa użytkownika",
         "passwordLabel": "Hasło",
-        "loginButton": "Zaloguj",
+        "loginButton": "Zaloguj się",
         "loggingIn": "Logowanie…",
         "tooManyAttempts": "Zbyt wiele prób. Odczekaj około minuty i spróbuj ponownie.",
         "invalidCredentials": "Nieprawidłowe dane logowania.",
@@ -3740,7 +3741,7 @@
         "ssoNoAccount": "Dla tego logowania SSO nie ma tu jeszcze konta. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
         "ssoEmailAmbiguous": "Twój adres e-mail należy tu do kilku kont, dlatego logowania SSO nie można przypisać do żadnego z nich. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
         "ssoLinkRequired": "Dla Twojego adresu e-mail istnieje tu już konto z hasłem. Zaloguj się nim i powiąż SSO w Ustawienia → Konto albo skontaktuj się z administratorem swojego gospodarstwa domowego.",
-        "forgotPassword": "Nie pamiętasz hasła?",
+        "forgotPassword": "Nie pamiętam hasła",
         "networkError": "Połączenie nie powiodło się. Sprawdź, czy serwer działa, i spróbuj ponownie.",
         "capsLockWarning": "Caps Lock jest włączony.",
         "fillAllFields": "Wprowadź nazwę użytkownika i hasło.",
@@ -3756,7 +3757,8 @@
         "twoFactorCancel": "Anuluj",
         "ssoOnlyHint": "Logowanie do tego gospodarstwa domowego odbywa się wyłącznie przez SSO.",
         "guestPasswordLogin": "Logowanie gościa hasłem",
-        "accountCannotSignIn": "To konto nie może się zalogować. Skontaktuj się z administratorem swojego gospodarstwa domowego."
+        "accountCannotSignIn": "To konto nie może się zalogować. Skontaktuj się z administratorem swojego gospodarstwa domowego.",
+        "secureConnection": "{{host}} · połączenie szyfrowane"
     },
     "setup": {
         "title": "Witamy w Yuvomi",
@@ -3944,7 +3946,11 @@
         "importSubmit": "Dodaj {{count}}",
         "importSuccess": "Dodano urodziny: {{count}}.",
         "importNothingSelected": "Wybierz co najmniej jeden kontakt.",
-        "importSelected": "Wybrano kontakty: {{count}}"
+        "importSelected": "Wybrano kontakty: {{count}}",
+        "heroAge": "{{age}}. urodziny",
+        "heroInTasks": "jest w zadaniach",
+        "heroGiftIdeas": "Pomysły na prezent",
+        "heroLabel": "Najbliższe urodziny"
     },
     "recipes": {
         "mealTypeNone": "Brak posiłku",
@@ -4412,7 +4418,23 @@
         "errorDmsAccountGone": "To konto DMS już nie istnieje.",
         "errorDmsDocumentGone": "Ten dokument już nie istnieje w systemie DMS.",
         "errorDmsAlreadyLinked": "Ten dokument z systemu DMS jest już połączony.",
-        "errorDmsAlreadyStored": "Ten dokument jest już zapisany w systemie DMS."
+        "errorDmsAlreadyStored": "Ten dokument jest już zapisany w systemie DMS.",
+        "inDays_one": "za {{count}} dzień",
+        "inDays": "za {{count}} dni",
+        "inDays_few": "za {{count}} dni",
+        "inDays_many": "za {{count}} dni",
+        "expiringSoonLabel": "Wkrótce wygasa: {{name}}",
+        "expiredLabel": "Po terminie: {{name}}",
+        "expiresOnShort": "wygasa {{date}}",
+        "expiredOnShort": "wygasło {{date}}",
+        "expiredPill": "po terminie",
+        "remindWeekBefore": "Przypomnij tydzień wcześniej",
+        "reminderOn": "przypomnienie {{date}}",
+        "reminderSetToast": "Przypomnienie ustawione na {{date}}.",
+        "listRecent": "Ostatnie",
+        "archiveRow": "Archiwum",
+        "folderPrivate": "tylko prywatne dokumenty",
+        "folderRowLabel": "{{name}}, dokumenty: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Nikt",
@@ -4597,7 +4619,25 @@
         "errorAmountsHidden": "Płatność może oznaczyć tylko osoba, która widzi kwoty pomocy domowej.",
         "notHereToday": "Dziś jeszcze jej nie ma",
         "tabVisits": "Wizyty",
-        "tabChores": "Prace domowe"
+        "tabChores": "Prace domowe",
+        "heroNextVisit": "Następna wizyta",
+        "heroHereNow": "Teraz w domu",
+        "heroSince": "Od {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "ok. {{duration}}",
+        "amountDue": "Do zapłaty {{amount}}",
+        "markAllPaid": "Zapłacone",
+        "forNextVisit": "Na następną wizytę",
+        "visitCount": "{{count}} wizyty",
+        "visitCount_one": "{{count}} wizyta",
+        "visitCount_few": "{{count}} wizyty",
+        "visitCount_many": "{{count}} wizyt",
+        "visitCount_other": "{{count}} wizyty",
+        "markPaidConfirmMany": "Oznaczyć {{count}} wizyty jako zapłacone?",
+        "markPaidConfirmMany_one": "Oznaczyć {{count}} wizytę jako zapłaconą?",
+        "markPaidConfirmMany_few": "Oznaczyć {{count}} wizyty jako zapłacone?",
+        "markPaidConfirmMany_many": "Oznaczyć {{count}} wizyt jako zapłacone?",
+        "markPaidConfirmMany_other": "Oznaczyć {{count}} wizyty jako zapłacone?"
     },
     "splitExpenses": {
         "title": "Wspólne wydatki",
@@ -5257,7 +5297,7 @@
             "loadError": "Nie udało się załadować przeglądu",
             "loadErrorDesc": "Spróbuj ponownie.",
             "retry": "Spróbuj ponownie",
-            "areasTitle": "Wszystkie kategorie",
+            "areasTitle": "Dziennik",
             "moreTitle": "Pokaż wszystkie wartości",
             "areasPick": "Wybierz kategorię",
             "dueToday": {
@@ -5282,7 +5322,25 @@
             "reminders": {
                 "title": "Kolejne przypomnienia",
                 "empty": "Brak kolejnych dawek na dziś"
-            }
+            },
+            "todayTitle": "Dziś",
+            "doneOf": "{{done}} z {{total}}",
+            "takenAt": "przyjęto o {{time}}",
+            "untakeNamed": "Jednak nie przyjęto: {{name}}",
+            "toastTaken": "Przyjęto: {{name}}",
+            "toastUntaken": "Oznaczono jako nieprzyjęte: {{name}}",
+            "stockTitle": "Zapasy",
+            "stockLeft": "zostało {{amount}}",
+            "stockUntil": "wystarczy do {{date}}",
+            "stockLow": "kończy się",
+            "stockOut": "brak",
+            "visitsTitle": "Wizyty",
+            "dueOn": "termin {{date}}",
+            "pillOverdue": "zaległe",
+            "pillToday": "dziś",
+            "pillTomorrow": "jutro",
+            "pillInDays": "za {{count}} dni",
+            "aiPrivacy": "Dane o zdrowiu nigdy nie trafiają do asystenta AI."
         },
         "vitals": {
             "title": "Parametry życiowe",
@@ -6119,7 +6177,10 @@
         "errorCycleImportNoRows": "Plik zawiera tylko wiersz nagłówka i żadnej miesiączki.",
         "errorCycleImportTooManyRows": "Jeden import może zawierać najwyżej {{limit}} miesiączek. Podziel plik.",
         "errorVitalImpossible": "Ta wartość jest niemożliwa. Sprawdź wprowadzone dane.",
-        "errorVitalBpOrder": "Wartość skurczowa musi być wyższa niż rozkurczowa."
+        "errorVitalBpOrder": "Wartość skurczowa musi być wyższa niż rozkurczowa.",
+        "person": {
+            "you": "Ty"
+        }
     },
     "waste": {
         "title": "Odbiór odpadów",

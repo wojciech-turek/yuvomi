@@ -1407,7 +1407,8 @@
         "checkConflict": "Nabago ang tala samantala. Iri-reload ito.",
         "pinnedState": "Naka-pin",
         "checklistDone": "Tapos",
-        "checklistOpen": "Bukas"
+        "checklistOpen": "Bukas",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Bold (Ctrl+B)",
@@ -3530,7 +3531,8 @@
         "twoFactorCancel": "Kanselahin",
         "ssoOnlyHint": "Ang pag-sign in sa sambahayang ito ay eksklusibong sa pamamagitan ng SSO.",
         "guestPasswordLogin": "Pag-sign in ng bisita gamit ang password",
-        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan."
+        "accountCannotSignIn": "Hindi makakapag-sign in ang account na ito. Makipag-ugnayan sa administrador ng iyong sambahayan.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Maligayang pagdating sa Yuvomi",
@@ -3714,7 +3716,11 @@
         "importSubmit": "Idagdag ang {{count}}",
         "importSuccess": "{{count}} kaarawan ang naidagdag.",
         "importNothingSelected": "Pumili ng kahit isang kontak.",
-        "importSelected": "{{count}} kontak ang napili"
+        "importSelected": "{{count}} kontak ang napili",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Walang pagkain",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Wala na ang DMS account na ito.",
         "errorDmsDocumentGone": "Wala na sa DMS ang dokumentong ito.",
         "errorDmsAlreadyLinked": "Naka-link na ang dokumentong ito mula sa DMS.",
-        "errorDmsAlreadyStored": "Nakaimbak na sa isang DMS ang dokumentong ito."
+        "errorDmsAlreadyStored": "Nakaimbak na sa isang DMS ang dokumentong ito.",
+        "inDays_one": "sa loob ng {{count}} araw",
+        "inDays": "sa loob ng {{count}} araw",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "userMultiSelect": {
         "nobody": "Wala",
@@ -4345,7 +4365,21 @@
         "errorAmountsHidden": "Ang may pahintulot lang na makita ang halaga para sa kasambahay ang makakapagmarka ng bayad.",
         "notHereToday": "Wala pa ngayong araw",
         "tabVisits": "Mga pagbisita",
-        "tabChores": "Gawaing-bahay"
+        "tabChores": "Gawaing-bahay",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "splitExpenses": {
         "title": "Mga hinating gastos",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Mga paparating na paalala",
                 "empty": "Wala nang dosis ngayong araw"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Bayolohikal na palatandaan",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "Header row lang ang laman ng file at walang regla.",
         "errorCycleImportTooManyRows": "Hanggang {{limit}} regla lang ang kaya ng isang import. Hatiin ang file.",
         "errorVitalImpossible": "Hindi posible ang halagang ito. Pakisuri ang inilagay mo.",
-        "errorVitalBpOrder": "Dapat mas mataas ang systolic kaysa sa diastolic."
+        "errorVitalBpOrder": "Dapat mas mataas ang systolic kaysa sa diastolic.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Koleksyon ng basura",

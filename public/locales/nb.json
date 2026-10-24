@@ -1391,7 +1391,8 @@
         "checkConflict": "Notatet har endret seg i mellomtiden. Det vil bli lastet på nytt.",
         "pinnedState": "Festet",
         "checklistDone": "Ferdig",
-        "checklistOpen": "Åpen"
+        "checklistOpen": "Åpen",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Fet (Ctrl+B)",
@@ -3514,7 +3515,8 @@
         "twoFactorCancel": "Avbryt",
         "ssoOnlyHint": "Innlogging til denne husholdningen skjer utelukkende via felles pålogging.",
         "guestPasswordLogin": "Gjestinnlogging med passord",
-        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din."
+        "accountCannotSignIn": "Denne kontoen kan ikke logge inn. Vennligst kontakt administratoren for husholdningen din.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Velkommen til Yuvomi",
@@ -3698,7 +3700,11 @@
         "importSubmit": "Legg til {{count}}",
         "importSuccess": "{{count}} fødselsdager lagt til.",
         "importNothingSelected": "Vennligst velg minst én kontakt.",
-        "importSelected": "{{count}} kontakter valgt"
+        "importSelected": "{{count}} kontakter valgt",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "recipes": {
         "mealTypeNone": "Intet måltid",
@@ -4160,7 +4166,21 @@
         "errorDmsAccountGone": "Denne DMS-kontoen finnes ikke lenger.",
         "errorDmsDocumentGone": "Dette dokumentet finnes ikke lenger i DMS-systemet.",
         "errorDmsAlreadyLinked": "Dette DMS-dokumentet er allerede koblet til.",
-        "errorDmsAlreadyStored": "Dette dokumentet er allerede lagret i et DMS."
+        "errorDmsAlreadyStored": "Dette dokumentet er allerede lagret i et DMS.",
+        "inDays_one": "om {{count}} dag",
+        "inDays": "om {{count}} dager",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "housekeeping": {
         "title": "Husarbeid",
@@ -4341,7 +4361,21 @@
         "errorAmountsHidden": "Bare den som kan se beløpene for husholdningshjelpen, kan registrere en betaling.",
         "notHereToday": "Ikke kommet ennå i dag",
         "tabVisits": "Besøk",
-        "tabChores": "Gjøremål"
+        "tabChores": "Gjøremål",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "mer",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Kommende påminnelser",
                 "empty": "Ingen flere doser i dag"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Vitalparametre",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "Filen har bare en overskriftsrad og ingen mens.",
         "errorCycleImportTooManyRows": "En import kan inneholde høyst {{limit}} menser. Del opp filen.",
         "errorVitalImpossible": "Denne verdien er ikke mulig. Sjekk det du skrev inn.",
-        "errorVitalBpOrder": "Den systoliske verdien må være høyere enn den diastoliske."
+        "errorVitalBpOrder": "Den systoliske verdien må være høyere enn den diastoliske.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Avfallshåndtering",

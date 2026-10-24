@@ -1391,7 +1391,8 @@
         "checkConflict": "Not bu arada değişti. Yeniden yüklenecek.",
         "pinnedState": "Sabitlenmiş",
         "checklistDone": "Tamamlandı",
-        "checklistOpen": "Açık"
+        "checklistOpen": "Açık",
+        "groupRecent": "Recent"
     },
     "markdown": {
         "bold": "Kalın (Ctrl+B)",
@@ -3514,7 +3515,8 @@
         "twoFactorCancel": "İptal",
         "ssoOnlyHint": "Bu haneye giriş yalnızca SSO ile yapılır.",
         "guestPasswordLogin": "Şifreyle misafir girişi",
-        "accountCannotSignIn": "Bu hesap giriş yapamaz. Lütfen hane yöneticinizle iletişime geçin."
+        "accountCannotSignIn": "Bu hesap giriş yapamaz. Lütfen hane yöneticinizle iletişime geçin.",
+        "secureConnection": "{{host}} · encrypted connection"
     },
     "setup": {
         "title": "Yuvomi’a hoş geldiniz",
@@ -3769,7 +3771,11 @@
         "importSubmit": "{{count}} ekle",
         "importSuccess": "{{count}} doğum günü eklendi.",
         "importNothingSelected": "Lütfen en az bir kişi seçin.",
-        "importSelected": "{{count}} kişi seçildi"
+        "importSelected": "{{count}} kişi seçildi",
+        "heroAge": "turns {{age}}",
+        "heroInTasks": "in Tasks",
+        "heroGiftIdeas": "Gift ideas",
+        "heroLabel": "Next birthday"
     },
     "reminders": {
         "sectionTitle": "Hatırlatıcı",
@@ -4100,7 +4106,21 @@
         "errorDmsAccountGone": "Bu DMS hesabı artık yok.",
         "errorDmsDocumentGone": "Bu belge artık DMS'de yok.",
         "errorDmsAlreadyLinked": "Bu DMS belgesi zaten bağlı.",
-        "errorDmsAlreadyStored": "Bu belge zaten bir DMS'de saklanıyor."
+        "errorDmsAlreadyStored": "Bu belge zaten bir DMS'de saklanıyor.",
+        "inDays_one": "{{count}} gün sonra",
+        "inDays": "{{count}} gün sonra",
+        "expiringSoonLabel": "Expiring soon: {{name}}",
+        "expiredLabel": "Expired: {{name}}",
+        "expiresOnShort": "expires {{date}}",
+        "expiredOnShort": "expired {{date}}",
+        "expiredPill": "expired",
+        "remindWeekBefore": "Remind me a week before",
+        "reminderOn": "reminder {{date}}",
+        "reminderSetToast": "Reminder set for {{date}}.",
+        "listRecent": "Recent",
+        "archiveRow": "Archive",
+        "folderPrivate": "private documents only",
+        "folderRowLabel": "{{name}}, documents: {{total}}"
     },
     "shortcuts": {
         "goKitchen": "Mutfak",
@@ -4341,7 +4361,21 @@
         "errorAmountsHidden": "Ödemeyi yalnızca ev yardımcısı tutarlarını görebilen kişi işaretleyebilir.",
         "notHereToday": "Bugün henüz gelmedi",
         "tabVisits": "Ziyaretler",
-        "tabChores": "Ev işleri"
+        "tabChores": "Ev işleri",
+        "heroNextVisit": "Next visit",
+        "heroHereNow": "Here now",
+        "heroSince": "Since {{time}}",
+        "dayAtTime": "{{day}}, {{time}}",
+        "aboutDuration": "about {{duration}}",
+        "amountDue": "Due {{amount}}",
+        "markAllPaid": "Paid",
+        "forNextVisit": "For the next visit",
+        "visitCount": "{{count}} visits",
+        "visitCount_one": "{{count}} visit",
+        "visitCount_other": "{{count}} visits",
+        "markPaidConfirmMany": "Mark {{count}} visits as paid?",
+        "markPaidConfirmMany_one": "Mark {{count}} visit as paid?",
+        "markPaidConfirmMany_other": "Mark {{count}} visits as paid?"
     },
     "userMultiSelect": {
         "moreUsers": "daha",
@@ -5012,7 +5046,25 @@
             "reminders": {
                 "title": "Sonraki hatırlatmalar",
                 "empty": "Bugün başka kullanım yok"
-            }
+            },
+            "todayTitle": "Today",
+            "doneOf": "{{done}} of {{total}}",
+            "takenAt": "taken at {{time}}",
+            "untakeNamed": "Not taken after all: {{name}}",
+            "toastTaken": "Taken: {{name}}",
+            "toastUntaken": "Marked as not taken: {{name}}",
+            "stockTitle": "Supplies",
+            "stockLeft": "{{amount}} left",
+            "stockUntil": "lasts until {{date}}",
+            "stockLow": "running low",
+            "stockOut": "empty",
+            "visitsTitle": "Check-ups",
+            "dueOn": "due {{date}}",
+            "pillOverdue": "overdue",
+            "pillToday": "today",
+            "pillTomorrow": "tomorrow",
+            "pillInDays": "in {{count}} days",
+            "aiPrivacy": "Health data never reaches the AI assistant."
         },
         "vitals": {
             "title": "Yaşamsal değerler",
@@ -5837,7 +5889,10 @@
         "errorCycleImportNoRows": "Dosyada yalnızca başlık satırı var ve hiç adet dönemi yok.",
         "errorCycleImportTooManyRows": "Bir içe aktarma en fazla {{limit}} adet dönemi içerebilir. Dosyayı böl.",
         "errorVitalImpossible": "Bu değer mümkün değil. Lütfen girdiğini kontrol et.",
-        "errorVitalBpOrder": "Sistolik değer diyastolikten büyük olmalı."
+        "errorVitalBpOrder": "Sistolik değer diyastolikten büyük olmalı.",
+        "person": {
+            "you": "You"
+        }
     },
     "waste": {
         "title": "Atık toplama",
