@@ -2811,7 +2811,9 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > `router.js` passes `wireCollapsingHeader` no `sealIcon`, so a header carries its title
 > only. Title weight is 600 (was 700), tracking default.
 >
-> **Tafla, Kopf (2026-10-19).** Unter 1024px: grosser Titel 34/41 in 600, kein Trenner in Ruhe,
+> **Tafla, Kopf (2026-10-19).** Unter 1024px: grosser Titel 34/41 in 600, kein Trenner in Ruhe
+> - die Kante kommt, sobald Inhalt unter dem Kopf liegt (`is-docked`; einzeilige Koepfe: ihr Port
+> ist gescrollt; 2026-10-24, Sonde 8 prueft jetzt das statt der durchgehenden Linie),
 > Kopf-Knoepfe sind **Geisterkreise** (36pt `--color-fill`, Zeichen 20 in Tinte, 44 Treffer,
 > nie violett, `--ghost-circle`), hoechstens zwei. Das „Neu" einer Seite dockt dort nur, wenn
 > der Kopf weniger als zwei traegt, und nicht auf Seiten, deren Sache das Erfassen-Blatt

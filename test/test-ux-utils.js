@@ -1362,7 +1362,16 @@ test('wireCollapsingHeader: ein einzeiliger Kopf mit mittig versetztem Inhalt be
     assert.equal(s.toolbar.props.get('--page-toolbar-lead'), '0px');
     assert.equal(s.toolbar.classList.contains('page-toolbar--stacked'), false,
       'ohne zweite Zeile kein --stacked: es verbirgt die Trennlinie, und nichts holt sie zurueck');
-    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'ohne Lead-Zone steht die Linie durchgehend');
+    // Tafla (2026-10-24): kein Trenner in Ruhe - die Kante kommt, sobald Inhalt
+    // unter dem Kopf liegt (vorher: durchgehend). Dass sie DANN kommt, prueft
+    // der naechste Test und Sonde 8 im Dokument.
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'ungescrollt: kein Trenner (Tafla)');
+    const port = s.toolbar.parentElement;
+    const scroll = (top) => { port.scrollTop = top; for (const fn of port.handlers.scroll ?? []) fn({ target: port }); };
+    scroll(40);
+    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'liegt Inhalt unter dem Kopf, traegt er seine Kante');
+    scroll(0);
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben wieder ohne');
   } finally { s.restore(); }
 });
 
