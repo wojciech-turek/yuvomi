@@ -693,6 +693,34 @@ test('R19: Schichtplan, Belohnungen und Haushaltshilfe fuehren ihre Reiter in de
   assert.ok(read('../DESIGN.md').includes('page-toolbar--tabs-title'), 'DESIGN.md nennt die Variante');
 });
 
+// Tafla (ROUND2 „Pushed pages", Befund 2026-10-24 bei 390px): auf Seiten hinter
+// Więcej traegt die Rueckweg-Zeile die Kopfkreise, der grosse Titel steht allein
+// auf voller Breite - „Odbiór odpadó…" teilte seine Zeile mit zwei Kreisen, und
+// Nagrody/Grafik hatten unter 768px gar keinen Titel (R19 nahm ihn aus dem Bild).
+test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller Breite und sichtbar', () => {
+  const capture = rules(read('../public/styles/capture.css'));
+  const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && !r.at.some((a) => /max-height/.test(a));
+  const pushed = capture.filter((r) => compact(r) && r.selector.includes(':has(> .page-back)') && !r.selector.includes('is-collapsed'));
+  const back = pushed.find((r) => r.selector.endsWith('> .page-back') && !r.selector.includes('period-inline'));
+  assert.equal(back && decl(back.body, 'order'), '-2', 'der Rueckweg fuehrt Zeile 1');
+  assert.equal(decl(back.body, 'margin-inline-end'), 'auto', 'und schiebt die Kreise an ihr Ende');
+  const circles = pushed.find((r) => /> :is\(\.page-toolbar__actions, \.page-search\)$/.test(r.selector));
+  assert.equal(circles && decl(circles.body, 'order'), '-1', 'Aktionen und Such-Icon stehen VOR dem Titel - in Zeile 1');
+  const title = pushed.find((r) => r.selector.endsWith('> .page-toolbar__title') && !r.selector.includes('tabs-title'));
+  assert.equal(title && decl(title.body, 'flex'), '1 0 100%', 'der Titel nimmt Zeile 2 ganz');
+  const tabsTitle = pushed.find((r) => r.selector.includes('.page-toolbar--tabs-title') && r.selector.endsWith('> .page-toolbar__title'));
+  assert.equal(tabsTitle && decl(tabsTitle.body, 'clip-path'), 'none', 'Reiter-Koepfe mit Rueckweg-Zeile zeigen ihren Titel (R19 gilt nur ohne sie)');
+  assert.equal(decl(tabsTitle.body, 'position'), 'static');
+  const collapsed = capture.filter((r) => compact(r) && r.selector.includes('is-collapsed') && r.selector.includes(':has(> .page-back)'));
+  const inline = collapsed.find((r) => r.selector.endsWith('> .page-toolbar__title'));
+  assert.equal(inline && decl(inline.body, 'order'), '-1', 'eingeklappt: Rueckweg, Titel, Kreise in EINER Leiste');
+  // Die scrollenden Seiten klappen auf demselben Weg ein (wireCollapsingHeader,
+  // `--bar`) und halten dabei ihren Platz im Fluss - der Inhalt springt nicht.
+  const bar = capture.find((r) => compact(r) && r.selector === '.page-toolbar--bar.is-collapsed');
+  assert.equal(bar && decl(bar.body, 'margin-block-end'), 'var(--bar-collapse-gap, 0px)', 'eingeklappt traegt die Leiste den Hoehenverlust als Rand');
+  assert.match(read('../public/utils/ux.js'), /toolbar\.style\.setProperty\('--bar-collapse-gap'/, 'wireCollapsingHeader misst den Rand');
+});
+
 // R20 (E1-Befund, gemessen 2026-10-17): der Nachlauf-Platzhalter hinter dem
 // Seiten-Root rutschte beim ersten Rendern von y=0 auf y=508 und trug auf dem
 // Schichtplan bei 390px CLS 0,114 bei. Er malt nichts; unsichtbar behaelt er
