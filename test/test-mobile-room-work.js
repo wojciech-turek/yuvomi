@@ -60,15 +60,30 @@ const MOBILE = 'max-width: 639px';
 // M1 Aufgabenzeile
 // --------------------------------------------------------------------------
 
-test('M1: mobil spannt der Aufgabentitel ueber Text- und Personenspalte', () => {
-  const row = declarations(tasksCss, '.task-card__main', { media: MOBILE });
-  assert.equal(row.display, 'grid', 'die Zeile wird mobil ein Raster, damit der Titel ueber den Stapel reicht');
-  assert.equal(declarations(tasksCss, '.task-card__main > .task-card__body', { media: MOBILE }).display, 'contents',
-    'Titel und Metazeile werden selbst Rasterzellen');
-  assert.equal(declarations(tasksCss, '.task-card__main .task-card__title', { media: MOBILE })['grid-column'], '2 / -1',
-    'der Titel reicht bis ans Zeilenende - Ziel >= 280 von 358px (gemessen 282)');
-  assert.equal(declarations(tasksCss, '.task-card__main > .avatar-stack', { media: MOBILE })['grid-row'], '2',
-    'der Personenstapel steht in der Metazeile, nicht neben dem Titel');
+// TAFLA (2026-10-20): die R9-Antwort auf "der Titel hat keinen Platz" war ein
+// Raster nur fuer Mobil (Stapel in der Metazeile, Titel ueber zwei Spalten).
+// Tafla nimmt die Platzfresser aus der Zeile - kein Prioritaetswort, kein
+// Avatar-Stapel (eine 20er-Scheibe nach der Personenregel), auf Touch kein
+// Mehr-Knopf und kein Griff - und baut EINE Flexzeile fuer jede Breite: Kreis
+// in einer 28er-Spalte, 12 Luft, Titel bei x=56. Gemessen 390x844: Titel
+// 254-282 von 358px wie zuvor, ohne zweite Bauart je Breite.
+test('Tafla: die Aufgabenzeile ist eine Flexzeile, Titel bei 56, hinten nur Fahne und Person', () => {
+  const row = declarations(tasksCss, '.tasks-page .task-card__main');
+  assert.equal(row.display, 'flex');
+  assert.equal(row.gap, 'var(--space-3)', '12 Luft nach der 28er-Spalte');
+  assert.match(row.padding ?? '', /var\(--space-4\)$/, '16 Polster an den Kanten');
+  assert.equal(row['min-block-size'], '64px', 'zweizeilig 64 hoch');
+  assert.equal(declarations(tasksCss, '.tasks-page .task-card--single > .task-card__main')['min-block-size'], '48px',
+    'ohne Metazeile 48');
+  assert.deepEqual(declarations(tasksCss, '.task-card__main', { media: MOBILE }), {},
+    'kein eigenes Mobil-Raster mehr');
+  const card = tasks.renderTaskCard({
+    id: 4, title: 'Zahnarzt', status: 'open', priority: 'high', visibility: 'all',
+    due_date: null, subtasks: [], assigned_users: [{ id: 99, display_name: 'Wojtek' }],
+  });
+  assert.doesNotMatch(card, /avatar-stack|priority-badge/, 'kein Stapel, kein Prioritaetswort');
+  assert.match(card, /class="task-card__flag task-card__flag--high"/, 'die Fahne nur fuer Hoch und Dringend');
+  assert.match(card, /class="person-disc person-disc--sm"/, 'die Aufgabe einer anderen Person traegt ihre Scheibe');
 });
 
 // Re-Critique 2026-09-28 (P8 / A3 P2-2): am Desktop stand die Personenwahl
@@ -83,12 +98,13 @@ test('M1/P8: auf keiner Breite nimmt die Personenwahl der Zeile Platz, bleibt ab
     'nicht display:none - das Menue richtet sich am Ausloeser aus und ginge sonst an der Fensterecke auf');
 });
 
-test('M1: der Statuskreis wird mobil schmaler, trifft aber weiter voll', () => {
-  const btn = declarations(tasksCss, '.task-card__main > .task-status-btn', { media: MOBILE });
-  assert.match(btn.width ?? '', /var\(--space-5\)/, 'die Box schrumpft auf Ring plus Luft');
-  const hit = declarations(tasksCss, '.task-card__main > .task-status-btn::before', { media: MOBILE });
+test('Tafla: der Statuskreis ist die 28er-Spalte, trifft aber weiter voll', () => {
+  const btn = declarations(tasksCss, '.tasks-page .task-card__main > .task-status-btn');
+  assert.equal(btn.width, '28px', 'die Box ist die Spalte, nicht die Trefflaeche - sonst waere die Zeile 52 statt 48');
+  const hit = declarations(tasksCss, '.tasks-page .task-card__main > .task-status-btn::before');
   assert.match(hit['inset-inline-start'] ?? '', /var\(--target-base\)/,
     'die Trefflaeche bleibt --target-base und steht zentriert ueber dem Ring');
+  assert.match(hit['inset-block-start'] ?? '', /var\(--target-base\)/);
 });
 
 // Integration R9 (Sonde 4 der Dokument-Guards, mobil): der Titel mass 267x20
@@ -97,19 +113,23 @@ test('M1: der Statuskreis wird mobil schmaler, trifft aber weiter voll', () => {
 // Ellipse) beschneidet es auf die Textzeile - im Raster wie vorher im Fluss.
 // Die Flaeche waechst deshalb per Polster und hebt es mit dem Rand wieder auf:
 // der Text bleibt, wo er ist, die Box reicht bis an die Zeilenkante.
-test('M1: mobil reicht die Trefferflaeche des Titels ins Zeilenpolster, trotz Ellipse', () => {
+// Tafla: dieselbe Regel gilt jetzt auf JEDER Breite (die Zeile hat keine
+// Mobil-Fassung mehr) - die Basisregel des Titels traegt Polster und Rand.
+test('M1: die Trefferflaeche des Titels reicht ins Zeilenpolster, trotz Ellipse', () => {
   // Seit R19 setzt die EINE Titelregel in typography.css die Kappung
   // (hoechstens zwei Zeilen, `overflow: hidden`), nicht mehr tasks.css - die
   // Voraussetzung liest deshalb dort. Sie gilt unveraendert: was kappt, klippt
   // auch ein ::before.
   const base = declarations(css('typography.css'), '.task-card__title');
   assert.equal(base.overflow, 'hidden', 'Voraussetzung: die Ellipse beschneidet ein ::before');
-  const title = declarations(tasksCss, '.task-card__main .task-card__title', { media: MOBILE });
+  const title = declarations(tasksCss, '.task-card__title');
   const pad = title['padding-block-start'];
   assert.match(pad ?? '', /var\(--list-row-pad/, 'die Box waechst um das Zeilenpolster nach oben');
   assert.equal(title['margin-block-start'], `calc(-1 * ${pad})`, 'und der Rand nimmt es wieder zurueck - der Text bleibt stehen');
   assert.equal(title['padding-block-end'], 'var(--space-0h)', 'unten bis an die Metazeile, keinen Pixel weiter');
   assert.equal(title['margin-block-end'], '0');
+  assert.equal(declarations(tasksCss, '.tasks-page .task-card__main')['--list-row-pad'], 'var(--space-2)',
+    'das Polster, an dem die Flaeche haengt, steht an der Zeile');
 });
 
 test('M1: die Metazeile endet mit Ellipse statt mit einem Schnitt', () => {
@@ -117,12 +137,14 @@ test('M1: die Metazeile endet mit Ellipse statt mit einem Schnitt', () => {
     id: 3, title: 'Zahnarzt', status: 'open', priority: 'high', visibility: 'all',
     due_date: '2026-09-01', subtasks: [], assigned_users: [],
   });
-  assert.match(card, /<span class="due-date__label">/, 'das Faelligkeitslabel hat einen eigenen Traeger');
-  const label = declarations(tasksCss, '.due-date__label');
-  assert.equal(label['text-overflow'], 'ellipsis');
-  assert.equal(label['white-space'], 'nowrap');
-  const due = declarations(tasksCss, '.task-card__meta > .due-date');
-  assert.equal(due['min-width'], '0', 'ohne min-width 0 schrumpft der Flex-Chip nie und die Zeile klippt');
+  // Tafla: das Wann steht als Wort im Text der Metazeile ("od pt 16 paź"),
+  // ueberfaellig als Pille davor - der Text ist der Traeger der Ellipse.
+  assert.match(card, /<span class="task-card__meta-text">/, 'der Text der Metazeile hat einen eigenen Traeger');
+  const text = declarations(tasksCss, '.task-card__meta-text');
+  assert.equal(text['text-overflow'], 'ellipsis');
+  assert.equal(text['min-width'], '0', 'ohne min-width 0 schrumpft der Flex-Text nie und die Zeile klippt');
+  assert.equal(declarations(tasksCss, '.task-card__meta')['white-space'], 'nowrap');
+  assert.equal(declarations(tasksCss, '.status-pill').flex, 'none', 'die Pille gibt nicht nach, der Text schon');
 });
 
 // --------------------------------------------------------------------------

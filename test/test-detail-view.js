@@ -665,7 +665,13 @@ test('die Aufgaben-Detailansicht führt die Leseinformationen der Karte', async 
   assert.match(fn, /recurrenceRow\(task\.recurrence_rule[),]/, 'Wiederholung über die geteilte Zeile');
   assert.match(fn, /visibilityRow\(task\.visibility\)/, 'Sichtbarkeit über die geteilte Zeile');
   const head = src.slice(src.indexOf('function taskDetailHead'), src.indexOf('function renderTaskDetail'));
-  assert.match(head, /subtitle: due\?\.label \?\? ''/, 'die Faelligkeit in den Worten der Liste');
+  // Tafla (2026-10-20): die Worte der Liste sind jetzt die der Tafla-Zeile
+  // ("Zaległe · od pt 16 paź", "Dziś · do 19:00"), aus dem EINEN Helfer fuer
+  // den relativen Tag (utils/day-label.js) - nicht mehr formatDueDate.
+  assert.match(head, /subtitle: dueWords\(task\)/, 'die Faelligkeit in den Worten der Liste');
+  const words = src.slice(src.indexOf('function dueWords'), src.indexOf('function taskDetailHead'));
+  assert.match(words, /relativeDayWord\(due\)/, 'der relative Tag kommt aus dem einen Helfer');
+  assert.match(words, /t\('tasks\.overduePill'\)/, 'ueberfaellig sagt dasselbe Wort wie die Pille der Zeile');
   assert.match(head, /subtitleLabel: t\('tasks\.dueDateLabel'\)/);
   assert.match(head, /people: task\.assigned_users \?\? \[\]/, 'Zugewiesene als Avatare im Kopf');
   assert.match(src, /head: taskDetailHead\(task\),/);
