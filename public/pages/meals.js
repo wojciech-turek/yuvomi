@@ -3244,6 +3244,31 @@ function cookPickerHtml(meal) {
     </div>`;
 }
 
+/**
+ * Tafla: people are told apart by the curated person colours, not by the
+ * avatar colour they once picked (utils/person-color.js). The cook chips of
+ * the sheet come from the shared people picker, which still paints the raw
+ * avatar colour; here each initial disc becomes the person disc - same
+ * place, same class (so the picker's sizing and logic stay), ink on tint.
+ * A photo avatar stays a photo.
+ */
+function cookAvatarsAsPersonDiscs(panel) {
+  for (const input of panel.querySelectorAll(`input[data-ms-input="${COOK_INPUT}"]:not(.user-ms__none)`)) {
+    const avatar = input.closest('.user-ms__option')?.querySelector('.user-ms__avatar');
+    if (!avatar || avatar.classList.contains('person-disc') || avatar.querySelector('img')) continue;
+    const id = Number(input.value);
+    const member = state.members.find((m) => m.id === id);
+    const cook = state.modal?.meal?.cook_user_id === id ? mealCook(state.modal.meal) : null;
+    const user = member ?? { id, avatar_color: cook?.color ?? null, display_name: cook?.display_name ?? '' };
+    avatar.insertAdjacentHTML('afterend', personDisc(user, {
+      text: initials(user.display_name ?? ''),
+      household: state.members,
+      className: 'user-ms__avatar',
+    }));
+    avatar.remove();
+  }
+}
+
 /** Die im Dialog gewaehlte Koch-id oder null ("Niemand"). */
 function selectedCookId(overlay) {
   return getSelectedUserIds(overlay, COOK_INPUT)[0] ?? null;
@@ -3268,6 +3293,7 @@ function selectedCookId(overlay) {
  * setzt den Merker nicht.
  */
 function wireCookPicker(panel) {
+  cookAvatarsAsPersonDiscs(panel);
   bindUserMultiSelect(panel, COOK_INPUT, { single: true });
   panel.querySelector(`.user-ms[data-ms-name="${COOK_INPUT}"]`)?.addEventListener('change', () => {
     if (state.modal) state.modal.cookTouched = true;

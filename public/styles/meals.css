@@ -3171,3 +3171,14 @@
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
 }
+
+/* Die Koch-Chips im Blatt tragen die Personenscheibe (meals.js,
+ * cookAvatarsAsPersonDiscs): Tinte auf Toenung aus den Personenfarben. Die
+ * Groesse bleibt die der Personenauswahl; deren Weiss-auf-Avatarfarbe und
+ * das fette Initial weichen der Scheibe. */
+.meal-modal__cook .user-ms__avatar.person-disc {
+  background: var(--person-disc-tint);
+  color: var(--person-disc-ink);
+  font-size: var(--type-footnote);
+  font-weight: var(--font-weight-semibold);
+}
