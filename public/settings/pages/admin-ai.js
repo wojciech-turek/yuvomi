@@ -181,7 +181,7 @@ function renderPage(container, cfg, memories) {
       })}
 
       <section class="tafla-group" id="ai-memory-group" aria-labelledby="ai-memory-title">
-        <h3 class="tafla-group__title" id="ai-memory-title">${esc(t('ai.memoryGroup'))}</h3>
+        <h2 class="tafla-group__title" id="ai-memory-title">${esc(t('ai.memoryGroup'))}</h2>
         <div class="tafla-card">
           ${taflaRowHtml({
             title: t('ai.memoryTitle'),
@@ -214,7 +214,7 @@ function renderPage(container, cfg, memories) {
       </section>
 
       <section class="tafla-group" id="ai-models" aria-labelledby="ai-models-title">
-        <h3 class="tafla-group__title" id="ai-models-title">${esc(t('ai.modelsTitle'))}</h3>
+        <h2 class="tafla-group__title" id="ai-models-title">${esc(t('ai.modelsTitle'))}</h2>
         <div class="tafla-card">
           ${taflaRowHtml({ title: t('ai.quickJobs'), glyph: 'zap', value: t('ai.modelHaikuName') })}
           ${taflaRowHtml({
