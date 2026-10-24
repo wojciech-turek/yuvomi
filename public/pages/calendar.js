@@ -18,7 +18,7 @@ import { swapRegion } from '/utils/content-swap.js';
 import { initials } from '/utils/initials.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
          monthPeriodKeys, startOfLocalWeekKey, addLocalDays, defaultDateInPeriod,
-         isWeekendKey } from '/utils/date.js';
+         isWeekendKey, parseLocalDateKey } from '/utils/date.js';
 import {
   calendarOccurrenceDeleteTarget,
   calendarOccurrenceMutationTarget,
@@ -5909,7 +5909,9 @@ function agendaStripHtml() {
           const label = monthDayAriaLabel(d, evs.length + tks.length, evs, { tasks: tks, isToday });
           const cls = ['cal-strip__day', isToday ? 'is-today' : '', d < state.today ? 'is-past' : '',
             d === state.cursor && !isToday ? 'is-selected' : ''].filter(Boolean).join(' ');
-          const dow = new Date(`${d}T12:00:00`).getDay();
+          // Der Wochentag eines KALENDERTAGS, aus seinen Feldern gebaut
+          // (parseLocalDateKey) - kein Zeitpunkt, den eine Zone umrechnet.
+          const dow = parseLocalDateKey(d).getDay();
           return `
         <button type="button" class="${cls}" data-strip-day="${esc(d)}" aria-label="${esc(label)}"${isToday ? ' aria-current="date"' : ''}>
           <span class="cal-strip__wd" aria-hidden="true">${esc(DAY_NAMES_SHORT()[dow])}</span>
