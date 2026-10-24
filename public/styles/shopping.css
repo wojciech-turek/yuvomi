@@ -1092,61 +1092,20 @@
   content: none;
 }
 
-/* Checkbox: the 44/48 target, drawn as a 24 ring in the 28 leading slot. */
+/* Checkbox: the 44/48 target, drawn as a 24 ring in the 28 leading slot.
+ * Ring, tick and the violet "in the basket" fill are the app's one check
+ * circle (`.check-ring`, list-row.css, 2026-10-24). */
 .item-check {
   width: var(--target-base);
   height: var(--target-base);
   margin-inline: calc((28px - var(--target-base)) / 2);
+  padding: 0;
   border-radius: var(--radius-full);
   border: none;
   background: none;
   cursor: pointer;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Der sichtbare Wechsel liegt am ::before (Rahmen + Fläche). */
-  transition: color var(--transition-fast);
-  position: relative;
 }
-
-.item-check::before {
-  content: '';
-  position: absolute;
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-full);
-  /* DIESELBE RUHE WIE DER ABHAKKREIS (R20, .check-ring in list-row.css). */
-  border: 2px solid var(--color-text-tertiary);
-  background: transparent;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.item-check:not(.item-check--static):hover::before {
-  border-color: var(--color-accent);
-}
-
-/* KEINE ANIMATION AN `--checked` (R18): die Quittung startet der Handler
- * (`acknowledgeCheck`, utils/ux.js). Guard: test:motion.
- *
- * DONE IS VIOLET (Tafla): the filled ring carries the white check; green
- * stays a word in a pill. */
-.item-check--checked::before {
-  background-color: var(--color-btn-primary);
-  border-color: var(--color-btn-primary);
-}
-
-.item-check__icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2.5;
-  color: var(--color-text-on-accent);
-  display: none;
-  position: relative;
-  z-index: 1;
-}
-
-.item-check--checked .item-check__icon { display: block; }
 
 /* DAS ZEICHEN STATT DES KNOPFS (#1265 P4): bei `shopping: read` traegt der
  * Kreis nur die Auskunft - neutraler Zeiger, kein Hover-Rahmen. */

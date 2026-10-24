@@ -1180,7 +1180,7 @@ async function completeTask(task, content, button = null) {
   // und erst danach wird neu gezeichnet - sonst ersetzte das Neuzeichnen den
   // Knopf, bevor sie einen Frame bekam (acknowledgeCheck()).
   vibrate(15);
-  button?.classList.add('housekeeping-task__check--done');
+  button?.classList.add('housekeeping-task__check--done', 'check-ring--done');
   button?.setAttribute('aria-busy', 'true');
   const settled = acknowledgeCheck(button, { checked: true });
   try {
@@ -1191,7 +1191,7 @@ async function completeTask(task, content, button = null) {
     if (content?.isConnected && state.tab === 'tasks') renderTasks(content);
     else if (content?.isConnected && state.tab === 'dashboard') renderDashboard(content);
   } catch (err) {
-    button?.classList.remove('housekeeping-task__check--done');
+    button?.classList.remove('housekeeping-task__check--done', 'check-ring--done');
     button?.removeAttribute('aria-busy');
     window.yuvomi?.showToast(err.message, 'danger');
   }

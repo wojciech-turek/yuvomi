@@ -3890,10 +3890,11 @@
   background: var(--color-separator);
 }
 
+/* Der Kreis ist der geteilte (`.check-ring`, list-row.css, 2026-10-24); hier
+ * steht er am Anfang der 56er-Schiene. */
 .agenda-task__check {
   flex: none;
-  display: flex;
-  align-items: center;
+  place-content: center start;
   inline-size: 56px;
   block-size: var(--target-base);
   padding: 0;
@@ -3906,42 +3907,9 @@
   cursor: default;
 }
 
-/* Der Ring wie in der Aufgabenliste (list-row.css .check-ring): 24, Kante in
- * Tinte-3-Rolle; erledigt violett mit weissem Haken. */
-.agenda-task__ring {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--space-6);
-  block-size: var(--space-6);
-  border-radius: var(--radius-full);
-  border: 2px solid var(--color-text-tertiary);
-  color: var(--color-on-accent);
-}
-
-.agenda-task__ring svg {
-  inline-size: 14px;
-  block-size: 14px;
-  stroke-width: 2.5;
-  opacity: 0;
-}
-
-.agenda-task__check--done .agenda-task__ring {
-  border-color: var(--color-btn-primary);
-  background: var(--color-btn-primary);
-}
-
-.agenda-task__check--done .agenda-task__ring svg {
-  opacity: 1;
-}
-
+/* Der Fokusring liegt an der Trefferflaeche, nach innen gerueckt. */
 .agenda-task__check:focus-visible {
-  outline: none;
-}
-
-.agenda-task__check:focus-visible .agenda-task__ring {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 .agenda-task--done .cal-task-chip {
@@ -3953,12 +3921,6 @@
   font-size: var(--type-footnote);
   line-height: var(--type-footnote-lh);
   color: var(--color-text-secondary);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .agenda-task__ring {
-    transition: background-color var(--duration-sm) var(--ease-out), border-color var(--duration-sm) var(--ease-out);
-  }
 }
 
 /* "Wolny wieczór": eine ruhige Zeile mit Mond in der Schiene. */

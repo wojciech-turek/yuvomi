@@ -6712,13 +6712,16 @@ function overviewDueMarkup() {
 /** Der Kreis vor einer Dosis: Knopf mit Recht, sonst ein stilles Zeichen. */
 function doseCheckMarkup(dose, log, name, own) {
   const done = log?.status === 'taken';
-  const ring = '<span class="health-check__ring"><i data-lucide="check" aria-hidden="true"></i></span>';
+  // The app's one check circle (`.check-ring`, list-row.css): the ring is its
+  // ::after, the tick the icon inside.
+  const ring = '<i data-lucide="check" aria-hidden="true"></i>';
+  const doneClass = done ? ' health-check--done check-ring--done' : '';
   if (!own) {
-    return `<span class="health-check health-check--static${done ? ' health-check--done' : ''}" aria-hidden="true">${ring}</span>`;
+    return `<span class="health-check check-ring check-ring--static${doneClass}" aria-hidden="true">${ring}</span>`;
   }
   const data = `data-med-id="${esc(dose.medicationId)}" data-schedule-id="${esc(dose.scheduleId ?? '')}" data-scheduled-at="${esc(dose.scheduledAt)}" data-log-id="${esc(log?.id ?? '')}" data-dose="${esc(dose.dose_qty ?? '')}" data-done="${done ? '1' : '0'}"`;
   const label = done ? t('health.overview.untakeNamed', { name }) : t('health.meds.takeNamed', { name });
-  return `<button type="button" class="health-check${done ? ' health-check--done' : ''}" ${OVERVIEW_DOSE_HOOKS.take} ${data} aria-pressed="${done ? 'true' : 'false'}" aria-label="${esc(label)}">${ring}</button>`;
+  return `<button type="button" class="health-check check-ring${doneClass}" ${OVERVIEW_DOSE_HOOKS.take} ${data} aria-pressed="${done ? 'true' : 'false'}" aria-label="${esc(label)}">${ring}</button>`;
 }
 
 function overviewDueRowMarkup(dose, med, log, own) {
@@ -6874,6 +6877,7 @@ async function handleOverviewDose(btn, action) {
   const toggles = action === 'take' || action === 'untake';
   const paint = (checked) => {
     btn.classList.toggle('health-check--done', checked);
+    btn.classList.toggle('check-ring--done', checked);
     btn.setAttribute('aria-pressed', checked ? 'true' : 'false');
   };
   if (toggles) paint(action === 'take');

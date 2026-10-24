@@ -4330,16 +4330,12 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   white-space: nowrap;
 }
 
-/* Der Kreis (spec "Kółko odhaczania", dieselbe Form wie auf Dziś): 24 auf
- * einem 44er-Treffer, im 28er-Slot der Zeile. Offen eine Kante in der
- * Feldtinte, genommen gefuellt in Violett mit weissem Haken - "erledigt" ist
- * violett, nicht gruen. */
+/* Der Kreis (spec "Kółko odhaczania"): Ring, Haken und Erledigt-Fuellung sind
+ * der geteilte Kreis (`.check-ring`, list-row.css, 2026-10-24) - hier stand
+ * eine Kopie von Dziś. Die Zeile setzt ihre 44er-Trefferflaeche und den
+ * 24er-Ring in den 28er-Slot. */
 .health-check {
-  position: relative;
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   inline-size: var(--target-base);
   block-size: var(--target-base);
   margin: 0 calc((var(--target-base) - 28px) / -2);
@@ -4347,12 +4343,7 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
   border: 0;
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text-on-accent);
   cursor: pointer;
-}
-
-.health-check--static {
-  cursor: default;
 }
 
 .health-check:disabled {
@@ -4362,39 +4353,6 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
 .health-check:focus-visible {
   outline-offset: var(--focus-ring-offset-inset);
 }
-
-.health-check__ring {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 24px;
-  block-size: 24px;
-  border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
-}
-
-.health-check__ring svg {
-  inline-size: 14px;
-  block-size: 14px;
-  stroke-width: 2.5;
-  opacity: 0;
-}
-
-.health-check--done .health-check__ring {
-  background: var(--color-btn-primary);
-  box-shadow: none;
-}
-
-.health-check--done .health-check__ring svg {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .health-check__ring {
-    transition: background-color var(--duration-sm) var(--ease-out), box-shadow var(--duration-sm) var(--ease-out);
-  }
-}
-
 
 /* Auf dem Telefon ziehen alle Karten des Rasters nach oben (der Tag) - ein
  * leeres Raster kostet dann keinen Abstand vor dem Hinweis. */

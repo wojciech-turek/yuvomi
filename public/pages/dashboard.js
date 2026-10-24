@@ -6864,6 +6864,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   function markRowChecked(button, checked) {
     const li = button.closest('.day-row');
     button.classList.toggle('day-check--done', checked);
+    button.classList.toggle('check-ring--done', checked);
     button.setAttribute('aria-pressed', checked ? 'true' : 'false');
     li?.classList.toggle('day-row--done', checked);
     li?.classList.toggle('day-row--ticking', checked);

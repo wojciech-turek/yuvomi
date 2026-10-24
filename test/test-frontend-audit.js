@@ -20529,33 +20529,50 @@ const rulesOf = (css) => [...eachRule(css)];
 const selectorsOf = (rule) => rule.selector.split(',').map((s) => s.trim());
 
 test('R16: der Abhakkreis steht einmal - eine Groesse, eine Tonregel', () => {
+  // 2026-10-24, Tafla: EIN Kreis fuer alles Abhakbare. Bis dahin stand er
+  // fuenfmal (Aufgaben/Haushaltshilfe als `.check-ring::after` mit 2px Tinte-3,
+  // Dziś als `.day-check__ring`, Gesundheit als Kopie davon, Kalender als
+  // `.agenda-task__ring`, Einkauf als `.item-check::before`). Die Absicht von
+  // R16 bleibt: eine Groesse, eine Tonregel, kein Modul baut den Ring nach -
+  // und jetzt auch EIN Erledigt-Zustand.
   const listRow = rulesOf(read('../public/styles/list-row.css'));
-  const ring = listRow.find((rule) => rule.selector.trim() === '.check-ring::after');
+  const ring = listRow.find((rule) => rule.at.length === 0 && rule.selector.trim() === '.check-ring::after');
   assert.ok(ring, 'list-row.css fuehrt den Ring als `.check-ring::after`');
-  // Tafla (2026-10-20, spec "Kółko odhaczania"): 24 sichtbar statt 20 - die
-  // Groesse des Einkaufskaestchens; die eine Regel und die eine Tonregel bleiben.
   assert.match(ring.body, /width:\s*var\(--space-6\)/);
   assert.match(ring.body, /height:\s*var\(--space-6\)/);
-  assert.match(ring.body, /border:\s*2px solid var\(--color-text-tertiary\)/, 'in Ruhe neutral, nicht im Modulton');
-  assert.ok(listRow.some((rule) => rule.selector.trim() === '.check-ring:not(.check-ring--static):hover::after'
-    && /--module-accent/.test(rule.body)), 'der Modulton laedt ein, das Zeichen ist ausgenommen');
+  assert.match(ring.body, /box-shadow:\s*inset 0 0 0 1\.5px var\(--color-border-control\)/, 'in Ruhe die Feldkanten-Tinte, nicht der Modulton');
+  const done = listRow.find((rule) => rule.at.length === 0 && rule.selector.trim() === '.check-ring--done::after');
+  assert.ok(done && /background-color:\s*var\(--color-btn-primary\)/.test(done.body),
+    'erledigt fuellt EIN Zustand in der Fuellrolle der Stimme (violett, nicht gruen)');
+  assert.ok(listRow.some((rule) => rule.selector.trim() === '.check-ring:not(.check-ring--static):not(.check-ring--done):hover::after'
+    && rule.at.some((a) => /hover:\s*hover/.test(a)) && /--module-accent/.test(rule.body)),
+    'der Modulton laedt am Zeiger ein, das Zeichen ist ausgenommen');
 
-  // Kein Modul baut den Ring nach: wer am Kreis-Pseudo eine Groesse oder einen
-  // ganzen Rahmen setzt, hat eine zweite Fassung.
-  for (const [file, pseudo] of [
-    ['tasks.css', /^\.task-status-btn::after$/],
-    ['housekeeping.css', /^\.housekeeping-task__check::(?:before|after)$/],
+  // Kein Modul baut den Ring oder seine Fuellung nach: wer am Kreis eine
+  // Groesse, eine ganze Kante oder die Erledigt-Flaeche setzt, hat eine zweite
+  // Fassung.
+  for (const [file, ringSel] of [
+    ['tasks.css', /^\.task-status-btn(?:--done)?::after$/],
+    ['housekeeping.css', /^\.housekeeping-task__check(?:\.housekeeping-task__check--done)?::(?:before|after)$/],
+    ['dashboard.css', /^\.day-check(?:--done)?(?:\s+\.day-check)?__ring$|^\.day-check::after$/],
+    ['health.css', /^\.health-check(?:--done)?(?:\s+\.health-check)?__ring$|^\.health-check::after$/],
+    ['calendar.css', /^(?:\.agenda-task__check--done\s+)?\.agenda-task__ring$/],
+    ['shopping.css', /^\.item-check(?:--checked)?::before$/],
   ]) {
     const nachbau = rulesOf(read(`../public/styles/${file}`))
-      .filter((rule) => rule.at.length === 0 && selectorsOf(rule).some((sel) => pseudo.test(sel)))
-      .filter((rule) => /(?:^|[;\s])(?:width|height|border):/.test(rule.body));
+      .filter((rule) => rule.at.length === 0 && selectorsOf(rule).some((sel) => ringSel.test(sel)))
+      .filter((rule) => /(?:^|[;\s])(?:width|height|border|box-shadow|background(?:-color)?):/.test(rule.body));
     assert.deepStrictEqual(nachbau.map((rule) => rule.selector.trim()), [], `${file} baut den Ring nicht nach`);
   }
 
   const tasksPage = read('../public/pages/tasks.js');
-  assert.match(tasksPage, /class="task-status-btn task-status-btn--\$\{task\.status\} check-ring"/);
-  assert.match(tasksPage, /task-status-btn--static check-ring check-ring--static"/, 'das Zeichen nimmt die Einladung aus');
+  assert.match(tasksPage, /class="task-status-btn task-status-btn--\$\{task\.status\} check-ring\$\{isDone \? ' check-ring--done' : ''\}"/);
+  assert.match(tasksPage, /task-status-btn--static check-ring check-ring--static/, 'das Zeichen nimmt die Einladung aus');
   assert.match(read('../public/pages/housekeeping.js'), /class="housekeeping-task__check check-ring"/);
+  assert.match(read('../public/components/today-view.js'), /class="day-check check-ring\$\{row\.done \? ' day-check--done check-ring--done' : ''\}"/, 'Dziś');
+  assert.match(read('../public/pages/health.js'), /class="health-check check-ring\$\{doneClass\}"/, 'Zdrowie');
+  assert.match(read('../public/pages/calendar.js'), /class="agenda-task__check check-ring"/, 'Kalendarz');
+  assert.match(read('../public/pages/shopping.js'), /class="item-check check-ring\$\{isDone \? ' item-check--checked check-ring--done' : ''\}"/, 'Zakupy');
 });
 
 test('R16: die Aufgabenzeile der Haushaltshilfe fuehrt keine Zeilenaktion - Loeschen steht im Dialog, mit Rueckweg', () => {
@@ -22156,23 +22173,22 @@ test('R19: die Nadel der Notizkarte zeichnet so gross wie die Zeilenaktion daneb
 // R20 D1 (Re-Critique 2026-10-17, A2 P1-2): das Kaestchen der Einkaufszeile
 // zog seine Kante aus der Kartenkante (--color-border) und stand gerendert bei
 // 1,32:1 hell und 1,47:1 dunkel - das meistgetippte Bedienelement des Moduls
-// war das blasseste. Es teilt jetzt die Ruhe des Abhakkreises (.check-ring,
-// 2px --color-text-tertiary): EINE Tonregel fuer alles, was sich abhaken
-// laesst, und 3:1 (WCAG 1.4.11) auf Grund und eigener Flaeche.
+// war das blasseste. 2026-10-24, Tafla: der Einkauf traegt jetzt DEN Kreis
+// (`.check-ring`, list-row.css); die Absicht bleibt - die Kante des einen
+// Kreises haelt 3:1 (WCAG 1.4.11) auf Karte und Papier, in beiden Themes.
 test('R20: das Einkaufskaestchen traegt die Ruhe des Abhakkreises und haelt 3:1', () => {
-  const shopping = [...eachRule(read('../public/styles/shopping.css'))].filter((r) => !r.at.length);
-  const box = shopping.find((r) => r.selector.trim() === '.item-check::before');
-  assert.ok(box, 'shopping.css fuehrt das Kaestchen als `.item-check::before`');
-  const ring = [...eachRule(read('../public/styles/list-row.css'))].find((r) => r.selector.trim() === '.check-ring::after');
-  const edgeOf = (body) => body.match(/border:\s*([^;]+);/)?.[1].trim();
-  assert.equal(edgeOf(box.body), edgeOf(ring.body), 'Kaestchen und Abhakkreis tragen dieselbe Kante');
-  const token = edgeOf(box.body).match(/var\((--[\w-]+)\)/)?.[1];
+  const ring = [...eachRule(read('../public/styles/list-row.css'))]
+    .find((r) => r.at.length === 0 && r.selector.trim() === '.check-ring::after');
+  assert.ok(ring, 'list-row.css fuehrt den Ring als `.check-ring::after`');
+  assert.match(read('../public/pages/shopping.js'), /class="item-check check-ring/, 'der Einkauf nimmt den geteilten Kreis');
+  const token = ring.body.match(/box-shadow:\s*inset[^;]*var\((--[\w-]+)\)/)?.[1];
+  assert.ok(token, 'die Kante kommt aus einem Token');
   const { light, dark } = themeTokenMaps();
   for (const [theme, map] of [['light', light], ['dark', dark]]) {
     const edge = resolveColor(token, map);
     for (const ground of ['--color-surface', '--color-bg']) {
       const ratio = contrastRatio(edge, resolveColor(ground, map));
-      assert.ok(ratio >= 3, `${theme}: Kaestchenkante ${token} auf ${ground} nur ${ratio.toFixed(2)}:1`);
+      assert.ok(ratio >= 3, `${theme}: Kreiskante ${token} auf ${ground} nur ${ratio.toFixed(2)}:1`);
     }
   }
 });

@@ -1800,7 +1800,7 @@ const SHARED_PRESSABLE = [
 /** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken.
  *  232 -> 225 (Tafla, 2026-10-24): Wand, Kochmodus und die Modulseiten sind neu geschrieben;
  *  alte Hover-Regeln dort sind entfallen, die neuen Flaechen tragen keine ungeschuetzten. */
-const UNGUARDED_HOVER_MAX = 225;
+const UNGUARDED_HOVER_MAX = 221;
 
 function hoverRules() {
   const out = [];

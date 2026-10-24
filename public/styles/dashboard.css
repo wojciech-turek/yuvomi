@@ -7886,13 +7886,15 @@ a.day-row__main {
 }
 
 /* ── The check circle (spec "Kółko odhaczania") ─────────── */
+/* Ring, tick and the done fill are the app's one check circle (`.check-ring`,
+ * list-row.css, 2026-10-24); the plan row sets its 44 hit and puts the 24 ring
+ * in the 28 slot. */
 
 .day-check {
-  position: relative;
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Own stacking context: the tick bloom (::before, z-index -1) sits under
+   * the ring but above the card. */
+  isolation: isolate;
   inline-size: var(--target-base);
   block-size: var(--target-base);
   margin: 0 calc((var(--target-base) - 28px) / -2);
@@ -7900,7 +7902,6 @@ a.day-row__main {
   border: 0;
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text-on-accent);
   cursor: pointer;
 }
 
@@ -7908,53 +7909,25 @@ a.day-row__main {
   cursor: default;
 }
 
-.day-check__ring {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 24px;
-  block-size: 24px;
-  border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
-}
-
-.day-check__ring svg {
-  inline-size: 14px;
-  block-size: 14px;
-  stroke-width: 2.5;
-  opacity: 0;
-}
-
-.day-check--done .day-check__ring {
-  background: var(--color-btn-primary);
-  box-shadow: none;
-}
-
-.day-check--done .day-check__ring svg {
-  opacity: 1;
-}
-
 @media (prefers-reduced-motion: no-preference) {
-  .day-check__ring {
-    transition: background-color var(--duration-sm) var(--ease-out), box-shadow var(--duration-sm) var(--ease-out);
-  }
-
   .day-row__title {
     transition: color var(--duration-sm) var(--ease-out);
   }
 
   /* The tick is drawn, then one bloom - the row folds into "Wcześniej"
    * after the hold (pages/dashboard.js). */
-  .day-row--ticking .day-check__ring svg {
+  .day-row--ticking .day-check > svg {
     stroke-dasharray: 24;
     animation: day-tick-draw var(--duration-md) var(--ease-out) var(--duration-xs) both;
   }
 
-  .day-row--ticking .day-check__ring::after {
+  .day-row--ticking .day-check::before {
     content: '';
     position: absolute;
     inset: 0;
+    inline-size: 24px;
+    block-size: 24px;
+    margin: auto;
     border-radius: var(--radius-full);
     background: var(--color-accent-tint);
     animation: day-tick-bloom var(--duration-2xl) var(--ease-out) both;

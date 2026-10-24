@@ -173,7 +173,8 @@ function klick({ aktion = null, id = 1, checked = 0, zeile = null } = {}) {
 test('Zeile bei `read`: der Haken bleibt als Zeichen, jede Handlung geht', async () => {
   zustand();
   const html = await withAccess(LESEN, () => shopping.renderItem(artikel()));
-  assert.match(html, /<span class="item-check item-check--static\s*"\s+role="img"/);
+  // 2026-10-24, Tafla: das Zeichen ist der geteilte Kreis (`.check-ring`).
+  assert.match(html, /<span class="item-check item-check--static check-ring check-ring--static\s*"\s+role="img"/);
   assert.match(html, /aria-label="Milch: shopping\.itemStateOpen"/, 'die Beschriftung nennt den Zustand');
   for (const weg of ['data-action="toggle-item"', 'data-action="delete-item"', 'data-action="reorder-handle"',
     'swipe-reveal', 'shopping.markDoneLabel', 'data-lucide="pencil"']) {
@@ -196,7 +197,7 @@ test('Zeile mit Schreibrecht (Gegenfall): Knopf, Griff, Bearbeiten, Loeschen, Wi
 test('Zeile bei `read`: ein abgehakter Artikel zeigt den Haken gesetzt und sagt es', async () => {
   zustand();
   const html = await withAccess(LESEN, () => shopping.renderItem(artikel({ is_checked: 1 })));
-  assert.match(html, /item-check--static item-check--checked/);
+  assert.match(html, /item-check--static check-ring check-ring--static item-check--checked check-ring--done/);
   assert.match(html, /aria-label="Milch: shopping\.itemStateChecked"/);
 });
 
@@ -894,11 +895,15 @@ const css = (datei) => [...eachRule(readFileSync(new URL(`../public/styles/${dat
 
 test('CSS: der Hover-Rahmen nimmt das Zeichen aus, Zeiger und Pop sind neutral', () => {
   const regeln = css('shopping.css');
-  const hover = regeln.filter(({ selector }) => /\.item-check[^,]*:hover::before/.test(selector));
-  assert.ok(hover.length > 0, 'die Hover-Regel des Hakens fehlt');
+  // 2026-10-24, Tafla: Ring und Einladung sind der geteilte Kreis
+  // (`.check-ring`, list-row.css). Die Absicht bleibt: die Hover-Regel nimmt
+  // das Zeichen (`--static`) per :not() aus, und der Einkauf baut keine eigene.
+  assert.ok(!regeln.some(({ selector }) => /\.item-check[^,]*:hover::(?:before|after)/.test(selector)),
+    'der Einkauf baut keine eigene Hover-Kante');
+  const hover = css('list-row.css').filter(({ selector }) => /\.check-ring[^,]*:hover::after/.test(selector));
+  assert.ok(hover.length > 0, 'die Hover-Regel des Kreises fehlt');
   for (const { selector } of hover) {
-    assert.match(selector, /\.item-check:not\(\.item-check--static\):hover::before/,
-      `${selector} traefe auch das Zeichen`);
+    assert.match(selector, /\.check-ring:not\(\.check-ring--static\)/, `${selector} traefe auch das Zeichen`);
   }
   const statisch = regeln.find(({ selector, at }) => !at.length && selector === '.item-check.item-check--static');
   assert.ok(statisch, 'die Regel fuer das Zeichen fehlt - (0,2,0), damit sie `.item-check--checked` schlaegt');

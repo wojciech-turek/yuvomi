@@ -1624,13 +1624,13 @@ function itemStateLabel(item) {
 function renderItemCheck(item, isDone) {
   if (readOnly()) {
     return `
-        <span class="item-check item-check--static ${isDone ? 'item-check--checked' : ''}"
+        <span class="item-check item-check--static check-ring check-ring--static${isDone ? ' item-check--checked check-ring--done' : ''}"
               role="img" aria-label="${esc(itemStateLabel(item))}">
           <i data-lucide="check" class="item-check__icon" aria-hidden="true"></i>
         </span>`;
   }
   return `
-        <button class="item-check ${isDone ? 'item-check--checked' : ''}"
+        <button class="item-check check-ring${isDone ? ' item-check--checked check-ring--done' : ''}"
                 data-action="toggle-item" data-id="${item.id}" data-checked="${checkedOf(item)}"
                 aria-label="${isDone ? t('shopping.markUndoneLabel', { name: esc(item.name) }) : t('shopping.markDoneLabel', { name: esc(item.name) })}">
           <i data-lucide="check" class="item-check__icon" aria-hidden="true"></i>
@@ -2809,6 +2809,7 @@ function updateItemRow(container, item) {
   const checkBtn = row.querySelector('.item-check');
   if (checkBtn) {
     checkBtn.classList.toggle('item-check--checked', isDone);
+    checkBtn.classList.toggle('check-ring--done', isDone);
     // Das Zeichen bei `read` nennt den ZUSTAND; eine Live-Auffrischung (jemand
     // anderes hakt ab) laeuft ueber genau diese Stelle und darf ihm nicht die
     // Handlungs-Beschriftung des Knopfs anhaengen.

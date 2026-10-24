@@ -5614,9 +5614,9 @@ function renderAgendaTaskRow(task) {
   });
   const time = taskTimeLabel(task);
   const check = canTickTasks()
-    ? `<button type="button" class="agenda-task__check" data-cal-task-check="${task.id}"
-              aria-label="${esc(t('tasks.markDone', { title: task.title }))}"><span class="agenda-task__ring"><i data-lucide="check" aria-hidden="true"></i></span></button>`
-    : '<span class="agenda-task__check agenda-task__check--static" aria-hidden="true"><span class="agenda-task__ring"></span></span>';
+    ? `<button type="button" class="agenda-task__check check-ring" data-cal-task-check="${task.id}"
+              aria-label="${esc(t('tasks.markDone', { title: task.title }))}"><i data-lucide="check" aria-hidden="true"></i></button>`
+    : '<span class="agenda-task__check agenda-task__check--static check-ring check-ring--static" aria-hidden="true"></span>';
   return `
     <div class="agenda-task" data-task-row="${task.id}">
       ${check}
@@ -5690,7 +5690,7 @@ async function tickCalendarTask(button) {
   const row = button.closest('.agenda-task');
   if (!id || button.disabled) return;
   button.disabled = true;
-  button.classList.add('agenda-task__check--done');
+  button.classList.add('agenda-task__check--done', 'check-ring--done');
   row?.classList.add('agenda-task--done');
   vibrate(15);
   try {
@@ -5712,7 +5712,7 @@ async function tickCalendarTask(button) {
     if (seriesDoneText(response)) loadRange(state.rangeFrom, state.rangeTo).then(() => renderView()).catch(() => {});
   } catch (err) {
     button.disabled = false;
-    button.classList.remove('agenda-task__check--done');
+    button.classList.remove('agenda-task__check--done', 'check-ring--done');
     row?.classList.remove('agenda-task--done');
     window.yuvomi?.showToast(err.message, 'danger');
   }
