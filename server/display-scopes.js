@@ -88,12 +88,12 @@ export const DISPLAY_SCOPES = Object.freeze([
 export const DISPLAY_WRITE_ROUTES = Object.freeze([
   Object.freeze({ method: 'PATCH', pattern: /^\/tasks\/\d+\/status$/ }),
   Object.freeze({ method: 'POST', pattern: /^\/rewards\/redemptions$/ }),
-  // THE WALL'S OWN WRITES (Tafla, 2026-10-19), all three behind the household
-  // switch "Pozwól odhaczać na ścianie" (services/wall-settings.js,
-  // `refuseWallWrite`, checked in each route - off by default): a running-out
-  // item onto a list (the "+" chips of the shopping card; the route takes only
-  // a name from a display) and the answer to the weekly question. The tick
-  // above is behind the same switch.
+  // THE WALL'S OWN WRITES (Tafla, 2026-10-19), behind the household switch
+  // "Pozwól odhaczać na ścianie" (services/wall-settings.js, `refuseWallWrite`,
+  // checked in each route - off by default): a running-out item onto a list
+  // (the "+" chips of the shopping card; the route takes only a name from a
+  // display) and the answer to the weekly question. The tick and the
+  // redemption above are behind the same switch: every write of a display is.
   Object.freeze({ method: 'POST', pattern: /^\/shopping\/\d+\/items$/ }),
   Object.freeze({ method: 'POST', pattern: /^\/ai\/questions\/\d+\/(?:answer|dismiss)$/ }),
 ]);

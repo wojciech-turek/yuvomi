@@ -2811,9 +2811,11 @@ household version (`planTasks`, `planEvents`, `tomorrowMeals`, `dinnerPlan`, `sh
 no longer the retired program fields (`urgentTasks`, `tasksDoneToday`, `wallTasks` come empty).
 Every write of a display is behind the household switch **"Pozwól odhaczać na ścianie"**
 (`sync_config.wall_allow_ticking`, admin-only through `PUT /preferences`, default off, readable by
-the display): while it is off, ticking a task, adding a running-out item and answering or skipping
-the weekly question answer 403 with `reason: 'wall_read_only'`, and `GET /displays/people` reports
-`can_tick_off: false` for everybody (`server/services/wall-settings.js`, checked in each route). Two
+the display): while it is off, ticking a task, redeeming a reward for someone, adding a running-out
+item and answering or skipping the weekly question answer 403 with `reason: 'wall_read_only'`, and
+`GET /displays/people` reports `can_tick_off: false` and `can_redeem: false` for everybody
+(`server/services/wall-settings.js`, checked in each route; a money request stays refused on a
+display either way, `money_not_on_display`). Two
 writes joined the route list for the wall, both behind that switch: `POST /shopping/{listId}/items`
 (a name only - any other field is refused with `display_action`) and
 `POST /ai/questions/{id}/answer|dismiss`. `GET /ai/questions/open` is readable. The sections the wall

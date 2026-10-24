@@ -4415,8 +4415,9 @@ Zeile des Aufklappers nennt sie.
 > (`sync_config.wall_allow_ticking`, admin only, default off) and the wall sections
 > (`wall_sections`) live in `/preferences`; the display reads both. Off: no rings, no "+"
 > chips, no answering - and the SERVER refuses the paired display (`refuseWallWrite`,
-> `services/wall-settings.js`: tick, add a running-out item by name, answer/skip the
-> question, all 403 `wall_read_only`; `/displays/people` names nobody to tick for). On: 48pt
+> `services/wall-settings.js`: tick, redeem a reward, add a running-out item by name,
+> answer/skip the question, all 403 `wall_read_only`; `/displays/people` names nobody to
+> tick or redeem for). On: 48pt
 > rings on task rows (the display names who did it - the one assignee, else a chooser),
 > "+" chips for running-out items, the question. **Timers and Gotuj always work.** The
 > display may READ shopping and pantry since Tafla (the shopping card, the dinner meter).

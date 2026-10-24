@@ -197,12 +197,26 @@ test('ohne den Schalter hakt das Tablett nichts ab, setzt nichts auf die Liste u
     assert.equal(res.body.reason, 'wall_read_only', action);
   }
 
-  // Und der Picker zeigt niemanden: die Ringe an der Wand und die Auswahl auf
-  // der Aufgabenseite verschwinden, bevor die Route absagen muss.
+  // Auch die Einloesung ist eine Schreibroute des Tabletts - und damit zu.
+  // Sie geht vor der Praemie und der Person durch den Schalter: ein Katalog,
+  // den es nicht gibt, aendert die Antwort nicht.
+  const vorher = db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n;
+  const eis = (await admin('POST', '/rewards/catalog', { name: 'Schalter-Eis', cost: 1 })).body.data.id;
+  for (const body of [{ catalog_id: eis, user_id: LEA }, { catalog_id: 999999, user_id: LEA }]) {
+    const redeem = await display('POST', '/rewards/redemptions', body);
+    assert.equal(redeem.status, 403, JSON.stringify(body));
+    assert.equal(redeem.body.reason, 'wall_read_only', JSON.stringify(body));
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n, vorher, 'nichts beantragt');
+
+  // Und der Picker zeigt niemanden: die Ringe an der Wand, die Auswahl auf
+  // der Aufgabenseite und die Einloese-Knoepfe verschwinden, bevor die Route
+  // absagen muss.
   const people = await display('GET', '/displays/people');
   assert.equal(people.status, 200);
   assert.ok(people.body.data.length >= 2, 'Reichweite: die Mitglieder stehen da');
   assert.ok(people.body.data.every((p) => p.can_tick_off === false), 'niemand ist abhakbar');
+  assert.ok(people.body.data.every((p) => p.can_redeem === false), 'fuer niemanden wird eingeloest');
 
   // Minutnik und Gotuj schreiben nichts - Lesen bleibt offen.
   assert.equal((await display('GET', '/dashboard?audience=household')).status, 200);
