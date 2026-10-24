@@ -876,8 +876,10 @@
 .tasks-page .task-card__main > .task-status-btn {
   flex: none;
   width: 28px;
-  height: 28px;
-  margin: 0;
+  /* Die Box traegt die Zielgroesse in der Hoehe (eine Achse, tokens.css),
+   * der negative Rand nimmt sie aus der Zeilenhoehe wieder heraus. */
+  height: var(--target-base);
+  margin: calc((28px - var(--target-base)) / 2) 0;
 }
 
 .tasks-page .task-card__main > .task-status-btn::before {
@@ -1166,7 +1168,8 @@
   color: var(--color-text-secondary);
 }
 
-.tasks-who__seg[aria-pressed='true'] > .tasks-who__thumb {
+.tasks-who__seg[aria-pressed='true'] > .tasks-who__thumb,
+.tasks-who__seg--picked > .tasks-who__thumb {
   background: var(--color-raised);
   box-shadow: var(--shadow-e1);
   color: var(--color-text-primary);

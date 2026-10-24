@@ -1837,9 +1837,12 @@ function whoSegmentHtml() {
   const seg = (s) => {
     if (s.menu) {
       const picked = s.people.find((p) => p.who === state.who);
+      // Ein Menueknopf, kein Umschalter: kein aria-pressed (das gehoert den
+      // Segmenten). Die Wahl steht im Namen und in der Kapsel (--picked).
+      const menuLabel = picked ? `${s.label}: ${picked.label}` : s.label;
       return `
-        <button type="button" class="tasks-who__seg popover-menu__trigger" popovertarget="tasks-who-menu"
-                aria-haspopup="menu" aria-expanded="false" aria-pressed="${picked ? 'true' : 'false'}" data-who-menu>
+        <button type="button" class="tasks-who__seg popover-menu__trigger${picked ? ' tasks-who__seg--picked' : ''}" popovertarget="tasks-who-menu"
+                aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}" data-who-menu>
           <span class="tasks-who__thumb">${esc(picked ? firstName(picked.label) : s.label)}<i data-lucide="chevron-down" class="tasks-who__chevron" aria-hidden="true"></i></span>
         </button>
         <div class="popover-menu" id="tasks-who-menu" popover role="menu">
