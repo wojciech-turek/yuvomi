@@ -838,6 +838,16 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
   // Scroll-Offset bleibt, was er war - kein Sprung, kein Pendeln.
   let barMode = false;
   let barPort = null;
+  // DER EINZEILIGE KOPF MIT GROSSEM TITEL KLAPPT AUCH EIN (Tafla, „Nagłówek":
+  // nach dem Scrollen schrumpft der grosse Titel in die Leiste). Ohne Lead-Zone
+  // (Więcej, Zadania: Titel und Kreise in EINER Zeile) aendert das nur den
+  // Schnitt des Titels, nicht die Hoehe der Zeile - die tragen die 48er-Ziele
+  // und die Mindesthoehe des Titels -, also ruehrt sich darunter nichts.
+  // Steht der grosse Titel AUSSERHALB des Kopfes im Inhalt (Einstellungs-Blatt:
+  // `[data-large-title]`), erscheint er klein in der Leiste, sobald er unter
+  // ihr verschwunden ist - der angedockte Titel neben dem Rueckweg.
+  let titleCollapse = false;
+  let extTitle = null;
 
   // DAS ABSENDER-SIEGEL: genau eines, unmittelbar vor dem Seitentitel.
   //
@@ -973,10 +983,17 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     // gescrollt ist, ob sie faltet oder - zu wenig Reserve - stehen bleibt.
     if (!lead) {
       toolbar.classList.toggle('is-docked', port.scrollTop > 0);
-      if (!fold) return;
+      // Der Titel im Inhalt: eingeklappt, sobald er unter der Leiste liegt -
+      // eine Frage der Lage, nicht der Geste.
+      if (titleCollapse && extTitle) {
+        setCollapsed(extTitle.getBoundingClientRect().bottom <= toolbar.getBoundingClientRect().bottom + 1, ['is-collapsed']);
+        return;
+      }
+      if (!fold && !titleCollapse) return;
     }
     if (!fold && !toolbar.classList.contains('page-toolbar--capped')) return;
-    const states = fold ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
+    // Ohne Lead-Zone haengt die Kante am Scrollstand (oben), nicht am Einklappen.
+    const states = fold || !lead ? ['is-collapsed'] : ['is-collapsed', 'is-docked'];
     // Nur kollabieren, wenn der Port das Ausklappen danach auch verkraftet -
     // sonst schiebt die zurückkehrende Kopfhöhe den Scroll auf 0, der Kopf
     // klappt wieder aus und beides pendelt gegeneinander.
@@ -1016,7 +1033,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
   // Inhalt unter ihm liegt (seine Kante, siehe onInnerScroll).
   const onBarScroll = (e) => {
     if (e.target !== barPort) return;
-    if (barMode) onInnerScroll(e);
+    if (barMode || titleCollapse) onInnerScroll(e);
     else if (!lead) toolbar.classList.toggle('is-docked', barPort.scrollTop > 0);
   };
   const unbindBar = () => {
@@ -1099,7 +1116,15 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
     const back = toolbar.querySelector(':scope > .page-back');
     barMode = !capped && Boolean(scrollport) && lead > 0 && Boolean(back?.getClientRects().length);
     toolbar.classList.toggle('page-toolbar--bar', barMode);
-    toolbar.classList.toggle('page-toolbar--capped', (Boolean(capped) || barMode) && lead > 0);
+    // Einzeilig mit grossem Titel (siehe `titleCollapse`) - nur unter 1024px,
+    // wo es den grossen Titel gibt. Er klappt auf demselben Weg wie die
+    // gedeckelten Koepfe (`--capped`, onInnerScroll); seine Hoehe bleibt.
+    const titleEl = toolbar.querySelector(':scope > .page-toolbar__title');
+    extTitle = lead ? null : (toolbar.parentElement?.querySelector('[data-large-title]') ?? null);
+    const compact = typeof matchMedia === 'function' && matchMedia('(max-width: 1023px)').matches;
+    titleCollapse = !lead && compact && Boolean(scrollport) && !toolbar.classList.contains('page-toolbar--in-group')
+      && (Boolean(titleEl?.getClientRects().length) || Boolean(extTitle));
+    toolbar.classList.toggle('page-toolbar--capped', ((Boolean(capped) || barMode) && lead > 0) || titleCollapse);
     const listen = Boolean(scrollport) && !capped && (barMode || !lead);
     if (listen && !barPort) {
       barPort = scrollport;
@@ -1247,6 +1272,17 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
       if (dockTitle.parentElement !== toolbar || dockTitle.nextElementSibling !== anchor) {
         toolbar.insertBefore(dockTitle, anchor);
       }
+    } else if (titleCollapse && extTitle) {
+      // Der kleine Titel des Einstellungs-Blatts: dieselbe Rolle, Text aus
+      // dem grossen im Inhalt; sichtbar nur eingeklappt (capture.css).
+      if (!dockTitle) {
+        dockTitle = document.createElement('span');
+        dockTitle.className = 'page-toolbar__dock-title';
+        dockTitle.setAttribute('aria-hidden', 'true');
+      }
+      const text = extTitle.textContent.trim();
+      if (dockTitle.textContent !== text) dockTitle.textContent = text;
+      if (dockTitle.parentElement !== toolbar) toolbar.append(dockTitle);
     } else if (dockTitle?.parentElement) {
       dockTitle.remove();
     }

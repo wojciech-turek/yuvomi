@@ -2403,7 +2403,14 @@ async function headDocking(page) {
 }
 
 /**
- * Scrollt jeden Port bis ans Ende und meldet die groesste gefundene Reserve.
+ * Scrollt jeden Port bis ans Ende und meldet die groesste Reserve unter den
+ * Ports DES KOPFES (`installHeadPorts`).
+ *
+ * 2026-10-24, Tafla: gemeldet wurde bis dahin die groesste Reserve IRGENDEINES
+ * Ports im Dokument. Auf /notes war das 118px im versteckten Mehr-Blatt
+ * (`.more-sheet__body`) - die Sonde erwartete ein Andocken, unter dem Kopf
+ * scrollte aber nichts, und sie meldete den Kopf rot. Gemessen wird jetzt, was
+ * unter DIESEM Kopf wegscrollen kann; gefahren wird weiter jeder Port.
  *
  * MIT DER GESTE DAVOR: seit der Re-Kritik 2026-09-25 klappt ein gedeckelter
  * Kopf (Budget, Kalender, Notizen, Kontakte) nur auf einen Scroll ein, dem
@@ -2413,7 +2420,9 @@ async function headDocking(page) {
  * davor macht daraus den Nutzer-Scroll, den diese Sonde nachstellen will.
  */
 async function scrollEveryPort(page) {
+  await installHeadPorts(page);
   return page.evaluate(() => {
+    const own = new Set(window.__yuvomiHeadPorts());
     let most = 0;
     for (const el of document.querySelectorAll('*')) {
       const oy = getComputedStyle(el).overflowY;
@@ -2421,7 +2430,7 @@ async function scrollEveryPort(page) {
       if ((oy === 'auto' || oy === 'scroll') && reserve > 8) {
         el.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: reserve }));
         el.scrollTop = reserve;
-        most = Math.max(most, reserve);
+        if (own.has(el)) most = Math.max(most, reserve);
       }
     }
     return most;
@@ -2429,25 +2438,33 @@ async function scrollEveryPort(page) {
 }
 
 /**
- * Hat ein Port DES KOPFES gescrollt? Das ist sein Scrollport (ein Vorfahr) und,
- * in der gedeckelten Bauart, ein Port in dem gedeckelten Modul-Root, der den
- * Kopf traegt - dieselbe Unterscheidung wie `wireCollapsingHeader`. Das
- * Mehr-Blatt und die Suche haben eigene Ports; unter dem Kopf laeuft dabei
- * nichts durch.
+ * Die Ports DES KOPFES: sein Scrollport (ein Vorfahr) und, in der gedeckelten
+ * Bauart, jeder Port im gedeckelten Modul-Root, der den Kopf traegt - dieselbe
+ * Unterscheidung wie `wireCollapsingHeader`. Das Mehr-Blatt (bis 2026-10-24)
+ * und die Suche haben eigene Ports; unter dem Kopf laeuft dabei nichts durch.
  */
-async function headPortScrolled(page) {
-  return page.evaluate(() => {
-    const head = document.querySelector('.page-toolbar');
-    if (!head) return false;
-    const scrolls = (el) => /^(auto|scroll)$/.test(getComputedStyle(el).overflowY);
-    let capped = null;
-    let el = head.parentElement;
-    for (; el && el !== document.body && !scrolls(el); el = el.parentElement) {
-      if (!capped && getComputedStyle(el).overflowY === 'hidden') capped = el;
-    }
-    if (el && el.scrollTop > 0) return true;
-    return Boolean(capped) && [...capped.querySelectorAll('*')].some((p) => scrolls(p) && p.scrollTop > 0);
+async function installHeadPorts(page) {
+  await page.evaluate(() => {
+    window.__yuvomiHeadPorts = () => {
+      const head = document.querySelector('.page-toolbar');
+      if (!head) return [];
+      const scrolls = (el) => /^(auto|scroll)$/.test(getComputedStyle(el).overflowY);
+      let capped = null;
+      let el = head.parentElement;
+      for (; el && el !== document.body && !scrolls(el); el = el.parentElement) {
+        if (!capped && getComputedStyle(el).overflowY === 'hidden') capped = el;
+      }
+      const ports = el && el !== document.body ? [el] : [];
+      if (capped) ports.push(...[...capped.querySelectorAll('*')].filter(scrolls));
+      return ports;
+    };
   });
+}
+
+/** Hat ein Port DES KOPFES gescrollt (`installHeadPorts`)? */
+async function headPortScrolled(page) {
+  await installHeadPorts(page);
+  return page.evaluate(() => window.__yuvomiHeadPorts().some((p) => p.scrollTop > 0));
 }
 
 test('Sonde 8 - ein Kopf mit Lead-Zone traegt seine Linie erst angedockt, und dockt auch an', async () => {

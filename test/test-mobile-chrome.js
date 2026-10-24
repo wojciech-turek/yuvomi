@@ -726,6 +726,19 @@ test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller 
   assert.equal(inline && decl(inline.body, 'order'), '-1', 'eingeklappt: Rueckweg, Titel, Kreise in EINER Leiste');
   // Die scrollenden Seiten klappen auf demselben Weg ein (wireCollapsingHeader,
   // `--bar`) und halten dabei ihren Platz im Fluss - der Inhalt springt nicht.
+  // 2026-10-24, Tafla: in der eingeklappten Leiste bleiben die Kreise - am
+  // Telefon auch das Such-Icon (layout.css nahm die Suche eingeklappt aus dem
+  // Bild; gemeint war das Feld ab 768px).
+  const phone = (r) => r.at.some((a) => /max-width:\s*767px/.test(a));
+  const keep = capture.find((r) => phone(r) && /\.page-toolbar--capped\.is-collapsed\s*>\s*\.page-search\.page-toolbar__center/.test(r.selector));
+  assert.equal(keep && decl(keep.body, 'display'), 'grid', 'das Such-Icon bleibt in der eingeklappten Leiste');
+  // Der grosse Titel im Inhalt (Einstellungs-Blatt) erscheint eingeklappt klein
+  // neben dem Rueckweg, in derselben Zeile.
+  const dock = capture.find((r) => compact(r) && r.selector === '.page-toolbar--capped.is-collapsed > .page-toolbar__dock-title');
+  assert.equal(dock && decl(dock.body, 'display'), 'block', '„‹ Titel": der kleine Titel steht in der Leiste');
+  const leafBack = capture.find((r) => compact(r) && r.selector === '.page-toolbar--capped.is-collapsed > .settings-toolbar__back');
+  assert.equal(leafBack && decl(leafBack.body, 'margin-inline-end'), '0', 'der Rueckweg teilt eingeklappt seine Zeile mit dem Titel');
+  assert.match(read('../public/settings/shell.js'), /heading\.dataset\.largeTitle = ''/, 'das Blatt nennt seinen grossen Titel');
   const bar = capture.find((r) => compact(r) && r.selector === '.page-toolbar--bar.is-collapsed');
   assert.equal(bar && decl(bar.body, 'margin-block-end'), 'var(--bar-collapse-gap, 0px)', 'eingeklappt traegt die Leiste den Hoehenverlust als Rand');
   assert.match(read('../public/utils/ux.js'), /toolbar\.style\.setProperty\('--bar-collapse-gap'/, 'wireCollapsingHeader misst den Rand');
