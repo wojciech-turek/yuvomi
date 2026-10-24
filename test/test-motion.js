@@ -1797,8 +1797,10 @@ const SHARED_PRESSABLE = [
   ['.card--interactive', 'own'],
   ['.more-item', 'own'],
 ];
-/** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken. */
-const UNGUARDED_HOVER_MAX = 232;
+/** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken.
+ *  232 -> 227 (Tafla, 2026-10-24): die Wand und der Kochmodus sind neu geschrieben,
+ *  fuenf alte Hover-Regeln dort sind entfallen; die neuen Flaechen tragen keine. */
+const UNGUARDED_HOVER_MAX = 227;
 
 function hoverRules() {
   const out = [];

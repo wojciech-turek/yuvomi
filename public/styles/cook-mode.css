@@ -533,7 +533,7 @@
   font-size: var(--cook-num);
   line-height: 1.1;
   letter-spacing: var(--tracking-display);
-  animation: cook-bloom var(--dur-peak, 600ms) var(--ease-spring, ease-out) both;
+  animation: cook-bloom var(--dur-peak) var(--ease-spring) both;
 }
 
 @keyframes cook-bloom {
