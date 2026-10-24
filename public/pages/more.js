@@ -25,6 +25,7 @@ import { esc } from '/utils/html.js';
 import { personToken } from '/utils/person-color.js';
 import { getHouseholdSize } from '/utils/household.js';
 import { navModuleAccess } from '/permissions.js';
+import { todayKey, nowFields } from '/utils/timezone.js';
 import { showToast } from '/utils/toast-show.js';
 import { openModal, closeModal } from '/components/modal.js';
 import { enterWallMode } from '/utils/wall-mode.js';
@@ -115,20 +116,17 @@ function moneyText(amount, currency, opts = {}) {
 function tHtml(key, vars = {}, html = {}) {
   const marks = {};
   let i = 0;
-  for (const name of Object.keys(html)) marks[name] = `${i++}`;
+  for (const name of Object.keys(html)) marks[name] = `\uE000${i++}\uE001`;
   const text = t(key, { ...vars, ...marks });
-  return text.split(/(\d+)/).map((part) => {
-    const m = /^(\d+)$/.exec(part);
+  return text.split(/(\uE000\d+\uE001)/).map((part) => {
+    const m = /^\uE000(\d+)\uE001$/.exec(part);
     return m ? html[Object.keys(html)[Number(m[1])]] : esc(part);
   }).join('');
 }
 
-function localKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+/* "Today" is the household's day (utils/timezone.js), not the browser's:
+ * a phone in another zone must still see tomorrow's pickup as tomorrow. */
+const pad2 = (n) => String(n).padStart(2, '0');
 
 function dayDiff(fromKey, toKey) {
   const a = Date.UTC(...fromKey.split('-').map((n, idx) => Number(n) - (idx === 1 ? 1 : 0)));
@@ -138,7 +136,8 @@ function dayDiff(fromKey, toKey) {
 
 function addDays(key, days) {
   const [y, m, d] = key.split('-').map(Number);
-  return localKey(new Date(y, m - 1, d + days));
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
 }
 
 /** "dziś", "jutro", "za 8 dni". */
@@ -194,7 +193,7 @@ function readHandled(user) {
 }
 
 function writeHandled(user, map) {
-  const today = localKey();
+  const today = todayKey();
   const kept = Object.fromEntries(Object.entries(map).filter(([, day]) => day >= today));
   try {
     localStorage.setItem(handledKey(user), JSON.stringify(kept));
@@ -225,7 +224,7 @@ function groupOf(module) {
 function buildInbox(state) {
   const { data, on, currency, user, extra } = state;
   const items = [];
-  const today = localKey();
+  const today = todayKey();
   const tomorrow = addDays(today, 1);
 
   // Sprzątanie: unpaid visits, one row per helper.
@@ -380,7 +379,7 @@ function buildInbox(state) {
 
 /** The nearest document that has not expired yet: { doc, days } or null. */
 function nextDocument(extra) {
-  const today = localKey();
+  const today = todayKey();
   return extra.documents
     .map((doc) => ({ doc, key: String(doc.expires_at ?? '').slice(0, 10) }))
     .filter(({ key }) => /^\d{4}-\d{2}-\d{2}$/.test(key))
@@ -391,7 +390,7 @@ function nextDocument(extra) {
 
 /** The next pickup from the dashboard's two-day window: { days, types } or null. */
 function nextPickup(data) {
-  const today = localKey();
+  const today = todayKey();
   const pickups = (Array.isArray(data.wastePickups) ? data.wastePickups : [])
     .filter((p) => String(p.date_key) >= today)
     .sort((a, b) => String(a.date_key).localeCompare(String(b.date_key)));
@@ -428,9 +427,9 @@ function buildTile(id, state) {
       const balance = Number(budget.balance) || 0;
       const expenses = Number(budget.expenses) || 0;
       if (income > 0) {
-        const today = new Date();
-        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-        const left = daysInMonth - today.getDate() + 1;
+        const { year, month, day } = nowFields();
+        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+        const left = daysInMonth - day + 1;
         return {
           id, route: '/budget', glyph: GLYPH.budget, label: t('nav.budget'),
           value: tHtml('more.budgetLeft', {}, { amount: `<span class="more-tile__number">${moneyHtml(balance, currency, { whole: true })}</span>` }),
@@ -782,9 +781,9 @@ function renderSkeleton() {
 // --------------------------------------------------------
 
 function currentMonthKey(offset = 0) {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const { year, month } = nowFields();
+  const d = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
 }
 
 async function loadExtra(data, on) {
@@ -952,6 +951,16 @@ export async function render(container, { user, signal: routeSignal = null } = {
   loadCounts(on, state.extra.counts).then(() => { if (!signal.aborted) paint(); });
 
   body.addEventListener('click', async (event) => {
+    // Rows, tiles and verbs are real links, but open in the app (router),
+    // like the tab bar - no full page load. Cmd-, middle- and shift-click
+    // keep the browser's own behaviour.
+    const link = event.target.closest?.('a[data-route]');
+    if (link && body.contains(link)) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      window.yuvomi?.navigate?.(link.dataset.route);
+      return;
+    }
     const action = event.target.closest('[data-more-action]')?.dataset.moreAction;
     if (action === 'search') window.yuvomi?.openSearch?.();
     if (action === 'help') window.yuvomi?.showHelp?.();

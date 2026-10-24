@@ -17,6 +17,7 @@
 import { api } from '/api.js';
 import { t, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
+import { nowFields } from '/utils/timezone.js';
 import { rowMenuHtml } from '/utils/row-action.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import { openModal, closeModal, captureModalContext } from '/components/modal.js';
@@ -72,10 +73,12 @@ function topicLabel(topic) {
   return { household: t('ai.topicHousehold'), meals: t('ai.topicMeals'), shopping: t('ai.topicShopping') }[topic] ?? topic;
 }
 
-/** "1 listopada" - the day the limit starts over. */
-function renewDate(now = new Date()) {
-  const first = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'long' }).format(first);
+/** "1 listopada" - the day the limit starts over (the server counts the
+ * month in the household's zone, so this does too). */
+function renewDate() {
+  const { year, month } = nowFields();
+  const first = new Date(Date.UTC(year, month, 1, 12));
+  return new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(first);
 }
 
 function keyValue(set, env) {

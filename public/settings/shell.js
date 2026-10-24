@@ -1511,6 +1511,16 @@ export async function renderSettingsShell(container, {
     content = document.createElement('div');
     content.className = 'settings-shell__content';
     content.id = 'settings-sheet';
+    // Die Tafla-Zeilen der Blaetter sind Markup (components.js taflaRowHtml)
+    // und kommen ohne eigenen Klick-Handler: ihre Links gehen hier durch den
+    // Router - wie jeder Link der Shell (bindSpaNavigation), kein Neuladen.
+    content.addEventListener('click', (event) => {
+      const link = event.target.closest?.('a.tafla-row[href^="/"]');
+      if (!link || event.defaultPrevented || event.button !== 0
+        || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !window.yuvomi?.navigate) return;
+      event.preventDefault();
+      window.yuvomi.navigate(link.getAttribute('href'));
+    });
     shell.append(navigation, content);
     body.appendChild(shell);
     page.append(toolbar, body);

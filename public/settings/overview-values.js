@@ -17,6 +17,7 @@ import { api } from '/api.js';
 import { t, formatDate, formatTime } from '/i18n.js';
 import { pushStatus, pushSupported } from '/push.js';
 import { getHouseholdSize } from '/utils/household.js';
+import { todayKey, zonedDateKey } from '/utils/timezone.js';
 import { personSlot, PERSON_PALETTE } from '/utils/person-color.js';
 import { BUILT_IN_MODULES, KITCHEN_CHILD_IDS } from './module-order.js';
 import { getPreferences } from './preferences-cache.js';
@@ -45,15 +46,16 @@ export function enabledModuleCount(disabled = []) {
   return plain + kitchen;
 }
 
-/** "dziś 03:00", "wczoraj 03:00" oder das Datum. */
+/** "dziś 03:00", "wczoraj 03:00" oder das Datum - Tage im Haushalt gezaehlt. */
 export function whenValue(timestamp, now = new Date()) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return '';
-  const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const key = zonedDateKey(timestamp);
+  if (!key) return '';
+  const today = todayKey(now);
+  const [y, m, d] = today.split('-').map(Number);
+  const before = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
   const time = formatTime(timestamp);
-  if (dayKey(date) === dayKey(now)) return t('settings.valueTodayAt', { time });
-  if (dayKey(date) === dayKey(yesterday)) return t('settings.valueYesterdayAt', { time });
+  if (key === today) return t('settings.valueTodayAt', { time });
+  if (key === before) return t('settings.valueYesterdayAt', { time });
   return formatDate(timestamp);
 }
 
