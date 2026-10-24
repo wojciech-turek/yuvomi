@@ -286,17 +286,28 @@
  * Kalender dasselbe Blatt traegt (D2). Hier bleiben nur die gemerkten Sets. */
 
 /* Ein gemerktes Set ist eine Aktion („wende das an"), kein Zustand - deshalb
- * gestrichelt statt getoent, ohne aria-pressed. */
+ * gestrichelt statt getoent, ohne aria-pressed. 2026-10-24, Tafla: der Chip
+ * hat keine Kante mehr, seine Kapsel ist das `::after` (filter-chip.css) - die
+ * Strichelung steht deshalb dort, statt der Fuellung. */
 .filter-chip--recent {
-  border-style: dashed;
   opacity: 0.8;
   cursor: pointer;
 }
 
-.filter-chip--recent:hover {
-  opacity: 1;
-  border-color: var(--module-accent, var(--color-accent));
-  color: var(--module-accent, var(--color-accent));
+.filter-chip--recent::after {
+  background: transparent;
+  border: var(--space-px) dashed var(--color-border-control);
+}
+
+@media (hover: hover) {
+  .filter-chip--recent:hover {
+    opacity: 1;
+    color: var(--module-accent, var(--color-accent));
+  }
+
+  .filter-chip--recent:hover::after {
+    border-color: var(--module-accent, var(--color-accent));
+  }
 }
 
 /* Die Gruppierungswahl im Blatt fuellt ihre Zeile: zwei gleich breite

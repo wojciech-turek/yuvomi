@@ -5446,10 +5446,12 @@ a.popover-menu__item {
  * stand in tasks.css und galt damit nur dort - der Kalender, der dasselbe
  * Blatt seit D2 traegt, bekam Chips ohne Abstand. Folgt sie einem Schalter
  * („Mir zugewiesen" ueber den Personen), haelt sie Abstand zu ihm. */
+/* 2026-10-24, Tafla: zwischen den Reihen nur 4 - die Trefferflaeche des Chips
+ * (40-48) ist hoeher als seine 36er-Kapsel und bringt die Luft schon mit. */
 .filter-panel__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
 }
 
 .toggle-row + .filter-panel__chips {

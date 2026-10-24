@@ -452,17 +452,12 @@ textarea.form-input {
 }
 
 /* ================================================================
- * 10. Filter-Chips — Glass Border (immer aktiv)
- * Aktiver Glass-State: direkt in tasks.css (Load-Order-Konflikt)
+ * 10. Filter-Chips
+ * 2026-10-24, Tafla: hier standen Glaskante und Hover-Fuellung des Chips. Der
+ * Tafla-Chip (filter-chip.css) hat keine Kante, und seine Kapsel ist ein
+ * `::after` - eine Fuellung am Knopf selbst malte unter dem Zeiger die volle
+ * 48er-Trefferflaeche. Der Hover ist dort die Tinte.
  * ================================================================ */
-.filter-chip {
-  border-color: var(--glass-border-subtle);
-}
-
-.filter-chip:hover:not(.filter-chip--active) {
-  border-color: var(--glass-border);
-  background-color: color-mix(in srgb, var(--color-text-tertiary) 8%, transparent);
-}
 
 /* ================================================================
  * 11. Priority Badges — Capsule + Glass Border
@@ -512,14 +507,10 @@ textarea.form-input {
  * 16. Accessibility — Phase 2
  * ================================================================ */
 @media (prefers-reduced-transparency: reduce) {
-  .filter-chip--active {
-    background-color: var(--color-accent-light);
-    border-color: var(--color-accent);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  /* DER TOAST STAND IN DER REGEL DES CHIPS UND HAT IHN NICHT ÜBERLEBT. Beide
+  /* 2026-10-24, Tafla: der aktive Chip hat kein Glas mehr (Akzent-Toenung im
+   * `::after`, filter-chip.css) - sein Fallback hier ist weg.
+   *
+   * DER TOAST STAND IN DER REGEL DES CHIPS UND HAT IHN NICHT ÜBERLEBT. Beide
    * verlieren hier ihr Glas, aber sie haben nicht denselben Grund darunter:
    * der Chip ist ein helles Element mit dunkler Schrift, der Toast steht auf
    * dem Shell-Material (`--toast-bg`, seit R16 in BEIDEN Themes dunkel - bis

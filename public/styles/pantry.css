@@ -69,47 +69,11 @@
   display: none;
 }
 
-/* TAFLA-CHIPS: 36 sichtbar, das Ziel bleibt das volle `.filter-chip--sm`
- * (--target-base am Finger). Die Kapsel ist ein `::before` hinter dem Inhalt -
- * so traegt der Knopf seine Trefferflaeche, ohne als 48er-Pille zu wirken.
- * Ungewaehlt: --fill und ink-2; gewaehlt: Akzent-Toenung, Akzent-Schrift und
- * ein Haken. Keine Kante. */
+/* Die Chips sind die geteilten Tafla-Chips (filter-chip.css, 2026-10-24: 36
+ * sichtbar, --fill / Akzent-Toenung, keine Kante) - hier stand ihre erste
+ * Fassung. In der Ortsreihe schrumpfen sie nicht. */
 .pantry-filters .filter-chip {
-  position: relative;
-  isolation: isolate;
   flex: none;
-  gap: var(--space-1);
-  padding-inline: var(--space-3);
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.pantry-filters .filter-chip::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset-inline: 0;
-  inset-block: calc(50% - var(--space-4) - var(--space-0h));
-  border-radius: var(--radius-full);
-  background: var(--color-fill);
-}
-
-@media (hover: hover) {
-  .pantry-filters .filter-chip:hover:not(.filter-chip--active) {
-    color: var(--color-text-primary);
-  }
-}
-
-.pantry-filters .filter-chip--active {
-  color: var(--color-accent);
-}
-
-.pantry-filters .filter-chip--active::before {
-  background: var(--color-accent-tint);
 }
 
 /* Die Zahl neben dem Ort: Fliesstext-Gewicht, keine eigene Marke. */

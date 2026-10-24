@@ -215,11 +215,14 @@ components:
   # 2026-08-27; die dauerhaft getoente Schrift las sich als „Filter ist an").
   # Die Zahl hinter einer Stufe steht in tokens.css Abschnitt 6b, nirgends
   # sonst - der Chip nennt seit c788ce01 (2026-08-08) nur noch die Stufe.
+  # TAFLA (2026-10-24, KIT "Chips"): keine Kante, 36 sichtbar, 13/600; ungewaehlt
+  # --fill mit Tinte-2, gewaehlt --accent-tint mit Akzent-Schrift. Die Kapsel ist
+  # ein ::after hinter dem Inhalt, der Knopf behaelt seine 40-48er Trefferflaeche.
   chip:
-    backgroundColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent)"
-    textColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary))"
+    backgroundColor: "var(--color-accent-tint)"
+    textColor: "var(--color-accent)"
     rounded: "{rounded.full}"
-    padding: "4px 12px (--space-1 / --space-3), Kante 1.5px"
+    padding: "0 12px (--space-3), 36 sichtbar, keine Kante"
     height: "48px (--target-lg); --sm-Variante 40px, auf (hover: none) 44px"
   card:
     backgroundColor: "{colors.surface}"
@@ -2251,6 +2254,15 @@ Zielgroessen-Regel halten (**Ebene 3**, `die Groesse des Icon-Knopfs gehoert der
   ausgeschrieben; zusammengehalten wird sie vom Guard, nicht von der Kaskade.
 
 ### Chips
+- **Tafla (2026-10-24):** EIN Chip fuer alle Module (filter-chip.css): keine Kante, 36
+  sichtbar, 13/600, ungewaehlt `--color-fill` mit Tinte-2, gewaehlt `--color-accent-tint`
+  mit `--color-accent`-Schrift (beide Themes AA). Die Kapsel ist das `::after` des Knopfs
+  (z-index -1 in der eigenen Stapelebene), der Knopf selbst bleibt durchsichtig und
+  `--target-lg` / `--sm` hoch - eine Fuellung AM Knopf malte die ganze Trefferflaeche.
+  Wer das `::after` anders braucht (Mahlzeit-Segment im Blatt: Trefferflaeche; gemerktes
+  Set der Aufgaben: gestrichelte Kante statt Fuellung), setzt es dort. Die Spiżarnia trug
+  diese Fassung zuerst allein. Die Saetze darunter zur Kante und zum Modulton sind
+  Geschichte.
 - **Form:** Kapsel (`--radius-full`), Kante wie ein Bedienelement. Kalender-Layer-Chips
   tragen die User-Farbe als Border mit ~60 % Deckung (>=3:1), nie als Textfarbe; alle
   Labels stehen inaktiv in Sekundaertext - auch der Mir-zugewiesen-Chip (Beschluss
