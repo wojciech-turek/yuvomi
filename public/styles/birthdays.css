@@ -236,6 +236,9 @@
  * fuehrt. Volle Zielhoehe, ohne die Karte zu strecken. */
 .birthday-hero__task {
   align-self: flex-start;
+  /* Nicht breiter als die Karte: sonst greift die Ellipse darunter nie. */
+  max-width: 100%;
+  min-width: 0;
   min-block-size: var(--target-base);
   margin-block: calc((var(--type-footnote-lh) - var(--target-base)) / 2);
   text-decoration: none;

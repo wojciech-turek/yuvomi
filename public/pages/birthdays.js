@@ -23,7 +23,7 @@ import { openDetailView } from '/components/detail-view.js';
 import { emptyStateHTML as sharedEmptyStateHTML, emptyHintHTML, searchEmptyHTML } from '/utils/empty-state.js';
 import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
 import { personToken } from '/utils/person-color.js';
-import { shortWeekdayDayMonth, relativeDateLabel } from '/utils/day-label.js';
+import { shortWeekdayDayMonth, relativeDayWord } from '/utils/day-label.js';
 import {
   renderAppPage,
   renderPageHeader,
@@ -532,7 +532,8 @@ export function birthdayHeroHtml(birthday) {
       .format(new Date(`${String(birthday.next_birthday).slice(0, 10)}T12:00:00Z`))
     : '';
   const age = Number.isInteger(birthday.next_age) && birthday.next_age > 0 ? t('birthdays.heroAge', { age: birthday.next_age }) : '';
-  const taskDue = task?.due_date ? relativeDateLabel(String(task.due_date).slice(0, 10)).toLocaleLowerCase(getLocale()) : '';
+  // The one relative day word of the app (day-label.js): "dziś", "jutro", "4 dni temu".
+  const taskDue = task?.due_date ? relativeDayWord(String(task.due_date).slice(0, 10)) : '';
   const taskLine = task ? `
       <a class="hero-card__meta birthday-hero__task" href="/tasks?open=${encodeURIComponent(task.id)}">
         <i data-lucide="circle-check" aria-hidden="true"></i>
