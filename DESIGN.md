@@ -4730,7 +4730,35 @@ Angabe braeuchte einen zweiten Timer, nur damit sie sich selbst aktuell haelt.
   Grau). Liste, Woche, Monat und Streifen lesen denselben Wert (`--ev-color`).
 - **Woche und Monat** behalten ihren Bau: Wochentage in Satzschreibung (13/400 Tinte-2, die
   Versal-Labels sind weg), heute in `--color-btn-primary` unter `--color-on-accent`, die
-  Jetzt-Linie violett statt rot (Rot ist in Tafla ein Zustand, keine Uhr).
+  Jetzt-Linie violett statt rot (Rot ist in Tafla ein Zustand, keine Uhr). Aufgaben-Chips in
+  Woche, Tag und Monat tragen die Fahne der Aufgabenzeile (nur Hoch und Dringend, hinter dem
+  Text) statt des Rangpunkts; in der Punktfassung des Monats am Telefon bleibt die Flaeche
+  der Ton der Stufe.
+
+**Koepfe, Aufraeumrunde 2026-10-24** (Regel „Nagłówek": hoechstens zwei Geisterkreise):
+- **Zadania** traegt unter 768px Lupe und Filter. Das Werkzeugmenue ist dort kein dritter
+  Kreis mehr; seine Wege stehen im Filterblatt im Abschnitt „Widok" (`.tasks-sheet-phone`,
+  ab 768px ausgeblendet): die Ansicht als Segment Lista · Kanban · Historia (schliesst das
+  Blatt), „Grupuj według" mit Namen, „Wybór wielokrotny", „Zarządzaj kategoriami",
+  „Zarządzaj tagami" als Verweiszeilen. Das Menue kehrt am Telefon zurueck, wo es der
+  einzige Weg ist: waehrend der Auswahl (Ablegen, Tags; der Filter tritt dafuer ab) und im
+  Verlauf (Suche und Filter sind dort weg). Ab 768px unveraendert: Segment im Kopf, Filter
+  und Menue als die zwei Kreise.
+- **Kalendarz** traegt unter 640px nach dem Artboard Titel, Lupe und den Kreis der Ansicht
+  (`calendar-days`, Name „Widok: Lista"), darunter den Zeitraum als 13/600-Zeile ueber dem
+  Streifen und „Dzisiaj" als schlichtes Wort, sobald man neben dem laufenden Zeitraum
+  steht. Keine Pfeile und kein Filterkreis im Kopf: das Menue der Ansicht traegt die vier
+  Ansichten, „Poprzedni/Następny <Einheit>" (Namen und Kuerzel der Pfeile) und „Filtry";
+  stehen Filter, zeigt der Kreis ihre Zahl als Badge und nennt sie im Namen. Eingeklappt
+  wird der Zeitraum der Titel der Leiste (17/600). Die Faltmechanik der Shell
+  (`data-collapse-fold`) nutzt der Kalender damit nicht mehr. Ab 640px unveraendert.
+- `calendar.relDay.*` ist in allen Sprachen uebersetzt (heute/morgen/uebermorgen/gestern je
+  Sprache; „in N Tagen"/„vor N Tagen" aus den vorhandenen Geburtstags- und Countdown-Texten).
+- Umgestellte Guards (Absicht erhalten): `test:task-filters` (Blatt traegt die Telefonwege,
+  tasks.css zwei Kreise), `test:calendar` (Kreis statt Wort, Menue mit Blaettern und Filtern,
+  Fahne am Chip), `test:mobile-chrome` (R17: eingeklappt faltet nichts mehr, mobil fehlt
+  nichts ohne Menue-Eintrag), `test:budget-ui` (Allowlist des eingeklappten Kalenderkopfs),
+  `test:frontend-audit` (Fahne statt Rangpunkt am Chip).
 
 Guards, die dabei auf die neue Regel umgestellt wurden (Absicht jeweils erhalten):
 `test:frontend-audit` (ein Abhakkreis, jetzt 24; Griffspalte; Etiketten nur noch im Brett;
