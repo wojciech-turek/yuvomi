@@ -1,13 +1,16 @@
 /**
  * Settings-Seite: Push-Benachrichtigungen (pro Gerät) und Admin-Notification-Channels.
  */
-import { t } from '/i18n.js';
+import { t, formatTime } from '/i18n.js';
 import { pushSupported, pushStatus, enablePush, disablePush, repairPush } from '/push.js';
 import { api, notifications } from '/api.js';
 import { confirmModal } from '/components/modal.js';
 import { esc } from '/utils/html.js';
 import { getPwaInstallState } from '/utils/pwa-install.js';
-import { toggleRowHtml, settingSwitchRowHtml } from '/settings/components.js';
+import { canAccessNavModule } from '/permissions.js';
+import {
+  toggleRowHtml, bindInstantSwitch, taflaRowHtml, taflaGroupHtml, taflaSwitchHtml,
+} from '/settings/components.js';
 
 const DEFAULT_PROVIDERS = [
   { id: 'gotify', name: 'Gotify' },
@@ -73,37 +76,147 @@ function channelDefaults(provider = 'gotify') {
   };
 }
 
+/**
+ * TAFLA (2026-10-20, Artboard Powiadomienia): drei Gruppen in Tafla-Zeilen.
+ *
+ *   TO URZADZENIE - der Push-Schalter dieses Geraets und die Probe.
+ *   PRZYPOMINAJ O - nur, was das System wirklich schickt, mit seiner Zeit:
+ *     Abfuhr je Abfallart (eigener Schalter je Person, Vorgabe "dzien przed,
+ *     8:00", aus bis eingeschaltet - routes/waste/reminder-settings.js), die
+ *     Dosen der eigenen Medikamente (immer, zur Dosis), Termine (wie am
+ *     Termin eingestellt) und die beiden AI-Hinweise (Haushaltsschalter am
+ *     AI-Blatt). Es gibt keine Ruhezeiten und keine Tagesgrenze ueber alles -
+ *     das Blatt verspricht deshalb keine.
+ *   KANALY DOMOWE - die Haushaltskanaele (Admins).
+ */
 function renderPage(container, user) {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="settings-section">
-      <h2 class="settings-section__title">${t('settings.pushToggleTitle')}</h2>
-      <!-- Zeilen im Traeger (R17, E9): der Schalter mit seinem Hinweis und
-           dem Zustand darunter, die Probe als eigene Zeile. Vorher eine Karte,
-           in der drei Hinweise UEBER dem Schalter standen, den sie erklaeren. -->
-      <div class="row-carrier settings-group">
-        ${settingSwitchRowHtml({
-          label: t('settings.pushToggleLabel'),
-          disabled: true,
-          description: t('settings.pushDeviceDescription'),
-          descriptionId: 'push-device-description',
-          extra: `<p class="form-hint" id="push-ios-hint" hidden>${t('settings.pushIosHomescreenHint')}</p>
-            <p class="form-hint" id="push-status" aria-live="polite">${t('settings.pushChecking')}</p>`,
-          attrs: { id: 'push-toggle', 'aria-describedby': 'push-device-description push-status' },
-        })}
-        <div class="settings-setting-row settings-setting-row--stacked">
-          <div class="settings-setting-row__control settings-form-actions">
-            <button type="button" class="btn btn--secondary" id="push-test-btn" disabled>
-              <i data-lucide="bell-ring" aria-hidden="true"></i>
-              <span>${t('settings.pushTestButton')}</span>
-            </button>
-          </div>
+    <section class="settings-section notif-page">
+      <section class="tafla-group" aria-labelledby="notif-device-title">
+        <h2 class="tafla-group__title" id="notif-device-title">${esc(t('settings.pushToggleTitle'))}</h2>
+        <div class="tafla-card">
+          ${taflaRowHtml({
+            title: t('settings.pushToggleLabel'),
+            glyph: 'smartphone',
+            trail: taflaSwitchHtml({
+              label: t('settings.pushToggleLabel'),
+              disabled: true,
+              attrs: { id: 'push-toggle', 'aria-describedby': 'push-device-description push-status' },
+            }),
+          })}
+          ${taflaRowHtml({
+            title: t('settings.pushTestButton'),
+            glyph: 'bell-ring',
+            button: true,
+            accent: true,
+            attrs: { id: 'push-test-btn', disabled: true },
+          })}
         </div>
-      </div>
+        <p class="tafla-group__footer" id="push-status" aria-live="polite">${esc(t('settings.pushChecking'))}</p>
+        <p class="tafla-group__footer" id="push-device-description">${esc(t('settings.pushDeviceDescription'))}</p>
+        <p class="tafla-group__footer" id="push-ios-hint" hidden>${esc(t('settings.pushIosHomescreenHint'))}</p>
+      </section>
+      <div id="notif-reminders"></div>
+      <section class="settings-section" id="notification-channels-section"></section>
     </section>
-    <section class="settings-section" id="notification-channels-section"></section>
   `);
   renderChannelShell(container, user);
+  renderReminders(container, user).catch((error) => console.error('[Settings] Reminders failed:', error));
+}
+
+/** Ist ein Modul fuer diese Person da (an und erlaubt)? */
+function moduleOn(moduleKey) {
+  return !window.yuvomi?.isModuleDisabled?.(moduleKey) && canAccessNavModule(moduleKey);
+}
+
+function wasteWhen(setting) {
+  const days = Number(setting.offset_days) || 0;
+  const time = formatTime(setting.delivery_time || '08:00');
+  if (days === 0) return t('settings.reminderSameDay', { time });
+  if (days === 1) return t('settings.reminderDayBefore', { time });
+  return t('settings.reminderDaysBefore', { count: days, time });
+}
+
+/** "Przypominaj o": die Erinnerungen, die es gibt, mit ihrer Zeit. */
+async function renderReminders(container, user) {
+  const host = container.querySelector('#notif-reminders');
+  if (!host) return;
+  const admin = user?.role === 'admin';
+  const [waste, ai] = await Promise.all([
+    moduleOn('waste') ? api.get('/waste/reminder-settings').then((res) => res?.data ?? []).catch(() => []) : [],
+    api.get('/ai/status').then((res) => res?.data ?? null).catch(() => null),
+  ]);
+  if (!host.isConnected) return;
+
+  const rows = [];
+  for (const setting of waste) {
+    rows.push(taflaRowHtml({
+      title: t('settings.reminderWaste', { type: setting.type_name }),
+      meta: wasteWhen(setting),
+      glyph: 'recycle',
+      trail: taflaSwitchHtml({
+        label: t('settings.reminderWaste', { type: setting.type_name }),
+        checked: setting.enabled,
+        attrs: {
+          'data-waste-reminder': setting.type_id,
+          'data-offset-days': setting.offset_days,
+          'data-delivery-time': setting.delivery_time,
+          'data-instant-save': '',
+        },
+      }),
+    }));
+  }
+  if (moduleOn('health')) {
+    rows.push(taflaRowHtml({ title: t('settings.reminderMeds'), meta: t('settings.reminderMedsWhen'), glyph: 'pill', value: t('settings.reminderAlways') }));
+  }
+  if (moduleOn('calendar')) {
+    rows.push(taflaRowHtml({
+      title: t('settings.reminderEvents'), meta: t('settings.reminderEventsWhen'), glyph: 'calendar',
+      chevron: true, href: '/settings/modules/calendar',
+    }));
+  }
+  if (ai?.enabled) {
+    const aiRow = (feature, titleKey, whenKey, glyph) => {
+      const on = Boolean(ai.features?.[feature]);
+      return taflaRowHtml({
+        title: t(titleKey),
+        meta: t(whenKey),
+        glyph,
+        ...(admin
+          ? { trail: taflaSwitchHtml({ label: t(titleKey), checked: on, attrs: { 'data-ai-feature': feature, 'data-instant-save': '' } }) }
+          : { value: on ? t('settings.valuePushOn') : t('settings.valuePushOff') }),
+      });
+    };
+    rows.push(aiRow('nudges', 'settings.reminderAiEvening', 'settings.reminderAiEveningWhen', 'sparkles'));
+    rows.push(aiRow('questions', 'ai.weeklyQuestion', 'settings.reminderAiQuestionWhen', 'message-circle'));
+  }
+
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', taflaGroupHtml({
+    id: 'notif-reminders-group',
+    title: t('settings.remindersTitle'),
+    rows,
+    footer: rows.length ? t('settings.remindersFooter') : '',
+  }));
+  window.lucide?.createIcons({ el: host });
+
+  for (const input of host.querySelectorAll('[data-waste-reminder]')) {
+    bindInstantSwitch(input, {
+      save: (checked) => api.put(`/waste/reminder-settings/${encodeURIComponent(input.dataset.wasteReminder)}`, {
+        enabled: checked,
+        offset_days: Number(input.dataset.offsetDays) || 1,
+        delivery_time: input.dataset.deliveryTime || '08:00',
+      }),
+      savedMessage: t('settings.remindersSaved'),
+    });
+  }
+  for (const input of host.querySelectorAll('[data-ai-feature]')) {
+    bindInstantSwitch(input, {
+      save: (checked) => api.put('/ai/config', { features: { [input.dataset.aiFeature]: checked } }),
+      savedMessage: t('settings.remindersSaved'),
+    });
+  }
 }
 
 function renderChannelShell(container, user) {

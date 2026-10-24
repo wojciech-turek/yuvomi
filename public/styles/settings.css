@@ -224,30 +224,36 @@
 /* --------------------------------------------------------
    Die Wurzel: EINE gruppierte Liste aller Blaetter (2026-09-26)
 
-   In jeder Breite dieselbe Liste - Bereiche als Abschnittsueberschriften,
-   ihre Blaetter in EINEM Traeger je Abschnitt (Zeilenlisten-Regel,
-   tokens.css). Mobil gab es davor eine eigene Bereichsebene (vier Zeilen, dann
-   eine Bereichsseite mit 88px-Zeilen); sie ist entfallen, Deep-Links springen
-   auf den Abschnitt (shell.js, revealOverviewSection). Was mobil anders ist,
-   steht im Media-Block darunter: niedrigere Zeilen, kleinere Marke, keine
-   Beschreibung - Apples Einstellungen.
+   In jeder Breite dieselbe Liste - Gruppen als Ueberschriften auf dem Grund,
+   ihre Zeilen in EINEM Traeger je Gruppe (Zeilenlisten-Regel, tokens.css).
+   Mobil gab es davor eine eigene Bereichsebene (vier Zeilen, dann eine
+   Bereichsseite mit 88px-Zeilen); sie ist entfallen, Deep-Links springen auf
+   den Abschnitt (shell.js, revealOverviewSection).
+
+   TAFLA (2026-10-20, Artboard Ustawienia): die Ausweiskarte oben, die Gruppen
+   Ty / Dom / Moduly / Zaawansowane, Zeilen 48 mit dem 28er Leitplatz (Titel
+   bei x=56, Haarlinien auf 56 eingerueckt), das nackte Zeichen in Tinte-2,
+   der WERT der Einstellung in Tinte-2 vor dem Chevron, die Karten flach
+   (weiss auf Papier), "Wyloguj" leise in Tinte-2 am Ende.
    -------------------------------------------------------- */
 
 .settings-overview {
   display: grid;
   gap: var(--space-6);
   min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-overview__status {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
 }
 
 .settings-overview__section {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
   /* Der Deep-Link-Sprung landet unter dem klebenden Kopf, nicht darunter
    * versteckt: angedockt bleibt die Bar-Zeile stehen (Such-Icon, 44/48px
@@ -255,51 +261,66 @@
   scroll-margin-block-start: calc(var(--target-base) + var(--space-8));
 }
 
-/* Der Bereichs-Titel steht auf dem Grund, seine Blaetter liegen im Traeger
- * darunter. Vorher trennten Haarlinien die Bereiche auf dem Grund - eine
- * Liste ohne Rand, an dem sie als ein Objekt fassbar waere. */
+/* Gruppenkopf (KIT "Group header"): 17/600 Tinte, 16 eingerueckt wie die
+ * Zeilen, ohne Zeichen. */
 .settings-overview__heading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   margin: 0;
+  padding: 0 var(--space-4);
   color: var(--color-text-primary);
-  font-size: var(--text-lg);
-}
-
-.settings-overview__heading-icon {
-  width: var(--space-5);
-  height: var(--space-5);
-  color: var(--module-settings);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
 }
 
 .settings-overview__list {
   display: grid;
   background: var(--color-surface-work);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
 .settings-overview__row {
-  display: grid;
-  grid-template-columns: var(--target-md) minmax(0, 1fr) auto;
-  gap: var(--space-3);
+  position: relative;
+  display: flex;
   align-items: center;
+  gap: var(--space-3);
+  width: 100%;
   min-width: 0;
-  min-height: var(--target-lg);
-  padding: var(--space-2) var(--space-4);
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast);
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
-/* Rahmenbreite aus --space-px: Token-Disziplin dieser Datei (Guard
- * `settings.css haelt Zeilenlaenge, Token-Disziplin und keine toten Regeln`).
- * Die Linie haengt am SICHTBAREN Vorgaenger: eine weggefilterte Zeile
- * (`hidden`) darf keine Doppellinie und keine Linie an der Oberkante lassen. */
-.settings-overview__row:not([hidden]) ~ .settings-overview__row:not([hidden]) {
-  border-top: var(--space-px) solid var(--color-border-subtle);
+.settings-overview__row--two {
+  min-height: 64px;
+}
+
+/* Die Haarlinie haengt am SICHTBAREN Vorgaenger und beginnt auf der
+ * Titelspalte (16 + 28 + 12): eine weggefilterte Zeile (`hidden`) darf keine
+ * Doppellinie und keine Linie an der Oberkante lassen. */
+.settings-overview__list > :not([hidden]) ~ :not([hidden])::before,
+.settings-overview__panel > :not([hidden]) ~ :not([hidden])::before,
+.settings-overview__expandable > .settings-overview__panel:not([hidden]) > :first-child::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.settings-overview__expandable,
+.settings-overview__panel {
+  position: relative;
+  display: grid;
+  min-width: 0;
 }
 
 /* Nur am echten Zeiger (R18); den Druck quittiert der Press-Baustein (list-row.css). */
@@ -309,88 +330,207 @@
   }
 }
 
+.settings-overview__row:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+/* Der 28er Leitplatz mit dem nackten 20er Zeichen in Tinte-2. */
 .settings-overview__row-mark {
+  flex: none;
   display: grid;
   place-items: center;
-  width: var(--target-md);
-  height: var(--target-md);
-  border-radius: var(--radius-sm);
+  width: 28px;
+  color: var(--color-text-secondary);
 }
 
 .settings-overview__row-mark-glyph {
-  width: var(--space-5);
-  height: var(--space-5);
+  width: 20px;
+  height: 20px;
 }
 
 .settings-overview__row-copy {
+  flex: 1;
   display: grid;
   gap: var(--space-1);
   min-width: 0;
 }
 
 .settings-overview__row-title {
+  overflow: hidden;
   color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.settings-overview__row-description {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--line-height-snug);
-}
-
-/* Der Ort eines Options-Treffers (Suche): das Blatt, in dem die Option steht.
- * Anders als die Beschreibung bleibt er auch mobil stehen - ohne ihn waere
- * „Farbe" ein Treffer ohne Adresse. */
+.settings-overview__row-description,
+.settings-overview__row-meta,
 .settings-overview__row-context {
+  overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--line-height-snug);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Der Wert der Einstellung: 17 Tinte-2 vor dem Chevron, eine Zeile. */
+.settings-overview__row-value {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-overview__row-value:empty {
+  display: none;
+}
+
+/* Die eigene Personenfarbe als 12er Punkt vor ihrem Namen (Twoj kolor). */
+.settings-overview__row-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--row-dot);
 }
 
 .settings-overview__row-chevron {
-  width: var(--space-4);
-  height: var(--space-4);
-  color: var(--color-text-tertiary);
+  flex: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+  color: var(--color-text-quaternary);
 }
 
-/* MOBIL die Zeile der Systemeinstellungen: 44/48px hoch (`--target-base`
- * waechst am Finger mit), 32px-Marke, nur der Name. Die Beschreibung trug die
- * Zeile auf 88px und liess 5,5 Zeilen im ersten Bildschirm (Critique A7); sie
- * steht weiter im Blatt-Kopf und bleibt in der Suche durchsuchbar. Der Titel
- * faellt auf das Normalgewicht, wie Apples Zeilen - fett war er nur, um sich
- * von der Beschreibung abzusetzen. */
+.settings-overview__row--expander[aria-expanded="true"] .settings-overview__row-chevron--down {
+  transform: rotate(180deg);
+}
+
+.settings-overview__footer {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+/* ── Die Ausweiskarte: Avatar 56, Name 22/600, Rolle und Haushalt ── */
+.settings-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-work);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.settings-identity:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+@media (hover: hover) {
+  .settings-identity:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.settings-identity__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--identity-tint);
+  color: var(--identity-ink);
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-identity__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-identity__copy {
+  flex: 1;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-identity__name {
+  overflow: hidden;
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-identity__meta {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Wyloguj: ein leiser Weg in Tinte-2, kein roter Knopf ── */
+.settings-overview__foot {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-2);
+}
+
+.settings-overview__logout {
+  min-height: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+/* MOBIL die Zeile der Systemeinstellungen: 48 am Finger (`--target-base`
+ * waechst dort mit), der 28er Leitplatz, nur der Name und sein Wert. Die
+ * Beschreibung trug die Zeile auf 88px und liess 5,5 Zeilen im ersten
+ * Bildschirm (Critique A7); sie steht weiter im Blatt-Kopf und bleibt in der
+ * Suche durchsuchbar. */
 @media (max-width: 767px) {
-  .settings-overview {
-    gap: var(--space-5);
-  }
-
-  .settings-overview__section {
-    gap: var(--space-2);
-  }
-
-  .settings-overview__heading {
-    font-size: var(--text-base);
-  }
-
   .settings-overview__row {
-    grid-template-columns: var(--target-sm) minmax(0, 1fr) auto;
     min-height: var(--target-base);
-    padding-block: var(--space-1);
+  }
+
+  .settings-overview__row--two {
+    min-height: 64px;
   }
 
   .settings-overview__row-mark {
-    width: var(--target-sm);
-    height: var(--target-sm);
-  }
-
-  .settings-overview__row-mark-glyph {
-    width: var(--icon-lg);
-    height: var(--icon-lg);
-  }
-
-  .settings-overview__row-title {
-    font-weight: var(--font-weight-regular);
+    width: 28px;
   }
 
   .settings-overview__row-description {
@@ -492,7 +632,34 @@
   flex: 0 0 auto;
 }
 
-.settings-toolbar__back:hover,
+/* TAFLA: der Rueckweg des Blatts ("Wróć: Ustawienia") ist ein 36er Kreis
+ * wie der geschobener Seiten (`.page-back`, capture.css) - Tinte, kein
+ * Violett. Eigene Klasse, nicht `.page-back`: capture.css nimmt den Kreis der
+ * Shell zurueck, sobald ein Modul selbst zurueckfuehrt
+ * (`:has(> .settings-toolbar__back) > .page-back`). */
+.settings-toolbar__back {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin-inline-start: calc(-1 * var(--ghost-circle-inset));
+  padding: var(--ghost-circle-inset);
+  background-color: var(--color-fill);
+  background-clip: content-box;
+  color: var(--color-text-primary);
+}
+
+.settings-toolbar__back .settings-toolbar__back-icon {
+  width: var(--space-5);
+  height: var(--space-5);
+  stroke-width: var(--tab-icon-stroke-active);
+}
+
+/* Der Kreis steht in einer eigenen Zeile ueber dem Blatt (wie `.page-back`). */
+.settings-shell-header > .settings-toolbar__back {
+  margin-inline-end: 100%;
+}
+
 .settings-breadcrumb__link:hover {
   color: var(--color-accent);
 }
@@ -4181,49 +4348,688 @@
 .settings-page:not(.settings-page--leaf) .settings-shell__skip {
   display: none;
 }
+/* --------------------------------------------------------
+   TAFLA-ZEILEN DER EINSTELLUNGEN (2026-10-20, components.js taflaRowHtml)
 
-/* AI settings (fork, 2026-10-19): usage lines and the household memory. */
-.ai-usage-list,
-.ai-memory-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+   Die gruppierte Liste der Artboards Domownicy, Moduly, AsystentAI und
+   Powiadomienia: Kopf 17/600 auf dem Grund (8 ueber der Karte, 24 zwischen
+   den Gruppen), die weisse Karte flach auf dem Papier (Radius 20), Zeilen 48
+   bzw. 64 mit dem 28er Leitplatz (nacktes 20er Zeichen in Tinte-2, Titel bei
+   x=56), Wert 17 Tinte-2, Chevron 16, Haarlinien auf 56 eingerueckt; die
+   Fussnote 13 Tinte-2 darunter. Ein Verb am Zeilenende ist 17/600 Violett.
+   -------------------------------------------------------- */
+
+.settings-page .tafla-group {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  min-width: 0;
+  margin-block-end: var(--space-6);
 }
 
-.ai-usage-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-variant-numeric: tabular-nums;
+.settings-page .tafla-group__title {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-page .tafla-group__count {
   color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.settings-page .tafla-group__footer {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.settings-page .tafla-card {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-work);
+  list-style: none;
+}
+
+.settings-page .tafla-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+}
+
+.settings-page .tafla-row--two {
+  min-height: 64px;
+}
+
+.settings-page .tafla-card > :is(.tafla-row, li) + :is(.tafla-row, li)::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.settings-page .tafla-card > * {
+  position: relative;
+}
+
+.settings-page a.tafla-row,
+.settings-page button.tafla-row {
+  cursor: pointer;
+}
+
+.settings-page a.tafla-row:focus-visible,
+.settings-page button.tafla-row:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
+}
+
+.settings-page button.tafla-row:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Powiadomienia: die Gruppen stehen 24 auseinander, der Rest kommt vom Blatt. */
+.notif-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.notif-page > .tafla-group,
+.notif-page > div > .tafla-group {
+  margin-block-end: 0;
+}
+
+.notif-page > div:empty {
+  display: none;
+}
+
+@media (hover: hover) {
+  .settings-page a.tafla-row:hover,
+  .settings-page button.tafla-row:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.settings-page .tafla-row__lead {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  width: 28px;
+  color: var(--color-text-secondary);
+}
+
+.settings-page .tafla-row__lead svg {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-page .tafla-row__body {
+  flex: 1;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings-page .tafla-row__title {
+  overflow: hidden;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ein Titel ohne Meta-Zeile darf umbrechen, statt mitten im Wort zu enden. */
+.settings-page .tafla-row--wrap .tafla-row__title {
+  padding-block: var(--space-3);
+  white-space: normal;
+}
+
+.settings-page .tafla-row--accent .tafla-row__title,
+.settings-page .tafla-row--accent .tafla-row__lead {
+  color: var(--color-accent);
+}
+
+.settings-page .tafla-row__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-page .tafla-row__value {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-page .tafla-row__chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-quaternary);
+}
+
+.settings-page .tafla-row__chevron svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+
+.settings-page button.tafla-row[aria-expanded="true"] .tafla-row__chevron svg {
+  transform: rotate(90deg);
+}
+
+/* Der Schalter am Zeilenende: die geteilte `.toggle`-Bahn (layout.css, 3:1
+ * gegen jede Flaeche) in einer 44er Trefferflaeche. */
+.settings-page .tafla-switch {
+  flex: none;
+  min-height: var(--target-base);
+}
+
+/* Ein Verb am Zeilenende ("Przypomnij"), oder ein leiser Weg unter einer
+ * Gruppe ("Sprawdź połączenie"). */
+.settings-page .tafla-plain {
+  min-height: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-page .tafla-row .tafla-plain {
+  flex: none;
+  padding: 0;
+}
+
+.settings-page .tafla-plain:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Eine Auswahl als Wert: die native Liste, unsichtbar ueber dem Wort. */
+.settings-page .tafla-select {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-base);
+  color: var(--color-text-secondary);
+}
+
+.settings-page .tafla-select__control {
+  appearance: none;
+  min-height: var(--target-base);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-align: end;
+  cursor: pointer;
+}
+
+.settings-page .tafla-select svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-quaternary);
+}
+
+/* Personenscheibe im Leitplatz (Domownicy): 40 bei Personen, 20 im Hinweis. */
+.settings-page .tafla-disc {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--disc-tint);
+  color: var(--disc-ink);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-page .tafla-disc img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-page .tafla-row--person .tafla-row__lead {
+  width: 40px;
+}
+
+.settings-page .tafla-card > .tafla-row--person + *::before,
+.settings-page .tafla-card > .tafla-row--person + .tafla-row--person::before {
+  inset-inline-start: 68px;
+}
+
+.settings-page .tafla-row__you {
+  margin-inline-start: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+/* Status als Wort in der getoenten Pille. */
+.settings-page .tafla-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-page .tafla-pill--success {
+  background: var(--color-success-tint);
+  color: var(--color-success);
+}
+
+.settings-page .tafla-pill--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning);
+}
+
+/* --------------------------------------------------------
+   Asystent AI (Artboard AsystentAI.dc.html)
+   -------------------------------------------------------- */
+
+.ai-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.ai-page > .tafla-group {
+  margin-block-end: 0;
+}
+
+.ai-page > div:empty {
+  display: none;
+}
+
+.settings-page .ai-master {
+  padding-block-end: var(--space-4);
+}
+
+.settings-page .ai-master > .tafla-row .tafla-row__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-page .ai-master__text {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+/* Die eine Heldenzahl der Seite: was der Monat gekostet hat, in runden Ziffern. */
+.settings-page .ai-usage {
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-1);
+  color: var(--color-text-primary);
+}
+
+.settings-page .ai-usage__line {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.settings-page .ai-usage__hero {
+  flex: none;
+  font-family: var(--font-rounded);
+  font-size: var(--type-large-title);
+  line-height: var(--type-large-title-lh);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.settings-page .ai-usage__of {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.settings-page .ai-usage__bar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+}
+
+.settings-page .ai-usage__fill {
+  display: block;
+  width: calc(var(--ai-usage-share, 0) * 100%);
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-btn-primary);
+}
+
+.settings-page .ai-usage__note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.settings-page .ai-usage__edit {
+  justify-self: start;
+  padding: 0;
+}
+
+.settings-page .ai-memory-panel {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-2);
+}
+
+.settings-page .ai-memory-panel[hidden] {
+  display: none;
 }
 
 .ai-memory-item {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: var(--space-px) solid var(--color-border-subtle);
+  min-height: 48px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+}
+
+.ai-memory-item__text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
 }
 
 .ai-memory-item__topic {
-  font-size: var(--text-xs);
+  flex: none;
   color: var(--color-text-secondary);
-  border: var(--space-px) solid var(--color-border);
-  border-radius: var(--radius-full);
-  padding: 0 var(--space-2);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
 }
 
 .ai-memory-add {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-3);
 }
 
 .ai-memory-add input {
   flex: 1 1 220px;
+}
+
+
+/* --------------------------------------------------------
+   Moduly (Tafla, Artboard Moduly.dc.html; modules-active.js)
+
+   Zwei Gruppen - "Na później" mit dem Zweck jeder Zeile, "Włączone" - in
+   der Tafla-Zeile: der 28er Leitplatz mit dem nackten Zeichen, Titel 17/400,
+   der Schalter am Ende. Die Gruppenkoepfe stehen 17/600 in Tinte ohne Linie.
+   -------------------------------------------------------- */
+
+.settings-modules-panel {
+  padding: 0;
+  border: 0;
+}
+
+.settings-modules-panel .settings-navigation-groups {
+  margin-top: 0;
+}
+
+.settings-modules-panel .settings-navigation-group {
+  gap: var(--space-2);
+}
+
+.settings-modules-panel .settings-navigation-group__title {
+  padding: 0 var(--space-4);
+  border-bottom: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-modules-panel .settings-navigation-group__count {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.settings-modules-panel .settings-modules-list {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-work);
+  box-shadow: none;
+}
+
+.settings-modules-panel .settings-module-row--fixed {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-1) var(--space-4);
+}
+
+.settings-modules-panel .settings-module-row__icon {
+  width: 28px;
+  height: auto;
+  color: var(--color-text-secondary);
+}
+
+.settings-modules-panel .settings-module-row__icon .module-glyph,
+.settings-modules-panel .settings-module-row__icon svg {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+.settings-modules-panel .settings-module-row__title strong {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+  font-weight: var(--font-weight-regular);
+}
+
+.settings-modules-panel .settings-module-row__purpose {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.settings-modules-panel__hint {
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+/* Die Haarlinie beginnt auf der Titelspalte (56), wie in jeder Tafla-Liste. */
+.settings-modules-panel .settings-modules-list > * + * {
+  position: relative;
+  border-top: 0;
+}
+
+.settings-modules-panel .settings-modules-list > * + *::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+/* --------------------------------------------------------
+   Domownicy (Tafla, Artboard Domownicy; admin-family.js)
+
+   Die Menschen als 64er Zeilen mit der 40er Scheibe, die Einladungen ohne
+   Scheibe, "Dodaj domownika" und "Zaproś kogoś" als violette Zeilen in ihrer
+   Karte; das Logowanie dwuetapowe sagt seinen Zustand als Wort in der Pille.
+   -------------------------------------------------------- */
+
+.family-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.family-page > .tafla-group {
+  margin-block-end: 0;
+}
+
+.family-page .family-card .settings-members {
+  margin: 0;
+}
+
+.family-page .family-card .settings-members:empty {
+  display: none;
+}
+
+.family-page .settings-member {
+  position: relative;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+}
+
+.family-page .settings-members.row-divided > * + * {
+  border-top: 0;
+}
+
+.family-page .settings-members > .settings-member + .settings-member::before,
+.family-page .family-card > .settings-member-actions::before,
+.family-page .family-card > .tafla-row::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  block-size: 0.5px;
+  background: var(--color-separator);
+}
+
+.family-page #members-list > .settings-member + .settings-member::before {
+  inset-inline-start: 68px;
+}
+
+/* Grid-Kinder schrumpfen erst mit min-width 0 - sonst schob eine lange
+ * Meta-Zeile Bearbeiten und Entfernen aus der Karte. */
+.family-page .family-card > * {
+  min-width: 0;
+}
+
+.family-page .family-card > .settings-member-actions {
+  position: relative;
+  display: block;
+}
+
+.family-page .family-card > .settings-members:empty + .settings-member-actions::before {
+  display: none;
+}
+
+.family-page .settings-add-btn {
+  width: 100%;
+}
+
+.family-page .settings-avatar--sm {
+  width: 40px;
+  height: 40px;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Die Personenscheibe: Initial in der Tinte auf der Toenung (person-color.js). */
+.settings-avatar--person {
+  background: var(--disc-tint);
+  color: var(--disc-ink);
+}
+
+.family-page .settings-member__name {
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
+}
+
+.family-page .settings-member__meta {
+  margin-top: var(--space-1);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.family-page #invites-list > li.form-hint {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+}
+
+.family-page #two-factor-household-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.family-page #two-factor-household-card .settings-group {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.family-page .settings-2fa__member-icon--on,
+.family-page .settings-2fa__member-icon--off {
+  color: var(--color-text-secondary);
+}
+
+.family-page .settings-2fa__member-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-lh);
 }

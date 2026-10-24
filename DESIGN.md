@@ -1654,6 +1654,7 @@ Kernseite fuehrt es. Die Zuordnung aller Seiten:
 | `budget-stats.js` Budget-Statistik | Flaeche | Reiter des Budgets |
 | `budget-plans.js` Budget-Plan | Flaeche | Reiter des Budgets |
 | `subscriptions.js` Abos | Flaeche | `full` |
+| `more.js` Więcej | Lesemass | `reading` (Tafla, 2026-10-20): eine gruppierte Liste wie die Einstellungen |
 
 **Einstellungen (R10, 2026-09-27).** Drei Bereiche: Konto (fuer alle), Haushalt (Admin) und
 Module. Je Modul EIN Blatt wie Apples "Einstellungen > App": oben eine Statuszeile (Zustand
@@ -4619,6 +4620,60 @@ aufgeklappten Teil, das MHD lebt in der aufgeklappten Zeile, der Leerzustand hat
 im Mahlzeit-Blatt gibt es kein "Abbrechen" mehr (das X schliesst) und D4 zaehlt nur die
 Mahlzeitart-Radios; die Rezept-Tests lesen die neue Liste und das Detail (je mit Notiz).
 Zwei Zaehl-Schluessel ohne Substantiv stehen in der Plural-Ausnahmekarte.
+
+### Więcej und Ustawienia in Tafla (2026-10-20)
+
+**Więcej ist ein Ort, kein Blatt.** Der fuenfte Tab fuehrt auf `/more` (pages/more.js,
+styles/more.css); das Mehr-Blatt oeffnet nichts mehr, und der Kreis "Wróć: Więcej" geschobener
+Seiten kehrt dorthin zurueck. Reihenfolge: Large Title, Suchfeld (oeffnet die globale Suche),
+"Sprawy domowe", die Profilzeile (-> Ustawienia), "Przypięte" (2x2-Kacheln), die Gruppen Dom /
+Pieniądze i zdrowie / Na co dzień, Tablet w kuchni, dann Ustawienia, Pomoc, Nowości.
+- NUR WAS DA IST. Jede Zeile, Kachel und Sache kommt aus den Navigationszielen des Routers
+  (`window.yuvomi.navDestinations()`: an, erlaubt, nicht ausgeblendet) und aus Endpunkten, die
+  es gibt (`/dashboard`, `/documents?expiring=30`, `/housekeeping/visits`). Ein abgeschaltetes
+  Modul erscheint nirgends; eine Kachel ohne Aussage faellt weg.
+- "Sprawy domowe" (versteckt, wenn leer): offener Lohn der Haushaltshilfe -> "Zapłacone"
+  (`/visits/:id/pay`, Cofnij nur fuer Admins: `/unpay`), offene Aufteilung -> "Rozlicz"
+  (Zahlung `/settlements`, Cofnij = `/reverse`), Abfuhr morgen -> "Wystawione", Dokumente
+  binnen 30 Tagen -> "Otwórz", Medikamente zum Nachkaufen -> "Otwórz". Ein Verb je Zeile, 17/600
+  Violett; hoechstens drei Zeilen, danach "Jeszcze N" IN der Karte. "Wystawione" hat keinen
+  Serverzustand (das Modul kennt kein "rausgestellt"): es blendet die Zeile auf diesem Geraet
+  fuer diesen Tag aus.
+- Gepinnt wird pro Person (`more_pins` in `/preferences`, null = Vorgabe aus den Modulen,
+  hoechstens vier). Die Budget-Kachel ist die eine Heldenzahl der Seite (runde Ziffern).
+- Geld ist Tinte, die Waehrung tritt auf ink-2 zurueck; ganze Betraege ohne Nachkommastellen.
+
+**Ustawienia.** Die Wurzel ist die Ausweiskarte (56er Scheibe, Name 22/600, Rolle und
+Haushaltsgroesse - einen Haushaltsnamen gibt es nicht) und vier Gruppen: Ty, Dom, Moduły,
+Zaawansowane (zugeklappt: E-Mail, API, Kopie mit ihrem letzten Lauf, System, Rechte, Modul
+installieren). Die Modulblaetter stehen in "Ustawienia modułów" in der Karte. Jede Zeile traegt
+ihren WERT (settings/overview-values.js), aber nur aus einer Quelle, die es gibt: das Theme
+dieses Geraets, die eigene Personenfarbe, Push an/aus auf diesem Geraet, die Haushaltsgroesse,
+Tablett gekoppelt, AI an/aus, der Wetterort, die Zahl der Module, die letzte Sicherung (nach
+einem Neustart unbekannt -> kein Wert). Ruhezeiten, einen Geraetenamen und eine Tagesgrenze
+fuer Mitteilungen gibt es nicht; keine Zeile behauptet sie. "Wyloguj" leise in ink-2.
+Blaetter: der Kreis "Wróć: Ustawienia", Large Title, eine Zeile Untertitel.
+- Die Tafla-Liste der Blaetter ist `taflaRowHtml`/`taflaGroupHtml` (settings/components.js):
+  Kopf 17/600, flache Karte, Zeilen 48/64 mit 28er Slot, Wert ink-2, Chevron, Haarlinie ab 56,
+  Status als Wort in der Pille. Der Schalter bleibt die geteilte `.toggle`-Bahn: die helle
+  Aus-Bahn des Entwurfs (#ECE8E0 mit Ring) haelt 3:1 nicht (#1572), die AA-Bahn bleibt.
+- Asystent AI: Hauptschalter, die Monatskosten gegen das Limit als Heldenzahl mit Balken (Tipp
+  -> Limit), "Co AI widzi / Nigdy" nach der Datenregel des Servers (Namen von Produkten, Gerichten,
+  Rezepten; Fotos, die jemand schickt; die Saetze der Erinnerung; nie Gesundheit, Budget,
+  Dokumente, Kontakte, keine Personen), Funktionen, Erinnerung, Frage der Woche (So ab 10:00),
+  Haiku 5.5 / Sonnet 5.5, Schluessel nur als "zapisany".
+- Moduły: "Na później" (aus, mit dem Zweck des Moduls) ueber "Włączone"; eigene Module darunter.
+- Powiadomienia: dieses Geraet, dann nur Erinnerungen, die es gibt, mit ihrer echten Zeit (Abfuhr
+  je Art mit eigenem Schalter, Dosen, Termine, die zwei AI-Hinweise), dann die Haushaltskanaele.
+- Domownicy: Menschen (Personenscheibe, Tinte auf Toenung), "Dodaj domownika" und "Zaproś
+  kogoś" als violette Zeilen in ihrer Karte, Logowanie dwuetapowe mit dem Zustand als Pille
+  (ein Erinnern gibt es nicht, also kein "Przypomnij"), Konta dzieci, Tablet w kuchni.
+
+**Umgestellte Guards (2026-10-20).** Der Więcej-Tab ist ein navigierender Tab mit
+`aria-current` statt eines Disclosure-Knopfs (test-frontend-audit); die Marke der Wurzelzeile
+ist der 28er Slot statt der 32er Kachel (test-settings-navigation); Tafla-Karten zaehlen als
+gruppierte Zeilen (R17); das Aus-Wort eingebauter Module steht als Gruppe "Na później"
+(Drittmodule behalten es an der Zeile); Anlegen und Einladen sind Zeilen statt Knoepfe (R14).
 
 ## Do's and Don'ts
 

@@ -19,7 +19,6 @@ import {
   KITCHEN_CHILD_IDS,
   KITCHEN_CHILD_LABEL_KEYS,
   NAV_SECTION,
-  NAV_SECTIONS,
   NAV_SECTION_LABEL_KEYS,
   moduleSection,
 } from '/settings/module-order.js';
@@ -181,8 +180,22 @@ function statusChipHtml(row) {
     if (row.enabled && row.status === t('settings.thirdPartyModulesStatusEnabled')) return '';
     return `<span class="settings-module-status settings-module-status--disabled">${esc(row.status)}</span>`;
   }
-  if (row.enabled) return '';
-  return `<span class="settings-module-status settings-module-status--disabled">${esc(t('settings.thirdPartyModulesStatusDisabled'))}</span>`;
+  // TAFLA: ein abgeschaltetes eingebautes Modul steht in der Gruppe "Na
+  // później" - die Gruppe nennt den Zustand, die Zeile ihren Zweck.
+  return '';
+}
+
+/**
+ * TAFLA (Artboard Moduly): zwei Gruppen statt der Navigationssektionen -
+ * "Na później" (was aus ist, mit seinem Zweck in einer Zeile) ueber
+ * "Włączone". Eigene Module behalten ihre Gruppe darunter.
+ */
+const LATER_SECTION = 'later';
+const ON_SECTION = 'on';
+
+function taflaSection(row) {
+  if (row.type === 'third-party') return NAV_SECTION.customModules;
+  return row.enabled ? ON_SECTION : LATER_SECTION;
 }
 
 function rowHtml(row) {
@@ -255,6 +268,7 @@ function rowHtml(row) {
           ${row.type === 'third-party' ? `<span class="settings-module-origin">${esc(t('settings.modulesExternalBadge'))}</span>` : ''}
           ${statusChipHtml(row)}
         </div>
+        ${!row.enabled && row.type !== 'third-party' && purposeText(row.id) ? `<p class="settings-module-row__purpose">${esc(purposeText(row.id))}</p>` : ''}
         ${row.error ? `<p class="form-error" role="alert">${esc(row.error)}</p>` : ''}
         ${kitchenPanel}
       </div>
@@ -368,12 +382,26 @@ function emptyCustomModulesElement() {
   return section;
 }
 
+/** Der Zweck eines Moduls in einer Zeile ("zmiany w pracy") - oder ''. */
+function purposeText(id) {
+  const key = `settings.modulePurpose.${id}`;
+  const text = t(key);
+  return text === key ? '' : text;
+}
+
+function sectionLabel(section) {
+  if (section === LATER_SECTION) return t('settings.modulesLater');
+  if (section === ON_SECTION) return t('settings.modulesOn');
+  return t(NAV_SECTION_LABEL_KEYS[section]);
+}
+
 function sectionHtml(section, rows) {
   const inSection = rows.filter((row) => row.section === section);
   if (!inSection.length) return '';
+  const count = section === NAV_SECTION.customModules ? '' : ` <span class="settings-navigation-group__count">${esc(String(inSection.length))}</span>`;
   return `
     <section class="settings-navigation-group" data-module-section="${esc(section)}">
-      <h3 class="settings-navigation-group__title">${t(NAV_SECTION_LABEL_KEYS[section])}</h3>
+      <h3 class="settings-navigation-group__title">${esc(sectionLabel(section))}${count}</h3>
       <div class="row-carrier settings-modules-list">${inSection.map(rowHtml).join('')}</div>
     </section>
   `;
@@ -599,16 +627,20 @@ async function renderActiveModules(container, user) {
     return;
   }
 
-  const rows = buildRows(preferences, thirdPartyModules, installInfo);
+  // Tafla: aus, an, eigene - statt der Navigationssektionen (Plan, Dom, ...).
+  const rows = buildRows(preferences, thirdPartyModules, installInfo)
+    .map((row) => ({ ...row, section: taflaSection(row) }));
 
+  // Der Titel des Abschnitts ist der Name, unter dem die Suche ihn findet
+  // (registry.js `options`); sichtbar sagt es der Blatt-Titel schon.
   container.insertAdjacentHTML('beforeend', `
     <section class="settings-section">
-      <section class="settings-navigation-panel">
-        <h2 class="settings-navigation-panel__title">${t('settings.activeModulesTitle')}</h2>
-        <p class="form-hint">${t('settings.activeModulesHint')}</p>
+      <section class="settings-navigation-panel settings-modules-panel">
+        <h2 class="settings-navigation-panel__title sr-only">${t('settings.activeModulesTitle')}</h2>
         <div class="settings-navigation-groups" id="module-toggles">
-          ${NAV_SECTIONS.map((section) => sectionHtml(section, rows)).join('')}
+          ${[LATER_SECTION, ON_SECTION, NAV_SECTION.customModules].map((section) => sectionHtml(section, rows)).join('')}
         </div>
+        <p class="form-hint settings-modules-panel__hint">${t('settings.activeModulesHint')}</p>
       </section>
     </section>
   `);
