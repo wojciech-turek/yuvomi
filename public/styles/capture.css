@@ -629,6 +629,12 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
     margin-inline-end: 0;
   }
 
+  /* Auch der Budget-Kopf: quer steht der Rueckweg vor Titel und Zeitraum,
+   * nicht in einer eigenen Zeile darueber (Sonde 15, 640x400: 3 -> 2 Zeilen). */
+  .page-toolbar.page-toolbar--period-inline:not(.page-toolbar--in-group):has(> .page-back) > .page-back {
+    margin-inline-end: 0;
+  }
+
   .page-toolbar:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> .page-back) > .page-toolbar__title {
     order: -1;
     flex: 1 1 0;
