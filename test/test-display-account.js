@@ -544,8 +544,8 @@ test('das Display liest die Aufgaben je Person fuer die Wand - nur die haushalts
   assert.equal((await admin('POST', '/tasks', { title: 'Wand: fuer alle', visibility: 'all', ...shared })).status, 201);
   assert.equal((await admin('POST', '/tasks', { title: 'Wand: nur Zugewiesene', visibility: 'assignees', ...shared })).status, 201);
 
-  const titlesFor = async (request) => {
-    const res = await request('GET', '/dashboard');
+  const titlesFor = async (request, path = '/dashboard') => {
+    const res = await request('GET', path);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.wallTasks), 'Reichweite: die Antwort traegt wallTasks');
     return (res.body.wallTasks.find((entry) => entry.user_id === adminId)?.open ?? []).map((task) => task.title);
@@ -553,10 +553,14 @@ test('das Display liest die Aufgaben je Person fuer die Wand - nur die haushalts
   const onDisplay = await titlesFor(asDisplay(displayToken));
   assert.ok(onDisplay.includes('Wand: fuer alle'));
   assert.ok(!onDisplay.includes('Wand: nur Zugewiesene'));
-  // Und dieselbe Liste aus der Sitzung der zugewiesenen Person selbst. Das
-  // gilt fuer dieselbe Anfrage: eine Kategorie-Auswahl (`tasks_category`)
+  // Und dieselbe Liste aus der Sitzung der zugewiesenen Person selbst, wenn sie
+  // die geteilte Flaeche abfragt. Eine Kategorie-Auswahl (`tasks_category`)
   // schraenkt die Liste fuer den ein, der sie mitschickt.
-  assert.deepEqual(await titlesFor(admin), onDisplay, 'ohne Filter liefert dieselbe Anfrage jedem dieselbe Liste');
+  assert.deepEqual(await titlesFor(admin, '/dashboard?audience=household'), onDisplay,
+    'ohne Filter liefert dieselbe Anfrage jedem dieselbe Liste');
+  // Die persoenliche Uebersicht (Dziś) rechnet das Feld nicht (2026-10-24): es
+  // kommt leer, in derselben Form.
+  assert.deepEqual(await titlesFor(admin), [], 'persoenlich bleibt wallTasks leer');
 });
 
 // --------------------------------------------------------
