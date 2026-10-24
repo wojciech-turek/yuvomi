@@ -136,6 +136,25 @@ a.inset-row {
   pointer-events: none;
 }
 
+/* A card whose rows are not `.inset-row`s or `li`s (swipe rows, list rows,
+ * articles): the same hairline between ANY two direct children, inset to the
+ * title column. Above a swipe row's reveal surfaces (z-index). 2026-10-24:
+ * Urodziny, Kontakty and Sprzątanie each drew this themselves. */
+.inset-card--rows > * {
+  position: relative;
+}
+
+.inset-card--rows > * + *::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 56px 0;
+  z-index: 1;
+  block-size: 0.5px;
+  background: var(--color-separator);
+  pointer-events: none;
+}
+
 @media (hover: hover) {
   button.inset-row:hover,
   a.inset-row:hover {
@@ -189,6 +208,23 @@ a.inset-row:active {
   line-height: var(--type-body-lh);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
+}
+
+/* The title as its own button (the row's check opens nothing, the name opens
+ * the item): a bare button over the full row height. */
+button.inset-row__title {
+  align-self: stretch;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+button.inset-row__title:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 .inset-row__meta {
@@ -256,6 +292,66 @@ a.inset-row:active {
 .inset-row--action .inset-row__lead,
 .inset-row--action .inset-row__title {
   color: var(--color-accent);
+}
+
+/* --------------------------------------------------------
+ * Segmented control (Tafla "Segment"): a place, not an action
+ *
+ * A 36 track in --fill, the chosen segment on the raised surface with the
+ * card shadow, never violet. 13/600. Each segment is 32 visible and reaches
+ * the full target through its ::after. The chosen state is whatever the
+ * markup says: aria-pressed, aria-selected, aria-current or .is-active.
+ * 2026-10-24: lifted from Zdrowie's person switch, which had it alone.
+ * -------------------------------------------------------- */
+
+.seg-control {
+  display: flex;
+  inline-size: 100%;
+  block-size: 36px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+}
+
+.seg-control__item {
+  position: relative;
+  flex: 1 1 0;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.seg-control__item::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--target-base) - 32px) / -2) 0;
+}
+
+.seg-control__item:is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"], .is-active) {
+  background: var(--color-raised);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-e1);
+}
+
+.seg-control__item:focus-visible {
+  outline-offset: var(--focus-ring-offset-inset);
 }
 
 /* --------------------------------------------------------

@@ -35,9 +35,9 @@ export function personSwitcherMarkup(members, activeId, meId, { menuId, label })
     const ordered = [...list].sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : 0));
     return `
     <div class="health-person-switcher health-person-switcher--seg">
-      <div class="health-person-seg" id="${esc(menuId)}" role="group" aria-label="${esc(label)}">
+      <div class="health-person-seg seg-control" id="${esc(menuId)}" role="group" aria-label="${esc(label)}">
         ${ordered.map((m) => `
-          <button type="button" class="health-person-seg__item" data-person-id="${esc(m.id)}"
+          <button type="button" class="health-person-seg__item seg-control__item" data-person-id="${esc(m.id)}"
                   aria-pressed="${m.id === active.id}">${esc(m.id === meId ? t('health.person.you') : m.display_name)}</button>`).join('')}
       </div>
     </div>`;

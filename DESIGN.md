@@ -3897,6 +3897,13 @@ Dates in rows come from `utils/day-label.js`: `pastDateLabel` (time today, "wczo
 "16 paź" - a past day never gets a weekday), `shortDayMonth`, `shortWeekdayDayMonth` ("wt 27 paź").
 On touch a row carries no "⋯" and no pin: they leave the picture via `clip-path`, not the focus
 tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
+Since 2026-10-24 the sheet also holds what modules had built alone: `.inset-card--rows` (the
+inset hairline between ANY children - swipe rows, list rows, articles), `button.inset-row__title`
+(a name that opens its item over the full row height), an action row as a button
+(`.inset-row.inset-row--action`, title in the accent too) and `.seg-control` (Tafla's neutral
+segmented control: 36 track in `--fill`, the chosen segment raised, never violet, 32 visible with
+a full-height hit). Modules keep only real differences (Zdrowie: the row's reserved two-line
+height; Sprzątanie: the visit log's padding).
 
 - **Notatki**: pinned notes as 2-up preview tiles (glyph, title 17/600, two lines of preview, the
   author's disc when it is someone else's), then "Ostatnie" as one list of 64 rows (title + date,

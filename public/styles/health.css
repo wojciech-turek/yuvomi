@@ -287,49 +287,14 @@
   display: none;
 }
 
-/* Die Flaeche der Gruppe. NICHT `.row-carrier`: der kappt auf --page-measure,
- * und die Gesundheit laeuft als Dashboard-Seite mit vollem Kopf (PAGE-016) -
- * dieselbe Begruendung wie `.health-vitals__more-list` weiter unten. Die
- * Haarlinien kommen aus `.row-divided` (list-row.css), Flaeche, Ecke und
- * Schatten sind die des Traegers. */
-.health-areas__group {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow: hidden;
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-}
+/* Die Flaeche der Gruppe ist die geteilte `.inset-card` (inset-list.css). NICHT
+ * `.row-carrier`: der kappt auf --page-measure, und die Gesundheit laeuft als
+ * Dashboard-Seite mit vollem Kopf (PAGE-016). */
 
 /* Schmal ist die Seite selbst die Übersicht - eine Zeile zu ihr wäre ein
  * Link auf sich. Ab der Schwelle steht sie als erste Zeile (unten). */
 .health-areas__overview {
   display: none;
-}
-
-/* Tafla: "Dziennik" ist ein Gruppenkopf (17/600, inset-list.css), kein
- * Abschnittstitel - 8 ueber der Karte, die Luecke davor gibt .health-browse. */
-.health-areas__title {
-  margin: 0;
-}
-
-.health-area-row {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Das Zeichen im 28er-Slot der Zeile (inset-list.css), Tinte-2, 20. */
-.health-area-row__icon {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  color: var(--color-text-secondary);
-}
-
-.health-area-row__icon svg {
-  width: 20px;
-  height: 20px;
 }
 
 /* IMMER ZWEI ZEILEN HOCH (R18, #1770). Der Status kommt nach dem Namen an
@@ -356,29 +321,11 @@
   flex: 0 0 auto;
 }
 
-/* Ein Wert ist EINE Zeile: lieber abgekürzt als ein Umbruch, der die Zeile
- * höher macht als ihre Nachbarn (Medikamentennamen, lange Einheiten). */
-.health-area-row__status {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
+/* Zeichen, Kante, Pfeil, Titel und Wert (eine Zeile, abgekuerzt) sind die der
+ * geteilten Zeile (`.inset-row__*`, inset-list.css); hier bleiben die feste
+ * Hoehe oben und das Verschwinden eines leeren Werts. */
 .health-area-row__status:empty {
   display: none;
-}
-
-.health-area-row__chevron {
-  flex: 0 0 auto;
-  /* 3:1 als Grafik in einer antippbaren Zeile (WCAG 1.4.11), wie in Dziś. */
-  color: var(--color-text-quaternary);
-}
-
-.health-area-row__chevron svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* ---- Ab der Split-Schwelle: Liste links, Bereich rechts ----
@@ -4220,57 +4167,9 @@ button.cycle-cal__day:not(:disabled):hover { background: var(--color-surface-2);
  * ========================================================================== */
 
 /* ---- Personenwahl: Segment-Schalter (bis drei Personen) ----
- * Spur in --color-fill, die gewaehlte Person auf der erhabenen Flaeche, nie
- * violett: die Wahl ist ein Ort, keine Handlung (wie die Kuchnia-Segmente). */
-.health-person-seg {
-  display: flex;
-  inline-size: 100%;
-  block-size: 36px;
-  padding: 2px;
-  box-sizing: border-box;
-  border-radius: var(--radius-full);
-  background: var(--color-fill);
-}
-
-.health-person-seg__item {
-  position: relative;
-  flex: 1 1 0;
-  min-inline-size: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-/* 32 sichtbar, die Trefferflaeche reicht in die Spur und darueber hinaus. */
-.health-person-seg__item::after {
-  content: '';
-  position: absolute;
-  inset: calc((var(--target-base) - 32px) / -2) 0;
-}
-
-.health-person-seg__item[aria-pressed="true"] {
-  background: var(--color-raised);
-  color: var(--color-text-primary);
-  box-shadow: var(--shadow-e1);
-}
-
-.health-person-seg__item:focus-visible {
-  outline-offset: var(--focus-ring-offset-inset);
-}
-
+ * Der Schalter ist der geteilte `.seg-control` (inset-list.css, 2026-10-24):
+ * Spur in --fill, die gewaehlte Person auf der erhabenen Flaeche, nie violett -
+ * die Wahl ist ein Ort, keine Handlung. Hier bleibt nur seine Breite. */
 .health-priority > .health-person-switcher--seg {
   align-self: stretch;
 }

@@ -38,23 +38,8 @@
   gap: var(--space-6);
 }
 
-/* Haarlinien zwischen den Zeilen einer Monatskarte, eingerueckt auf x=56.
- * An den Wisch-Huellen, nicht an der Zeile: zwischen Karte und Zeile liegt
- * `.swipe-row`. */
-.birthdays-card > .swipe-row {
-  position: relative;
-}
-
-.birthdays-card > .swipe-row + .swipe-row::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  z-index: 1;
-  block-size: 0.5px;
-  background: var(--color-separator);
-  pointer-events: none;
-}
+/* Haarlinien zwischen den Zeilen einer Monatskarte kommen von
+ * `.inset-card--rows` (inset-list.css) - an den Wisch-Huellen. */
 
 .birthday-item {
   min-height: 64px;

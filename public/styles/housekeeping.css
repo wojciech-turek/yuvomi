@@ -1142,57 +1142,8 @@
 
 /* Chores for the next visit: 48 rows, the 44 check circle drawn in the 28
  * slot so the name starts at x=56 like every row title. */
-.housekeeping-chore {
-  gap: var(--space-3);
-}
-
 .housekeeping-chore .housekeeping-task__check {
   margin-inline: calc((var(--target-lg) - 28px) / -2);
-}
-
-.housekeeping-chore__name {
-  flex: 1;
-  min-width: 0;
-  align-self: stretch;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-text-primary);
-  font: inherit;
-  text-align: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.housekeeping-chore__name:focus-visible,
-.housekeeping-chore__add:focus-visible {
-  outline-offset: var(--focus-ring-offset-inset);
-}
-
-.housekeeping-chore--add {
-  padding: 0;
-}
-
-.housekeeping-chore__add {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  min-block-size: 48px;
-  padding: 0 var(--space-4);
-  border: 0;
-  background: none;
-  color: var(--color-accent);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.housekeeping-chore__add .inset-row__lead,
-.housekeeping-chore__add .inset-row__title {
-  color: var(--color-accent);
 }
 
 /* The last visits on this page: an inset card of 48 rows. The staff log keeps
@@ -1215,23 +1166,10 @@
   padding-block: 0;
 }
 
-.housekeeping-visit-row--compact {
-  position: relative;
-}
-
-/* Hairlines inset to the title column, like every inset card. */
+/* Hairlines inset to the title column come from `.inset-card--rows`
+ * (inset-list.css); the log's own top border steps aside. */
 .housekeeping-visit-row--compact.housekeeping-staff-log-row + .housekeeping-staff-log-row {
   border-top: 0;
-}
-
-.housekeeping-visit-row--compact + .housekeeping-visit-row--compact::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  block-size: 0.5px;
-  background: var(--color-separator);
-  pointer-events: none;
 }
 
 .housekeeping-visit-row--compact .list-row__main {

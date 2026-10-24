@@ -576,7 +576,7 @@ function birthdayListHtml(list) {
   return groups.map(({ key, rows }) => `
     <section class="inset-group birthdays-group">
       ${key ? `<h2 class="inset-group__head birthdays-month">${esc(monthHeading(key))}<span class="inset-group__count">${rows.length}</span></h2>` : ''}
-      <div class="inset-card birthdays-card">${rows.join('')}</div>
+      <div class="inset-card inset-card--rows birthdays-card">${rows.join('')}</div>
     </section>`).join('');
 }
 

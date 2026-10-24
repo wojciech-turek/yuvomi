@@ -699,7 +699,7 @@ function drawList(container, { animate = false } = {}) {
   container.insertAdjacentHTML('beforeend', groups.map(({ letter, items }) => `
       <section class="contact-group inset-group" aria-label="${esc(letter)}">
         <h2 class="contact-group__header">${esc(letter)}</h2>
-        <div class="contact-group__list inset-card">${items.map((c) => renderContactItem(c)).join('')}</div>
+        <div class="contact-group__list inset-card inset-card--rows">${items.map((c) => renderContactItem(c)).join('')}</div>
       </section>
     `).join(''));
 

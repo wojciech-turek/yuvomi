@@ -6867,7 +6867,8 @@ test('hardening keeps Birthday rows on one line with extreme localized content',
   // Tafla (2026-10-20): the cards are the MONTH GROUPS now - each one the
   // shared inset card (inset-list.css), not a rebuilt surface - and the list
   // host is a plain column that owns the container itself.
-  assert.match(read('../public/pages/birthdays.js'), /<div class="inset-card birthdays-card">/,
+  // 2026-10-24, Tafla: plus `.inset-card--rows`, the shared hairlines.
+  assert.match(read('../public/pages/birthdays.js'), /<div class="inset-card inset-card--rows birthdays-card">/,
     'jede Monatsgruppe traegt die geteilte Karte, statt sie nachzubauen');
   assert.match(cssRuleBody(birthdays, '.birthdays-list'), /container-type:\s*inline-size/,
     'ohne Container am Traeger fragt der Query ins Leere und die Notiz bliebe fuer immer aus');

@@ -782,10 +782,14 @@ test('R18: eine Bereichszeile ist immer zwei Zeilen hoch - ihr Status schiebt ni
   // Der Name darf die reservierte Hoehe nicht selbst fuellen (.list-row__name waechst im Flex-Traeger).
   const name = rules.find((r) => r.selector.trim() === '.health-area-row__main > .health-area-row__name');
   assert.ok(name && /flex:\s*0 0 auto/.test(name.body), 'sonst steht der Name oben statt mittig');
-  // Reichweite der Rechnung: der Status laeuft wirklich in --text-sm.
-  const status = rules.filter((r) => r.selector.trim() === '.health-area-row__status').map((r) => r.body).join(';');
-  assert.match(status, /font-size:\s*var\(--text-sm\)/);
-  assert.match(status, /white-space:\s*nowrap/, 'und bleibt eine Zeile');
+  // Reichweite der Rechnung: der Status laeuft wirklich in der Footnote (13,
+  // = --text-sm) und bleibt eine Zeile. 2026-10-24, Tafla: das traegt die
+  // geteilte Metazeile (`.inset-row__meta`, inset-list.css), die die Zeile
+  // ohnehin fuehrt - die Kopie in health.css ist gegangen.
+  assert.match(read('public/pages/health.js'), /class="inset-row__meta health-area-row__status"/);
+  const shared = [...eachRule(read('public/styles/inset-list.css'))].filter((r) => r.selector.trim() === '.inset-row__meta').map((r) => r.body).join(';');
+  assert.match(shared, /font-size:\s*var\(--type-footnote\)/);
+  assert.match(shared, /white-space:\s*nowrap/, 'und bleibt eine Zeile');
 });
 
 test('R18: kein Bereich laedt mehr mit dem Wort "Lade..." - jeder traegt ein Skelett', () => {
