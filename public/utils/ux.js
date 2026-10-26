@@ -1352,23 +1352,9 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
   const onMenuToggle = (e) => {
     const panel = e.target;
     if (!(panel instanceof Element) || !panel.matches('.popover-menu')) return;
-    // DIE GEDECKELTE FALTUNG (R17 Schritt 5, Kalender). Ein eingeklappter Kopf
-    // der gedeckelten Architektur darf Werkzeuge abgeben, wenn sein Menue sie
-    // aufnimmt: das Modul markiert sie (`data-collapse-fold`) und das Menue
-    // (`data-collapse-fold-menu`), sein Stylesheet blendet sie eingeklappt
-    // aus. Hier entstehen - wie bei der Faltung der scrollenden Koepfe - nur
-    // die Stellvertreter, und nur fuer das, was gerade WIRKLICH nicht zu
-    // sehen ist: wo das Stylesheet nichts ausblendet (breiter Kopf, aktiver
-    // Filter), entsteht auch kein zweiter Weg zur selben Handlung.
-    const foldMenu = capped ? toolbar.querySelector('[data-collapse-fold-menu][popovertarget]') : null;
-    if (foldMenu && foldMenu.getAttribute('popovertarget') === panel.id) {
-      clearDockFoldItems(panel, foldMenu);
-      if (e.newState === 'open' && toolbar.classList.contains('is-collapsed')) {
-        fillDockFoldItems(panel, [...toolbar.querySelectorAll('[data-collapse-fold]')]
-          .filter((el) => el.getClientRects().length === 0));
-      }
-      return;
-    }
+    // Die gedeckelte Faltung (`data-collapse-fold`, R17 Schritt 5) stand hier,
+    // bis 2026-10-24: ihr einziger Nutzer war der Kalender, und sein Tafla-Kopf
+    // fuehrt Schritte und Filter im Ansichtsmenue selbst.
     const actions = toolbar.querySelector(':scope > .page-toolbar__actions');
     const menu = actions ? dockFoldMenu(actions) : null;
     if (menu?.panel !== panel) return;

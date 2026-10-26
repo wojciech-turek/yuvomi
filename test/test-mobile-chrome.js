@@ -349,14 +349,20 @@ test('R17/Tafla: der Kalenderkopf ist eingeklappt EINE Zeile, und was mobil fehl
   assert.doesNotMatch(calendarJs, /id="cal-search"/, 'kein Suchknopf mehr');
   assert.match(calendarJs, /id: 'cal-search-input'/, 'die Suche ist das Feld der Shell');
 
-  // Die Faltmechanik der Shell selbst bleibt geprueft (utils/ux.js), auch
-  // wenn der Kalender sie seit Tafla nicht mehr nutzt.
+  // Die gedeckelte Faltung der Shell (`data-collapse-fold`) ist 2026-10-24
+  // entfernt (Tafla): der Kalender war ihr einziger Nutzer. Kein Modul darf
+  // sie wieder voraussetzen - es gaebe niemanden, der die Stellvertreter baut.
   const ux = read('../public/utils/ux.js');
-  const branch = ux.match(/const foldMenu = capped \?[\s\S]*?\n    \}\n/)?.[0] ?? '';
-  assert.match(branch, /\[data-collapse-fold-menu\]\[popovertarget\]/, 'der Kopf findet das markierte Menue');
-  assert.match(branch, /classList\.contains\('is-collapsed'\)/, 'Stellvertreter nur eingeklappt');
-  assert.match(branch, /getClientRects\(\)\.length === 0/,
-    'und nur fuer das, was gerade nicht zu sehen ist - sonst stuende dieselbe Handlung zweimal da');
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code(ux), /data-collapse-fold/, 'die Shell kennt die gedeckelte Faltung nicht mehr');
+  for (const dir of ['pages', 'components', 'utils', 'settings']) {
+    const base = new URL(`../public/${dir}/`, import.meta.url);
+    for (const f of readdirSync(base).filter((n) => n.endsWith('.js'))) {
+      assert.doesNotMatch(code(readFileSync(new URL(f, base), 'utf8')), /data-collapse-fold/, `${dir}/${f} setzt die entfernte Faltung voraus`);
+    }
+  }
+  // Die Faltung der scrollenden Koepfe (`data-dock-fold`) bleibt; ein inerter
+  // Reset ist dort kein Eintrag.
   assert.match(ux, /btn\.disabled \|\| btn\.inert/, 'ein inerter Reset ("Heute" im laufenden Zeitraum) ist kein Eintrag');
   assert.match(ux, /reserve \+ shorter/, 'die Reserve-Regel rechnet mit der AUSGEKLAPPTEN Hoehe, sonst pendelt eine knappe Liste');
 });
