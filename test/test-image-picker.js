@@ -217,7 +217,9 @@ test('alle Meldungsschlüssel der Aufnahme existieren in der Referenz-Locale', (
   collect(cropSource);
   for (const file of FILES) collect(readFileSync(file, 'utf8'));
 
-  assert.ok(keys.size >= 7, `nur ${keys.size} Schlüssel gefunden - erwartet mindestens 7`);
+  // 7 -> 6 (Tafla, 2026-10-27): der Schnelllink-Editor (quick-links-manager.js) ist mit dem
+  // alten Widget-Raster entfernt; seine drei quickLinks.icon*-Schlüssel zählen nicht mehr.
+  assert.ok(keys.size >= 6, `nur ${keys.size} Schlüssel gefunden - erwartet mindestens 6`);
   for (const key of keys) {
     assert.strictEqual(typeof lookup(key), 'string', `de.json kennt "${key}" nicht`);
   }
