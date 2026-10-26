@@ -295,15 +295,11 @@
  * ================================================================ */
 
 /* ================================================================
- * 6. Cards — Glass auf hover (nur interaktive Cards)
+ * 6. Cards - entfallen (2026-10-26)
+ *
+ * Hier stand ein Glas-Hover fuer `.card--interactive`. Die Klasse vergibt
+ * seit dem Abbau des Widget-Boards niemand mehr.
  * ================================================================ */
-@media (hover: hover) {
-  .card--interactive:hover {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border-subtle);
-    box-shadow: var(--shadow-md);
-  }
-}
 
 /* ================================================================
  * 7. Accessibility Overrides — Phase 1
@@ -718,23 +714,11 @@ html.navigating .app-content *::after {
  * ================================================================ */
 
 /* ================================================================
- * 29. Note-Items — opake Karten
+ * 29. Note-Items - entfallen (2026-10-26)
  *
- * Der Dashboard-Zweig trug bis zum HIG-Rollout Glas (glass-bg-card +
- * blur-xs) und lief damit gegen die Glas-ist-Chrome-Regel. Beide Zweige
- * teilen jetzt dieselbe opake Kartenfläche; der @supports-Rahmen ist
- * entfallen, weil hier nichts mehr an backdrop-filter hängt.
+ * `.note-item` war die Notiz im Dashboard-Widget; das Widget-Board ist weg,
+ * und die Notizseite baut ihre Zeilen und Kacheln selbst (notes.css).
  * ================================================================ */
-.notes-page .note-item {
-  background-color: var(--color-surface-work);
-  border: 1px solid var(--color-border-subtle);
-  box-shadow: var(--shadow-sm);
-}
-
-.notes-page .note-item:hover {
-  background-color: var(--color-surface-raised);
-  box-shadow: var(--shadow-md);
-}
 
 /* ================================================================
  * 30. Meal-Slots — opake Grid-Zellen
@@ -750,9 +734,8 @@ html.navigating .app-content *::after {
   background-color: var(--color-surface-raised);
 }
 
-.meals-page .meal-slot--filled {
-  background-color: color-mix(in srgb, var(--module-accent, var(--module-meals)) var(--tint-wash), var(--color-surface-raised));
-}
+/* `.meal-slot--filled` stand hier bis 2026-10-26 - das Raster vergibt nur
+ * noch leere Plaetze (`--empty`), ein belegter ist eine Karte. */
 
 /* ================================================================
  * 31. Form-Inputs — Arbeitsfläche
