@@ -19,7 +19,7 @@
  * esc() (kein innerHTML, Hausregel).
  */
 import { api } from '/api.js';
-import { t, getLocale } from '/i18n.js';
+import { t, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { openModal, closeModal, captureModalContext } from '/components/modal.js';
 import { navModuleAccess } from '/permissions.js';
@@ -179,7 +179,7 @@ function quantityText(item) {
   if (item.quantity == null) return undefined;
   let n;
   try {
-    n = new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 3 }).format(item.quantity);
+    n = getNumberFormat({ maximumFractionDigits: 3 }).format(item.quantity);
   } catch {
     n = String(item.quantity);
   }
