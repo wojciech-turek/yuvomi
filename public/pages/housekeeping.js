@@ -815,8 +815,8 @@ function visitChoresHtml(guess) {
           <button type="button" class="housekeeping-chore__name inset-row__title" data-edit-task="${esc(task.id)}">${esc(task.name)}</button>`}
         </li>`).join('');
   const add = ro ? '' : `
-        <li class="inset-row inset-row--single inset-row--action housekeeping-chore housekeeping-chore--add">
-          <button type="button" class="housekeeping-chore__add" data-create-task>
+        <li class="housekeeping-chore--add">
+          <button type="button" class="inset-row inset-row--single inset-row--action housekeeping-chore__add" data-create-task>
             <span class="inset-row__lead"><i data-lucide="plus" aria-hidden="true"></i></span>
             <span class="inset-row__title">${esc(t('housekeeping.addTask'))}</span>
           </button>
@@ -902,7 +902,7 @@ function renderDashboard(content) {
     <div class="housekeeping-dashboard-columns${amountsHidden(data.monthly_payments) ? ' housekeeping-dashboard-columns--single' : ''}">
     <section class="housekeeping-section inset-group" aria-labelledby="housekeeping-recent-title">
       <h2 class="inset-group__head" id="housekeeping-recent-title">${esc(t('housekeeping.recentVisits'))}</h2>
-      <div class="inset-card housekeeping-staff-log-list">
+      <div class="inset-card inset-card--rows housekeeping-staff-log-list">
         ${recentRows || `<p class="housekeeping-muted">${esc(t('housekeeping.noVisits'))}</p>`}
       </div>
     </section>
@@ -1180,7 +1180,7 @@ async function completeTask(task, content, button = null) {
   // und erst danach wird neu gezeichnet - sonst ersetzte das Neuzeichnen den
   // Knopf, bevor sie einen Frame bekam (acknowledgeCheck()).
   vibrate(15);
-  button?.classList.add('housekeeping-task__check--done');
+  button?.classList.add('housekeeping-task__check--done', 'check-ring--done');
   button?.setAttribute('aria-busy', 'true');
   const settled = acknowledgeCheck(button, { checked: true });
   try {
@@ -1191,7 +1191,7 @@ async function completeTask(task, content, button = null) {
     if (content?.isConnected && state.tab === 'tasks') renderTasks(content);
     else if (content?.isConnected && state.tab === 'dashboard') renderDashboard(content);
   } catch (err) {
-    button?.classList.remove('housekeeping-task__check--done');
+    button?.classList.remove('housekeeping-task__check--done', 'check-ring--done');
     button?.removeAttribute('aria-busy');
     window.yuvomi?.showToast(err.message, 'danger');
   }

@@ -2306,11 +2306,15 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 /* Die Valenz der Zahl (nav-badges.js, paint): Danger ist die gerissene Frist,
  * Warning die ablaufende, Accent die Nachricht. Ein Geburtstag in drei Tagen
  * stand vorher im selben Alarm-Rot wie eine ueberfaellige Aufgabe - und das
- * Mehr-Blatt zaehlte dieselbe Zahl neutral (Critique 2026-08-27). Tinte
- * bleibt --color-ink-on-vivid: dieselbe Paarung wie FAB (accent) und
- * Kuechen-Warnzaehler (warning). */
+ * Mehr-Blatt zaehlte dieselbe Zahl neutral (Critique 2026-08-27). Danger und
+ * Warning tragen --color-ink-on-vivid (Kuechen-Warnzaehler).
+ *
+ * 2026-10-24, Tafla: die Nachricht ist eine Zahl AUF Violett - also die
+ * Fuell-Rolle (--color-btn-primary, dunkel #7C52F2) mit weisser Ziffer wie das
+ * +, nicht die Text-Rolle --color-accent (dunkel #B49CFF mit schwarzer Ziffer). */
 .nav-badge--accent {
-  background-color: var(--color-accent);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
 }
 
 .nav-badge--warning {
@@ -5419,8 +5423,10 @@ a.popover-menu__item {
   height: var(--space-4);
   padding-inline: var(--space-0h);
   border-radius: var(--radius-full);
-  background: var(--module-accent, var(--color-accent));
-  color: var(--color-ink-on-vivid);
+  /* 2026-10-24, Tafla: eine Zahl auf Violett ist die Fuell-Rolle mit weisser
+   * Ziffer (vorher Modulton + --color-ink-on-vivid, dunkel hell mit schwarz). */
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
   font-size: var(--text-2xs);
   font-weight: var(--font-weight-bold);
   line-height: var(--space-4);
@@ -5446,10 +5452,12 @@ a.popover-menu__item {
  * stand in tasks.css und galt damit nur dort - der Kalender, der dasselbe
  * Blatt seit D2 traegt, bekam Chips ohne Abstand. Folgt sie einem Schalter
  * („Mir zugewiesen" ueber den Personen), haelt sie Abstand zu ihm. */
+/* 2026-10-24, Tafla: zwischen den Reihen nur 4 - die Trefferflaeche des Chips
+ * (40-48) ist hoeher als seine 36er-Kapsel und bringt die Luft schon mit. */
 .filter-panel__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
 }
 
 .toggle-row + .filter-panel__chips {
@@ -6095,12 +6103,13 @@ p.field-hint--warn[hidden] {
     height: var(--sidebar-icon-well);
     border-radius: var(--radius-full);
     overflow: hidden;
-    /* Ohne eigene Farbe steht die Scheibe auf dem Akzent, und dessen Tinte
-     * kippt mit dem Theme (hell: Weiss, dunkel: das helle Violett traegt
-     * dunkle Schrift). Eine Nutzerfarbe setzt syncSidebarAccount() inline und
-     * waehlt die Schrift per Kontrastrechnung (--on-color / --ink). */
-    background-color: var(--color-accent);
-    color: var(--color-ink-on-vivid);
+    /* Ohne eigene Farbe steht die Scheibe auf dem Violett der Fuell-Rolle mit
+     * weissem Initial (2026-10-24, Tafla; vorher die Text-Rolle --color-accent,
+     * die dunkel hell wird und schwarze Schrift brauchte). Eine Nutzerfarbe
+     * setzt syncSidebarAccount() inline und waehlt die Schrift per
+     * Kontrastrechnung (--on-color / --ink). */
+    background-color: var(--color-btn-primary);
+    color: var(--color-on-accent);
     font-size: var(--text-xs);
     font-weight: var(--font-weight-semibold);
     line-height: 1;
@@ -7830,10 +7839,12 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
 /* Eingerasteter Zustand eines Umschalt-Buttons (z. B. Mehrfachauswahl in
    Aufgaben). Trägt `aria-pressed="true"`; ohne diese Regel war der aktive
    Zustand nur für Screenreader erkennbar, visuell aber identisch zum Ruhezustand.
-   Steht nach allen Varianten, damit es sie bei gleicher Spezifität überschreibt. */
+   Steht nach allen Varianten, damit es sie bei gleicher Spezifität überschreibt.
+   2026-10-24, Tafla: die Fuellung des Primaerknopfs mit weisser Schrift (vorher
+   --color-accent + --color-ink-on-vivid, dunkel ein helles Violett mit Schwarz). */
 .btn--active {
-  background-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
   border-color: transparent;
 }
 
@@ -10139,15 +10150,17 @@ html:has(.app-page.is-selecting) {
   color: var(--color-accent);
 }
 
+/* 2026-10-24, Tafla: ein gewaehlter Tag mit Buchstabe ist Violett als
+ * FLAECHE - die Fuell-Rolle mit weisser Schrift, wie das Abhaken. */
 .rrule-day--active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  background: var(--color-btn-primary);
+  border-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
 }
 
 .rrule-day--active:hover {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  background: var(--color-btn-primary-hover);
+  border-color: var(--color-btn-primary-hover);
 }
 
 @media (max-width: 1023px) {
@@ -10457,7 +10470,9 @@ html:has(.app-page.is-selecting) {
 }
 
 .swipe-reveal--done   { background-color: var(--color-success); color: var(--color-ink-on-vivid); }
-.swipe-reveal--edit   { background-color: var(--color-accent);  color: var(--color-ink-on-vivid); }
+/* 2026-10-24, Tafla: Bearbeiten ist eine Handlung auf Violett - die Fuell-Rolle
+ * mit weissem Zeichen (vorher --color-accent + --color-ink-on-vivid). */
+.swipe-reveal--edit   { background-color: var(--color-btn-primary); color: var(--color-on-accent); }
 .swipe-reveal--delete { background-color: var(--color-danger);  color: var(--color-ink-on-vivid); }
 
 /* --------------------------------------------------------
@@ -10703,8 +10718,9 @@ html:has(.app-page.is-selecting) {
   clip: auto;
   white-space: normal;
   overflow: visible;
-  background: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  /* 2026-10-24, Tafla: ein Link auf Violett - Fuell-Rolle, weisse Schrift. */
+  background: var(--color-btn-primary);
+  color: var(--color-on-accent);
   font-size: var(--text-sm);
   border-radius: 0 0 var(--radius-sm) 0;
 }
@@ -11289,7 +11305,8 @@ p.field-hint--warn svg {
   border: none;
   border-radius: var(--radius-full);
   background: none;
-  color: var(--color-ink-on-vivid);
+  /* Der Haken auf der Fuellung (unten): weiss, 2026-10-24 Tafla. */
+  color: var(--color-on-accent);
   cursor: pointer;
   flex-shrink: 0;
   display: flex;
@@ -11317,9 +11334,12 @@ p.field-hint--warn svg {
   outline-offset: calc(var(--focus-ring-offset) * -1);
 }
 
+/* 2026-10-24, Tafla: gewaehlt traegt dieselbe Fuellung wie der erledigte
+ * Abhakkreis (`.check-ring--done`, list-row.css) - die Fuell-Rolle mit weissem
+ * Haken, nicht die Text-Rolle --color-accent. */
 .select-circle--on::after {
-  border-color: var(--color-accent);
-  background-color: var(--color-accent);
+  border-color: var(--color-btn-primary);
+  background-color: var(--color-btn-primary);
 }
 
 .select-circle__check {

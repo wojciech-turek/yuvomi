@@ -350,8 +350,9 @@ function checkButton(row, state) {
     ? t(row.kind === 'dose' ? 'today.undoTakenAria' : 'today.reopenAria', { title: row.title })
     : t(row.kind === 'dose' ? 'today.markTakenAria' : 'today.markDoneAria', { title: row.title });
   const disabled = state.canCheck(row) ? '' : ' disabled';
-  return `<button type="button" class="day-check${row.done ? ' day-check--done' : ''}" data-day-action="check" data-row-key="${esc(row.key)}"
-      aria-pressed="${row.done ? 'true' : 'false'}" aria-label="${esc(label)}"${disabled}><span class="day-check__ring">${icon('check')}</span></button>`;
+  // The ring is the app's one check circle (`.check-ring`, list-row.css).
+  return `<button type="button" class="day-check check-ring${row.done ? ' day-check--done check-ring--done' : ''}" data-day-action="check" data-row-key="${esc(row.key)}"
+      aria-pressed="${row.done ? 'true' : 'false'}" aria-label="${esc(label)}"${disabled}>${icon('check')}</button>`;
 }
 
 function rowMeta(row) {

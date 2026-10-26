@@ -142,15 +142,7 @@
   padding: 0 var(--space-4);
 }
 
-.contact-group__list > .contact-item + .contact-item::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  block-size: 0.5px;
-  background: var(--color-separator);
-  pointer-events: none;
-}
+/* Haarlinien zwischen den Zeilen: `.inset-card--rows` (inset-list.css). */
 
 @media (hover: hover) {
   .contact-item:hover {

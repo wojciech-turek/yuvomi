@@ -789,39 +789,98 @@
  * Abhakkreis: EIN Ring fuer jede Zeile, die sich erledigen laesst
  * -------------------------------------------------------- */
 /* EINE GROESSE, EINE TONREGEL (Critique 2026-10-05, R16 P1 "Bausteine werden
- * nicht vererbt"). Der Ring stand zweimal da: 20px in `--color-text-tertiary`
- * an der Aufgabe (tasks.css), 24px im Modulton an der Haushaltshilfe
- * (housekeeping.css) - dieselbe Geste, zwei Zeichen. Die Aufgaben-Fassung ist
- * die Referenz und steht jetzt hier; beide Knoepfe tragen `.check-ring`.
+ * nicht vererbt"): der Ring stand an Aufgabe und Haushaltshilfe zweimal da,
+ * dieselbe Geste mit zwei Zeichen - seitdem steht er hier. Das eckige
+ * Kaestchen des Einkaufs ist seit Tafla ebenfalls dieser Kreis. */
+/* TAFLA (2026-10-24): DAS EINE KOLKO ODHACZANIA (spec "Kółko odhaczania").
+ * Bis hierher stand es fuenfmal: als `.check-ring::after` (Aufgaben,
+ * Haushaltshilfe, 2px Tinte-3), als `.day-check__ring` (Dziś), als Kopie davon
+ * in der Gesundheit (`.health-check__ring`), als `.agenda-task__ring` im
+ * Kalender und als `.item-check::before` im Einkauf - drei Kanten, zwei
+ * Strichstaerken, fuenfmal "erledigt". Jetzt EIN Baustein, und jedes Modul
+ * setzt nur noch seine Trefferflaeche und Stellung:
  *
- * - RUHE: 20px, 2px, `--color-text-tertiary`. Das meistgenutzte Steuerelement
- *   der Zeile darf nicht das blasseste sein (`--color-border` war im Dark kaum
- *   zu sehen), aber es traegt auch nicht den Modulton: der Modulton LAEDT EIN,
- *   Gruen BESTAETIGT, Ruhe ist neutral.
- * - EINLADUNG: unter dem Zeiger nimmt der Ring den Modulton an.
- * - ZEICHEN STATT KNOPF (`--static`): keine Einladung - der Ring ist dann eine
- *   Auskunft. Per `:not()` ausgenommen statt per Gegenregel, die eine
- *   Zustandsfarbe ueberstimmen koennte (Review zu PR #1252).
+ * - DER RING: 24 sichtbar, 1.5px in der Feldkante (`--color-border-control`,
+ *   #8A857C / #8A8378 - 3:1 auf Karte und Papier, WCAG 1.4.11), am `::after`
+ *   des Knopfs. Das Modul zentriert ihn (Flex/Grid).
+ * - DER HAKEN ist das Zeichen im Knopf (`<i data-lucide="check">`): 14, Strich
+ *   2.5, in Weiss; in Ruhe unsichtbar, ueber dem Ring (positioniert).
+ * - ERLEDIGT (`.check-ring--done`): der Ring fuellt sich in der Fuellrolle der
+ *   Stimme (`--color-btn-primary`) - erledigt ist violett, nicht gruen - und
+ *   der Haken steht weiss darauf.
+ * - EINLADUNG: unter dem Zeiger nimmt die Kante den Modulton an (am Zeiger;
+ *   auf Touch klebt :hover).
+ * - ZEICHEN STATT KNOPF (`.check-ring--static`): keine Einladung, neutraler
+ *   Zeiger. Per `:not()` ausgenommen statt per Gegenregel (Review zu #1252).
  *
- * Trefferflaeche, Zustand (`--done`, `--in_progress`) und die Stellung in der
- * Zeile bleiben beim Modul: sie haengen an dessen Markup. Das eckige
- * `.item-check` des Einkaufs ist ein Kaestchen, kein Kreis, und bleibt eigen.
+ * Weitere Zustaende (In Arbeit: Kante in Warnton) setzt das Modul an der
+ * Kante (`box-shadow` desselben Rings), nie als zweiten Ring.
  * Guard: test-frontend-audit.js, "der Abhakkreis steht einmal". */
-/* TAFLA (2026-10-20, spec "Kółko odhaczania"): 24 sichtbar wie das Kaestchen
- * des Einkaufs (shopping.css `.item-check::before`, dieselbe Kante - EINE
- * Tonregel fuer alles Abhakbare); erledigt fuellt ihn das Violett
- * (`--color-btn-primary`) mit weissem Haken - das setzt das Modul. */
+/* Ring und Haken liegen in EINER Rasterzelle von 24x24: die Zelle steht in
+ * der Mitte der Trefferflaeche (`place-content`; der Kalender setzt sie an den
+ * Anfang seiner Schiene), beide sind in ihr zentriert - der Haken bleibt so
+ * auf dem Ring, wo immer das Modul die Zelle hinstellt. */
+.check-ring {
+  position: relative;
+  display: inline-grid;
+  grid-template: var(--space-6) / var(--space-6);
+  place-content: center;
+  place-items: center;
+  color: var(--color-on-accent);
+}
+
 .check-ring::after {
   content: '';
+  grid-area: 1 / 1;
+  box-sizing: border-box;
   width: var(--space-6);
   height: var(--space-6);
   border-radius: var(--radius-full);
-  border: 2px solid var(--color-text-tertiary);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  /* Die Kante als Innenschatten, nicht als `border`: sie ist die Strichstaerke
+   * des Kreises, keine Feldkante (die Feldhaut ist 1px, R18). */
+  box-shadow: inset 0 0 0 1.5px var(--color-border-control);
+  background-color: transparent;
 }
 
-.check-ring:not(.check-ring--static):hover::after {
-  border-color: var(--module-accent, var(--color-accent));
+/* Ueber dem Ring: ein Rasterelement mit z-index braucht keine Position. */
+.check-ring > svg {
+  grid-area: 1 / 1;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+  color: var(--color-on-accent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.check-ring--done::after {
+  box-shadow: none;
+  background-color: var(--color-btn-primary);
+}
+
+.check-ring--done > svg {
+  opacity: 1;
+}
+
+.check-ring--static {
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .check-ring:not(.check-ring--static):not(.check-ring--done):hover::after {
+    box-shadow: inset 0 0 0 1.5px var(--module-accent, var(--color-accent));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .check-ring::after {
+    transition: box-shadow var(--transition-fast), background-color var(--transition-fast);
+  }
+
+  .check-ring > svg {
+    transition: opacity var(--transition-fast);
+  }
 }
 
 /* --------------------------------------------------------

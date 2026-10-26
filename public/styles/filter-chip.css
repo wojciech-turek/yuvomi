@@ -14,54 +14,62 @@
  * Tasks-Darstellung unverändert bleibt.
  */
 
+/* TAFLA (2026-10-24, KIT "Chips"): 36 sichtbar, 13/600, keine Kante.
+ * Ungewaehlt --fill mit Tinte-2, gewaehlt --accent-tint mit Akzent-Schrift.
+ * Die Kapsel ist ein `::after` hinter dem Inhalt (z-index -1 in der eigenen
+ * Stapelebene): der Knopf behaelt so seine volle Trefferflaeche (min-height
+ * unten, --target-lg / --sm), ohne als 48er-Pille zu wirken. `::before` bleibt
+ * frei fuer den Mahlzeit-Punkt (unten). Bis hierher: weisser Chip mit
+ * 1.5px-Kante und Modulton-Toenung - die Spiżarnia trug die Tafla-Fassung
+ * schon allein, jetzt tragen sie alle.
+ *
+ * Der Aktiv-Text ist die Akzent-TEXTROLLE (#6C3AED / dark #B49CFF) auf der
+ * Akzent-Toenung - in beiden Themes AA (tokens.css, Tafla-Paare). */
 .filter-chip {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
+  padding: 0 var(--space-3);
+  border: 0;
   border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
-  border: 1.5px solid var(--color-border);
-  background-color: var(--color-surface);
-  color: var(--color-text-secondary);
-  /* Benannt statt `all`: der Chip wechselt auf Hover und im Aktivzustand genau
-   * diese drei. `all` zieht implizit auch Layout-Properties mit (Critique
-   * 2026-07-30). */
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  /* Benannt statt `all` (Critique 2026-07-30). */
+  transition: color var(--transition-fast);
   min-height: var(--target-lg);
 }
 
-.filter-chip:hover:not(.filter-chip--active) {
-  border-color: var(--color-text-secondary);
-  color: var(--color-text-primary);
+.filter-chip::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-inline: 0;
+  inset-block: calc(50% - var(--space-4) - var(--space-0h));
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  transition: background-color var(--transition-fast);
 }
 
-/* Aktiv-Text nach der Konvention "Akzent-Text auf akzent-getöntem Grund"
- * (dokumentiert in tokens.css, Abschnitt Modul-Akzente), nicht als roher
- * Akzent: der Chip-Grund ist selbst eine Tönung derselben Farbe, dadurch hing
- * der Kontrast allein an der Akzent-Helligkeit (tasks 3.60:1, notes 3.57:1).
- * Füllung und Rahmen bleiben unberührt, der Chip behält seine Modulfarbe.
- *
- * Die Werte standen bis zum HIG-Rollout als rohe Zahlen (18 % Fläche, 50 %
- * Kante) in einem @supports-Zwilling, der zusätzlich blur-xs und einen
- * Specular-Inset auflegte - Glas auf einem INHALTS-Element und damit gegen die
- * Glas-ist-Chrome-Regel. Weil jeder Browser mit backdrop-filter ohnehin diesen
- * Zweig sah, wurden seine Farbwerte hier der Bestand; nur Blur und Specular
- * sind weg.
- *
- * Seit c788ce01 nennt der Chip statt der Zahlen die BENANNTEN Stufen der
- * Tönungsskala (tokens.css, Abschnitt 6b), und das war nicht nur eine
- * Umbenennung: Kante und Tinte trafen ihre Stufe punktgenau (--tint-hint 50 %,
- * --tint-ink 70 %), die FLÄCHE hat sich dabei bewegt - --tint-state ist 12 %,
- * nicht die 18 %, die hier bis 2026-09-07 standen. Wer eine Zahl braucht,
- * liest sie in tokens.css; hier steht sie absichtlich nicht mehr. */
+@media (hover: hover) {
+  .filter-chip:hover:not(.filter-chip--active) {
+    color: var(--color-text-primary);
+  }
+}
+
 .filter-chip--active {
-  background-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent);
-  border-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-hint), transparent);
-  color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
+  color: var(--color-accent);
+}
+
+.filter-chip--active::after {
+  background: var(--color-accent-tint);
 }
 
 /* Dichtere Variante für Filterzeilen mit vielen Chips (Dokumente). Das Touch-Maß

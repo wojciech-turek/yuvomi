@@ -638,89 +638,31 @@
  * `.due-date--overdue/--today` ist Tinte am Wort, die Zeile bleibt ruhig. Die
  * Klassen `--today/--overdue` bleiben am Markup - sie faerben das Wort. */
 
-/* DER KREIS: ein LEERER Ring in 48px Trefferflaeche. Der gefuellte Kreis mit
- * Haken las sich an jeder Zeile wie „schon erledigt" (A3, Persona Oma Ingrid) -
- * er heisst aber „jetzt erledigen". Der Haken erscheint erst als Einladung
- * unter Zeiger und Fokus.
+/* DER KREIS: ein LEERER Ring in 48px Trefferflaeche - er heisst „jetzt
+ * erledigen", nicht „schon erledigt" (A3, Persona Oma Ingrid).
  *
- * DER RING IST DER DER AUFGABEN (`.check-ring`, list-row.css): 20px in
- * `--color-text-tertiary`, unter dem Zeiger im Modulton. Hier stand er als
- * eigene Fassung - 24px und in Ruhe schon gruen, also mit der Farbe, die
- * app-weit „erledigt" heisst (Critique 2026-10-05, R16). Hier bleibt, was die
- * Zeile betrifft: Trefferflaeche, Stellung und der Haken als Einladung. */
+ * Ring, Haken und Erledigt-Fuellung sind der geteilte Kreis (`.check-ring`,
+ * list-row.css; Tafla 2026-10-24: 24 sichtbar, 1.5px Feldkante, erledigt
+ * violett). Hier bleiben Trefferflaeche und Stellung. Die Quittung des Tipps
+ * (completeTask()) setzt `.check-ring--done` und `acknowledgeCheck` (utils/
+ * ux.js); das Neuzeichnen nach dem Roundtrip nimmt sie wieder weg. Bis hierher
+ * fuellte sich der Ring hier GRUEN - erledigt ist in Tafla violett. */
 .housekeeping-task__check {
-  position: relative;
   flex-shrink: 0;
-  /* Der 20px-Ring steht auf der Inhaltskante der Zeile: die halbe Differenz
+  /* Der 24px-Ring steht auf der Inhaltskante der Zeile: die halbe Differenz
    * zur Trefferflaeche reicht in die Zeilenpolsterung. */
-  margin-inline-start: calc((var(--target-lg) - var(--space-5)) / -2);
+  margin-inline-start: calc((var(--target-lg) - var(--space-6)) / -2);
   width: var(--target-lg);
   height: var(--target-lg);
+  padding: 0;
   border: 0;
   border-radius: var(--radius-full);
   background: none;
-  color: transparent;
-  display: grid;
-  place-items: center;
   cursor: pointer;
-  transition: color var(--transition-fast);
-}
-
-/* Ring und Haken liegen uebereinander in derselben Zelle: der Ring ist das
- * `::after` aus `.check-ring`, der Haken das Kind. */
-.housekeeping-task__check::after,
-.housekeeping-task__check svg {
-  grid-area: 1 / 1;
-}
-
-.housekeeping-task__check svg {
-  position: relative;
-  width: var(--space-3);
-  height: var(--space-3);
-  /* In Ruhe ist der Haken nicht da (transparente Tinte), also auch nicht
-   * gezeichnet - er erscheint als Einladung unter Zeiger und Fokus und auf
-   * der Quittung. Klicks nimmt der Knopf, nie das Zeichen darin. */
-  opacity: 0;
-  pointer-events: none;
-}
-
-.housekeeping-task__check:hover svg,
-.housekeeping-task__check:focus-visible svg,
-.housekeeping-task__check.housekeeping-task__check--done svg {
-  opacity: 1;
-}
-
-.housekeeping-task__check:hover,
-.housekeeping-task__check:focus-visible {
-  color: var(--module-accent);
 }
 
 .housekeeping-task__check:active::after {
   transform: scale(0.92);
-}
-
-/* Die Quittung des Tipps (completeTask()), dieselbe wie beim Abhaken einer
- * Aufgabe (`.task-status-btn--done`, tasks.css): der Ring fuellt sich in der
- * Erfolgsfarbe, der Haken steht darauf, und `acknowledgeCheck` (utils/ux.js)
- * quittiert die Beruehrung aus dem Handler. Kein Zustand - das Neuzeichnen nach dem Roundtrip nimmt die
- * Klasse wieder weg, der Kreis heisst weiter „jetzt erledigt".
- *
- * ZWEI KLASSEN IM SELEKTOR: der Finger (oder Zeiger) steht nach dem Tipp noch
- * auf dem Knopf, und `:hover` hat (0,2,0) bzw. (0,2,1) - mit einer Klasse
- * gewaenne die Hover-Toenung ueber die Fuellung. */
-.housekeeping-task__check.housekeeping-task__check--done::after {
-  border-color: var(--color-success);
-}
-
-/* Die Fuellung traegt der Haken selbst (12px + 2 x 4px = der 20px-Ring), damit
- * Tinte und Untergrund in EINER Regel stehen - so prueft der Kontrast-Guard
- * genau dieses Paar (Tinte auf Gruen) und nicht Tinte auf der Seitenflaeche. */
-.housekeeping-task__check.housekeeping-task__check--done svg {
-  box-sizing: content-box;
-  padding: var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--color-success);
-  color: var(--color-ink-on-vivid);
 }
 
 /* Titel als Zeilenname: die h2 behaelt ihre Rolle fuer die Ueberschriften-
@@ -1200,57 +1142,8 @@
 
 /* Chores for the next visit: 48 rows, the 44 check circle drawn in the 28
  * slot so the name starts at x=56 like every row title. */
-.housekeeping-chore {
-  gap: var(--space-3);
-}
-
 .housekeeping-chore .housekeeping-task__check {
   margin-inline: calc((var(--target-lg) - 28px) / -2);
-}
-
-.housekeeping-chore__name {
-  flex: 1;
-  min-width: 0;
-  align-self: stretch;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-text-primary);
-  font: inherit;
-  text-align: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.housekeeping-chore__name:focus-visible,
-.housekeeping-chore__add:focus-visible {
-  outline-offset: var(--focus-ring-offset-inset);
-}
-
-.housekeeping-chore--add {
-  padding: 0;
-}
-
-.housekeeping-chore__add {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  min-block-size: 48px;
-  padding: 0 var(--space-4);
-  border: 0;
-  background: none;
-  color: var(--color-accent);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.housekeeping-chore__add .inset-row__lead,
-.housekeeping-chore__add .inset-row__title {
-  color: var(--color-accent);
 }
 
 /* The last visits on this page: an inset card of 48 rows. The staff log keeps
@@ -1273,23 +1166,10 @@
   padding-block: 0;
 }
 
-.housekeeping-visit-row--compact {
-  position: relative;
-}
-
-/* Hairlines inset to the title column, like every inset card. */
+/* Hairlines inset to the title column come from `.inset-card--rows`
+ * (inset-list.css); the log's own top border steps aside. */
 .housekeeping-visit-row--compact.housekeeping-staff-log-row + .housekeeping-staff-log-row {
   border-top: 0;
-}
-
-.housekeeping-visit-row--compact + .housekeeping-visit-row--compact::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  block-size: 0.5px;
-  background: var(--color-separator);
-  pointer-events: none;
 }
 
 .housekeeping-visit-row--compact .list-row__main {

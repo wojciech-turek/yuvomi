@@ -331,17 +331,28 @@
  * Kalender dasselbe Blatt traegt (D2). Hier bleiben nur die gemerkten Sets. */
 
 /* Ein gemerktes Set ist eine Aktion („wende das an"), kein Zustand - deshalb
- * gestrichelt statt getoent, ohne aria-pressed. */
+ * gestrichelt statt getoent, ohne aria-pressed. 2026-10-24, Tafla: der Chip
+ * hat keine Kante mehr, seine Kapsel ist das `::after` (filter-chip.css) - die
+ * Strichelung steht deshalb dort, statt der Fuellung. */
 .filter-chip--recent {
-  border-style: dashed;
   opacity: 0.8;
   cursor: pointer;
 }
 
-.filter-chip--recent:hover {
-  opacity: 1;
-  border-color: var(--module-accent, var(--color-accent));
-  color: var(--module-accent, var(--color-accent));
+.filter-chip--recent::after {
+  background: transparent;
+  border: var(--space-px) dashed var(--color-border-control);
+}
+
+@media (hover: hover) {
+  .filter-chip--recent:hover {
+    opacity: 1;
+    color: var(--module-accent, var(--color-accent));
+  }
+
+  .filter-chip--recent:hover::after {
+    border-color: var(--module-accent, var(--color-accent));
+  }
 }
 
 /* Die Gruppierungswahl im Blatt fuellt ihre Zeile: zwei gleich breite
@@ -586,9 +597,6 @@
   cursor: pointer;
   flex-shrink: 0;
   margin-top: calc((var(--target-base) - var(--space-5)) / -2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
 }
 
@@ -759,32 +767,16 @@
  * ein `span`, den niemand antippen kann, hat keinen Handler. Guard: test:motion
  * ("keine Animation an einer Zustandsklasse"). */
 
-/* Tafla: erledigt ist violett, nicht gruen ("Done is violet") - die
- * Fuellrolle des Akzents, damit Weiss darauf auch im Dark 4,5:1 haelt. */
-.task-status-btn--done::after {
-  border-color: var(--color-btn-primary);
-  background-color: var(--color-btn-primary);
-}
-
+/* Erledigt (violette Fuellung, weisser Haken) setzt der geteilte Kreis
+ * (`.check-ring--done`, list-row.css, Tafla 2026-10-24); hier bleibt nur der
+ * Zustand, den es nur an der Aufgabe gibt. */
 .task-status-btn--in_progress {
   border-color: transparent;
 }
 
 .task-status-btn--in_progress::after {
-  border-color: var(--color-warning);
+  box-shadow: inset 0 0 0 1.5px var(--color-warning);
 }
-
-.task-status-btn__check {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2.5;
-  color: var(--color-on-accent);
-  display: none;
-  position: absolute;
-  z-index: 1;
-}
-
-.task-status-btn--done .task-status-btn__check { display: block; }
 
 /* Am Wandtablett IST der Haken die Personenauswahl (#1209).
  *

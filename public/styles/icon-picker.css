@@ -94,15 +94,16 @@
  * Rand: bei 56px Kachel ist ein 1px-Rand die schwächere Ansage, und die
  * Kachel steht zwischen bis zu 120 gleich aussehenden Nachbarn.
  *
- * DIE TINTE IST --color-ink-on-vivid UND NICHT --color-text-on-accent. Der
- * Akzent hellt im Dark-Theme auf (#A78BFA); Weiss darauf misst 2.72:1 und
- * verfehlt AA - derselbe Befund, den die Kachelgesichter schon einmal
- * gekostet haben (.quick-link-face in dashboard.css nimmt dieselbe Tinte). */
+ * 2026-10-24, Tafla: die Flaeche ist die Fuell-Rolle --color-btn-primary
+ * (#6C3AED / dunkel #7C52F2), das Zeichen darauf Weiss (6.1 / 4.83:1). Bis
+ * hierher stand die Text-Rolle --color-accent als Flaeche, die im Dunkeln
+ * aufhellt (Weiss darauf 2.72:1) und deshalb --color-ink-on-vivid brauchte -
+ * ein helles Feld mit schwarzem Zeichen. */
 .icon-picker__tile--current,
 .icon-picker__tile--current:hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-ink-on-vivid);
+  background: var(--color-btn-primary);
+  border-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
 }
 
 .icon-picker__tile i,

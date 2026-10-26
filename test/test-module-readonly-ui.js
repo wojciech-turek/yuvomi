@@ -206,7 +206,9 @@ test('Zustandszeichen bei `tasks: read`: eine begonnene Aufgabe heisst "In Bearb
   withAccess({ tasks: 'read' }, () => {
     for (const [status, key] of zustaende) {
       const html = tasks.renderTaskCard(aufgabe({ status }));
-      const zeichen = html.match(/<span class="task-status-btn [^"]*task-status-btn--static check-ring check-ring--static"[^>]*aria-label="([^"]*)"/);
+      // 2026-10-24, Tafla: eine erledigte Aufgabe traegt dazu den geteilten
+      // Zustand `check-ring--done` (list-row.css).
+      const zeichen = html.match(/<span class="task-status-btn [^"]*task-status-btn--static check-ring check-ring--static(?: check-ring--done)?"[^>]*aria-label="([^"]*)"/);
       assert.ok(zeichen, `Zeichen fuer ${status} vorhanden`);
       assert.equal(zeichen[1], `Müll rausbringen: ${key}`, `Aufgabe im Zustand ${status}`);
 
@@ -466,23 +468,25 @@ test('das Zustandszeichen reagiert nicht auf Ueberfahren, und der Ring behaelt s
   // (`.check-ring`), der Zustand weiter in tasks.css - gemessen wird die
   // Kaskade in Ladereihenfolge (index.html: list-row.css vor dem Seiten-CSS).
   const KASKADE = `${readFileSync(new URL('../public/styles/list-row.css', import.meta.url), 'utf8')}\n${TASKS_CSS}`;
-  for (const [name, klassen, ruhend] of [
+  for (const [name, klassen, eigenschaft, ruhend] of [
     // Tafla (2026-10-20): erledigt ist VIOLETT, nicht gruen ("Done is violet",
-    // DESIGN.md) - die Fuellrolle des Akzents. Die Zusage bleibt: der Ring
-    // behaelt die Farbe seines Zustands, auch unter dem Zeiger.
-    ['erledigt', ['task-status-btn', 'task-status-btn--done', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'var(--color-btn-primary)'],
-    ['in Arbeit', ['task-status-btn', 'task-status-btn--in_progress', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'var(--color-warning)'],
+    // DESIGN.md) - die Fuellrolle des Akzents. 2026-10-24: die Fuellung traegt
+    // der geteilte Zustand `.check-ring--done` (list-row.css), die Kante ist
+    // der Innenschatten des Rings. Die Zusage bleibt: der Ring behaelt die
+    // Farbe seines Zustands, auch unter dem Zeiger.
+    ['erledigt', ['task-status-btn', 'task-status-btn--done', 'task-status-btn--static', 'check-ring', 'check-ring--static', 'check-ring--done'], 'background-color', 'var(--color-btn-primary)'],
+    ['in Arbeit', ['task-status-btn', 'task-status-btn--in_progress', 'task-status-btn--static', 'check-ring', 'check-ring--static'], 'box-shadow', 'inset 0 0 0 1.5px var(--color-warning)'],
   ]) {
-    assert.equal(effektiverWert(KASKADE, klassen, 'border-color', ':hover::after'), null,
+    assert.equal(effektiverWert(KASKADE, klassen, eigenschaft, ':hover::after'), null,
       `${name}: keine Hover-Regel darf das Zeichen treffen`);
-    assert.equal(effektiverWert(KASKADE, klassen, 'border-color', '::after'), ruhend,
+    assert.equal(effektiverWert(KASKADE, klassen, eigenschaft, '::after'), ruhend,
       `${name}: der Ring behaelt die Farbe, die den Zustand traegt`);
   }
-  // Der bedienbare Knopf behaelt seine Hover-Reaktion.
-  assert.match(
-    effektiverWert(KASKADE, ['task-status-btn', 'task-status-btn--done', 'check-ring'], 'border-color', ':hover::after') ?? '',
-    /module-accent/,
-  );
+  // Der bedienbare Knopf behaelt seine Hover-Reaktion - seit 2026-10-24
+  // (Tafla) am Zeiger, `@media (hover: hover)`; der Loeser oben liest nur
+  // Regeln ohne At-Regel, deshalb hier direkt.
+  const hover = [...eachRule(KASKADE)].find((r) => r.selector.trim() === '.check-ring:not(.check-ring--static):not(.check-ring--done):hover::after');
+  assert.ok(hover && hover.at.some((a) => /hover:\s*hover/.test(a)) && /module-accent/.test(hover.body));
 });
 
 test('und an der Zeile der Leseansicht - dort war es nur noch nicht schaedlich', () => {

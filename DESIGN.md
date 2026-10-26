@@ -215,11 +215,14 @@ components:
   # 2026-08-27; die dauerhaft getoente Schrift las sich als „Filter ist an").
   # Die Zahl hinter einer Stufe steht in tokens.css Abschnitt 6b, nirgends
   # sonst - der Chip nennt seit c788ce01 (2026-08-08) nur noch die Stufe.
+  # TAFLA (2026-10-24, KIT "Chips"): keine Kante, 36 sichtbar, 13/600; ungewaehlt
+  # --fill mit Tinte-2, gewaehlt --accent-tint mit Akzent-Schrift. Die Kapsel ist
+  # ein ::after hinter dem Inhalt, der Knopf behaelt seine 40-48er Trefferflaeche.
   chip:
-    backgroundColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent)"
-    textColor: "color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary))"
+    backgroundColor: "var(--color-accent-tint)"
+    textColor: "var(--color-accent)"
     rounded: "{rounded.full}"
-    padding: "4px 12px (--space-1 / --space-3), Kante 1.5px"
+    padding: "0 12px (--space-3), 36 sichtbar, keine Kante"
     height: "48px (--target-lg); --sm-Variante 40px, auf (hover: none) 44px"
   card:
     backgroundColor: "{colors.surface}"
@@ -470,10 +473,16 @@ sections); the approved artboards and spec live with the design brief (BUILD.md)
   today, checked circles, links, focus ring, AI chips; at most ~10 % of a screen. Light
   `#6C3AED`; in dark the voice is split: `--color-btn-primary` `#7C52F2` as a FILL under
   white, `--color-accent` `#B49CFF` as TEXT or icon. Quiet wash: `--color-accent-tint`.
-  Done is violet, not green.
+  Done is violet, not green. Anything violet that carries a digit, letter or glyph is the
+  FILL role with `--color-on-accent` (2026-10-24 sweep: nav count, filter count,
+  `.btn--active`, selected day and time in the date picker, recurrence day, selection
+  circle, swipe "edit", current icon tile, skip link, sidebar avatar without a colour);
+  bare marks (dots, the detail strip, the today ring) stay `--color-accent`.
 - **Status as words.** success / warning / danger each come with a `-tint` and appear as
   a word in a tinted pill ("zaległe", "jutro"), never as bare colour and never repeated
-  down a list; money is ink. Success only for income, a positive balance and "kwita".
+  down a list; money is ink. Success only for income, a change for the better (trend) and
+  "kwita"; a positive balance is ink too (2026-10-24, like account balances since R18),
+  only a negative one is red.
 - **The four-size scale** (Large title 34/41, Title 22/28, Body 17/22, Footnote 13/18;
   weights 400/600; `--type-large-title`, `--type-title`, `--type-body`, `--type-footnote`
   with `-lh`), the wall's four fluid steps (`--wall-display` 112, `--wall-title` 44,
@@ -1865,7 +1874,7 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
 | Mobiles Blatt (Dialog, Mehr) | EINE Grammatik: Griff 36x5 in der Kopfzone (`--sheet-grabber`: hell `--color-border-strong`, dunkel Glas-Weiss), Griff-Oberkante bis Titel 16px; 1:1 mitgehen, schliessen ab 80px Weg ODER Flick > 0.5px/ms, sonst zurueckfedern (`--duration-lg` + `--ease-out`), nach oben Gummiband; der Zug liegt auf `translate`. Ein- und Ausfahrt aus EINEM Paar (`--sheet-in`/`--sheet-out`, Hub `--sheet-lift`), auch die mobile Suche. Der Backdrop des Mehr-Blatts blendet im Ausgang des Blatts aus (`opacity` + `visibility` ueber `--sheet-out`, geschlossen ohne Zeiger), statt per `display: none` im ersten Frame zu verschwinden | `wireSheetDrag(sheet, { scroller, onDismiss })` (utils/sheet-drag.js) | leerer Griff-Streifen, Glas-Weiss auf weisser Tafel, Faktor 0.6, Schliessen erst bei `touchend`, Zurueckspringen ohne Transition |
 | Mehrfachauswahl in einer Liste | Auswahlkreis ERSETZT Statuskreis und Zeilen-Picker (Apple Erinnerungen); Leiste = Bulk-Pille mit "Fertig"; Name je Zeile mit Objekt ("<Titel> auswaehlen"); Loeschen im Pillen-Stil, Rueckfrage in der Pille, eine Folge, die die Frage nicht traegt, als Detailzeile darunter (Dokumente: kein Papierkorb) | `.select-circle` (layout.css) + `setBulkPill({ label, actions })` / `clearBulkPill()` (utils/bulk-pill.js), `confirm: { question, detail? }` | native blaue Checkbox neben dem Statuskreis, eigene Aktionsleiste, gefuellte rote Loeschen-Kapsel |
 | Aktionen an Karte oder Zeile | dauerhaft sichtbar, ruhig per Tertiaerfarbe; reduziert wird ihre ZAHL (hoechstens zwei + Mehr-Knopf, Zeile oben), nie ihre Sichtbarkeit | `.row-action`, `rowMenuHtml()` | Einblenden erst per `:hover`/`:focus-within` |
-| Erledigen an einer Zeile | EIN Abhakkreis: 24px (Tafla 2026-10-20, vorher 20; dieselbe Groesse wie das Einkaufskaestchen), 2px, in Ruhe `--color-text-tertiary`; unter dem Zeiger laedt der Modulton ein, erledigt ist seit Tafla VIOLETT (`--color-btn-primary` mit weissem Haken; vorher `--color-success`); `--static` = Zeichen ohne Einladung. Das Kaestchen des Einkaufs (`.item-check`) ist ein Kaestchen und bleibt eigen | `.check-ring` (list-row.css) an `.task-status-btn` und `.housekeeping-task__check`; Trefferflaeche und Zustand beim Modul | zweiter Ring je Modul (24px, in Ruhe gruen) |
+| Erledigen an einer Zeile | EIN Abhakkreis (Tafla 2026-10-24, „Kółko odhaczania"): 24px, Kante 1.5px als Innenschatten in der Feldkanten-Tinte (`--color-border-control`, 3:1 auf Karte und Papier); unter dem Zeiger (`@media (hover: hover)`) laedt der Modulton ein; erledigt ist VIOLETT (`.check-ring--done`: `--color-btn-primary` mit weissem Haken, der Haken ist das Zeichen im Knopf); `--static` = Zeichen ohne Einladung. Ring und Haken liegen in einer 24er-Rasterzelle, die das Modul per `place-content` stellt | `.check-ring` (list-row.css) an Aufgaben, Haushaltshilfe, Dziś (`.day-check`), Zdrowie (`.health-check`), Kalender (`.agenda-task__check`) und Einkauf (`.item-check`); das Modul setzt nur Trefferflaeche, Stellung und eigene Zustaende (In Arbeit: Kante im Warnton) | zweiter Ring je Modul; eigene Erledigt-Fuellung; gruen fuer erledigt |
 | Was eine Zeile tut (R16, R17 E7) | **In Abhak-Listen des Einkaufs hakt der Zeilen-Tipp ab; sonst oeffnet er** (wo es ein Leseblatt gibt, das Leseblatt: Kalender, Kontakte, Inventar, seit R17 Geburtstage unter der Spaltenschwelle; sonst Bearbeiten, mit Leserecht die Leseansicht) - als echter Knopf (`.list-row__main--interactive`). Im Einkauf bleibt ein EIGENER Weg in die Artikel-Details (bis 2026-10-07 der Stift, seither der Eintrag "Bearbeiten" im Mehr-Knopf der Zeile): die ganze Zeile ist dort das Abhak-Ziel (einhaendig im Laden, 358 statt 48px; R16, von E7 ausdruecklich ausgenommen). **Im Leseblatt sitzt Bearbeiten an EINER Stelle:** als Primaerknopf am Ende des Fusses (`edit.primary`; Termin, Inventar, Kontakt, Geburtstag), in der Detailspalte als Kopfaktion; die Aufgabe ist die benannte Ausnahme (Hauptabsicht Erledigen). **Loeschen = Wisch mobil + ein fester Ort am Desktop:** den Dialogfuss (Desktop, Tastatur) und auf Touch den Wisch zum Zeilenende. Eine Zeilenaktion, die nur den Zeilenkoerper doppelt (Stift), entfaellt; sichtbare Zeilenaktionen bleiben sichtbar (ignore.md), reduziert wird ihre ZAHL | `wireSwipeRows()` (utils/swipe-row.js), `scheduleUndoableDelete()` (utils/ux.js), `decorateFooterDelete()` (modal.js) | Stift + Papierkorb als 2 x 48px am Zeilenende, vier Grammatiken je Modulgruppe |
 | Bearbeiten in einer Leseansicht | **EIN gefuellter Primaerknopf am Ende des Fusses** - Blatt, Popover und Detailspalte (R19, `withPrimaryEdit` in components/detail-view.js). Andere Primaerknoepfe desselben Fusses treten zurueck (Rezept: Einplanen sekundaer). **Einzige Ausnahme: die Aufgabe** (Ulas 2026-10-16) - wer sie oeffnet, will sie meist abhaken; Erledigen (erledigt: Wieder oeffnen) bleibt der EINE gefuellte Knopf am Ende, Bearbeiten steht sekundaer davor, mobil als Stift (`keepPrimary: true` an `openDetailView`). Rezepte oeffnen mobil als Leseblatt statt aufzuklappen | `withPrimaryEdit(actions, edit, { keepPrimary })`, `detailFooterEl()` | Bearbeiten umrandet im Kopf, zwei gefuellte Knoepfe in einem Fuss |
 | Suche ohne Treffer | EIN Leerzustand (R19): Titel "Keine Treffer", ein Satz (mit Filtern ein zweiter), Begriff und Filter als Chips (`.empty-state__term`), EINE Aktion "Suche zuruecksetzen" (hebt alles auf, was die Chips nennen), Zusatzwege dahinter | `searchEmptyOptions()` / `searchEmptyEl()` / `searchEmptyHTML()` / `mountSearchEmpty()` (utils/empty-state.js); Guard `test:search-empty` | eigener Titel/Satz je Modul, Begriff in Anfuehrungszeichen, kein Ausweg |
@@ -2251,6 +2260,15 @@ Zielgroessen-Regel halten (**Ebene 3**, `die Groesse des Icon-Knopfs gehoert der
   ausgeschrieben; zusammengehalten wird sie vom Guard, nicht von der Kaskade.
 
 ### Chips
+- **Tafla (2026-10-24):** EIN Chip fuer alle Module (filter-chip.css): keine Kante, 36
+  sichtbar, 13/600, ungewaehlt `--color-fill` mit Tinte-2, gewaehlt `--color-accent-tint`
+  mit `--color-accent`-Schrift (beide Themes AA). Die Kapsel ist das `::after` des Knopfs
+  (z-index -1 in der eigenen Stapelebene), der Knopf selbst bleibt durchsichtig und
+  `--target-lg` / `--sm` hoch - eine Fuellung AM Knopf malte die ganze Trefferflaeche.
+  Wer das `::after` anders braucht (Mahlzeit-Segment im Blatt: Trefferflaeche; gemerktes
+  Set der Aufgaben: gestrichelte Kante statt Fuellung), setzt es dort. Die Spiżarnia trug
+  diese Fassung zuerst allein. Die Saetze darunter zur Kante und zum Modulton sind
+  Geschichte.
 - **Form:** Kapsel (`--radius-full`), Kante wie ein Bedienelement. Kalender-Layer-Chips
   tragen die User-Farbe als Border mit ~60 % Deckung (>=3:1), nie als Textfarbe; alle
   Labels stehen inaktiv in Sekundaertext - auch der Mir-zugewiesen-Chip (Beschluss
@@ -3897,6 +3915,13 @@ Dates in rows come from `utils/day-label.js`: `pastDateLabel` (time today, "wczo
 "16 paź" - a past day never gets a weekday), `shortDayMonth`, `shortWeekdayDayMonth` ("wt 27 paź").
 On touch a row carries no "⋯" and no pin: they leave the picture via `clip-path`, not the focus
 tree (guard "Zeilenaktionen ziehen sich auf Touch zurueck").
+Since 2026-10-24 the sheet also holds what modules had built alone: `.inset-card--rows` (the
+inset hairline between ANY children - swipe rows, list rows, articles), `button.inset-row__title`
+(a name that opens its item over the full row height), an action row as a button
+(`.inset-row.inset-row--action`, title in the accent too) and `.seg-control` (Tafla's neutral
+segmented control: 36 track in `--fill`, the chosen segment raised, never violet, 32 visible with
+a full-height hit). Modules keep only real differences (Zdrowie: the row's reserved two-line
+height; Sprzątanie: the visit log's padding).
 
 - **Notatki**: pinned notes as 2-up preview tiles (glyph, title 17/600, two lines of preview, the
   author's disc when it is someone else's), then "Ostatnie" as one list of 64 rows (title + date,
@@ -4789,8 +4814,8 @@ Token als Rueckfall (`var(--color-fill, var(--color-fill-field))`), bis die Grun
   langes Druecken oder Rechtsklick oeffnet den Editor (der auch Loeschen traegt). Auf Touch
   kein "..." und kein Griff; am Zeiger bleiben beide, Pfeiltasten am Griff sortieren.
   Erledigt ist VIOLETT (gefuellter Ring), ohne Durchstrich, der Name tritt auf ink-2 zurueck.
-  Der Ring traegt bis zur Komponentenrunde die Kante des geteilten `.check-ring`
-  (R20-Guard: beide gleich).
+  Seit 2026-10-24 IST das Kaestchen der geteilte Kreis (`.item-check.check-ring`); der
+  R20-Guard prueft die Kante des einen Kreises auf 3:1.
 - "Pewnie się kończy" steht IN der Liste (ein Sparkles-Label je Gruppe, Chips in
   accent-tint) und, solange die Leiste Fokus und noch keinen Namen hat, ueber der Leiste.
 - Die Hinzufuegen-Leiste ist am Telefon unten angedockt (12 ueber der Kapsel), immer da; sie

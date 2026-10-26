@@ -657,7 +657,7 @@ function renderTaskCard(task, opts = {}) {
         </button>
         ` : `
         ${darfAbhaken ? `
-        <button class="task-status-btn task-status-btn--${task.status} check-ring"
+        <button class="task-status-btn task-status-btn--${task.status} check-ring${isDone ? ' check-ring--done' : ''}"
                 data-action="toggle-status" data-id="${task.id}" data-status="${task.status}"
                 aria-label="${isDone ? t('tasks.markOpen', { title: esc(task.title) }) : t('tasks.markDone', { title: esc(task.title) })}">
           <i data-lucide="check" class="task-status-btn__check" aria-hidden="true"></i>
@@ -669,7 +669,7 @@ function renderTaskCard(task, opts = {}) {
              Mensch mit Leserecht bekommt keinen Picker, und ohne dieses
              Zeichen verschwaende die Zeile die Auskunft, die der Haken traegt:
              ob die Aufgabe erledigt ist. */''}
-        <span class="task-status-btn task-status-btn--${task.status} task-status-btn--static check-ring check-ring--static"
+        <span class="task-status-btn task-status-btn--${task.status} task-status-btn--static check-ring check-ring--static${isDone ? ' check-ring--done' : ''}"
               role="img" aria-label="${esc(`${task.title}: ${statusLabel(task.status)}`)}">
           <i data-lucide="check" class="task-status-btn__check" aria-hidden="true"></i>
         </span>
@@ -5916,6 +5916,7 @@ function wireTaskList(container) {
       // und die Regel, die zuletzt im Stylesheet steht, gewann das Aussehen.
       target.classList.toggle('task-status-btn--done', nextStatus === 'done');
       target.classList.toggle('task-status-btn--open', nextStatus !== 'done');
+      target.classList.toggle('check-ring--done', nextStatus === 'done');
       target.closest('.task-card')?.classList.toggle('task-card--done', nextStatus === 'done');
       // Die Quittung startet JETZT und läuft neben dem Roundtrip, nicht danach:
       // `loadTasks()` ersetzt den Knopf, und ohne dieses Warten war sie in 0

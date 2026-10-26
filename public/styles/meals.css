@@ -2806,6 +2806,10 @@
   content: '';
   position: absolute;
   inset: -6px 0;
+  /* 2026-10-24, Tafla: das `::after` des geteilten Chips ist seine Kapsel
+   * (filter-chip.css) - hier ist es nur die Trefferflaeche, die Spur oben
+   * ist die Fuellung. */
+  background: none;
 }
 
 .meal-sheet .meal-type-chip::before {

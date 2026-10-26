@@ -1451,10 +1451,14 @@
 
   /* Ein gewaehlter Ordner ist ein aktiver Filter - der Chip sagt es wie
    * jede Facette (Aktivton), solange nicht „Alle Dokumente" gilt. */
+  /* 2026-10-24, Tafla: in der Sprache des geteilten aktiven Chips
+   * (filter-chip.css) - Akzent-Schrift, die Toenung in der Kapsel (`::after`). */
   .documents-folder-chip[data-folder-active] {
-    background-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-state), transparent);
-    border-color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-hint), transparent);
-    color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
+    color: var(--color-accent);
+  }
+
+  .documents-folder-chip[data-folder-active]::after {
+    background: var(--color-accent-tint);
   }
 
   /* Zugeklappt belegt die Ordnerauswahl KEINE Zeile mehr: ihr Kopf (Titel
