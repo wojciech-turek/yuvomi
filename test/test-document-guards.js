@@ -1263,7 +1263,8 @@ const SHAPE_EXEMPT = new Map([
   ['recipe-card', 'Rasterzelle: Rezeptkarte im Raster "Gotowane ostatnio" (Tafla, zwei je Reihe)'],
   // 4. Zeilen einer Zeilenliste
   ['nav-item', 'Zeile: Eintrag der Sidebar-Navigation'],
-  ['note-item', 'Zeile: Notiz im Dashboard-Widget'],
+  // 2026-10-26, Tafla: `note-item` (Notiz im Dashboard-Widget) ist mit dem
+  // Widget-Board gegangen, seine letzte Regel stand in glass.css.
   ['rw-standing__id', 'Zeile: Oeffner einer Mitglieds-Zeile'],
   ['documents-folder-item__select', 'Zeile: Ordner in der Dokumentenliste'],
   // Der Chip traegt seit 031597b1 (Juli 2026) role="button" und dieselbe flache

@@ -9948,9 +9948,14 @@ html:has(.app-page.is-selecting) {
   border-end-end-radius: var(--radius-md);
 }
 
-.swipe-reveal--done   { background-color: var(--color-success); color: var(--color-ink-on-vivid); }
-/* 2026-10-24, Tafla: Bearbeiten ist eine Handlung auf Violett - die Fuell-Rolle
- * mit weissem Zeichen (vorher --color-accent + --color-ink-on-vivid). */
+/* Erledigen und Bearbeiten sind beide eine Handlung auf Violett - die
+ * Fuell-Rolle mit weissem Zeichen, ABSICHTLICH gleich (eine Regel; in den
+ * Aufgaben stehen sie an entgegengesetzten Kanten, Zeichen und Wort trennen
+ * sie). 2026-10-24: Bearbeiten (vorher --color-accent + --color-ink-on-vivid).
+ * 2026-10-26: Erledigen - erledigt ist violett, nicht gruen (wie
+ * `.check-ring--done`); bis hierher trug nur die Aufgabenliste das violette
+ * Band (tasks.css), Einkauf, Haushaltshilfe, Abos und Budget wischten gruen. */
+.swipe-reveal--done,
 .swipe-reveal--edit   { background-color: var(--color-btn-primary); color: var(--color-on-accent); }
 .swipe-reveal--delete { background-color: var(--color-danger);  color: var(--color-ink-on-vivid); }
 

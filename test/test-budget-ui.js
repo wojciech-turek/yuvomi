@@ -500,9 +500,18 @@ test('es gibt genau eine Umschalter-Optik im Modul', () => {
 
 test('das Touch-Maß der Umschalter kommt aus dem Token, nicht aus der Leiste', () => {
   // Die abgelösten Leisten lagen bei 40px (Zeitraum) und 28px (Nur-Ausgaben).
+  // 2026-10-26, Tafla: das Segment ist 32 sichtbar (der gleitende Daumen misst
+  // es); bis --target-base reicht es per `::after` um `--seg-pad`, und das
+  // Polster rechnet sich aus dem Token.
   const item = panelCss.match(/\n\.segmented__item\s*\{([^}]*)\}/);
   assert.ok(item, '.segmented__item fehlt');
-  assert.match(item[1], /min-height:\s*var\(--target-base\)/);
+  const bar = panelCss.match(/\n\.segmented\s*\{([^}]*)\}/);
+  assert.ok(bar, '.segmented fehlt');
+  assert.match(bar[1], /--seg-pad:\s*calc\(\(var\(--target-base\) - 32px\) \/ 2\)/);
+  assert.match(bar[1], /padding:\s*var\(--seg-pad\)/);
+  const hit = panelCss.match(/\n\.segmented__item::after\s*\{([^}]*)\}/);
+  assert.ok(hit, '.segmented__item::after fehlt');
+  assert.match(hit[1], /inset:\s*calc\(-1 \* var\(--seg-pad\)\) 0/);
 });
 
 test('Auflösungs-Umschalter der Berichte trägt echtes Tab-ARIA', () => {
