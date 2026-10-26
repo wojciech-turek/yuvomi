@@ -269,7 +269,6 @@ const PLURAL_EXCEPTIONS = {
   'contacts.importDetailFailed': 'NO_NOUN',
   'documents.selectCount': 'NO_NOUN',
   'tasks.bulkSelectedCount': 'NO_NOUN',
-  'dashboard.todayShoppingCount': 'NO_NOUN',
   'dashboard.rewardsPending': 'NO_NOUN',
   'dashboard.healthRefill': 'NO_NOUN',
   'health.labs.abnormalBadge': 'NO_NOUN',
@@ -466,8 +465,6 @@ const ONE_WITHOUT_COUNT = {
   // 30 (Agenda); die Eins geht an calendar.prevDay/nextDay.
   'calendar.prevDays': { counts: [3, 30], where: 'public/pages/calendar.js periodStepOf' },
   'calendar.nextDays': { counts: [3, 30], where: 'public/pages/calendar.js periodStepOf' },
-  // dashboard.js: count ist die Konstante EXPIRY_SOON_DAYS = 7 (utils/pantry-status.js).
-  'dashboard.pantryExpiringEmpty': { counts: [7], where: 'public/utils/pantry-status.js EXPIRY_SOON_DAYS' },
   // cron-label.js formatCronSchedule: `count < 1 || count > 23` -> null.
   'settings.backupSchedulerCronHourly': { min: 1, max: 23, where: 'public/settings/cron-label.js formatCronSchedule' },
   // modules-health.js typeIntervalLabel: 0/leer -> healthPreventionOneOff, sonst >= 1.
@@ -736,9 +733,9 @@ test('Vorrat und Uebersicht setzen die Menge ueber den flektierenden Helfer', ()
     return src.slice(at, src.indexOf('\n}\n', at));
   };
   const pantry = strip(readFileSync(new URL('../public/pages/pantry.js', import.meta.url), 'utf8'));
-  const dashboard = strip(readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8'));
-  for (const [src, fn, file] of [[pantry, 'quantityText', 'pantry.js'], [pantry, 'shortfallText', 'pantry.js'],
-    [dashboard, 'pantryQuantityText', 'dashboard.js']]) {
+  // TAFLA (2026-10-24): die Vorrats-Kachel der Uebersicht (pantryQuantityText) ist
+  // mit dem Raster gegangen; Dziś nennt ablaufende Vorraete nur als Zahl.
+  for (const [src, fn, file] of [[pantry, 'quantityText', 'pantry.js'], [pantry, 'shortfallText', 'pantry.js']]) {
     const own = body(src, fn);
     assert.match(own, /pantryQuantityLabel\(/, `${file} ${fn}: Menge ohne flektierende Einheit („6 Dose")`);
     assert.doesNotMatch(own, /pantry\.units\.\$\{|unitLabel\(/, `${file} ${fn}: setzt den Singular selbst hinter die Zahl`);

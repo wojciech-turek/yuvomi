@@ -375,11 +375,6 @@
   .list-row__main--interactive,
   .shopping-item:not(.shopping-item--static),
   .task-card,
-  .today-cockpit-card[data-route],
-  .today-cockpit-card--group,
-  .today-cockpit__more--link,
-  .quick-link-tile,
-  .widget__link,
   .settings-shell__navigation-link,
   .settings-overview__row
 ):active:not(:has(:is(a, button, input, select, textarea, label, summary, [role="button"], [role="checkbox"], [role="switch"]):not(.u-row-title):active)):not(.swipe-row--swiping *):not([class*="--done"], [class*="--checked"], [class*="--archived"], [class*="--paused"], [class*="--inactive"], [class*="--completed"]) {

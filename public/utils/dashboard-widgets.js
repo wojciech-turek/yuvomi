@@ -151,11 +151,6 @@ export function defaultWidgetSize(id) {
   return '1x1';
 }
 
-// Das „Heute"-Cockpit fasst diese vier Domänen bereits als Kurzüberblick zusammen.
-// Ihre Widgets starten deshalb ausgeblendet: kein Echo, keine Erststart-Überladung.
-// Über „Anpassen" jederzeit wieder einblendbar; Bestandskonfigurationen bleiben unberührt.
-export const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping', 'meals']);
-
 // Standardmäßig ausgeblendet: die vier vom Cockpit abgedeckten Domänen (kein Echo)
 // plus die spezialisierten Module und Widgets (unter anderem Health, fasting,
 // Haushaltshilfe und Abfall). Sie sind nicht in jedem Haushalt aktiv und erscheinen als Opt-in im
@@ -182,6 +177,9 @@ export const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping',
 // jeder Haushalt fuehrt Mindesthaltbarkeiten, und ein frisches Dashboard mit
 // einer Kachel „nichts laeuft ab" waere die Ueberladung, die diese Menge
 // verhindern soll.
+// Die Domaenen, die Dziś selbst als Plan zeigt - ihre alten Kacheln starten aus.
+const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping', 'meals']);
+
 export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'pantry', 'clock', 'weather', 'quicklinks']);
 
 export function defaultWidgetVisible(id) {
@@ -276,179 +274,6 @@ export function normalizeDashboardConfig(input) {
     presentIds.add(id);
   }
   return ordered.map((w, i) => ({ ...w, order: i }));
-}
-
-/* DAS DICHTE RASTER, NACHGERECHNET (Critique 2026-09-23).
- *
- * Das Raster packt seit dieser Runde IMMER dicht (`grid-auto-flow: row dense`),
- * auch bei eigener Reihenfolge und im Bearbeiten-Modus. Was danach noch an
- * Loechern bleibt, liegt nicht an der Reihenfolge, sondern an den GROESSEN:
- * drei Breitkacheln in drei Spalten lassen rechts je eine Zelle frei, weil keine
- * spaetere Kachel hineinpasst. Das kann nur eine andere Groesse loesen, und die
- * schlaegt der Bearbeiten-Modus vor.
- *
- * Dafuer braucht es die Belegung, BEVOR sie gerendert ist - fuer jede
- * Kandidaten-Groesse ein Raster, das es nie gibt. `packGrid` rechnet den
- * Auto-Placement-Algorithmus fuer den einzigen Fall nach, den das Raster kennt:
- * jede Kachel hat nur Spans und keine feste Position, und `dense` setzt den
- * Suchcursor fuer JEDE Kachel zurueck an den Anfang (CSS Grid 2, §8.5, Schritt
- * 4). Erste passende Zelle von oben links gewinnt. Die Spans kommen vom
- * Aufrufer, gelesen aus dem gerenderten Stylesheet - die Zuordnung Groesse →
- * Span steht damit weiter nur in dashboard.css. */
-
-/**
- * Belegung eines dicht gepackten Rasters.
- * @param {{ id: string, cols: number, rows: number }[]} items in Rangfolge
- * @param {number} columns Spaltenzahl des Rasters
- * @returns {(string|null)[][]} Zeilen x Spalten, belegt mit der Widget-Id
- */
-export function packGrid(items, columns) {
-  const cols = Math.max(1, Math.floor(columns) || 1);
-  const cells = [];
-  const row = (r) => (cells[r] ??= Array(cols).fill(null));
-  const free = (r, c, w, h) => {
-    for (let a = r; a < r + h; a += 1) {
-      for (let b = c; b < c + w; b += 1) if (row(a)[b]) return false;
-    }
-    return true;
-  };
-  for (const item of items) {
-    // Breiter als das Raster geht nicht: CSS legte dafuer eine implizite
-    // Spalte an, die das Raster nie zeigen soll - gerechnet wird mit der Kante.
-    const w = Math.min(Math.max(1, item.cols | 0), cols);
-    const h = Math.max(1, item.rows | 0);
-    let placed = false;
-    for (let r = 0; !placed; r += 1) {
-      for (let c = 0; c + w <= cols && !placed; c += 1) {
-        if (!free(r, c, w, h)) continue;
-        for (let a = r; a < r + h; a += 1) for (let b = c; b < c + w; b += 1) row(a)[b] = item.id;
-        placed = true;
-      }
-    }
-  }
-  return cells;
-}
-
-/**
- * Leere Zellen VOR der letzten Zeile. Die letzte Zeile darf auslaufen - dort
- * endet das Raster ruhig, statt ein Loch mitten in die Flaeche zu setzen.
- */
-export function gridHoleCount(cells) {
-  let holes = 0;
-  for (let r = 0; r < cells.length - 1; r += 1) holes += cells[r].filter((v) => !v).length;
-  return holes;
-}
-
-/**
- * Die billigste Groessenaenderung EINER Kachel, nach der kein Loch mehr bleibt
- * und das Raster nicht hoeher wird. `null`, wenn es nichts zu schliessen gibt
- * oder keine einzelne Aenderung es schafft - dann schweigt der Hinweis lieber,
- * als einen Umbau in mehreren Schritten anzuregen.
- *
- * @param {{ id: string, size: string, cols: number, rows: number }[]} items
- * @param {number} columns
- * @param {(item: object) => { size: string, cols: number, rows: number }[]} candidatesFor
- */
-export function suggestGridHoleFill(items, columns, candidatesFor) {
-  const base = packGrid(items, columns);
-  if (!gridHoleCount(base)) return null;
-  // Zuerst die NACHBARN des Lochs - die Kachel darueber kann nach unten, die
-  // links daneben nach rechts wachsen -, dann der Rest. Ein Vorschlag, der eine
-  // Kachel am anderen Ende des Rasters umbaut, schliesst das Loch zwar auch,
-  // aber niemand sieht, warum.
-  const neighbours = new Set();
-  for (let r = 0; r < base.length - 1; r += 1) {
-    for (let c = 0; c < base[r].length; c += 1) {
-      if (base[r][c]) continue;
-      if (r > 0 && base[r - 1][c]) neighbours.add(base[r - 1][c]);
-      if (c > 0 && base[r][c - 1]) neighbours.add(base[r][c - 1]);
-    }
-  }
-  // Danach die Kosten der Aenderung: gleiche Flaeche (aus breit wird hoch) vor
-  // groesser vor kleiner - ein Vorschlag, der Inhalt wegnimmt, ist der teuerste.
-  // Erst zuletzt die Rangfolge.
-  const area = (x) => x.cols * x.rows;
-  const cost = (item, cand) => {
-    const delta = area(cand) - area(item);
-    return delta === 0 ? 0 : delta > 0 ? delta : 100 - delta;
-  };
-  const tries = items.flatMap((item, i) => candidatesFor(item)
-    .filter((cand) => cand.size !== item.size)
-    .map((cand) => ({ i, cand, near: neighbours.has(item.id) ? 0 : 1, cost: cost(item, cand) })))
-    .sort((x, y) => x.near - y.near || x.cost - y.cost || x.i - y.i);
-  for (const { i, cand } of tries) {
-    const next = items.map((it, j) => (j === i ? { ...it, ...cand } : it));
-    const cells = packGrid(next, columns);
-    if (gridHoleCount(cells) === 0 && cells.length <= base.length) {
-      return { id: items[i].id, size: cand.size };
-    }
-  }
-  return null;
-}
-
-/**
- * Welche Kachel im NORMALMODUS in den Rest ihrer Zeile waechst (Re-Critique
- * 2026-09-27, A7 P2-12 / R10 L9). Gemessen bei 1440x900: neben der
- * Kennzahlreihe (2x1) und neben den Notizen (2x1) blieb je eine Spalte leer,
- * 367x110 und 367x201px - der Loch-Hinweis steht nur im Anpassen-Modus, und
- * wer nie anpasst, sieht die Loecher fuer immer.
- *
- * Die Regel: nach der dichten Packung waechst jede Kachel nach rechts ueber
- * die freien Zellen, die in ALLEN ihren Zeilen frei sind, bis zur naechsten
- * belegten Zelle oder zum Rand. Gespeichert wird nichts - die gewaehlte Groesse
- * bleibt die des Nutzers, gewachsen wird nur in der Darstellung.
- *
- * WARUM DAS DIE PACKUNG NICHT UMWIRFT (Aequivalenz, getestet): gewachsen wird
- * nur in Zellen, die nach der VOLLEN Packung leer sind. Keine Kachel stand je
- * dort, also findet bei der Neupackung mit den breiteren Spans jede Kachel
- * dieselbe erste passende Stelle - die davor passten schon mit der schmaleren
- * Breite nicht, und die eigene ist weiterhin frei. Der Test packt beide
- * Fassungen und vergleicht die Positionen.
- *
- * @param {{ id: string, cols: number, rows: number }[]} items in Rangfolge
- * @param {number} columns Spaltenzahl des Rasters
- * @returns {Map<string, number>} Id -> neue Spaltenbreite, nur fuer Kacheln, die wachsen
- */
-export function rowFillSpans(items, columns) {
-  const cols = Math.max(1, Math.floor(columns) || 1);
-  const grown = new Map();
-  if (cols < 2) return grown;
-  const cells = packGrid(items, cols);
-  for (const item of items) {
-    // Die Stelle der Kachel: ihre erste Zelle in Lesereihenfolge.
-    let top = -1;
-    let left = -1;
-    for (let r = 0; r < cells.length && top < 0; r += 1) {
-      const c = cells[r].indexOf(item.id);
-      if (c >= 0) { top = r; left = c; }
-    }
-    if (top < 0) continue;
-    const w = Math.min(Math.max(1, item.cols | 0), cols);
-    const h = Math.max(1, item.rows | 0);
-    let end = left + w;
-    const columnFree = (c) => {
-      for (let r = top; r < top + h; r += 1) if (!cells[r] || cells[r][c]) return false;
-      return true;
-    };
-    while (end < cols && columnFree(end)) {
-      for (let r = top; r < top + h; r += 1) cells[r][end] = item.id;
-      end += 1;
-    }
-    if (end > left + w) grown.set(item.id, end - left);
-  }
-  return grown;
-}
-
-export function sameWidgetConfig(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  return a.every((w, i) => w.id === b[i].id && w.visible === b[i].visible
-    && w.size === b[i].size && w.order === b[i].order
-    // Die Optionen zählen mit, sonst bietet der Toast kein „Rückgängig" an,
-    // wenn NUR eine Option umgestellt wurde (#814) - genau der Fall, in dem
-    // die Änderung am wenigsten sichtbar ist. Der Vergleich läuft über die
-    // serialisierte Form: die Werte sind flach und stammen aus derselben
-    // Normalisierung, ihre Schlüsselreihenfolge ist damit stabil.
-    && JSON.stringify(w.options ?? null) === JSON.stringify(b[i].options ?? null));
 }
 
 /**

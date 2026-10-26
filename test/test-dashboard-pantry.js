@@ -15,9 +15,13 @@
  *           einer kurz vor Mitternacht Los Angeles.
  *        4. Rechte - Modul `none` und ein Token ohne Vorrats-Scope liefern die
  *           leere Form; `read` ist keine Sperre.
- *        Dazu der Renderer (Zeilendeckel je Größe, „+N weitere" gegen die
- *        SERVER-Gesamtzahl, Ton nach Dringlichkeit, Deep-Link je Zeile) und der
- *        Filter-Deep-Link der Vorratsseite, auf den die Zeilen zeigen.
+ *        Dazu der Filter-Deep-Link der Vorratsseite, auf den die Zeilen
+ *        zeigen, und die Zeile „Läuft heute ab" im Tagesplan von Dziś.
+ *
+ *        TAFLA (2026-10-24): die Kachel des alten Rasters (renderPantryWidget)
+ *        ist mit dem Raster gegangen; ihre Renderer-Tests mit ihr. Dziś zeigt
+ *        den Vorrat als Vorschaukachel (todayTile) und als Zeile im Plan
+ *        (utils/today-plan.js über utils/today-sheet.js).
  *
  *        Die Datenbasis ist bewusst die Charge (eine `pantry_items`-Zeile):
  *        das Haushalts-Produkt über der Charge (#1448) steht noch aus, die
@@ -41,8 +45,8 @@ process.env.SESSION_SECRET = 'dashboard-pantry-test-secret';
 const widgets = await import('../public/utils/dashboard-widgets.js');
 const { PERMISSION_WIDGETS, resolvePermissions, buildSessionModuleAccess } = await import('../server/permissions.js');
 const { EXPIRY_SOON_DAYS, pantryFilterFromSearch } = await import('../public/utils/pantry-status.js');
-const { __test } = await import('../public/pages/dashboard.js');
-const { renderPantryWidget, listRowCap } = __test;
+const { PANTRY_EXPIRING_ROW_CAP } = await import('../server/services/pantry-expiring.js');
+const { planContext, buildPlan } = await import('../public/utils/today-plan.js');
 
 const src = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -80,18 +84,17 @@ test('Registrierung: Rechte hängen am Modul pantry', () => {
     'ein gesperrter Vorrat muss auch die Kachel sperren (#467)');
 });
 
-test('Registrierung: Modulschalter, Dispatch, Beschriftung und Ton sind verdrahtet', () => {
+test('Registrierung: Modulschalter, Beschriftung und die Vorschaukachel von Dziś sind verdrahtet', () => {
   const page = src('../public/pages/dashboard.js');
   assert.match(page, /const MODULE_FOR_WIDGET = \{[^}]*\bpantry: 'pantry'/,
-    'MODULE_FOR_WIDGET: ein abgeschalteter Vorrat muss die Kachel aus Raster UND Tray nehmen');
-  assert.match(page, /pantry: \(size\) => renderPantryWidget\(data\.pantryExpiring, size\)/,
-    'widgetById muss die Kachel mit ihrer Größe rendern, sonst greift der Zeilendeckel nicht');
-  assert.match(page, /pantry:\s*\(\) => t\('dashboard\.pantryExpiringTitle'\)/, 'widgetLabel (Tray, Fehlerkachel)');
+    'MODULE_FOR_WIDGET: ein abgeschalteter Vorrat muss die Kachel aus Dziś und „Dostosuj Dziś" nehmen');
+  assert.match(page, /pantry:\s*\(\) => t\('dashboard\.pantryExpiringTitle'\)/, 'widgetLabel');
+  // Die Vorschaukachel (todayTile): sie fuehrt in den gefilterten Vorrat und
+  // zaehlt gegen die Server-Gesamtzahl, nicht gegen die gelieferten Zeilen.
+  assert.match(page, /route: '\/pantry\?filter=soon'/, 'die Kachel oeffnet den Vorrat beim Filter „bald"');
+  assert.match(page, /t\('today\.pantryExpiring', \{ count: total \}\)/, 'der Wert ist die Gesamtzahl');
   const admin = src('../public/settings/pages/admin-permissions.js');
   assert.match(admin, /pantry: 'dashboard\.pantryExpiringTitle'/, 'die Rechteverwaltung nennt die Kachel beim selben Namen');
-  const css = src('../public/styles/dashboard.css');
-  assert.match(css, /\.widget--pantry\s*\{\s*--widget-accent:\s*var\(--module-pantry\);\s*\}/,
-    'Familienton kitchen über --module-pantry');
 });
 
 // --------------------------------------------------------------------------
@@ -238,8 +241,8 @@ test('Payload: die Liste ist gedeckelt, die Zahlen nicht', withClock(NOON_BERLIN
   for (let i = 0; i < 9; i += 1) seedItem(`Artikel ${i}`, i < 7 ? '2026-09-20' : '2026-09-23');
 
   const { pantryExpiring } = await dashboard();
-  assert.equal(pantryExpiring.items.length, listRowCap('2x2'),
-    'der Server liefert die größte Fassung der Kachel, nicht mehr');
+  assert.equal(pantryExpiring.items.length, PANTRY_EXPIRING_ROW_CAP,
+    'der Server liefert den Deckel der Liste, nicht mehr');
   assert.equal(pantryExpiring.total, 9, 'die Gesamtzahl zählt über den Deckel hinaus');
   assert.equal(pantryExpiring.expiredCount, 7);
   assert.equal(pantryExpiring.todayCount, 2);
@@ -356,102 +359,6 @@ test('Fehlerpfad: eine scheiternde Vorratsabfrage setzt null und lässt den Rest
 }));
 
 // --------------------------------------------------------------------------
-// Renderer
-// --------------------------------------------------------------------------
-
-// `hasIcon()` fragt das Lucide-Register im Fenster: zwei bekannte Zeichen
-// reichen, um den Rückfall für ein unbekanntes zu messen.
-globalThis.window ??= {};
-globalThis.window.lucide = { icons: { Refrigerator: {}, Package: {} } };
-
-function row(id, daysLeft, overrides = {}) {
-  return {
-    id, name: `Artikel ${id}`, quantity: 1, unit: 'pcs', expires_on: `2026-09-${String(23 + daysLeft).padStart(2, '0')}`,
-    days_left: daysLeft, location_name: 'Kühlschrank', location_icon: 'refrigerator', ...overrides,
-  };
-}
-
-function slice(items, total = items.length) {
-  return {
-    items, todayItems: [], total,
-    expiredCount: items.filter((i) => i.days_left < 0).length,
-    todayCount: items.filter((i) => i.days_left === 0).length,
-  };
-}
-
-const zeilen = (html) => (html.match(/class="pantry-widget-row"/g) || []).length;
-
-test('Renderer: ein Ladefehler (null) wirft, damit die geteilte Fehlerkachel greift', () => {
-  // Mit der eigenen Meldung - ein TypeError aus einem fehlenden Renderer wäre
-  // auch ein Wurf und machte diesen Test vor dem Bau grün.
-  assert.throws(() => renderPantryWidget(null, '1x2'), /pantry widget slice failed to load/);
-});
-
-test('Renderer: leer ist ruhig und nennt den Horizont', () => {
-  const html = renderPantryWidget(slice([]), '1x2');
-  assert.match(html, /dashboard\.pantryExpiringEmpty\{&quot;count&quot;:7\}|dashboard\.pantryExpiringEmpty\{"count":7\}/,
-    'der Leerzustand sagt, wie weit die Kachel schaut');
-  assert.doesNotMatch(html, /widget__badge/, 'keine 0-Badge neben einem Leerzustand');
-  assert.doesNotMatch(html, /widget__empty-cta/, 'kein Handlungsknopf - die Kachel ist reine Anzeige');
-});
-
-test('Renderer: Zeilendeckel folgt der Kachelhöhe (listRowCap), 1x1 und 2x1 flach, 1x2 hoch', () => {
-  const items = [-2, -1, 0, 1, 2].map((d, i) => row(i + 1, d));
-  assert.equal(zeilen(renderPantryWidget(slice(items, 8), '1x1')), listRowCap('1x1'));
-  assert.equal(zeilen(renderPantryWidget(slice(items, 8), '2x1')), listRowCap('2x1'));
-  assert.equal(zeilen(renderPantryWidget(slice(items, 8), '1x2')), listRowCap('1x2'));
-});
-
-test('Renderer: Badge und „+N weitere" rechnen gegen die Server-Gesamtzahl', () => {
-  const items = [-2, -1, 0, 1, 2].map((d, i) => row(i + 1, d));
-  const flach = renderPantryWidget(slice(items, 8), '1x1');
-  assert.match(flach, /widget__badge">8</, 'die Badge zählt alle im Horizont, nicht die gezeigten');
-  assert.match(flach, /dashboard\.pantryExpiringMore\{&quot;count&quot;:5\}/, '8 im Horizont, 3 gezeigt');
-  const passt = renderPantryWidget(slice(items.slice(0, 2)), '1x2');
-  assert.doesNotMatch(passt, /pantryExpiringMore/, 'ohne Überlauf keine Fussnote');
-});
-
-test('Renderer: Ton nach Dringlichkeit - abgelaufen, heute/morgen, später', () => {
-  const html = renderPantryWidget(slice([row(1, -3), row(2, -1), row(3, 0), row(4, 1), row(5, 4)]), '1x2');
-  const toene = [...html.matchAll(/pantry-widget-row__days--(\w+)/g)].map((m) => m[1]);
-  assert.deepEqual(toene, ['expired', 'expired', 'now', 'now', 'soon']);
-});
-
-test('Renderer: Resttage in Worten aus den Vorrats-Texten', () => {
-  const html = renderPantryWidget(slice([row(1, -3), row(2, -1), row(3, 0), row(4, 1), row(5, 4)]), '1x2');
-  assert.match(html, /pantry\.badgeExpiredDays\{&quot;count&quot;:3\}/);
-  assert.match(html, /pantry\.badgeExpiredYesterday/);
-  assert.match(html, /pantry\.badgeExpiresToday/);
-  assert.match(html, /pantry\.badgeExpiresTomorrow/);
-  assert.match(html, /pantry\.badgeExpiresDays\{&quot;count&quot;:4\}/);
-});
-
-test('Renderer: Zeilen führen in den passend gefilterten Vorrat, der Kopf in den ganzen', () => {
-  const html = renderPantryWidget(slice([row(1, -1), row(2, 2)]), '1x2');
-  assert.match(html, /class="pantry-widget-row" data-route="\/pantry\?filter=expired"/);
-  assert.match(html, /class="pantry-widget-row" data-route="\/pantry\?filter=soon"/);
-  assert.match(html, /class="widget__link"/);
-  assert.match(html, /data-route="\/pantry" class="widget__link"|href="\/pantry" data-route="\/pantry"/,
-    'der Kopf-Link führt auf /pantry - mit Query liefe das Siegel auf den Slug „pantry?filter=…"');
-});
-
-test('Renderer: Name und Menge werden escaped, die Menge steht knapp', () => {
-  const html = renderPantryWidget(slice([row(1, 0, { name: '<img src=x>', quantity: 2.5, unit: 'kg' })]), '1x2');
-  assert.doesNotMatch(html, /<img src=x>/);
-  assert.match(html, /&lt;img src=x&gt;/);
-  // Die Einheit bekommt die Menge als count, damit sie flektiert („6 Dosen",
-  // Re-Critique 2026-09-27 W2). Der t()-Stub des Loaders haengt die Parameter
-  // an den Schluessel - sichtbar wird damit genau das: 2,5 geht zur Pluralwahl.
-  assert.match(html, /2,5 pantry\.units\.kg\{&quot;count&quot;:2\.5\}/);
-});
-
-test('Renderer: das Lagerort-Zeichen fällt bei unbekanntem Namen auf package zurück', () => {
-  const html = renderPantryWidget(slice([row(1, 0), row(2, 1, { location_icon: 'kein-solches-zeichen' })]), '1x2');
-  const zeichen = [...html.matchAll(/pantry-widget-row__icon" aria-hidden="true"><i data-lucide="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(zeichen, ['refrigerator', 'package'], 'ein leerer Kreis wäre die stille Fassung desselben Fehlers');
-});
-
-// --------------------------------------------------------------------------
 // Der Filter-Deep-Link der Vorratsseite
 // --------------------------------------------------------------------------
 
@@ -466,13 +373,15 @@ test('Vorratsseite: ?filter= öffnet den passenden Chip, Unbekanntes bleibt bei 
 });
 
 // --------------------------------------------------------------------------
-// Heute-Blatt: „Läuft heute ab" dockt am Beitrags-Vertrag an (Integration)
+// Tagesplan von Dziś: „Läuft heute ab" dockt am Beitrags-Vertrag an (Integration)
 // --------------------------------------------------------------------------
 
-/* Was HEUTE abläuft, ist eine Sache von heute - das Heute-Blatt nannte sie
- * nicht und sagte daneben „Danach steht heute nichts mehr an". Die Quelle
- * spricht nach denselben drei Riegeln wie jede andere (Modul an, Widget-Recht,
- * Kein-Echo gegen die Vorrats-Kachel) und hält die Coda auf. */
+/* Was HEUTE abläuft, ist eine Sache von heute. Dziś baut seinen Plan
+ * (utils/today-plan.js) und nimmt die Zeilen der übrigen Module über den
+ * Beitrags-Vertrag von utils/today-sheet.js: die Quelle spricht nach denselben
+ * Riegeln wie jede andere (Modul an, Modulrecht, Widget-Recht). Das Kein-Echo
+ * gegen die Vorrats-Kachel gibt es nicht mehr - Dziś hat keine Modulkacheln
+ * (TAFLA, 2026-10-19), der Plan fragt ohne Anordnung. */
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 
 function withSheet(perms, fn) {
@@ -492,62 +401,46 @@ const expiringToday = (names, todayCount = names.length) => ({
   todayItems: names.map((name, i) => ({ id: i + 1, name, quantity: 1, unit: 'l' })),
 });
 const birthdayToday = [{ id: 9, name: 'Oma Erna', days_until: 0, kind: 'birthday' }];
-const sheetRows = (model) => model.rows.filter((row) => row.kind === 'pantry');
+const plan = (data) => buildPlan(data, planContext({
+  now: new Date('2026-09-23T10:00:00.000Z'),
+  moduleOff: (module) => Boolean(global.window?.yuvomi?.isModuleDisabled?.(module)),
+}));
+const pantryRows = (p) => p.all.filter((row) => row.sourceKind === 'pantry');
 
-test('Heute-Blatt: was heute abläuft, steht als eine Zeile im Blatt und hält die Coda auf', () => withSheet({}, () => {
-  const model = __test.buildTodayCockpitModel(
-    { birthdays: birthdayToday, pantryExpiring: expiringToday(['Milch', 'Joghurt']) }, [],
-  );
-  const rows = sheetRows(model);
-  assert.equal(rows.length, 1, `zwei Chargen von heute sind eine Zeile, erhalten: ${model.rows.map((r) => r.kind)}`);
+test('Tagesplan: was heute abläuft, steht als eine offene Zeile im Plan', () => withSheet({}, () => {
+  const p = plan({ birthdays: birthdayToday, pantryExpiring: expiringToday(['Milch', 'Joghurt']) });
+  const rows = pantryRows(p);
+  assert.equal(rows.length, 1, `zwei Chargen von heute sind eine Zeile, erhalten: ${p.all.map((r) => r.sourceKind ?? r.kind)}`);
   assert.match(rows[0].title, /Milch.*Joghurt/);
-  assert.match(rows[0].sub, /pantry\.badgeExpiresToday/, 'der Text ist der der Vorratsseite (pantryExpiryPhrase(0))');
-  assert.equal(rows[0].tone, 'pantry');
+  assert.match(rows[0].meta, /pantry\.badgeExpiresToday/, 'der Text ist der der Vorratsseite (pantryExpiryPhrase(0))');
   assert.match(rows[0].route, /^\/pantry\?filter=soon$/, 'die Zeile öffnet den Vorrat mit dem passenden Filter');
-  assert.equal(model.coda, null, 'solange heute etwas abläuft, keine Entwarnung');
+  assert.ok(p.open.includes(rows[0]), 'sie steht offen im Tag, nicht unter „Wcześniej"');
 
-  const nothing = __test.buildTodayCockpitModel({ birthdays: birthdayToday, pantryExpiring: expiringToday([]) }, []);
-  assert.equal(sheetRows(nothing).length, 0);
-  assert.match(String(nothing.coda), /todayNothingElse/, 'Gegenprobe: ohne Ablauf fällt die Coda');
+  const nothing = plan({ birthdays: birthdayToday, pantryExpiring: expiringToday([]) });
+  assert.equal(pantryRows(nothing).length, 0, 'Gegenprobe: ohne Ablauf keine Zeile');
 }));
 
-test('Heute-Blatt: mehr als die gelieferten Chargen - der Rest steht als Zahl da', () => withSheet({}, () => {
-  const model = __test.buildTodayCockpitModel({ pantryExpiring: expiringToday(['A', 'B', 'C', 'D', 'E'], 7) }, []);
-  assert.match(sheetRows(model)[0].title, /pantryExpiringMore.*"count":2/, 'todayCount ist ungedeckelt, die Liste nicht');
+test('Tagesplan: mehr als die gelieferten Chargen - der Rest steht als Zahl da', () => withSheet({}, () => {
+  const p = plan({ pantryExpiring: expiringToday(['A', 'B', 'C', 'D', 'E'], 7) });
+  assert.match(pantryRows(p)[0].title, /pantryExpiringMore.*"count":2/, 'todayCount ist ungedeckelt, die Liste nicht');
 }));
 
-test('Heute-Blatt: Kein-Echo gegen die Vorrats-Kachel, Rechte und Modulschalter', () => {
+test('Tagesplan: Rechte, Widget-Recht und Modulschalter halten die Zeile zurück', () => {
   const data = { pantryExpiring: expiringToday(['Milch']) };
   withSheet({}, () => {
-    const beside = __test.buildTodayCockpitModel(data, [{ id: 'pantry', visible: true, size: '1x2' }]);
-    assert.equal(sheetRows(beside).length, 0, 'neben der sichtbaren Kachel keine zweite Zeile');
-    const hiddenTile = __test.buildTodayCockpitModel(data, [{ id: 'pantry', visible: false, size: '1x2' }]);
-    assert.equal(sheetRows(hiddenTile).length, 1, 'ausgeblendete Kachel: das Blatt spricht');
+    assert.equal(pantryRows(plan(data)).length, 1, 'Vorbedingung: ohne Riegel spricht die Quelle');
   });
   withSheet({ modules: { pantry: 'none' } }, () => {
-    assert.equal(sheetRows(__test.buildTodayCockpitModel(data, [])).length, 0, 'ohne Vorratsrecht keine Zeile');
+    assert.equal(pantryRows(plan(data)).length, 0, 'ohne Vorratsrecht keine Zeile');
   });
   withSheet({ widgets: { pantry: 'none' } }, () => {
-    assert.equal(sheetRows(__test.buildTodayCockpitModel(data, [])).length, 0, 'gesperrtes Widget heisst auch: keine Zeile (#467)');
+    assert.equal(pantryRows(plan(data)).length, 0, 'gesperrtes Widget heisst auch: keine Zeile (#467)');
   });
-  const prevWindow = global.window;
-  try {
-    withSheet({}, () => {
-      global.window = { yuvomi: { isModuleDisabled: (m) => m === 'pantry' } };
-      assert.equal(sheetRows(__test.buildTodayCockpitModel(data, [])).length, 0, 'abgeschaltetes Modul spricht nicht');
-    });
-  } finally {
-    global.window = prevWindow;
-  }
   withSheet({}, () => {
-    assert.equal(sheetRows(__test.buildTodayCockpitModel({ pantryExpiring: null }, [])).length, 0,
-      'ein Ladefehler (null) ist keine Zeile');
+    global.window = { yuvomi: { isModuleDisabled: (m) => m === 'pantry' } };
+    assert.equal(pantryRows(plan(data)).length, 0, 'abgeschaltetes Modul spricht nicht');
   });
-});
-
-// TAFLA (2026-10-19): die Zeilen der Wand tragen keinen Modulton mehr (Artboard
-// „Ściana": Zeit, Titel, Pille, Scheibe) - die Wand-Haelfte ist gegangen.
-test('Heute-Blatt: die Vorratszeile hat ihren Ton im Cockpit', () => {
-  const css = src('../public/styles/dashboard.css');
-  assert.match(css, /\.today-cockpit-card--pantry\s*\{\s*--today-card-accent:\s*var\(--module-pantry\)/);
+  withSheet({}, () => {
+    assert.equal(pantryRows(plan({ pantryExpiring: null })).length, 0, 'ein Ladefehler (null) ist keine Zeile');
+  });
 });

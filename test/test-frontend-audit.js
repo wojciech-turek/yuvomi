@@ -305,7 +305,6 @@ test('kein HTML-Kommentar im Markup enthält ein Backtick', () => {
 // SINKEN - wer eine Stelle umstellt, senkt sie hier mit; eine neue Datei steht
 // bei 0.
 const LATE_MODAL_CLOSE_BESTAND = {
-  'components/quick-links-manager.js': 1,
   'pages/birthdays.js': 2,
   'pages/budget-plans.js': 2,
   'pages/budget.js': 7,
@@ -844,123 +843,6 @@ test('keine Bewegungskurve steht ausserhalb von tokens.css als Literal', () => {
 });
 
 
-
-/**
- * Das Wetter-Vokabular haelt an vier Enden zusammen.
- *
- * DIE LAGEN UND BAENDER STEHEN NICHT ALS LISTE HIER, sondern werden aus
- * dashboard.js gelesen - `weatherToneKey()` erzeugt sie, also ist sie die
- * Quelle. Eine Liste im Test waere die zweite Wahrheit, und genau die ist in
- * diesem Repo schon dreimal auseinandergelaufen (Modulzahl, Waehrungen,
- * Familientoene). Kommt eine siebte Lage dazu, faellt dieser Guard von selbst
- * um, statt sie durchzulassen.
- *
- * VIER ENDEN, WEIL EIN TON AN VIER STELLEN GLEICHZEITIG STEHEN MUSS:
- *   1. der Light-Wert in `:root`,
- *   2. der Dark-Wert - in BEIDEN Dark-Bloecken. Das ist die eigentliche
- *      Drift-Gefahr: tokens.css fuehrt @media(prefers-color-scheme) UND
- *      [data-theme="dark"], und wer nur einen bedient, baut einen Fehler, den
- *      genau die Haelfte der Nutzer sieht.
- *   3. die Aufloesungsregel in dashboard.css, die `[data-weather-tone="x"]`
- *      auf das Token abbildet - ohne sie steht das Attribut im DOM und faerbt
- *      nichts,
- *   4. und fuer jede Gangart eine Animation samt reduced-motion-Ausschalter.
- *
- * Guard-Ebene: Struktur (aus der JS-Abbildung abgeleitet) + Wert.
- */
-test('jede Wetterlage traegt ihren Ton in beiden Themes und loest ihn auch auf', () => {
-  const page = read('../public/pages/dashboard.js');
-  const tokens = read('../public/styles/tokens.css');
-  const css = read('../public/styles/dashboard.css');
-
-  const toneFn = page.match(/function weatherToneKey\([\s\S]*?\n}/);
-  assert.ok(toneFn, 'weatherToneKey() nicht gefunden - die Quelle der Lagen ist weg.');
-  const tones = [...new Set([...toneFn[0].matchAll(/return '([a-z]+)'/g)].map((m) => m[1]))];
-  assert.ok(tones.length >= 6, `Nur ${tones.length} Wetterlagen gelesen - die Signatur greift nicht mehr.`);
-
-  const bandsDecl = page.match(/const WEATHER_BANDS = \[([^\]]+)\]/);
-  assert.ok(bandsDecl, 'WEATHER_BANDS nicht gefunden.');
-  const bands = [...bandsDecl[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
-  assert.ok(bands.length >= 5, `Nur ${bands.length} Temperaturbaender gelesen.`);
-
-  const darkScheme = darkSchemeBlock(tokens);
-  const darkAttr = darkAttrBlock(tokens);
-  assert.ok(darkScheme && darkAttr, 'Ein Dark-Block von tokens.css ist nicht auffindbar.');
-
-  const missing = [];
-  const check = (name, attr) => {
-    if (!new RegExp(`\\n\\s*--_${name}:\\s*#`).test(tokens)) missing.push(`tokens.css :root --_${name}`);
-    if (!new RegExp(`--_${name}:\\s*#`).test(darkScheme[1])) missing.push(`tokens.css prefers-color-scheme --_${name}`);
-    if (!new RegExp(`--_${name}:\\s*#`).test(darkAttr[1])) missing.push(`tokens.css [data-theme=dark] --_${name}`);
-    if (!new RegExp(`--${name}:\\s*var\\(--_${name}\\)`).test(tokens)) missing.push(`tokens.css oeffentliches --${name}`);
-    if (!css.includes(attr)) missing.push(`dashboard.css ${attr}`);
-  };
-
-  for (const tone of tones) check(`weather-${tone}`, `[data-weather-tone="${tone}"]`);
-  for (const band of bands) check(`weather-band-${band}`, `[data-weather-band="${band}"]`);
-
-  assert.deepEqual(missing, [], `Wetter-Vokabular unvollstaendig:\n${missing.join('\n')}`);
-});
-
-test('jede Bewegung des Wetter-Widgets steht unter einer Bewegungs-Bedingung', () => {
-  const page = read('../public/pages/dashboard.js');
-  const css = read('../public/styles/dashboard.css');
-
-  const motionFn = page.match(/function weatherMotionAttr\([\s\S]*?\n}/);
-  assert.ok(motionFn, 'weatherMotionAttr() nicht gefunden.');
-  const motions = [...new Set([...motionFn[0].matchAll(/data-weather-motion="([a-z]+)"/g)].map((m) => m[1]))];
-  assert.ok(motions.length >= 4, `Nur ${motions.length} Gangarten gelesen - die Signatur greift nicht mehr.`);
-
-  // DIE SIGNATUR IST „Wetter-Selektor + animation", NICHT EINE LISTE VON
-  // GANGARTEN. Ein Guard ueber die vier bekannten Namen waere beim fuenften
-  // gruen geblieben - genau der Fehler, den die Umstellung auf
-  // `no-preference` gerade behoben hat. Er faellt hier ueber die BAUART:
-  // jede Regel, die eine Wetter-Flaeche animiert, muss unter einer
-  // prefers-reduced-motion-Bedingung stehen.
-  const stray = [];
-  let seen = 0;
-  for (const rule of eachRule(css)) {
-    if (!/weather-widget|weather-forecast|wall-weather|data-weather-motion/.test(rule.selector)) continue;
-    if (!/\banimation(-name|-delay|-duration)?\s*:\s*(?!none)/.test(rule.body)) continue;
-    seen += 1;
-    const gated = rule.at.some((at) => /prefers-reduced-motion/.test(at));
-    // ZWEI BAUARTEN BRAUCHEN DIE BEDINGUNG NICHT, und beide sind das Gegenteil
-    // von Umgebungsbewegung:
-    //   - der Wand-Nachtmodus HAELT Bewegung an, statt sie zu starten;
-    //   - der Ladekringel des Aktualisieren-Knopfs ist Rueckmeldung auf eine
-    //     angestossene Aktion und laeuft nur, solange die Anfrage laeuft. Auch
-    //     unter reduzierter Bewegung muss erkennbar bleiben, dass etwas
-    //     passiert - Apple laesst seine Aktivitaetsanzeigen aus demselben Grund
-    //     drehen. Die Zusicherung darunter belegt, dass er wirklich fluechtig
-    //     ist; ohne sie waere das hier eine Ausnahme auf Zuruf.
-    const transient = /--spinning/.test(rule.selector);
-    if (!gated && !/data-wall-night/.test(rule.selector) && !transient) {
-      stray.push(`${rule.selector} -> ${rule.body.trim().slice(0, 60)}`);
-    }
-  }
-  assert.ok(seen >= 6, `Nur ${seen} animierte Wetter-Regeln gesehen - die Signatur greift nicht mehr.`);
-  assert.deepEqual(stray, [],
-    'Bewegung am Wetter-Widget ohne Bewegungs-Bedingung. Sie gehoert in den\n'
-    + '`@media (prefers-reduced-motion: no-preference)`-Block in dashboard.css -\n'
-    + 'eine nachgeschobene `animation: none`-Gegenregel verliert gegen jeden\n'
-    + `Selektor mit einem Zusatz mehr (gemessen am fallenden Regen).\n${stray.join('\n')}`);
-
-  // Und die Gegenrichtung: der Block muss jede Gangart auch wirklich fuehren.
-  const inBlock = [...eachRule(css)]
-    .filter((rule) => rule.at.some((at) => /prefers-reduced-motion:\s*no-preference/.test(at)))
-    .map((rule) => rule.selector).join('\n');
-  const missing = motions.filter((m) => !inBlock.includes(`[data-weather-motion="${m}"]`));
-  assert.deepEqual(missing, [], `Gangart ohne Animation: ${missing.join(', ')}`);
-  assert.match(inBlock, /weather-widget__glyph::before/, 'der Lichthauch muss im Bewegungsblock atmen');
-
-  // Die Ausnahme oben gilt nur, solange sie fluechtig IST: die Klasse wird um
-  // die Anfrage herum gesetzt und wieder entfernt. Bliebe sie stehen, waere
-  // aus der Rueckmeldung eine Dauerbewegung ohne Ausschalter geworden.
-  assert.match(page, /classList\.add\('weather-widget__refresh--spinning'\)/,
-    'der Ladekringel muss beim Anstossen gesetzt werden');
-  assert.match(page, /classList\.remove\('weather-widget__refresh--spinning'\)/,
-    'der Ladekringel muss wieder entfernt werden - sonst ist er keine Rueckmeldung, sondern Dauerbewegung');
-});
 
 /**
  * Jedes benutzte Token muss auch existieren.
@@ -1898,73 +1780,6 @@ test('synchronization-by-data-type leaves exist and export async render function
       `${file} must import the shared API client`,
     );
   }
-});
-
-test('die Widget-Optionen sind auch am ausgeblendeten Widget erreichbar (#814)', () => {
-  const source = read('../public/pages/dashboard.js');
-  const widgets = read('../public/utils/dashboard-widgets.js');
-
-  // DIE VORAUSSETZUNG, DIE DIESE REGEL NOETIG MACHT: Aufgaben und Kalender sind
-  // ab Werk ausgeblendet, weil das Cockpit ihre Domaenen abdeckt. Genau sie
-  // tragen die Optionen. Waeren die Optionen nur an der sichtbaren Kachel,
-  // muesste man die Kachel erst einblenden, um einzustellen, was sie gar nicht
-  // zeigt - und ihre Filter wirken auf Cockpit und Kopfband weiter.
-  const covered = widgets.match(/COCKPIT_COVERED_WIDGETS = new Set\(\[([^\]]*)\]/);
-  assert.ok(covered, 'COCKPIT_COVERED_WIDGETS nicht gefunden - das Muster greift nicht mehr');
-  const withOptions = source.match(/WIDGETS_WITH_OPTIONS = new Set\(\[([^\]]*)\]/);
-  assert.ok(withOptions, 'WIDGETS_WITH_OPTIONS nicht gefunden');
-  const optionIds = [...withOptions[1].matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
-  const coveredIds = [...covered[1].matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
-  assert.ok(optionIds.some((id) => coveredIds.includes(id)),
-    'kein Options-Widget ist ab Werk ausgeblendet - dann ist diese Regel gegenstandslos geworden');
-
-  // TAFLA (2026-10-19): Kachelraster und Ablage sind fort; Dziś zeigt die
-  // Aufgaben und Termine selbst. Ihre Filter wirken weiter auf den ganzen
-  // Plan - also bietet „Dostosuj Dziś" sie an (Abschnitt „Więcej"), und die
-  // Zeilen oeffnen dieselben Dialoge.
-  assert.match(source, /filters: \['tasks', 'calendar'\]\.filter\(/,
-    'das Blatt bietet die Filter von Aufgaben und Kalender an');
-  assert.match(source, /onFilter: editTodayFilter/, 'und verdrahtet sie');
-  assert.match(source, /async function editTodayFilter\(id\) \{[\s\S]*?openWidgetOptions\(id, current\)/,
-    'mit demselben Dialog wie frueher an der Kachel');
-});
-
-test('das Kopfband faehrt im selben Anpassen-Zyklus wie die Kacheln (#740)', () => {
-  const source = read('../public/pages/dashboard.js');
-
-  // Der eigentliche Fehler waere nicht ein fehlender Schalter, sondern einer,
-  // der neben dem Zyklus steht: Abbrechen holt die Kacheln zurueck und laesst
-  // das Kopfband verschwunden, oder Rueckgaengig kennt es nicht. Geprueft wird
-  // deshalb die KOPPLUNG, nicht die Existenz des Knopfes.
-  // JEDER dieser PUTs, nicht irgendeiner: es gibt zwei (Speichern und
-  // Ruecknahme), und ein Guard, dem einer genuegt, ist blind fuer den anderen.
-  const widgetPuts = [...source.matchAll(/api\.put\('\/preferences',\s*\{[^}]*dashboard_widgets[^}]*\}/g)]
-    .map((m) => m[0]);
-  assert.ok(widgetPuts.length >= 2,
-    `Nur ${widgetPuts.length} dashboard_widgets-PUTs gefunden - das Muster greift nicht mehr`);
-  const withoutGlance = widgetPuts.filter((call) => !call.includes('dashboard_today_glance'));
-  assert.deepEqual(withoutGlance, [],
-    'Kacheln und Kopfband muessen in EINEM PUT gehen - sonst schreibt ein Fehlschlag die Haelfte:\n  '
-    + withoutGlance.join('\n  '));
-  // TAFLA (2026-10-19): kein Abbrechen mehr - „Dostosuj Dziś" speichert jede
-  // Aenderung sofort. Der Wert reist im selben PUT wie die Anordnung weiter
-  // (oben), damit ein spaeterer Kopfband-Leser ihn nicht verliert.
-  // SEIT #827 IST "STANDARD" DIE VORGABE DES HAUSHALTS, nicht mehr der
-  // Auslieferungszustand: Zuruecksetzen loescht den eigenen Stand und uebernimmt,
-  // was der Server daraufhin zurueckmeldet. Das Kopfband muss diesen Weg
-  // mitgehen - eine feste `true` waere hier wieder die halbe Ruecknahme.
-  assert.match(source, /function resetDashboardConfig[\s\S]{0,1400}?glanceVisible = res\.data\?\.dashboard_today_glance !== false/,
-    'Zuruecksetzen holt das Kopfband nicht aus der Vorgabe zurueck');
-  assert.match(source, /dashboard_widgets: null, dashboard_today_glance: null/,
-    'Zuruecksetzen muss BEIDE eigenen Werte loeschen - sonst folgt die Haelfte weiter dem alten Stand');
-  assert.match(source, /glanceVisible = previousGlance/,
-    'Rueckgaengig nimmt das Kopfband nicht mit zurueck');
-  // Das Kopfband selbst zeichnet Dziś nicht mehr (Tafla) - das Cockpit
-  // bleibt fuer die Wand, und dort gilt weiter: ohne Inhalt faellt es weg.
-  assert.match(source, /!parts\.length && !editing/,
-    'ohne Inhalt faellt das Kopfband auch im Bearbeiten-Modus weg');
-  assert.match(source, /data-glance-show/,
-    'ausgeblendet fehlt der Weg zurueck ueber die Chip-Leiste');
 });
 
 test('sync-calendar leaf loads CalDAV, Google, and Apple with independent status', () => {
@@ -5002,7 +4817,7 @@ test('der Zustand „keine Einkaufsliste" hat genau eine Antwort', () => {
   // verbliebenen Vorkommen sind ein anderer Zustand: dort hat der Nutzer gar
   // keine Liste UND steht auf der Fläche, auf der er eine anlegt - beide tragen
   // ihren eigenen Anlege-CTA und sind keine Vorbedingung eines Transfers.
-  const ownEmptyStates = new Set(['shopping.noLists', 'dashboard.noShoppingLists']);
+  const ownEmptyStates = new Set(['shopping.noLists']);
   for (const entry of readdirSync(pagesDir)) {
     if (!entry.endsWith('.js')) continue;
     for (const [, key] of read(`../public/pages/${entry}`)
@@ -6605,7 +6420,6 @@ test('R19/Tafla: Notatki sind zwei Gruppen - angepinnte Kacheln, dann die Liste'
 
 test('responsive adaptation keeps Notes vertical and prevents intrinsic-width overflow', () => {
   const notes = read('../public/styles/notes.css');
-  const dashboard = read('../public/styles/dashboard.css');
   const pageSearch = read('../public/styles/page-search.css');
 
   // The shared search control guards its own intrinsic-width overflow.
@@ -6619,44 +6433,12 @@ test('responsive adaptation keeps Notes vertical and prevents intrinsic-width ov
   assert.match(notes, /@container notes-page \(min-width:\s*600px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(notes, /@container notes-page \(min-width:\s*900px\)\s*\{[^}]*\.notes-tiles\s*\{\s*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(notes, /repeat\(5/);
-  assert.match(
-    dashboard,
-    /\.notes-grid-widget\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
-  );
   assert.match(notes, /\.note-card\s*\{[\s\S]*min-width:\s*0/);
   assert.match(notes, /\.note-card__title\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
   assert.match(
     notes,
     /\.note-card__title,[\s\S]*\.note-card__content\s*\{[\s\S]*unicode-bidi:\s*plaintext/
   );
-});
-
-test('dashboard weather widget adapts to selected widget size', () => {
-  const dashboard = read('../public/styles/dashboard.css');
-  const wrapperRule = cssRuleBody(dashboard, '.widget-wrapper');
-
-  assert.match(wrapperRule, /container:\s*dashboard-widget\s*\/\s*inline-size/);
-  assert.match(
-    dashboard,
-    /@container dashboard-widget \(min-width:\s*480px\)[\s\S]*\.weather-widget__inner\s*\{[\s\S]*flex-direction:\s*row/,
-    'weather should switch to horizontal layout from its widget width, not viewport width',
-  );
-  assert.match(
-    dashboard,
-    /\.widget-size--1x1\s*>\s*\.weather-widget \.weather-widget__meta,[\s\S]*\.widget-size--1x1\s*>\s*\.weather-widget \.weather-forecast\s*\{[\s\S]*display:\s*none/,
-    'tiny weather widgets should not force rich forecast content into the tile',
-  );
-  assert.match(
-    dashboard,
-    /\.widget-size--2x1\s*>\s*\.weather-widget \.weather-widget__meta,[\s\S]*\.widget-size--4x1\s*>\s*\.weather-widget \.weather-widget__meta\s*\{[\s\S]*display:\s*none/,
-    'one-row weather widgets should use a denser summary',
-  );
-  assert.doesNotMatch(
-    dashboard,
-    /@media \(min-width:\s*(?:768|1024|1440)px\)\s*\{\s*\.weather-widget\s*\{/,
-    'weather layout must not be driven by viewport breakpoints',
-  );
-  assert.doesNotMatch(dashboard, /\.weather-widget\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
 });
 
 test('responsive adaptation keeps all four Kitchen tabs readable on narrow phones', () => {
@@ -6755,49 +6537,15 @@ test('Birthday page exposes a single creation action (FAB), no duplicate toolbar
 
 test('dashboard polish keeps one page heading and native quick-action controls', () => {
   const dashboard = read('../public/pages/dashboard.js');
-  const css = read('../public/styles/dashboard.css');
 
   assert.equal((dashboard.match(/<h1\b/g) || []).length, 1, 'dashboard must expose one h1');
-  assert.match(dashboard, /<h2 class="dashboard-overview__title(?: dashboard-overview__title--\$\{greetingPeriod\(\)\})?"/);
+  // TAFLA (2026-10-24): der Kopf der alten Uebersicht (h2 mit Gruss, runde
+  // Werkzeugknoepfe) ist mit dem Raster gegangen; Dziś traegt seinen eigenen.
   // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnet das
   // Erfassen-Blatt (components/capture-sheet.js), und dort sind es echte Knoepfe.
   assert.doesNotMatch(dashboard, /class="fab-action"/);
   assert.match(read('../public/components/capture-sheet.js'), /btn\.type = 'button';\s*btn\.className = 'capture-plus';/);
   assert.doesNotMatch(dashboard, /<button class="fab-action__btn"/);
-  assert.match(css, /\.dashboard-icon-btn\s*\{[\s\S]*width:\s*var\(--target-lg\);[\s\S]*height:\s*var\(--target-lg\)/);
-  // width/height müssen INNERHALB derselben .dashboard-icon-btn-Regel liegen
-  // ([^{}] überschreitet keine Regelgrenze) — sonst matcht die Regex fälschlich
-  // ein --target-base aus einer beliebigen späteren Regel (z.B. dem
-  // pointer:coarse-Block der Edit-Controls) quer über die Datei.
-  assert.doesNotMatch(
-    css,
-    /@media \(max-width:\s*639px\)[\s\S]*?\.dashboard-icon-btn\s*\{[^{}]*width:\s*var\(--target-base\)[^{}]*height:\s*var\(--target-base\)/,
-    'mobile dashboard controls must keep the large touch target through the final cascade'
-  );
-  assert.match(
-    css,
-    /@media \(min-width:\s*1024px\)[\s\S]*\.dashboard-icon-btn\s*\{[\s\S]*width:\s*var\(--target-md\);[\s\S]*height:\s*var\(--target-md\)/,
-  );
-});
-
-test('dashboard today cockpit keeps content visibly below its section heading', () => {
-  const dashboard = read('../public/styles/dashboard.css');
-  const typography = read('../public/styles/typography.css');
-  const valueRule = cssRuleBody(dashboard, '.today-cockpit-card__value');
-
-  assert.match(
-    typography,
-    /\.today-cockpit__header h2,[\s\S]*?font-size:\s*var\(--type-section-title\)/,
-    'Heute wichtig must keep the section-title role',
-  );
-  // Der Value trägt die Card-Title-Rolle (16px): dominant genug, um den
-  // Icon-Chip zu überwiegen (das glanzbare Datum der Karte), aber weiterhin
-  // unter der 18px-Section-Heading „Heute wichtig".
-  assert.match(
-    valueRule,
-    /font-size:\s*var\(--type-card-title\)/,
-    'cockpit value must carry the 16px card-title role, still below the 18px section heading',
-  );
 });
 
 test('polished rounded cards use subtle full borders instead of thick accent caps', () => {
@@ -7774,123 +7522,6 @@ test('phase 1 keeps the scroll content on an opaque base without a shell gradien
   assert.doesNotMatch(shellRule, /gradient\(/, 'app-shell should not paint a gradient the opaque scroll content hides');
   assert.match(glassContentRule, /background-color:\s*var\(--color-bg\)/, 'glass.css should keep scroll content on an opaque readable base');
   assert.doesNotMatch(layoutContentRule, /radial-gradient/, 'layout.css should not put decorative radial gradients on the scroll container');
-});
-
-test('phase 2 dashboard primary titles do not split words mid-token', () => {
-  const dashboard = read('../public/styles/dashboard.css');
-  const selectors = [
-    '.dashboard-overview__title',
-    '.today-cockpit-card__value',
-  ];
-
-  for (const selector of selectors) {
-    const body = cssRuleBody(dashboard, selector);
-    assert.match(body, /overflow-wrap:\s*normal/, `${selector} should prefer natural word wrapping`);
-    assert.match(body, /word-break:\s*normal/, `${selector} should not break German words mid-token`);
-    assert.doesNotMatch(body, /overflow-wrap:\s*anywhere/, `${selector} must not use anywhere wrapping`);
-  }
-});
-
-/**
- * „Heute wichtig" ist seit dem HIG-Rollout (2026-08) EINE Inset-Grouped-Liste,
- * kein 2×2-Kachelraster mehr.
- *
- * Der abgelöste Guard hielt das 2×2-Glance-Raster fest: vier pastellgefüllte
- * Stat-Kacheln mit fester Mindesthöhe. Genau diese Bauart hat das Finish-Review
- * der Fundament-Phase abgeräumt - vier gerahmte Kacheln in einem gerahmten
- * Masthead waren genestete Karten, und der Hero-Metrik-Look ist der
- * Kategorie-Default, den der Kanon verweigert. Die neue Form ist Apples
- * Grouped-Liste: eine Fläche, Zeilen mit Haarlinien, getönte Icon-Kachel pro
- * Zeile, trailing Count.
- *
- * Der Guard hält jetzt die FORM fest, nicht die alte Geometrie.
- */
-test('dashboard „Heute wichtig" is one inset-grouped list, not a tile grid', () => {
-  const dashboard = read('../public/styles/dashboard.css');
-  const gridBody = cssRuleBody(dashboard, '.today-cockpit__grid');
-  const cardBody = cssRuleBody(dashboard, '\n.today-cockpit-card');
-  const iconBody = cssRuleBody(dashboard, '.today-cockpit-card__icon');
-
-  // Die GRUPPE trägt Fläche, Rundung und Schatten - genau einmal.
-  //
-  // DIE RUNDUNG IST EINE ROLLE, KEIN WERT. Hier stand `--radius-lg` fest
-  // verdrahtet, und damit hielt der Guard eine Zahl statt seiner eigenen
-  // Aussage („die Gruppe ist der gerundete Behälter, nicht die Zeile"). Als das
-  // Tagesprogramm seinen Rang bekam - eine Stufe über den Widget-Karten, weil es
-  // der Hauptgegenstand der Seite ist -, schlug er auf einen Wechsel an, den er
-  // gar nicht bewacht. Gebunden bleibt: die Gruppe rundet über einen TOKEN, und
-  // die Zeile rundet gar nicht.
-  assert.match(gridBody, /grid-template-columns:\s*1fr/, 'the group is a single column of rows, not a tile grid');
-  assert.match(gridBody, /background:\s*var\(--color-surface\)/, 'the group carries one opaque surface');
-  assert.match(gridBody, /border-radius:\s*var\(--radius-[a-z0-9]+\)/, 'the group is the rounded container, and it rounds via a token');
-  assert.match(gridBody, /overflow:\s*hidden/, 'rows must clip to the group radius');
-  assert.doesNotMatch(gridBody, /repeat\(2,/, 'the 2×2 glance grid belongs to the superseded world');
-
-  // Die ZEILE trägt keine eigene Karte.
-  assert.match(cardBody, /background:\s*transparent/, 'rows sit on the group surface, not on their own');
-  assert.match(cardBody, /border:\s*none/, 'rows are separated by hairlines, never framed');
-  assert.doesNotMatch(cardBody, /border-radius/, 'the row never rounds - only the group does');
-  assert.match(cardBody, /min-height:\s*var\(--target-base\)/, 'row height stays tokenized against the touch target');
-  assert.match(
-    dashboard,
-    /\.today-cockpit-card \+ \.today-cockpit-card\s*\{[^}]*border-top:\s*1px solid var\(--color-border-subtle\)/,
-    'consecutive rows are divided by a hairline',
-  );
-
-  // Modul-Identität lebt im Markensiegel (Block 2): die Kachel leitet ihren
-  // Tone-Akzent an den geteilten .module-seal-Baustein weiter, der Baustein
-  // trägt das Tönungsrezept, und das Markup bindet beide Klassen aneinander.
-  // Reißt eines der drei Glieder, ist die Kachel wieder ein Eigenbau.
-  assert.match(iconBody, /--seal-accent:\s*var\(--today-card-accent\)/, 'the icon well forwards its tone accent to the seal');
-  const layout = read('../public/styles/layout.css');
-  // JEDE REGEL, DIE DAS SIEGEL ANSPRICHT, nicht die eine, die so heisst: seit
-  // 2026-08-18 teilt es seine HAUT mit `.vivid-mark` (die Marken der
-  // Modulseiten borgen sie, ohne ihre Geometrie aufzugeben), und damit steht
-  // das Rezept in einer Regel mit zwei Selektoren. Ein Guard, der nur
-  // `.module-seal {` sucht, faellt genau ueber diese Zusammenlegung - und
-  // haette sie als Rueckbau des Volltons gemeldet, obwohl sie ihn ausweitet.
-  const sealBody = [...eachRule(layout)]
-    .filter((r) => r.selector.split(',').some((s) => s.trim() === '.module-seal'))
-    .map((r) => r.body)
-    .join('\n');
-  assert.ok(sealBody, 'keine .module-seal-Regel gefunden - die Signatur greift nicht mehr');
-  // DAS SIEGEL HAT EIN GESICHT, UND ES IST DER VOLLTON (2026-08-17).
-  //
-  // Hier stand das Toenungsrezept (16 % gegen einen parametrischen Grund
-  // --seal-base) - der Guard hielt fest, was dark-chroma.mjs am selben Tag
-  // widerlegt hat: eine Beimischung hellt im Dark fast nur auf, statt Farbe zu
-  // tragen. Im Light war es noch schaerfer: Notizen, Dokumente und Inventar
-  // teilen die Familie „records", und ihr Scheibengrund war bei 16 % bitweise
-  // derselbe. Der Ton IST jetzt die Flaeche, die Tinte ist --color-ink-on-vivid.
-  assert.match(sealBody, /background:[\s\S]*var\(--seal-accent\);/, 'the seal carries its module tone as the disc itself');
-  assert.match(sealBody, /color:\s*var\(--color-ink-on-vivid\)/, 'the glyph is the measured ink on a vivid ground');
-  // Und die Toenung kommt nicht durch die Hintertuer zurueck: --seal-base war
-  // der Parameter, den NUR sie brauchte. Steht er wieder da, steht auch wieder
-  // eine Mischung dahinter.
-  //
-  // UEBER `eachRule`, NICHT UEBER DIE QUELLE: die Begruendung des Rueckbaus
-  // nennt den Namen mehrfach im Kommentar, und ein Guard, der die Datei als
-  // Text liest, findet seine eigene Erklaerung und faellt darueber. Es ist
-  // dieselbe Falle, die test/css-rules.js oben beschreibt.
-  const sealGrounds = [];
-  for (const file of readdirSync(new URL('../public/styles/', import.meta.url)).filter((f) => f.endsWith('.css'))) {
-    for (const { selector, body } of eachRule(read(`../public/styles/${file}`))) {
-      if (/--seal-base\s*:/.test(body)) sealGrounds.push(`${file}: ${selector}`);
-      if (selector.includes('.module-seal--vivid')) sealGrounds.push(`${file}: ${selector}`);
-    }
-  }
-  assert.deepEqual(sealGrounds, [],
-    'Das Siegel hat ein Gesicht: kein --seal-base (den brauchte nur die Toenung) und '
-    + 'kein --vivid (das waehlte zwischen zweien aus).\n' + sealGrounds.join('\n'));
-  const dashboardJs = read('../public/pages/dashboard.js');
-  assert.match(dashboardJs, /class="module-seal today-cockpit-card__icon"/, 'the cockpit icon well takes its form from the seal');
-
-  // Sehr schmale Container bleiben einspaltig (Container-Query, kein Viewport-BP)
-  assert.match(
-    dashboard,
-    /@container today-cockpit \(max-width:\s*270px\)[\s\S]*grid-template-columns:\s*1fr/,
-    'very narrow cockpit container should fall back to a single column'
-  );
 });
 
 /**
@@ -10118,7 +9749,6 @@ test('holiday chips derive readable ink from each configured color', () => {
 });
 
 test('user-selected avatar colors derive readable text ink', () => {
-  const dashboard = read('../public/pages/dashboard.js');
   const multiSelect = read('../public/components/user-multi-select.js');
   const color = read('../public/utils/color.js');
 
@@ -10126,11 +9756,6 @@ test('user-selected avatar colors derive readable text ink', () => {
   // getReadableTextColor needs a value it can measure luminance on).
   assert.match(color, /export const AVATAR_FALLBACK_COLOR = '#[0-9a-fA-F]{6}';/);
 
-  assert.match(dashboard, /import \{ getReadableTextColor, AVATAR_FALLBACK_COLOR \} from '\/utils\/color\.js'/);
-  assert.match(
-    dashboard,
-    /color:\$\{getReadableTextColor\(u\.avatar_color \|\| AVATAR_FALLBACK_COLOR\)\}/,
-  );
   assert.match(multiSelect, /import \{ getReadableTextColor, AVATAR_FALLBACK_COLOR \} from '\/utils\/color\.js'/);
   assert.match(
     multiSelect,
@@ -11138,19 +10763,9 @@ test('ein Kategoriebalken bleibt proportional - kein Prozentboden im Anteil', ()
   }
 });
 
-test('dashboard and task progress bars animate with transforms instead of widths', () => {
-  const dashboardPage = read('../public/pages/dashboard.js');
-  const dashboardCss = read('../public/styles/dashboard.css');
+test('task progress bars animate with transforms instead of widths', () => {
   const tasksPage = read('../public/pages/tasks.js');
   const tasksCss = read('../public/styles/tasks.css');
-
-  assert.match(
-    dashboardCss,
-    /\.shopping-widget-list__bar\s*\{[\s\S]*transform-origin:\s*left[\s\S]*transform:\s*scaleX\(var\(--progress-scale,\s*0\)\)[\s\S]*transition:\s*transform/,
-  );
-  assert.doesNotMatch(cssRuleBody(dashboardCss, '.shopping-widget-list__bar'), /transition:\s*width/);
-  assert.match(dashboardPage, /style="--progress-scale:\$\{progress\s*\/\s*100\}"/);
-  assert.doesNotMatch(dashboardPage, /shopping-widget-list__bar" style="width:/);
 
   assert.match(
     tasksCss,
@@ -13259,12 +12874,7 @@ test('row lists sit in exactly one carrier', () => {
   // der Guard nicht mehr trifft, ist eine Ausnahme ohne Gegenstand und faellt
   // unten als veraltet auf. Der Schluessel traegt den WERT - ein anderer
   // Radius an derselben Zeile ist wieder ein Befund.
-  const EXEMPT = new Map([
-    ['dashboard.css .countdown-item border-radius: var(--radius-sm)',
-      'Radius fuer Fokusring und Hover-Flaeche, keine Flaeche und kein Schatten im Ruhezustand '
-      + '(Begruendung am Selektor). Ob ein solcher Radius an einer flachen Zeile als Kartenmerkmal '
-      + 'zaehlt, ist offen (#1456) - `.list-row` traegt keinen.'],
-  ]);
+  const EXEMPT = new Map([]);
   const exemptSeen = new Set();
   let rowCount = 0;
 
@@ -14786,7 +14396,8 @@ test('jede Toenung nimmt eine Stufe der Toenungsskala', () => {
   // Zusicherung wie bei den Dokument-Sonden. Ein Tippfehler in TINT_SOURCE
   // machte ihn sonst gruen und blind zugleich. Keine feste Zahl: eine neue
   // Toenung soll die Suite nicht rot faerben, nur weil sie dazukommt.
-  assert.ok(seen >= 150, `Nur ${seen} Toenungen gesehen - die Signatur greift nicht mehr.`);
+  // 150 -> 120 (Tafla, 2026-10-24): das Kachelraster der Uebersicht trug rund dreissig.
+  assert.ok(seen >= 120, `Nur ${seen} Toenungen gesehen - die Signatur greift nicht mehr.`);
   assert.deepEqual(
     offenders,
     [],
@@ -15863,7 +15474,8 @@ test('wer ein Markensiegel baut, benennt eine Herkunft oder ist der Kopf', () =>
   // still aufgegeben.
   assert.ok(heads >= 2,
     `Nur ${heads} Kopf-Bau-Stellen gefunden (erwartet: kollabierender Kopf + Gruppenleiste).`);
-  assert.ok(mixers >= 4,
+  // 4 -> 3 (Tafla, 2026-10-24): die Kacheln der Uebersicht bauten eines.
+  assert.ok(mixers >= 3,
     `Nur ${mixers} Mischstellen-Siegel gefunden - die Signatur greift nicht mehr.`);
   assert.ok(sites >= heads + mixers,
     `Zaehlung inkonsistent: ${sites} Bau-Stellen, aber ${heads} + ${mixers} Rollen.`);
@@ -16136,39 +15748,6 @@ test('jedes Push-Ziel zeigt auf eine Route, die es gibt', () => {
     + 'still auf das Dashboard zurück');
 });
 
-test('das Überlappungszeichen kommt aus einer Hand', () => {
-  // DIE REGEL (Block-2-Brief, DESIGN.md „Das Überlappungszeichen"): es erscheint
-  // nur, wo ohnehin ein Siegel steht, das Objekt eine Person trägt UND es mehr
-  // als einen möglichen Beteiligten gibt — im Solo-Haushalt entfällt es still.
-  //
-  // Alle drei Bedingungen stehen in `utils/seal-pair.js`. Wer das Markup
-  // anderswo von Hand baut, hat sie nicht: er hat einen Avatar neben einem
-  // Siegel, und das ist die Siegel-Inflation, die der Brief als Anti-Ziel
-  // führt. Dieselbe Bauart wie die Signatur-Guards aus Block 2 — die Regel
-  // hängt am Bauteil, nicht an einer Liste von Aufrufern.
-  const offenders = [];
-  for (const rel of walkFrontendFiles('../public/')) {
-    if (rel.endsWith('utils/seal-pair.js')) continue;
-    const src = read(rel);
-    for (const match of src.matchAll(/seal-pair__who/g)) {
-      const line = src.slice(0, match.index).split('\n').length;
-      offenders.push(`${rel.replace(/^\.\.\//, '')}:${line}`);
-    }
-  }
-
-  assert.deepEqual(offenders, [],
-    'Überlappungszeichen von Hand gebaut — `whoMark()`/`withWho()` aus utils/seal-pair.js '
-    + 'nehmen, sonst fehlen die Bedingungen (Person vorhanden, Haushalt > 1)');
-
-  // Und die Gegenrichtung: der Baustein muss die Solo-Bedingung tatsächlich
-  // führen. Ohne sie wäre der Guard oben eine Zusicherung über einen Ort, an
-  // dem nichts geprüft wird.
-  const pair = read('../public/utils/seal-pair.js');
-  assert.match(pair, /isSoloHousehold\(\)/,
-    'seal-pair.js prüft den Solo-Haushalt nicht mehr — das Zeichen erschiene dort, wo es '
-    + 'laut Brief still entfallen soll');
-});
-
 // ---------------------------------------------------------------------------
 // DIE EINE-STIMME-REGEL (DESIGN.md, 2026-08-10)
 //
@@ -16401,7 +15980,8 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
     + offenders.join('\n'));
   // Reichweiten-Nachweis NACH der Messung (die leere Liste ist sonst keine
   // Zusicherung): der Scanner muss die Bau-Stellen ueberhaupt gesehen haben.
-  assert.ok(sealSites >= 6, `Nur ${sealSites} Siegel-Bau-Stellen gefunden - die Signatur greift nicht mehr.`);
+  // 6 -> 5 (Tafla, 2026-10-24): der Kachelkopf der Uebersicht war eine.
+  assert.ok(sealSites >= 5, `Nur ${sealSites} Siegel-Bau-Stellen gefunden - die Signatur greift nicht mehr.`);
 
   // (b) Und keine der Abschriften kommt zurueck. Es waren FUENF: navItems()
   //     (Router), widgetIcon() und jede widgetHeader()-Aufrufstelle
@@ -16415,16 +15995,10 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
     'widgetIcon leitet Core-Widgets aus MODULE_ICON ab und Extension-Widgets aus dem Manifest');
   assert.doesNotMatch(dashboard, /const map = \{ tasks:/,
     'die zweite Modul→Zeichen-Tabelle ist wieder da');
-  // Die Widget-Koepfe bekommen ihre WIDGET-ID, nicht einen Icon-Namen - sonst
-  // steht die Zuordnung wieder an jeder Aufrufstelle. Geprueft ueber die
-  // Signatur der Aufrufe: ein Icon-Name enthaelt einen Bindestrich oder heisst
-  // wie ein Lucide-Glyph, eine Id ist ein Modulschluessel.
-  const headerArgs = [...dashboard.matchAll(/widgetHeader\('([^']+)'/g)].map((m) => m[1]);
-  assert.ok(headerArgs.length >= 10, `Nur ${headerArgs.length} widgetHeader-Aufrufe gefunden - die Signatur greift nicht mehr.`);
-  const fremdeArgs = headerArgs.filter((id) => !(id in MODULE_ICON_KEYS));
-  assert.deepEqual(fremdeArgs, [],
-    'widgetHeader nimmt die Widget-Id (ein Schluessel von MODULE_ICON), nicht einen Icon-Namen.\n'
-    + fremdeArgs.join('\n'));
+  // TAFLA (2026-10-24): die Widget-Koepfe (widgetHeader) sind mit dem
+  // Kachelraster gegangen; die Kacheln von Dziś holen ihr Zeichen ueber
+  // widgetIcon() - die eine Stelle, die oben geprueft ist.
+  assert.doesNotMatch(dashboard, /widgetHeader\(/, 'die Widget-Koepfe des alten Rasters sind wieder da');
 
   const moduleOrder = read('../public/settings/module-order.js');
   assert.doesNotMatch(moduleOrder, /icon:/,
@@ -19085,16 +18659,16 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
   // Zwischen Kopf und Pruefung duerfen nur Zeilenkommentare stehen.
   assert.match(rebuild, /function rebuildDashboard\(cfg\) \{\n(?:\s*\/\/[^\n]*\n)*\s*if \(signal\.aborted\) return;/,
     'rebuildDashboard() prueft als Erstes, ob dieser Aufbau noch gilt');
-  for (const fn of ['async function refreshDashboardData()', 'const doAutoRefresh = async () =>', 'const doWeatherRefresh = async () =>']) {
+  for (const fn of ['async function refreshDashboardData()', 'const doAutoRefresh = async () =>']) {
     const at = render.indexOf(fn);
     assert.ok(at > 0, `${fn} nicht gefunden`);
     const body = render.slice(at, at + 1200);
     assert.match(body, /await [\s\S]*?if \(signal\.aborted\) return;/, `${fn}: nach dem await fehlt die Pruefung`);
   }
   // Sieben Stellen: nach der ersten Antwortrunde, nach der gefilterten
-  // Nachfrage, nach den Slice-Nachladungen, im Engpass rebuildDashboard() und
-  // in den drei Pfaden, die von sich aus neu zeichnen (stiller Refresh,
-  // Wetter-Auto-Refresh, Wetter-Knopf).
+  // Nachfrage, im Engpass rebuildDashboard() und in den Pfaden, die von sich
+  // aus neu zeichnen (stiller Refresh, Wetter-Auto-Refresh); den Wetter-Knopf
+  // gibt es mit der Wetterkarte nicht mehr (Tafla).
   assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 7,
     'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
 });
@@ -21699,7 +21273,6 @@ const SERVER_TEXT_OWNERS = new Set([
 // von #1909 raeumt sie mit eigenen Gruenden und Saetzen ab.
 const SERVER_TEXT_OPEN = new Map([
   ['components/modal.js', 1],
-  ['components/quick-links-manager.js', 2],
   ['components/task-detail.js', 1],
   ['pages/birthdays.js', 1],
   ['pages/calendar.js', 7],

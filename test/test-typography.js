@@ -629,22 +629,14 @@ test('kein sichtbarer Titel wiederholt den Namen des gewählten Eintrags einer A
 });
 
 test('lange Inhalts- und interaktive Texte verwenden mindestens die Sekundärrolle', () => {
-  const dashboard = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
+  // TAFLA (2026-10-24): die Kacheln der Uebersicht (.widget__link, .event-item__time,
+  // .meal-slot__title, .shopping-widget-item, .note-item__content,
+  // .budget-widget__footer) sind mit dem Raster gegangen; Dziś setzt seine Texte
+  // ueber die --day-*-Stufen.
   const notes = readFileSync(new URL('../public/styles/notes.css', import.meta.url), 'utf8');
   const recipes = readFileSync(new URL('../public/styles/recipes.css', import.meta.url), 'utf8');
   const calendar = readFileSync(new URL('../public/styles/calendar.css', import.meta.url), 'utf8');
 
-  for (const selector of [
-    '.widget__link',
-    '.event-item__time',
-    '.meal-slot__title',
-    '.shopping-widget-item',
-    '.note-item__content',
-    '.budget-widget__footer',
-  ]) {
-    assertTypeRole(dashboard, 'dashboard.css', selector, '--type-secondary',
-      `${selector} muss mindestens die 14px-Sekundärrolle verwenden`);
-  }
   assertTypeRole(notes, 'notes.css', '.note-card__content', '--type-body',
     'Notiz-Fließtext muss die 16px-Bodyrolle verwenden');
   // Umbenannt mit dem Wechsel von der Rezeptkarte zur Rezeptzeile mit
@@ -794,7 +786,6 @@ const BREAKS_WITHOUT_HYPHENS = {
   '.document-dropzone__file': 'NO_SYLLABLES',
   '.folder-upload-preview': 'NO_SYLLABLES',
   '.folder-upload-tree__name': 'NO_SYLLABLES',
-  '.fasting-widget__timer': 'NO_SYLLABLES',
   '.fasting-hero__timer': 'NO_SYLLABLES',
   '.inventory-detail-list__link': 'NO_SYLLABLES',
   '.caldav-calendar-source': 'NO_SYLLABLES',

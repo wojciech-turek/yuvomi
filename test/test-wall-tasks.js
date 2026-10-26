@@ -113,9 +113,12 @@ test.after(async () => {
   db.close();
 });
 
+// `wallTasks` rechnet die Route nur fuer die geteilte Flaeche (2026-10-24):
+// `audience=household` oder ein gekoppeltes Display. Die persoenliche Antwort
+// traegt das Feld leer.
 async function wallTasksFor(userId = ANNA) {
   viewer = userId;
-  const res = await fetch(`${base}/`);
+  const res = await fetch(`${base}/?audience=household`);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.ok(Array.isArray(body.wallTasks), 'Reichweite: die Antwort traegt wallTasks');
@@ -223,9 +226,9 @@ test('Server: die Kategorie-Auswahl der Uebersicht gilt auch fuer die Wand', wit
   db.prepare("UPDATE tasks SET category = 'school' WHERE id = ?").run(school);
   db.prepare("UPDATE tasks SET category = 'household' WHERE id IN (?, ?)").run(home, doneHome);
   viewer = ANNA;
-  const all = Object.fromEntries((await (await fetch(`${base}/`)).json()).wallTasks.map((e) => [e.user_id, e]));
+  const all = Object.fromEntries((await (await fetch(`${base}/?audience=household`)).json()).wallTasks.map((e) => [e.user_id, e]));
   assert.equal(all[BEN].open_count, 2, 'Vorbedingung: ohne Auswahl beide');
-  const filtered = Object.fromEntries((await (await fetch(`${base}/?tasks_category=school`)).json()).wallTasks.map((e) => [e.user_id, e]));
+  const filtered = Object.fromEntries((await (await fetch(`${base}/?audience=household&tasks_category=school`)).json()).wallTasks.map((e) => [e.user_id, e]));
   assert.deepEqual(titles(filtered[BEN].open), ['Schule']);
   assert.equal(filtered[BEN].done_count, 0, 'auch das Erledigte folgt der Auswahl');
 }));
@@ -401,6 +404,7 @@ test('Geteilte Flaeche: ohne den Parameter bleibt die Uebersicht persoenlich', w
     ['Aus Bens eigenem Abo', 'Aus dem geteilten Abo', 'Termin fuer alle', 'Termin nur Zugewiesene', 'Termin privat']);
   assert.equal(mine.openTaskCount, 3);
   assert.equal(mine.tasksDoneToday, 1);
+  assert.deepEqual(mine.wallTasks, [], 'die persoenliche Antwort rechnet das Feld der geteilten Flaeche nicht');
 }));
 
 test('Geteilte Flaeche: die Haushaltsfassung traegt in KEINER Scheibe etwas Eingeschraenktes - auch nicht fuer die Besitzerin', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
@@ -414,7 +418,9 @@ test('Geteilte Flaeche: die Haushaltsfassung traegt in KEINER Scheibe etwas Eing
     assert.deepEqual(eventTitles(wall.planEvents), ['Aus dem geteilten Abo', 'Termin fuer alle'], label);
     assert.deepEqual(wall.urgentTasks, [], label);
     assert.equal(wall.tasksDoneToday, 0, label);
-    assert.deepEqual(wall.wallTasks, [], label);
+    // `wallTasks` (#1817) kommt mit - nur haushaltssichtbar, wie der Plan.
+    const named = wall.wallTasks.flatMap((entry) => [...entry.open, ...entry.done]).map((task) => task.title);
+    assert.deepEqual(named, ['Aufgabe fuer alle'], label);
     assert.deepEqual(eventTitles(wall.upcomingEvents), ['Aus dem geteilten Abo', 'Termin fuer alle'], label);
     // Was die Wand nicht zeichnet, kommt seit der Allowlist leer (Abschnitt 8):
     // die Zahlen der Kacheln, der Wochenstreifen, die Familienkarte.
@@ -993,7 +999,11 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     assert.deepEqual(wall.weekEvents, []);
     assert.deepEqual(wall.memberTodayTasks, []);
     assert.deepEqual(wall.urgentTasks, [], 'das alte Programm zeichnet die Wand nicht mehr');
-    assert.deepEqual(wall.wallTasks, [], '„Wer heute dran ist" auch nicht');
+    // `wallTasks` traegt die Haushaltsfassung (nur fuer die geteilte Flaeche
+    // gerechnet) - und nennt nichts, was der Tagesplan der Wand nicht ohnehin traegt.
+    const planned = new Set(wall.planTasks.map((task) => task.title));
+    const named = wall.wallTasks.flatMap((entry) => [...entry.open, ...entry.done]).map((task) => task.title);
+    assert.ok(named.every((title) => planned.has(title)), `Sitzung ${who}: wallTasks nennt nur Geplantes (${named})`);
     assert.equal(wall.tasksDoneToday, 0);
     assert.equal(wall.openTaskCount, 0);
     assert.equal(wall.overdueTaskCount, 0);
@@ -1042,10 +1052,10 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   rewards: 'rewards', health: 'health', fasting: 'health', nutrition: 'health', myShiftsToday: 'schedule',
   // Keinem Modul zugeordnet: nach der anfragenden Person geschnitten.
   countdowns: null, countdownTotal: null, quicklinks: null,
-  // Das alte Wand-Programm und „Wer heute dran ist" (bis Tafla, 2026-10-19):
-  // die Tafla-Wand liest den Tagesplan (planTasks, planEvents) und zeichnet
-  // beides nicht mehr.
-  urgentTasks: 'tasks', tasksDoneToday: 'tasks', wallTasks: 'tasks',
+  // Das alte Wand-Programm (bis Tafla, 2026-10-19): die Tafla-Wand liest den
+  // Tagesplan (planTasks, planEvents). `wallTasks` traegt sie dagegen - die
+  // Route rechnet es nur noch fuer die geteilte Flaeche (2026-10-24).
+  urgentTasks: 'tasks', tasksDoneToday: 'tasks',
 });
 const DELIBERATELY_EMPTY_FIELDS = Object.freeze({
   housekeeping: ['configured', 'visitsThisMonth', 'unpaidAmount', 'lastVisit'],
@@ -1094,8 +1104,10 @@ test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der
   const differs = (a, b) => { try { assert.deepEqual(a, b); return false; } catch { return true; } };
   const carried = Object.keys(wall).filter((key) => differs(wall[key], blank[key])).sort();
   assert.deepEqual(carried, ['birthdays', 'housekeeping', 'pantryExpiring', 'planEvents', 'planTasks', 'shoppingLists',
-    'shoppingOpenCount', 'todayMeals', 'upcomingEvents', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
-  for (const key of carried.filter((name) => !['housekeeping', 'pantryExpiring'].includes(name))) {
+    'shoppingOpenCount', 'todayMeals', 'upcomingEvents', 'wallTasks', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
+  // `wallTasks` rechnet nur die geteilte Flaeche - persoenlich steht es leer.
+  assert.deepEqual(personal.wallTasks, []);
+  for (const key of carried.filter((name) => !['housekeeping', 'pantryExpiring', 'wallTasks'].includes(name))) {
     assert.deepEqual(wall[key], personal[key], `„${key}" kommt unveraendert`);
   }
   assert.deepEqual(wall.users, personal.users, 'die Gesichter kommen unveraendert');

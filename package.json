@@ -244,7 +244,7 @@
     "test:budget-series-edit-browser": "node --test --test-concurrency=1 test/test-budget-series-edit-browser.js",
     "test:budget-loan-dialogs-browser": "node --test --test-concurrency=1 test/test-budget-loan-dialogs-browser.js",
     "test:budget-refusals-browser": "node --test --test-concurrency=1 test/test-budget-refusals-browser.js",
-    "test:fasting-browser": "node --test --test-concurrency=1 test/test-fasting-browser.js test/test-fasting-journal-browser.js test/test-fasting-insights-browser.js test/test-fasting-reminders-browser.js test/test-fasting-dashboard-browser.js",
+    "test:fasting-browser": "node --test --test-concurrency=1 test/test-fasting-browser.js test/test-fasting-journal-browser.js test/test-fasting-insights-browser.js test/test-fasting-reminders-browser.js",
     "test:health-vitals": "node --loader ./test/test-browser-loader.mjs --test test/test-health-vitals.js",
     "test:health-visibility-defaults": "node --test test/test-health-visibility-defaults.js",
     "test:settings-health-visibility": "node --loader ./test/test-browser-loader.mjs --test test/test-settings-health-visibility.js",

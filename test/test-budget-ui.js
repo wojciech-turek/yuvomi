@@ -6734,11 +6734,11 @@ test('Statistik: das Ziel steht als Text, und seine Marke klemmt nicht an der Ka
 // 1,17:1 ueber der Karte), nicht auf --color-surface-2 (dunkel das Fast-Schwarz
 // unter der Buehne).
 test('R19: Fortschrittsbahnen sind Mulden, keine Loecher', () => {
-  const sheets = { budget: budgetCss, panel: read('../public/styles/panel.css'), dashboard: read('../public/styles/dashboard.css'), rewards: read('../public/styles/rewards.css') };
+  // TAFLA (2026-10-24): die Budget-Kachel der Uebersicht ist mit dem Raster gegangen.
+  const sheets = { budget: budgetCss, panel: read('../public/styles/panel.css'), rewards: read('../public/styles/rewards.css') };
   const wanted = {
     budget: ['.budget-loan-card__progress', '.budget-plan-row__track'],
     panel: ['.metric-card__progress'],
-    dashboard: ['.budget-widget__share'],
     rewards: ['.rw-ledger-row__icon'],
   };
   for (const [sheet, selectors] of Object.entries(wanted)) {

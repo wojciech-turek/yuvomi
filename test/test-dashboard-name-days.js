@@ -1,77 +1,54 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const dashboard = await import('../public/pages/dashboard.js');
+// TAFLA (2026-10-19): the birthday widget of the old board is gone. Upcoming
+// birthdays and name days now stand in "Wkrótce" of Dziś (buildSoon in
+// utils/today-plan.js) - the same three promises hold there.
+const { buildSoon, planContext } = await import('../public/utils/today-plan.js');
 
-test('birthday widget renders a name day as its own labelled occurrence', () => {
-  assert.equal(typeof dashboard.renderUpcomingBirthdays, 'function');
-  const html = dashboard.renderUpcomingBirthdays([{
+const ctx = planContext({ now: new Date('2026-04-22T10:00:00Z') });
+const soon = (birthday) => buildSoon({ birthdays: [birthday] }, ctx);
+
+test('Wkrótce shows a name day as its own labelled occurrence', () => {
+  const [row] = soon({
     id: 7,
     kind: 'name_day',
     name: 'Jiří',
     next_date: '2026-04-24',
     days_until: 2,
     next_age: null,
-    photo_data: null,
-    family_user_color: null,
-  }], '1x1');
+  });
 
-  assert.match(html, />Jiří</);
-  assert.match(html, /birthdays\.nameDay/);
-  assert.doesNotMatch(html, /birthdays\.turnsAge/);
-  assert.match(html, /2026-04-24/);
+  assert.equal(row.title, 'Jiří');
+  assert.equal(row.meta, 'birthdays.nameDay');
+  assert.doesNotMatch(row.title, /today\.birthdayAge/);
+  assert.equal(row.date, '2026-04-24');
 });
 
-test('birthday occurrence continues to show the upcoming age', () => {
-  assert.equal(typeof dashboard.renderUpcomingBirthdays, 'function');
-  const html = dashboard.renderUpcomingBirthdays([{
+test('a birthday occurrence continues to show the upcoming age', () => {
+  const [row] = soon({
     id: 8,
     kind: 'birthday',
     name: 'Mila',
-    next_date: '2026-05-03',
+    next_date: '2026-04-26',
     days_until: 4,
     next_age: 36,
-    photo_data: null,
-    family_user_color: null,
-  }], '1x1');
+  });
 
-  assert.match(html, /birthdays\.turnsAge/);
-  assert.doesNotMatch(html, /birthdays\.nameDay/);
+  assert.match(row.title, /today\.birthdayAge/);
+  assert.notEqual(row.meta, 'birthdays.nameDay');
 });
 
 test('legacy birthday data without an age does not render an empty age label', () => {
-  const html = dashboard.renderUpcomingBirthdays([{
+  const [row] = soon({
     id: 9,
     name: 'Bez věku',
-    next_birthday: '2026-05-03',
+    next_birthday: '2026-04-26',
     days_until: 4,
     next_age: null,
-    photo_data: null,
-    family_user_color: null,
-  }], '1x1');
+  });
 
-  assert.doesNotMatch(html, /birthdays\.turnsAge/);
-  assert.doesNotMatch(html, />null</);
-});
-
-test('birthday metric identifies a name-day occurrence instead of calling it a birthday', () => {
-  const previousWindow = globalThis.window;
-  globalThis.window = { yuvomi: { isModuleDisabled: () => false } };
-  try {
-    const tiles = dashboard.__test.selectMetricTiles({
-      budget: { entryCount: 1, income: 1, balance: 0 },
-      birthdays: [{
-        id: 10,
-        kind: 'name_day',
-        name: 'Jiří',
-        days_until: 2,
-      }],
-    }, 'EUR');
-
-    const birthdayTile = tiles.find((tile) => tile.id === 'birthdays');
-    assert.ok(birthdayTile);
-    assert.equal(birthdayTile.note, 'Jiří · birthdays.nameDay');
-  } finally {
-    globalThis.window = previousWindow;
-  }
+  assert.equal(row.title, 'Bez věku');
+  assert.doesNotMatch(row.title, /null/);
+  assert.doesNotMatch(row.title, /today\.birthdayAge/);
 });

@@ -2808,7 +2808,9 @@ The list also carries `meals:read` (cook mode on the wall), `shopping:read` and 
 wall's shopping card and the dinner meter, which compares tonight's ingredients with the pantry).
 The household answer of `GET /dashboard?audience=household` carries the day plan of Dziś in its
 household version (`planTasks`, `planEvents`, `tomorrowMeals`, `dinnerPlan`, `shoppingLists`) and
-no longer the retired program fields (`urgentTasks`, `tasksDoneToday`, `wallTasks` come empty).
+no longer the retired program fields (`urgentTasks`, `tasksDoneToday` come empty). `wallTasks`
+(the household-visible tasks of today per member, #1817) is computed only for the shared surface
+(`audience=household` or a paired display); the personal answer carries it as an empty array.
 Every write of a display is behind the household switch **"Pozwól odhaczać na ścianie"**
 (`sync_config.wall_allow_ticking`, admin-only through `PUT /preferences`, default off, readable by
 the display): while it is off, ticking a task, redeeming a reward for someone, adding a running-out

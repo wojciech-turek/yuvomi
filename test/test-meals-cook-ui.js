@@ -50,6 +50,8 @@ const { setHouseholdSize, clearHouseholdSize } = await import('../public/utils/h
 const { toLocalDateKey } = await import('../public/utils/date.js');
 const { __test: meals } = await import('../public/pages/meals.js');
 const { __test: dashboard } = await import('../public/pages/dashboard.js');
+const { buildPlan, planContext } = await import('../public/utils/today-plan.js');
+const { renderPlanRow } = await import('../public/components/today-view.js');
 
 const LESEN = { meals: 'read', shopping: 'read', pantry: 'read' };
 const SCHREIBEN = { meals: 'write', shopping: 'write', pantry: 'write' };
@@ -205,89 +207,51 @@ test('Wochenansicht bei `read`: der Koch bleibt als Zeichen an der Karte', async
 });
 
 // -------------------------------------------------------------------------
-// Uebersichtskachel
+// Dziś (Tafla, 2026-10-19)
+//
+// Die Mahlzeiten-Kachel „Heute essen" und das Heute-Blatt des alten Rasters
+// sind gegangen; die Mahlzeit steht als Zeile im Plan von Dziś
+// (utils/today-plan.js, components/today-view.js). Was sie dort trug, traegt
+// sie hier: der Koch ist die Person der Zeile, mit dem Profilbild aus `users`
+// derselben Dashboard-Antwort, und sein Name laeuft durch esc().
 // -------------------------------------------------------------------------
 
-test('Uebersicht: der Slot einer Mahlzeit mit Koch traegt den Avatar in der Kopfzeile, vor dem Symbol der Mahlzeitenart', () => {
-  const html = dashboard.renderTodayMeals([
-    { meal_type: 'lunch', title: 'Linsensuppe', cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' },
-    { meal_type: 'dinner', title: 'Pasta', cook_user_id: null, cook_name: null },
-  ], ['lunch', 'dinner']);
+const KOCH_USERS = [{ id: 1, display_name: 'Anna', avatar_color: '#FF9500', avatar_data: null },
+  { id: 2, display_name: 'Ben', avatar_color: '#34C759', avatar_data: 'data:image/png;base64,QkVO' }];
+const mahlzeitZeile = (todayMeals, users) => buildPlan({ todayMeals }, planContext({ users }))
+  .all.find((row) => row.kind === 'meal');
+const zeilenHtml = (row) => renderPlanRow(row, { canCheck: () => false });
 
-  const mittag = abschnitt(html, 'data-type="lunch"', 'data-type="dinner"');
-  const kopf = abschnitt(mittag, 'class="meal-slot__header"', 'class="meal-slot__title');
-  assert.match(kopf, /class="meal-slot__cook"/, 'das Koch-Zeichen steht im Kopf des Slots');
-  assert.match(kopf, /class="avatar-stack__item"/);
-  assert.match(kopf, /background-color:#34C759/);
-  assert.match(kopf, /<span class="sr-only">meals\.cookNamed\{&quot;name&quot;:&quot;Ben&quot;\}<\/span>/);
-  assert.ok(kopf.indexOf('meal-slot__type') < kopf.indexOf('meal-slot__cook'), 'nach dem Typ-Label');
-  assert.ok(kopf.indexOf('meal-slot__cook') < kopf.indexOf('meal-slot__icon'), 'vor dem Symbol');
-  assert.doesNotMatch(abschnitt(mittag, 'class="meal-slot__title', '</div>'), /avatar-stack/, 'nicht in der Titelzeile');
-
-  const abend = html.slice(html.indexOf('data-type="dinner"'));
-  assert.match(abend, /Pasta/, 'Vorbedingung: der zweite Slot ist gezeichnet');
-  assert.doesNotMatch(abend, /meal-slot__cook|avatar-stack|meals\.cookNamed/, 'ohne Koch rendert der Slot wie bisher');
-});
-
-test('Uebersicht, Heute-Blatt: die Zeile der Mahlzeit traegt den Koch als ihre Person', () => {
-  // Alle drei Mahlzeitenarten, damit die Auswahl "was steht als Naechstes an"
-  // zu jeder Uhrzeit eine Mahlzeit findet - der Test haengt nicht an der Uhr.
+test('Dziś: die Zeile der Mahlzeit traegt den Koch als ihre Person', () => {
   const heute = (over) => ['breakfast', 'lunch', 'dinner'].map((meal_type, i) => ({
     id: 30 + i, meal_type, title: `Gericht ${i}`, cook_user_id: null, cook_name: null, cook_color: null, ...over,
   }));
-  const zeile = (todayMeals, users) => dashboard.buildTodayProgram({ todayMeals, users }, { includeTasks: false, includeCalendar: false })
-    .rows.find((row) => row.kind === 'meal');
 
   // Das Bild steht in `users` derselben Dashboard-Antwort, nicht an der Mahlzeit.
-  const USERS = [{ id: 1, display_name: 'Anna', avatar_color: '#FF9500', avatar_data: null },
-    { id: 2, display_name: 'Ben', avatar_color: '#34C759', avatar_data: 'data:image/png;base64,QkVO' }];
-  const mit = zeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }), USERS);
-  assert.ok(mit, 'Vorbedingung: das Heute-Blatt hat seine Mahlzeit-Zeile');
-  assert.deepEqual(mit.who, { id: 2, display_name: 'Ben', color: '#34C759', avatar_data: 'data:image/png;base64,QkVO' },
-    'wen die Zeile angeht, ist der Koch - das Ueberlappungszeichen liest genau diese Person');
-  assert.equal(zeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' })).who.avatar_data, null,
-    'ohne `users` (oder fuer einen Koch, der dort nicht steht) bleiben die Initialen');
+  const mit = mahlzeitZeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }), KOCH_USERS);
+  assert.ok(mit, 'Vorbedingung: der Plan hat seine Mahlzeit-Zeile');
+  assert.equal(mit.who.kind, 'person', 'wen die Zeile angeht, ist der Koch');
+  assert.equal(mit.who.person.id, 2);
+  assert.equal(mit.who.person.avatar_data, 'data:image/png;base64,QkVO');
+  assert.equal(mit.who.person.color, '#34C759');
+  assert.ok(!mahlzeitZeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }), []).who.person.avatar_data,
+    'ohne Eintrag in `users` (ein Koch, der dort nicht steht) bleiben die Initialen');
 
-  // Die Kachel "Heute essen" nimmt denselben Weg.
-  const slot = (users) => dashboard.renderTodayMeals(
-    [{ meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }], ['lunch'], users);
-  assert.match(abschnitt(slot(USERS), 'class="meal-slot__cook"', 'meal-slot__icon'), /<img src="data:image\/png;base64,QkVO" alt="Ben"/,
-    'das Profilbild im Kopf des Slots');
-  assert.doesNotMatch(slot([USERS[0]]), /<img src="data:/, 'ohne Eintrag in `users` kein Bild');
-  assert.match(slot(undefined), /class="meal-slot__cook"/, 'und ohne Liste bleibt das Zeichen');
-
-  const ohne = zeile(heute());
+  const ohne = mahlzeitZeile(heute(), KOCH_USERS);
   assert.ok(ohne, 'Vorbedingung');
-  assert.equal(ohne.who, null, 'ohne Koch bleibt die Zeile, wie sie war');
+  assert.equal(ohne.who.kind, 'none', 'ohne Koch bleibt die Zeile ohne Person');
 });
 
-// renderTodayMeals() nimmt die Liste als Argument - ob die Kachel sie auch
-// BEKOMMT, entscheidet der eine Aufruf in renderDashboardLayout(). Fehlte
-// `data.users` dort, blieben alle Tests darueber gruen und die Kachel zeigte
-// fuer jeden Koch nur noch Initialen (Review zu #1739).
-test('Uebersicht: die Mahlzeiten-Kachel bekommt `users` der Dashboard-Antwort - das Profilbild des Kochs steht im Slot', () => {
-  const USERS = [{ id: 1, display_name: 'Anna', avatar_color: '#FF9500', avatar_data: null },
-    { id: 2, display_name: 'Ben', avatar_color: '#34C759', avatar_data: 'data:image/png;base64,QkVO' }];
-  const todayMeals = [{ id: 31, meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }];
-  const kachel = (data) => {
-    const zuvor = globalThis.window.yuvomi;
-    globalThis.window.yuvomi = null;
-    try {
-      return dashboard.renderDashboardLayout([{ id: 'meals', visible: true, size: '2x1' }], data, null, 'EUR', { visibleMealTypes: ['lunch'] });
-    } finally {
-      globalThis.window.yuvomi = zuvor;
-    }
-  };
-  const slot = (html) => abschnitt(html, 'class="meal-slot__cook"', 'meal-slot__icon');
+test('Dziś: an der Zeile steht der Koch als Scheibe - mit Profilbild aus `users`, sonst die Initiale', () => {
+  const suppe = { id: 31, meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' };
+  const mit = zeilenHtml(mahlzeitZeile([suppe], KOCH_USERS));
+  assert.match(mit, /class="day-disc day-disc--20 day-disc--photo"[^>]*aria-label="Ben"/, 'die Scheibe nennt den Koch');
+  assert.match(mit, /<img src="data:image\/png;base64,QkVO"/, 'das Bild aus `users` steht in der Scheibe');
+  assert.match(mit, /today\.cooks/, 'und die Zeile sagt, wer kocht');
 
-  const mit = kachel({ todayMeals, users: USERS });
-  assert.match(mit, /data-type="lunch"/, 'Vorbedingung: die Kachel ist gezeichnet');
-  assert.match(slot(mit), /<img src="data:image\/png;base64,QkVO" alt="Ben"/, 'das Bild aus `users` steht am Koch-Zeichen');
-
-  // Gegenfall: ohne `users` (oder ohne Bild dort) die Initialen auf der Farbe.
-  const ohne = kachel({ todayMeals });
-  assert.ok(slot(ohne), 'das Zeichen bleibt');
-  assert.doesNotMatch(ohne, /<img src="data:/);
+  const ohne = zeilenHtml(mahlzeitZeile([suppe], [KOCH_USERS[0]]));
+  assert.match(ohne, /class="day-disc day-disc--20"[^>]*aria-label="Ben"/, 'das Zeichen bleibt');
+  assert.doesNotMatch(ohne, /<img src="data:/, 'ohne Eintrag in `users` kein Bild');
 });
 
 // Entschieden zu #1737: Kochen ist eine Zustaendigkeit wie eine Aufgabe, also
@@ -328,10 +292,10 @@ test('Wandtablett: wer kocht, steht an der Mahlzeit - an der Zeile und an der Ab
   assert.ok(!/aria-label="Ben Beispiel"/.test(ohne), 'und keine Zeile traegt eine Scheibe');
 });
 
-test('Uebersicht: der Name des Kochs laeuft durch esc()', () => {
-  const html = dashboard.renderTodayMeals([
-    { meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: '"><script>x</script>', cook_color: '#34C759' },
-  ], ['lunch']);
+test('Dziś: der Name des Kochs laeuft durch esc()', () => {
+  const html = zeilenHtml(mahlzeitZeile([
+    { id: 31, meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: '"><script>x</script>', cook_color: '#34C759' },
+  ], []));
   // Als Teilstring geprueft, nicht per Regex: gesucht ist genau die Zeichenfolge
   // aus dem Namen oben, kein Filter fuer Markup.
   assert.ok(!html.includes('<script'), 'kein rohes Markup aus dem Namen');
@@ -742,7 +706,9 @@ test('Speichern mit Serien-Umfang: der Koch geht nur mit, wenn er in diesem Dial
 // Stylesheets: was das Markup nennt, hat eine Regel
 // -------------------------------------------------------------------------
 
-test('Stylesheets: die Koch-Zeichen schrumpfen nicht, und der Avatar der Kachel steht am Ende des Kopfs', () => {
+// Der Slot der Mahlzeiten-Kachel (`.meal-slot__cook` in dashboard.css) ist mit
+// dem Raster gegangen (Tafla); die Scheibe an der Zeile von Dziś ist `.day-disc`.
+test('Stylesheets: die Koch-Zeichen schrumpfen nicht', () => {
   const regel = (datei, selektor) => {
     const css = readFileSync(new URL(`../public/styles/${datei}`, import.meta.url), 'utf8');
     for (const { selector, body, at } of eachRule(css)) {
@@ -753,11 +719,6 @@ test('Stylesheets: die Koch-Zeichen schrumpfen nicht, und der Avatar der Kachel 
   const karte = regel('meals.css', '.meal-card__cook');
   assert.ok(karte, '.meal-card__cook hat eine Regel in meals.css');
   assert.match(karte, /flex:\s*none/, 'die Scheibe bleibt neben einer langen Zutatenzahl rund');
-
-  const slot = regel('dashboard.css', '.meal-slot__cook');
-  assert.ok(slot, '.meal-slot__cook hat eine Regel in dashboard.css');
-  assert.match(slot, /flex:\s*none/);
-  assert.match(slot, /margin-inline-start:\s*auto/, 'sonst setzte space-between den Avatar in die Mitte des Kopfs');
 
   assert.ok(regel('meals.css', '.meal-read__cook'), '.meal-read__cook hat eine Regel in meals.css');
 });

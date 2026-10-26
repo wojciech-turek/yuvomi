@@ -23,7 +23,7 @@
  * so breit wie die Seite liest sich wie eine Eingabezeile, nicht wie eine Wahl. */
 .fasting-preferences > .form-group,
 .fasting-notifications { max-inline-size: var(--layout-reading); }
-[data-fasting-edit-error], [data-fasting-widget-error], [data-fasting-error] { font-size: var(--text-sm); color: var(--color-danger-ink); }
+[data-fasting-edit-error], [data-fasting-error] { font-size: var(--text-sm); color: var(--color-danger-ink); }
 .fasting-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .fasting-editor-grid .form-group { min-width: 0; }
 .fasting-editor-grid .form-input { min-width: 0; width: 100%; }
@@ -34,7 +34,7 @@
 .fasting-rating__choice span { font-size: var(--text-2xl); color: var(--color-accent); }
 .fasting-rating__choice:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 [data-fasting-edit-form] textarea { resize: vertical; }
-[data-fasting-error]:empty, [data-fasting-widget-error]:empty, [data-fasting-preferences-status]:empty, [data-fasting-edit-error]:empty { display: none; }
+[data-fasting-error]:empty, [data-fasting-preferences-status]:empty, [data-fasting-edit-error]:empty { display: none; }
 .fasting-dial--segmented { background: none; }
 .fasting-dial--segmented::after { display: none; }
 [data-fasting-segments] { position: absolute; inset: 0; }

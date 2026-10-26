@@ -29,9 +29,7 @@
 /* --------------------------------------------------------------------------
  * Hero / Begrüßung — eine Instanz pro Screen, feste Produkt-Skala
  * ------------------------------------------------------------------------ */
-.u-hero,
-.dashboard-hero__title,
-.dashboard-overview__title {
+.u-hero {
   font-size: var(--type-hero-mobile);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
@@ -148,6 +146,12 @@
  * Liste, ist er Gruppenkopf; benennt er einen eigenen Bereich, ist er
  * Überschrift.
  * ------------------------------------------------------------------------ */
+/* Die Reichweite eines Einstellungsblatts ("Fuer mich" / "Fuer den Haushalt")
+ * gliedert Abschnitte, also traegt sie deren Stufe - siehe die Stufenleiter
+ * weiter unten (R16). */
+/* Der Titel des Lese-Popovers traegt die Stufe des Blatts und der
+ * Detailspalte (`.modal-panel__title`, Title 3): derselbe Termin stand im
+ * Popover in 17px und im Blatt in 20px (Critique R18). */
 .u-section-title,
 .panel-head__title,
 .budget-page .split-title,
@@ -158,14 +162,7 @@
 .list-header__name,
 .loan-report__title,
 .day-view__date-label,
-.today-cockpit__header h2,
 .settings-section__title,
-/* Die Reichweite eines Einstellungsblatts ("Fuer mich" / "Fuer den Haushalt")
- * gliedert Abschnitte, also traegt sie deren Stufe - siehe die Stufenleiter
- * weiter unten (R16). */
-/* Der Titel des Lese-Popovers traegt die Stufe des Blatts und der
- * Detailspalte (`.modal-panel__title`, Title 3): derselbe Termin stand im
- * Popover in 17px und im Blatt in 20px (Critique R18). */
 .detail-popover__title,
 .settings-scope__title,
 .settings-navigation-panel__title,
@@ -279,11 +276,13 @@
 /* Dichte-Variante: eine Stufe kompakter. Macht hohe Informationsdichte
  * (Dashboard-Widgets, Kanban-Karten, Listen-Items) zu einer BEWUSSTEN
  * Entscheidung statt zu einem zufälligen Größen-Override pro Selektor. */
+/* Gruppentitel über den Modul-Listen ("Übersicht", "Planen"). Sie standen in
+ * der Section-Rolle (18px) und wurden in settings.css auf 14px übersteuert -
+ * die Registrierung behauptete das eine, die Datei tat das andere, und im
+ * Ergebnis rendert dasselbe h3-Element zwei Größen (Critique 2026-07-27). */
 .u-card-title.u-compact,
 .task-item__title,
 .event-item__title,
-.shopping-widget-list__name,
-.note-item__title,
 .note-card__title,
 .documents-folder-item__name,
 .document-dropzone__title,
@@ -293,10 +292,6 @@
 .reminder-section__title,
 .cat-row__name,
 .cat-subrow__name,
-/* Gruppentitel über den Modul-Listen ("Übersicht", "Planen"). Sie standen in
- * der Section-Rolle (18px) und wurden in settings.css auf 14px übersteuert -
- * die Registrierung behauptete das eine, die Datei tat das andere, und im
- * Ergebnis rendert dasselbe h3-Element zwei Größen (Critique 2026-07-27). */
 .settings-navigation-group__title {
   /* Tafla: die Dichte-Variante stand auf Subheadline (15/600). Die Skala hat
    * keine 15 mehr, und 13/600 ist die Rolle von Chips und Pillen, nicht von
@@ -416,9 +411,7 @@
 }
 
 @media (min-width: 1024px) {
-  .u-hero,
-  .dashboard-hero__title,
-  .dashboard-overview__title {
+  .u-hero {
     font-size: var(--type-hero-desktop);
   }
 
@@ -567,13 +560,9 @@ button.note-md-box:focus-visible {
 }
 
 /* Inline-Emphase (auch verschachtelt in Blöcken) */
-.note-card__content strong,
-.note-item__content strong { font-weight: var(--font-weight-bold); }
-.note-card__content em,
-.note-item__content em { font-style: italic; }
+.note-card__content strong { font-weight: var(--font-weight-bold); }
+.note-card__content em { font-style: italic; }
 
 /* Erster/letzter Block ohne Außenabstand, damit die Karte bündig sitzt */
-.note-card__content > :first-child,
-.note-item__content > :first-child { margin-top: 0; }
-.note-card__content > :last-child,
-.note-item__content > :last-child { margin-bottom: 0; }
+.note-card__content > :first-child { margin-top: 0; }
+.note-card__content > :last-child { margin-bottom: 0; }
