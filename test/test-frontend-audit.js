@@ -7478,14 +7478,21 @@ test('calendar agenda events and task chips keep readable contrast in mobile age
   // Gemessen lagen die vier getoenten Felder 6,61 (medium/high) und 6,77
   // (high/urgent) auseinander, bei 11,3 fuer die Diagrammserien des Projekts.
   //
-  // Die Zusage ist jetzt die der Rangmarke: neutrale Flaeche, neutrale Schrift,
-  // die Stufe im 8px-Vollton-Punkt daneben - dieselbe, die `.priority-dot` in
-  // list-row.css fuer die Aufgabenliste traegt.
-  assert.match(taskBody, /background:\s*var\(--color-fill-well\)/, 'task chips carry a neutral surface: the step is the dot, not the fill');
+  // Die Zusage ist jetzt die der Rangmarke: neutrale Flaeche, neutrale Schrift.
+  // Die Marke war bis Tafla der 8px-Punkt der Skala (`.priority-dot`); seit
+  // Tafla (2026-10-24) ist es die Fahne, nur fuer Hoch und Dringend - dieselbe,
+  // die die Zeile der Aufgabenliste traegt (tasks.js taskTrailHtml,
+  // `.task-card__flag`). Mittel und Niedrig tragen dort wie hier keine Marke.
+  assert.match(taskBody, /background:\s*var\(--color-fill-well\)/, 'task chips carry a neutral surface: the step is the flag, not the fill');
   assert.doesNotMatch(taskBody, /color-mix\(in srgb,\s*currentColor/, 'task chips must not tint from their priority colour: that is the retracted fassung of the scale rule');
-  assert.match(read('../public/pages/calendar.js'), /class="priority-dot priority-dot--\$\{priority\}"/,
-    'a task chip must render the shared priority dot (list-row.css), not a second fassung of the scale');
-  assert.doesNotMatch(taskBody, /border(-color)?:|box-shadow:/, 'task chips read flat: the dot is the second channel, not an edge on top of it');
+  const calendarJs = read('../public/pages/calendar.js');
+  const chipFn = calendarJs.match(/function renderTaskChip\([\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(chipFn, /priority === 'high' \|\| priority === 'urgent'/, 'the flag marks only high and urgent, like the task row');
+  assert.match(chipFn, /data-lucide="flag" class="cal-task-chip__flag" aria-hidden="true"/, 'a task chip carries the flag of the task row');
+  assert.doesNotMatch(chipFn, /priority-dot/, 'the retired scale dot must not come back as a second marker');
+  assert.match(read('../public/pages/tasks.js'), /task\.priority === 'high' \|\| task\.priority === 'urgent'[\s\S]{0,40}task-card__flag/,
+    'the task row is the model: the flag for high and urgent');
+  assert.doesNotMatch(taskBody, /border(-color)?:|box-shadow:/, 'task chips read flat: the flag is the second channel, not an edge on top of it');
   assert.match(metaBody, /color:\s*var\(--color-text-secondary\)/, 'metadata should remain legible in light and dark themes');
 });
 

@@ -246,10 +246,10 @@ test('M5: der Kopf traegt ein Ansichtsmenue mit genau einer gewaehlten Ansicht',
   }
 });
 
-// D1 (Critique 2026-10-16): der Ausloeser ist ein Pop-up-Knopf mit dem Wort der
-// Ansicht (`.cal-toolbar__view-menu`) und steht mit dem Zeitraum in Zeile 2;
-// Lupe und Filter folgen dem Titel in Zeile 1 (DOM-Reihenfolge, der Zeitraum
-// rueckt per `order` dahinter).
+// D1 (Critique 2026-10-16), seit Tafla (2026-10-24): der Ausloeser ist der
+// Kreis der Ansicht (`.cal-toolbar__view-menu`) und folgt mit der Lupe dem
+// Titel in Zeile 1 (DOM-Reihenfolge der Werkzeuggruppe); der Zeitraum rueckt
+// per `order` als eigene Zeile dahinter.
 test('M5: mobil ersetzt das Menue das Segment, und der Kopf hat zwei Zeilen', () => {
   assert.equal(declarations(calendarCss, '.cal-toolbar__view-menu').display, 'none', 'am Desktop waehlt das Segment');
   assert.equal(declarations(calendarCss, '.cal-toolbar__view-menu', { media: MOBILE }).display, 'inline-flex');
@@ -260,7 +260,7 @@ test('M5: mobil ersetzt das Menue das Segment, und der Kopf hat zwei Zeilen', ()
   assert.equal(center['flex-basis'], '100%', 'der Zeitraum behaelt die zweite Zeile fuer sich (Label nicht angeschnitten)');
   assert.equal(center.order, '2', 'Werkzeuge vor dem Zeitraum: sie stehen in Zeile 1');
   const stepper = declarations(calendarCss, '.cal-toolbar__stepper', { media: MOBILE });
-  assert.equal(stepper.flex, '1 1 0', 'der Stepper nimmt den Rest der Zeile neben dem Pop-up-Knopf');
+  assert.equal(stepper.flex, '1 1 0', 'der Stepper nimmt die Zeile des Zeitraums');
 });
 
 test('M5: Termintitel der Woche brechen nach Blockhoehe um statt nowrap', () => {

@@ -4348,9 +4348,29 @@ function filterSheetGroups() {
   // standen zwischen den Filtern, engen aber nichts ein: das eine ordnet die
   // Liste, das andere weitet sie um das, was noch nicht dran ist. Sie stehen
   // jetzt als eigener Abschnitt hinter allen Achsen.
+  //
+  // AM TELEFON STEHT HIER AUCH, WAS DORT KEIN KOPFKREIS MEHR IST (Tafla,
+  // „Nagłówek": hoechstens zwei Kreise). Unter 768px traegt der Kopf Lupe und
+  // Filter; das Werkzeugmenue als dritter Kreis ist weg (tasks.css). Seine
+  // Wege stehen hier, beschriftet und ab 768px ausgeblendet, wo Segment und
+  // Menue im Kopf sie wieder tragen: die Ansicht (Liste, Kanban, Verlauf) als
+  // Segment zuoberst, die Mehrfachauswahl und die beiden Verwaltungen als
+  // Verweiszeilen am Ende (`.filter-sheet__action`, wie „Kalender verwalten").
   const viewRows = [];
+  viewRows.push(`
+        <div class="segmented tasks-sheet-view tasks-sheet-phone" id="tasks-sheet-view" role="radiogroup" aria-label="${esc(t('tasks.viewToggleLabel'))}">
+          ${VIEW_CHOICES.map(([mode, key]) => {
+            const on = state.viewMode === mode;
+            return `<button type="button" class="segmented__item${on ? ' is-active' : ''}" role="radio"
+                    data-tab-id="${mode}" aria-checked="${on}" tabindex="${on ? '0' : '-1'}">${esc(t(key))}</button>`;
+          }).join('')}
+        </div>`);
   if (state.viewMode === 'list') {
     const modes = [['due', 'tasks.dueDateLabel', 'calendar-clock'], ['category', 'tasks.categoryLabel', 'folder']];
+    // Zwei Segmente untereinander brauchen am Telefon einen Namen fuer das
+    // zweite; allein (ab 768px) sagt es die Ueberschrift „Widok".
+    viewRows.push(`
+        <p class="tasks-sheet-label tasks-sheet-phone" aria-hidden="true">${esc(t('tasks.groupToggleLabel'))}</p>`);
     viewRows.push(`
         <div class="segmented tasks-group-mode" id="group-mode-toggle" role="radiogroup" aria-label="${esc(t('tasks.groupToggleLabel'))}">
           ${modes.map(([mode, key, icon]) => {
@@ -4363,8 +4383,30 @@ function filterSheetGroups() {
   }
   viewRows.push(toggleRowHtml({ label: t('tasks.showFuture'), icon: 'calendar-clock', checked: state.showFuture,
     control: 'switch', attrs: { 'data-filter-future': 'true' } }));
+  viewRows.push(...sheetToolRows().map(([tool, key, icon, dialog]) => `
+        <button type="button" class="filter-sheet__action tasks-sheet-phone" data-sheet-tool="${tool}"${dialog ? ' aria-haspopup="dialog"' : ''}>
+          <i data-lucide="${icon}" class="icon-md" aria-hidden="true"></i>
+          <span>${esc(t(key))}</span>
+        </button>`));
   groups.push({ heading: t('tasks.viewToggleLabel'), variant: 'view', html: viewRows.join('') });
   return groups;
+}
+
+/** Die drei Ansichten, in der Reihenfolge des Kopfsegments. */
+const VIEW_CHOICES = [['list', 'tasks.listView'], ['kanban', 'tasks.kanbanView'], ['history', 'tasks.historyView']];
+
+/**
+ * Die Werkzeuge des Kopfmenues als Zeilen im Filterblatt (nur Telefon, siehe
+ * filterSheetGroups): `[tool, Schluessel, Icon, oeffnet einen Dialog]`. Die
+ * Auswahl nur in der Liste, wie im Menue; schreibend, also nicht bei Nur-lesen.
+ */
+function sheetToolRows() {
+  if (readOnly()) return [];
+  return [
+    ...(state.viewMode === 'list' ? [['bulk-select', 'tasks.bulkSelect', 'list-checks', false]] : []),
+    ['manage-categories', 'tasks.manageCategories', 'folder-tree', true],
+    ['manage-tags', 'tasks.manageTags', 'tags', true],
+  ];
 }
 
 /**
@@ -4452,7 +4494,41 @@ function openTaskFilters(container) {
     });
     attachSegmentIndicator(groupMode);
   }
+  // DIE ANSICHT AUS DEM BLATT (Telefon): erst auf Enter/Leertaste oder Tipp,
+  // nicht beim Pfeilwandern - der Wechsel schliesst das Blatt, denn Status-
+  // und Gruppengruppe darin gehoeren zur Ansicht, die gerade geht.
+  const viewChoice = panel.querySelector('#tasks-sheet-view');
+  if (viewChoice) {
+    wireTablist(viewChoice, {
+      activeId: state.viewMode,
+      activeClass: 'is-active',
+      mode: 'select',
+      manualActivation: true,
+      onChange: (mode) => { afterTaskFiltersClosed(() => setViewMode(container, mode)); },
+    });
+    attachSegmentIndicator(viewChoice);
+  }
   return panel;
+}
+
+/**
+ * Das Blatt schliessen und DANACH weitermachen. Danach heisst: wenn der Dialog
+ * seinen Verlaufseintrag zurueckgegeben hat - ein Ansichtswechsel schreibt
+ * sonst die Adresse auf den Marker des Blatts, und dessen `back()` truege die
+ * alte wieder herein (dieselbe Reihenfolge wie revealCreatedTask).
+ * Ab 1024px ist das Blatt ein Popover ohne Verlaufseintrag.
+ */
+function afterTaskFiltersClosed(next) {
+  const panel = state.filterSheet;
+  state.filterSheet = null;
+  if (panel?.isConnected && panel.matches('[popover]')) {
+    panel.hidePopover?.();
+    next();
+    return;
+  }
+  const closed = whenModalClosed();
+  closeModal({ force: true });
+  closed.then(() => whenHistorySettled()).then(next);
 }
 
 /** Schalter im Blatt (Checkboxen der toggle-rows). */
@@ -4484,6 +4560,11 @@ async function onFilterSheetChange(input, container) {
 
 /** Chips im Blatt: ein Wert je Achse an/aus, oder ein gemerktes Set. */
 async function onFilterSheetClick(e, container) {
+  const tool = e.target.closest('[data-sheet-tool]');
+  if (tool) {
+    runSheetTool(tool.dataset.sheetTool, container);
+    return;
+  }
   const recent = e.target.closest('[data-recent-filter]');
   if (recent) {
     try {
@@ -4500,6 +4581,46 @@ async function onFilterSheetClick(e, container) {
     return;
   }
   await toggleValueFilter(chip.dataset.filter, chip.dataset.value, container);
+}
+
+/**
+ * Ein Werkzeug aus dem Blatt (Telefon): erst das Blatt zu, dann die Handlung.
+ * So merkt sich ein Dialog den Filterknopf als Rueckkehrziel und nicht einen
+ * Knopf im geschlossenen Blatt.
+ */
+function runSheetTool(tool, container) {
+  if (readOnly()) return;
+  afterTaskFiltersClosed(() => {
+    if (tool === 'bulk-select') {
+      toggleBulkSelect(container);
+      // Waehrend der Auswahl traegt der Kopf am Telefon das Menue mit den
+      // Sammelaktionen statt des Filters - der Fokus kam gerade auf den
+      // Filterknopf zurueck, der jetzt verschwindet.
+      focusVisibleTool(container, { force: true });
+    } else if (tool === 'manage-categories') {
+      openTaskCategoryManager(container);
+    } else if (tool === 'manage-tags') {
+      openTagManager(container);
+    }
+  });
+}
+
+/**
+ * Steht der Fokus auf einem Kopfknopf, den der Modus gerade ausgeblendet hat
+ * (am Telefon: Filter in der Auswahl, Menue ausserhalb), geht er an den, der
+ * jetzt dort steht - sonst fiele er aufs Dokument.
+ */
+function focusVisibleTool(container, { force = false } = {}) {
+  const shown = (el) => !!el && el.getClientRects().length > 0;
+  const active = document.activeElement;
+  // Ohne `force` nur, wenn der Fokus auf einem Knoten steht, der gerade
+  // verschwunden ist - ein Fokus anderswo (oder keiner) bleibt, wie er ist.
+  if (!force && (!active || active === document.body || shown(active))) return;
+  // Das Menue zuerst: ueber es kam man in die Auswahl, und waehrend der Auswahl
+  // traegt es die Sammelaktionen. Wo es nicht steht, der Filter.
+  const tools = container.querySelector('.tasks-toolbar .page-tools-btn');
+  const filter = container.querySelector('#tasks-filter-btn');
+  [tools, filter].find(shown)?.focus();
 }
 
 /**
@@ -5135,6 +5256,10 @@ function syncViewChrome(container) {
   // Brett bezieht sich auf einen neuen Containing Block (Drag-Ghosts,
   // fixierte Ebenen). Die Auswahl raeumt setViewMode bei jedem Wechsel ab.
   container.querySelector('.tasks-page')?.classList.toggle('app-page--list-detail', !isKanbanMode());
+  // Die Ansicht steht an der Wurzel, fuer den Kopf am Telefon (tasks.css,
+  // „Hoechstens zwei Kreise"): im Verlauf ist das Werkzeugmenue dort der Weg
+  // zurueck, denn Suche und Filter sind weg.
+  container.querySelector('.tasks-page')?.setAttribute?.('data-tasks-view', mode);
   syncSplitHeight(container);
 
   // Suche, Filter und Sammelauswahl fragen alle nach AUFGABEN. Der Verlauf
@@ -5448,7 +5573,8 @@ function exitBulkSelect(container) {
   state.selectedTaskIds.clear();
   syncPopoverMenuItem(container.querySelector('#tasks-tools-menu'), 'bulk-select', false);
   renderTaskList(container);
-  if (pillHadFocus) container.querySelector('.tasks-toolbar .page-tools-btn')?.focus();
+  // Stand der Fokus am Menueknopf, ist der am Telefon jetzt fort (tasks.css).
+  focusVisibleTool(container, { force: pillHadFocus });
 }
 
 /** Escape beendet die Auswahl - ein Modus, den nur das Menue verlaesst, waere eine Falle. */
@@ -6445,7 +6571,7 @@ export async function render(container, { user, signal } = {}) {
   // Initiales Skeleton (all values are from i18n keys or hardcoded constants, no user data)
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <div class="tasks-page app-page app-page--full${state.viewMode !== 'kanban' ? ' app-page--list-detail' : ''}" data-composition="full">
+    <div class="tasks-page app-page app-page--full${state.viewMode !== 'kanban' ? ' app-page--list-detail' : ''}" data-composition="full" data-tasks-view="${esc(state.viewMode)}">
       <div class="page-toolbar page-toolbar--wrap page-toolbar--title-tools tasks-toolbar">
         <h1 class="page-toolbar__title">${t('tasks.title')}</h1>
         ${renderPageSearch({

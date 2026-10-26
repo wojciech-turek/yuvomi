@@ -363,7 +363,9 @@ test('das Blatt: Filter zuerst, Kategorie und Tag eingeklappt, „Ansicht" abges
   baseState();
   tasks.state.viewMode = 'kanban';
   assert.ok(!headingsOf().includes('tasks.filterGroupStatus'));
-  assert.doesNotMatch(htmlOf('tasks.viewToggleLabel'), /radiogroup/);
+  // Die Gruppierung fehlt; die Ansichtswahl des Telefons (auch ein Segment)
+  // steht weiter da - sie fuehrt zurueck zur Liste (Test unten).
+  assert.doesNotMatch(htmlOf('tasks.viewToggleLabel'), /id="group-mode-toggle"/);
   assert.match(htmlOf('tasks.viewToggleLabel'), /data-filter-future/);
 
   // Allein im Haushalt: keine Personenachse und kein „Mir zugewiesen".
@@ -539,6 +541,50 @@ test('das Werkzeugmenue: Verwalten nur mit Schreibrecht, Auswahl nur in der List
   } finally {
     clearPermissions();
   }
+});
+
+// HOECHSTENS ZWEI KREISE IM KOPF (Tafla, 2026-10-24): unter 768px faellt das
+// Werkzeugmenue aus dem Kopf, seine Wege stehen im Filterblatt - beschriftet
+// und als `.tasks-sheet-phone`, das tasks.css ab 768px ausblendet, wo Segment
+// und Menue im Kopf sie tragen. Gemessen wird hier, WAS das Blatt anbietet;
+// die Sichtbarkeit je Breite steht in tasks.css (Test darunter).
+test('das Blatt traegt am Telefon die Ansicht und die Werkzeuge des Menues', () => {
+  baseState();
+  const view = () => tasks.filterSheetGroups().find((g) => g.heading === 'tasks.viewToggleLabel').html;
+  const choice = () => view().match(/<div class="segmented tasks-sheet-view tasks-sheet-phone" id="tasks-sheet-view"[\s\S]*?<\/div>/)?.[0] ?? '';
+  const tools = () => [...view().matchAll(/class="filter-sheet__action tasks-sheet-phone" data-sheet-tool="([^"]+)"/g)].map((m) => m[1]);
+
+  assert.match(choice(), /role="radiogroup"/, 'die Ansicht ist EINE Wahl aus dreien, wie das Segment im Kopf');
+  assert.deepEqual([...choice().matchAll(/data-tab-id="([^"]+)"/g)].map((m) => m[1]), ['list', 'kanban', 'history']);
+  assert.match(choice(), /data-tab-id="list" aria-checked="true"/);
+  assert.ok(view().indexOf('id="tasks-sheet-view"') < view().indexOf('id="group-mode-toggle"'),
+    'die Ansicht steht vor der Gruppierung, die zu ihr gehoert');
+  assert.deepEqual(tools(), ['bulk-select', 'manage-categories', 'manage-tags'],
+    'Mehrfachauswahl und die beiden Verwaltungen, wie im Menue');
+
+  tasks.state.viewMode = 'kanban';
+  assert.match(choice(), /data-tab-id="kanban" aria-checked="true"/);
+  assert.deepEqual(tools(), ['manage-categories', 'manage-tags'], 'im Brett gibt es keine Mehrfachauswahl');
+
+  setPermissions({ admin: false, modules: { tasks: 'read' }, widgets: {}, capabilities: {} });
+  try {
+    assert.deepEqual(tools(), [], 'bei Nur-lesen nichts, was schreibt (#467)');
+    assert.match(choice(), /data-tab-id="history"/, 'die Ansichten bleiben');
+  } finally {
+    clearPermissions();
+  }
+});
+
+test('tasks.css: unter 768px zwei Kreise, das Menue nur in Auswahl und Verlauf, die Blattzeilen nur dort', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../public/styles/tasks.css', import.meta.url), 'utf8');
+  const phone = css.slice(css.indexOf('HOECHSTENS ZWEI KREISE IM KOPF'));
+  assert.match(phone, /@media \(max-width: 767px\) \{\s*\.tasks-page:not\(\.is-selecting\):not\(\[data-tasks-view="history"\]\) \.tasks-toolbar \.page-tools-btn \{\s*display: none;/,
+    'das Menue ist am Telefon kein dritter Kreis - ausser es ist der einzige Weg');
+  assert.match(phone, /\.tasks-page\.is-selecting \.tasks-toolbar \.tasks-toolbar__filter \{\s*display: none;/,
+    'in der Auswahl macht der Filter dem Menue Platz');
+  assert.match(phone, /@media \(min-width: 768px\) \{\s*\.filter-sheet \.tasks-sheet-phone \{\s*display: none;/,
+    'ab 768px tragen Segment und Menue im Kopf diese Wege');
 });
 
 // ---------------------------------------------------------------------------

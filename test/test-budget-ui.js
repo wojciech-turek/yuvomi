@@ -2755,12 +2755,16 @@ test('Budgetkopf traegt page-toolbar--period: eingeklappt verlaesst der Titel da
   // teilt der Knopf die Zeile mit dem Stepper und behaelt nur sein Zeichen.
   // R20 6c: das Wort bleibt eingeklappt stehen, dafuer halbiert der Knopf
   // seinen Innenrand (das Label traegt die Agenda-Spanne bei 390px ungekuerzt).
-  const ALLOWED_COLLAPSED = [/> \.page-toolbar__center$/, /\[data-collapse-fold\]/, / \.cal-toolbar__view-menu$/];
+  // Tafla (2026-10-24): am Telefon stehen keine Pfeile mehr im Kopf, und die
+  // Ansicht ist ein Kreis ohne Wort - eingeklappt faltet nichts mehr. Erlaubt
+  // bleibt der Center-Slot und die Schrift des Zeitraums, der dort zum Titel
+  // der Leiste wird (17/600 statt der 13/600-Zeile darunter).
+  const ALLOWED_COLLAPSED = [/> \.page-toolbar__center$/, / \.cal-toolbar__stepper > \.cal-toolbar__label$/];
   const strangers = [...eachRule(calendarCss)]
     .filter((r) => /\.is-collapsed/.test(r.selector))
     .flatMap((r) => r.selector.split(',').map((part) => part.trim()))
     .filter((part) => /\.is-collapsed/.test(part) && !ALLOWED_COLLAPSED.some((re) => re.test(part)));
-  assert.deepEqual(strangers, [], 'der eingeklappte Kalenderkopf ordnet nur Center-Slot und gefaltete Werkzeuge');
+  assert.deepEqual(strangers, [], 'der eingeklappte Kalenderkopf ordnet nur Center-Slot und die Schrift des Zeitraums');
 });
 
 /* ZWEI SKALEN (Critique 2026-09-25, P2): eine gemeinsame Skala liess das

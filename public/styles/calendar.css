@@ -538,20 +538,21 @@
   }
 }
 
-/* MOBIL ZWEI KOPFZEILEN (R9 M5, Re-Critique 2026-09-27 A8 P2-3; D1).
+/* MOBIL DER KOPF DER TAFEL (Tafla, Kalendarz.dc.html, 2026-10-24; davor R9
+ * M5, Re-Critique 2026-09-27 A8 P2-3, D1).
  *
- * Wie in Apples Kalender waehlt man die Ansicht unter 640px aus einem Menue
- * (calendar.js, viewMenuHtml); das Segment verschwindet, und die Bar-Zeile
- * loest sich auf (`display: contents`): Lupe und Filter ruecken als Gruppe an
- * das Ende der Titelzeile - die Lupe zuerst (D1: Suche · Ansicht · Filter) -,
- * der Zeitraum behaelt mit dem Pop-up-Knopf der Ansicht die zweite Zeile.
+ * Zeile 1: der Large Title und hoechstens ZWEI Geisterkreise („Nagłówek"):
+ * die Lupe und die Ansicht (calendar.js, viewMenuHtml). Die Bar-Zeile loest
+ * sich dafuer auf (`display: contents`), das Segment verschwindet, und der
+ * Filterknopf ist hier kein dritter Kreis - die Filter stehen im Menue der
+ * Ansicht, ihre Zahl als Badge an deren Kreis.
  *
- * DAS WORT DER ANSICHT STEHT IN ZEILE 2, NICHT NEBEN DEM TITEL: gemessen 390px
- * hatte die Titelzeile neben "Kalender" und zwei Werkzeugen 71px frei, der
- * Knopf mit "Woche" braucht 74-84px - der Titel waere angeschnitten worden.
- * Zeile 2 traegt ihn, weil der Reset ("Heute") dort auf den Wert rueckt
- * (wie im Budget, layout.css `--period-inline`): seine reservierte Box
- * (~70px) wird frei, das Label behaelt seine Breite (~160px). */
+ * Zeile 2: der Zeitraum als leise Zeile ueber dem Wochenstreifen (13/600
+ * Tinte-2, „Październik 2026"), am Ende „Dziś" als schlichtes Wort, solange
+ * man neben dem laufenden Zeitraum steht (Pasek tygodnia). Die Pfeile stehen
+ * nicht mehr im Kopf: geblaettert wird per Wisch (period-swipe.js), per Taste
+ * (j/k und Pfeiltasten, router.js) und ueber die beiden Eintraege im
+ * Ansichtsmenue - die gibt es dort in jedem Zustand, nicht erst eingeklappt. */
 @media (max-width: 639px) {
   .cal-toolbar__views {
     display: none;
@@ -574,11 +575,10 @@
     white-space: nowrap;
   }
 
-  /* Lupe und Filter folgen dem Titel in der DOM-Reihenfolge; der Titel waechst
-   * (Basis 0) und schiebt sie ans Zeilenende, der Zeitraum steht per `order`
-   * in Zeile 2. Die Lupe nimmt ihre Icon-Form aus der Shell (layout.css). */
+  /* Der Filter ist am Telefon kein Kreis: Lupe und Ansicht sind die zwei.
+   * Erreichbar bleibt er als Eintrag im Menue der Ansicht. */
   .cal-toolbar__filter-btn {
-    flex-shrink: 0;
+    display: none;
   }
 
   /* Die offene Suche nimmt die Zeile (wie in `--title-tools`, layout.css):
@@ -599,102 +599,80 @@
     gap: var(--space-2);
   }
 
-  /* Zeitraum + Ansicht: der Stepper nimmt den Rest, der Knopf seine Breite. */
   /* `contain: inline-size`: der Stepper meldet keine Inhaltsbreite nach
    * aussen. Die Shell gibt dem Center-Slot `min-width: min-content` (gegen
    * Ueberlappung im eingeklappten Kopf), und darin zaehlte das ungekuerzte
    * Zeitraumlabel mit - in uk ragte die Zeile 42px ueber die Kante (Sonde 1).
-   * Der Stepper nimmt den Rest der Zeile, das Label kuerzt mit Ellipse. */
+   * Der Stepper nimmt die Zeile, das Label kuerzt mit Ellipse. */
   .cal-toolbar__stepper {
     display: flex;
     align-items: center;
     flex: 1 1 0;
+    gap: var(--space-2);
     min-width: 0;
     contain: inline-size;
-    position: relative;
   }
 
-  /* Das Wort der Ansicht hat eine Obergrenze: "Порядок денний" (uk) schob die
-   * Zeitraumzeile bei 375px 42px ueber die Kante (Sonde 1). Laenger kuerzt
-   * es mit Ellipse; der Name des Knopfs nennt die Ansicht vollstaendig. */
-  .cal-toolbar__view-menu {
-    display: inline-flex;
-    flex: 0 1 auto;
-    gap: var(--space-1);
-    max-inline-size: 7.5rem;
-    min-width: 0;
-    padding-inline: var(--space-3);
-    min-height: var(--target-base);
+  .cal-toolbar__stepper > .period-stepper__prev,
+  .cal-toolbar__stepper > .period-stepper__next {
+    display: none;
   }
 
-  .cal-toolbar__view-menu-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* Der Zeitraum als Zeile ueber dem Streifen: Footnote 13/600 in Tinte-2,
+   * am Anfang der Zeile wie die Augenbraue eines Large Title. */
+  .cal-toolbar__stepper > .cal-toolbar__label {
+    flex: 1 1 0;
+    text-align: start;
+    font-size: var(--type-footnote);
+    line-height: var(--type-footnote-lh);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
   }
 
-  /* DER RESET LIEGT AUF DEM WERT (Muster Budget, layout.css `--period-inline`):
-   * durchsichtig zwischen den Pfeilen, ein Tipp aufs Label springt zurueck;
-   * der Wert steht im Modulton, solange man neben dem laufenden Zeitraum
-   * steht. Name und Tab-Stopp des Knopfs bleiben. */
+  /* „Dziś" (Pasek tygodnia): ein schlichtes Wort in der Akzentstimme. Seine
+   * Zielhoehe bringt `.btn` mit (--target-base); die negative Marge haelt die
+   * Zeile so hoch wie ihren 18px-Text, ob das Wort steht oder nicht. Im
+   * laufenden Zeitraum ist es verborgen und inert (syncTodayButton). */
+  .cal-toolbar__stepper > .cal-toolbar__today {
+    flex: none;
+    margin-block: calc((var(--type-footnote-lh) - var(--target-base)) / 2);
+    padding: 0 var(--space-1);
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-accent);
+    font-size: var(--type-footnote);
+    font-weight: var(--font-weight-semibold);
+  }
+
   .cal-toolbar__stepper > .cal-toolbar__today.is-current {
     display: none;
   }
 
-  .cal-toolbar__stepper > .cal-toolbar__today {
-    position: absolute;
-    inset-block: 0;
-    inset-inline: var(--target-base);
-    min-width: 0;
-    padding: 0;
-    overflow: hidden;
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    color: transparent;
+  /* Der Kreis der Ansicht: die Kopf-Icon-Haut (`.btn--secondary.btn--icon`),
+   * dazu nur der Bezug fuer die Badge der Filterzahl (layout.css,
+   * `.page-filter-btn__count`). Er hat kein Wort mehr und laeuft damit in
+   * keiner Locale ueber die Kante (Sonde 1). */
+  .cal-toolbar__view-menu {
+    display: inline-flex;
+    position: relative;
+    flex: none;
   }
 
-  .cal-toolbar__stepper > .period-stepper__value--away {
-    color: var(--module-accent);
-  }
-
-  /* EINGEKLAPPT EINE ZEILE (R17 Schritt 5, Critique 2026-10-07 A1 P1; R20 6c).
-   *
-   * Der Zeitraum rueckt mit dem Pop-up-Knopf in die frei gewordene Titelzeile,
-   * vor Lupe und Filter - wie der kompakte Kopf von Apple Kalender: das
-   * Label, die Ansicht MIT Wort, Suche und Filter. Was dafuer weicht, sind
-   * die beiden Pfeile (Ulas 2026-10-17, Option b). Bis R20 wichen statt ihrer
-   * das Wort der Ansicht und der ruhende Filter - eingeklappt blieb ein
-   * stummes Auf/Ab-Zeichen, und wer filtern wollte, musste erst ins Menue.
-   *
-   * Blaettern geht eingeklappt weiter: per Wisch (period-swipe.js), per Taste
-   * (j/k und Pfeiltasten, router.js) und ueber das Ansichtsmenue, das die
-   * gefalteten Pfeile als Eintraege aufnimmt (`data-collapse-fold`,
-   * wireCollapsingHeader in utils/ux.js). "Heute" liegt schon auf dem Wert;
-   * ohne Pfeile deckt er das ganze Label, ein Tipp darauf springt zurueck.
-   * Steht man im laufenden Zeitraum, ist er verborgen und inert - dort gibt
-   * es nichts zurueckzusetzen. Die Lupe faltet nicht: sie ist ein Feld. */
+  /* EINGEKLAPPT EINE ZEILE (R17 Schritt 5, Critique 2026-10-07 A1 P1).
+   * Der Titel geht (layout.css), der Zeitraum rueckt in die frei gewordene
+   * Titelzeile vor Lupe und Ansicht und wird dort ihr Titel - 17/600 in
+   * Tinte wie der Titel der Glasleiste. „Dziś" bleibt stehen. */
   .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed > .page-toolbar__center {
     order: 0;
     flex: 1 1 0;
     min-width: 0;
   }
 
-  .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed .cal-toolbar__stepper > .period-stepper__prev[data-collapse-fold],
-  .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed .cal-toolbar__stepper > .period-stepper__next[data-collapse-fold] {
-    display: none;
-  }
-
-  .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed .cal-toolbar__stepper > .cal-toolbar__today[data-collapse-fold] {
-    inset-inline: 0;
-  }
-
-  /* Der Knopf der Ansicht teilt die Zeile mit Label, Lupe und Filter: mit
-   * halbem Innenrand traegt das Label bei 390px die Agenda-Spanne
-   * "17.10. - 16.11.2026" ungekuerzt (gemessen 158px Text in 154px). */
-  .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed .cal-toolbar__view-menu {
-    padding-inline: var(--space-2);
+  .page-toolbar--period-title.cal-toolbar.page-toolbar--capped.is-collapsed .cal-toolbar__stepper > .cal-toolbar__label {
+    font-size: var(--type-body);
+    line-height: var(--type-body-lh);
+    color: var(--color-text-primary);
   }
 }
 
@@ -2766,7 +2744,8 @@
    * zwei Sprachen, je nachdem in welchem Modul man sie ansah.
    *
    * Die Bar bleibt eine Bar (das Monatsraster stellt sie neben die Event-Bars),
-   * ihre Fläche ist jetzt neutral, und die Stufe trägt der Punkt davor. */
+   * ihre Fläche ist jetzt neutral. Die Marke ist seit Tafla (2026-10-24) die
+   * Fahne hinter dem Text, nur für Hoch und Dringend - wie in der Liste. */
   background: var(--color-fill-well);
   color: var(--color-text-primary);
 }
@@ -2784,9 +2763,21 @@
   white-space: nowrap;
 }
 
+/* Die Fahne fuer Hoch und Dringend (Tafla; renderTaskChip): Tinte wie in der
+ * Aufgabenliste (`.task-card__flag`), in der Groesse der Chip-Zeichen. Sie
+ * steht hinter dem Text und schrumpft nie. */
+.cal-task-chip__flag {
+  flex: none;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  stroke-width: 1.75;
+  color: var(--color-text-primary);
+}
+
 /* Die vier Prioritätsvarianten standen hier als TEXTFARBEN - der zweite Kanal
  * neben der getönten Fläche. Die Skalen-Regel gibt einer Rangmarke genau einen,
- * und der ist der Punkt (`.priority-dot`, list-row.css). Was die Klassen jetzt
+ * und der ist seit Tafla die Fahne (`.cal-task-chip__flag`, nur Hoch und
+ * Dringend, wie `.task-card__flag` in der Aufgabenliste). Was die Klassen jetzt
  * tun, ist ihren Ton zu BENENNEN, ohne ihn selbst zu malen: die kompakte
  * Monatsansicht am Finger schrumpft den ganzen Chip auf 8px, und dann IST der
  * Chip der Punkt und braucht die Farbe an sich (siehe den Block ganz unten,
@@ -3010,9 +3001,9 @@
   /* HIER IST DER CHIP DER PUNKT - also trägt er die Stufe im Vollton, genau wie
    * die Termin-Bar darüber ihre --ev-color. Die neutrale Bar-Fläche der großen
    * Ansicht wäre hier ein Informationsverlust: vier Prioritäten sähen als vier
-   * graue Punkte gleich aus. Der eingelegte Punkt aus dem Markup ist auf dieser
-   * Größe ausgeblendet (`> * { display: none }` oben), seine Aufgabe übernimmt
-   * die Fläche.
+   * graue Punkte gleich aus. Die Fahne aus dem Markup ist auf dieser Größe
+   * ausgeblendet (`> * { display: none }` unten), ihre Aufgabe übernimmt die
+   * Fläche.
    *
    * AUFGABE UND TERMIN UNTERSCHEIDET DIE FORM, NICHT EINE RINGFARBE (Critique
    * 2026-09-24, P2). Hier stand ein Ring in `--color-surface-work`, und der war
@@ -3092,11 +3083,11 @@
     display: none;
   }
 
-  /* Der Prioritaetspunkt bleibt die Rangmarke der Aufgabe (Skalen-Regel), nur
-   * proportional zur 13px-Zeile: 8px sassen darauf wie ein zweites Element. */
-  .month-view--titles .cal-task-chip .priority-dot {
-    width: var(--space-1h);
-    height: var(--space-1h);
+  /* Die Fahne bleibt die Marke der dringenden Aufgabe, nur proportional zur
+   * 10px-Zeile der Titelfassung: 12px sassen darauf wie ein zweites Element. */
+  .month-view--titles .cal-task-chip .cal-task-chip__flag {
+    width: var(--space-2h);
+    height: var(--space-2h);
   }
 
   .month-view--titles .month-day .month-day__more {
