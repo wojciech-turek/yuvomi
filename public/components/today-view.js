@@ -19,6 +19,7 @@ import { esc } from '/utils/html.js';
 import { personToken } from '/utils/person-color.js';
 import { firstName, earlierLabel, minutesOf, MEAL_TIMES } from '/utils/today-plan.js';
 import { recipeThumbHtml } from '/utils/recipe-thumb.js';
+import { initials, compactInitials } from '/utils/initials.js';
 
 // --------------------------------------------------------
 // Small pieces
@@ -28,10 +29,14 @@ function icon(name, cls = '') {
   return `<i data-lucide="${esc(name)}"${cls ? ` class="${esc(cls)}"` : ''} aria-hidden="true"></i>`;
 }
 
-/** The first letter of a name, as a person disc shows it. */
-function initialOf(name) {
-  const first = [...firstName(name)][0] ?? '?';
-  return first.toLocaleUpperCase(getLocale());
+/**
+ * The characters on a person disc - the ONE initials rule (utils/initials.js,
+ * with the household's "LI"/"LE" where two people share a letter). The 20 and
+ * 24 discs carry 13px type: two Latin letters fit, two Hangul/Han glyphs do
+ * not, so they take the compact form, as the avatar stack does.
+ */
+function discText(name, size) {
+  return size >= 36 ? initials(name, '?') : compactInitials(name, '?');
 }
 
 /**
@@ -47,7 +52,7 @@ export function personDisc(person, { size = 20, label = true } = {}) {
   if (person.avatar_data) {
     return `<span class="day-disc day-disc--${size} day-disc--photo"${a11y} style="${style}"><img src="${esc(person.avatar_data)}" alt="" loading="lazy"></span>`;
   }
-  return `<span class="day-disc day-disc--${size}"${a11y} style="${style}">${esc(initialOf(name))}</span>`;
+  return `<span class="day-disc day-disc--${size}"${a11y} style="${style}">${esc(discText(name, size))}</span>`;
 }
 
 /** The split "razem" disc: the two first people's colours, diagonally. */

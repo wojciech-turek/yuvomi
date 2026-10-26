@@ -373,3 +373,84 @@ test('first run: Zacznij tutaj with starter chips, no Teraz and no plan', () => 
   assert.match(html, /today\.firstRunTitle/);
   assert.doesNotMatch(html, /day-now|day-plan/);
 });
+
+// --------------------------------------------------------------------------
+// What the old cockpit's browser tests protected, on Dziś (2026-10-26)
+// --------------------------------------------------------------------------
+
+const ev = (id, title, start, end, extra = {}) => ({ id, title, start_datetime: start, end_datetime: end, all_day: 0, assigned_users: [], ...extra });
+const titlesOf = (rows) => rows.map((row) => row.title);
+
+test('#1457: an event from yesterday stands today - running all day, ending today "do", ended folded away', () => {
+  // 10:00 on a Thursday: a trip until tomorrow, a night shift until 08:00, the
+  // way home until 12:00, a two-day all-day trip, and one this evening.
+  const p = plan.buildPlan({ planEvents: [
+    ev(1, 'Reise', '2026-10-18T18:00', '2026-10-20T12:00'),
+    ev(2, 'Nachtschicht', '2026-10-18T18:00', '2026-10-19T08:00'),
+    ev(3, 'Heimweg', '2026-10-18T20:00', '2026-10-19T12:00'),
+    ev(4, 'Klassenfahrt', '2026-10-18', '2026-10-20', { all_day: 1 }),
+    ev(5, 'Heute abend', '2026-10-19T19:00', '2026-10-19T20:00'),
+  ] }, ctxAt('10:00'));
+  const by = Object.fromEntries(p.all.map((row) => [row.title, row]));
+  assert.equal(by.Reise.timeLabel, 'today.allDay', 'over today and beyond: all day, not the start of yesterday');
+  assert.equal(by.Klassenfahrt.timeLabel, 'today.allDay');
+  assert.equal(by.Heimweg.timeLabel, 'calendar.spanUntil{"time":"12:00"}', 'ends today: "do 12:00"');
+  assert.deepEqual(titlesOf(p.earlier), ['Nachtschicht'], 'over at 08:00: in Wcześniej, not "all day" until midnight');
+  assert.ok(!titlesOf(p.open).includes('Nachtschicht'));
+  // After 12:00 the way home is over as well.
+  const later = plan.buildPlan({ planEvents: [ev(3, 'Heimweg', '2026-10-18T20:00', '2026-10-19T12:00')] }, ctxAt('12:30'));
+  assert.deepEqual(titlesOf(later.earlier), ['Heimweg']);
+  // An end at exactly 00:00 closes the day before (#804): yesterday's party
+  // until midnight is not on today's plan.
+  const midnight = plan.buildPlan({ planEvents: [ev(6, 'Bis Mitternacht', '2026-10-17T18:00', '2026-10-19T00:00')] }, ctxAt('10:00'));
+  assert.deepEqual(titlesOf(midnight.all), []);
+});
+
+test('#1457/#1534: the household zone decides the day and the time, not the device', () => {
+  try {
+    // 10:00 in Honolulu is 20:00 UTC. Both events as synchronised instants.
+    setDisplayTimeZone('Pacific/Honolulu');
+    const ctx = plan.planContext({ now: new Date('2026-09-24T20:00:00Z'), viewer: M, users: [W, M] });
+    const p = plan.buildPlan({ planEvents: [
+      ev(1, 'Reise', '2026-09-24T04:00:00.000Z', '2026-09-25T22:00:00.000Z'), // 23.09. 18:00 - 25.09. 12:00
+      ev(2, 'Abend', '2026-09-25T05:00:00.000Z', '2026-09-25T06:00:00.000Z'), // 24.09. 19:00
+    ] }, ctx);
+    assert.deepEqual(p.open.map((row) => [row.title, row.time]), [['Abend', '19:00'], ['Reise', '']],
+      'the evening at 19:00 household time, the trip running all day');
+  } finally {
+    setDisplayTimeZone('Europe/Warsaw');
+  }
+  // A task's due time is the wall time as typed (#1534) - no zone turns it.
+  try {
+    setDisplayTimeZone('America/New_York');
+    const ctx = plan.planContext({ now: new Date('2026-10-19T12:00:00Z'), viewer: M, users: [W, M] });
+    const p = plan.buildPlan({ planTasks: [
+      { id: 1, title: 'Muell', status: 'open', due_date: '2026-10-19', due_time: '18:00', assigned_users: [] },
+      { id: 2, title: 'Spaet', status: 'open', due_date: '2026-10-19', due_time: '23:30:00', assigned_users: [] },
+      { id: 3, title: 'Frueh', status: 'open', due_date: '2026-10-19', due_time: '06:15', assigned_users: [] },
+    ] }, ctx);
+    assert.deepEqual(p.all.map((row) => [row.title, row.time]).sort(), [['Frueh', '06:15'], ['Muell', '18:00'], ['Spaet', '23:30']]);
+  } finally {
+    setDisplayTimeZone('Europe/Warsaw');
+  }
+});
+
+test('#1698: an event row names its calendar - a place or "razem" comes first, and the view escapes it', () => {
+  const p = plan.buildPlan({ planEvents: [
+    ev(1, 'Frueh', '2026-10-19T14:00', '2026-10-19T22:00', { cal_name: 'Niklas Arbeitskalender', assigned_users: [M] }),
+    ev(2, 'Sync', '2026-10-19T15:00', '2026-10-19T16:00', { cal_name: 'Haushalt', source_calendar_name: 'Google: Familie', assigned_users: [M] }),
+    ev(3, 'Boese', '2026-10-19T16:00', '2026-10-19T17:00', { cal_name: '<img src=x>', assigned_users: [M] }),
+    ev(4, 'Mit Ort', '2026-10-19T17:00', '2026-10-19T18:00', { cal_name: 'Kalender', location: 'Turnhalle', assigned_users: [M] }),
+    ev(5, 'Nur in Yuvomi', '2026-10-19T18:00', '2026-10-19T19:00', { assigned_users: [M] }),
+  ] }, ctxAt('10:00'));
+  const meta = Object.fromEntries(p.all.map((row) => [row.title, row.meta]));
+  assert.equal(meta.Frueh, 'Niklas Arbeitskalender');
+  assert.equal(meta.Sync, 'Google: Familie', 'the synchronised source calendar first, as in the calendar module');
+  assert.equal(meta['Mit Ort'], 'Turnhalle', 'a place is the better second line');
+  assert.equal(meta['Nur in Yuvomi'], '', 'no calendar, no word');
+  const html = view.renderPlanRow(p.all.find((row) => row.title === 'Boese'), { canCheck: () => false });
+  assert.ok(html.includes('&lt;img src=x&gt;') && !html.includes('<img src=x>'), 'the name is user input and goes through esc()');
+  const frueh = view.renderPlanRow(p.all.find((row) => row.title === 'Frueh'), { canCheck: () => false });
+  assert.ok(frueh.includes('14:00') && !frueh.includes('22:00'), 'no span on Dziś: the start, not the end');
+});
+

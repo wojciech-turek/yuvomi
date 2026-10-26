@@ -510,6 +510,16 @@ test('Uebersicht: Wandansicht', async () => {
   assertShows(wallPersonDisc(user, [user]), '민수', 'Wandansicht');
 });
 
+test('Uebersicht: Dziś', async () => {
+  const user = { id: 1, display_name: MINSU, avatar_color: '#34C759' };
+  // Die Scheiben von Dziś (components/today-view.js): 36 im Kopf traegt zwei
+  // Geviert-Zeichen, 20 und 24 an Zeilen und Meta nur das kompakte eine.
+  const { personDisc } = await import('../public/components/today-view.js');
+  assertShows(personDisc(user, { size: 36 }), '민수', 'Dziś Kopf');
+  assertShows(personDisc(user), '수', 'Dziś Zeile');
+  assertShows(personDisc(user, { size: 24 }), '수', 'Dziś Meta');
+});
+
 // --------------------------------------------------------
 // 4. Gleiche Initialen im Haushalt (#1464)
 // --------------------------------------------------------
@@ -624,6 +634,7 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const { __test: rewards } = await import('../public/pages/rewards.js');
   const { __test: hk } = await import('../public/pages/housekeeping.js');
   const wallView = await import('../public/components/wall-view.js');
+  const todayView = await import('../public/components/today-view.js');
 
   const withState = (state, patch, run) => {
     const before = Object.fromEntries(Object.keys(patch).map((key) => [key, state[key]]));
@@ -661,6 +672,8 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
       workers: [{ id: 7, display_name: name, current_session: null, today_session: null }],
     }, () => hk.renderWorkerSummary()),
     'Uebersicht Wandansicht': (name) => wallView.wallPersonDisc(person(name), [person(name)]),
+    'Dziś Zeile': (name) => todayView.personDisc(person(name)),
+    'Dziś Kopf': (name) => todayView.personDisc(person(name), { size: 36 }),
   };
 
   // Die Kontozeile der Seitenleiste: derselbe Weg wie im Test weiter oben.

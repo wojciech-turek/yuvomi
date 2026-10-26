@@ -118,17 +118,41 @@ function eventDayKey(event) {
   return value.length <= 10 ? value.slice(0, 10) : (zonedDateKey(value) || value.slice(0, 10));
 }
 
+/**
+ * The last day an event covers, in the household zone. An all-day end is
+ * exclusive ("2026-10-20" ends before that day), and so is a timed end at
+ * exactly 00:00 - it closes the day before (#804).
+ */
+function eventLastDay(event) {
+  const endRaw = String(event?.end_datetime ?? '');
+  if (!endRaw) return '';
+  if (endRaw.length <= 10) return addLocalDays(endRaw.slice(0, 10), -1);
+  const day = zonedDateKey(endRaw) || endRaw.slice(0, 10);
+  return zonedTimeKey(endRaw) === '00:00' ? addLocalDays(day, -1) : day;
+}
+
 /** Does the event touch this day (multi-day and all-day ones included)? */
 function eventTouches(event, dayKey) {
   const start = eventDayKey(event);
   if (!start) return false;
   if (start === dayKey) return true;
   if (start > dayKey) return false;
-  const endRaw = String(event?.end_datetime ?? '');
-  if (!endRaw) return false;
-  // An all-day end is exclusive ("2026-10-20" ends before that day).
-  const end = endRaw.length <= 10 ? addLocalDays(endRaw.slice(0, 10), -1) : (zonedDateKey(endRaw) || endRaw.slice(0, 10));
-  return end >= dayKey;
+  const last = eventLastDay(event);
+  return Boolean(last) && last >= dayKey;
+}
+
+/**
+ * When an event that began on an earlier day ends at a time ON this day
+ * ("Nachtschicht" until 08:00, #1457): that time, else ''. It stands as "do
+ * 08:00" and folds into "Wcześniej" once it is over - not "all day" until
+ * midnight.
+ */
+function eventEndsAt(event, dayKey) {
+  if (event.all_day || eventDayKey(event) >= dayKey) return '';
+  const endRaw = String(event.end_datetime ?? '');
+  if (endRaw.length <= 10 || zonedDateKey(endRaw) !== dayKey) return '';
+  const time = zonedTimeKey(endRaw);
+  return time && time !== '00:00' ? time : '';
 }
 
 function eventIsTimed(event, dayKey) {
@@ -167,9 +191,10 @@ function eventMeta(event, viewer) {
 function eventRow(event, ctx, dayKey = ctx.todayKey) {
   const timed = eventIsTimed(event, dayKey);
   const time = timed ? zonedTimeKey(event.start_datetime) : '';
+  const endsAt = timed ? '' : eventEndsAt(event, dayKey);
   const startMin = timed ? minutesOf(time) : NaN;
-  const endMin = timed ? eventEndMin(event, dayKey) : NaN;
-  const past = dayKey === ctx.todayKey && timed && endMin <= ctx.nowMin;
+  const endMin = timed ? eventEndMin(event, dayKey) : (endsAt ? minutesOf(endsAt) : NaN);
+  const past = dayKey === ctx.todayKey && (timed || Boolean(endsAt)) && endMin <= ctx.nowMin;
   return {
     key: `event:${event.id}@${event.start_datetime}`,
     kind: 'event',
@@ -178,7 +203,7 @@ function eventRow(event, ctx, dayKey = ctx.todayKey) {
     meta: eventMeta(event, ctx.viewer),
     pill: null,
     time,
-    timeLabel: timed ? formatTime(time) : t('today.allDay'),
+    timeLabel: timed ? formatTime(time) : endsAt ? t('calendar.spanUntil', { time: formatTime(endsAt) }) : t('today.allDay'),
     sortMin: timed ? startMin : NaN,
     startMin,
     endMin,
@@ -643,7 +668,9 @@ export function buildSoon(data, ctx, { documents = [] } = {}) {
         key: `birthday:${b.id}:${b.kind}`, kind: 'birthday', days, date,
         title: b.kind !== 'name_day' && Number(b.next_age) > 0 ? t('today.birthdayAge', { name: b.name, count: Number(b.next_age) }) : String(b.name ?? ''),
         meta: b.kind === 'name_day' ? t('birthdays.nameDay') : '',
-        icon: 'cake', route: '/birthdays',
+        // EINE Zeile nennt EINEN Anlass (#1821): sie oeffnet ihn, die Seite
+        // loest `?open=` in der Spalte und unter der Schwelle ein.
+        icon: 'cake', route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
       });
     }
   }
