@@ -2979,7 +2979,7 @@ function doseActionsMarkup(dose, log, name, own, hooks = DOSE_HOOKS) {
   // nach der Containerbreite faellt (health.css).
   return `
       <div class="health-dose__actions">
-        <button type="button" class="btn btn--sm btn--primary health-dose__take" ${hooks.take} ${data} aria-label="${esc(t('health.meds.takeNamed', { name }))}"><i data-lucide="pill" class="icon-sm health-dose__take-icon" aria-hidden="true"></i><span class="health-dose__take-label">${esc(t('health.meds.take'))}</span></button>
+        <button type="button" class="btn btn--sm health-dose__take" ${hooks.take} ${data} aria-label="${esc(t('health.meds.takeNamed', { name }))}"><i data-lucide="pill" class="icon-sm health-dose__take-icon" aria-hidden="true"></i><span class="health-dose__take-label">${esc(t('health.meds.take'))}</span></button>
         <button type="button" class="btn btn--sm btn--ghost health-dose__skip" ${hooks.skip} ${data} aria-label="${esc(t('health.meds.skipNamed', { name }))}"><i data-lucide="skip-forward" class="icon-sm" aria-hidden="true"></i><span class="health-dose__skip-label">${esc(t('health.meds.skip'))}</span></button>
       </div>`;
 }
@@ -3094,7 +3094,7 @@ function prnRowMarkup(med, scope, own) {
     : med.dosage_text || '';
 
   const action = own
-    ? `<button type="button" class="btn btn--sm ${state.allowed ? 'btn--primary' : 'btn--ghost'} health-prn__take"
+    ? `<button type="button" class="btn btn--sm ${state.allowed ? 'health-prn__take--ready' : 'btn--ghost'} health-prn__take"
                data-prn-take data-prn-scope="${esc(scope)}" data-med-id="${esc(med.id)}"
                aria-label="${esc(t('health.meds.prn.takeFor', { medication: med.name }))}">
          <i data-lucide="pill" class="icon-sm" aria-hidden="true"></i>

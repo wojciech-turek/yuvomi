@@ -928,8 +928,11 @@ function attentionEl() {
       noteText.textContent = missing.length
         ? t('pantry.attentionOnList', { names: joinNames(already.map((i) => i.name)) })
         : t('pantry.attentionAllOnList');
+      // The check rides at the end of the sentence, inside the text: when the
+      // note wraps to its second line it stays with the words it confirms
+      // instead of floating at the card's edge.
+      noteText.insertAdjacentHTML('beforeend', '<i data-lucide="check" class="icon-sm" aria-hidden="true"></i>');
       note.appendChild(noteText);
-      note.insertAdjacentHTML('beforeend', '<i data-lucide="check" class="icon-sm" aria-hidden="true"></i>');
       text.appendChild(note);
     }
     body.appendChild(text);

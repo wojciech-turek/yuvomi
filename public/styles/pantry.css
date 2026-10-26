@@ -336,9 +336,7 @@
 }
 
 .pantry-attention__note {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  display: block;
   min-width: 0;
   font-size: var(--type-footnote);
   line-height: var(--type-footnote-lh);
@@ -354,8 +352,12 @@
   overflow: hidden;
 }
 
+/* The check closes the sentence: inline after the last word, so a wrapped
+ * note keeps it beside the text it confirms. */
 .pantry-attention__note svg {
-  flex: none;
+  display: inline-block;
+  margin-inline-start: var(--space-1);
+  vertical-align: -0.125em;
 }
 
 /* "Dodaj 2 do listy": getoent, nicht primaer - die Seite hat keine Hauptaktion,
