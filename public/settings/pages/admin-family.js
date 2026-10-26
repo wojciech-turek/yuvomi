@@ -401,7 +401,7 @@ function renderPage(container) {
       </section>
 
       <section class="tafla-group" id="invites-card" aria-labelledby="invites-title">
-        <h3 class="tafla-group__title" id="invites-title">${t('settings.invites.title')}</h3>
+        <h2 class="tafla-group__title" id="invites-title">${t('settings.invites.title')}</h2>
         <div class="tafla-card family-card">
           <ul class="settings-members row-divided" id="invites-list"></ul>
           <div class="settings-member-actions">
@@ -416,7 +416,7 @@ function renderPage(container) {
            die Liste, wen die Pflicht trifft - beides zusammen ist die
            Entscheidung (#672). -->
       <div id="two-factor-household-card">
-        <h3 class="settings-card__title settings-group__title tafla-group__title">${t('settings.twoFactorTitle')}</h3>
+        <h2 class="settings-card__title settings-group__title tafla-group__title">${t('settings.twoFactorTitle')}</h2>
         <div class="row-carrier settings-group">
           ${settingSwitchRowHtml({
             label: t('settings.twoFactorRequireLabel'),

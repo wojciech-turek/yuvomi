@@ -2120,6 +2120,17 @@ describe('Sonde 6 - die Kacheln einer Kennzahlreihe sind gleich hoch', () => {
           check(where, await metricRowHeights(page));
         });
       }
+      // 2026-10-24, Tafla: DIE AKTIVITAETS-REIHE DER GESUNDHEIT WIRD ANGEFAHREN.
+      // Sie ist die Reihe, um derentwillen die Sonde aus den Karten liest (siehe
+      // metricRowHeights) - erreicht wurde sie aber nur, solange die Bereiche
+      // der Gesundheit Tabs waren. Seit R10 G1 sind sie Links einer Liste
+      // (eigene Adressen), und `visitViews` klickt keine Links. Die Route steht
+      // deshalb hier ausdruecklich, statt dass die Sonde sie nie misst.
+      await gotoRoute(page, '/health/activity');
+      await visitViews(page, 'health/activity', async (where) => {
+        await openMetricDisclosures(page);
+        check(where, await metricRowHeights(page));
+      });
       await page.close();
 
       // Eine Sonde, die nichts gemessen hat, darf nicht urteilen (dieselbe
@@ -2127,10 +2138,22 @@ describe('Sonde 6 - die Kacheln einer Kennzahlreihe sind gleich hoch', () => {
       // Der Reichweiten-Nachweis steigt mit der Reichweite: seit die Reihe aus
       // den KARTEN kommt statt aus `.metric-grid`, gehoert die Aktivitaets-Reihe
       // der Gesundheit dazu, die vorher unsichtbar war.
+      //
+      // 2026-10-24, Tafla: WELCHE REIHEN ES JE GERAET SIND. Am Desktop stehen
+      // Budget-Uebersicht und Darlehen seit R19 als Schiene (eine Spalte, eine
+      // Kachel je Zeile - keine Reihe), und die Kennzahlreihe der Haushaltshilfe
+      // (`#housekeeping-metrics`, vier Kacheln) hat Tafla durch die Karte
+      // "Następna wizyta" mit dem offenen Betrag ersetzt. Erwartet sind dort:
+      // Abos, Aufteilen, die zwei Zeilen der Vitalwerte in der Gesundheits-
+      // Uebersicht und die Aktivitaets-Reihe. Mobil: Budget-Uebersicht (im
+      // Grundzustand und hinter ihrem Reiter), Abos, Darlehen, Aufteilen und die
+      // Aktivitaets-Reihe (die Telefon-Uebersicht der Gesundheit ist seit Tafla
+      // der Tag, ohne Vitalwerte).
       assert.ok(rowsSeen >= 5,
-        `Nur ${rowsSeen} Kennzahlreihen gesehen - erwartet sind mindestens Budget, Abos, Aufteilen, `
-        + 'Darlehen und die Aktivitaets-Reihe der Gesundheit. Entweder hat der Seed keine Zahlen '
-        + 'geliefert, oder die Bauart hat sich geaendert.');
+        `Nur ${rowsSeen} Kennzahlreihen gesehen - erwartet sind mindestens fuenf: am Desktop Abos, `
+        + 'Aufteilen, die Vitalwerte der Gesundheits-Uebersicht (zwei Zeilen) und die Aktivitaets-Reihe; '
+        + 'mobil Budget-Uebersicht, Abos, Darlehen, Aufteilen und die Aktivitaets-Reihe. Entweder '
+        + 'hat der Seed keine Zahlen geliefert, oder die Bauart hat sich geaendert.');
 
       assert.deepEqual(findings, [],
         'Kennzahlreihen im gerenderten Dokument. Gleichartige Kacheln nebeneinander sind gleich hoch, '

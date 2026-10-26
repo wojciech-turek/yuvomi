@@ -195,7 +195,7 @@ function renderBody(view, stats, statsError = false) {
     <div class="fasting-dial fasting-dial--segmented" data-fasting-progress><div data-fasting-segments></div><div class="fasting-dial__content"><div class="fasting-hero__timer" data-fasting-timer>00:00:00</div><span class="fasting-dial__days" data-fasting-days></span></div></div>
     <p class="sr-only" role="status" aria-live="polite" data-fasting-announcement></p>
     ${active ? `<p class="fasting-hero__remaining" data-fasting-remaining></p><p class="fasting-hero__meta">${esc(t('health.fasting.startedAt', { date: fastingStamp(active.start_at, active.start_tzid) }))}</p>${active.goal_minutes ? `<p class="fasting-hero__meta" data-fasting-target>${esc(t('health.fasting.targetAt', { date: fastingStamp(new Date(Date.parse(active.start_at) + active.goal_minutes * 60000).toISOString(), active.start_tzid) }))}</p>` : ''}` : ''}
-    ${writable ? `<div class="fasting-hero__actions"><button class="btn btn--primary" type="button" data-fasting-action>${esc(t(active ? 'health.fasting.finish' : 'health.fasting.start'))}</button><button class="btn btn--secondary" type="button" ${active ? 'data-fasting-edit-start' : 'data-fasting-earlier'}>${esc(t(active ? 'health.fasting.editStart' : 'health.fasting.earlier'))}</button><button class="btn btn--secondary btn--icon" type="button" data-fasting-settings aria-label="${esc(`${t('health.fasting.title')} - ${t('nav.settings')}`)}" title="${esc(t('nav.settings'))}"><i data-lucide="settings" class="icon-md" aria-hidden="true"></i></button></div>` : `<p class="form-hint">${esc(t('health.fasting.readOnly'))}</p>`}
+    ${writable ? `<div class="fasting-hero__actions"><button class="pill-btn pill-btn--primary" type="button" data-fasting-action>${esc(t(active ? 'health.fasting.finish' : 'health.fasting.start'))}</button><button class="pill-btn pill-btn--secondary" type="button" ${active ? 'data-fasting-edit-start' : 'data-fasting-earlier'}>${esc(t(active ? 'health.fasting.editStart' : 'health.fasting.earlier'))}</button><button class="ghost-circle" type="button" data-fasting-settings aria-label="${esc(`${t('health.fasting.title')} - ${t('nav.settings')}`)}" title="${esc(t('nav.settings'))}"><span class="ghost-circle__disc"><i data-lucide="settings" aria-hidden="true"></i></span></button></div>` : `<p class="form-hint">${esc(t('health.fasting.readOnly'))}</p>`}
     <p class="form-hint" role="alert" data-fasting-error></p>
     ${state.settings?.zone_mode === 'educational' ? fastingEducationMarkup() : ''}
   </section>
@@ -208,9 +208,9 @@ function renderBody(view, stats, statsError = false) {
     icon: 'timer',
     title: t('health.fasting.noHistory'),
     description: t('health.fasting.emptyDesc'),
-  })}</section>` : `<section id="history"><div class="fasting-card__heading"><h3 class="u-section-title">${esc(t('health.fasting.history'))}</h3><a href="/api/v1/health/export/fasting${esc(fastingHistoryQuery(view))}" class="btn btn--secondary btn--sm" download>${esc(t('health.fasting.export'))}</a></div>
+  })}</section>` : `<section id="history"><div class="fasting-card__heading"><h3 class="u-section-title">${esc(t('health.fasting.history'))}</h3><a href="/api/v1/health/export/fasting${esc(fastingHistoryQuery(view))}" class="pill-btn pill-btn--secondary" download>${esc(t('health.fasting.export'))}</a></div>
     ${filtersMarkup(view)}
-    <div class="fasting-card" data-fasting-history></div><div class="fasting-history-more"><button class="btn btn--secondary" type="button" data-fasting-more ${view.more ? '' : 'hidden'}>${esc(t('health.fasting.loadMore'))}</button><p class="form-hint" role="alert" data-fasting-history-error></p></div>
+    <div class="fasting-card" data-fasting-history></div><div class="fasting-history-more"><button class="pill-btn pill-btn--secondary" type="button" data-fasting-more ${view.more ? '' : 'hidden'}>${esc(t('health.fasting.loadMore'))}</button><p class="form-hint" role="alert" data-fasting-history-error></p></div>
   </section>`}`);
   const reload = () => refresh(view);
   const reloadStats = () => refresh(view, { refreshStats: true });
