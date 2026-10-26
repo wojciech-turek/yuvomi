@@ -1460,6 +1460,40 @@
   --wall-body:    clamp(26px, 3.66vmin, 36px);   /* 30  - Zeilen, Datum, Teraz-Zeile, Zutaten, Knopflabels (600) */
   --wall-label:   clamp(24px, 2.93vmin, 28px);   /* 24  - Eyebrows, Abschnittslabels, "min", Exit-Pille: der Boden, auch bei 1280x800 */
 
+  /* Ihre Zeilenhoehen (Artboards „Ściana" und „Gotowanie"). */
+  --wall-display-lh: 1.14;   /* 112/128 - Uhr, laufender Timer */
+  --wall-text-lh:    1.27;   /* 44/56 und 30/38 - Titel, Zeilen, Kochschritt */
+  --wall-label-lh:   1.25;   /* 24/30 - Labels, Eyebrows */
+  --wall-tight-lh:   1.1;    /* Zahl und Einheit uebereinander in einer Minutnik-Scheibe, "Smacznego!" */
+
+  /* IHRE GEOMETRIE an einer Stelle (2026-10-24, aus dashboard.css und
+   * cook-mode.css gehoben): Karten, Teller, Messer, Knoepfe, Linien. Farben
+   * stehen hier nicht - die Wand nimmt die semantischen Rollen, die hell und
+   * dunkel umschalten; Kochbuehne und Nachtszene tragen die festen --cook-* und
+   * --wall-night-* oben (sie schalten bewusst nie um). Werte bei 1180x820.
+   * Die zwei Radien tragen den Familiennamen --radius-*: Radien kommen in der
+   * ganzen App nur aus dieser Familie (Guard in test:frontend-audit). */
+  --radius-wall-card:      calc(var(--radius-lg) + 12px);              /* 28  - Karten, Hauptkarte, Felder und Band im Kochmodus */
+  --radius-wall-plate:     calc(var(--radius-sm) + 12px);              /* 20  - der Teller der Hauptkarte */
+  --wall-plate:            calc(var(--space-16) * 2.5);                /* 160 */
+  --wall-meter:            calc(var(--space-16) * 3 + var(--space-2)); /* 200 - der Vorrats-Messer am Abendessen */
+  --wall-cook-min:         calc(var(--space-16) * 5);                  /* 320 - „Gotuj" in der Hauptkarte */
+  --wall-cook-min-compact: calc(var(--space-16) * 3);                  /* 192 - „Gotuj" in der kleinen Abendessen-Karte */
+  --wall-next-min:         calc(var(--space-16) * 4);                  /* 256 - „Wróć do ściany" am Ende des Kochmodus */
+  --wall-loading-min:      calc(var(--space-16) * 4);                  /* 256 - Platzhalter einer Karte beim Laden */
+  --wall-band-min:         calc(var(--space-16) * 2 - var(--space-2)); /* 120 - das Minutnik-Band im Kochmodus (iPad) */
+  --wall-dialog-max:       40rem;   /* „Kto to zrobił?" */
+  --wall-progress-max:     25rem;   /* der Fortschritt des Kochmodus */
+  --wall-progress-seg:     6px;     /* Hoehe eines Fortschritt-Segments */
+  --wall-hairline:         0.5px;   /* zwischen den Zeilen der Dziś-Karte */
+  --wall-rule:             1px;     /* Fuss eines Feldes, Trenner im Band, Scheibe bei Nacht */
+  --wall-ring:             2px;     /* Kreis zum Abhaken, Zutaten-Ring */
+  --wall-ring-thin:        1.5px;   /* eine fehlende Zutat im Messer */
+  --wall-icon-stroke:      1.25;    /* gross gesetzte Lucide-Zeichen: Wetter, Teller */
+  --wall-check-stroke:     2.5;     /* der Haken im Zutaten-Ring */
+  --wall-arc-stroke:       6;       /* der Bogen des laufenden Minutniks */
+  --wall-pulse:            1s;      /* ein abgelaufener Minutnik schlaegt einmal je Sekunde */
+
   /* Größen-Skala (Kompatibilitäts- und Layout-Tokens) */
   --text-2xs:  0.625rem;   /* 10px - Sehr kleine Badges (z.B. Erinnerungs-Zähler) */
   --text-xs:   0.8125rem;  /* 13px - Tafla Footnote (vorher 12px Caption 1) */

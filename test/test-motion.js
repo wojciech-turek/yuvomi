@@ -319,7 +319,10 @@ test('ein Blatt von unten: Dialog-Sheet, Mehr-Blatt und mobile Suche fahren aus 
 test('eine Kurvenfamilie: keine nackte Keyword-Kurve in Interaktions-Motion', () => {
   const { keyword, loops } = motionViolations();
   // 8 -> 7 (Tafla, 2026-10-24): die Wetterkarte der Uebersicht ist mit ihren Schleifen gegangen.
-  assert.ok(loops >= 7, `der Scanner sieht die Endlos-Schleifen nicht (${loops}) - der Guard waere blind`);
+  // 7 -> 5 (2026-10-26): die Pulse von Wand und Kochmodus nehmen Periode und
+  // Kurve jetzt aus Tokens (--wall-pulse, --ease-in-out) - der Scanner zaehlt
+  // nur Schleifen mit Literal oder Keyword.
+  assert.ok(loops >= 5, `der Scanner sieht die Endlos-Schleifen nicht (${loops}) - der Guard waere blind`);
   assert.deepEqual(keyword, [], `Keyword-Kurve statt var(--ease-out)/var(--ease-in-out):\n  ${keyword.join('\n  ')}`);
 });
 

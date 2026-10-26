@@ -514,7 +514,7 @@
   background: var(--color-bg);
   color: var(--color-text-primary);
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-variant-numeric: tabular-nums;
 }
 
@@ -538,7 +538,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-10);
-  min-height: calc(var(--wall-display) * 1.14);
+  min-height: calc(var(--wall-display) * var(--wall-display-lh));
 }
 
 .wall__head-main {
@@ -553,7 +553,7 @@
   flex: none;
   font-family: var(--font-rounded);
   font-size: var(--wall-display);
-  line-height: 1.14;
+  line-height: var(--wall-display-lh);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-display);
   white-space: nowrap;
@@ -570,7 +570,7 @@
 .wall__teraz {
   margin: 0;
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -609,20 +609,20 @@
   inline-size: var(--space-16);
   block-size: var(--space-16);
   color: var(--color-text-secondary);
-  stroke-width: 1.25;
+  stroke-width: var(--wall-icon-stroke);
 }
 
 .wall__weather-temp {
   font-family: var(--font-rounded);
   font-size: var(--wall-title);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
 }
 
 .wall__weather-line {
   margin: 0;
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -637,14 +637,14 @@
 
 .wall__timer-label {
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
 
 .wall__timer[data-state="done"] .wall__timer-value {
   color: var(--color-accent);
-  animation: wall-timer-pulse 1s ease-in-out infinite;
+  animation: wall-timer-pulse var(--wall-pulse) var(--ease-in-out) infinite;
 }
 
 @keyframes wall-timer-pulse {
@@ -694,7 +694,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-6);
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--color-surface);
   min-height: 0;
 }
@@ -707,7 +707,7 @@
 .wall-card__label {
   margin: 0;
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
@@ -724,7 +724,7 @@
   justify-content: space-between;
   gap: var(--space-6);
   padding: var(--space-8);
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--color-hearth);
   box-shadow: var(--shadow-e1);
   min-height: 0;
@@ -755,7 +755,7 @@
 .wall-hero__eyebrow {
   margin: 0;
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
@@ -763,7 +763,7 @@
 .wall-hero__title {
   margin: 0;
   font-size: var(--wall-title);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -774,9 +774,9 @@
 
 .wall-hero__plate {
   flex: none;
-  inline-size: calc(var(--space-16) * 2.5);
-  block-size: calc(var(--space-16) * 2.5);
-  border-radius: calc(var(--radius-sm) + 12px);
+  inline-size: var(--wall-plate);
+  block-size: var(--wall-plate);
+  border-radius: var(--radius-wall-plate);
   background: var(--color-surface);
   display: grid;
   place-items: center;
@@ -793,7 +793,7 @@
 .wall-hero__plate-icon {
   inline-size: calc(var(--space-16) + var(--space-6));
   block-size: calc(var(--space-16) + var(--space-6));
-  stroke-width: 1.25;
+  stroke-width: var(--wall-icon-stroke);
 }
 
 .wall-hero__cook,
@@ -803,7 +803,7 @@
   align-items: center;
   gap: var(--space-4);
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   color: var(--color-text-secondary);
 }
 
@@ -816,7 +816,7 @@
 .wall-meter {
   display: flex;
   gap: var(--space-1);
-  inline-size: calc(var(--space-16) * 3 + var(--space-2));
+  inline-size: var(--wall-meter);
 }
 
 .wall-meter__seg {
@@ -828,12 +828,12 @@
 
 .wall-meter__seg--missing {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--color-field-border);
+  box-shadow: inset 0 0 0 var(--wall-ring-thin) var(--color-field-border);
 }
 
 .wall-hero__meter-text {
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   color: var(--color-text-secondary);
 }
 
@@ -841,7 +841,7 @@
 .wall-cook {
   align-self: flex-start;
   box-sizing: border-box;
-  min-inline-size: calc(var(--space-16) * 5);
+  min-inline-size: var(--wall-cook-min);
   block-size: calc(var(--space-16) + var(--space-6));
   padding: 0 var(--space-8);
   display: inline-flex;
@@ -877,7 +877,7 @@
 .wall-dinner__title {
   margin: 0;
   font-size: var(--wall-title);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -887,7 +887,7 @@
 }
 
 .wall-dinner .wall-cook {
-  min-inline-size: calc(var(--space-16) * 3);
+  min-inline-size: var(--wall-cook-min-compact);
   block-size: calc(var(--space-16) + var(--space-2));
   margin-top: var(--space-2);
 }
@@ -934,7 +934,7 @@
   position: absolute;
   inset-block-start: 0;
   inset-inline: calc(var(--space-6) + var(--space-16) + var(--space-8) + var(--space-4)) 0;
-  block-size: 0.5px;
+  block-size: var(--wall-hairline);
   background: var(--color-separator);
 }
 
@@ -955,7 +955,7 @@
 .wall-row__time {
   font-family: var(--font-rounded);
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
@@ -970,7 +970,7 @@
 .wall-row__title {
   min-width: 0;
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1014,7 +1014,7 @@
   padding: 0;
   display: grid;
   place-items: center;
-  border: 2px solid var(--color-field-border);
+  border: var(--wall-ring) solid var(--color-field-border);
   border-radius: var(--radius-full);
   background: transparent;
   color: transparent;
@@ -1044,7 +1044,7 @@
   align-items: center;
   gap: var(--space-4);
   font-size: var(--wall-title);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1090,7 +1090,7 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
@@ -1145,7 +1145,7 @@
 .wall-question__text {
   margin: 0;
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1185,7 +1185,7 @@
 
 /* „Kto to zrobił?" am Display: ein Dialog mit einem grossen Knopf je Person. */
 .wall-pick {
-  max-inline-size: min(40rem, calc(100% - var(--space-12)));
+  max-inline-size: min(var(--wall-dialog-max), calc(100% - var(--space-12)));
   padding: var(--space-8);
   border: 0;
   border-radius: var(--radius-xl);
@@ -1201,7 +1201,7 @@
 .wall-pick__title {
   margin: 0;
   font-size: var(--wall-body);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1267,7 +1267,7 @@
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
@@ -1318,7 +1318,7 @@
 .wall__timer-presets-label {
   margin-inline-end: var(--space-2);
   font-size: var(--wall-label);
-  line-height: 1.25;
+  line-height: var(--wall-label-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -1345,12 +1345,12 @@
 
 .wall__timer-preset-num {
   font-size: var(--wall-body);
-  line-height: 1.2;
+  line-height: var(--wall-tight-lh);
 }
 
 .wall__timer-preset-unit {
   font-size: var(--wall-label);
-  line-height: 1.1;
+  line-height: var(--wall-tight-lh);
   color: var(--color-text-secondary);
 }
 
@@ -1376,7 +1376,7 @@
 .wall__error-title {
   margin: 0;
   font-size: var(--wall-title);
-  line-height: 1.27;
+  line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1387,9 +1387,9 @@
 }
 
 .wall__loading {
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--color-fill);
-  min-block-size: calc(var(--space-16) * 4);
+  min-block-size: var(--wall-loading-min);
 }
 
 /* ── Szene Noc (22:00 bis 06:00) ──
@@ -1421,7 +1421,7 @@
 .wall[data-scene="noc"] .wall__timer-preset {
   background: transparent;
   color: var(--wall-night-ink);
-  box-shadow: inset 0 0 0 1px var(--wall-night-ink);
+  box-shadow: inset 0 0 0 var(--wall-rule) var(--wall-night-ink);
 }
 
 .wall[data-scene="noc"] .wall__stage {

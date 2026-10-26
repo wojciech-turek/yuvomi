@@ -123,12 +123,12 @@
 .cook__progress {
   display: flex;
   gap: var(--space-1);
-  inline-size: min(25rem, 100%);
+  inline-size: min(var(--wall-progress-max), 100%);
 }
 
 .cook__seg {
   flex: 1;
-  block-size: 6px;
+  block-size: var(--wall-progress-seg);
   border-radius: var(--radius-full);
   background: var(--cook-track);
 }
@@ -190,7 +190,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--cook-panel);
   min-height: 0;
 }
@@ -221,14 +221,14 @@
   display: grid;
   place-items: center;
   border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 2px var(--color-field-border);
+  box-shadow: inset 0 0 0 var(--wall-ring) var(--color-field-border);
   color: transparent;
 }
 
 .cook__ring svg {
   inline-size: 60%;
   block-size: 60%;
-  stroke-width: 2.5;
+  stroke-width: var(--wall-check-stroke);
 }
 
 .cook__ing[aria-pressed="true"] {
@@ -251,7 +251,7 @@
 }
 
 .cook__panel-foot {
-  border-top: 1px solid var(--cook-rule);
+  border-top: var(--wall-rule) solid var(--cook-rule);
 }
 
 .cook__panel-more {
@@ -342,7 +342,7 @@
   gap: var(--space-4);
   min-block-size: calc(var(--space-16) + var(--space-6));
   padding: var(--space-3) var(--space-4);
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--cook-panel);
 }
 
@@ -369,12 +369,12 @@
 
 .cook__preset-num {
   font-size: var(--cook-body);
-  line-height: 1.1;
+  line-height: var(--wall-tight-lh);
 }
 
 .cook__preset-unit {
   font-size: var(--cook-label);
-  line-height: 1.1;
+  line-height: var(--wall-tight-lh);
   color: var(--cook-ink-2);
 }
 
@@ -395,7 +395,7 @@
 .cook__timer-track,
 .cook__timer-arc {
   fill: none;
-  stroke-width: 6;
+  stroke-width: var(--wall-arc-stroke);
 }
 
 .cook__timer-track {
@@ -433,12 +433,12 @@
   justify-content: center;
   align-self: stretch;
   border: 0;
-  border-radius: calc(var(--radius-lg) + 12px);
+  border-radius: var(--radius-wall-card);
   background: var(--cook-accent-fill);
   color: var(--color-on-accent);
   font-size: var(--cook-step);
   font-weight: var(--font-weight-semibold);
-  animation: cook-done-pulse 1s ease-in-out infinite;
+  animation: cook-done-pulse var(--wall-pulse) var(--ease-in-out) infinite;
 }
 
 @keyframes cook-done-pulse {
@@ -448,7 +448,7 @@
 
 .cook__band-rule {
   flex: none;
-  inline-size: 1px;
+  inline-size: var(--wall-rule);
   align-self: stretch;
   background: var(--cook-rule);
 }
@@ -531,7 +531,7 @@
 .cook__end-title {
   margin: 0;
   font-size: var(--cook-num);
-  line-height: 1.1;
+  line-height: var(--wall-tight-lh);
   letter-spacing: var(--tracking-display);
   animation: cook-bloom var(--dur-peak) var(--ease-spring) both;
 }
@@ -562,7 +562,7 @@
 
 .cook__next--end {
   flex: none;
-  min-inline-size: calc(var(--space-16) * 4);
+  min-inline-size: var(--wall-next-min);
 }
 
 /* ── iPad and wider: the artboard's 12-column stage ── */
@@ -570,7 +570,7 @@
   .cook {
     --cook-num: var(--wall-display);
     --cook-step: var(--wall-title);
-    --cook-step-lh: 1.27;
+    --cook-step-lh: var(--wall-text-lh);
     --cook-body: var(--wall-body);
     --cook-label: var(--wall-label);
     --cook-nav: calc(var(--space-16) + var(--space-6));
@@ -593,7 +593,7 @@
   }
 
   .cook__progress {
-    inline-size: min(25rem, 36vw);
+    inline-size: min(var(--wall-progress-max), 36vw);
   }
 
   .cook__pill {
@@ -644,7 +644,7 @@
 
   .cook__band {
     grid-column: 1 / 9;
-    min-block-size: calc(var(--space-16) * 2 - var(--space-2));
+    min-block-size: var(--wall-band-min);
     padding: 0 var(--space-6);
     gap: var(--space-6);
   }
