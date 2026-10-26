@@ -338,7 +338,7 @@
  * Auswahlzeile von Liste + Detail (`data-md-id`), der antippbare Hauptteil
  * (`.list-row__main--interactive`) und die Einkaufszeile, die als Ganzes
  * abhakt. Karten mit eigenem Druckbild (`.card--interactive`,
- * `.metric-card--tile`, `.more-item`: sie skalieren) bleiben bei ihrem.
+ * `.metric-card--tile`: sie skalieren) bleiben bei ihrem.
  *
  * DIE FLAECHE ist `--color-surface-hover` - die eine neutrale Zustandsstufe
  * ueber `--color-surface`, deren Kontraste schon gehalten sind (Tertiaertext

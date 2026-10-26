@@ -5,6 +5,7 @@ import { navigationFrom } from '/utils/view-transition.js';
 import { todayKey } from '/utils/date.js';
 import { KITCHEN_MODULES as KITCHEN_MODULES_SOURCE } from '/utils/module-accent.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
+import { wireCollapsingTitleBar } from '/utils/ux.js';
 
 // Reihenfolge = Küchen-Kreislauf: planen → kochen → einkaufen → lagern.
 //
@@ -126,6 +127,10 @@ const BADGES = [
 
 /** Aktuelle Leiste; der Zustand wird nachgeladen, nachdem sie schon steht. */
 let _bar = null;
+// Der grosse Titel „Kuchnia" klappt beim Scrollen der Seite darunter ein
+// (Tafla, utils/ux.js `wireCollapsingTitleBar`). Neu verdrahtet bei jedem
+// Einhaengen: die Leiste wandert mit, die Seite darunter ist neu.
+let _titleCollapse = null;
 /** Die gleitende Kapsel der stehenden Leiste - eine, nie mehr. */
 let _indicator = null;
 let _activeRoute = null;
@@ -271,8 +276,11 @@ export function renderKitchenTabsBar(container, activeRoute) {
   // Nur innerhalb der Kueche bleibt die Leiste stehen. Wer von aussen kommt,
   // bekommt eine frische - dort gibt es nichts, von wo die Kapsel gleiten
   // koennte, und die Leiste blendet mit der Seite ein.
+  _titleCollapse?.destroy();
+  _titleCollapse = null;
   if (_bar && isKitchenRoute(navigationFrom()) && sameTabs(_bar, tabs)) {
     container.insertAdjacentElement('afterbegin', _bar);
+    _titleCollapse = wireCollapsingTitleBar(_bar, container);
     selectSubTab(_bar, activeRoute);
     applyBadges(_lastSummary);
     // Das Wiedereinhaengen setzt den waagrechten Scrollstand zurueck.
@@ -309,6 +317,7 @@ export function renderKitchenTabsBar(container, activeRoute) {
     onChange: onTabChosen,
   });
   _indicator = attachSegmentIndicator(_bar, { itemSelector: '.sub-tab' });
+  _titleCollapse = wireCollapsingTitleBar(_bar, container);
   applyBadges(_lastSummary);
   scrollActiveSubTabIntoView(_bar);
   placeIndicator();

@@ -1405,6 +1405,57 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
   };
 }
 
+/**
+ * Der grosse Titel einer GRUPPEN-LEISTE klappt beim Scrollen ein (Tafla,
+ * 2026-10-26: „Kuchnia" ueber dem Segment-Schalter der Kueche).
+ *
+ * Die Leiste ist kein `.page-toolbar` - sie steht ueber den vier Kuechen-
+ * Seiten, ausserhalb ihrer Scrollports (die Bauart der gedeckelten Koepfe).
+ * Es gilt dieselbe Grammatik wie in `wireCollapsingHeader`: nur ein Scroll,
+ * den der Nutzer fuehrt, klappt ein (> 24px), oben (< 8px) klappt es auf, und
+ * ein Port ohne genug Reserve klappt nie ein. Eingeklappt schrumpft nur der
+ * Schnitt des Titels; seine Zeile behaelt ihre Hoehe - die Seiten darunter
+ * rechnen mit `--kitchen-tabs-height`, und nichts darunter ruehrt sich. Nur
+ * unter 1024px: am Desktop steht der Titel ohnehin im Inline-Schnitt.
+ *
+ * @param {HTMLElement} bar   die Leiste
+ * @param {HTMLElement} scope der Knoten, in dem ihre Seiten scrollen
+ * @returns {{ destroy: () => void }}
+ */
+export function wireCollapsingTitleBar(bar, scope) {
+  if (!bar || !scope) return { destroy: () => {} };
+  const GESTURES = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
+  let gestureTarget = null;
+  const onGesture = (e) => { gestureTarget = e.target; };
+  const compact = () => typeof matchMedia === 'function' && matchMedia('(max-width: 1023px)').matches;
+  const set = (on) => {
+    if (bar.classList.contains('is-collapsed') === on) return;
+    if (on) bar.classList.add('is-collapsed', 'was-collapsed');
+    else bar.classList.remove('is-collapsed');
+  };
+  const onScroll = (e) => {
+    const port = e.target;
+    if (!(port instanceof Element) || bar.contains(port) || !scope.contains(port)) return;
+    const reserve = port.scrollHeight - port.clientHeight;
+    // Waagerechte Streifen (Wochenleiste, Filter) sind nicht der Port der Seite.
+    if (reserve <= 0 && port.scrollWidth > port.clientWidth) return;
+    if (!compact() || reserve < 48) { set(false); return; }
+    if (!gestureTarget || !port.contains(gestureTarget)) return;
+    if (port.scrollTop > 24) set(true);
+    else if (port.scrollTop < 8) set(false);
+  };
+  scope.addEventListener('scroll', onScroll, { capture: true, passive: true });
+  for (const type of GESTURES) scope.addEventListener(type, onGesture, { capture: true, passive: true });
+  return {
+    destroy: () => {
+      scope.removeEventListener('scroll', onScroll, { capture: true });
+      for (const type of GESTURES) scope.removeEventListener(type, onGesture, { capture: true });
+      gestureTarget = null;
+      bar.classList.remove('is-collapsed', 'was-collapsed');
+    },
+  };
+}
+
 /** Unter dieser Breite bliebe vom angedockten Titel nur die Ellipse. */
 export const DOCK_TITLE_MIN_WIDTH = 88;
 

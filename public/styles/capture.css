@@ -62,8 +62,8 @@
 }
 
 /* Wo die Kapsel nicht steht, steht auch das + nicht: am Desktop (Seitenleiste,
- * dort der Knopf „Dodaj" oben), an der Wand, waehrend einer Auswahl, unter der
- * Tastatur und solange das Mehr-Blatt offen ist. */
+ * dort der Knopf „Dodaj" oben), an der Wand, waehrend einer Auswahl und unter
+ * der Tastatur. */
 @media (min-width: 1024px) {
   .capture-plus {
     display: none;
@@ -511,8 +511,9 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
  * Der Rueckweg geschobener Seiten (router.js, syncPageBack)
  *
  * Seiten hinter „Więcej" tragen vorn im Kopf einen 36pt-Kreis mit Chevron
- * (44 Treffer), der das Mehr-Blatt oeffnet - „Wróć: Więcej" (Artboards
- * Notatki/Budzet.dc.html). Am Desktop fuehrt die Seitenleiste; dort entfaellt er.
+ * (44 Treffer), der zur Seite Więcej (/more) fuehrt - „Wróć: Więcej"
+ * (Artboards Notatki/Budzet.dc.html). Am Desktop fuehrt die Seitenleiste; dort
+ * entfaellt er.
  * ================================================================ */
 .page-back {
   display: none;

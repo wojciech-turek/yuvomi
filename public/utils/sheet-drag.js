@@ -1,8 +1,9 @@
 /**
  * Modul: Sheet-Ziehen (geteilt) - EINE Grammatik fuer jedes mobile Blatt.
- * Zweck: Zieh-zum-Schliessen fuer das Dialog-Sheet (components/modal.js) und
- *        das Mehr-Blatt (router.js): 1:1 mitgehen, schliessen bei Weg ODER
- *        Flick-Tempo, sonst zurueckfedern; nach oben ein Gummiband.
+ * Zweck: Zieh-zum-Schliessen fuer das Dialog-Sheet (components/modal.js):
+ *        1:1 mitgehen, schliessen bei Weg ODER Flick-Tempo, sonst
+ *        zurueckfedern; nach oben ein Gummiband. (Das Mehr-Blatt, der zweite
+ *        Nutzer, ist 2026-10-24 entfallen - Więcej ist die Seite /more.)
  *
  * WARUM GETEILT (Re-Critique 2026-09-27, P1 #1 / A1 P2-3): zwei Blaetter,
  * zwei Grammatiken. Das Mehr-Blatt schloss erst bei `touchend` ab 60px und
@@ -15,8 +16,7 @@
  *
  * DESHALB `translate`, NICHT `transform`: die Einzel-Eigenschaft `translate`
  * setzt sich mit `transform` zusammen, statt es zu ersetzen. Einfahrt und
- * Ausgang (Keyframes auf `transform`) und das Ein-/Ausfahren des Mehr-Blatts
- * (Transition auf `transform`) laufen ungestoert weiter, der Zug liegt
+ * Ausgang (Keyframes auf `transform`) laufen ungestoert weiter, der Zug liegt
  * darueber. Der Ausgang startet damit von selbst dort, wo der Finger das
  * Blatt losliess - `--sheet-drag` in den Keyframes ist entbehrlich.
  *
@@ -40,9 +40,10 @@
  *     modal.js die Tafel abbaut; laenger floege sie ins Leere.
  *   - ZURUECKFEDERN: dieselbe Rechnung mit dem Weg zur Ruhelage, hoechstens
  *     `--duration-lg` (die Dauer der Transition, die bis dahin federte).
- *   - ABDUNKLUNG: `--sheet-pull` (0..1, Anteil des Zugs an der Blatthoehe) am
- *     Element aus `opts.dim`; das Stylesheet macht daraus `opacity`.
- * Beides animiert `translate` bzw. `opacity`, nie Layout. Der Tipp- und
+ * Beides animiert `translate`, nie Layout. (Die Abdunklung per `--sheet-pull`
+ * und das Zuruecksetzen nach dem Ausfahren gehoerten dem Mehr-Blatt, dessen
+ * Backdrop ein eigenes Element war und das im DOM blieb; beides ist mit ihm
+ * 2026-10-26 entfallen.) Der Tipp- und
  * Esc-Ausgang bleibt der kurze Hub aus dem Stylesheet (Entscheidung 05.10.).
  * Ohne `animate` oder unter reduzierter Bewegung gilt ueberall das Stylesheet.
  */
@@ -144,30 +145,20 @@ function mark(sheet, value) {
  *   zurueck heisst "bleibt stehen" (z. B. Rueckfrage bei ungespeicherten
  *   Aenderungen): dann federt das Blatt in die Ruhelage.
  * @param {number} [opts.handleZone=SHEET_HANDLE_ZONE_PX]
- * @param {() => (HTMLElement|null)} [opts.dim]  die Abdunklung hinter dem Blatt,
- *   wenn sie ein EIGENES Element ist (Backdrop des Mehr-Blatts): sie bekommt
- *   `--sheet-pull`. Das Dialog-Overlay ist Abdunklung UND Elternknoten der
- *   Tafel - seine Deckkraft naehme die Tafel mit, es bleibt deshalb aussen vor.
- * @param {boolean} [opts.resetAfterDismiss=false]  das Blatt bleibt im DOM
- *   (Mehr-Blatt): nach dem Ausfahren den Zug ohne Bewegung zuruecknehmen,
- *   sonst oeffnete es beim naechsten Mal um den alten Zug versetzt.
- * @returns {{ reset: () => void }}  `reset` nimmt einen liegengebliebenen
- *   Versatz ohne Bewegung zurueck (Mehr-Blatt beim naechsten Oeffnen).
+ * @returns {{}}
  */
 export function wireSheetDrag(sheet, {
   scroller = () => null,
   onDismiss,
   handleZone = SHEET_HANDLE_ZONE_PX,
-  resetAfterDismiss = false,
-  dim = () => null,
 } = {}) {
   let startY = 0;
   // Hoehe des Blatts, beim Aufsetzen gemessen (dort wird ohnehin gelesen) -
   // nie im touchmove: ein Layout-Read je Bewegung.
   let height = 0;
-  // Weg von der Ruhelage bis ganz aus dem Bild. Nicht immer die Blatthoehe: das
-  // Mehr-Blatt schwebt UEBER der Kapsel (gemessen: Unterkante 76px ueber dem
-  // Rand) - um seine Hoehe versetzt stuende es noch 52px im Bild.
+  // Weg von der Ruhelage bis ganz aus dem Bild. Nicht immer die Blatthoehe: ein
+  // Blatt, das ueber dem Rand schwebt, stuende um seine Hoehe versetzt noch im
+  // Bild.
   let exitDistance = 0;
   // Der laufende Flug bzw. die laufende Feder; ein neuer Zug bricht sie ab.
   let flight = null;
@@ -178,17 +169,6 @@ export function wireSheetDrag(sheet, {
     if (!flight) return;
     try { flight.cancel(); } catch { /* schon beendet */ }
     flight = null;
-  };
-
-  /** Abdunklung dem Zug nachfuehren: Anteil des Versatzes an der Blatthoehe. */
-  const setPull = (offset) => {
-    const el = dim();
-    if (!el?.style) return 0;
-    const pull = height > 0 ? Math.min(1, Math.max(0, offset / height)) : 0;
-    const rounded = Math.round(pull * 1000) / 1000;
-    if (rounded > 0) el.style.setProperty('--sheet-pull', String(rounded));
-    else el.style.removeProperty('--sheet-pull');
-    return rounded;
   };
 
   /** Der aktuelle Versatz in px (aus dem Inline-Wert, den nur dieser Helfer schreibt). */
@@ -206,36 +186,8 @@ export function wireSheetDrag(sheet, {
   let fromHandle = false;
   let samples = [];
 
-  const reset = () => {
-    // Der Flug haelt das Blatt draussen (`fill: forwards`) - beim Mehr-Blatt,
-    // das im DOM bleibt, muss er weg, sonst oeffnete es unsichtbar.
-    stopFlight();
-    setPull(0);
-    mark(sheet, 'drag');
-    setOffset(sheet, 0);
-    // Die Marke erst im naechsten Bild nehmen, sonst federte der Rueckweg.
-    const clear = () => { if (sheet.getAttribute('data-sheet-drag') === 'drag') mark(sheet, null); };
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(clear);
-    else clear();
-  };
-
-  // Das Ausfahren endet mit `transitionend` (transform, unter reduzierter
-  // Bewegung opacity); der Timer faengt den Fall ohne Transition ab.
-  const afterExit = (fn) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      sheet.removeEventListener('transitionend', onEnd);
-      fn();
-    };
-    const onEnd = (ev) => { if (ev.target === sheet && ev.propertyName !== 'translate') finish(); };
-    sheet.addEventListener('transitionend', onEnd);
-    setTimeout(finish, 600);
-  };
-
   /**
-   * In die Ruhelage zurueck. Der Zustand (kein Versatz, volle Abdunklung) steht
+   * In die Ruhelage zurueck. Der Zustand (kein Versatz) steht
    * SOFORT; darueber liegt, wo es geht, eine Feder mit dem Tempo des Loslassens.
    * Solange sie laeuft, bleibt die Marke `drag` stehen: sonst liefe die
    * CSS-Transition auf `translate` darunter mit, und am Ende der kuerzeren
@@ -245,8 +197,6 @@ export function wireSheetDrag(sheet, {
    */
   const settle = (velocity = 0) => {
     const offset = currentOffset();
-    const pull = setPull(offset);
-    setPull(0);
     if (!canAnimate() || offset === 0) {
       mark(sheet, null);
       setOffset(sheet, 0);
@@ -263,8 +213,6 @@ export function wireSheetDrag(sheet, {
     const easing = easingToken('--ease-out', 'ease-out');
     const spring = sheet.animate([{ translate: `0px ${offset}px` }, { translate: '0px 0px' }], { duration, easing });
     flight = spring;
-    const el = dim();
-    if (pull > 0 && typeof el?.animate === 'function') el.animate([{ opacity: 1 - pull }, { opacity: 1 }], { duration, easing });
     setTimeout(() => {
       if (flight !== spring) return;
       flight = null;
@@ -347,7 +295,6 @@ export function wireSheetDrag(sheet, {
       stopFlight();
       mark(sheet, 'drag');
       setOffset(sheet, rubberBand(up));
-      setPull(0);
       return;
     }
     // Erst ab der Schwelle ziehen - ein Tipp schreibt nichts. Danach 1:1: der
@@ -359,7 +306,6 @@ export function wireSheetDrag(sheet, {
       mark(sheet, 'drag');
       const offset = Math.max(0, dy - SHEET_SLOP_PX);
       setOffset(sheet, offset);
-      setPull(offset);
     }
   }, { passive: true });
 
@@ -385,7 +331,6 @@ export function wireSheetDrag(sheet, {
       // Und faehrt von dort hinaus, mit dem Tempo des Fingers (kein DOM-Schreiben:
       // die Web Animations API legt nur eine Animation an).
       flyOut(currentOffset(), velocity);
-      if (resetAfterDismiss) afterExit(reset);
       return;
     }
     raf(() => settle(velocity));
@@ -395,5 +340,5 @@ export function wireSheetDrag(sheet, {
   // Stand wie ein Flick aussah.
   sheet.addEventListener('touchcancel', abort);
 
-  return { reset };
+  return {};
 }

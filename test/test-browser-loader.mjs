@@ -349,6 +349,8 @@ const STUBS = {
     export const drawChartOnce = () => 0;
     export const durationToken = (name, fallback) => fallback;
     export const easingToken = (name, fallback = 'ease-out') => fallback;
+    // Der einklappende Titel der Kuechen-Leiste: ohne Scroll gibt es nichts zu klappen.
+    export const wireCollapsingTitleBar = () => ({ destroy: () => {} });
   `,
   // Inhaltswechsel und Listenbewegung (R16): ohne Layout gibt es nichts zu
   // bewegen - der Tausch selbst muss trotzdem laufen, genau einmal und

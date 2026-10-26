@@ -225,6 +225,20 @@
     color: var(--color-text-primary);
   }
 
+  /* EINGEKLAPPT (Tafla, 2026-10-26; utils/ux.js `wireCollapsingTitleBar`):
+   * „Kuchnia" faellt beim Scrollen der Seite auf den Inline-Schnitt jedes
+   * eingeklappten Kopfes. Die Zeilenhoehe bleibt (--type-large-title-lh), also
+   * bleibt auch --kitchen-tabs-height - die Seiten darunter ruehren sich nicht.
+   * Der Wechsel blendet wie der Titel der gedeckelten Koepfe (layout.css). */
+  .kitchen-tabs-bar.is-collapsed .sub-tabs-bar__title {
+    font-size: var(--type-toolbar-title);
+    animation: page-title-settle var(--duration-xs) var(--ease-out);
+  }
+
+  .kitchen-tabs-bar.was-collapsed:not(.is-collapsed) .sub-tabs-bar__title {
+    animation: page-title-settle-back var(--duration-xs) var(--ease-out);
+  }
+
   /* Gleich verteilt, aber nie unter das Label: ein gekuerztes „Posił…" kostet
    * mehr Orientierung als eine Leiste, die in einer langen Sprache wischt
    * (die Leiste bleibt overflow-x: auto, sub-tabs.css). */

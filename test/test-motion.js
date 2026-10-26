@@ -1600,6 +1600,10 @@ const STATE_CLASS = /\.(?:[\w-]+--(?:checked|done|selected|active|current|open|e
 const STATE_ANIMATION_EXCEPTIONS = new Map([
   ['layout.css: .page-toolbar--capped.is-collapsed > .page-toolbar__title', 'Large Title: der Zustand folgt dem Scrollstand am selben, nie neu gezeichneten Knoten; die Blende ist sein Uebergang (Guard "Large Title")'],
   ['layout.css: .page-toolbar--capped.was-collapsed:not(.is-collapsed) > .page-toolbar__title', 'Rueckweg derselben Blende; `was-collapsed` faellt erst nach dem ersten Einklappen, ein Seitenaufbau spielt sie nicht'],
+  // 2026-10-26, Tafla: dieselbe Blende am grossen Titel der Kuechen-Leiste
+  // (utils/ux.js wireCollapsingTitleBar) - dieselbe Begruendung wie oben.
+  ['kitchen-tabs.css: .kitchen-tabs-bar.is-collapsed .sub-tabs-bar__title', 'Large Title der Kuechen-Leiste: der Zustand folgt dem Scrollstand am selben Knoten (die Leiste bleibt ueber den Kuechen-Tabs stehen); die Blende ist sein Uebergang'],
+  ['kitchen-tabs.css: .kitchen-tabs-bar.was-collapsed:not(.is-collapsed) .sub-tabs-bar__title', 'Rueckweg derselben Blende; `was-collapsed` faellt erst nach dem ersten Einklappen'],
 ]);
 
 function stateAnimations() {
@@ -2026,16 +2030,6 @@ function gestureSheet({ height = 500, top = 300, animate = true } = {}) {
   };
 }
 
-function dimEl() {
-  const props = new Map();
-  const calls = [];
-  return {
-    props, calls,
-    style: { setProperty: (k, v) => props.set(k, String(v)), removeProperty: (k) => props.delete(k) },
-    animate: (keyframes, timing) => { calls.push({ keyframes, timing }); return { finished: new Promise(() => {}), cancel() {} }; },
-  };
-}
-
 test('Blatt-Geste: nach dem Flick faehrt das Blatt von der Lage des Fingers aus dem Bild - Dauer aus Reststrecke und Tempo', async () => {
   const restore = motionEnv();
   globalThis.requestAnimationFrame = (fn) => fn();
@@ -2104,37 +2098,9 @@ test('Blatt-Geste: unter der Schwelle federt es mit dem Tempo des Loslassens zur
   } finally { delete globalThis.requestAnimationFrame; restore(); }
 });
 
-test('Blatt-Geste: die Abdunklung folgt dem Zug, kehrt beim Zurueckfedern zurueck und haelt beim Schliessen', async () => {
-  const restore = motionEnv();
-  globalThis.requestAnimationFrame = (fn) => fn();
-  try {
-    const { wireSheetDrag } = await import('../public/utils/sheet-drag.js');
-    const dim = dimEl();
-    const sheet = gestureSheet({ height: 400 });
-    const drag = wireSheetDrag(sheet.panel, { onDismiss: () => {}, dim: () => dim, resetAfterDismiss: true });
-    sheet.start(600);
-    sheet.move(710, 300); // Versatz 100px von 400px
-    assert.equal(dim.props.get('--sheet-pull'), '0.25', 'Anteil des Zugs an der Blatthoehe - das Stylesheet macht daraus opacity');
-    sheet.move(650, 300); // zurueck auf 40px
-    assert.equal(dim.props.get('--sheet-pull'), '0.1');
-    sheet.end(650, 400);
-    assert.equal(dim.props.has('--sheet-pull'), false, 'zurueckgefedert: volle Abdunklung');
-    assert.deepEqual(dim.calls[0]?.keyframes, [{ opacity: 0.9 }, { opacity: 1 }], 'und sie kehrt mit dem Blatt zurueck, nicht in einem Sprung');
-
-    // Schliessen: der Wert bleibt, bis das Blatt zurueckgesetzt ist - sonst
-    // spraenge die Abdunklung auf voll, waehrend das Blatt hinausfaehrt.
-    sheet.start(600);
-    sheet.move(760, 300);
-    sheet.end(760, 100);
-    assert.equal(dim.props.get('--sheet-pull'), '0.375');
-    const fly = sheet.calls.at(-1);
-    assert.equal(fly.timing.fill, 'forwards');
-    drag.reset();
-    assert.equal(dim.props.has('--sheet-pull'), false);
-    assert.equal(fly.cancelled, true, 'das Mehr-Blatt bleibt im DOM: der Flug darf es beim naechsten Oeffnen nicht draussen halten');
-  } finally { delete globalThis.requestAnimationFrame; restore(); }
-});
-
+// 2026-10-26, Tafla: die Abdunklung per `--sheet-pull` (`dim`) und das
+// Zuruecksetzen nach dem Ausfahren (`resetAfterDismiss`) gehoerten dem
+// Mehr-Blatt; mit ihm sind die Optionen und ihr Test entfallen.
 test('Blatt-Geste: ohne animate oder unter reduzierter Bewegung bleibt es beim Ausgang des Stylesheets', async () => {
   for (const [name, env, opts] of [['reduzierte Bewegung', { reduced: true }, {}], ['kein animate', {}, { animate: false }]]) {
     const restore = motionEnv(env);
