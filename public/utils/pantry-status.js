@@ -100,21 +100,6 @@ export function pantryExpiryPhrase(days) {
 }
 
 /**
- * Dringlichkeit einer Charge für den TON ihrer Anzeige - drei Stufen, nicht
- * die zwei des Filters: „heute/morgen" ist der Tag, an dem man noch handeln
- * kann, und liest sich deshalb anders als „in fünf Tagen".
- *
- * @param {number} days - Resttage (negativ = abgelaufen)
- * @returns {'expired'|'now'|'soon'}
- */
-export function pantryExpiryTone(days) {
-  const d = Math.trunc(Number(days) || 0);
-  if (d < 0) return 'expired';
-  if (d <= 1) return 'now';
-  return 'soon';
-}
-
-/**
  * Der Filter aus einem Deep-Link (`/pantry?filter=soon`), oder `null`.
  *
  * Nur die drei Chips aus PANTRY_FILTERS - eine Allowlist, weil der Wert aus der

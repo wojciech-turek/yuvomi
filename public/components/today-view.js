@@ -370,7 +370,7 @@ export function renderPlanRow(row, state) {
   const who = whoMarkup(row.who);
   const twoLine = Boolean(row.meta || row.pill);
   return `
-    <li class="day-row${twoLine ? '' : ' day-row--single'}${row.done ? ' day-row--done' : ''}${row.past ? ' day-row--past' : ''}" data-row-key="${esc(row.key)}" data-kind="${esc(row.kind)}">
+    <li class="day-row${twoLine ? '' : ' day-row--single'}${row.done ? ' day-row--done' : ''}${row.past ? ' day-row--past' : ''}" data-row-key="${esc(row.key)}" data-kind="${esc(row.kind)}"${row.kind === 'task' && row.id != null ? ` data-object-kind="task" data-object-id="${esc(String(row.id))}"` : ''}>
       ${checkButton(row, state)}
       <${open.tag} class="day-row__main" ${open.attrs}>
         <span class="day-row__body">

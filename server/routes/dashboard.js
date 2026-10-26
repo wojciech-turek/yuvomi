@@ -1533,7 +1533,13 @@ router.get('/', (req, res) => {
   }
 
   // Die Wand nennt die Aufgaben beim Namen (#1817), siehe `wallTasksByMember`.
-  if (allows('tasks')) try {
+  // NUR FUER DIE GETEILTE FLAECHE (2026-10-24): `audience=household` oder ein
+  // gekoppeltes Display. Die persoenliche Uebersicht (Dziś) liest den Tagesplan
+  // (`planTasks`) und hat fuer dieses Feld keinen Leser - sie bekommt es leer, in
+  // derselben Form, statt jede Anfrage dafuer zahlen zu lassen.
+  const sharedSurface = householdAudience || req.authMethod === 'display';
+  if (!sharedSurface) result.wallTasks = [];
+  else if (allows('tasks')) try {
     result.wallTasks = wallTasksByMember(d, {
       today: todayLocalKey,
       zone: householdTimeZone(d),

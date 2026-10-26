@@ -481,22 +481,6 @@ textarea.form-input {
 }
 
 /* ================================================================
- * 13. FAB-Backdrop (Dashboard) — Glass Blur
- * ================================================================ */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .fab-backdrop--visible {
-    backdrop-filter: var(--blur-xs);
-    -webkit-backdrop-filter: var(--blur-xs);
-    background: var(--color-backdrop-glass);
-  }
-}
-
-/* ================================================================
- * 14. Dashboard-Widgets — Glass Cards
- * Glass-Styles direkt in dashboard.css (Load-Order-Konflikt)
- * ================================================================ */
-
-/* ================================================================
  * 15. Modal-Inputs
  * ================================================================ */
 /* Hier stand bis R18 (2026-10-07) eine zweite Feldfuellung fuer den Dialog
@@ -752,64 +736,20 @@ html.navigating .app-content *::after {
   box-shadow: var(--shadow-md);
 }
 
-/* AUF DEM DASHBOARD IST DIE NOTIZ EIN INSET-WELL, keine zweite Karte
- * (Critique 2026-08-10, P2 „Karte pro Zeile").
- *
- * Beide Zweige teilten dieselbe Kartenflaeche, und das war fuer den einen
- * richtig und fuer den anderen falsch: auf `/notes` liegt das Kaertchen auf dem
- * Seitengrund, im Widget liegt es IN einer Karte. Gemessen im Dark Mode:
- * `--color-surface-work` ergab dort #1C1C1E auf #1C1C1E, also 1,00:1 - eine
- * Karte, die sich von ihrem Traeger ueberhaupt nicht abhob und ihre Kontur
- * allein aus einer 1px-Kante und einem Schatten bezog. Der Browser-Detektor
- * markierte genau diese drei Elemente als `nested-cards`.
- *
- * Die Kasten-in-Kasten-Regel hat dafuer eine Antwort, und es ist nicht „andere
- * Kartenfarbe": ein Kasten IN einem Kasten ist eine Vertiefung, kein
- * Aufgesetztes. `--color-fill-well` liegt in beiden Themes unter der
- * Kartenflaeche, braucht deshalb weder Kante noch Schatten und trennt ohne
- * einen einzigen zusaetzlichen Kanal.
- *
- * DAS WELL TRAEGT DIE FARBE DER NOTIZ. Die Vertiefung war neutral, und damit
- * verlor jede angeheftete Notiz auf dem Dashboard genau das Merkmal, an dem man
- * sie auf `/notes` wiedererkennt - drei gleich graue Kaesten, die wie
- * deaktivierte Platzhalter lasen. Dass es ueberhaupt unbemerkt blieb, liegt an
- * der Schichtung: `dashboard.css` fuehrt fuer `.note-item` ein getoentes Rezept,
- * das diese spezifischere Regel seit dem HIG-Rollout ueberschreibt - es stand da
- * als toter Code und behauptete das Gegenteil des Gerenderten.
- *
- * --tint-wash (8%) ist die Stufe, weil die Toenung FREMDEN Inhalt untergreift
- * (Titel und Vorschautext der Notiz), und sie mischt gegen das Well, nicht gegen
- * die Kartenflaeche - die Vertiefung bleibt eine Vertiefung. Ohne eigene Farbe
- * faellt die Notiz auf den Notizen-Modulton zurueck: eine farblose Notiz ist
- * keine violette, sie ist eine Notiz. */
-.dashboard .note-item {
-  background-color: color-mix(in srgb, var(--note-color, var(--module-notes)) var(--tint-wash), var(--color-fill-well));
-  border: none;
-  box-shadow: none;
-}
-
-.dashboard .note-item:hover {
-  background-color: color-mix(in srgb, var(--note-color, var(--module-notes)) var(--tint-state), var(--color-fill-well));
-  box-shadow: none;
-}
-
 /* ================================================================
  * 30. Meal-Slots — opake Grid-Zellen
  *
- * Gleiche Bereinigung wie bei den Note-Items: der Dashboard-Zweig war
- * geglast, der Modul-Zweig nicht. Eine Fläche für beide.
+ * Opak wie die Note-Items. Der geglaste Zweig der Uebersicht ist mit ihrem
+ * Kachelraster gegangen (Tafla).
  * ================================================================ */
-.dashboard .meal-slot,
 .meals-page .meal-slot {
   background-color: var(--color-surface-work);
 }
 
-.dashboard .meal-slot:hover,
 .meals-page .meal-slot:hover {
   background-color: var(--color-surface-raised);
 }
 
-.dashboard .meal-slot--filled,
 .meals-page .meal-slot--filled {
   background-color: color-mix(in srgb, var(--module-accent, var(--module-meals)) var(--tint-wash), var(--color-surface-raised));
 }
@@ -872,26 +812,6 @@ textarea.form-input {
 }
 
 /* ================================================================
- * 34. FAB Speed-Dial Actions — Glass Labels + Buttons
- * ================================================================ */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .fab-action__label {
-    background-color: var(--glass-bg-elevated);
-    backdrop-filter: var(--blur-sm) saturate(160%);
-    -webkit-backdrop-filter: var(--blur-sm) saturate(160%);
-    border: 1px solid var(--glass-border-subtle);
-    box-shadow: var(--glass-shadow-md);
-  }
-
-  .fab-action__btn {
-    background-color: var(--glass-bg-elevated);
-    backdrop-filter: var(--blur-sm) saturate(160%);
-    -webkit-backdrop-filter: var(--blur-sm) saturate(160%);
-    border: 1px solid var(--glass-border-subtle);
-  }
-}
-
-/* ================================================================
  * 35. Buehne - eine Flaeche, kein Verlauf
  *
  * Hier stand ein radialer Akzentverlauf auf .app-shell ("Vibrancy-Basis"),
@@ -933,12 +853,6 @@ textarea.form-input {
   /* Hier wurde .app-content durchsichtig, damit der Grund der Shell den
    * Verlauf ersetzt. Die Shell traegt keinen Verlauf mehr (Abschnitt 35), der
    * Scrollport bleibt in jedem Zustand selbst opak. */
-  .fab-action__label,
-  .fab-action__btn {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
   /* Modul-Köpfe brauchen hier nichts mehr: .page-toolbar (layout.css) ist
    * ohnehin opak (--color-bg) und trägt bewusst KEIN backdrop-filter. Hier
    * stand bis #577 der Zwilling des gelöschten Section-28-Blocks — dieselbe

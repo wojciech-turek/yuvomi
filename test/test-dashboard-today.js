@@ -9,17 +9,18 @@
  *        1. Haushaltshilfe (#1451): Besuche und offener Betrag des Monats
  *           zaehlten den UTC-Monat von `check_in` (`substr(check_in, 1, 7)`).
  *        2. Mehrtaegige Termine (#1457): `upcomingEvents` waehlte nach dem
- *           BEGINN, und was gestern begann und heute noch laeuft, fehlte in
- *           Liste, Heute-Blatt, Wand und Familienkarte.
+ *           BEGINN, und was gestern begann und heute noch laeuft, fehlte.
  *        3. Familienkarte (#1449): sie lieh sich die Liste der Termin-Kachel
  *           - fuenf Kommende und deren „nur meine" - und verlor damit den
- *           Abendtermin eines Mitglieds an einem vollen Tag.
- *        4. „Heute bis HH:MM" (#1534): die Faelligkeit einer Aufgabe wurde
- *           in der Zone des Geraets gelesen und dann in die des Haushalts
- *           umgerechnet - hier mit Prozesszone != Haushaltszone.
- *        5. Die Terminzeile nennt ihren Kalender statt „Termin" (#1698), im
- *           Heute-Blatt wie an der Wand; Beginn UND Ende zeigt nur die Wand,
- *           und nur mit echtem Ende unter einem Tag auf der Wanduhr.
+ *           Abendtermin eines Mitglieds an einem vollen Tag (`familyEvents`).
+ *        6. Kinder-Standards (R20): die Vorgabe der Kacheln, und dass die
+ *           Seite den Betrachter setzt, den der Tagesplan fragt.
+ *
+ *        TAFLA (2026-10-24): die Browser-Haelften (Termin-Kachel,
+ *        Tagesprogramm, Familienkarte, Heute-Blatt, „heute bis" #1534,
+ *        Kalendername #1698, Kinder-Reihenfolge R20) sind mit dem Raster der
+ *        Uebersicht gegangen. Dziś baut seinen Tag aus utils/today-plan.js
+ *        (test:dashboard-tafla).
  *
  * Ausfuehren: npm run test:dashboard-today
  */
@@ -311,98 +312,7 @@ test('#1457: /calendar/upcoming und MCP (ohne fromToday) bleiben „ab jetzt"', 
   assert.deepEqual(titles(getUpcomingEvents(db, { userId: ADMIN, limit: 5 })), ['Heute abend']);
 }));
 
-// --- dieselben Termine im Browser: Kachel, Tagesprogramm, Familienkarte ---
-
-const tz = await import('/utils/timezone.js');
 const { __test: dash } = await import('../public/pages/dashboard.js');
-const { setPermissions, clearPermissions } = await import('../public/permissions.js');
-
-function inBrowser(iso, zone, fn) {
-  return async () => {
-    mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
-    tz.setDisplayTimeZone(zone);
-    const prevWindow = global.window;
-    global.window = { yuvomi: { isModuleDisabled: () => false } };
-    setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
-    try {
-      await fn();
-    } finally {
-      clearPermissions();
-      global.window = prevWindow;
-      tz.setDisplayTimeZone(null);
-      mock.timers.reset();
-    }
-  };
-}
-
-const KID = { id: 91, display_name: 'Leo', avatar_color: '#FF9500' };
-const ev = (id, title, start, end, extra = {}) => ({
-  id, title, start_datetime: start, end_datetime: end, all_day: 0, assigned_users: [], ...extra,
-});
-// Wie die Antwort sie liefert: sortiert nach Beginn.
-const BERLIN_DAY = [
-  ev(1, 'Reise', '2026-09-23T18:00', '2026-09-25T12:00'),
-  ev(2, 'Nachtschicht', '2026-09-23T18:00', '2026-09-24T08:00'),
-  ev(3, 'Heimweg', '2026-09-23T20:00', '2026-09-24T12:00'),
-  ev(4, 'Klassenfahrt', '2026-09-23', '2026-09-25', { all_day: 1 }),
-  ev(5, 'Heute abend', '2026-09-24T19:00', '2026-09-24T20:00'),
-];
-
-function tileRows(html) {
-  return [...html.matchAll(/<div class="event-item([^"]*)"[\s\S]*?event-item__title">([^<]*)<\/div>[\s\S]*?event-item__time">([\s\S]*?)<\/div>/g)]
-    .map(([, cls, title, time]) => ({
-      title,
-      ended: cls.includes('event-item--ended'),
-      badge: (/event-time-badge[^>]*>([^<]*)</.exec(time) || [])[1],
-      time: time.replace(/<span[^>]*>[^<]*<\/span>/g, '').replace(/\s+/g, ' ').trim(),
-    }));
-}
-
-test('#1457 Kachel: ein Termin von gestern steht heute, mit „ganztaegig" oder „bis"', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-  const rows = tileRows(dash.renderUpcomingEvents(BERLIN_DAY, { now: new Date() }));
-  const by = Object.fromEntries(rows.map((row) => [row.title, row]));
-  assert.deepEqual(by.Reise, { title: 'Reise', ended: false, badge: 'common.today', time: 'dashboard.allDay' },
-    'laeuft ueber heute hinaus: heute, ohne die Startzeit von gestern');
-  assert.deepEqual(by.Klassenfahrt, { title: 'Klassenfahrt', ended: false, badge: 'common.today', time: 'dashboard.allDay' });
-  assert.deepEqual(by.Heimweg, { title: 'Heimweg', ended: false, badge: 'common.today', time: 'dashboard.todayUntil{"time":"2026-09-24T12:00"}' },
-    'endet heute: „bis 12:00"');
-  assert.equal(by.Nachtschicht?.ended, true, 'heute um 08:00 zu Ende: tritt zurueck wie jeder heute beendete Termin');
-
-  // Ein Ende um genau 00:00 schliesst den Tag davor (#804): die Reise bis
-  // heute Mitternacht endet heute, sie laeuft morgen nicht weiter.
-  const [midnight] = tileRows(dash.renderUpcomingEvents([ev(9, 'Bis Mitternacht', '2026-09-23T18:00', '2026-09-25T00:00')], { now: new Date() }));
-  assert.equal(midnight.time, 'dashboard.todayUntil{"time":"2026-09-25T00:00"}');
-}));
-
-test('#1457 Heute-Blatt: der laufende Termin steht oben, der beendete nicht', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-  const program = dash.buildTodayProgram({ upcomingEvents: BERLIN_DAY }, { includeTasks: false, includeMeals: false, now: new Date() });
-  const rows = program.rows.map((row) => [row.title, row.sortKey, row.timeLabel]);
-  assert.deepEqual(rows, [
-    ['Reise', '00:01', 'dashboard.allDay'],
-    ['Heimweg', '00:01', 'dashboard.todayUntil{"time":"2026-09-24T12:00"}'],
-    ['Klassenfahrt', '00:01', 'dashboard.allDay'],
-    ['Heute abend', '19:00', '2026-09-24T19:00'],
-  ]);
-  assert.equal(dash.buildTodayHighlights({ upcomingEvents: BERLIN_DAY }).eventCount, 5, '„Heute auf einen Blick" zaehlt alle fuenf von heute');
-}));
-
-test('#1457 Familienkarte: wer auf Reise ist, ist nicht „heute frei"', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-  const events = [ev(1, 'Reise', '2026-09-23T18:00', '2026-09-25T12:00', { assigned_users: [{ id: KID.id }] })];
-  const html = dash.renderFamilyWidget([KID], { upcomingEvents: events, familyEvents: events });
-  const status = (/family-member__status[^"]*">([^<]*)</.exec(html) || [])[1];
-  assert.equal(status, 'Reise', `die laufende Reise ist der Termin von heute, bekam ${status}`);
-}));
-
-test('#1457: im Browser entscheidet die Haushaltszone, nicht die Geraetezone', inBrowser('2026-09-24T20:00:00Z', 'Pacific/Honolulu', () => {
-  // 10:00 in Honolulu. Beide als Instant, wie synchronisiert.
-  const events = [
-    ev(1, 'Reise', '2026-09-24T04:00:00.000Z', '2026-09-25T22:00:00.000Z'), // 23.09. 18:00 bis 25.09. 12:00
-    ev(2, 'Abend', '2026-09-25T05:00:00.000Z', '2026-09-25T06:00:00.000Z'), // 24.09. 19:00
-  ];
-  const program = dash.buildTodayProgram({ upcomingEvents: events }, { includeTasks: false, includeMeals: false, now: new Date() });
-  assert.deepEqual(program.rows.map((row) => [row.title, row.sortKey]), [['Reise', '00:01'], ['Abend', '19:00']],
-    'Platz im Tag nach der Wanduhr des Haushalts');
-}));
 
 // --------------------------------------------------------------------------
 // 3. Die Familienkarte hat eigene Termine je Mitglied (#1449)
@@ -444,253 +354,12 @@ test('#1449: „nur meine" der Kachel gilt nicht fuer die Familienkarte', withCl
   assert.ok(titles(body.familyEvents ?? []).includes('Leo Abend'), 'die Karte zeigt jedes Mitglied - Leo ist nicht „frei"');
 }));
 
-test('#1449 Browser: die Karte liest familyEvents, nicht die Liste der Kachel', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  const leo = { id: 7, display_name: 'Leo', avatar_color: '#FF9500' };
-  const anna = { id: 8, display_name: 'Anna', avatar_color: '#7C3AED' };
-  const mk = (id, title, start, end, who) => ev(id, title, start, end, { assigned_users: [{ id: who.id }] });
-  const morning = ['06', '07', '08', '09', '10'].map((h, i) => mk(10 + i, `Leo ${h}`, `2026-09-24T${h}:00`, `2026-09-24T${h}:30`, leo));
-  const afternoon = ['15', '16', '17', '18', '19'].map((h, i) => mk(20 + i, `Anna ${h}`, `2026-09-24T${h}:00`, `2026-09-24T${h}:30`, anna));
-  const evening = mk(30, 'Leo Abend', '2026-09-24T21:00', '2026-09-24T22:00', leo);
-  // Die Liste der Kachel: zwei beendete aus dem Pool, fuenf Kommende - ohne Leos Abend.
-  const tile = [...morning, ...afternoon];
-  const html = dash.renderFamilyWidget([anna, leo], {
-    upcomingEvents: tile,
-    familyEvents: [...morning, ...afternoon, evening],
-  });
-  const statusOf = (name) => (new RegExp(`family-member__name">${name}</span>\\s*<span class="family-member__status[^"]*">([^<]*)<`).exec(html) || [])[1];
-  assert.equal(statusOf('Leo'), '2026-09-24T21:00 Leo Abend', `Leo hat heute noch den Abend, bekam ${statusOf('Leo')}`);
-}));
-
-test('#1449 Browser: endet ein Termin der Familienkarte, baut der Minutentakt neu', inBrowser(THU_14_BERLIN, 'Europe/Berlin', () => {
-  // Nur in familyEvents - die Kachel zeigt ihn nicht (Deckel oder „nur meine").
-  const data = { upcomingEvents: [], familyEvents: [ev(30, 'Leo Abend', '2026-09-24T21:00', '2026-09-24T22:00', { assigned_users: [{ id: 7 }] })] };
-  const before = dash.todayFingerprint(data, [], new Date('2026-09-24T19:59:00Z'));
-  const after = dash.todayFingerprint(data, [], new Date('2026-09-24T20:01:00Z'));
-  assert.notEqual(before, after, 'um 22:00 wechselt Leo auf „fuer heute durch" - ohne Neuladen');
-}));
-
-// --------------------------------------------------------------------------
-// Die Wand: jede zugewiesene Person, und das gewaehlte Icon (#1828, #1829)
-// --------------------------------------------------------------------------
-//
-// Beide Fehler sassen im Browser, nicht im Server: die Antwort trug alle
-// Zugewiesenen und das Icon schon. Deshalb laeuft hier die ECHTE Antwort der
-// Route durch den Renderer der Wand - ein von Hand gebautes Objekt haette nur
-// belegt, dass der Renderer liest, was der Test ihm hinlegt.
-
-const { moduleIconHTML } = await import('/nav-icons.js');
-const wallTask = (title, extra = {}) => ({ id: 1, title, due_date: '2026-09-24', due_time: '18:00', status: 'open', assigned_users: [], ...extra });
-
-function onTheWall(iso, zone, fn) {
-  return async () => {
-    db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('household_timezone', ?)").run(zone);
-    mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
-    tz.setDisplayTimeZone(zone);
-    const prevWindow = global.window;
-    global.window = { yuvomi: { isModuleDisabled: () => false } };
-    setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
-    try {
-      await fn();
-    } finally {
-      clearPermissions();
-      global.window = prevWindow;
-      tz.setDisplayTimeZone(null);
-      mock.timers.reset();
-    }
-  };
-}
-
-const setIcon = db.prepare('UPDATE calendar_events SET icon = ? WHERE id = ?');
-
-/* TAFLA (2026-10-19): HIER STANDEN DIE WAND-HALBEN VON #1828 UND #1829 -
- * „Wer heute dran ist" zaehlte einen Termin fuer zwei bei beiden, und jede
- * Programmzeile der Wand trug das Siegel ihres Moduls oder das gewaehlte Icon
- * des Termins. Die Tafla-Wand (Artboard „Ściana") hat weder den Abschnitt noch
- * Siegel an den Zeilen: eine Zeile ist Uhrzeit, Titel, Status-Pille und die
- * Personenscheibe - ein Termin fuer zwei traegt die geteilte Scheibe beider
- * (test:wall-tafla). Die Haelfte fuer „Heute wichtig" bleibt hier stehen. */
-
-/** Das Siegel jeder Zeile von „Heute wichtig" als { Titel: Markup }. */
-function todaySeals(html) {
-  return Object.fromEntries(
-    [...html.matchAll(/<span class="module-seal today-cockpit-card__icon">([\s\S]*?)<\/span>(?:<span class="seal-pair__who[\s\S]*?)?<\/span>\s*<span class="today-cockpit-card__body">\s*<strong class="today-cockpit-card__value">([^<]*)<\/strong>/g)]
-      .map(([, seal, title]) => [title, seal.trim()]),
-  );
-}
-
-// „Heute wichtig" ist dieselbe Mischstelle wie die Wand und liest dieselben
-// Zeilen: ein Termin, der dort sein Icon zeigt und hier das Kalenderzeichen,
-// ist derselbe Fehler auf der zweiten Flaeche.
-test('#1829 Heute wichtig: der Termin zeigt sein gewaehltes Icon',
-  onTheWall(THU_14_BERLIN, 'Europe/Berlin', async () => {
-    clearEvents();
-    setIcon.run('car', addEvent('Werkstatt', '2026-09-24T15:00', '2026-09-24T16:00'));
-    setIcon.run('tooth', addEvent('Zahnarzt', '2026-09-24T16:00', '2026-09-24T17:00'));
-    setIcon.run('drill', addEvent('Kontrolle', '2026-09-24T17:00', '2026-09-24T18:00'));
-    setIcon.run('gibt-es-nicht', addEvent('Unbekannt', '2026-09-24T18:00', '2026-09-24T19:00'));
-    addEvent('Ohne Wahl', '2026-09-24T19:00', '2026-09-24T20:00');
-    const body = await getJson('/');
-    const sheet = todaySeals(dash.renderTodayCockpit(body, [], false, { now: new Date() }));
-    const generic = moduleIconHTML('calendar');
-
-    assert.deepEqual(Object.keys(sheet).sort(), ['Kontrolle', 'Ohne Wahl', 'Unbekannt', 'Werkstatt', 'Zahnarzt'],
-      'Vorbedingung: alle fuenf Termine stehen als Zeile im Blatt');
-    assert.match(sheet.Werkstatt, /data-lucide="car"/, 'das gewaehlte Lucide-Icon steht im Siegel');
-    assert.match(sheet.Werkstatt, /class="module-glyph"/, 'mit der Marke, an der Groesse und Strichstaerke des Siegels haengen');
-    assert.match(sheet.Zahnarzt, /<svg class="module-glyph event-icon--custom"/, 'ein eigenes Zeichen (Zahn) wird gezeichnet wie im Kalender');
-    assert.equal(sheet.Kontrolle, sheet.Zahnarzt, 'der alte Name `drill` ist derselbe Zahn');
-    assert.equal(sheet['Ohne Wahl'], generic, 'ohne Wahl bleibt das Kalenderzeichen');
-    assert.equal(sheet.Unbekannt, generic, 'ein unbekannter Name faellt auf das Kalenderzeichen zurueck');
-  }));
-
-test('#1829 Heute wichtig: Aufgabe und Sammelzeile behalten das Modulzeichen',
-  onTheWall(THU_14_BERLIN, 'Europe/Berlin', () => {
-    // Eine Aufgabe, die zufaellig ein Feld `icon` truege, bekaeme kein Terminzeichen.
-    const single = dash.renderTodayCockpit({ urgentTasks: [wallTask('Muell', { icon: 'car' })], users: [] }, [], false, { now: new Date() });
-    assert.equal(todaySeals(single).Muell, moduleIconHTML('check-square'));
-    // Die Sammelzeile der Ueberfaelligen spricht fuer mehrere Aufgaben, nicht fuer ein Objekt.
-    const overdue = [1, 2, 3].map((id) => wallTask(`Alt ${id}`, { id, due_date: '2026-09-20', icon: 'car' }));
-    global.window.matchMedia = (query) => ({ matches: /max-width:\s*639px/.test(query), media: query });
-    const grouped = dash.renderTodayCockpit({ urgentTasks: overdue, users: [] }, [], false, { now: new Date(), overdueOpen: false });
-    assert.match(grouped, /today-cockpit-card--overdue-group|data-today-overdue/, 'Vorbedingung: auf dem Telefon steht die Sammelzeile');
-    assert.doesNotMatch(grouped, /data-lucide="car"/);
-  }));
-
-// --------------------------------------------------------------------------
-// 4. „Heute bis HH:MM" ist die Uhrzeit des Haushalts (#1534)
-// --------------------------------------------------------------------------
-// Die Faelligkeit einer Aufgabe ist zonenlose Wanduhrzeit. Das Heute-Blatt
-// baute daraus `new Date(`${due_date}T${due_time}`)` - einen Zeitpunkt der
-// GERAETE-Zone - und reichte ihn an `formatTime`, das jeden Zeitpunkt in die
-// Haushaltszone umrechnet. Liegt das Geraet woanders als der Haushalt, stand an
-// einer Aufgabe fuer 18:00 eine andere Uhrzeit. Der Prozess laeuft deshalb in
-// einer ANDEREN Zone als der Haushalt; der Stub von `formatTime` gibt sein
-// Argument als Text zurueck, und gelesen wird es hier ueber `zonedTimeKey` -
-// dieselbe Umrechnung (`zonedFields`), mit der das echte `formatTime` rechnet.
-
-function inProcessZone(processZone, fn) {
-  return async () => {
-    const prevTz = process.env.TZ;
-    process.env.TZ = processZone;
-    try {
-      await fn();
-    } finally {
-      if (prevTz === undefined) delete process.env.TZ;
-      else process.env.TZ = prevTz;
-    }
-  };
-}
-
-const dueToday = (id, title, dueTime) => ({ id, title, due_date: '2026-09-24', due_time: dueTime, status: 'open', assigned_users: [] });
-function todayUntil(row) {
-  const m = /^dashboard\.todayUntil(\{.*\})$/.exec(row?.timeLabel ?? '');
-  assert.ok(m, `Zeile ohne „heute bis": ${row?.timeLabel}`);
-  return JSON.parse(m[1]).time;
-}
-function taskRows(now) {
-  return dash.buildTodayProgram(
-    { urgentTasks: [dueToday(1, 'Muell', '18:00'), dueToday(2, 'Spaet', '23:30:00'), dueToday(3, 'Frueh', '06:15')] },
-    { includeCalendar: false, includeMeals: false, now },
-  ).rows.filter((row) => row.kind === 'task');
-}
-
-test('#1534: „heute bis" nennt die Uhrzeit des Haushalts, nicht die des Geraets',
-  inProcessZone('America/New_York', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-    assert.equal(new Date('2026-09-24T12:00').getTimezoneOffset(), 240, 'Prozess muss in New York laufen');
-    const rows = taskRows(new Date());
-    assert.deepEqual(rows.map((row) => [row.title, tz.zonedTimeKey(todayUntil(row))]),
-      [['Frueh', '06:15'], ['Muell', '18:00'], ['Spaet', '23:30']],
-      'die eingetragene Wanduhrzeit, in Berlin wie eingetippt');
-    assert.deepEqual(rows.map((row) => row.sortKey), ['06:15', '18:00', '23:30'], 'Platz im Tag nach derselben Uhr');
-  })));
-
-test('#1534: Geraet und Haushalt in derselben Zone - unveraendert',
-  inProcessZone('Europe/Berlin', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-    const rows = taskRows(new Date());
-    assert.deepEqual(rows.map((row) => [row.title, tz.zonedTimeKey(todayUntil(row)), row.sortKey]),
-      [['Frueh', '06:15', '06:15'], ['Muell', '18:00', '18:00'], ['Spaet', '23:30', '23:30']]);
-  })));
-
-// --------------------------------------------------------------------------
-// 5. Kalender und Spanne eines Termins (#1698, D#988)
-// --------------------------------------------------------------------------
-//
-// TAFLA (2026-10-19): die Wand-Haelfte ist im Ruhestand. Die alte Wand nannte
-// unter jedem Termin den Kalender und hinter dem Beginn das Ende („14:00 -
-// 22:00"). Die Tafla-Wand zeigt den Beginn auf der Zeitschiene und den Titel,
-// wie das freigegebene Artboard („20:00 Wieczór filmowy") - Kalendername und
-// Spanne stehen in Dziś und im Kalender. Das Blatt behaelt seine Regel.
-
-test('#1698: das Heute-Blatt nennt den Kalender, ohne Spanne', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-  const events = [
-    ev(1, 'Frueh', '2026-09-24T14:00', '2026-09-24T22:00', { cal_name: 'Niklas Arbeitskalender' }),
-    ev(2, 'Nur in Yuvomi', '2026-09-24T15:00', '2026-09-24T16:00'),
-    ev(3, 'Boese', '2026-09-24T16:00', '2026-09-24T17:00', { cal_name: '<img src=x>' }),
-  ];
-  const rows = dash.buildTodayProgram({ upcomingEvents: events }, { includeTasks: false, includeMeals: false, now: new Date() }).rows;
-  assert.deepEqual(rows.map((row) => [row.title, row.sub, row.timeLabel]), [
-    ['Frueh', 'Niklas Arbeitskalender', '2026-09-24T14:00'],
-    ['Nur in Yuvomi', 'dashboard.todayEvent', '2026-09-24T15:00'],
-    ['Boese', '<img src=x>', '2026-09-24T16:00'],
-  ]);
-  const sheet = dash.renderTodayCockpit({ upcomingEvents: events, urgentTasks: [], users: [] }, []);
-  assert.match(sheet, /today-cockpit-card__sub">Niklas Arbeitskalender</, 'das Blatt nennt den Kalender');
-  assert.match(sheet, /today-cockpit-card__sub">dashboard\.todayEvent</, 'ohne Kalendernamen bleibt das Wort');
-  assert.ok(sheet.includes('&lt;img src=x&gt;') && !sheet.includes('<img src=x>'), 'der Name ist Nutzereingabe und laeuft durch esc()');
-  assert.ok(!sheet.includes('2026-09-24T22:00'), 'kein Ende im Blatt: die Spanne bleibt der Wand vorbehalten');
-  assert.ok(!sheet.includes('wall-row__time-end'));
-}));
-
-test('#1698: die Unterzeile des Blatts bleibt eine Zeile, die Zustandskarte darf umbrechen', async () => {
-  const { readFileSync } = await import('node:fs');
-  const { eachRule } = await import('./css-rules.js');
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  const rules = [...eachRule(css)].filter((rule) => rule.at.length === 0);
-  const own = rules.find((rule) => rule.selector.trim() === '.today-cockpit-card__sub');
-  assert.ok(own, 'Reichweite: die Regel der Unterzeile');
-  assert.match(own.body, /white-space:\s*nowrap/);
-  assert.match(own.body, /text-overflow:\s*ellipsis/);
-  const state = rules.find((rule) => rule.selector.trim() === '.today-cockpit-card--state .today-cockpit-card__sub');
-  assert.match(state?.body ?? '', /white-space:\s*normal/);
-});
-
 // --------------------------------------------------------------------------
 // 6. Kinder-Standards (R20): eigene Aufgaben zuerst, Punkte vor Budget
 // --------------------------------------------------------------------------
 
 const KIND = { id: 3, family_role: 'child', display_name: 'Emma' };
 const MAMA = { id: 1, family_role: 'mom', display_name: 'Linda' };
-const assigned = (task, ...people) => ({ ...task, assigned_users: people.map((p) => ({ id: p.id, display_name: p.display_name })) });
-const childTasks = () => [
-  assigned({ id: 11, title: 'Steuer', due_date: '2026-09-23', status: 'open' }, MAMA),
-  assigned({ id: 12, title: 'Arzt anrufen', due_date: '2026-09-23', status: 'open' }, MAMA),
-  assigned({ id: 13, title: 'Zimmer aufraeumen', due_date: '2026-09-24', due_time: '17:00', status: 'open' }, KIND),
-  { id: 14, title: 'Blumen giessen', due_date: '2026-09-24', status: 'open', assigned_users: [] },
-  assigned({ id: 15, title: 'Hausaufgaben', due_date: '2026-09-23', status: 'open' }, KIND),
-];
-
-test('R20: ein Kind sieht im Heute-Blatt eigene und freie Aufgaben vor denen der Eltern',
-  inProcessZone('Europe/Berlin', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-    const titles = (viewer) => dash.buildTodayProgram({ urgentTasks: childTasks() }, {
-      includeCalendar: false, includeMeals: false, now: new Date(), viewer,
-    }).rows.map((row) => row.title);
-    assert.deepEqual(titles(KIND), ['Hausaufgaben', 'Blumen giessen', 'Zimmer aufraeumen', 'Steuer', 'Arzt anrufen'],
-      'eigene (auch ueberfaellige) und freie zuerst, die der Mutter am Ende');
-    assert.deepEqual(titles(MAMA), ['Steuer', 'Arzt anrufen', 'Hausaufgaben', 'Blumen giessen', 'Zimmer aufraeumen'],
-      'Erwachsene: unveraendert nach der Uhr');
-    assert.deepEqual(titles(null), titles(MAMA), 'ohne Betrachter wie bisher');
-  })));
-
-test('R20: bei knappem Platz fallen die fremden Aufgaben eines Kindes zuerst unter „+N weitere"',
-  inProcessZone('Europe/Berlin', inBrowser(THU_10_BERLIN, 'Europe/Berlin', () => {
-    const model = dash.buildTodayCockpitModel({ urgentTasks: childTasks() }, [], {
-      cap: 3, now: new Date(), groupOverdue: true, viewer: KIND,
-    });
-    const shown = model.rows.map((row) => row.title);
-    assert.deepEqual(shown, ['Hausaufgaben', 'Blumen giessen', 'Zimmer aufraeumen'], 'die Aufgaben der Mutter stehen nicht im sichtbaren Blatt');
-    assert.equal(model.overflow, 2);
-    assert.deepEqual(model.hiddenRows.map((row) => row.title).sort(), ['Arzt anrufen', 'Steuer']);
-  })));
 
 test('R20: die Kinder-Vorgabe der Kacheln - Punkte zuerst und sichtbar, Budget aus, nur bei gefolgter Vorgabe', async () => {
   const { childDefaultWidgetConfig, DEFAULT_WIDGET_CONFIG } = await import('../public/utils/dashboard-widgets.js');
@@ -707,12 +376,11 @@ test('R20: die Kinder-Vorgabe der Kacheln - Punkte zuerst und sichtbar, Budget a
   assert.equal(dash.childDefaultFor(DEFAULT_WIDGET_CONFIG, MAMA, true), DEFAULT_WIDGET_CONFIG, 'Erwachsene bekommen die Haushaltsvorgabe');
 });
 
-test('R20: die Seite setzt den Betrachter, den das Heute-Blatt fragt', () => {
-  // Die Optionen oben reichen den Betrachter selbst herein; diese Zeile haelt
-  // fest, dass der echte Aufrufer (render -> buildTodayCockpitModel ohne
-  // `viewer`) ihn auch bekommt.
+test('R20: die Seite setzt den Betrachter, den der Tagesplan fragt', () => {
+  // TAFLA (2026-10-24): der Plan von Dziś (utils/today-plan.js) liest den
+  // Betrachter aus seinem Kontext - eigene Aufgaben eines Kindes zuerst. Diese
+  // Zeile haelt fest, dass der echte Aufrufer ihn hineinreicht.
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   assert.match(src, /export async function render\([\s\S]{0,1500}?dashboardViewer = user \?\? null;/);
-  assert.match(src, /viewer = dashboardViewer,\n\} = \{\}\) \{/, 'buildTodayCockpitModel faellt auf den gesetzten Betrachter zurueck');
-  assert.match(src, /buildTodayProgram\(data, \{ includeTasks, includeCalendar, includeMeals, now, viewer \}\)/);
+  assert.match(src, /planContext\(\{ now: new Date\(\), viewer: user,/, 'Dziś fragt den Plan mit dem Betrachter');
 });

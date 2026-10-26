@@ -134,7 +134,8 @@ test('jeder Aufrufer nennt seinen Ausloeser', () => {
   // das auf derselben Seite schliesst, bekaeme den Dialog trotzdem.
   const callers = [
     '../public/settings/pages/modules-health.js',
-    '../public/components/quick-links-manager.js',
+    // components/quick-links-manager.js ging mit dem Raster der Uebersicht
+    // (Tafla, 2026-10-19) - die Schnelllinks hatten nur dort ihre Verwaltung.
     '../public/pages/schedule.js',
     '../public/pages/waste.js',
   ];

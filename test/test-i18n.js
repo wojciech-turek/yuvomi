@@ -308,9 +308,10 @@ test('ein Verwerfen-Knopf heisst in keiner Sprache wie der Abbrechen-Knopf daneb
  * waehlt. Was der Vergleich NICHT sieht: zwei verschiedene Woerter mit derselben
  * Bedeutung - das bleibt Lesearbeit.
  */
-const DISTINCT_STATE_LABELS = [
-  ['dashboard.dueSoon', 'dashboard.dueToday'],
-];
+// TAFLA (2026-10-24): das einzige Paar (dashboard.dueSoon/dueToday) ist mit
+// formatDueDate und dem Kachelraster gegangen; die Pruefung bleibt fuer das
+// naechste Paar stehen.
+const DISTINCT_STATE_LABELS = [];
 
 test('Labels fuer verschiedene Zustaende sind in keiner Sprache textgleich', () => {
   const fold = (value, locale) => String(value ?? '').trim().toLocaleLowerCase(locale);

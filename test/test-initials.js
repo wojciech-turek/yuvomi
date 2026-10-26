@@ -365,14 +365,10 @@ test('Avatar-Stapel und Personenauswahl (components/user-multi-select.js)', asyn
   assert.ok(!SHOWS(ums.renderAvatarStack([user], { size: 16 }), '수'), 'unter 20px bleibt die Scheibe ohne Text');
 });
 
-test('Ueberlappungszeichen (utils/seal-pair.js)', async () => {
-  const { isSoloHousehold } = await import('../public/utils/household.js');
-  const { whoMark } = await import('../public/utils/seal-pair.js');
-  assert.equal(isSoloHousehold(), false, 'ohne gezaehlten Haushalt erscheint das Zeichen');
-  // 20px breit, neben dem kleinen Siegel 16px, bei 10px Schrift: ein Zeichen.
-  assertShows(whoMark({ display_name: MINSU, avatar_color: '#34C759' }), '수', 'Siegel-Avatar');
-  assert.ok(SHOWS(whoMark({ display_name: 'Anna Maria Schmidt' }), 'AS'), 'lateinisch: zwei Buchstaben');
-});
+// Das Ueberlappungszeichen (utils/seal-pair.js) hing an den Zeilen von „Heute
+// wichtig" und ist mit dem Raster der Uebersicht gegangen (Tafla, 2026-10-19).
+// Seine fruehere Kopie der Regel bleibt oben in FORMER_COPIES - als Form, die
+// der Detektor erkennen muss.
 
 test('Kontozeile der Seitenleiste (router.js)', () => {
   // router.js laesst sich hier nicht laden (der Loader stubt seine Nachbarn),
@@ -503,22 +499,11 @@ test('Hauspersonal: die Zeile einer Kraft', async () => {
   }
 });
 
-test('Uebersicht: Familie, Geburtstage, Dienstplan, Belohnungen und Wandansicht', async () => {
-  const { __test: dashboard, renderUpcomingBirthdays } = await import('../public/pages/dashboard.js');
+// Familie-, Geburtstags-, Dienstplan- und Belohnungs-Widget der Uebersicht sind
+// mit dem Raster gegangen (Tafla, 2026-10-19). Die Scheibe an einer Zeile der
+// Wand nimmt den Helfer weiter.
+test('Uebersicht: Wandansicht', async () => {
   const user = { id: 1, display_name: MINSU, avatar_color: '#34C759' };
-
-  assertShows(dashboard.renderFamilyWidget([user, { id: 2, display_name: 'Anna Maria Schmidt' }], { upcomingEvents: [] }), '민수', 'Familie');
-  assertShows(renderUpcomingBirthdays([{ id: 1, name: MINSU, days_until: 3, next_birthday: '2026-10-06', next_age: 9 }], '1x2'), '민수', 'Geburtstage');
-
-  const type = { id: 1, name: 'Frueh', short_code: 'F', color: '#6C3AED' };
-  const schedule = { hasTypes: true, entries: [{ user_id: 1, shift_type: type }] };
-  assertShows(dashboard.renderScheduleWidget(schedule, [user], '1x2'), '민수', 'Dienstplan');
-
-  const rewards = dashboard.renderRewardsWidget({
-    view: 'household', me: 99, standings: [{ id: 1, display_name: MINSU, avatar_color: '#34C759', balance: 10 }],
-    catalog: [], recent: [],
-  }, '2x2');
-  assertShows(rewards, '민수', 'Belohnungen');
 
   // Tafla: die Scheibe an einer Zeile der Wand (components/wall-view.js).
   const { wallPersonDisc } = await import('../public/components/wall-view.js');
@@ -629,7 +614,6 @@ test('der Haushalt gilt fuer JEDEN Aufruf des Helfers, und nur bis zum Abmelden'
 
 test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async () => {
   const ums = await import('../public/components/user-multi-select.js');
-  const { whoMark } = await import('../public/utils/seal-pair.js');
   const family = await import('../public/settings/pages/admin-family.js');
   const account = await import('../public/settings/pages/personal-account.js');
   const permissions = await import('../public/settings/pages/admin-permissions.js');
@@ -639,7 +623,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const { __test: birthdays } = await import('../public/pages/birthdays.js');
   const { __test: rewards } = await import('../public/pages/rewards.js');
   const { __test: hk } = await import('../public/pages/housekeeping.js');
-  const { __test: dashboard, renderUpcomingBirthdays } = await import('../public/pages/dashboard.js');
   const wallView = await import('../public/components/wall-view.js');
 
   const withState = (state, patch, run) => {
@@ -654,7 +637,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
     'Stapel 28px': (name) => ums.renderAvatarStack([person(name)], { size: 28 }),
     'Stapel 22px': (name) => ums.renderAvatarStack([person(name)], { size: 22 }),
     Personenauswahl: (name) => ums.renderUserMultiSelect([person(name)], [], 'assignees', 'tasks.assignedTo'),
-    'Siegel-Avatar': (name) => whoMark(person(name)),
     'Einstellungen Familie': (name) => family.__test.avatarHtml(person(name)),
     'Einstellungen Konto': (name) => account.__test.avatarHtml(person(name)),
     'Einstellungen Rechte': (name) => permissions.memberChipHtml(person(name)),
@@ -678,12 +660,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
     Hauspersonal: (name) => withState(hk.state(), {
       workers: [{ id: 7, display_name: name, current_session: null, today_session: null }],
     }, () => hk.renderWorkerSummary()),
-    'Uebersicht Familie': (name) => dashboard.renderFamilyWidget([person(name), { id: 2, display_name: 'Anna Schmidt' }], { upcomingEvents: [] }),
-    'Uebersicht Geburtstage': (name) => renderUpcomingBirthdays([{ id: 1, name, days_until: 3, next_birthday: '2026-10-06', next_age: 9 }], '1x2'),
-    'Uebersicht Dienstplan': (name) => dashboard.renderScheduleWidget({ hasTypes: true, entries: [{ user_id: 1, shift_type: shift }] }, [person(name)], '1x2'),
-    'Uebersicht Belohnungen': (name) => dashboard.renderRewardsWidget({
-      view: 'household', me: 99, standings: [{ id: 1, display_name: name, avatar_color: '#34C759', balance: 10 }], catalog: [], recent: [],
-    }, '2x2'),
     'Uebersicht Wandansicht': (name) => wallView.wallPersonDisc(person(name), [person(name)]),
   };
 

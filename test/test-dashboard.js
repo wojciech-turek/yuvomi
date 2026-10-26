@@ -15,7 +15,6 @@ import express from 'express';
 import { MIGRATIONS_SQL } from '../server/db-schema-test.js';
 import { addLocalDays, toLocalDateKey } from '../public/utils/date.js';
 import { withoutBlockComments } from './source-text.js';
-import { eachRule } from './css-rules.js';
 
 // Dynamisch geladen, weil beide Module inzwischen server/db.js in ihren
 // Import-Graphen ziehen: statische Imports laufen vor der DB_PATH-Zuweisung
@@ -185,313 +184,6 @@ test('Das Erfassen bietet nur an, was der Betrachter anlegen darf (#1208, Tafla)
   clearPermissions();
 });
 
-test('Notes widget options stay unchanged when the category catalog cannot load', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const current = { categories: [7, 8] };
-
-  const result = await __test.openWidgetOptions('notes', current, {
-    loadNotes: async () => null,
-  });
-
-  assert(result === null, 'ein Katalogfehler muss den Dialog abbrechen statt den gespeicherten Filter zu leeren');
-});
-
-test('Today-Highlights priorisieren dringende Aufgaben und nächsten Termin', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const result = __test.buildTodayHighlights({
-    tasks: [
-      { id: 1, title: 'Low task', priority: 'low' },
-      { id: 2, title: 'Pay bill', priority: 'urgent' },
-    ],
-    events: [{ id: 3, title: 'Dentist' }],
-    shopping: { items: [{ is_checked: false }, { is_checked: true }] },
-    meals: { dinner: { title: 'Soup' } },
-  });
-
-  assert(result.urgentTask.title === 'Pay bill', 'Urgent Task sollte priorisiert werden');
-  assert(result.nextEvent.title === 'Dentist', 'Nächster Termin sollte übernommen werden');
-  assert(result.openShoppingCount === 1, 'Offene Einkaufsartikel sollten gezählt werden');
-  assert(result.meal.title === 'Soup', 'Geplante Mahlzeit sollte übernommen werden');
-});
-
-test('Today-Highlights wählt die Mahlzeit passend zur Tageszeit', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const RealDate = Date;
-  const withHour = (hour, fn) => {
-    class FakeDate extends RealDate {
-      constructor(...args) {
-        if (args.length === 0) { super('2026-07-03T00:00:00'); this.setHours(hour); return; }
-        super(...args);
-      }
-    }
-    globalThis.Date = FakeDate;
-    try { return fn(); } finally { globalThis.Date = RealDate; }
-  };
-  const meals = [
-    { meal_type: 'breakfast', title: 'Eier' },
-    { meal_type: 'lunch', title: 'Salat' },
-    { meal_type: 'dinner', title: 'Suppe' },
-  ];
-
-  const morning = withHour(8, () => __test.buildTodayHighlights({ meals }));
-  assert(morning.mealType === 'breakfast' && morning.meal.title === 'Eier', 'Morgens sollte Frühstück gezeigt werden');
-
-  const noon = withHour(13, () => __test.buildTodayHighlights({ meals }));
-  assert(noon.mealType === 'lunch' && noon.meal.title === 'Salat', 'Mittags sollte Mittagessen gezeigt werden');
-
-  const evening = withHour(20, () => __test.buildTodayHighlights({ meals }));
-  assert(evening.mealType === 'dinner' && evening.meal.title === 'Suppe', 'Abends sollte Abendessen gezeigt werden');
-
-  // Frühstück nicht geplant → nächste geplante Mahlzeit des Tages
-  const onlyDinner = withHour(8, () => __test.buildTodayHighlights({ meals: [{ meal_type: 'dinner', title: 'Suppe' }] }));
-  assert(onlyDinner.meal.title === 'Suppe', 'Ohne Frühstück sollte die nächste geplante Mahlzeit gezeigt werden');
-});
-
-test('Today-Highlights filtert Termine auf den heutigen Tag', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const tomorrowStr = addLocalDays(todayStr, 1);
-
-  const result = __test.buildTodayHighlights({
-    events: [
-      { id: 1, title: 'Termin Morgen', start_datetime: `${tomorrowStr}T10:00:00` },
-      { id: 2, title: 'Termin Heute', start_datetime: `${todayStr}T14:30:00` },
-    ],
-  });
-
-  assert(result.eventCount === 1, `Erwartet 1 Termin für heute, erhalten ${result.eventCount}`);
-  assert(result.nextEvent.title === 'Termin Heute', 'Erwartet "Termin Heute" als nächsten Termin');
-});
-
-test('Tagesprogramm: Termin, Aufgabe und Mahlzeit mischen sich chronologisch', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-
-  const result = __test.buildTodayProgram({
-    upcomingEvents: [{ id: 11, title: 'Zahnarzt', start_datetime: `${todayStr}T14:00:00` }],
-    urgentTasks: [{ id: 22, title: 'Zettel abgeben', due_date: todayStr, due_time: '09:30:00', status: 'open' }],
-    // Nur dinner geplant: selectTodayMeal fällt zu jeder Tageszeit auf dinner
-    // vor (deterministisch, kein withHour nötig).
-    todayMeals: [{ id: 33, meal_type: 'dinner', title: 'Pasta' }],
-  // Feste Uhr: seit #1449 verlaesst ein beendeter Termin das Programm, und
-  // der um 14:00 waere am Nachmittag sonst schon vorbei.
-  }, { now: todayAt(8) });
-
-  const kinds = result.rows.map((r) => r.kind);
-  nodeAssert.deepEqual(kinds, ['task', 'event', 'meal'], 'Aufgabe 09:30 → Termin 14:00 → Abendessen (nominal 18:30)');
-  nodeAssert.deepEqual(result.rows.map((r) => r.objectId), [22, 11, 33], 'jede Zeile trägt ihre Objekt-ID (Deep-Link-Anker, Paket 2)');
-  const sorted = [...result.rows.map((r) => r.sortKey)].sort();
-  nodeAssert.deepEqual(result.rows.map((r) => r.sortKey), sorted, 'Sortierschlüssel sind aufsteigend');
-  nodeAssert.equal(result.nextUpcoming, null, 'kein Termin über heute hinaus');
-});
-
-test('Tagesprogramm: Überfälliges zuerst, Ganztägiges vor zeitlosen Aufgaben', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const yesterdayStr = addLocalDays(todayStr, -1);
-
-  const result = __test.buildTodayProgram({
-    upcomingEvents: [{ id: 1, title: 'Ferienbeginn', start_datetime: todayStr, all_day: 1 }],
-    urgentTasks: [
-      { id: 2, title: 'Ohne Uhrzeit', due_date: todayStr, status: 'open' },
-      { id: 3, title: 'Längst fällig', due_date: yesterdayStr, status: 'open' },
-    ],
-  });
-
-  nodeAssert.deepEqual(
-    result.rows.map((r) => r.title),
-    ['Längst fällig', 'Ferienbeginn', 'Ohne Uhrzeit'],
-    'Reihenfolge: überfällig (00:00) → ganztägig (00:01) → heute ohne Uhrzeit (00:02)',
-  );
-  nodeAssert.equal(result.rows[0].overdue, true, 'überfällige Zeile ist markiert');
-});
-
-test('formatDueDate: „Morgen fällig" erfindet ohne due_time keine Uhrzeit', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const tomorrowStr = addLocalDays(toLocalDateKey(new Date()), 1);
-  // Ohne due_time ist 23:59:59 nur die interne Sortier-Krücke - sie darf nie
-  // als „Morgen fällig – 23:59" im UI landen.
-  const noTime = __test.formatDueDate(tomorrowStr, null);
-  nodeAssert.ok(!/\d{1,2}:\d{2}/.test(noTime.text), `keine erfundene Uhrzeit, erhalten: ${noTime.text}`);
-  const withTime = __test.formatDueDate(tomorrowStr, '09:30:00');
-  nodeAssert.match(withTime.text, /09:30/, 'eine echte Uhrzeit bleibt sichtbar');
-});
-
-/* Die Faelligkeit folgt der ANZEIGEZONE, nicht dem Browser (#829 Teil 3, Nachlese
- * aus #851).
- *
- * `due_date`/`due_time` sind zonenlose Wanduhrzeit. Hier stand ein Umweg ueber
- * `new Date(`${date}T${time}`)`, und der machte daraus einen Zeitpunkt der
- * BROWSER-Zone - den formatDate/formatTime anschliessend in die Anzeigezone
- * umrechneten. Mit Haushalt auf Honolulu und Browser in Berlin wurde aus einer
- * fuer 21:00 eingetragenen Aufgabe eine fuer 9:00, und dieselbe Uhr entschied
- * ueber "heute"/"morgen".
- *
- * Der Test setzt die Zone ueber DENSELBEN Spezifizierer, den dashboard.js
- * benutzt (`/utils/timezone.js`) - ueber den Repo-Pfad importiert waere es eine
- * zweite Modulinstanz mit eigenem Zonen-Cache, und der Test liefe an seinem
- * eigenen Gegenstand vorbei. */
-test('formatDueDate liest due_date/due_time in der Anzeigezone, nicht im Browser', async () => {
-  const tz = await import('/utils/timezone.js');
-  const { __test } = await import('../public/pages/dashboard.js');
-  const p2 = (n) => String(n).padStart(2, '0');
-  const stamp = (f) => `${f.year}-${p2(f.month)}-${p2(f.day)}`;
-
-  const ZONES = ['Pacific/Honolulu', 'Pacific/Kiritimati'];
-  try {
-    for (const zone of ZONES) {
-      tz.setDisplayTimeZone(zone);
-      const today = stamp(tz.nowFields());
-
-      // Die eingetippte Uhrzeit bleibt die eingetippte Uhrzeit.
-      //
-      // Geprueft wird der STEMPEL, nicht die fertige Schreibweise: `/i18n.js` ist
-      // in diesem Kontext ein Stub, der `String(d)` zurueckgibt und deshalb gar
-      // nicht umrechnet - eine Assertion auf "steht 21:00 drin" waere hier gruen,
-      // egal was uebergeben wird. Die Eigenschaft, an der es haengt, ist, dass
-      // die zonenlose Wanduhrzeit als Stempel weitergereicht wird statt als Date
-      // der Browser-Zone; nur die kann dieser Kontext sehen.
-      const withTime = __test.formatDueDate(today, '21:00:00');
-      nodeAssert.match(withTime.text, /\d{4}-\d{2}-\d{2}T21:00/,
-        `${zone}: die Wanduhrzeit muss als Stempel an den Formatierer gehen, erhalten: ${withTime.text}`);
-      nodeAssert.ok(!/GMT/.test(withTime.text),
-        `${zone}: ein Date-Umweg wuerde die Zeit in der Browser-Zone einfrieren, erhalten: ${withTime.text}`);
-
-      // Und "heute" ist der Tag der Anzeigezone, nicht der des Browsers.
-      nodeAssert.match(withTime.text, /dashboard\.(dueToday|overdue)/,
-        `${zone}: der heutige Tag der Anzeigezone muss als heute gelten, erhalten: ${withTime.text}`);
-
-      const shiftDay = (key, days) => {
-        const [y, m, d] = key.split('-').map(Number);
-        return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
-      };
-      nodeAssert.match(__test.formatDueDate(shiftDay(today, 1), null).text, /dashboard\.dueTomorrow/,
-        `${zone}: der Folgetag der Anzeigezone ist morgen`);
-
-      // JEDER Ausgabepfad, der eine Uhrzeit zeigt - nicht nur der heutige. Der
-      // ueberfaellige und der Bald-Zweig bauen ihre Beschriftung ueber eine eigene
-      // Zeile (`fullLabel`), und die blieb bei einer ersten Fassung dieses Tests
-      // ungeprueft: sie kommt bei "heute faellig" gar nicht vor.
-      const paths = [
-        [shiftDay(today, -1), '21:00:00', /dashboard\.overdue/, 'gestern 21:00 ist ueberfaellig'],
-        [shiftDay(today, 1), '23:30:00', /dashboard\.(dueSoon|dueTomorrow)/, 'morgen spaet'],
-        [shiftDay(today, 1), '09:30:00', /dashboard\.dueTomorrow/, 'morgen frueh'],
-        [shiftDay(today, 4), '14:00:00', /\d/, 'in vier Tagen'],
-      ];
-      for (const [day, time, expect, what] of paths) {
-        const res = __test.formatDueDate(day, time);
-        nodeAssert.match(res.text, expect, `${zone}: ${what}, erhalten: ${res.text}`);
-        nodeAssert.match(res.text, new RegExp(`${day}T${time.slice(0, 5)}`),
-          `${zone}: ${what} - die Wanduhrzeit muss als Stempel weitergereicht werden, erhalten: ${res.text}`);
-        nodeAssert.ok(!/GMT/.test(res.text),
-          `${zone}: ${what} - ein Date-Umweg friert die Zeit in der Browser-Zone ein, erhalten: ${res.text}`);
-      }
-    }
-  } finally {
-    tz.setDisplayTimeZone(null);
-  }
-});
-
-/* Die Grenze zwischen „gleich faellig" und „schon vorbei" - an JEDER Minute des
- * Tages, nicht an der, die gerade zufaellig ist.
- *
- * Diese Probe erbte ihre Eingabe von der echten Uhr: sie las `nowFields()`,
- * rechnete `Date.UTC(...) + 60000` und reichte nur STUNDE UND MINUTE des
- * Ergebnisses weiter, den Tag aber unveraendert aus dem Vorher. Um 23:59 der
- * Anzeigezone faellt die eine Minute auf den naechsten Tag: die Uhrzeit sprang
- * auf 00:00, der Tag blieb stehen, und die angebliche „Minute in der Zukunft"
- * war in Wahrheit 23 Stunden und 59 Minuten VERGANGENHEIT. `formatDueDate`
- * antwortete voellig richtig „ueberfaellig", der Test nannte das einen Fehler.
- *
- * Ein Tageswechsel ist nicht die Zeitzone des RECHNERS - der spielt hier keine
- * Rolle, weil `zonedFields()` mit gesetzter Anzeigezone ueber
- * `Intl.DateTimeFormat` liest und `Date.UTC`/`getUTC*` reine Feldarithmetik
- * sind. Gemessen: unter TZ=UTC, TZ=Europe/Berlin und TZ=America/Los_Angeles
- * faellt exakt dieselbe eine Minute (2026-09-09T09:59Z = 23:59 in Honolulu).
- * Die Suite war deshalb 1439 Minuten am Tag gruen und blind, und der eine rote
- * Lauf sah aus wie eine Zonenabhaengigkeit, weil er nur dem einen Rechner
- * begegnete, der gerade lief.
- *
- * Deshalb steht hier BEIDES still: die Anzeigezone (wie in den Proben darueber)
- * und die Uhr. Zwischen dem Stellen und dem Zuruecksetzen liegt kein `await` -
- * die Tests dieser Datei laufen verschraenkt, und ein `await` mitten drin
- * uebergaebe einer anderen Probe eine gestellte Uhr und eine fremde Zone.
- */
-test('formatDueDate: die Faelligkeitsgrenze haelt an jeder Minute des Tages', async () => {
-  const tz = await import('/utils/timezone.js');
-  const { __test } = await import('../public/pages/dashboard.js');
-
-  // Ab hier synchron.
-  const RealDate = Date;
-  let fixedMs = RealDate.UTC(2026, 8, 9);
-  class FrozenDate extends RealDate {
-    constructor(...args) { super(...(args.length ? args : [fixedMs])); }
-    static now() { return fixedMs; }
-  }
-
-  const p2 = (n) => String(n).padStart(2, '0');
-  const dayOf = (f) => `${f.year}-${p2(f.month)}-${p2(f.day)}`;
-  // Wanduhr-Felder plus/minus Minuten - dieselbe Feldarithmetik, die
-  // `formatDueDate` intern fuehrt, und diesmal MIT dem Tagesuebertrag.
-  const shiftWallMinutes = (f, minutes) => {
-    const d = new RealDate(RealDate.UTC(f.year, f.month - 1, f.day, f.hour, f.minute) + minutes * 60000);
-    return {
-      day: `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`,
-      time: `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`,
-    };
-  };
-
-  try {
-    globalThis.Date = FrozenDate;
-    // Eine westlich von UTC (-10), eine knapp oestlich (+2) und eine am
-    // aeussersten Ostrand (+14): der Tageswechsel der Anzeigezone faellt in
-    // jeder auf eine andere UTC-Minute, und in Kiritimati liegt er sogar auf
-    // einem anderen UTC-Datum.
-    for (const zone of ['Pacific/Honolulu', 'Europe/Berlin', 'Pacific/Kiritimati']) {
-      tz.setDisplayTimeZone(zone);
-      let sawLastMinuteOfDay = 0;
-
-      // Ein voller Tag im Minutenraster - damit ist die 23:59 der Zone
-      // zwangslaeufig dabei, in welcher Zone auch immer.
-      for (let i = 0; i < 1440; i++) {
-        fixedMs = RealDate.UTC(2026, 8, 9) + i * 60000;
-        const now = tz.nowFields();
-        const when = `${zone} @ ${dayOf(now)} ${p2(now.hour)}:${p2(now.minute)}`;
-        if (now.hour === 23 && now.minute === 59) sawLastMinuteOfDay += 1;
-
-        // Eine Minute spaeter ist noch nicht vorbei - auch wenn sie ueber
-        // Mitternacht faellt.
-        const future = shiftWallMinutes(now, 1);
-        const ahead = __test.formatDueDate(future.day, future.time);
-        nodeAssert.equal(ahead.overdue, false,
-          `${when}: eine Minute spaeter (${future.day} ${future.time}) ist nicht ueberfaellig, erhalten: ${ahead.text}`);
-
-        // Und eine Minute frueher ist es. Ohne diese Haelfte bestuende die Probe
-        // auch dann, wenn `formatDueDate` gar nichts mehr ueberfaellig nennt.
-        const past = shiftWallMinutes(now, -1);
-        const behind = __test.formatDueDate(past.day, past.time);
-        nodeAssert.equal(behind.overdue, true,
-          `${when}: eine Minute frueher (${past.day} ${past.time}) ist ueberfaellig, erhalten: ${behind.text}`);
-
-        // Die Grenze selbst: genau jetzt faellig ist noch nicht vorbei. Ohne
-        // diesen Fall bliebe ein `<=` statt `<` in `formatDueDate` unbemerkt -
-        // gemessen: die Probe war mit dieser Aenderung gruen.
-        const same = shiftWallMinutes(now, 0);
-        const onTime = __test.formatDueDate(same.day, same.time);
-        nodeAssert.equal(onTime.overdue, false,
-          `${when}: genau jetzt faellig (${same.day} ${same.time}) ist noch nicht ueberfaellig, erhalten: ${onTime.text}`);
-      }
-
-      // Sonst haette das Raster die Stelle, um die es geht, gar nicht getroffen.
-      nodeAssert.equal(sawLastMinuteOfDay, 1,
-        `${zone}: das Raster muss den Tageswechsel genau einmal enthalten, gezaehlt: ${sawLastMinuteOfDay}`);
-    }
-  } finally {
-    globalThis.Date = RealDate;
-    tz.setDisplayTimeZone(null);
-  }
-});
-
 /* „Heute"/„Morgen" an einem echten ZEITPUNKT (#829, Nachlese #851).
  *
  * Hier stand `d.toDateString() === new Date().toDateString()` - beide Seiten in
@@ -509,7 +201,9 @@ test('formatDueDate: die Faelligkeitsgrenze haelt an jeder Minute des Tages', as
  * trifft die Abweichung zwangslaeufig, sobald die Zonen auseinanderliegen. */
 test('relativeDateLabel benennt einen Zeitpunkt in der Anzeigezone', async () => {
   const tz = await import('/utils/timezone.js');
-  const { __test } = await import('../public/pages/dashboard.js');
+  // TAFLA (2026-10-24): die Uebersicht reicht den Helfer nicht mehr durch (ihre
+  // Kacheln sind gegangen) - geprueft wird er dort, wo er lebt.
+  const { relativeDateLabel } = await import('../public/utils/day-label.js');
   const shiftDay = (key, days) => {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
@@ -528,7 +222,7 @@ test('relativeDateLabel benennt einen Zeitpunkt in der Anzeigezone', async () =>
       for (let h = 0; h < 48; h += 2) {
         const d = new Date(Date.now() + h * 3600000);
         const dayInZone = tz.zonedDateKey(d);
-        const label = __test.relativeDateLabel(d);
+        const label = relativeDateLabel(d);
 
         if (dayInZone === today) {
           nodeAssert.equal(label, 'common.today',
@@ -552,52 +246,9 @@ test('relativeDateLabel benennt einen Zeitpunkt in der Anzeigezone', async () =>
   }
 });
 
-/* Ein DATUMS-KEY wird gelesen, ein ZEITPUNKT umgerechnet - und ein Date, das aus
- * einem Key gebaut wurde, ist die gefaehrliche Mitte.
- *
- * Die erste Fassung dieses Fixes schickte alles durch `zonedDateKey()`. Fuer
- * einen echten Instant und fuer einen Key-STRING ist das richtig - `zonedFields`
- * liest zonenlose Strings, statt sie zu rechnen. Fuer
- * `parseLocalDateKey('2026-08-25')` aber, also Mitternacht der BROWSER-Zone, ist
- * es einen Tag daneben: damit war derselbe Fehler wieder da, gegen den dieser PR
- * angetreten ist, nur ueber einen anderen Weg.
- *
- * Die Pflicht liegt deshalb beim AUFRUFER, und genau dort setzt dieser Test an:
- * nicht an `relativeDateLabel` (das war nie kaputt, wenn man ihm einen String
- * gab), sondern an den Stellen, die vorher ein Date daraus bauten. Ein Test auf
- * die Funktion allein waere gruen und blind gewesen - gemessen, nicht vermutet. */
-test('die Termin-Auswahl "heute" folgt der Anzeigezone, nicht dem Browser', async () => {
-  const tz = await import('/utils/timezone.js');
-  const { __test } = await import('../public/pages/dashboard.js');
-  try {
-    for (const zone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
-      tz.setDisplayTimeZone(zone);
-      const n = tz.nowFields();
-      const p2 = (x) => String(x).padStart(2, '0');
-      const today = `${n.year}-${p2(n.month)}-${p2(n.day)}`;
-      const shift = (days) => {
-        const [y, m, d] = today.split('-').map(Number);
-        return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
-      };
-
-      const res = __test.buildTodayHighlights({
-        events: [
-          { id: 1, title: 'Heute', start_datetime: `${today}T10:00` },
-          { id: 2, title: 'Morgen', start_datetime: `${shift(1)}T10:00` },
-          { id: 3, title: 'Gestern', start_datetime: `${shift(-1)}T10:00` },
-        ],
-      });
-      nodeAssert.equal(res.nextEvent?.title, 'Heute',
-        `${zone}: nur der Termin am heutigen Tag DER ANZEIGEZONE zaehlt, bekam: ${res.nextEvent?.title}`);
-    }
-  } finally {
-    tz.setDisplayTimeZone(null);
-  }
-});
-
 test('relativeDateLabel benennt einen Datums-Key ohne ihn umzurechnen', async () => {
   const tz = await import('/utils/timezone.js');
-  const { __test } = await import('../public/pages/dashboard.js');
+  const { relativeDateLabel } = await import('../public/utils/day-label.js');
   try {
     for (const zone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
       tz.setDisplayTimeZone(zone);
@@ -608,602 +259,26 @@ test('relativeDateLabel benennt einen Datums-Key ohne ihn umzurechnen', async ()
         const [y, m, d] = today.split('-').map(Number);
         return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10);
       };
-      nodeAssert.equal(__test.relativeDateLabel(today), 'common.today', zone);
-      nodeAssert.equal(__test.relativeDateLabel(shift(1)), 'common.tomorrow', zone);
-      nodeAssert.ok(!['common.today', 'common.tomorrow'].includes(__test.relativeDateLabel(shift(3))), zone);
-      nodeAssert.equal(__test.relativeDateLabel(null), '', 'kein Wert, kein Label');
+      nodeAssert.equal(relativeDateLabel(today), 'common.today', zone);
+      nodeAssert.equal(relativeDateLabel(shift(1)), 'common.tomorrow', zone);
+      nodeAssert.ok(!['common.today', 'common.tomorrow'].includes(relativeDateLabel(shift(3))), zone);
+      nodeAssert.equal(relativeDateLabel(null), '', 'kein Wert, kein Label');
     }
   } finally {
     tz.setDisplayTimeZone(null);
   }
 });
 
-test('Tagesprogramm: Ausblick kennt die nächste fällige Aufgabe über heute hinaus', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const tomorrowStr = addLocalDays(todayStr, 1);
-  const result = __test.buildTodayProgram({
-    urgentTasks: [{ id: 5, title: 'Zettel abgeben', due_date: tomorrowStr, status: 'open' }],
-  });
-  nodeAssert.equal(result.rows.length, 0, 'morgen Fälliges erzeugt keine Heute-Zeile');
-  nodeAssert.equal(result.nextDueTask?.id, 5, 'die nächste Frist steht als Ausblick bereit');
-});
-
-test('Cockpit-Coda nennt die morgen fällige Aufgabe statt falscher Entwarnung', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const tomorrowStr = addLocalDays(todayStr, 1);
-  const prevWindow = global.window;
-  global.window = { yuvomi: null };
-  try {
-    // Programm hat eine Heute-Zeile UND morgen ist etwas fällig → Coda-Variante.
-    const withTomorrow = __test.renderTodayCockpit({
-      upcomingEvents: [{ id: 1, title: 'Heute Abend', start_datetime: `${todayStr}T20:00:00` }],
-      urgentTasks: [{ id: 5, title: 'Zettel abgeben', due_date: tomorrowStr, status: 'open' }],
-    // Feste Uhr (#1449): nach 20 Uhr waere der Termin vorbei und die Zeile weg.
-    }, [], false, { now: todayAt(9) });
-    nodeAssert.match(withTomorrow, /todayNothingElseTomorrow/, 'Coda warnt vor der Morgen-Frist');
-    // Leerer Tag, nur die Morgen-Aufgabe → Zustandszeile trägt sie als Ausblick.
-    const stateRow = __test.renderTodayCockpit({
-      urgentTasks: [{ id: 5, title: 'Zettel abgeben', due_date: tomorrowStr, status: 'open' }],
-    }, []);
-    nodeAssert.match(stateRow, /todayFree/, 'leerer Tag zeigt die Zustandszeile');
-    nodeAssert.match(stateRow, /todayNextUp/, 'der Ausblick nennt die Morgen-Aufgabe');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
-test('"Heute frei"/"Fuer heute alles erledigt" entfaellt neben einer sichtbaren Schichtplan-Kachel (S-18)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const prevWindow = global.window;
-  global.window = { yuvomi: null };
-  try {
-    // Ohne Schedule-Kachel (Vorgabe): der leere Tag darf "Heute frei" sagen.
-    const withoutWidget = __test.renderTodayCockpit({}, []);
-    nodeAssert.match(withoutWidget, /todayFree/, 'ohne sichtbare Schichtplan-Kachel bleibt die alte Zustandszeile');
-    // Mit sichtbarer Schedule-Kachel: dieselbe leere Aufgaben/Termin-Lage darf
-    // NICHT mehr "Heute frei" behaupten - die Kachel daneben koennte etwas
-    // ganz anderes zeigen (der urspruengliche Befund: eine echte Schicht).
-    const withWidget = __test.renderTodayCockpit({}, [{ id: 'schedule', visible: true }]);
-    nodeAssert.ok(!/todayFree/.test(withWidget), 'eine sichtbare Schichtplan-Kachel darf nicht neben "Heute frei" widersprochen werden');
-    // Dieselbe Regel fuer die "alles erledigt"-Variante (erledigte Aufgaben,
-    // sonst nichts): auch sie ist neben der Kachel eine unvollstaendige Story.
-    const allDoneWithWidget = __test.renderTodayCockpit(
-      { urgentTasks: [{ id: 1, title: 'x', due_date: toLocalDateKey(new Date()), status: 'done' }] },
-      [{ id: 'schedule', visible: true }],
-    );
-    nodeAssert.ok(!/todayAllDone/.test(allDoneWithWidget), '"alles erledigt" entfaellt ebenso neben einer sichtbaren Schichtplan-Kachel');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
-// Review of #1099, finding 11: scheduleWidgetVisible read only widgetShown('schedule')
-// (the layout config's `visible` flag), never isModuleDisabled('schedule') -
-// unlike domainInCockpit() above it, which checks both. A household that
-// disables the Schedule module can be left with a stale layout entry still
-// carrying `visible: true` (nothing prunes it on disable), which would
-// silently suppress "Heute frei"/"Fuer heute alles erledigt" forever, even
-// though no Schedule tile is actually rendering anything anymore.
-test('a disabled Schedule module cannot suppress "Heute frei" via a stale widget-layout entry (#1099 finding 11)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const prevWindow = global.window;
-  try {
-    // Modul aktiv + Kachel sichtbar (Ausgangslage von S-18 oben): weiterhin
-    // unterdrueckt.
-    global.window = { yuvomi: { isModuleDisabled: () => false } };
-    const enabledWithWidget = __test.renderTodayCockpit({}, [{ id: 'schedule', visible: true }]);
-    nodeAssert.ok(!/todayFree/.test(enabledWithWidget), 'bei aktivem Modul mit sichtbarer Kachel bleibt die Unterdrueckung');
-
-    // Modul deaktiviert, Layout traegt aber noch die alte `visible: true`-Zeile:
-    // die Kachel zeigt nichts mehr, "Heute frei" darf wieder erscheinen.
-    global.window = { yuvomi: { isModuleDisabled: (m) => m === 'schedule' } };
-    const disabledWithStaleWidget = __test.renderTodayCockpit({}, [{ id: 'schedule', visible: true }]);
-    nodeAssert.match(disabledWithStaleWidget, /todayFree/, 'ein abgeschaltetes Modul darf "Heute frei" nicht ueber eine stehengebliebene Layout-Zeile unterdruecken');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
-/* DAS HEUTE-BLATT KENNT JEDE QUELLE, DIE ETWAS OFFEN HAT (Critique 23.09.2026,
- * P1). Gemessen an Linda: zwei offene Dosen um 08:00 und eine wartende
- * Freigabe lagen in derselben Antwort, und das Blatt schloss mit „Danach steht
- * heute nichts mehr an". Die Faelle unten laufen alle ueber das MODELL, das
- * Cockpit und Wand gemeinsam lesen - und mit fester Uhr: offen oder nicht
- * haengt an der Tageszeit (Dosis faellig, Tonne vor Mittag). */
+/* Eine feste Uhrzeit von heute: die Wand waehlt ihre Szene nach der Uhr
+ * (Noc ab 22:00), also stehen ihre Faelle unten auf einer festen Stunde.
+ * TAFLA (2026-10-24): hier standen die Faelle des Heute-Blatts
+ * (buildTodayCockpitModel). Das Blatt ist mit dem Raster gegangen; seine
+ * Quellen liest Dziś ueber utils/today-plan.js (test:dashboard-tafla). */
 function todayAt(hour, minute = 0) {
   const now = new Date();
   now.setHours(hour, minute, 0, 0);
   return now;
 }
-
-async function withSheetEnv({ perms = { admin: true }, disabled = [] } = {}, fn) {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const { setPermissions, clearPermissions } = await import('../public/permissions.js');
-  const prevWindow = global.window;
-  global.window = { yuvomi: { isModuleDisabled: (m) => disabled.includes(m) } };
-  setPermissions({ admin: false, modules: {}, widgets: {}, capabilities: {}, ...perms });
-  try {
-    return fn(__test);
-  } finally {
-    clearPermissions();
-    global.window = prevWindow;
-  }
-}
-
-const sheetKinds = (model) => model.rows.map((row) => row.kind);
-const eveningEvent = () => ({ id: 1, title: 'Elternabend', start_datetime: `${toLocalDateKey(new Date())}T20:00:00` });
-const openDoses = () => ({ hasMeds: true, dosesTotal: 2, dosesTaken: 0, dosesSkipped: 0, nextDose: { name: 'Eisen', time: '08:00' } });
-
-test('Heute-Blatt: eine offene Dosis steht im Blatt und haelt die Coda auf', () => withSheetEnv({}, (__test) => {
-  const model = __test.buildTodayCockpitModel(
-    { upcomingEvents: [eveningEvent()], health: openDoses() }, [], { now: todayAt(9) },
-  );
-  nodeAssert.ok(sheetKinds(model).includes('dose'), `die Dosis ist eine Zeile, erhalten: ${sheetKinds(model)}`);
-  nodeAssert.equal(model.coda, null, 'keine Entwarnung, solange eine Dosis offen ist');
-
-  const taken = __test.buildTodayCockpitModel(
-    { upcomingEvents: [eveningEvent()], health: { ...openDoses(), dosesTaken: 2, nextDose: null } }, [], { now: todayAt(9) },
-  );
-  nodeAssert.ok(!sheetKinds(taken).includes('dose'), 'genommene Dosen sind keine offene Zeile');
-  nodeAssert.match(String(taken.coda), /todayNothingElse/, 'sind alle genommen, faellt die Coda wieder');
-}));
-
-test('Heute-Blatt: die wartende Freigabe spricht nur zu Admins', async () => {
-  const data = { upcomingEvents: [eveningEvent()], rewards: { view: 'approver', standings: [], participantCount: 0, pending: 2 } };
-  await withSheetEnv({ perms: { admin: true } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-    nodeAssert.ok(sheetKinds(model).includes('approval'), 'der Admin sieht die Freigabe');
-    nodeAssert.equal(model.coda, null, 'und keine Entwarnung daneben');
-  });
-  // Das Kind bekommt vom Server die Sicht `self`; `pending` zaehlt dort seine
-  // eigenen Bitten (siehe den Test "(a2 x a8)" darunter).
-  const kid = { ...data, rewards: { view: 'self', me: 7, standings: [], participantCount: 0, pending: 1 } };
-  await withSheetEnv({ perms: { admin: false } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(kid, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('approval'), 'ein Kind entscheidet keine Freigaben');
-    nodeAssert.match(String(model.coda), /todayNothingElse/, 'fuer das Kind ist der Tag ohne sie vollstaendig');
-  });
-});
-
-/* DIE SICHT KOMMT VOM SERVER (Integration 2026-09-23, a2 x a8). Seit der
- * Belohnungs-Umbau liefert /dashboard `rewards.pending` je Sicht: `approver`
- * zaehlt alle offenen Anfragen, `self` nur die EIGENEN des Kindes. Die
- * Blatt-Quelle fragte nur das Client-Recht `isAdmin` - wer die Anfrage-Zahl
- * eines Kindes mit gesetztem Admin-Flag (veralteter Rechte-Stand, anderes
- * Konto im selben Speicher) bekam, las die eigene Bitte als "Freigabe". Die
- * Antwort traegt die Entscheidung schon; das Blatt folgt ihr. */
-test('Heute-Blatt: Freigaben sprechen nur in der Sicht "approver" (a2 x a8)', async () => {
-  const self = { upcomingEvents: [eveningEvent()], rewards: { view: 'self', me: 7, standings: [], pending: 1 } };
-  await withSheetEnv({ perms: { admin: true } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(self, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('approval'),
-      `die eigene Anfrage eines Kindes ist keine Freigabe, erhalten: ${sheetKinds(model)}`);
-  });
-  const family = { upcomingEvents: [eveningEvent()], rewards: { view: 'family', standings: [], pending: 0 } };
-  await withSheetEnv({ perms: { admin: true } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(family, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('approval'), 'die Familien-Sicht kennt keine Freigaben');
-  });
-});
-
-/* DIE ZAHL OFFENER FREIGABEN STEHT GENAU EINMAL: Belohnungen-Widget vor
- * Heute-Blatt vor Eltern-Kennzahlkachel. Widget sichtbar -> Blatt und Kachel
- * schweigen (Kein-Echo, `shown`); Widget aus, Blatt da -> nur das Blatt; Blatt
- * ausgeblendet -> die Kachel. Geprueft am AUFRUFER (`renderDashboardLayout`),
- * weil die Kachel nur dort erfaehrt, ob das Blatt die Zahl schon traegt. */
-test('Freigaben: die Zahl steht an genau einer Stelle - Widget > Heute-Blatt > Kennzahlkachel', async () => {
-  const data = {
-    upcomingEvents: [eveningEvent()],
-    // Budget und Geburtstag halten die Reihe bei mindestens zwei Kacheln.
-    budget: { entryCount: 3, balance: 100, income: 200 },
-    birthdays: [{ name: 'Oma', days_until: 5, kind: 'birthday' }],
-    rewards: { view: 'approver', me: 1, standings: [], participantCount: 2, pending: 2, catalog: [] },
-  };
-  const metricsOnly = [{ id: 'metrics', visible: true, size: '2x1' }];
-  const pendingTile = (html) => /metric-card[^]*?rewardsPending/.test(html);
-  await withSheetEnv({ perms: { admin: true } }, (__test) => {
-    const sheet = __test.buildTodayCockpitModel(data, metricsOnly, { now: todayAt(9) });
-    nodeAssert.ok(sheetKinds(sheet).includes('approval'), 'ohne Belohnungen-Widget traegt das Blatt die Freigabe');
-    const withSheet = __test.renderDashboardLayout(metricsOnly, data, null, 'EUR', { glanceHidden: false });
-    nodeAssert.ok(!pendingTile(withSheet), 'neben dem Blatt nennt die Kennzahlkachel die Freigaben nicht noch einmal');
-    const withoutSheet = __test.renderDashboardLayout(metricsOnly, data, null, 'EUR', { glanceHidden: true });
-    nodeAssert.ok(pendingTile(withoutSheet), 'ist das Blatt ausgeblendet, traegt die Kachel die Zahl');
-    const withWidget = [...metricsOnly, { id: 'rewards', visible: true, size: '1x2' }];
-    const sheetBesideWidget = __test.buildTodayCockpitModel(data, withWidget, { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(sheetBesideWidget).includes('approval'), 'neben dem Widget schweigt das Blatt');
-    const layout = __test.renderDashboardLayout(withWidget, data, null, 'EUR', { glanceHidden: false });
-    nodeAssert.ok(!pendingTile(layout.replace(/<div class="widget widget--rewards[^]*$/, '')),
-      'neben dem Widget schweigt die Kachel');
-  });
-});
-
-/* Dieselbe Regel fuer die Dosen (Browser-Abnahme der Integration: „2 Dosen
- * offen" im Blatt, „2 offen" in der Gesundheits-Kachel darunter). Die Kachel
- * tritt zurueck, solange das Blatt die offenen Dosen nennt - ausser eine
- * Packung muss nachbestellt werden: das sagt das Blatt nicht. */
-test('Dosen: die Zahl offener Dosen steht nicht in Blatt UND Kennzahlkachel', async () => {
-  const data = {
-    budget: { entryCount: 3, balance: 100, income: 200 },
-    birthdays: [{ name: 'Oma', days_until: 5, kind: 'birthday' }],
-    health: { ...openDoses(), lowStockCount: 0 },
-  };
-  const metricsOnly = [{ id: 'metrics', visible: true, size: '2x1' }];
-  const healthTile = (html) => /metric-card[^]*?metricDoses/.test(html);
-  await withSheetEnv({ perms: { admin: true } }, (__test) => {
-    nodeAssert.ok(sheetKinds(__test.buildTodayCockpitModel(data, metricsOnly, { now: todayAt(7) })).includes('dose'),
-      'Vorbedingung: das Blatt nennt die Dosen');
-    nodeAssert.ok(!healthTile(__test.renderDashboardLayout(metricsOnly, data, null, 'EUR', { glanceHidden: false })),
-      'neben dem Blatt keine zweite Dosen-Zahl');
-    nodeAssert.ok(healthTile(__test.renderDashboardLayout(metricsOnly, data, null, 'EUR', { glanceHidden: true })),
-      'ohne Blatt traegt die Kachel sie');
-    const refill = { ...data, health: { ...data.health, lowStockCount: 1 } };
-    nodeAssert.match(__test.renderDashboardLayout(metricsOnly, refill, null, 'EUR', { glanceHidden: false }), /healthRefill/,
-      'eine Nachbestellung sagt das Blatt nicht - die Kachel bleibt');
-  });
-});
-
-test('Heute-Blatt: die Tonne von heute und die von morgen (heute Abend rausstellen)', () => withSheetEnv({}, (__test) => {
-  const today = toLocalDateKey(new Date());
-  const tomorrow = addLocalDays(today, 1);
-  const morning = __test.buildTodayCockpitModel({
-    upcomingEvents: [eveningEvent()],
-    wastePickups: [
-      { date_key: today, type_name: 'Restmuell', deep_link: '?type=1' },
-      { date_key: today, type_name: 'Papier', deep_link: '?type=2' },
-    ],
-  }, [], { now: todayAt(7) });
-  const wasteRows = morning.rows.filter((row) => row.kind === 'waste');
-  nodeAssert.equal(wasteRows.length, 1, 'zwei Tonnen eines Tages sind eine Zeile');
-  nodeAssert.match(wasteRows[0].title, /Restmuell.*Papier/);
-  nodeAssert.equal(morning.coda, null, 'am Morgen muss die Tonne noch raus - keine Entwarnung');
-
-  const afternoon = __test.buildTodayCockpitModel({
-    upcomingEvents: [eveningEvent()],
-    wastePickups: [{ date_key: today, type_name: 'Restmuell' }],
-  }, [], { now: todayAt(15) });
-  nodeAssert.ok(sheetKinds(afternoon).includes('waste'), 'am Nachmittag bleibt die Auskunft stehen');
-  nodeAssert.match(String(afternoon.coda), /todayNothingElse/, 'die abgeholte Tonne haelt die Coda nicht auf');
-
-  const eve = __test.buildTodayCockpitModel({ wastePickups: [{ date_key: tomorrow, type_name: 'Bio' }] }, [], { now: todayAt(9) });
-  const tonight = eve.rows.find((row) => row.kind === 'waste');
-  nodeAssert.match(String(tonight?.sub), /todayWasteTonight/, 'die Abholung von morgen heisst: heute Abend rausstellen');
-  nodeAssert.equal(eve.coda, null);
-  nodeAssert.equal(eve.state, null, 'ein Tag mit offener Tonne ist nicht „heute frei"');
-}));
-
-test('Heute-Blatt: die Coda faellt, wenn alles Offene erledigt ist', () => withSheetEnv({}, (__test) => {
-  const model = __test.buildTodayCockpitModel({
-    upcomingEvents: [eveningEvent()],
-    health: { ...openDoses(), dosesTaken: 1, dosesSkipped: 1, nextDose: null },
-    rewards: { pending: 0 },
-    wastePickups: [],
-    housekeeping: { present: true, presentSince: `${toLocalDateKey(new Date())}T08:30:00`, workerName: 'Maria' },
-  }, [], { now: todayAt(9) });
-  nodeAssert.deepEqual(sheetKinds(model).sort(), ['event', 'housekeeping'], 'Termin und Auskunft, nichts Offenes');
-  nodeAssert.match(String(model.coda), /todayNothingElse/, 'nichts mehr offen - jetzt stimmt die Entwarnung');
-}));
-
-/* Gefunden in der Browser-Verifikation: der Check-in der Haushaltshilfe ist ein
- * Instant ('...Z'), und die Zeile las ihren Platz im Tag per Regex aus dem
- * String - also in UTC, waehrend die Beschriftung daneben die Haushaltszone
- * zeigte. „seit 08:30" stand deshalb HINTER einer Dosis um 08:00 nicht,
- * sondern davor. Die Zone ist hier fest auf Honolulu gestellt, damit der Fall
- * auch in einer CI in UTC rot werden kann. */
-test('Heute-Blatt: die Haushaltshilfe sortiert nach der Haushaltsuhr, nicht nach UTC', async () => {
-  const tz = await import('/utils/timezone.js');
-  await withSheetEnv({}, (__test) => {
-    tz.setDisplayTimeZone('Pacific/Honolulu');
-    try {
-      const now = new Date();
-      const today = tz.zonedDateKey(now);
-      const model = __test.buildTodayCockpitModel({
-        housekeeping: { present: true, presentSince: `${today}T18:30:00Z`, workerName: 'Maria' },
-      }, [], { now });
-      const row = model.rows.find((r) => r.kind === 'housekeeping');
-      nodeAssert.equal(row?.sortKey, tz.zonedTimeKey(`${today}T18:30:00Z`), 'der Platz im Tag ist die Wanduhr des Haushalts');
-      nodeAssert.equal(row.sortKey, '08:30');
-    } finally {
-      tz.setDisplayTimeZone(null);
-    }
-  });
-});
-
-test('Heute-Blatt: Kein-Echo gilt auch fuer die neuen Quellen', () => withSheetEnv({}, (__test) => {
-  const today = toLocalDateKey(new Date());
-  const data = {
-    health: openDoses(),
-    rewards: { view: 'approver', pending: 1 },
-    wastePickups: [{ date_key: today, type_name: 'Restmuell' }],
-    myShiftsToday: [{ shift_type: { id: 3, name: 'Fruehdienst', start_time: '06:00', end_time: '14:00' } }],
-    housekeeping: { present: true, presentSince: `${today}T08:30:00`, workerName: 'Maria' },
-    birthdays: [{ id: 4, name: 'Oma Erna', days_until: 0, kind: 'birthday' }],
-  };
-  const all = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-  nodeAssert.deepEqual(
-    [...new Set(sheetKinds(all))].sort(),
-    ['approval', 'birthday', 'dose', 'housekeeping', 'shift', 'waste'],
-    'Vorbedingung: ohne Kacheln spricht jede Quelle',
-  );
-  for (const [widget, kind] of [['health', 'dose'], ['rewards', 'approval'], ['waste', 'waste'],
-    ['schedule', 'shift'], ['housekeeping', 'housekeeping'], ['birthdays', 'birthday']]) {
-    const model = __test.buildTodayCockpitModel(data, [{ id: widget, visible: true }], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes(kind), `sichtbare ${widget}-Kachel: keine ${kind}-Zeile im Blatt`);
-    nodeAssert.ok(sheetKinds(model).length > 0, 'die uebrigen Quellen sprechen weiter');
-  }
-}));
-
-test('Heute-Blatt: ohne Gesundheitsrecht keine Dosen, abgeschaltetes Modul spricht nicht', async () => {
-  const data = { upcomingEvents: [eveningEvent()], health: openDoses() };
-  // Die Gegenprobe zuerst: ein Mitglied mit vollen Rechten sieht die Dosis.
-  // Ohne sie waere jede Abwesenheit unten auch beim Nichtstun gruen.
-  await withSheetEnv({ perms: { admin: false } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-    nodeAssert.ok(sheetKinds(model).includes('dose'), 'Vorbedingung: mit Recht steht die Dosis im Blatt');
-  });
-  await withSheetEnv({ perms: { admin: false, widgets: { health: 'none' } } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('dose'), 'ein gesperrtes Gesundheits-Widget heisst: keine Dosen im Blatt');
-  });
-  await withSheetEnv({ perms: { admin: false, modules: { health: 'none' } } }, (__test) => {
-    const model = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('dose'), 'ein gesperrtes Gesundheitsmodul ebenso');
-  });
-  await withSheetEnv({ disabled: ['health'] }, (__test) => {
-    const model = __test.buildTodayCockpitModel(data, [], { now: todayAt(9) });
-    nodeAssert.ok(!sheetKinds(model).includes('dose'), 'ein abgeschaltetes Modul spricht nicht');
-  });
-});
-
-/* Review #1450: die Erinnerungs-Quelle hat keine eigene Kachel und lief deshalb
- * am Widget-Riegel von sourceSpeaks() vorbei. Ein gesperrtes Gesundheits-Widget
- * hielt die Dosen stumm, eine faellige Vorsorge-Erinnerung stand trotzdem
- * mit ihrem Titel im Blatt; ebenso Abo (budget), Aufgabe und Termin. */
-test('Heute-Blatt: eine Erinnerung folgt dem Widget-Recht ihres Moduls', async () => {
-  const reminders = [
-    { id: 1, entity_type: 'health_prevention_due', entity_id: 7, entity_title: 'Darmkrebs-Vorsorge' },
-    { id: 2, entity_type: 'subscription', entity_id: 8, entity_title: 'Streaming-Abo' },
-    { id: 3, entity_type: 'task', entity_id: 9, entity_title: 'Steuer abgeben' },
-    { id: 4, entity_type: 'event', entity_id: 10, entity_title: 'Zahnarzt' },
-    { id: 5, entity_type: 'document_expiry', entity_id: 11, entity_title: 'Reisepass' },
-  ];
-  const titles = (model) => model.rows.filter((r) => r.kind === 'reminder').map((r) => r.title).sort();
-  await withSheetEnv({ perms: { admin: false } }, (__test) => {
-    const model = __test.buildTodayCockpitModel({ pendingReminders: reminders }, [], { now: todayAt(9) });
-    nodeAssert.deepEqual(titles(model), ['Darmkrebs-Vorsorge', 'Reisepass', 'Steuer abgeben', 'Streaming-Abo', 'Zahnarzt'],
-      'Vorbedingung: mit allen Rechten spricht jede Erinnerung');
-  });
-  await withSheetEnv({ perms: { admin: false, widgets: { health: 'none', budget: 'none', tasks: 'none', calendar: 'none' } } }, (__test) => {
-    const model = __test.buildTodayCockpitModel({ pendingReminders: reminders }, [], { now: todayAt(9) });
-    nodeAssert.deepEqual(titles(model), ['Reisepass'],
-      'gesperrte Widgets heissen: keine Erinnerung aus ihrem Modul; ohne eigene Kachel (Dokumente) bleibt nur das Modulrecht');
-  });
-});
-
-test('Heute-Blatt: unter dem Deckel bleibt, was offen ist', () => withSheetEnv({}, (__test) => {
-  const today = toLocalDateKey(new Date());
-  const events = Array.from({ length: 7 }, (_, i) => ({
-    id: 100 + i, title: `Termin ${i}`, start_datetime: `${today}T${String(10 + i).padStart(2, '0')}:00:00`,
-  }));
-  const model = __test.buildTodayCockpitModel(
-    { upcomingEvents: events, health: { ...openDoses(), nextDose: { name: 'Eisen', time: '23:00' } } },
-    [], { now: todayAt(9) },
-  );
-  nodeAssert.ok(sheetKinds(model).includes('dose'), 'die offene Dosis spaet am Abend faellt nicht unter den Deckel');
-  nodeAssert.equal(model.rows.length, __test.PROGRAM_ROW_CAP);
-  nodeAssert.equal(model.overflow, 2);
-  nodeAssert.equal(model.coda, null);
-}));
-
-// TAFLA (2026-10-19): hier stand „Wand: dieselben Quellen, dieselbe Coda-Regel wie das Cockpit". Die Tafla-Wand (Artboard „Ściana") liest nicht mehr das Cockpit-Programm, sondern den Tagesplan von Dziś
-// (utils/today-plan.js) in der Haushaltsfassung - ohne Dosen (test:wall-tafla,
-// test:wall-tasks „Persoenliches").
-/* #1449: BEENDETE TERMINE TRETEN ZURUECK. Das Blatt verspricht, was heute NOCH
- * ansteht; ein Termin, dessen Ende hinter uns liegt, verlaesst es. Die
- * Termin-Kachel behaelt ihn, aber zurueckgetreten und oberhalb des Kommenden -
- * und ihr Fuenfer-Limit zaehlt nur das Kommende. */
-test('Heute-Blatt: ein beendeter Termin verlaesst das Blatt (#1449)', () => withSheetEnv({}, (__test) => {
-  const today = toLocalDateKey(new Date());
-  const model = __test.buildTodayCockpitModel({
-    upcomingEvents: [
-      { id: 1, title: 'Fruehsport', start_datetime: `${today}T06:30:00`, end_datetime: `${today}T07:30:00` },
-      { id: 2, title: 'Laeuft noch', start_datetime: `${today}T08:30:00`, end_datetime: `${today}T10:00:00` },
-      { id: 3, title: 'Ganztags', start_datetime: today, all_day: 1 },
-      eveningEvent(),
-    ],
-  }, [], { now: todayAt(9) });
-  const titles = model.rows.map((row) => row.title);
-  nodeAssert.ok(!titles.includes('Fruehsport'), `der beendete Termin ist weg, erhalten: ${titles}`);
-  nodeAssert.ok(titles.includes('Laeuft noch'), 'ein laufender Termin bleibt');
-  nodeAssert.ok(titles.includes('Ganztags'), 'ein Ganztagstermin endet nicht an seinem Tag');
-}));
-
-test('Termin-Kachel: beendete Termine treten zurueck, das Limit zaehlt nur Kommendes (#1449)', () => withSheetEnv({}, (__test) => {
-  const today = toLocalDateKey(new Date());
-  const ended = Array.from({ length: 5 }, (_, i) => ({
-    id: 10 + i, title: `Vorbei ${i}`,
-    start_datetime: `${today}T0${i + 1}:00:00`, end_datetime: `${today}T0${i + 1}:30:00`,
-  }));
-  const html = __test.renderUpcomingEvents([...ended, eveningEvent()], { now: todayAt(19, 28) });
-  nodeAssert.match(html, /Elternabend/, 'der kommende Abendtermin steht in der Kachel');
-  const endedRows = html.match(/event-item--ended/g) ?? [];
-  nodeAssert.equal(endedRows.length, 2, 'die zwei juengsten beendeten stehen zurueckgetreten darueber');
-  nodeAssert.match(html, /eventsEndedMore/, 'der Rest faltet sich in eine Zahl');
-  nodeAssert.ok(html.indexOf('Vorbei 4') < html.indexOf('Elternabend'), 'Beendetes oberhalb des Kommenden');
-  nodeAssert.ok(!html.includes('Vorbei 0'), 'aeltere beendete stehen nicht einzeln da');
-}));
-
-test('Notiz-Widget: nur der Auszug landet im DOM, nie der Volltext (Paket 3)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  // line-clamp kürzt rein visuell - Screenreader lasen die komplette Notiz vor.
-  const secret = 'GEHEIMES-WLAN-PASSWORT-AM-ENDE';
-  const long = `${'Wort '.repeat(60)}${secret}`;
-  const html = __test.renderPinnedNotes([{ title: 'WLAN', content: long, color: '#FFEB3B', pinned: 1 }]);
-  nodeAssert.ok(!html.includes(secret), 'der Volltext (inkl. Ende) steht nicht im DOM');
-  nodeAssert.match(html, /…/, 'der Auszug endet mit einer Ellipse');
-});
-
-test('Notiz-Widget: die Zeilenzahl kommt aus der Kachelgroesse, nicht aus einer festen Drei (#928)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  // Fuenf angepinnte Notizen - der Vorrat, den die Route seit #928 liefert.
-  const notes = ['A', 'B', 'C', 'D', 'E'].map((titel, i) => ({
-    id: i + 1, title: `Notiz ${titel}`, content: titel, pinned: 1,
-  }));
-  const zeilen = (html) => (html.match(/class="note-item"/g) || []).length;
-
-  // Die Standardgroesse der Kachel ist 1x2, also hoch: dort passen fuenf.
-  // Genau hier stand der Fehler - die Kachel hatte den Platz und bekam drei.
-  nodeAssert.equal(zeilen(__test.renderPinnedNotes(notes, '1x2')), 5,
-    'die hohe Kachel zeigt nicht alle fuenf');
-  nodeAssert.equal(zeilen(__test.renderPinnedNotes(notes, '2x2')), 5,
-    'die grosse Kachel zeigt nicht alle fuenf');
-  // Gegenprobe: die flache Kachel deckelt weiterhin, sonst quillt sie ueber.
-  nodeAssert.equal(zeilen(__test.renderPinnedNotes(notes, '1x1')), 3,
-    'die flache Kachel deckelt nicht mehr');
-  nodeAssert.equal(zeilen(__test.renderPinnedNotes(notes, '2x1')), 3,
-    'die breite flache Kachel deckelt nicht mehr');
-  // Ohne Groesse (aeltere Aufrufer, __test-Tor) bleibt es beim flachen Wert -
-  // die Kachel darf nicht ins Unbegrenzte kippen, nur weil niemand fragt.
-  nodeAssert.equal(zeilen(__test.renderPinnedNotes(notes)), 3,
-    'ohne Groesse wird nicht gedeckelt');
-});
-
-test('Tagesprogramm: Aufgaben-Zeile trägt den Quick-Action-Anker (Paket 2)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const prevWindow = global.window;
-  global.window = { yuvomi: null };
-  try {
-    const html = __test.renderTodayCockpit({
-      urgentTasks: [{ id: 7, title: 'Zettel abgeben', due_date: todayStr, status: 'open' }],
-    }, []);
-    nodeAssert.match(html, /data-object-kind="task"/, 'Zeile deklariert ihre Objektart');
-    nodeAssert.match(html, /data-object-id="7"/, 'Zeile trägt die Aufgaben-ID für das Quick-Action-Modal');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
-test('Tagesprogramm: leerer Tag liefert Ausblick (nextUpcoming) und Erledigt-Zähler', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const tomorrowStr = addLocalDays(todayStr, 1);
-
-  const result = __test.buildTodayProgram({
-    upcomingEvents: [{ id: 9, title: 'Elternabend', start_datetime: `${tomorrowStr}T19:00:00` }],
-    urgentTasks: [{ id: 4, title: 'Erst übermorgen', due_date: addLocalDays(todayStr, 2), status: 'open' }],
-    tasksDoneToday: 2,
-  });
-
-  nodeAssert.equal(result.rows.length, 0, 'keine Programmzeilen an einem leeren Tag');
-  nodeAssert.equal(result.nextUpcoming?.id, 9, 'der nächste kommende Termin ist der Ausblick');
-  nodeAssert.equal(result.tasksDoneToday, 2, 'der Erledigt-Zähler wird durchgereicht');
-});
-
-test('Tagesprogramm: eine begonnene Aufgabe sagt es in der Unterzeile (#1251)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const result = __test.buildTodayProgram({
-    urgentTasks: [
-      { id: 1, title: 'Offen', due_date: todayStr, due_time: '09:00:00', status: 'open' },
-      { id: 2, title: 'Angefangen', due_date: todayStr, due_time: '10:00:00', status: 'in_progress' },
-    ],
-  });
-  const sub = Object.fromEntries(result.rows.map((r) => [r.title, r.sub]));
-  nodeAssert.equal(sub.Offen, 'dashboard.todayTask', 'eine offene Aufgabe bleibt bei "Aufgabe"');
-  nodeAssert.equal(sub.Angefangen, 'dashboard.todayTaskStarted', 'eine begonnene Aufgabe heisst "Aufgabe · begonnen"');
-
-  // Als sichtbarer Text in der Karte, nicht als Symbol: so liest ihn auch ein Screenreader.
-  const prevWindow = global.window;
-  global.window = { yuvomi: null };
-  try {
-    const html = __test.renderTodayCockpit({ urgentTasks: [{ id: 2, title: 'Angefangen', due_date: todayStr, status: 'in_progress' }] }, []);
-    nodeAssert.match(html, /<span class="today-cockpit-card__sub">dashboard\.todayTaskStarted<\/span>/,
-      'die Unterzeile traegt das Wort als Text');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
-test('Aufgaben-Kachel: begonnene Aufgabe traegt das Zeichen der Aufgabenliste, samt Wort (#1251)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-  const html = __test.renderUrgentTasks([
-    { id: 1, title: 'Offen', priority: 'none', due_date: todayStr, status: 'open' },
-    { id: 2, title: 'Angefangen', priority: 'none', due_date: todayStr, status: 'in_progress' },
-  ]);
-  const rows = html.split('class="task-item"').slice(1);
-  nodeAssert.equal(rows.length, 2);
-  const [offen, angefangen] = rows;
-  nodeAssert.match(angefangen, /class="task-status-btn task-status-btn--in_progress task-status-btn--static"[^>]*aria-hidden="true"/,
-    'dasselbe Zeichen wie in der Aufgabenliste, als Dekoration');
-  nodeAssert.match(angefangen, /<span class="sr-only">tasks\.statusInProgress<\/span>/,
-    'der Status steht fuer Screenreader als Wort in der Zeile');
-  nodeAssert.doesNotMatch(offen, /task-status-btn|tasks\.statusInProgress/,
-    'eine offene Aufgabe bekommt kein viertes Zeichen');
-
-  // Die Kachel laeuft auf `/`, wo tasks.css nicht geladen ist: ohne eigene Regel
-  // in dashboard.css waere das Zeichen dort unsichtbar.
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  nodeAssert.match(css, /\.task-item \.task-status-btn--in_progress::after\s*\{[^}]*--color-warning/,
-    'dashboard.css zeichnet den Ring in der Farbe der Aufgabenliste');
-
-  // Oeffnet man eine Aufgabe aus der Kachel, haengt `ensureTaskStyles()` tasks.css
-  // fuer den Rest der Sitzung an - und dessen `.task-status-btn` hat die
-  // Trefflaeche (44px) samt negativem Rand. Die Regel hier muss die Masse selbst
-  // festlegen, sonst waechst der Ring in der Kachel mit (Review zu #1400).
-  const ringBox = [...eachRule(css)].find((rule) => rule.at.length === 0
-    && rule.selector.trim() === '.task-item .task-status-btn--in_progress');
-  nodeAssert.ok(ringBox, 'die Kachel hat eine eigene Regel fuer das Zeichen');
-  const declarations = new Map(ringBox.body.split(';')
-    .map((decl) => decl.split(':').map((part) => part.trim()))
-    .filter(([prop, value]) => prop && value !== undefined));
-  for (const [prop, value] of [['width', 'var(--space-5)'], ['height', 'var(--space-5)'], ['margin-top', '0']]) {
-    nodeAssert.equal(declarations.get(prop), value,
-      `${prop}: ${value} - sonst uebernimmt tasks.css die Trefflaeche, sobald es geladen ist`);
-  }
-});
-
-test('eventStartDate: ganztägige Termine (date-only) landen auf dem lokalen Kalendertag (Issue #466)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  // Google speichert ganztägige Termine als reines Datum "2026-07-10". `new Date()`
-  // parst das als UTC-Mitternacht und verschiebt den Tag westlich von UTC um einen
-  // Tag zurück. eventStartDate muss stattdessen den lokalen Kalendertag liefern.
-  const d = __test.eventStartDate({ start_datetime: '2026-07-10', all_day: 1 });
-  assert(d.getFullYear() === 2026, `Erwartet Jahr 2026, erhalten ${d.getFullYear()}`);
-  assert(d.getMonth() === 6, `Erwartet Monat Juli (6), erhalten ${d.getMonth()}`);
-  assert(d.getDate() === 10, `Erwartet Tag 10, erhalten ${d.getDate()}`);
-  assert(d.getHours() === 0, `Erwartet lokale Mitternacht, erhalten ${d.getHours()}h`);
-});
-
-test('Today-Highlights zählt ganztägigen Termin von heute (date-only, Issue #466)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const todayStr = toLocalDateKey(new Date());
-
-  const result = __test.buildTodayHighlights({
-    events: [
-      { id: 1, title: 'Ganztägig Heute', start_datetime: todayStr, all_day: 1 },
-    ],
-  });
-
-  assert(result.eventCount === 1, `Erwartet 1 ganztägigen Termin für heute, erhalten ${result.eventCount}`);
-  assert(result.nextEvent.title === 'Ganztägig Heute', 'Erwartet "Ganztägig Heute" als nächsten Termin');
-});
-
-test('Today-Meals-Widget rendert nur sichtbare Mahlzeit-Typen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const html = __test.renderTodayMeals([
-    { meal_type: 'breakfast', title: 'Haferbrei' },
-    { meal_type: 'dinner', title: 'Pasta' },
-    { meal_type: 'snack', title: 'Apfel' },
-  ], ['dinner', 'snack']);
-
-  nodeAssert.ok(html.includes('data-type="dinner"'));
-  nodeAssert.ok(html.includes('data-type="snack"'));
-  nodeAssert.ok(!html.includes('data-type="breakfast"'));
-  nodeAssert.ok(!html.includes('data-type="lunch"'));
-});
 
 // --------------------------------------------------------
 // Tests: Dringende Aufgaben
@@ -2143,27 +1218,6 @@ test('getUpcomingEvents: wiederkehrender Termin mit Vergangenheits-Start erschei
   assert(sofia.id === recurId, 'Behält die Original-Event-ID der Serie');
 });
 
-test('calendarEventRoute: Dashboard-Link enthält die expandierte Instanz-Datumskomponente', async () => {
-  const { __test: dashboardHelpers } = await import('../public/pages/dashboard.js');
-  const events = getUpcomingEvents(cdb, { userId: cuTheo, limit: 10 });
-  const sofia = events.find((e) => e.title === 'Sofia Field Trip');
-  const route = dashboardHelpers.calendarEventRoute(sofia);
-  const params = new URLSearchParams(route.split('?')[1]);
-  assert(route.startsWith('/calendar?'), `Unerwartete Route: ${route}`);
-  assert(params.get('open') === String(recurId), 'Route muss die Serien-ID öffnen');
-  assert(params.get('date') === sofia.start_datetime.slice(0, 10),
-    'Route muss auf die expandierte Dashboard-Instanz zeigen');
-});
-
-test('calendarEventRoute: ungültige oder fehlende Startdaten erzeugen keinen kaputten date-Parameter', async () => {
-  const { __test: dashboardHelpers } = await import('../public/pages/dashboard.js');
-  const route = dashboardHelpers.calendarEventRoute({ id: 123, start_datetime: 'not-a-date' });
-  const params = new URLSearchParams(route.split('?')[1]);
-  assert(params.get('open') === '123', 'Event-ID bleibt erhalten');
-  assert(params.has('date') === false, 'Ungültiges Datum darf nicht in die Kalender-Query');
-  assert(dashboardHelpers.calendarEventRoute(null) === '/calendar', 'Ohne Event geht es zur Kalenderübersicht');
-});
-
 test('getUpcomingEvents: vergangene Einzeltermine erscheinen nicht', () => {
   const events = getUpcomingEvents(cdb, { userId: cuTheo, limit: 10 });
   assert(!events.find((e) => e.title === 'Past one-off'), 'Vergangener Einzeltermin darf nicht erscheinen');
@@ -2610,27 +1664,16 @@ test('Wand-Modus: Einstieg und Ausstieg sind Gegenstücke auf derselben Seite (#
     // eingeschaltet und hier verlassen: man ging dort hinaus, wo man nicht
     // hineinkam. Geprüft wird deshalb das PAAR, nicht der neue Knopf allein -
     // verschwindet eine der beiden Hälften, ist die Einbahnstraße zurück.
-    const uebersicht = __test.renderDashboardOverview({ display_name: 'Ulas' }, false);
+    //
+    // TAFLA (2026-10-19): der Einstieg steht nicht mehr in einer Werkzeugzeile
+    // der Uebersicht, sondern in „Dostosuj Dziś" - auf derselben Seite, die die
+    // Wand wieder verlaesst. Das Paar bleibt die Zusage.
+    const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+    nodeAssert.match(sheet, /actions\.onWall \? actionRow\(\{ action: 'wall'/, 'Dostosuj Dziś traegt den Einstieg');
+    nodeAssert.match(page, /onWall: onDisplay \? null : enterWallFromToday/, 'die Uebersicht reicht ihn hinein');
     const wand = __test.renderWallSurface({ urgentTasks: wallTasks(1), users: [] }, null, {});
-
-    nodeAssert.match(uebersicht, /id="dashboard-wall-enter"/, 'die Übersicht trägt den Einstieg');
     nodeAssert.match(wand, /id="wall-exit"/, 'die Wand trägt den Ausstieg');
-
-    // Und er sitzt in der Werkzeugzeile, nicht irgendwo: ein Knopf ausserhalb
-    // wäre nicht das Gegenstück zum Ausstieg, sondern ein zweiter Ort.
-    const tools = uebersicht.slice(uebersicht.indexOf('dashboard-overview__tools'));
-    nodeAssert.match(tools, /id="dashboard-wall-enter"/, 'in der Werkzeugzeile der Übersicht');
-  });
-});
-
-test('Wand-Modus: der Einstieg fällt im Anpassen-Modus weg', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  await withWallWindow(() => {
-    // Dort geht es um die Anordnung der Kacheln; ein Moduswechsel mittendrin
-    // würfe eine ungespeicherte Bearbeitung weg.
-    const editing = __test.renderDashboardOverview({ display_name: 'Ulas' }, true);
-    nodeAssert.ok(!/id="dashboard-wall-enter"/.test(editing), 'kein Einstieg im Anpassen-Modus');
-    nodeAssert.match(editing, /id="dashboard-customize-save"/, 'Reichweite: es IST der Anpassen-Modus');
   });
 });
 
@@ -2650,7 +1693,7 @@ test('Wand-Modus: der Fehlerzustand trägt keinen Retry-Knopf, aber die Uhr', as
  * was ihr Attribut traegt - hier steht, DASS die Wand es setzt: an den beiden
  * Zeilen der Uhr (nicht an ihrem Rahmen, der so breit ist wie die Flaeche) und
  * am Fuss. Der Name kommt aus dem Modul, das ihn liest, nicht aus dem Test. */
-test('Wand-Modus: Uhrzeit, Datum und Fuss sind Sperrzonen der Toast-Lage, die Kachel-Uhr nicht (#1917)', async () => {
+test('Wand-Modus: Uhrzeit, Datum und Fuss sind Sperrzonen der Toast-Lage (#1917)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   const { KEEPOUT_SELECTOR } = await import('../public/utils/toast-placement.js');
   const attr = KEEPOUT_SELECTOR.replace(/^\[|\]$/g, '');
@@ -2666,11 +1709,9 @@ test('Wand-Modus: Uhrzeit, Datum und Fuss sind Sperrzonen der Toast-Lage, die Ka
       nodeAssert.deepEqual(marked.sort(), ['wall__clock u-rounded', 'wall__dock', 'wall__head-text'],
         `in jedem Zustand der Wand (${JSON.stringify(options)})`);
     }
-    // Ausserhalb der Wand steht die Uhr als Kachel im Raster; dort laege eine
-    // Sperrzone mitten im Inhalt und bewegte jede Meldung der Uebersicht.
-    const tile = __test.renderDashboardLayout([{ id: 'clock', visible: true, size: '1x1' }], {}, null, 'EUR');
-    nodeAssert.match(tile, /id="clock-widget-time"/, 'Reichweite: die Uhr steht als Kachel im Raster');
-    nodeAssert.ok(!tile.includes(attr), 'die Kachel-Uhr traegt keine Sperrzone');
+    // TAFLA (2026-10-24): hier stand die Gegenprobe an der Uhr-KACHEL des
+    // Rasters (keine Sperrzone mitten im Inhalt). Raster und Kachel-Uhr sind
+    // gegangen; die Uhr steht nur noch an der Wand.
   });
 });
 
@@ -2948,16 +1989,6 @@ test('Widget-Optionen reisen durch die Normalisierung, ohne dass sie jemand kenn
     'ein leeres Optionsobjekt waere in jedem Layout dieselbe leere Klammer');
 });
 
-test('sameWidgetConfig sieht eine geaenderte Option (#814)', () => {
-  // Sonst bietet der Toast nach einer reinen Optionsaenderung kein
-  // „Rueckgaengig" an - genau der Fall, in dem die Aenderung am wenigsten
-  // sichtbar ist.
-  const a = widgets.DEFAULT_WIDGET_CONFIG.map((w) => ({ ...w }));
-  const b = a.map((w) => (w.id === 'calendar' ? { ...w, options: { scope: 'mine' } } : { ...w }));
-  assert(widgets.sameWidgetConfig(a, a.map((w) => ({ ...w }))), 'identische Layouts gelten als verschieden');
-  assert(!widgets.sameWidgetConfig(a, b), 'eine geaenderte Option faellt nicht auf');
-});
-
 test('dashboardQuery uebersetzt Optionen in Parameter, die die Route versteht (#814)', () => {
   const mit = (id, options) => widgets.DEFAULT_WIDGET_CONFIG
     .map((w) => (w.id === id ? { ...w, options } : { ...w }));
@@ -2988,184 +2019,6 @@ test('dashboardQuery uebersetzt Optionen in Parameter, die die Route versteht (#
   // Ein Layout, in dem es das Widget gar nicht gibt, darf nicht werfen.
   assert(widgets.dashboardQuery([]) === '/dashboard');
   assert(widgets.dashboardQuery(null) === '/dashboard');
-});
-
-// --------------------------------------------------------
-// Das dichte Raster, nachgerechnet (Critique 2026-09-23)
-//
-// `packGrid` rechnet `grid-auto-flow: row dense` fuer Kacheln mit reinen Spans
-// nach; der Loch-Hinweis im Bearbeiten-Modus schlaegt darauf eine Groesse vor.
-// Ob der Browser genauso packt, misst test:dashboard-surface-browser am
-// gerenderten Raster - hier steht die Rechnung selbst.
-// --------------------------------------------------------
-
-const kachel = (id, cols, rows, size = `${cols}x${rows}`) => ({ id, cols, rows, size });
-
-test('packGrid: dicht heisst, eine spaetere kleine Kachel fuellt das fruehere Loch', () => {
-  // calendar 2x1 laesst rechts eine Zelle frei, tasks 2x1 passt nicht hinein,
-  // notes 1x1 schon - `dense` setzt den Cursor fuer jede Kachel zurueck.
-  const cells = widgets.packGrid([kachel('calendar', 2, 1), kachel('tasks', 2, 1), kachel('notes', 1, 1)], 3);
-  assert(cells.map((r) => r.map((v) => v ?? '.').join(' ')).join(' / ')
-    === 'calendar calendar notes / tasks tasks .', `Belegung: ${JSON.stringify(cells)}`);
-  assert(widgets.gridHoleCount(cells) === 0, 'die letzte Zeile darf auslaufen, sie ist kein Loch');
-});
-
-test('packGrid: eine hohe Kachel belegt beide Zeilen, eine zu breite wird an der Kante gekappt', () => {
-  const cells = widgets.packGrid([kachel('family', 1, 2), kachel('weather', 3, 1), kachel('notes', 2, 1)], 2);
-  // weather ist breiter als das Raster: gerechnet wird mit zwei Spalten.
-  assert(cells[0][0] === 'family' && cells[1][0] === 'family', `family: ${JSON.stringify(cells)}`);
-  assert(cells[2].every((v) => v === 'weather'), `weather: ${JSON.stringify(cells)}`);
-  assert(cells[0][1] === null && cells[1][1] === null && cells[3].every((v) => v === 'notes'),
-    `notes passt nicht neben family und landet unten: ${JSON.stringify(cells)}`);
-  assert(widgets.gridHoleCount(cells) === 2);
-});
-
-test('suggestGridHoleFill: schlaegt die billigste Aenderung am Nachbarn des Lochs vor', () => {
-  // Drei Breitkacheln in drei Spalten: rechts bleibt je eine Zelle frei.
-  // Billigste Loesung ist dieselbe Flaeche in anderer Form, und zwar an der
-  // Kachel links neben dem ersten Loch.
-  const items = [kachel('calendar', 2, 1), kachel('tasks', 2, 1), kachel('notes', 2, 1)];
-  const presets = (item) => [['1x1', 1, 1], ['2x1', 2, 1], ['1x2', 1, 2], ['2x2', 2, 2]]
-    .map(([size, cols, rows]) => ({ size, cols, rows, id: item.id }));
-  const vorschlag = widgets.suggestGridHoleFill(items, 3, presets);
-  nodeAssert.deepEqual(vorschlag, { id: 'calendar', size: '1x2' });
-  const danach = widgets.packGrid(items.map((it) => (it.id === 'calendar' ? { ...it, cols: 1, rows: 2 } : it)), 3);
-  assert(widgets.gridHoleCount(danach) === 0, 'der Vorschlag schliesst das Loch nicht');
-});
-
-test('suggestGridHoleFill: waechst lieber, als Inhalt wegzunehmen', () => {
-  // Der Demo-Haushalt bei 1440px, in seiner gespeicherten Rangfolge: unter
-  // „Belohnungen" (1x1, dicht nach vorn gerueckt) bleibt ein Loch neben den
-  // Kennzahlen (2x1). Kennzahlen als 1x1 schloesse es auch - und naehme einer
-  // Kachel die Haelfte. Belohnungen als 1x2 waechst in das Loch hinein.
-  const items = [
-    kachel('family', 1, 2), kachel('budget', 1, 2), kachel('birthdays', 1, 2),
-    kachel('weather', 2, 1), kachel('metrics', 2, 1), kachel('rewards', 1, 1), kachel('notes', 2, 1),
-  ];
-  const presets = (item) => [['1x1', 1, 1], ['2x1', 2, 1], ['1x2', 1, 2], ['2x2', 2, 2]]
-    .map(([size, cols, rows]) => ({ size, cols, rows, id: item.id }));
-  assert(widgets.gridHoleCount(widgets.packGrid(items, 3)) === 1, 'Reichweite: das Ausgangsraster hat genau ein Loch');
-  nodeAssert.deepEqual(widgets.suggestGridHoleFill(items, 3, presets), { id: 'rewards', size: '1x2' });
-});
-
-test('suggestGridHoleFill: ohne Loch und ohne Ausweg schweigt er', () => {
-  const presets = (item) => [{ size: item.size, cols: item.cols, rows: item.rows }];
-  assert(widgets.suggestGridHoleFill([kachel('a', 1, 1), kachel('b', 1, 1)], 2, presets) === null,
-    'eine volle Zeile hat kein Loch');
-  // Nur die eigene Groesse im Angebot: es gibt nichts vorzuschlagen.
-  assert(widgets.suggestGridHoleFill([kachel('a', 2, 1), kachel('b', 2, 1), kachel('c', 1, 1)], 3, presets) === null,
-    'ohne Kandidaten darf kein Vorschlag entstehen');
-});
-
-// --------------------------------------------------------
-// Normalmodus ohne Loecher (Re-Critique 2026-09-27, A7 P2-12 / R10 L9)
-//
-// Gemessen bei 1440x900 im Demo-Haushalt: neben den Kennzahlen (367x110) und
-// neben den Notizen (367x201) blieb je eine Spalte leer, und den Loch-Hinweis
-// gibt es nur im Anpassen-Modus. `rowFillSpans` sagt, welche Kachel in den
-// Rest ihrer Zeile waechst; applyRowFill() setzt es als Darstellung.
-// --------------------------------------------------------
-
-/** Die Positionen einer Packung: Id -> [Zeile, Spalte] der ersten Zelle. */
-function positions(cells) {
-  const pos = {};
-  cells.forEach((row, r) => row.forEach((id, c) => { if (id && !pos[id]) pos[id] = [r, c]; }));
-  return pos;
-}
-
-const DEMO_RASTER = [
-  kachel('family', 1, 2), kachel('budget', 1, 2), kachel('birthdays', 1, 2),
-  kachel('weather', 2, 1), kachel('metrics', 2, 1), kachel('rewards', 1, 1), kachel('notes', 2, 1),
-];
-
-test('rowFillSpans: im Demo-Raster wachsen Kennzahlen und Notizen in ihren Zeilenrest', () => {
-  nodeAssert.equal(typeof widgets.rowFillSpans, 'function', 'rowFillSpans fehlt in utils/dashboard-widgets.js');
-  const grown = widgets.rowFillSpans(DEMO_RASTER, 3);
-  nodeAssert.deepEqual([...grown], [['metrics', 3], ['notes', 3]]);
-  // Einspaltig gibt es keinen Rest, und ein volles Raster laesst alles stehen.
-  nodeAssert.equal(widgets.rowFillSpans(DEMO_RASTER, 1).size, 0);
-  nodeAssert.equal(widgets.rowFillSpans([kachel('a', 1, 1), kachel('b', 1, 1)], 2).size, 0);
-});
-
-test('rowFillSpans: eine hohe Kachel waechst nur, wo BEIDE ihrer Zeilen frei sind', () => {
-  // family 1x2 links, rechts daneben oben notes 1x1, unten nichts: die Zelle
-  // unten rechts ist frei, aber die obere nicht - family darf nicht wachsen,
-  // die einzeilige Kachel daneben schon nicht, weil ihre Zeile voll ist.
-  const grown = widgets.rowFillSpans([kachel('family', 1, 2), kachel('notes', 1, 1)], 2);
-  nodeAssert.deepEqual([...grown], []);
-  // Zwei hohe Kacheln in drei Spalten: die zweite waechst in die dritte Spalte.
-  nodeAssert.deepEqual([...widgets.rowFillSpans([kachel('a', 1, 2), kachel('b', 1, 2)], 3)], [['b', 2]]);
-});
-
-test('rowFillSpans: das Wachstum wirft die Packung nicht um (Aequivalenz)', () => {
-  // Gewachsen wird nur in Zellen, die nach der VOLLEN Packung leer sind - die
-  // Neupackung mit den breiteren Spans muss jede Kachel an ihrer Stelle lassen
-  // und die gewachsenen Zeilen voll machen. Geprueft an mehreren Rastern,
-  // nicht nur am Demo-Haushalt.
-  const raster = [
-    [DEMO_RASTER, 3],
-    [DEMO_RASTER, 4],
-    [DEMO_RASTER, 2],
-    [[kachel('a', 2, 1), kachel('b', 1, 2), kachel('c', 1, 1), kachel('d', 2, 2), kachel('e', 1, 1)], 3],
-    [[kachel('a', 1, 1), kachel('b', 3, 1), kachel('c', 1, 2), kachel('d', 1, 1)], 4],
-  ];
-  for (const [items, cols] of raster) {
-    const before = widgets.packGrid(items, cols);
-    const grown = widgets.rowFillSpans(items, cols);
-    const widened = items.map((it) => (grown.has(it.id) ? { ...it, cols: grown.get(it.id) } : it));
-    const after = widgets.packGrid(widened, cols);
-    nodeAssert.deepEqual(positions(after), positions(before), `Positionen verschoben (${cols} Spalten)`);
-    nodeAssert.ok(after.length <= before.length, 'das Raster wird nicht hoeher');
-    for (const [id] of grown) {
-      const [r] = positions(after)[id];
-      nodeAssert.ok(after[r].every(Boolean), `die Zeile von ${id} ist nach dem Wachsen voll (${cols} Spalten)`);
-    }
-  }
-});
-
-test('applyRowFill: waechst im Normalmodus, im Anpassen-Modus nimmt es alles zurueck', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  nodeAssert.equal(typeof __test.applyRowFill, 'function', 'applyRowFill fehlt im __test-Export');
-  const SPANS = { family: [1, 2], budget: [1, 2], birthdays: [1, 2], weather: [2, 1], metrics: [2, 1], rewards: [1, 1], notes: [2, 1] };
-  const tile = (id) => {
-    const props = new Map();
-    return {
-      dataset: { widgetId: id },
-      style: { setProperty: (k, v) => props.set(k, v), removeProperty: (k) => props.delete(k), props },
-    };
-  };
-  const tiles = Object.keys(SPANS).map(tile);
-  const grid = { children: tiles };
-  const vorher = globalThis.getComputedStyle;
-  globalThis.getComputedStyle = (el) => {
-    if (el === grid) return { gridTemplateColumns: '366px 366px 366px' };
-    const [cols, rows] = SPANS[el.dataset.widgetId];
-    return { display: 'flex', gridColumnStart: 'auto', gridColumnEnd: `span ${cols}`, gridRowStart: 'auto', gridRowEnd: `span ${rows}` };
-  };
-  try {
-    __test.applyRowFill(grid);
-    const gewachsen = tiles.filter((t) => 'rowFill' in t.dataset).map((t) => [t.dataset.widgetId, t.style.props.get('--widget-fill-span')]);
-    nodeAssert.deepEqual(gewachsen, [['metrics', '3'], ['notes', '3']]);
-    __test.applyRowFill(grid, { editing: true });
-    nodeAssert.equal(tiles.filter((t) => 'rowFill' in t.dataset || t.style.props.size).length, 0,
-      'im Anpassen-Modus zeigt das Raster die gewaehlten Groessen');
-  } finally {
-    globalThis.getComputedStyle = vorher;
-  }
-});
-
-test('das Wachstum ist verdrahtet: CSS liest den Span, der Aufbau ruft es nach dem Anpassen-Draht', () => {
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  const regel = [...eachRule(css)].find((r) => r.selector.trim() === '.dashboard__grid > [data-row-fill]');
-  nodeAssert.ok(regel, 'keine Regel fuer [data-row-fill] in dashboard.css');
-  nodeAssert.match(regel.body, /grid-column:\s*span var\(--widget-fill-span\)/);
-  nodeAssert.ok(regel.at.some((a) => /min-width:\s*768px/.test(a)), 'nur ab zwei Spalten');
-  // TAFLA (2026-10-19): Dziś zeichnet kein Kachelraster mehr - ausserhalb der
-  // Wand gibt es keinen Aufbau, der das Wachstum verdrahten koennte. Die
-  // Regel oben und applyRowFill (Test davor) bleiben fuer ein Raster, das es
-  // wieder geben koennte; verdrahtet wird es nicht mehr.
-  const src = withoutBlockComments(readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8'));
-  nodeAssert.doesNotMatch(src, /wireRowFill\(\)/, 'Dziś hat kein Raster, dessen Zeilen wachsen koennten');
 });
 
 test('isUserOrderedConfig gibt es nicht mehr - das Raster schaltet nach keiner Reihenfolge um', () => {
@@ -3199,69 +2052,6 @@ test('Widget-Merge: Groesse und Sichtbarkeit eines Bestandseintrags bleiben unbe
 });
 
 // --------------------------------------------------------
-// Kennzahlreihe: sie zeigt, was sonst NIRGENDS steht
-//
-// Anlass (Critique 2026-08-13, P1): im Standard-Layout waren alle vier Kacheln
-// Echos. „2.504 EUR Saldo" stand 800px neben dem Budget-Widget mit derselben
-// Zahl, „17 Tage / Tante Claire Becker" ueber dem Geburtstage-Widget mit
-// demselben Namen, „23 Artikel" und „4 ueberfaellig" in den Cockpit-Zeilen.
-// PRODUCT.md fuehrt das „ueberlastete Feature-Dashboard" als Anti-Referenz.
-//
-// GEPRUEFT WIRD DIE AUSWAHL, NICHT DAS MARKUP: was die Reihe zeigt, ist die
-// Zusage - dass sie es in einem <a> zeigt, ist ihre Form.
-// --------------------------------------------------------
-
-const METRIC_DATA = {
-  openTaskCount: 5, overdueTaskCount: 2,
-  shoppingOpenCount: 23, shoppingOpenLists: 2,
-  budget: { entryCount: 9, balance: 2504, income: 3000 },
-  birthdays: [{ name: 'Tante Claire', days_until: 17 }],
-  todayMeals: [{ title: 'Suppe' }],
-  // `pinnedNotes` ist die VORSCHAU (gepinnt zuerst, dann aktuellste, drei
-  // Stueck) - die Zahl der gepinnten steht daneben, weil die Liste nicht
-  // filtert. Die Vorlage fuehrt beides, sonst prueft sie eine Nutzlast, die es
-  // so nicht gibt (Codex-Review zu PR #754).
-  pinnedNotes: [{ title: 'Urlaub', pinned: 1 }],
-  pinnedNotesCount: 1,
-  rewards: { view: 'self', me: 1, standings: [{ id: 1, display_name: 'Leo', balance: 60 }], catalog: [] },
-  health: { hasMeds: true, dosesTotal: 3, dosesTaken: 1, dosesSkipped: 0, nextDose: { name: 'Vitamin D3' }, lowStockCount: 0 },
-  housekeeping: { configured: true, visitsThisMonth: 4, present: true },
-};
-
-test('Kennzahlreihe wiederholt nicht, was das Cockpit schon sagt', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const ids = __test.selectMetricTiles(METRIC_DATA, 'EUR', new Set()).map((t) => t.id);
-  for (const covered of ['tasks', 'calendar', 'shopping', 'meals']) {
-    assert(!ids.includes(covered),
-      `„${covered}" wird vom Cockpit schon zusammengefasst und gehoert nicht zusaetzlich in die Reihe`);
-  }
-  assert(ids.length >= 2, 'ohne sichtbare Widgets muss die Reihe etwas zu zeigen haben');
-});
-
-test('Kennzahlreihe wiederholt nicht, was ein sichtbares Widget schon sagt', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const ohne = __test.selectMetricTiles(METRIC_DATA, 'EUR', new Set()).map((t) => t.id);
-  assert(ohne.includes('budget'), 'ohne Budget-Widget gehoert die Budget-Kachel in die Reihe');
-
-  const mit = __test.selectMetricTiles(METRIC_DATA, 'EUR', new Set(['budget', 'birthdays'])).map((t) => t.id);
-  assert(!mit.includes('budget'), 'neben einem sichtbaren Budget-Widget ist die Budget-Kachel dessen Echo');
-  assert(!mit.includes('birthdays'), 'dasselbe gilt fuer die Geburtstage');
-
-  // ES IST EIN FILTER, KEINE ZWEITE LISTE: wer ein Widget ausblendet, bekommt
-  // dessen Kachel zurueck. Ohne diese Gegenrichtung waere ein Guard gruen, der
-  // die Reihe schlicht leert.
-  //
-  // NICHT UEBER DIE LAENGE - das war die erste Fassung und die falsche Frage:
-  // `slice(0, METRIC_TILE_COUNT)` deckelt beide Mengen auf vier, also sind sie
-  // gleich lang, obwohl sich ihr Inhalt unterscheidet. Die Zusage ist, dass der
-  // Filter AUSTAUSCHT statt zu leeren.
-  assert(mit.length === ohne.length,
-    'faellt ein Kandidat weg, rueckt der naechste nach - die Reihe wird nicht kuerzer');
-  assert(mit.some((id) => !ohne.includes(id)),
-    'und der Nachrueckende ist einer, der vorher nicht dran war');
-});
-
-// --------------------------------------------------------
 // Schedule-Widget: Verdrahtung (Schedule v2)
 // ANLASS: der Zyklus-Slice hat zwei Stellen, an denen `data` bei einem
 // Refresh ersetzt wird (reloadIfQueryChanged, refreshDashboardData), und BEIDE
@@ -3271,44 +2061,6 @@ test('Kennzahlreihe wiederholt nicht, was ein sichtbares Widget schon sagt', asy
 // /dashboard nie mitliefert, weil er - anders als bei cycle - keine
 // Owner-Beschraenkung braucht) und denselben Zweiteiler.
 // --------------------------------------------------------
-
-// M-6a/M-6b: a plain `fresh.schedule = data.schedule;` carry-over is still
-// present TWICE in the file (once per refresh site) - a bare count-of-two
-// guard stays green even if refreshDashboardData() regressed back to pure
-// carry-over, since the literal line still exists there too, just preceded by
-// nothing. This guard instead pins WHICH mechanism each site uses:
-// reloadIfQueryChanged() (fires only on a filter change) still carries the
-// slice over unchanged like cycle, but refreshDashboardData() (the 15-minute
-// silent/background tick) must reset-and-reload it first - "who's on duty
-// today" is a moving target across both a 15-minute tick and a midnight
-// rollover on a wall-mounted tablet, unlike the owner-only, privacy-gated
-// cycle slice.
-test('das Schedule-Widget wird an der periodischen Refresh-Stelle zurueckgesetzt und neu geladen, nicht nur uebernommen wie an der query-getriebenen Stelle', () => {
-  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert(/schedule:\s*'schedule'/.test(src), 'MODULE_FOR_WIDGET kennt das Modul hinter dem Widget nicht');
-  assert(/schedule:\s*\(size\)\s*=>\s*renderScheduleWidget/.test(src), 'widgetById hat keinen Eintrag fuer schedule, oder er reicht die Groesse nicht durch (PR #930 review)');
-
-  // reloadIfQueryChanged(): only fires on a filter change, no staleness
-  // concern - the slice still just rides along, exactly like cycle.
-  const reloadFn = src.slice(src.indexOf('async function reloadIfQueryChanged'), src.indexOf('async function persistWidgetConfig'));
-  nodeAssert.match(reloadFn, /fresh\.cycle = data\.cycle;/);
-  nodeAssert.match(reloadFn, /fresh\.schedule = data\.schedule;/, 'reloadIfQueryChanged must still carry the old slice over unchanged - it has no reason to refetch on every filter change');
-
-  // refreshDashboardData(): the 15-minute silent/background refresh. Must
-  // reset the memoized slice to undefined (so ensureScheduleSlice()'s own
-  // `if (data.schedule !== undefined) return;` early-out does not skip the
-  // refetch) and re-await it with a freshly computed "today" BEFORE folding
-  // it into `fresh` - in that order, or a stale/failed slice survives another
-  // 15 minutes.
-  // TAFLA (2026-10-19): outside wall mode Dziś draws no schedule widget, so
-  // the page loads no schedule slice any more, and the silent refresh must not
-  // carry a stale one over either - it takes the fresh /dashboard answer as a
-  // whole. (Before Tafla this guard pinned the reset-and-reload of the slice
-  // here; the widget it fed is gone from the normal page.)
-  const refreshFn = src.slice(src.indexOf('async function refreshDashboardData'), src.indexOf('const refreshTimerId'));
-  nodeAssert.ok(refreshFn.length > 0, 'refreshDashboardData() is still there');
-  nodeAssert.doesNotMatch(refreshFn, /fresh\.schedule = data\.schedule;/, 'no stale schedule slice survives the silent refresh');
-});
 
 test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen', async () => {
   const widgets = await import('../public/utils/dashboard-widgets.js');
@@ -3334,94 +2086,6 @@ test('die Schedule-Kachel defaultet auf 1x2 wie family, nicht auf 1x1', async ()
     'eine Mitglieder-Liste braucht Hoehe, nicht Breite (PR #930 review)');
 });
 
-test('Schedule-Widget: die Zeilenzahl kommt aus der Kachelgroesse, nicht aus der vollen Eintragsliste', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const users = ['Anna', 'Ben', 'Cara', 'Dax', 'Emi', 'Finn'].map((name, i) => ({ id: i + 1, display_name: name }));
-  const type = { id: 1, name: 'Früh', short_code: 'F', color: '#6C3AED' };
-  const schedule = {
-    hasTypes: true,
-    entries: users.map((u) => ({ user_id: u.id, shift_type: type })),
-  };
-  const zeilen = (html) => (html.match(/class="schedule-widget-row"/g) || []).length;
-
-  // Die hohe Kachel (1x2, ihr eigener Standard) zeigt fuenf von sechs Zeilen -
-  // genau hier stand der Fehler: ohne Deckel waeren es alle sechs gewesen.
-  nodeAssert.equal(zeilen(__test.renderScheduleWidget(schedule, users, '1x2')), 5,
-    'die hohe Kachel muss bei fuenf Zeilen deckeln, nicht alle sechs zeigen');
-  // Gegenprobe: die flache Kachel deckelt enger.
-  nodeAssert.equal(zeilen(__test.renderScheduleWidget(schedule, users, '1x1')), 3,
-    'die flache Kachel muss bei drei Zeilen deckeln');
-
-  // Der Header zaehlt trotzdem ueber ALLE sechs - die ehrliche Zahl, unabhaengig
-  // vom Zeilendeckel darunter (die Review nannte das ausdruecklich als
-  // Bedingung: der Header darf nicht mitschneiden).
-  const html = __test.renderScheduleWidget(schedule, users, '1x1');
-  nodeAssert.match(html, /class="widget__badge">6</, 'der Header muss die volle Anzahl "on shift" zeigen, nicht die gedeckelte Zeilenzahl');
-});
-
-test('Schedule-Widget: der Zeilendeckel zeigt die Im-Dienst-Eintraege zuerst, nicht die ersten in API-Reihenfolge', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  // Sechs Mitglieder, `users ORDER BY id` - die zwei im Dienst (Emi, Finn)
-  // haben bewusst die hoechsten ids, damit ein ungefilterter `slice(0, N)`
-  // sie abschneiden wuerde (Review #930: Header zaehlt "2", jede sichtbare
-  // Zeile zeigt "Freier Tag").
-  const users = ['Anna', 'Ben', 'Cara', 'Dax', 'Emi', 'Finn'].map((name, i) => ({ id: i + 1, display_name: name }));
-  const type = { id: 1, name: 'Früh', short_code: 'F', color: '#6C3AED' };
-  const schedule = {
-    hasTypes: true,
-    entries: users.map((u) => ({ user_id: u.id, shift_type: ['Emi', 'Finn'].includes(u.display_name) ? type : null })),
-  };
-
-  const html = __test.renderScheduleWidget(schedule, users, '1x1'); // deckelt bei 3 von 6
-  nodeAssert.match(html, /class="widget__badge">2</, 'der Header muss 2 im Dienst zeigen');
-  nodeAssert.match(html, /Emi/, 'Emi ist im Dienst und muss trotz Deckel sichtbar sein');
-  nodeAssert.match(html, /Finn/, 'Finn ist im Dienst und muss trotz Deckel sichtbar sein');
-});
-
-// Eine Person mit einem Extra (Bereitschaft NEBEN einer regulaeren Schicht,
-// server/routes/schedule-extras.js) traegt zwei Eintraege am selben Tag - die
-// Ueberschrift zaehlt trotzdem PERSONEN ("wer arbeitet heute"), nicht
-// Schicht-Zeilen, sonst wuerde genau diese Person doppelt gezaehlt.
-test('renderScheduleWidget() zaehlt Personen, nicht Schicht-Eintraege, und begrenzt nur die sichtbaren Zeilen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const users = [
-    { id: 1, display_name: 'Alice' },
-    { id: 2, display_name: 'Bob' },
-    { id: 3, display_name: 'Carol' },
-  ];
-  const shiftType = { id: 1, name: 'Frueh', short_code: 'F', color: '#6C3AED' };
-  const entries = [
-    { user_id: 1, source: 'override', shift_type: shiftType },
-    { user_id: 1, source: 'extra', shift_type: shiftType }, // dieselbe Person, zweiter Eintrag
-    { user_id: 2, source: 'override', shift_type: shiftType },
-    { user_id: 3, source: 'override', shift_type: shiftType },
-  ];
-
-  const wide = __test.renderScheduleWidget({ entries, hasTypes: true }, users, '1x2');
-  nodeAssert.match(wide, /widget__badge">3</, 'drei verschiedene Personen sind im Dienst, nicht vier Zeilen');
-  nodeAssert.equal((wide.match(/schedule-widget-row"/g) || []).length, 4, 'auf 1x2 (Deckel 5) passen alle vier Zeilen');
-
-  const narrow = __test.renderScheduleWidget({ entries, hasTypes: true }, users, '1x1');
-  nodeAssert.match(narrow, /widget__badge">3</, 'die Kopfzahl bleibt der wahre Bestand, unabhaengig von der Kachelgroesse');
-  nodeAssert.equal((narrow.match(/schedule-widget-row"/g) || []).length, 3, 'auf 1x1 (Deckel 3) werden nur drei der vier Zeilen gezeigt');
-});
-
-test('Kennzahlreihe fuehrt mit den Modulen, die sonst kein Widget zeigen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  // Die drei Opt-in-Module sind im Werks-Layout unsichtbar (DEFAULT_HIDDEN_WIDGETS)
-  // - genau deshalb sind sie die eigentlichen Kandidaten der Reihe.
-  for (const id of ['rewards', 'health', 'housekeeping']) {
-    assert(__test.METRIC_TILE_ORDER.includes(id),
-      `„${id}" zeigt im Standard-Layout kein Widget und gehoert damit in die Kandidaten`);
-  }
-  // Und ohne Daten gibt es keine Kachel - eine leere Zahl ist keine Kennzahl.
-  const leer = __test.selectMetricTiles(
-    { ...METRIC_DATA, health: { hasMeds: false }, housekeeping: { configured: false }, rewards: { standings: [] } },
-    'EUR', new Set(['budget', 'birthdays', 'notes']),
-  );
-  assert(leer.length === 0, 'ohne Daten und ohne Kandidaten bleibt die Reihe weg, statt leer dazustehen');
-});
-
 test('Kennzahlreihe ist eine Zeile, kein Block', async () => {
   const widgets = await import('../public/utils/dashboard-widgets.js');
   // 671px hoch fuer vier Zahlen war der Anlass; die Mitteilung zum Bau sagte
@@ -3430,139 +2094,9 @@ test('Kennzahlreihe ist eine Zeile, kein Block', async () => {
     'die Reihe startet als Zeile - 2x2 war der Block, der 671px fuer 80px Inhalt nahm');
 });
 
-test('Kennzahlreihe bezieht ihre Hoehe aus ihrem Inhalt, nicht von aussen', () => {
-  // ZWEITER ANLAUF (Critique 2026-08-13). Nach dem ersten Fix stand die Reihe
-  // mobil bei 105px - und auf dem Desktop weiter bei 361px je Kachel, fuer 71px
-  // Inhalt. Die Zahl `2x1` oben war dabei die ganze Zeit gruen: sie prueft das
-  // Raster-Kaestchen, nicht die gerenderte Hoehe. Ein Zielwert, der an dem
-  // Viewport gruen ist, an dem der Defekt nicht lebt, ist keine Zusicherung.
-  //
-  // Statisch pruefbar ist die URSACHE, und die sind genau zwei Deklarationen,
-  // die Hoehe von aussen beziehen: `flex: 1` laesst die Reihe die Hoehe ihres
-  // Wrappers erben (und der ist so hoch wie die hoechste Karte SEINER
-  // Rasterzeile), `align-content: stretch` verteilt den Ueberschuss auf die
-  // einzige Rasterzeile. Beides zusammen war der Faktor 4,5.
-  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
-  const block = (selector) => {
-    const at = css.indexOf(`\n${selector} {`);
-    return at === -1 ? '' : css.slice(at, css.indexOf('\n}', at));
-  };
-
-  const wrapper = block('.widget-wrapper > .metric-tiles');
-  assert(wrapper, '.widget-wrapper > .metric-tiles muss es geben - sonst prueft dieser Guard nichts');
-  assert(!/flex:\s*1\b/.test(wrapper),
-    'die Kennzahlreihe darf ihre Hoehe nicht vom Wrapper erben (flex: 1) - gemessen wurden daraus 361px je Kachel fuer 71px Inhalt');
-
-  const tiles = block('.metric-tiles');
-  assert(tiles, '.metric-tiles muss es geben');
-  assert(!/align-content:\s*stretch/.test(tiles),
-    'align-content: stretch gibt der einzigen Rasterzeile allen Ueberschuss - die Reihe waechst auf ihren Inhalt, nicht auf ihren Platz');
-
-  // UND DIE ZELLE, NICHT NUR DIE REIHE (Critique 2026-08-13, zweite Runde).
-  //
-  // Die zwei Zusicherungen darueber haben die Reihe repariert und die Zelle
-  // stehen lassen: `.widget-wrapper { align-self: stretch }` liess sie weiter
-  // die Hoehe der hoechsten Karte ihrer Rasterzeile beanspruchen, gemessen
-  // 753x360,5px fuer eine 105px hohe Reihe. Die Leere war nicht verschwunden,
-  // sie war aus der getoenten Kachel auf den Grund gewandert - und dieser
-  // Guard hat es nicht gesehen, weil er dieselbe Ebene prueft wie der Fix,
-  // den er begleitet. Das ist das Muster, das diese Runde dreimal gefunden
-  // hat: die Sonde steht dort, wo repariert wurde, nicht dort, wo es weh tat.
-  assert(/\.widget-wrapper:has\(>\s*\.metric-tiles\)\s*\{[^}]*align-self:\s*start/.test(css),
-    'die ZELLE der Kennzahlreihe muss auf ihren Inhalt schrumpfen - sonst steht die Reihe richtig und die Buehne darunter ist leer');
-});
-
 // --------------------------------------------------------
 // Wetterlage, Gangart und Temperaturband (#Wetter-Kur 2026-08-17)
 // --------------------------------------------------------
-
-/**
- * DIE ICON-LISTE KOMMT VOM SERVER, NICHT AUS DIESER DATEI. `wmoIcon()` in
- * server/routes/weather.js ist die einzige Stelle, die entscheidet, welche
- * Lucide-Namen je aus Open-Meteo herausfallen koennen - eine Liste hier waere
- * die zweite Wahrheit und liefe beim naechsten WMO-Code auseinander, ohne rot
- * zu werden. Der Guard liest deshalb die Rueckgabewerte der Funktion.
- *
- * DIESER GUARD KOMMT AUS EINEM GEMESSENEN FEHLER, nicht aus Vorsicht: die
- * Sonne bekam ihre Rotation nie, weil `'sun'.endsWith('n')` wahr ist und die
- * Tag/Nacht-Pruefung der OWM-Codes auf den Lucide-Zweig durchschlug. Ein
- * Struktur-Guard ueber die CSS-Regeln sah das nicht - die Regel existierte,
- * das Attribut kam nur nie an. Die Ebene muss die AUSGABE sein.
- */
-test('jedes Wetter-Icon des Servers findet eine Lage, und die Sonne dreht sich', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const routeSrc = readFileSync(new URL('../server/routes/weather.js', import.meta.url), 'utf8');
-  const wmoFn = routeSrc.match(/function wmoIcon\([\s\S]*?\n}/);
-  assert(wmoFn, 'wmoIcon() nicht gefunden - die Quelle der Icon-Namen ist weg');
-  const icons = [...new Set([...wmoFn[0].matchAll(/'([a-z-]+)'/g)].map((m) => m[1]))];
-  assert(icons.length >= 8, `Nur ${icons.length} Icon-Namen gelesen - die Signatur greift nicht mehr`);
-
-  const untoned = icons.filter((icon) => !__test.weatherToneKey(icon));
-  assert(untoned.length === 0, `Ohne Wetterton: ${untoned.join(', ')}`);
-
-  // Und der OWM-Legacy-Zweig, der dieselbe Funktion benutzt.
-  const owm = ['01d', '01n', '02d', '02n', '03d', '04d', '09d', '10d', '11d', '13d', '50d'];
-  const untonedOwm = owm.filter((code) => !__test.weatherToneKey(code));
-  assert(untonedOwm.length === 0, `OWM-Code ohne Wetterton: ${untonedOwm.join(', ')}`);
-
-  assert(__test.weatherMotionAttr('sun').includes('rays'), 'die Sonne muss ihre Strahlen drehen');
-  assert(__test.weatherMotionAttr('01d').includes('rays'), 'OWM-Tagsonne muss ihre Strahlen drehen');
-  assert(__test.weatherMotionAttr('01n') === '', 'die klare Nacht bewegt sich nicht');
-  assert(__test.weatherMotionAttr('moon') === '', 'der Mond zieht nicht');
-  assert(__test.weatherMotionAttr('cloud-rain').includes('fall'), 'Regen faellt');
-  assert(__test.weatherMotionAttr('cloud-lightning').includes('flash'), 'das Gewitter leuchtet');
-  assert(__test.weatherMotionAttr('cloud').includes('drift'), 'die Wolke zieht');
-});
-
-/**
- * Der Wand-Modus rendert das Wetter aus denselben Bausteinen, aber in einer
- * eigenen Komposition - und genau dort geht so etwas verloren. Aus zwei Metern
- * ist der Ton die schnellere Auskunft als die Form, deshalb traegt hier JEDER
- * Vorhersagetag seinen eigenen (anders als auf der Karte, wo der Balken das
- * uebernimmt).
- */
-// TAFLA (2026-10-19): hier stand „der Wand-Modus faerbt jeden Wettertag". Die Tafla-Wand (Artboard „Ściana") nennt das Wetter im Kopf: Zeichen, Temperatur, eine
-// Zeile - ohne Vorhersagetage und ohne Wetterton.
-test('die Temperaturbaender liegen in jeder Einheit auf denselben Grenzen', async () => {
-  const { __test: { weatherTempBand } } = await import('../public/pages/dashboard.js');
-  // Dieselbe Wetterlage, drei Einheiten: -1 °C ist 30,2 °F ist 272,15 K, und
-  // alle drei muessen „eisig" heissen. Genau diese Kette bricht, wenn jemand
-  // eine Celsius-Schwelle im Code umrechnet statt sie auszuschreiben.
-  for (const [units, freezing, mild, hot] of [
-    ['metric', -1, 15, 30],
-    ['imperial', 30, 59, 86],
-    ['standard', 272, 288, 303],
-  ]) {
-    assert(weatherTempBand(freezing, units) === 'icy', `${units}: ${freezing} muss eisig sein`);
-    assert(weatherTempBand(mild, units) === 'mild', `${units}: ${mild} muss mild sein`);
-    assert(weatherTempBand(hot, units) === 'hot', `${units}: ${hot} muss heiss sein`);
-  }
-  assert(weatherTempBand(null, 'metric') === null, 'ohne Zahl kein Band');
-  assert(weatherTempBand('x', 'metric') === null, 'ohne Zahl kein Band');
-  // Eine unbekannte Einheit faellt auf metrisch zurueck statt auf undefined.
-  assert(weatherTempBand(25, 'kelvinish') === 'warm', 'unbekannte Einheit faellt auf metrisch');
-});
-
-test('die Spanne der Vorhersage bleibt ein Balken, auch wenn die Woche flach ist', async () => {
-  const { __test: { weatherSpanModel } } = await import('../public/pages/dashboard.js');
-  const flat = weatherSpanModel([
-    { temp_min: 10, temp_max: 10 }, { temp_min: 10, temp_max: 10 },
-  ]);
-  const one = flat({ temp_min: 10, temp_max: 10 });
-  assert(one.to - one.from >= 0.13, 'eine flache Woche darf keinen unsichtbaren Balken ergeben');
-  assert(one.from >= 0 && one.to <= 1, 'der Balken bleibt in seiner Spur');
-
-  const week = weatherSpanModel([
-    { temp_min: 0, temp_max: 10 }, { temp_min: 10, temp_max: 20 }, { temp_min: 5, temp_max: 15 },
-  ]);
-  const cold = week({ temp_min: 0, temp_max: 10 });
-  const warm = week({ temp_min: 10, temp_max: 20 });
-  assert(cold.from === 0 && warm.to === 1, 'die Woche spannt von ihrem Minimum bis zu ihrem Maximum');
-  assert(warm.from > cold.from, 'der waermere Tag liegt weiter rechts');
-
-  assert(weatherSpanModel([]) === null, 'ohne Vorhersage kein Modell');
-  assert(weatherSpanModel([{ temp_min: 'x', temp_max: 'y' }]) === null, 'ohne Zahlen kein Modell');
-});
 
 // --------------------------------------------------------
 // Kalendertag der Route: lokal, nie UTC
@@ -3603,56 +2137,11 @@ test('die Route zieht ihren Kalendertag lokal, nicht aus toISOString()', () => {
 });
 
 // --------------------------------------------------------
-// Wetter: welcher Tag heisst "Heute" (#851)
+// Wetter: ob Dziś eine Wetterzeile versprechen darf
+// TAFLA (2026-10-24): hier standen die Faelle der Wetterkarte des Rasters
+// (welcher Vorhersagetag „Heute" heisst, #851). Die Karte ist gegangen; Dziś
+// und die Wand tragen eine Zeile ohne Vorhersage.
 // --------------------------------------------------------
-/* Ein Vorhersagetag wird an seinem DATUM benannt, nie an seiner Position.
- *
- * Die Position war die Falle: der Server trennt den laufenden Tag aus
- * `forecast` heraus, `forecast[0]` ist also morgen - hart als „Heute"
- * beschriftet las sich die Reihe, als fehle ein Tag. Auf einem Wandtablet und
- * auf dem Handy stand derselbe Fehler zweimal, weil beide Fassungen dieselbe
- * Zeile kopiert hatten.
- *
- * Bezugsgroesse ist `weather.today.date`, der Kalendertag AM WETTERORT. Fehlt
- * er, gibt es kein „Heute" - lieber kein Label als ein falsches. */
-
-const WEATHER_FIXTURE = {
-  units: 'metric',
-  city: 'Honolulu',
-  current: { temp: 26, feels_like: 27, humidity: 70, icon: 'sun', desc: 'wmo.0', wind_speed: 8 },
-  today: { date: '2026-08-24', temp_min: 22, temp_max: 29, icon: 'sun', desc: 'wmo.0' },
-  forecast: [
-    { date: '2026-08-25', temp_min: 21, temp_max: 28, icon: 'cloud', desc: 'wmo.3' },
-    { date: '2026-08-26', temp_min: 20, temp_max: 27, icon: 'cloud-rain', desc: 'wmo.61' },
-    { date: '2026-08-27', temp_min: 22, temp_max: 30, icon: 'sun', desc: 'wmo.0' },
-  ],
-};
-
-test('Wetter: der erste Vorhersagetag heisst nicht "Heute"', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const label = __test.weatherDayLabel(WEATHER_FIXTURE, WEATHER_FIXTURE.forecast[0].date);
-  assert(label !== 'common.today', 'forecast[0] ist morgen und darf nicht "Heute" heissen');
-  assert(label === 'Di', `Wochentag erwartet, bekam: ${label}`);
-});
-
-test('Wetter: ein Tag, der wirklich heute ist, heisst "Heute"', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  assert(
-    __test.weatherDayLabel(WEATHER_FIXTURE, WEATHER_FIXTURE.today.date) === 'common.today',
-    'der laufende Tag traegt das Heute-Label',
-  );
-});
-
-test('Wetter: ohne Bezugstag gibt es kein "Heute"', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const blind = { ...WEATHER_FIXTURE, today: null };
-  for (const d of WEATHER_FIXTURE.forecast) {
-    assert(
-      __test.weatherDayLabel(blind, d.date) !== 'common.today',
-      'ohne today.date darf kein Tag geraten werden',
-    );
-  }
-});
 
 test('Wetter-Verfuegbarkeit: der Grund des Proxys entscheidet, die Praeferenzen nur ohne Antwort', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
@@ -3669,49 +2158,6 @@ test('Wetter-Verfuegbarkeit: der Grund des Proxys entscheidet, die Praeferenzen 
   assert(avail({ data: null }, MEMBER) === true, 'Standort des Mitglieds zaehlt mit');
   assert(avail({ data: null }, NONE) === false, 'nichts eingerichtet');
   assert(avail(null, null) === false, 'vor dem Laden verspricht nichts eine Kachel');
-});
-
-test('Wetter-Karte ohne Wetter: ruhiger Zustand, kein Alarm, Aktualisieren bleibt', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const html = __test.renderWeatherUnavailable();
-  assert(html.includes('dashboard.weatherUnavailable'), 'der Zustand sagt, was los ist');
-  assert(html.includes('id="weather-refresh-btn"'), 'der Weg zurueck bleibt');
-  assert(!/role="alert"/.test(html), 'kein Alarm bei jedem Aufbau');
-});
-
-test('Wetter-Karte: die Reihe beginnt beschriftet mit morgen, nicht mit "Heute"', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const html = __test.renderWeatherWidget(WEATHER_FIXTURE);
-  const labels = [...html.matchAll(/class="weather-forecast__label[^"]*">([^<]*)</g)].map((m) => m[1]);
-  assert(labels.length === 3, `drei Vorhersagetage erwartet, bekam ${labels.length}`);
-  assert(labels[0] !== 'common.today', 'die Karte beschriftet morgen als "Heute"');
-  assert(!html.includes('weather-forecast__label--today'), 'kein Tag der Reihe ist heute');
-});
-
-/* Hoch und Tief des laufenden Tages: die Karte trug fuer jeden Folgetag eine
- * Spanne, fuer heute aber nur den Momentanwert - genau die Luecke aus #851. */
-test('Wetter: der Hauptblock traegt Hoch und Tief des laufenden Tages', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const html = __test.renderWeatherWidget(WEATHER_FIXTURE);
-  assert(html.includes('weather-widget__range-high'), 'Hoechstwert fehlt im Hauptblock');
-  assert(/weather-widget__range-high"[^>]*>29°/.test(html), 'falscher Hoechstwert');
-  assert(/weather-widget__range-low"[^>]*>22°/.test(html), 'falscher Tiefstwert');
-  assert(html.includes('dashboard.weatherHighLow'), 'die Zahlenpaarung braucht eine Vorlesehilfe');
-  assert(/class="weather-widget__range" role="img"/.test(html),
-    'die Vorlesehilfe braucht eine Rolle - auf einem rollenlosen span mit aria-hidden-Kindern haengt sie an nichts');
-});
-
-test('Wetter: ohne Tageswerte bleibt die Hoch/Tief-Zeile weg statt leer zu stehen', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const ohne = { ...WEATHER_FIXTURE, today: { date: '2026-08-24', temp_min: null, temp_max: null } };
-  assert(
-    !__test.renderWeatherWidget(ohne).includes('weather-widget__range'),
-    'ohne Zahlen darf die Zeile nicht erscheinen',
-  );
-  assert(
-    !__test.renderWeatherWidget({ ...WEATHER_FIXTURE, today: null }).includes('weather-widget__range'),
-    'ohne today darf die Zeile nicht erscheinen',
-  );
 });
 
 test('Dashboard serialisiert linked occurrences ohne rohe Persistenzfelder', async () => {
@@ -3765,26 +2211,6 @@ test('Dashboard serialisiert linked occurrences ohne rohe Persistenzfelder', asy
     await new Promise((resolve) => server.close(resolve));
     routeDb.prepare('DELETE FROM users WHERE id = ?').run(owner);
   }
-});
-
-// --------------------------------------------------------
-// Ergebnis
-// --------------------------------------------------------
-test('das Familienmitglieder-Widget kennt die eigene Schicht statt "Heute frei" zu behaupten (S-18)', async () => {
-  const { __test } = await import('../public/pages/dashboard.js');
-  const users = [{ id: 1, display_name: 'Anna', avatar_color: '#6C3AED' }];
-  // Ohne data.schedule (Schedule-Kachel nicht sichtbar): unveraendertes Verhalten.
-  const withoutSchedule = __test.renderFamilyWidget(users, {});
-  nodeAssert.match(withoutSchedule, /todayFree/, 'ohne geladene Schichtplan-Daten bleibt die alte "Heute frei"-Zeile');
-  // Mit einer echten Schicht heute: die Zeile nennt die Schicht, nicht "frei".
-  const withShift = __test.renderFamilyWidget(users, {
-    schedule: { entries: [{ user_id: 1, shift_type: { short_code: 'E', name: 'Early shift' } }] },
-  });
-  nodeAssert.match(withShift, /E · Early shift/, 'die eigene Schicht ersetzt die "frei"-Behauptung');
-  nodeAssert.ok(!/todayFree/.test(withShift), 'kein Widerspruch zur Schedule-Kachel mehr');
-  // Ein freier Tag (Schedule geladen, aber kein Eintrag fuer diese Person) sagt weiterhin "frei".
-  const stillFree = __test.renderFamilyWidget(users, { schedule: { entries: [] } });
-  nodeAssert.match(stillFree, /todayFree/, 'ein wirklich freier Tag darf weiterhin "Heute frei" sagen');
 });
 
 test('Wand-Modus: Screensaver-Knopf erscheint mit screensaverEnabled, nicht ohne (#1766)', async () => {

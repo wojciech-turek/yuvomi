@@ -163,10 +163,14 @@ export const HOUSEHOLD_AUDIENCE_SHOWS = Object.freeze({
   todayMeals: true,
   // Die Zahl der Einkaufskarte („23 na liście").
   shoppingOpenCount: true,
-  // Seit Tafla NICHT MEHR: `urgentTasks`, `tasksDoneToday` und `wallTasks`.
-  // Die Wand zeichnet weder das alte Programm noch „Wer heute dran ist" (die
-  // Scheiben an den Zeilen sagen, wer dran ist) - was sie nicht zeichnet,
-  // traegt ihre Antwort nicht.
+  // Seit Tafla NICHT MEHR: `urgentTasks` und `tasksDoneToday` - die Wand
+  // zeichnet das alte Programm nicht.
+  // `wallTasks` („Wer heute dran ist", #1817) zeichnet die Tafla-Wand ebenfalls
+  // nicht, die Scheiben an den Zeilen sagen es. Die Route rechnet das Feld aber
+  // NUR noch fuer die geteilte Flaeche (2026-10-24) - fuer API-Nutzer eines
+  // Displays -, also traegt deren Antwort es auch. Es liest ohnehin nur
+  // haushaltssichtbare Aufgaben.
+  wallTasks: true,
   // THE TAFLA WALL (2026-10-19) draws the day plan of Dziś in its own card,
   // the dinner hero with its meter and the shopping card with the first items
   // ("mleko · śmietanka · brokuł"). The plan rows come in their household

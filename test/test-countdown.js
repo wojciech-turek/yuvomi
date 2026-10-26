@@ -24,7 +24,7 @@ const { MIGRATIONS, get, _setTestDatabase } = await import('../server/db.js');
 const { getCountdowns, nextEventDate, daysBetween } = await import('../server/services/countdowns.js');
 const { nextOccurrence } = await import('../server/services/recurrence.js');
 const { MIRRORED_FIELDS } = await import('../server/services/calendar-outbound.js');
-const { countdownPhrase, countdownRank, daysBetweenDateKeys } = await import('../public/utils/countdown.js');
+const { countdownPhrase, daysBetweenDateKeys } = await import('../public/utils/countdown.js');
 
 // Die meisten Faelle interessiert nur die Liste; `total` hat seine eigenen
 // Tests weiter unten.
@@ -271,26 +271,6 @@ test('eine ueberfaellige Aufgabe bleibt, eine ueberfaellige WIEDERKEHRENDE nicht
     .run('FREQ=WEEKLY;INTERVAL=1', wdh);
   const items = cd({ userId: ALICE, todayKey: '2026-08-17' });
   assert.deepEqual(items.map((c) => c.title), ['Einmalig ueberfaellig']);
-});
-
-test('countdownRank benennt vier Raenge, und seine Grenze ist die der Formulierung', () => {
-  assert.equal(countdownRank(-1), 'overdue');
-  assert.equal(countdownRank(0), 'now');
-  assert.equal(countdownRank(1), 'now');
-  assert.equal(countdownRank(2), 'soon');
-  assert.equal(countdownRank(30), 'soon');
-  assert.equal(countdownRank(31), 'later');
-  // DIE EIGENTLICHE ZUSICHERUNG: Rang und Formulierung duerfen nicht zwei
-  // Vorstellungen von „nah" haben. Ueberall dort, wo der Text exakt zaehlt,
-  // muss der Rang `now` oder `soon` sein - und umgekehrt.
-  const falsch = [];
-  for (let d = 0; d <= 400; d++) {
-    const exakt = ['common.today', 'common.tomorrow', 'dashboard.daysLeft']
-      .includes(countdownPhrase(d).key);
-    const nah = ['now', 'soon'].includes(countdownRank(d));
-    if (exakt !== nah) falsch.push(d);
-  }
-  assert.deepEqual(falsch, [], `Rang und Formulierung laufen auseinander bei: ${falsch.slice(0, 5).join(', ')}`);
 });
 
 test('ein ueberfaelliger Countdown bekommt seine eigene Formulierung', () => {

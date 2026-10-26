@@ -251,7 +251,6 @@ const MOTION_EXCEPTIONS = new Map([
   ['layout.css: .search-overlay', '`visibility 0s linear <Verzoegerung>`: diskreter Schalter nach der Blende, keine Bewegung'],
   ['layout.css: .swipe-reveal', 'folgt dem Finger: die Deckkraft wird je Frame gesetzt, linear glaettet nur'],
   ['layout.css: .swipe-row--hint > :first-child', 'einmaliger Wisch-Hinweis (Onboarding), nicht im Arbeitsfluss'],
-  ['dashboard.css: .dashboard-icon-btn--hint', 'einmaliger Hinweis-Puls (3 Wiederholungen), nicht im Arbeitsfluss'],
   ['health.css: .cycle-ring__now', 'Hinweis-Puls am heutigen Tag (3 Wiederholungen), nicht im Arbeitsfluss'],
   ['screensaver.css: .photo-screensaver img', 'Bildschirmschoner: langsame Ueberblendung zwischen Fotos, kein Bedienmoment'],
 ]);
@@ -319,7 +318,11 @@ test('ein Blatt von unten: Dialog-Sheet, Mehr-Blatt und mobile Suche fahren aus 
 
 test('eine Kurvenfamilie: keine nackte Keyword-Kurve in Interaktions-Motion', () => {
   const { keyword, loops } = motionViolations();
-  assert.ok(loops >= 8, `der Scanner sieht die Endlos-Schleifen nicht (${loops}) - der Guard waere blind`);
+  // 8 -> 7 (Tafla, 2026-10-24): die Wetterkarte der Uebersicht ist mit ihren Schleifen gegangen.
+  // 7 -> 5 (2026-10-26): die Pulse von Wand und Kochmodus nehmen Periode und
+  // Kurve jetzt aus Tokens (--wall-pulse, --ease-in-out) - der Scanner zaehlt
+  // nur Schleifen mit Literal oder Keyword.
+  assert.ok(loops >= 5, `der Scanner sieht die Endlos-Schleifen nicht (${loops}) - der Guard waere blind`);
   assert.deepEqual(keyword, [], `Keyword-Kurve statt var(--ease-out)/var(--ease-in-out):\n  ${keyword.join('\n  ')}`);
 });
 
@@ -1478,7 +1481,8 @@ test('Kalender: das Filter-Popover ist das geteilte - Ein- und Ausgang aus layou
 
 test('Erststart: die Karte steht, der Schritt wechselt ueber swapContent mit fester Hoehe', () => {
   const dash = pageSource('dashboard');
-  const fn = dash.slice(dash.indexOf('function showOnboarding('), dash.indexOf('function maybeHintCustomize('));
+  const start = dash.indexOf('function showOnboarding(');
+  const fn = dash.slice(start, dash.indexOf('\n}\n', start));
   assert.doesNotMatch(fn, /overlay\.replaceChildren\(\)/, 'die Karte wird nicht mehr je Schritt neu gebaut');
   assert.match(fn, /swapContent\(stepEl, \(\) => \{ next = fillStep\(\); \}, \{ direction: 1 \}\);\s*next\?\.focus\(\);/, 'Tausch, dann Fokus auf den neuen Hauptknopf');
   assert.match(fn, /function fitSteps\(\) \{[\s\S]{0,420}tallest = Math\.max\(tallest, stepEl\.offsetHeight\);[\s\S]{0,200}stepEl\.style\.minBlockSize = `\$\{tallest\}px`;/, 'die Hoehe ist die des hoechsten Schritts');
@@ -1786,11 +1790,6 @@ const SHARED_PRESSABLE = [
   ['.task-card', '.task-card'],
   ['.tasks-page .task-card', '.task-card'],
   ['.shopping-page .shopping-item', '.shopping-item:not(.shopping-item--static)'],
-  ['.today-cockpit-card[data-route]', '.today-cockpit-card[data-route]'],
-  ['.today-cockpit-card--group', '.today-cockpit-card--group'],
-  ['.today-cockpit__more--link', '.today-cockpit__more--link'],
-  ['.quick-link-tile', '.quick-link-tile'],
-  ['.widget__link', '.widget__link'],
   ['.settings-shell__navigation-link', '.settings-shell__navigation-link'],
   ['.settings-overview__row', '.settings-overview__row'],
   ['.metric-card--tile', 'own'],
@@ -1799,10 +1798,12 @@ const SHARED_PRESSABLE = [
 ];
 /** Hoechststand der `:hover`-Regeln ausserhalb von `@media (hover: hover)`. Nur senken.
  *  232 -> 225 (Tafla, 2026-10-24): Wand, Kochmodus und die Modulseiten sind neu geschrieben;
- *  alte Hover-Regeln dort sind entfallen, die neuen Flaechen tragen keine ungeschuetzten. */
-/*  221 -> 219 (2026-10-24, Tafla-Chips): die Glas-Hoverfuellung des Chips ist weg, das gemerkte
- *  Set der Aufgaben steht unter (hover: hover). */
-const UNGUARDED_HOVER_MAX = 219;
+ *  alte Hover-Regeln dort sind entfallen, die neuen Flaechen tragen keine ungeschuetzten.
+ *  221 -> 219 (2026-10-24, Tafla-Chips): die Glas-Hoverfuellung des Chips ist weg, das gemerkte
+ *  Set der Aufgaben steht unter (hover: hover).
+ *  -> 206 (2026-10-24): das Kachelraster der Uebersicht ist mit Tafla gegangen.
+ *  -> 198 (2026-10-26): beides zusammengefuehrt - Chips und Kachelraster entfallen gemeinsam. */
+const UNGUARDED_HOVER_MAX = 198;
 
 function hoverRules() {
   const out = [];
@@ -2210,22 +2211,6 @@ test('Mehr-Blatt: auch unter reduzierter Bewegung blendet der Backdrop aus, stat
 // --------------------------------------------------------------------------
 // R18, Bewegung: KLEINE HARTE KANTEN.
 // --------------------------------------------------------------------------
-test('R18: das Backdrop des FAB-Menues blendet ein und aus - und liegt in Ruhe weiter nicht im Baum (#166)', () => {
-  const base = ruleBodies('dashboard.css', '.fab-backdrop').join(';');
-  // #166: kein dauerhaft fixiertes Vollbild-Overlay - in Ruhe `display: none`.
-  assert.match(base, /display:\s*none/);
-  assert.match(base, /opacity:\s*0/);
-  const transitions = [...base.matchAll(/transition:\s*([^;]+)/g)].map((m) => m[1]);
-  assert.equal(transitions.length, 2, 'zwei Deklarationen: die erste ist der Rueckfall ohne allow-discrete');
-  assert.doesNotMatch(transitions[0], /allow-discrete/);
-  assert.match(transitions[1], /opacity var\(--duration-xs\) var\(--ease-out\),\s*display var\(--duration-xs\) allow-discrete/, 'der Ausgang haelt es fuer seine Dauer im Baum');
-  const open = ruleBodies('dashboard.css', '.fab-backdrop--visible').join(';');
-  assert.match(open, /display:\s*block/);
-  assert.match(open, /opacity:\s*1/);
-  assert.match(open, /opacity var\(--duration-md\) var\(--ease-out\)/, 'die Einfahrt ist laenger als der Ausgang');
-  assert.match(css('dashboard.css'), /@starting-style \{\s*\.fab-backdrop--visible \{\s*opacity: 0;/);
-});
-
 test('R18: das Detail-Popover hat einen Ausgang - in der Grammatik des Popover-Menues', () => {
   const rules = animationRules();
   const exit = winner(rules, ['detail-popover', 'detail-popover--closing'], 1024);

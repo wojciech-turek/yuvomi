@@ -2,8 +2,14 @@
  * Kennzahl „Ausgleich offen" der geteilten Ausgaben auf dem Dashboard.
  *
  * Das Modul hatte kein Dashboard-Element (Critique 2026-09-23). Die Kachel
- * steht in der bestehenden Kennzahlreihe (`metrics`) und zeigt aus Sicht des
+ * stand in der Kennzahlreihe (`metrics`) und zeigte aus Sicht des
  * Betrachters den Netto-Saldo plus die groesste offene Position.
+ *
+ * TAFLA (2026-10-24): die Kennzahlreihe des alten Rasters ist gegangen, und
+ * Dziś bietet die geteilten Ausgaben nicht als Vorschaukachel an
+ * (TODAY_EXTRA_IDS) - die Kachel-Tests sind mit ihr gegangen. Was bleibt: die
+ * Antwort des Servers (`splitBalance`), ihre Gleichheit mit dem Modul und die
+ * Sprungziele der Ausgleichs-Ansicht.
  *
  * DIE EINE ZUSAGE, AN DER ALLES HAENGT: die Kachel rechnet NICHT selbst. Sie
  * liest dieselben Saldenzeilen wie die Ausgleichs-Ansicht des Moduls
@@ -284,109 +290,6 @@ test('ausgeglichen: keine Positionen, kein Netto', async () => {
 });
 
 // --------------------------------------------------------------------------
-// Browser: Registrierung, Kachel, Formatierung
-// --------------------------------------------------------------------------
-
-const BASE_DATA = {
-  // Eine zweite Kachel, damit die Reihe ueberhaupt steht (unter zwei Kacheln
-  // blendet sie sich aus).
-  rewards: { standings: [{ display_name: 'Leo', balance: 60 }] },
-};
-
-async function dashboardTest() {
-  globalThis.window = { yuvomi: { isModuleDisabled: () => false } };
-  return (await import('../public/pages/dashboard.js')).__test;
-}
-
-function splitTile(tiles) {
-  return tiles.find((tile) => tile.id === 'split-expenses');
-}
-
-const nbsp = (text) => String(text).replace(/\s/g, ' ');
-
-test('Registrierung: die Kennzahlreihe kennt die geteilten Ausgaben', async () => {
-  const __test = await dashboardTest();
-  assert.ok(__test.METRIC_TILE_ORDER.includes('split-expenses'));
-  // Direkt hinter dem Budget: Geld zu Geld, und vor den Opt-in-Modulen, damit
-  // eine offene Forderung nicht hinter einem Punktestand verschwindet.
-  assert.equal(__test.METRIC_TILE_ORDER.indexOf('split-expenses'), __test.METRIC_TILE_ORDER.indexOf('budget') + 1);
-});
-
-test('Kachel: Netto als Wert, groesste Position plus Rest als Fussnote, Sprung in die Ausgleichs-Ansicht', async () => {
-  const __test = await dashboardTest();
-  const tile = splitTile(__test.selectMetricTiles({
-    ...BASE_DATA,
-    splitBalance: {
-      net: [{ currency: 'EUR', netMinor: 200, amount: '2.00' }],
-      positions: [
-        { direction: 'owed', userId: 3, name: 'Bea', groupId: 7, groupName: 'WG', currency: 'EUR', amountMinor: 1500, amount: '15.00' },
-        { direction: 'owe', userId: 2, name: 'Alex', groupId: 4, groupName: 'Urlaub', currency: 'EUR', amountMinor: 1300, amount: '13.00' },
-      ],
-    },
-  }, 'EUR', new Set()));
-  assert.ok(tile, 'mit offenen Positionen steht die Kachel in der Reihe');
-  assert.equal(nbsp(tile.value), '2,00 €');
-  assert.equal(tile.tone, 'balance-positive');
-  assert.equal(tile.note, 'dashboard.splitOwesYou{"name":"Bea"} · +1');
-  assert.equal(tile.route, '/budget?tab=split-expenses&group=7');
-});
-
-test('Kachel: wer schuldet, sieht ein Minus in Rot', async () => {
-  const __test = await dashboardTest();
-  const tile = splitTile(__test.selectMetricTiles({
-    ...BASE_DATA,
-    splitBalance: {
-      net: [{ currency: 'EUR', netMinor: -1300, amount: '-13.00' }],
-      positions: [{ direction: 'owe', userId: 2, name: 'Alex', groupId: 4, groupName: 'Urlaub', currency: 'EUR', amountMinor: 1300, amount: '13.00' }],
-    },
-  }, 'EUR', new Set()));
-  assert.equal(nbsp(tile.value), '-13,00 €');
-  assert.equal(tile.tone, 'balance-negative');
-  assert.equal(tile.note, 'dashboard.splitYouOwe{"name":"Alex"}', 'eine einzige Position traegt kein „+0"');
-});
-
-test('Kachel: ausgeglichen, gesperrt oder abgeschaltet -> keine Kachel', async () => {
-  const __test = await dashboardTest();
-  const settled = __test.selectMetricTiles({ ...BASE_DATA, splitBalance: { net: [], positions: [] } }, 'EUR', new Set());
-  assert.equal(splitTile(settled), undefined, 'ausgeglichen braucht keine Handlung - die Kachel macht Platz');
-  const missing = __test.selectMetricTiles({ ...BASE_DATA }, 'EUR', new Set());
-  assert.equal(splitTile(missing), undefined, 'ohne Feld (aelterer Server) keine Kachel');
-
-  const open = {
-    ...BASE_DATA,
-    splitBalance: {
-      net: [{ currency: 'EUR', netMinor: -1300, amount: '-13.00' }],
-      positions: [{ direction: 'owe', userId: 2, name: 'Alex', groupId: 4, groupName: 'Urlaub', currency: 'EUR', amountMinor: 1300, amount: '13.00' }],
-    },
-  };
-  const previous = globalThis.window;
-  try {
-    globalThis.window = { yuvomi: { isModuleDisabled: (m) => m === 'budget' } };
-    assert.equal(splitTile(__test.selectMetricTiles(open, 'EUR', new Set())), undefined,
-      'abgeschaltetes Budget-Modul nimmt die geteilten Ausgaben mit');
-  } finally {
-    globalThis.window = previous;
-  }
-});
-
-test('Formatierung: Nachkommastellen nach ISO 4217 (0, 2, 3), nicht nach CLDR', async () => {
-  const __test = await dashboardTest();
-  const valueFor = (currency, amount, netMinor) => nbsp(splitTile(__test.selectMetricTiles({
-    ...BASE_DATA,
-    splitBalance: {
-      net: [{ currency, netMinor, amount }],
-      positions: [{ direction: 'owed', userId: 3, name: 'Bea', groupId: 7, groupName: 'WG', currency, amountMinor: Math.abs(netMinor), amount }],
-    },
-  }, 'EUR', new Set())).value);
-  assert.equal(valueFor('JPY', '1235', 1235), '1.235 ¥', 'JPY: keine Nachkommastellen');
-  assert.equal(valueFor('KWD', '12.345', 12345), '12,345 KWD', 'KWD: drei Nachkommastellen');
-  // HUF: ISO 4217 sagt zwei, der CLDR zeigt keine - der Server rechnet in der
-  // ISO-Skala, und 12,50 als „13" zu zeigen waere eine erfundene Rundung.
-  assert.equal(valueFor('HUF', '12.50', 1250), '12,50 HUF', 'HUF: zwei Stellen nach ISO');
-  assert.equal(valueFor('EUR', '1234.50', 123450), '1.234,50 €', 'ab 1000 bleiben die Cent - ein Saldo ist ein Kontostand');
-});
-
-// --------------------------------------------------------------------------
 // Sprungziel: /budget?tab=split-expenses&group=N oeffnet die Ausgleichs-Ansicht
 // --------------------------------------------------------------------------
 
@@ -408,41 +311,6 @@ test('Sprungziel: die geteilten Ausgaben waehlen die Gruppe aus ?group=, wenn de
   assert.equal(split.groupFromQuery('?tab=split-expenses&group=7', groups), 7);
   assert.equal(split.groupFromQuery('?group=99', groups), null, 'eine fremde oder archivierte Gruppe wird nicht erraten');
   assert.equal(split.groupFromQuery('', groups), null);
-});
-
-/* Review #1450: das Netto summiert ueber alle Gruppen und laesst eine Waehrung
- * mit Summe 0 weg, die Positionen bleiben je Gruppe stehen. Die Kachel hing
- * nur an den Positionen und fiel ohne passendes Netto auf "0" zurueck - also
- * "0,00 €" neben "Du schuldest Alex", oder ein offenes Netto in einer anderen
- * Waehrung blieb versteckt. */
-const pos = (direction, name, groupId, currency, amountMinor) => ({
-  direction, userId: groupId, name, groupId, groupName: `G${groupId}`, currency, amountMinor,
-  amount: (amountMinor / 100).toFixed(2),
-});
-
-test('Kachel: gleicht sich das Netto ueber Gruppen aus, gibt es keine Kachel - nie "0,00"', async () => {
-  const __test = await dashboardTest();
-  const tile = splitTile(__test.selectMetricTiles({
-    ...BASE_DATA,
-    splitBalance: { net: [], positions: [pos('owe', 'Alex', 4, 'EUR', 5000), pos('owed', 'Bob', 7, 'EUR', 5000)] },
-  }, 'EUR', new Set()));
-  assert.equal(tile, undefined, `insgesamt ausgeglichen ist die Regel "ausgeglichen, keine Kachel" - erhalten: ${tile && nbsp(tile.value)}`);
-});
-
-test('Kachel: Wert und Position kommen aus der Waehrung, in der wirklich etwas offen ist', async () => {
-  const __test = await dashboardTest();
-  const tile = splitTile(__test.selectMetricTiles({
-    ...BASE_DATA,
-    splitBalance: {
-      net: [{ currency: 'USD', netMinor: -2000, amount: '-20.00' }],
-      positions: [pos('owe', 'Alex', 4, 'EUR', 5000), pos('owed', 'Bob', 7, 'EUR', 5000), pos('owe', 'Cleo', 9, 'USD', 2000)],
-    },
-  }, 'EUR', new Set()));
-  assert.ok(tile, 'das offene USD-Netto bekommt eine Kachel');
-  assert.match(nbsp(tile.value), /-20,00/, `der Wert ist das offene Netto, nicht "0": ${nbsp(tile.value)}`);
-  assert.equal(tile.tone, 'balance-negative');
-  assert.match(tile.note, /Cleo/, 'die genannte Position gehoert zur Waehrung des Werts');
-  assert.equal(tile.route, '/budget?tab=split-expenses&group=9');
 });
 
 // --------------------------------------------------------------------------

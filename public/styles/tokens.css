@@ -543,7 +543,7 @@
    *
    * Der Schalter ist die Staerke: prefers-reduced-transparency und
    * prefers-contrast setzen sie auf 0, dann sind alle Stopps transparent -
-   * dieselbe Kopplung wie beim Wetter-Lichthauch (--weather-glow-opacity). */
+   * so wie jedes Lichtfeld hinter Inhalt. */
   --_brand-field-opacity: 0.20;
   --brand-field-opacity:  var(--_brand-field-opacity);
   --brand-field:
@@ -1086,75 +1086,6 @@
   --source-tandoor-light:   var(--_source-tandoor-light);
 
   /* --------------------------------------------------------
-   * 5b. Farben - Wetterlagen
-   *
-   * WOFÜR: das Wetter ist der einzige Inhalt der App, den niemand im Haushalt
-   * eingegeben hat - er kommt von draußen und ändert sich von selbst. Bis
-   * hierher trug seine Glyphe `--module-dashboard`, also das Violett der
-   * Übersicht: die Karte sagte damit, WO sie steht, aber nichts darüber, WAS
-   * sie zeigt. Sechs Lagen bekommen deshalb einen eigenen Ton.
-   *
-   * SIE SIND KEINE ZEHNTE FAMILIE. Die Familientöne (Abschnitt 4) beantworten
-   * „welches Modul", und dieses Vokabular gehört den Modulen allein - deshalb
-   * teilt keine Lage hier den WERT einer Familie. Die Wetterlage beantwortet
-   * eine andere Frage, und sie erscheint ausschließlich in Wetter-Flächen:
-   * Karte, Masthead-Zeile, Wand-Modus. Die Bauart ist dieselbe wie bei den
-   * Mahlzeit-Typen darüber - eine parallele Domänenfamilie mit eigenen
-   * `--_`-Privaten, damit der Dark-Block sie erreicht.
-   *
-   * FARBE IST HIER NIE DER ALLEINIGE TRÄGER: neben jedem Ton steht die Glyphe
-   * der Lage und der ausgeschriebene Beschreibungstext (`wmo.*`). Wer die
-   * Töne nicht unterscheiden kann, verliert nichts.
-   *
-   * ALLE ZWÖLF WERTE SIND GEMESSEN, Ziel 4,5:1 (nicht 3:1) - der Ton trägt in
-   * der Verlaufszeile auch die Höchsttemperatur, und das ist Kleintext. Light
-   * gegen #FFFFFF / #FBFAF7 / #F5F3ED, Dark gegen #2B2825 / #37332E / #191816;
-   * der jeweils schlechteste Grund steht daneben. Kleinster Abstand im Paar
-   * cloud/snow (dE 18,5) - Schiefer ist entsättigt, Petrol nicht.
-   * -------------------------------------------------------- */
-  --_weather-clear:  #B45309;   /* Bernstein  - Sonne, klarer Tag; 4,53:1 */
-  --weather-clear:   var(--_weather-clear);
-  --_weather-night:  #4C4FBF;   /* Indigo     - klare Nacht, Mond;  5,96:1 */
-  --weather-night:   var(--_weather-night);
-  --_weather-cloud:  #4F6478;   /* Schiefer   - bewölkt, Nebel;     5,52:1 */
-  --weather-cloud:   var(--_weather-cloud);
-  --_weather-rain:   #0A5C9E;   /* Azur       - Regen, Niesel;      6,23:1 */
-  --weather-rain:    var(--_weather-rain);
-  --_weather-snow:   #00768C;   /* Petrol     - Schnee, Graupel;    4,77:1 */
-  --weather-snow:    var(--_weather-snow);
-  --_weather-storm:  #8B2FC9;   /* Purpur     - Gewitter;           5,65:1 */
-  --weather-storm:   var(--_weather-storm);
-
-  /* Die Temperaturbänder der Verlaufszeile: FÜNF Stufen, keine Interpolation.
-   * Eine stufenlose Rampe hätte ihren Mischwert als Zahl am Element gebraucht
-   * (`calc(var(--x) * 100%)`), und genau diese Bauart sieht der Tönungs-Guard
-   * (6b) nicht - sie wäre die achtunddreißigste Prozentstufe gewesen, nur
-   * unsichtbar. Fünf benannte Bänder lesen sich außerdem wie eine Wetterkarte
-   * statt wie ein Farbverlauf, und der Balken bleibt neben der ausgeschriebenen
-   * Zahl eine Zweitkodierung. Schwellen und Einheitenumrechnung: dashboard.js,
-   * `weatherTempBand()`. */
-  --_weather-band-icy:  #0E7490;   /* unter 0 °C   */
-  --weather-band-icy:   var(--_weather-band-icy);
-  --_weather-band-cold: #0663C7;   /* 0 bis 9 °C   */
-  --weather-band-cold:  var(--_weather-band-cold);
-  --_weather-band-mild: #0F766E;   /* 10 bis 19 °C */
-  --weather-band-mild:  var(--_weather-band-mild);
-  --_weather-band-warm: #9F5700;   /* 20 bis 27 °C */
-  --weather-band-warm:  var(--_weather-band-warm);
-  --_weather-band-hot:  #C2410C;   /* ab 28 °C     */
-  --weather-band-hot:   var(--_weather-band-hot);
-
-  /* Der Lichthauch hinter der Glyphe - und der Grund, warum er ein TOKEN ist
-   * und keine Zahl in dashboard.css: er ist ein Lichtfeld, also
-   * eine weiche Atmosphäre HINTER dem Inhalt, kein chromatischer Verlauf AUF
-   * ihm - dieselbe Gattung wie das Marken-Lichtfeld der Zugangsseiten
-   * (`--brand-field-opacity`, bei der Bildmarke). Weil es dieselbe Gattung ist,
-   * hat es dieselben Ausschalter: in prefers-reduced-transparency und
-   * prefers-contrast stehen beide auf 0. Ein Wert in der Komponente hätte
-   * diese Kopplung nicht mitgebracht. */
-  --weather-glow-opacity: 1;
-
-  /* --------------------------------------------------------
    * 6. Farben - Prioritäten
    *    Unverändert aus dem Bestand: die Helligkeits-Trennung
    *    (High ~1,8x Urgent) ist farbfehlsicht-verifiziert.
@@ -1529,6 +1460,40 @@
   --wall-body:    clamp(26px, 3.66vmin, 36px);   /* 30  - Zeilen, Datum, Teraz-Zeile, Zutaten, Knopflabels (600) */
   --wall-label:   clamp(24px, 2.93vmin, 28px);   /* 24  - Eyebrows, Abschnittslabels, "min", Exit-Pille: der Boden, auch bei 1280x800 */
 
+  /* Ihre Zeilenhoehen (Artboards „Ściana" und „Gotowanie"). */
+  --wall-display-lh: 1.14;   /* 112/128 - Uhr, laufender Timer */
+  --wall-text-lh:    1.27;   /* 44/56 und 30/38 - Titel, Zeilen, Kochschritt */
+  --wall-label-lh:   1.25;   /* 24/30 - Labels, Eyebrows */
+  --wall-tight-lh:   1.1;    /* Zahl und Einheit uebereinander in einer Minutnik-Scheibe, "Smacznego!" */
+
+  /* IHRE GEOMETRIE an einer Stelle (2026-10-24, aus dashboard.css und
+   * cook-mode.css gehoben): Karten, Teller, Messer, Knoepfe, Linien. Farben
+   * stehen hier nicht - die Wand nimmt die semantischen Rollen, die hell und
+   * dunkel umschalten; Kochbuehne und Nachtszene tragen die festen --cook-* und
+   * --wall-night-* oben (sie schalten bewusst nie um). Werte bei 1180x820.
+   * Die zwei Radien tragen den Familiennamen --radius-*: Radien kommen in der
+   * ganzen App nur aus dieser Familie (Guard in test:frontend-audit). */
+  --radius-wall-card:      calc(var(--radius-lg) + 12px);              /* 28  - Karten, Hauptkarte, Felder und Band im Kochmodus */
+  --radius-wall-plate:     calc(var(--radius-sm) + 12px);              /* 20  - der Teller der Hauptkarte */
+  --wall-plate:            calc(var(--space-16) * 2.5);                /* 160 */
+  --wall-meter:            calc(var(--space-16) * 3 + var(--space-2)); /* 200 - der Vorrats-Messer am Abendessen */
+  --wall-cook-min:         calc(var(--space-16) * 5);                  /* 320 - „Gotuj" in der Hauptkarte */
+  --wall-cook-min-compact: calc(var(--space-16) * 3);                  /* 192 - „Gotuj" in der kleinen Abendessen-Karte */
+  --wall-next-min:         calc(var(--space-16) * 4);                  /* 256 - „Wróć do ściany" am Ende des Kochmodus */
+  --wall-loading-min:      calc(var(--space-16) * 4);                  /* 256 - Platzhalter einer Karte beim Laden */
+  --wall-band-min:         calc(var(--space-16) * 2 - var(--space-2)); /* 120 - das Minutnik-Band im Kochmodus (iPad) */
+  --wall-dialog-max:       40rem;   /* „Kto to zrobił?" */
+  --wall-progress-max:     25rem;   /* der Fortschritt des Kochmodus */
+  --wall-progress-seg:     6px;     /* Hoehe eines Fortschritt-Segments */
+  --wall-hairline:         0.5px;   /* zwischen den Zeilen der Dziś-Karte */
+  --wall-rule:             1px;     /* Fuss eines Feldes, Trenner im Band, Scheibe bei Nacht */
+  --wall-ring:             2px;     /* Kreis zum Abhaken, Zutaten-Ring */
+  --wall-ring-thin:        1.5px;   /* eine fehlende Zutat im Messer */
+  --wall-icon-stroke:      1.25;    /* gross gesetzte Lucide-Zeichen: Wetter, Teller */
+  --wall-check-stroke:     2.5;     /* der Haken im Zutaten-Ring */
+  --wall-arc-stroke:       6;       /* der Bogen des laufenden Minutniks */
+  --wall-pulse:            1s;      /* ein abgelaufener Minutnik schlaegt einmal je Sekunde */
+
   /* Größen-Skala (Kompatibilitäts- und Layout-Tokens) */
   --text-2xs:  0.625rem;   /* 10px - Sehr kleine Badges (z.B. Erinnerungs-Zähler) */
   --text-xs:   0.8125rem;  /* 13px - Tafla Footnote (vorher 12px Caption 1) */
@@ -1684,9 +1649,9 @@
    *    (Zentrumsabstand 31,5), Aufgaben-Tagfilter (29,3), Sidebar-Umschalter
    *    (31,5). Wer eine Ausnahme braucht, braucht in Wahrheit Abstand.
    *
-   *    GEMESSEN WIRD DIE TREFFERFLÄCHE, NICHT DIE BOX. .weather-widget__refresh
-   *    ist 34x34 groß und dehnt seine Fläche per ::before auf --target-base
-   *    aus; eine Box-Messung meldet ihn als Verstoß, obwohl der Finger 44px
+   *    GEMESSEN WIRD DIE TREFFERFLÄCHE, NICHT DIE BOX. Der Wetter-Knopf der
+   *    alten Uebersicht war 34x34 groß und dehnte seine Fläche per ::before auf
+   *    --target-base aus; eine Box-Messung meldete ihn als Verstoß, obwohl der Finger 44px
    *    findet. Das ist zugleich das Rezept für „kompakt aussehen, voll
    *    treffen".
    *
@@ -2780,21 +2745,6 @@
     --_source-tandoor:        #60A5FA;
     --_source-tandoor-light:  #172554;
 
-    /* Wetterlagen (5b) - dieselben sechs Rollen, auf der Kohle-Buehne
-     * aufgehellt. Gemessen gegen #2B2825 / #37332E / #191816, schlechtester
-     * Grund: 7,51 / 6,29 / 6,35 / 6,60 / 7,75 / 6,38:1. */
-    --_weather-clear:  #FBBF24;
-    --_weather-night:  #A5B4FC;
-    --_weather-cloud:  #A8BBCC;
-    --_weather-rain:   #7FC4F0;
-    --_weather-snow:   #5EDDE8;
-    --_weather-storm:  #D8A6F5;
-    --_weather-band-icy:  #67E8F9;
-    --_weather-band-cold: #7FB8FF;
-    --_weather-band-mild: #5EEAD4;
-    --_weather-band-warm: #FBBF24;
-    --_weather-band-hot:  #FB923C;
-
     --_color-priority-low:       #C7C7CC;
     --_color-priority-medium:    #FBBF24;
     --_color-priority-high:      #FB923C;
@@ -3054,19 +3004,6 @@
     --_source-tandoor:        #60A5FA;
     --_source-tandoor-light:  #172554;
 
-    /* Wetterlagen (5b) - Zwilling des prefers-color-scheme-Blocks. */
-    --_weather-clear:  #FBBF24;
-    --_weather-night:  #A5B4FC;
-    --_weather-cloud:  #A8BBCC;
-    --_weather-rain:   #7FC4F0;
-    --_weather-snow:   #5EDDE8;
-    --_weather-storm:  #D8A6F5;
-    --_weather-band-icy:  #67E8F9;
-    --_weather-band-cold: #7FB8FF;
-    --_weather-band-mild: #5EEAD4;
-    --_weather-band-warm: #FBBF24;
-    --_weather-band-hot:  #FB923C;
-
     /* Priority-Badge Hintergründe */
     --_color-priority-low:       #C7C7CC;
     --_color-priority-medium:    #FBBF24;
@@ -3144,8 +3081,7 @@
     --blur-md:  blur(0px);
     --blur-lg:  blur(0px);
     --opacity-glass-elevated: 1;
-    --weather-glow-opacity: 0; /* Wetter-Lichthauch aus (5b) */
-    --brand-field-opacity: 0;  /* Marken-Lichtfeld aus - gleiche Gattung */
+    --brand-field-opacity: 0;  /* Marken-Lichtfeld aus */
     /* Specular aus: --glass-inset-strength ist der Faktor aller abgestuften
      * Inset-Tokens (d2). */
     --glass-inset-strength: 0;
@@ -3188,8 +3124,7 @@
      * Ein Hochkontrast-Block, der den Kontrast senkt, ist schlimmer als keiner.
      * Ohne Eintrag gilt der regulaere Modul-Tint, und der haelt seine Zusage. */
 
-    --weather-glow-opacity: 0; /* Wetter-Lichthauch aus (5b) */
-    --brand-field-opacity: 0;  /* Marken-Lichtfeld aus - gleiche Gattung */
+    --brand-field-opacity: 0;  /* Marken-Lichtfeld aus */
     /* Specular aus, siehe der Schwesterblock oben. */
     --glass-inset-strength: 0;
 
