@@ -2147,7 +2147,7 @@ function periodNavHtml() {
     prev: { id: 'cal-prev', label: labels.prev, title: true, keys: `${CAL_SHORTCUT_KEYS.prev} ${keys.prev}` },
     value: { id: 'cal-label', className: 'cal-toolbar__label' },
     next: { id: 'cal-next', label: labels.next, title: true, keys: `${CAL_SHORTCUT_KEYS.next} ${keys.next}` },
-    // „Dzisiaj" steht mobil als schlichtes Wort am Ende der Zeitraumzeile, nur
+    // „Dziś" steht mobil als schlichtes Wort am Ende der Zeitraumzeile, nur
     // abseits des laufenden Zeitraums (Tafla, Pasek tygodnia); dort ist er
     // inert und verborgen.
     reset: {
@@ -2205,7 +2205,7 @@ function toolbarHtml({ filterCount = 0, scheduleWarningHtml = '', searchValue = 
   // Kopf ist der der Tafla-Tafel: hinter dem Titel ZWEI Kreise, die Lupe und
   // die Ansicht (`viewMenuHtml`, Zeichen `calendar-days`), die auch Blaettern
   // und die Filter traegt. Darunter der Zeitraum als leise Zeile, am Ende
-  // „Dzisiaj", sobald man neben dem laufenden Zeitraum steht.
+  // „Dziś", sobald man neben dem laufenden Zeitraum steht.
   return `
     <h1 class="page-toolbar__title">${t('calendar.title')}</h1>
     <div class="page-toolbar__center cal-toolbar__month">
@@ -2649,7 +2649,7 @@ function syncTodayButton(root = _container) {
     : state.today >= from && state.today <= to;
   // Verbergen, Fokus-Uebergabe und `inert`: die eine Regel in period-stepper.js.
   // Am Telefon stehen keine Pfeile (calendar.css); der Fokus eines
-  // verschwindenden „Dzisiaj" geht dann an den Kreis der Ansicht, der das
+  // verschwindenden „Dziś" geht dann an den Kreis der Ansicht, der das
   // Blaettern traegt.
   const prevArrow = root.querySelector('#cal-prev');
   const arrows = typeof prevArrow?.getClientRects !== 'function' || prevArrow.getClientRects().length > 0;
