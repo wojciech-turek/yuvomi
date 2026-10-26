@@ -119,8 +119,6 @@
         "quickActions": "त्वरित क्रियाएं",
         "recipes": "रेसिपी",
         "more": "और",
-        "moreBadge": "{{count}} लंबित",
-        "moreBadge_one": "{{count}} लंबित",
         "moreActiveLabel": "अधिक, {{section}} सक्रिय",
         "moreCatalogHint": "सभी मॉड्यूल. पसंदीदा को सेटिंग में अनुकूलित करें।",
         "documents": "दस्तावेज़",

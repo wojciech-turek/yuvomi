@@ -119,8 +119,6 @@
         "quickActions": "Azioni rapide",
         "recipes": "Ricette",
         "more": "Altro",
-        "moreBadge": "{{count}} in sospeso",
-        "moreBadge_one": "{{count}} in sospeso",
         "moreActiveLabel": "Altro, {{section}} attivo",
         "moreCatalogHint": "Tutti i moduli. Personalizza i preferiti nelle impostazioni.",
         "documents": "Documenti",

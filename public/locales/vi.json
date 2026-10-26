@@ -119,8 +119,6 @@
         "quickActions": "Hành động nhanh",
         "recipes": "Công thức nấu ăn",
         "more": "Thêm",
-        "moreBadge": "{{count}} đang chờ",
-        "moreBadge_one": "{{count}} đang chờ",
         "moreActiveLabel": "Thêm, {{section}} đang hoạt động",
         "moreCatalogHint": "Tất cả mô-đun. Tùy chỉnh mục yêu thích trong cài đặt.",
         "documents": "Tài liệu",

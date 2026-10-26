@@ -119,8 +119,6 @@
         "quickActions": "クイックアクション",
         "recipes": "レシピ",
         "more": "もっと見る",
-        "moreBadge": "未処理 {{count}} 件",
-        "moreBadge_one": "未処理 {{count}} 件",
         "moreActiveLabel": "その他、{{section}} がアクティブ",
         "moreCatalogHint": "すべてのモジュール。お気に入りは設定でカスタマイズできます。",
         "documents": "書類",

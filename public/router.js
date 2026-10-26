@@ -50,7 +50,6 @@ import { hasLeaveGuard, mayLeave } from '/utils/leave-guard.js';
 import { createUpdateFlow, isUserBusy } from '/utils/app-update.js';
 import { createStartHandoff } from '/utils/start-handoff.js';
 import { showSessionUnreachable, showPageUnreachable, isUnreachableFailure } from '/utils/session-unreachable.js';
-import { wireSheetDrag } from '/utils/sheet-drag.js';
 import {
   handleBackNavigation, closeAllOverlays, consumeOverlayMarker,
   pushOverlay, dropOverlay, whenHistorySettled, hasOpenOverlay,
@@ -371,18 +370,6 @@ function scrollPageToTop() {
  * prueft oder ein `fetch` damit abbricht, sieht keinen Unterschied.
  */
 const PAGE_LEFT = new DOMException('The page was left.', 'AbortError');
-
-/**
- * Bringt das ausfahrende Mehr-Blatt samt Abdunklung an sein Ende - vor dem
- * alten Bild eines Seitenwechsels (utils/view-transition.js, `settle`). Die
- * Ausfahrt ist eine CSS-Transition; `finish()` setzt sie auf ihren Endwert,
- * und `getAnimations()` holt eine noch nicht gestartete vorher in den Stil.
- */
-function settleClosingOverlays() {
-  document.querySelectorAll('.more-sheet, .more-backdrop').forEach((el) => {
-    el.getAnimations?.().forEach((anim) => anim.finish());
-  });
-}
 
 // --------------------------------------------------------
 // Modul-Cache: verhindert redundante dynamic imports bei Navigation
@@ -1156,36 +1143,6 @@ function syncSidebarAccount(root = document.querySelector('.nav-sidebar__account
   }
 }
 
-// System-/Utility-Zeilen unter dem App-Launcher-Grid: Einstellungen (Route),
-// Hilfe und Änderungen (Overlays). Vollbreite Listenzeilen — der ruhige,
-// monochrome System-Cluster, klar abgesetzt vom farbigen Modul-Grid.
-// `route` → navigierender <a> (aria-current-fähig); sonst Overlay-<button>.
-function moreActionEl({ labelKey, icon, className = '', onClick, route, navHref }) {
-  const label = t(labelKey);
-  const el = document.createElement(route ? 'a' : 'button');
-  if (route) {
-    el.href = navHref || route;
-    el.dataset.route = route;
-    if (navHref) el.dataset.navHref = navHref;
-  } else {
-    el.type = 'button';
-  }
-  el.className = `more-action ${className}`.trim();
-  el.setAttribute('aria-label', label);
-  if (onClick) el.addEventListener('click', onClick);
-
-  const iconEl = document.createElement('i');
-  iconEl.dataset.lucide = icon;
-  iconEl.className = 'more-action__icon';
-  iconEl.setAttribute('aria-hidden', 'true');
-
-  const labelEl = document.createElement('span');
-  labelEl.className = 'more-action__label';
-  labelEl.textContent = label;
-  el.append(iconEl, labelEl);
-  return el;
-}
-
 /* Zählstände der Modulkacheln im „Mehr"-Sheet.
  *
  * Sie kommen aus EINEM späteren /dashboard-Abruf beim ersten Öffnen des
@@ -1399,203 +1356,6 @@ async function refreshModuleCounts() {
   }
 }
 
-/** Zieht die Badges am offenen Sheet nach, ohne es neu zu bauen. */
-function paintMoreSheetBadges(sheet) {
-  if (!sheet) return;
-  sheet.querySelectorAll('.more-item[data-nav-id]').forEach((item) => {
-    const count = _moduleCounts[item.dataset.navId] ?? 0;
-    const existing = item.querySelector('.more-item__badge');
-    if (count > 0) {
-      if (existing) existing.replaceWith(moreBadgeEl(count));
-      // Vor den Pfeil (Lucide uebernimmt die Klasse aufs erzeugte <svg>).
-      else item.insertBefore(moreBadgeEl(count), item.querySelector('.more-item__chevron'));
-      // Ansage am Link, nicht am Badge - siehe moreBadgeEl.
-      const labelText = item.querySelector('.more-item__label')?.textContent;
-      if (labelText) item.setAttribute('aria-label', `${labelText}, ${t('nav.moreBadge', { count })}`);
-    } else {
-      existing?.remove();
-      item.removeAttribute('aria-label');
-    }
-  });
-}
-
-/**
- * Baut den dynamischen Body des „Mehr“-Sheets: die Module als gruppierte
- * Zeilenliste in den Sektionen der Seitenleiste und darunter die monochrome
- * System-Reihe (Einstellungen · Hilfe · Änderungen · Abmelden).
- *
- * EINE ZEILENLISTE WIE IN DEN iOS-EINSTELLUNGEN, KEIN RASTER MEHR (R19, Ulas
- * 2026-10-16). Das Vierer-Raster je Sektion liess Luecken: Planen trug zwei
- * Kacheln, Finanzen eine, und das Blatt mass bei 390x844 724px (86 % des
- * Schirms) fuer zwoelf Ziele, von denen jede Gruppe ihre Reihe nur halb
- * fuellte. Eine Liste hat keine leeren Zellen: jede Gruppe ist so hoch, wie
- * sie Eintraege hat, der Name steht in voller Laenge auf einer Zeile (keine
- * Silbentrennung „Haushalts-hilfe" mehr), und das Zaehlbadge sitzt am Ende der
- * Zeile, wo der Blick es auf iOS sucht. Die Gruppen sind dieselben wie in der
- * Seitenleiste, mit derselben Regel fuer den Kopf (navSectionLabelKey: ueber
- * nur einem Eintrag steht keiner).
- *
- * Die System-Reihe bleibt eine Reihe aus vier Zielen: sie ist voll besetzt
- * (keine Luecke), monochrom (Meta, nicht Modul) und kostet als Reihe 64px
- * statt vier Zeilen.
- *
- * Gibt EINEN Knoten in einem Array zurück (`.more-sheet__body`, der Scroller);
- * beide Aufrufer spreizen das Ergebnis und bleiben davon unberührt.
- *
- * EINE Quelle der Wahrheit für renderAppShell() UND rebuildNavigation() —
- * beide Pfade müssen dieselbe Struktur erzeugen, sonst zerstört ein
- * Sprachwechsel / Modul-Toggle / Settings-Besuch das Layout.
- * Handle + Suchleiste bleiben davon unberührt (sie tragen Event-Wiring).
- */
-/**
- * Die Module des Mehr-Blatts, gruppiert nach `section` in der gelieferten
- * Reihenfolge: je Sektion EINE Liste (`.more-sheet__list`), benannt wie in der
- * Seitenleiste. Ob eine Sektion einen Kopf bekommt, entscheidet ihre Groesse
- * in der SEITENLEISTE (`labelCounts`), nicht im Blatt: die Favoriten der
- * Leiste fehlen hier, und „Planen" darf nicht namenlos werden, nur weil
- * Kalender und Aufgaben unten in der Leiste stehen - die Gruppen sind
- * dieselben wie am Desktop.
- *
- * @param {Array<object>} modules  bereits nach Sektion sortiert
- * @param {Map<number, number>} labelCounts  Eintraege je Sektion in der Seitenleiste
- * @returns {HTMLElement[]}
- */
-function moreSheetSections(modules, labelCounts) {
-  const out = [];
-  let current;
-  let list = null;
-  for (const item of modules) {
-    const section = item.section ?? null;
-    if (!list || section !== current) {
-      current = section;
-      list = document.createElement('div');
-      list.className = 'more-sheet__list';
-      const group = document.createElement('div');
-      group.className = 'more-sheet__group';
-      const labelKey = section == null ? null : navSectionLabelKey(section, labelCounts.get(section));
-      if (labelKey) {
-        group.setAttribute('role', 'group');
-        const labelId = `more-section-${section}`;
-        group.setAttribute('aria-labelledby', labelId);
-        const label = document.createElement('div');
-        label.className = 'more-sheet__section-label';
-        label.id = labelId;
-        label.textContent = t(labelKey);
-        group.append(label);
-      }
-      group.append(list);
-      out.push(group);
-    }
-    list.appendChild(moreItemEl(item));
-  }
-  return out;
-}
-
-function buildMoreSheetBody() {
-  /* EIN scrollender Körper zwischen Griff und Suche und dem Blattrand.
-   *
-   * Das Blatt ist `position: fixed; bottom: 0` und hatte weder Obergrenze noch
-   * Scroller: es wuchs nach OBEN aus dem Schirm. Gemessen bei 320x568 lag seine
-   * Oberkante bei -142,6px, das Suchfeld komplett ausserhalb (-105,6 bis -67,0)
-   * - fokussierbar per Tab, aber nicht ins Bild zu holen (Critique
-   * 2026-08-13, P0). Der Deckel gehoert ans Blatt, das Scrollen an den Koerper:
-   * so bleiben Griff und Suche stehen, wo die Hand sie sucht, und nur die
-   * Gruppen wandern. Ein Sticky-Kopf haette dieselbe Wirkung, aber zwei
-   * Hintergruende mehr zu verwalten. */
-  const body = document.createElement('div');
-  body.className = 'more-sheet__body';
-  const nodes = [];
-
-  // Der Katalog-Hinweis („Alle Module … in den Einstellungen") lebt jetzt in
-  // der Hilfe (buildHelpRows), nicht mehr als Dauer-Zeile über dem Grid — das
-  // hält das Sheet ruhig und kompakt.
-
-  // Einstellungen ist ein System-Ziel, kein Inhalts-Modul — es wandert aus dem
-  // farbigen Grid in den System-Cluster, damit das Grid sauber aufgeht.
-  const secondary = secondaryMobileItems();
-  const settingsItem = secondary.find((item) => item.module === 'settings');
-
-  // Je Sektion der Seitenleiste EIN Raster unter ihrem Namen. Die Sortierung
-  // nach Sektion steckt schon in secondaryMobileItems() (sortNavigationItems);
-  // hier wird sie nachgezeichnet, wie die Seitenleiste es tut - eine benannte
-  // Gruppe (role="group" + aria-labelledby), damit die Ordnung auch hoerbar ist.
-  const modules = secondary.filter((item) => item.module !== 'settings');
-  const labelCounts = navSectionEntryCounts(navItems().filter((item) => item.module !== 'settings'));
-  nodes.push(...moreSheetSections(modules, labelCounts));
-
-  const divider = document.createElement('div');
-  divider.className = 'more-sheet__divider';
-  divider.setAttribute('aria-hidden', 'true');
-  nodes.push(divider);
-
-  // System-Reihe im selben Vierer-Raster (Icon-über-Label, monochrom).
-  const system = document.createElement('div');
-  system.className = 'more-sheet__system';
-  if (settingsItem) {
-    system.appendChild(moreActionEl({
-      labelKey: 'nav.settings',
-      icon: settingsItem.icon || 'settings',
-      route: settingsItem.path,
-      navHref: settingsItem.navHref,
-    }));
-  }
-  system.appendChild(moreActionEl({
-    labelKey: 'nav.help',
-    icon: 'circle-help',
-    className: 'more-item--help',
-    onClick: () => {
-      if (window._closeMoreSheet) window._closeMoreSheet({ restoreFocus: false });
-      showHelpModal();
-    },
-  }));
-  system.appendChild(moreActionEl({
-    labelKey: 'nav.changelog',
-    icon: 'history',
-    className: 'more-item--changelog',
-    onClick: () => {
-      if (window._closeMoreSheet) window._closeMoreSheet({ restoreFocus: false });
-      showChangelogModal();
-    },
-  }));
-  /* Abmelden ist das vierte Ziel der Reihe, nicht mehr eine Zeile darunter.
-   *
-   * DER ANLASS FUER DIE EIGENE ZEILE IST WEG, NICHT NUR ALT. Gemessen bei
-   * 390x844 lag der Mehr-Knopf bei x 266,6-329,0 / y 776,9-835,0, und
-   * `elementFromPoint` lieferte an seinem MITTELPUNKT nach dem Oeffnen
-   * `.more-item--logout` - derselbe Pixel oeffnete das Blatt und beendete die
-   * Sitzung (Critique 2026-08-13, P0). Behoben hat das die Unterkante des
-   * Blattes: seit `bottom: --nav-bottom-height` (layout.css) liegt ueber der
-   * Leiste ueberhaupt kein Bedienelement des Blattes mehr. Die eigene Zeile war
-   * die zweite Naht ueber derselben Wunde und kostet 60px Hoehe fuer eine
-   * Ueberlappung, die es geometrisch nicht mehr geben kann.
-   *
-   * Es bleibt das LETZTE Ziel der Reihe, und das ist kein Zufall: es ist die
-   * terminale Aktion, sie steht am Ende der Leserichtung, und der
-   * Bestaetigungsdialog bleibt davor. */
-  system.appendChild(moreActionEl({
-    labelKey: 'settings.logout',
-    icon: 'log-out',
-    className: 'more-item--logout',
-    onClick: () => {
-      if (window._closeMoreSheet) window._closeMoreSheet({ restoreFocus: false });
-      // #more-btn synchron fokussieren, BEVOR das Modal öffnet: openModal
-      // erfasst document.activeElement als previouslyFocused. Sonst landet der
-      // Fokus nach „Abbrechen" auf <body> (das Sheet-Item ist dann inert).
-      document.getElementById('more-btn')?.focus();
-      confirmAndLogout();
-    },
-  }));
-
-  // Die Spaltenzahl folgt der Besetzung: ohne Einstellungen (Modul abgeschaltet)
-  // sind es drei Ziele, und drei Ziele in vier Spalten lassen eine Lücke, die
-  // wie ein fehlendes Element aussieht.
-  system.style.setProperty('--more-system-cols', String(system.children.length || 1));
-  nodes.push(system);
-
-  body.append(...nodes);
-  return [body];
-}
-
 /**
  * Lädt und rendert eine Seite dynamisch.
  * @param {{ path: string, page: string }} route
@@ -1807,7 +1567,6 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
       // wenn diese Navigation durch ist: navigate() verwirft jeden Aufruf,
       // solange `isNavigating` steht.
       whenSettled: navigationIdle,
-      settle: settleClosingOverlays,
     });
 
     // Mit View Transition macht der Browser die Blende - seit 2026-10-16 auch
@@ -2165,50 +1924,8 @@ function renderAppShell(container) {
     navItems().forEach((item) => bottomItems.appendChild(navItemEl(item)));
   }
 
-  let backdrop, moreSheet;
 
-  if (!isMinimalNav) {
-    bottomItems.replaceChildren(...buildBottomNavItems());
-
-    backdrop = document.createElement('div');
-    backdrop.className = 'more-backdrop';
-    backdrop.id = 'more-backdrop';
-    backdrop.setAttribute('aria-hidden', 'true');
-
-    moreSheet = document.createElement('div');
-    moreSheet.className = 'more-sheet';
-    moreSheet.id = 'more-sheet';
-    moreSheet.setAttribute('role', 'dialog');
-    moreSheet.setAttribute('aria-modal', 'true');
-    moreSheet.setAttribute('aria-label', t('nav.more'));
-    setOverlayInteractive(moreSheet, false);
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'more-sheet__handle';
-    dragHandle.setAttribute('aria-hidden', 'true');
-    moreSheet.insertAdjacentElement('afterbegin', dragHandle);
-
-    const moreSearchBar = document.createElement('button');
-    moreSearchBar.type = 'button';
-    moreSearchBar.className = 'more-sheet__search';
-    moreSearchBar.id = 'more-sheet-search';
-    moreSearchBar.setAttribute('aria-label', t('search.placeholder'));
-    const moreSearchIcon = document.createElement('i');
-    moreSearchIcon.dataset.lucide = 'search';
-    moreSearchIcon.className = 'more-sheet__search-icon';
-    moreSearchIcon.setAttribute('aria-hidden', 'true');
-    const moreSearchPlaceholder = document.createElement('span');
-    moreSearchPlaceholder.className = 'more-sheet__search-placeholder';
-    moreSearchPlaceholder.textContent = t('search.placeholder');
-    moreSearchBar.appendChild(moreSearchIcon);
-    moreSearchBar.appendChild(moreSearchPlaceholder);
-    moreSheet.appendChild(moreSearchBar);
-
-    // Hinweis + App-Launcher-Grid + System-Cluster. Geteilte Logik mit
-    // rebuildNavigation() (Sprachwechsel / Modul-Toggle) — sonst driften die
-    // zwei Render-Pfade auseinander.
-    moreSheet.append(...buildMoreSheetBody());
-  }
-
+  if (!isMinimalNav) bottomItems.replaceChildren(...buildBottomNavItems());
   bottomNav.appendChild(bottomItems);
 
   // Gleitender Tab-Indikator. TAFLA: er liegt IN der Kapsel, zwischen ihrem
@@ -2332,8 +2049,6 @@ function renderAppShell(container) {
   // TAFLA: das abgesetzte + (globales Erfassen) - auf jeder Seite dasselbe,
   // nie umgedeutet. Gast und Wandtablett erfassen nichts.
   if (!isMinimalNav) shellNodes.push(createCapturePlus({ onOpen: () => openCaptureFromShell() }));
-  if (backdrop)   shellNodes.push(backdrop);
-  if (moreSheet)  shellNodes.push(moreSheet);
   shellNodes.push(searchOverlay, routeAnnouncer);
   container.replaceChildren(...shellNodes);
   // Der Stapel weicht den Knoepfen offener Dialoge aus (#1160, Begruendung in
@@ -2354,7 +2069,6 @@ function renderAppShell(container) {
       e.preventDefault();
       const target = el.dataset.navHref ?? el.dataset.route;
       if (isCurrentAddress(target, location)) {
-        window._closeMoreSheet?.({ restoreFocus: false });
         scrollPageToTop();
         return;
       }
@@ -2377,7 +2091,19 @@ function renderAppShell(container) {
 
   const openSearch = initSearch(container);
   _openSearch = openSearch;
-  initMoreSheet(container, openSearch);
+  // TAFLA: Więcej ist ein Ziel (/more), kein Blatt mehr - der Knopf fuehrt
+  // dorthin wie jeder Tab, und der aktive fuehrt nur nach oben. Delegiert am
+  // Shell-Knoten (er ueberlebt rebuildNavigation, der Knopf nicht), und nur
+  // einmal je Knoten: renderAppShell laeuft bei jedem Neuaufbau der Shell.
+  if (!container.dataset.moreTabWired) {
+    container.dataset.moreTabWired = '1';
+    container.addEventListener('click', (e) => {
+      if (!e.target.closest?.('#more-btn')) return;
+      e.preventDefault();
+      if (isCurrentAddress(MORE_PATH, location)) scrollPageToTop();
+      else navigate(MORE_PATH);
+    });
+  }
   initOfflineBanner();
   initKeyboardShortcuts();
 
@@ -3068,7 +2794,7 @@ function applyUpdateBadge() {
   const version = pendingUpdateVersion();
   // Die Kontozeile traegt den Punkt fuer das Menue, in dem „Aenderungen" jetzt
   // steht - hinter einem geschlossenen Menue waere der Hinweis sonst unsichtbar.
-  for (const el of document.querySelectorAll('.nav-sidebar__account-trigger, .nav-sidebar__account-menu .nav-item--changelog, .more-item--changelog, #more-btn')) {
+  for (const el of document.querySelectorAll('.nav-sidebar__account-trigger, .nav-sidebar__account-menu .nav-item--changelog, #more-btn')) {
     toggleUpdateDot(el, Boolean(version));
   }
   const account = document.querySelector('.nav-sidebar__account-trigger');
@@ -3076,7 +2802,7 @@ function applyUpdateBadge() {
   // Den Namen des „Mehr"-Buttons setzt setMoreButtonState bei jeder Navigation
   // neu; sein Zusatz gehört deshalb dorthin und nicht hierher, sonst wäre er
   // nach dem ersten Seitenwechsel wieder weg.
-  for (const el of document.querySelectorAll('.nav-item--changelog, .more-item--changelog')) {
+  for (const el of document.querySelectorAll('.nav-item--changelog')) {
     const label = withUpdateHint(t('nav.changelog'), version);
     el.setAttribute('aria-label', label);
     if (el.hasAttribute('title')) el.setAttribute('title', label);
@@ -3417,121 +3143,6 @@ function initOfflineBanner() {
 }
 
 /**
- * Öffnet/schließt das More-Sheet und die Backdrop.
- */
-function initMoreSheet(container, openSearch) {
-  const moreBtn  = container.querySelector('#more-btn');
-  const backdrop = container.querySelector('#more-backdrop');
-  const sheet    = container.querySelector('#more-sheet');
-  if (!moreBtn || !backdrop || !sheet) return;
-  let lastFocusedBeforeSheet = null;
-  const moreSheetTrap = createFocusTrap(sheet);
-  const currentMoreBtn = () => container.querySelector('#more-btn') || moreBtn;
-
-  // Der Marker der Zurueck-Geste, solange das Blatt offen ist (#871).
-  let sheetOverlayToken = null;
-
-  function openSheet() {
-    lastFocusedBeforeSheet = document.activeElement;
-    sheetOverlayToken = pushOverlay(() => closeSheet());
-    setOverlayInteractive(sheet, true);
-    sheet.addEventListener('keydown', moreSheetTrap);
-    backdrop.classList.add('more-backdrop--visible');
-    currentMoreBtn().setAttribute('aria-expanded', 'true');
-    sheet.querySelector('#more-sheet-search, [data-route]')?.focus();
-    if (window.lucide) window.lucide.createIcons({ el: sheet });
-    /* ZUERST AUS DEM SPEICHER, DANN NACHZIEHEN.
-     *
-     * Der Speicher ist beim Oeffnen in der Regel schon warm: seit #868 holt
-     * ihn der Shell-Aufbau, weil die Nav-Badges daran haengen. Ohne die erste
-     * Zeile faenden die Kacheln davon nichts - `refreshModuleCounts()` gaebe
-     * innerhalb seiner TTL `false` zurueck („nichts Neues"), und die Wache
-     * darunter uebersprang das Zeichnen. Die Kacheln blieben dann bis zu 60
-     * Sekunden nach dem Anmelden leer, obwohl die Zahlen im Speicher lagen -
-     * derselbe Fehler, den dieser Fix fuer die Nav-Badges behebt, nur eine
-     * Ebene versetzt.
-     *
-     * Das Nachziehen bleibt: das Sheet steht sofort, frische Zahlen kommen,
-     * sobald die Antwort da ist. */
-    paintMoreSheetBadges(sheet);
-    refreshModuleCounts().then((fresh) => {
-      if (fresh && sheet.getAttribute('aria-hidden') !== 'true') paintMoreSheetBadges(sheet);
-    });
-  }
-
-  function closeSheet({ restoreFocus = true } = {}) {
-    if (sheet.getAttribute('aria-hidden') === 'true') return;
-    if (sheetOverlayToken !== null) {
-      const token = sheetOverlayToken;
-      sheetOverlayToken = null;
-      dropOverlay(token);
-    }
-    setOverlayInteractive(sheet, false);
-    sheet.removeEventListener('keydown', moreSheetTrap);
-    backdrop.classList.remove('more-backdrop--visible');
-    currentMoreBtn().setAttribute('aria-expanded', 'false');
-    if (restoreFocus) returnFocus(lastFocusedBeforeSheet || currentMoreBtn());
-  }
-
-  // TAFLA: the Więcej tab goes to its page (/more) instead of opening this
-  // sheet. Nothing opens the sheet any more; its code can go in a follow-up.
-  container.addEventListener('click', (e) => {
-    if (!e.target.closest('#more-btn')) return;
-    e.preventDefault();
-    if (sheet.getAttribute('aria-hidden') === 'false') closeSheet({ restoreFocus: false });
-    navigate(MORE_PATH);
-  });
-
-  backdrop.addEventListener('click', () => closeSheet());
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && sheet.getAttribute('aria-hidden') === 'false') {
-      closeSheet();
-    }
-  });
-
-  /* WISCHEN SCHLIESST NUR VOM ANFANG DER LISTE AUS - ODER VOM GRIFF.
-   *
-   * Vorher schloss jede Abwaertsbewegung ueber 60px das Blatt, egal wo sie
-   * begann. Seit `.more-sheet__body` scrollt (die Obergrenze gegen den
-   * Blattueberstand bei 320px), IST diese Geste auch das Zurueckscrollen in den
-   * Gruppen: wer unten steht und nach oben zurueckwischt, bewegt den Finger
-   * abwaerts und schloss damit das Blatt (PR-Review #754). Der Stand wird beim
-   * BEGINN der Geste gemerkt, nicht am Ende.
-   *
-   * Die Geste selbst ist seit der Re-Critique 2026-09-27 dieselbe wie am
-   * Dialog-Sheet (utils/sheet-drag.js): das Blatt geht 1:1 mit, schliesst ab
-   * 80px ODER bei einem Flick, federt sonst zurueck. Vorher entschied erst
-   * `touchend` ab 60px, und das Blatt stand waehrenddessen still. */
-  wireSheetDrag(sheet, {
-    scroller: () => sheet.querySelector('.more-sheet__body'),
-    onDismiss: () => closeSheet(),
-    resetAfterDismiss: true,
-    // Die Abdunklung folgt dem Zug (R18): der Backdrop ist ein eigenes Element.
-    dim: () => backdrop,
-  });
-
-  sheet.addEventListener('click', (e) => {
-    if (e.target.closest('[data-route]')) closeSheet({ restoreFocus: false });
-  });
-
-  const moreSearchBar = sheet.querySelector('#more-sheet-search');
-  if (moreSearchBar && openSearch) {
-    const triggerSearch = () => {
-      // Sheet sofort (ohne Slide-Animation) schließen, damit nur eine Animation abläuft
-      sheet.style.transition = 'none';
-      closeSheet({ restoreFocus: false });
-      requestAnimationFrame(() => {
-        openSearch();
-        sheet.style.transition = '';
-      });
-    };
-    moreSearchBar.addEventListener('click', triggerSearch);
-  }
-
-  window._closeMoreSheet = closeSheet;
-}
-
-/**
  * Initialisiert die Suchfunktion (Overlay + API-Calls).
  */
 // Die Palette hinter ⌘K (Re-Critique 2026-09-28, A1 P2-1): zuerst ORTE und
@@ -3679,7 +3290,6 @@ function initSearch(container) {
       input.select();
       return;
     }
-    if (window._closeMoreSheet) window._closeMoreSheet({ restoreFocus: false });
     lastFocusedBeforeSearch = document.activeElement;
     if (searchOverlayToken === null) searchOverlayToken = pushOverlay(() => closeSearch());
     setOverlayInteractive(overlay, true);
@@ -4757,59 +4367,6 @@ function sidebarKitchenEl() {
   return a;
 }
 
-function moreItemEl({ path, navHref, label, icon, module: mod, accent, navId }) {
-  const a = document.createElement('a');
-  a.href = navHref ?? path;
-  a.dataset.route = path;
-  a.dataset.navId = navId ?? mod;
-  if (navHref) a.dataset.navHref = navHref;
-  a.className = 'more-item';
-  if (accent) a.style.setProperty('--item-module-accent', accent);
-  else if (mod) a.style.setProperty('--item-module-accent', moduleAccentVar(mod));
-  const well = document.createElement('div');
-  // Markensiegel (Block 2): das Well nimmt Form und Material vom Baustein,
-  // die Zeilengroesse und die Akzent-Weiterleitung stehen in layout.css.
-  well.className = 'module-seal more-item__icon-well';
-  well.appendChild(moduleIconEl(icon, 'more-item__icon'));
-  const span = document.createElement('span');
-  span.className = 'more-item__label';
-  span.textContent = label;
-  a.appendChild(well);
-  a.appendChild(span);
-
-  // Der Zaehlstand kommt spaeter (siehe paintMoreSheetBadges) und nur, wenn es
-  // einen gibt. Die Zeile bleibt ohne ihn vollstaendig - ein Badge ist eine
-  // Zugabe, kein Bestandteil. Er steht VOR dem Pfeil, wie in iOS.
-  const count = _moduleCounts[navId ?? mod];
-  if (count > 0) {
-    a.appendChild(moreBadgeEl(count));
-    a.setAttribute('aria-label', `${label}, ${t('nav.moreBadge', { count })}`);
-  }
-  const chevron = document.createElement('i');
-  chevron.dataset.lucide = 'chevron-right';
-  chevron.className = 'more-item__chevron';
-  chevron.setAttribute('aria-hidden', 'true');
-  a.appendChild(chevron);
-  return a;
-}
-
-/**
- * Zaehlbadge einer Modulkachel: „was wartet", nie „was existiert".
- * Die nackte Ziffer haengt sich sonst an den Kachelnamen („Belohnungen1"):
- * ein aria-label auf dem <span> zaehlt bei der Namensberechnung des Links
- * NICHT (Rolle generic traegt keinen Namen), sein Ziffern-Text aber schon.
- * Deshalb ist das Badge aria-hidden, und die Ansage steht als aria-label auf
- * der Kachel selbst („Belohnungen, 1 offen") - dasselbe Muster wie
- * nav-badges.js und setSubTabBadge.
- */
-function moreBadgeEl(count) {
-  const badge = document.createElement('span');
-  badge.className = 'more-item__badge';
-  badge.textContent = count > 99 ? '99+' : String(count);
-  badge.setAttribute('aria-hidden', 'true');
-  return badge;
-}
-
 function kitchenSectionLabel(path) {
   const kitchenItems = navItems().filter((i) => i.kitchenGroup);
   const targetRoute = isKitchenRoute(path) ? path : getLastKitchenRoute();
@@ -4829,18 +4386,18 @@ function kitchenNavAriaLabel(path) {
 }
 
 /**
- * Aktiven Nav-Link hervorheben und More-Button als aktiv markieren
- * wenn die aktive Route im More-Sheet liegt.
+ * Den Więcej-Tab als aktiv markieren, wenn die aktive Route hinter Więcej
+ * liegt (oder /more selbst ist).
  */
 function setMoreButtonState(moreBtn, activeSecondary, onMorePage = false) {
   // Auf /more selbst ist der Tab das Ziel (Tafla): aktiv, ohne Abschnittsnamen.
-  const inMoreSheet = onMorePage || !!activeSecondary;
+  const inMore = onMorePage || !!activeSecondary;
   const moreLabel = activeSecondary && !onMorePage
     ? t('nav.moreActiveLabel', { section: activeSecondary.label })
     : t('nav.more');
 
-  moreBtn.classList.toggle('nav-item--active', inMoreSheet);
-  if (inMoreSheet) {
+  moreBtn.classList.toggle('nav-item--active', inMore);
+  if (inMore) {
     moreBtn.setAttribute('aria-current', 'page');
     if (activeSecondary?.accent) {
       moreBtn.style.setProperty('--item-module-accent', activeSecondary.accent);
@@ -5176,7 +4733,7 @@ window.addEventListener('auth:expired', () => {
 });
 
 // Navigation komplett neu rendern (z.B. nach Sprach- oder Modul-Toggle-Änderung).
-// Behält Bottom-Bar-Buttons (Kitchen, More) und More-Sheet-Handle/Suche bei.
+// Behält die Bottom-Bar-Buttons (Kitchen, Więcej) bei.
 /**
  * Ein Ziel ist aus der Navigation verschwunden (Modul abgeschaltet oder
  * ausgeblendet): seine Zahl geht mit.
@@ -5200,7 +4757,6 @@ function rebuildNavigation({ updateLabels = true } = {}) {
   const navSidebarItems = document.querySelector('.nav-sidebar__items');
   const navBottom    = document.querySelector('.nav-bottom');
   const bottomItems  = document.querySelector('.nav-bottom__items');
-  const moreSheet    = document.querySelector('#more-sheet');
   const moreBtnLabel = document.querySelector('#more-btn .nav-item__label');
 
   if (updateLabels) {
@@ -5236,19 +4792,6 @@ function rebuildNavigation({ updateLabels = true } = {}) {
     const indicator = bottomItems.querySelector('.nav-bottom__indicator');
     bottomItems.replaceChildren(...(indicator ? [indicator] : []), ...buildBottomNavItems(moreBtn));
     requestAnimationFrame(() => positionTabIndicator());
-  }
-  if (moreSheet) {
-    const handle = moreSheet.querySelector('.more-sheet__handle');
-    const searchBar = moreSheet.querySelector('#more-sheet-search');
-    if (searchBar) {
-      const placeholder = searchBar.querySelector('.more-sheet__search-placeholder');
-      if (placeholder) placeholder.textContent = t('search.placeholder');
-      searchBar.setAttribute('aria-label', t('search.placeholder'));
-    }
-    // Handle + Suchleiste bewahren (Event-Wiring); Body über die geteilte
-    // Funktion neu bauen — identisch zu renderAppShell().
-    moreSheet.replaceChildren(handle, ...(searchBar ? [searchBar] : []), ...buildMoreSheetBody());
-    if (window.lucide) window.lucide.createIcons({ el: moreSheet });
   }
 
   document.querySelectorAll('[data-route]').forEach((el) => {

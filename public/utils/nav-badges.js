@@ -88,10 +88,8 @@ function iconWrap(navItem) {
  * ueberfaellig" ueberschrieben.
  *
  * Nach CONTAINER und nicht nach Item-Klasse: „in der Navigation" ist die
- * Aussage, und sie ueberlebt eine Umbenennung von `.nav-item`. Das Mehr-Blatt
- * steht bewusst NICHT dabei - seine Kacheln fuehren ihre eigenen Zaehler
- * (`.more-item__badge`, siehe `paintMoreSheetBadges` im Router), und die
- * beantworten eine andere Frage.
+ * Aussage, und sie ueberlebt eine Umbenennung von `.nav-item`. Die Seite
+ * Więcej (/more) steht bewusst NICHT dabei - sie ist Inhalt, nicht Navigation.
  */
 const NAV_SCOPES = '.nav-sidebar, .nav-bottom';
 

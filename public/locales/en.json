@@ -119,8 +119,6 @@
         "quickActions": "Quick actions",
         "recipes": "Recipes",
         "more": "More",
-        "moreBadge": "{{count}} open",
-        "moreBadge_one": "{{count}} open",
         "moreActiveLabel": "More, {{section}} active",
         "moreCatalogHint": "All modules. Customize your favorites in settings.",
         "documents": "Documents",

@@ -2788,7 +2788,8 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 - **Die Pille der Leiste ist dunkel eine halbe Stufe kraeftiger** (`--nav-indicator-tint`: hell
   16 %, dunkel 24 %). Pixelprobe 390x844 gegen die Kapsel: 1,32/1,28:1 -> 1,51/1,48:1;
   Akzentzeichen auf der Pille 3,70:1 (Grafik, >= 3:1), Labelton 4,93:1.
-- **Mehr-Blatt:** so breit wie die Kapsel (`max-inline-size: --nav-capsule-max`, zentriert;
+- **Mehr-Blatt** (entfernt 2026-10-24, Tafla: Więcej ist die Seite `/more`; Blatt, Backdrop,
+  ihre Regeln und `nav.moreBadge` sind weg - der folgende Eintrag ist Geschichte): so breit wie die Kapsel (`max-inline-size: --nav-capsule-max`, zentriert;
   768px: 744 -> 560px, 390px unveraendert 366px). Die Module stehen als **gruppierte
   Zeilenliste wie in den iOS-Einstellungen** (R19, Ulas 2026-10-16), je Sektion der
   Seitenleiste eine eingelassene Liste (`.more-sheet__list`): Zeile >= `--target-base`, Siegel
@@ -2846,7 +2847,13 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > klebt darunter - auf JEDER geschobenen Seite, auch den scrollenden (2026-10-24:
 > `wireCollapsingHeader` setzt dort `page-toolbar--bar`, Kollaps wie gedeckelt; den
 > Hoehenverlust traegt der Kopf als Rand unten `--bar-collapse-gap`, der Inhalt springt nicht,
-> und die Scroll-Verankerung ruht fuer den Umschalt-Durchgang). Budget
+> und die Scroll-Verankerung ruht fuer den Umschalt-Durchgang). Auch EINZEILIGE Koepfe mit grossem
+> Titel (Więcej, Zadania) klappen unter 1024px ein - der Titel faellt auf 22px, die Zeile bleibt
+> gleich hoch; steht der grosse Titel im Inhalt (Einstellungs-Blatt, `[data-large-title]`),
+> erscheint er klein neben dem Rueckweg, sobald er unter der Leiste liegt („‹ Wygląd"). In jeder
+> eingeklappten Leiste bleiben die Kreise, am Telefon auch das Such-Icon (2026-10-24). Die Kante
+> eines gedeckelten Kopfes folgt dem Scroll seiner Liste, auch wenn deren Reserve das Einklappen
+> nicht traegt (Lead-Zone + 48px; /notes mit 91px gegen 56px). Budget
 > (`--period-inline`) behaelt Titel und Zeitraum in Zeile 2. Fuehrt ein Modul selbst zurueck
 > („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (capture.css). Kuchnia: „Kuchnia" als
 > grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·

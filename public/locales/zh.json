@@ -119,8 +119,6 @@
         "quickActions": "快捷操作",
         "recipes": "食谱",
         "more": "更多",
-        "moreBadge": "{{count}} 项待处理",
-        "moreBadge_one": "{{count}} 项待处理",
         "moreActiveLabel": "更多，{{section}} 已激活",
         "moreCatalogHint": "所有模块。在设置中自定义常用项。",
         "documents": "文档",
