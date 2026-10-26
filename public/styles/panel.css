@@ -89,51 +89,87 @@
  *
  * Das Touch-Maß kommt aus --target-base (44px Zeiger / 48px Finger); die
  * abgelösten Leisten lagen bei 40px bzw. 28px Höhe.
- * -------------------------------------------------------- */
+ *
+ * TAFLA (2026-10-26, KIT "Segmented control"; dieselbe Form wie `.seg-control`
+ * in inset-list.css und die Kuechen-Leiste): eine 36 hohe Spur in --fill,
+ * Kapsel, 2pt Einzug, ohne Kante; der Daumen 32 hoch auf --raised mit E1;
+ * Labels 13/600, Tinte gewaehlt, Tinte-2 sonst - neutral, nie violett. Bis
+ * hierher: umrandetes Well (--surface-3, radius-md) mit 44/48 hohen Segmenten.
+ *
+ * DIE LEISTE BLEIBT SO HOCH WIE DAS ZIEL. Der gleitende Daumen
+ * (segment-indicator.js) misst das Segment selbst, also IST das Segment 32
+ * hoch; seine Trefferflaeche reicht per `::after` um `--seg-pad` nach oben und
+ * unten, und die Leiste polstert genau so viel (aussen = --target-base). Die
+ * Spur ist deshalb das `::before` der Leiste statt ihr Grund - und nichts ragt
+ * aus der Leiste heraus, auch dort nicht, wo sie selbst quer scrollt
+ * (Kalender-Ansicht im Kopf, Fastenziel). */
 .segmented {
+  --seg-pad: calc((var(--target-base) - 32px) / 2);
+  --seg-active-bg: var(--color-raised);
+  --seg-active-shadow: var(--shadow-e1);
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
-  gap: var(--space-1);
-  padding: var(--space-0h);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-3);
+  align-items: center;
+  gap: 0;
+  padding: var(--seg-pad) 2px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+}
+
+.segmented::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--seg-pad) - 2px) 0;
+  z-index: -2;
+  border-radius: var(--radius-full);
+  background: var(--color-fill);
+  pointer-events: none;
 }
 
 .segmented__item {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
-  min-height: var(--target-base);
+  min-height: 32px;
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--type-footnote);
+  line-height: var(--type-footnote-lh);
+  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* Die Trefferflaeche: bis an die Kante der Leiste (--target-base). */
+.segmented__item::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--seg-pad)) 0;
 }
 
 .segmented__item:hover:not(.is-active) {
   color: var(--color-text-primary);
 }
 
-/* Aktiv = erhabene Surface-Pille im Well, Modulton nur in der Tinte - die eine
- * Segment-Sprache der Shell (Rezept: tokens.css, Abschnitt 6c; Muster
- * .sub-tab--active / .group-toggle__btn--active / .cal-toolbar__view-btn--active).
+/* Aktiv = erhabene Surface-Pille in der Spur (Rezept: tokens.css, Abschnitt
+ * 6c; Muster .sub-tab--active / .group-toggle__btn--active).
  *
- * Die Unterscheidung zum Primärbutton daneben trägt weiter die FORM, wie schon
- * unter der gefüllten Fassung: der Primärbutton ist ein Rechteck mit Schatten
- * in EINER Stimme (Violett), das Segment eine Kapsel in einer umrandeten
- * Leiste. Neu ist nur, dass der Modulton nicht mehr als zweite laute Fläche
- * daneben steht. Innenradius konzentrisch (radius-sm im radius-md-Träger). */
+ * 2026-10-26, Tafla: die Tinte ist TINTE, nicht der Modulton. Die Wahl ist ein
+ * Ort, keine Handlung (KIT: "Neutral, never violet") - und ohne Modul (die
+ * Einstellungen) fiel `--module-accent` auf das Violett zurueck. Der Guard
+ * "das aktive Segment ist ueberall dieselbe Pille" kennt diese Fassung. */
 .segmented__item.is-active {
   background: var(--seg-active-bg);
   box-shadow: var(--seg-active-shadow);
-  color: color-mix(in srgb, var(--module-accent, var(--color-accent)) var(--tint-ink), var(--color-text-primary));
+  color: var(--color-text-primary);
 }
 
 .segmented__item:focus-visible {
@@ -144,21 +180,12 @@
 /* DIE ANSICHTSWAHL IM KOPF (D1, Critique 2026-10-16): Aufgaben, Dokumente und
  * Kalender waehlen ihre Ansicht mit diesem Segment. Am Zeiger steht es in der
  * Kopfzeile neben 40px-Knoepfen (`.page-toolbar .btn--icon`, layout.css) und
- * misst AUSSEN dieselben 40px - Naht 1px, Rand 1px, Segmente 36px. Mit der
- * Basis-Hoehe und 2px Naht stand es als 50px-Well in der Zeile und hob die
- * Titelzeile um 6px an. Am Finger gilt dieselbe Rechnung gegen --target-base
- * (aussen 48px wie Lupe und Filter, statt 54px auf dem Tablet). */
-.page-toolbar .segmented {
-  padding: var(--space-px);
-}
-
-.page-toolbar .segmented__item {
-  min-height: calc(var(--target-base) - 4 * var(--space-px));
-}
-
+ * misst AUSSEN dieselben 40px; am Finger --target-base wie Lupe und Filter.
+ * 2026-10-26, Tafla: die Spur und der Daumen sind dieselben 36/32 wie ueberall
+ * - im Kopf schrumpft nur das Polster der Leiste (`--seg-pad`). */
 @media (hover: hover) and (pointer: fine) {
-  .page-toolbar .segmented__item {
-    min-height: calc(var(--target-md) - 4 * var(--space-px));
+  .page-toolbar .segmented {
+    --seg-pad: calc((var(--target-md) - 32px) / 2);
   }
 }
 

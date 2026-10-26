@@ -1258,8 +1258,12 @@ test('der Ansichtsumschalter ist das Kanon-Segment (D1) und so hoch wie Suche un
     && /(?:^|[;{\s])(?:background|box-shadow|border-radius|padding|width|height)\s*:/.test(rule.body));
   assert.deepEqual(own.map((r) => r.selector.trim()), [], 'keine eigene Pille, Flaeche oder Hoehe mehr');
   const panel = readFileSync(new URL('../public/styles/panel.css', import.meta.url), 'utf8');
-  const item = [...eachRule(panel)].find((r) => r.selector.trim() === '.page-toolbar .segmented__item' && !r.at.length);
-  assert.match(item?.body ?? '', /min-height:\s*calc\(var\(--target-base\) - 4 \* var\(--space-px\)\)/, 'Kopf-Segment aussen so hoch wie ein Kopfknopf');
+  // 2026-10-26, Tafla: aussen ist die Leiste so hoch wie ihr Polster es sagt -
+  // am Finger --target-base (Grundregel), am Zeiger --target-md wie die Kopfknoepfe.
+  const bar = [...eachRule(panel)].find((r) => r.selector.trim() === '.segmented' && !r.at.length);
+  assert.match(bar?.body ?? '', /--seg-pad:\s*calc\(\(var\(--target-base\) - 32px\) \/ 2\)/, 'Segment aussen so hoch wie ein Ziel');
+  const head = [...eachRule(panel)].find((r) => r.selector.trim() === '.page-toolbar .segmented' && r.at.some((a) => /pointer:\s*fine/.test(a)));
+  assert.match(head?.body ?? '', /--seg-pad:\s*calc\(\(var\(--target-md\) - 32px\) \/ 2\)/, 'Kopf-Segment aussen so hoch wie ein Kopfknopf');
 });
 
 test('der Ordner-Kebab ist immer sichtbar, ruhig in Tertiaerfarbe', () => {
