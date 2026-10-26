@@ -205,8 +205,7 @@
  *
  * KEIN backdrop-filter - weder hier noch an der Tafel (siehe unten): die
  * Kante ist Material ohne Blur. */
-.modal-panel::after,
-.more-sheet::after {
+.modal-panel::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -257,7 +256,7 @@
  * also unsichtbar (Re-Critique 2026-09-27, P1 #1). Die Farbe ist jetzt ein
  * Token mit zwei Werten (`--sheet-grabber`, tokens.css): hell die kraeftigere
  * Kante, dunkel weiter das Glas-Weiss. Gezeichnet wird der Griff in
- * layout.css (Dialog-Sheet) und an `.more-sheet__handle`. */
+ * layout.css (Dialog-Sheet). */
 
 /* ================================================================
  * 4. Buttons — Specular Highlight

@@ -622,6 +622,38 @@ dialog.modal-overlay:has(.modal-panel--capture)::backdrop {
   .page-toolbar--bar.is-collapsed {
     margin-block-end: var(--bar-collapse-gap, 0px);
   }
+
+  /* Der kleine Titel eines Kopfes, dessen grosser Titel im Inhalt steht
+   * (Einstellungs-Blatt, `[data-large-title]`): eingeklappt steht er neben dem
+   * Rueckweg - „‹ Wygląd" (Tafla, 2026-10-24). */
+  .page-toolbar--capped.is-collapsed > .page-toolbar__dock-title {
+    display: block;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Der Rueckweg des Blatts steht in Ruhe allein in seiner Zeile
+   * (settings.css); eingeklappt teilt er sie mit dem kleinen Titel - sonst
+   * braeche der Titel in eine zweite Zeile, und der Kopf wuchse beim
+   * Einklappen. */
+  .page-toolbar--capped.is-collapsed > .settings-toolbar__back {
+    margin-inline-end: 0;
+  }
+}
+
+/* DIE KREISE BLEIBEN IN DER EINGEKLAPPTEN LEISTE - auch das Such-Icon (Tafla,
+ * 2026-10-24). layout.css nimmt die Suche eingeklappt aus dem Bild (Apples
+ * hidesSearchBarWhenScrolling) - gemeint war das FELD. Am Telefon ist sie ein
+ * Kreis wie die Aktionen daneben, ein Knopf der Leiste, und geht nicht mit dem
+ * Titel. Ab 768px ist sie wieder Feld, dort gilt die Regel weiter. */
+@media (max-width: 767px) {
+  .page-toolbar--capped.is-collapsed
+    > .page-search.page-toolbar__center:not(:focus-within):not(:has(input:not(:placeholder-shown))) {
+    display: grid;
+  }
 }
 
 @media (max-width: 1023px) and (max-height: 499px) {

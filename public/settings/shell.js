@@ -922,6 +922,10 @@ function createLeafHeader(leaf) {
 
   const heading = document.createElement('h1');
   heading.className = 'settings-leaf-header__title';
+  // Der grosse Titel des Blatts steht im Inhalt, nicht im Kopf: der Kopf
+  // (wireCollapsingHeader) zeigt ihn klein neben dem Rueckweg, sobald er unter
+  // der Leiste verschwunden ist („‹ Titel", Tafla).
+  heading.dataset.largeTitle = '';
   heading.textContent = settingsLeafLabel(leaf, t);
 
   header.appendChild(heading);

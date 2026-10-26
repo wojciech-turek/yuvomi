@@ -118,8 +118,6 @@
         "navigation": "ناوبری",
         "quickActions": "اقدامات سریع",
         "more": "بیشتر",
-        "moreBadge": "{{count}} در انتظار",
-        "moreBadge_one": "{{count}} در انتظار",
         "moreActiveLabel": "بیشتر، {{section}} فعال",
         "moreCatalogHint": "همه ماژول‌ها. موارد دلخواه را در تنظیمات سفارشی کنید.",
         "recipes": "دستورهای غذا",

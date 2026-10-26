@@ -963,6 +963,24 @@ test('wireCollapsingHeader: ohne Rueckweg bleibt der scrollende Kopf beim negati
   } finally { s.restore(); }
 });
 
+// Tafla (2026-10-24, Sonde 8 auf /notes): traegt der Port das Einklappen nicht
+// (zu wenig Reserve), bleibt der Kopf offen - seine Kante kommt trotzdem,
+// sobald die Liste gescrollt ist. Vorher hing sie allein am Einklappen.
+test('wireCollapsingHeader: die Kante des gedeckelten Kopfes folgt dem Scroll, auch ohne Einklappen', () => {
+  const s = collapsingStub();
+  try {
+    s.port.scrollHeight = 580;
+    s.port.clientHeight = 500;
+    wireCollapsingHeader(s.toolbar);
+    s.fire('touchstart', s.cell);
+    s.scrollTo(s.port, 60);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), false, '80px Reserve tragen das Einklappen nicht');
+    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'die Liste laeuft unter der Kopfkante - die Linie steht');
+    s.scrollTo(s.port, 0);
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben wieder ohne Trenner');
+  } finally { s.restore(); }
+});
+
 test('wireCollapsingHeader: ein Ansichtswechsel haelt den eingeklappten Kopf, wo der neue Port ihn tragen kann', () => {
   const s = collapsingStub();
   try {
@@ -1159,6 +1177,7 @@ function dockStub({ withMenu = true, tabBar = false, padTop = 0, barTop = 57 } =
     toggleAttribute(n, on) { if (on) this.attrs[n] = ''; else delete this.attrs[n]; }
     addEventListener(type, fn) { (this.handlers[type] ??= []).push(fn); }
     removeEventListener(type, fn) { this.handlers[type] = (this.handlers[type] ?? []).filter((f) => f !== fn); }
+    contains(n) { for (let x = n; x; x = x.parentElement) if (x === this) return true; return false; }
     click() { this.clicks += 1; for (const fn of this.handlers.click ?? []) fn({ target: this }); }
     focus() { this.focused = (this.focused ?? 0) + 1; global.document.activeElement = this; }
     getClientRects() { return this.visible() ? [this.rect] : []; }
@@ -1373,6 +1392,60 @@ test('wireCollapsingHeader: ein einzeiliger Kopf mit mittig versetztem Inhalt be
     scroll(0);
     assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben wieder ohne');
   } finally { s.restore(); }
+});
+
+// Tafla (2026-10-24, „Nagłówek": nach dem Scrollen schrumpft der grosse Titel
+// in die Leiste): auch der EINZEILIGE Kopf (Więcej, Zadania) klappt ein - auf
+// dem Weg der gedeckelten Koepfe, nur unter 1024px. Seine Zeile bleibt so hoch,
+// wie Kreise und Titel-Mindesthoehe sie machen; die Kante haengt am Scrollstand.
+test('wireCollapsingHeader: ein einzeiliger Kopf mit grossem Titel klappt beim Scrollen ein', () => {
+  const s = dockStub({ withMenu: false });
+  const savedMatchMedia = global.matchMedia;
+  const savedWindowMatchMedia = global.window.matchMedia;
+  // Telefonbreite - und reduzierte Bewegung, damit kein FLIP Tokens liest.
+  global.matchMedia = () => ({ matches: true });
+  global.window.matchMedia = () => ({ matches: true });
+  try {
+    s.toolbar.children.splice(0, s.toolbar.children.length);
+    s.title.rect = { top: 8, bottom: 49, left: 0, width: 200 };
+    const search = new s.title.constructor('label', { cls: ['page-search', 'page-toolbar__center'], rect: { top: 4, bottom: 52, left: 0, width: 48 } });
+    s.toolbar.append(s.title, search);
+    const port = s.toolbar.parentElement;
+    Object.assign(port, { scrollHeight: 1600, clientHeight: 844, scrollTop: 0 });
+    const fire = (type, target) => { for (const fn of port.handlers[type] ?? []) fn({ target }); };
+    wireCollapsingHeader(s.toolbar);
+    assert.equal(s.toolbar.props.get('--page-toolbar-lead'), '0px', 'Attrappe muss einzeilig sein');
+    assert.ok(s.toolbar.classList.contains('page-toolbar--capped'), 'einzeilig mit Titel: derselbe Weg wie die gedeckelten Koepfe');
+    fire('touchstart', s.title);
+    port.scrollTop = 120;
+    fire('scroll', port);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), true, 'der Titel schrumpft in die Leiste');
+    assert.equal(s.toolbar.classList.contains('is-docked'), true, 'und die Kante steht');
+    port.scrollTop = 0;
+    fire('scroll', port);
+    assert.equal(s.toolbar.classList.contains('is-collapsed'), false, 'oben wieder gross');
+    assert.equal(s.toolbar.classList.contains('is-docked'), false, 'oben ohne Trenner');
+  } finally {
+    global.matchMedia = savedMatchMedia;
+    global.window.matchMedia = savedWindowMatchMedia;
+    s.restore();
+  }
+});
+
+test('wireCollapsingHeader: ohne Telefonbreite bleibt der einzeilige Kopf, wie er ist', () => {
+  const s = dockStub({ withMenu: false });
+  const savedMatchMedia = global.matchMedia;
+  global.matchMedia = () => ({ matches: false });
+  try {
+    s.toolbar.children.splice(0, s.toolbar.children.length);
+    s.title.rect = { top: 8, bottom: 49, left: 0, width: 200 };
+    s.toolbar.append(s.title);
+    wireCollapsingHeader(s.toolbar);
+    assert.equal(s.toolbar.classList.contains('page-toolbar--capped'), false, 'am Desktop gibt es keinen grossen Titel');
+  } finally {
+    global.matchMedia = savedMatchMedia;
+    s.restore();
+  }
 });
 
 test('R20: weder Shell noch CSS kennen den Band-Modus noch', () => {

@@ -2411,10 +2411,16 @@
   height: 20px;
 }
 
-/* Am Finger aus dem Fluss genommen, nicht entfernt: Tastatur und VoiceOver
- * erreichen die Knoepfe weiter (geclippt wie .sr-only, sichtbar beim Fokus). */
+/* Am Finger aus dem Bild, nicht aus dem Fokusbaum: Tastatur, Schalter-
+ * steuerung und VoiceOver erreichen die Knoepfe weiter (geclippt wie
+ * .sr-only, beim Fokus wieder da). Ein Finger trifft sie nicht - dafuer gibt
+ * es das lange Druecken auf die Zeile (Menue mit Przepis und Na listę) und den
+ * Tipp ins Blatt. Ohne `pointer-events: none` lagen die zwei 48px-Knoepfe
+ * geclippt unter der Zeile: ein Ziel, das keiner treffen und Sonde 4 nie
+ * messen konnte. Dasselbe Muster wie Przepisy, Urodziny, Notatki. */
 @media (hover: none) {
   .meals-row__actions:not(:focus-within) {
+    pointer-events: none;
     position: absolute;
     width: 1px;
     height: 1px;

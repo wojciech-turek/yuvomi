@@ -331,11 +331,6 @@ export function createNavigate(state, deps) {
     running = run;
     commitDetourAddress(userOrPushState);
 
-    // Offenes „Mehr“-Sheet beim Navigieren immer schließen - robust und
-    // unabhängig vom Klick-Bubbling (das reißt, wenn die Navigation
-    // zwischendurch rebuildNavigation() auslöst, z. B. beim Settings-Ziel).
-    if (window._closeMoreSheet) window._closeMoreSheet({ restoreFocus: false });
-
     try {
       // Überlastung: navigate(path, user) nach Login vs navigate(path, false) beim Init
       if (typeof userOrPushState === 'object' && userOrPushState !== null) {

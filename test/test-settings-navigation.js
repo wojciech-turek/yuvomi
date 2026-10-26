@@ -1461,10 +1461,10 @@ test('R19: eine Sektion mit nur einem Eintrag hat keinen Namen in der Navigation
   const sidebar = router.slice(router.indexOf('function sidebarNavItems()'), router.indexOf('function isModuleDisabled('));
   assert.match(sidebar, /navSectionLabelKey\(section, entryCounts\.get\(section\)\)/, 'die Seitenleiste fragt die Regel');
   assert.doesNotMatch(router, /const NAV_SECTION_LABEL_KEYS = /, 'keine Abschrift der Namen-Tabelle im Router');
-  const sheet = router.slice(router.indexOf('function moreSheetSections('), router.indexOf('function buildMoreSheetBody()'));
-  assert.match(sheet, /navSectionLabelKey\(section, labelCounts\.get\(section\)\)/, 'das Mehr-Blatt fragt dieselbe Regel');
-  const body = router.slice(router.indexOf('function buildMoreSheetBody()'), router.indexOf('function renderPage('));
-  assert.match(body, /navSectionEntryCounts\(navItems\(\)/, 'gezaehlt wird in der Seitenleiste, nicht im Blatt ohne Favoriten');
+  // 2026-10-24, Tafla: das Mehr-Blatt, der zweite Leser der Regel, ist entfernt
+  // (Więcej ist die Seite /more mit eigener Ordnung). Gezaehlt wird weiter an
+  // der ganzen Seitenleiste.
+  assert.match(sidebar, /navSectionEntryCounts\(items/, 'gezaehlt wird an der Seitenleiste');
 });
 
 test('desktop navigation order is applied only inside each section', () => {

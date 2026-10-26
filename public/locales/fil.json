@@ -118,8 +118,6 @@
         "navigation": "Nabigasyon",
         "quickActions": "Mabilisang aksyon",
         "more": "Higit pa",
-        "moreBadge": "{{count}} ang nakabinbin",
-        "moreBadge_one": "{{count}} ang nakabinbin",
         "moreActiveLabel": "Higit pa, aktibo ang {{section}}",
         "moreCatalogHint": "Lahat ng modyul. I-customize ang iyong mga paborito sa mga setting.",
         "recipes": "Mga Resipe",

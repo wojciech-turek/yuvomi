@@ -319,7 +319,8 @@ const DIALOG_REGISTRY = {
     { none: true, why: 'Filter-Popover: Haken und Fuss kommen fertig aus dem Filterblatt, ausgezeichnet wird nichts eigenes' },
   ],
   'public/router.js': [
-    { none: true, why: 'Mehr-Blatt: Navigation ohne Kopf- und Fusszeile, seine Links sind selbst die Leisten' },
+    // Das Mehr-Blatt stand hier bis 2026-10-24 (Tafla): es ist entfernt,
+    // Więcej ist die Seite /more.
     { none: true, why: 'Suche: Feld und Treffer sind selbst die Leisten' },
     // Der Tastenkuerzel-Dialog (showHelpModal) baut seit R20 (Schritt D) kein
     // eigenes Panel mehr: er laeuft ueber openModal() und ist damit ein Dialog

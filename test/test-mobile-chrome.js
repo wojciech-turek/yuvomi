@@ -349,14 +349,20 @@ test('R17/Tafla: der Kalenderkopf ist eingeklappt EINE Zeile, und was mobil fehl
   assert.doesNotMatch(calendarJs, /id="cal-search"/, 'kein Suchknopf mehr');
   assert.match(calendarJs, /id: 'cal-search-input'/, 'die Suche ist das Feld der Shell');
 
-  // Die Faltmechanik der Shell selbst bleibt geprueft (utils/ux.js), auch
-  // wenn der Kalender sie seit Tafla nicht mehr nutzt.
+  // Die gedeckelte Faltung der Shell (`data-collapse-fold`) ist 2026-10-24
+  // entfernt (Tafla): der Kalender war ihr einziger Nutzer. Kein Modul darf
+  // sie wieder voraussetzen - es gaebe niemanden, der die Stellvertreter baut.
   const ux = read('../public/utils/ux.js');
-  const branch = ux.match(/const foldMenu = capped \?[\s\S]*?\n    \}\n/)?.[0] ?? '';
-  assert.match(branch, /\[data-collapse-fold-menu\]\[popovertarget\]/, 'der Kopf findet das markierte Menue');
-  assert.match(branch, /classList\.contains\('is-collapsed'\)/, 'Stellvertreter nur eingeklappt');
-  assert.match(branch, /getClientRects\(\)\.length === 0/,
-    'und nur fuer das, was gerade nicht zu sehen ist - sonst stuende dieselbe Handlung zweimal da');
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code(ux), /data-collapse-fold/, 'die Shell kennt die gedeckelte Faltung nicht mehr');
+  for (const dir of ['pages', 'components', 'utils', 'settings']) {
+    const base = new URL(`../public/${dir}/`, import.meta.url);
+    for (const f of readdirSync(base).filter((n) => n.endsWith('.js'))) {
+      assert.doesNotMatch(code(readFileSync(new URL(f, base), 'utf8')), /data-collapse-fold/, `${dir}/${f} setzt die entfernte Faltung voraus`);
+    }
+  }
+  // Die Faltung der scrollenden Koepfe (`data-dock-fold`) bleibt; ein inerter
+  // Reset ist dort kein Eintrag.
   assert.match(ux, /btn\.disabled \|\| btn\.inert/, 'ein inerter Reset ("Heute" im laufenden Zeitraum) ist kein Eintrag');
   assert.match(ux, /reserve \+ shorter/, 'die Reserve-Regel rechnet mit der AUSGEKLAPPTEN Hoehe, sonst pendelt eine knappe Liste');
 });
@@ -722,6 +728,19 @@ test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller 
   assert.equal(inline && decl(inline.body, 'order'), '-1', 'eingeklappt: Rueckweg, Titel, Kreise in EINER Leiste');
   // Die scrollenden Seiten klappen auf demselben Weg ein (wireCollapsingHeader,
   // `--bar`) und halten dabei ihren Platz im Fluss - der Inhalt springt nicht.
+  // 2026-10-24, Tafla: in der eingeklappten Leiste bleiben die Kreise - am
+  // Telefon auch das Such-Icon (layout.css nahm die Suche eingeklappt aus dem
+  // Bild; gemeint war das Feld ab 768px).
+  const phone = (r) => r.at.some((a) => /max-width:\s*767px/.test(a));
+  const keep = capture.find((r) => phone(r) && /\.page-toolbar--capped\.is-collapsed\s*>\s*\.page-search\.page-toolbar__center/.test(r.selector));
+  assert.equal(keep && decl(keep.body, 'display'), 'grid', 'das Such-Icon bleibt in der eingeklappten Leiste');
+  // Der grosse Titel im Inhalt (Einstellungs-Blatt) erscheint eingeklappt klein
+  // neben dem Rueckweg, in derselben Zeile.
+  const dock = capture.find((r) => compact(r) && r.selector === '.page-toolbar--capped.is-collapsed > .page-toolbar__dock-title');
+  assert.equal(dock && decl(dock.body, 'display'), 'block', '„‹ Titel": der kleine Titel steht in der Leiste');
+  const leafBack = capture.find((r) => compact(r) && r.selector === '.page-toolbar--capped.is-collapsed > .settings-toolbar__back');
+  assert.equal(leafBack && decl(leafBack.body, 'margin-inline-end'), '0', 'der Rueckweg teilt eingeklappt seine Zeile mit dem Titel');
+  assert.match(read('../public/settings/shell.js'), /heading\.dataset\.largeTitle = ''/, 'das Blatt nennt seinen grossen Titel');
   const bar = capture.find((r) => compact(r) && r.selector === '.page-toolbar--bar.is-collapsed');
   assert.equal(bar && decl(bar.body, 'margin-block-end'), 'var(--bar-collapse-gap, 0px)', 'eingeklappt traegt die Leiste den Hoehenverlust als Rand');
   assert.match(read('../public/utils/ux.js'), /toolbar\.style\.setProperty\('--bar-collapse-gap'/, 'wireCollapsingHeader misst den Rand');

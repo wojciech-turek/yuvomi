@@ -119,8 +119,6 @@
         "quickActions": "Γρήγορες ενέργειες",
         "recipes": "Συνταγές",
         "more": "Περισσότερα",
-        "moreBadge": "{{count}} σε εκκρεμότητα",
-        "moreBadge_one": "{{count}} σε εκκρεμότητα",
         "moreActiveLabel": "Περισσότερα, {{section}} ενεργό",
         "moreCatalogHint": "Όλες οι ενότητες. Προσαρμόστε τα αγαπημένα στις ρυθμίσεις.",
         "documents": "Έγγραφα",

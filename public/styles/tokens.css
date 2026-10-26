@@ -2160,15 +2160,6 @@
    * Glas-Weiss (Dark-Bloecke unten). */
   --_sheet-grabber:     var(--color-border-strong);
   --sheet-grabber:      var(--_sheet-grabber);
-  /* Kachel im Mehr-Blatt (Nav-Polish 2026-10-15). Hell bleibt sie Surface auf
-   * Surface - dort trennt sie --shadow-xs, und eine getoente Stufe (raised
-   * #FBFAF7) waere DUNKLER als das weisse Blatt. Dunkel trug sie rgb(43,40,37)
-   * auf rgb(43,40,37), 1,00:1, und die Schatten (rgba 0,0,0) sind auf dieser
-   * Flaeche wirkungslos: die Kacheln lasen als ein Feld. Dort steht sie eine
-   * Stufe ueber dem Blatt (Dark-Bloecke unten, --_color-surface-raised #37332E,
-   * 1,17:1 gegen #2B2825, dieselbe Sprosse wie die Leiter der Flaechen). */
-  --_sheet-tile-bg:     var(--_color-surface);
-  --sheet-tile-bg:      var(--_sheet-tile-bg);
   /* Toenung der gleitenden Pille in der mobilen Tab-Leiste (Nav-Polish
    * 2026-10-15). Hell die Objekt-Stufe. Dunkel liegt die Pille auf dem
    * duennen Kapselglas (0.50 + Ton-Filter), und dort stand sie mit 16 % bei
@@ -2791,7 +2782,6 @@
     --_glass-capsule-rim-edge: 0.10;
     --_glass-border:           rgba(255, 255, 255, 0.12);
     --_sheet-grabber:         var(--glass-border);
-    --_sheet-tile-bg:         var(--_color-surface-raised);
     --_nav-indicator-tint:    calc(var(--tint-surface) + 8%);
     --_sidebar-indicator-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     --_glass-border-subtle:    rgba(255, 255, 255, 0.14);
@@ -3041,7 +3031,6 @@
     --_glass-capsule-rim-edge: 0.10;
     --_glass-border:          rgba(255, 255, 255, 0.12);
     --_sheet-grabber:         var(--glass-border);
-    --_sheet-tile-bg:         var(--_color-surface-raised);
     --_nav-indicator-tint:    calc(var(--tint-surface) + 8%);
     --_sidebar-indicator-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     --_glass-border-subtle:   rgba(255, 255, 255, 0.14);
