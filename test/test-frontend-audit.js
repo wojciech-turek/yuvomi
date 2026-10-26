@@ -8992,8 +8992,8 @@ test('zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity, und ihre Te
       // Deaktiviert ist vom Standard ausgenommen (WCAG 1.4.3) - dieselbe
       // Kategorie wie oben, nur an der Farbe statt am Selektor erkannt.
       if (decl[1] === '--color-text-disabled') continue;
-      // Eine Regel, die ihre EIGENE Flaeche setzt (`.swipe-reveal--done`: Tinte
-      // auf Gruen), steht nicht auf surface - ihr Paar prueft "jede Regel, die
+      // Eine Regel, die ihre EIGENE Flaeche setzt (`.swipe-reveal--done`: Weiss
+      // auf Violett, bis 2026-10-26 Tinte auf Gruen), steht nicht auf surface - ihr Paar prueft "jede Regel, die
       // Farbe UND Untergrund setzt, haelt ihr eigenes Paar" weiter oben.
       if (/(?:^|;)\s*background(?:-color)?\s*:/.test(rule.body)) continue;
       for (const [theme, map] of [['light', light], ['dark', dark]]) {
@@ -10275,7 +10275,10 @@ test('remaining audited mobile controls use 48px touch targets', () => {
   // Der Darlehens-Statusfilter ist in .segmented aufgegangen. Der Baustein
   // nimmt --target-base (44px Zeiger / 48px Finger) statt --target-lg fest: das
   // Kriterium ist die Zeigerfähigkeit, nicht die Viewport-Breite (tokens.css).
-  assertRuleUsesToken(read('../public/styles/panel.css'), '.segmented__item', 'min-height', '--target-base', '../public/styles/panel.css');
+  // 2026-10-26, Tafla: 32 sichtbar, die Trefferflaeche (`::after`) reicht um
+  // `--seg-pad` bis --target-base - das Polster der Leiste rechnet sich daraus.
+  assert.match(cssRuleBody(read('../public/styles/panel.css'), '.segmented'),
+    /--seg-pad:\s*calc\(\(var\(--target-base\) - 32px\) \/ 2\)/);
   // Der Raten-Filter der Darlehenskarte steht seit D6 (Critique 2026-10-16)
   // als Eintrag im Mehr-Knopf der Karte; dessen Ausloeser traegt `.row-action`
   // (--target-lg, utils/row-action.js).
@@ -16892,7 +16895,11 @@ test('das aktive Segment ist ueberall dieselbe Pille', () => {
         // Tinte sitzt zwangslaeufig am Geschwister darueber. Am Element
         // ablesbar, nicht an seinem Namen.
         const carriesText = !/pointer-events\s*:\s*none/.test(body);
-        if (carriesText && !/color\s*:\s*color-mix\([^;]*var\(--tint-ink\)[^;]*var\(--color-text-primary\)/.test(body)) {
+        // 2026-10-26, Tafla: das geteilte `.segmented` traegt TINTE statt des
+        // Modultons (KIT: "Neutral, never violet") - auch das ist eine
+        // vollstaendige Pille. Die Mischung bleibt fuer die uebrigen erlaubt.
+        const neutralInk = /color\s*:\s*var\(--color-text-primary\)/.test(body);
+        if (carriesText && !neutralInk && !/color\s*:\s*color-mix\([^;]*var\(--tint-ink\)[^;]*var\(--color-text-primary\)/.test(body)) {
           missing.push('color: color-mix(… var(--tint-ink), var(--color-text-primary))');
         }
         if (missing.length) incomplete.push(`${file}: ${selector.trim()} - es fehlt ${missing.join(' und ')}`);
