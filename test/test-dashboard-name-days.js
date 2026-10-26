@@ -52,3 +52,12 @@ test('legacy birthday data without an age does not render an empty age label', (
   assert.doesNotMatch(row.title, /null/);
   assert.doesNotMatch(row.title, /today\.birthdayAge/);
 });
+
+// #1821: a row that names ONE occasion opens it - the birthdays page reads
+// `?open=<id>` in the split view and below the column threshold.
+test('a Wkrótce row opens its own occasion, a name day included', () => {
+  assert.equal(soon({ id: 8, kind: 'birthday', name: 'Mila', days_until: 4, next_age: 36 }).at(0).route, '/birthdays?open=8');
+  assert.equal(soon({ id: 7, kind: 'name_day', name: 'Jiří', days_until: 2, next_age: null }).at(0).route, '/birthdays?open=7');
+  // Without an id there is nothing to open: the page itself.
+  assert.equal(soon({ kind: 'birthday', name: 'Ohne Id', days_until: 3, next_age: 40 }).at(0).route, '/birthdays');
+});
