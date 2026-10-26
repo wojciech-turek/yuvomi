@@ -4746,14 +4746,18 @@ Angabe braeuchte einen zweiten Timer, nur damit sie sich selbst aktuell haelt.
   und Menue als die zwei Kreise.
 - **Kalendarz** traegt unter 640px nach dem Artboard Titel, Lupe und den Kreis der Ansicht
   (`calendar-days`, Name „Widok: Lista"), darunter den Zeitraum als 13/600-Zeile ueber dem
-  Streifen und „Dzisiaj" als schlichtes Wort, sobald man neben dem laufenden Zeitraum
+  Streifen und „Dziś" als schlichtes Wort, sobald man neben dem laufenden Zeitraum
   steht. Keine Pfeile und kein Filterkreis im Kopf: das Menue der Ansicht traegt die vier
   Ansichten, „Poprzedni/Następny <Einheit>" (Namen und Kuerzel der Pfeile) und „Filtry";
   stehen Filter, zeigt der Kreis ihre Zahl als Badge und nennt sie im Namen. Eingeklappt
   wird der Zeitraum der Titel der Leiste (17/600). Die Faltmechanik der Shell
   (`data-collapse-fold`) nutzt der Kalender damit nicht mehr. Ab 640px unveraendert.
 - `calendar.relDay.*` ist in allen Sprachen uebersetzt (heute/morgen/uebermorgen/gestern je
-  Sprache; „in N Tagen"/„vor N Tagen" aus den vorhandenen Geburtstags- und Countdown-Texten).
+  Sprache; „in N Tagen"/„vor N Tagen" aus den vorhandenen Geburtstags- und Countdown-Texten),
+  ebenso die Tafla-Texte von Zadania und Kalendarz („Czyje zadania", erster Start,
+  Startvorschlaege, „Oboje zajęci", „Wolny wieczór", „Do zrobienia" usw.; 2026-10-26).
+- Der Ruecksprung heisst auf Polnisch „Dziś" wie der Reiter (`calendar.today`; er traegt
+  denselben Wert im Schichtplan-Stepper und im gesprochenen Namen einer Monatszelle).
 - Umgestellte Guards (Absicht erhalten): `test:task-filters` (Blatt traegt die Telefonwege,
   tasks.css zwei Kreise), `test:calendar` (Kreis statt Wort, Menue mit Blaettern und Filtern,
   Fahne am Chip), `test:mobile-chrome` (R17: eingeklappt faltet nichts mehr, mobil fehlt
