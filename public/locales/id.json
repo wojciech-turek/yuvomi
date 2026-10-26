@@ -1323,14 +1323,14 @@
         "upNextTitle": "Berikutnya",
         "upNextEmpty": "Tidak ada apa pun dalam tiga minggu ke depan.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "hari ini",
+            "tomorrow": "besok",
+            "dayAfterTomorrow": "lusa",
+            "yesterday": "kemarin",
+            "inDays_one": "dalam {{count}} hari",
+            "inDays": "dalam {{count}} hari",
+            "daysAgo_one": "{{count}} hari lalu",
+            "daysAgo": "{{count}} hari lalu"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

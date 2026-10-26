@@ -1307,14 +1307,14 @@
         "upNextTitle": "A seguir",
         "upNextEmpty": "Nada nas próximas três semanas.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "hoje",
+            "tomorrow": "amanhã",
+            "dayAfterTomorrow": "depois de amanhã",
+            "yesterday": "ontem",
+            "inDays_one": "em {{count}} dia",
+            "inDays": "em {{count}} dias",
+            "daysAgo_one": "há {{count}} dia",
+            "daysAgo": "há {{count}} dias"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

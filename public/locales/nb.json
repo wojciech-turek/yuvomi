@@ -1307,14 +1307,14 @@
         "upNextTitle": "Neste",
         "upNextEmpty": "Ingenting de neste tre ukene.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "i dag",
+            "tomorrow": "i morgen",
+            "dayAfterTomorrow": "i overmorgen",
+            "yesterday": "i går",
+            "inDays_one": "om {{count}} dag",
+            "inDays": "om {{count}} dager",
+            "daysAgo_one": "{{count}} dag siden",
+            "daysAgo": "{{count}} dager siden"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

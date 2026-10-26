@@ -1636,19 +1636,25 @@ function renderTaskChip(task, { interactive = true, icon = true } = {}) {
   const button   = interactive
     ? ` role="button" tabindex="0" aria-label="${esc(taskChipAriaLabel(task))}"`
     : '';
-  // Die Prioritaet steht als Rangmarke im Punkt (list-row.css), nicht mehr als
-  // getoentes Feld mit getoenter Schrift: dieselbe Stufe, die die Aufgabenliste
-  // seit v2.23.0 so zeigt. „Ohne" bekommt keinen Punkt - eine Marke fuer eine
-  // Abwesenheit waere eine fuenfte Stufe.
-  const dot = priority !== 'none'
-    ? `<span class="priority-dot priority-dot--${priority}" aria-hidden="true"></span>`
+  // DIE FAHNE NUR FUER HOCH UND DRINGEND (Tafla, 2026-10-24), wie die Zeile
+  // der Aufgabenliste (tasks.js, taskTrailHtml): dieselbe Aufgabe spricht in
+  // beiden Modulen dieselbe Sprache. Bis dahin stand hier der Punkt der
+  // Rangskala fuer jede Stufe ausser „Ohne" - die Liste hat
+  // ihn mit Tafla gegen die Fahne getauscht, und Mittel und Niedrig tragen dort
+  // keine Marke. Die Fahne steht HINTER dem Text und schrumpft nicht: ein
+  // langer Titel kuerzt mit Ellipse, die Marke bleibt. Gesprochen wird die
+  // Stufe im Namen des Chips (taskChipAriaLabel). Die Klasse
+  // `cal-task-chip--<stufe>` bleibt: sie benennt den Ton fuer die Punktfassung
+  // des Monats am Telefon, in der der ganze Chip der Punkt ist.
+  const flag = priority === 'high' || priority === 'urgent'
+    ? '<i data-lucide="flag" class="cal-task-chip__flag" aria-hidden="true"></i>'
     : '';
   return `<div class="cal-task-chip cal-task-chip--${priority}"
                data-task-id="${task.id}"${button}
                title="${label}${esc(timeStr)}">
     ${icon ? '<i data-lucide="check-square" class="icon-sm" aria-hidden="true"></i>' : ''}
-    ${dot}
     <span>${label}${esc(timeStr)}</span>
+    ${flag}
   </div>`;
 }
 
@@ -2133,16 +2139,19 @@ function periodNavHtml() {
   const labels = periodArrowLabels(currentPeriodStep());
   // Markup und Reihenfolge kommen aus dem EINEN Baustein (utils/period-stepper.js).
   return periodStepperHtml({
-    // `data-collapse-fold`: eingeklappt (mobil) weichen die Pfeile ins
-    // Ansichtsmenue (R20 6c, calendar.css; die Stellvertreter baut utils/ux.js).
-    prev: { id: 'cal-prev', label: labels.prev, title: true, keys: `${CAL_SHORTCUT_KEYS.prev} ${keys.prev}`, attrs: { 'data-collapse-fold': true } },
+    // TAFLA AM TELEFON (unter 640px, 2026-10-24): keine Pfeile im Kopf. Der
+    // Zeitraum steht als Zeile ueber dem Wochenstreifen, geblaettert wird per
+    // Wisch, Taste (j/k, Pfeiltasten) und ueber die beiden Eintraege im
+    // Ansichtsmenue (viewMenuHtml) - die Pfeile bleiben im Markup fuer die
+    // breiten Koepfe und blenden mobil aus (calendar.css).
+    prev: { id: 'cal-prev', label: labels.prev, title: true, keys: `${CAL_SHORTCUT_KEYS.prev} ${keys.prev}` },
     value: { id: 'cal-label', className: 'cal-toolbar__label' },
-    next: { id: 'cal-next', label: labels.next, title: true, keys: `${CAL_SHORTCUT_KEYS.next} ${keys.next}`, attrs: { 'data-collapse-fold': true } },
-    // "Heute" liegt mobil auf dem Wert und deckt eingeklappt das ganze Label;
-    // im laufenden Zeitraum ist er inert und kommt auch im Menue nicht vor.
+    next: { id: 'cal-next', label: labels.next, title: true, keys: `${CAL_SHORTCUT_KEYS.next} ${keys.next}` },
+    // „Dzisiaj" steht mobil als schlichtes Wort am Ende der Zeitraumzeile, nur
+    // abseits des laufenden Zeitraums (Tafla, Pasek tygodnia); dort ist er
+    // inert und verborgen.
     reset: {
       id: 'cal-today', className: 'cal-toolbar__today', label: t('calendar.today'), keys: CAL_SHORTCUT_KEYS.today,
-      attrs: { 'data-collapse-fold': true, 'data-fold-icon': 'CalendarCheck' },
     },
   });
 }
@@ -2192,14 +2201,15 @@ function toolbarHtml({ filterCount = 0, scheduleWarningHtml = '', searchValue = 
   // Stepper), und gesucht wurde ueber einen eigenen Knopf, der erst eine
   // Leiste unter dem Kopf aufdeckte - als einziges Modul ohne das Feld im Kopf.
   //
-  // Mobil (unter 640px) loest sich die Bar-Zeile auf (calendar.css): Lupe und
-  // Filter stehen am Ende der Titelzeile, die Ansichtswahl als Pop-up-Knopf
-  // mit dem NAMEN der Ansicht am Ende der Zeitraum-Zeile (`viewMenuHtml`).
+  // Mobil (unter 640px) loest sich die Bar-Zeile auf (calendar.css), und der
+  // Kopf ist der der Tafla-Tafel: hinter dem Titel ZWEI Kreise, die Lupe und
+  // die Ansicht (`viewMenuHtml`, Zeichen `calendar-days`), die auch Blaettern
+  // und die Filter traegt. Darunter der Zeitraum als leise Zeile, am Ende
+  // „Dzisiaj", sobald man neben dem laufenden Zeitraum steht.
   return `
     <h1 class="page-toolbar__title">${t('calendar.title')}</h1>
     <div class="page-toolbar__center cal-toolbar__month">
       <div class="cal-toolbar__stepper">${periodNavHtml()}</div>
-      ${viewMenuHtml()}
     </div>
     ${/* Der Aktions-Slot traegt die Ueberlappungswarnung, "Kalender verwalten"
           und - am Zeigergeraet - den angedockten FAB (#fab-new-event,
@@ -2258,6 +2268,7 @@ function toolbarHtml({ filterCount = 0, scheduleWarningHtml = '', searchValue = 
           },
           className: 'cal-toolbar__filter-btn',
         })}
+        ${viewMenuHtml(state.view, { filterCount })}
         <span id="cal-search-live" class="sr-only" role="status" aria-live="polite"></span>
       </div>
     </div>
@@ -2265,14 +2276,26 @@ function toolbarHtml({ filterCount = 0, scheduleWarningHtml = '', searchValue = 
 }
 
 /**
- * MOBIL STEHT DIE ANSICHTSWAHL IN EINEM POP-UP-KNOPF (R9 M5, A8 P2-3; D1).
+ * MOBIL STEHT DIE ANSICHTSWAHL HINTER EINEM KREIS (Tafla, 2026-10-24; davor
+ * R9 M5, A8 P2-3, D1 als Pop-up-Knopf mit Wort in der Zeitraumzeile).
  *
- * Vier Ansichten passen bei 390px nicht als Segment neben den Zeitraum. Wie in
+ * Vier Ansichten passen bei 390px nicht als Segment in den Kopf. Wie in
  * Apples Kalender waehlt man sie unter 640px aus einem Menue (calendar.css
  * blendet dort das Segment aus und diesen Knopf ein); darueber bleibt das
  * Segment, und der Knopf ist unsichtbar. Beide steuern dieselbe Tablist
  * (`viewTabs.setActive`), der Speicher und die Kuerzel m/w/d/a laufen
  * unveraendert ueber deren `onChange`.
+ *
+ * DER KNOPF IST DER ZWEITE GEISTERKREIS DER TAFEL (Kalendarz.dc.html): Lupe
+ * und Ansicht, hoechstens zwei Kreise („Nagłówek"). Sein Zeichen steht
+ * (`calendar-days`), sein Name nennt die Ansicht ("Widok: Lista"). Was der
+ * Kopf am Telefon dafuer nicht mehr zeigt, steht im Menue:
+ *   - Blaettern: die Pfeile sind mobil weg; „Poprzedni/Następny tydzień"
+ *     stehen als Eintraege da (neben Wisch und j/k), mit dem Namen, den die
+ *     Pfeile in dieser Ansicht tragen (syncPeriodArrows).
+ *   - Die Filter: der Filterknopf ist mobil kein dritter Kreis. Stehen
+ *     Filter, traegt der Kreis ihre Zahl als Badge (dieselbe Marke wie am
+ *     Filterknopf) und sein Name sagt sie an.
  *
  * `menuitemradio`, weil genau eine Ansicht gilt - die geteilte
  * Popover-Mechanik setzt den Fokus beim Oeffnen auf den gewaehlten Eintrag
@@ -2281,28 +2304,26 @@ function toolbarHtml({ filterCount = 0, scheduleWarningHtml = '', searchValue = 
  */
 const VIEW_ICONS = { month: 'calendar-days', week: 'calendar-range', day: 'calendar-1', agenda: 'list' };
 
-/**
- * DER KNOPF NENNT DIE AKTIVE ANSICHT IN WORTEN, SEIN ZEICHEN STEHT (D1,
- * Critique 2026-10-16; vorher R17 E11). E11 hatte dem Knopf die Glyphe der
- * aktiven Ansicht gegeben - damit wechselte das Zeichen eines Knopfs mit
- * seinem Zustand, und ein Erstnutzer erkannte ihn nach dem Wechsel nicht
- * wieder. Jetzt ist er ein Pop-up-Knopf wie bei Apple: das Wort der Ansicht
- * ("Woche") und dahinter das feste Auf/Ab-Zeichen einer Auswahl. Er steht am
- * Ende der Zeitraum-Zeile, die dafuer den Reset auf den Wert legt
- * (calendar.css). Der Name bleibt "Ansicht: Woche".
- */
-function viewMenuLabel(current = state.view) {
-  return `${t('calendar.viewSwitcher')}: ${VIEW_LABELS()[current] ?? ''}`;
+function viewMenuLabel(current = state.view, filterCount = 0) {
+  const view = `${t('calendar.viewSwitcher')}: ${VIEW_LABELS()[current] ?? ''}`;
+  return filterCount > 0 ? `${view}, ${t('calendar.filtersActive', { count: filterCount })}` : view;
 }
 
-function viewMenuHtml(current = state.view) {
-  const label = viewMenuLabel(current);
+function viewMenuFilterLabel(filterCount = 0) {
+  return filterCount > 0 ? t('calendar.filtersActive', { count: filterCount }) : t('calendar.filters');
+}
+
+function viewMenuHtml(current = state.view, { filterCount = 0 } = {}) {
+  const label = viewMenuLabel(current, filterCount);
+  const steps = periodArrowLabels(currentPeriodStep());
+  const keys = periodArrowKeys();
+  const n = Math.max(0, Number(filterCount) || 0);
   return `
-        <button type="button" class="btn btn--secondary cal-toolbar__view-menu popover-menu__trigger" id="cal-views-menu"
-                popovertarget="cal-views-menu-panel" aria-haspopup="menu" aria-expanded="false" data-collapse-fold-menu
-                data-view="${esc(current)}" aria-label="${esc(label)}" title="${esc(label)}">
-          <span class="cal-toolbar__view-menu-label" aria-hidden="true">${esc(VIEW_LABELS()[current] ?? '')}</span>
-          <i data-lucide="chevrons-up-down" class="icon-sm" aria-hidden="true"></i>
+        <button type="button" class="btn btn--secondary btn--icon cal-toolbar__view-menu popover-menu__trigger" id="cal-views-menu"
+                popovertarget="cal-views-menu-panel" aria-haspopup="menu" aria-expanded="false"
+                data-view="${esc(current)}" data-filter-count="${n}" aria-label="${esc(label)}" title="${esc(label)}">
+          <i data-lucide="calendar-days" class="icon-md" aria-hidden="true"></i>
+          <span class="page-filter-btn__count cal-toolbar__view-menu-count" aria-hidden="true"${n ? '' : ' hidden'}>${n || ''}</span>
         </button>
         <div class="popover-menu" id="cal-views-menu-panel" popover role="menu">
           ${VIEWS.map((v) => `
@@ -2313,25 +2334,45 @@ function viewMenuHtml(current = state.view) {
             <span>${esc(VIEW_LABELS()[v])}</span>
             <i data-lucide="check" class="icon-md popover-menu__item-trail popover-menu__item-check${v === current ? '' : ' popover-menu__item-check--hidden'}" aria-hidden="true"></i>
           </button>`).join('')}
+          <div class="popover-menu__separator" role="separator"></div>
+          <button type="button" role="menuitem" class="popover-menu__item" data-cal-step="-1"
+                  aria-keyshortcuts="${CAL_SHORTCUT_KEYS.prev} ${keys.prev}">
+            <i data-lucide="chevron-left" class="icon-md" aria-hidden="true"></i>
+            <span class="cal-toolbar__step-label">${esc(steps.prev)}</span>
+          </button>
+          <button type="button" role="menuitem" class="popover-menu__item" data-cal-step="1"
+                  aria-keyshortcuts="${CAL_SHORTCUT_KEYS.next} ${keys.next}">
+            <i data-lucide="chevron-right" class="icon-md" aria-hidden="true"></i>
+            <span class="cal-toolbar__step-label">${esc(steps.next)}</span>
+          </button>
+          <div class="popover-menu__separator" role="separator"></div>
+          <button type="button" role="menuitem" class="popover-menu__item" data-cal-open-filters aria-haspopup="dialog">
+            <i data-lucide="sliders-horizontal" class="icon-md" aria-hidden="true"></i>
+            <span class="cal-toolbar__filters-label">${esc(viewMenuFilterLabel(n))}</span>
+          </button>
         </div>`;
 }
 
-/** Den Haken im Ansichtsmenue der aktuellen Ansicht nachziehen. */
+/** Haken, Name und Eintraege des Ansichtsmenues auf den Stand ziehen. */
 function syncViewMenu(root = _container) {
   for (const item of root?.querySelectorAll?.('[data-cal-view]') ?? []) {
     const on = item.dataset.calView === state.view;
     item.setAttribute('aria-checked', String(on));
     item.querySelector('.popover-menu__item-check')?.classList.toggle('popover-menu__item-check--hidden', !on);
   }
-  // Der Ausloeser zieht Wort und Namen nach; sein Zeichen bleibt stehen.
+  // Der Ausloeser zieht seinen Namen nach; sein Zeichen bleibt stehen.
   const trigger = root?.querySelector?.('#cal-views-menu');
-  if (!trigger || trigger.dataset.view === state.view) return;
+  if (!trigger) return;
   trigger.dataset.view = state.view;
-  const label = viewMenuLabel(state.view);
+  const label = viewMenuLabel(state.view, Number(trigger.dataset.filterCount) || 0);
   trigger.setAttribute('aria-label', label);
   trigger.setAttribute('title', label);
-  const word = trigger.querySelector('.cal-toolbar__view-menu-label');
-  if (word) word.textContent = VIEW_LABELS()[state.view] ?? '';
+  // Die Blaetter-Eintraege heissen wie die Pfeile dieser Ansicht.
+  const steps = periodArrowLabels(currentPeriodStep());
+  const prev = root.querySelector('[data-cal-step="-1"] .cal-toolbar__step-label');
+  const next = root.querySelector('[data-cal-step="1"] .cal-toolbar__step-label');
+  if (prev) prev.textContent = steps.prev;
+  if (next) next.textContent = steps.next;
 }
 
 function renderToolbar() {
@@ -2386,11 +2427,14 @@ function renderToolbar() {
   bar.querySelector('#cal-filters').addEventListener('click', openCalendarFilters);
   installPopoverMenus(bar);
   bar.querySelector('#cal-views-menu-panel')?.addEventListener('click', (e) => {
-    const item = e.target.closest?.('[data-cal-view]');
+    const item = e.target.closest?.('[data-cal-view], [data-cal-step], [data-cal-open-filters]');
     if (!item) return;
     // Die Mechanik schliesst das Menue selbst; der Fokus geht an den
-    // Ausloeser zurueck, nicht in einen versteckten Eintrag.
+    // Ausloeser zurueck, nicht in einen versteckten Eintrag. Das Filterblatt
+    // gibt ihn beim Schliessen ebenfalls dorthin.
     bar.querySelector('#cal-views-menu')?.focus();
+    if (item.dataset.calStep) { navigate(Number(item.dataset.calStep)); return; }
+    if (item.hasAttribute('data-cal-open-filters')) { openCalendarFilters(); return; }
     if (item.dataset.calView !== state.view) viewTabs?.setActive(item.dataset.calView);
   });
 
@@ -2604,7 +2648,16 @@ function syncTodayButton(root = _container) {
     ? state.cursor === state.today
     : state.today >= from && state.today <= to;
   // Verbergen, Fokus-Uebergabe und `inert`: die eine Regel in period-stepper.js.
-  syncPeriodReset(root, { reset: '#cal-today', isCurrent, prev: '#cal-prev', next: '#cal-next' });
+  // Am Telefon stehen keine Pfeile (calendar.css); der Fokus eines
+  // verschwindenden „Dzisiaj" geht dann an den Kreis der Ansicht, der das
+  // Blaettern traegt.
+  const prevArrow = root.querySelector('#cal-prev');
+  const arrows = typeof prevArrow?.getClientRects !== 'function' || prevArrow.getClientRects().length > 0;
+  syncPeriodReset(root, {
+    reset: '#cal-today', isCurrent,
+    prev: arrows ? '#cal-prev' : '#cal-views-menu',
+    next: arrows ? '#cal-next' : '#cal-views-menu',
+  });
 }
 
 function getWeekNumber(dateStr) {

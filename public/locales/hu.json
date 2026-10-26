@@ -1307,14 +1307,14 @@
         "upNextTitle": "Következik",
         "upNextEmpty": "A következő három hétben nincs semmi.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "ma",
+            "tomorrow": "holnap",
+            "dayAfterTomorrow": "holnapután",
+            "yesterday": "tegnap",
+            "inDays_one": "{{count}} nap múlva",
+            "inDays": "{{count}} nap múlva",
+            "daysAgo_one": "{{count}} napja",
+            "daysAgo": "{{count}} napja"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

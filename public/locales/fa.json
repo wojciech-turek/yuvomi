@@ -1323,14 +1323,14 @@
         "upNextTitle": "بعدی",
         "upNextEmpty": "در سه هفته آینده چیزی نیست.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "امروز",
+            "tomorrow": "فردا",
+            "dayAfterTomorrow": "پس‌فردا",
+            "yesterday": "دیروز",
+            "inDays_one": "{{count}} روز دیگر",
+            "inDays": "{{count}} روز دیگر",
+            "daysAgo_one": "{{count}} روز پیش",
+            "daysAgo": "{{count}} روز پیش"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

@@ -1307,14 +1307,14 @@
         "upNextTitle": "Επόμενα",
         "upNextEmpty": "Τίποτα τις επόμενες τρεις εβδομάδες.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "σήμερα",
+            "tomorrow": "αύριο",
+            "dayAfterTomorrow": "μεθαύριο",
+            "yesterday": "χθες",
+            "inDays_one": "σε {{count}} ημέρα",
+            "inDays": "σε {{count}} ημέρες",
+            "daysAgo_one": "πριν από {{count}} ημέρα",
+            "daysAgo": "πριν από {{count}} ημέρες"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",

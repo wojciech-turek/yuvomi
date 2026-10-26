@@ -1307,14 +1307,14 @@
         "upNextTitle": "Sıradaki",
         "upNextEmpty": "Önümüzdeki üç haftada bir şey yok.",
         "relDay": {
-            "today": "today",
-            "tomorrow": "tomorrow",
-            "dayAfterTomorrow": "in 2 days",
-            "yesterday": "yesterday",
-            "inDays_one": "in {{count}} day",
-            "inDays": "in {{count}} days",
-            "daysAgo_one": "{{count}} day ago",
-            "daysAgo": "{{count}} days ago"
+            "today": "bugün",
+            "tomorrow": "yarın",
+            "dayAfterTomorrow": "öbür gün",
+            "yesterday": "dün",
+            "inDays_one": "{{count}} gün sonra",
+            "inDays": "{{count}} gün sonra",
+            "daysAgo_one": "{{count}} gün önce",
+            "daysAgo": "{{count}} gün önce"
         },
         "together": "together",
         "bothBusy": "Both busy {{range}}",
