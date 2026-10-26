@@ -15432,7 +15432,9 @@ test('wer ein Markensiegel baut, benennt eine Herkunft oder ist der Kopf', () =>
   assert.ok(heads >= 2,
     `Nur ${heads} Kopf-Bau-Stellen gefunden (erwartet: kollabierender Kopf + Gruppenleiste).`);
   // 4 -> 3 (Tafla, 2026-10-24): die Kacheln der Uebersicht bauten eines.
-  assert.ok(mixers >= 3,
+  // 3 -> 2 (Tafla, 2026-10-26): das alte Mehr-Blatt (more-item__icon-well) ist entfernt;
+  // es bleiben Erinnerungen und der Such-Bereich.
+  assert.ok(mixers >= 2,
     `Nur ${mixers} Mischstellen-Siegel gefunden - die Signatur greift nicht mehr.`);
   assert.ok(sites >= heads + mixers,
     `Zaehlung inkonsistent: ${sites} Bau-Stellen, aber ${heads} + ${mixers} Rollen.`);
@@ -15938,7 +15940,9 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
   // Reichweiten-Nachweis NACH der Messung (die leere Liste ist sonst keine
   // Zusicherung): der Scanner muss die Bau-Stellen ueberhaupt gesehen haben.
   // 6 -> 5 (Tafla, 2026-10-24): der Kachelkopf der Uebersicht war eine.
-  assert.ok(sealSites >= 5, `Nur ${sealSites} Siegel-Bau-Stellen gefunden - die Signatur greift nicht mehr.`);
+  // 5 -> 4 (Tafla, 2026-10-26): das alte Mehr-Blatt war eine; es bleiben die zwei Koepfe
+  // (ux.js, sub-tabs.js), Erinnerungen und der Such-Bereich.
+  assert.ok(sealSites >= 4, `Nur ${sealSites} Siegel-Bau-Stellen gefunden - die Signatur greift nicht mehr.`);
 
   // (b) Und keine der Abschriften kommt zurueck. Es waren FUENF: navItems()
   //     (Router), widgetIcon() und jede widgetHeader()-Aufrufstelle
