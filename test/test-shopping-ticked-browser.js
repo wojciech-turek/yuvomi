@@ -84,7 +84,20 @@ before(async () => {
   await page.goto('http://probe.local/probe.html', { waitUntil: 'load' });
   // Die echten Texte (de): die Griffe nennen ihre Position im Klartext, und
   // nur so ist sie messbar.
-  await page.evaluate(async () => { const { initI18n } = await import('/i18n.js'); await initI18n(); });
+  //
+  // DIE SPRACHE STEHT FEST, NICHT DIE DES RECHNERS. Ohne Vorgabe waehlt
+  // initI18n() nach `navigator.languages`, und das ist die Sprache, in der
+  // Chromium auf dem jeweiligen Rechner startet: auf einem englischen Mac
+  // stand dann "Checked off 1", "An error occurred." und "Position 1 of 3",
+  // und drei Sonden waren rot, ohne dass sich an der Seite etwas geaendert
+  // hatte (gemessen 2026-10-26 auf dem Stand vor Tafla und danach gleich).
+  // Gesetzt wird die manuelle Wahl der App - derselbe Weg, den ein Nutzer
+  // in den Einstellungen nimmt.
+  await page.evaluate(async () => {
+    localStorage.setItem('yuvomi-locale', 'de');
+    const { initI18n } = await import('/i18n.js');
+    await initI18n();
+  });
 });
 
 after(async () => {
@@ -363,6 +376,14 @@ test('Eine Zeile aus dem zugeklappten Abschnitt gleitet beim Neuaufbau nicht aus
   await setup([item(1, 'Apfel', 'Obst'), item(2, 'Birne', 'Obst'), item(3, 'Kiwi', 'Obst', { is_checked: 1 })]);
   const result = await page.evaluate(() => {
     const c = document.getElementById('c');
+    // ERST DIE LISTE ZUR RUHE KOMMEN LASSEN. setup() baut sie aus dem Stand
+    // der vorigen Sonde neu, und die Zeilen gleiten dabei selbst noch (FLIP,
+    // 200 ms). Mitten in diesem Gleiten gemessen, steht der Apfel um genau
+    // die Strecke versetzt, um die ihn der Neuaufbau unten verschiebt - mit
+    // den 56pt-Zeilen von Tafla war das die volle Zeilenhoehe, und die
+    // Kontrolle unten sah "keine Bewegung", obwohl er sich bewegte. Die
+    // Messung gilt der ruhenden Liste.
+    document.getAnimations().forEach((a) => { try { a.finish(); } catch { /* endlos: laeuft weiter */ } });
     // Jemand anderes holt die Kiwi zurueck UND fuegt etwas hinzu: Neuaufbau.
     window.s.state.items.find((i) => i.id === 3).is_checked = 0;
     window.s.state.items.push({ ...window.s.state.items[0], id: 9, name: 'Mango', sort_order: 0 });
