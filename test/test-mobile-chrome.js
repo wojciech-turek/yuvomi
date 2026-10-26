@@ -709,6 +709,20 @@ test('R19: Schichtplan, Belohnungen und Haushaltshilfe fuehren ihre Reiter in de
 // Więcej traegt die Rueckweg-Zeile die Kopfkreise, der grosse Titel steht allein
 // auf voller Breite - „Odbiór odpadó…" teilte seine Zeile mit zwei Kreisen, und
 // Nagrody/Grafik hatten unter 768px gar keinen Titel (R19 nahm ihn aus dem Bild).
+// Tafla (2026-10-26): „Kuchnia" klappt beim Scrollen ein wie die Titel der
+// anderen Tabs - Inline-Schnitt in derselben Zeilenhoehe, damit
+// --kitchen-tabs-height und die Seiten darunter stehen bleiben.
+test('Tafla: der grosse Titel der Kuechen-Leiste klappt beim Scrollen ein, ohne die Leiste zu verkuerzen', () => {
+  const kitchen = rules(read('../public/styles/kitchen-tabs.css'));
+  const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a));
+  const open = kitchen.find((r) => compact(r) && r.selector === '.kitchen-tabs-bar .sub-tabs-bar__title');
+  const collapsed = kitchen.find((r) => compact(r) && r.selector === '.kitchen-tabs-bar.is-collapsed .sub-tabs-bar__title');
+  assert.equal(open && decl(open.body, 'font-size'), 'var(--type-large-title)', 'offen: der grosse Titel');
+  assert.equal(collapsed && decl(collapsed.body, 'font-size'), 'var(--type-toolbar-title)', 'eingeklappt: der Inline-Schnitt jedes Kopfes');
+  assert.equal(decl(collapsed.body, 'line-height'), null, 'die Zeilenhoehe bleibt - die Leiste wird nicht kuerzer');
+  assert.match(read('../public/utils/kitchen-tabs.js'), /wireCollapsingTitleBar\(_bar, container\)/, 'die Leiste ist an der Seite darunter verdrahtet');
+});
+
 test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller Breite und sichtbar', () => {
   const capture = rules(read('../public/styles/capture.css'));
   const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && !r.at.some((a) => /max-height/.test(a));

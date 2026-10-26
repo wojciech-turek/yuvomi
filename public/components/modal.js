@@ -798,7 +798,7 @@ function _onCancel(event) {
 // Swipe-to-Close (Mobile)
 // --------------------------------------------------------
 
-// EINE Sheet-Grammatik fuer Dialog und Mehr-Blatt (utils/sheet-drag.js,
+// EINE Sheet-Grammatik fuer jedes mobile Blatt (utils/sheet-drag.js,
 // Re-Critique 2026-09-27): 1:1 mitgehen, schliessen ab 80px Weg ODER
 // Flick-Tempo > 0.5px/ms, sonst zurueckfedern (`--duration-lg` + `--ease-out`),
 // nach oben ein Gummiband. Richtungssperre (#981) und das Aufraeumen per rAF

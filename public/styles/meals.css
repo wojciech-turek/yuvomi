@@ -418,7 +418,7 @@
  * Gutter-Spalte) sorgt dafuer, dass das im Normalfall gar nicht passiert; wo es
  * doch passiert, trennt das Silbenwoerterbuch der Dokumentsprache, und
  * `hyphenate-limit-chars` haelt mindestens vier Zeichen auf jeder Seite
- * (dieselbe Untergrenze wie `.more-item__label`, layout.css). break-word bleibt
+ * (dieselbe Untergrenze wie die Labels der Navigation). break-word bleibt
  * die letzte Stufe fuer Woerter ohne Trennstelle. Eigener Span, weil die
  * Umbruch-Regeln nicht auf anonyme Flex-Textknoten wirken. Die Regel haelt
  * test:typography („wer ein Wort brechen laesst, schaltet den Strich nicht ab"). */

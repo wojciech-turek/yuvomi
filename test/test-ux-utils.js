@@ -1432,6 +1432,40 @@ test('wireCollapsingHeader: ein einzeiliger Kopf mit grossem Titel klappt beim S
   }
 });
 
+// Tafla (2026-10-26): „Kuchnia" ueber dem Segment-Schalter klappt beim Scrollen
+// der Kuechen-Seite ein - dieselbe Grammatik wie die Koepfe: nur auf eine Geste,
+// > 24 ein, < 8 aus, ein Port ohne Reserve klappt nicht, ein waagerechter
+// Streifen zaehlt nicht.
+test('wireCollapsingTitleBar: der grosse Titel der Kuechen-Leiste klappt mit der Seite ein', async () => {
+  const { wireCollapsingTitleBar } = await import('../public/utils/ux.js');
+  const s = collapsingStub();
+  const savedMatchMedia = global.matchMedia;
+  global.matchMedia = () => ({ matches: true });
+  try {
+    const bar = s.toolbar;
+    const handle = wireCollapsingTitleBar(bar, s.root);
+    s.scrollTo(s.port, 120);
+    assert.equal(bar.classList.contains('is-collapsed'), false, 'ohne Geste klappt nichts');
+    s.fire('touchstart', s.cell);
+    s.scrollTo(s.port, 120);
+    assert.equal(bar.classList.contains('is-collapsed'), true, 'der Nutzer-Scroll der Seite klappt den Titel ein');
+    const strip = new s.FakeEl('strip', { overflowY: 'hidden' });
+    strip.scrollWidth = 900;
+    s.root.append(strip);
+    s.scrollTo(strip, 0);
+    assert.equal(bar.classList.contains('is-collapsed'), true, 'ein waagerechter Streifen klappt nicht auf');
+    s.scrollTo(s.port, 0);
+    assert.equal(bar.classList.contains('is-collapsed'), false, 'oben wieder gross');
+    s.fire('touchstart', s.cell);
+    s.scrollTo(s.port, 120);
+    handle.destroy();
+    assert.equal(bar.classList.contains('is-collapsed'), false, 'destroy nimmt den Zustand mit (neue Seite, neuer Scroll)');
+  } finally {
+    global.matchMedia = savedMatchMedia;
+    s.restore();
+  }
+});
+
 test('wireCollapsingHeader: ohne Telefonbreite bleibt der einzeilige Kopf, wie er ist', () => {
   const s = dockStub({ withMenu: false });
   const savedMatchMedia = global.matchMedia;
