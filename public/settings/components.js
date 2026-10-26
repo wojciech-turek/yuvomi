@@ -226,14 +226,16 @@ export function taflaSwitchHtml({ label, checked = false, disabled = false, attr
 
 /**
  * Eine Gruppe: Kopf (optional), Karte mit den Zeilen, Fussnote (optional).
- * @param {{ id?: string, title?: string, count?: string|number, rows: string[], footer?: string, className?: string }} group
+ * @param {{ id?: string, title?: string, count?: string|number, rows: string[], footer?: string, className?: string, level?: 2|3 }} group
  */
-export function taflaGroupHtml({ id = '', title = '', count = '', rows = [], footer = '', className = '' }) {
+export function taflaGroupHtml({ id = '', title = '', count = '', rows = [], footer = '', className = '', level = 2 }) {
   const items = rows.filter(Boolean);
   if (!items.length) return '';
   const headId = id ? `${id}-title` : '';
+  // Unter dem h1 des Blatts ist eine Gruppe h2 (Sonde 10: keine Stufe ueberspringen).
+  const tag = level === 3 ? 3 : 2;
   return `<section class="tafla-group ${esc(className)}"${id ? ` id="${esc(id)}"` : ''}${headId && title ? ` aria-labelledby="${esc(headId)}"` : ''}>`
-    + (title ? `<h3 class="tafla-group__title"${headId ? ` id="${esc(headId)}"` : ''}>${esc(title)}${count !== '' ? ` <span class="tafla-group__count">${esc(String(count))}</span>` : ''}</h3>` : '')
+    + (title ? `<h${tag} class="tafla-group__title"${headId ? ` id="${esc(headId)}"` : ''}>${esc(title)}${count !== '' ? ` <span class="tafla-group__count">${esc(String(count))}</span>` : ''}</h${tag}>` : '')
     + `<div class="tafla-card">${items.join('')}</div>`
     + (footer ? `<p class="tafla-group__footer">${esc(footer)}</p>` : '')
     + '</section>';
