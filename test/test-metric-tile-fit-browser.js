@@ -195,9 +195,15 @@ test('wo Platz ist, behaelt der Wert Title 1 und die Einheit ihre Groesse', asyn
   // 168px Innenbreite ist die Schwelle (panel.css), plus 26px Polster und Kante.
   const wide = rows.filter((r) => r.tile >= 194);
   assert.ok(wide.length > 0);
+  // 2026-10-26, Tafla: die Einheit traegt Footnote (13px) - die Tafla-Skala
+  // kennt nur 34/22/17/13, und 14px (Subheadline-Naehe) ist aufgegangen
+  // (tokens.css, --text-sm). Die Zusage dieses Tests bleibt: wo Platz ist,
+  // wird nichts verkleinert - der Wert behaelt Title 1, die Einheit ihre
+  // (neue) Groesse, und sie steht nie allein auf ihrer Zeile.
   for (const r of wide) {
     assert.equal(r.valueSize, '28px', `${r.text} in ${r.tile}px`);
-    assert.equal(r.unitSize, '14px', `${r.text} in ${r.tile}px`);
+    assert.equal(r.unitSize, '13px', `${r.text} in ${r.tile}px`);
+    assert.equal(r.wrapped, false, `${r.text} in ${r.tile}px: die Einheit steht unter dem Wert`);
   }
 });
 

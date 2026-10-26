@@ -825,7 +825,17 @@
  * etwas anders laeuft. Die erste Stufe gilt nur, wo die Reihe noch Title 1
  * vergibt (ueber 600px): sie soll senken, nie eine schon kleinere Stufe der
  * Reihe wieder anheben. Title 3 bleibt die Untergrenze des Werts; darunter
- * gibt die Einheit nach. */
+ * gibt die Einheit nach.
+ *
+ * TAFLA (2026-10-26): DIE EINHEIT HAT EINEN BODEN, ALSO GIBT DER WERT NACH.
+ * Seit der Tafla-Typoskala ist Footnote (13px) die kleinste Schrift - die
+ * Einheit faellt nicht mehr auf Caption 1 (12px) -, und der Wert laeuft ohne
+ * engere Laufweite (Tafla: kein letter-spacing). Gemessen an "180/110 mmHg"
+ * in der 150px-Kachel (124px Wertzeile): Title 3 plus Einheit in 13px braucht
+ * 127px, "mmHg" stand darunter. Unter 132px (127 plus die 4px Plattform-
+ * Reserve) nimmt der Wert deshalb Body (17px, eine der vier Tafla-Groessen):
+ * rund 115px, die Einheit bleibt bei 13. Die Zusage bleibt dieselbe: eine
+ * Einheit steht nie allein auf ihrer Zeile. */
 .metric-rows > .metric-card > .metric-card__body {
   container: metric-tile / inline-size;
 }
@@ -845,6 +855,12 @@
 
   .metric-rows .metric-card__unit {
     font-size: var(--text-xs);
+  }
+}
+
+@container metric-tile (width < 132px) {
+  .metric-rows .metric-card__value {
+    font-size: var(--type-body);
   }
 }
 
