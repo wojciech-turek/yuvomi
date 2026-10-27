@@ -1417,8 +1417,7 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
     const swap = () => {
       // ZUERST festhalten, ob die alte Seite einen FAB hatte - schwebend in der
       // Ebene oder (Desktop) angedockt in ihrem Kopf, der mit dem Inhalt gleich
-      // faellt: der naechste poppt dann nicht neu herein, und die Kapsel haelt
-      // seine Reserve (holdFabAcrossSwap).
+      // faellt: der naechste poppt dann nicht neu herein (holdFabAcrossSwap).
       holdFabAcrossSwap();
       // Alter Inhalt ist jetzt weg - altes Stylesheet kann entfernt werden
       pageWrapper = document.createElement('div');
@@ -1958,8 +1957,8 @@ function renderAppShell(container) {
   // also geht der Beobachter des alten mit.
   _stopToastPlacement?.();
   _stopToastPlacement = watchToastPlacement(bottomStack);
-  // Die Kapsel ist ein NEUER Knoten; der Beobachter des Tab-Indikators haengt
-  // sonst am verworfenen (siehe observeNavCapsule weiter unten).
+  // Die Tab-Reihe ist ein NEUER Knoten; die Hoehenmessung haengt sonst am
+  // verworfenen (siehe observeNavCapsule weiter unten).
   observeNavCapsule();
   applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
   updateBranding(routerState.currentPath || '/');
@@ -2283,8 +2282,8 @@ function wireToolbar(el) {
 /**
  * Liegt die Route hinter „Więcej" (kein eigener Tab)? Dann ist sie eine
  * GESCHOBENE Seite (Tafla, spec-navigation.txt): ihr Kopf traegt einen
- * Rueckweg, und die Kapsel steht minimiert. Dieselbe Frage, die den
- * Mehr-Knopf aktiv macht (updateNav).
+ * Rueckweg (v2: die Leiste minimiert dort nicht mehr). Dieselbe Frage, die
+ * den Mehr-Knopf aktiv macht (updateNav).
  */
 function isPushedRoute(rawPath = routerState.currentPath || location.pathname) {
   const path = topLevelSection(rawPath);
@@ -2373,9 +2372,9 @@ function clearPageFab() {
  * bis der naechste Wechsel neu fragt - also auch fuer einen Nachzuegler. Beim
  * Kaltstart steht kein Vorgaenger: die Klasse faellt, der FAB faehrt ein.
  *
- * Die Kapsel muss seit der Re-Kritik 2026-10-17 nichts mehr halten: ihre
- * FAB-Reserve steht immer (layout.css, `.nav-bottom__items`), die frueheren
- * `fab-holding`/`releaseFabHold()` sind entfallen.
+ * Die Leiste muss nichts halten: seit der Re-Kritik 2026-10-17 stand ihre
+ * FAB-Reserve immer, und seit v2 (2026-10-27) reserviert sie gar nichts mehr.
+ * Die frueheren `fab-holding`/`releaseFabHold()` sind entfallen.
  */
 function holdFabAcrossSwap() {
   const root = document.documentElement;
@@ -4822,9 +4821,8 @@ window.yuvomi = {
   //     Wand), stand der alte bedienbar auf der Wand, bis die Seite ihn nach
   //     ihren Daten selbst raeumte.
   //   - adoptPageFab(): bringt er einen mit, blieb der im Scrollport - ohne
-  //     Glyph (die Icons zeichnet sonst erst updateNav()), und die Tab-Kapsel
-  //     hielt ihr hinteres Ende nicht mehr frei, weil ihre Reserve an
-  //     `.fab-layer .page-fab` haengt: die Slots liefen unter den Knopf.
+  //     Glyph (die Icons zeichnet sonst erst updateNav()) und ohne Andocken
+  //     im Kopf.
   // Aufzurufen direkt nach dem synchronen Teil von render(), wie in renderPage().
   replacePageFab: () => {
     clearPageFab();
