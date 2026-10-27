@@ -960,7 +960,9 @@ function syncSidebarTools(root = document.querySelector('.nav-sidebar__logo-acti
 
 /**
  * Die Kontozeile am Fuss der Seitenleiste: Avatar, Name, und dahinter das
- * Konto-Menue (Hilfe, Aenderungen, Abmelden).
+ * Konto-Menue (Einstellungen, Hilfe, Aenderungen, Abmelden). v2 (2026-10-27):
+ * die Einstellungen stehen hier, seit die Seitenleiste nur noch die fuenf Ziele
+ * der Leiste fuehrt - am Desktop einen Klick entfernt statt zwei ueber Więcej.
  *
  * Gebaut per DOM-API, weil Name und Bild Nutzerdaten sind; Farbe und Bild
  * setzt `syncSidebarAccount()`, das auch nach einer Profil-Aenderung laeuft.
@@ -1020,6 +1022,7 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
     return btn;
   };
   menu.append(
+    item('settings', 'settings', 'nav.settings', 'nav-account__settings'),
     item('help', 'circle-help', 'nav.help', 'nav-account__help'),
     // `nav-item--changelog` traegt den Update-Hinweis im Namen (applyUpdateBadge).
     item('changelog', 'history', 'nav.changelog', 'nav-item--changelog'),
@@ -1036,7 +1039,8 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
   }
   menu.addEventListener('click', (event) => {
     const action = event.target.closest?.('.popover-menu__item')?.dataset.action;
-    if (action === 'help') showHelpModal();
+    if (action === 'settings') navigate('/settings?view=domains');
+    else if (action === 'help') showHelpModal();
     else if (action === 'changelog') showChangelogModal();
     else if (action === 'logout') confirmAndLogout();
   });
@@ -1698,29 +1702,13 @@ function renderAppShell(container) {
 
   const sidebarItems = document.createElement('div');
   sidebarItems.className = 'nav-sidebar__items nav-sidebar__items--liquid';
-  // Kein role="list": die Kinder sind Sektions-Gruppen (role="group") + das
-  // gepinnte Settings-Item, keine listitems. Die <nav>-Hülle trägt die
-  // Navigations-Semantik, die Gruppen die Sektions-Struktur.
-  // DER GEPINNTE EINTRAG STEHT AUSSERHALB DES SCROLLERS (Critique 2026-08-10).
-  //
-  // Die Absicht gab es schon: `nav-item--pinned-end` plus `margin-top: auto`.
-  // Nur braucht ein Auto-Rand FREIEN RAUM - er wirkt also genau dann nicht,
-  // wenn er gebraucht wird. Gemessen auf 1280x720: scrollHeight 666 in
-  // clientHeight 448, und die Einstellungen lagen 218px unter der Falz,
-  // zusammen mit dem Budget - beides Module, die PRODUCT.md ausdruecklich als
-  // Desktop-Sitzung nennt. Eine Regel, die nur im unkritischen Fall greift, ist
-  // dieselbe stille Zusicherung wie eine Fade-Maske, die zeigt, dass es
-  // weitergeht, ohne dass man hinkaeme.
-  //
-  // Als Geschwister der Liste sitzt er immer am Fuss, ohne Auto-Rand: die
-  // Sidebar ist eine Flex-Spalte, und was nicht im Scroller liegt, scrollt
-  // nicht weg. Strukturell ist das ohnehin der richtige Ort - die Einstellungen
-  // sind Systemebene, kein Modul unter Modulen.
-  const pinnedSidebarItems = [];
-  sidebarNavItems().forEach((item) => {
-    if (item.classList?.contains('nav-item--pinned-end')) pinnedSidebarItems.push(item);
-    else sidebarItems.appendChild(item);
-  });
+  // Kein role="list": die Kinder sind Links und zwei dekorative Flaechen
+  // (Pille, Hover), keine listitems. Die <nav>-Hülle trägt die Semantik.
+  // 2026-10-27, v2: hier stand der gepinnte Eintrag „Einstellungen" ausserhalb
+  // des Scrollers (Critique 2026-08-10). Die Seitenleiste fuehrt jetzt die fuenf
+  // Ziele der Leiste; die Einstellungen stehen auf Więcej und im Konto-Menue
+  // am Fuss (sidebarAccountEl).
+  sidebarNavItems().forEach((item) => sidebarItems.appendChild(item));
 
   // Scroll-Affordanz (Audit F-01): weiche Fade-Anrisse oben/unten, sobald die
   // Liste überläuft — der Scrollbalken ist bewusst versteckt, ohne Anriss waren
@@ -1816,10 +1804,6 @@ function renderAppShell(container) {
   sidebar.appendChild(sidebarLogo);
   sidebar.appendChild(sidebarItems);
 
-  // Der gepinnte Eintrag steht zwischen Liste und Fuss-Aktionen: er IST eine
-  // Route (data-route, Aktiv-Pille) und gehoert damit nicht zu den Aktionen
-  // darunter, aber auch nicht mehr in den Scroller darueber.
-  pinnedSidebarItems.forEach((el) => sidebar.appendChild(el));
 
   // HILFE, AENDERUNGEN UND ABMELDEN STEHEN HINTER DEM AVATAR (Critique
   // 2026-09-26, P1-2). Als Fussleiste kosteten sie 104px Hoehe fuer drei
@@ -4090,29 +4074,9 @@ function placeNavIndicator(indicator, apply) {
   if (indicator.getClientRects().length) indicator.dataset.placed = '1';
 }
 
-/**
- * Laesst die Pille des gepinnten Eintrags von einer Bildschirmhoehe her an
- * ihren Platz gleiten (FLIP): erst ohne Uebergang auf den Startpunkt, dann
- * mit dem Uebergang der Pille (layout.css, reduced-motion schaltet ihn ab)
- * zurueck auf null. `fromTop` null heisst: ohne Weg einblenden.
- */
-function glidePillFrom(pill, fromTop) {
-  if (pill.style.opacity !== '0') return;
-  if (fromTop != null) {
-    pill.style.opacity = '';
-    startGlideAt(pill, fromTop - pill.getBoundingClientRect().top);
-  }
-  pill.style.transform = '';
-  pill.style.opacity = '';
-}
-
-/** Setzt eine Pille ohne Uebergang auf einen Startpunkt; der naechste Wert gleitet. */
-function startGlideAt(pill, y) {
-  pill.style.transition = 'none';
-  pill.style.transform = `translateY(${y}px)`;
-  pill.getBoundingClientRect();
-  pill.style.transition = '';
-}
+// 2026-10-27, v2: hier standen glidePillFrom() und startGlideAt() - die Pille
+// des gepinnten Eintrags „Einstellungen" glitt von der Listenpille her und
+// zurueck. Der Eintrag ist mit den fuenf Zielen entfallen.
 
 /**
  * Positioniert den morphenden Indikator in der Sidebar auf dem aktiven Nav-Item.
@@ -4122,28 +4086,10 @@ function positionSidebarIndicator() {
   const indicator = container?.querySelector('.nav-sidebar__indicator');
   if (!indicator) return;
   const active = container.querySelector('.nav-item[aria-current="page"]');
-  const pinnedPill = document.querySelector('.nav-sidebar > .nav-item--pinned-end > .nav-sidebar__indicator--pinned');
   if (!active) {
-    // Der gepinnte Eintrag (Einstellungen) ist aktiv: seine eigene Pille
-    // gleitet von dort her, wo die Listenpille gerade stand, und die
-    // Listenpille tritt ab. Ohne sichtbare Vorgaengerin erscheint sie still.
-    if (pinnedPill?.parentElement?.getAttribute('aria-current') === 'page') {
-      const from = indicator.style.opacity !== '0' && indicator.getClientRects().length
-        ? indicator.getBoundingClientRect().top : null;
-      glidePillFrom(pinnedPill, from);
-    }
     indicator.style.opacity = '0';
     return;
   }
-  // Zurueck in die Liste: die Listenpille startet an der Stelle der
-  // gepinnten (unterhalb der Liste, vom Scroller beschnitten) und gleitet
-  // herauf - dieselbe Bewegung in die Gegenrichtung.
-  // Nur ein schon platzierter Indikator gleitet - die erste Platzierung
-  // springt weiter (placeNavIndicator).
-  if (pinnedPill && pinnedPill.style.opacity !== '0' && indicator.dataset.placed === '1') {
-    startGlideAt(indicator, pinnedPill.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop);
-  }
-  if (pinnedPill) pinnedPill.style.opacity = '0';
   // Aktives Item in den Sichtbereich holen (Audit F-01): bei überlaufender
   // Liste lagen Item UND Pille sonst unsichtbar unterhalb der Falte — die
   // Navigation verlor ihren „Du bist hier"-Anker. Manuelles Scrollen statt

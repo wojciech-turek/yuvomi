@@ -391,14 +391,15 @@ test('R18: die schwebende Tafel nimmt dem Inhalt keine Breite', () => {
  * Die zwei Zeilen ausserhalb der Liste (Einstellungen, Konto) faerbten sich
  * ueber die volle Breite. In der runden Tafel schneidet die untere Ecke eine
  * randbuendige Flaeche an; mit dem Einzug der Pille liegt sie in der Kurve.
+ * 2026-10-27, v2: der gepinnte Eintrag „Einstellungen" ist entfallen (die
+ * Seitenleiste fuehrt die fuenf Ziele der Leiste); es bleibt die Kontozeile.
  */
-test('R18: Einstellungen und Kontozeile tragen den Einzug der gleitenden Pille', () => {
+test('R18: die Kontozeile traegt den Einzug der gleitenden Pille', () => {
   const pill = rulesFor(LAYOUT, '.nav-sidebar__indicator').find((r) => /left\s*:/.test(r.body));
   const inset = pill.body.match(/left:\s*(var\(--[\w-]+\))/)[1];
   const rows = [...eachRule(LAYOUT)].find((r) => isDesktop(r)
-    && r.selector.includes('.nav-sidebar > .nav-item--pinned-end')
     && r.selector.includes('.nav-sidebar__account-trigger') && /margin-inline/.test(r.body));
-  assert.ok(rows, 'die gemeinsame Regel der beiden Zeilen fehlt');
+  assert.ok(rows, 'die Regel der Kontozeile fehlt');
   assert.ok(rows.body.includes(`margin-inline: ${inset}`), `Einzug ${inset} wie die Pille`);
 });
 
