@@ -1,12 +1,20 @@
 /**
- * Modul: Cook mode (Tafla, 2026-10-19)
- * Zweck: The dark cook stage (components/cook-mode.js), artboard "Gotowanie".
- *        #141311 in BOTH themes - the tokens in tokens.css 4d never flip. On
+ * Modul: Cook mode (Tafla, 2026-10-19; light stage since v2, 2026-10-27)
+ * Zweck: The cook stage (components/cook-mode.js), artboard "Gotowanie". On
  *        the iPad (and any wider screen) the stage is a 12-column grid with the
- *        wall's four type steps: the step number 112 rounded violet, the step
- *        text 44/56, labels and buttons 30 and 24. On the phone everything
- *        stacks and takes the iPhone steps; targets stay at least 56 for wet
- *        hands, the two navigation buttons 64 (88 on the iPad).
+ *        wall's four type steps: the step number 112 violet, the step text
+ *        44/56, labels and buttons 30 and 24. On the phone everything stacks
+ *        and takes the iPhone steps; targets stay at least 56 for wet hands,
+ *        the two navigation buttons 64 (88 on the iPad).
+ *
+ * v2, 2026-10-27: LIGHT ONLY. The owner: "kitchen tablet will be turned off
+ * for the night so dont worry about dark mode at all, keep everything light".
+ * The dark stage (#141311, the --cook-* tokens and `color-scheme: dark`) is
+ * gone; the stage stands on the v2 ground (--color-bg #F6F6F3) with white
+ * panels on a hairline, ink and ink-2 text, the violet voice for the step
+ * number and the one fill (--color-btn-primary) for what moves the cook on.
+ * Read from a step away it keeps its size; the contrast is the app's
+ * (ink 16.09 on the ground, violet text AA, ink-2 5.99).
  */
 
 .cook-mode-open,
@@ -24,10 +32,8 @@
   --cook-nav: var(--space-16);
   --cook-disc: calc(var(--space-12) + var(--space-2));
   --cook-gap: var(--space-4);
-  /* White at 10/12 % of the stage ink: the quiet pills, the empty segments. */
-  --cook-quiet: color-mix(in srgb, var(--cook-ink) 10%, transparent);
-  --cook-track: color-mix(in srgb, var(--cook-ink) 12%, transparent);
-  --cook-rule: color-mix(in srgb, var(--cook-ink) 16%, var(--cook-panel));
+  /* The empty segments and the idle timer ring: ink at the state step. */
+  --cook-track: color-mix(in srgb, var(--color-text-primary) var(--tint-state), transparent);
 
   position: fixed;
   inset: 0;
@@ -43,16 +49,15 @@
   gap: var(--cook-gap);
   padding: max(var(--space-4), env(safe-area-inset-top, 0px)) max(var(--space-4), env(safe-area-inset-right, 0px))
     max(var(--space-4), env(safe-area-inset-bottom, 0px)) max(var(--space-4), env(safe-area-inset-left, 0px));
-  background: var(--cook-stage);
-  color: var(--cook-ink);
-  color-scheme: dark;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
   font-size: var(--cook-body);
   font-variant-numeric: tabular-nums;
   overflow-y: auto;
 }
 
 .cook::backdrop {
-  background: var(--cook-stage);
+  background: var(--color-bg);
 }
 
 :where(.cook) button {
@@ -62,7 +67,7 @@
 }
 
 :where(.cook) button:focus-visible {
-  outline: var(--focus-ring-width) solid var(--cook-accent);
+  outline: var(--focus-ring-width) solid var(--color-accent);
   outline-offset: var(--focus-ring-offset);
 }
 
@@ -70,12 +75,12 @@
   margin: 0;
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 .cook__muted {
   margin: 0;
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 /* ── Top bar: Zakończ, title and progress ──
@@ -108,7 +113,7 @@
   max-inline-size: 100%;
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -134,7 +139,7 @@
 }
 
 .cook__seg--done {
-  background: var(--cook-accent-fill);
+  background: var(--color-btn-primary);
 }
 
 .cook__pill {
@@ -145,7 +150,8 @@
   padding: 0 var(--space-5) 0 var(--space-4);
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--cook-quiet);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-card-border);
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
@@ -165,7 +171,7 @@
   padding: 0 var(--space-3);
   border: 0;
   background: transparent;
-  color: var(--cook-accent);
+  color: var(--color-accent);
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
 }
@@ -190,8 +196,9 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
+  border: 1px solid var(--color-card-border);
   border-radius: var(--radius-wall-card);
-  background: var(--cook-panel);
+  background: var(--color-surface);
   min-height: 0;
 }
 
@@ -232,11 +239,11 @@
 }
 
 .cook__ing[aria-pressed="true"] {
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 .cook__ing[aria-pressed="true"] .cook__ring {
-  background: var(--cook-accent-fill);
+  background: var(--color-btn-primary);
   box-shadow: none;
   color: var(--color-on-accent);
 }
@@ -251,7 +258,7 @@
 }
 
 .cook__panel-foot {
-  border-top: var(--wall-rule) solid var(--cook-rule);
+  border-top: var(--wall-rule) solid var(--color-separator-inner);
 }
 
 .cook__panel-more {
@@ -262,7 +269,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--cook-accent);
+  color: var(--color-accent);
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
 }
@@ -283,7 +290,7 @@
   font-size: var(--cook-num);
   line-height: 1;
   letter-spacing: var(--tracking-display);
-  color: var(--cook-accent);
+  color: var(--color-accent);
 }
 
 .cook__step-text {
@@ -303,7 +310,7 @@
   padding: 0 var(--space-4) 0 var(--space-3);
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--cook-accent-fill);
+  background: var(--color-btn-primary);
   color: var(--color-on-accent);
   font-size: var(--cook-body);
   font-weight: var(--font-weight-semibold);
@@ -320,7 +327,7 @@
 .cook__then {
   margin: 0;
   font-size: var(--cook-body);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 .cook__then-label {
@@ -342,8 +349,9 @@
   gap: var(--space-4);
   min-block-size: calc(var(--space-16) + var(--space-6));
   padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-card-border);
   border-radius: var(--radius-wall-card);
-  background: var(--cook-panel);
+  background: var(--color-surface);
 }
 
 .cook__presets {
@@ -364,7 +372,7 @@
   justify-content: center;
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--cook-quiet);
+  background: var(--color-fill);
 }
 
 .cook__preset-num {
@@ -375,7 +383,7 @@
 .cook__preset-unit {
   font-size: var(--cook-label);
   line-height: var(--wall-tight-lh);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 .cook__timer {
@@ -403,7 +411,7 @@
 }
 
 .cook__timer-arc {
-  stroke: var(--cook-accent-fill);
+  stroke: var(--color-btn-primary);
   stroke-linecap: round;
 }
 
@@ -418,7 +426,7 @@
 .cook__timer-label {
   font-size: var(--cook-label);
   font-weight: var(--font-weight-semibold);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -434,7 +442,7 @@
   align-self: stretch;
   border: 0;
   border-radius: var(--radius-wall-card);
-  background: var(--cook-accent-fill);
+  background: var(--color-btn-primary);
   color: var(--color-on-accent);
   font-size: var(--cook-step);
   font-weight: var(--font-weight-semibold);
@@ -450,7 +458,7 @@
   flex: none;
   inline-size: var(--wall-rule);
   align-self: stretch;
-  background: var(--cook-rule);
+  background: var(--color-separator-inner);
 }
 
 .cook__nav {
@@ -468,7 +476,8 @@
   place-items: center;
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--cook-quiet);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-card-border);
 }
 
 .cook__back:disabled {
@@ -487,7 +496,7 @@
   gap: var(--space-2);
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--cook-accent-fill);
+  background: var(--color-btn-primary);
   color: var(--color-on-accent);
   font-size: var(--cook-body);
   font-weight: var(--font-weight-semibold);
@@ -545,7 +554,7 @@
 .cook__end-note {
   margin: 0;
   font-size: var(--cook-body);
-  color: var(--cook-ink-2);
+  color: var(--color-text-secondary);
 }
 
 .cook__end-note {

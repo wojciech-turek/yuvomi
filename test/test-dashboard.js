@@ -1734,19 +1734,15 @@ test('Wand-Modus und Dziś erzählen denselben Tag (ein Modell, zwei Formen)', a
     nodeAssert.deepEqual(wand, dzis, 'dieselben Zeilen in derselben Reihenfolge - keine zweite Wahrheit');
   });
 });
-test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', async () => {
-  const { isWallNight, isWallRoute, WALL_NIGHT_FROM, WALL_NIGHT_TO } = await import('../public/utils/wall-mode.js');
-  const at = (h, m = 0) => new Date(2026, 7, 11, h, m);
-  const probe = [
-    [21, 59, false], [22, 0, true], [23, 30, true],
-    [0, 15, true], [3, 0, true], [5, 59, true], [6, 0, false], [12, 0, false],
-  ];
-  const falsch = probe.filter(([h, m, soll]) => isWallNight(at(h, m)) !== soll)
-    .map(([h, m]) => `${h}:${String(m).padStart(2, '0')}`);
-  nodeAssert.equal(probe.length, 8, 'acht Uhrzeiten geprüft');
-  nodeAssert.deepEqual(falsch, [], 'ODER statt UND - sonst reißt das Fenster um Mitternacht');
-  nodeAssert.equal(WALL_NIGHT_FROM, 22);
-  nodeAssert.equal(WALL_NIGHT_TO, 6);
+// 2026-10-27, v2: light only. Hier stand das Nachtfenster 22:00-06:00 (ODER
+// statt UND ueber Mitternacht). Die Nachtszene ist gegangen - das Tablet ist
+// nachts aus, die Wand bleibt hell.
+test('Wand-Modus: keine Nacht mehr, und der Modus ist ein Zustand des Dashboards', async () => {
+  const wall = await import('../public/utils/wall-mode.js');
+  const { isWallRoute } = wall;
+  nodeAssert.equal(wall.isWallNight, undefined, 'kein Nachtfenster');
+  nodeAssert.equal(wall.WALL_NIGHT_FROM, undefined);
+  nodeAssert.equal(wall.WALL_NIGHT_TO, undefined);
 
   // Der Modus ist ein Zustand DES DASHBOARDS, keine eigene Route.
   nodeAssert.equal(isWallRoute('/'), true);
@@ -1755,7 +1751,12 @@ test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', 
 
 /* #1453: NACH EINEM RELOAD IN DER NACHT BLIEB DIE WAND HELL.
  *
- * 2026-10-27, v2: light only. Es gibt kein dunkles Theme mehr: theme-init.js
+ * 2026-10-27, v2: light only - und jetzt ist genau das die Zusage: die
+ * Nachtszene ist gegangen, die Wand bleibt nachts hell. Weder theme-init noch
+ * `syncWallMode` setzen `data-wall-night`, keiner setzt `data-theme`, und eine
+ * frueher gespeicherte Wahl ist weg.
+ *
+ * Zuvor (v2, vor „keep everything light"): Es gab kein dunkles Theme mehr: theme-init.js
  * raeumt eine gespeicherte Wahl (`yuvomi-theme`) ab und setzt nie
  * `data-theme`; die Nachtszene malt ihr Dunkel selbst (--wall-night-*) und
  * haengt allein an `data-wall-night`. Die Zusage von #1453 bleibt in dieser
@@ -1772,7 +1773,7 @@ test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', 
  * als echtes Skript, die Router-Init als ihre Drei-Wege-Logik (router.js,
  * Initialisierung), dann der echte `syncWallMode` samt Minutentakt.
  */
-test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand in der Nacht (#1453)', async () => {
+test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand hell (#1453, v2 light only)', async () => {
   const wall = await import('../public/utils/wall-mode.js');
   const tz = await import('/utils/timezone.js');
   const themeInit = readFileSync(new URL('../public/theme-init.js', import.meta.url), 'utf8');
@@ -1839,7 +1840,8 @@ test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand in der Nacht (#
       new Function('localStorage', 'sessionStorage', 'document', 'location', 'Date', themeInit)(
         storage, makeStorage({}), globalThis.document, globalThis.location, deviceNight,
       );
-      nodeAssert.ok(root.hasAttribute('data-wall-night'), 'Vorbedingung: theme-init setzt nachts data-wall-night');
+      nodeAssert.ok(root.hasAttribute('data-wall-mode'), 'Vorbedingung: theme-init setzt den Wand-Modus');
+      nodeAssert.ok(!root.hasAttribute('data-wall-night'), 'theme-init setzt nachts keine Nacht mehr');
       // 2. (Die Router-Init stellte bis v2 das gespeicherte Theme her - entfallen.)
       // 3. syncWallMode aus der Navigation, danach ein Minutentakt in der Nacht
       atInstant(NIGHT, () => wall.syncWallMode('/'));
@@ -1865,10 +1867,10 @@ test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand in der Nacht (#
     }
   }
   nodeAssert.deepEqual(results, [
-    { stored: null, afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
-    { stored: 'light', afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
-    { stored: 'dark', afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
-  ], `nachts Nacht nach dem Laden und im Takt, morgens Tag, nie data-theme, eine alte Wahl ist weg - bekam ${JSON.stringify(results)}`);
+    { stored: null, afterLoad: null, afterTick: null, night: false, morning: null, morningNight: false, kept: null },
+    { stored: 'light', afterLoad: null, afterTick: null, night: false, morning: null, morningNight: false, kept: null },
+    { stored: 'dark', afterLoad: null, afterTick: null, night: false, morning: null, morningNight: false, kept: null },
+  ], `nachts hell nach dem Laden und im Takt, nie data-theme, eine alte Wahl ist weg - bekam ${JSON.stringify(results)}`);
 });
 
 // --------------------------------------------------------

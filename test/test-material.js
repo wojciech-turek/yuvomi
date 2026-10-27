@@ -535,3 +535,51 @@ test('Tafla: auf dem Papier der Zugangsseite halten Text, Feldkante und Haus ihr
     assert.match(read(`../public/pages/${page}.js`), /<p class="auth-version"[^>]*><\/p>\s*<\/main>/, `${page}.js: Versionszeile am Fuss`);
   }
 });
+
+/* KEINE DUNKLE PALETTE (2026-10-27, v2: light only). Der Eigentuemer: "kitchen
+ * tablet will be turned off for the night so dont worry about dark mode at
+ * all, keep everything light". Nach dem Dark Mode gingen damit die zwei
+ * letzten dunklen Flaechen - die Kochbuehne (--cook-*, `color-scheme: dark`)
+ * und die Nachtszene der Wand (--wall-night-*). Damit keine zurueckkommt:
+ * kein Stylesheet setzt `color-scheme: dark`, keins fragt
+ * `prefers-color-scheme: dark` ab oder waehlt `[data-theme="dark"]`, und kein
+ * Grund-Token (bg, stage, panel, surface, ground, backdrop) traegt einen
+ * dunklen Wert. Gelesen werden die Deklarationen, nicht die Kommentare.
+ *
+ * Die eine Ausnahme ist benannt: die Meldung (Toast) ist eine inverse Pille
+ * auf hellem Grund - ein Bauteil, kein Theme. */
+const INVERSE_SURFACES = new Map([
+  ['--_toast-bg', 'die Meldung ist die eine inverse Pille (Snackbar) auf hellem Grund'],
+]);
+
+test('v2 light only: keine dunkle Palette in public/styles', () => {
+  const relLum = (hex) => {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const findings = [];
+  let tokens = 0;
+  const files = readdirSync(STYLE_DIR).filter((name) => name.endsWith('.css'));
+  for (const file of files) {
+    const css = readFileSync(new URL(file, STYLE_DIR), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of css.matchAll(/color-scheme\s*:\s*([^;}]*)/g)) {
+      if (/\bdark\b/.test(m[1])) findings.push(`${file}: color-scheme: ${m[1].trim()}`);
+    }
+    if (/prefers-color-scheme\s*:\s*dark/.test(css)) findings.push(`${file}: @media (prefers-color-scheme: dark)`);
+    if (/\[data-theme=["']?dark/.test(css)) findings.push(`${file}: [data-theme="dark"]`);
+    for (const m of css.matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})\b/g)) {
+      if (!/(bg|background|stage|panel|surface|ground|backdrop)/i.test(m[1])) continue;
+      tokens += 1;
+      if (relLum(m[2]) < 0.3 && !INVERSE_SURFACES.has(m[1])) findings.push(`${file}: ${m[1]}: ${m[2]} (dunkel)`);
+    }
+    for (const gone of ['--cook-stage', '--cook-panel', '--wall-night-bg', '--wall-night-ink']) {
+      if (css.includes(gone)) findings.push(`${file}: ${gone} ist zurueck`);
+    }
+  }
+  assert.ok(files.length >= 30, `Reichweite: nur ${files.length} Stylesheets gelesen`);
+  assert.ok(tokens >= 5, `Reichweite: nur ${tokens} Grund-Tokens mit Hex-Wert gesehen`);
+  assert.deepEqual(findings, [], `dunkle Palette gefunden:\n${findings.join('\n')}`);
+  // Die Ausnahme besteht noch - sonst ist sie ueberfluessig.
+  assert.ok(read('../public/styles/tokens.css').includes('--_toast-bg'), 'die benannte Ausnahme gibt es noch');
+});

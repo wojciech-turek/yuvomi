@@ -93,17 +93,11 @@ function renderHead(model, { clock, weather, weatherIcon, timer }) {
         ${main}
         <div class="wall__head-text" data-toast-keepout>
           <p class="wall__date">${small}<span id="wall-date">${esc(wallDateLabel(model.todayKey))}</span></p>
-          ${model.scene === 'noc' ? renderNightLine(model) : teraz}
+          ${teraz}
         </div>
       </div>
-      ${model.sections.weather && model.scene !== 'noc' ? renderWeather(weather, weatherIcon) : ''}
+      ${model.sections.weather ? renderWeather(weather, weatherIcon) : ''}
     </header>`;
-}
-
-function renderNightLine(model) {
-  const first = model.tomorrow?.rows?.[0];
-  if (!first) return '';
-  return `<p class="wall__teraz">${esc(t('today.tomorrowPointer', { what: `${first.time ? `${first.time} ` : ''}${first.title}` }))}</p>`;
 }
 
 // --------------------------------------------------------
@@ -336,8 +330,6 @@ export function renderWall(model, {
       </div>`;
   } else if (state === 'loading') {
     stage = '<div class="wall__stage" data-layout="single"><div class="wall__loading" aria-hidden="true"></div></div>';
-  } else if (model.scene === 'noc') {
-    stage = '<div class="wall__stage" data-layout="night"></div>';
   } else {
     stage = renderStage(model, ui);
   }

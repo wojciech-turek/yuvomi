@@ -5029,32 +5029,8 @@
   opacity: 0.6;
 }
 
-/* Die Nacht ist feste Zeit (utils/wall-mode.js, 22-6): eine Infozeile, kein Knopf. */
-.tablet-info {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: var(--space-16);
-  padding: var(--space-2) var(--space-4);
-}
-
-.tablet-info__text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.tablet-info__label {
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-}
-
-.tablet-info__hint {
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-}
+/* Hier stand die Infozeile der Nacht (22-6); mit der Nachtszene gegangen
+ * (v2, 2026-10-27: light only). */
 
 .tablet-form {
   margin-top: var(--space-3);
