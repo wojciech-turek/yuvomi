@@ -2322,6 +2322,19 @@ test('v2: die Zeile liest ihre Menge - "2 mleko", "mleko 2", "250 g sera", "jajk
   assert.deepEqual(__test.parseQuickEntry('Mleko 2 l'), { name: 'Mleko', quantity: '2 l' }, 'the name keeps the case it was typed in');
   assert.deepEqual(__test.parseQuickEntry('  sól i   pieprz '), { name: 'sól i pieprz', quantity: null }, 'one send is one item');
   assert.deepEqual(__test.parseQuickEntry('Mleko 2%'), { name: 'Mleko 2%', quantity: null });
+  // The adjective after a noun the parser turned back follows it (2026-10-27, v2).
+  assert.deepEqual(__test.parseQuickEntry('200 g sera żółtego'), { name: 'ser żółty', quantity: '200 g' }, '-ego -> -y');
+  assert.deepEqual(__test.parseQuickEntry('2 l mleka świeżego'), { name: 'mleko świeże', quantity: '2 l' }, 'a neuter noun takes -e');
+  assert.deepEqual(__test.parseQuickEntry('1 kg mąki pszennej'), { name: 'mąka pszenna', quantity: '1 kg' }, '-ej -> -a');
+  assert.deepEqual(__test.parseQuickEntry('papryki słodkiej 2'), { name: 'papryka słodka', quantity: `2 ${pcs(2)}` }, '-kiej -> -ka, the amount behind');
+  assert.deepEqual(__test.parseQuickEntry('10 jajek wiejskich'), { name: 'jajka wiejskie', quantity: `10 ${pcs(10)}` }, '-ich -> -ie');
+  assert.deepEqual(__test.parseQuickEntry('3 jogurtów naturalnych'), { name: 'jogurty naturalne', quantity: `3 ${pcs(3)}` }, '-ych -> -e');
+  assert.deepEqual(__test.parseQuickEntry('jogurtu greckiego 2'), { name: 'jogurt grecki', quantity: `2 ${pcs(2)}` }, '-iego -> -i');
+  assert.deepEqual(__test.parseQuickEntry('500 g sera w plastrach'), { name: 'ser w plastrach', quantity: '500 g' },
+    'the first word without an adjective ending ends the phrase');
+  assert.deepEqual(__test.parseQuickEntry('2 kiełbasy śląskiej'), { name: 'kiełbasy śląskiej', quantity: `2 ${pcs(2)}` },
+    'a noun the parser does not turn back keeps its adjective as typed - never one case for the noun and another for the adjective');
+  assert.deepEqual(__test.parseQuickEntry('ser żółty 200 g'), { name: 'ser żółty', quantity: '200 g' }, 'already nominative: untouched');
   assert.equal(__test.quickAddHintText({ name: 'jajka', quantity: '10 szt.' }, ''), '10 szt.');
   assert.equal(__test.quickAddHintText({ name: 'ser', quantity: null }, ''), '', 'nothing known, nothing said');
 });

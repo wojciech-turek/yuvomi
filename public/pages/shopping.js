@@ -78,8 +78,8 @@ const state = {
   frequent: [],
   /** "Pewnie się kończy" - the last answer of GET /shopping/predictions. */
   predictions: [],
-  /** The row the add bar just created: it shows its aisle with "zmień" for a
-   *  moment (Tafla), because on the phone the bar has no category field. */
+  /** The row the add bar just created: for a moment it stands in the accent
+   *  wash and says "dodano" (v2, 2026-10-27). */
   freshItemId: null,
 };
 
@@ -2108,10 +2108,54 @@ function parseQuickEntry(text) {
 
   const typedName = trail ? trail[1] : source.replace(amount, '').trim();
   const first = typedName.charAt(0);
-  const name = first && first !== first.toUpperCase() ? item.name.charAt(0).toLowerCase() + item.name.slice(1) : item.name;
+  const cased = first && first !== first.toUpperCase() ? item.name.charAt(0).toLowerCase() + item.name.slice(1) : item.name;
+  const name = nominativeAdjectives(typedName, cased);
   const number = /\d+(?:[.,]\d+)?/.exec(amount)?.[0] ?? String(item.quantity);
   const quantity = item.unit ? amount : `${number} ${t('pantry.units.pcs', { count: item.quantity })}`;
   return { name, quantity };
+}
+
+/** Lower case without diacritics (ł too) - for comparing a typed word with a parsed one. */
+function foldWord(word) {
+  return String(word ?? '').toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}+/gu, '');
+}
+
+/**
+ * THE ADJECTIVE FOLLOWS ITS NOUN (2026-10-27, v2). After an amount Polish puts
+ * the whole phrase in the genitive: "200 g sera żółtego". The capture parser
+ * turns the noun back ("sera" -> "ser") from its small table; this does the
+ * same for the adjectives right after it, so the list says "ser żółty".
+ *
+ * LOW RISK BY CONSTRUCTION: it acts only when the parser DID change the noun -
+ * the one sure sign that the phrase was in the genitive - and only on the words
+ * directly after it that carry a genitive adjective ending; the first word
+ * that does not ("w plastrach") ends it. A noun the table does not know
+ * ("kiełbasy śląskiej") keeps the whole phrase as typed, rather than a noun in
+ * one case and its adjective in another.
+ *
+ *   -ego -> -y / -i (masculine: "żółtego", "greckiego"), -e / -ie when the
+ *           noun is neuter, i.e. ends in -o or -e ("mleka świeżego")
+ *   -ej  -> -a ("pszennej"; "słodkiej" -> "słodka")
+ *   -ych -> -e, -ich -> -ie (plural: "naturalnych", "wiejskich")
+ */
+function nominativeAdjectives(typedName, parsedName) {
+  const typed = typedName.trim().split(/\s+/);
+  const words = parsedName.trim().split(/\s+/);
+  if (words.length < 2 || foldWord(typed[0]) === foldWord(words[0])) return parsedName;
+  const neuter = /[oe]$/i.test(words[0]);
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    let next = null;
+    if (/iego$/i.test(w)) next = w.replace(/iego$/i, neuter ? 'ie' : 'i');
+    else if (/ego$/i.test(w)) next = w.replace(/ego$/i, neuter ? 'e' : 'y');
+    else if (/[kg]iej$/i.test(w)) next = w.replace(/iej$/i, 'a');
+    else if (/ej$/i.test(w)) next = w.replace(/ej$/i, 'a');
+    else if (/ich$/i.test(w)) next = w.replace(/ich$/i, 'ie');
+    else if (/ych$/i.test(w)) next = w.replace(/ych$/i, 'e');
+    if (!next) break;
+    words[i] = next;
+  }
+  return words.join(' ');
 }
 
 /** What the field will add, said inside it: "10 szt. · Nabiał" (empty while nothing is known). */
