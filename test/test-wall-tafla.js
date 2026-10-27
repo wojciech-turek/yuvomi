@@ -3,7 +3,8 @@
  * Zweck: The wall was rebuilt after the approved artboard "Ściana". These
  *        guards hold what the artboard and the owner decided:
  *   1. the scene follows the clock (Rano, Dzień, Kolacja from 15:00 until
- *      dinner + 2h when a dinner is planned, Wieczór, Noc 22-6);
+ *      dinner + 2h when a dinner is planned, Wieczór); 2026-10-27, v2: light
+ *      only - the dark Noc scene (22-6) is gone, the wall stays light;
  *   2. the Teraz line ("Za 19 min kolacja · 20:00 Wieczór filmowy");
  *   3. no row cap: every open row is in the model, the view fits the height
  *      (`planWallRows` decides "+N więcej");
@@ -85,8 +86,10 @@ test('the scene follows the clock - Kolacja only with a planned dinner, from 15:
   assert.equal(build('18:11').scene, 'kolacja');
   assert.equal(build('20:29').scene, 'kolacja', 'dinner at 18:30 lingers two hours');
   assert.equal(build('20:30').scene, 'wieczor');
-  assert.equal(build('22:41').scene, 'noc');
-  assert.equal(build('03:00').scene, 'noc');
+  // 2026-10-27, v2: light only - no Noc scene; late evening stays Wieczór, the
+  // small hours count as morning (the tablet is off by then).
+  assert.equal(build('22:41').scene, 'wieczor');
+  assert.equal(build('03:00').scene, 'rano');
   const noDinner = { ...household(), todayMeals: [], dinnerPlan: null };
   assert.equal(build('18:11', {}, noDinner).scene, 'wieczor', 'no dinner, no Kolacja scene');
   assert.equal(build('16:00', {}, noDinner).scene, 'dzien');
@@ -211,7 +214,9 @@ test('the weekly question: Sunday evening only, and on the display only when the
   assert.equal(build('19:00', { question }, household(), sunday).question, question);
   assert.equal(build('17:59', { question }, household(), sunday).question, null, 'not before 18:00');
   assert.equal(build('19:00', { question }).question, null, 'not on a Monday');
-  assert.equal(build('22:30', { question }, household(), sunday).question, null, 'not at night');
+  // 2026-10-27, v2: light only - there is no night any more; the question
+  // stands until the day ends.
+  assert.equal(build('22:30', { question }, household(), sunday).question, question, 'no night cut-off any more');
   assert.equal(build('19:00', { question, isDisplay: true }, household(), sunday).question, null, 'a read-only display does not answer');
   assert.equal(build('19:00', { question, isDisplay: true, mayWrite: true }, household(), sunday).question, question);
 });
@@ -233,16 +238,17 @@ test('the stale note: from twelve minutes without a good load', () => {
 // 8. Markup
 // --------------------------------------------------------------------------
 
-test('the wall navigates nowhere, the night keeps only clock, date, tomorrow and the dock', () => {
+test('the wall navigates nowhere, and late at night it is the light evening wall (v2: no Noc)', () => {
   const html = markup(build('18:11', { mayWrite: true }));
   assert.ok(!/<a\b|href=|data-route=/.test(html), 'no link on the wall');
-  const night = build('22:41');
-  assert.equal(night.scene, 'noc');
-  const nightHtml = markup(night);
-  assert.match(nightHtml, /data-scene="noc"/);
-  assert.ok(!/wall-hero|wall-plan|wall-shop/.test(nightHtml), 'no cards at night');
-  assert.match(nightHtml, /today\.tomorrowPointer\{"what":"07:30 Przegląd auta"\}/);
-  assert.match(nightHtml, /id="wall-exit"/);
+  // 2026-10-27, v2: light only. Here the night kept only clock, date, "Jutro:"
+  // and the dock on the dark Noc stage. The scene is gone: at 22:41 the wall is
+  // the evening wall, with its cards, and nothing on it is dark.
+  const late = markup(build('22:41'));
+  assert.match(late, /data-scene="wieczor"/);
+  assert.doesNotMatch(late, /data-scene="noc"|data-layout="night"|tomorrowPointer/);
+  assert.match(late, /id="wall-exit"/);
+  assert.equal(wall.wallScene({ night: true, nowMin: 23 * 60 }), 'wieczor', 'a night flag no longer changes the scene');
 });
 
 test('a running timer takes the clock slot; the clock drops into the date line', () => {

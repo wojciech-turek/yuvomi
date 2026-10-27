@@ -1,13 +1,16 @@
 /**
  * Modul: The kitchen wall as a model (Tafla, 2026-10-19)
  * Zweck: What the wall says, without markup: its scene (Rano, Dzień, Kolacja,
- *        Wieczór, Noc), the header's Teraz line, tonight's dinner as the hero
+ *        Wieczór), the header's Teraz line, tonight's dinner as the hero
  *        from 15:00 until dinner + 2h, the Dziś card's rows with their person
  *        discs, the shopping card, "Jutro" in the evening, the weekly question
  *        on Sunday evenings and whether the data is stale. The view
  *        (components/wall-view.js) only draws what this returns.
- * Abhängigkeiten: /i18n.js, /utils/today-plan.js, /utils/timezone.js,
- *                 /utils/wall-mode.js (the night window)
+ * Abhängigkeiten: /i18n.js, /utils/today-plan.js, /utils/timezone.js
+ *
+ * NO NIGHT (v2, 2026-10-27: light only). The dark "Noc" scene (22:00-06:00,
+ * only the amber clock and "Jutro: ...") is gone: the kitchen tablet is
+ * turned off for the night, and the wall stays light around the clock.
  *
  * THE WALL IS NOBODY'S SCREEN. It is built with no viewer, so every row that
  * belongs to somebody carries their disc (Dziś leaves your own rows bare - on
@@ -23,7 +26,6 @@
 
 import { t, formatTime } from '/i18n.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { isWallNight } from '/utils/wall-mode.js';
 import {
   planContext, buildPlan, pickNow, buildTomorrow, dayClosed, minutesOf, firstName, MEAL_TIMES, DINNER_FROM, DINNER_LINGER_MIN,
 } from '/utils/today-plan.js';
@@ -54,14 +56,12 @@ export function normalizeWallSections(raw) {
 
 /**
  * The scene by the clock:
- *   noc      22:00-06:00 (the night window of wall-mode.js)
  *   kolacja  a dinner is planned and it is 15:00 until dinner + 2h
  *   rano     06:00-10:00
  *   wieczor  from 17:00, or after the dinner window
  *   dzien    the rest of the day
  */
-export function wallScene({ night = false, nowMin, dinnerWindow = false, dinnerOver = false }) {
-  if (night) return 'noc';
+export function wallScene({ nowMin, dinnerWindow = false, dinnerOver = false }) {
   if (dinnerWindow) return 'kolacja';
   if (nowMin < minutesOf(MORNING_UNTIL)) return 'rano';
   if (dinnerOver || nowMin >= minutesOf(EVENING_FROM)) return 'wieczor';
@@ -234,11 +234,9 @@ export function buildWall(data, {
 } = {}) {
   const on = normalizeWallSections(sections);
   const ctx = planContext({ now, viewer: null, users: data?.users ?? [], moduleOff, mealLabel });
-  const night = isWallNight(now);
   const timerShown = timer?.state === 'running' || timer?.state === 'done';
   const base = {
     scene: 'dzien',
-    night,
     todayKey: ctx.todayKey,
     nowTime: ctx.nowTime,
     sections: on,
@@ -255,17 +253,14 @@ export function buildWall(data, {
     canTick: false,
     household: data?.users ?? [],
   };
-  if (!data) {
-    base.scene = night ? 'noc' : 'dzien';
-    return base;
-  }
+  if (!data) return base;
 
   const { plan, now: teraz } = wallDay(data, ctx, timerShown ? timer : null);
   const dinner = !moduleOff('meals') && on.dinner ? dinnerOfToday(data) : null;
   const dinnerMin = minutesOf(MEAL_TIMES.dinner);
   const dinnerWindow = Boolean(dinner) && ctx.nowMin >= minutesOf(DINNER_FROM) && ctx.nowMin < dinnerMin + DINNER_LINGER_MIN;
   const dinnerOver = Boolean(dinner) && ctx.nowMin >= dinnerMin + DINNER_LINGER_MIN;
-  const scene = wallScene({ night, nowMin: ctx.nowMin, dinnerWindow, dinnerOver });
+  const scene = wallScene({ nowMin: ctx.nowMin, dinnerWindow, dinnerOver });
   const closed = dayClosed(plan);
   // Ticking needs a household yes AND, on the display, somebody it may tick
   // for - the view asks `tickers` (GET /displays/people, can_tick_off).
@@ -274,7 +269,7 @@ export function buildWall(data, {
   const model = { ...base, scene, canTick };
   // The dinner has its own card on the wall: the Teraz line names what comes
   // after it in the plan ("20:00 Wieczór filmowy"), not the dinner again.
-  const showsDinner = Boolean(dinner) && scene !== 'noc' && scene !== 'wieczor';
+  const showsDinner = Boolean(dinner) && scene !== 'wieczor';
   model.teraz = terazLine(showsDinner ? skipDinnerThen(teraz, plan, ctx) : teraz, plan, { closed });
 
   // Tonight's dinner: the hero in the Kolacja scene, a quiet card before it.
@@ -295,7 +290,7 @@ export function buildWall(data, {
     else model.dinner = card;
   }
 
-  if (on.plan && scene !== 'noc') {
+  if (on.plan) {
     // The hero shows tonight's dinner; it is not a row as well. Before the
     // window the dinner card does the same.
     const rows = plan.open
@@ -304,7 +299,7 @@ export function buildWall(data, {
     model.plan = { rows, closed, empty: !plan.hasAnything };
   }
 
-  if (scene === 'wieczor' || scene === 'noc') {
+  if (scene === 'wieczor') {
     const tomorrow = buildTomorrow(data, ctx);
     const rows = (tomorrow.rows ?? []).slice(0, WALL_TOMORROW_ROWS).map((row) => ({
       key: row.key,
@@ -315,7 +310,7 @@ export function buildWall(data, {
     model.tomorrow = rows.length ? { rows, total: tomorrow.total ?? rows.length } : null;
   }
 
-  if (on.shopping && !moduleOff('shopping') && scene !== 'noc') {
+  if (on.shopping && !moduleOff('shopping')) {
     const lists = Array.isArray(data?.shoppingLists) ? data.shoppingLists : [];
     const items = lists.flatMap((list) => (list.items ?? []).map((item) => ({ ...item, list_id: list.id })));
     const count = Number(data?.shoppingOpenCount) || 0;
@@ -334,7 +329,7 @@ export function buildWall(data, {
 
   // The weekly question: Sunday evening, while the AI has one open and the
   // wall may answer (a person's own wall, or a display the household lets write).
-  if (question && scene !== 'noc' && isSunday(ctx.todayKey) && ctx.nowMin >= minutesOf(QUESTION_FROM)
+  if (question && isSunday(ctx.todayKey) && ctx.nowMin >= minutesOf(QUESTION_FROM)
     && (!isDisplay || mayWrite)) {
     model.question = question;
   }

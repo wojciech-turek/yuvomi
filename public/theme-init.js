@@ -59,12 +59,7 @@
     if (localStorage.getItem('yuvomi-wall-mode') !== '1') return;
     if (location.pathname !== '/') return;
     document.documentElement.setAttribute('data-wall-mode', '');
-    var hour = new Date().getHours();
-    if (hour >= 22 || hour < 6) {
-      // Die Nachtszene malt ihr Dunkel selbst (--wall-night-*); ein dunkles
-      // Theme gibt es seit v2 nicht mehr.
-      document.documentElement.setAttribute('data-wall-night', '');
-    }
+    // Keine Nacht mehr (v2, 2026-10-27: light only) - die Wand bleibt hell.
   } catch (e) { /* Storage nicht verfuegbar → kein Wand-Modus in dieser Sitzung */ }
 })();
 

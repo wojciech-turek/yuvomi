@@ -24,7 +24,7 @@ import { esc } from '/utils/html.js';
 import { confirmModal, refocusAfterRender } from '/components/modal.js';
 import { settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
 import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
-import { enterWallMode, WALL_NIGHT_FROM, WALL_NIGHT_TO } from '/utils/wall-mode.js';
+import { enterWallMode } from '/utils/wall-mode.js';
 import { zonedDateKey } from '/utils/timezone.js';
 
 /** The wall sections the household switches, in the order of the artboard. */
@@ -170,11 +170,6 @@ function sectionTitle(id, key) {
   return `<h2 class="tablet-group-title" id="${esc(id)}">${esc(t(key))}</h2>`;
 }
 
-function nightRange() {
-  const at = (hour) => formatTime(new Date(2026, 0, 1, hour, 0));
-  return t('settings.tabletNightHint', { from: at(WALL_NIGHT_FROM), to: at(WALL_NIGHT_TO) });
-}
-
 function renderBody(state) {
   const { displays, prefs } = state;
   const sections = prefs?.wall_sections ?? {};
@@ -249,18 +244,9 @@ function renderBody(state) {
       </div>
       <p class="form-hint settings-group__footer">${esc(t('settings.tabletTouchFooter'))}</p>
     </section>
-    <section class="tablet-group" aria-labelledby="tablet-night-title">
-      ${sectionTitle('tablet-night-title', 'settings.tabletNight')}
-      <div class="row-carrier settings-group">
-        <div class="tablet-info">
-          <span class="tablet-action__glyph">${icon('moon')}</span>
-          <span class="tablet-info__text">
-            <span class="tablet-info__label">${esc(t('settings.tabletNightMode'))}</span>
-            <span class="tablet-info__hint">${esc(nightRange())}</span>
-          </span>
-        </div>
-      </div>
-    </section>
+    ${/* 2026-10-27, v2: light only - der Abschnitt „Noc" (22:00-06:00,
+          bursztynowy zegar) beschrieb nur die Nachtszene der Wand, und die ist
+          gegangen. */ ''}
     <section class="tablet-group" aria-labelledby="tablet-device-title">
       ${sectionTitle('tablet-device-title', 'settings.tabletDevice')}
       <div class="row-carrier settings-group tablet-actions">

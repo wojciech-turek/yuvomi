@@ -26,13 +26,13 @@
  *    Geraeteform: eine Fehlerkennung auf dem Laptop erzeugte einen Zustand, den
  *    niemand angefordert hat und den man dann erst wieder loswerden muss.
  *
- * 3. NACHTABSENKUNG NACH UHRZEIT. Das Tablet haengt im Flur und leuchtet um
- *    drei. Das Problem ist die Leuchtdichte, nicht der Farbmodus. Zwischen 22
- *    und 6 Uhr traegt die Wurzel deshalb `data-wall-night`, und die Szene
- *    "Noc" malt ihr Dunkel selbst (--wall-night-*, dashboard.css). Bis v2
- *    (2026-10-27) erzwang dieser Pfad zusaetzlich `data-theme="dark"`; ein
- *    dunkles Theme gibt es nicht mehr, die Nachtszene ist eine der zwei
- *    bewusst dunklen Flaechen der App (die andere: die Kochbuehne).
+ * 3. KEINE NACHT. Bis v2 senkte der Modus zwischen 22 und 6 Uhr die
+ *    Leuchtdichte ab (`data-wall-night`, die dunkle Szene "Noc" mit
+ *    bernsteinfarbener Uhr). 2026-10-27, v2: light only - "kitchen tablet will
+ *    be turned off for the night so dont worry about dark mode at all, keep
+ *    everything light". Die Wand bleibt rund um die Uhr hell; wer sie nachts
+ *    nicht sehen will, schaltet das Tablet aus (oder laesst den Bildschirm-
+ *    schoner ueber ihr laufen).
  *
  * 4. REINE ANZEIGE. Der Modus ist ein Read-Zustand: die Programmzeilen sind
  *    Text, keine Links. Das steht nicht hier, sondern in den Renderern - hier
@@ -86,14 +86,7 @@
  * zwei Wege.
  */
 
-import { nowFields } from './timezone.js';
-
 const WALL_KEY = 'yuvomi-wall-mode';
-
-/** Ab dieser Stunde (einschliesslich) ist Nacht. */
-export const WALL_NIGHT_FROM = 22;
-/** Ab dieser Stunde (einschliesslich) ist wieder Tag. */
-export const WALL_NIGHT_TO = 6;
 
 function safeGet(key) {
   try {
@@ -153,29 +146,17 @@ export function wallShowsOn(path = location.pathname) {
   return isWallModeEnabled() && isWallRoute(path);
 }
 
-/**
- * Nachtfenster. Ueber Mitternacht hinweg, deshalb ODER statt UND - dieselbe
- * Falle, die das Tagesprogramm beim Mitternachts-Ausblick schon einmal hatte.
- */
-export function isWallNight(now = new Date()) {
-  // Die Uhr des Haushalts, nicht die des Geraets: ein Wandbildschirm, dessen
-  // Browser in einer anderen Zone steht, ginge sonst zur falschen Stunde in den
-  // Nachtmodus (#829 Teil 3).
-  const hour = nowFields(now).hour;
-  return hour >= WALL_NIGHT_FROM || hour < WALL_NIGHT_TO;
-}
-
 /** Laeuft die Flaeche gerade als Wand? Liest den Zustand, den `syncWallMode` setzt. */
 export function isWallActive() {
   return document.documentElement.hasAttribute('data-wall-mode');
 }
 
 /**
- * Bringt die Wurzel-Attribute auf den Stand von Route, Schalter und Uhrzeit.
+ * Bringt das Wurzel-Attribut auf den Stand von Route und Schalter.
  *
- * Idempotent und billig: der Minutentakt der Uhr ruft sie mit, damit der
- * Wechsel um 22:00 und um 06:00 passiert, wenn er passiert - und nicht erst
- * beim naechsten Laden. Sie ist die EINZIGE Stelle, die diese Attribute setzt.
+ * Idempotent und billig: der Minutentakt der Uhr ruft sie mit. Sie ist die
+ * EINZIGE Stelle, die das Attribut setzt (seit v2 nur noch `data-wall-mode` -
+ * die Nacht ist gegangen).
  *
  * @param {string} path Der aktive Pfad.
  * @returns {boolean} Ob die Wand danach laeuft.
@@ -183,18 +164,7 @@ export function isWallActive() {
 export function syncWallMode(path = location.pathname) {
   const root = document.documentElement;
   const active = wallShowsOn(path);
-  const night = active && isWallNight();
-  const wasNight = root.hasAttribute('data-wall-night');
-
   root.toggleAttribute('data-wall-mode', active);
-  root.toggleAttribute('data-wall-night', night);
-
-  // DIE STATUSBAR GEHT MIT DER SZENE (installierte PWA): router.js
-  // (updateThemeColorForRoute) gibt ihr nachts den Grund der Nachtszene, am Tag
-  // den Seitengrund. Hier wird sie nur beim Wechsel nachgezogen. Ein Theme
-  // schaltet dabei nicht mehr um (v2, 2026-10-27).
-  if (night !== wasNight) window.yuvomi?.restoreThemeColor?.();
-
   return active;
 }
 

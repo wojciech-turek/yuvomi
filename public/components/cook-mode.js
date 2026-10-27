@@ -1,9 +1,9 @@
 /**
- * Modul: Cook mode (Tafla, 2026-10-19: the dark stage)
+ * Modul: Cook mode (Tafla, 2026-10-19; light stage since v2, 2026-10-27)
  * Zweck: A full-screen kitchen view of one recipe, one step at a time, read
  *        from a step away and used with wet hands. Artboard "Gotowanie": the
- *        stage is #141311 in BOTH themes (no glare at the stove at night), the
- *        step number in rounded violet, the step text large with its timers as
+ *        stage stands on the light v2 ground (the dark stage went with "keep
+ *        everything light"), the step number in violet, the step text large with its timers as
  *        pills inside the sentence, "Do tego kroku" (the ingredients this step
  *        names), "Następnie" (the next step), a timer band with presets when
  *        idle, a five-segment progress bar and big tap zones: the left third of

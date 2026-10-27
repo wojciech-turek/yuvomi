@@ -7732,13 +7732,13 @@ test('text/surface token pairs meet WCAG AA 4.5:1', () => {
       [`--person-${n}`, '--color-fill'],
       [`--person-${n}`, `--person-${n}-tint`],
     ]),
-    ['--cook-ink', '--cook-stage'],
-    ['--cook-ink-2', '--cook-stage'],
-    ['--cook-accent', '--cook-stage'],
-    ['--cook-ink', '--cook-panel'],
-    ['--cook-ink-2', '--cook-panel'],
-    ['--cook-accent', '--cook-panel'],
-    ['--wall-night-ink', '--wall-night-bg'],
+    // 2026-10-27, v2: light only - the dark cook stage (--cook-*) and the
+    // wall's night (--wall-night-*) are gone. The cook stage now reads ink,
+    // ink-2 and the violet text on the ground and on its white panels.
+    ['--color-text-primary', '--color-bg'],
+    ['--color-text-secondary', '--color-bg'],
+    ['--color-accent', '--color-bg'],
+    ['--color-accent', '--color-surface'],
   ];
 
   for (const [theme, map] of [['light', light]]) {
@@ -7791,7 +7791,8 @@ test('Tafla: Grafikpaare halten 3:1', () => {
     ['--color-field-border', '--color-bg'],
     ['--color-btn-primary', '--color-surface'],
     ['--color-btn-primary', '--color-bg'],
-    ['--cook-accent-fill', '--cook-stage'],
+    // 2026-10-27, v2: light only - the violet fill on the dark cook stage is
+    // gone; on the light stage it is the pair above (btn-primary on the ground).
     ...[1, 2, 3, 4, 5, 6].map((n) => [`--person-${n}`, '--color-surface']),
   ];
   for (const [theme, map] of [['light', light]]) {
@@ -16117,15 +16118,11 @@ test('der Vorab-Wand-Modus in theme-init.js driftet nicht von utils/wall-mode.js
   assert.equal(modKey, 'yuvomi-wall-mode', 'der Schluessel steht in wall-mode.js');
   assert.ok(init.includes(`'${modKey}'`), `theme-init.js liest denselben Schluessel (${modKey})`);
 
-  const from = Number(mod.match(/export const WALL_NIGHT_FROM = (\d+)/)?.[1]);
-  const to = Number(mod.match(/export const WALL_NIGHT_TO = (\d+)/)?.[1]);
-  assert.equal(from, 22);
-  assert.equal(to, 6);
-
-  const initWindow = init.match(/hour >= (\d+) \|\| hour < (\d+)/);
-  assert.ok(initWindow, 'theme-init.js traegt ein Nachtfenster');
-  assert.equal(Number(initWindow[1]), from, 'dieselbe Nachtgrenze wie wall-mode.js');
-  assert.equal(Number(initWindow[2]), to, 'dieselbe Morgengrenze wie wall-mode.js');
+  // 2026-10-27, v2: light only. Hier stand das Nachtfenster (22-6) als Naht
+  // zwischen beiden Dateien. Die Nachtszene ist gegangen - keine der beiden
+  // traegt noch eins, und keine setzt `data-wall-night`.
+  assert.doesNotMatch(mod, /WALL_NIGHT_FROM|WALL_NIGHT_TO|isWallNight|(?:toggle|set)Attribute\('data-wall-night'/);
+  assert.doesNotMatch(init, /hour >= \d+ \|\| hour < \d+|setAttribute\('data-wall-night'/);
 
   // Und die Route: der Modus ist ein Zustand des Dashboards, kein zweiter Ort.
   assert.match(mod, /export function isWallRoute\(path\) \{\s*return path === '\/';/);

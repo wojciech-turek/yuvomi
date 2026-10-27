@@ -242,12 +242,8 @@ function updateThemeColorForRoute(route) {
     setThemeColor(route.thirdPartyModule.accent);
     return;
   }
-  // Die Nachtszene der Wand ist dunkel, auch ohne dunkles Theme (v2): ueber
-  // ihr steht die Leiste in ihrem Grund, nicht im hellen Seitengrund.
-  if (document.documentElement.hasAttribute('data-wall-night')) {
-    setThemeColor(getCSSToken('--wall-night-bg') || '#0E0C0A');
-    return;
-  }
+  // Auch die Wand steht im Seitengrund: ihre dunkle Nachtszene ist mit v2
+  // gegangen (2026-10-27, light only).
   setThemeColor('#F6F6F3');
 }
 

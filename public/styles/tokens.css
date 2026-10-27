@@ -37,7 +37,7 @@
  * (dark: fill #7C52F2, text #B49CFF), module tones out of the chrome (section
  * 4 points every family at ink-2), status as a word on a tint, a curated person
  * palette (section 4c), the hearth, the dark cook stage and the wall night
- * (section 4d), the 34/22/17/13 type scale with rounded numerals (section 10),
+ * (section 4d, gone with v2 - see below), the 34/22/17/13 type scale with rounded numerals (section 10),
  * radii 8/12/20/28 (section 9), warm shadows E1-E3 plus the accent glow
  * (section 8) and the spring motion set (section 14). Every new text pair is
  * measured in "text/surface token pairs meet WCAG AA" (test-frontend-audit.js).
@@ -45,8 +45,9 @@
  * v2 (2026-10-27, design-v2/project/Foundations.dc.html). The owner: "different
  * font, not these rounded cartoonish ones, should feel more like productivity
  * app" and "light mode only". So: ONE light theme (the dark blocks, the theme
- * choice and data-theme="dark" are gone; the cook stage and the wall's night
- * scene in 4d stay dark on purpose), Inter instead of the system and rounded
+ * choice and data-theme="dark" are gone; so are the dark cook stage and the
+ * wall's night scene - "kitchen tablet will be turned off for the night so
+ * dont worry about dark mode at all, keep everything light"), Inter instead of the system and rounded
  * faces (section 10), a neutral ground #F6F6F3 with ink #1A1A19 / ink-2
  * #5F5E5A, hairline #EAE9E5 (rows inside a card #EFEEEA), the decorative grey
  * #8D8C87 for icons and rings only, cards at radius 12 without shadow, and the
@@ -1003,24 +1004,13 @@
   --person-6-dot:   var(--person-6);
 
   /* --------------------------------------------------------
-   * 4d. Kochbuehne und Wandnacht (Tafla) - in BEIDEN Themes gleich
-   *
-   * Cook mode always stands on a dark ink stage, so the stove at night has no
-   * glare: stage #141311, panels and the timer band #24211E. On the stage ink
-   * #F5F1E8 16.47, ink-2 #B8B2A7 8.81, the step number / violet text #B49CFF
-   * 8.08, the violet fill #7C52F2 as a shape 3.84; on the panel ink-2 7.60,
-   * violet text 6.97. The wall's "Noc" scene (22:00-6:00) is #0E0C0A with dim
-   * amber digits #B8792E at 5.40:1, AA at any size, so no large-text exception
-   * is needed. No --_ indirection and no dark twin: these never flip.
+   * 4d. Kochbuehne und Wandnacht - entfallen (v2, 2026-10-27: light only).
+   * Hier standen die festen dunklen Werte der Kochbuehne (--cook-*) und der
+   * Nachtszene der Wand (--wall-night-*). Die Kochbuehne steht seitdem auf
+   * dem v2-Grund mit den Rollen dieser Datei (cook-mode.css), die Wand bleibt
+   * rund um die Uhr hell - das Tablet ist nachts aus. Guard: test-material.js,
+   * „keine dunkle Palette".
    * -------------------------------------------------------- */
-  --cook-stage:       #141311;
-  --cook-panel:       #24211E;
-  --cook-ink:         #F5F1E8;
-  --cook-ink-2:       #B8B2A7;
-  --cook-accent:      #B49CFF;
-  --cook-accent-fill: #7C52F2;
-  --wall-night-bg:    #0E0C0A;
-  --wall-night-ink:   #B8792E;
 
   /* --------------------------------------------------------
    * 4e. v2-Rollen (2026-10-27, Foundations.dc.html)
@@ -1534,9 +1524,8 @@
 
   /* IHRE GEOMETRIE an einer Stelle (2026-10-24, aus dashboard.css und
    * cook-mode.css gehoben): Karten, Teller, Messer, Knoepfe, Linien. Farben
-   * stehen hier nicht - die Wand nimmt die semantischen Rollen, die hell und
-   * dunkel umschalten; Kochbuehne und Nachtszene tragen die festen --cook-* und
-   * --wall-night-* oben (sie schalten bewusst nie um). Werte bei 1180x820.
+   * stehen hier nicht - Wand und Kochbuehne nehmen die semantischen Rollen
+   * (seit v2 nur hell). Werte bei 1180x820.
    * Die zwei Radien tragen den Familiennamen --radius-*: Radien kommen in der
    * ganzen App nur aus dieser Familie (Guard in test:frontend-audit). */
   --radius-wall-card:      calc(var(--radius-lg) + 12px);              /* 28  - Karten, Hauptkarte, Felder und Band im Kochmodus */
@@ -2492,9 +2481,9 @@
  * Hier standen zwei Bloecke, `@media screen and (prefers-color-scheme: dark)`
  * und `[data-theme="dark"]`, die die privaten --_-Tokens auf eine warme
  * Kohle-Welt umstellten. Die App ist seit v2 immer hell; theme-init.js setzt
- * kein data-theme mehr und raeumt eine gespeicherte Wahl ab. Dunkel bleiben
- * mit Absicht nur die Kochbuehne (--cook-*) und die Nachtszene der Wand
- * (--wall-night-*), Abschnitt 4d.
+ * kein data-theme mehr und raeumt eine gespeicherte Wahl ab. Auch die zwei
+ * letzten dunklen Flaechen sind gegangen (Kochbuehne, Nachtszene der Wand,
+ * Abschnitt 4d): die App kennt keine dunkle Palette mehr.
  * ================================================================ */
 
 /* ================================================================
