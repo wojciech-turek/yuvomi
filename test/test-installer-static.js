@@ -63,12 +63,18 @@ test('der Installer serviert keine Schriften mehr - auch nicht die der App', asy
   });
 
   // Und die Gegenrichtung: die Schrift darf auch nicht ueber ein Stylesheet
-  // zurueckkommen. `public/` fuehrt seit dem Redesign kein @font-face - faellt
-  // diese Zusicherung, steht wieder eine Schrift im Spiel, fuer die es keine
-  // Auslieferung gibt.
+  // zurueckkommen. 2026-10-27, v2: die APP fuehrt wieder genau EIN @font-face -
+  // Inter, selbst gehostet unter /fonts/inter/ aus public/ (der App-Server
+  // liefert es, nicht dieser Installer). Jede andere Schrift, und jedes
+  // @font-face im Installer selbst, bleibt ausgeschlossen.
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-  assert.doesNotMatch(tokens, /@font-face/, 'tokens.css deklariert wieder eine Schrift');
+  const faces = [...tokens.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.equal(faces.length, 1, 'tokens.css deklariert genau eine Schrift (Inter)');
+  assert.match(faces[0], /font-family:\s*"Inter"/);
+  assert.match(faces[0], /url\("\/fonts\/inter\/InterVariable\.woff2"\)/);
   assert.doesNotMatch(tokens, /Plus Jakarta/i, 'tokens.css nennt wieder Plus Jakarta Sans');
+  const installer = readFileSync(new URL('../tools/installer/install.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(installer, /@font-face\s*\{/, 'der Installer deklariert eine Schrift');
 });
 
 // ── Token-Parität: install.html nutzt App-Tokens, keine eigenen Hardcodes ─────

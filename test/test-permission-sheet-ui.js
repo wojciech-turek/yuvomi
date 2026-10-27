@@ -395,7 +395,8 @@ test('solange die Rechte des Subjekts laden, speichert der Knopf nichts', async 
 
 // ── Re-Critique 2026-09-28 (A7 P1-1, P2-5): die gewaehlte Stufe ist sichtbar, der Fuss klebt nur bei Aenderung ──
 
-test('Rechte-Matrix: das aktive Segment traegt getoente Flaeche, eine Kante >= 3:1 und ein gefuelltes Glyph - hell UND dunkel', async () => {
+// 2026-10-27, v2: light only - gerechnet wird das helle Theme (vorher hell UND dunkel).
+test('Rechte-Matrix: das aktive Segment traegt getoente Flaeche, eine Kante >= 3:1 und ein gefuelltes Glyph', async () => {
   // Gemessen: Daumen rgb(255,255,255) auf Segment rgb(251,251,253) = 1,03:1,
   // in Dark sogar DUNKLER als das Segment; das Glyph 1,2:1 gegen das inaktive.
   // Ursache: der Modulton der Einstellungen ist neutral. Eine Toenung allein
@@ -422,21 +423,19 @@ test('Rechte-Matrix: das aktive Segment traegt getoente Flaeche, eine Kante >= 3
   assert.match(layout, /\.perm-seg__opt\.is-active svg\s*\{[^}]*fill:\s*color-mix\(in srgb, currentColor 30%, transparent\)/,
     'gefuelltes Glyph (Filled Variant, layout.css)');
 
-  // Die 3:1 NACHGERECHNET, aus den Token-Werten beider Themes.
+  // Die 3:1 NACHGERECHNET, aus den Token-Werten.
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const lum = (rgb) => {
     const [r, g, b] = rgb.map((c) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-  const darkStart = tokens.indexOf('@media screen and (prefers-color-scheme: dark)');
-  assert.ok(darkStart > 0);
   const pick = (name, from, to) => {
     const m = tokens.slice(from, to).match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`));
     assert.ok(m, `${name} nicht gefunden`);
     return hex(m[1]);
   };
-  for (const [theme, from, to] of [['hell', 0, darkStart], ['dunkel', darkStart, tokens.length]]) {
+  for (const [theme, from, to] of [['hell', 0, tokens.length]]) {
     const accent = pick('--_color-accent', from, to);
     const track = pick('--_color-surface-raised', from, to);
     const r = ratio(accent, track);

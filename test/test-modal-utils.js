@@ -1444,7 +1444,9 @@ test('Sheet-Griff: sichtbar im hellen Theme, in der Kopfzone statt ueber einem l
   assert.ok(![...eachRule(glass)].some((r) => /--modal-handle-color|--sheet-grabber/.test(r.body)),
     'glass.css faerbt den Griff nicht mehr fuer jedes Theme um - das Glas-Weiss gehoert nur dem Dark (Token)');
   assert.match(tokens, /--_sheet-grabber:\s*var\(--color-border-strong\)/, 'hell: die kraeftigere neutrale Kante');
-  assert.equal((tokens.match(/--_sheet-grabber:\s*var\(--glass-border\)/g) || []).length, 2, 'dunkel (Media + data-theme): Glas-Weiss');
+  // 2026-10-27, v2: light only - das Glas-Weiss der beiden Dark-Bloecke ist
+  // gegangen; der Griff hat genau einen Wert.
+  assert.equal((tokens.match(/--_sheet-grabber:/g) || []).length, 1, 'ein Wert, der helle');
   const grip = body(mobile, '.modal-panel::before');
   assert.match(grip, /background-color:\s*var\(--sheet-grabber\)/);
   assert.match(grip, /width:\s*36px/);

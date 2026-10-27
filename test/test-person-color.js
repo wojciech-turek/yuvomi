@@ -6,9 +6,12 @@
  *    Avatare landen auf ihrem naechsten Platz, graue Avatare starten bei
  *    (id - 1) mod 6, und zwei Mitglieder eines Haushalts teilen nie einen
  *    Platz - unabhaengig von der Reihenfolge der Liste.
- * 2. DIE PALETTE IM JS IST DIE IN tokens.css - hell und in beiden Dark-Bloecken.
+ * 2. DIE PALETTE IM JS IST DIE IN tokens.css.
  * 3. JEDES PAAR HAELT AA: Tinte auf Karte, Papier, Fill, Herd und der eigenen
- *    Toenung, in beiden Themes; Weiss auf der hellen Tinte.
+ *    Toenung; Weiss auf der Tinte.
+ * 2026-10-27, v2: light only - die dunklen Paare (darkInk/darkTint und die
+ * beiden Dark-Bloecke) sind gegangen; Blau und Rose tragen die Scheiben aus
+ * Foundations.dc.html, und Platz 1/2 haben einen eigenen 8pt-Punkt.
  *
  * Ausfuehren: node --test test/test-person-color.js
  */
@@ -35,11 +38,17 @@ test('die iOS-Vorgabefarben der Avatare landen auf ihrem naechsten Platz', () =>
   for (const [color, slot, key] of cases) {
     assert.equal(personSlot({ id: 1, avatar_color: color }), slot, `${color} -> ${key}`);
   }
-  // Jede Palettenfarbe ist ihr eigener Platz - hell wie dunkel gewaehlt.
+  // Jede Palettenfarbe ist ihr eigener Platz (2026-10-27, v2: light only -
+  // die dunkle Tinte als Wahl entfaellt mit ihr).
   for (const entry of PERSON_PALETTE) {
     assert.equal(personSlot({ id: 9, avatar_color: entry.ink }), entry.slot, entry.key);
-    assert.equal(personSlot({ id: 9, avatar_color: entry.darkInk.toLowerCase() }), entry.slot, `${entry.key} (dunkel)`);
+    assert.equal(personSlot({ id: 9, avatar_color: entry.ink.toLowerCase() }), entry.slot, `${entry.key} (klein geschrieben)`);
+    assert.equal('darkInk' in entry || 'darkTint' in entry, false, `${entry.key}: kein dunkles Paar mehr`);
   }
+  // Die v2-Punkte der Haushaltsfarben (Foundations "Wojtek" / "Mariola")
+  // landen auf Blau und Rose.
+  assert.equal(personSlot({ id: 1, avatar_color: '#2F6FDB' }), 1, 'Wojtek-Blau -> Platz 1');
+  assert.equal(personSlot({ id: 1, avatar_color: '#D9467A' }), 2, 'Mariola-Rose -> Platz 2');
 });
 
 test('ein Avatar ohne Farbton startet bei (id - 1) mod 6', () => {
@@ -92,39 +101,38 @@ test('personToken liefert die beiden Tokens, die Scheiben bauen sicheres Markup'
   for (const sel of ['.person-disc {', '.person-disc--md {', '.person-disc--lg {']) assert.ok(layout.includes(`\n${sel}`), sel);
 });
 
-test('die Palette im JS ist die in tokens.css, hell und in beiden Dark-Bloecken', () => {
-  const media = TOKENS.indexOf('@media screen and (prefers-color-scheme: dark)');
-  const attr = TOKENS.indexOf('[data-theme="dark"] {');
-  assert.ok(media > 0 && attr > media, 'Dark-Bloecke nicht gefunden');
+// 2026-10-27, v2: light only - nur noch der helle Block; die Dark-Bloecke
+// gibt es nicht mehr (und duerfen nicht zurueckkommen).
+test('die Palette im JS ist die in tokens.css', () => {
+  const code = TOKENS.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.equal(code.includes('[data-theme="dark"]'), false, 'kein Dark-Block in tokens.css');
+  assert.doesNotMatch(code, /prefers-color-scheme:\s*dark/, 'kein System-Dark-Block in tokens.css');
   const valueIn = (from, name) => {
     const re = new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6});`, 'g');
     re.lastIndex = from;
     return re.exec(TOKENS)?.[1]?.toUpperCase();
   };
-  for (const { slot, ink, tint, darkInk, darkTint } of PERSON_PALETTE) {
-    assert.equal(valueIn(0, `--_person-${slot}`), ink, `--_person-${slot} hell`);
-    assert.equal(valueIn(0, `--_person-${slot}-tint`), tint, `--_person-${slot}-tint hell`);
-    for (const from of [media, attr]) {
-      assert.equal(valueIn(from, `--_person-${slot}`), darkInk, `--_person-${slot} dunkel`);
-      assert.equal(valueIn(from, `--_person-${slot}-tint`), darkTint, `--_person-${slot}-tint dunkel`);
-    }
+  for (const { slot, ink, tint } of PERSON_PALETTE) {
+    assert.equal(valueIn(0, `--_person-${slot}`), ink, `--_person-${slot}`);
+    assert.equal(valueIn(0, `--_person-${slot}-tint`), tint, `--_person-${slot}-tint`);
     assert.match(TOKENS, new RegExp(`--person-${slot}:\\s*var\\(--_person-${slot}\\);`));
     assert.match(TOKENS, new RegExp(`--person-${slot}-tint:\\s*var\\(--_person-${slot}-tint\\);`));
+    assert.match(TOKENS, new RegExp(`--person-${slot}-dot:`), `--person-${slot}-dot fehlt`);
   }
+  // v2: die Punkte von Platz 1 und 2 sind die Foundations-Farben.
+  assert.equal(valueIn(0, '--person-1-dot'), '#2F6FDB');
+  assert.equal(valueIn(0, '--person-2-dot'), '#D9467A');
 });
 
-test('jedes Paar haelt AA in beiden Themes', () => {
-  const light = { Karte: '#FFFFFF', Papier: '#F5F3ED', Fill: '#ECE8E0', Herd: '#FBEFE3' };
-  const dark = { Karte: '#2B2825', Papier: '#191816', Fill: '#36322D', Herd: '#33291F' };
-  for (const { key, ink, tint, darkInk, darkTint } of PERSON_PALETTE) {
+// 2026-10-27, v2: light only - die v2-Flaechen (Karte, Grund #F6F6F3, Fill
+// #ECEBE7, Herd); die dunklen Paare sind gegangen.
+test('jedes Paar haelt AA', () => {
+  const light = { Karte: '#FFFFFF', Papier: '#F6F6F3', Fill: '#ECEBE7', Herd: '#FBEFE3' };
+  for (const { key, ink, tint } of PERSON_PALETTE) {
     for (const [where, ground] of Object.entries(light)) {
       assert.ok(contrastRatio(ink, ground) >= 4.5, `${key} auf ${where}: ${contrastRatio(ink, ground).toFixed(2)}`);
     }
-    for (const [where, ground] of Object.entries(dark)) {
-      assert.ok(contrastRatio(darkInk, ground) >= 4.5, `${key} dunkel auf ${where}: ${contrastRatio(darkInk, ground).toFixed(2)}`);
-    }
     assert.ok(contrastRatio(ink, tint) >= 4.5, `${key}: Initial auf der Toenung ${contrastRatio(ink, tint).toFixed(2)}`);
-    assert.ok(contrastRatio(darkInk, darkTint) >= 4.5, `${key} dunkel: Initial auf der Toenung ${contrastRatio(darkInk, darkTint).toFixed(2)}`);
     assert.ok(contrastRatio('#FFFFFF', ink) >= 4.5, `${key}: Weiss auf der Tinte ${contrastRatio('#FFFFFF', ink).toFixed(2)}`);
   }
   // Sechs Plaetze, sechs verschiedene Toene, je mindestens 25 Grad auseinander.

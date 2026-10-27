@@ -22,13 +22,6 @@ import { personSlot, PERSON_PALETTE } from '/utils/person-color.js';
 import { BUILT_IN_MODULES, KITCHEN_CHILD_IDS } from './module-order.js';
 import { getPreferences } from './preferences-cache.js';
 
-const THEME_KEYS = { light: 'settings.themeLight', dark: 'settings.themeDark' };
-
-/** Der Wert der Zeile Wygląd: das gewaehlte Theme dieses Geraets. */
-export function themeValue(stored) {
-  return THEME_KEYS[stored] ? t(THEME_KEYS[stored]) : t('settings.valueThemeAuto');
-}
-
 /** Name und Tinte der eigenen Personenfarbe (dieselbe Zuordnung wie ueberall). */
 export function colorValue(user, household = []) {
   if (!user) return null;
@@ -89,9 +82,8 @@ export function loadOverviewValues(user, put) {
   const admin = user?.role === 'admin';
   const safe = (promise) => promise.catch(() => null);
 
-  let theme = 'system';
-  try { theme = localStorage.getItem('yuvomi-theme') || 'system'; } catch { /* privat */ }
-  put('theme', themeValue(theme));
+  // (Die Zeile Wygląd nannte bis v2 das Theme dieses Geraets - es gibt nur
+  // noch das helle, 2026-10-27.)
 
   const size = getHouseholdSize();
   if (size) put('members', t('more.peopleAtHome', { count: size }));

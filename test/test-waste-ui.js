@@ -607,8 +607,9 @@ test('WASTE_TYPE_COLORS: eine kuratierte Auswahl ohne Dubletten und ohne Extremw
 // -------------------------------------------------------------------------
 
 // Die Flaechen, auf denen ein Farbsymbol oder Swatch landet, gerechnet aus
-// tokens.css selbst - Light UND Dark, Grundflaeche UND gehobene Karte. Kein
-// abgeschriebener Hex hier: aendert sich ein Flaechenton, misst der Test mit.
+// tokens.css selbst - Grundflaeche UND gehobene Karte. Kein abgeschriebener
+// Hex hier: aendert sich ein Flaechenton, misst der Test mit.
+// 2026-10-27, v2: light only - die Dark-Flaechen sind gegangen.
 const TOKENS_CSS = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
 const SURFACES = [...new Set([...TOKENS_CSS.matchAll(/--_color-surface(?:-raised)?:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase()))];
 function relLum(hex) {
@@ -628,10 +629,10 @@ function hueOf(hex) {
   return (h * 60 + 360) % 360;
 }
 
-test('USER_COLORS: eine Startpalette, die auf jeder Flaeche beider Themes >= 3:1 haelt', async () => {
+test('USER_COLORS: eine Startpalette, die auf jeder Flaeche >= 3:1 haelt', async () => {
   const { USER_COLORS } = await import('../public/utils/color.js');
   assert.ok(Array.isArray(USER_COLORS) && USER_COLORS.length >= 8, 'geteilte Palette fehlt in utils/color.js');
-  assert.ok(SURFACES.length >= 4, `Flaechen aus tokens.css nicht gefunden: ${SURFACES}`);
+  assert.equal(SURFACES.length, 2, `Flaechen aus tokens.css nicht gefunden: ${SURFACES}`);
   for (const hex of USER_COLORS) {
     for (const surface of SURFACES) {
       assert.ok(contrast(hex, surface) >= 3, `${hex} auf ${surface}: ${contrast(hex, surface).toFixed(2)}:1 < 3:1`);

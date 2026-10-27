@@ -1137,7 +1137,9 @@ function evaluateSample(sample, pageBase) {
 }
 
 describe('Sonde 2 - jeder sichtbare Text haelt WCAG AA auf seinem KOMPONIERTEN Untergrund', () => {
-  for (const theme of ['light', 'dark']) {
+  // 2026-10-27, v2: light only - die Dark-Laeufe (dark / mobile, dark /
+  // desktop) sind mit dem Dark Mode gegangen.
+  for (const theme of ['light']) {
     for (const device of ['mobile', 'desktop']) {
       test(`${theme} / ${device}`, async () => {
         const page = await openPage(harness, { device, theme, locale: 'de' });
@@ -3733,7 +3735,8 @@ test('Sonde 14 - ein Icon auf getoentem Grund haelt 3:1', async () => {
   let seen = 0;
   let withSibling = 0;
 
-  for (const theme of ['light', 'dark']) {
+  // 2026-10-27, v2: light only - der Dark-Lauf ist mit dem Dark Mode gegangen.
+  for (const theme of ['light']) {
     for (const device of ['mobile', 'desktop']) {
       const page = await openPage(harness, { device, theme, locale: 'de' });
       const base = parseColor(

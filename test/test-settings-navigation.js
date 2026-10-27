@@ -1205,7 +1205,9 @@ test('die Suche findet einzelne Optionen, nicht nur Blaetter', async () => {
     .options.some((hit) => hit.section.id === sectionId);
 
   assert.ok(optionOn('Zeitzone', 'personal-appearance'), 'Zeitzone -> Darstellung');
-  assert.ok(optionOn('dunkel', 'personal-appearance'), 'ein Theme-Wert findet das Design-Segment');
+  // 2026-10-27, v2: light only - es gibt kein Theme mehr, also auch keinen
+  // Treffer fuer einen Theme-Wert (vorher: "dunkel" fand das Design-Segment).
+  assert.equal(optionOn('dunkel', 'personal-appearance'), false, 'kein Theme-Segment mehr im Index');
   assert.ok(optionOn('Einladung', 'admin-family'));
   assert.ok(optionOn('mealie', 'modules-kitchen'), 'Produktnamen stehen als terms im Index');
   assert.ok(optionOn('Zwei-Faktor', 'personal-account'));
@@ -2377,10 +2379,14 @@ test('Modulzeilen beschriften nur die Abweichung, nicht den Normalzustand', asyn
  * `.segmented` (panel.css) als radiogroup mit der geteilten Verhaltensschicht
  * (Pfeiltasten, Roving-Tabindex, aria-checked), und die eigene Optik ist weg.
  */
-test('Theme und Wochenstart sind das Segment der Shell, kein eigener Umschalter', async () => {
+// 2026-10-27, v2: light only - die Theme-Wahl ist aus "Wygląd" gegangen; der
+// Wochenstart bleibt das Segment der Shell, und das Blatt baut kein
+// #theme-toggle mehr.
+test('Wochenstart ist das Segment der Shell, kein eigener Umschalter - und es gibt keine Theme-Wahl mehr', async () => {
   const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+  const appearance = await read('../public/settings/pages/personal-appearance.js');
+  assert.doesNotMatch(appearance, /id="theme-toggle"|yuvomi-theme|applyTheme/, 'Wygląd baut keine Theme-Wahl mehr');
   for (const [path, id] of [
-    ['../public/settings/pages/personal-appearance.js', 'theme-toggle'],
     ['../public/settings/pages/modules-calendar.js', 'week-start-toggle'],
   ]) {
     const source = await read(path);
@@ -2751,6 +2757,12 @@ const RETIRED_OPTIONS = Object.freeze({
   'settings.rewardsEnableLabel': 'modules-active',
 });
 
+/**
+ * Optionen, die ersatzlos weg sind. 2026-10-27, v2: light only - die
+ * Theme-Wahl (Abschnitt "Design" in Wygląd) hat keinen neuen Ort.
+ */
+const DROPPED_OPTIONS = Object.freeze(new Set(['settings.sectionDesign']));
+
 /** Der Abschnitt, in dem ein altes Blatt heute steht (modules-options: einer je Teil). */
 function sectionsOfOldLeaf(oldId) {
   if (oldId === 'modules-options') return SETTINGS_SECTIONS.filter((s) => String(s.loader).includes('modules-options.js'));
@@ -2882,6 +2894,11 @@ test('S2: die Suche findet jede Option und jedes Blatt von vor R10', async () =>
     const homes = sectionsOfOldLeaf(old.id).map((entry) => entry.id);
     for (const key of old.options) {
       if (RETIRED_OPTIONS[key]) continue;
+      if (DROPPED_OPTIONS.has(key)) {
+        assert.equal(SETTINGS_SECTIONS.some((section) => (section.options ?? [])
+          .some((entry) => (typeof entry === 'string' ? entry : entry.key) === key)), false, `${key} steht wieder im Index`);
+        continue;
+      }
       seen += 1;
       const hits = searchSettings(translate(key), { user: admin, translate }).options;
       assert.ok(hits.some((hit) => hit.key === key && homes.includes(hit.section.id)),
@@ -3919,10 +3936,13 @@ test('R18: die Formularzeile steht im globalen Blatt - randlose Auswahl mit Zeic
   const tokens = await readFile(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
   const strokes = [...tokens.matchAll(/--_field-chevron:[^;]*stroke='%23([0-9A-Fa-f]{6})'/g)].map((m) => `#${m[1]}`);
   // Tafla-Tinte-2 (2026-10-19): das Zeichen zieht mit --_neutral-600 um.
-  assert.deepEqual([...new Set(strokes)], ['#5E5A53', '#B3ACA1']);
+  // 2026-10-27, v2: light only - EIN Strich, die Tinte-2 des hellen Themes
+  // (vorher hell #5E5A53 und dunkel #B3ACA1).
+  const ink2 = tokens.match(/--_neutral-600:\s*(#[0-9A-Fa-f]{6})/)[1].toUpperCase();
+  assert.deepEqual([...new Set(strokes)].map((c) => c.toUpperCase()), [ink2], 'das Zeichen traegt die Tinte-2 von --_neutral-600');
   const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
   const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
-  for (const [chevron, grounds] of [['#5E5A53', ['#FFFFFF', '#FBFAF7', '#F5F3ED']], ['#B3ACA1', ['#2B2825', '#36322D', '#191816']]]) {
+  for (const [chevron, grounds] of [[ink2, ['#FFFFFF', '#FBFBF9', '#F6F6F3']]]) {
     for (const ground of grounds) assert.ok(ratio(chevron, ground) >= 3, `${chevron} auf ${ground}: ${ratio(chevron, ground).toFixed(2)}:1`);
   }
   // Und in den Einstellungen gibt es keine zweite Auswahl-Regel mehr daneben.

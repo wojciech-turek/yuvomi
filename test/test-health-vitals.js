@@ -819,15 +819,16 @@ test('R18: die Kennzahlkarte hat vier feste Zeilen - Kopf, Wert, Trendlinie, Met
   assert.match(body('.metric-card__spark', plain), /color:\s*var\(--module-accent, var\(--color-text-secondary\)\)/);
   assert.match(body('.metric-card__spark-to'), /stop-opacity:\s*0\b/);
   assert.match(body('.metric-card__spark-end'), /stroke:\s*var\(--color-text-primary\)/);
-  // Grafikkontrast 3:1 der Linie gegen Karte und Well, beide Themes. Seit Tafla
-  // (2026-10-19) ist der Modulton der Gesundheit Tinte-2 (die Modulfarbe hat
-  // das Chrome verlassen): #5E5A53 hell, #B3ACA1 dunkel.
+  // Grafikkontrast 3:1 der Linie gegen Karte und Well. Seit Tafla (2026-10-19)
+  // ist der Modulton der Gesundheit Tinte-2 (die Modulfarbe hat das Chrome
+  // verlassen). 2026-10-27, v2: light only - Tinte-2 ist #5F5E5A, das Well
+  // #ECEBE7; die dunkle Haelfte ist mit dem Dark Mode gegangen.
   const { contrastRatio } = await import('../public/utils/contrast.js');
   const tokens = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-  for (const [name, ink, surface] of [['hell/Karte', '#5E5A53', '#FFFFFF'], ['hell/Well', '#5E5A53', '#ECE8E0'], ['dunkel/Karte', '#B3ACA1', '#2B2825'], ['dunkel/Well', '#B3ACA1', '#36322D']]) {
+  for (const [name, ink, surface] of [['Karte', '#5F5E5A', '#FFFFFF'], ['Well', '#5F5E5A', '#ECEBE7']]) {
     assert.ok(contrastRatio(ink, surface) >= 3, `${name}: ${contrastRatio(ink, surface)}`);
   }
-  for (const hex of ['--_family-health:   var(--_neutral-600)', '--_neutral-600: #5E5A53', '--_neutral-600: #B3ACA1']) assert.ok(tokens.includes(hex), hex);
+  for (const hex of ['--_family-health:   var(--_neutral-600)', '--_neutral-600: #5F5E5A', '--_neutral-150: #ECEBE7']) assert.ok(tokens.includes(hex), hex);
   // Zeiten, Daten und Betraege unter dem Wert stehen tabellarisch.
   for (const part of ['note', 'meta', 'trend', 'unit']) {
     assert.match(body(`.metric-card__${part}`), /font-variant-numeric:\s*tabular-nums/, `.metric-card__${part}`);
