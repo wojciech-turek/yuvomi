@@ -4725,7 +4725,8 @@
 
 .settings-page .ai-usage__hero {
   flex: none;
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--type-large-title);
   line-height: var(--type-large-title-lh);
   font-weight: var(--font-weight-semibold);

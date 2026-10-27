@@ -421,7 +421,8 @@ button.more-row {
 
 /* The one hero number of the page sits in rounded numerals. */
 .more-tile__number {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-semibold);
 }
 

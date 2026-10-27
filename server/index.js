@@ -445,10 +445,10 @@ app.get('/manifest.webmanifest', apiLimiter, (req, res) => {
     // Systemsperre, die der Nutzer gesetzt hat. Ein ausdrueckliches 'any' waere
     // wieder eine Ansage und nicht dasselbe.
     // theme_color/background_color muessen mit public/manifest.json und den
-    // theme-color-Metas in index.html zusammenbleiben: der App-Grund
-    // (#F5F3ED = --neutral-100, warmes Papier).
-    theme_color: '#F5F3ED',
-    background_color: '#F5F3ED',
+    // theme-color-Meta in index.html zusammenbleiben: der App-Grund
+    // (#F6F6F3 = --neutral-100, v2 2026-10-27).
+    theme_color: '#F6F6F3',
+    background_color: '#F6F6F3',
     lang: 'de-DE',
     categories: ['productivity', 'lifestyle'],
     icons: [

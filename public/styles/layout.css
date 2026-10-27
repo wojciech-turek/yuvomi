@@ -5764,9 +5764,12 @@ p.field-hint--warn[hidden] {
  * .card--interactive - Hover-Lift + Cursor
  * -------------------------------------------------------- */
 .card {
+  /* v2 (2026-10-27): Karte = Radius 12, Haarlinie, kein Schatten
+   * (--radius-card, --color-card-border, --shadow-card in tokens.css). */
   background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 

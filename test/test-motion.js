@@ -2190,10 +2190,15 @@ test('R18: die Vitalwert-Kurven zeichnen sich einmal ein (drawChartOnce), Raster
   assert.match(health, /drawChartOnce\(`health-vitals-\$\{metric\.type\}`, \{ lines: host\.querySelector\('\.health-chart__lines'\) \}\);/, 'einmal je Messgroesse und Sitzung');
 });
 
-test('R18: der Theme-Wechsel blendet ueber die Wurzel - nur der gewaehlte, nicht der Nachtwechsel der Wand', async () => {
+// 2026-10-27, v2: light only. Es gibt keinen gewaehlten Theme-Wechsel mehr:
+// router.js bietet kein `applyTheme` an und blendet nichts ueber die Wurzel;
+// die Wand schaltet nachts weiter ohne Blende. Der Baustein `swapTheme`
+// (view-transition.js) wird hier nur noch als Mechanik geprueft, solange er
+// steht.
+test('R18: kein Theme-Wechsel blendet ueber die Wurzel - die App ist immer hell, die Wand schaltet ohne Blende', async () => {
   const router = publicSource('router.js');
-  const apply = router.slice(router.indexOf('applyTheme: (value) => {'), router.indexOf('applyTheme: (value) => {') + 2600);
-  assert.match(apply, /swapTheme\(\(\) => \{/, 'der sichtbare Wechsel laeuft im Callback');
+  assert.doesNotMatch(router, /applyTheme\s*:/, 'router.js bietet keinen Theme-Wechsel mehr an');
+  assert.doesNotMatch(router.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /swapTheme/, 'router.js blendet kein Theme');
   assert.doesNotMatch(publicSource('utils/wall-mode.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /swapTheme|startViewTransition/, 'die Wand schaltet nachts ohne Blende');
 
   const { swapTheme } = await import('../public/utils/view-transition.js');

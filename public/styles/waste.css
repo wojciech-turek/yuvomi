@@ -364,19 +364,9 @@
 }
 
 /* Same M-12 measurement as the warning badges above: 4.48:1 on
- * --color-surface-3 in light theme, corrected to 4.55:1. Dark theme's
- * --color-warning already holds 6.10:1 on the dark surface fill unmodified
- * (no override needed there - only the warning classes above needed one);
- * --color-danger measured 4.44:1 in dark and needed its own small lighten. */
+ * --color-surface-3, corrected to 4.55:1. (The dark-theme lighten that stood
+ * here went with dark mode, v2 2026-10-27.) */
 .waste-badge--error { color: color-mix(in srgb, var(--color-danger) 99%, black); }
-@media screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .waste-badge--error {
-    color: color-mix(in srgb, var(--color-danger) 98%, white);
-  }
-}
-[data-theme="dark"] .waste-badge--error {
-  color: color-mix(in srgb, var(--color-danger) 98%, white);
-}
 
 .waste-source-detail__meta {
   display: flex;

@@ -3,14 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#F5F3ED" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#191816" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F6F6F3">
   <title>Keine Verbindung – Yuvomi</title>
-  <!-- Dieselbe Theme-Entscheidung wie in der App: der gespeicherte Wunsch
-       (`yuvomi-theme`) schlaegt die Systemeinstellung und setzt `data-theme` auf
-       <html>. Das Skript ist dasselbe, das index.html im Kopf laedt, und es
-       liegt im Precache des Service Workers - ohne Netz laeuft es also auch.
-       Faellt es aus, greift die prefers-color-scheme-Regel unten.
+  <!-- Derselbe Erstzustand wie in der App (theme-init.js, im Precache des
+       Service Workers): seit v2 (2026-10-27) immer hell.
        KEIN Inline-Skript: die CSP dieses Servers erlaubt nur `script-src 'self'`. -->
   <script src="/theme-init.js"></script>
   <style>
@@ -30,12 +26,12 @@
      * Die Werte stehen als Literale, weil es keine zweite Quelle gibt, die
      * dieses Dokument erreichen koennte. */
     :root {
-      /* Farben - Light (tokens.css :root) */
-      --color-bg:             #F5F3ED;  /* --neutral-100 */
+      /* Farben (tokens.css :root, v2 2026-10-27) */
+      --color-bg:             #F6F6F3;  /* --neutral-100 */
       --color-surface:        #FFFFFF;
-      --color-border:         #E4E0D7;  /* --neutral-200 */
-      --color-text:           #1C1B19;  /* --neutral-900 (Tafla ink) */
-      --color-text-secondary: #5E5A53;  /* --neutral-600 (Tafla ink-2), 6.86:1 auf weiss */
+      --color-border:         #EAE9E5;  /* --neutral-200 */
+      --color-text:           #1A1A19;  /* --neutral-900 (v2 ink) */
+      --color-text-secondary: #5F5E5A;  /* --neutral-600 (v2 ink-2), 6.49:1 auf weiss */
       --color-accent:         #6C3AED;
       --color-ink-on-vivid:   #FFFFFF;
 
@@ -50,37 +46,12 @@
       --type-secondary: 0.9375rem;  /* 15px - Subheadline */
       --line-height-tight: 1.21;
       --line-height-base:  1.47;
-      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+      /* Ohne die Stylesheet-Kette kennt die Huelle das @font-face nicht: Inter
+       * greift nur, wenn es lokal installiert ist, sonst die Systemschrift. */
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
 
-    /* Dark - dieselben Werte wie der Dark-Block in tokens.css. Zweimal
-     * geschrieben, weil beide Wege dorthin fuehren muessen: das System
-     * (prefers-color-scheme) und die ausdrueckliche Wahl (data-theme, gesetzt
-     * von theme-init.js). Die Wahl gewinnt, deshalb steht sie zuletzt. */
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --color-bg:             #191816;
-        --color-surface:        #2B2825;
-        --color-border:         #45403A;
-        --color-text:           #F5F1E8;
-        --color-text-secondary: #B3ACA1;
-        /* Spiegelt --_color-accent aus tokens.css. Hier traegt der Wert nur
-         * Flaeche (Retry-Knopf) und Fokusring, nie Text: #191816 darauf 7,72,
-         * Ring gegen #191816 7,72. Eine Notiz, die stattdessen eine Textrolle
-         * nennt, gilt fuer diese Datei nicht - sie hat keine. */
-        --color-accent:         #B49CFF;
-        --color-ink-on-vivid:   #191816;
-      }
-    }
-    :root[data-theme="dark"] {
-      --color-bg:             #191816;
-      --color-surface:        #2B2825;
-      --color-border:         #45403A;
-      --color-text:           #F5F1E8;
-      --color-text-secondary: #B3ACA1;
-      --color-accent:         #B49CFF;
-      --color-ink-on-vivid:   #191816;
-    }
+    /* (Hier stand der Dark-Spiegel - entfallen mit dem Dark Mode, v2.) */
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {

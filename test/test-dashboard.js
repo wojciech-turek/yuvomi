@@ -1771,6 +1771,14 @@ test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', 
 
 /* #1453: NACH EINEM RELOAD IN DER NACHT BLIEB DIE WAND HELL.
  *
+ * 2026-10-27, v2: light only. Es gibt kein dunkles Theme mehr: theme-init.js
+ * raeumt eine gespeicherte Wahl (`yuvomi-theme`) ab und setzt nie
+ * `data-theme`; die Nachtszene malt ihr Dunkel selbst (--wall-night-*) und
+ * haengt allein an `data-wall-night`. Die Zusage von #1453 bleibt in dieser
+ * Form: nach dem Laden und im Minutentakt ist es Nacht, um 06:00 nicht mehr -
+ * und ein frueher gespeichertes 'dark' schaltet nichts mehr dunkel.
+ *
+ * Bis v2:
  * Drei Stellen fassen beim Laden die Wurzel an: theme-init.js setzt nachts
  * `data-wall-night` und erzwingt `data-theme="dark"`, die Router-Init stellt
  * das gespeicherte Theme wieder her („Automatisch" entfernt `data-theme`,
@@ -1780,7 +1788,7 @@ test('Wand-Modus: das Nachtfenster läuft über Mitternacht (22:00 bis 06:00)', 
  * als echtes Skript, die Router-Init als ihre Drei-Wege-Logik (router.js,
  * Initialisierung), dann der echte `syncWallMode` samt Minutentakt.
  */
-test('Wand-Modus: nach einem Reload in der Nacht ist die Wand dunkel (#1453)', async () => {
+test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand in der Nacht (#1453)', async () => {
   const wall = await import('../public/utils/wall-mode.js');
   const tz = await import('/utils/timezone.js');
   const themeInit = readFileSync(new URL('../public/theme-init.js', import.meta.url), 'utf8');
@@ -1848,15 +1856,14 @@ test('Wand-Modus: nach einem Reload in der Nacht ist die Wand dunkel (#1453)', a
         storage, makeStorage({}), globalThis.document, globalThis.location, deviceNight,
       );
       nodeAssert.ok(root.hasAttribute('data-wall-night'), 'Vorbedingung: theme-init setzt nachts data-wall-night');
-      // 2. Router-Init: das gespeicherte Theme noch einmal (router.js, Initialisierung)
-      if (stored === 'dark' || stored === 'light') root.setAttribute('data-theme', stored);
-      else root.removeAttribute('data-theme');
+      // 2. (Die Router-Init stellte bis v2 das gespeicherte Theme her - entfallen.)
       // 3. syncWallMode aus der Navigation, danach ein Minutentakt in der Nacht
       atInstant(NIGHT, () => wall.syncWallMode('/'));
       const afterLoad = root.getAttribute('data-theme');
+      const nightAfterLoad = root.hasAttribute('data-wall-night');
       atInstant(NIGHT, () => wall.syncWallMode('/'));
       const afterTick = root.getAttribute('data-theme');
-      const night = root.hasAttribute('data-wall-night');
+      const night = nightAfterLoad && root.hasAttribute('data-wall-night');
       // 4. der Takt um 06:00 stellt die Wahl des Nutzers zurueck
       atInstant(MORNING, () => wall.syncWallMode('/'));
       results.push({
@@ -1874,10 +1881,10 @@ test('Wand-Modus: nach einem Reload in der Nacht ist die Wand dunkel (#1453)', a
     }
   }
   nodeAssert.deepEqual(results, [
-    { stored: null, afterLoad: 'dark', afterTick: 'dark', night: true, morning: null, morningNight: false, kept: null },
-    { stored: 'light', afterLoad: 'dark', afterTick: 'dark', night: true, morning: 'light', morningNight: false, kept: 'light' },
-    { stored: 'dark', afterLoad: 'dark', afterTick: 'dark', night: true, morning: 'dark', morningNight: false, kept: 'dark' },
-  ], `nachts dunkel nach dem Laden und im Takt, morgens die Wahl des Nutzers, yuvomi-theme unberuehrt - bekam ${JSON.stringify(results)}`);
+    { stored: null, afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
+    { stored: 'light', afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
+    { stored: 'dark', afterLoad: null, afterTick: null, night: true, morning: null, morningNight: false, kept: null },
+  ], `nachts Nacht nach dem Laden und im Takt, morgens Tag, nie data-theme, eine alte Wahl ist weg - bekam ${JSON.stringify(results)}`);
 });
 
 // --------------------------------------------------------

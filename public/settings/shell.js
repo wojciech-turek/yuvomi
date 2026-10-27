@@ -449,7 +449,6 @@ const OVERVIEW_GROUPS = [
 ];
 
 const OVERVIEW_VALUE_KEYS = {
-  'personal-appearance': 'theme',
   'personal-color': 'color',
   'personal-notifications': 'push',
   'personal-weather': 'weather-personal',
