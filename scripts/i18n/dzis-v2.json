@@ -1,0 +1,17 @@
+{
+  "today.rainUntil": { "en": "Rain until {{time}}", "pl": "Deszcz do {{time}}" },
+  "today.rainAt": { "en": "Rain around {{time}}", "pl": "Deszcz około {{time}}" },
+  "today.rainWindow": { "en": "Rain {{from}}-{{to}}", "pl": "Deszcz {{from}}-{{to}}" },
+  "today.rainChance": { "en": "up to {{pop}}%", "pl": "do {{pop}}%" },
+  "today.chartNow": { "en": "now", "pl": "teraz" },
+  "today.dryEvening": { "en": "No rain until evening", "pl": "Bez deszczu do wieczora" },
+  "today.dryRestOfDay": { "en": "No rain for the rest of the day", "pl": "Bez deszczu do końca dnia" },
+  "today.feelsLike": { "en": "feels like {{temp}}", "pl": "odczuwalna {{temp}}" },
+  "today.nowUntil": { "en": "now · until {{time}}", "pl": "teraz · do {{time}}" },
+  "today.earlierCount": { "en": "{{n}} earlier", "pl": "{{n}} wcześniej" },
+  "today.tomorrowMore": { "en": "and {{n}} more", "pl": "i {{n}} więcej" },
+  "today.nameDayKind": { "en": "name day", "pl": "imieniny" },
+  "today.birthdayKind": { "en": "birthday", "pl": "urodziny" },
+  "today.calendarEmpty": { "en": "Nothing in the calendar today", "pl": "Dziś nic w kalendarzu" },
+  "today.priorityFlag": { "en": "High priority", "pl": "Wysoki priorytet" }
+}

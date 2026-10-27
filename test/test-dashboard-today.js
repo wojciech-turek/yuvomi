@@ -380,7 +380,9 @@ test('R20: die Seite setzt den Betrachter, den der Tagesplan fragt', () => {
   // TAFLA (2026-10-24): der Plan von Dziś (utils/today-plan.js) liest den
   // Betrachter aus seinem Kontext - eigene Aufgaben eines Kindes zuerst. Diese
   // Zeile haelt fest, dass der echte Aufrufer ihn hineinreicht.
+  // 2026-10-27, v2: die Modulvariable `dashboardViewer` las niemand mehr (sie
+  // ist gegangen); der Betrachter reist allein im Kontext des Plans.
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(src, /export async function render\([\s\S]{0,1500}?dashboardViewer = user \?\? null;/);
+  assert.doesNotMatch(src, /dashboardViewer/);
   assert.match(src, /planContext\(\{ now: new Date\(\), viewer: user,/, 'Dziś fragt den Plan mit dem Betrachter');
 });

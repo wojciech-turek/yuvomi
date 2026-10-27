@@ -656,9 +656,11 @@ test('t() waehlt in cs, pl, ru, uk und ar die Form fuer 2, 5 und 11 (#1473)', as
   const faelle = [
     ['cs', 'dashboard.daysLeft', 2, 'Za 2 dny'],
     ['cs', 'dashboard.daysLeft', 5, 'Za 5 dní'],
-    ['pl', 'dashboard.metricPoints', 2, '2 punkty'],
-    ['pl', 'dashboard.metricPoints', 5, '5 punktów'],
-    ['pl', 'dashboard.metricPoints', 22, '22 punkty'],
+    // 2026-10-27, v2: `dashboard.metricPoints` ging mit der Punkte-Kachel von
+    // Dziś; dieselbe Stichprobe an einem lebenden Schluessel.
+    ['pl', 'tasks.tagUsageCount', 2, '2 zadania'],
+    ['pl', 'tasks.tagUsageCount', 5, '5 zadań'],
+    ['pl', 'tasks.tagUsageCount', 22, '22 zadania'],
     ['ru', 'dashboard.daysLeft', 2, '2 дня'],
     ['ru', 'dashboard.daysLeft', 11, '11 дн.'],
     ['uk', 'tasks.pointsSummary', 3, '3 бали'],

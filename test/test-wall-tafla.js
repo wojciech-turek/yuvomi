@@ -266,7 +266,9 @@ test('the switches of the household hide their sections', () => {
 test('nothing on the wall is set below the 24px floor: every font-size in the wall rules is a wall step', () => {
   const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8');
   const start = css.indexOf('Wand-Modus (Tafla, 2026-10-19)');
-  const end = css.indexOf('/* ── Widget-Optionen (#814)');
+  // 2026-10-27, v2: the widget options went with Dziś v2; the wall block now
+  // ends where the Dziś block begins.
+  const end = css.indexOf(' * DZIŚ (design v2, 2026-10-27)');
   assert.ok(start > 0 && end > start, 'Reichweite: the wall block was found');
   const block = css.slice(start, end);
   const sizes = [...block.matchAll(/font-size:\s*([^;]+);/g)].map((m) => m[1].trim());

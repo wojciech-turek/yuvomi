@@ -330,100 +330,14 @@ test('dashboardQuery: die Stufe reist nur, wenn sie von der Vorgabe abweicht', (
     '/dashboard?events_scope=mine&events_birthdays=hide&events_limit=12');
 });
 
-const tz = await import('/utils/timezone.js');
-const { __test: dash } = await import('../public/pages/dashboard.js');
-const { setPermissions, clearPermissions } = await import('../public/permissions.js');
-
-function inBrowser(iso, zone, fn) {
-  return async () => {
-    mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
-    tz.setDisplayTimeZone(zone);
-    const prevWindow = global.window;
-    global.window = {
-      yuvomi: { isModuleDisabled: () => false },
-      matchMedia: () => ({ matches: false }),
-    };
-    setPermissions({ admin: true, modules: {}, widgets: {}, capabilities: {} });
-    try {
-      await fn();
-    } finally {
-      clearPermissions();
-      global.window = prevWindow;
-      tz.setDisplayTimeZone(null);
-      mock.timers.reset();
-    }
-  };
-}
-
-/** Den Dialog oeffnen, ohne DOM: der Stub faengt Inhalt und Speichern-Handler. */
-async function openCalendarDialog(current, picked) {
-  let content = '';
-  let submit = null;
-  const prev = { open: globalThis.__openModal, close: globalThis.__closeModal };
-  const field = (selector) => {
-    if (selector === 'input[name="cal-scope"]:checked') return { value: picked.scope ?? 'all' };
-    if (selector === 'input[name="cal-birthdays"]') return { checked: picked.birthdays !== false };
-    if (selector === 'input[name="cal-limit"]:checked') return picked.limit === undefined ? null : { value: String(picked.limit) };
-    if (selector === '[data-action="cancel"]') return { addEventListener() {} };
-    if (selector === '#widget-options-form') return { addEventListener: (_type, handler) => { submit = handler; } };
-    return null;
-  };
-  globalThis.__openModal = (config) => {
-    content = config.content;
-    config.onSave({ querySelector: field });
-  };
-  globalThis.__closeModal = () => true;
-  try {
-    const result = dash.openWidgetOptions('calendar', current);
-    // openWidgetOptions ist async: der Dialog steht erst nach einem Takt.
-    await Promise.resolve();
-    await Promise.resolve();
-    assert.equal(typeof submit, 'function', 'der Dialog hat keinen Speichern-Handler verdrahtet');
-    submit({ preventDefault() {} });
-    return { content, saved: await result };
-  } finally {
-    globalThis.__openModal = prev.open;
-    globalThis.__closeModal = prev.close;
-  }
-}
-const limitChoices = (content) => [...content.matchAll(/<input type="radio" name="cal-limit" value="(\d+)" (checked)?/g)]
-  .map((m) => ({ value: Number(m[1]), checked: Boolean(m[2]) }));
-
-test('Dialog: die Kalender-Kachel bietet die drei Stufen, und fuenf ist vorgewaehlt', inBrowser(THU_14_BERLIN, 'Europe/Berlin', async () => {
-  const { content } = await openCalendarDialog({}, { limit: 5 });
-  assert.deepEqual(limitChoices(content), [
-    { value: 5, checked: true }, { value: 8, checked: false }, { value: 12, checked: false },
-  ]);
-  assert.match(content, /dashboard\.optionCalendarLimit</, 'die Gruppe traegt ihre Ueberschrift ueber t()');
-  // TAFLA (2026-10-24): der Hinweis auf den Wochenstreifen ist mit dem
-  // Kachelraster gegangen - es gibt keine Kachelgroesse mehr, auf die er zeigt.
-  assert.doesNotMatch(content, /dashboard\.optionCalendarLimitHint/, 'kein Hinweis auf eine Kachelgroesse');
-  // Die beiden aelteren Optionen stehen weiter da - die dritte kommt dazu.
-  assert.match(content, /name="cal-scope"/);
-  assert.match(content, /name="cal-birthdays"/);
-}));
-
-test('Dialog: die gespeicherte Stufe ist vorgewaehlt, ein Fremdwert zeigt die Vorgabe', inBrowser(THU_14_BERLIN, 'Europe/Berlin', async () => {
-  assert.deepEqual(limitChoices((await openCalendarDialog({ limit: 12 }, { limit: 12 })).content).filter((c) => c.checked), [{ value: 12, checked: true }]);
-  assert.deepEqual(limitChoices((await openCalendarDialog({ limit: 500 }, { limit: 5 })).content).filter((c) => c.checked), [{ value: 5, checked: true }]);
-}));
-
-test('Dialog: gespeichert wird nur die Abweichung, als Zahl', inBrowser(THU_14_BERLIN, 'Europe/Berlin', async () => {
-  assert.deepEqual((await openCalendarDialog({}, { limit: 8 })).saved, { limit: 8 });
-  assert.deepEqual((await openCalendarDialog({}, { limit: 12, scope: 'mine' })).saved, { scope: 'mine', limit: 12 });
-  assert.deepEqual((await openCalendarDialog({ limit: 12 }, { limit: 5 })).saved, {}, 'fuenf wird nicht gespeichert - wie scope: all');
-  assert.deepEqual((await openCalendarDialog({}, { limit: 99 })).saved, {}, 'ein Wert, den es im Dialog nicht gibt, kommt nicht ins Layout');
-  assert.deepEqual((await openCalendarDialog({}, {})).saved, {}, 'ohne gewaehltes Radio bleibt es bei der Vorgabe');
-}));
-
-// TAFLA (2026-10-24): hier stand, wie die Kalender-KACHEL die Stufe zeigt
-// (Liste je Groesse, 2x1 als Wochenstreifen, Telefon, Raster) und dass das
-// Heute-Blatt seinen Deckel behaelt. Kachel, Raster und Blatt sind gegangen;
-// die Stufe bleibt eine Option der Kalender-Filter in „Dostosuj Dziś" (Dialog
-// oben) und ein Parameter der Route (Abschnitt 1).
+// 2026-10-27, v2: hier stand der Dialog der Kalender-Filter (drei Stufen,
+// vorgewaehlte Stufe, gespeichert nur die Abweichung) und dass „Als Vorgabe
+// fuer alle" die Antwort neu holt. Beides stand in „Dostosuj Dziś", und das
+// ist mit Dziś v2 gegangen. Eine gespeicherte Stufe gilt weiter (Abschnitt 1,
+// dashboardQuery oben).
 
 // --------------------------------------------------------------------------
-// 4. Die Stufe ist kein Filter, und Veroeffentlichen holt die Antwort neu
+// 4. Die Stufe ist kein Filter
 // --------------------------------------------------------------------------
 
 const badges = await import('../public/utils/nav-badges.js');
@@ -477,16 +391,6 @@ test('die Zahlen der Navigation sind mit und ohne Stufe dieselben - und mit eine
 // AUFRUF fest; das Verhalten dahinter - die geteilte Funktion und die Zahlen -
 // messen die zwei Tests darueber, den Ablauf die Browser-Probe im PR.
 const pageSource = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-/** Der Rumpf einer Funktion bis zur schliessenden Klammer auf ihrer Einrueckung. */
-function functionBody(source, signature) {
-  const start = source.indexOf(signature);
-  assert.ok(start >= 0, `${signature} nicht gefunden`);
-  const indent = source.slice(source.lastIndexOf('\n', start) + 1, start);
-  const end = source.indexOf(`\n${indent}}\n`, start);
-  assert.ok(end > start, `Ende von ${signature} nicht gefunden`);
-  return source.slice(start, end);
-}
-
 test('die Seite reicht dem Zahlenspeicher die Antwort nach der geteilten Regel, nicht nach „hat Parameter"', () => {
   const call = /primeModuleCountsFrom\?\.\(dashRes, \{\s*filtered: ([^\n]+?),?\s*\}\)/.exec(pageSource);
   assert.ok(call, 'der Aufruf von primeModuleCountsFrom ist nicht mehr zu finden');
@@ -498,18 +402,3 @@ test('die Seite reicht dem Zahlenspeicher die Antwort nach der geteilten Regel, 
   assert.equal(call[1], "dashboardQueryFiltersCounts(overviewRequest(layoutHintQuery('/dashboard')))");
 });
 
-test('„Als Vorgabe fuer alle" holt die Antwort neu, wenn sich die Abfrage geaendert hat', () => {
-  const body = functionBody(pageSource, 'async function publishHouseholdDefault()');
-  const before = body.indexOf('const previousQuery = dashboardQuery(savedWidgetConfig);');
-  const saved = body.indexOf('savedWidgetConfig = widgetConfig.map(');
-  const reload = body.indexOf('await reloadIfQueryChanged(previousQuery);');
-  const rebuild = body.indexOf('rebuildDashboard(widgetConfig);');
-  assert.ok(before >= 0, 'der Pfad VOR dem Speichern wird nicht festgehalten');
-  assert.ok(reload >= 0, 'nach dem Veroeffentlichen wird nicht neu geholt - die Kachel zeigte weiter die alte Zahl');
-  assert.ok(before < saved, 'der alte Pfad muss gelesen sein, bevor savedWidgetConfig ueberschrieben wird');
-  assert.ok(saved < reload && reload < rebuild, 'erst speichern, dann neu holen, dann zeichnen');
-  // Derselbe Ablauf wie beim Speichern - der Zwilling, an dem die Luecke auffiel.
-  // Seit Tafla (2026-10-19) speichert „Dostosuj Dziś" ueber persistTodayLayout.
-  const persist = functionBody(pageSource, 'function persistTodayLayout(nextConfig)');
-  assert.match(persist, /await reloadIfQueryChanged\(previousQuery\);\s*rebuildDashboard\(widgetConfig\);/);
-});

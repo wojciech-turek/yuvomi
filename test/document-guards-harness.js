@@ -737,11 +737,12 @@ export async function clickLive(page, selector, { tries = 4, ...options } = {}) 
 /**
  * Den Wand-Modus der Uebersicht so einschalten, wie ein Finger es tut.
  *
- * TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (Abschnitt
- * „Więcej"), nicht mehr als Knopf im Kopf der Uebersicht. Der Helfer geht den
- * Weg ueber das Blatt und laesst den Handler dahinter unveraendert.
+ * v2 (2026-10-27): Dziś hat kein „Dostosuj Dziś" mehr; der Einstieg steht in
+ * „Więcej" („Uruchom tryb ściany"), und von dort fuehrt er zurueck auf `/`.
  */
 export async function enterDashboardWall(page) {
-  await clickLive(page, '[data-day-action="customize"]', { timeout: 15000 });
-  await clickLive(page, '.day-sheet [data-sheet-action="wall"]');
+  await gotoRoute(page, '/more');
+  await clickLive(page, '[data-more-action="wall"]', { timeout: 15000 });
+  await page.waitForSelector('.wall', { timeout: 15000 });
+  await settle(page);
 }

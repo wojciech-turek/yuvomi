@@ -48,13 +48,6 @@ import { EVENT_LIMIT_DEFAULT, clampEventLimit } from './dashboard-event-limit.js
  * list, so a saved layout that predates them gets them on top, in this order
  * (normalizeDashboardConfig inserts a missing id at its default position). */
 export const TODAY_SECTION_IDS = Object.freeze(['today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon']);
-/* The old widgets Dziś still offers as optional preview tiles ("Kafelek
- * podglądu") in "Dostosuj Dziś". `family` only where more than two adults
- * share the household (pages/dashboard.js). The rest - tasks, calendar,
- * meals, birthdays, countdown, shopping, waste - is the plan itself, "Jutro" or
- * "Wkrótce"; clock and weather card belong to the wall. */
-export const TODAY_EXTRA_IDS = Object.freeze(['budget', 'notes', 'health', 'housekeeping', 'pantry', 'rewards', 'family']);
-
 export const WIDGET_IDS = [...TODAY_SECTION_IDS, 'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget', 'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
 
 // Vier kuratierte Formen statt sechs: über vier Auswahlmöglichkeiten pro Widget

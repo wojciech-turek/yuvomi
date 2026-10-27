@@ -474,23 +474,6 @@ export function buildPlan(data, ctx, { featuredDinner = null } = {}) {
   };
 }
 
-/**
- * The words of the "Wcześniej" row: the last past event by name when there is
- * one, else how many; then how many are done. Null when nothing is earlier.
- */
-export function earlierLabel(plan) {
-  if (!plan.earlier.length) return null;
-  const parts = [];
-  const events = plan.pastEvents;
-  if (events.length === 1) parts.push(`${events[0].title} ${events[0].timeLabel}`.trim());
-  else if (events.length > 1) parts.push(t('today.earlierEvents', { count: events.length }));
-  const done = plan.earlier.filter((row) => row.checkable && row.done).length;
-  if (done) parts.push(t('today.earlierDone', { count: done }));
-  const rest = plan.earlier.length - events.length - done;
-  if (!parts.length && rest) parts.push(t('today.earlierOther', { n: rest }));
-  return t('today.earlier', { what: parts.join(' · ') });
-}
-
 // --------------------------------------------------------
 // Teraz
 // --------------------------------------------------------
@@ -645,59 +628,4 @@ export function buildTomorrow(data, ctx) {
   }
   const timedFirst = rows.sort((a, b) => a.sortMin - b.sortMin);
   return { rows: timedFirst.slice(0, TOMORROW_ROWS), total: timedFirst.length };
-}
-
-// --------------------------------------------------------
-// Wkrótce
-// --------------------------------------------------------
-
-/**
- * What is coming within two weeks, nearest first: birthdays, marked
- * countdowns, document expiries (fetched by the page when the module is on).
- * Hidden by the view when empty.
- */
-export function buildSoon(data, ctx, { documents = [] } = {}) {
-  const rows = [];
-  const off = (module) => Boolean(ctx.moduleOff?.(module));
-  if (!off('birthdays')) {
-    for (const b of Array.isArray(data?.birthdays) ? data.birthdays : []) {
-      const days = Number(b.days_until);
-      if (!Number.isFinite(days) || days < 1 || days > SOON_DAYS) continue;
-      const date = addLocalDays(ctx.todayKey, days);
-      rows.push({
-        key: `birthday:${b.id}:${b.kind}`, kind: 'birthday', days, date,
-        title: b.kind !== 'name_day' && Number(b.next_age) > 0 ? t('today.birthdayAge', { name: b.name, count: Number(b.next_age) }) : String(b.name ?? ''),
-        meta: b.kind === 'name_day' ? t('birthdays.nameDay') : '',
-        // EINE Zeile nennt EINEN Anlass (#1821): sie oeffnet ihn, die Seite
-        // loest `?open=` in der Spalte und unter der Schwelle ein.
-        icon: 'cake', route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
-      });
-    }
-  }
-  for (const c of Array.isArray(data?.countdowns) ? data.countdowns : []) {
-    const days = Number(c.days_until);
-    if (!Number.isFinite(days) || days < 1 || days > SOON_DAYS) continue;
-    if (off(c.source === 'task' ? 'tasks' : 'calendar')) continue;
-    rows.push({
-      key: `countdown:${c.source}:${c.id}`, kind: 'countdown', days, date: String(c.date ?? '').slice(0, 10),
-      title: String(c.title ?? ''), meta: '', icon: c.source === 'task' ? 'circle-check' : 'calendar',
-      route: c.source === 'task' ? '/tasks' : `/calendar?open=${encodeURIComponent(String(c.id))}&date=${encodeURIComponent(String(c.date ?? ''))}`,
-      taskId: c.source === 'task' ? c.id : null,
-    });
-  }
-  if (!off('documents')) {
-    for (const doc of Array.isArray(documents) ? documents : []) {
-      const key = String(doc.expires_at ?? '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
-      const days = dayDiff(ctx.todayKey, key);
-      if (days < 0 || days > 30) continue;
-      rows.push({
-        key: `document:${doc.id}`, kind: 'document', days, date: key,
-        title: String(doc.title ?? doc.name ?? ''), meta: t('today.documentExpires'),
-        icon: 'file-text', route: `/documents?open=${encodeURIComponent(String(doc.id))}`,
-      });
-    }
-  }
-  rows.sort((a, b) => a.days - b.days || a.title.localeCompare(b.title));
-  return rows.slice(0, SOON_ROWS);
 }
