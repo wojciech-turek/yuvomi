@@ -510,6 +510,51 @@ router.get('/predictions', (_req, res) => {
   }
 });
 
+// --------------------------------------------------------
+// GET /api/v1/shopping/frequent (2026-10-27, v2)
+// "Często": what this household buys most, for the chips above the add bar.
+// The purchase log ranks by recency-weighted count (the same weight the
+// suggestions use), so "mleko" bought twice a week stands before "mascarpone"
+// bought once in spring. A young household with a thin log is filled up with
+// the names it put on lists most recently. No AI switch: this is its own
+// history, not a guess. Response: { data: { name, category, quantity }[] }
+// --------------------------------------------------------
+const FREQUENT_LIMIT = 12;
+
+router.get('/frequent', (_req, res) => {
+  try {
+    const now = Date.now();
+    const purchases = db.get().prepare(
+      'SELECT name, name_key, category, quantity, purchased_at FROM shopping_purchases WHERE purchased_at >= ?',
+    ).all(new Date(now - 365 * 86_400_000).toISOString());
+    const ranked = [...groupPurchases(purchases).values()]
+      .map((g) => ({ key: g.key, name: g.name, category: g.category, quantity: g.quantity, score: weight(g.times, now) }))
+      .sort((a, b) => b.score - a.score);
+    const seen = new Set(ranked.map((g) => g.key));
+    if (ranked.length < FREQUENT_LIMIT) {
+      const recent = db.get().prepare(
+        'SELECT name, category, quantity FROM shopping_items ORDER BY created_at DESC, id DESC LIMIT 500',
+      ).all();
+      for (const it of recent) {
+        if (ranked.length >= FREQUENT_LIMIT) break;
+        const key = nameKey(it.name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        ranked.push({ key, name: it.name, category: it.category, quantity: it.quantity });
+      }
+    }
+    const data = ranked.slice(0, FREQUENT_LIMIT).map((g) => ({
+      name: g.name,
+      category: rememberedCategory(g.key)?.category ?? g.category ?? null,
+      quantity: g.quantity ?? null,
+    }));
+    res.json({ data });
+  } catch (err) {
+    log.error('frequent error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
 /** Appends a ticked item to the purchase log. */
 function logPurchase(item, userId) {
   const key = nameKey(item.name);
@@ -1244,10 +1289,28 @@ router.post('/:listId/items', (req, res) => {
     const errors = collectErrors([vName, vQty, vCat, vNotes, vUrl]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
-    const { result, list_change } = withListChange(req.params.listId, () => db.get().prepare(`
+    // AT THE TOP OF ITS AISLE (2026-10-27, v2): the add bar asks for
+    // `position: 'top'`, so the row it just made stands first in its
+    // category, where the eye looks for it. Every other writer keeps the end
+    // of the aisle (#678) that the v133 trigger gives a new row; a top row
+    // then moves one below the smallest rank of the aisle's open rows, in the
+    // same transaction; the receipt (`list_change`) covers both writes.
+    const toTop = req.body.position === 'top';
+    const { result, list_change } = withListChange(req.params.listId, () => db.get().transaction(() => {
+      const inserted = db.get().prepare(`
       INSERT INTO shopping_items (list_id, name, quantity, category, notes, url)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(req.params.listId, vName.value, vQty.value, vCat.value || defaultCat, vNotes.value, vUrl.value));
+    `).run(req.params.listId, vName.value, vQty.value, vCat.value || defaultCat, vNotes.value, vUrl.value);
+      if (toTop) {
+        db.get().prepare(`
+          UPDATE shopping_items SET sort_order = MIN(0, COALESCE((
+            SELECT MIN(sort_order) FROM shopping_items
+            WHERE list_id = ? AND category = ? AND is_checked = 0 AND id != ?
+          ), 0)) - 1 WHERE id = ?
+        `).run(req.params.listId, vCat.value || defaultCat, inserted.lastInsertRowid, inserted.lastInsertRowid);
+      }
+      return inserted;
+    })());
 
     const item = db.get()
       .prepare('SELECT * FROM shopping_items WHERE id = ?')
