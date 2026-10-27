@@ -133,7 +133,7 @@
   --color-bg:             var(--neutral-100);
   --_color-surface:       #FFFFFF;
   --color-surface:        var(--_color-surface);
-  /* surface-2: recessed/vertieft (dunkler als bg in dark mode — kein Elevations-Token) */
+  /* surface-2: recessed/vertieft (kein Elevations-Token) */
   --color-surface-2:      var(--neutral-50);
   --_color-surface-3:     var(--_neutral-150);
   --color-surface-3:      var(--_color-surface-3);
@@ -144,13 +144,12 @@
    * WCAG 1.4.11 fuer die Grenze eines Bedienelements verlangt (die Entscheidung
    * vom 2026-07-30 hatte das bewusst offen gelassen).
    *
-   * --color-border-control ist seit Tafla (2026-10-19) die Feldkante der
-   * Spezifikation, #8A857C hell / #8A8378 dunkel (vorher die Rampenstufe
-   * --neutral-500), und haelt 3:1 auf jedem Grund, auf dem ein Feld gemessen
-   * stand: light 3,67 auf Weiss, 3,51 auf -raised, 3,30 auf der Buehne; dark
-   * 3,91 auf -surface, 3,39 auf -raised (= Tafla-Fill), 4,73 auf der Buehne.
-   * Die knappere Alternative von damals (#938E85 / #7A746B) fiel auf der hellen
-   * Buehne auf 2,93 und auf dem dunklen -raised auf 2,71.
+   * --color-border-control ist seit v2 (2026-10-27) #87867F - eine Spur
+   * unter dem dekorativen Grau der Foundations (#8D8C87, das auf der Fuellung
+   * #ECEBE7 nur 2,82 haelt; die Felder der Zugangsseite stehen dort). Es haelt
+   * 3:1 auf jedem Grund, auf dem ein Feld oder Ring steht: 3,65 auf Weiss,
+   * 3,38 auf dem Grund #F6F6F3, 3,06 auf der Fuellung - und bleibt "leise"
+   * (am knappsten Grund unter 3,4). Tafla: #8A857C.
    *
    * NUR FELDKANTEN (input, select, textarea, .input, .form-input, Such-Huellen).
    * Trennlinien, Karten- und Gruppenkanten behalten --color-border - sie global
@@ -158,19 +157,17 @@
    * der Akzent. Guard: test-frontend-audit.js, "Feldkanten tragen
    * --color-border-control".
    *
-   * TAFLA: the control edge is the spec's field border (#8A857C / #8A8378),
-   * also the ring of every check circle (--color-field-border): 3.67 on white,
-   * 3.30 on --color-bg, 3.50 on -raised, 3.00 on --color-fill (no ring sits on
-   * the fill, spec rule). The hairline between rows is --color-separator
-   * (#E2DDD3 / #3E3933), and --color-border-subtle - the token every row
-   * divider already reads - now points at it, so the whole app moves at once.
-   * Decorative, no contrast promise. */
+   * The control edge is also the ring of every check circle
+   * (--color-field-border). The hairline is --color-separator (v2 #EAE9E5;
+   * rows inside a card: --color-separator-inner #EFEEEA), and
+   * --color-border-subtle - the token every row divider already reads - points
+   * at it, so the whole app moves at once. Decorative, no contrast promise. */
   --_color-separator:     #EAE9E5;   /* v2 hairline */
   --color-separator:      var(--_color-separator);
   --color-border:         var(--neutral-200);
   --color-border-subtle:  var(--color-separator);
   --color-border-strong:  var(--neutral-300);  /* kräftigere Trennlinie (Hover, betonte Rahmen) */
-  --_color-border-control: #8D8C87;   /* v2 ring/field edge: 3.37 weiss, 3.11 bg */
+  --_color-border-control: #87867F;   /* v2 ring/field edge: 3.65 weiss, 3.38 bg, 3.06 fill */
   --color-border-control: var(--_color-border-control);  /* Ruhekante von Eingabefeldern, 3:1 (WCAG 1.4.11) */
   --color-field-border:   var(--color-border-control);   /* Tafla-Name: Feldkante und Prüfkreis */
   /* DIE BAHN EINES AUSGESCHALTETEN SCHALTERS (#1572). Die `.toggle`-Bahn stand
@@ -367,8 +364,7 @@
    * --field-chevron ist das Zeichen eines select mit appearance: none - der
    * Lucide-Pfad chevron-down als Bild, weil ein select kein Pseudo-Element
    * traegt, an dem eine Maske haengen koennte. Die Farbe steht deshalb IM Bild
-   * und hat einen Dark-Zwilling: hell #5E5A53 (6,86:1 auf Weiss), dunkel
-   * #B3ACA1 (5,65:1 auf der Mulde, 6,51:1 auf -surface) - das Zeichen traegt
+   * und folgt --_neutral-600 (v2 #5F5E5A, 6,49:1 auf Weiss) - das Zeichen traegt
    * die 3:1 als Erkennungsmerkmal auch dort, wo die Auswahl selbst keine Kante
    * hat (die randlose Auswahl der Formularzeile, .form-row in layout.css).
    * Guard: test-frontend-audit.js, "R18: eine Feldhaut". */
@@ -395,7 +391,7 @@
    * sekundaer 5,15 / 8,76, tertiaer 4,69 / 7,71:1. */
   --_color-board-well:        var(--_neutral-150);
   --color-board-well:         var(--_color-board-well);
-  --_field-chevron:           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E5A53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --_field-chevron:           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235F5E5A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --field-chevron:            var(--_field-chevron);
 
   /* DIE ZEILENLISTEN-REGEL (HIG-Rollout Runde 3, 2026-08-06).
