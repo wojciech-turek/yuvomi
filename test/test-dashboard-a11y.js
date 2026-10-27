@@ -236,13 +236,13 @@ test('R14 P2: die Wand sammelt nicht - dort klappt nichts auf', async () => {
 // 2026-10-27, v2: Blatt, + und die Pille auf Dziś sind weg - jede Seite legt
 // in ihrem eigenen Kopf an. Dziś baut weder Speed-Dial noch Knopf.
 test('R14/v2: die Uebersicht baut keinen Speed-Dial und ruft kein globales Erfassen', () => {
-  assert.equal(__test.renderFab(), '', 'kein schwebender Speed-Dial');
-  assert.doesNotMatch(dashboardSource, /openCapture/, 'kein globales Erfassen mehr');
+  assert.equal(__test.renderFab, undefined, 'kein Knopf-Bauer mehr, auch kein leerer');
+  assert.doesNotMatch(dashboardSource, /openCapture|capture-sheet|capture-plus|yuvomi:captured/, 'kein globales Erfassen mehr');
   assert.doesNotMatch(dashboardSource, /FAB_ACTIONS|FAB_NEW_BTN|function wireNewMenu/, 'der Speed-Dial ist entfallen');
 });
 
 test('v2: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf', () => withStage(true, () => {
-  assert.equal(__test.renderFab(), '');
+  assert.doesNotMatch(dashboardSource, /class="page-fab"|id="fab-main"/, 'Dziś zeichnet keinen schwebenden Knopf');
 }));
 
 // Critique 2026-10-16: jede Kachel fuehrt mit „Alle" zu ihrer Seite, nur die

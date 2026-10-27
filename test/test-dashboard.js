@@ -162,9 +162,9 @@ console.log('\n[Dashboard-Test] API-Abfragen\n');
 test('Dziś traegt keinen eigenen Anlege-Knopf und ruft kein globales Erfassen (v2)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   const { readFile } = await import('node:fs/promises');
-  assert(__test.renderFab() === '', 'kein Speed-Dial, kein Knopf');
+  assert(__test.renderFab === undefined, 'kein Speed-Dial, kein Knopf - auch kein leerer Bauer');
   const src = await readFile(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert(!/openCapture|capture-sheet/.test(src), 'Dziś ruft kein globales Erfassen mehr');
+  assert(!/openCapture|capture-sheet|capture-plus|yuvomi:captured/.test(src), 'Dziś ruft kein globales Erfassen mehr');
 });
 
 /* „Heute"/„Morgen" an einem echten ZEITPUNKT (#829, Nachlese #851).

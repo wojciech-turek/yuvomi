@@ -10,7 +10,6 @@ import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-
 import { planContext } from '/utils/today-plan.js';
 import { headerDate, greetingKey, weatherCard, calendarDay, pendingTasks, birthdaysSoon, clockStamp } from '/utils/dzis-plan.js';
 import { renderTodayPage, renderTodaySkeleton } from '/components/today-view.js';
-import { openCaptureSheet } from '/components/capture-sheet.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { moduleAccess } from '/permissions.js';
 import { t, getLocale } from '/i18n.js';
@@ -23,14 +22,12 @@ import { findPageFab } from '/utils/fab.js';
 import { toggleRegion } from '/utils/ux.js';
 import { swapContent } from '/utils/content-swap.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
-import { dashboardQuery, dashboardQueryFiltersCounts, dashboardRequest, fetchPendingReminders, childDefaultWidgetConfig } from '/utils/dashboard-widgets.js';
-import { buildDefaultWidgetConfig, normalizeDashboardConfigWithExtensions } from '/utils/extension-widgets.js';
+import { dashboardQueryFiltersCounts, dashboardRequest, fetchPendingReminders } from '/utils/dashboard-widgets.js';
 import { exitWallMode, isWallActive, syncWallMode, takeWallEntryFocus } from '/utils/wall-mode.js';
 import { mountZonePrompt } from '/utils/household-zone-hint.js';
 import { wireWallTimer, readWallTimer } from '/components/wall-timer.js';
 import { buildWall, wallClock, wallFingerprint, WALL_REFRESH_MS } from '/utils/wall-plan.js';
 import { renderWall, renderWhoChooser, fitWallLists, wallDateLabel } from '/components/wall-view.js';
-import { rememberLayoutHint, layoutHintQuery } from '/utils/dashboard-layout-hint.js';
 import { attachOverlay, pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.js';
 import { mealTypeLabel, primeMealTypeNames } from '/utils/meal-types.js';
 import { wireRecipeThumbs } from '/utils/recipe-thumb.js';
@@ -128,8 +125,9 @@ function getOnboardingSteps() {
     { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
       target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
     { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
-      // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins steht.
-      target: () => [...document.querySelectorAll('.page-fab')].find(isShownOnScreen) ?? null },
+      // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins
+      // steht; auf Dziś ist das „Dodaj zadanie" in der Karte der Aufgaben.
+      target: () => [...document.querySelectorAll('.page-fab, [data-today] .dz-tasks__add')].find(isShownOnScreen) ?? null },
   ];
 }
 
@@ -440,11 +438,6 @@ function visibleCountdowns(items) {
 function setHtml(element, html) {
   element.replaceChildren();
   element.insertAdjacentHTML('afterbegin', html);
-}
-
-/** Ein Kinderkonto, das der Vorgabe folgt, bekommt die Kinder-Vorgabe der Kacheln. */
-function childDefaultFor(config, user, followsDefault) {
-  return followsDefault && user?.family_role === 'child' ? childDefaultWidgetConfig(config) : config;
 }
 
 /** A selector that finds "the same" element again after a rebuild of Dziś. */
@@ -802,12 +795,6 @@ function wireWallExit(container, rerender, signal) {
   holdWallMarker(leave);
 }
 
-/** Dziś traegt keinen eigenen FAB: angelegt wird in den Bereichen selbst
- *  (v2, 2026-10-27 - das globale + der Shell ist entfallen). */
-function renderFab() {
-  return '';
-}
-
 // --------------------------------------------------------
 // Eine Aufgabe aus der Übersicht öffnen (#918)
 // --------------------------------------------------------
@@ -896,7 +883,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
         ${wallMode ? renderWallSurface(null, null, { loading: true }) : renderTodaySkeleton()}
       </div>
     </div>
-    ${wallMode ? '' : renderFab()}
   `);
 
   // Der Zonen-Hinweis fuer Bestandshaushalte (#1607): ein Admin, dessen Browser
@@ -955,9 +941,13 @@ export async function render(container, { user, signal: routeSignal = null } = {
   let weather      = null;
   let weatherPrefs = null;
   let weatherAutoLocate = false;
-  // The saved widget layout no longer arranges Dziś (v2, 2026-10-27); its
-  // filters (#814) still narrow the /dashboard answer, so it is still read.
-  let widgetConfig = buildDefaultWidgetConfig();
+  /* DIE SEITE FRAGT DIE ROUTE OHNE FILTER (v2, 2026-10-27). Die Optionen der
+   * alten Kacheln (#814: Kalender „nur meine", Geburtstage aus, die Stufe der
+   * Liste, Aufgaben-Kategorien) liess „Dostosuj Dziś" setzen - das Blatt ist
+   * gegangen, und niemand kann sie mehr aendern. Sie filtern Dziś (und die
+   * Wand, die aus derselben Antwort zeichnet) deshalb nicht mehr still; die
+   * gespeicherten Werte bleiben in den Praeferenzen unberuehrt. */
+  const DASHBOARD_QUERY = '/dashboard';
   // Die Wand fragt die Haushaltsfassung der Uebersicht ab (#1817,
   // `dashboardRequest`). JEDER Abruf dieser Seite geht hier durch - auch der
   // stille Refresh, sonst stuende nach einer Viertelstunde wieder die
@@ -988,7 +978,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   let lastLoadedAt = null;
   try {
     const [dashRes, weatherRes, prefsRes, remindersRes] = await Promise.all([
-      api.get(overviewRequest(layoutHintQuery('/dashboard'))),
+      api.get(overviewRequest(DASHBOARD_QUERY)),
       api.get(`/weather?lang=${encodeURIComponent(getLocale())}`).catch(() => ({ data: null })),
       // Beim Start hat der Router dieselbe Antwort schon unterwegs und reicht
       // sie herein (utils/start-handoff.js) - sonst zwei `/preferences` je
@@ -1003,14 +993,11 @@ export async function render(container, { user, signal: routeSignal = null } = {
     data         = dashRes;
     /* Die Zahlen an den Nav-Zielen und Modulkacheln kommen aus derselben
      * Antwort (#868). Sie hier hereinzureichen spart die zweite Aggregation,
-     * die der Shell-Aufbau sonst beim Anmelden anstiess - `layoutHintQuery`
-     * schraenkt sie allerdings ein, und eine eingeschraenkte Zahl ist eine
-     * andere Zahl, also nimmt der Speicher sie nur ungefiltert an. Die Stufe
-     * der Kalender-Kachel (`events_limit`, #1680) ist kein Filter: sie aendert
-     * keine Zahl, und mit ihr als „gefiltert" holte der Router die Antwort bei
-     * jedem Kaltstart ein zweites Mal (`dashboardQueryFiltersCounts`). */
+     * die der Shell-Aufbau sonst beim Anmelden anstiess. Der Speicher nimmt
+     * sie nur ungefiltert an - die Wand fragt die Haushaltsfassung, und deren
+     * Zahlen sind nicht die der Person (`dashboardQueryFiltersCounts`). */
     window.yuvomi?.primeModuleCountsFrom?.(dashRes, {
-      filtered: dashboardQueryFiltersCounts(overviewRequest(layoutHintQuery('/dashboard'))),
+      filtered: dashboardQueryFiltersCounts(overviewRequest(DASHBOARD_QUERY)),
     });
     // Geburtstags-Termine tragen serverseitig einen sprachneutralen Titel
     // („Birthday: <Name>"); anhand von birthday_name in die aktive Sprache
@@ -1021,34 +1008,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     weatherPrefs = prefsRes.data ?? null;
     setWeatherAvailability(weatherRes, weatherPrefs);
     weatherAutoLocate = Boolean(prefsRes.data?.weather_user?.auto_locate ?? prefsRes.data?.weather_auto_locate);
-    widgetConfig = childDefaultFor(
-      normalizeDashboardConfigWithExtensions(prefsRes.data?.dashboard_widgets ?? buildDefaultWidgetConfig()),
-      user,
-      prefsRes.data?.dashboard_follows_default !== false,
-    );
-    /* WIDGET-OPTIONEN KOMMEN EINEN SCHRITT ZU SPAET (#814): die Uebersicht und
-     * die Praeferenzen laufen absichtlich parallel los, aber welche Filter
-     * gelten, steht erst in der Antwort der zweiten. Die erste Abfrage nimmt
-     * deshalb den Pfad, den dieses Geraet zuletzt gebraucht hat
-     * (`layoutHintQuery`, dieselbe Vorhersage wie beim Skelett) - im
-     * Regelfall stimmt er, und es bleibt bei einer Abfrage.
-     *
-     * Stimmt er nicht, wird nachgeholt, und zwar VOR dem ersten Zeichnen: sonst
-     * saehe man kurz Termine, die man ausgeblendet hat. Die Alternative - erst
-     * Praeferenzen, dann Uebersicht - kostete JEDEN Aufruf eine Rundreise, auch
-     * die ohne Optionen. */
-    if (dashboardQuery(widgetConfig) !== layoutHintQuery('/dashboard')) {
-      try {
-        const filtered = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
-        if (signal.aborted) return;
-        localizeEventLists(filtered);
-        data = filtered;
-        setCountdownAvailability(data?.countdowns);
-      } catch { /* die ungefilterte Antwort steht bereits - lieber mehr als nichts */ }
-    }
     data.pendingReminders = remindersRes;
-    // Das Skelett des NAECHSTEN Aufrufs lernt hier seine Kachelform.
-    rememberLayoutHint(widgetConfig, dashboardQuery(widgetConfig));
     screensaverEnabled = Boolean(prefsRes.data?.screensaver_enabled);
     // The household's choices for the wall (Tafla): its sections and whether
     // it may tick things off. Read on every build - an admin's switch reaches
@@ -1169,7 +1129,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // The row leaves now; the refresh after it brings the next pending task.
     data.urgentTasks = (data.urgentTasks ?? []).filter((item) => item.id !== task.id);
     if (Number.isFinite(Number(data.openTaskCount))) data.openTaskCount = Math.max(0, Number(data.openTaskCount) - 1);
-    rebuildDashboard(widgetConfig);
+    rebuildDashboard();
     window.yuvomi?.showToast(t('today.toastDone', { title: row.title }), 'default', 5000, async () => {
       try {
         await api.patch(`/tasks/${task.id}/status`, { status: before || 'open' });
@@ -1200,8 +1160,16 @@ export async function render(container, { user, signal: routeSignal = null } = {
       return;
     }
     if (action === 'add-task') {
-      // The existing sheet, set to a task; Dziś hears `yuvomi:captured` below.
-      await openCaptureSheet({ context: 'task' });
+      // The SAME form as "Nowe zadanie" in the head of Zadania
+      // (pages/tasks.js, openNewTaskFrom), loaded on demand like the task view
+      // (#918); after the save the card refreshes.
+      try {
+        const { openNewTaskFrom } = await import('/pages/tasks.js');
+        await openNewTaskFrom({ user, onChanged: () => refreshDashboardData() });
+      } catch (err) {
+        console.error('[Dashboard] Neue Aufgabe konnte nicht geöffnet werden:', err);
+        window.yuvomi?.showToast(err?.message ?? t('tasks.loadError'), 'danger');
+      }
     }
   }
 
@@ -1221,13 +1189,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
       event.preventDefault();
       window.yuvomi?.navigate(link.dataset.route);
-    }, { signal });
-  }
-
-  // A task added through the sheet shows up in the card at once.
-  if (!wallMode) {
-    window.addEventListener('yuvomi:captured', (event) => {
-      if (event.detail?.type === 'task') void refreshDashboardData();
     }, { signal });
   }
 
@@ -1281,7 +1242,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     }
     if (!jobs.length) return;
     await Promise.all(jobs);
-    if (!signal.aborted) rebuildDashboard(widgetConfig);
+    if (!signal.aborted) rebuildDashboard();
   }
 
   /** "Kto to zrobił?" on the display: a dialog with one big button per person. */
@@ -1362,7 +1323,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
         await api.post(`/shopping/${listId}/items`, { name, category_source: 'default' });
         wallUi.predictions = wallUi.predictions.filter((item) => item !== name);
         data.shoppingOpenCount = (Number(data.shoppingOpenCount) || 0) + 1;
-        rebuildDashboard(widgetConfig);
+        rebuildDashboard();
         window.yuvomi?.showToast(t('today.addedToast', { n: 1 }), 'default', 4000);
         void refreshDashboardData();
       } catch (err) {
@@ -1377,10 +1338,10 @@ export async function render(container, { user, signal: routeSignal = null } = {
       try {
         wallUi.questionSettled = await answerQuestion(api, question, index);
         wallUi.question = null;
-        rebuildDashboard(widgetConfig);
+        rebuildDashboard();
         setTimeout(() => {
           wallUi.questionSettled = null;
-          if (!signal.aborted) rebuildDashboard(widgetConfig);
+          if (!signal.aborted) rebuildDashboard();
         }, 3000);
       } catch (err) {
         wallWriteError(err);
@@ -1393,7 +1354,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
       try {
         await skipQuestion(api, question);
         wallUi.question = null;
-        rebuildDashboard(widgetConfig);
+        rebuildDashboard();
       } catch (err) {
         wallWriteError(err);
       }
@@ -1402,7 +1363,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   // Das Einpassen der Wand auf Aufbau und Fenstergroesse (Hoehenbudget).
   const wallFit = createWallFit(window, signal);
-  function rebuildDashboard(cfg) {
+  function rebuildDashboard() {
     // Der eine Engpass fuer jeden verspaeteten Neuaufbau (#977): eine Antwort,
     // die nach dem Verlassen der Seite oder nach dem naechsten render()
     // eintrifft, darf die Flaeche nicht mehr anfassen - sonst ueberschreibt der
@@ -1413,7 +1374,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     if (wallMode) {
       rebuildWall(container, shell, {
         surface: renderWallSurface(data, weather, { failed: loadFailed, updatedAt: lastLoadedAt, screensaverEnabled, ...wallOptions() }),
-        rerender: () => rebuildDashboard(widgetConfig),
+        rerender: () => rebuildDashboard(),
         signal,
         fit: wallFit,
         actions: wallActions,
@@ -1426,12 +1387,10 @@ export async function render(container, { user, signal: routeSignal = null } = {
       container.querySelector('#dashboard-retry')?.addEventListener('click', rerender, { signal: signal });
       return;
     }
-    // `cfg` bleibt das Argument aller Aufrufer; Dziś v2 hat keine Anordnung.
-    void cfg;
     renderToday(shell);
   }
 
-  rebuildDashboard(widgetConfig);
+  rebuildDashboard();
 
   if (wallMode || loadFailed) {
     // Kein FAB im Fehler-Zustand: seine Schnellaktionen würden in Module
@@ -1475,7 +1434,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     if (loadFailed || refreshInFlight) return;
     refreshInFlight = true;
     try {
-      const fresh = await api.get(overviewRequest(dashboardQuery(widgetConfig)));
+      const fresh = await api.get(overviewRequest(DASHBOARD_QUERY));
       if (signal.aborted) return;
       localizeEventLists(fresh);
       fresh.pendingReminders = await loadPendingReminders(overviewRequest);
@@ -1486,7 +1445,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
       data = fresh;
       setCountdownAvailability(data?.countdowns);
       lastLoadedAt = new Date();
-      rebuildDashboard(widgetConfig);
+      rebuildDashboard();
     } catch { /* Hintergrund-Refresh: bewusst still */ }
     finally { refreshInFlight = false; }
   }
@@ -1524,7 +1483,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     const next = dayStamp();
     if (next === dayFingerprint) return;
     dayFingerprint = next;
-    rebuildDashboard(widgetConfig);
+    rebuildDashboard();
   };
   startClockTicker(container, signal, () => {
     if (wallMode) {
@@ -1554,7 +1513,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
         if (signal.aborted) return;
         weather = res.data ?? null;
         setWeatherAvailability(res, weatherPrefs);
-        rebuildDashboard(widgetConfig);
+        rebuildDashboard();
       } catch { /* Hintergrund-Timer: bewusst still — der Nutzer hat nichts
                    angestoßen, ein Toast alle 30 Min wäre reiner Lärm. */ }
     };
@@ -1601,4 +1560,4 @@ async function loadPendingReminders(request = (path) => path, get = (path) => fe
   }
 }
 
-export const __test = { loadPendingReminders, childDefaultFor, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, renderFab, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };
+export const __test = { loadPendingReminders, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };

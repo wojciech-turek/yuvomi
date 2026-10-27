@@ -511,10 +511,11 @@ test('Geteilte Flaeche: die Wand fragt die Haushaltsfassung ab, die Uebersicht n
   // Fassung an der Wand.
   const { readFileSync } = await import('node:fs');
   const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  const calls = [...page.matchAll(/api\.get\(([^\n]*(?:dashboardQuery|layoutHintQuery)[^\n]*)/g)].map((m) => m[1]);
-  // 2026-10-27, v2: der vierte Abruf (nach dem Speichern der Widget-Optionen)
-  // ging mit „Dostosuj Dziś"; es bleiben Start, Nachholen und stiller Refresh.
-  assert.ok(calls.length >= 3, `nur ${calls.length} Abrufe der Uebersicht gefunden - misst der Leser noch?`);
+  // 2026-10-27, v2: die Seite fragt die Route ohne die Optionen der alten
+  // Kacheln (`DASHBOARD_QUERY`) - es bleiben Start und stiller Refresh; das
+  // Nachholen mit den Optionen und das Speichern der Optionen sind gegangen.
+  const calls = [...page.matchAll(/api\.get\(([^\n]*(?:DASHBOARD_QUERY|dashboardQuery|layoutHintQuery)[^\n]*)/g)].map((m) => m[1]);
+  assert.ok(calls.length >= 2, `nur ${calls.length} Abrufe der Uebersicht gefunden - misst der Leser noch?`);
   const bare = calls.filter((call) => !call.startsWith('overviewRequest('));
   assert.deepEqual(bare, [], 'Abruf der Uebersicht an `overviewRequest` vorbei');
   assert.match(page, /const overviewRequest = \(query\) => dashboardRequest\(query, \{ wall: wallMode \}\);/);

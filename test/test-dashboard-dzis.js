@@ -356,9 +356,10 @@ test('the styles: v2 card, the ongoing row in the accent wash, overdue in its to
   assert.match(body('.dz-sec__title'), /font-size:\s*var\(--type-section\)/);
   assert.match(body('.dz-cal__title'), /font-size:\s*var\(--type-row\)/);
   assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
-  // One hex stands on the page: the umbrella blue, which has no token.
+  // No hex on the page: the umbrella takes --color-rain-ink (tokens.css).
   const dzis = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').split(' * DZIŚ (design v2, 2026-10-27)')[1];
-  assert.deepEqual(dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/#[0-9a-f]{3,8}\b/gi), ['#2F6FDB']);
+  assert.equal(dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/#[0-9a-f]{3,8}\b/gi), null);
+  assert.match(body('.dz-weather__rain-icon'), /color:\s*var\(--color-rain-ink\)/);
 });
 
 test('"Tydzień" lands in the week: the calendar takes ?view= for one visit, without saving it', () => {
@@ -369,10 +370,35 @@ test('"Tydzień" lands in the week: the calendar takes ?view= for one visit, wit
   assert.doesNotMatch(branch[1], /setSavedCalendarView/, 'a link does not overwrite the remembered view');
 });
 
-test('the page ticks through the existing task API with an undo, and adds through the existing sheet', () => {
+test('the page ticks through the existing task API with an undo', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   assert.match(src, /await api\.patch\(`\/tasks\/\$\{task\.id\}\/status`, \{ status: 'done' \}\);/);
   assert.match(src, /showToast\(t\('today\.toastDone', \{ title: row\.title \}\), 'default', 5000, async \(\) => \{/);
-  assert.match(src, /await openCaptureSheet\(\{ context: 'task' \}\);/);
   assert.match(src, /canCheck: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
+});
+
+// 2026-10-27, v2 (after the chrome): the capture sheet and the global + are
+// gone. "Dodaj zadanie" opens the SAME form as "Nowe zadanie" in the head of
+// Zadania, and the card refreshes after the save.
+test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after the save', () => {
+  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  assert.match(src, /const \{ openNewTaskFrom \} = await import\('\/pages\/tasks\.js'\);\s*await openNewTaskFrom\(\{ user, onChanged: \(\) => refreshDashboardData\(\) \}\);/);
+  assert.doesNotMatch(src, /openCapture|capture-sheet|capture-plus|yuvomi:captured/);
+  const tasks = readFileSync(new URL('../public/pages/tasks.js', import.meta.url), 'utf8');
+  const entry = tasks.slice(tasks.indexOf('export async function openNewTaskFrom('), tasks.indexOf('export async function openTaskById('));
+  assert.match(entry, /if \(readOnly\(\)\) return false;/, 'read-only viewers get no form');
+  assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged \}, null\);/, 'the one form of the page, not a second one');
+  const header = tasks.slice(tasks.indexOf('function openNewTaskForm('), tasks.indexOf('function wireNewTaskBtn('));
+  assert.match(header, /openTaskModal\(\{ users: state\.users \}, container\);/, 'the head of Zadania opens the same modal');
+  assert.match(tasks, /onSave\(panel\) \{ wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\); \}/,
+    'from outside, the caller refreshes its own surface instead of a list that is not there');
+});
+
+test('the saved options of the old tiles no longer filter Dziś: one plain /dashboard, start and refresh', () => {
+  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  assert.match(src, /const DASHBOARD_QUERY = '\/dashboard';/);
+  assert.doesNotMatch(src, /dashboardQuery\(|layoutHintQuery|widgetConfig|dashboard_widgets/);
+  const gets = [...src.matchAll(/api\.get\(overviewRequest\(([^)]*)\)\)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(gets)], ['DASHBOARD_QUERY']);
+  assert.ok(gets.length >= 2, 'the first load and the silent refresh');
 });

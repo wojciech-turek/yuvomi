@@ -1031,12 +1031,15 @@
    *                            flag; 5.18 on white, 4.78 on the ground
    *   --color-rain             hourly rain bars (#5B8DEF, a shape: 3.23 on
    *                            the card), --color-rain-soft the dry hours
+   *   --color-rain-ink         the umbrella of a wet day on Dziś (#2F6FDB,
+   *                            an icon: 4.91 on the card)
    *   --color-card-border      the 1px edge of a card (no shadow in v2)
    * -------------------------------------------------------- */
   --color-separator-inner: #EFEEEA;
   --color-overdue:         #C2410C;
   --color-rain:            #5B8DEF;
   --color-rain-soft:       #DCE5F6;
+  --color-rain-ink:        #2F6FDB;
   --color-card-border:     var(--color-separator);
 
   /* KONVENTION "Akzent-Text auf akzent-getöntem Grund" (Chips, Badges,

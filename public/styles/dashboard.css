@@ -1441,14 +1441,12 @@
  * Everything runs on the v2 tokens (tokens.css, Foundations): the four type
  * steps `--type-page` 26, `--type-section` 17, `--type-row` 15 and
  * `--type-meta` 12, the card (`--color-card-border`, `--radius-card`, no
- * shadow), `--color-separator-inner` between rows, `--color-overdue` and the
- * rain pair `--color-rain` / `--color-rain-soft`.
+ * shadow), `--color-separator-inner` between rows, `--color-overdue`, the
+ * rain pair `--color-rain` / `--color-rain-soft` and the umbrella's
+ * `--color-rain-ink`. No hex stands on the page.
  * -------------------------------------------------------- */
 
 .dz {
-  /* The umbrella of a wet day: the design's blue (4.9:1 on the card). The
-   * foundation has no rain ink of its own; the chart takes the rain pair. */
-  --dz-umbrella: #2F6FDB;
   /* The time column of a calendar row: "09:30" at 15/600, wider for "9:30 PM". */
   --dz-time-col: 3rem;
 
@@ -1695,7 +1693,7 @@
   flex: none;
   inline-size: 18px;
   block-size: 18px;
-  color: var(--dz-umbrella);
+  color: var(--color-rain-ink);
   stroke-width: 1.75;
 }
 

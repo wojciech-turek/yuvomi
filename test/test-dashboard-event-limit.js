@@ -399,6 +399,9 @@ test('die Seite reicht dem Zahlenspeicher die Antwort nach der geteilten Regel, 
   // die des Haushalts, nicht die der Person - sie duerfen nie in den Speicher
   // der Navigations-Badges. Dass die Regel sie als gefiltert wertet, misst
   // test:wall-tasks.
-  assert.equal(call[1], "dashboardQueryFiltersCounts(overviewRequest(layoutHintQuery('/dashboard')))");
+  // 2026-10-27, v2: die Seite fragt die Route ohne die Optionen der alten
+  // Kacheln (`DASHBOARD_QUERY`); die Stufe reist nicht mehr mit.
+  assert.equal(call[1], 'dashboardQueryFiltersCounts(overviewRequest(DASHBOARD_QUERY))');
+  assert.match(pageSource, /const DASHBOARD_QUERY = '\/dashboard';/);
 });
 

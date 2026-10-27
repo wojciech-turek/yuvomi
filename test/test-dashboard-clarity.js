@@ -376,7 +376,8 @@ test('#1821 Fokus: der Neuaufbau der Seite ruft Erfassen und Wiederfokus, um das
   assert.ok(capture > 0, 'erfasst wird vor dem Aufbau');
   assert.ok(paint > capture, 'dann wird gebaut');
   assert.ok(restore > paint, 'und danach wieder fokussiert: eigener Schluessel, dann der Nachfolger der Geste');
-  assert.match(src, /function rebuildDashboard\(cfg\) \{[\s\S]*?renderToday\(shell\);/, 'jeder Neuaufbau ausserhalb der Wand geht durch renderToday()');
+  // 2026-10-27, v2: ohne Anordnung nimmt der Neuaufbau kein Argument mehr.
+  assert.match(src, /function rebuildDashboard\(\) \{[\s\S]*?renderToday\(shell\);/, 'jeder Neuaufbau ausserhalb der Wand geht durch renderToday()');
 });
 
 // 2026-10-27, v2: die Vorschau-Kacheln von Dziś („Kafelek podglądu",
@@ -671,7 +672,8 @@ test('Onboarding: Bildmarke im ersten Schritt, Lichtring auf Leiste und Plus-Kno
   // Tafla: das globale + der Shell (Telefon) oder die Pille im Kopf (Desktop).
   // 2026-10-27, v2: das globale + ist weg - Schritt 3 zeigt auf das „Neu" der
   // Seite, wo eines sichtbar steht (auf Dziś keins: dann ohne Ring).
-  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)?\s*target: \(\) => \[\.\.\.document\.querySelectorAll\('\.page-fab'\)\]\.find\(isShownOnScreen\)/,
+  // 2026-10-27, v2: auf Dziś ist das „Neu" der Seite „Dodaj zadanie".
+  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*target: \(\) => \[\.\.\.document\.querySelectorAll\('\.page-fab, \[data-today\] \.dz-tasks__add'\)\]\.find\(isShownOnScreen\)/,
     'Schritt 3 zeigt auf den sichtbaren Knopf der Seite');
   assert.doesNotMatch(steps, /capture-plus/);
   assert.match(show, /function placeSpotlight\(\)/);

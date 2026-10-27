@@ -18418,9 +18418,10 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
     'ein Neuaufbau reicht das Router-Signal weiter, sonst ueberlebt er das Verlassen der Seite');
   // Der Engpass fuer verspaetete Antworten (#977) und die Pruefungen hinter den
   // awaits, die selbst zeichnen.
-  const rebuild = render.slice(render.indexOf('function rebuildDashboard(cfg) {'), render.indexOf('function rebuildDashboard(cfg) {') + 400);
+  // 2026-10-27, v2: ohne Anordnung nimmt der Neuaufbau kein Argument mehr.
+  const rebuild = render.slice(render.indexOf('function rebuildDashboard() {'), render.indexOf('function rebuildDashboard() {') + 400);
   // Zwischen Kopf und Pruefung duerfen nur Zeilenkommentare stehen.
-  assert.match(rebuild, /function rebuildDashboard\(cfg\) \{\n(?:\s*\/\/[^\n]*\n)*\s*if \(signal\.aborted\) return;/,
+  assert.match(rebuild, /function rebuildDashboard\(\) \{\n(?:\s*\/\/[^\n]*\n)*\s*if \(signal\.aborted\) return;/,
     'rebuildDashboard() prueft als Erstes, ob dieser Aufbau noch gilt');
   for (const fn of ['async function refreshDashboardData()', 'const doAutoRefresh = async () =>']) {
     const at = render.indexOf(fn);
@@ -18428,11 +18429,12 @@ test('dashboard: Timer und Listener haengen am Signal des eigenen Aufbaus, nicht
     const body = render.slice(at, at + 1200);
     assert.match(body, /await [\s\S]*?if \(signal\.aborted\) return;/, `${fn}: nach dem await fehlt die Pruefung`);
   }
-  // Sieben Stellen: nach der ersten Antwortrunde, nach der gefilterten
-  // Nachfrage, im Engpass rebuildDashboard() und in den Pfaden, die von sich
-  // aus neu zeichnen (stiller Refresh, Wetter-Auto-Refresh); den Wetter-Knopf
-  // gibt es mit der Wetterkarte nicht mehr (Tafla).
-  assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 7,
+  // Nach der ersten Antwortrunde, im Engpass rebuildDashboard() und in den
+  // Pfaden, die von sich aus neu zeichnen (stiller Refresh, Wetter-Auto-
+  // Refresh); den Wetter-Knopf gibt es mit der Wetterkarte nicht mehr (Tafla),
+  // die gefilterte Nachfrage nicht mehr mit den Kachel-Optionen (v2,
+  // 2026-10-27) - es bleiben sechs.
+  assert.ok((render.match(/if \(signal\.aborted\) return;/g) ?? []).length >= 6,
     'die Pruefung steht hinter jedem await des Hauptflusses und in jedem Pfad, der selbst zeichnet');
 });
 
