@@ -62,14 +62,14 @@ export function personDisc(person, { size = 20, label = true, household = [] } =
 
 /**
  * The person dot of a calendar row: one colour, two for "razem", grey for
- * nobody. The dot takes the brighter dot shade of the v2 tokens
- * (`--person-N-dot`) where it exists, else the person's ink.
+ * nobody. The dot is the brighter dot shade of the v2 tokens
+ * (`--person-N-dot`, tokens.css), not the disc ink.
  */
 function dots(people, household) {
   if (!people?.length) return '<span class="dz-dots" aria-hidden="true"><span class="dz-dot dz-dot--none"></span></span>';
   const dot = (person, cls = '') => {
-    const { slot, ink } = personToken(person, household);
-    return `<span class="dz-dot${cls}" style="--dot: var(--person-${slot}-dot, ${ink})"></span>`;
+    const { slot } = personToken(person, household);
+    return `<span class="dz-dot${cls}" style="--dot: var(--person-${slot}-dot)"></span>`;
   };
   return `<span class="dz-dots${people.length > 1 ? ' dz-dots--pair' : ''}" aria-hidden="true">${dot(people[0])}${people[1] ? dot(people[1], ' dz-dot--second') : ''}</span>`;
 }

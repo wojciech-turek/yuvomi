@@ -1149,7 +1149,9 @@ test('die Rasterkarte traegt eine feste Vorschauflaeche, das Blatt liegt GANZ un
   assert.match(media.body, /padding:\s*var\(--space-3\)/, 'das Blatt liegt mit Rand in der Mulde');
   const tokens = read('../public/styles/tokens.css');
   assert.match(tokens, /--_media-sheet-opacity:\s*1;/);
-  assert.equal((tokens.match(/--_media-sheet-opacity:\s*0\.82;/g) ?? []).length, 2, 'beide Dark-Bloecke daempfen das Blatt');
+  // 2026-10-27, v2: light only - die Daempfung des Blatts in beiden Dark-Bloecken
+  // (0.82) ist mit dem Dark Mode gegangen; hell bleibt das Blatt voll deckend.
+  assert.doesNotMatch(tokens, /--_media-sheet-opacity:\s*0\.82;/, 'kein Dark-Wert mehr');
   // Das Einblenden endet auf der Deckkraft des Blatts, nicht auf 1.
   const kf = css.slice(css.indexOf('@keyframes document-thumb-in'), css.indexOf('@keyframes document-thumb-in') + 120);
   assert.doesNotMatch(kf, /to\s*\{\s*opacity:\s*1/, 'ein festes Ende auf 1 hoebe die Daempfung im Dark nach dem Einblenden auf');

@@ -358,9 +358,24 @@ test('die Produkt-Typografie nutzt feste semantische Rollenwerte', () => {
   );
   assert.match(tokens, /--text-xs:\s*0\.8125rem/, '--text-xs ist die Tafla-Footnote (13px)');
   assert.match(tokens, /--font-weight-medium:\s*400;/, 'Tafla kennt zwei Gewichte: medium faellt auf 400');
-  assert.match(tokens, /--font-rounded:\s*ui-rounded,\s*"SF Pro Rounded"/,
-    '--font-rounded fuehrt mit dem Systemschnitt (ui-rounded), ohne Webfont');
-  assert.doesNotMatch(tokens, /@font-face/, 'Tafla laedt keine Webfont');
+  // 2026-10-27, v2: Inter statt der System- und Rundschnitte ("not these
+  // rounded cartoonish ones"). --font-sans fuehrt mit Inter aus einem
+  // selbst gehosteten @font-face (CSP: font-src 'self'); --font-rounded und
+  // ui-rounded gibt es nirgends mehr. Bis v2 stand hier das Gegenteil: kein
+  // Webfont, --font-rounded mit ui-rounded vorn.
+  assert.match(tokens, /--font-sans:\s*"Inter",/, '--font-sans fuehrt mit Inter');
+  const face = tokens.match(/@font-face\s*\{([^}]*)\}/);
+  assert.ok(face, 'tokens.css traegt das @font-face fuer Inter');
+  assert.match(face[1], /font-family:\s*"Inter"/);
+  assert.match(face[1], /font-weight:\s*100 900/, 'eine variable Datei fuer 100-900');
+  assert.match(face[1], /font-display:\s*swap/, 'nie unsichtbarer Text, bis die Datei da ist');
+  assert.match(face[1], /src:\s*url\("\/fonts\/inter\/InterVariable\.woff2"\)\s*format\("woff2"\)/,
+    'selbst gehostet unter /fonts/inter/');
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const rounded = readdirSync(styleDir).filter((f) => f.endsWith('.css'))
+    .filter((f) => /--font-rounded\s*:|var\(--font-rounded\)|ui-rounded|SF Pro Rounded/
+      .test(readFileSync(new URL(f, styleDir), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')));
+  assert.deepEqual(rounded, [], 'kein Rundschnitt mehr in den Stylesheets');
 });
 
 test('Raster und Liste der Dokumente verwenden dieselbe Titelrolle', () => {

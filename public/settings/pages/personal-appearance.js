@@ -10,8 +10,6 @@ import { esc } from '/utils/html.js';
 import { appendCurrencyOptions, persistCurrencySelection } from '/settings/currency.js';
 import { getPreferences, resetPreferencesCache, savePreferences } from '/settings/preferences-cache.js';
 import { settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
-import { wireTablist } from '/utils/tablist.js';
-import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import { isWallModeEnabled, setWallModeEnabled } from '/utils/wall-mode.js';
 import {
   SCREENSAVER_IDLE_STEPS,
@@ -34,14 +32,8 @@ import {
   numberLocaleFor,
 } from '/settings/region-presets.js';
 
-// Der Name jedes Segments ist sein sichtbares Wort - vorher trug es ein
-// abweichendes aria-label („Dunkles Design" zu „Dunkel"), und die Gruppe
-// selbst heisst schon „Design" (WCAG 2.5.3, Label im Namen).
-const THEME_OPTIONS = [
-  { value: 'system', icon: 'monitor', labelKey: 'settings.themeSystem' },
-  { value: 'light', icon: 'sun', labelKey: 'settings.themeLight' },
-  { value: 'dark', icon: 'moon', labelKey: 'settings.themeDark' },
-];
+// (Hier stand die Wahl Hell / Dunkel / System. Seit v2, 2026-10-27, ist die
+// App immer hell - das Blatt beginnt mit der Sprache.)
 
 const DATE_FORMATS = [
   ['mdy', 'MM/DD/YYYY'],
@@ -76,10 +68,6 @@ function safeStorageRemove(key) {
   } catch {
     // Storage can be unavailable in private or restricted browser contexts.
   }
-}
-
-function currentTheme() {
-  return safeStorageGet('yuvomi-theme', 'system') || 'system';
 }
 
 function formatOptions(selected) {
@@ -276,40 +264,10 @@ function renderLoadError(container) {
  * nicht die Struktur (Critique 2026-07-27).
  */
 function renderPage(container, preferences, isAdmin) {
-  const theme = currentTheme();
   const activeRegion = resolveRegion(preferences);
   const customHidden = isAdmin && activeRegion !== CUSTOM_REGION;
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
-    <section class="settings-section">
-      <h2 class="settings-section__title">${t('settings.sectionDesign')}</h2>
-      <!-- EIN TRAEGER JE ABSCHNITT (R17, E9): bis dahin stand jede dieser
-           Einstellungen in ihrer eigenen Karte - zehn Einstellungen in acht
-           Karten, drei davon im ersten Bild. -->
-      <div class="row-carrier settings-group">
-        <!-- Hell / Dunkel / System ist EIN Wert aus drei - das Segment der
-             Shell im Well (.segmented, panel.css; DESIGN.md "Segmented
-             Controls"). Bis 2026-09-26 standen hier drei getrennte
-             Rahmenknoepfe ohne Traeger (Critique A7). radiogroup statt
-             aria-pressed: genau einer gilt, und Pfeiltasten gehoeren dazu.
-             Die Zeile traegt kein eigenes Label: die Abschnittsueberschrift
-             direkt darueber IST es (aria-label am Segment). -->
-        <div class="settings-setting-row settings-setting-row--stacked">
-          <div class="settings-setting-row__control">
-            <div class="segmented settings-segmented" id="theme-toggle" role="radiogroup" aria-label="${esc(t('settings.sectionDesign'))}">
-              ${THEME_OPTIONS.map(({ value, icon, labelKey }) => {
-                const on = theme === value;
-                return `<button type="button" class="segmented__item${on ? ' is-active' : ''}" role="radio"
-                  data-tab-id="${value}" aria-checked="${on}" tabindex="${on ? '0' : '-1'}">
-                  <i data-lucide="${icon}" class="icon-md" aria-hidden="true"></i>${esc(t(labelKey))}
-                </button>`;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="settings-section">
       <h2 class="settings-section__title">${t('settings.languageTitle')}</h2>
       <div class="row-carrier settings-group">
@@ -424,24 +382,6 @@ function renderPage(container, preferences, isAdmin) {
       <p class="form-hint settings-group__footer" id="formats-household-hint"${customHidden ? ' hidden' : ''}>${t('settings.formatsHouseholdHint')}</p>
     </section>
   `);
-}
-
-function applyTheme(value) {
-  safeStorageSet('yuvomi-theme', value);
-  if (window.yuvomi?.applyTheme) {
-    try {
-      window.yuvomi.applyTheme(value);
-      return;
-    } catch {
-      // Fall back to applying the theme directly when router storage fails.
-    }
-  }
-
-  if (value === 'dark' || value === 'light') {
-    document.documentElement.setAttribute('data-theme', value);
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
 }
 
 // Spiegelt die aktive Region als Formatier-Locale für Zahlen/Währung in den
@@ -679,16 +619,6 @@ function bindDeviceDisplay(container) {
 }
 
 function bindEvents(container, user) {
-  // Geteilte gleitende Kapsel (Re-Critique 2026-09-27, D8).
-  const themeToggle = container.querySelector('#theme-toggle');
-  if (themeToggle) attachSegmentIndicator(themeToggle);
-  wireTablist(themeToggle, {
-    activeId: currentTheme(),
-    activeClass: 'is-active',
-    mode: 'select',
-    onChange: (value) => applyTheme(value),
-  });
-
   bindDeviceDisplay(container);
 
   const localeSelect = container.querySelector('#locale-select');

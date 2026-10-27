@@ -129,7 +129,6 @@ export const SETTINGS_SECTIONS = freezeEntries([
     labelKey: 'settings.pageAppearance',
     descriptionKey: 'settings.pageAppearanceDescription',
     options: [
-      { key: 'settings.sectionDesign', also: ['settings.themeSystem', 'settings.themeLight', 'settings.themeDark'] },
       'settings.localeLabel',
       'settings.dataLanguageLabel',
       'settings.regionLabel',

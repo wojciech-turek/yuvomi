@@ -488,9 +488,8 @@ export async function openPage(harness, { device = 'mobile', theme = 'light', lo
       localStorage.setItem('yuvomi-locale', l);
       localStorage.setItem('yuvomi-onboarded', '1');
       localStorage.setItem('yuvomi-install-dismissed', String(Date.now()));
-      localStorage.setItem('yuvomi-theme', t);
     },
-    { t: theme, l: locale },
+    { l: locale },
   );
 
   page.__yuvomiBase = harness.baseUrl;
@@ -552,15 +551,11 @@ export async function settle(page) {
  */
 export async function gotoRoute(page, path) {
   await page.goto(`${page.__yuvomiBase}${path}`, { waitUntil: 'domcontentloaded' });
-  // Ein harter Ladevorgang setzt das Attribut zurueck, das der Theme-Umschalter
-  // sonst aus localStorage schreibt - hier wird es explizit nachgezogen.
-  try {
-    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), page.__yuvomiTheme);
-  } catch {
-    /* Weiterleitung mitten im Aufruf; settle() wartet den Aufbau ohnehin ab. */
-  }
+  // 2026-10-27, v2: light only. Hier wurde das gewaehlte Theme als `data-theme`
+  // nachgezogen; die App setzt keins mehr, und die Sonden messen sie so, wie
+  // sie steht. `theme` bleibt als System-Praeferenz (prefers-color-scheme) -
+  // die App muss auch unter einem dunklen System hell bleiben.
   await settle(page);
-  await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), page.__yuvomiTheme);
 }
 
 /**

@@ -7,10 +7,10 @@
  *
  * WARUM NICHT DIE AVATARFARBE SELBST. users.avatar_color ist frei waehlbar
  * (Farbwaehler in den Einstellungen, iOS-Systemfarben als Vorgabe): auf
- * Papier wie auf Kohle haelt eine beliebige Farbe als Text oder 3pt-Kante
- * keine Zusage. Tafla nimmt deshalb die NAECHSTE kuratierte Farbe - jedes
- * Paar ist in beiden Themes AA-gemessen (Initial auf der Toenung, Text auf
- * Karte, Papier, Fill und Herd). Die Farbe, die jemand gewaehlt hat, bleibt
+ * Papier haelt eine beliebige Farbe als Text oder 3pt-Kante keine Zusage.
+ * Tafla nimmt deshalb die NAECHSTE kuratierte Farbe - jedes Paar ist
+ * AA-gemessen (Initial auf der Toenung, Text auf Karte, Papier, Fill und
+ * Herd). Die Farbe, die jemand gewaehlt hat, bleibt
  * die Richtung; die Palette liefert die lesbare Fassung davon.
  *
  * STABIL: dieselbe Person bekommt immer denselben Platz. Ohne Haushaltsliste
@@ -26,14 +26,16 @@
 
 import { esc } from './html-escape.js';
 
-/** Die sechs Plaetze. `hue` ist der Farbton der hellen Tinte (HSL-Grad). */
+/** Die sechs Plaetze. `hue` ist der Farbton der Tinte (HSL-Grad).
+ * v2 (2026-10-27): nur noch hell - die dunklen Paare sind mit dem Dark Mode
+ * gegangen; Blau und Rose tragen die Scheiben aus Foundations.dc.html. */
 export const PERSON_PALETTE = Object.freeze([
-  Object.freeze({ slot: 1, key: 'blue', hue: 212, ink: '#2A64A8', tint: '#E1E9F3', darkInk: '#7AAEEB', darkTint: '#2F3A47' }),
-  Object.freeze({ slot: 2, key: 'rose', hue: 335, ink: '#AD3568', tint: '#F4E3EA', darkInk: '#F08AB4', darkTint: '#4A3139' }),
-  Object.freeze({ slot: 3, key: 'green', hue: 144, ink: '#2A6E45', tint: '#E0EFE5', darkInk: '#6ABA8C', darkTint: '#2A3D31' }),
-  Object.freeze({ slot: 4, key: 'terracotta', hue: 19, ink: '#A3461C', tint: '#F6E5DA', darkInk: '#EC9A70', darkTint: '#47322A' }),
-  Object.freeze({ slot: 5, key: 'plum', hue: 294, ink: '#8F4398', tint: '#F2E4F4', darkInk: '#D396DB', darkTint: '#42324A' }),
-  Object.freeze({ slot: 6, key: 'teal', hue: 187, ink: '#146B77', tint: '#DCEDEF', darkInk: '#5BBAC4', darkTint: '#253C3F' }),
+  Object.freeze({ slot: 1, key: 'blue', hue: 219, ink: '#1F4FA8', tint: '#E3ECFB' }),
+  Object.freeze({ slot: 2, key: 'rose', hue: 340, ink: '#A3264F', tint: '#FBE4EC' }),
+  Object.freeze({ slot: 3, key: 'green', hue: 144, ink: '#2A6E45', tint: '#E0EFE5' }),
+  Object.freeze({ slot: 4, key: 'terracotta', hue: 19, ink: '#A3461C', tint: '#F6E5DA' }),
+  Object.freeze({ slot: 5, key: 'plum', hue: 294, ink: '#8F4398', tint: '#F2E4F4' }),
+  Object.freeze({ slot: 6, key: 'teal', hue: 187, ink: '#146B77', tint: '#DCEDEF' }),
 ]);
 
 /** Unter dieser Saettigung (HSL) hat eine Farbe keinen Ton, der zaehlt. */

@@ -203,17 +203,8 @@
   margin-top: 4px;
 }
 
-@media screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .schedule-page input[type="time"],
-  :root:not([data-theme="light"]) .schedule-modal-form input[type="time"] {
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] .schedule-page input[type="time"],
-:root[data-theme="dark"] .schedule-modal-form input[type="time"] {
-  color-scheme: dark;
-}
+/* (Hier stand das dunkle Farbschema der Zeitfelder im Dark - entfallen mit
+ * dem Dark Mode, v2 2026-10-27.) */
 
 /* 12rem fits "24 · 24-hour shift" (the longest shipped preset) without the
  * native <select> eliding its own closed-state text - a <select> can't wrap
@@ -344,14 +335,8 @@
   flex: 0 0 auto;
 }
 
-/* Swatches im Dark mit Kante (Re-Critique 2026-09-28, P9): die Presets halten
- * dort jetzt >= 3:1, eine BESTANDSFARBE aus der Zeit davor (700-900er Toene,
- * keine Migration) faellt aber unter 2:1 und verschwaende in der Karte. Die
- * Kante aus dem Kanten-Token traegt den Punkt unabhaengig von seinem Ton. */
-@media screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .schedule-swatch { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
-}
-:root[data-theme="dark"] .schedule-swatch { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+/* (Die Kante der Swatches im Dark - Re-Critique 2026-09-28, P9 - ist mit dem
+ * Dark Mode gegangen, v2 2026-10-27.) */
 
 .schedule-entry-row,
 .schedule-type-row,
@@ -667,11 +652,6 @@
   }
 }
 
-@media screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .schedule-page input[type="month"] { color-scheme: dark; }
-}
-
-:root[data-theme="dark"] .schedule-page input[type="month"] { color-scheme: dark; }
 
 /* Auswertung mobil: zwei Zeilen statt einer 257px-Formularkarte (R16) - die
  * Begruendung steht am Dateiende bei der Bedienflaeche des Vergleichs. */

@@ -286,7 +286,7 @@ test('Kalendarz: the fold is a real disclosure, the ongoing row is marked, Tydzi
   assert.equal(count(html, /dz-cal__row--now/g), 1);
   assert.match(html, /href="\/calendar\?view=week"[^>]*>calendar\.viewWeek</);
   assert.equal(count(html, /dz-dots--pair/g), 1, 'razem draws both colours');
-  assert.match(html, /style="--dot: var\(--person-\d-dot, var\(--person-\d\)\)"/);
+  assert.match(html, /style="--dot: var\(--person-1-dot\)"[\s\S]*style="--dot: var\(--person-2-dot\)"/, 'Wojtek blue, Mariola rose');
   assert.match(html, /class="dz-cal__tomorrow" href="\/calendar\?date=2026-10-28"/);
   const quiet = pageAt('10:15', {}, { planEvents: [], ...TASKS });
   assert.match(quiet, /<p class="dz-cal__empty">today\.calendarEmpty<\/p>/);
@@ -336,22 +336,26 @@ test('the styles: v2 card, the ongoing row in the accent wash, overdue in its to
   const { eachRule } = await import('./css-rules.js');
   const rules = [...eachRule(readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8'))];
   const body = (selector) => rules.filter((rule) => rule.at.length === 0 && rule.selector.split(',').map((s) => s.trim()).includes(selector)).map((rule) => rule.body).join(';');
-  assert.match(body('.dz-card'), /border:\s*1px solid var\(--dz-card-edge\)/);
-  assert.match(body('.dz-card'), /border-radius:\s*var\(--dz-radius\)/);
+  assert.match(body('.dz-card'), /border:\s*1px solid var\(--color-card-border\)/);
+  assert.match(body('.dz-card'), /border-radius:\s*var\(--radius-card\)/);
   assert.doesNotMatch(body('.dz-card'), /box-shadow/, 'v2 cards carry no shadow');
   assert.match(body('.dz-cal__row--now .dz-cal__link'), /color-mix\(in srgb, var\(--color-accent\) var\(--tint-wash\)/);
-  assert.match(body('.dz-task__due--late'), /color:\s*var\(--dz-late\)/);
-  assert.match(body('.dz-chart__bar--wet'), /background:\s*var\(--dz-rain\)/);
+  assert.match(body('.dz-task__due--late'), /color:\s*var\(--color-overdue\)/);
+  assert.match(body('.dz-chart__bar--wet'), /background:\s*var\(--color-rain\)/);
+  assert.match(body('.dz-chart__bar'), /background:\s*var\(--color-rain-soft\)/);
   assert.match(body('.day-check'), /inline-size:\s*var\(--target-base\)/);
   assert.match(body('.day-check'), /block-size:\s*var\(--target-base\)/);
   for (const sel of ['.dz-cal__earlier', '.dz-cal__tomorrow', '.dz-tasks__add', '.dz-soon__row']) {
     assert.match(body(sel), /min-block-size:\s*var\(--target-base\)/, `${sel} keeps a 44 hit`);
   }
-  // The v2 tokens win once they are there; the design's values only stand in.
-  const root = body('.dz');
-  for (const token of ['--type-page', '--type-section', '--type-row', '--type-meta', '--color-overdue', '--color-rain', '--color-rain-soft', '--radius-card']) {
-    assert.match(root, new RegExp(`var\\(${token},`), `${token} is read first`);
-  }
+  // The v2 type steps, not the Tafla ones (34/22/17/13).
+  assert.match(body('.dz-head__greeting'), /font-size:\s*var\(--type-page\)/);
+  assert.match(body('.dz-sec__title'), /font-size:\s*var\(--type-section\)/);
+  assert.match(body('.dz-cal__title'), /font-size:\s*var\(--type-row\)/);
+  assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
+  // One hex stands on the page: the umbrella blue, which has no token.
+  const dzis = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').split(' * DZIŚ (design v2, 2026-10-27)')[1];
+  assert.deepEqual(dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/#[0-9a-f]{3,8}\b/gi), ['#2F6FDB']);
 });
 
 test('"Tydzień" lands in the week: the calendar takes ?view= for one visit, without saving it', () => {

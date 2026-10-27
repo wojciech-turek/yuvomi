@@ -5,56 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title data-i18n="title">Yuvomi Setup</title>
   <meta name="description" content="Set up your self-hosted Yuvomi family planner: server, security keys, integrations and the first admin account.">
-  <!-- Fallback-Tokens VOR dem tokens.css-Link: lädt tokens.css (inkl. Dark-Mode-
-       Media-Query), gewinnen dessen spätere :root-Regeln per Cascade. Fehlt
+  <!-- Fallback-Tokens VOR dem tokens.css-Link: lädt tokens.css, gewinnen dessen
+       spätere :root-Regeln per Cascade. Seit v2 (2026-10-27) nur hell - wie die
+       App; der Dark-Block, der den Dark Mode von tokens.css spiegelte, ist weg. Fehlt
        tokens.css (falscher OIKOS_INSTALLER_ROOT, Packaging-/Volume-Fehler), bleibt
        der Installer trotzdem lesbar statt Serif-auf-Transparent zu rendern -
        genau die fehlkonfigurierte Umgebung, in der ein Installer läuft. -->
   <style>
     :root {
-      /* Sagt dem Browser, dass beide Modi bedient werden. Ohne diese Zeile
-         rendert er UA-Bedienelemente (die unchecked Checkbox!) in Hell-Optik,
-         auch wenn die ganze Seite dunkel ist - ein weisses Kaestchen auf
-         dunkler Flaeche. Betrifft nur das, was der Browser selbst zeichnet. */
-      color-scheme: light dark;
-      /* Der System-Font-Stack, nicht Plus Jakarta Sans: die Schrift ist mit dem
-         HIG-Redesign aus der App entfallen, und ein Fallback, der sie lädt,
-         zeigt eine Welt, die es nicht mehr gibt. */
-      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+      /* v2 (2026-10-27): nur das helle Theme, wie die App - auch fuer das, was
+         der Browser selbst zeichnet. */
+      color-scheme: light;
+      /* Der Stack der App (v2): Inter, dahinter die Systemschrift. Das
+         @font-face kommt mit tokens.css; ohne sie greift Inter nur, wenn es
+         lokal installiert ist. */
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       --font-mono: ui-monospace, 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
-      --color-bg: #F5F3ED;
+      --color-bg: #F6F6F3;
       --color-surface: #FFFFFF;
-      --color-surface-2: #FBFAF7;
-      --color-border: #E4E0D7;
-      /* Ruhekante der Eingabefelder, wie in tokens.css die Feldkante der
-         Tafla-Spezifikation (#8A857C, 3,67:1 auf Weiss). --color-border
+      --color-surface-2: #FBFBF9;
+      --color-border: #EAE9E5;
+      /* Ruhekante der Eingabefelder, wie in tokens.css die Feldkante (v2
+         #87867F, 3,65:1 auf Weiss, 3,06 auf der Fuellung). --color-border
          (Karten, Gruppen) liegt auf der Feldflaeche bei rund 1,3:1 - ein leeres
          Feld war damit kaum als Feld zu erkennen, und WCAG 1.4.11 verlangt fuer
          die Kante eines Bedienelements 3:1. */
-      --neutral-500: #8C8880;
-      --color-border-control: #8A857C;
+      --neutral-500: #8D8C87;
+      --color-border-control: #87867F;
       /* Bahn eines ausgeschalteten Schalters (.toggle__track), wie in der App:
          3:1 gegen die Karte und die Zeile im Hover (WCAG 1.4.11, #1572). */
-      --color-switch-off: #88847C;
-      --color-text-primary: #1C1B19;
-      --color-text-secondary: #5E5A53;
-      --color-text-tertiary: #6B675F;
+      --color-switch-off: #87867F;
+      --color-text-primary: #1A1A19;
+      --color-text-secondary: #5F5E5A;
+      --color-text-tertiary: #696863;
       /* Haarlinie zwischen den Zeilen einer Inset-Gruppe (Kasten-in-Kasten-
          Regel der App): leiser als --color-border, das Karten abgrenzt. */
-      --color-border-subtle: #E2DDD3;
+      --color-border-subtle: #EAE9E5;
       /* tokens.css leitet dieses Token aus --color-text-tertiary ab; hier steht
          dessen Wert direkt, weil der Fallback keine zweite Ebene braucht. */
-      --color-text-placeholder: #6B675F;
+      --color-text-placeholder: #696863;
       --color-accent: #6C3AED;
       --color-accent-hover: #5A2BD6;
-      /* Traegt die Primaerbutton-Mischung der App. Die Rampe INVERTIERT im Dark
-         Mode (#FBFAF7 statt #0E0D0B) - dadurch wird der Knopf dort heller statt
-         dunkler, und die dunkle Tinte darauf gewinnt Kontrast statt zu verlieren. */
-      --neutral-950: #0E0D0B;
-      /* Tinte auf farbiger Fläche. Muss dem Theme folgen: --color-accent hellt
-         im Dark-Mode auf #B49CFF auf, weißer Text fällt dort durch.
-         tokens.css definiert dasselbe Token; dessen --color-text-on-accent ist
-         dagegen statisch weiß und taugt hier deshalb nicht. */
+      /* Traegt die Primaerbutton-Mischung der App. */
+      --neutral-950: #0E0E0D;
+      /* Tinte auf farbiger Fläche, wie --color-ink-on-vivid in tokens.css. */
       --color-ink-on-vivid: #FFFFFF;
       --color-success: #1C7134;
       --color-warning: #8F5000;
@@ -85,9 +79,9 @@
       --line-height-tight: 1.21;
       --tracking-tight: -0.015em;
       --tracking-label: 0;
-      --shadow-sm: 0 1px 2px rgba(41, 37, 31, 0.04), 0 2px 6px rgba(41, 37, 31, 0.04);
-      --shadow-md: 0 2px 10px rgba(41, 37, 31, 0.08), 0 1px 2px rgba(41, 37, 31, 0.04);
-      --shadow-lg: 0 8px 28px rgba(41, 37, 31, 0.12), 0 2px 6px rgba(41, 37, 31, 0.04);
+      --shadow-sm: 0 1px 2px rgba(26, 26, 25, 0.04), 0 2px 6px rgba(26, 26, 25, 0.04);
+      --shadow-md: 0 2px 10px rgba(26, 26, 25, 0.08), 0 1px 2px rgba(26, 26, 25, 0.04);
+      --shadow-lg: 0 8px 28px rgba(26, 26, 25, 0.12), 0 2px 6px rgba(26, 26, 25, 0.04);
       /* Motion der App (tokens.css, Abschnitt Bewegung). Jede Transition und
          Animation im Installer rechnet nur mit diesen Stufen; ohne tokens.css
          waeren die var() sonst leer und jede Bewegung ungueltig. */
@@ -104,29 +98,6 @@
          --glass-inset-strength, das in beiden Themes 1 ist. */
       --ease-glass: cubic-bezier(0.34, 1.56, 0.64, 1);
       --glass-inset-thumb: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        /* --color-surface-2 liegt hier TIEFER als --color-bg (#0F0E0D gegen
-           #191816) - das ist kein Vertipper, sondern die Dunkelseite der App:
-           die gehobene Fläche ist die Karte (--color-surface), der Grund darunter
-           wird dunkler statt heller. --color-border folgt nicht der
-           Neutralen-Rampe, tokens.css setzt es im Dark-Mode eigens. */
-        --color-bg: #191816; --color-surface: #2B2825; --color-surface-2: #0F0E0D;
-        --color-border: #45403A; --color-text-primary: #F5F1E8; --color-text-secondary: #B3ACA1;
-        --color-text-placeholder: #A9A39A; --color-text-tertiary: #A9A39A;
-        --color-border-subtle: #3E3933;
-        --color-accent: #B49CFF; --color-accent-hover: #C6B4FF; --color-ink-on-vivid: #0A0A0C;
-        --neutral-950: #FBFAF7; --neutral-500: #948E85; --color-switch-off: #948E85;
-        --color-border-control: #8A8378;
-        --color-success: #5CC27D; --color-warning: #E6A94F; --color-danger: #FF7B76;
-        /* Inkl. des 1px-Kantenrings aus tokens.css (Dark-Kur 2026-08-17): ein
-           reiner Schwarz-Wurf ist auf der Kohle-Buehne unsichtbar, die Karte
-           hinge allein am Flaechenkontrast. */
-        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.06);
-        --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.06);
-        --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
-      }
     }
   </style>
   <!-- App-Designtokens + Plus Jakarta Sans, vom Installer-Server ausgeliefert.

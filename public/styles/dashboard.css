@@ -448,7 +448,8 @@
 .wall__clock,
 .wall__timer-value {
   flex: none;
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-display);
   line-height: var(--wall-display-lh);
   font-weight: var(--font-weight-semibold);
@@ -478,7 +479,8 @@
 }
 
 .wall__clock-small {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
@@ -510,7 +512,8 @@
 }
 
 .wall__weather-temp {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-title);
   line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
@@ -850,7 +853,8 @@
 }
 
 .wall-row__time {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-body);
   line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
@@ -1294,9 +1298,16 @@
  * Das Problem im dunklen Flur ist die Leuchtdichte. Nachts bleibt nur die Uhr,
  * bernsteinfarben auf fast Schwarz (`--wall-night-bg`, `--wall-night-ink`,
  * 5.40:1), dazu das Datum und was morgen als Erstes ansteht; Ausstieg und
- * Minutnik bleiben bedienbar. Die Wahl des Themes bleibt unberuehrt
- * (utils/wall-mode.js erzwingt nachts nur das dunkle). */
+ * Minutnik bleiben bedienbar.
+ *
+ * v2 (2026-10-27): bis hierher schaltete die Wurzel nachts zusaetzlich auf das
+ * dunkle Theme. Das gibt es nicht mehr - die Szene traegt ihr Dunkel allein,
+ * und was in ihr noch Tinte, Tinte-2 oder Akzent nimmt (Wetter, ein
+ * abgelaufener Timer), nimmt hier den Bernstein. */
 .wall[data-scene="noc"] {
+  --color-text-primary: var(--wall-night-ink);
+  --color-text-secondary: var(--wall-night-ink);
+  --color-accent: var(--wall-night-ink);
   background: var(--wall-night-bg);
   color: var(--wall-night-ink);
 }
@@ -1427,32 +1438,18 @@
  * the pending tasks and the birthdays soon - nothing else. Markup in
  * components/today-view.js, model in utils/dzis-plan.js.
  *
- * THE v2 TOKENS come with the foundation (tokens.css: `--type-page`,
- * `--type-section`, `--type-row`, `--type-meta`, `--color-overdue`,
- * `--color-rain`, `--radius-card` ...). Until they are on the branch each one
- * reads through a page variable with the design's value as its fallback; once
- * they are, the fallbacks are never taken.
+ * Everything runs on the v2 tokens (tokens.css, Foundations): the four type
+ * steps `--type-page` 26, `--type-section` 17, `--type-row` 15 and
+ * `--type-meta` 12, the card (`--color-card-border`, `--radius-card`, no
+ * shadow), `--color-separator-inner` between rows, `--color-overdue` and the
+ * rain pair `--color-rain` / `--color-rain-soft`.
  * -------------------------------------------------------- */
 
 .dz {
-  --dz-page: var(--type-page, 1.625rem);
-  --dz-page-lh: var(--type-page-lh, 2rem);
-  --dz-page-tracking: var(--type-page-tracking, var(--tracking-display));
-  --dz-section: var(--type-section, 1.0625rem);
-  --dz-section-lh: var(--type-section-lh, 1.5rem);
-  --dz-row: var(--type-row, 0.9375rem);
-  --dz-row-lh: var(--type-row-lh, 1.25rem);
-  --dz-meta: var(--type-meta, 0.75rem);
-  --dz-meta-lh: var(--type-meta-lh, 1rem);
-  --dz-card-edge: var(--color-card-border, var(--color-separator));
-  --dz-sep: var(--color-separator-inner, var(--color-separator));
-  --dz-ink-3: var(--color-ink-3);
-  --dz-late: var(--color-overdue, var(--color-warning));
-  --dz-rain: var(--color-rain, #5B8DEF);
-  --dz-rain-soft: var(--color-rain-soft, color-mix(in srgb, #5B8DEF var(--tint-raised), var(--color-surface)));
-  /* The umbrella of a wet day: the design's blue, 4.9:1 on the card. */
+  /* The umbrella of a wet day: the design's blue (4.9:1 on the card). The
+   * foundation has no rain ink of its own; the chart takes the rain pair. */
   --dz-umbrella: #2F6FDB;
-  --dz-radius: var(--radius-card, var(--radius-md));
+  /* The time column of a calendar row: "09:30" at 15/600, wider for "9:30 PM". */
   --dz-time-col: 3rem;
 
   display: flex;
@@ -1482,17 +1479,17 @@
 
 .dz-head__date {
   margin: 0;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
 }
 
 .dz-head__greeting {
   margin: 0;
-  font-size: var(--dz-page);
-  line-height: var(--dz-page-lh);
+  font-size: var(--type-page);
+  line-height: var(--type-page-lh);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--dz-page-tracking);
+  letter-spacing: var(--type-page-tracking);
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
   hyphens: auto;
@@ -1545,8 +1542,8 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--dz-meta, var(--type-footnote)); line-height: 20px; }
-.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--dz-row, var(--type-body)); line-height: 36px; }
+.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-meta); line-height: 20px; }
+.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-row); line-height: 36px; }
 
 .day-disc--photo img {
   inline-size: 100%;
@@ -1563,8 +1560,8 @@
   display: block;
   overflow: hidden;
   background: var(--color-surface);
-  border: 1px solid var(--dz-card-edge);
-  border-radius: var(--dz-radius);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
   color: inherit;
   text-decoration: none;
 }
@@ -1584,8 +1581,8 @@
 
 .dz-sec__title {
   margin: 0;
-  font-size: var(--dz-section);
-  line-height: var(--dz-section-lh);
+  font-size: var(--type-section);
+  line-height: var(--type-section-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
@@ -1601,10 +1598,10 @@
 .dz-sec__link {
   flex: none;
   min-inline-size: var(--target-base);
-  padding: calc((var(--target-base) - var(--dz-row-lh)) / 2) var(--space-2);
-  margin: calc((var(--target-base) - var(--dz-row-lh)) / -2) calc(var(--space-2) * -1);
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  padding: calc((var(--target-base) - var(--type-row-lh)) / 2) var(--space-2);
+  margin: calc((var(--target-base) - var(--type-row-lh)) / -2) calc(var(--space-2) * -1);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-accent);
   text-align: end;
   text-decoration: none;
@@ -1616,7 +1613,7 @@
   inline-size: 18px;
   block-size: 18px;
   margin-inline-start: auto;
-  color: var(--dz-ink-3);
+  color: var(--color-ink-3);
   stroke-width: 2;
 }
 
@@ -1651,10 +1648,10 @@
 
 .dz-weather__temp {
   flex: none;
-  font-size: var(--dz-page);
-  line-height: var(--dz-page-lh);
+  font-size: var(--type-page);
+  line-height: var(--type-page-lh);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--dz-page-tracking);
+  letter-spacing: var(--type-page-tracking);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1666,13 +1663,13 @@
 }
 
 .dz-weather__desc {
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
 }
 
 .dz-weather__meta {
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -1684,7 +1681,7 @@
   align-items: center;
   gap: var(--space-2);
   padding-block-start: var(--space-3);
-  border-block-start: 1px solid var(--dz-sep);
+  border-block-start: 1px solid var(--color-separator-inner);
 }
 
 .dz-weather__rain-icon {
@@ -1701,8 +1698,8 @@
 
 .dz-weather__rain-label {
   min-width: 0;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
@@ -1710,8 +1707,8 @@
 .dz-weather__chance {
   flex: none;
   margin-inline-start: auto;
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -1740,11 +1737,11 @@
   display: block;
   block-size: var(--bar, 3px);
   border-radius: var(--radius-2xs);
-  background: var(--dz-rain-soft);
+  background: var(--color-rain-soft);
 }
 
 .dz-chart__bar--wet {
-  background: var(--dz-rain);
+  background: var(--color-rain);
 }
 
 .dz-chart__bar--now {
@@ -1752,8 +1749,8 @@
 }
 
 .dz-chart__labels {
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1786,8 +1783,8 @@
   padding: 0 var(--space-4);
   border: 0;
   background: none;
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   text-align: start;
@@ -1818,7 +1815,7 @@
   position: absolute;
   inset-block-start: 0;
   inset-inline: var(--space-4) 0;
-  border-block-start: 1px solid var(--dz-sep);
+  border-block-start: 1px solid var(--color-separator-inner);
 }
 
 .dz-cal__link {
@@ -1841,8 +1838,8 @@
 }
 
 .dz-cal__time {
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1850,8 +1847,8 @@
 
 /* "cały dzień" has no hour: it stands small and may take two lines. */
 .dz-cal__time--allday {
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-secondary);
   white-space: normal;
@@ -1877,7 +1874,7 @@
   inline-size: 8px;
   block-size: 8px;
   border-radius: var(--radius-full);
-  background: var(--dot, var(--dz-ink-3));
+  background: var(--dot, var(--color-ink-3));
 }
 
 .dz-dot--second {
@@ -1886,7 +1883,7 @@
 }
 
 .dz-dot--none {
-  background: var(--dz-ink-3);
+  background: var(--color-ink-3);
 }
 
 .dz-cal__title {
@@ -1894,8 +1891,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
 }
 
 .dz-cal__meta {
@@ -1903,8 +1900,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
 }
 
@@ -1918,8 +1915,8 @@
 .dz-cal__empty {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
 }
 
@@ -1930,9 +1927,9 @@
   gap: var(--space-2);
   min-block-size: var(--target-base);
   padding: 0 var(--space-4);
-  border-block-start: 1px solid var(--dz-sep);
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  border-block-start: 1px solid var(--color-separator-inner);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   text-decoration: none;
@@ -1973,7 +1970,7 @@
   position: absolute;
   inset-block-start: 0;
   inset-inline: 48px 0;
-  border-block-start: 1px solid var(--dz-sep);
+  border-block-start: 1px solid var(--color-separator-inner);
 }
 
 /* The check circle is the app's one ring (`.check-ring`, list-row.css); the
@@ -2008,15 +2005,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-text-primary);
   text-align: start;
   cursor: pointer;
 }
 
 .dz-task--done .dz-task__title {
-  color: var(--dz-ink-3);
+  color: var(--color-ink-3);
   text-decoration: line-through;
 }
 
@@ -2030,13 +2027,13 @@
 .dz-task__flag {
   inline-size: 14px;
   block-size: 14px;
-  color: var(--dz-late);
+  color: var(--color-overdue);
   stroke-width: 2;
 }
 
 .dz-task__due {
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2044,7 +2041,7 @@
 
 .dz-task__due--late {
   font-weight: var(--font-weight-semibold);
-  color: var(--dz-late);
+  color: var(--color-overdue);
 }
 
 .dz-task--done .dz-task__due--late {
@@ -2055,8 +2052,8 @@
 .dz-tasks__empty {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
 }
 
@@ -2068,10 +2065,10 @@
   min-block-size: var(--target-base);
   padding: 0 var(--space-4);
   border: 0;
-  border-block-start: 1px solid var(--dz-sep);
+  border-block-start: 1px solid var(--color-separator-inner);
   background: none;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-accent);
   text-align: start;
   cursor: pointer;
@@ -2131,8 +2128,8 @@
 
 .dz-soon__title {
   margin: 0;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
@@ -2168,7 +2165,7 @@
   flex: none;
   inline-size: 18px;
   block-size: 18px;
-  color: var(--dz-ink-3);
+  color: var(--color-ink-3);
   stroke-width: 1.75;
 }
 
@@ -2177,20 +2174,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dz-row);
-  line-height: var(--dz-row-lh);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
 }
 
 .dz-soon__kind {
-  font-size: var(--dz-meta);
+  font-size: var(--type-meta);
   color: var(--color-text-secondary);
 }
 
 .dz-soon__when {
   flex: none;
   margin-inline-start: auto;
-  font-size: var(--dz-meta);
-  line-height: var(--dz-meta-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -2199,13 +2196,13 @@
 
 .dz-skeleton__title {
   inline-size: 70%;
-  block-size: var(--dz-page-lh);
+  block-size: var(--type-page-lh);
   border-radius: var(--radius-xs);
 }
 
 .dz-skeleton__card {
   block-size: 176px;
-  border-radius: var(--dz-radius);
+  border-radius: var(--radius-card);
 }
 
 .dz-skeleton__card--weather {
