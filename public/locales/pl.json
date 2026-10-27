@@ -764,8 +764,6 @@
         "allBoughtMeta_one": "{{count}} produkt z listy {{name}}",
         "moveToPantry": "Przenieś {{count}} do spiżarni",
         "clearList": "Wyczyść listę",
-        "changeAisle": "{{category}} · zmień",
-        "changeAisleLabel": "{{name}} w dziale {{category}}, zmień dział",
         "allBoughtMeta_few": "{{count}} produkty z listy {{name}}",
         "allBoughtMeta_many": "{{count}} produktów z listy {{name}}",
         "usualQuantity": "zwykle {{quantity}}",

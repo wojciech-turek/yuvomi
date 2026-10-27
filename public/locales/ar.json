@@ -787,8 +787,6 @@
         "allBoughtMeta_one": "{{count}} item from {{name}}",
         "moveToPantry": "Move {{count}} to the pantry",
         "clearList": "Clear the list",
-        "changeAisle": "{{category}} · change",
-        "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
         "usualQuantity": "usually {{quantity}}",
         "frequentLabel": "متكرر",
         "itemAdded": "أُضيف",

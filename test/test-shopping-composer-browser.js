@@ -190,7 +190,7 @@ const posts = () => api.log.filter((a) => a.method === 'POST').map((a) => a.body
 test('Ein Feld, die Menge darin: "2 mleko", "mleko 2", "250 g sera", "jajka 10"', async () => {
   await setup();
   const parsed = await page.evaluate(() => Object.fromEntries(
-    ['2 mleko', 'mleko 2', '250 g sera', 'jajka 10', 'Ser żółty', 'sól i pieprz', 'Mleko 2%', '1,5 kg ziemniaków', '2x chleb', '']
+    ['2 mleko', 'mleko 2', '250 g sera', 'jajka 10', 'Ser żółty', 'sól i pieprz', 'Mleko 2%', '1,5 kg ziemniaków', '2x chleb', '200 g sera żółtego', '10 jajek wiejskich', '']
       .map((line) => [line, window.s.parseQuickEntry(line)]),
   ));
   assert.deepEqual(parsed['2 mleko'], { name: 'mleko', quantity: '2 szt.' });
@@ -202,6 +202,8 @@ test('Ein Feld, die Menge darin: "2 mleko", "mleko 2", "250 g sera", "jajka 10"'
   assert.deepEqual(parsed['Mleko 2%'], { name: 'Mleko 2%', quantity: null }, '2% ist Teil des Namens, keine Menge');
   assert.deepEqual(parsed['1,5 kg ziemniaków'], { name: 'ziemniaki', quantity: '1,5 kg' });
   assert.deepEqual(parsed['2x chleb'], { name: 'chleb', quantity: '2 szt.' });
+  assert.deepEqual(parsed['200 g sera żółtego'], { name: 'ser żółty', quantity: '200 g' }, 'das Adjektiv folgt seinem Nomen');
+  assert.deepEqual(parsed['10 jajek wiejskich'], { name: 'jajka wiejskie', quantity: '10 szt.' });
   assert.deepEqual(parsed[''], { name: '', quantity: null });
 });
 
