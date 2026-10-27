@@ -673,8 +673,10 @@ test('View Transition: die Gruppen laufen auf --duration-md/--ease-out, nicht au
 });
 
 test('reduzierte Bewegung: der Seitenwechsel blendet - die Gruppen stehen, die Bilder blenden kurz', async () => {
-  const { swapPage, swapTheme } = await import('../public/utils/view-transition.js');
-  for (const [name, run] of [['swapPage', (env) => swapPage(() => {}, { content: env.content })], ['swapTheme', () => swapTheme(() => {})]]) {
+  const { swapPage } = await import('../public/utils/view-transition.js');
+  // 2026-10-27, v2: light only - der zweite Lauf mit `swapTheme` ist mit dem
+  // Baustein gegangen.
+  for (const [name, run] of [['swapPage', (env) => swapPage(() => {}, { content: env.content })]]) {
     const env = stubDocument();
     env.doc.documentElement = { classList: { add() {}, remove() {}, contains: () => false } };
     globalThis.document = env.doc;
@@ -2191,50 +2193,16 @@ test('R18: die Vitalwert-Kurven zeichnen sich einmal ein (drawChartOnce), Raster
 });
 
 // 2026-10-27, v2: light only. Es gibt keinen gewaehlten Theme-Wechsel mehr:
-// router.js bietet kein `applyTheme` an und blendet nichts ueber die Wurzel;
-// die Wand schaltet nachts weiter ohne Blende. Der Baustein `swapTheme`
-// (view-transition.js) wird hier nur noch als Mechanik geprueft, solange er
-// steht.
-test('R18: kein Theme-Wechsel blendet ueber die Wurzel - die App ist immer hell, die Wand schaltet ohne Blende', async () => {
+// router.js bietet kein `applyTheme` an und blendet nichts ueber die Wurzel,
+// view-transition.js fuehrt kein `swapTheme` mehr (seine Mechanik-Pruefungen
+// sind mit ihm gegangen), und die Wand schaltet nachts ohne Blende.
+test('R18: kein Theme-Wechsel blendet ueber die Wurzel - die App ist immer hell, die Wand schaltet ohne Blende', () => {
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const router = publicSource('router.js');
   assert.doesNotMatch(router, /applyTheme\s*:/, 'router.js bietet keinen Theme-Wechsel mehr an');
-  assert.doesNotMatch(router.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /swapTheme/, 'router.js blendet kein Theme');
-  assert.doesNotMatch(publicSource('utils/wall-mode.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /swapTheme|startViewTransition/, 'die Wand schaltet nachts ohne Blende');
-
-  const { swapTheme } = await import('../public/utils/view-transition.js');
-  // Mit API: der Tausch laeuft im Callback, die Klasse steht fuer die Dauer.
-  const env = stubDocument();
-  const classes = new Set();
-  env.doc.documentElement = { classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) } };
-  globalThis.document = env.doc;
-  globalThis.matchMedia = () => ({ matches: false });
-  try {
-    let ran = 0;
-    const done = swapTheme(() => { ran += 1; assert.equal(classes.has('theme-swapping'), true); });
-    assert.equal(ran, 0, 'erst das alte Bild, dann der Tausch');
-    await Promise.resolve(); await Promise.resolve();
-    assert.equal(ran, 1);
-    assert.equal(classes.has('page-swapping'), false, 'kein Seitenwechsel: die Chrome-Namen bleiben aus');
-    env.finish();
-    await done;
-    assert.equal(classes.has('theme-swapping'), false);
-  } finally { delete globalThis.document; delete globalThis.matchMedia; }
-  // Ohne API oder verdeckt: direkt und synchron. (Reduzierte Bewegung blendet
-  // seit 2026-10-16 mit - siehe den Test "reduzierte Bewegung: der Seitenwechsel blendet".)
-  for (const [name, e, reduce] of [['ohne API', stubDocument({ api: false }), false], ['verdeckt', stubDocument({ visibility: 'hidden' }), false]]) {
-    globalThis.document = e.doc;
-    globalThis.matchMedia = () => ({ matches: reduce });
-    try {
-      let ran = 0;
-      swapTheme(() => { ran += 1; });
-      assert.equal(ran, 1, `${name}: synchron`);
-      assert.deepEqual(e.log, [], `${name}: keine Transition`);
-    } finally { delete globalThis.document; delete globalThis.matchMedia; }
-  }
-  // Ein werfender Tausch (localStorage im Privatmodus) kommt beim Aufrufer an.
-  globalThis.document = stubDocument({ api: false }).doc;
-  globalThis.matchMedia = () => ({ matches: false });
-  try { assert.throws(() => swapTheme(() => { throw new Error('quota'); }), /quota/); } finally { delete globalThis.document; delete globalThis.matchMedia; }
+  assert.doesNotMatch(code(router), /swapTheme/, 'router.js blendet kein Theme');
+  assert.doesNotMatch(code(publicSource('utils/view-transition.js')), /swapTheme|theme-swapping/, 'kein Theme-Baustein mehr');
+  assert.doesNotMatch(code(publicSource('utils/wall-mode.js')), /swapTheme|startViewTransition/, 'die Wand schaltet nachts ohne Blende');
 });
 
 // --------------------------------------------------------
