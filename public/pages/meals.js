@@ -780,12 +780,33 @@ export async function render(container, { user }) {
 
   // `?.`: bei `read` steht kein FAB im Markup. Der Riegel selbst sitzt in
   // openMealModal() - dort muenden alle Anlegewege.
+  fabStepsBackOnPhone(findPageFab('fab-new-meal'));
   findPageFab('fab-new-meal')?.addEventListener('click', () => {
     const firstType = state.visibleMealTypes[0] ?? 'lunch';
     openMealModal({ mode: 'create', date: today, mealType: firstType });
   });
 
   wireMealIdeas(container, today);
+}
+
+/**
+ * ON THE PHONE THE DAY ROWS ARE THE ADD (2026-10-27, v2). Without the global +
+ * the page's "+" (Dodaj posiłek) floated over the tab bar - a second door next
+ * to the "+ Śniadanie / + Obiad …" rows of every day, which already open the
+ * sheet for exactly that slot. Below 1024px it steps back with `hidden` (the
+ * app's way for a page to put its FAB away, `.page-fab[hidden]` in
+ * layout.css); with a pointer it stays the docked "+ Posiłek" pill next to the
+ * board. It follows a window crossing the line.
+ */
+function fabStepsBackOnPhone(fab) {
+  const phone = window.matchMedia?.('(max-width: 1023px)');
+  if (!fab || !phone) return;
+  const apply = () => {
+    if (!fab.isConnected) { phone.removeEventListener?.('change', apply); return; }
+    fab.hidden = phone.matches;
+  };
+  fab.hidden = phone.matches;
+  phone.addEventListener?.('change', apply);
 }
 
 // --------------------------------------------------------

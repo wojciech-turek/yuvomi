@@ -4221,11 +4221,23 @@ async function fabAtScrollEnd(page) {
    * ist, ist der Knopf der Seite der einzige Weg zum Anlegen. */
   await new Promise((r) => setTimeout(r, 700));
   const anlegen = await page.evaluate(() => {
+    const shown = (el) => {
+      const b = el?.getBoundingClientRect();
+      return !!el && b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'
+        && b.bottom > 0 && b.top < window.innerHeight;
+    };
     const fab = document.querySelector('.page-fab:not([hidden])');
-    const b = fab?.getBoundingClientRect();
+    /* 2026-10-27, v2: AM TELEFON IST DAS ANLEGEN ZWEIER SEITEN KEIN KNOPF. In
+     * Zakupy ist es die Leiste "Dodaj produkt" (der Composer, ZakupyIdle), in
+     * Posiłki sind es die Zeilen "+ Śniadanie / + Obiad …" der Tage - ihr
+     * Seitenknopf tritt dort zurueck (`hidden`), statt eine zweite Tuer neben
+     * die erste zu stellen. Gezaehlt wird, was der Nutzer beim Betreten sieht. */
+    const own = [...document.querySelectorAll('#main-content .shopping-addbar .quick-add__input, #main-content .meals-row__add')];
     return {
-      anlegenSichtbar: !!fab && b.width > 0 && b.height > 0 && getComputedStyle(fab).visibility !== 'hidden'
-        && b.bottom > 0 && b.top < window.innerHeight,
+      anlegenSichtbar: shown(fab) || own.some(shown),
+      // Die eigenen Wege der Seite, auch unterhalb der Falz: die Zeilen
+      // "+ Obiad …" stehen am Telefon bei den Tagen, nicht zwingend im Bild.
+      eigenesAnlegen: own.some((el) => el.getBoundingClientRect().height > 0),
       anlegenImKopf: !!fab && !!fab.closest('.page-toolbar'),
       globalesPlus: Boolean(document.querySelector('#capture-plus, .capture-plus, .nav-sidebar__add')),
     };
@@ -4356,6 +4368,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       const mitAnlegen = [];
       const globalesPlus = [];
       let dzisOhneKnopf = null;
+      let posilkiZeilen = null;
 
       for (const name of sweep('Sonde 18')) {
         await gotoRoute(page, ALL_ROUTES[name]);
@@ -4365,6 +4378,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
         if (m.anlegenSichtbar) mitAnlegen.push(name);
         if (m.globalesPlus) globalesPlus.push(name);
         if (name === 'dashboard') dzisOhneKnopf = !m.anlegenSichtbar;
+        if (name === 'meals') posilkiZeilen = m.eigenesAnlegen;
         // Unabhaengig vom Scrollstand: ob ein Knopf schwebt, ist eine Frage
         // der Seite, nicht davon, ob die Messung ihr Ende erreicht hat.
         if (!m.keinFab) schwebend.push(name);
@@ -4467,8 +4481,11 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Ueberlappungsfrage einen Gegenstand. Die Aufteilung steht mit Namen:
          * aendert sie sich, aendert sich die Reichweite dieser Sonde.
          * Gegengeprueft wird sie in der Rueckwaertsrichtung: ein Kopf, der am
-         * Telefon wieder Platz hat, nimmt seinen Knopf auf und faellt hier raus. */
-        const SCHWEBEND_AM_FINGER = ['calendar', 'meals', 'pantry'];
+         * Telefon wieder Platz hat, nimmt seinen Knopf auf und faellt hier raus.
+         * 2026-10-27, v2: Posiłki schwebt nicht mehr - am Telefon sind die
+         * Zeilen "+ Śniadanie / + Obiad …" das Anlegen, der Knopf tritt dort
+         * zurueck (`hidden`, meals.js fabStepsBackOnPhone). */
+        const SCHWEBEND_AM_FINGER = ['calendar', 'pantry'];
         assert.deepEqual([...schwebend].sort(), SCHWEBEND_AM_FINGER,
           'Am Finger schweben nur die Knoepfe, deren Kopf am Telefon keinen Platz hat.');
         assert.ok(seen >= 1, `Nur ${seen} schwebende Knoepfe an ihrem Scroll-Ende gemessen - die Sonde misst nichts.`);
@@ -4482,12 +4499,25 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
        * Betreten - im Kopf oder schwebend. Ausgenommen mit Grund: Dziś (legt
        * nichts an), Zdrowie (legt je Bereich an, die Uebersicht hat keinen
        * Knopf), Nagrody und Sprzątanie (der Knopf folgt Reiter bzw. Profil),
-       * Ustawienia. */
+       * Ustawienia.
+       * 2026-10-27, v2: Zakupy und Posiłki bleiben in der Liste, zeigen ihr
+       * Anlegen am Telefon aber nicht als Knopf: Zakupy mit der Leiste "Dodaj
+       * produkt" (der Kopf traegt nur die Suche, ZakupyIdle), Posiłki mit den
+       * Zeilen "+ Śniadanie / + Obiad …" der Tage. Am Zeiger bleibt beiden die
+       * angedockte Pille. Die Messung (fabAtScrollEnd) zaehlt beides.
+       * Posiłki steht am Finger deshalb NICHT in der Liste "beim Betreten im
+       * Bild": ist der heutige Tag verplant (der Seed plant ihn), stehen die
+       * naechsten "+ …"-Zeilen bei den folgenden Tagen unter der Falz -
+       * gemessen auf dem Demo-Seed: "+ Przekąska" bei y 1263 von 844. Geprueft
+       * wird dort, dass die Zeilen im Dokument stehen. */
       const ANLEGEN_SICHTBAR = ['tasks', 'calendar', 'shopping', 'meals', 'recipes', 'pantry', 'notes',
-        'contacts', 'birthdays', 'budget', 'documents'];
+        'contacts', 'birthdays', 'budget', 'documents'].filter((n) => device !== 'mobile' || n !== 'meals');
       assert.deepEqual(globalesPlus, [], 'kein globales + mehr (#capture-plus, .nav-sidebar__add)');
       assert.deepEqual(ANLEGEN_SICHTBAR.filter((n) => !mitAnlegen.includes(n)), [],
         `${device}: diese Seiten zeigen beim Betreten keinen Weg zum Anlegen - mit dem globalen + ist ihr Knopf der einzige.`);
+      if (device === 'mobile') {
+        assert.equal(posilkiZeilen, true, 'Posiłki am Telefon: die Zeilen "+ Śniadanie / + Obiad …" sind das Anlegen und stehen im Dokument');
+      }
       assert.equal(dzisOhneKnopf, true, 'Dziś traegt keinen eigenen Anlege-Knopf');
 
       assert.deepEqual(findings, [],

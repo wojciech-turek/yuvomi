@@ -5264,6 +5264,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   renderListContent(container);
   wireListContentEvents(container);
 
+  fabStepsBackOnPhone(findPageFab('fab-new-item'));
   findPageFab('fab-new-item')?.addEventListener('click', () => {
     if (readOnly()) return;
     const input = container.querySelector('#item-name-input');
@@ -5289,6 +5290,26 @@ export async function render(container, { user, signal: routeSignal = null } = {
   if (new URLSearchParams(window.location.search).get('manage') === 'categories') {
     openCategoryManager(container, { fromDeepLink: true });
   }
+}
+
+/**
+ * ON THE PHONE THE COMPOSER IS THE ADD (2026-10-27, v2). Without the global +
+ * the router docks every page's "+" into its header as a ghost circle - here
+ * that was a second "Dodaj artykuł" over the "Dodaj produkt" bar, which the
+ * design (ZakupyIdle) does not have: the header carries only the search. The
+ * button steps back with `hidden` (the app's way for a page to put its FAB
+ * away, `.page-fab[hidden]` in layout.css) below 1024px and stays the docked
+ * "+ Artykuł" pill with a pointer. It follows a window crossing the line.
+ */
+function fabStepsBackOnPhone(fab) {
+  const phone = window.matchMedia?.('(max-width: 1023px)');
+  if (!fab || !phone) return;
+  const apply = () => {
+    if (!fab.isConnected) { phone.removeEventListener?.('change', apply); return; }
+    fab.hidden = phone.matches;
+  };
+  fab.hidden = phone.matches;
+  phone.addEventListener?.('change', apply);
 }
 
 /**
