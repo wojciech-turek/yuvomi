@@ -20,6 +20,65 @@ const log = createLogger('Weather');
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 50;
 
+// ----------------------------------------------------------------
+// RAIN OF THE DAY (v2 Dziś, 2026-10-27). "Will it rain today?" is the first
+// thing the household asks the weather, so the answer carries the hours of the
+// local day ({ hour, pop, mm }) and two summaries: the highest chance of the
+// day and the window from the first to the last hour with a chance of at least
+// RAIN_POP percent. Both summaries cover the WHOLE local day, so a cached answer
+// stays true for its half hour; the page works out "from now" from the hours.
+// ----------------------------------------------------------------
+export const RAIN_POP = 40;
+
+/** `today.pop_max` and `today.rain_window` from the hours of the local day. */
+export function rainSummary(hours) {
+  const known = (hours ?? []).filter((h) => Number.isFinite(h?.pop));
+  if (!known.length) return { pop_max: null, rain_window: null };
+  const wet = known.filter((h) => h.pop >= RAIN_POP);
+  return {
+    pop_max: Math.max(...known.map((h) => h.pop)),
+    rain_window: wet.length ? { from: wet[0].hour, to: wet[wet.length - 1].hour } : null,
+  };
+}
+
+const roundMm = (value) => (Number.isFinite(Number(value)) ? Math.round(Number(value) * 10) / 10 : 0);
+
+/** Open-Meteo `hourly` (local times, `timezone=auto`) -> the hours of `dayKey`. */
+export function openMeteoHours(hourly, dayKey) {
+  const times = hourly?.time ?? [];
+  const out = [];
+  times.forEach((time, i) => {
+    if (!dayKey || !String(time).startsWith(dayKey)) return;
+    const pop = hourly.precipitation_probability?.[i];
+    out.push({
+      hour: Number(String(time).slice(11, 13)),
+      pop: Number.isFinite(pop) ? Math.round(pop) : null,
+      mm: roundMm(hourly.precipitation?.[i]),
+    });
+  });
+  return out;
+}
+
+/**
+ * OpenWeatherMap's 3-hour steps of `dayKey` as hours: each step stands for its
+ * three hours with the step's `pop` (0..1 -> percent) and a third of its rain.
+ * The list starts at the next step, so the hours already past are missing.
+ */
+export function owmHours(list, dayKey, toLocal) {
+  const out = new Map();
+  for (const item of list ?? []) {
+    const local = toLocal(item.dt_txt);
+    if (Number.isNaN(local.getTime()) || utcDateKey(local) !== dayKey) continue;
+    const start = local.getUTCHours();
+    const pop = Number.isFinite(item.pop) ? Math.round(item.pop * 100) : null;
+    const mm = roundMm((Number(item.rain?.['3h']) || 0) / 3);
+    for (let hour = start; hour < Math.min(start + 3, 24); hour += 1) {
+      if (!out.has(hour)) out.set(hour, { hour, pop, mm });
+    }
+  }
+  return [...out.values()].sort((a, b) => a.hour - b.hour);
+}
+
 // Ortssuche (GET /geocode): Grenzen des Suchworts und Zahl der Treffer. Ein
 // Zeichen liefert beim Anbieter nichts, also fragen wir ihn gar nicht erst.
 export const GEOCODE_MIN_CHARS = 2;
@@ -202,8 +261,11 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
 
   // ---------------------------------------------------------------
   // GET /api/v1/weather
-  // Response: { data: { provider, city, units, current, today, forecast } }
+  // Response: { data: { provider, city, units, current, today, today_hours, forecast } }
   //         | { data: null, reason: 'not_configured' | 'upstream_error' }
+  // `today_hours` are the hours of the local day ({ hour, pop, mm });
+  // `today.pop_max` and `today.rain_window` ({ from, to } hours, or null) sum
+  // them up (see RAIN_POP above).
   // `today` traegt den Kalendertag AM WETTERORT samt Hoch/Tief; `forecast` sind
   // die Folgetage. Die Anzeige benennt ihre Tage an `today.date`, nicht am Index.
   // ---------------------------------------------------------------
@@ -268,6 +330,7 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
           `&longitude=${encodeURIComponent(lon)}`,
           '&current=temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m',
           '&daily=weather_code,temperature_2m_max,temperature_2m_min',
+          '&hourly=precipitation_probability,precipitation,weather_code',
           '&timezone=auto',
           '&forecast_days=6',
           `&temperature_unit=${tempUnit}`,
@@ -298,6 +361,8 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
         // Open-Meteo gibt den Offset des Ortes mit heraus - Folge von
         // `timezone=auto`, die Antwort ist ohnehin in Ortszeit geschluesselt.
         locationOffsetMs = (Number(om.utc_offset_seconds) || 0) * 1000;
+        const omHours = om.daily?.time?.length ? openMeteoHours(om.hourly, omToday) : [];
+        const omToday0 = days.find((d) => d.date === omToday) ?? null;
 
         data = {
           provider: 'open-meteo',
@@ -311,7 +376,8 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
             desc:       `wmo.${cur.weather_code}`,
             wind_speed: Math.round(cur.wind_speed_10m),
           },
-          today: days.find((d) => d.date === omToday) ?? null,
+          today: omToday0 ? { ...omToday0, ...rainSummary(omHours) } : null,
+          today_hours: omToday0 ? omHours : [],
           forecast: days.filter((d) => d.date > omToday).slice(0, 5),
         };
       } else {
@@ -342,10 +408,12 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
         locationOffsetMs = owmOffsetMs;
         let todayDay = null;
         let forecastDays = [];
+        let todayHours = [];
 
         if (forecastRes.ok) {
           const forecastJson = await forecastRes.json();
           const list = forecastJson.list ?? [];
+          todayHours = owmHours(list, owmToday, owmLocal);
           const dayMap = new Map();
           for (const item of list) {
             const local = owmLocal(item.dt_txt);
@@ -400,6 +468,7 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
           temp_max: null,
           icon:     todayDay?.icon ?? currentJson.weather[0]?.icon,
           desc:     todayDay?.desc ?? currentJson.weather[0]?.description,
+          ...rainSummary(todayHours),
         };
 
         data = {
@@ -418,6 +487,7 @@ export function buildRouter({ cfgGet: cfgGetFn = cfgGet, fetchFn = null, logger 
               : Math.round((currentJson.wind?.speed ?? 0) * 3.6),
           },
           today: todayDay,
+          today_hours: todayHours,
           forecast: forecastDays,
         };
       }

@@ -794,3 +794,85 @@ test('Ortssuche: dieselbe Frage in derselben Sprache kommt aus dem Cache', async
     assert.equal(calls, 2, 'eine andere Sprache ist eine andere Frage');
   } finally { await close(); }
 });
+
+// --------------------------------------------------------------------------
+// Rain of the day (v2 Dziś, 2026-10-27): the hours of the local day and the
+// window of the first to the last hour with a chance of at least 40 %.
+// --------------------------------------------------------------------------
+
+test('rainSummary: the highest chance and the window from the first to the last wet hour', async () => {
+  const { rainSummary, RAIN_POP } = await import('../server/routes/weather.js');
+  assert.equal(RAIN_POP, 40);
+  const pops = [5, 5, 10, 20, 39, 40, 75, 85, 70, 45, 10];
+  const hours = pops.map((pop, i) => ({ hour: 8 + i, pop, mm: 0 }));
+  assert.deepEqual(rainSummary(hours), { pop_max: 85, rain_window: { from: 13, to: 17 } });
+  assert.deepEqual(rainSummary(hours.map((h) => ({ ...h, pop: 10 }))), { pop_max: 10, rain_window: null }, 'a dry day has no window');
+  assert.deepEqual(rainSummary([]), { pop_max: null, rain_window: null }, 'no hours, no claim');
+  assert.deepEqual(rainSummary([{ hour: 9, pop: null, mm: 0 }]), { pop_max: null, rain_window: null });
+});
+
+test('Open-Meteo: asks for the hourly rain and returns the hours of the local day', async () => {
+  let asked = null;
+  const fetchFn = async (url) => {
+    asked = new URL(String(url));
+    const time = [];
+    const pop = [];
+    const mm = [];
+    for (const day of ['2026-06-05', '2026-06-06']) {
+      for (let h = 0; h < 24; h += 1) {
+        time.push(`${day}T${String(h).padStart(2, '0')}:00`);
+        pop.push(day === '2026-06-05' && h >= 13 && h <= 17 ? 80 : 10);
+        mm.push(day === '2026-06-05' && h === 15 ? 1.26 : 0);
+      }
+    }
+    return { ok: true, json: async () => ({
+      current: { temperature_2m: 11, apparent_temperature: 9, relative_humidity_2m: 80, is_day: 1, weather_code: 61, wind_speed_10m: 10 },
+      daily: { time: ['2026-06-05', '2026-06-06'], weather_code: [61, 3], temperature_2m_max: [14, 15], temperature_2m_min: [8, 9] },
+      hourly: { time, precipitation_probability: pop, precipitation: mm, weather_code: pop.map(() => 61) },
+    }) };
+  };
+  const { baseUrl, close } = await startApp({ db: OM_DB, fetchFn });
+  try {
+    const { body } = await getJson(baseUrl);
+    assert.equal(asked.searchParams.get('hourly'), 'precipitation_probability,precipitation,weather_code');
+    assert.equal(body.data.today_hours.length, 24, 'the local day, not tomorrow');
+    assert.deepEqual(body.data.today_hours[15], { hour: 15, pop: 80, mm: 1.3 });
+    assert.equal(body.data.today.pop_max, 80);
+    assert.deepEqual(body.data.today.rain_window, { from: 13, to: 17 });
+    assert.equal(body.data.today.temp_max, 14, 'the day keeps its high/low');
+  } finally { await close(); }
+});
+
+test('Open-Meteo without hourly data: no hours and no claim about rain', async () => {
+  const { baseUrl, close } = await startApp({ db: OM_DB, fetchFn: OM_FETCH });
+  try {
+    const { body } = await getJson(baseUrl);
+    assert.deepEqual(body.data.today_hours, []);
+    assert.equal(body.data.today.pop_max, null);
+    assert.equal(body.data.today.rain_window, null);
+  } finally { await close(); }
+});
+
+test('OWM: the 3-hour steps of the local day become hours with their pop', async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const fetchFn = async (url) => {
+    if (String(url).includes('/weather?')) {
+      return { ok: true, json: async () => ({ name: 'Hamburg', timezone: 0, main: { temp: 15, feels_like: 13, humidity: 80 },
+        weather: [{ icon: '10d', description: 'Regen' }], wind: { speed: 4 } }) };
+    }
+    return { ok: true, json: async () => ({ list: [
+      { dt_txt: `${today} 12:00:00`, pop: 0.2, main: { temp: 15 }, weather: [{ icon: '04d', description: 'bedeckt' }] },
+      { dt_txt: `${today} 15:00:00`, pop: 0.85, rain: { '3h': 3 }, main: { temp: 14 }, weather: [{ icon: '10d', description: 'Regen' }] },
+      { dt_txt: `${today} 21:00:00`, pop: 0.05, main: { temp: 11 }, weather: [{ icon: '04n', description: 'bedeckt' }] },
+    ] }) };
+  };
+  const { baseUrl, close } = await startApp({ env: { OPENWEATHER_API_KEY: 'key123', OPENWEATHER_CITY: 'Hamburg' }, fetchFn });
+  try {
+    const { body } = await getJson(baseUrl);
+    assert.deepEqual(body.data.today_hours.map((h) => [h.hour, h.pop]),
+      [[12, 20], [13, 20], [14, 20], [15, 85], [16, 85], [17, 85], [21, 5], [22, 5], [23, 5]]);
+    assert.equal(body.data.today_hours.find((h) => h.hour === 15).mm, 1, 'a third of the step\'s rain per hour');
+    assert.equal(body.data.today.pop_max, 85);
+    assert.deepEqual(body.data.today.rain_window, { from: 15, to: 17 });
+  } finally { await close(); }
+});
