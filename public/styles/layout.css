@@ -547,6 +547,15 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   --fab-tail: var(--fab-safe-zone);
 }
 
+/* UND DER INSTALL-BANNER STEHT UEBER IHM (v2, 2026-10-27). Beide sind unten
+ * fixiert, der Banner auf der Toast-Ebene ueber dem FAB - solange er stand,
+ * war „etwas anlegen" auf den Seiten mit schwebendem Knopf tot. Am `:root`,
+ * weil der Banner kein Nachfahre der Shell ist (index.html); die Variable
+ * erbt in sein Shadow-DOM (yuvomi-install-prompt.js). */
+:root:has(.fab-layer .page-fab:not([hidden])) {
+  --install-prompt-lift: calc(var(--fab-size) + var(--space-4));
+}
+
 /* ── UND DER DRITTE FIXIERTE KÖRPER: DER INSTALL-BANNER ──
  *
  * FAB und Sammelaktions-Pille bekamen ihren Nachlauf, der Banner nie - obwohl
@@ -8748,9 +8757,11 @@ textarea::placeholder {
  * -------------------------------------------------------- */
 .shell-bottom-stack {
   position: fixed;
-  /* TAFLA: der Toast steht 12pt ueber der Kapsel. --nav-bottom-height reicht
-   * bis 8pt ueber ihre Oberkante (Safe-Area eingerechnet), dazu 4pt. */
-  bottom: calc(var(--nav-bottom-height) + var(--space-1));
+  /* TAFLA: der Toast stand 12pt ueber der Kapsel (--nav-bottom-height reichte
+   * 8pt ueber ihre Oberkante, dazu 4pt). v2 (2026-10-27): die Zone endet
+   * genau an der Kante der Leiste - die 12pt kommen jetzt ganz von hier
+   * (gemessen vorher 4px Luft bei 390x844). */
+  bottom: calc(var(--nav-bottom-height) + var(--space-3));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -8830,7 +8841,7 @@ html:has(.app-page.is-selecting) {
  * Abstand wie auf dem Telefon, nur ohne dessen FAB-Nachlauf. */
 @media (min-width: 768px) and (max-width: 1023px) {
   .shell-bottom-stack {
-    bottom: calc(var(--nav-bottom-height) + var(--space-1));
+    bottom: calc(var(--nav-bottom-height) + var(--space-3));
   }
 }
 
