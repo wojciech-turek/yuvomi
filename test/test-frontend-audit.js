@@ -21450,7 +21450,7 @@ test('D5: die Schnellzeile des Einkaufs traegt EINE Haut - um die Leiste, die Fe
 
   const shopping = [...eachRule(read('../public/styles/shopping.css'))];
   const bar = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar');
-  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-md\)/, 'die Leiste ist die Haut (v2: Radius 12)');
+  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-card\)/, 'die Leiste ist die Haut (v2: --radius-card, 12)');
   assert.match(bar?.body ?? '', /background-color:\s*var\(--color-surface\)/, 'weiss wie eine Karte (v2)');
   // The hairline is a ring inside the bar's 48 (`--addbar-edge`), the focus
   // turns the same ring to the accent.

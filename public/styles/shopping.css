@@ -360,7 +360,7 @@
 .shopping-addbar {
   --addbar-edge: var(--color-border);
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   background-color: var(--color-surface);
   /* The hairline is a ring inside the 48, not a border around it. */
   box-shadow: inset 0 0 0 1px var(--addbar-edge), 0 4px 16px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
@@ -438,8 +438,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -597,8 +597,8 @@
     min-height: var(--target-base);
     padding-inline: var(--space-3);
     border: 1.5px solid var(--color-accent);
-    border-radius: calc(var(--radius-md) - 2px);
-    background-color: var(--color-fill);
+    border-radius: calc(var(--radius-card) - 2px);
+    background-color: var(--color-bg);
   }
 
   .shopping-addbar--typing .quick-add__glyph {
@@ -621,8 +621,8 @@
 
   .shopping-addbar__frequent-label {
     flex: none;
-    font-size: var(--type-footnote);
-    line-height: var(--type-footnote-lh);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-lh);
     color: var(--color-text-secondary);
   }
 
@@ -635,8 +635,8 @@
     background-color: var(--color-fill);
     color: var(--color-text-primary);
     font-family: inherit;
-    font-size: var(--type-body);
-    line-height: var(--type-body-lh);
+    font-size: var(--type-row);
+    line-height: var(--type-row-lh);
     cursor: pointer;
   }
 
@@ -1298,8 +1298,8 @@
 
 .shopping-item__fresh {
   color: var(--color-text-secondary);
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
