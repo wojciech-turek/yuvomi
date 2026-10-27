@@ -3985,16 +3985,19 @@ Regeln stehen am Ende von `public/styles/dashboard.css` auf den v2-Tokens):
   fuenf Zeilen, die Zahl aller offenen neben der h3. Der eine Abhakkreis (`.check-ring`) hakt an
   Ort und Stelle ab (Durchstreichen, dann geht die Zeile, „Cofnij" in der Meldung);
   Faelligkeit 12, ueberfaellig in `--color-overdue` 600; Fahne nur fuer hoch/dringend;
-  Personenscheibe. Die letzte Zeile „Dodaj zadanie" oeffnet das Erfassen-Blatt. Lesende Konten
-  und das Display sehen keine Kreise und kein „Dodaj zadanie".
+  Personenscheibe. Die letzte Zeile „Dodaj zadanie" oeffnet dasselbe Formular wie „Nowe
+  zadanie" im Kopf von Zadania (`openNewTaskFrom`, `pages/tasks.js`); nach dem Speichern frischt
+  die Karte auf. Lesende Konten und das Display sehen keine Kreise und kein „Dodaj zadanie".
 - **Wkrótce**, leise und ohne Karte: Geburtstage und Namenstage der naechsten 30 Tage,
   hoechstens drei, 44er Zeilen mit Torte, „Name · 70. urodziny" und „sob 1 lis · za 5 dni",
   jede fuehrt zu ihrem Anlass (`/birthdays?open=<id>`).
 
 Gegangen sind die Teraz-Karte, das Abendessen, der Plan des Tages (er wiederholte den laufenden
 Termin), Zakupy, Jutro, die Frage der Woche, die Vorschaukacheln, Erweiterungs-Widgets und
-„Dostosuj Dziś"; der Wand-Modus startet aus „Więcej". Der Tagesplan (`utils/today-plan.js`) und
-das Tagesprogramm gelten seitdem fuer die Wand.
+„Dostosuj Dziś"; der Wand-Modus startet aus „Więcej". Mit dem Blatt gelten auch seine Optionen
+nicht mehr (Kalender „nur meine", Geburtstage aus, die Stufe der Liste, Aufgaben-Kategorien):
+die Seite fragt `/dashboard` ohne Filter, die gespeicherten Werte bleiben unberuehrt. Der
+Tagesplan (`utils/today-plan.js`) und das Tagesprogramm gelten seitdem fuer die Wand.
 
 ### Die Modulseiten (Tafla, 2026-10-20)
 The pages behind Więcej speak ONE vocabulary, `public/styles/inset-list.css` (global, next to
