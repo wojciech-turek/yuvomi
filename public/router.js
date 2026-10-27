@@ -31,7 +31,7 @@ import { numberLocaleFor } from '/settings/region-presets.js';
 import { setDisplayTimeZone, zonedDateKey } from '/utils/timezone.js';
 import { rememberZonePrefs, forgetZonePrefs, noteZoneDecision } from '/utils/household-zone-hint.js';
 import { isKitchenRoute, getLastKitchenRoute } from '/utils/kitchen-tabs.js';
-import { swapPage, swapTheme } from '/utils/view-transition.js';
+import { swapPage } from '/utils/view-transition.js';
 import { moduleAccentToken, moduleAccentVar } from '/utils/module-accent.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
 import { getLastHealthRoute, HEALTH_ROUTES } from '/utils/health-tabs.js';
@@ -185,47 +185,18 @@ const isStandalone = window.matchMedia('(display-mode: standalone)').matches
   || navigator.standalone === true;
 
 /**
- * System-Farbschema als langlebige MediaQueryList. Bewusst ein Modul-Binding
- * und kein `window.matchMedia(...).addEventListener(...)` in einem Rutsch: ohne
- * gehaltene Referenz darf die Engine die Liste einsammeln, und der Listener
- * verstummt irgendwann still. Genutzt vom Auto-Modus-Nachzug des Modul-Akzents.
+ * Setzt die theme-color der installierten PWA.
+ *
+ * Seit v2 (2026-10-27) gibt es nur das helle Theme und EIN `<meta
+ * name="theme-color">` (index.html). Bis dahin stand hier ein Paar fuer hell
+ * und dunkel samt der Regel, welches davon bei ausdruecklicher Wahl gilt. Das
+ * zweite Argument nehmen alte Aufrufer noch mit (modal.js); es zaehlt nicht.
+ * @param {string} color
  */
-const darkSchemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)') ?? null;
-
-/**
- * Setzt die theme-color Meta-Tags (Light + Dark Variante).
- * @param {string} lightColor
- * @param {string} [darkColor] - Falls nicht angegeben, wird lightColor für beide gesetzt
- */
-function setThemeColor(lightColor, darkColor) {
+function setThemeColor(color) {
   if (!isStandalone) return;
-  const metas = document.querySelectorAll('meta[name="theme-color"]');
-  const dark = darkColor || lightColor;
-
-  // DIE METAS FOLGEN DEM SYSTEM, DIE APP FOLGT DER WAHL DES NUTZERS.
-  //
-  // Die beiden `<meta name="theme-color">` in index.html tragen ein
-  // `media="(prefers-color-scheme: …)"`; welche davon gilt, entscheidet also das
-  // BETRIEBSSYSTEM. Die App entscheidet es ueber `data-theme` auf <html>. Wer in
-  // der installierten PWA auf einem hellen System ausdruecklich Dunkel waehlt,
-  // bekam deshalb eine helle Statusbar ueber einer dunklen Seite - und
-  // umgekehrt. Ein erneuter Aufruf half nicht: er schrieb dasselbe Paar noch
-  // einmal, und die Auswahl davon blieb dieselbe.
-  //
-  // Bei ausdruecklicher Wahl tragen deshalb BEIDE Metas die aktive Farbe; dann
-  // ist gleichgueltig, welche der Browser nimmt. Nur im Automatik-Modus (kein
-  // `data-theme`) bleibt das Paar ein Paar - dort ist das System die richtige
-  // Quelle.
-  const forced = document.documentElement.getAttribute('data-theme');
-  const [first, second] = forced === 'dark' ? [dark, dark]
-    : forced === 'light' ? [lightColor, lightColor]
-      : [lightColor, dark];
-
-  if (metas.length >= 2) {
-    metas[0].setAttribute('content', first);
-    metas[1].setAttribute('content', second);
-  } else if (metas.length === 1) {
-    metas[0].setAttribute('content', first);
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    meta.setAttribute('content', color);
   }
 }
 
@@ -242,12 +213,9 @@ function getCSSToken(name) {
  * `--module-<name>` würde als var()-Kette „invalid at computed-value time"
  * enden statt in den CSS-Fallback `var(--color-accent)` zu laufen.
  *
- * Preis dieser Auflösung: der Inline-Wert ist eine Momentaufnahme des aktuellen
- * Themes. `--module-tasks` wechselt im Dark-Theme von #15803D auf #4ADE80 - die
- * Momentaufnahme tut das nicht. Deshalb MUSS jeder Theme-Wechsel diese Funktion
- * erneut aufrufen (applyTheme + der prefers-color-scheme-Listener für den
- * Auto-Modus), sonst behält die ganze Shell den Akzent des alten Themes und
- * Text darauf fiel im Dunkelmodus auf 2.71:1 statt 7.81:1 - unter WCAG AA.
+ * Der Inline-Wert ist eine Momentaufnahme. Solange es ein dunkles Theme gab,
+ * musste jeder Theme-Wechsel sie erneuern; seit v2 (2026-10-27, nur hell) ist
+ * sie es bis zur naechsten Navigation.
  */
 function applyModuleAccentForRoute(route) {
   const accentToken = moduleAccentToken(route?.module);
@@ -276,10 +244,16 @@ function applyModuleAccentForRoute(route) {
  */
 function updateThemeColorForRoute(route) {
   if (route?.thirdPartyModule?.accent) {
-    setThemeColor(route.thirdPartyModule.accent, route.thirdPartyModule.accent);
+    setThemeColor(route.thirdPartyModule.accent);
     return;
   }
-  setThemeColor('#F5F3ED', '#191816');
+  // Die Nachtszene der Wand ist dunkel, auch ohne dunkles Theme (v2): ueber
+  // ihr steht die Leiste in ihrem Grund, nicht im hellen Seitengrund.
+  if (document.documentElement.hasAttribute('data-wall-night')) {
+    setThemeColor(getCSSToken('--wall-night-bg') || '#0E0C0A');
+    return;
+  }
+  setThemeColor('#F6F6F3');
 }
 
 // --------------------------------------------------------
@@ -905,29 +879,6 @@ function allRoutes() {
  */
 function currentRoute() {
   return allRoutes().find((r) => r.path === routerState.currentPath);
-}
-
-/**
- * Zieht die Statusbar-Farbe auf das jetzt gültige Theme nach.
- *
- * Der Modul-Akzent ist nicht die einzige eingefrorene Momentaufnahme:
- * `updateThemeColorForRoute` löst `--module-<name>` über denselben `getCSSToken`
- * auf und schreibt das Ergebnis in beide `<meta name="theme-color">`. Ein
- * Attribut nimmt an keiner Kaskade teil, also behielt die Statusbar nach
- * hell↔dunkel die Modulfarbe des alten Themes, während die Shell darunter längst
- * umgeschaltet hatte - dieselbe Regel wie bei applyModuleAccentForRoute, nur für
- * die zweite Momentaufnahme.
- *
- * Sichtbar nur in der installierten PWA: `setThemeColor` steigt außerhalb des
- * Standalone-Modus früh aus. Deshalb fiel es neben dem Akzent-Befund nicht auf.
- */
-function refreshThemeColorForTheme() {
-  // Liegt ein Modal über der Seite, gehört die Statusbar ihm: modal.js dunkelt
-  // sie beim Öffnen ab und stellt sie über restoreThemeColor selbst wieder her.
-  // Ein Nachziehen der Routenfarbe höbe die Abdunklung mitten im offenen Modal
-  // auf - der Fall tritt im Auto-Modus ein, wenn das System selbst umschaltet.
-  if (document.getElementById('shared-modal-overlay')) return;
-  updateThemeColorForRoute(currentRoute());
 }
 
 // Bestätigter Logout, überall aus der Navigation erreichbar (Sidebar-Footer +
@@ -4992,27 +4943,9 @@ if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
 // --------------------------------------------------------
 (async () => {
   try {
-    // Vorab-Theme-Anwendung ohne Abhängigkeit von window.yuvomi
-    const stored = localStorage.getItem('yuvomi-theme');
-    if (stored === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else if (stored === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-
-    // Theme „Automatisch" (kein data-theme) folgt prefers-color-scheme rein per
-    // CSS - applyTheme() feuert dabei nie. Der Modul-Akzent im Inline-Style
-    // bliebe also beim Sonnenuntergang des Systems auf dem Hellmodus-Wert
-    // stehen: derselbe Kontrast-Bruch wie beim manuellen Umschalten, nur ohne
-    // Nutzeraktion. Der Listener zieht ihn nach; bei explizitem Theme ist der
-    // Aufruf idempotent (dieselbe Farbe wird erneut aufgelöst). Die Statusbar
-    // hängt an derselben Momentaufnahme, siehe refreshThemeColorForTheme.
-    darkSchemeQuery?.addEventListener?.('change', () => {
-      applyModuleAccentForRoute(currentRoute());
-      refreshThemeColorForTheme();
-    });
+    // (Hier wurde bis v2 das gespeicherte Theme angewandt und dem System-
+    // Farbschema gefolgt - die App ist seit 2026-10-27 immer hell,
+    // theme-init.js raeumt eine alte Wahl ab.)
 
     // GLEICHZEITIG MIT DEN SPRACHDATEIEN (Critique R18): `/version`, die
     // Sitzungsfrage und das Seitenmodul haengen weder von der Sprache noch
@@ -5121,40 +5054,6 @@ window.yuvomi = {
       window.lucide?.createIcons({ el: fab.closest('.page-fab-group') ?? fab });
     }
     return fab;
-  },
-  applyTheme: (value) => {
-    // DER GEWAEHLTE WECHSEL BLENDET (Critique R18): alles Sichtbare laeuft im
-    // Callback von swapTheme - als Blende ueber die Wurzel, wo der Browser sie
-    // kann, sonst synchron wie bisher. Der Nachtwechsel des Wandmodus ruft
-    // diese Funktion nie (utils/wall-mode.js) und bleibt ohne Blende.
-    swapTheme(() => {
-      if (value === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else if (value === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
-      // Der Modul-Akzent liegt als aufgelöste Farbe im Inline-Style von <html> und
-      // folgt der CSS-Kaskade daher NICHT. Ohne dieses Nachziehen behielte die
-      // ganze Shell (Buttons, Fokusringe, FAB, aktive Nav-Pille) den Akzent des
-      // vorherigen Themes. Begründung an applyModuleAccentForRoute.
-      applyModuleAccentForRoute(currentRoute());
-      // Die Statusbar im Standalone-Modus trägt dieselbe eingefrorene
-      // Momentaufnahme, siehe refreshThemeColorForTheme.
-      refreshThemeColorForTheme();
-    });
-    // Persistenz zuletzt und fehlertolerant: ein werfendes localStorage (Safari
-    // Privatmodus, Quota) darf das sichtbare Anwenden nicht abbrechen. Vorher
-    // stand diese Zeile zuerst - warf sie, fiel der Aufrufer in den
-    // Einstellungen auf ein direktes data-theme zurück und liess den Akzent
-    // stehen. Derselbe Schlüssel wird dort ohnehin über safeStorageSet
-    // geschrieben, hier geht also nichts verloren.
-    try {
-      localStorage.setItem('yuvomi-theme', value);
-    } catch {
-      // Theme gilt für diese Sitzung, überlebt den Reload aber nicht.
-    }
   },
   restoreThemeColor: () => {
     updateThemeColorForRoute(currentRoute());

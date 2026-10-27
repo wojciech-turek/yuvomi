@@ -74,11 +74,14 @@
  * -------------------------------------------------------- */
 
 .inset-card {
+  /* v2 (2026-10-27): Karte = Radius 12, Haarlinie, kein Schatten
+   * (--radius-card, --color-card-border, --shadow-card in tokens.css). */
   margin: 0;
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
 }
 

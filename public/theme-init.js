@@ -29,43 +29,16 @@
   } catch (e) { /* Storage nicht verfügbar (Privatmodus) → ignorieren */ }
 })();
 
-(function() {
-  var stored = localStorage.getItem('yuvomi-theme');
-  if (stored === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  } else if (stored === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-
-  // DIE STATUSBAR GEHOERT ZUR THEME-ENTSCHEIDUNG, ALSO HIERHER.
-  //
-  // Beide `<meta name="theme-color">` tragen ein `media="(prefers-color-scheme:
-  // …)"`: welche gilt, entscheidet das SYSTEM - waehrend die Zeilen darueber es
-  // gerade ueber `data-theme` entschieden haben. Wer auf einem hellen Geraet
-  // ausdruecklich Dunkel waehlt, bekam eine helle Statusbar ueber einer dunklen
-  // Seite. Bei ausdruecklicher Wahl tragen deshalb beide Metas die AKTIVE
-  // Farbe; dann ist gleichgueltig, welche der Browser nimmt. Im
-  // Automatik-Modus bleibt das Paar ein Paar - dort ist das System die richtige
-  // Quelle.
-  //
-  // HIER UND NICHT NUR IM ROUTER: dieses Skript laeuft in index.html UND in
-  // offline.html, und die Offline-Huelle hat keinen Router, der es nachholen
-  // koennte. Der Router korrigiert weiter beim Theme- und Routenwechsel; das
-  // ist die Bewegung, das hier der Anfangszustand.
-  //
-  // Die Werte kommen aus den Metas selbst, nicht als Literale: eine vierte
-  // Kopie von #F5F3ED/#191816 waere eine vierte Stelle, an der die Farbe der
-  // Seite und die ihrer Statusbar auseinanderlaufen koennen.
-  try {
-    var metas = document.querySelectorAll('meta[name="theme-color"]');
-    if (metas.length >= 2 && (stored === 'dark' || stored === 'light')) {
-      var active = metas[stored === 'dark' ? 1 : 0].getAttribute('content');
-      metas[0].setAttribute('content', active);
-      metas[1].setAttribute('content', active);
-    }
-  } catch (e) { /* ohne Metas bleibt es beim Systemverhalten */ }
+// IMMER HELL (v2, 2026-10-27: "light mode only"). Bis hierher entschied
+// dieses Skript zwischen hell, dunkel und dem System (`yuvomi-theme`,
+// `data-theme`) und zog die beiden theme-color-Metas nach. Es gibt nur noch das
+// helle Theme: kein data-theme, EIN theme-color-Meta in index.html und
+// offline.html. Eine gespeicherte Wahl von frueher wird still entfernt - sie
+// hat keine Wirkung mehr, und ein verwaister Schluessel waere ein Versprechen,
+// das niemand haelt.
+(function () {
+  try { localStorage.removeItem('yuvomi-theme'); } catch (e) { /* Privatmodus */ }
+  document.documentElement.removeAttribute('data-theme');
 })();
 
 // DER WAND-MODUS GEHOERT ZUM ERSTZUSTAND, ALSO HIERHER.
@@ -88,9 +61,9 @@
     document.documentElement.setAttribute('data-wall-mode', '');
     var hour = new Date().getHours();
     if (hour >= 22 || hour < 6) {
+      // Die Nachtszene malt ihr Dunkel selbst (--wall-night-*); ein dunkles
+      // Theme gibt es seit v2 nicht mehr.
       document.documentElement.setAttribute('data-wall-night', '');
-      // Nachts erzwungen dunkel - ohne `yuvomi-theme` anzufassen.
-      document.documentElement.setAttribute('data-theme', 'dark');
     }
   } catch (e) { /* Storage nicht verfuegbar → kein Wand-Modus in dieser Sitzung */ }
 })();

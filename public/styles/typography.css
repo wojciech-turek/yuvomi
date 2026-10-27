@@ -404,7 +404,7 @@
  * eine Heldenzahl je Bildschirm und die Gipfelzeilen ("Smacznego!", "Dzień
  * ogarnięty"). Immer 600 und tabellarisch; ab 96px mit -0.02em. */
 .u-rounded {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }

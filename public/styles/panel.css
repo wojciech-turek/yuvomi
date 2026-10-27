@@ -265,10 +265,10 @@
    * (--radius-glass-card, der Radius für Glas-Chrome und Sheets) plus
    * sichtbare Kante plus ein 3 %-Modul-Tint-Overlay aus der Glas-Phase. Drei
    * Merkmale, die eine Kennzahlkarte wie ein Sheet aussehen ließen. */
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-card-border);  /* v2: Haarlinie statt Schatten */
+  border-radius: var(--radius-card);
   padding: var(--space-3);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-0h);

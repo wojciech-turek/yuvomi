@@ -27,12 +27,12 @@
  *    niemand angefordert hat und den man dann erst wieder loswerden muss.
  *
  * 3. NACHTABSENKUNG NACH UHRZEIT. Das Tablet haengt im Flur und leuchtet um
- *    drei. Das Problem ist die Leuchtdichte, nicht der Farbmodus: ein dunkles
- *    Theme leuchtet immer noch. Zwischen 22 und 6 Uhr traegt die Wurzel deshalb
- *    `data-wall-night`, und der dunkle Grund wird ERZWUNGEN, auch wenn das
- *    Theme hell steht. Erzwungen heisst hier nicht gespeichert: die Wahl des
- *    Nutzers in `yuvomi-theme` bleibt unberuehrt, sie ist die Quelle, aus der
- *    `restoreUserTheme()` am Morgen zurueckstellt.
+ *    drei. Das Problem ist die Leuchtdichte, nicht der Farbmodus. Zwischen 22
+ *    und 6 Uhr traegt die Wurzel deshalb `data-wall-night`, und die Szene
+ *    "Noc" malt ihr Dunkel selbst (--wall-night-*, dashboard.css). Bis v2
+ *    (2026-10-27) erzwang dieser Pfad zusaetzlich `data-theme="dark"`; ein
+ *    dunkles Theme gibt es nicht mehr, die Nachtszene ist eine der zwei
+ *    bewusst dunklen Flaechen der App (die andere: die Kochbuehne).
  *
  * 4. REINE ANZEIGE. Der Modus ist ein Read-Zustand: die Programmzeilen sind
  *    Text, keine Links. Das steht nicht hier, sondern in den Renderern - hier
@@ -89,7 +89,6 @@
 import { nowFields } from './timezone.js';
 
 const WALL_KEY = 'yuvomi-wall-mode';
-const THEME_KEY = 'yuvomi-theme';
 
 /** Ab dieser Stunde (einschliesslich) ist Nacht. */
 export const WALL_NIGHT_FROM = 22;
@@ -172,25 +171,6 @@ export function isWallActive() {
 }
 
 /**
- * Stellt das Theme auf die WAHL DES NUTZERS zurueck.
- *
- * Dieselbe Drei-Wege-Logik steht in `theme-init.js` (Erstzustand vor dem
- * Rendern) und in `router.js` (`applyTheme`, mit Persistenz). Hier steht sie
- * ein drittes Mal, weil dieser Pfad genau das NICHT tun darf, was die anderen
- * beiden tun: `applyTheme` schriebe den erzwungenen Nachtwert nach
- * `yuvomi-theme` und loeschte damit die Wahl, die wir gerade
- * wiederherstellen wollen.
- */
-function restoreUserTheme() {
-  const stored = safeGet(THEME_KEY);
-  if (stored === 'dark' || stored === 'light') {
-    document.documentElement.setAttribute('data-theme', stored);
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-}
-
-/**
  * Bringt die Wurzel-Attribute auf den Stand von Route, Schalter und Uhrzeit.
  *
  * Idempotent und billig: der Minutentakt der Uhr ruft sie mit, damit der
@@ -206,32 +186,14 @@ export function syncWallMode(path = location.pathname) {
   const night = active && isWallNight();
   const wasNight = root.hasAttribute('data-wall-night');
 
-  const themeBefore = root.getAttribute('data-theme');
-
   root.toggleAttribute('data-wall-mode', active);
   root.toggleAttribute('data-wall-night', night);
 
-  // NACHTS ENTSCHEIDET DER GEWOLLTE ZUSTAND, NICHT DIE ERINNERUNG (#1453).
-  // Hier stand `night && !wasNight` - das Attribut als Gedaechtnis des letzten
-  // Aufrufs. Nach einem Reload in der Nacht hatte theme-init.js es aber schon
-  // gesetzt, und die Router-Init danach das gespeicherte Theme zurueckgestellt
-  // („Automatisch" ohne, „Hell" mit `light`): Nacht und schon Nacht, kein
-  // Zweig, die Wand blieb bis 06:00 hell. Nachts wird deshalb bei JEDEM Aufruf
-  // dunkel erzwungen, und nur der Wechsel zum Tag stellt zurueck.
-  if (night) {
-    // Erzwungen, nicht gespeichert: `yuvomi-theme` bleibt, wie der Nutzer es
-    // gewaehlt hat.
-    if (themeBefore !== 'dark') root.setAttribute('data-theme', 'dark');
-  } else if (wasNight) {
-    restoreUserTheme();
-  }
-
-  // Die Statusbar der installierten PWA haengt am `data-theme` der Wurzel
-  // (router.js: setThemeColor liest es). Ohne dieses Nachziehen stuende ueber
-  // der abgedunkelten Nachtflaeche eine helle Leiste.
-  if (night !== wasNight || root.getAttribute('data-theme') !== themeBefore) {
-    window.yuvomi?.restoreThemeColor?.();
-  }
+  // DIE STATUSBAR GEHT MIT DER SZENE (installierte PWA): router.js
+  // (updateThemeColorForRoute) gibt ihr nachts den Grund der Nachtszene, am Tag
+  // den Seitengrund. Hier wird sie nur beim Wechsel nachgezogen. Ein Theme
+  // schaltet dabei nicht mehr um (v2, 2026-10-27).
+  if (night !== wasNight) window.yuvomi?.restoreThemeColor?.();
 
   return active;
 }

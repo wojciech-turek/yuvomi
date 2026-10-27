@@ -6,14 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
 
   <!-- PWA / Theme.
-       Die Werte SIND --color-bg aus tokens.css (hell --neutral-100 #F5F3ED,
-       dunkel #191816). Ein Meta-Attribut nimmt an keiner Kaskade teil, also
-       muessen sie hier als Literal stehen - dass sie es bleiben, haelt der
-       Guard "the status bar colour is the page background" im frontend-audit.
-       Vorher stand hier dunkel #0C0C0E, zwei Stufen neben der Seite, die die
-       Statusleiste rahmt. -->
-  <meta name="theme-color" content="#F5F3ED" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#191816" media="(prefers-color-scheme: dark)" />
+       Der Wert IST --color-bg aus tokens.css (--neutral-100, v2 #F6F6F3). Ein
+       Meta-Attribut nimmt an keiner Kaskade teil, also steht er hier als
+       Literal - dass er es bleibt, haelt der Guard "the status bar colour is the
+       page background" im frontend-audit. Seit v2 (2026-10-27) gibt es nur das
+       helle Theme und damit EIN Meta statt eines Paars fuer hell und dunkel. -->
+  <meta name="theme-color" content="#F6F6F3" />
   <meta name="mobile-web-app-capable" content="yes" />
 
   <!-- iOS-spezifisch -->
@@ -29,9 +27,8 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
 
-  <!-- Theme: explizite Nutzer-Overrides vor CSS-Rendering anwenden (Flash-Prevention).
-       System-Präferenz wird durch @media (prefers-color-scheme: dark) in tokens.css
-       direkt per CSS behandelt — kein JS-matchMedia erforderlich. -->
+  <!-- Erstzustand vor dem ersten Rendern: immer hell (v2), Wand-Modus,
+       Bildschirmschoner (theme-init.js). -->
   <script src="/theme-init.js"></script>
 
   <!-- Lang: echte Nutzer-Locale vor dem Render setzen, damit Chromium-Browser nicht
