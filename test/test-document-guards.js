@@ -443,11 +443,17 @@ test('save confirmations preserve the same editor across repeated gates and keep
 // Seitenleisten-Tipps 30 und 110ms nach dem Wechsel alle. swapPage bricht die
 // Blende beim ersten pointerdown ab: der erste Tipp bleibt verloren (sein Ziel
 // war schon <html>), der zweite erreicht die neue Seite.
+// 2026-10-27, v2: das Ziel war „Notizen" - die Seitenleiste fuehrt jetzt nur
+// die fuenf Ziele der Leiste (Notizen steht auf Więcej). Getippt wird deshalb
+// „Więcej" (#sidebar-more-nav, /more): ein Ziel, das weder Start- noch
+// Wechselseite ist, sodass nur ein angekommener Tipp dorthin fuehrt.
 test('ein zweiter Tipp waehrend des Seitenwechsels erreicht die Seitenleiste', async () => {
   const page = await openPage(harness, { device: 'desktop', locale: 'de' });
   try {
-    const tapNotes = async () => {
-      const box = await (await page.$('.nav-sidebar [data-route="/notes"]')).boundingBox();
+    const tapMore = async () => {
+      const target = await page.$('.nav-sidebar #sidebar-more-nav[data-route="/more"]');
+      assert.ok(target, 'Vorbedingung: die Seitenleiste fuehrt Więcej als Link auf /more');
+      const box = await target.boundingBox();
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     };
     await page.evaluate(() => window.yuvomi.navigate('/calendar'));
@@ -456,12 +462,12 @@ test('ein zweiter Tipp waehrend des Seitenwechsels erreicht die Seitenleiste', a
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(await page.evaluate(() => document.documentElement.classList.contains('navigating')), true,
       'Vorbedingung: der Wechsel laeuft noch als View Transition - sonst misst die Sonde nichts');
-    await tapNotes();
+    await tapMore();
     await new Promise((r) => setTimeout(r, 80));
-    await tapNotes();
-    await page.waitForFunction(() => location.pathname === '/notes', { timeout: 3000 }).catch(() => {});
-    assert.equal(await page.evaluate(() => location.pathname), '/notes',
-      'der zweite Tipp auf "Notizen" verpuffte waehrend der Blende');
+    await tapMore();
+    await page.waitForFunction(() => location.pathname === '/more', { timeout: 3000 }).catch(() => {});
+    assert.equal(await page.evaluate(() => location.pathname), '/more',
+      'der zweite Tipp auf "Więcej" verpuffte waehrend der Blende');
   } finally {
     await page.close();
   }
@@ -2681,6 +2687,18 @@ test('Sonde 9 - ein Compositor-Versprechen im Ruhezustand ist einmalig, nie eine
   const findings = [];
   let routesSeen = 0;
   let layersSeen = 0;
+  let control = null;
+
+  /** Signaturen, die im Ruhezustand mehr als einmal ein Versprechen tragen. */
+  const repeated = (layers) => {
+    const counts = new Map();
+    for (const { sig, wc } of layers) {
+      const entry = counts.get(sig) ?? { count: 0, wc };
+      entry.count += 1;
+      counts.set(sig, entry);
+    }
+    return [...counts].filter(([, { count }]) => count >= 2);
+  };
 
   const routes = sweep('Sonde 9');
   for (const name of routes) {
@@ -2690,16 +2708,42 @@ test('Sonde 9 - ein Compositor-Versprechen im Ruhezustand ist einmalig, nie eine
     await new Promise((r) => setTimeout(r, 500));
     routesSeen += 1;
 
-    const counts = new Map();
-    for (const { sig, wc } of await restingLayers(page)) {
-      layersSeen += 1;
-      const entry = counts.get(sig) ?? { count: 0, wc };
-      entry.count += 1;
-      counts.set(sig, entry);
+    /* 2026-10-27, v2: DIE GEGENPROBE STATT DER MINDESTZAHL. Hier verlangte die
+     * Sonde mindestens eine Ebene je Route, weil die Shell sie mitbrachte (am
+     * Finger der gleitende Tab-Indikator). Die v2-Leiste ist flach - kein
+     * Glas, kein Blur, kein Indikator, kein will-change -, und im Ruhezustand
+     * gibt es am Finger keine Ebene mehr. Gut fuer die App, aber eine Sonde,
+     * die nichts sieht, beweist nichts. Deshalb setzt sie auf der ersten Route
+     * selbst ZWEI Zeilen mit demselben Versprechen in den Inhalt und verlangt,
+     * dass sie beide sieht UND als Wiederholung meldet; eine einzelne dritte
+     * Signatur darf sie nicht melden. Dann ist eine leere Liste auf den
+     * Routen ein Befund ueber die App, nicht ueber den Selektor. */
+    if (!control) {
+      await page.evaluate(() => {
+        const host = document.querySelector('#main-content') ?? document.body;
+        const make = (cls) => {
+          const el = document.createElement('div');
+          el.className = cls;
+          el.style.willChange = 'transform';
+          el.style.width = '10px';
+          el.style.height = '10px';
+          host.appendChild(el);
+          return el;
+        };
+        window.__sonde9 = [make('sonde9-zeile'), make('sonde9-zeile'), make('sonde9-einmalig')];
+      });
+      const probe = await restingLayers(page);
+      await page.evaluate(() => { window.__sonde9.forEach((el) => el.remove()); delete window.__sonde9; });
+      control = {
+        rows: probe.filter((l) => l.sig === 'div.sonde9-zeile').length,
+        single: probe.filter((l) => l.sig === 'div.sonde9-einmalig').length,
+        flagged: repeated(probe).map(([sig]) => sig).filter((sig) => sig.startsWith('div.sonde9-')),
+      };
     }
 
-    for (const [sig, { count, wc }] of counts) {
-      if (count < 2) continue;
+    const layers = await restingLayers(page);
+    layersSeen += layers.length;
+    for (const [sig, { count, wc }] of repeated(layers)) {
       findings.push(`${name}: ${count}x ${sig} traegt "will-change: ${wc}" im Ruhezustand.`);
     }
   }
@@ -2712,11 +2756,17 @@ test('Sonde 9 - ein Compositor-Versprechen im Ruhezustand ist einmalig, nie eine
   // die bis R18 dazukamen, sind gestrichen - die Schwelle unten (eine Ebene je
   // Route) haelt auch ohne sie.
   // Findet die Sonde gar keine, misst sie den Selektor falsch statt die App.
+  // 2026-10-27, v2: die Shell traegt am Finger keine Ebene mehr (siehe die
+  // Gegenprobe in der Schleife). Die Reichweite belegt jetzt die Gegenprobe:
+  // zwei eingesetzte Zeilen gesehen und als Wiederholung gemeldet, die
+  // einmalige gesehen und nicht gemeldet. `layersSeen` steht nur noch in der
+  // Meldung, als Messwert.
   assert.ok(routesSeen >= routes.length - 1,
     `Nur ${routesSeen} von ${routes.length} Zustaenden gesehen.`);
-  assert.ok(layersSeen >= routesSeen,
-    `Nur ${layersSeen} Ebenen ueber ${routesSeen} Routen gefunden - die Shell allein traegt `
-    + 'mehrere je Seite. Die Sonde misst nicht mehr, was sie messen soll.');
+  assert.deepEqual(control, { rows: 2, single: 1, flagged: ['div.sonde9-zeile'] },
+    `Die Gegenprobe greift nicht (${JSON.stringify(control)}; ${layersSeen} Ebenen ueber ${routesSeen} Routen) - `
+    + 'die Sonde sieht eingesetzte Ebenen nicht oder meldet ihre Wiederholung nicht. Sie misst nicht mehr, '
+    + 'was sie messen soll.');
 
   assert.deepEqual(findings, [],
     'Wiederholte Compositor-Versprechen im Ruhezustand. Eine Signatur, die zweimal vorkommt, kommt '
