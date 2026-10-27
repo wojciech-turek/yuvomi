@@ -2388,10 +2388,11 @@ test('R19: das Skelett blendet nach --duration-sm ein und schimmert nur mit tran
 
 test('R19: die Uebersicht blendet vom Skelett zum Inhalt ueber swapContent', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // TAFLA (2026-10-19): das Skelett ist das von Dziś (`.day-skeleton`), der
-  // Inhalt kommt aus renderTodayPage() - dieselbe Blende, nur andere Namen.
-  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.day-skeleton'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
-  assert.match(src, /swapContent\(shell, \(\) => setHtml\(shell, renderTodayPage\(todayState\)\), \{ animate: fromSkeleton \}\);/);
+  // TAFLA (2026-10-19): das Skelett ist das von Dziś, der Inhalt kommt aus
+  // renderTodayPage() - dieselbe Blende, nur andere Namen.
+  // 2026-10-27, v2: das Skelett heisst `.dz-skeleton`, der Zustand `dzisState`.
+  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.dz-skeleton'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
+  assert.match(src, /swapContent\(shell, \(\) => setHtml\(shell, renderTodayPage\(dzisState\)\), \{ animate: fromSkeleton \}\);/);
 });
 
 /* 12. GERICHTETER WECHSEL EINER REGION (R19, Critique 2026-10-16): der

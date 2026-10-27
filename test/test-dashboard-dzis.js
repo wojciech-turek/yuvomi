@@ -260,6 +260,8 @@ test('the page, top to bottom: header, weather, Kalendarz, Zadania, Wkrótce - a
   assert.ok(order.every((pos) => pos > 0), `every part is drawn: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the design\'s order');
   assert.equal(count(html, /<h2 class="dz-head__greeting"/g), 1, 'one greeting, the page\'s h2');
+  assert.equal(count(html, /<h2\b/g), 1, 'the sections are h3 under it');
+  assert.equal(count(html, /<h3 class="dz-(?:sec|soon)__title"/g), 3);
   assert.match(html, /<a class="dz-head__me" href="\/settings"/);
   for (const gone of [/day-now/, /day-plan/, /day-closed/, /data-day-action="cook"/, /data-day-action="customize"/, /page-fab/, /today\.planTitle/]) {
     assert.doesNotMatch(html, gone, `${gone} is gone with v2`);
@@ -299,7 +301,8 @@ test('Zadania: every circle has a name, the flag is read out, late is marked; Do
   assert.equal(circles[0], 'tasks.markDone{&quot;title&quot;:&quot;Zapłacić za prąd&quot;}');
   assert.equal(count(html, /data-lucide="flag" class="dz-task__flag" role="img" aria-label="today\.priorityFlag"/g), 2);
   assert.equal(count(html, /dz-task__due--late/g), 1);
-  assert.match(html, /<h2 class="dz-sec__title" id="dz-tasks-h">nav\.tasks <span class="dz-sec__count">9<\/span><\/h2>/);
+  assert.match(html, /<h3 class="dz-sec__title" id="dz-tasks-h">nav\.tasks<\/h3>\s*<span class="dz-sec__count">9<\/span>/,
+    'the count stands beside the heading, not in its name');
   assert.match(html, /<a class="dz-sec__link" href="\/tasks"[^>]*>common\.all<\/a>/);
   assert.match(html, /<button type="button" class="dz-tasks__add" data-day-action="add-task">/);
 });

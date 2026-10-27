@@ -25,7 +25,7 @@ import { swapContent } from '/utils/content-swap.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
 import { dashboardQuery, dashboardQueryFiltersCounts, dashboardRequest, fetchPendingReminders, childDefaultWidgetConfig } from '/utils/dashboard-widgets.js';
 import { buildDefaultWidgetConfig, normalizeDashboardConfigWithExtensions } from '/utils/extension-widgets.js';
-import { exitWallMode, isWallActive, syncWallMode } from '/utils/wall-mode.js';
+import { exitWallMode, isWallActive, syncWallMode, takeWallEntryFocus } from '/utils/wall-mode.js';
 import { mountZonePrompt } from '/utils/household-zone-hint.js';
 import { wireWallTimer, readWallTimer } from '/components/wall-timer.js';
 import { buildWall, wallClock, wallFingerprint, WALL_REFRESH_MS } from '/utils/wall-plan.js';
@@ -62,11 +62,11 @@ let _wallLeave = null;
  * stand der Fokus auf <body>: wer per Tastatur „Wand-Modus starten" drueckte,
  * fand sich nirgends, und nach Esc wieder am Dokumentanfang. Die Absicht
  * ueberlebt den Neuaufbau hier, weil `render()` eine neue Closure baut:
- *   'enter' -> die Wandflaeche selbst (`#wall-surface`, tabindex=-1): ein
- *              ruhiger Einstieg, kein Knopf - ein Enter dort beendete sonst
- *              gleich wieder, was gerade begonnen hat;
- *   'leave' -> der Knopf, der die Wand wieder oeffnet (am Finger das Menue).
- * Einmal gelesen, dann vergessen. */
+ *   'leave' -> der Anfang von Dziś (das Konto im Kopf).
+ * Einmal gelesen, dann vergessen. Den Start ('enter': die Wandflaeche selbst,
+ * `#wall-surface`, tabindex=-1 - ein ruhiger Einstieg, kein Knopf) haelt seit
+ * v2 (2026-10-27) utils/wall-mode.js: der Start steht in „Więcej", auf einer
+ * anderen Seite (`takeWallEntryFocus`). */
 let _wallFocusIntent = null;
 function takeWallFocusIntent(kind) {
   if (_wallFocusIntent !== kind) return false;
@@ -706,7 +706,7 @@ function rebuildWall(container, shell, { surface, rerender, signal, fit, actions
   if (globalThis.window?.lucide) globalThis.window.lucide.createIcons({ el: shell });
   wireRecipeThumbs(shell);
   wireWallSurface(container, rerender, signal, actions);
-  restoreFocusAfterRebuild(container, [keepFocus, takeWallFocusIntent('enter') ? '#wall-surface' : null]);
+  restoreFocusAfterRebuild(container, [keepFocus, takeWallEntryFocus() ? '#wall-surface' : null]);
   return fit.show(shell);
 }
 

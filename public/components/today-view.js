@@ -74,10 +74,15 @@ function dots(people, household) {
   return `<span class="dz-dots${people.length > 1 ? ' dz-dots--pair' : ''}" aria-hidden="true">${dot(people[0])}${people[1] ? dot(people[1], ' dz-dot--second') : ''}</span>`;
 }
 
+/**
+ * The head of a section: an h3 under the greeting's h2, the count beside it
+ * (never in the heading's name), the link at the end.
+ */
 function sectionHead(id, title, link, count = '') {
   return `
       <div class="dz-sec__head">
-        <h2 class="dz-sec__title" id="${esc(id)}">${esc(title)}${count !== '' ? ` <span class="dz-sec__count">${esc(count)}</span>` : ''}</h2>
+        <h3 class="dz-sec__title" id="${esc(id)}">${esc(title)}</h3>${count !== '' ? `
+        <span class="dz-sec__count">${esc(count)}</span>` : ''}
         ${link ? `<a class="dz-sec__link" href="${esc(link.route)}" data-route="${esc(link.route)}">${esc(link.label)}</a>` : ''}
       </div>`;
 }
@@ -225,7 +230,7 @@ function renderTasks(state) {
 function renderSoon(rows) {
   return `
     <section class="dz-soon" aria-labelledby="dz-soon-h">
-      <h2 class="dz-soon__title" id="dz-soon-h">${esc(t('today.soonTitle'))}</h2>
+      <h3 class="dz-soon__title" id="dz-soon-h">${esc(t('today.soonTitle'))}</h3>
       <ul class="dz-soon__list">${rows.map((row) => `
         <li><a class="dz-soon__row" href="${esc(row.route)}" data-route="${esc(row.route)}">
           ${icon('cake', 'dz-soon__icon')}

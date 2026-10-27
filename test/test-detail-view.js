@@ -568,10 +568,12 @@ test('der Rueckgaengig-Streifen blendet JEDE Darstellung der Aufgabe aus (#918)'
   // Dringend-Widget sind mit dem Raster gegangen; die Aufgabe steht jetzt als
   // Zeile im Plan von Dziś (components/today-view.js, renderPlanRow) und muss
   // dort einen der beiden Namen tragen, die taskRowsIn sucht.
+  // 2026-10-27, v2: die Aufgabe steht in der Karte „Zadania" von Dziś
+  // (components/today-view.js, taskRow).
   const today = await read('public/components/today-view.js');
-  const planRow = today.slice(today.indexOf('export function renderPlanRow('), today.indexOf('function renderPlan(state)'));
-  assert.ok(planRow.length > 0, 'renderPlanRow ist nicht mehr auffindbar');
-  assert.match(planRow, /data-object-kind=|data-task-id=/,
+  const taskRow = today.slice(today.indexOf('function taskRow('), today.indexOf('function renderTasks(state)'));
+  assert.ok(taskRow.length > 0, 'taskRow ist nicht mehr auffindbar');
+  assert.match(taskRow, /data-object-kind="task" data-object-id=/,
     'die Zeile einer Aufgabe in Dziś benennt ihr Objekt - sonst bleibt sie nach dem Loeschen stehen');
 });
 

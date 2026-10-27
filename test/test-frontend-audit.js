@@ -6523,10 +6523,13 @@ test('polished rounded cards use subtle full borders instead of thick accent cap
   // Akzentkappe sitzt. Das Pseudoelement ist entfallen (1.00:1 im Light, Glas-
   // Vokabular auf einer Inhaltskarte), womit die Zusage strenger gilt als
   // vorher. Geprüft wird deshalb die Zusage selbst: keine Kappe an der Kante.
-  const widgetBase = dashboard.match(/\n\.widget\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.ok(widgetBase, '.widget muss eine Basisregel haben');
-  assert.doesNotMatch(widgetBase, /border-top:\s*(?:[2-9]px|var\(--space-[1-9])/);
-  assert.doesNotMatch(dashboard, /\.widget::before/);
+  // 2026-10-27, v2: die Widget-Kachel ist mit den Kacheln von Dziś gegangen;
+  // die Karte von Dziś ist `.dz-card` - eine volle Haarlinie, keine Kappe.
+  const cardBase = dashboard.match(/\n\.dz-card\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(cardBase, '.dz-card muss eine Basisregel haben');
+  assert.match(cardBase, /border:\s*1px solid var\(--color-card-border\)/);
+  assert.doesNotMatch(cardBase, /border-top:\s*(?:[2-9]px|var\(--space-[1-9])/);
+  assert.doesNotMatch(dashboard, /\.widget::before|\.dz-card::before/);
   assert.doesNotMatch(housekeepingCard, /border-top:\s*3px/);
 });
 
@@ -15762,15 +15765,13 @@ test('ein Modul fuehrt EIN Zeichen, und die Zuordnung steht an einer Stelle', ()
   //     (settings/module-order.js). Jede einzelne ist hier benannt, weil jede
   //     einzeln zurueckkommen kann.
   const dashboard = read('../public/pages/dashboard.js');
-  // Core-Widgets: eine Quelle (MODULE_ICON). Extension-Widgets: Icon aus dem
-  // Manifest (capabilities.widgets[].icon) - keine zweite Kern-Tabelle.
-  assert.match(dashboard, /function widgetIcon\(id\)\s*\{[\s\S]*?getExtensionWidgetMeta\(id\)[\s\S]*?MODULE_ICON\[id\]/,
-    'widgetIcon leitet Core-Widgets aus MODULE_ICON ab und Extension-Widgets aus dem Manifest');
+  // 2026-10-27, v2: widgetIcon() ist mit den Kacheln und Erweiterungs-Widgets
+  // von Dziś gegangen; die Seite fuehrt kein Modul-Zeichen mehr selbst.
+  assert.doesNotMatch(dashboard, /function widgetIcon\(/);
   assert.doesNotMatch(dashboard, /const map = \{ tasks:/,
     'die zweite Modul→Zeichen-Tabelle ist wieder da');
   // TAFLA (2026-10-24): die Widget-Koepfe (widgetHeader) sind mit dem
-  // Kachelraster gegangen; die Kacheln von Dziś holen ihr Zeichen ueber
-  // widgetIcon() - die eine Stelle, die oben geprueft ist.
+  // Kachelraster gegangen.
   assert.doesNotMatch(dashboard, /widgetHeader\(/, 'die Widget-Koepfe des alten Rasters sind wieder da');
 
   const moduleOrder = read('../public/settings/module-order.js');
@@ -21526,15 +21527,19 @@ test('R20: der Wand-Modus fuehrt den Fokus, benennt den Timer und laesst die Ini
   // TAFLA (2026-10-19): das Markup der Wand steht in components/wall-view.js.
   const wallView = read('../public/components/wall-view.js');
   assert.match(wallView, /<div class="wall" id="wall-surface" tabindex="-1"/, 'die Flaeche ist der Landeplatz des Fokus');
-  // TAFLA (2026-10-19): der Einstieg steht in „Dostosuj Dziś" (enterWallFromToday).
-  const enter = dash.slice(dash.indexOf('function enterWallFromToday('));
-  assert.match(enter.slice(0, 200), /_wallFocusIntent = 'enter'/, 'der Start merkt sich, wohin der Fokus soll');
+  // TAFLA (2026-10-19): der Einstieg stand in „Dostosuj Dziś" (enterWallFromToday).
+  // 2026-10-27, v2: er steht in „Więcej" und fuehrt per Navigation auf `/`;
+  // die Absicht haelt deshalb der Start selbst (utils/wall-mode.js).
+  const mode = read('../public/utils/wall-mode.js');
+  const enter = mode.slice(mode.indexOf('export function enterWallMode('));
+  assert.match(enter.slice(0, 200), /_entryFocus = true/, 'der Start merkt sich, wohin der Fokus soll');
+  assert.match(read('../public/pages/more.js'), /if \(action === 'wall'\) \{\s*enterWallMode\(\);/, 'Więcej startet ueber genau diesen Weg');
   const wall = dash.slice(dash.indexOf('function rebuildWall('), dash.indexOf('function updateWallClock('));
   assert.match(wall, /captureRebuildFocus\(/, 'der stille Neuaufbau nimmt den Fokus mit');
-  assert.match(wall, /takeWallFocusIntent\('enter'\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
+  assert.match(wall, /takeWallEntryFocus\(\) \? '#wall-surface'/, 'nach dem Start steht er auf der Flaeche');
   const leave = dash.slice(dash.indexOf('function wireWallExit('), dash.indexOf('function wireWallExit(') + 400);
   assert.match(leave, /_wallFocusIntent = 'leave'/, 'der Ausstieg merkt sich den Rueckweg');
-  assert.match(dash, /if \(takeWallFocusIntent\('leave'\)\) restoreFocusAfterRebuild\(container, \['\[data-day-action="customize"\]'\]\)/, 'nach Esc steht er auf „Dostosuj Dziś", dem Weg, der die Wand wieder oeffnet');
+  assert.match(dash, /if \(takeWallFocusIntent\('leave'\)\) restoreFocusAfterRebuild\(container, \['\.dz-head__me'\]\)/, 'nach Esc steht er am Anfang von Dziś, dem Konto im Kopf');
 
   const timer = read('../public/components/wall-timer.js');
   assert.match(timer, /role="group" aria-labelledby="wall-timer-presets-label"/, 'die sichtbare Zeile ist der Name der Gruppe');

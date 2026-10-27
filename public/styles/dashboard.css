@@ -1459,6 +1459,8 @@
   max-width: 40rem;
   margin: 0 auto;
   color: var(--color-text-primary);
+  /* Times, temperatures and counts line up (R18): every number inherits. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Header ─────────────────────────────────────────────── */
@@ -1575,8 +1577,7 @@
 .dz-sec__head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-1);
 }
 
 .dz-sec__title {
@@ -1587,19 +1588,25 @@
   color: var(--color-text-primary);
 }
 
+/* "Zadania 5": the count beside the heading in the head's size, not in it. */
 .dz-sec__count {
-  font-weight: var(--font-weight-regular);
+  font-size: var(--type-section);
+  line-height: var(--type-section-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 /* "Tydzień", "Wszystkie": a plain word in a 20-tall line keeps its
- * --target-base hit by hanging into the lines above and below. */
+ * --target-base hit by hanging into the lines above and below - over the
+ * card's top edge by a few px, so it stands above it. */
 .dz-sec__link {
+  position: relative;
+  z-index: 1;
   flex: none;
   min-inline-size: var(--target-base);
   padding: calc((var(--target-base) - var(--type-row-lh)) / 2) var(--space-2);
-  margin: calc((var(--target-base) - var(--type-row-lh)) / -2) calc(var(--space-2) * -1);
+  margin-block: calc((var(--target-base) - var(--type-row-lh)) / -2);
+  margin-inline: auto calc(var(--space-2) * -1);
   font-size: var(--type-row);
   line-height: var(--type-row-lh);
   color: var(--color-accent);
@@ -2012,8 +2019,10 @@
   cursor: pointer;
 }
 
+/* Done steps back, struck through. The design's #8D8C87 is 3.37:1 on the
+ * card - too light for text; ink-3 of the text ramp holds 4.5:1. */
 .dz-task--done .dz-task__title {
-  color: var(--color-ink-3);
+  color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
 

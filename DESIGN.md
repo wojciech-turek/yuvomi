@@ -3943,35 +3943,40 @@ ohne Gesamtzahl (die Termine, bei fuenf geschnitten) traegt keine Badge: eine Za
 ihre eigene Obergrenze nennt, ist keine Auskunft. Die Badge ist `aria-hidden`, dieselbe Zahl
 steht als sr-only-Satz hinter der h3 - sonst hiesse die Ueberschrift „Geburtstage 5".
 
-### Dziś: der Tag als ein Plan (Tafla, entschieden 2026-10-19)
-Die Startseite ist ausserhalb des Wand-Modus kein Kachelraster mehr, sondern EIN Plan
-(`public/utils/today-plan.js` rechnet, `public/components/today-view.js` zeichnet):
+### Dziś v2 (entschieden 2026-10-27, Entwurf „Main" / „DzisFull")
+Die Startseite zeigt ausserhalb des Wand-Modus genau, was der Entwurf zeigt, von oben nach
+unten (`public/utils/dzis-plan.js` rechnet, `public/components/today-view.js` zeichnet, die
+Regeln stehen am Ende von `public/styles/dashboard.css` auf den v2-Tokens):
 
-- **Kopf**: Datum (Footnote 600, ink-2), Gruss (Large Title), Wetterzeile, rechts der eigene
-  Avatar als Weg in die Einstellungen. Keine Werkzeugknoepfe im Kopf.
-- **Teraz-Karte** (E1, Radius 20) nach fester Rangfolge: laufender Timer > eigener oder
-  gemeinsamer Termin binnen 60 min > das Abendessen ab 15:00 bis zwei Stunden danach (auf
-  `--color-hearth`, Teller, Zutaten-Meter „Masz 5 z 6", primaer „Gotuj", sekundaer „Dopisz") >
-  das Naechste mit Uhrzeit binnen drei Stunden > „Wolny wieczór". Ist alles erledigt, steht an
-  ihrer Stelle „Dzień ogarnięty" (Rundschrift) mit einem Blick auf morgen.
-- **Plan dnia**: Aufgaben, Termine, eigene Dosen (Haken = „Wzięte"), Abfuhr und die Zeilen des
-  Beitrags-Vertrags in EINER Liste - Ueberfaelliges zuerst mit „zaległe", dann nach Uhrzeit,
-  dann ohne Uhrzeit. Was vorbei ist, faltet sich in die Zeile „Wcześniej" (in der Karte, oben,
-  klappt an Ort und Stelle auf). Der Zaehler „3 z 9" zaehlt nur Abhakbares.
-- **Personenregel**: eigene Zeilen ohne Kreis, die einer anderen Person mit ihrem Initial in
-  ihrer Personenfarbe (`personToken()`, `public/utils/person-color.js`), gemeinsame mit dem
-  diagonal geteilten Razem-Kreis. Keine Familienkarte bei zwei Erwachsenen: die Kreise sagen
-  schon, wer was tut; „Jutro" ersetzt sie (erst ab drei Erwachsenen bietet „Dostosuj Dziś" sie an).
-- **Abschnitte** in der Reihenfolge der Person: Zakupy, Jutro, Pytanie tygodnia, Wkrótce und
-  optionale Vorschaukacheln (Kafelek podglądu, zwei je Zeile; eine Kachel ohne Aussage faellt
-  weg). Sie liegen in derselben persoenlichen Anordnung wie frueher die Kacheln
-  (`dashboard_widgets`, Ids `today-*`), damit Vorgabe des Haushalts, Zuruecksetzen und jede
-  gespeicherte Anordnung weiter gelten.
-- **„Dostosuj Dziś"** ist ein Dialog, der jede Aenderung sofort speichert - darum kein
-  „Abbrechen" und kein Verlassen-Schutz. Dort stehen auch die Filter von Aufgaben und
-  Kalender (sie verengen den ganzen Plan), Vorgabe/Zuruecksetzen und der Wand-Modus.
+- **Kopf**: Datum (`--type-row` 15, ink-2), Gruss (`--type-page` 26/600, die h2 der Seite),
+  rechts der eigene Avatar (36 auf 44) als Weg in die Einstellungen. Keine Werkzeuge.
+- **Wetterkarte** (die Frage des Morgens: regnet es heute?): Symbol, Temperatur 26/600 in
+  tabellarischen Ziffern, Zustand, „14° / 8° · odczuwalna 9°". Darunter hinter einer
+  Haarlinie die Regenzeile des RESTES des Tages aus `today_hours` der Wetter-Antwort - Schirm,
+  „Deszcz 13:00-17:00" (erste bis letzte Stunde ab 40 %), „do 85%" - und 14 Balken ab der
+  Stunde vor jetzt (`--color-rain` ab 40 %, darunter `--color-rain-soft`, die laufende Stunde in
+  Tinte, „teraz" und jede dritte Stunde benannt, aria-hidden). Trocken: Sonne und „Bez deszczu
+  do wieczora" (nach 17 Uhr „do końca dnia"). Die Karte fuehrt in die Wettereinstellungen;
+  ohne Wetter steht keine Karte.
+- **Kalendarz**, kompakt: Vergangenes faltet sich in „N wcześniej · 08:00 Titel" (klappt an Ort
+  und Stelle auf), der laufende Termin steht hervorgehoben an seinem Platz (Akzent 8 %,
+  „teraz · do 11:00") statt in einer zweiten Karte; Zeilen 48 mit Uhrzeit 15/600, Personenpunkt
+  (`--person-N-dot`, bei „razem" beide), Titel, Meta 12. Die letzte Zeile blickt auf morgen
+  („Jutro · 08:00 Przedszkole · i 2 więcej"), „Tydzień" oeffnet die Woche (`?view=week`).
+- **Zadania**: was wartet, in der Reihenfolge des Servers (ueberfaellig, datiert, ohne Datum),
+  fuenf Zeilen, die Zahl aller offenen neben der h3. Der eine Abhakkreis (`.check-ring`) hakt an
+  Ort und Stelle ab (Durchstreichen, dann geht die Zeile, „Cofnij" in der Meldung);
+  Faelligkeit 12, ueberfaellig in `--color-overdue` 600; Fahne nur fuer hoch/dringend;
+  Personenscheibe. Die letzte Zeile „Dodaj zadanie" oeffnet das Erfassen-Blatt. Lesende Konten
+  und das Display sehen keine Kreise und kein „Dodaj zadanie".
+- **Wkrótce**, leise und ohne Karte: Geburtstage und Namenstage der naechsten 30 Tage,
+  hoechstens drei, 44er Zeilen mit Torte, „Name · 70. urodziny" und „sob 1 lis · za 5 dni",
+  jede fuehrt zu ihrem Anlass (`/birthdays?open=<id>`).
 
-Das Tagesprogramm darunter gilt seitdem fuer die Wand.
+Gegangen sind die Teraz-Karte, das Abendessen, der Plan des Tages (er wiederholte den laufenden
+Termin), Zakupy, Jutro, die Frage der Woche, die Vorschaukacheln, Erweiterungs-Widgets und
+„Dostosuj Dziś"; der Wand-Modus startet aus „Więcej". Der Tagesplan (`utils/today-plan.js`) und
+das Tagesprogramm gelten seitdem fuer die Wand.
 
 ### Die Modulseiten (Tafla, 2026-10-20)
 The pages behind Więcej speak ONE vocabulary, `public/styles/inset-list.css` (global, next to

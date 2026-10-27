@@ -214,5 +214,20 @@ export function exitWallMode() {
  */
 export function enterWallMode() {
   setWallModeEnabled(true);
+  _entryFocus = true;
   syncWallMode(location.pathname);
+}
+
+/* DER START GIBT DEN FOKUS AN DIE FLAECHE (R20 D4). Seit v2 (2026-10-27)
+ * startet die Wand aus „Więcej" und kommt per Navigation auf `/` - in einer
+ * neuen Seite, die von diesem Start nichts weiss. Die Absicht steht deshalb
+ * hier, beim Start selbst; die Uebersicht nimmt sie beim ersten Zeichnen der
+ * Wand einmal (`takeWallEntryFocus`) und setzt den Fokus auf `#wall-surface`. */
+let _entryFocus = false;
+
+/** True once after `enterWallMode()`: the wall's first drawing takes the focus. */
+export function takeWallEntryFocus() {
+  const wanted = _entryFocus;
+  _entryFocus = false;
+  return wanted;
 }

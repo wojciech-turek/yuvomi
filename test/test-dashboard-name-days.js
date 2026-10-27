@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // TAFLA (2026-10-19): the birthday widget of the old board is gone. Upcoming
-// birthdays and name days now stand in "Wkrótce" of Dziś (buildSoon in
-// utils/today-plan.js) - the same three promises hold there.
-const { buildSoon, planContext } = await import('../public/utils/today-plan.js');
+// birthdays and name days stand in "Wkrótce" of Dziś - the same three
+// promises hold there.
+// 2026-10-27, v2: "Wkrótce" is drawn from birthdaysSoon (utils/dzis-plan.js)
+// as "Name · 70. urodziny" / "sob 1 lis · za 5 dni"; buildSoon is gone.
+const { planContext } = await import('../public/utils/today-plan.js');
+const { birthdaysSoon } = await import('../public/utils/dzis-plan.js');
 
 const ctx = planContext({ now: new Date('2026-04-22T10:00:00Z') });
-const soon = (birthday) => buildSoon({ birthdays: [birthday] }, ctx);
+const soon = (birthday) => birthdaysSoon({ birthdays: [birthday] }, ctx);
 
 test('Wkrótce shows a name day as its own labelled occurrence', () => {
   const [row] = soon({
@@ -19,10 +22,10 @@ test('Wkrótce shows a name day as its own labelled occurrence', () => {
     next_age: null,
   });
 
-  assert.equal(row.title, 'Jiří');
-  assert.equal(row.meta, 'birthdays.nameDay');
-  assert.doesNotMatch(row.title, /today\.birthdayAge/);
-  assert.equal(row.date, '2026-04-24');
+  assert.equal(row.name, 'Jiří');
+  assert.equal(row.kind, 'today.nameDayKind');
+  assert.doesNotMatch(row.kind, /birthdays\.heroAge/);
+  assert.match(row.when, / · birthdays\.inDays\{"count":2\}$/);
 });
 
 test('a birthday occurrence continues to show the upcoming age', () => {
@@ -35,8 +38,7 @@ test('a birthday occurrence continues to show the upcoming age', () => {
     next_age: 36,
   });
 
-  assert.match(row.title, /today\.birthdayAge/);
-  assert.notEqual(row.meta, 'birthdays.nameDay');
+  assert.equal(row.kind, 'birthdays.heroAge{"age":36}');
 });
 
 test('legacy birthday data without an age does not render an empty age label', () => {
@@ -48,9 +50,9 @@ test('legacy birthday data without an age does not render an empty age label', (
     next_age: null,
   });
 
-  assert.equal(row.title, 'Bez věku');
-  assert.doesNotMatch(row.title, /null/);
-  assert.doesNotMatch(row.title, /today\.birthdayAge/);
+  assert.equal(row.name, 'Bez věku');
+  assert.equal(row.kind, 'today.birthdayKind', 'the word, not an empty age');
+  assert.doesNotMatch(`${row.name} ${row.kind}`, /null/);
 });
 
 // #1821: a row that names ONE occasion opens it - the birthdays page reads

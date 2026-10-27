@@ -5,10 +5,11 @@
  *        Geburtstags-, Countdown-, Budget-, Zyklus- und Mahlzeiten-Kachel), das
  *        Heute-Blatt und der Anpassen-Modus sind mit Dziś und der Wand
  *        gegangen - und mit ihnen ihre Faelle. Hier bleibt, was weiter gilt:
- *        `relativeDateLabel` (utils/day-label.js), die Kennzahlen der
- *        Vorschau-Kacheln (`metricTileFor`), die Zeile der Haushaltshilfe im
- *        Plan von Dziś, die Ziele einer Zeile (#1821) und der Fokus beim
- *        stillen Neuaufbau.
+ *        `relativeDateLabel` (utils/day-label.js), die Zeile der
+ *        Haushaltshilfe im Plan (heute das Modell der Wand), die Ziele einer
+ *        Zeile (#1821) und der Fokus beim stillen Neuaufbau. Die Kennzahlen
+ *        der Vorschau-Kacheln (`metricTileFor`) sind mit Dziś v2 gegangen
+ *        (2026-10-27).
  *        Zeit und Zone sind festgenagelt: Berlin wie die Demo-Saat UND je ein
  *        Gegenlauf in einer Zone, die den Tag verschiebt.
  * Ausfuehren: npm run test:dashboard-clarity
@@ -21,7 +22,7 @@ register('./test-browser-loader.mjs', import.meta.url);
 
 const tz = await import('/utils/timezone.js');
 const { __test } = await import('../public/pages/dashboard.js');
-const { relativeDateLabel } = await import('/utils/day-label.js');
+const { relativeDateLabel, housekeepingSinceLabel } = await import('/utils/day-label.js');
 const { buildPlan, planContext } = await import('/utils/today-plan.js');
 
 // --------------------------------------------------------
@@ -60,26 +61,9 @@ globalThis.__formatDayMonth = (d) => `DM:${d}`;
 // Notiz-, Geburtstags- und Entsorgungs-Kachel mit ihren Zeilen-Zielen sind mit
 // dem Raster gegangen (Tafla, 2026-10-19).
 
-test('#1821 Einkauf in Dziś: eine einzige Liste mit Offenem ist das Ziel, mehrere sind die Seite', () => withSheet(async () => {
-  const list = (id, open) => ({ id, name: `L${id}`, open_count: open, total_count: open, items: [] });
-  const one = { shoppingLists: [list(7, 4)], shoppingOpenCount: 4, shoppingOpenLists: 1 };
-  const two = { shoppingLists: [list(7, 4), list(2, 1)], shoppingOpenCount: 5, shoppingOpenLists: 2 };
-  assert.equal(__test.shoppingSoleListRoute(one), '/shopping?list=7');
-  assert.equal(__test.shoppingSoleListRoute(two), '/shopping');
-  // Der Server kappt bei drei Listen: vier offene Listen duerfen nicht auf die
-  // erste geladene zeigen, nur weil die Antwort sie zuerst nennt.
-  assert.equal(__test.shoppingSoleListRoute({ ...one, shoppingOpenLists: 4 }), '/shopping');
-  // Aelterer Server ohne Zaehler: lieber die Seite als eine geratene Liste.
-  assert.equal(__test.shoppingSoleListRoute({ shoppingLists: [list(7, 4)] }), '/shopping');
-  assert.equal(__test.shoppingSoleListRoute({}), '/shopping');
-
-  // Der echte Aufrufer: der Abschnitt „Zakupy" von Dziś (die Schlusszeile des
-  // Heute-Blatts ist mit ihm gegangen).
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(src, /const shopping = moduleOff\('shopping'\) \? null : \{[\s\S]*?route: shoppingSoleListRoute\(data\),/,
-    'Dziś nimmt sein Ziel aus derselben Regel');
-}));
+// 2026-10-27, v2: der Abschnitt „Zakupy" ist mit Dziś v2 gegangen (Entwurf
+// „Main"), und mit ihm sein Ziel (`shoppingSoleListRoute`, #1821). Der Einkauf
+// steht an der Wand; ihre Zahl misst test-dashboard-shopping-selection.js.
 
 // --------------------------------------------------------
 // #1821: eine Zeile mit Query im Ziel waermt ihr Modul vor
@@ -386,43 +370,18 @@ test('#1821 Fokus: der Neuaufbau der Seite ruft Erfassen und Wiederfokus, um das
   const fn = src.slice(src.indexOf('  function renderToday(shell) {'));
   const body = fn.slice(0, fn.indexOf('\n  }\n'));
   const capture = body.indexOf('const { key: keepFocus } = captureRebuildFocus(shell, document.activeElement, document.body);');
-  const paint = body.indexOf('setHtml(shell, renderTodayPage(todayState))');
-  const restore = body.indexOf('restoreFocusAfterRebuild(container, [keepFocus, ...(todayFocus ?? [])]);');
+  // 2026-10-27, v2: der Zustand heisst `dzisState`, der Nachfolger `dzisFocus`.
+  const paint = body.indexOf('setHtml(shell, renderTodayPage(dzisState))');
+  const restore = body.indexOf('restoreFocusAfterRebuild(container, [keepFocus, ...(dzisFocus ?? [])]);');
   assert.ok(capture > 0, 'erfasst wird vor dem Aufbau');
   assert.ok(paint > capture, 'dann wird gebaut');
   assert.ok(restore > paint, 'und danach wieder fokussiert: eigener Schluessel, dann der Nachfolger der Geste');
   assert.match(src, /function rebuildDashboard\(cfg\) \{[\s\S]*?renderToday\(shell\);/, 'jeder Neuaufbau ausserhalb der Wand geht durch renderToday()');
 });
 
-test('Kennzahlen nennen Zustand und Zeitraum: "2 offen", "9 im Monat", "im Haus seit 08:30"', () => {
-  const prevWindow = global.window;
-  global.window = { yuvomi: { isModuleDisabled: () => false } };
-  try {
-    at('2026-09-23T19:18:00Z', 'Europe/Berlin', () => {
-      // Die Vorschau-Kacheln von Dziś („Kafelek podglądu", metricTileFor).
-      const data = {
-        health: { hasMeds: true, dosesTotal: 3, dosesTaken: 1, dosesSkipped: 0, lowStockCount: 0, nextDose: { time: '20:00', name: 'Vitamin D3' } },
-        housekeeping: { configured: true, present: true, presentSince: '2026-09-23T06:30:00.000Z', visitsThisMonth: 9 },
-      };
-      const health = __test.metricTileFor('health', data, 'EUR');
-      const hk = __test.metricTileFor('housekeeping', data, 'EUR');
-      assert.equal(health.value, 'dashboard.metricDoses{"count":2}');
-      assert.equal(health.note, '20:00 Vitamin D3', 'die Zweitzeile nennt die NAECHSTE Dosis mit Uhrzeit');
-      assert.equal(hk.value, 'dashboard.metricVisitsMonth{"count":9}', 'der Zeitraum steht im Wert');
-      // 06:30Z ist 08:30 in Berlin - heute, also nur die Uhrzeit.
-      assert.equal(hk.note, 'dashboard.housekeepingPresentSince{"time":"2026-09-23T06:30:00.000Z"}');
-    });
-    at('2026-09-24T19:18:00Z', 'Europe/Berlin', () => {
-      // Dieselbe offene Sitzung einen Tag spaeter: eine vergessene Abmeldung.
-      const hk = __test.metricTileFor('housekeeping', {
-        housekeeping: { configured: true, present: true, presentSince: '2026-09-23T06:30:00.000Z', visitsThisMonth: 9 },
-      }, 'EUR');
-      assert.match(hk.note, /DM:2026-09-23, /, `ein Beginn von gestern nennt sein Datum, bekam: ${hk.note}`);
-    });
-  } finally {
-    global.window = prevWindow;
-  }
-});
+// 2026-10-27, v2: die Vorschau-Kacheln von Dziś („Kafelek podglądu",
+// metricTileFor: Dosen, Besuche, Monatssaldo) sind mit Dziś v2 gegangen. Was
+// sie ueber die Haushaltshilfe sagten, sagt die Zeile des Plans (#1452 unten).
 
 // --------------------------------------------------------
 // 2. Relative Daten: heute, morgen, Wochentag, Datum ohne Jahr
@@ -542,23 +501,8 @@ test('2×2 heisst nach seiner Form, nicht „Standard" - keine Kachel beginnt in
 
 // Faelligkeit (formatDueDate), leerer Mahlzeiten-Slot, Budget-Sparquote (#1455)
 // und die Zeilen der Geburtstags- und Countdown-Kachel (#1454) sind mit ihren
-// Widgets gegangen. Der letzte Besuch der Haushaltshilfe steht weiter in der
-// Vorschau-Kachel - und liest rueckwaerts (`earnedWhenLabel`).
-
-test('#1454: der letzte Besuch liest rueckwaerts, ohne Jahr', () => {
-  const prevWindow = global.window;
-  global.window = { yuvomi: { isModuleDisabled: () => false } };
-  try {
-    at(CRITIQUE_NOW, 'Europe/Berlin', () => {
-      const hk = (lastVisit) => ({ configured: true, present: false, unpaidAmount: 0, visitsThisMonth: 3, lastVisit });
-      const note = (lastVisit) => __test.metricTileFor('housekeeping', { housekeeping: hk(lastVisit) }, 'EUR').note;
-      assert.equal(note('2026-09-22T07:00:00.000Z'), 'dashboard.housekeepingLastVisit{"date":"common.yesterday"}');
-      assert.equal(note('2026-09-10T07:00:00.000Z'), 'dashboard.housekeepingLastVisit{"date":"DM:2026-09-10T07:00:00.000Z"}');
-    });
-  } finally {
-    global.window = prevWindow;
-  }
-});
+// Widgets gegangen; der letzte Besuch der Haushaltshilfe mit der Vorschau-
+// Kachel (2026-10-27, v2).
 
 // --------------------------------------------------------
 // Dziś: ein Check-in von gestern nennt sein Datum (#1452)
@@ -586,9 +530,6 @@ const SINCE_YESTERDAY = '2026-09-23T06:30:00.000Z'; // 08:30 in Berlin
 const hkRow = (now) => buildPlan({
   housekeeping: { configured: true, present: true, presentSince: SINCE_YESTERDAY, workerName: 'Maria', visitsThisMonth: 9 },
 }, planContext({ now })).all.find((row) => row.sourceKind === 'housekeeping');
-const tileNote = () => __test.metricTileFor('housekeeping', {
-  housekeeping: { configured: true, present: true, presentSince: SINCE_YESTERDAY, visitsThisMonth: 9 },
-}, 'EUR').note;
 const timeParam = (text) => JSON.parse(String(text).replace(/^[^{]*/, '')).time;
 
 test('#1452: der Check-in von gestern steht in Dziś mit Datum und ohne heutige Uhrzeit', () => withSheet(() => {
@@ -596,7 +537,9 @@ test('#1452: der Check-in von gestern steht in Dziś mit Datum und ohne heutige 
     const row = hkRow(new Date());
     assert.ok(row, 'Reichweite: die Haushaltshilfe steht im Plan');
     assert.match(row.timeLabel, /DM:2026-09-23, /, `das Datum steht da, bekam ${row.timeLabel}`);
-    assert.equal(timeParam(row.timeLabel), timeParam(tileNote()), 'dieselbe Angabe wie die Kennzahl-Kachel');
+    // 2026-10-27, v2: die Kennzahl-Kachel, mit der die Zeile verglichen wurde,
+    // ist gegangen; der Helfer, den beide lasen, bleibt die eine Quelle.
+    assert.equal(timeParam(row.timeLabel), housekeepingSinceLabel(SINCE_YESTERDAY));
     assert.equal(row.time, '', 'ein Beginn vor heute sortiert nicht auf 08:30 in den heutigen Tag');
   });
 }));
@@ -634,20 +577,8 @@ test('#1452: ob der Check-in von heute ist, entscheidet die Haushaltszone', () =
 // Ausgaben und Saldo des Monats, also nennt jeder ihrer Wege diesen Reiter.
 // Das Budget-Widget ist mit dem Raster gegangen; die Vorschau-Kachel bleibt.
 
-test('#1607: die Kennzahl-Kachel „Monatssaldo" nennt denselben Reiter', () => {
-  const prevWindow = global.window;
-  global.window = { yuvomi: { isModuleDisabled: () => false } };
-  try {
-    const tile = __test.metricTileFor('budget', {
-      budget: { income: 100, expenses: 40, balance: 60, entryCount: 2 },
-    }, 'EUR');
-    assert.ok(tile, 'Reichweite: die Budget-Kachel steht in der Reihe');
-    assert.equal(tile.route, '/budget?tab=budget');
-  } finally {
-    global.window = prevWindow;
-  }
-});
-
+// 2026-10-27, v2: die Kachel „Monatssaldo" ist mit Dziś v2 gegangen; der
+// Reiter, auf den sie fuehrte, bleibt ein Ziel, das das Budget kennt.
 test('#1607: der Reiter aus der Kachel ist einer, den das Budget kennt', async () => {
   globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
   globalThis.customElements = globalThis.customElements ?? { define() {}, get() {} };
@@ -681,7 +612,8 @@ test('R18: Geld, Zeit und Zaehler der Uebersicht stehen in tabular-nums', async 
   // Wand setzen die tabellarischen Ziffern an ihrer Wurzel - jede Zahl darin
   // erbt sie, auch eine, die spaeter dazukommt.
   const roots = {
-    day: [read('../public/components/today-view.js'), /<div class="day" data-today>/],
+    // 2026-10-27, v2: die Wurzel von Dziś heisst `.dz`.
+    dz: [read('../public/components/today-view.js'), /<div class="dz" data-today>/],
     wall: [read('../public/components/wall-view.js'), /<div class="wall" id="wall-surface"/],
   };
   for (const [cls, [source, root]] of Object.entries(roots)) {
@@ -774,25 +706,27 @@ test('die Uebersicht polstert am Desktop mit --page-inline-pad und kennt kein ei
 
 /* R19 (Entscheidung Ulas 2026-10-16, Critique P2 mobil): DIE UEBERSICHT AUF DEM
  * TELEFON. Das Wetter begann bei y 1438, ueber dem Gruss standen drei
- * Icon-Knoepfe. TAFLA: die Wetterzeile steht im Kopf von Dziś, der Wand-Modus
- * in „Dostosuj Dziś". (Die Avatar-Reihe der Familienkarte ging mit dem Raster.) */
-test('R19 mobil: die Wetterzeile steht im Kopf von Dziś', async () => {
+ * Icon-Knoepfe. TAFLA: die Wetterzeile stand im Kopf von Dziś, der Wand-Modus
+ * in „Dostosuj Dziś". 2026-10-27, v2: das Wetter ist die erste Karte unter dem
+ * Kopf (die Frage des Morgens: regnet es heute?), der Wand-Modus steht in
+ * „Więcej". (Die Avatar-Reihe der Familienkarte ging mit dem Raster.) */
+test('R19 mobil: die Wetterkarte steht gleich unter dem Kopf von Dziś', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // TAFLA (2026-10-19): Dziś hat keine Wetterkarte mehr; die Zeile steht im
-  // Kopf, abschaltbar in „Dostosuj Dziś" (`today-weather`).
   const view = readFileSync(new URL('../public/components/today-view.js', import.meta.url), 'utf8');
-  assert.match(view, /\$\{showWeather \? weatherLine\(weather\) : ''\}/, 'das Wetter geht in den Kopf von Dziś');
-  assert.match(src, /showWeather: entries\.some\(\(w\) => w\.id === 'today-weather' && todayVisible\(w\)\)/);
+  assert.match(view, /\$\{renderHeader\(state\)\}\s*\$\{state\.weather \? renderWeather\(state\.weather\) : ''\}/,
+    'das Wetter ist das Erste nach dem Kopf');
+  assert.match(src, /weather: weatherAvailable \? weatherCard\(weather, ctx\) : null,/);
 });
 
-test('R19 mobil: der Wand-Modus steht in „Dostosuj Dziś", nie am Display', async () => {
+test('R19 mobil: der Wand-Modus steht in „Więcej", nie am Display und nicht im Kopf von Dziś', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // Das Werkzeug-Menue im Kopf der alten Uebersicht ist mit ihm gegangen.
-  // TAFLA (2026-10-19): der Kopf von Dziś hat keine Werkzeuge mehr; der
-  // Wand-Modus steht in „Dostosuj Dziś" (Abschnitt „Więcej"), nie am Display.
-  assert.match(src, /onWall: onDisplay \? null : enterWallFromToday/);
-  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-  assert.match(sheet, /actions\.onWall \? actionRow\(\{ action: 'wall', label: t\('dashboard\.wallEnter'\)/);
+  const view = readFileSync(new URL('../public/components/today-view.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /enterWallMode|enterWallFromToday/, 'Dziś startet die Wand nicht selbst');
+  assert.doesNotMatch(view, /data-day-action="(?:wall|customize)"/);
+  const more = readFileSync(new URL('../public/pages/more.js', import.meta.url), 'utf8');
+  const kitchen = more.slice(more.indexOf('function renderKitchen('), more.indexOf('function renderKitchen(') + 600);
+  assert.match(kitchen, /if \(state\.user\?\.access_scope === 'display'\) return '';/, 'nie am Display');
+  assert.match(kitchen, /data-more-action="wall"/);
 });

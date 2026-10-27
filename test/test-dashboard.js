@@ -1665,13 +1665,14 @@ test('Wand-Modus: Einstieg und Ausstieg sind Gegenstücke auf derselben Seite (#
     // hineinkam. Geprüft wird deshalb das PAAR, nicht der neue Knopf allein -
     // verschwindet eine der beiden Hälften, ist die Einbahnstraße zurück.
     //
-    // TAFLA (2026-10-19): der Einstieg steht nicht mehr in einer Werkzeugzeile
-    // der Uebersicht, sondern in „Dostosuj Dziś" - auf derselben Seite, die die
+    // TAFLA (2026-10-19): der Einstieg stand in „Dostosuj Dziś".
+    // 2026-10-27, v2: Dziś hat kein Anpassen mehr; der Einstieg steht in
+    // „Więcej" (Tablet w kuchni) und fuehrt auf `/` - auf die Seite, die die
     // Wand wieder verlaesst. Das Paar bleibt die Zusage.
-    const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-    const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-    nodeAssert.match(sheet, /actions\.onWall \? actionRow\(\{ action: 'wall'/, 'Dostosuj Dziś traegt den Einstieg');
-    nodeAssert.match(page, /onWall: onDisplay \? null : enterWallFromToday/, 'die Uebersicht reicht ihn hinein');
+    const more = readFileSync(new URL('../public/pages/more.js', import.meta.url), 'utf8');
+    nodeAssert.match(more, /data-more-action="wall"/, 'Więcej traegt den Einstieg');
+    nodeAssert.match(more, /if \(action === 'wall'\) \{\s*enterWallMode\(\);\s*window\.yuvomi\?\.navigate\?\.\('\/'\);/,
+      'und fuehrt auf die Uebersicht');
     const wand = __test.renderWallSurface({ urgentTasks: wallTasks(1), users: [] }, null, {});
     nodeAssert.match(wand, /id="wall-exit"/, 'die Wand trägt den Ausstieg');
   });

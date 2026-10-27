@@ -26,9 +26,11 @@ const src = () => readFileSync(new URL('../public/pages/dashboard.js', import.me
 // Registrierung (Quelltext-Verdrahtung, wie beim Schedule-Widget)
 // -------------------------------------------------------------------------
 
-test('das Waste-Widget ist am Modul verdrahtet, und der Refresh nimmt die Antwort als Ganzes', () => {
+test('der Refresh nimmt die Antwort als Ganzes, und der Plan liest die Abfuhr aus ihr', () => {
   const text = src();
-  assert.match(text, /waste:\s*'waste'/, 'MODULE_FOR_WIDGET kennt das Modul hinter dem Widget nicht');
+  // 2026-10-27, v2: MODULE_FOR_WIDGET ist mit den Kacheln von Dziś gegangen;
+  // die Abfuhr steht an der Wand (Plan und Jutro, utils/today-plan.js).
+  assert.doesNotMatch(text, /MODULE_FOR_WIDGET/);
   // TAFLA (2026-10-19): Dziś zeichnet die Kachel nicht mehr und laedt ihren
   // Slice nicht; die Abfuhr spricht dort ueber `wastePickups` der Antwort -
   // heute im Plan, morgen (heute Abend rausstellen) in „Jutro". Ein stiller
