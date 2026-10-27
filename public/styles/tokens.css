@@ -2538,6 +2538,12 @@
      * mehr Kontrast brauchen. */
     --glass-bg-elevated: var(--color-surface);
     --glass-bg-capsule:  var(--color-surface);
+    /* 2026-10-27, v2: Karte und Karten-Hover fehlten hier (der Schwesterblock
+     * darueber kippt sie). Sonde 12 sah es erst, seit sie die Tokens selbst
+     * misst - die Glas-Kapsel war bis dahin die einzige gemessene Flaeche:
+     * 0,62 bzw. 0,74 Deckkraft unter erhoehtem Kontrast. */
+    --glass-bg-card:     var(--color-surface);
+    --glass-bg-card-hover: var(--color-surface-2);
     --glass-border:      var(--color-text-primary);
     --glass-border-subtle: var(--color-text-secondary);
     --sidebar-indicator-rim-tint: 100%; /* Sidebar-Pille: voller Akzent-Rand */
