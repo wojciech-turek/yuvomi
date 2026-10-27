@@ -15,56 +15,12 @@
  */
 
 /* ================================================================
- * 1. Bottom Navigation — Glass Bar
+ * 1. Bottom Navigation - kein Glas mehr (v2, 2026-10-27)
+ *
+ * Die Leiste ist eine deckende weisse Flaeche buendig an der Unterkante
+ * (layout.css, `.nav-bottom`). Die Glas-Kapsel, ihr Indikator und ihre
+ * Fallbacks (§1, §17, §37, §39, §41) sind mit ihr entfallen.
  * ================================================================ */
-
-/* Immer aktiv: Glass-Hintergrund auf der schwebenden Kapsel
- * (.nav-bottom__items), nicht mehr auf der Bar-Zone (Liquid Glass).
- * Der Schatten der Kapsel steht vollstaendig in §41 - hier stand er ein
- * zweites Mal, wortgleich, und wurde von dort ohnehin ueberschrieben. */
-/* Ausserhalb von @supports der DECKENDERE Grund: ohne backdrop-filter liefe
- * der Inhalt ungefiltert durch das duenne Kapselglas, also traegt die Kapsel
- * dort die Deckung der uebrigen Chrome-Flaechen. Der Lichtfang steht ebenfalls
- * hier - er ist Material, kein Blur, und kippt mit seinem Token unter
- * reduzierter Transparenz und erhoehtem Kontrast auf transparent. */
-.nav-bottom__items {
-  background-color: var(--glass-bg-elevated);
-  background-image: linear-gradient(to bottom, var(--glass-sheen-capsule), transparent 45%);
-}
-
-/* Blur nur wenn unterstützt (webkit-Fallback für Safari < 18). Erst mit Blur
- * wird das Glas duenn (--glass-bg-capsule): Toenung, Ton-Filter, Saettigung
- * und Labelfarbe sind gemeinsam gemessen, die Rechnung steht in tokens.css
- * (a1). */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .nav-bottom__items {
-    background-color: var(--glass-bg-capsule);
-    backdrop-filter: var(--blur-lg) saturate(var(--lg-capsule-saturate)) var(--glass-capsule-tone);
-    -webkit-backdrop-filter: var(--blur-lg) saturate(var(--lg-capsule-saturate)) var(--glass-capsule-tone);
-  }
-}
-
-/* Active-State: EINE crispe Glass-Kapsel. Der Tint sitzt am Indikator selbst
- * (siehe §39); das ::before trägt nur noch den inneren Specular-Highlight,
- * damit sich nicht zwei Tint-Schichten überlagern (matschige Kante). */
-.nav-bottom__indicator::before {
-  box-shadow: inset 0 var(--space-px) 0 var(--glass-highlight-subtle);
-}
-
-/* Bottom-Nav: inaktive Icons sitzen nackt in der Bar — kein gefülltes Well.
- * Die Fläche gehört exklusiv dem aktiven Tab (gleitende Pille). */
-.nav-bottom .nav-item__icon-well {
-  background: transparent;
-  box-shadow: none;
-}
-
-/* Hover-State Bottom-Nav (nur sichtbar auf Mobile) */
-@media (hover: hover) {
-  .nav-bottom .nav-item:hover:not([aria-current="page"]):not(.nav-item--active) {
-    background: color-mix(in srgb, var(--color-text-tertiary) 8%, transparent);
-    border-radius: var(--radius-glass-chip);
-  }
-}
 
 /* ================================================================
  * 1b. FAB — getönte Glas-Kapsel (Direction Contract FIRST VIEWPORT)
@@ -153,22 +109,15 @@
 }
 
 /* ================================================================
- * 2. Sidebar (Desktop ≥ 1024px) — Glass Panel
+ * 2. Sidebar (Desktop ≥ 1024px) — helle Tafel (v2, ohne Glas)
  * ================================================================ */
 @media (min-width: 1024px) {
-  /* Die schwebende Tafel (R18): Glas rundum gefasst statt einer rechten
-   * Kante. Der Schatten samt Lichtkante steht in Abschnitt 41 - dort gewann
-   * er ohnehin, und hier stand er ein zweites Mal. */
+  /* v2 (2026-10-27): die Seitenleiste ist hell und deckend - kein Glas, kein
+   * Blur, wie die Leiste am Telefon. Eine 1px-Kante in derselben Linie fasst
+   * die Tafel; der Glas-Schatten (Abschnitt 41) ist entfallen. */
   .nav-sidebar {
-    background: var(--glass-bg-elevated);
-    border-color: var(--glass-border);
-  }
-
-  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .nav-sidebar {
-      backdrop-filter: var(--blur-md) saturate(180%);
-      -webkit-backdrop-filter: var(--blur-md) saturate(180%);
-    }
+    background: var(--color-surface);
+    border-color: var(--nav-bar-border);
   }
 
   /* Active-State in Sidebar: die Flaeche traegt die Pille (Abschnitt 38,
@@ -304,22 +253,6 @@
  * 7. Accessibility Overrides — Phase 1
  * ================================================================ */
 @media (prefers-reduced-transparency: reduce) {
-  /* DIESE ZWEI WERTE GEHOEREN ZUSAMMEN, und ohne diesen Absatz sieht das
-   * niemand: `.nav-bottom__indicator` toent hier eine Sprosse ueber der
-   * Objekt-Stufe (+6 %), weil ihm ohne Glas die Tiefe fehlt - allein gemessen
-   * kaeme er damit auf 1,438 (light) / 1,644 (dark) gegen die Bar und waere
-   * deutlich kraeftiger als die Glas-Fassung. Dieses ::before legt sich OPAK
-   * darueber und holt ihn zurueck: zusammen 1,231 / 1,203, gegen 1,259 / 1,190
-   * in der Glas-Fassung. Wer einen der beiden Werte anfasst, kippt den anderen
-   * still - deshalb steht beiden ihre Stufe als Bezug voran statt einer Zahl. */
-  .nav-bottom__indicator::before {
-    background: color-mix(
-      in srgb,
-      var(--color-accent) calc(var(--tint-surface) - 2%),
-      var(--color-surface)
-    );
-    box-shadow: none;
-  }
 
   .nav-item__icon-well {
     background: var(--color-surface-elevated);
@@ -335,12 +268,6 @@
   .btn--primary,
   .btn--primary:hover {
     box-shadow: var(--shadow-sm);
-  }
-}
-
-@media (prefers-contrast: more) {
-  .nav-bottom__indicator::before {
-    box-shadow: inset 0 0 0 var(--space-px) currentColor;
   }
 }
 
@@ -520,15 +447,6 @@ textarea.form-input {
  * ================================================================ */
 
 /* ================================================================
- * 17. Bottom-Nav Surface Transitions
- * ================================================================ */
-.nav-bottom__items {
-  transition:
-    background-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-/* ================================================================
  * 18. Modal-Entrance — Glass Spring
  * ================================================================ */
 @keyframes glass-modal-scale-in {
@@ -663,9 +581,6 @@ html.navigating .app-content *::after {
  * 24. Accessibility — Phase 3
  * ================================================================ */
 @media (prefers-reduced-motion: reduce) {
-  .nav-bottom {
-    transition: none;
-  }
 
   .modal-panel:not(.modal-panel--closing) {
     animation: none;
@@ -825,25 +740,6 @@ textarea.form-input {
 }
 
 /* ================================================================
- * 37. Accessibility — Phase 4
- * ================================================================ */
-@media (prefers-reduced-transparency: reduce) {
-  /* Inhalte sind seit dem HIG-Rollout ohnehin opak (Sektionen 25-33); die
-   * frühere Liste aus Widgets, Task-Cards, Note-Items, Meal-Slots und
-   * Skeletons schaltete hier ein Glas ab, das es nicht mehr gibt.
-   * Zurück bleibt, was echtes Chrome-Material ist. */
-  /* Hier wurde .app-content durchsichtig, damit der Grund der Shell den
-   * Verlauf ersetzt. Die Shell traegt keinen Verlauf mehr (Abschnitt 35), der
-   * Scrollport bleibt in jedem Zustand selbst opak. */
-  /* Modul-Köpfe brauchen hier nichts mehr: .page-toolbar (layout.css) ist
-   * ohnehin opak (--color-bg) und trägt bewusst KEIN backdrop-filter. Hier
-   * stand bis #577 der Zwilling des gelöschten Section-28-Blocks — dieselbe
-   * Vier-Modul-Liste, die vier von dreizehn Köpfen unter dieser Präferenz auf
-   * --color-surface umfärbte, plus ein backdrop-filter:none, das nichts mehr
-   * abzuschalten hatte. */
-}
-
-/* ================================================================
  * 38. Sidebar Liquid Indikator — Glass Pill
  * ================================================================ */
 @media (min-width: 1024px) {
@@ -871,27 +767,6 @@ textarea.form-input {
 /* ================================================================
  * 39. Mobile Tab-Indikator — Glass Pill
  * ================================================================ */
-/* iOS-Tab-Pille: crisp und randlos — solide Tönung statt Blur+Border,
- * die auf der Kapsel als verschwommener Fleck lasen. */
-.nav-bottom__indicator {
-  /* TAFLA: die Akzent-Toenung des Token-Vertrags (#F0EBFD / dunkel #3A3249),
-   * deckend - sie traegt Zeichen und Label in der Stimme mit AA. */
-  background: var(--color-accent-tint);
-  border: none;
-  box-shadow: none;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  /* Eine Sprosse ueber der Objekt-Stufe, weil ohne Glas die Tiefe fehlt. Der
-   * Wert steht NICHT allein: das ::before in §7 deckt ihn opak zurueck, und
-   * erst beide zusammen treffen die Glas-Fassung (1,231/1,203 gegen
-   * 1,259/1,190). Die Rechnung steht dort. */
-  .nav-bottom__indicator {
-    background: color-mix(in srgb, var(--color-accent) calc(var(--tint-surface) + 6%), var(--color-surface-elevated));
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
 
 /* ================================================================
  * PHASE 5 - Liquid Glass: Specular
@@ -919,39 +794,4 @@ textarea.form-input {
  * ================================================================ */
 .app-content {
   position: relative;
-}
-
-/* ================================================================
- * 41. Stärkerer Specular — Inset-Top-Highlight auf erhöhten Flächen
- *
- * Kanonische Glass-Rezeptur (siehe README): jede erhöhte Glass-
- * Fläche erhält einen Inset-Top-Highlight aus den `--glass-inset-*`-Tokens;
- * ihr Faktor `--glass-inset-strength` faellt unter
- * prefers-reduced-transparency / prefers-contrast auf 0 (Highlight
- * verschwindet).
- *
- * --glass-shadow-capsule darunter ist der einzige Schatten der Kapsel; die
- * Begruendung, warum es nicht --glass-shadow-md ist, steht am Token.
- * ================================================================ */
-.nav-bottom__items {
-  /* Der Glanzrand der Kapsel ist kraeftiger als der Specular der Sidebar
-   * (--glass-inset-capsule, tokens.css): das duennere Glas braucht eine
-   * gefasste Kante, sonst verschwimmt es mit dem, was darunter scrollt. */
-  box-shadow:
-    var(--glass-inset-capsule),
-    var(--glass-inset-bottom-lift),
-    var(--glass-shadow-capsule);
-}
-
-@media (min-width: 1024px) {
-  /* Lichtkante der schwebenden Tafel: dieselbe Stufe wie Dialog und Blatt
-   * (`--glass-inset-elevated`), am selben Schalter. Hier stand eine freie
-   * color-mix-Formel mit eigener Staerke (0.22) fuer eine Leiste, die bis an die
-   * Fensterkante reichte und oben gar keine sichtbare Kante hatte. */
-  .nav-sidebar {
-    box-shadow:
-      var(--glass-inset-elevated),
-      var(--glass-inset-bottom-lift),
-      var(--glass-shadow-md);
-  }
 }

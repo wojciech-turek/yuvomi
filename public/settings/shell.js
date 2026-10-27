@@ -817,7 +817,7 @@ function renderToolbar(toolbar, content, { activeLeaf, domain, user = null }) {
   if (activeLeaf && domain) {
     // TAFLA: der Rueckweg ist ein 36pt-Kreis wie der geschobener Seiten
     // („Wróć: Ustawienia", settings.css). Den Kreis „Wróć: Więcej" der Shell
-    // nimmt capture.css zurueck, solange dieser im Kopf steht.
+    // nimmt page-head.css zurueck, solange dieser im Kopf steht.
     const back = createLink(settingsOverviewUrl(domain.id), 'settings-toolbar__back');
     back.setAttribute('aria-label', t('settings.backToSettings'));
     back.append(createIcon('chevron-left', 'settings-toolbar__back-icon'));
