@@ -3383,12 +3383,17 @@ test('Sonde 12 - Glas sitzt auf Chrome, nie im Seiteninhalt', async () => {
    * (Kapsel, minimierte Kapsel, Seitenleiste). Die Sonde fragt deshalb nach
    * diesen beiden Traegern - faellt das Glas an einem davon weg, oder sieht
    * Ebene 1 gar keines, wird sie rot. Ebene 2 unten bleibt unveraendert streng. */
+  /* 2026-10-27, v2 (Main.dc.html): die beiden Traeger, nach denen hier gefragt
+   * wurde, sind mit Absicht deckend geworden - die Leiste ein weisses Rechteck
+   * buendig unten, die Seitenleiste eine helle Tafel ohne Blur. Ebene 1 fragt
+   * an ihnen deshalb das Gegenteil: kein Glas. Was sie sonst an Glas sieht,
+   * prueft sie weiter auf den Ort. Ebene 2 unten bleibt unveraendert streng -
+   * sie liest das CSSOM und braucht keine gerenderte Glasflaeche. */
   const has = (device, part) => [...seenOn[device]].some((sel) => sel.includes(part));
-  assert.ok(seen.size > 0, 'Keine Glasflaeche im Dokument gesehen - Ebene 1 hat nichts gemessen.');
-  assert.ok(has('mobile', 'nav-bottom__items'),
-    `Am Finger traegt die Tab-Kapsel kein Glas mehr (gesehen: ${[...seenOn.mobile].join(', ') || 'nichts'}).`);
-  assert.ok(has('desktop', 'nav-sidebar'),
-    `Am Zeiger traegt die Seitenleiste kein Glas mehr (gesehen: ${[...seenOn.desktop].join(', ') || 'nichts'}).`);
+  assert.ok(!has('mobile', 'nav-bottom'),
+    `v2: die Tab-Leiste ist deckend und traegt kein Glas (gesehen: ${[...seenOn.mobile].join(', ') || 'nichts'}).`);
+  assert.ok(!has('desktop', 'nav-sidebar'),
+    `v2: die Seitenleiste ist deckend und traegt kein Glas (gesehen: ${[...seenOn.desktop].join(', ') || 'nichts'}).`);
   assert.ok(declaredSeen >= 5,
     `Nur ${declaredSeen} Regeln mit deklariertem Blur gefunden - Ebene 2 hat nichts gemessen. `
     + 'Traegt das CSSOM die Regeln noch, oder ist die Blur-Schreibweise eine andere?');
@@ -4186,35 +4191,44 @@ async function installScrollportFinder(page) {
 
 async function fabAtScrollEnd(page) {
   await installScrollportFinder(page);
+  /* 2026-10-27, v2: OB DIE SEITE IHR ANLEGEN ZEIGT, wird VOR dem Fahren
+   * gemessen - am Scroll-Ende kann ein Kopf eingeklappt oder weggescrollt sein,
+   * und gefragt ist, ob der Weg beim Betreten da ist. Seit das globale + weg
+   * ist, ist der Knopf der Seite der einzige Weg zum Anlegen. */
+  await new Promise((r) => setTimeout(r, 700));
+  const anlegen = await page.evaluate(() => {
+    const fab = document.querySelector('.page-fab:not([hidden])');
+    const b = fab?.getBoundingClientRect();
+    return {
+      anlegenSichtbar: !!fab && b.width > 0 && b.height > 0 && getComputedStyle(fab).visibility !== 'hidden'
+        && b.bottom > 0 && b.top < window.innerHeight,
+      anlegenImKopf: !!fab && !!fab.closest('.page-toolbar'),
+      globalesPlus: Boolean(document.querySelector('#capture-plus, .capture-plus, .nav-sidebar__add')),
+    };
+  });
   const toEnd = () => page.evaluate(() => {
     const scroller = window.__yuvomiScrollport();
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   });
-  await new Promise((r) => setTimeout(r, 700));
+  // Die erste Settle-Pause steht oben, vor der Anlege-Messung.
   await toEnd();
   await new Promise((r) => setTimeout(r, 700));
   await toEnd();
   await new Promise((r) => setTimeout(r, 550));
 
-  return page.evaluate(() => {
+  const scrollEnd = await page.evaluate(() => {
     const px = (n) => Math.round(n * 10) / 10;
     const outer = document.querySelector('.app-content');
     const scroller = window.__yuvomiScrollport();
     const inner = scroller === outer ? null : scroller;
-    /* DER SCHWEBENDE KNOPF AM FINGER IST SEIT TAFLA DAS + DER SHELL (2026-10-24).
-     *
-     * `#capture-plus` steht abgesetzt neben der Tab-Kapsel, fixiert ueber dem
-     * Inhalt, auf jeder Seite - das globale Erfassen. Die Seiten-FABs sind am
-     * Telefon nicht mehr zu sehen oder docken als Geisterkreis im Kopf an. Die
-     * Sonde fragte nach `.page-fab` und sah deshalb mobil keinen Knopf mehr
-     * („Nur 0 Zustaende am Scroll-Ende"); sie misst jetzt das +, und am Zeiger
-     * (dort ist es ausgeblendet) weiter den Seiten-FAB. */
-    const plusEl = document.querySelector('.capture-plus');
-    const plusBox = plusEl?.getBoundingClientRect();
-    const plus = plusEl && plusBox.width > 0 && plusBox.height > 0
-      && getComputedStyle(plusEl).visibility !== 'hidden' ? plusEl : null;
-    const pageFab = document.querySelector('.page-fab:not([hidden])');
-    const fab = plus ?? pageFab;
+    /* DER SCHWEBENDE KNOPF AM FINGER WAR SEIT TAFLA DAS + DER SHELL (2026-10-24)
+     * - `#capture-plus` neben der Tab-Kapsel, auf jeder Seite.
+     * 2026-10-27, v2: das + ist weg. Gemessen wird wieder der Knopf der Seite:
+     * am Finger dockt er als Geisterkreis im Kopf an (verdeckt nichts), und wo
+     * der Kopf am Telefon keinen Platz hat (Kalender, Spiżarnia, Posiłki),
+     * schwebt er ueber der Leiste - ueber Inhalt, also genau der Fall, fuer den
+     * diese Sonde geschrieben wurde. */
+    const fab = document.querySelector('.page-fab:not([hidden])');
     const o = outer.getBoundingClientRect();
     /* GEKLIPPT WIRD AM SCROLLPORT, DER WIRKLICH SCROLLT.
      *
@@ -4234,18 +4248,7 @@ async function fabAtScrollEnd(page) {
       viewportHoehe: window.innerHeight,
       amEnde: !scroller || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 2,
       scrollbar: !!scroller && scroller.scrollHeight > scroller.clientHeight + 4,
-      // Ein Seiten-FAB, der am Finger als Kreis im Kopf andockt (Tafla), ist
-      // ein zweiter, ortsfester Weg - kein schwebender.
-      kopfFab: !!plus && !!pageFab && !pageFab.closest('.fab-layer'),
-      // Das globale Anlegen am Zeiger: der „Dodaj"-Kreis der Seitenleiste.
-      seitenleistenPlus: Boolean(document.querySelector('.nav-sidebar__add')?.getClientRects().length),
     };
-    if (plus) {
-      // Das + gehoert in die Nav-Zone: seine Mitte liegt auf der Hoehe der Kapsel.
-      const nav = document.querySelector('.nav-bottom__items')?.getBoundingClientRect();
-      const mid = plusBox.top + plusBox.height / 2;
-      res.plusInNav = !!nav && mid >= nav.top && mid <= nav.bottom;
-    }
     if (!fab) return { ...res, keinFab: true };
 
     const f = fab.getBoundingClientRect();
@@ -4270,7 +4273,7 @@ async function fabAtScrollEnd(page) {
      * erkennt das Andocken (`position` taugt nicht - der Dashboard-FAB ist
      * `static` und schwebt trotzdem, weil `.fab-layer` um ihn herum fixiert
      * ist), die Groesse erkennt das Einklappen. */
-    const schwebend = fab === plus || (!!fab.closest('.fab-layer') && f.width > 0 && f.height > 0);
+    const schwebend = !!fab.closest('.fab-layer') && f.width > 0 && f.height > 0;
     if (!schwebend) {
       return { ...res, keinFab: true, angedockt: !fab.closest('.fab-layer'), eingeklappt: f.width < 1 || f.height < 1 };
     }
@@ -4313,6 +4316,7 @@ async function fabAtScrollEnd(page) {
     }
     return res;
   });
+  return { ...anlegen, ...scrollEnd };
 }
 
 describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () => {
@@ -4325,16 +4329,18 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       const eingeklappt = [];
       const schwebend = [];
       let ohneFab = 0;
-      const ohnePlusInNav = [];
-      let dzisAnlegen = null;
+      const mitAnlegen = [];
+      const globalesPlus = [];
+      let dzisOhneKnopf = null;
 
       for (const name of sweep('Sonde 18')) {
         await gotoRoute(page, ALL_ROUTES[name]);
         const m = await fabAtScrollEnd(page);
         if (m.angedockt) angedockt.push(name);
         if (m.eingeklappt) eingeklappt.push(name);
-        if (device === 'mobile' && !m.plusInNav) ohnePlusInNav.push(name);
-        if (name === 'dashboard') dzisAnlegen = device === 'mobile' ? m.plusInNav : m.seitenleistenPlus;
+        if (m.anlegenSichtbar) mitAnlegen.push(name);
+        if (m.globalesPlus) globalesPlus.push(name);
+        if (name === 'dashboard') dzisOhneKnopf = !m.anlegenSichtbar;
         // Unabhaengig vom Scrollstand: ob ein Knopf schwebt, ist eine Frage
         // der Seite, nicht davon, ob die Messung ihr Ende erreicht hat.
         if (!m.keinFab) schwebend.push(name);
@@ -4418,33 +4424,47 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Notizen, Kontakte, Kalender und Budget seit #1483 ("one add button"),
          * die Uebersicht seit R14. Eingeklappt ist keiner mehr. */
         /* 2026-10-24, Tafla: Dziś (`dashboard`) traegt keinen Seiten-FAB mehr.
-         * Sein Anlegen ist das globale + - am Zeiger der „Dodaj"-Kreis oben in
-         * der Seitenleiste (`.nav-sidebar__add`, Erfassen-Blatt), am Finger das
-         * + neben der Kapsel. Dass der Weg da ist, prueft die Zeile darunter;
-         * nichts schwebt (die Regel oben bleibt). */
+         * Sein Anlegen war das globale + (am Zeiger der „Dodaj"-Kreis der
+         * Seitenleiste). 2026-10-27, v2: das + ist weg, Dziś legt nichts an -
+         * jede Seite legt in ihrem eigenen Kopf an; geprueft weiter unten fuer
+         * beide Geraete. */
         const ANGEDOCKT_AM_ZEIGER = ['tasks', 'calendar', 'shopping', 'meals', 'recipes',
           'pantry', 'notes', 'contacts', 'birthdays', 'budget', 'documents'];
         assert.deepEqual({ angedockt: [...angedockt].sort(), eingeklappt },
           { angedockt: [...ANGEDOCKT_AM_ZEIGER].sort(), eingeklappt: [] },
           `Erwartet auf dem Zeiger: ${ANGEDOCKT_AM_ZEIGER.length} FABs in der Kopfleiste und kein eingeklappter, `
           + `dazu ${ohneFab} Seiten ohne FAB. Aendert sich das, aendert sich die Reichweite dieser Sonde.`);
-        assert.equal(dzisAnlegen, true, 'Dziś hat am Zeiger seinen Weg zum Anlegen: das + oben in der Seitenleiste');
       } else {
-        /* 2026-10-24, Tafla: am Finger schwebt das + der Shell auf JEDER Seite
-         * (bis dahin: 15 Routen minus die drei ohne FAB = 12). Jede Modulroute
-         * misst deshalb ihr Scroll-Ende unter dem +; die Einstellungs-Blaetter
-         * kommen dazu. Weniger heisst: einer Seite fehlt das +, oder sie kam
-         * nicht an ihr Ende. */
-        assert.ok(seen >= ROUTE_NAMES.length,
-          `Nur ${seen} Zustaende am Scroll-Ende gemessen - erwartet sind mindestens ${ROUTE_NAMES.length} `
-          + '(jede Modulroute). Entweder fehlt einer Seite das +, oder keine Seite kam an ihr Scroll-Ende.');
-        /* Die Bedeutung von `angedockt == []` bleibt: am Finger lebt die
-         * Hauptaktion in der Nav-Zone. Seit Tafla ist das das + neben der
-         * Kapsel - auf jeder Seite, auf Kapselhoehe. Ein Seiten-FAB darf
-         * zusaetzlich als Geisterkreis im Kopf andocken (dockFabAsGhost); er
-         * schwebt nicht und verdeckt nichts. */
-        assert.deepEqual(ohnePlusInNav, [], 'am Finger steht das + in der Nav-Zone, auf jeder Seite');
+        /* 2026-10-24, Tafla: am Finger schwebte das + der Shell auf JEDER Seite,
+         * und jede Modulroute mass ihr Scroll-Ende darunter.
+         * 2026-10-27, v2: das + ist weg. Am Finger dockt der Knopf der Seite als
+         * Geisterkreis im Kopf an (verdeckt nichts); nur wo der Kopf am Telefon
+         * keinen Platz hat, schwebt er ueber der Leiste - und nur dort hat die
+         * Ueberlappungsfrage einen Gegenstand. Die Aufteilung steht mit Namen:
+         * aendert sie sich, aendert sich die Reichweite dieser Sonde.
+         * Gegengeprueft wird sie in der Rueckwaertsrichtung: ein Kopf, der am
+         * Telefon wieder Platz hat, nimmt seinen Knopf auf und faellt hier raus. */
+        const SCHWEBEND_AM_FINGER = ['calendar', 'meals', 'pantry'];
+        assert.deepEqual([...schwebend].sort(), SCHWEBEND_AM_FINGER,
+          'Am Finger schweben nur die Knoepfe, deren Kopf am Telefon keinen Platz hat.');
+        assert.ok(seen >= 1, `Nur ${seen} schwebende Knoepfe an ihrem Scroll-Ende gemessen - die Sonde misst nichts.`);
       }
+
+      /* 2026-10-27, v2: JEDE SEITE LEGT SELBST AN („remove the add, we will go
+       * to each section to add there directly"). Hier stand die Frage nach dem
+       * globalen + in der Nav-Zone (am Finger) bzw. oben in der Seitenleiste (am
+       * Zeiger). Gefragt wird jetzt das Gegenstueck: es gibt kein globales +
+       * mehr, und jede Modulseite mit eigener Primaeraktion zeigt sie beim
+       * Betreten - im Kopf oder schwebend. Ausgenommen mit Grund: Dziś (legt
+       * nichts an), Zdrowie (legt je Bereich an, die Uebersicht hat keinen
+       * Knopf), Nagrody und Sprzątanie (der Knopf folgt Reiter bzw. Profil),
+       * Ustawienia. */
+      const ANLEGEN_SICHTBAR = ['tasks', 'calendar', 'shopping', 'meals', 'recipes', 'pantry', 'notes',
+        'contacts', 'birthdays', 'budget', 'documents'];
+      assert.deepEqual(globalesPlus, [], 'kein globales + mehr (#capture-plus, .nav-sidebar__add)');
+      assert.deepEqual(ANLEGEN_SICHTBAR.filter((n) => !mitAnlegen.includes(n)), [],
+        `${device}: diese Seiten zeigen beim Betreten keinen Weg zum Anlegen - mit dem globalen + ist ihr Knopf der einzige.`);
+      assert.equal(dzisOhneKnopf, true, 'Dziś traegt keinen eigenen Anlege-Knopf');
 
       assert.deepEqual(findings, [],
         'Der FAB am Scroll-Ende. Dort gehoert ihm der Nachlauf allein.\n  ' + findings.join('\n  '));
