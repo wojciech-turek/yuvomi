@@ -102,20 +102,19 @@ function tokenMap(body) {
 }
 
 const LIGHT = tokenMap([...eachRule(TOKENS)].find((r) => r.selector.trim() === ':root' && !r.at.length).body);
-const DARK_ATTR = tokenMap([...eachRule(TOKENS)].find((r) => r.selector.trim() === '[data-theme="dark"]').body);
-const DARK_MEDIA = tokenMap([...eachRule(TOKENS)]
-  .find((r) => /prefers-color-scheme:\s*dark/.test(r.at.join(' ')) && /:root/.test(r.selector)).body);
+// 2026-10-27, v2: light only: die Dark-Bloecke (DARK_ATTR, DARK_MEDIA) sind mit dem
+// Dark Mode aus tokens.css gegangen; gerechnet wird nur noch das helle Theme.
 const A11Y = ['prefers-reduced-transparency', 'prefers-contrast'].map((q) => tokenMap([...eachRule(TOKENS)]
   .find((r) => r.at.join(' ').includes(q) && r.selector.trim() === ':root').body));
 
-/** Der Wert eines Tokens in einem Theme, `var()` bis zum Literal aufgeloest. */
-function resolve(name, theme) {
-  const scope = theme === 'dark' ? DARK_ATTR : LIGHT;
-  let value = scope.get(name) ?? LIGHT.get(name);
+/** Der Wert eines Tokens (helles Theme), `var()` bis zum Literal aufgeloest. */
+function resolve(name) {
+  const scope = LIGHT;
+  let value = scope.get(name);
   assert.ok(value !== undefined, `tokens.css: ${name} fehlt`);
   for (let i = 0; i < 12 && /var\(/.test(value); i += 1) {
     value = value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_, inner) => {
-      const next = scope.get(inner) ?? LIGHT.get(inner);
+      const next = scope.get(inner);
       assert.ok(next !== undefined, `tokens.css: ${inner} fehlt (aus ${name})`);
       return next;
     });
@@ -268,9 +267,10 @@ test('R18: das helle Glas ist warm wie die Buehne, nicht kuehl', () => {
  * Blur - die untere Grenze. Wer einen Glaswert oder eine Tinte anfasst, sieht
  * hier, was unter AA faellt.
  */
-test('R18: Text auf dem hellen und dunklen Chrome-Glas haelt AA', () => {
+// 2026-10-27, v2: light only (vorher hell UND dunkel).
+test('R18: Text auf dem hellen Chrome-Glas haelt AA', () => {
   const rows = [];
-  for (const theme of ['light', 'dark']) {
+  for (const theme of ['light']) {
     const stage = tone('--_neutral-100', theme).rgb;
     const card = tone('--_color-surface', theme).rgb;
     const glass = tone('--_glass-bg-elevated', theme);
@@ -298,7 +298,7 @@ test('R18: Text auf dem hellen und dunklen Chrome-Glas haelt AA', () => {
       over(tone('--_glass-bg-capsule', 'light').rgb, tone('--_glass-bg-capsule', 'light').a, tone('--_neutral-900', 'light').rgb)), 4.5]);
   const failing = rows.filter(([, ratio, min]) => ratio < min).map(([name, ratio, min]) => `${name}: ${ratio.toFixed(2)}:1 < ${min}`);
   assert.deepEqual(failing, [], 'Text auf Glas unter AA');
-  assert.ok(rows.length >= 18, `Reichweite: ${rows.length} Paare gerechnet`);
+  assert.ok(rows.length >= 10, `Reichweite: ${rows.length} Paare gerechnet`);
 });
 
 /**
@@ -307,7 +307,8 @@ test('R18: Text auf dem hellen und dunklen Chrome-Glas haelt AA', () => {
  * Verlangt ist in BEIDEN Themes eine lesbare Stufe gegen das Glas, und das
  * Modulzeichen darauf haelt die Grafikschwelle (WCAG 1.4.11, 3:1).
  */
-test('R18: die Icon-Mulde der Seitenleiste ist in beiden Themes eine Mulde', () => {
+// 2026-10-27, v2: light only (vorher in beiden Themes).
+test('R18: die Icon-Mulde der Seitenleiste ist eine Mulde', () => {
   const well = rulesFor(LAYOUT, '.nav-sidebar .nav-item__icon-well').find((r) => /background\s*:/.test(r.body));
   assert.ok(well, 'die Seitenleiste setzt ihre Mulde nicht mehr selbst');
   const mix = well.body.match(/background\s*:\s*color-mix\(in srgb,\s*var\((--[\w-]+)\)\s*var\((--[\w-]+)\),\s*transparent\)/);
@@ -315,13 +316,13 @@ test('R18: die Icon-Mulde der Seitenleiste ist in beiden Themes eine Mulde', () 
   assert.equal(mix[1], '--color-text-primary', 'die Mulde mischt die Tinte ein - sie kippt mit dem Theme');
   const strength = percent(mix[2]);
 
-  for (const theme of ['light', 'dark']) {
+  for (const theme of ['light']) {
     const glass = tone('--_glass-bg-elevated', theme);
     const surface = over(glass.rgb, glass.a, tone('--_neutral-100', theme).rgb);
     const wellColor = over(tone('--_neutral-900', theme).rgb, strength, surface);
     const step = contrast(wellColor, surface);
     assert.ok(step >= 1.12, `${theme}: Mulde gegen Glas ${step.toFixed(3)}:1 - unter 1,12 ist sie keine Stufe`);
-    const families = [...(theme === 'dark' ? DARK_ATTR : LIGHT).keys()].filter((k) => /^--_family-/.test(k));
+    const families = [...LIGHT.keys()].filter((k) => /^--_family-/.test(k));
     assert.ok(families.length >= 9, `${theme}: Familientoene gefunden (${families.length})`);
     for (const family of families) {
       const ratio = contrast(tone(family, theme).rgb, wellColor);
@@ -427,8 +428,7 @@ test('R18: das Marken-Lichtfeld steht still, ohne Filter, und faellt unter den a
   assert.equal(switched, stops, 'ein farbiger Stopp haengt nicht an der Staerke');
 
   for (const block of A11Y) assert.equal(block.get('--brand-field-opacity'), '0', 'a11y-Block schaltet das Feld ab');
-  assert.equal(DARK_ATTR.get('--_brand-field-opacity'), DARK_MEDIA.get('--_brand-field-opacity'), 'beide Dark-Bloecke gleich');
-  assert.ok(DARK_ATTR.get('--_brand-field-opacity'), 'das Feld hat einen Dark-Wert');
+  // 2026-10-27, v2: light only: die Dark-Werte des Feldes sind mit den Dark-Bloecken gegangen.
 
   // Traeger: die Shell der Zugangsseiten, das Ladebild und der Zustand, der
   // das Ladebild ersetzt, wenn die Sitzung gerade nicht pruefbar ist
@@ -472,7 +472,7 @@ test('Tafla: die Zugangsseite steht auf Papier - keine Tafel, kein Glas, kein Fe
 
 /**
  * TAFLA: every ink on the sign-in page stands on the paper itself (no panel),
- * and holds AA there in both themes; the field keeps its 3:1 edge against the
+ * and holds AA there (2026-10-27, v2: light only); the field keeps its 3:1 edge against the
  * paper AND its own fill (WCAG 1.4.11), the house its 3:1 on its tint. The
  * loading screen still stands on the brand field - its ink is measured
  * against the worst point of that field.
@@ -484,10 +484,10 @@ test('Tafla: auf dem Papier der Zugangsseite halten Text, Feldkante und Haus ihr
     .map((m) => ({ ink: m[1] === 'from' ? from : to, share: Number(m[2]) / 100 }));
   assert.equal(peaks.length, 3, 'drei Kerne gelesen');
   const report = [];
-  for (const theme of ['light', 'dark']) {
+  for (const theme of ['light']) {
     const paper = tone('--_neutral-100', theme).rgb;
     const fill = tone('--_color-surface-3', theme).rgb;
-    const edge = tone(theme === 'dark' ? '--color-border-control' : '--_color-border-control', theme).rgb;
+    const edge = tone('--_color-border-control', theme).rgb;
     const pairs = [
       ['Label und Satz (Sekundaertext)', tone('--_neutral-600', theme).rgb, paper, 4.5],
       ['Versionszeile (Tertiaertext)', tone('--_color-text-tertiary', theme).rgb, paper, 4.5],

@@ -947,15 +947,10 @@ function tokenScopes() {
   const decls = (rule) => Object.fromEntries([...rule.body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);?/g)].map((m) => [m[1], m[2].trim()]));
   const rules = [...eachRule(css)];
   const root = Object.assign({}, ...rules.filter((r) => r.selector.trim() === ':root' && !r.at.length).map(decls));
-  const darkPref = rules.filter((r) => r.selector.trim() === ':root:not([data-theme="light"])'
-    && r.at.some((a) => /prefers-color-scheme:\s*dark/.test(a))).map(decls);
-  const darkPick = rules.filter((r) => r.selector.trim() === '[data-theme="dark"]').map(decls);
-  assert.ok(darkPref.length && darkPick.length, 'die beiden Dunkel-Bloecke nicht gefunden - der Guard waere blind');
-  return {
-    light: root,
-    'dunkel per Vorliebe': { ...root, ...Object.assign({}, ...darkPref) },
-    'dunkel per Wahl': { ...root, ...Object.assign({}, ...darkPick) },
-  };
+  // 2026-10-27, v2: light only - die beiden Dunkel-Bloecke (per Vorliebe, per
+  // Wahl) gibt es nicht mehr; gerechnet wird das eine helle Theme.
+  assert.ok(root['--_toast-bg'], 'der :root-Block traegt den Toast nicht - der Guard waere blind');
+  return { light: root };
 }
 
 function resolveHex(scope, name, depth = 0) {
@@ -982,19 +977,14 @@ const contrast = (a, b) => {
 };
 const over = (top, under, alpha) => top.map((v, i) => Math.round(v * alpha + under[i] * (1 - alpha)));
 
-test('A1 P2-2: der Toast ist im Dunkeln nicht die hellste Flaeche, und alles darauf bleibt lesbar', () => {
+// 2026-10-27, v2: light only - der Teil "im Dunkeln nicht die hellste Flaeche"
+// galt dem Dark Mode und ist mit ihm gegangen; der Toast bleibt die dunkle
+// Schale im hellen Theme, und alles darauf bleibt lesbar.
+test('A1 P2-2: der Toast ist eine dunkle Schale, und alles darauf bleibt lesbar', () => {
   for (const [theme, scope] of Object.entries(tokenScopes())) {
     const bg = rgb(resolveHex(scope, '--_toast-bg'));
     assert.ok(luminance(bg) < 0.05,
       `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) ist keine dunkle Schale mehr`);
-    if (theme !== 'light') {
-      const raised = rgb(resolveHex(scope, '--_color-raised'));
-      const card = rgb(resolveHex(scope, '--_color-surface'));
-      assert.ok(luminance(bg) <= luminance(raised) + 1e-9,
-        `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) ist heller als --color-raised`);
-      assert.ok(luminance(bg) > luminance(card),
-        `${theme}: der Toast (${resolveHex(scope, '--_toast-bg')}) liest nicht als Schicht ueber der Karte`);
-    }
     const stage = rgb(resolveHex(scope, '--_neutral-100'));
     const grounds = { opak: bg, 'Glas ueber der Buehne': over(bg, stage, 0.9), 'Glas ueber Weiss': over(bg, [255, 255, 255], 0.9) };
     for (const [where, ground] of Object.entries(grounds)) {
