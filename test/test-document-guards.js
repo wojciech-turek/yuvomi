@@ -3443,11 +3443,35 @@ for (const [label, features] of [
         }
       }
     }
+    /* 2026-10-27, v2: DIE TOKENS SELBST, nicht nur die Flaechen, die sie
+     * gerade tragen. Am Finger war die Glas-Kapsel die einzige Flaeche mit
+     * Glas-Grund auf den gefahrenen Routen; die v2-Leiste ist deckend, und die
+     * uebrigen Traeger (Datepicker, einzelne Karten, Rezept-Kapsel) stehen im
+     * Seed nicht offen. Die Regel spricht aber ueber die TOKENS („kippt alle
+     * Glas-Tokens auf --color-surface-Werte"): jeder `--glass-bg-*` wird
+     * deshalb an einer Messflaeche aufgeloest, im selben Medienzustand. Ein
+     * Token, das nicht kippt (oder fehlt: dann ist der Grund transparent),
+     * steht mit Namen da. */
+    const glassTokens = [...new Set(readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8')
+      .match(/--glass-bg-[\w-]+(?=\s*:)/g) ?? [])];
+    const tokenBgs = await page.evaluate((names) => names.map((name) => {
+      const probe = document.createElement('div');
+      probe.style.backgroundColor = `var(${name})`;
+      document.body.appendChild(probe);
+      const bg = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { name, bg };
+    }), glassTokens);
+    for (const { name, bg } of tokenBgs) {
+      const alpha = parseColor(bg)[3];
+      if (alpha < 1) findings.push(`Token ${name} bleibt durchsichtig (alpha ${alpha.toFixed(2)})`);
+    }
     await cdp.detach();
     await page.close();
 
     assert.ok(blurred > 0, 'Keine Glasflaeche gesehen - die Sonde hat nichts gemessen.');
-    assert.ok(backed > 0, 'Keine Flaeche mit Glas-Grund gesehen - die CSSOM-Suche greift nicht mehr.');
+    assert.ok(tokenBgs.length >= 3, `Nur ${tokenBgs.length} Glas-Tokens gefunden - die Token-Suche greift nicht mehr.`);
+    assert.ok(backed + tokenBgs.length > 0, 'Keine Flaeche mit Glas-Grund gesehen - die CSSOM-Suche greift nicht mehr.');
     assert.deepEqual(findings, [],
       `Die Fallback-Regel kommt im Dokument nicht an (${label}). Das Stylesheet kippt `
       + '--blur-2xs..lg auf blur(0px) und die --glass-bg-* auf --color-surface-Werte; '

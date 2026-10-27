@@ -132,10 +132,11 @@
     inset-block: var(--sidebar-float-gap);
     inset-inline-start: var(--sidebar-float-gap);
     inline-size: calc(var(--sidebar-width-expanded) - var(--sidebar-float-gap));
-    border: 1px solid var(--glass-border);
+    /* v2 (2026-10-27): das Ladebild der Seitenleiste ist so hell und deckend
+     * wie die Seitenleiste selbst (glass.css) - kein Glas, kein Schatten. */
+    border: 1px solid var(--nav-bar-border);
     border-radius: var(--radius-glass-card);
-    background-color: var(--glass-bg-elevated);
-    box-shadow: var(--glass-shadow-md);
+    background-color: var(--color-surface);
   }
 
   .app-loading__page {
