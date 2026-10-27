@@ -1,11 +1,13 @@
 /**
- * Modul: Capture parser (Tafla global capture, "Szybkie dodawanie")
+ * Modul: Capture parser (born with the Tafla global capture; kept in v2 for
+ *        the parts that read free text, e.g. quantities in the Zakupy composer)
  * Zweck: Reads one line of free text ("jutro 18 fryzjer Ola", "mleko, jajka,
  *        masło") into a typed draft - date, time, assignee, meal slot,
  *        shopping items - with local rules only. Pure: no DOM, no i18n, no
  *        network; deterministic for a given `now`. Polish first, English second.
- *        The sheet (utils/capture-sheet.js) renders labels and saves; AI may
- *        later look at `leftover`, but saving never waits for it.
+ *        The capture sheet that first used it is gone (v2, 2026-10-27); the
+ *        caller renders labels and saves. AI may later look at `leftover`,
+ *        but saving never waits for it.
  * Ausfuehren der Tests: node --test test/test-capture-parse.js
  *
  * Decisions worth knowing (each one is pinned by a test):

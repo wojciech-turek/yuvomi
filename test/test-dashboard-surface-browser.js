@@ -697,43 +697,36 @@ test('Wetter: nicht eingerichtet - weder im Kopf noch im Blatt, wie ein abgescha
  * dem Knopf. Gemessen wird deshalb, was man sieht: wo der Knopf haengt, ob er
  * ein Glyph hat und ob ein Tab-Slot unter ihm liegt. */
 /* TAFLA (2026-10-19): der Speed-Dial der Uebersicht ist entfallen. Am Telefon
- * steht dort, wo er stand, das globale + der Shell (`#capture-plus`) - und
- * dieselben Zusagen gelten fuer es: genau eines, in der Shell statt im
- * Scrollport, mit Plus, und kein Tab-Slot darunter. */
-async function fabOverCapsule(page) {
+ * stand dort, wo er stand, das globale + der Shell (`#capture-plus`).
+ * 2026-10-27, v2: auch das + ist weg - jede Seite legt in ihrem eigenen Kopf
+ * an, und Dziś hat keinen Anlege-Knopf. Die Zusage des Neuaufbaus bleibt: er
+ * laesst die Shell heil - die Leiste steht mit allen Tabs, und nirgends
+ * (Shell-Ebene oder Scrollport) bleibt ein Knopf zurueck, der hier nichts
+ * anlegt. */
+async function todayChrome(page) {
   await page.waitForFunction(() => {
-    const plus = document.querySelector('#capture-plus');
-    return plus && plus.getClientRects().length && !document.documentElement.hasAttribute('data-wall-mode');
+    const bar = document.querySelector('.nav-bottom__items');
+    return bar && bar.getClientRects().length && !document.documentElement.hasAttribute('data-wall-mode');
   }, { timeout: 10000 });
   await freeze(page);
   await wait(300);
   return page.evaluate(() => {
-    const fab = document.querySelector('#capture-plus');
-    const f = fab.getBoundingClientRect();
-    const slots = [...document.querySelectorAll('.nav-bottom__items > .nav-item')];
+    const shown = (el) => el.getClientRects().length > 0;
     return {
-      count: document.querySelectorAll('#capture-plus').length + document.querySelectorAll('#fab-main').length,
-      inLayer: !fab.closest('#main-content'),
-      glyph: !!fab.querySelector('svg'),
-      slots: slots.length,
-      under: slots
-        .map((el) => ({ el, r: el.getBoundingClientRect() }))
-        .filter(({ r }) => r.width > 0 && r.left < f.right - 1 && r.right > f.left + 1
-          && r.top < f.bottom && r.bottom > f.top)
-        .map(({ el }) => el.id || el.dataset.route || el.className),
+      plus: document.querySelectorAll('#capture-plus, #fab-main').length,
+      fabs: [...document.querySelectorAll('#fab-layer .page-fab, #main-content .page-fab')].filter(shown).length,
+      slots: [...document.querySelectorAll('.nav-bottom__items > .nav-item')].filter(shown).length,
     };
   });
 }
 
-function assertFabDocked(state, when) {
+function assertChromeIntact(state, when) {
   assert.ok(state.slots >= 3, `Reichweite (${when}): nur ${state.slots} Tab-Slots gesehen`);
   // Gesammelt statt einzeln: rot soll jeder Befund auf einmal stehen, nicht
   // nur der erste.
   const findings = [];
-  if (state.count !== 1) findings.push(`${state.count} Plus-Knoepfe (#capture-plus/#fab-main) im Dokument`);
-  if (!state.inLayer) findings.push('das + haengt im Scrollport statt in der Shell');
-  if (!state.glyph) findings.push('der FAB hat kein Plus');
-  if (state.under.length) findings.push(`unter dem FAB liegt ein Tab-Slot (${state.under.join(', ')})`);
+  if (state.plus !== 0) findings.push(`${state.plus} globale Plus-Knoepfe (#capture-plus/#fab-main) im Dokument`);
+  if (state.fabs !== 0) findings.push(`${state.fabs} sichtbare Seiten-Knoepfe auf Dziś - die Seite legt nichts an`);
   assert.deepEqual(findings, [], `${when}:\n${findings.join('\n')}`);
 }
 
@@ -744,7 +737,8 @@ function assertFabDocked(state, when) {
  * wird deshalb angehalten: gemessen wird der Moment, bevor die Daten da sind. */
 test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange die Daten laden (mobile, #1588)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  await page.waitForSelector('#capture-plus');
+  // 2026-10-27, v2: gewartet wird auf die Leiste - das + gibt es nicht mehr.
+  await page.waitForSelector('.nav-bottom__items .nav-item');
   const held = [];
   page.__yuvomiRequestInterceptor = (req) => {
     if (!/\/api\/v1\/dashboard(\?|$)/.test(req.url())) return false;
@@ -768,21 +762,20 @@ test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange 
   assert.equal(state.fabs, 0, `auf der Wand stehen ${state.fabs} FAB, solange die Daten laden`);
 });
 
-test('FAB: nach dem Verlassen des Wand-Modus steht er in der Shell-Ebene, mit Plus, neben der Kapsel (mobile, #1588)', async () => {
+// 2026-10-27, v2: „steht er in der Shell-Ebene, mit Plus, neben der Kapsel" -
+// das + ist weg; geprueft wird, dass der Neuaufbau die Shell heil laesst.
+test('Dziś: nach dem Verlassen des Wand-Modus steht die Leiste, und kein Knopf bleibt zurueck (mobile, #1588, v2)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  assertFabDocked(await fabOverCapsule(page), 'vor dem Wand-Modus');
+  assertChromeIntact(await todayChrome(page), 'vor dem Wand-Modus');
   await enterDashboardWall(page);
   await page.waitForSelector('.wall #wall-exit');
-  // Die Wand hat sich gesetzt: der Knopf der Vorseite ist aus der Shell-Ebene
-  // geraeumt, wie nach jeder Weile an der Wand.
-  await page.waitForFunction(() => !document.querySelector('#capture-plus')?.getClientRects().length, { timeout: 10000 });
   await page.click('#wall-exit');
-  const after = await fabOverCapsule(page);
+  const after = await todayChrome(page);
   await page.close();
-  assertFabDocked(after, 'nach dem Verlassen');
+  assertChromeIntact(after, 'nach dem Verlassen');
 });
 
-test('FAB: nach "erneut versuchen" steht er in der Shell-Ebene, mit Plus, neben der Kapsel (mobile, #1588)', async () => {
+test('Dziś: nach "erneut versuchen" steht die Leiste, und kein Knopf bleibt zurueck (mobile, #1588, v2)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
   let failNext = true;
   page.__yuvomiRequestInterceptor = (req) => {
@@ -796,7 +789,7 @@ test('FAB: nach "erneut versuchen" steht er in der Shell-Ebene, mit Plus, neben 
   assert.equal(failNext, false, 'Reichweite: die Uebersicht hat die gescheiterte Anfrage gar nicht gestellt');
   await page.click('#dashboard-retry');
   await page.waitForSelector('[data-today]');
-  const after = await fabOverCapsule(page);
+  const after = await todayChrome(page);
   await page.close();
-  assertFabDocked(after, 'nach erneut versuchen');
+  assertChromeIntact(after, 'nach erneut versuchen');
 });

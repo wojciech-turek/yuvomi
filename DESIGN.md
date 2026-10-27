@@ -2725,6 +2725,24 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 
 ### Navigation
 
+> **v2 (2026-10-27, Owner: „ein Rechteck ohne Platz darunter, professionell, aber gemuetlich";
+> Entwurf Main.dc.html; Guards: test:mobile-chrome, test:frontend-audit, Sonde 12/18).**
+> Mobil eine **deckende weisse Leiste buendig an der Unterkante**: 1px Kante oben
+> (`--nav-bar-border`, die v2-Haarlinie), 6px Polster oben, unten 6px oder Safe-Area minus 14px
+> (`--nav-bar-pad-bottom` - die Labels stehen ueber dem Home-Indikator, ohne leeren Streifen
+> darunter). Kein Glas, keine Kapsel, kein Verlauf, **keine Minimierung beim Scrollen**. Fuenf
+> gleich breite Tabs **Dziś · Kalendarz · Zadania · Jedzenie · Więcej** (Raster aus fuenf
+> Spalten), Zeichen 22px (Sonne, Kalender, Haken im Quadrat, Besteck, Raster), Label 12/16.
+> Aktiv: eine 52x30-Pille in der Stimme zu 8 % hinter dem Zeichen, das Zeichen in der Stimme,
+> das Label 600 in Tinte; ruhend Tinte-2, 400. **Kein globales +** mehr: jede Seite legt in
+> ihrem eigenen Kopf an (Geisterkreis, `dockFabAsGhost`); wo der Kopf am Telefon keinen Platz
+> hat (Kalender, Spiżarnia, Posiłki), schwebt der Knopf der Seite ueber der Leiste
+> (`--fab-offset-bottom`, mit Nachlauf `--fab-safe-zone`). Dziś legt nichts an. Die
+> Seitenleiste am Desktop fuehrt **dieselben fuenf Ziele**, hell und deckend, ohne Sektionen;
+> die Einstellungen stehen im Konto-Menue am Fuss und auf Więcej. „Kuchnia" heisst jetzt
+> **Jedzenie** (en Food) - Schluessel und Routen bleiben `kitchen`. Was unten der Kapsel, dem
+> + und dem Glas der Leiste widerspricht, ist ueberholt.
+
 > **Tafla (2026-10-19, Owner-Freigabe; Guards: test:mobile-chrome, test:frontend-audit,
 > test:nav-badges).** Mobil fuenf feste Ziele **Dziś · Kalendarz · Zadania · Kuchnia · Więcej**
 > mit eigenen Zeichen (`TAB_ICON` in router.js: Sonne, Kalender, Haken im Kreis, Topf, Raster),
@@ -2920,7 +2938,7 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > eines gedeckelten Kopfes folgt dem Scroll seiner Liste, auch wenn deren Reserve das Einklappen
 > nicht traegt (Lead-Zone + 48px; /notes mit 91px gegen 56px). Budget
 > (`--period-inline`) behaelt Titel und Zeitraum in Zeile 2. Fuehrt ein Modul selbst zurueck
-> („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (capture.css). Kuchnia: „Kuchnia" als
+> („‹ Zdrowie" im Bereich, „‹ Ustawienia" im Blatt), tritt der Kreis ab (page-head.css, bis v2 capture.css). Kuchnia: „Kuchnia" als
 > grosser Titel ueber einem neutralen Segment-Schalter Posiłki · Zakupy · Spiżarnia ·
 > Przepisy (kitchen-tabs.css).
 Eine `.page-toolbar` pro Modul, **Absender-Siegel und Titel links**, Center-Slot (Suche oder

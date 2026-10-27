@@ -1285,7 +1285,7 @@ export function wireCollapsingHeader(toolbar, opts = {}) {
       }
     } else if (titleCollapse && extTitle) {
       // Der kleine Titel des Einstellungs-Blatts: dieselbe Rolle, Text aus
-      // dem grossen im Inhalt; sichtbar nur eingeklappt (capture.css).
+      // dem grossen im Inhalt; sichtbar nur eingeklappt (page-head.css).
       if (!dockTitle) {
         dockTitle = document.createElement('span');
         dockTitle.className = 'page-toolbar__dock-title';
@@ -1680,7 +1680,8 @@ export function wireSwipeToDismiss(el, { onDismiss, threshold = 40, slop = 10, f
 }
 
 /**
- * DIE ECHTE HOEHE DER TAB-KAPSEL, NICHT DIE TOKEN-HOEHE (Review zu #1475).
+ * DIE ECHTE HOEHE DER TABS, NICHT DIE TOKEN-HOEHE (Review zu #1475; seit v2
+ * die Tabs der buendigen Leiste, nicht mehr einer Kapsel).
  *
  * `.nav-bottom__items` traegt `min-height: var(--nav-height-mobile)` und darf
  * wachsen: lange Labels brechen auf engen Geraeten und in langen Sprachen auf
@@ -1709,10 +1710,6 @@ export function watchNavCapsuleHeight(items, root = document.documentElement) {
       observer.disconnect();
       return;
     }
-    // Minimiert (watchNavMinimize) oder auf dem Rueckweg zaehlt die Kapsel
-    // nicht: die Zone darunter haelt die ausgefahrene Hoehe, sonst rueckten
-    // Nachlauf und Toasts bei jedem Scroll um 8px.
-    if (items.closest?.('.nav-bottom--minimized, .nav-bottom--settling')) return;
     const height = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target?.offsetHeight ?? 0;
     // 0 heisst: nicht gerendert (Desktop mit Sidebar, Wand-Modus).
     // Ungerundet: aufgerundet reservierte die Zone bei 60,09px schon 61, und
@@ -1722,184 +1719,4 @@ export function watchNavCapsuleHeight(items, root = document.documentElement) {
   });
   observer.observe(items);
   return observer;
-}
-
-/**
- * DIE KAPSEL MACHT BEIM LESEN PLATZ (iOS-26-Muster, Critique R19 / Entscheidung
- * Ulas 2026-10-16). Wer im Inhalt abwaerts scrollt, liest: die Kapsel minimiert
- * sich - Labels blenden aus, sie wird flacher, der FAB bleibt. Aufwaerts, oben
- * und am Seitenende faehrt sie wieder aus; dort sucht man den naechsten Ort.
- *
- * Die Entscheidung ist eine reine Funktion, damit Schwellen und Ausnahmen ohne
- * DOM pruefbar sind. `travel` sammelt die Strecke in EINER Richtung - ein
- * Zittern von 3px gegen die Leserichtung setzt sie zurueck, statt die Kapsel
- * pendeln zu lassen.
- *   - oben (`top` <= 8) und am Ende (Rest <= 2): immer ausgefahren
- *   - abwaerts >= NAV_MINIMIZE_DOWN, und nur aus einer Nutzergeste (`gesture`):
- *     ein Scroll-Restore oder `scrollIntoView` liest nicht
- *   - aufwaerts >= NAV_MINIMIZE_UP: ausgefahren, auch im Nachschwung ohne
- *     Geste - sonst bliebe die Kapsel nach einem Wisch an den Anfang klein
- *
- * @param {{minimized: boolean, travel: number}} state
- * @param {{top: number, max: number, delta: number, gesture: boolean}} step
- * @returns {{minimized: boolean, travel: number}}
- */
-export const NAV_MINIMIZE_DOWN = 24;
-export const NAV_MINIMIZE_UP = 16;
-export function nextNavMinimized(state, { top, max, delta, gesture }) {
-  if (top <= 8 || max - top <= 2) return { minimized: false, travel: 0 };
-  if (!delta) return state;
-  const travel = Math.sign(delta) === Math.sign(state.travel) ? state.travel + delta : delta;
-  if (travel <= -NAV_MINIMIZE_UP) return { minimized: false, travel };
-  if (travel >= NAV_MINIMIZE_DOWN && gesture) return { minimized: true, travel };
-  return { minimized: state.minimized, travel };
-}
-
-/**
- * DIE MINIMIERTE KAPSEL IST EINE KAPSEL AUS ZEICHEN (Tafla 2026-10-19,
- * spec-navigation.txt; R20 schrumpfte sie noch auf das aktive Ziel). Alle Ziele
- * bleiben stehen, jedes 48 breit, die Labels blenden aus. Die Breite wird
- * gerechnet statt `auto`, damit sie gleiten kann:
- *   Polster + Anzahl x Ziel + Polster + Rand (Border-Box).
- *
- * Reine Rechnung, damit sie ohne DOM pruefbar ist.
- *
- * @param {{ count: number, padStart: number, border?: number, item?: number }} m
- * @returns {number}
- */
-export const NAV_MINI_ITEM = 48;
-export function navMiniWidth({ count, padStart, border = 0, item = NAV_MINI_ITEM }) {
-  return padStart * 2 + Math.max(0, count) * item + border * 2;
-}
-
-/** Ein Ziel der Kapsel, das gerade gezeichnet wird (der Kuechen-Tab fehlt je nach Modulen). */
-const isShownNavItem = (el) => Boolean(el?.classList?.contains('nav-item') && el.getClientRects?.().length);
-
-/**
- * Misst die minimierte Breite an der ausgefahrenen Kapsel und schreibt sie als
- * `--nav-mini-width` an `.nav-bottom` (layout.css liest sie im minimierten
- * Zustand).
- * @param {Element} nav
- */
-function measureNavMini(nav) {
-  const items = nav.querySelector?.('.nav-bottom__items');
-  if (!items) return;
-  const count = [...items.children].filter(isShownNavItem).length;
-  if (!count) return;
-  const cs = getComputedStyle(items);
-  const width = navMiniWidth({
-    count,
-    padStart: parseFloat(cs.paddingInlineStart ?? cs.paddingLeft) || 0,
-    border: parseFloat(cs.borderLeftWidth) || 0,
-  });
-  nav.style.setProperty('--nav-mini-width', `${width}px`);
-}
-
-/**
- * Verdrahtet `nextNavMinimized` an die Bottom-Nav. Zugehoert wird jedem
- * senkrechten Scrollport im Inhalt (`.app-content` und die eigenen Ports der
- * gedeckelten Module) - Dialoge, Blaetter und Popover zaehlen nicht, sie
- * liegen ueber der Seite. Waagerechte Leisten aendern `scrollTop` nicht und
- * fallen damit von selbst heraus.
- *
- * KEIN LAYOUT-SHIFT: die Kapsel liegt ausser Fluss, und ihre Hoehe zaehlt nur
- * ausgefahren - `watchNavCapsuleHeight` misst nicht, solange sie minimiert ist
- * oder zurueckgleitet (`--settling`). Nachlauf, Toasts und Mehr-Blatt stehen
- * also still; nur der FAB rueckt in die flachere Kapsel nach (layout.css).
- *
- * @param {Element} nav - `.nav-bottom`
- * @param {{ doc?: Document, settleMs?: number }} [opts]
- * @returns {{ nav: Element, expand: () => void, destroy: () => void }|null}
- */
-export function watchNavMinimize(nav, { doc = document, settleMs = 450 } = {}) {
-  if (!nav) return null;
-  const last = new WeakMap();
-  let state = { minimized: false, travel: 0 };
-  let gestureAt = -Infinity;
-  let settleTimer = 0;
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-
-  const apply = (minimized) => {
-    if (minimized === nav.classList.contains('nav-bottom--minimized')) return;
-    clearTimeout(settleTimer);
-    // Gemessen wird ausgefahren - an der Kapsel, wie sie gerade steht.
-    if (minimized) measureNavMini(nav);
-    nav.classList.toggle('nav-bottom--minimized', minimized);
-    doc.documentElement.classList.toggle('nav-minimized', minimized);
-    // Zurueck gleitet sie ueber Zwischenhoehen - die duerfen die Zone nicht
-    // verschieben. Nach der Transition gilt wieder die Messung.
-    nav.classList.toggle('nav-bottom--settling', !minimized);
-    if (!minimized) settleTimer = setTimeout(() => nav.classList.remove('nav-bottom--settling'), settleMs);
-  };
-
-  const inContent = (el) => el instanceof Element
-    && Boolean(el.closest('.app-content'))
-    && !el.closest('dialog, [popover], .modal-overlay');
-
-  const onGesture = (e) => { if (inContent(e.target)) gestureAt = now(); };
-  let pinned = false;
-  const onScroll = (e) => {
-    if (pinned) return;
-    const port = e.target;
-    if (!inContent(port)) return;
-    // Nur wo die Kapsel steht (unter 1024px); am Desktop gibt es nichts zu minimieren.
-    if (!nav.getClientRects().length) return;
-    const top = port.scrollTop;
-    const prev = last.get(port) ?? top;
-    last.set(port, top);
-    state = nextNavMinimized(state, {
-      top,
-      max: port.scrollHeight - port.clientHeight,
-      delta: top - prev,
-      gesture: now() - gestureAt < 1200,
-    });
-    apply(state.minimized);
-  };
-  const GESTURES = ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown'];
-  doc.addEventListener('scroll', onScroll, { capture: true, passive: true });
-  for (const type of GESTURES) doc.addEventListener(type, onGesture, { capture: true, passive: true });
-
-  const expand = () => { state = { minimized: false, travel: 0 }; apply(false); };
-  // Tafla: auf einer geschobenen Seite (hinter Więcej) steht die Kapsel
-  // minimiert, unabhaengig vom Scrollen; Fokus in ihr faehrt sie weiter aus.
-  const pin = (on) => {
-    pinned = Boolean(on);
-    if (!pinned) return;
-    state = { minimized: true, travel: 0 };
-    if (nav.getClientRects?.().length) apply(true);
-  };
-  // Minimiert bleiben alle Ziele sichtbar (Tafla): ein Tipp auf ein Zeichen
-  // navigiert wie ausgefahren, und der Seitenwechsel faehrt die Kapsel aus
-  // (updateNav im Router). Die Sonderbehandlung der R20-Pille ist entfallen.
-
-  return {
-    nav,
-    expand,
-    pin,
-    destroy: () => {
-      clearTimeout(settleTimer);
-      doc.removeEventListener('scroll', onScroll, { capture: true });
-      for (const type of GESTURES) doc.removeEventListener(type, onGesture, { capture: true });
-      // Der Root-Zustand gehoert der Kapsel, die ihn gesetzt hat; eine
-      // Nachfolgerin beginnt ausgefahren.
-      doc.documentElement.classList.remove('nav-minimized');
-    },
-  };
-}
-
-/**
- * Haelt die Minimierung an DER Kapsel, die gerade steht (Review #2049).
- * renderAppShell() baut die Shell bei Logout/Login neu; der Minimierer der
- * alten Kapsel hing an einem abgehaengten Knoten, und die neue minimierte nie.
- * Dieselbe Kapsel behaelt ihren Minimierer, eine neue bekommt einen neuen,
- * der alte haengt ab.
- *
- * @param {ReturnType<typeof watchNavMinimize>} current
- * @param {Element|null} nav - die aktuelle `.nav-bottom`
- * @param {{ doc?: Document, settleMs?: number }} [opts]
- */
-export function bindNavMinimize(current, nav, opts) {
-  if (current && current.nav === nav) return current;
-  if (current) current.destroy();
-  return watchNavMinimize(nav, opts);
 }

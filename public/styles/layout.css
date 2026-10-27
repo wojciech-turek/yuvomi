@@ -108,16 +108,13 @@
 .app-loading__card:last-child { block-size: 12rem; }
 
 .app-loading__capsule {
+  /* Das Ladebild steht, wo die Leiste stehen wird: buendig unten (v2). */
   position: fixed;
-  inset-inline: var(--nav-bar-gutter);
-  bottom: calc(var(--safe-area-inset-bottom) + var(--space-2));
-  max-inline-size: var(--nav-capsule-max);
-  margin-inline: auto;
-  block-size: var(--nav-height-mobile);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full);
-  background-color: var(--glass-bg-elevated);
-  box-shadow: var(--glass-shadow-capsule);
+  inset-inline: 0;
+  bottom: 0;
+  block-size: var(--nav-bottom-height);
+  border-top: 1px solid var(--nav-bar-border);
+  background-color: var(--color-surface);
 }
 
 .app-loading__rail {
@@ -135,10 +132,11 @@
     inset-block: var(--sidebar-float-gap);
     inset-inline-start: var(--sidebar-float-gap);
     inline-size: calc(var(--sidebar-width-expanded) - var(--sidebar-float-gap));
-    border: 1px solid var(--glass-border);
+    /* v2 (2026-10-27): das Ladebild der Seitenleiste ist so hell und deckend
+     * wie die Seitenleiste selbst (glass.css) - kein Glas, kein Schatten. */
+    border: 1px solid var(--nav-bar-border);
     border-radius: var(--radius-glass-card);
-    background-color: var(--glass-bg-elevated);
-    box-shadow: var(--glass-shadow-md);
+    background-color: var(--color-surface);
   }
 
   .app-loading__page {
@@ -228,36 +226,26 @@
  * -------------------------------------------------------- */
 /* Die Chrome-Namen stehen NUR waehrend des Wechsels:
  * swapPage setzt `html.page-swapping` vor startViewTransition und nimmt es nach
- * dem letzten Wechsel wieder ab. Dauerhaft gesetzt macht ein Name die Leiste
- * zur Backdrop Root - der `backdrop-filter` der Kapsel `.nav-bottom__items` und
- * des Seitenleisten-Indikators sah dann nur den transparenten Elternknoten, und
- * Schrift lief scharf durchs Glas (Re-Critique 2026-09-28, A1 P1-1). Waehrend
- * des Wechsels ist das egal: dort steht die Leiste als eigenes Bild still.
+ * dem letzten Wechsel wieder ab. Dauerhaft gesetzt macht ein Name sein Element
+ * zur Backdrop Root - der `backdrop-filter` von Glas darin sah dann nur den
+ * transparenten Elternknoten, und Schrift lief scharf durchs Glas (Re-Critique
+ * 2026-09-28, A1 P1-1). Waehrend des Wechsels ist das egal: dort steht die
+ * Leiste als eigenes Bild still.
  * Guard: test-motion.js (8). */
 html.page-swapping .nav-sidebar {
   view-transition-name: nav-sidebar;
 }
 
-/* DIE KAPSEL TRAEGT DEN NAMEN SELBST, nicht ihr Elternknoten (Critique R18).
- * An `.nav-bottom` machte der Name die Zone auch waehrend des Wechsels zur
- * Backdrop Root: die Kapsel darin verlor fuer die rund 200ms der Blende ihr
- * Glas, Zeilentext lief scharf durch sie hindurch (Zwischenbild bei 67ms).
- * Am Glas-Element selbst uebernimmt der Browser dessen `backdrop-filter` an
- * die Gruppe des Uebergangs - und die blurrt das Wurzelbild darunter. Eine
- * Engine, die das nicht tut, zeigt die Kapsel wie vorher: kurz ohne Blur.
- *
- * Die Pille ist ein GESCHWISTER der Kapsel (misst echte Rects) und laege im
- * Wurzelbild unter dem Glas - sie bekommt deshalb ihren eigenen Namen und
- * gleitet wie bisher lebend zum Ziel.
+/* DIE LEISTE TRAEGT DEN NAMEN SELBST (v2, 2026-10-27). Unter Tafla sass er
+ * an der Glas-Kapsel `.nav-bottom__items`, weil er am Elternknoten die Kapsel
+ * waehrend der Blende ihr Glas kostete (Critique R18), und die gleitende Pille
+ * hatte einen eigenen Namen. Die v2-Leiste ist EIN deckendes Rechteck ohne
+ * Glas und ohne Indikator - sie steht als ein Bild still.
  *
  * Jeder Name hat genau EINEN Traeger (test:motion): ein doppelter verwirft
  * die ganze Transition. */
-html.page-swapping .nav-bottom__items {
+html.page-swapping .nav-bottom {
   view-transition-name: nav-bottom;
-}
-
-html.page-swapping .nav-bottom__indicator {
-  view-transition-name: nav-bottom-indicator;
 }
 
 /* DER FAB STEHT WIE DER KOPF (R18). Er ist je Seite ein neuer Knoten und
@@ -306,23 +294,21 @@ html.page-swapping .fab-layer .page-fab {
 ::view-transition-group(page-toolbar),
 ::view-transition-group(nav-sidebar),
 ::view-transition-group(nav-bottom),
-::view-transition-group(nav-bottom-indicator),
 ::view-transition-group(page-fab),
 ::view-transition-group(kitchen-tabs) {
   animation: none;
 }
 
 /* Der `backdrop-filter`, den die Gruppe vom Glas-Element uebernimmt, folgt
- * IHREM Kasten: ohne Rundung blurrte ein Rechteck ueber die Ecken der Kapsel
- * hinaus (im Zwischenbild gesehen). Kapsel und FAB sind voll gerundet. */
-::view-transition-group(nav-bottom),
+ * IHREM Kasten: ohne Rundung blurrte ein Rechteck ueber die Ecken hinaus (im
+ * Zwischenbild gesehen). Der FAB ist voll gerundet; die v2-Leiste ist ein
+ * Rechteck ohne Glas und braucht keine Rundung. */
 ::view-transition-group(page-fab) {
   border-radius: var(--radius-full);
 }
 
 ::view-transition-old(nav-sidebar):not(:only-child),
 ::view-transition-old(nav-bottom):not(:only-child),
-::view-transition-old(nav-bottom-indicator):not(:only-child),
 ::view-transition-old(page-fab):not(:only-child),
 ::view-transition-old(kitchen-tabs):not(:only-child) {
   display: none;
@@ -330,7 +316,6 @@ html.page-swapping .fab-layer .page-fab {
 
 ::view-transition-new(nav-sidebar):not(:only-child),
 ::view-transition-new(nav-bottom):not(:only-child),
-::view-transition-new(nav-bottom-indicator):not(:only-child),
 ::view-transition-new(page-fab):not(:only-child),
 ::view-transition-new(kitchen-tabs):not(:only-child) {
   animation: none;
@@ -563,6 +548,15 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   --fab-tail: var(--fab-safe-zone);
 }
 
+/* UND DER INSTALL-BANNER STEHT UEBER IHM (v2, 2026-10-27). Beide sind unten
+ * fixiert, der Banner auf der Toast-Ebene ueber dem FAB - solange er stand,
+ * war „etwas anlegen" auf den Seiten mit schwebendem Knopf tot. Am `:root`,
+ * weil der Banner kein Nachfahre der Shell ist (index.html); die Variable
+ * erbt in sein Shadow-DOM (yuvomi-install-prompt.js). */
+:root:has(.fab-layer .page-fab:not([hidden])) {
+  --install-prompt-lift: calc(var(--fab-size) + var(--space-4));
+}
+
 /* ── UND DER DRITTE FIXIERTE KÖRPER: DER INSTALL-BANNER ──
  *
  * FAB und Sammelaktions-Pille bekamen ihren Nachlauf, der Banner nie - obwohl
@@ -608,6 +602,9 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
  * benutzt wird. An `:root` deklariert hätte sie alle drei als 0 gelesen. */
 :root {
   --install-prompt-tail: 0px;
+  /* Kein Summand des Nachlaufs, sondern der Hub des Banners ueber einen
+   * schwebenden FAB (v2, Regel bei --fab-tail). */
+  --install-prompt-lift: 0px;
   --fab-tail: 0px;
   --bulk-pill-tail: 0px;
   --nav-tail: 0px;
@@ -635,8 +632,8 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
 
 /* Die Pille ist der zweite Summand - dieselbe Bauart wie der FAB: fixierte
  * Shell-Fläche über dem Scrollport, die am Scroll-Ende sonst genau die Zeilen
- * verdeckt, auf die sie sich bezieht. Am Finger fällt --fab-safe-zone auf 0
- * (der FAB sitzt dort in der Nav-Kapsel), dort ist sie der ganze Nachlauf. */
+ * verdeckt, auf die sie sich bezieht. Wo kein FAB schwebt (am Telefon die
+ * meisten Seiten - ihr FAB dockt im Kopf), ist sie der ganze Nachlauf. */
 .app-shell:has(.list-bulkbar) {
   --bulk-pill-tail: var(--bulk-pill-safe-zone);
 }
@@ -947,109 +944,46 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
  * Leichter Blur-Effekt für Glassmorphismus.
  * -------------------------------------------------------- */
 .nav-bottom {
-  /* Absolut an der Unterkante von .app-shell statt position: fixed -
-   * zuverlässiger auf iOS PWA. position: fixed kann durch will-change:
-   * transform in iOS-Compositor-Layern falsch referenziert werden. Die Shell
-   * ist 100dvh hoch und `position: relative`, ihre Unterkante IST der
-   * Viewport-Bottom - dieselbe Garantie wie als Flex-Kind.
+  /* v2 (2026-10-27, Main.dc.html): eine deckende weisse Leiste BUENDIG an der
+   * Unterkante - keine schwebende Kapsel, kein Glas, keine Luft darunter
+   * („mach ein Rechteck ohne Platz darunter, professionell, aber gemuetlich").
+   * 1px Kante oben, 6px Polster oben, unten 6px oder Safe-Area minus 14px
+   * (--nav-bar-pad-bottom, tokens.css): 20px in der installierten App auf
+   * Face-ID-iPhones, im Browser nichts dazu.
    *
-   * UEBER DEM INHALT, NICHT DARUNTER (Kopfregel mobil, 2026-09-26). Bis dahin
-   * stand hier ein Flex-Kind (`position: relative; flex-shrink: 0`): es nahm
-   * dem Scrollport seine Zone ab, unter dem Glas lief nie Inhalt, und die
-   * Kapsel war Glas ueber leerem Grund (A1 P1-3, A8). Aus dem Fluss genommen
-   * reicht `.app-content` bis zur Unterkante, die Kapsel schwebt ueber dem,
-   * was darunter scrollt, und `--nav-tail` (oben bei den Summanden) haelt das
-   * Seitenende ueber ihr. FAB, Toasts und Mehr-Blatt rechnen weiter mit
-   * `--nav-bottom-height` ab dem Viewport-Bottom und stehen unveraendert.
-   * Guard: test:mobile-chrome.
-   *
-   * Liquid Glass: die Bar selbst ist eine transparente Zone; das
-   * Glas-Material trägt die schwebende Kapsel .nav-bottom__items. Der
-   * gleitende Indikator bleibt Kind von .nav-bottom und misst echte Rects
-   * (positionTabIndicator) — die Kapsel-Margins rechnen sich automatisch ein. */
+   * Absolut an der Unterkante der Shell statt `position: fixed` - zuverlaessiger
+   * in der iOS-PWA; die Shell ist 100dvh hoch und `position: relative`. Der
+   * Scrollport reicht weiter bis zur Unterkante, `--nav-tail` haelt das
+   * Seitenende ueber der Leiste, und Toasts rechnen mit --nav-bottom-height.
+   * Guard: test:mobile-chrome. */
   position: absolute;
   inset-inline: 0;
   bottom: 0;
   width: 100%;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  /* Kein `view-transition-name` hier - auch nicht waehrend des Seitenwechsels
-   * (R18): er steht dann an der Kapsel selbst (Abschnitt Seiten-Uebergang).
-   * An der Zone machte er sie zur Backdrop Root, und die Kapsel darin blurrte
-   * nichts. */
-  /* TAFLA (spec-navigation.txt): die Kapsel steht 12pt vom Rand und 20pt ueber
-   * der Unterkante; das abgesetzte + (`.capture-plus`, ein Shell-Geschwister)
-   * steht rechts daneben, und die Zone haelt ihm seinen Platz frei:
-   * 390 - 12 - (12 + 52 + 8) = 306pt Kapsel. Breiter zentriert die Gruppe
-   * (--nav-capsule-inset, tokens.css). */
-  padding-block: var(--space-2) var(--nav-capsule-bottom);
-  padding-inline: var(--nav-capsule-inset) calc(var(--nav-capsule-inset) + var(--capture-size) + var(--nav-capture-gap));
+  box-sizing: border-box;
+  padding: var(--nav-bar-pad-top) var(--space-1) var(--nav-bar-pad-bottom);
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--nav-bar-border);
   z-index: var(--z-nav);
-  /* Die Zone ist Luft, keine Flaeche: seit Inhalt unter ihr laeuft, gehoert
-   * ein Tipp auf den Streifen neben oder ueber der Kapsel der Zeile darunter.
-   * Treffer nimmt nur die Kapsel an (`.nav-bottom__items`). */
-  pointer-events: none;
 }
 
-/* DIE SCROLL-KANTE (Tafla): ein 32pt-Verlauf ueber der Kapsel, damit Listentext
- * nie unter ihren Labels steht. Er liegt HINTER der Kapsel (z-index -1 im
- * Stapelkontext der Zone), reicht bis zur Unterkante und nimmt keine Treffer.
- * Neben der Scroll-Kante der Wand (#1917) der einzige erlaubte Verlauf. */
-.nav-bottom::before {
-  content: '';
-  position: absolute;
-  inset: calc(var(--space-2) - var(--space-8)) 0 0;
-  z-index: -1;
-  background: linear-gradient(
-    to bottom,
-    transparent 0,
-    color-mix(in srgb, var(--color-bg) 92%, transparent) var(--space-8),
-    var(--color-bg) 100%
-  );
-  pointer-events: none;
-}
-
-/* ── Items-Reihe: die schwebende Glas-Kapsel ── */
+/* ── Items-Reihe: fuenf Spalten in der Leiste (v2: keine Kapsel mehr) ── */
 .nav-bottom__items {
-  display: flex;
-  /* min-height statt fixer Höhe: lange Labels (de/fr, z. B. „Haushaltsbuch",
-   * „Paramètres") dürfen die Bar auf zwei Zeilen wachsen lassen, statt zu
-   * clippen. Kurze Labels behalten die kompakte Höhe. */
+  /* Fuenf gleich breite Spalten - so viele wie Ziele (Gast und Wand fuehren
+   * andere Mengen; die Spalten folgen der Zahl). Mindestens --nav-height-mobile
+   * hoch: lange Labels duerfen auf zwei Zeilen wachsen, statt zu clippen. */
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   min-height: var(--nav-height-mobile);
   width: 100%;
-  max-width: var(--nav-capsule-max);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--glass-border);
-  /* Das hintere Ende gehoert dem FAB. Er liegt als fixiertes Kind der
-   * Shell-Layer darueber (die #634-Begruendung fuer seinen Wohnort gilt
-   * unveraendert), also kann die Kapsel ihm keinen Flex-Platz geben - sie
-   * macht ihn ueber Innenabstand frei. Beide rechnen mit --fab-size, damit
-   * die Reserve nicht von der Knopfgroesse wegdriften kann.
-   *
-   * VORNE STEHT DIE RUNDUNG IM WEG, und das ist Geometrie, kein Geschmack.
-   * Die Kapsel ist eine Pille (Radius = halbe Hoehe = 32px bei 64px). Ein
-   * Label sitzt mit seiner Mitte rund 11px ueber ihrer Unterkante, und dort
-   * liegt ihre linke Begrenzung nicht bei 0, sondern bei
-   * 32 - sqrt(32^2 - 21^2) = 7,9px (bei 60px Hoehe waren es 7,6). „Übersicht"
-   * begann frueher bei 5px und ragte damit sichtbar aus der Rundung heraus.
-   * --space-2 (8px) raeumt genau diese Sehne frei. Hinten braucht es nichts:
-   * dort deckt die FAB-Reserve die Kurve laengst ab.
-   *
-   * TAFLA: der Knopf steht nicht mehr IN der Kapsel, sondern daneben. Die
-   * Tabs sind 48 hoch in 8pt Polster (64), seitlich 4pt - die Kurve raeumen
-   * jetzt die Tabs selbst frei, weil die aktive Pille Icon UND Label umfasst
-   * und mit der Rundung der Kapsel konzentrisch ist. */
-  padding: var(--space-2) var(--space-1);
-  pointer-events: auto;
-  /* Der gleitende Indikator liegt in der Kapsel (router.js) und misst sich an ihr. */
   position: relative;
 }
 
-/* DER PLATZ DES KNOPFS: seit Tafla haelt ihn die ZONE frei (padding-inline
- * an `.nav-bottom`), nicht mehr die Kapsel - das + steht neben ihr. Kapsel und
- * Tabs bleiben in jedem Modul und Reiter gleich breit (Re-Kritik 2026-10-17):
- * keine Regel fragt, ob eine Seite einen eigenen Knopf hat. */
+/* KEIN PLATZ FUER EINEN KNOPF (v2, 2026-10-27). Unter Tafla hielt die Zone
+ * hinten das globale + frei; das ist weg, jede Seite legt in ihrem Kopf an.
+ * Die Tabs bleiben in jedem Modul und Reiter gleich breit (Re-Kritik
+ * 2026-10-17): keine Regel fragt, ob eine Seite einen eigenen Knopf hat. */
 
 /* ── More-Button (Button-Basis, ansonsten wie nav-item) ── */
 .nav-item--more,
@@ -1754,20 +1688,18 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 .nav-bottom .nav-item {
-  /* TAFLA: ein Tab ist so breit wie sein Label und teilt sich den Rest der
-   * Kapsel - 390pt: Dziś 46 · Kalendarz 74 · Zadania 62 · Kuchnia 62 ·
-   * Więcej 54. Die Pille (der Indikator) ist der Tab selbst, also kein eigenes
-   * Polster: der Rest der Kapsel IST die Luft um das Label. Mindestens ein
-   * Ziel breit (44), 48 hoch: Zeichen 24 ueber Label 13/600, 2pt Fuge. Reicht
-   * die Kapsel nicht (lange Sprachen, 320pt), brechen die Labels auf zwei
-   * Zeilen um (Regel am Label), statt die Kapsel zu sprengen. */
-  flex: 1 1 auto;
+  /* Ein Tab: Pille mit Zeichen, 2px Fuge, Label - oben angeschlagen, damit
+   * die Pillen aller fuenf auf einer Linie stehen, auch wenn ein Label
+   * umbricht. Ruhend Tinte-2 (#5F5E5A), aktiv Tinte mit der Pille in der
+   * Stimme. */
+  justify-content: flex-start;
   min-width: var(--target-base);
-  min-height: var(--space-12);
-  padding: var(--space-1) 0;
-  gap: calc(var(--space-1) / 2);
-  border-radius: var(--radius-full);
-  color: var(--color-text-primary);
+  min-height: var(--nav-height-mobile);
+  padding: 0;
+  gap: 2px;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text-secondary);
 }
 
 .nav-item__icon-wrap {
@@ -1874,31 +1806,26 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 }
 
 .nav-bottom .nav-item__icon-well {
-  /* TAFLA: keine Mulde, kein Modulton - das Zeichen steht nackt in Tinte, die
-   * aktive Pille (Indikator) umfasst Zeichen UND Label. Module verlassen den
-   * Rahmen der App (KIT.md, „Colour discipline"). */
-  width: auto;
-  height: auto;
+  /* Die Pille: 52x30, voll gerundet. Ruhend unsichtbar; aktiv traegt sie den
+   * Zustand (Regel unten). Keine Mulde, kein Modulton. */
+  width: var(--nav-pill-width);
+  height: var(--nav-pill-height);
   border-radius: var(--radius-full);
   background: transparent;
   box-shadow: none;
   color: inherit;
   transition:
+    background-color var(--transition-fast),
     color var(--transition-fast),
     transform var(--duration-xs) var(--ease-out),
     opacity var(--duration-xs) var(--ease-out);
 }
 
-/* Das Zeichen: 24pt, Strich 1.75 - aktiv 2.25 statt einer Fuellung. */
 .nav-bottom .nav-item__icon {
-  width: var(--space-6);
-  height: var(--space-6);
+  /* Das Zeichen: 22px, Strich 1.75 - auch aktiv (die Pille traegt den Zustand). */
+  width: var(--nav-icon-size);
+  height: var(--nav-icon-size);
   stroke-width: var(--tab-icon-stroke);
-}
-
-.nav-bottom .nav-item[aria-current="page"] .nav-item__icon,
-.nav-bottom .nav-item--active .nav-item__icon {
-  stroke-width: var(--tab-icon-stroke-active);
 }
 
 /* DIE MULDE DER SEITENLEISTE IST EINE MULDE, IN BEIDEN THEMES (R18). Sie trug
@@ -1955,12 +1882,13 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   fill: color-mix(in srgb, currentColor 30%, transparent);
 }
 
-/* Bottom-Nav aktiv: die gleitende Indikatorfläche übernimmt den Zustand. */
+/* Bottom-Nav aktiv: der Tab selbst traegt keine Flaeche - die Pille um das
+ * Zeichen traegt den Zustand (v2: der gleitende Indikator ist entfallen). */
 .nav-bottom .nav-item[aria-current="page"],
 .nav-bottom .nav-item--active {
   background: none;
   box-shadow: none;
-  color: var(--color-accent);
+  color: var(--color-text-primary);
 }
 
 .nav-item__icon {
@@ -1984,69 +1912,50 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * „Einst…"; zwei zentrierte Zeilen erhalten die Recognition.
  * overflow-wrap:anywhere bricht auch fugenlose Langwörter.
  *
- * EINE STUFE KLEINER ALS DIE UEBRIGEN LABELS (2026-08-10), UND DAS IST DER
- * PLATTFORM-WERT, NICHT DIE NOTLOESUNG. iOS setzt Tab-Bar-Titel auf 10pt; die
- * App stand bei 12px und damit ueber dem Kanon. Der Anlass war der FAB, der in
- * die Kapsel gezogen ist und ihr 60px abnimmt: bei 375px blieben 58px je Slot,
- * „Übersicht" wollte 58 und bekam 54 - die Bar wuchs auf zwei Zeilen und 74px
- * Hoehe. --type-micro (Caption 2, 11px) ist die kleinste TEXTROLLE der Skala
- * und damit die richtige Stufe; darunter faengt --text-2xs an, und das ist eine
- * Badge-Groesse. Bei 11px will das laengste deutsche Label 53px und passt
- * einzeilig. Der Umbruch bleibt trotzdem: er faengt die Sprachen ab, fuer die
- * auch das nicht reicht - deshalb steht er in DERSELBEN Regel wie die Groesse
- * und nicht in einer zweiten mit gleichem Selektor. */
+ * HIER STAND 11px (--type-micro, 2026-08-10): der FAB sass damals in der
+ * Kapsel und nahm ihr 60px, „Übersicht" brach bei 375px sonst um. v2
+ * (2026-10-27): ohne Knopf in der Leiste hat jeder der fuenf Tabs die volle
+ * Fuenftelbreite, und das Label steht wieder bei 12/16 wie im Entwurf
+ * (Main.dc.html). Der Umbruch bleibt in DERSELBEN Regel wie die Groesse: er
+ * faengt die Sprachen ab, fuer die auch das nicht reicht. */
 .nav-bottom .nav-item__label {
-  /* TAFLA: 13/600 in Tinte-2 (ink-2), aktiv in der Stimme. Die Groesse ist die
-   * Fussnoten-Stufe der vier iPhone-Groessen (KIT.md); lange Sprachen brechen
-   * auf zwei Zeilen um (Regel unten), statt auszublenden. */
-  font-size: var(--type-footnote);
-  font-weight: var(--font-weight-semibold);
-  /* PRIMAER- STATT TERTIAERTEXT (2026-10-01, duenneres Kapselglas). Das Label
-   * ist der einzige TEXT auf dem Glas und damit die Groesse, die bestimmt, wie
-   * duenn es sein darf: gegen ein mittelgraues Foto unter der Kapsel hielt
-   * Tertiaertext schon bei der alten Deckung (0.86) nur 4.6:1 - jede weitere
-   * Durchsicht haette AA gerissen, Sekundaertext haette kaum etwas gewonnen.
-   * Die Rechnung steht in tokens.css (a1). Aktiv bleibt erkennbar, weil der
-   * aktive Tab Akzentfarbe, Halbfett, gefuelltes Zeichen UND die Pille traegt
-   * (Regel unten) - drei Kanaele neben der Farbe.
-   * TAFLA: ink-2 auf der 0.88-Kapsel ueber der Scroll-Kante (der Grund darunter
-   * ist zu 92 % Papier) - 5,9:1 hell, 6,8:1 dunkel. */
-  color: var(--color-text-secondary);
+  /* v2: 12/16, ruhend 400 in Tinte-2, aktiv 600 in Tinte (Regel unten). Lange
+   * Sprachen brechen auf zwei Zeilen um - mit Trennstrich, nicht mitten im
+   * Wort (Critique 2026-08-13) -, statt das Label zu kuerzen. */
+  font-size: var(--nav-label-size);
+  line-height: var(--nav-label-lh);
+  font-weight: var(--font-weight-regular);
+  color: inherit;
+  max-width: 100%;
   white-space: normal;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   text-align: center;
-  /* MIT TRENNSTRICH, NICHT MITTEN IM WORT (Critique 2026-08-13). Der Umbruch
-   * hier ist richtig und war es immer; geprüft hat nur nie jemand, WIE er
-   * bricht. Bei 320px standen „Übersicht" und „Aufgaben" als „Übersich / t"
-   * und „Aufgabe / n" - `overflow-wrap: anywhere` bricht per Definition
-   * innerhalb eines Wortes, und bei `hyphens: manual` ohne jedes Zeichen.
-   *
-   * Es ist dieselbe Antwort, die die Zeilennamen in Etappe 7 bekommen haben,
-   * und der Anlass war derselbe: die Regel war nie über Zeilen, sie war über
-   * Deutsch. `hyphens: auto` macht aus dem Bruch eine Trennung („Über-sicht"),
-   * `anywhere` bleibt als Rückfall für fugenlose Langwörter darunter stehen. */
   hyphens: auto;
   overflow-wrap: anywhere;
-  line-height: var(--type-footnote-lh);
 }
 
-/* Das Label steht auf der getönten Indikator-Pille, also auf einer Tönung
- * SEINER EIGENEN FARBE - genau der Fall, für den tokens.css die Konvention
- * „Akzent-Text auf akzent-getöntem Grund" führt (70 % Akzent + 30 %
- * text-primary). Zehn Stylesheets wenden sie an; die Tab-Bar war die einzige
- * Stelle, die den rohen Akzent schrieb.
- *
- * Gemessen am gerenderten Pixel im Dark, vorher → nachher: Übersicht 3.41 →
- * 4.92:1, Kalender 4.14 → 5.51:1, Aufgaben 5.88 → 6.58:1, Einkauf 4.85 →
- * 5.94:1. Zwei der vier lagen unter AA, und kein Token-Guard konnte das sehen:
- * das Paar entsteht erst aus Fläche plus Tint plus Glas im Dokument.
- *
- * Das ICON behält den vollen Akzent - für Nicht-Text gilt 3:1, und die
- * Konvention sagt das ausdrücklich. */
-/* Und dieselbe Konvention in der SIDEBAR, aus demselben Grund (Runde 6,
+/* Aktiv: die Pille in der Stimme zu 8 % (accentSoft), das Zeichen in der
+ * Stimme, das Label 600 in Tinte. */
+.nav-bottom .nav-item[aria-current="page"] .nav-item__icon-well,
+.nav-bottom .nav-item--active .nav-item__icon-well {
+  background-color: color-mix(in srgb, var(--color-btn-primary) 8%, transparent);
+  color: var(--color-accent);
+}
+
+.nav-bottom .nav-item[aria-current="page"] .nav-item__label,
+.nav-bottom .nav-item--active .nav-item__label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* v2 (2026-10-27): in der Leiste steht das aktive Label in TINTE, nicht in
+ * der Stimme, und nicht auf der Pille (die umfasst nur das Zeichen) - die
+ * Frage „Akzent-Text auf akzent-getoentem Grund" stellt sich dort nicht mehr.
+ * Das ICON auf der Pille traegt den vollen Akzent: Nicht-Text, 3:1. */
+/* In der SIDEBAR steht das Label weiter in der Stimme auf der Toenung (Runde 6,
  * Phase 3). Der gleitende Indikator tönt dort dieselbe Farbe, die das Label
  * schreibt; gemessen im Dark auf der Übersicht: 4.20:1 gegen #29292D, also
  * unter AA.
@@ -2060,18 +1969,16 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
 /* TAFLA: Zeichen UND Label in der Stimme, auf der Akzent-Toenung
  * (--color-accent-tint). Das Paar ist ein Token-Paar und haelt AA ohne
  * Beimischung: #6C3AED auf #F0EBFD 6,1:1, dunkel #B49CFF auf #3A3249 6,0:1. */
-.nav-bottom .nav-item[aria-current="page"] .nav-item__label,
-.nav-bottom .nav-item--active .nav-item__label,
 .nav-sidebar .nav-item[aria-current="page"] .nav-item__label,
 .nav-sidebar .nav-item--active .nav-item__label {
   color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
 }
 
-/* Fokusring um den ganzen Tab (Tafla): die aktive Pille umfasst Zeichen und
- * Label, also tut es der Ring auch - rund, in der Stimme (Eine-Stimme-Regel:
- * kein Modulton, ein Ring fuer alle fuenf Ziele), innen an der Tabkante, damit
- * ihn die Rundung der Kapsel nicht beschneidet. */
+/* Fokusring um den ganzen Tab: Zeichen und Label sind EIN Ziel, also umfasst
+ * der Ring beide - in der Stimme (Eine-Stimme-Regel: kein Modulton, ein Ring
+ * fuer alle fuenf Ziele), innen an der Tabkante, damit ihn die Leistenkante
+ * und der Bildschirmrand nicht beschneiden. */
 .nav-bottom .nav-item:focus-visible {
   --focus-ring-color: var(--color-accent);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
@@ -2146,116 +2053,11 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   z-index: calc(var(--z-nav) - 1);
 }
 
-/* TAFLA: AUF DEM TELEFON SCHWEBT KEIN SEITEN-FAB MEHR (spec-navigation.txt).
- *
- * Das abgesetzte + neben der Kapsel ist auf jeder Seite dasselbe und wird nie
- * umgedeutet; was eine Seite bisher auf ihren FAB legte („Neue Notiz",
- * „Neues Rezept"), bekommt sie ueber den vorgewaehlten Typ im Erfassen-Blatt
- * oder als Geisterkreis im eigenen Kopf (dockFabIntoToolbar im Router). Ein
- * Seiten-FAB, der keinen Kopf-Platz findet, bleibt deshalb unsichtbar in der
- * Ebene stehen: seine Verdrahtung (der Kurzbefehl `n`, die Suche „Neu …") ruft
- * ihn weiter per `.click()` auf, und das Erfassen-Blatt bietet ihn als
- * „Pełny formularz" an. */
-@media (max-width: 1023px) {
-  .fab-layer .page-fab,
-  .fab-layer .page-fab-group {
-    display: none;
-  }
-}
-
-/* DIE KAPSEL MINIMIERT SICH BEIM LESEN (R19, iOS-26-Muster; Entscheidung Ulas
- * 2026-10-16; Tafla 2026-10-19). Abwaerts gescrollt (utils/ux.js
- * watchNavMinimize) wird sie eine 48 hohe Kapsel aus Zeichen: alle Ziele
- * bleiben, die Labels blenden aus (160ms), jedes Ziel ist 48 breit und 40 hoch.
- * Aufwaerts, oben und am Seitenende faehrt sie wieder aus; Fokus in der Kapsel
- * holt sie sofort ganz zurueck (Tastatur sieht immer Labels).
- *
- * DIE ZIELE BLEIBEN: jedes Zeichen ist auch minimiert ein Ziel (48x40), sein
- * Name bleibt im Baum - die Labels werden unsichtbar, nicht entfernt.
- *
- * KEIN LAYOUT-SHIFT: die Kapsel liegt ausser Fluss und schrumpft um ihre Mitte
- * (der Rand nimmt die halbe Hoehendifferenz), die Zone und --nav-bottom-height
- * rechnen weiter mit der ausgefahrenen Hoehe (watchNavCapsuleHeight misst
- * minimiert nicht). Die Breite kommt gemessen (`--nav-mini-width`, ux.js),
- * damit sie gleiten kann. Das + schrumpft mit auf 48.
- *
- * Reduzierte Bewegung: derselbe Zustandswechsel ohne Gleiten (unten). */
-@media (max-width: 1023px) {
-  /* Mit `.nav-bottom` davor: glass.css laedt spaeter und setzt an
-   * `.nav-bottom__items` die Uebergaenge von Flaeche und Schatten - gleiche
-   * Spezifitaet, also gewann es, und Hoehe wie Breite schalteten hart. */
-  .nav-bottom .nav-bottom__items {
-    transition:
-      background-color var(--transition-fast),
-      box-shadow var(--transition-fast),
-      min-height var(--duration-md) var(--ease-out),
-      margin var(--duration-md) var(--ease-out),
-      padding var(--duration-md) var(--ease-out),
-      inline-size var(--duration-md) var(--ease-out);
-  }
-
-  .nav-bottom .nav-item__label {
-    max-block-size: 3em;
-    transition:
-      opacity var(--duration-sm) var(--ease-out),
-      max-block-size var(--duration-md) var(--ease-out);
-  }
-
-  .nav-bottom .nav-item {
-    transition:
-      color var(--transition-fast),
-      background-color var(--transition-fast),
-      min-height var(--duration-md) var(--ease-out),
-      inline-size var(--duration-md) var(--ease-out);
-  }
-
-  .nav-bottom--minimized:not(:focus-within) .nav-bottom__items {
-    min-height: var(--nav-height-minimized);
-    margin-block: calc((var(--nav-height-mobile) - var(--nav-height-minimized)) / 2);
-    padding-block: var(--space-1);
-    inline-size: var(--nav-mini-width, 100%);
-  }
-
-  /* Ohne Label steht das Zeichen in der Mitte - die Fuge zum Label faellt mit. */
-  .nav-bottom--minimized:not(:focus-within) .nav-item {
-    row-gap: 0;
-    flex: none;
-    inline-size: var(--space-12);
-    min-height: var(--space-10);
-    padding: 0;
-  }
-
-  .nav-bottom--minimized:not(:focus-within) .nav-item__label {
-    max-block-size: 0;
-    overflow: hidden;
-    opacity: 0;
-  }
-
-  /* Minimiert traegt das aktive Ziel seine Pille selbst: der gleitende
-   * Indikator ist an der ausgefahrenen Geometrie gemessen. */
-  .nav-bottom--minimized:not(:focus-within) .nav-bottom__indicator {
-    opacity: 0;
-  }
-
-  .nav-bottom--minimized:not(:focus-within) .nav-item[aria-current="page"],
-  .nav-bottom--minimized:not(:focus-within) .nav-item--active {
-    background-color: var(--color-accent-tint);
-  }
-
-  html.nav-minimized:not(:has(.nav-bottom:focus-within)) .capture-plus {
-    /* 48 / 52: das + steht minimiert so hoch wie die Kapsel, um seine Mitte. */
-    --capture-scale: 0.923;
-  }
-}
-
-@media (max-width: 1023px) and (prefers-reduced-motion: reduce) {
-  .nav-bottom .nav-bottom__items,
-  .nav-bottom .nav-item,
-  .nav-bottom .nav-item__label,
-  .capture-plus {
-    transition: none;
-  }
-}
+/* AM TELEFON DOCKT DER SEITEN-FAB IM KOPF (dockFabIntoToolbar im Router, als
+ * Geisterkreis). v2 (2026-10-27): ohne das globale + ist er die einzige
+ * Anlege-Affordance seiner Seite - findet er keinen Kopf-Platz, schwebt er
+ * deshalb ueber der Leiste (--fab-offset-bottom), statt unsichtbar in der
+ * Ebene zu warten wie unter Tafla. */
 
 /* Der FAB einer Speed-Dial-Gruppe positioniert sich nicht selbst: er ist das
  * einzige Kind im Fluss, die Gruppe schrumpft dadurch exakt auf seine Fläche,
@@ -5708,12 +5510,9 @@ p.field-hint--warn[hidden] {
 
   /* ── Aktiv: Schrift in der Stimme, die FLAECHE traegt die Pille ──
    *
-   * Hier standen eine statische Toenung und ein 3px-Akzentstreifen links. In
-   * der Liste schaltete `.nav-sidebar__items--liquid` beide ab, der gepinnte
-   * Eintrag (Einstellungen) liegt aber ausserhalb der Liste und trug sie
-   * weiter - als einzige Zeile der Leiste (Critique 2026-10-16). Seit er eine
-   * eigene Pille mitbringt (router.js, `nav-sidebar__indicator--pinned`),
-   * hat keine Zeile mehr Bedarf an Streifen oder Toenung. */
+   * Hier standen eine statische Toenung und ein 3px-Akzentstreifen links
+   * (Critique 2026-10-16). Die gleitende Pille traegt die Flaeche; keine Zeile
+   * hat Bedarf an Streifen oder Toenung (v2: ohne gepinnten Eintrag). */
   .nav-sidebar .nav-item[aria-current="page"] {
     color: var(--color-accent);
     font-weight: var(--font-weight-semibold);
@@ -5735,52 +5534,20 @@ p.field-hint--warn[hidden] {
       background-color var(--duration-2xs) var(--ease-out);
   }
 
-  /* ── Einstellungen ans Ende ──
-   *
-   * HIER STAND `margin-top: auto` AN `.nav-sidebar__items > …`. Ein Auto-Rand
-   * verteilt FREIEN Raum, und bei Ueberlauf gibt es keinen - der Pin fiel also
-   * genau in dem Fall aus, fuer den er gedacht war (gemessen 1280x720:
-   * scrollHeight 666 in clientHeight 448, Einstellungen 218px unter der Falz).
-   *
-   * Der Eintrag haengt seit 2026-08-10 als Geschwister der Liste in der
-   * Sidebar-Spalte (router.js) und braucht deshalb gar keinen Rand mehr: was
-   * nicht im Scroller liegt, scrollt nicht weg. Bleibt nur die Naht zur Liste
-   * darueber, damit er nicht an ihrem letzten Eintrag klebt. */
-  .nav-sidebar > .nav-item--pinned-end {
-    margin-top: var(--space-1);
-    flex-shrink: 0;
-  }
+  /* 2026-10-27, v2: hier stand „Einstellungen ans Ende" (der gepinnte Eintrag
+   * als Geschwister der Liste, Critique 2026-08-10) samt seiner Naht bei
+   * Ueberlauf. Die Seitenleiste fuehrt die fuenf Ziele der Leiste; die
+   * Einstellungen stehen im Konto-Menue. */
 
-  /* DIE ZWEI ZEILEN AUSSERHALB DER LISTE HABEN DIE GEOMETRIE DER PILLE (R18).
+  /* DIE ZEILE AUSSERHALB DER LISTE HAT DIE GEOMETRIE DER PILLE (R18).
    * In der Liste traegt die gleitende Pille Hover und Auswahl, 4px von der
-   * Tafelkante eingerueckt. Einstellungen und die Kontozeile haengen
-   * ausserhalb der Liste und faerbten sich selbst - ueber die volle Breite,
-   * bis an die Kante. In der flachen Leiste war das ein Balken; in der
-   * runden Tafel schnitte ihre untere Ecke (26px) die Flaeche der Kontozeile
-   * an. Mit demselben Einzug wie die Pille liegt die Ecke der Zeile innerhalb
-   * der Kurve (Abstand zum Kreismittelpunkt 24,7px < 26px), und alle Zeilen
-   * der Tafel sprechen eine Form. Das Polster faellt um den Einzug, damit das
-   * Zeichen auf der Flucht X=28 bleibt. */
-  .nav-sidebar > .nav-item--pinned-end,
+   * Tafelkante eingerueckt. Die Kontozeile haengt ausserhalb der Liste und
+   * faerbte sich selbst - ueber die volle Breite, bis an die Kante. Mit
+   * demselben Einzug wie die Pille sprechen alle Zeilen eine Form. Das Polster
+   * faellt um den Einzug, damit das Zeichen auf der Flucht X=28 bleibt. */
   .nav-sidebar .nav-item.nav-sidebar__account-trigger {
     margin-inline: var(--space-1);
     padding-inline: calc(var(--sidebar-icon-inset) - var(--space-1)) calc(var(--space-3) - var(--space-1));
-  }
-
-  /* UND EINE KANTE, SOBALD DIE LISTE UEBERLAEUFT. Ohne sie liest sich der
-   * gepinnte Eintrag als naechster Listeneintrag - im Screenshot stand
-   * „Einstellungen" direkt unter „Belohnungen", waehrend „Menschen" und
-   * „Finanzen" dazwischen weggescrollt waren. Die Fade-Maske sagt „hier geht es
-   * weiter" und wird dadurch zur Falle: was darunter steht, gehoert nicht mehr
-   * dazu.
-   *
-   * `wireScrollFade` setzt `has-fade-end` genau dann, wenn unterhalb noch
-   * Eintraege liegen - dieselbe Bedingung, aus der die Naht ihre Berechtigung
-   * zieht. Passt die Liste, bleibt die Sidebar ununterbrochen. */
-  .nav-sidebar__items.has-fade-end + .nav-item--pinned-end {
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
-    border-top: 1px solid var(--color-border-subtle);
   }
 
   /* ── Sidebar eingeklappt (icon-only) ── */
@@ -8994,9 +8761,11 @@ textarea::placeholder {
  * -------------------------------------------------------- */
 .shell-bottom-stack {
   position: fixed;
-  /* TAFLA: der Toast steht 12pt ueber der Kapsel. --nav-bottom-height reicht
-   * bis 8pt ueber ihre Oberkante (Safe-Area eingerechnet), dazu 4pt. */
-  bottom: calc(var(--nav-bottom-height) + var(--space-1));
+  /* TAFLA: der Toast stand 12pt ueber der Kapsel (--nav-bottom-height reichte
+   * 8pt ueber ihre Oberkante, dazu 4pt). v2 (2026-10-27): die Zone endet
+   * genau an der Kante der Leiste - die 12pt kommen jetzt ganz von hier
+   * (gemessen vorher 4px Luft bei 390x844). */
+  bottom: calc(var(--nav-bottom-height) + var(--space-3));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -9076,7 +8845,7 @@ html:has(.app-page.is-selecting) {
  * Abstand wie auf dem Telefon, nur ohne dessen FAB-Nachlauf. */
 @media (min-width: 768px) and (max-width: 1023px) {
   .shell-bottom-stack {
-    bottom: calc(var(--nav-bottom-height) + var(--space-1));
+    bottom: calc(var(--nav-bottom-height) + var(--space-3));
   }
 }
 
@@ -9969,11 +9738,6 @@ html:has(.app-page.is-selecting) {
  * eigene Fallbacks.
  * -------------------------------------------------------- */
 @media (prefers-reduced-transparency: reduce) {
-  .nav-bottom {
-    background-color: var(--color-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
 
   /* Ohne Blur braucht der Modal-Backdrop wieder volle Deckkraft, damit das
    * dahinterliegende Modul nicht unscharf-frei durchscheint. Dasselbe fuer
@@ -10422,22 +10186,6 @@ textarea.input { resize: vertical; }
   box-shadow: none !important;
 }
 
-/* DIE PILLE DES GEPINNTEN EINTRAGS (Critique 2026-10-16). Dieselbe Klasse wie
- * die Listenpille, also dasselbe Material (glass.css) und derselbe Uebergang;
- * nur die Geometrie ist die der Zeile selbst - der Eintrag traegt den Einzug
- * der Pille schon als Rand (Regel "Geometrie der Pille", oben). Hinter Zeichen
- * und Wort per eigenem Stapelkontext; aufgerufen und hergeglitten von
- * positionSidebarIndicator() (router.js). */
-.nav-sidebar > .nav-item--pinned-end {
-  isolation: isolate;
-}
-
-.nav-sidebar__indicator--pinned {
-  inset: 0;
-  height: auto;
-  z-index: -1;
-}
-
 /* ── Sidebar: Abschnittsbezeichnung (z.B. "Haushalt") ──
  * Sentence-Case Gruppierungslabel (Typo-Rolle in typography.css). Tertiär
  * gefärbt, damit es als ruhige Über-Beschriftung liest und nicht mit den
@@ -10492,47 +10240,9 @@ textarea.input { resize: vertical; }
   }
 }
 
-/* ── Mobile: Tab-Indikator (Strukturell) ──
- * TAFLA: die Pille umfasst Zeichen UND Label - sie ist der aktive Tab selbst
- * (48 hoch). Die Kapsel haelt ihr 4/8pt Polster frei, also stoesst sie nicht
- * an die Rundung der Kapsel (der Befund aus #569 bleibt geloest). Die exakte
- * Geometrie setzt positionTabIndicator() aus dem Rect des Tabs; die Werte hier
- * sind der Stand vor dem ersten Messen. */
-.nav-bottom__indicator {
-  position: absolute;
-  top: 0;
-  bottom: auto;
-  left: 0;
-  height: var(--space-12);
-  border-radius: var(--radius-full);
-  pointer-events: none;
-  /* `--duration-lg` + `--ease-out`: dieselbe Bewegung wie jede gleitende
-   * Kapsel einer Segment-/Tab-Leiste (DESIGN.md, Bedien-Tabelle). Hier stand
-   * --duration-md - die Pille der Leiste war die eine, die schneller lief. */
-  transition:
-    transform var(--duration-lg) var(--ease-out),
-    opacity var(--transition-fast);
-  will-change: transform;
-  z-index: 0;
-}
-
-.nav-bottom__indicator::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-/* Nav-Items im Bottom-Bar über dem Indikator */
-.nav-bottom .nav-item {
-  position: relative;
-  z-index: 1;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .nav-sidebar__indicator,
-  .nav-sidebar__hover,
-  .nav-bottom__indicator {
+  .nav-sidebar__hover {
     transition: none;
   }
 

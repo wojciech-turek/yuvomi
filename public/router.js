@@ -14,7 +14,7 @@ import { initI18n, getLocale, t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
 import { emptyHintEl, emptyStateEl } from '/utils/empty-state.js';
-import { wireScrollFade, wireCollapsingHeader, watchNavCapsuleHeight, bindNavMinimize } from '/utils/ux.js';
+import { wireScrollFade, wireCollapsingHeader, watchNavCapsuleHeight } from '/utils/ux.js';
 import { TOAST_SURFACES } from '/utils/toast-surface.js';
 import { showToast } from '/utils/toast-show.js';
 import { unknownPathDetour, publicPathDetour, detourPaths } from '/utils/unknown-route.js';
@@ -45,7 +45,6 @@ import { buildHelpRows } from '/utils/help.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
 import { wirePaletteCombobox } from '/utils/palette-combobox.js';
 import { triggerPageFab, syncFabName, fabActionLabel } from '/utils/fab.js';
-import { createCapturePlus, openCaptureSheet, captureTypeForRoute, forgetCaptureCache } from '/components/capture-sheet.js';
 import { hasLeaveGuard, mayLeave } from '/utils/leave-guard.js';
 import { createUpdateFlow, isUserBusy } from '/utils/app-update.js';
 import { createStartHandoff } from '/utils/start-handoff.js';
@@ -78,14 +77,10 @@ import {
 } from '/settings/registry.js';
 import {
   NAV_SECTION,
-  navSectionEntryCounts,
-  navSectionLabelKey,
   resolveMobileNavOrder,
   sortNavigationItems,
 } from '/settings/module-order.js';
 
-/** Haelt die Minimier-Logik der Kapsel (bindNavMinimize); jeder Seitenwechsel faehrt sie aus. */
-let navMinimizer = null;
 
 // --------------------------------------------------------
 // Routen-Definitionen
@@ -965,7 +960,9 @@ function syncSidebarTools(root = document.querySelector('.nav-sidebar__logo-acti
 
 /**
  * Die Kontozeile am Fuss der Seitenleiste: Avatar, Name, und dahinter das
- * Konto-Menue (Hilfe, Aenderungen, Abmelden).
+ * Konto-Menue (Einstellungen, Hilfe, Aenderungen, Abmelden). v2 (2026-10-27):
+ * die Einstellungen stehen hier, seit die Seitenleiste nur noch die fuenf Ziele
+ * der Leiste fuehrt - am Desktop einen Klick entfernt statt zwei ueber Więcej.
  *
  * Gebaut per DOM-API, weil Name und Bild Nutzerdaten sind; Farbe und Bild
  * setzt `syncSidebarAccount()`, das auch nach einer Profil-Aenderung laeuft.
@@ -1025,6 +1022,7 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
     return btn;
   };
   menu.append(
+    item('settings', 'settings', 'nav.settings', 'nav-account__settings'),
     item('help', 'circle-help', 'nav.help', 'nav-account__help'),
     // `nav-item--changelog` traegt den Update-Hinweis im Namen (applyUpdateBadge).
     item('changelog', 'history', 'nav.changelog', 'nav-item--changelog'),
@@ -1041,7 +1039,8 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
   }
   menu.addEventListener('click', (event) => {
     const action = event.target.closest?.('.popover-menu__item')?.dataset.action;
-    if (action === 'help') showHelpModal();
+    if (action === 'settings') navigate('/settings?view=domains');
+    else if (action === 'help') showHelpModal();
     else if (action === 'changelog') showChangelogModal();
     else if (action === 'logout') confirmAndLogout();
   });
@@ -1418,8 +1417,7 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
     const swap = () => {
       // ZUERST festhalten, ob die alte Seite einen FAB hatte - schwebend in der
       // Ebene oder (Desktop) angedockt in ihrem Kopf, der mit dem Inhalt gleich
-      // faellt: der naechste poppt dann nicht neu herein, und die Kapsel haelt
-      // seine Reserve (holdFabAcrossSwap).
+      // faellt: der naechste poppt dann nicht neu herein (holdFabAcrossSwap).
       holdFabAcrossSwap();
       // Alter Inhalt ist jetzt weg - altes Stylesheet kann entfernt werden
       pageWrapper = document.createElement('div');
@@ -1703,29 +1701,13 @@ function renderAppShell(container) {
 
   const sidebarItems = document.createElement('div');
   sidebarItems.className = 'nav-sidebar__items nav-sidebar__items--liquid';
-  // Kein role="list": die Kinder sind Sektions-Gruppen (role="group") + das
-  // gepinnte Settings-Item, keine listitems. Die <nav>-Hülle trägt die
-  // Navigations-Semantik, die Gruppen die Sektions-Struktur.
-  // DER GEPINNTE EINTRAG STEHT AUSSERHALB DES SCROLLERS (Critique 2026-08-10).
-  //
-  // Die Absicht gab es schon: `nav-item--pinned-end` plus `margin-top: auto`.
-  // Nur braucht ein Auto-Rand FREIEN RAUM - er wirkt also genau dann nicht,
-  // wenn er gebraucht wird. Gemessen auf 1280x720: scrollHeight 666 in
-  // clientHeight 448, und die Einstellungen lagen 218px unter der Falz,
-  // zusammen mit dem Budget - beides Module, die PRODUCT.md ausdruecklich als
-  // Desktop-Sitzung nennt. Eine Regel, die nur im unkritischen Fall greift, ist
-  // dieselbe stille Zusicherung wie eine Fade-Maske, die zeigt, dass es
-  // weitergeht, ohne dass man hinkaeme.
-  //
-  // Als Geschwister der Liste sitzt er immer am Fuss, ohne Auto-Rand: die
-  // Sidebar ist eine Flex-Spalte, und was nicht im Scroller liegt, scrollt
-  // nicht weg. Strukturell ist das ohnehin der richtige Ort - die Einstellungen
-  // sind Systemebene, kein Modul unter Modulen.
-  const pinnedSidebarItems = [];
-  sidebarNavItems().forEach((item) => {
-    if (item.classList?.contains('nav-item--pinned-end')) pinnedSidebarItems.push(item);
-    else sidebarItems.appendChild(item);
-  });
+  // Kein role="list": die Kinder sind Links und zwei dekorative Flaechen
+  // (Pille, Hover), keine listitems. Die <nav>-Hülle trägt die Semantik.
+  // 2026-10-27, v2: hier stand der gepinnte Eintrag „Einstellungen" ausserhalb
+  // des Scrollers (Critique 2026-08-10). Die Seitenleiste fuehrt jetzt die fuenf
+  // Ziele der Leiste; die Einstellungen stehen auf Więcej und im Konto-Menue
+  // am Fuss (sidebarAccountEl).
+  sidebarNavItems().forEach((item) => sidebarItems.appendChild(item));
 
   // Scroll-Affordanz (Audit F-01): weiche Fade-Anrisse oben/unten, sobald die
   // Liste überläuft — der Scrollbalken ist bewusst versteckt, ohne Anriss waren
@@ -1814,22 +1796,6 @@ function renderAppShell(container) {
     sidebarSearch.addEventListener('click', () => _openSearch?.());
     sidebarLogoActions.appendChild(sidebarSearch);
   }
-  // Am Zeigergeraet steht das Erfassen hier statt neben der Kapsel: dasselbe
-  // Blatt, derselbe Name („Dodaj").
-  if (!isMinimalNav) {
-    const sidebarAdd = document.createElement('button');
-    sidebarAdd.type = 'button';
-    sidebarAdd.className = 'nav-sidebar__tool nav-sidebar__add';
-    sidebarAdd.setAttribute('aria-label', t('capture.add'));
-    sidebarAdd.setAttribute('title', t('capture.add'));
-    sidebarAdd.setAttribute('aria-haspopup', 'dialog');
-    const addIcon = document.createElement('i');
-    addIcon.dataset.lucide = 'plus';
-    addIcon.setAttribute('aria-hidden', 'true');
-    sidebarAdd.appendChild(addIcon);
-    sidebarAdd.addEventListener('click', () => openCaptureFromShell());
-    sidebarLogoActions.appendChild(sidebarAdd);
-  }
   sidebarToggle.classList.add('nav-sidebar__tool');
   sidebarLogoActions.appendChild(sidebarToggle);
   sidebarLogo.appendChild(sidebarLogoActions);
@@ -1837,10 +1803,6 @@ function renderAppShell(container) {
   sidebar.appendChild(sidebarLogo);
   sidebar.appendChild(sidebarItems);
 
-  // Der gepinnte Eintrag steht zwischen Liste und Fuss-Aktionen: er IST eine
-  // Route (data-route, Aktiv-Pille) und gehoert damit nicht zu den Aktionen
-  // darunter, aber auch nicht mehr in den Scroller darueber.
-  pinnedSidebarItems.forEach((el) => sidebar.appendChild(el));
 
   // HILFE, AENDERUNGEN UND ABMELDEN STEHEN HINTER DEM AVATAR (Critique
   // 2026-09-26, P1-2). Als Fussleiste kosteten sie 104px Hoehe fuer drei
@@ -1879,18 +1841,8 @@ function renderAppShell(container) {
   if (!isMinimalNav) bottomItems.replaceChildren(...buildBottomNavItems());
   bottomNav.appendChild(bottomItems);
 
-  // Gleitender Tab-Indikator. TAFLA: er liegt IN der Kapsel, zwischen ihrem
-  // Glas und den Tabs - die Pille ist deckend (--color-accent-tint), und als
-  // Geschwister der Kapsel malte sie ueber Zeichen und Label (die Kapsel ist
-  // durch ihren backdrop-filter ein eigener Stapelkontext). Ein Neuaufbau der
-  // Tabs (rebuildNavigation) haengt ihn wieder an.
-  if (!isMinimalNav) {
-    const tabIndicator = document.createElement('div');
-    tabIndicator.className = 'nav-bottom__indicator';
-    tabIndicator.setAttribute('aria-hidden', 'true');
-    tabIndicator.style.opacity = '0';
-    bottomItems.prepend(tabIndicator);
-  }
+  // v2 (2026-10-27): kein gleitender Indikator mehr - der aktive Tab traegt
+  // seine Pille selbst (layout.css, `.nav-item__icon-well`).
 
   const searchOverlay = document.createElement('div');
   searchOverlay.className = 'search-overlay';
@@ -1996,19 +1948,17 @@ function renderAppShell(container) {
   //
   // Sichtbar ändert das nichts: der Stapel ist `position: fixed` und trägt
   // `--z-toast`, seine Lage kommt aus der Regel, nicht aus der Reihenfolge.
-  const shellNodes = [skipLink, sidebar, main, fabLayer, bottomStack, bottomNav];
-  // TAFLA: das abgesetzte + (globales Erfassen) - auf jeder Seite dasselbe,
-  // nie umgedeutet. Gast und Wandtablett erfassen nichts.
-  if (!isMinimalNav) shellNodes.push(createCapturePlus({ onOpen: () => openCaptureFromShell() }));
-  shellNodes.push(searchOverlay, routeAnnouncer);
+  // v2 (2026-10-27): kein globales + mehr - jede Seite legt selbst an (ihr
+  // eigenes „Neu" im Kopf, dockFabIntoToolbar).
+  const shellNodes = [skipLink, sidebar, main, fabLayer, bottomStack, bottomNav, searchOverlay, routeAnnouncer];
   container.replaceChildren(...shellNodes);
   // Der Stapel weicht den Knoepfen offener Dialoge aus (#1160, Begruendung in
   // utils/toast-placement.js). Ein neuer Shell-Aufbau baut einen neuen Stapel,
   // also geht der Beobachter des alten mit.
   _stopToastPlacement?.();
   _stopToastPlacement = watchToastPlacement(bottomStack);
-  // Die Kapsel ist ein NEUER Knoten; der Beobachter des Tab-Indikators haengt
-  // sonst am verworfenen (siehe observeNavCapsule weiter unten).
+  // Die Tab-Reihe ist ein NEUER Knoten; die Hoehenmessung haengt sonst am
+  // verworfenen (siehe observeNavCapsule weiter unten).
   observeNavCapsule();
   applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
   updateBranding(routerState.currentPath || '/');
@@ -2148,7 +2098,31 @@ function dockFabIntoToolbar(fab) {
   const main = document.getElementById('main-content');
   const slot = main?.querySelector('.page-toolbar__actions');
   if (!slot) return false;
-  if (!isDesktopViewport()) return dockFabAsGhost(fab, slot);
+  if (!isDesktopViewport()) {
+    // v2 (2026-10-27): seit das globale + weg ist, ist der Seitenknopf der
+    // einzige Weg zum Anlegen. Ein Slot, der am Telefon nicht gerendert wird,
+    // waere ein Versteck: der Kopf der Kueche steht dort nur waehrend der
+    // Suche, und der Kalender blendet seinen Slot unter 1024px aus (calendar.css
+    // - ein dritter Kreis kuerzte dort „Kalendarz" auf „Kalenda…"). Dann bleibt
+    // der Knopf in der fab-layer und schwebt ueber der Leiste.
+    //
+    // GEFRAGT WIRD NACH DEM EINHAENGEN, nicht davor: ein LEERER Slot ist unter
+    // 1024px immer ausgeblendet (`.page-toolbar__actions:empty`, layout.css),
+    // und leer ist er, bis der Knopf darin steht. Die Vorabfrage liess deshalb
+    // auch Belohnungen schweben, deren Kopf Platz hat. Gemessen wird der Slot,
+    // nicht der Knopf: ein Knopf mit `hidden` (Belohnungen auf „Punkty") hat
+    // nie Geometrie, sein Slot aber schon, sobald er ihn traegt. Misslingt
+    // der Versuch, steht der Knopf wieder, wo er war - der Aufrufer zieht ihn
+    // von dort in die Ebene (oder laesst ihn dort, wenn er schon darin stand).
+    const home = fab.parentNode;
+    const next = fab.nextSibling;
+    dockFabAsGhost(fab, slot);
+    if (slot.getClientRects().length) return true;
+    fab.classList.remove('page-fab--ghost');
+    syncFabName(fab);
+    home?.insertBefore(fab, next);
+    return false;
+  }
   const label = fab.dataset.dockLabel;
   if (!label) return false;
 
@@ -2177,62 +2151,23 @@ function dockFabIntoToolbar(fab) {
 }
 
 /**
- * TAFLA: AM TELEFON WIRD DER SEITEN-FAB EIN GEISTERKREIS IM KOPF.
+ * AM TELEFON WIRD DER SEITEN-FAB EIN GEISTERKREIS IM KOPF (Tafla; v2 fuer
+ * jede Seite).
  *
- * Unten rechts steht jetzt das globale + (nie umgedeutet). Was eine Seite
- * bisher auf ihren FAB legte, bleibt erreichbar:
- *   - Seiten, deren Sache das Erfassen-Blatt selbst kennt (Zadania, Kalendarz,
- *     Zakupy, Posiłki, Notatki), bekommen ihren Typ dort vorgewaehlt - ein
- *     zweites Plus im Kopf waere dieselbe Aktion zweimal. Ihr volles Formular
- *     steht im Blatt als „Pełny formularz".
- *   - alle anderen (Kontakte, Budżet, Dokumenty, Przepisy …) tragen ihr
- *     „Neu" als 36pt-Geisterkreis (44 Treffer) im Kopf, ohne Wort.
- * Ohne Kopf-Platz bleibt der Knopf unsichtbar in der Ebene (layout.css) und
- * per Kurzbefehl und Blatt erreichbar.
+ * v2 (2026-10-27): das globale + ist entfallen - „wir gehen in jeden Bereich
+ * und legen dort an". Jede Seite traegt ihr „Neu" deshalb selbst, als
+ * 36pt-Geisterkreis (44 Treffer) im Kopf, ohne Wort, auch dort, wo der Kopf
+ * schon zwei Kreise traegt: die Primaeraktion einer Seite geht vor der Regel
+ * „hoechstens zwei" (Tafla), die nur galt, solange das + sie auffing.
+ * Ohne Kopf-Platz schwebt der Knopf ueber der Leiste (layout.css).
  */
 function dockFabAsGhost(fab, slot) {
-  if (captureTypeForRoute(topLevelSection(routerState.currentPath || location.pathname)) !== 'auto') return false;
-  // Hoechstens zwei Geisterkreise im Kopf (spec-components „Nagłówek"): traegt
-  // er schon zwei (Suche, Werkzeuge), bleibt das „Neu" im Erfassen-Blatt.
-  // Gezaehlt wird im GANZEN Kopf (die Suche steht oft im Center-Slot).
-  const toolbar = slot.closest('.page-toolbar') ?? slot;
-  const shown = [...toolbar.querySelectorAll('.btn--icon, .page-search:not(.page-search--field)')]
-    .filter((el) => !el.hidden && !el.closest('[hidden], [popover]') && el.getClientRects().length);
-  if (shown.length >= 2) return false;
   fab.classList.add('page-fab--ghost');
   syncFabName(fab);
   slot.appendChild(fab);
   markFabShortcut(fab);
   return true;
 }
-
-/**
- * Das volle Formular der Seite als Weg im Erfassen-Blatt: ihr FAB, wo er
- * gerade steht (Ebene, Kopf). Nicht bei Nur-lesen, nicht der Erfassen-Knopf
- * der Uebersicht selbst.
- */
-function currentPageAction() {
-  if (document.documentElement.hasAttribute('data-module-readonly')) return null;
-  const fab = document.querySelector('#fab-layer .page-fab, #main-content .page-fab');
-  if (!fab || fab.hidden || fab.id === 'fab-main' || fab.closest('.page-fab-group')) return null;
-  const label = fabActionLabel(fab);
-  if (!label) return null;
-  return { label, run: () => fab.click() };
-}
-
-/** Das globale Erfassen mit dem Typ der Seite vorgewaehlt. */
-function openCaptureFromShell() {
-  const path = topLevelSection(routerState.currentPath || location.pathname);
-  openCaptureSheet({ context: captureTypeForRoute(path), pageAction: currentPageAction() });
-}
-
-// Gespeichert: die Zahlen an den Nav-Zielen ziehen nach, und steht die Seite
-// des Typs (oder Dziś) offen, zeichnet sie sich neu.
-window.addEventListener('yuvomi:captured', (e) => {
-  invalidateModuleCounts();
-  const path = routerState.currentPath;
-  if (path && (path === '/' || path === e.detail?.route)) refreshCurrentRoute();
-});
 
 /** Macht den 'n'-Chord am FAB sichtbar bzw. vorlesbar - schwebend wie angedockt. */
 function markFabShortcut(fab) {
@@ -2347,8 +2282,8 @@ function wireToolbar(el) {
 /**
  * Liegt die Route hinter „Więcej" (kein eigener Tab)? Dann ist sie eine
  * GESCHOBENE Seite (Tafla, spec-navigation.txt): ihr Kopf traegt einen
- * Rueckweg, und die Kapsel steht minimiert. Dieselbe Frage, die den
- * Mehr-Knopf aktiv macht (updateNav).
+ * Rueckweg (v2: die Leiste minimiert dort nicht mehr). Dieselbe Frage, die
+ * den Mehr-Knopf aktiv macht (updateNav).
  */
 function isPushedRoute(rawPath = routerState.currentPath || location.pathname) {
   const path = topLevelSection(rawPath);
@@ -2437,9 +2372,9 @@ function clearPageFab() {
  * bis der naechste Wechsel neu fragt - also auch fuer einen Nachzuegler. Beim
  * Kaltstart steht kein Vorgaenger: die Klasse faellt, der FAB faehrt ein.
  *
- * Die Kapsel muss seit der Re-Kritik 2026-10-17 nichts mehr halten: ihre
- * FAB-Reserve steht immer (layout.css, `.nav-bottom__items`), die frueheren
- * `fab-holding`/`releaseFabHold()` sind entfallen.
+ * Die Leiste muss nichts halten: seit der Re-Kritik 2026-10-17 stand ihre
+ * FAB-Reserve immer, und seit v2 (2026-10-27) reserviert sie gar nichts mehr.
+ * Die frueheren `fab-holding`/`releaseFabHold()` sind entfallen.
  */
 function holdFabAcrossSwap() {
   const root = document.documentElement;
@@ -3865,86 +3800,31 @@ function sidebarNavItems() {
   hover.setAttribute('aria-hidden', 'true');
   elements.push(hover);
 
-  let kitchenAdded = false;
-  let currentSection = null;
-  let currentGroup = null;
-
-  // Die Übersicht (Dashboard) ist die App-Wurzel und sitzt als einzelnes Item
-  // ganz oben — ohne „Übersicht"-Sektionsheader über einem „Übersicht"-Item
-  // (Stutter). Sie rendert als direktes Kind, ohne Gruppe/Label.
-  const HEADERLESS_SECTIONS = new Set([NAV_SECTION.overview]);
-
-  // Jede sichtbare Sektion wird ein role="group" mit aria-labelledby auf ihr Label
-  // — so ist die visuelle Gruppierung für Screenreader hörbar (statt verwaister
-  // Label-Divs zwischen Links). Items landen im aktuellen Gruppen-Container.
-  // Eine Sektion mit nur EINEM Eintrag bekommt keinen Kopf und keine Gruppe
-  // (navSectionLabelKey, R19): ihr Eintrag steht direkt in der Liste, mit der
-  // Luft einer Gruppe davor (`.nav-item--headerless`, layout.css).
-  const items = navItems();
-  const entryCounts = navSectionEntryCounts(items.filter((item) => item.module !== 'settings'));
-  let headerless = false;
-  const startSection = (section) => {
-    if (section === currentSection) return;
-    currentSection = section;
-    headerless = false;
-    if (HEADERLESS_SECTIONS.has(section)) { currentGroup = null; return; }
-    const labelKey = navSectionLabelKey(section, entryCounts.get(section));
-    if (!labelKey) { currentGroup = null; headerless = true; return; }
-    const labelId = `nav-section-${section}`;
-    const label = document.createElement('div');
-    label.className = 'nav-section-label';
-    label.id = labelId;
-    label.textContent = t(labelKey);
-    const group = document.createElement('div');
-    group.className = 'nav-sidebar__group';
-    group.setAttribute('role', 'group');
-    group.setAttribute('aria-labelledby', labelId);
-    group.appendChild(label);
-    elements.push(group);
-    currentGroup = group;
-  };
-
-  const appendNavEl = (el) => {
-    if (!currentGroup && headerless) el.classList.add('nav-item--headerless');
-    (currentGroup ?? { appendChild: (n) => elements.push(n) }).appendChild(el);
-  };
-
-  items.forEach((item) => {
-    // Settings ist gepinnt und gehört zu keiner sichtbaren Sektionsgruppe —
-    // der Aufrufer hebt es aus der Liste heraus und hängt es als Geschwister
-    // an die Sidebar-Spalte (siehe dort, und layout.css zum entfallenen Rand).
-    if (item.module !== 'settings') startSection(item.section);
-
-    if (item.kitchenGroup) {
-      if (!kitchenAdded) {
-        appendNavEl(sidebarKitchenEl());
-        kitchenAdded = true;
-      }
-      return;
-    }
-    const el = navItemEl(item);
-    if (item.module === 'settings') {
-      // Ans Sidebar-Ende pinnen — über eine explizite Klasse statt
-      // ":last-child a". Der Aufrufer erkennt sie und hängt den Eintrag
-      // ausserhalb des Scrollers ein.
-      el.classList.add('nav-item--pinned-end');
-      // DIESELBE PILLE AUCH HIER (Critique 2026-10-16, R18/D6). Der Eintrag
-      // liegt ausserhalb des Scrollers, die Pille der Liste erreicht ihn also
-      // nie - er trug deshalb noch den alten 3px-Streifen und eine statische
-      // Toenung. Jetzt bringt er eine eigene Pille mit (dieselbe Klasse, also
-      // dasselbe Material), und positionSidebarIndicator() laesst sie von der
-      // Stelle der Listenpille hergleiten.
-      const pill = document.createElement('span');
-      pill.className = 'nav-sidebar__indicator nav-sidebar__indicator--pinned';
-      pill.setAttribute('aria-hidden', 'true');
-      pill.style.opacity = '0';
-      el.prepend(pill);
-      elements.push(el);
-      return;
-    }
-    appendNavEl(el);
-  });
+  /* v2 (2026-10-27): DIESELBEN FUENF ZIELE WIE DIE LEISTE - Dziś, Kalendarz,
+   * Zadania, Jedzenie, Więcej. Alles Weitere (Module, Ustawienia) steht auf der
+   * Seite Więcej, am Desktop wie am Telefon; eine zweite, laengere Ordnung in
+   * der Seitenleiste waere eine zweite Antwort auf „wo finde ich was".
+   * Gast und Wandtablett (`isMinimalNav`) haben keine Seite Więcej - sie
+   * behalten ihre kurze Liste aus navItems(). */
+  const scope = routerState.currentUser?.access_scope;
+  if (scope === 'display' || scope === 'split_guest') {
+    navItems().forEach((item) => elements.push(item.kitchenGroup ? sidebarKitchenEl() : navItemEl(item)));
+    return elements.filter((el, i, all) => el.id !== 'sidebar-kitchen-nav' || all.findIndex((x) => x.id === 'sidebar-kitchen-nav') === i);
+  }
+  const dashboard = navItems().find((item) => item.module === 'dashboard');
+  if (dashboard) elements.push(navItemEl({ ...dashboard, navId: 'dashboard' }));
+  for (const item of mobileFavoriteItems()) {
+    elements.push(item.navId === 'kitchen' ? sidebarKitchenEl() : navItemEl(item));
+  }
+  elements.push(sidebarMoreEl());
   return elements;
+}
+
+/** Więcej in der Seitenleiste: ein Link auf /more, aktiv auch auf den Seiten dahinter (updateNav). */
+function sidebarMoreEl() {
+  const a = navItemEl({ path: MORE_PATH, label: t('nav.more'), icon: TAB_ICON.more, navId: 'more' });
+  a.id = 'sidebar-more-nav';
+  return a;
 }
 
 function isModuleDisabled(moduleName) {
@@ -4026,12 +3906,14 @@ async function disableFailedThirdPartyModule(moduleId) {
  * Więcej a grid. Sidebar and capsule read the same map, so a destination looks
  * the same in both. Every other module keeps its MODULE_ICON.
  */
+// v2 (2026-10-27, Main.dc.html): sun, calendar, square-check, utensils,
+// layout-grid - for the bottom bar and the sidebar alike (nav-icons.js).
 const TAB_ICON = Object.freeze({
   dashboard: 'sun',
-  calendar: 'calendar',
-  tasks: 'circle-check-big',
-  kitchen: 'cooking-pot',
-  more: 'layout-grid',
+  calendar: 'tab-calendar',
+  tasks: 'tab-check',
+  kitchen: 'tab-food',
+  more: 'tab-more',
 });
 
 function navItemEl({ path, navHref, label, icon, module: mod, accent, navId }) {
@@ -4191,29 +4073,9 @@ function placeNavIndicator(indicator, apply) {
   if (indicator.getClientRects().length) indicator.dataset.placed = '1';
 }
 
-/**
- * Laesst die Pille des gepinnten Eintrags von einer Bildschirmhoehe her an
- * ihren Platz gleiten (FLIP): erst ohne Uebergang auf den Startpunkt, dann
- * mit dem Uebergang der Pille (layout.css, reduced-motion schaltet ihn ab)
- * zurueck auf null. `fromTop` null heisst: ohne Weg einblenden.
- */
-function glidePillFrom(pill, fromTop) {
-  if (pill.style.opacity !== '0') return;
-  if (fromTop != null) {
-    pill.style.opacity = '';
-    startGlideAt(pill, fromTop - pill.getBoundingClientRect().top);
-  }
-  pill.style.transform = '';
-  pill.style.opacity = '';
-}
-
-/** Setzt eine Pille ohne Uebergang auf einen Startpunkt; der naechste Wert gleitet. */
-function startGlideAt(pill, y) {
-  pill.style.transition = 'none';
-  pill.style.transform = `translateY(${y}px)`;
-  pill.getBoundingClientRect();
-  pill.style.transition = '';
-}
+// 2026-10-27, v2: hier standen glidePillFrom() und startGlideAt() - die Pille
+// des gepinnten Eintrags „Einstellungen" glitt von der Listenpille her und
+// zurueck. Der Eintrag ist mit den fuenf Zielen entfallen.
 
 /**
  * Positioniert den morphenden Indikator in der Sidebar auf dem aktiven Nav-Item.
@@ -4223,28 +4085,10 @@ function positionSidebarIndicator() {
   const indicator = container?.querySelector('.nav-sidebar__indicator');
   if (!indicator) return;
   const active = container.querySelector('.nav-item[aria-current="page"]');
-  const pinnedPill = document.querySelector('.nav-sidebar > .nav-item--pinned-end > .nav-sidebar__indicator--pinned');
   if (!active) {
-    // Der gepinnte Eintrag (Einstellungen) ist aktiv: seine eigene Pille
-    // gleitet von dort her, wo die Listenpille gerade stand, und die
-    // Listenpille tritt ab. Ohne sichtbare Vorgaengerin erscheint sie still.
-    if (pinnedPill?.parentElement?.getAttribute('aria-current') === 'page') {
-      const from = indicator.style.opacity !== '0' && indicator.getClientRects().length
-        ? indicator.getBoundingClientRect().top : null;
-      glidePillFrom(pinnedPill, from);
-    }
     indicator.style.opacity = '0';
     return;
   }
-  // Zurueck in die Liste: die Listenpille startet an der Stelle der
-  // gepinnten (unterhalb der Liste, vom Scroller beschnitten) und gleitet
-  // herauf - dieselbe Bewegung in die Gegenrichtung.
-  // Nur ein schon platzierter Indikator gleitet - die erste Platzierung
-  // springt weiter (placeNavIndicator).
-  if (pinnedPill && pinnedPill.style.opacity !== '0' && indicator.dataset.placed === '1') {
-    startGlideAt(indicator, pinnedPill.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop);
-  }
-  if (pinnedPill) pinnedPill.style.opacity = '0';
   // Aktives Item in den Sichtbereich holen (Audit F-01): bei überlaufender
   // Liste lagen Item UND Pille sonst unsichtbar unterhalb der Falte — die
   // Navigation verlor ihren „Du bist hier"-Anker. Manuelles Scrollen statt
@@ -4264,41 +4108,6 @@ function positionSidebarIndicator() {
   const centerOffset = (active.offsetHeight - indicator.getBoundingClientRect().height) / 2;
   placeNavIndicator(indicator, () => {
     indicator.style.transform = `translateY(${top + centerOffset}px)`;
-    indicator.style.opacity = '';
-  });
-}
-
-/**
- * Positioniert den gleitenden Indikator in der mobilen Tab-Bar.
- *
- * TAFLA (spec-navigation.txt): die aktive Pille umfasst Zeichen UND Label - sie
- * ist so gross wie der aktive Tab (48 hoch, so breit wie sein Label plus 8pt
- * je Seite). Die Kapsel haelt 4pt seitlich und 8pt oben/unten Polster, die
- * Pille steht damit konzentrisch in ihrer Rundung und nie an ihrer Kante
- * (der Befund aus #569 bleibt geloest, nur aus der Geometrie der Kapsel statt
- * einer Kappung). Minimiert traegt das Ziel seine Pille selbst (layout.css).
- */
-function positionTabIndicator() {
-  const nav = document.querySelector('.nav-bottom__items');
-  const indicator = nav?.querySelector('.nav-bottom__indicator');
-  if (!indicator || !nav) return;
-  const active = document.querySelector(
-    '.nav-bottom__items .nav-item[aria-current="page"], .nav-bottom__items .nav-item--active',
-  );
-  if (!active) {
-    indicator.style.opacity = '0';
-    return;
-  }
-  const nr = nav.getBoundingClientRect();
-  const ar = active.getBoundingClientRect();
-  // clientTop: der Indikator sitzt in der Padding-Box der Bar, das Rect an der
-  // Border-Kante - ohne den Abzug sitzt die Kapsel 1px zu tief.
-  const top = ar.top - nr.top - nav.clientTop;
-  const left = ar.left - nr.left - nav.clientLeft;
-  placeNavIndicator(indicator, () => {
-    indicator.style.width = `${ar.width}px`;
-    indicator.style.height = `${ar.height}px`;
-    indicator.style.transform = `translate(${left}px, ${top}px)`;
     indicator.style.opacity = '';
   });
 }
@@ -4375,8 +4184,6 @@ function setMoreButtonState(moreBtn, activeSecondary, onMorePage = false) {
 }
 
 function updateNav(rawPath) {
-  // Ein neuer Ort beginnt oben - mit ausgefahrener Kapsel (R19).
-  navMinimizer?.expand();
   // EINE SEKTION JE ZIEL, an jedem Aufruf (Critique R19). Die Navigation
   // reicht `topLevelSection()` schon herein, der Neuaufbau der Leiste
   // (rebuildNavigation, nach Sprache, Modulen oder dem Nachladen der
@@ -4384,8 +4191,6 @@ function updateNav(rawPath) {
   // /settings/personal/notifications fand "Mehr" dann kein Ziel und stand
   // ohne Aktivzustand da. Idempotent - ein schon gekuerzter Pfad bleibt.
   const path = topLevelSection(rawPath);
-  // Geschobene Seiten (hinter Więcej) stehen mit minimierter Kapsel (Tafla).
-  navMinimizer?.pin?.(isPushedRoute(path));
   const kitchenDestination = currentKitchenDestination();
   document.querySelectorAll('[data-route]').forEach((el) => {
     if (el.dataset.navId === 'kitchen' && kitchenDestination) {
@@ -4430,11 +4235,15 @@ function updateNav(rawPath) {
   }
 
   const moreBtn = document.querySelector('#more-btn');
-  if (moreBtn) {
-    const activeSecondary = secondaryMobileItems().find((item) => (
-      item.navId === 'kitchen' ? isKitchenRoute(path) : item.path === path
-    ));
-    setMoreButtonState(moreBtn, activeSecondary, path === MORE_PATH);
+  const activeSecondary = secondaryMobileItems().find((item) => (
+    item.navId === 'kitchen' ? isKitchenRoute(path) : item.path === path
+  ));
+  if (moreBtn) setMoreButtonState(moreBtn, activeSecondary, path === MORE_PATH);
+  // Więcej in der Seitenleiste (v2): aktiv auf /more und auf jeder Seite dahinter.
+  const sidebarMore = document.querySelector('#sidebar-more-nav');
+  if (sidebarMore) {
+    if (path === MORE_PATH || activeSecondary) sidebarMore.setAttribute('aria-current', 'page');
+    else sidebarMore.removeAttribute('aria-current');
   }
 
   if (window.lucide) {
@@ -4442,10 +4251,7 @@ function updateNav(rawPath) {
     window.lucide.createIcons(navRoot ? { el: navRoot } : undefined);
   }
 
-  requestAnimationFrame(() => {
-    positionSidebarIndicator();
-    positionTabIndicator();
-  });
+  requestAnimationFrame(() => positionSidebarIndicator());
 }
 
 function renderError(container, err, { page = null, home = false } = {}) {
@@ -4644,8 +4450,6 @@ function forgetSessionState() {
   // Der Layout-Hinweis des Dashboards gehoert derselben Sitzung: ohne ihn sagt
   // das Skelett am geteilten Tablett das Raster des Vorgaengers voraus.
   forgetLayoutHint();
-  // Haushalt und KI-Stand des Erfassens gehoeren derselben Sitzung.
-  forgetCaptureCache();
   // Gemerkte Scrollstände gehören zur Sitzung: der nächste Nutzer am selben
   // Gerät soll nicht auf den Positionen des vorigen landen.
   forgetScrollPositions();
@@ -4740,9 +4544,7 @@ function rebuildNavigation({ updateLabels = true } = {}) {
   }
   if (bottomItems) {
     const moreBtn = bottomItems.querySelector('#more-btn') ?? moreNavButtonEl();
-    const indicator = bottomItems.querySelector('.nav-bottom__indicator');
-    bottomItems.replaceChildren(...(indicator ? [indicator] : []), ...buildBottomNavItems(moreBtn));
-    requestAnimationFrame(() => positionTabIndicator());
+    bottomItems.replaceChildren(...buildBottomNavItems(moreBtn));
   }
 
   document.querySelectorAll('[data-route]').forEach((el) => {
@@ -4803,39 +4605,19 @@ window.addEventListener('timezone-changed', refreshCurrentRoute);
 window.addEventListener('timezone-changed', (event) => noteZoneDecision(event.detail?.timezone));
 window.addEventListener('time-format-changed', refreshCurrentRoute);
 
-window.addEventListener('resize', () => {
-  positionSidebarIndicator();
-  positionTabIndicator();
-}, { passive: true });
+window.addEventListener('resize', () => positionSidebarIndicator(), { passive: true });
 
-/* DER INDIKATOR MISST ECHTE RECTS, ALSO MUSS ER JEDE BREITENAENDERUNG SEHEN -
- * und `resize` ist nur EINE ihrer Ursachen.
- *
- * Seit die Nav-Kapsel ihr hinteres Ende fuer den FAB freihaelt (`:has()` in
- * layout.css), aendert sich die Breite aller fuenf Slots, sobald ein FAB
- * erscheint oder verschwindet. Das passiert auch OHNE Navigation: budget.js
- * schaltet `fab.hidden` beim Tabwechsel, split-expenses.js beim Archivfilter.
- * Der Indikator stand danach auf den Koordinaten der alten Slotbreiten, bis
- * irgendwann ein Resize oder ein Routenwechsel kam (Codex-Review zu PR #719).
- *
- * Ein ResizeObserver AN DER KAPSEL statt Aufrufe an den beiden bekannten
- * Stellen: die Ursache ist die Breite, nicht die Liste der Module, die sie
- * gerade aendern. Der dritte Aufrufer waere sonst wieder einer, der es
- * vergisst. */
+/* DIE HOEHE DER LEISTE: umbrechende Labels (lange Sprachen, enge Geraete)
+ * machen die Tabs hoeher als --nav-height-mobile, und die Zone darueber
+ * (--nav-bottom-height) muss mitwachsen (Review zu #1475). An der JEWEILS
+ * aktuellen Leiste - nach Logout/Login ist es eine neue (Review #2049).
+ * v2 (2026-10-27): der gleitende Indikator und das Minimieren beim Lesen sind
+ * entfallen; geblieben ist die Messung. */
 function observeNavCapsule() {
-  if (typeof ResizeObserver !== 'function') return;
   const items = document.querySelector('.nav-bottom__items');
-  if (!items || items.dataset.indicatorObserved === '1') return;
-  items.dataset.indicatorObserved = '1';
-  new ResizeObserver(() => requestAnimationFrame(() => positionTabIndicator())).observe(items);
-  // Dieselbe Kapsel, ihre HOEHE: umbrechende Labels machen sie hoeher als
-  // --nav-height-mobile, und die Zone darunter muss mitwachsen (Review zu #1475).
+  if (!items || items.dataset.heightObserved === '1') return;
+  items.dataset.heightObserved = '1';
   watchNavCapsuleHeight(items);
-  // Und sie minimiert sich beim Lesen (iOS-26-Muster, R19): abwaerts flacher
-  // und ohne Labels, aufwaerts, oben und am Seitenende wieder ganz. An der
-  // JEWEILS aktuellen Kapsel - nach Logout/Login ist es eine neue (Review #2049).
-  const nav = items.closest('.nav-bottom');
-  if (nav) navMinimizer = bindNavMinimize(navMinimizer, nav);
 }
 observeNavCapsule();
 
@@ -4997,9 +4779,6 @@ window.yuvomi = {
   // Uebersicht mobil, Re-Critique 2026-09-27 A1 P2-6) - dasselbe Overlay wie
   // Seitenleiste, Mehr-Blatt und Cmd-K.
   openSearch: () => _openSearch?.(),
-  // Das globale Erfassen (Tafla) - fuer die Pille „Dodaj" der Uebersicht am
-  // Desktop; dasselbe Blatt wie das + neben der Kapsel.
-  openCapture: () => openCaptureFromShell(),
   showToast,
   friendlyError,
   // Hilfe, Aenderungsverlauf und Abmelden fuer die Seiten Więcej und
@@ -5042,9 +4821,8 @@ window.yuvomi = {
   //     Wand), stand der alte bedienbar auf der Wand, bis die Seite ihn nach
   //     ihren Daten selbst raeumte.
   //   - adoptPageFab(): bringt er einen mit, blieb der im Scrollport - ohne
-  //     Glyph (die Icons zeichnet sonst erst updateNav()), und die Tab-Kapsel
-  //     hielt ihr hinteres Ende nicht mehr frei, weil ihre Reserve an
-  //     `.fab-layer .page-fab` haengt: die Slots liefen unter den Knopf.
+  //     Glyph (die Icons zeichnet sonst erst updateNav()) und ohne Andocken
+  //     im Kopf.
   // Aufzurufen direkt nach dem synchronen Teil von render(), wie in renderPage().
   replacePageFab: () => {
     clearPageFab();

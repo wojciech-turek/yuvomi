@@ -102,23 +102,32 @@ const ICON_SHAPES = {
     ['path', { d: 'm8 12.3 2.8 2.8 5.6-5.6' }],
   ],
 
-  // Tafla: the tab capsule's own glyphs (Lucide shapes, spec-navigation.txt).
-  // Dziś is a sun, Zadania a ticked circle, Kuchnia a pot - only the five
-  // destinations use them (TAB_ICON in router.js), module identity elsewhere
-  // keeps MODULE_ICON below.
+  // v2 (2026-10-27, Main.dc.html): the five destinations' own glyphs - plain
+  // Lucide shapes as the design draws them (sun, calendar, square-check,
+  // utensils, layout-grid). Only TAB_ICON in router.js uses them (bottom bar
+  // and sidebar); module identity elsewhere keeps MODULE_ICON below.
   'sun': [
     ['circle', { cx: '12', cy: '12', r: '4' }],
-    ['path', { d: 'M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41' }],
+    ['path', { d: 'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41' }],
   ],
-  'circle-check-big': [
-    ['path', { d: 'M21.801 10A10 10 0 1 1 17 3.335' }],
+  'tab-calendar': [
+    ['rect', { x: '3', y: '4', width: '18', height: '18', rx: '2' }],
+    ['path', { d: 'M16 2v4M8 2v4M3 10h18' }],
+  ],
+  'tab-check': [
     ['path', { d: 'm9 11 3 3L22 4' }],
+    ['path', { d: 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' }],
   ],
-  'cooking-pot': [
-    ['path', { d: 'M2 12h20' }],
-    ['path', { d: 'M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8' }],
-    ['path', { d: 'm4 8 16-4' }],
-    ['path', { d: 'm8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8' }],
+  'tab-food': [
+    ['path', { d: 'M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2' }],
+    ['path', { d: 'M7 2v20' }],
+    ['path', { d: 'M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7' }],
+  ],
+  'tab-more': [
+    ['rect', { x: '3', y: '3', width: '7', height: '7', rx: '1' }],
+    ['rect', { x: '14', y: '3', width: '7', height: '7', rx: '1' }],
+    ['rect', { x: '14', y: '14', width: '7', height: '7', rx: '1' }],
+    ['rect', { x: '3', y: '14', width: '7', height: '7', rx: '1' }],
   ],
 
   'sticky-note': [

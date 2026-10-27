@@ -923,8 +923,10 @@ function backdropRootCause(body) {
 test('Glas: kein Vorfahre eines backdrop-filter-Elements ist dauerhaft eine Backdrop Root', () => {
   const glass = glassAncestors();
   assert.ok(glass.size >= 8, `der Scanner findet die Glas-Elemente nicht (${glass.size}) - der Guard waere blind`);
-  const kapsel = [...glass].find(([k]) => k.endsWith('.nav-bottom__items'));
-  assert.ok(kapsel && kapsel[1].has('nav-bottom'), 'die Kapsel und ihr Vorfahre .nav-bottom muessen erkannt sein');
+  // 2026-10-27, v2: hier stand die Reichweite an der Glas-Kapsel
+  // (`.nav-bottom__items` mit Vorfahre `.nav-bottom`). Die Leiste ist jetzt
+  // deckend und traegt kein Glas - und soll es auch nicht wieder tun.
+  assert.ok(![...glass.keys()].some((k) => /\.nav-bottom(?:__items)?$/.test(k)), 'v2: die Leiste ist deckend, ohne backdrop-filter');
 
   const offenders = [];
   for (const file of allSheets) {
@@ -1911,32 +1913,32 @@ const namedRules = () => {
   return out;
 };
 
-test('R18: die Kapsel behaelt ihr Glas - der Name sitzt am Glas-Element, nicht an seinem Elternknoten', () => {
+// 2026-10-27, v2: der Titel war „die Kapsel behaelt ihr Glas - der Name sitzt am
+// Glas-Element". Die Leiste hat kein Glas mehr: sie ist EIN deckendes Rechteck,
+// also traegt sie den Namen selbst (`.nav-bottom`), und einen gleitenden
+// Indikator mit eigenem Namen gibt es nicht mehr. Es bleibt: genau ein Traeger
+// je Name, nur waehrend des Wechsels, und die Gruppen stehen.
+test('R18/v2: die Leiste steht ueber den Wechsel - ein Name an der Leiste selbst, nur waehrend des Wechsels', () => {
   const named = namedRules();
   const byName = (name) => named.filter((r) => r.name === name).map((r) => r.selector);
-  assert.deepEqual(byName('nav-bottom'), ['html.page-swapping .nav-bottom__items'], 'genau EIN Traeger je Name - ein doppelter verwirft die ganze Transition');
-  assert.deepEqual(byName('nav-bottom-indicator'), ['html.page-swapping .nav-bottom__indicator']);
+  assert.deepEqual(byName('nav-bottom'), ['html.page-swapping .nav-bottom'], 'genau EIN Traeger je Name - ein doppelter verwirft die ganze Transition');
+  assert.deepEqual(byName('nav-bottom-indicator'), [], 'v2: kein Tab-Indikator mehr');
   assert.deepEqual(byName('page-fab'), ['html.page-swapping .fab-layer .page-fab'], 'nur der schwebende FAB der Ebene: dort steht hoechstens einer');
-  // Das benannte Element IST das Glas (sonst haette die Gruppe nichts zu uebernehmen).
-  const glass = [...glassAncestors().keys()];
-  assert.ok(glass.some((k) => k.endsWith(': .nav-bottom__items')), 'die Kapsel traegt den backdrop-filter selbst');
   // Jeder Name nur waehrend des Wechsels.
   for (const r of named.filter((n) => /^(?:nav-|page-fab)/.test(n.name))) assert.match(r.selector, TRANSIENT_GATE, `${r.selector} traegt ${r.name} dauerhaft`);
 
   // Die Gruppen stehen (kein Gleiten), das alte Bild entfaellt, das neue lebt ohne Blende.
   const layout = [...eachRule(css('layout.css'))];
   const rule = (needle) => layout.filter((r) => selectorList(r.selector).some((s) => s.replace(/\s+/g, ' ') === needle));
-  for (const name of ['nav-bottom', 'nav-bottom-indicator', 'page-fab']) {
+  for (const name of ['nav-bottom', 'page-fab']) {
     assert.ok(rule(`::view-transition-group(${name})`).some((r) => /animation:\s*none/.test(r.body)), `Gruppe ${name} gleitet`);
     assert.ok(rule(`::view-transition-old(${name}):not(:only-child)`).some((r) => /display:\s*none/.test(r.body)), `altes Bild von ${name} bleibt als Geist stehen`);
     assert.ok(rule(`::view-transition-new(${name}):not(:only-child)`).some((r) => /animation:\s*none/.test(r.body)), `neues Bild von ${name} blendet`);
   }
   // Der backdrop-filter der Gruppe folgt ihrem Kasten: ohne Radius blurrte ein
-  // Rechteck ueber die Rundung der Kapsel hinaus (im Zwischenbild gesehen).
-  for (const name of ['nav-bottom', 'page-fab']) {
-    assert.ok(rule(`::view-transition-group(${name})`).some((r) => /border-radius:\s*var\(--radius-full\)/.test(r.body)), `Gruppe ${name} ohne Rundung`);
-  }
-  assert.match(ruleBodies('layout.css', '.nav-bottom__items').join(';'), /border-radius:\s*var\(--radius-full\)/, 'die Kapsel selbst ist voll gerundet - sonst passt die Gruppe nicht');
+  // Rechteck ueber die Rundung hinaus (im Zwischenbild gesehen). Gilt noch
+  // fuer den runden FAB; die v2-Leiste ist ein Rechteck ohne Glas.
+  assert.ok(rule('::view-transition-group(page-fab)').some((r) => /border-radius:\s*var\(--radius-full\)/.test(r.body)), 'Gruppe page-fab ohne Rundung');
 });
 
 test('R18: der FAB steht ueber den Wechsel, poppt nur ohne Vorgaenger, und seine Reserve haelt bis zum Ende des Aufbaus', () => {
@@ -1956,11 +1958,13 @@ test('R18: der FAB steht ueber den Wechsel, poppt nur ohne Vorgaenger, und seine
   assert.doesNotMatch(router, /fab-holding|releaseFabHold/, 'kein Halten der Reserve mehr');
 
   assert.match(ruleBodies('layout.css', 'html.fab-steady .page-fab').join(';'), /animation:\s*none/);
-  // Tafla: das + steht NEBEN der Kapsel, den Platz haelt die Zone - ohne
-  // Bedingung, also auch waehrend des Aufbaus.
-  const reserve = [...eachRule(css('layout.css'))].find((r) => /padding-inline:[^;]*var\(--capture-size\)/.test(r.body) && /\.nav-bottom\b/.test(r.selector));
-  assert.ok(reserve, 'die Reserve fuer das + fehlt');
-  assert.equal(reserve.selector.trim(), '.nav-bottom', 'die Reserve haengt an keiner Bedingung - sie steht auch im Aufbau');
+  // Tafla: das + stand NEBEN der Kapsel, den Platz hielt die Zone - ohne
+  // Bedingung, also auch waehrend des Aufbaus. 2026-10-27, v2: das globale +
+  // ist weg, die Leiste haelt keinen Platz mehr frei - also kann waehrend des
+  // Aufbaus auch nichts springen. Keine Regel der Leiste fragt nach einem FAB.
+  const reserve = [...eachRule(css('layout.css'))].filter((r) => /\.nav-bottom\b/.test(r.selector)
+    && (/--capture-size/.test(r.body) || /page-fab|fab-steady/.test(r.selector)));
+  assert.deepEqual(reserve.map((r) => r.selector.trim()), [], 'v2: die Leiste reserviert nichts fuer einen Knopf');
   // Kaltstart: die Einfahrt gibt es weiter.
   assert.match(ruleBodies('layout.css', '.page-fab').join(';'), /animation:\s*fab-in var\(--duration-xl\) var\(--ease-out\) backwards/);
 });
@@ -2136,12 +2140,13 @@ test('Blatt-Geste: der Helfer schreibt translate statt transform und raeumt erst
   assert.match(end, /raf\(\(\) => settle\(/);
 });
 
-test('mobiler Tab-Indikator gleitet wie jede Kapsel einer Leiste: --duration-lg + --ease-out', () => {
-  // DESIGN.md, Bedien-Tabelle "Auswahl in einer Segment-/Tab-Leiste zeigen".
-  // Die Pille der Tab-Leiste lief mit --duration-md als einzige schneller
-  // (Nav-Polish 2026-10-15, M3).
-  const ind = ruleBodies('layout.css', '.nav-bottom__indicator').join(';');
-  assert.match(ind, /transition:\s*transform var\(--duration-lg\) var\(--ease-out\),\s*opacity var\(--transition-fast\)/);
+// 2026-10-27, v2: hier stand „mobiler Tab-Indikator gleitet wie jede Kapsel
+// einer Leiste" (Nav-Polish 2026-10-15, M3). Die v2-Leiste hat keinen
+// gleitenden Indikator: die Pille steht fest hinter dem Zeichen des aktiven
+// Tabs und wechselt mit seiner Farbe (--transition-fast an der Mulde).
+test('v2: die Leiste hat keinen gleitenden Indikator - die Pille wechselt an der Mulde', () => {
+  assert.deepEqual(ruleBodies('layout.css', '.nav-bottom__indicator'), []);
+  assert.match(ruleBodies('layout.css', '.nav-bottom .nav-item__icon-well').join(';'), /background-color var\(--transition-fast\)/);
 });
 
 // --------------------------------------------------------------------------
