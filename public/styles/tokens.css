@@ -1922,7 +1922,14 @@
    * mehr. Die Ueberlappungsfrage aus #634, die die Zone urspruenglich
    * begruendet hat, stellt sich dort nicht - unter ihm liegt Chrome, kein
    * Inhalt. Auf dem Desktop (keine Bottom-Nav) schwebt er weiter frei und
-   * behaelt seine Zone. */
+   * behaelt seine Zone.
+   *
+   * v2 (2026-10-27): DIE ZONE GILT WIEDER UEBERALL, WO EIN FAB SCHWEBT. Die
+   * Kapsel und das globale + sind weg; ein Seiten-FAB dockt als Geisterkreis
+   * im Kopf an, und nur wo der Kopf am Telefon keinen Platz hat (Kalender,
+   * Spiżarnia, Posiłki), schwebt er ueber der Leiste - also wieder ueber
+   * Inhalt. Teuer ist das nicht mehr: der Nachlauf haengt an
+   * `:has(.fab-layer .page-fab:not([hidden]))` und trifft nur diese Seiten. */
   /* Der Weg, nach dem eine Wischzeile ausloest - derselbe Wert wie
    * SWIPE_THRESHOLD in utils/swipe-row.js (ein Guard haelt beide zusammen).
    * Das Reveal-Panel stellt Icon und Etikett in genau diesen Streifen: was
@@ -1933,10 +1940,9 @@
   /* v2: ein Seiten-FAB, der keinen Platz im Kopf findet, schwebt 16px ueber
    * der Leiste (am Desktop gilt --fab-gap, Block unter --bp-desktop). */
   --fab-offset-bottom: calc(var(--nav-bottom-height) + var(--space-4));
-  /* Basis ist der SCHWEBENDE Fall (Desktop, keine Bottom-Nav). Wo die Leiste
-   * existiert, faellt die Zone auf 0 - siehe den Block unter --bp-desktop.
-   * Das Kriterium ist die Leiste, nicht die Breite und nicht die Hoehe: nur
-   * mit ihr sitzt der Knopf ueber Chrome statt ueber Inhalt. */
+  /* Der SCHWEBENDE Fall, auf jeder Breite (v2, 2026-10-27): unter Tafla fiel
+   * die Zone neben der Leiste auf 0, weil der Knopf dort ueber Chrome sass.
+   * Heute schwebt er dort ueber Inhalt, und #634 gilt wieder. */
   --fab-safe-zone: calc(var(--fab-gap) + var(--fab-size) + var(--space-4));
   /* Der Nachlauf unter der Sammelaktions-Pille, nach demselben Rezept: eigene
    * Hoehe plus der Abstand, mit dem sie ueber dem Chrome steht.
@@ -2361,19 +2367,14 @@
 }
 
 /* ================================================================
- * Wo die Bottom-Nav steht, kostet der FAB keine Flaeche mehr
- *
- * Er sitzt am hinteren Ende der Nav-Kapsel, also ueber Chrome. Damit
- * entfaellt der Grund fuer --fab-safe-zone: unter ihm liegt kein Scrollport
- * mehr, den er verdecken koennte. Die Zusicherung aus #634 - "bei jedem
- * Scrollstand liegt nichts Bedienbares unter dem Knopf" - haelt dadurch
- * strukturell statt durch einen reservierten Streifen.
- *
- * Der Streifen war 92px ueber die volle Breite, auf 812px Hoehe 11 % des
- * Geraets. Ein frueherer Versuch, ihn auf 0 zu setzen, SOLANGE DER FAB NOCH
- * UEBER DEM INHALT SCHWEBTE, machte am Scroll-Ende `.pantry-stepper__btn` und
- * `.contact-more-menu` unerreichbar (gemessen 2026-08-10). Der Unterschied
- * ist nicht die Zone, sondern wo der Knopf steht.
+ * HIER STAND „Wo die Bottom-Nav steht, kostet der FAB keine Flaeche mehr"
+ * (2026-08-10 bis 2026-10-27): unter 1024px fiel --fab-safe-zone auf 0 und
+ * --fab-size auf --target-base, weil der Knopf in der Nav-Kapsel sass, ueber
+ * Chrome statt ueber Inhalt. v2 hat die Kapsel abgeschafft; ein Seiten-FAB
+ * ohne Kopf-Platz schwebt am Telefon wieder ueber der Seite (layout.css,
+ * `.page-fab`) und bekommt damit seine Zone und seine Schwebe-Groesse
+ * zurueck. Die Messung von damals gilt wieder: mit Zone 0 waren am Scroll-Ende
+ * `.pantry-stepper__btn` und `.contact-more-menu` unerreichbar.
  * ================================================================ */
 @media (max-width: 639px) {
   :root {
@@ -2381,37 +2382,15 @@
   }
 }
 
-@media (max-width: 1023px) {
-  :root {
-    --fab-safe-zone: 0px;
-    /* UND ER WIRD KLEINER, WEIL ER JETZT IN ETWAS DRINSITZT.
-     *
-     * 52px waren die Groesse eines Knopfes, der FREI ueber der Seite schwebte -
-     * dort ist er das einzige Objekt seiner Groessenklasse und darf gross sein.
-     * In einer 60px hohen Kapsel liess derselbe Wert 4px Luft und las sich,
-     * als platze er heraus. --target-base ist die Zielgroesse der Geraetewelt
-     * (44px am Zeiger, 48 am Finger) und damit die richtige Antwort auf beides:
-     * in der heute 64px hohen Kapsel 10 bzw. 8px Luft rundum
-     * (--nav-fab-inset).
-     *
-     * Das allein haette den zweizeiligen Umbruch der Labels NICHT geloest:
-     * „Übersicht" will bei 12px 58px und bekommt auch danach nur 55,4. Geloest
-     * hat ihn die Schriftstufe (--type-micro, siehe layout.css); der kleinere
-     * Knopf gibt der Loesung ihren Spielraum. */
-    --fab-size: var(--target-base);
-  }
-}
-
 /* ================================================================
  * Kompakte Höhe — die zweite Achse der Größenklasse (§11c)
  *
- * DER FAB KOSTET HIER NICHTS MEHR, UND ZWAR NICHT ERST SEIT DER KOMPAKTEN
- * HÖHE. Bis 2026-08-10 stand an dieser Stelle die Rechnung, wie weit
- * --fab-safe-zone in einem flachen Viewport fallen darf (von 92 auf 60px), und
- * die Warnung, dass 0 am Scroll-Ende `.pantry-stepper__btn` und
- * `.contact-more-menu` unerreichbar macht. Beides ist erledigt, seit der Knopf
- * in der Nav-Kapsel sitzt: er steht über Chrome, die Zone ist überall dort 0,
- * wo die Leiste existiert, und dieser Block muss dafür nichts mehr tun.
+ * DER FAB BEKOMMT HIER KEINE EIGENE RECHNUNG. Bis 2026-08-10 stand an dieser
+ * Stelle, wie weit --fab-safe-zone in einem flachen Viewport fallen darf (von
+ * 92 auf 60px), und die Warnung, dass 0 am Scroll-Ende `.pantry-stepper__btn`
+ * und `.contact-more-menu` unerreichbar macht. v2 (2026-10-27): die Zone gilt
+ * wieder, aber nur auf den drei Seiten, deren FAB am Telefon schwebt - der
+ * Rest dockt im Kopf. Ein flacher Sonderwert lohnt dafuer nicht.
  *
  * DER FAB SELBST BLEIBT UNANGETASTET. Naheliegend wäre gewesen, ihn beim
  * Scrollen wegfahren zu lassen — genau das war `.page-fab--retracted`, und es

@@ -624,8 +624,8 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
 
 /* Die Pille ist der zweite Summand - dieselbe Bauart wie der FAB: fixierte
  * Shell-Fläche über dem Scrollport, die am Scroll-Ende sonst genau die Zeilen
- * verdeckt, auf die sie sich bezieht. Am Finger fällt --fab-safe-zone auf 0
- * (der FAB sitzt dort in der Nav-Kapsel), dort ist sie der ganze Nachlauf. */
+ * verdeckt, auf die sie sich bezieht. Wo kein FAB schwebt (am Telefon die
+ * meisten Seiten - ihr FAB dockt im Kopf), ist sie der ganze Nachlauf. */
 .app-shell:has(.list-bulkbar) {
   --bulk-pill-tail: var(--bulk-pill-safe-zone);
 }

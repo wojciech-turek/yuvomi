@@ -2164,7 +2164,16 @@ function dockFabIntoToolbar(fab) {
   const main = document.getElementById('main-content');
   const slot = main?.querySelector('.page-toolbar__actions');
   if (!slot) return false;
-  if (!isDesktopViewport()) return dockFabAsGhost(fab, slot);
+  if (!isDesktopViewport()) {
+    // v2 (2026-10-27): seit das globale + weg ist, ist der Seitenknopf der
+    // einzige Weg zum Anlegen. Ein Slot, der am Telefon nicht gerendert wird,
+    // waere ein Versteck: der Kopf der Kueche steht dort nur waehrend der
+    // Suche, und der Kalender blendet seinen Slot unter 1024px aus (calendar.css
+    // - ein dritter Kreis kuerzte dort „Kalendarz" auf „Kalenda…"). Dann bleibt
+    // der Knopf in der fab-layer und schwebt ueber der Leiste.
+    if (!slot.getClientRects().length) return false;
+    return dockFabAsGhost(fab, slot);
+  }
   const label = fab.dataset.dockLabel;
   if (!label) return false;
 

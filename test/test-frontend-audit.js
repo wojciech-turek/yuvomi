@@ -4380,39 +4380,33 @@ test('der FAB weicht der Zeile, statt eine Gasse zu reservieren', () => {
   // Weg, die #634-Zusicherung zu halten - und sie kostete auf dem Telefon 92px
   // ueber die volle Breite (11 % des Geraets). Sitzt er dagegen IN der
   // Nav-Kapsel, steht unter ihm Chrome statt Inhalt, und dieselbe Zusicherung
-  // haelt ohne reservierten Streifen. Beides wird hier geprueft, weil beides
-  // gleichzeitig gilt: Desktop schwebend MIT Zone, mobil eingesetzt OHNE.
+  // haelt ohne reservierten Streifen.
+  //
+  // 2026-10-27, v2: die Kapsel und das globale + sind weg. Ein Seiten-FAB dockt
+  // am Telefon als Geisterkreis im Kopf; wo der Kopf keinen Platz hat
+  // (Kalender, Spiżarnia, Posiłki), SCHWEBT er ueber der flachen Leiste - also
+  // ueber Inhalt, und die Zone gilt wieder auf jeder Breite. Geprueft wird
+  // deshalb das Gegenteil von vorher: kein Block nullt sie neben der Leiste.
   assert.match(tokens, /--fab-safe-zone:\s*calc\([^;]*--fab-gap[^;]*--fab-size[^;]*;/,
     'der SCHWEBENDE Fall braucht seine Zone weiter, abgeleitet aus --fab-gap und --fab-size');
-  assert.match(
+  assert.doesNotMatch(
     tokens,
     /@media\s*\(max-width:\s*1023px\)\s*\{\s*:root\s*\{[^}]*--fab-safe-zone:\s*0px/,
-    'wo die Bottom-Nav steht, faellt --fab-safe-zone auf 0 - der FAB sitzt dort in der Kapsel'
+    'v2: neben der Leiste schwebt der FAB ueber Inhalt - eine Zone 0 macht am Scroll-Ende Zeilenaktionen unerreichbar'
   );
-  // Der eingesetzte FAB rechnet aus der Kapselgeometrie, nicht aus --fab-gap:
-  // er soll in der Bar-Zeile ZENTRIERT sitzen, und das haengt an der Barhoehe
-  // und an seiner eigenen Groesse.
-  // TAFLA: das globale + steht NEBEN der Kapsel und zentriert sich auf ihr.
+  // Der schwebende FAB steht ueber der Leiste, nicht in ihr: sein Abstand
+  // rechnet aus der GANZEN Leistenhoehe (Rand, Polster, gemessene Zeile,
+  // Safe-Area-Polster), nicht mehr aus einer Kapsel und --capture-size.
   assert.match(
     tokens,
-    /--fab-offset-bottom:\s*calc\([^;]*var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)[^;]*--capture-size[^;]*\)/s,
-    'das + zentriert sich aus der GEMESSENEN Kapselhoehe (Fallback --nav-height-mobile) und --capture-size'
+    /--fab-offset-bottom:\s*calc\(\s*var\(--nav-bottom-height\)\s*\+[^;]*\)/,
+    'v2: der schwebende FAB steht ueber der flachen Leiste (--nav-bottom-height)'
   );
-  // Dieselbe Hoehe fuer den hinteren Abstand: mit zweizeiligen Labels (el,
-  // fil) waechst die Kapsel auf 72px, und mit der Sollhoehe sass der Knopf
-  // 16/8px statt mittig (Nav-Polish 2026-10-15).
-  assert.match(
-    tokens,
-    /--nav-fab-inset:\s*calc\(\(var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)\s*-\s*var\(--capture-size\)\)\s*\/\s*2\)/,
-    'der Abstand des + rechnet aus derselben gemessenen Kapselhoehe'
-  );
-  // Und die Zone haelt ihm seinen Platz frei, aus derselben Groesse - sonst
-  // stuende die Kapsel unter dem Knopf.
-  assert.match(
-    layout,
-    /\.nav-bottom\s*\{[^}]*padding-inline:[^;]*var\(--capture-size\)/,
-    'die Zone muss das + aus --capture-size freihalten'
-  );
+  const tokensLive = tokens.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const gone of ['--capture-size', '--nav-fab-inset', '--nav-capture-gap']) {
+    assert.doesNotMatch(tokensLive, new RegExp(`${gone}\\s*:`),
+      `v2: ${gone} gehoerte zum globalen + und darf nicht zurueckkommen`);
+  }
   // PADDING, NICHT MARGE - seit 2026-08-12, und der Wechsel ist eine Korrektur
   // der Invariante, nicht des Mechanismus. Die Marge verkuerzte den Scrollport um
   // 96px ueber die volle Breite und sicherte damit „bei KEINEM Scrollstand liegt
@@ -4555,6 +4549,9 @@ test('jede CSS-Ausblendung des FAB nullt seinen Nachlauf', () => {
   // TAFLA: unter 1024px steht die Zone schon am Token auf 0 (tokens.css, der
   // FAB sass dort in der Kapsel; heute schwebt dort keiner mehr). Eine Regel,
   // die den Seiten-FAB NUR in dieser Breite ausblendet, ist damit gepaart.
+  // 2026-10-27, v2: die Null ist gefallen (der FAB schwebt am Telefon wieder,
+  // wo der Kopf keinen Platz hat) - `zoneZeroCompact` ist damit falsch, und
+  // eine Ausblendung nur in dieser Breite braucht wieder ihr eigenes Paar.
   const tokensCss = read('../public/styles/tokens.css');
   const zoneZeroCompact = /@media\s*\(max-width:\s*1023px\)\s*\{\s*:root\s*\{[^}]*--fab-safe-zone:\s*0px/.test(tokensCss);
   const ohnePaar = versteckt.filter(({ file, selector, compact }) => !(compact && zoneZeroCompact) && !nullt.some((z) =>
