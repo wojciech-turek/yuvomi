@@ -48,8 +48,6 @@ const SWAPPING_CLASS = 'page-swapping';
 /** So lange nach der Blende wartet ein abgebrochener Tipp noch auf sein `click`. */
 const LOST_TAP_WINDOW_MS = 1000;
 
-/** Klasse an <html> fuer die Dauer eines Theme-Wechsels (kein Chrome-Name). */
-const THEME_CLASS = 'theme-swapping';
 
 /**
  * `html.page-swapping` GEHOERT ALLEN, DIE SIE GERADE BRAUCHEN (Review #2049,
@@ -246,38 +244,6 @@ export async function swapPage(update, { content, from = null, animate = true, w
 }
 
 
-/**
- * Fuehrt einen GEWAEHLTEN Theme-Wechsel aus - als Blende ueber die Wurzel, wo
- * der Browser sie kann (Critique R18: hell <-> dunkel schlug in einem Frame um,
- * jede Flaeche einzeln).
- *
- * Kein Name, kein Chrome, das steht: das ganze Dokument blendet vom alten ins
- * neue Bild, in der Dauer der Seitenblende (`::view-transition-*(root)` in
- * layout.css). `page-swapping` bleibt aus - die Leisten wechseln ihre Farbe
- * mit und duerfen nicht als lebendes Bild ueber einem alten Grund stehen.
- *
- * NUR FUER DIE WAHL IN DEN EINSTELLUNGEN. Der Nachtwechsel des Wandmodus
- * (utils/wall-mode.js) schaltet ohne Blende: dort schaut niemand hin, und eine
- * Blende an einem Wandtablett ist eine Bewegung ohne Anlass.
- *
- * `update` laeuft genau einmal. Ohne API und im verdeckten Tab synchron (ein
- * Fehler daraus kommt beim Aufrufer an), sonst im Callback der Transition -
- * auch unter reduzierter Bewegung: ein Farbwechsel als Blende ist dort die
- * gewollte Alternative zum harten Umschlag, nicht eine Bewegung.
- *
- * @param {() => void} update  setzt das Theme
- * @returns {Promise<void>} aufgeloest, wenn die Blende durch ist
- */
-export function swapTheme(update) {
-  if (!canViewTransition()) {
-    update();
-    return Promise.resolve();
-  }
-  const root = document.documentElement;
-  root?.classList.add(THEME_CLASS);
-  const transition = document.startViewTransition(update);
-  transition.ready?.catch?.(() => {});
-  return Promise.resolve(transition.finished)
-    .catch(() => {})
-    .finally(() => root?.classList.remove(THEME_CLASS));
-}
+/* Hier stand `swapTheme` - die Blende fuer den gewaehlten Theme-Wechsel
+ * (Critique R18). Seit v2 (2026-10-27) ist die App immer hell; es gibt
+ * keinen Wechsel mehr, den man blenden koennte. */

@@ -138,8 +138,8 @@ test('jede Such-Option einer Leaf wird auf genau dieser Leaf gerendert', () => {
   // Datei, die sie rendert.
   for (const leaf of SETTINGS_SECTIONS) {
     const source = readFileSync(sectionSourcePath(leaf), 'utf8');
-    // `t('x')` UND der Schluessel als Literal: Werte-Listen wie das Theme-
-    // Segment tragen `labelKey: 'settings.themeDark'` und uebersetzen spaeter.
+    // `t('x')` UND der Schluessel als Literal: Werte-Listen tragen
+    // `labelKey: 'settings.…'` und uebersetzen spaeter.
     const keysIn = (text) => [
       ...translationKeysIn(text),
       ...[...text.matchAll(/['"]([a-z][\w]*\.[\w.]+)['"]/g)].map((m) => m[1]),
