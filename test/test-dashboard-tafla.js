@@ -10,8 +10,9 @@
  *   3. Teraz follows the spec's priority; "Dzień ogarnięty" only when nothing
  *      is left; the person rule (own: no disc, someone else's: initial,
  *      shared: razem);
- *   4. the view never draws the family card in a two-adult home and names
- *      every check circle.
+ *   4. (2026-10-27, v2) the view of the Tafla page went with Dziś v2: the
+ *      home screen is drawn from utils/dzis-plan.js now, guarded in
+ *      test-dashboard-dzis.js. The model here stays - the wall builds on it.
  * Ausfuehren: npm run test:dashboard-tafla
  */
 
@@ -315,64 +316,13 @@ test('Jutro: put-out tonight, tomorrow\'s events and tasks with their people, di
   assert.equal(rows[1].who.kind, 'person', 'Wojtek\'s car service carries his disc');
 });
 
-test('Wkrótce: birthdays and countdowns within two weeks, nearest first', () => {
-  const data = {
-    birthdays: [{ id: 1, name: 'Mama', kind: 'birthday', days_until: 8, next_age: 60 }, { id: 2, name: 'Daleko', kind: 'birthday', days_until: 40 }],
-    countdowns: [{ id: 3, source: 'event', title: 'Wyjazd', days_until: 2, date: '2026-10-21' }],
-  };
-  const rows = plan.buildSoon(data, ctxAt('18:10'));
-  assert.deepEqual(rows.map((row) => row.days), [2, 8]);
-});
+// 2026-10-27, v2: "Wkrótce" (buildSoon, birthdays and countdowns within two
+// weeks) went with the Tafla page; Dziś v2 lists birthdays only, through
+// dzis-plan.js (test-dashboard-dzis.js).
 
-// --------------------------------------------------------------------------
-// 4. The view
-// --------------------------------------------------------------------------
-
-const view = await import('../public/components/today-view.js');
-
-function pageFor(data, hhmm = '18:10', extra = {}) {
-  const ctx = ctxAt(hhmm);
-  const { plan: p, now } = plan.buildDay(data, ctx);
-  return view.renderTodayPage({
-    user: M, ctx, weather: null, showWeather: false, plan: p, now, closed: plan.dayClosed(p),
-    tomorrow: plan.buildTomorrow(data, ctx), soon: [], shopping: null, question: null,
-    sections: ['today-shopping', 'today-tomorrow', 'today-question', 'today-soon'], tiles: new Map(), extensions: new Map(),
-    family: [], earlierOpen: false, firstRun: false, canCustomize: true, canCheck: () => true, canWriteShopping: true,
-    ...extra,
-  });
-}
-
-test('the page: every check circle has a name, the plan has its count, no family card in a two-adult home', () => {
-  const html = pageFor(sampleData());
-  const circles = [...html.matchAll(/class="day-check[^"]*"[^>]*aria-label="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(circles.length >= 4);
-  assert.ok(circles.every(Boolean));
-  assert.match(html, /today\.countOf\{&quot;done&quot;:1,&quot;total&quot;:5\}/);
-  assert.doesNotMatch(html, /data-row-key="meal:30"/, 'the dinner on the Teraz card is no second row');
-  assert.doesNotMatch(html, /family-widget|dashboard\.familyTitle/, 'Jutro replaces the family card');
-  assert.match(html, /today\.togetherWith/, 'the shared film night carries the razem disc');
-  assert.match(html, /data-day-action="cook"/, 'dinner mode offers Gotuj');
-});
-
-test('the closed day draws the end card instead of Teraz, with a peek at tomorrow', () => {
-  const data = sampleData();
-  const done = {
-    ...data,
-    planTasks: data.planTasks.map((task) => ({ ...task, status: task.due_date <= '2026-10-19' ? 'done' : task.status })),
-    health: { doses: [{ ...data.health.doses[0], status: 'taken' }] },
-  };
-  const html = pageFor(done, '22:30');
-  assert.match(html, /class="day-closed"/);
-  assert.match(html, /today\.closedTitle/);
-  assert.doesNotMatch(html, /class="day-now/);
-  assert.match(html, /day-closed__tomorrow/);
-});
-
-test('first run: Zacznij tutaj with starter chips, no Teraz and no plan', () => {
-  const html = pageFor({}, '10:00', { firstRun: true });
-  assert.match(html, /today\.firstRunTitle/);
-  assert.doesNotMatch(html, /day-now|day-plan/);
-});
+// 2026-10-27, v2: section 4 (the Tafla view: check circles and "3 z 9",
+// the closed day, "Zacznij tutaj") went with the page. Its successors stand
+// in test-dashboard-dzis.js, section 5.
 
 // --------------------------------------------------------------------------
 // What the old cockpit's browser tests protected, on Dziś (2026-10-26)
@@ -435,7 +385,7 @@ test('#1457/#1534: the household zone decides the day and the time, not the devi
   }
 });
 
-test('#1698: an event row names its calendar - a place or "razem" comes first, and the view escapes it', () => {
+test('#1698: an event row names its calendar - a place or "razem" comes first', () => {
   const p = plan.buildPlan({ planEvents: [
     ev(1, 'Frueh', '2026-10-19T14:00', '2026-10-19T22:00', { cal_name: 'Niklas Arbeitskalender', assigned_users: [M] }),
     ev(2, 'Sync', '2026-10-19T15:00', '2026-10-19T16:00', { cal_name: 'Haushalt', source_calendar_name: 'Google: Familie', assigned_users: [M] }),
@@ -448,9 +398,7 @@ test('#1698: an event row names its calendar - a place or "razem" comes first, a
   assert.equal(meta.Sync, 'Google: Familie', 'the synchronised source calendar first, as in the calendar module');
   assert.equal(meta['Mit Ort'], 'Turnhalle', 'a place is the better second line');
   assert.equal(meta['Nur in Yuvomi'], '', 'no calendar, no word');
-  const html = view.renderPlanRow(p.all.find((row) => row.title === 'Boese'), { canCheck: () => false });
-  assert.ok(html.includes('&lt;img src=x&gt;') && !html.includes('<img src=x>'), 'the name is user input and goes through esc()');
-  const frueh = view.renderPlanRow(p.all.find((row) => row.title === 'Frueh'), { canCheck: () => false });
-  assert.ok(frueh.includes('14:00') && !frueh.includes('22:00'), 'no span on Dziś: the start, not the end');
+  // 2026-10-27, v2: escaping and "the start, not the end" are guarded on the
+  // v2 view (test-dashboard-dzis.js, "user text is escaped everywhere").
 });
 

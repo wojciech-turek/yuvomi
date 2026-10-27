@@ -408,72 +408,11 @@ test('die Auswahl filtert keine Zahl der Navigation: kein zweiter Abruf, und die
   assert.equal(picked.shoppingOpenCount, plain.shoppingOpenCount);
 });
 
-const { __test: dash } = await import('../public/pages/dashboard.js');
-
-/** Den Dialog oeffnen, ohne DOM: der Stub faengt Inhalt und Speichern-Handler. */
-async function openShoppingDialog(current, { lists, picked = [] }) {
-  let content = null;
-  let submit = null;
-  const toasts = [];
-  const prev = { open: globalThis.__openModal, close: globalThis.__closeModal, window: globalThis.window };
-  const field = (selector) => {
-    if (selector === '[data-action="cancel"]') return { addEventListener() {} };
-    if (selector === '#widget-options-form') return { addEventListener: (_type, handler) => { submit = handler; } };
-    return null;
-  };
-  globalThis.window = { yuvomi: { showToast: (message, type) => toasts.push([message, type]) } };
-  globalThis.__openModal = (config) => {
-    content = config.content;
-    config.onSave({
-      querySelector: field,
-      querySelectorAll: (selector) => (selector === 'input[name="shopping-list"]:checked' ? picked.map((value) => ({ value: String(value) })) : []),
-    });
-  };
-  globalThis.__closeModal = () => true;
-  try {
-    const result = dash.openWidgetOptions('shopping', current, { loadLists: async () => lists });
-    await Promise.resolve();
-    await Promise.resolve();
-    if (content === null) return { content, saved: await result, toasts };
-    assert.equal(typeof submit, 'function', 'der Dialog hat keinen Speichern-Handler verdrahtet');
-    submit({ preventDefault() {} });
-    return { content, saved: await result, toasts };
-  } finally {
-    globalThis.__openModal = prev.open;
-    globalThis.__closeModal = prev.close;
-    globalThis.window = prev.window;
-  }
-}
-const choices = (content) => [...content.matchAll(/<input type="checkbox" name="shopping-list" value="(\d+)"\s+(checked)?>\s*<span>([^<]*)<\/span>/g)]
-  .map((m) => ({ id: Number(m[1]), checked: Boolean(m[2]), name: m[3] }));
-const CATALOG = [{ id: 1, name: 'Wocheneinkauf' }, { id: 7, name: 'Drogerie & "Bad"' }, { id: 9, name: 'Baumarkt' }];
-
-/** Der Dialog mit dem ECHTEN Lader: nur die Netzschicht (`api.get`) ist ersetzt. */
-async function openWithRealLoader(current, get) {
-  const prev = { stub: globalThis.__apiStub, open: globalThis.__openModal, close: globalThis.__closeModal, window: globalThis.window };
-  const calls = [];
-  const toasts = [];
-  let opened = false;
-  globalThis.__apiStub = { get: (...args) => { calls.push(args); return get(...args); } };
-  globalThis.__openModal = () => { opened = true; };
-  globalThis.__closeModal = () => true;
-  globalThis.window = { yuvomi: { showToast: (message, type) => toasts.push([message, type]) } };
-  try {
-    const pending = dash.openWidgetOptions('shopping', current);
-    // Geht der Dialog auf, wartet er auf Speichern oder Schliessen; die Probe
-    // braucht dann nur, DASS er aufging.
-    const result = await Promise.race([pending, new Promise((resolve) => setTimeout(() => resolve('offen'), 20))]);
-    return { result, calls, toasts, opened };
-  } finally {
-    globalThis.__apiStub = prev.stub;
-    globalThis.__openModal = prev.open;
-    globalThis.__closeModal = prev.close;
-    globalThis.window = prev.window;
-  }
-}
+// 2026-10-27, v2: hier standen die Helfer des Listen-Dialogs (Widget-Optionen
+// in „Dostosuj Dziś"); der Dialog ist mit Dziś v2 gegangen.
 
 // --------------------------------------------------------------------------
-// 4. Was die Auswahl NICHT anfasst: Dziś und Wand
+// 4. Was die Auswahl NICHT anfasst: die Wand
 // --------------------------------------------------------------------------
 
 const { buildWall } = await import('../public/utils/wall-plan.js');
@@ -492,7 +431,7 @@ async function wallShopping(data) {
   }
 }
 
-test('Dziś und Wand zaehlen ueber ALLE Listen - auch wenn ein Layout eine Auswahl traegt', async () => {
+test('die Wand zaehlt ueber ALLE Listen - auch wenn ein Layout eine Auswahl traegt', async () => {
   // Das Kuechentablett, das einer Haushaltsvorgabe mit Auswahl folgt: die Wand
   // liest dieselbe Antwort. Mit der ersten Fassung: "1" bei einer gewaehlten
   // Liste, und mit nur der fertig gekauften verschwand der Einkauf.
@@ -506,24 +445,7 @@ test('Dziś und Wand zaehlen ueber ALLE Listen - auch wenn ein Layout eine Auswa
   const plain = await getJson('/');
   assert.equal(plain.shoppingLists.reduce((sum, list) => sum + list.open_count, 0), 13, 'Vorbedingung: die Summe der drei ist kleiner');
   assert.equal((await wallShopping(plain)).count, 14);
-  // Dziś liest dieselben Felder (buildTodayState in pages/dashboard.js).
-  const { readFileSync } = await import('node:fs');
-  const page = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(page, /count: Number\(data\?\.shoppingOpenCount\) \|\| 0,/, 'Dziś zaehlt mit der Zahl des Servers');
-  assert.match(page, /route: shoppingSoleListRoute\(data\),/, 'und waehlt sein Ziel aus den ungefilterten Listen');
+  // 2026-10-27, v2: Dziś zeigt keinen Einkauf mehr (das Design kennt ihn dort
+  // nicht); die Wand ist die eine Flaeche, die ihn zaehlt.
 });
 
-test('der Einkauf von Dziś waehlt sein Ziel aus den UNGEFILTERTEN Listen (#1821)', async () => {
-  // `/shopping?list=<id>` gilt, wenn im HAUSHALT genau eine Liste Offenes hat -
-  // nicht, wenn ein Layout genau eine Liste gewaehlt hat. Hier haben vier Listen
-  // Offenes: das Ziel bleibt die Seite, auch mit einer einzelnen gewaehlten.
-  // Filterte die Route die geteilten Felder, stuende hier `?list=<Garten>`.
-  for (const path of ['/', query(GARTEN), query(FEST)]) {
-    assert.equal(dash.shoppingSoleListRoute(await getJson(path)), '/shopping', path);
-  }
-  // Reichweite: mit genau einer Liste mit Offenem im Haushalt ist sie das Ziel -
-  // auch wenn das Layout eine ANDERE gewaehlt hat.
-  const one = { shoppingLists: [{ id: 7, name: 'Drogerie', open_count: 2, total_count: 2, items: [] }], shoppingOpenCount: 2, shoppingOpenLists: 1,
-    shoppingTile: { lists: [{ id: 9, name: 'Fest', open_count: 0, total_count: 1, items: [] }], openCount: 0, listCount: 1 } };
-  assert.equal(dash.shoppingSoleListRoute(one), '/shopping?list=7');
-});

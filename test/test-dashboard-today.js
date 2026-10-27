@@ -361,26 +361,25 @@ test('#1449: „nur meine" der Kachel gilt nicht fuer die Familienkarte', withCl
 const KIND = { id: 3, family_role: 'child', display_name: 'Emma' };
 const MAMA = { id: 1, family_role: 'mom', display_name: 'Linda' };
 
-test('R20: die Kinder-Vorgabe der Kacheln - Punkte zuerst und sichtbar, Budget aus, nur bei gefolgter Vorgabe', async () => {
-  const { childDefaultWidgetConfig, DEFAULT_WIDGET_CONFIG } = await import('../public/utils/dashboard-widgets.js');
-  const kid = childDefaultWidgetConfig(DEFAULT_WIDGET_CONFIG);
-  assert.equal(kid[0].id, 'rewards');
-  assert.equal(kid[0].visible, true);
-  assert.equal(kid.find((w) => w.id === 'budget').visible, false);
-  assert.deepEqual(kid.map((w) => w.order), kid.map((_, i) => i));
-  assert.equal(kid.length, DEFAULT_WIDGET_CONFIG.length, 'keine Kachel verschwindet aus dem Anpassen-Tray');
-  assert.equal(DEFAULT_WIDGET_CONFIG.find((w) => w.id === 'budget').visible, true, 'die Eingabe bleibt unberuehrt');
-
-  assert.deepEqual(dash.childDefaultFor(DEFAULT_WIDGET_CONFIG, KIND, true), kid);
-  assert.equal(dash.childDefaultFor(DEFAULT_WIDGET_CONFIG, KIND, false), DEFAULT_WIDGET_CONFIG, 'ein eigenes Layout bleibt');
-  assert.equal(dash.childDefaultFor(DEFAULT_WIDGET_CONFIG, MAMA, true), DEFAULT_WIDGET_CONFIG, 'Erwachsene bekommen die Haushaltsvorgabe');
+// 2026-10-27, v2: „die Kinder-Vorgabe der Kacheln" (Punkte zuerst, Budget
+// aus) ordnete das Kachelraster - Dziś v2 hat keine Kacheln und liest keine
+// Anordnung mehr; die Vorgabe (`childDefaultWidgetConfig`) und ihr Aufrufer
+// (`childDefaultFor`) sind gegangen. Was fuer ein Kind bleibt: seine eigenen
+// Aufgaben stehen im Plan zuerst (Test darunter).
+test('R20, v2: Dziś wendet keine Kachel-Vorgabe mehr an', async () => {
+  const widgets = await import('../public/utils/dashboard-widgets.js');
+  assert.equal(widgets.childDefaultWidgetConfig, undefined);
+  assert.equal(dash.childDefaultFor, undefined);
+  assert.ok(KIND.family_role === 'child' && MAMA.family_role === 'mom', 'Reichweite: die Personen der Abschnitts');
 });
 
 test('R20: die Seite setzt den Betrachter, den der Tagesplan fragt', () => {
   // TAFLA (2026-10-24): der Plan von Dziś (utils/today-plan.js) liest den
   // Betrachter aus seinem Kontext - eigene Aufgaben eines Kindes zuerst. Diese
   // Zeile haelt fest, dass der echte Aufrufer ihn hineinreicht.
+  // 2026-10-27, v2: die Modulvariable `dashboardViewer` las niemand mehr (sie
+  // ist gegangen); der Betrachter reist allein im Kontext des Plans.
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(src, /export async function render\([\s\S]{0,1500}?dashboardViewer = user \?\? null;/);
+  assert.doesNotMatch(src, /dashboardViewer/);
   assert.match(src, /planContext\(\{ now: new Date\(\), viewer: user,/, 'Dziś fragt den Plan mit dem Betrachter');
 });

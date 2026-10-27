@@ -48,13 +48,6 @@ import { EVENT_LIMIT_DEFAULT, clampEventLimit } from './dashboard-event-limit.js
  * list, so a saved layout that predates them gets them on top, in this order
  * (normalizeDashboardConfig inserts a missing id at its default position). */
 export const TODAY_SECTION_IDS = Object.freeze(['today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon']);
-/* The old widgets Dziś still offers as optional preview tiles ("Kafelek
- * podglądu") in "Dostosuj Dziś". `family` only where more than two adults
- * share the household (pages/dashboard.js). The rest - tasks, calendar,
- * meals, birthdays, countdown, shopping, waste - is the plan itself, "Jutro" or
- * "Wkrótce"; clock and weather card belong to the wall. */
-export const TODAY_EXTRA_IDS = Object.freeze(['budget', 'notes', 'health', 'housekeeping', 'pantry', 'rewards', 'family']);
-
 export const WIDGET_IDS = [...TODAY_SECTION_IDS, 'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget', 'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
 
 // Vier kuratierte Formen statt sechs: über vier Auswahlmöglichkeiten pro Widget
@@ -187,27 +180,6 @@ export function defaultWidgetVisible(id) {
 }
 
 export const DEFAULT_WIDGET_CONFIG = WIDGET_IDS.map((id, i) => ({ id, visible: defaultWidgetVisible(id), order: i, size: defaultWidgetSize(id) }));
-
-/**
- * Die Vorgabe fuer ein Kinderkonto (R20, Kinder-Standards): die eigenen Punkte
- * zuerst, die Budget-Kachel aus. Gilt nur, solange das Konto der Vorgabe
- * FOLGT (nichts Eigenes gespeichert) - ein eigenes Layout bleibt, wie es ist.
- * Kein Recht: wer Budget sehen darf, holt die Kachel ueber "Anpassen" zurueck;
- * ein neues Kinderkonto hat das Modul ohnehin nicht (server/permissions.js).
- * Die Aufgaben stehen schon im Heute-Blatt ganz oben, eigene zuerst
- * (pages/dashboard.js `buildTodayProgram`).
- *
- * Rein und ohne Seiteneffekt, auf einer schon normalisierten Liste.
- */
-export function childDefaultWidgetConfig(config) {
-  const list = (Array.isArray(config) ? config : []).map((w) => ({ ...w }));
-  const rewards = list.find((w) => w.id === 'rewards');
-  const rest = list
-    .filter((w) => w.id !== 'rewards')
-    .map((w) => (w.id === 'budget' ? { ...w, visible: false } : w));
-  const ordered = rewards ? [{ ...rewards, visible: true }, ...rest] : rest;
-  return ordered.map((w, i) => ({ ...w, order: i }));
-}
 
 /**
  * Wo eine fehlende Id in ein gespeichertes Layout gehört: direkt hinter den

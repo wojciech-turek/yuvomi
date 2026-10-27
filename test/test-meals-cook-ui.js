@@ -51,7 +51,6 @@ const { toLocalDateKey } = await import('../public/utils/date.js');
 const { __test: meals } = await import('../public/pages/meals.js');
 const { __test: dashboard } = await import('../public/pages/dashboard.js');
 const { buildPlan, planContext } = await import('../public/utils/today-plan.js');
-const { renderPlanRow } = await import('../public/components/today-view.js');
 
 const LESEN = { meals: 'read', shopping: 'read', pantry: 'read' };
 const SCHREIBEN = { meals: 'write', shopping: 'write', pantry: 'write' };
@@ -214,13 +213,18 @@ test('Wochenansicht bei `read`: der Koch bleibt als Zeichen an der Karte', async
 // (utils/today-plan.js, components/today-view.js). Was sie dort trug, traegt
 // sie hier: der Koch ist die Person der Zeile, mit dem Profilbild aus `users`
 // derselben Dashboard-Antwort, und sein Name laeuft durch esc().
+//
+// 2026-10-27, v2: Dziś zeigt keine Mahlzeiten mehr (Entwurf „Main"); der Plan
+// ist das Modell der Wand. Die Zusage an die Zeile (der Koch als ihre Person)
+// gilt dort weiter; die zwei Proben am Markup der Dziś-Zeile (Scheibe mit
+// Profilbild, Name durch esc()) sind mit der Zeile gegangen - die Wand prueft
+// ihre Scheiben selbst (unten).
 // -------------------------------------------------------------------------
 
 const KOCH_USERS = [{ id: 1, display_name: 'Anna', avatar_color: '#FF9500', avatar_data: null },
   { id: 2, display_name: 'Ben', avatar_color: '#34C759', avatar_data: 'data:image/png;base64,QkVO' }];
 const mahlzeitZeile = (todayMeals, users) => buildPlan({ todayMeals }, planContext({ users }))
   .all.find((row) => row.kind === 'meal');
-const zeilenHtml = (row) => renderPlanRow(row, { canCheck: () => false });
 
 test('Dziś: die Zeile der Mahlzeit traegt den Koch als ihre Person', () => {
   const heute = (over) => ['breakfast', 'lunch', 'dinner'].map((meal_type, i) => ({
@@ -240,18 +244,6 @@ test('Dziś: die Zeile der Mahlzeit traegt den Koch als ihre Person', () => {
   const ohne = mahlzeitZeile(heute(), KOCH_USERS);
   assert.ok(ohne, 'Vorbedingung');
   assert.equal(ohne.who.kind, 'none', 'ohne Koch bleibt die Zeile ohne Person');
-});
-
-test('Dziś: an der Zeile steht der Koch als Scheibe - mit Profilbild aus `users`, sonst die Initiale', () => {
-  const suppe = { id: 31, meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' };
-  const mit = zeilenHtml(mahlzeitZeile([suppe], KOCH_USERS));
-  assert.match(mit, /class="day-disc day-disc--20 day-disc--photo"[^>]*aria-label="Ben"/, 'die Scheibe nennt den Koch');
-  assert.match(mit, /<img src="data:image\/png;base64,QkVO"/, 'das Bild aus `users` steht in der Scheibe');
-  assert.match(mit, /today\.cooks/, 'und die Zeile sagt, wer kocht');
-
-  const ohne = zeilenHtml(mahlzeitZeile([suppe], [KOCH_USERS[0]]));
-  assert.match(ohne, /class="day-disc day-disc--20"[^>]*aria-label="Ben"/, 'das Zeichen bleibt');
-  assert.doesNotMatch(ohne, /<img src="data:/, 'ohne Eintrag in `users` kein Bild');
 });
 
 // Entschieden zu #1737: Kochen ist eine Zustaendigkeit wie eine Aufgabe, also
@@ -290,16 +282,6 @@ test('Wandtablett: wer kocht, steht an der Mahlzeit - an der Zeile und an der Ab
   const ohne = wand(heute());
   assert.ok(!/today\.cooks/.test(ohne), 'ohne Koch nennt die Karte niemanden');
   assert.ok(!/aria-label="Ben Beispiel"/.test(ohne), 'und keine Zeile traegt eine Scheibe');
-});
-
-test('Dziś: der Name des Kochs laeuft durch esc()', () => {
-  const html = zeilenHtml(mahlzeitZeile([
-    { id: 31, meal_type: 'lunch', title: 'Suppe', cook_user_id: 2, cook_name: '"><script>x</script>', cook_color: '#34C759' },
-  ], []));
-  // Als Teilstring geprueft, nicht per Regex: gesucht ist genau die Zeichenfolge
-  // aus dem Namen oben, kein Filter fuer Markup.
-  assert.ok(!html.includes('<script'), 'kein rohes Markup aus dem Namen');
-  assert.ok(html.includes('&quot;&gt;&lt;script&gt;x&lt;/script&gt;'), 'der Name steht escaped da');
 });
 
 // -------------------------------------------------------------------------

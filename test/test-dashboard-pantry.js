@@ -84,15 +84,13 @@ test('Registrierung: Rechte hängen am Modul pantry', () => {
     'ein gesperrter Vorrat muss auch die Kachel sperren (#467)');
 });
 
-test('Registrierung: Modulschalter, Beschriftung und die Vorschaukachel von Dziś sind verdrahtet', () => {
+test('Registrierung: die Rechteverwaltung nennt die Kachel; Dziś v2 zeigt keine Vorschaukachel', () => {
+  // 2026-10-27, v2: Dziś zeichnet nur noch Wetter, Kalender, Aufgaben und
+  // Wkrótce (Entwurf „Main"). Die Vorschaukachel des Vorrats, ihr Modulschalter
+  // (MODULE_FOR_WIDGET) und ihre Beschriftung (widgetLabel) sind mit ihr
+  // gegangen; die Felder der Route bleiben (Abschnitt unten), das Recht auch.
   const page = src('../public/pages/dashboard.js');
-  assert.match(page, /const MODULE_FOR_WIDGET = \{[^}]*\bpantry: 'pantry'/,
-    'MODULE_FOR_WIDGET: ein abgeschalteter Vorrat muss die Kachel aus Dziś und „Dostosuj Dziś" nehmen');
-  assert.match(page, /pantry:\s*\(\) => t\('dashboard\.pantryExpiringTitle'\)/, 'widgetLabel');
-  // Die Vorschaukachel (todayTile): sie fuehrt in den gefilterten Vorrat und
-  // zaehlt gegen die Server-Gesamtzahl, nicht gegen die gelieferten Zeilen.
-  assert.match(page, /route: '\/pantry\?filter=soon'/, 'die Kachel oeffnet den Vorrat beim Filter „bald"');
-  assert.match(page, /t\('today\.pantryExpiring', \{ count: total \}\)/, 'der Wert ist die Gesamtzahl');
+  assert.doesNotMatch(page, /MODULE_FOR_WIDGET|today\.pantryExpiring|\/pantry\?filter=soon/);
   const admin = src('../public/settings/pages/admin-permissions.js');
   assert.match(admin, /pantry: 'dashboard\.pantryExpiringTitle'/, 'die Rechteverwaltung nennt die Kachel beim selben Namen');
 });

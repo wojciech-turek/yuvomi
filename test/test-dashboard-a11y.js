@@ -5,7 +5,9 @@
  *        „Heute wichtig" sind mit Dziś und der Wand gegangen - und mit ihnen
  *        die Faelle ueber Widget-Koepfe, Badges, Bearbeiten-Leisten, die
  *        Sammelzeile und den Kopf der alten Uebersicht. Hier bleibt, was fuer
- *        Dziś, „Dostosuj Dziś", die Wand und den Router weiter gilt.
+ *        Dziś, die Wand und den Router weiter gilt. 2026-10-27, v2: „Dostosuj
+ *        Dziś" ist mit dem Entwurf „Main" gegangen - Dziś hat nichts mehr
+ *        anzupassen.
  *        Rendering mit dem Loader-Stub: t('key', values) kommt als
  *        "key" + JSON.stringify(values) zurueck. Das Verhalten im gerenderten
  *        Dokument (Fokus, Ansagen, Trefferflaechen) prueft
@@ -19,8 +21,9 @@ import { register } from 'node:module';
 register('./test-browser-loader.mjs', import.meta.url);
 
 const { __test } = await import('../public/pages/dashboard.js');
-const { buildPlan, planContext } = await import('../public/utils/today-plan.js');
-const { renderPlanRow } = await import('../public/components/today-view.js');
+const { planContext } = await import('../public/utils/today-plan.js');
+const { pendingTasks } = await import('../public/utils/dzis-plan.js');
+const { renderTodayPage } = await import('../public/components/today-view.js');
 
 /** Der Text, den ein Screenreader aus einem Markup-Stueck liest: ohne aria-hidden und ohne Tags. */
 function accessibleText(html) {
@@ -49,57 +52,46 @@ const { toLocalDateKey } = await import('../public/utils/date.js');
 const { readFile } = await import('node:fs/promises');
 const dashboardSource = await readFile(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
 
-test('Dziś bietet die Familienkarte erst ab drei Erwachsenen an (H1, Tafla)', () => {
+test('Dziś zeichnet keine Familienkarte (H1, Tafla, v2)', async () => {
   // Das Familie-Widget mit seinem „Verwalten"-Link ist mit dem Raster gegangen.
-  // TAFLA (2026-10-19): Dziś zeichnet kein Raster mehr. Die Familienkarte
-  // gibt es dort nur, wo mehr als zwei Erwachsene im Haushalt leben (Wunsch
-  // des Haushalts: mit zweien sagen die Kreise im Plan schon, wer was tut);
-  // die Verwaltung der Mitglieder erreicht man ueber die Einstellungen.
-  assert.match(dashboardSource, /if \(id === 'family'\) return todayAdults\(\)\.length > 2/,
-    'Dziś bietet die Familienkarte erst ab drei Erwachsenen an');
-});
-
-test('am Wandtablett bietet Dziś kein Anpassen an (#1808)', async () => {
-  // Der Einstieg endet an einer Route, die ein Display nicht erreicht:
-  // `PUT /preferences` antwortet ihm mit 403 (gemessen am echten Server in
-  // test:display-account). Der Melder ordnete sein Brett um und bekam beim
-  // Speichern den englischen Rohtext der Scope-Sperre. TAFLA: der Kopf der
-  // alten Uebersicht ist gegangen; „Dostosuj Dziś" steht am Fuss von Dziś,
-  // nur wenn `canCustomize` gilt - und die Seite setzt es fuer ein Display aus.
+  // TAFLA (2026-10-19): die Familienkarte stand nur bei mehr als zwei
+  // Erwachsenen. 2026-10-27, v2: der Entwurf „Main" kennt sie nicht - wer was
+  // tut, sagen die Punkte im Kalender und die Scheiben an den Aufgaben; die
+  // Verwaltung der Mitglieder erreicht man ueber die Einstellungen.
   const view = await readFile(new URL('../public/components/today-view.js', import.meta.url), 'utf8');
-  const page = view.slice(view.indexOf('export function renderTodayPage('), view.indexOf('export function renderTodaySkeleton('));
-  assert.match(page, /const customize = state\.canCustomize\s*\?[\s\S]*?data-day-action="customize"/,
-    'der Einstieg haengt an canCustomize');
-  assert.match(dashboardSource, /const onDisplay = user\?\.access_scope === 'display';/);
-  assert.match(dashboardSource, /canCustomize: !onDisplay,/, 'ein Display bekommt keinen Einstieg in eine Anordnung, die sich nicht speichern laesst');
-  // Ein Ausgaben-Gast oder ein anderes enges Konto ist nicht mitgemeint:
-  // die Regel haengt am Display, nicht an jedem engen Konto.
-  assert.doesNotMatch(dashboardSource, /canCustomize: [^\n]*split_guest/);
+  assert.doesNotMatch(dashboardSource, /todayAdults|id === 'family'/);
+  assert.doesNotMatch(view, /family-widget|dashboard\.familyTitle/);
 });
 
-test('Abbrechen fragt nur, wenn es etwas zu verlieren gibt (H2)', async () => {
-  // TAFLA (2026-10-19): „Dostosuj Dziś" ersetzt den Anpassen-Modus und hat
-  // GAR NICHTS zu verlieren - jede Aenderung wird sofort gespeichert und Dziś
-  // dahinter neu gezeichnet. Darum gibt es kein „Abbrechen", das verwerfen
-  // koennte, und keine Rueckfrage; „Gotowe" schliesst nur.
-  const sheet = await readFile(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-  assert.match(sheet, /headerAction: \{ label: t\('today\.customizeDone'\), onClick: \(\) => closeModal\(\) \}/, '„Gotowe" schliesst nur');
-  assert.doesNotMatch(sheet, /common\.cancel/, 'kein zweiter Ausgang, der verwerfen koennte');
-  assert.match(dashboardSource, /onChange: \(\{ order, visible \}\) => \{[\s\S]*?persistTodayLayout\(/, 'jede Aenderung geht sofort an den Speicher');
+test('am Wandtablett hakt Dziś nichts ab und legt nichts an (#1808, v2)', () => {
+  // Der Einstieg endete an einer Route, die ein Display nicht erreicht:
+  // `PUT /preferences` antwortet ihm mit 403. TAFLA: „Dostosuj Dziś" hing an
+  // `canCustomize: !onDisplay`. 2026-10-27, v2: es gibt kein Anpassen mehr;
+  // dieselbe Regel gilt fuer das, was Dziś schreibt - die Kreise und
+  // „Dodaj zadanie" stehen nur mit Schreibrecht und nie am Display.
+  assert.match(dashboardSource, /const onDisplay = user\?\.access_scope === 'display';/);
+  assert.match(dashboardSource, /canCheck: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
+  assert.match(dashboardSource, /canAddTask: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
+  assert.doesNotMatch(dashboardSource, /canCustomize/);
 });
+
+// 2026-10-27, v2: „Abbrechen fragt nur, wenn es etwas zu verlieren gibt"
+// galt „Dostosuj Dziś" (H2) - das Blatt ist mit Dziś v2 gegangen.
 
 test('die Zeile in Dziś nennt den Titel vor der Person (H13, A7 Sam)', () => {
-  // „Heute wichtig" ist gegangen; die Aufgabe steht als Zeile im Plan von
-  // Dziś. Die Person ist dort eine Scheibe mit Namen (role="img",
-  // aria-label) am Ende der Zeile - gesprochen wird sie nach dem Titel.
+  // „Heute wichtig" ist gegangen; die Aufgabe steht als Zeile in Dziś. Die
+  // Person ist dort eine Scheibe mit Namen (role="img", aria-label) am Ende
+  // der Zeile - gesprochen wird sie nach dem Titel.
+  // 2026-10-27, v2: die Zeile der Karte „Zadania" (pendingTasks, taskRow).
   const todayStr = toLocalDateKey(new Date());
   const linda = { id: 3, display_name: 'Linda Johnson', avatar_color: '#6a5acd' };
   const ctx = planContext({ now: new Date(), users: [linda] });
-  const row = buildPlan({
-    planTasks: [{ id: 1, title: 'Einverstaendnis abgeben', due_date: todayStr, due_time: '23:59', status: 'open', assigned_users: [linda] }],
-  }, ctx).all.find((r) => r.kind === 'task');
-  assert.ok(row, 'Reichweite: die Aufgabe steht im Plan');
-  const html = renderPlanRow(row, { canCheck: () => false });
+  const tasks = pendingTasks({
+    urgentTasks: [{ id: 1, title: 'Einverstaendnis abgeben', due_date: todayStr, status: 'open', priority: 'medium', assigned_users: [linda] }],
+  }, ctx);
+  assert.equal(tasks.rows.length, 1, 'Reichweite: die Aufgabe steht in der Karte');
+  const page = renderTodayPage({ user: linda, household: [linda], dateLabel: '', greetingKey: 'x', weather: null, calendar: null, tasks, birthdays: [], canCheck: false, canAddTask: false });
+  const html = page.slice(page.indexOf('<li class="dz-task'), page.indexOf('</li>', page.indexOf('<li class="dz-task')));
   const title = html.indexOf('Einverstaendnis abgeben');
   const person = html.search(/role="img" aria-label="Linda Johnson"/);
   assert.ok(title >= 0 && person >= 0, `Titel und Person stehen beide in der Zeile: ${accessibleText(html)}`);
@@ -108,16 +100,8 @@ test('die Zeile in Dziś nennt den Titel vor der Person (H13, A7 Sam)', () => {
 
 // ── R9 M7 (Re-Critique 2026-09-27, A7 P1-2): Anpassen ─────────────────────────
 
-test('Tafla: Vorgabe und Zuruecksetzen stehen in „Dostosuj Dziś", nur fuer wen sie gelten', async () => {
-  // Die Kopfzeile [Abbrechen] Titel [Fertig] des alten Anpassen-Modus und seine
-  // Fussnote sind gegangen. TAFLA (2026-10-19): Vorgabe und Zuruecksetzen
-  // stehen in „Dostosuj Dziś" (Abschnitt „Więcej"), nur fuer wen sie gelten -
-  // Admin bzw. eigener Stand.
-  const sheet = await readFile(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-  assert.match(sheet, /actions\.canPublish \? actionRow\(\{ action: 'publish'/);
-  assert.match(sheet, /actions\.followsDefault === false \? actionRow\(\{ action: 'reset'/);
-  assert.match(dashboardSource, /onPublish: async \(\) => \{ await closeModal\(\{ force: true \}\); await publishHouseholdDefault\(\); \}/);
-});
+// 2026-10-27, v2: „Vorgabe und Zuruecksetzen" standen in „Dostosuj Dziś"
+// (nur fuer Admin bzw. eigenen Stand) - das Blatt ist mit Dziś v2 gegangen.
 
 // -------------------------------------------------------------------------
 // Anpassen-Modus verliert nichts still (Re-Critique 2026-09-28, A7 P2-1)
@@ -144,17 +128,15 @@ test('Verlassen-Schutz: ohne Waechter frei, ein Nein haelt, ein Fehler sperrt ni
   assert.equal(await mayLeave('/tasks'), true);
 });
 
-test('Anpassen: das Blatt ist ein Dialog und braucht keinen Verlassen-Schutz', async () => {
+test('Dziś hat nichts anzupassen: kein Blatt, kein Verlassen-Schutz, kein eigenes Esc (v2)', async () => {
   // Das Ausblenden des Speed-Dials im Anpassen-Modus (setCustomizeFabHidden)
-  // ist mit dem Modus gegangen.
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // TAFLA (2026-10-19): „Dostosuj Dziś" ist ein modales Blatt - der Knopf
-  // liegt unter dem Scrim, und weil jede Aenderung sofort gespeichert ist,
-  // braucht der Weg hinaus keinen Verlassen-Schutz mehr.
-  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-  assert.match(sheet, /openModal\(\{/, 'das Blatt ist ein Dialog');
-  assert.doesNotMatch(src, /setLeaveGuard\(\(\) => customizeLeaveAllowed\(/, 'kein Schutz fuer einen Modus, den es nicht mehr gibt');
+  // ist mit dem Modus gegangen; TAFLA: „Dostosuj Dziś" war ein modales Blatt
+  // ohne Verlassen-Schutz. 2026-10-27, v2: auch das Blatt ist gegangen - die
+  // Seite haengt weder einen Schutz noch ein eigenes Esc an.
+  const { existsSync } = await import('node:fs');
+  assert.equal(existsSync(new URL('../public/components/today-customize.js', import.meta.url)), false);
+  assert.doesNotMatch(dashboardSource, /today-customize|openTodayCustomize|setLeaveGuard\(/);
+  assert.doesNotMatch(dashboardSource, /event\.key !== 'Escape' \|\| event\.defaultPrevented \|\| !isCustomizing/);
 });
 
 // navigate() steht seit #1657 in utils/router-navigate.js; der Router reicht
@@ -254,13 +236,13 @@ test('R14 P2: die Wand sammelt nicht - dort klappt nichts auf', async () => {
 // 2026-10-27, v2: Blatt, + und die Pille auf Dziś sind weg - jede Seite legt
 // in ihrem eigenen Kopf an. Dziś baut weder Speed-Dial noch Knopf.
 test('R14/v2: die Uebersicht baut keinen Speed-Dial und ruft kein globales Erfassen', () => {
-  assert.equal(__test.renderFab(), '', 'kein schwebender Speed-Dial');
-  assert.doesNotMatch(dashboardSource, /openCapture/, 'kein globales Erfassen mehr');
+  assert.equal(__test.renderFab, undefined, 'kein Knopf-Bauer mehr, auch kein leerer');
+  assert.doesNotMatch(dashboardSource, /openCapture|capture-sheet|capture-plus|yuvomi:captured/, 'kein globales Erfassen mehr');
   assert.doesNotMatch(dashboardSource, /FAB_ACTIONS|FAB_NEW_BTN|function wireNewMenu/, 'der Speed-Dial ist entfallen');
 });
 
 test('v2: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf', () => withStage(true, () => {
-  assert.equal(__test.renderFab(), '');
+  assert.doesNotMatch(dashboardSource, /class="page-fab"|id="fab-main"/, 'Dziś zeichnet keinen schwebenden Knopf');
 }));
 
 // Critique 2026-10-16: jede Kachel fuehrt mit „Alle" zu ihrer Seite, nur die
@@ -278,17 +260,5 @@ test('Dashboard: Onboarding-Karte als schwebende Tafel (Critique 2026-10-16)', a
   assert.match(card?.body ?? '', /box-shadow:\s*var\(--glass-shadow-lg\), var\(--glass-inset-elevated\)/, 'Tiefe und Lichtkante der schwebenden Tafel');
 });
 
-// R20 (Re-Critique 2026-10-17, A1 P3): Esc beendete das Anpassen nicht - am
-// Telefon war "Abbrechen" der einzige Weg. Esc nimmt denselben Weg wie der
-// Knopf (mit Rueckfrage bei Aenderungen) und laesst offene Dialoge und Menues
-// ihr eigenes Esc behalten.
-test('R20: Esc beendet das Anpassen wie "Abbrechen", nicht an einem offenen Dialog vorbei', async () => {
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  // TAFLA (2026-10-19): das Anpassen ist ein Dialog (modal.js) - sein Esc ist
-  // das Esc des Dialogs, und es verliert nichts, weil jede Aenderung schon
-  // gespeichert ist. Die Seite selbst haengt kein eigenes Esc mehr an.
-  assert.doesNotMatch(src, /event\.key !== 'Escape' \|\| event\.defaultPrevented \|\| !isCustomizing/);
-  const sheet = readFileSync(new URL('../public/components/today-customize.js', import.meta.url), 'utf8');
-  assert.match(sheet, /dirtyGuard: false/, 'nichts Ungespeichertes, also keine Rueckfrage beim Schliessen');
-});
+// R20 (Re-Critique 2026-10-17, A1 P3): Esc beendete das Anpassen nicht.
+// 2026-10-27, v2: es gibt kein Anpassen mehr (Test oben, „kein eigenes Esc").

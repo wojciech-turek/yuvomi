@@ -1,8 +1,9 @@
 /**
  * Modul: Dashboard
- * Zweck: Dziś und die Wand in der Kueche (Tafla, 2026-10-19), der Rundgang beim
- *        Erststart, der Ladefehler der Seite und die Fehlerkachel eines
- *        Erweiterungs-Widgets. Das alte Widget-Raster ist mit Tafla gegangen.
+ * Zweck: Dziś (design v2, 2026-10-27) und die Wand in der Kueche (Tafla,
+ *        2026-10-19), der Rundgang beim Erststart und der Ladefehler der
+ *        Seite. Das alte Widget-Raster ist mit Tafla gegangen, die
+ *        Erweiterungs-Widgets und ihre Fehlerkachel mit v2.
  * Abhängigkeiten: tokens.css, layout.css
  */
 
@@ -40,91 +41,6 @@
   .dashboard {
     padding: var(--space-6) var(--page-inline-pad);
   }
-}
-
-/* --------------------------------------------------------
- * Die Fehlerkachel eines Erweiterungs-Widgets (renderWidgetError)
- *
- * Die Kacheln des alten Rasters sind mit Tafla gegangen; ein Erweiterungs-
- * Widget steht in Dziś in seiner eigenen Karte und zeigt diese Kachel, wenn
- * es nicht rendern kann.
- * -------------------------------------------------------- */
-.widget {
-  /* HIG-Karte: randlos auf dem Grouped Background, weiche Rundung (16px),
-   * subtiler Schatten. Der transparente Rahmen bleibt als Träger für
-   * .widget--error (Danger-Tint) bestehen. */
-  background-color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid transparent;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.widget__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  /* Ein gekürzter Titel endet sonst genau an der Kante des Links: gemessen 0px
-   * Abstand zwischen der Ellipse von „Familienmitglieder" und „Verwalten".
-   * `space-between` verteilt nur ÜBERSCHUSS - wo keiner ist, verteilt es
-   * nichts, und der Mindestabstand muss selbst dastehen. */
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) var(--space-2);
-  position: relative;
-  z-index: 2;
-}
-
-.widget__title {
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  /* DIE TITELZEILE IST DAS MASS DES KOPFES, und sie ist es an EINER Stelle.
-   * Vorher setzte `.dashboard .widget__header` dafuer `min-height:
-   * var(--target-base)` - eine Zielgroesse als Kopfhoehe, und dazu eine, die
-   * die tatsaechliche Hoehe gar nicht bestimmte: die kam aus der 48px-Box des
-   * „Alle"-Links und ergab 73px (12 + 48 + 12 + 1). Mit 32px hier landen BEIDE
-   * Bauformen auf derselben Kopfhoehe: die Karte mit Link (Link 32px) und die
-   * Fehlerkachel ohne ihn (Siegel 24px, renderWidgetError). Das Band, das
-   * diese Zeile frueher mass, ist 2026-08-17 zurueckgebaut (siehe den
-   * Kopf-Abschnitt unten); das Mass selbst gilt unveraendert. */
-  min-height: var(--target-sm);
-}
-
-/* Das Widget-Titel-Icon sitzt seit Block 2 in einem Markensiegel
- * (.module-seal--sm, layout.css); Groesse und Farbe kommen von dort. */
-
-.widget__empty {
-  padding: var(--space-3) var(--space-4);
-  color: var(--color-text-tertiary);
-  font-size: var(--text-sm);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.widget__empty .empty-state__icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-  opacity: 0.6;
-}
-
-/* Fehlerkachel eines einzelnen Widgets: dezent danger-getönter Rahmen, damit
- * „kaputt" auf einen Blick von „leer" unterscheidbar ist, ohne zu schreien.
- * Der Retry rutscht ans Zeilenende wie die Empty-State-CTA. */
-.widget--error {
-  border-color: color-mix(in srgb, var(--color-danger) var(--tint-hint), var(--color-border));
-}
-
-.widget__retry {
-  margin-inline-start: auto;
 }
 
 /* --------------------------------------------------------
@@ -409,28 +325,9 @@
   overflow: visible;
 }
 
-/* `min-width: 0` GEHOERT DER NACHGIEBIGEN SEITE, UND DAS IST NUR DER TITEL.
- *
- * Der Link stand hier mit und hat die Regel gegen sich selbst gedreht: er traegt
- * `flex-shrink: 0` (unten), gibt also gar nicht nach - `min-width: 0` war fuer
- * ihn von Anfang an wirkungslos. Wirkung bekam es erst, als der Link seine
- * Zielbreite BRAUCHTE: `min-width: var(--target-lg)` in der Basisregel verlor
- * gegen dieses spezifischere `0`, und die kurzen „Alle"-Links blieben bei
- * gemessenen 42,2px - unter der Zielgroesse, die die eine Achse tragen soll. */
-.dashboard .widget__title {
-  min-width: 0;
-}
-
-.dashboard .widget__empty {
-  padding: var(--space-4);
-}
-
+/* The phone gutter is the design's 16 (v2, 2026-10-27): the base padding
+ * above; the 12 that stood here for the widget board is gone with it. */
 @media (max-width: 639px) {
-  .dashboard {
-    padding-left: var(--space-3);
-    padding-right: var(--space-3);
-  }
-
   .dashboard-shell {
     gap: var(--space-3);
     /* Bewusst ohne eigene Bottom-Reserve: die FAB-Clearance traegt bereits
@@ -1533,72 +1430,26 @@
   }
 }
 
-/* ── Widget-Optionen (#814) ──────────────────────────────────────────────────
- * Ein schlanker Dialog: eine Gruppe, darin Auswahlzeilen. Bewusst keine eigene
- * Listenkomponente - was hier steht, sind zwei Radios oder eine Handvoll
- * Kategorien, und jede weitere Form waere ein Bauteil, das nur an einer Stelle
- * vorkommt. */
-.widget-options__group {
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.widget-options__hint {
-  margin: 0 0 var(--space-2) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
-.widget-options__choice {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  /* Die ganze Zeile ist das Ziel, nicht nur das Kaestchen: auf dem Telefon
-     traefe man sonst 20px in einer 44px-Zeile. */
-  min-height: var(--target-base);
-  cursor: pointer;
-}
-
-.widget-options__choice input {
-  flex: 0 0 auto;
-}
-
-/* VIER LESESTUFEN AUF DEN INHALTSFLAECHEN (Critique R18, 2026-10-07).
- *
- * Gemessen standen auf der Uebersicht 11 bis 14 Schriftgroessen, in
- * 1-px-Schritten von 12 bis 18. Inhalt liest auf vier Stufen: 17 (Headline,
- * Kacheltitel und Leitwert einer Zeile), 15 (Subheadline, Zeilentitel und
- * Fliesstext), 13 (Footnote, Nebenzeile) und 12 (Caption, Meta und Badge).
- * 14 und 16 bleiben den Bedienelementen (Knopf, Link, Feld), die Display-
- * Werte (28, 34) den Kennzahlen.
- *
- * Umgestellt ist, was dabei KLEINER oder gleich breit wird - so entsteht kein
- * neuer Umbruch: Wetter (Spanne, Lage, Ort 14 -> 13), Budget (Sparquote
- * 18 fett -> 17 semibold, ihr Label und die beiden Fluesse 14 -> 13),
- * Geburtstage (Name geerbte 16 -> 15, "wird 41" 14 fett -> 13 semibold),
- * Belohnungen (Name 16 medium -> 15 semibold). Die Regeln stehen bei ihren
- * Kacheln weiter oben; dieser Absatz ist ihr gemeinsamer Grund. Gemessen
- * (1440, hell): 22 -> 16 Groesse/Gewicht-Paare; bei 390px in `fi` und `de`
- * weder Umbruch noch Ellipse an den umgestellten Klassen.
- * Guard: test-dashboard-clarity.js (die genannten Klassen stehen auf
- * Leiter-Tokens). */
-
 /* --------------------------------------------------------
- * DZIŚ (Tafla, 2026-10-19)
+ * DZIŚ (design v2, 2026-10-27)
  *
- * The start page is one checkable day plan, not a widget board: header, the
- * Teraz card, "Plan dnia", then the sections in the person's order. Markup in
- * components/today-view.js, rules in DESIGN.md "Tafla". Everything here runs on
- * the Tafla tokens (tokens.css): four type sizes, the 8-pt grid, radius 20 for
- * cards, one violet voice, person colours only on discs and edges.
+ * The home screen as the owner's design draws it ("Main", "DzisFull"): the
+ * header, the weather card with the rain of the day, the compact calendar,
+ * the pending tasks and the birthdays soon - nothing else. Markup in
+ * components/today-view.js, model in utils/dzis-plan.js.
+ *
+ * Everything runs on the v2 tokens (tokens.css, Foundations): the four type
+ * steps `--type-page` 26, `--type-section` 17, `--type-row` 15 and
+ * `--type-meta` 12, the card (`--color-card-border`, `--radius-card`, no
+ * shadow), `--color-separator-inner` between rows, `--color-overdue`, the
+ * rain pair `--color-rain` / `--color-rain-soft` and the umbrella's
+ * `--color-rain-ink`. No hex stands on the page.
  * -------------------------------------------------------- */
 
-.dashboard--today {
-  --day-gutter: var(--space-4);
-}
+.dz {
+  /* The time column of a calendar row: "09:30" at 15/600, wider for "9:30 PM". */
+  --dz-time-col: 3rem;
 
-.day {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -1606,59 +1457,39 @@
   max-width: 40rem;
   margin: 0 auto;
   color: var(--color-text-primary);
+  /* Times, temperatures and counts line up (R18): every number inherits. */
   font-variant-numeric: tabular-nums;
-}
-
-.day-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
 }
 
 /* ── Header ─────────────────────────────────────────────── */
 
-.day-head {
+.dz-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.dz-head__text {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  min-width: 0;
 }
 
-.day-head__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-height: var(--type-footnote-lh);
-}
-
-.day-head__date {
+.dz-head__date {
   margin: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
 }
 
-/* The avatar is the way to the profile: 36 visual, --target-base hit (44 at
- * the pointer, 48 at the finger), hanging into the lines above and below so
- * the date line keeps its 18. */
-.day-head__me {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--target-base);
-  block-size: var(--target-base);
-  margin: calc((var(--target-base) - var(--type-footnote-lh)) / -2) calc(var(--space-1) * -1) calc((var(--target-base) - var(--type-footnote-lh)) / -2) 0;
-  border-radius: var(--radius-full);
-  text-decoration: none;
-}
-
-.day-head__greeting {
+.dz-head__greeting {
   margin: 0;
-  font-size: var(--type-large-title);
-  line-height: var(--type-large-title-lh);
+  font-size: var(--type-page);
+  line-height: var(--type-page-lh);
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--type-page-tracking);
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
   hyphens: auto;
@@ -1667,28 +1498,24 @@
   -webkit-hyphenate-limit-after: 4;
 }
 
-.day-head__weather {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-head__weather svg {
+/* The avatar is the way to the profile: 36 visual in a --target-base hit,
+ * hanging 4 into the gutter as the design has it. */
+.dz-head__me {
   flex: none;
-  inline-size: 20px;
-  block-size: 20px;
+  display: grid;
+  place-items: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) 0 0;
+  border-radius: var(--radius-full);
+  text-decoration: none;
 }
 
-/* DIE KOMPAKTE HOEHENKLASSE (DESIGN.md, „Die Chrome-Regel"): unter 500px
- * Fensterhoehe faellt der Kopf auf seine Datumszeile; Gruss und Wetter treten
- * aus dem Bild, bleiben aber im Dokument - der Gruss ist die h2 der Seite. */
+/* DIE KOMPAKTE HOEHENKLASSE (DESIGN.md, "Die Chrome-Regel"): below 500px of
+ * window height the header falls to its date line; the greeting leaves the
+ * picture but stays in the document - it is the page's h2. */
 @media (max-height: 499px) {
-  .day-head__greeting,
-  .day-head__weather {
+  .dz-head__greeting {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
@@ -1715,9 +1542,8 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-footnote); line-height: 20px; }
-.day-disc--24 { inline-size: 24px; block-size: 24px; font-size: var(--type-footnote); line-height: 24px; }
-.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-body); line-height: 36px; }
+.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-meta); line-height: 20px; }
+.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-row); line-height: 36px; }
 
 .day-disc--photo img {
   inline-size: 100%;
@@ -1725,639 +1551,435 @@
   object-fit: cover;
 }
 
-/* "Razem": the two people's colours split on the diagonal - the one gradient
- * Tafla allows besides the scroll-edge fade. */
-.day-disc--razem {
-  background: linear-gradient(135deg, var(--disc-a) 0 50%, var(--disc-b) 50% 100%);
-}
+/* ── Cards and section heads ────────────────────────────── */
 
-/* ── Buttons, pills, chips ──────────────────────────────── */
-
-.day-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-block-size: var(--target-base);
-  padding: 0 var(--space-6);
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  font: inherit;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.day-btn svg {
-  inline-size: 20px;
-  block-size: 20px;
-  stroke-width: 2.25;
-}
-
-.day-btn--primary {
-  min-inline-size: 120px;
-  background: var(--color-btn-primary);
-  color: var(--color-text-on-accent);
-  box-shadow: var(--shadow-accent-glow);
-}
-
-.day-btn--secondary {
-  flex: 1;
-  min-inline-size: 0;
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
-}
-
-/* On the hearth the secondary is the card itself, not a second tint. */
-.day-btn--on-hearth {
+/* The v2 card: white, a hairline, radius 12, no shadow. Rows inside it carry
+ * their focus ring inward - the card clips what stands outside it. */
+.dz-card {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  display: block;
+  overflow: hidden;
   background: var(--color-surface);
-}
-
-.day-btn--plain {
-  padding: 0;
-  color: var(--color-accent);
-}
-
-/* A plain verb in an 18-tall line keeps its --target-base hit area by hanging
- * over it. */
-.day-btn--compact {
-  margin: calc((var(--target-base) - var(--type-footnote-lh)) / -2) 0;
-}
-
-.day-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .day-btn {
-    transition: transform var(--duration-xs) var(--ease-out);
-  }
-
-  .day-btn:active:not(:disabled) {
-    transform: scale(0.97);
-  }
-}
-
-.day-pill {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  block-size: 24px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-}
-
-.day-pill--danger {
-  background: var(--color-danger-tint);
-  color: var(--color-danger);
-}
-
-.day-pill--warning {
-  background: var(--color-warning-tint);
-  color: var(--color-warning);
-}
-
-/* Chips are 36 visual, --target-base hit: the hit area reaches above and
- * below (4 at the pointer, 6 at the finger). */
-.day-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  block-size: 36px;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--color-fill);
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.day-chip::after {
-  content: '';
-  position: absolute;
-  inset: calc((var(--target-base) - 36px) / -2) 0;
-}
-
-.day-chip svg {
-  inline-size: 14px;
-  block-size: 14px;
-  stroke-width: 2.25;
-}
-
-.day-chip--accent {
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
-}
-
-/* ── Teraz ──────────────────────────────────────────────── */
-
-.day-now {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-e1);
-}
-
-/* Tonight's dinner is the one thing that sits on the hearth. */
-.day-now--dinner {
-  background: var(--color-hearth);
-}
-
-.day-now__lead {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: 0;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
   color: inherit;
-  font: inherit;
-  text-align: start;
   text-decoration: none;
 }
 
-button.day-now__lead,
-a.day-now__lead {
-  cursor: pointer;
-}
-
-.day-now__text {
-  flex: 1;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.day-now__eyebrow {
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-accent);
-}
-
-.day-now__title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.day-now__meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-inline-size: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-now__meta > span:last-child {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The running timer is the card's one hero number: rounded numerals. */
-.day-now__clock {
-  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
-  font-size: var(--type-large-title);
-  line-height: var(--type-large-title-lh);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The plate: where a recipe photo goes, else a quiet glyph. White on the
- * hearth, the fill on a white card. */
-.day-now__plate {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  inline-size: 56px;
-  block-size: 56px;
-  border-radius: var(--radius-sm);
-  background: var(--color-fill);
-  color: var(--color-text-secondary);
-}
-
-.day-now--dinner .day-now__plate {
-  background: var(--color-surface);
-}
-
-.day-now__plate svg {
-  inline-size: 28px;
-  block-size: 28px;
-  stroke-width: 1.5;
-}
-
-.day-now__plate img,
-.day-now__plate-img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
-
-.day-now__plate--glyph {
-  color: var(--color-text-secondary);
-}
-
-.day-now__meter {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-now__meter > span:last-child {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.day-meter {
-  flex: none;
-  display: flex;
-  gap: var(--space-1);
-  inline-size: 96px;
-}
-
-.day-meter__seg {
-  flex: 1;
-  block-size: 4px;
-  border-radius: var(--radius-full);
-  background: var(--color-text-primary);
-}
-
-.day-meter__seg--missing {
-  background: var(--color-warning);
-}
-
-.day-now__actions {
-  display: flex;
-  gap: var(--space-2);
-  margin-block-start: var(--space-1);
-}
-
-.day-now__then {
-  margin: 0;
-  padding-block-start: var(--space-3);
-  box-shadow: inset 0 0.5px 0 var(--color-separator);
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── The end of the day: "Dzień ogarnięty" ──────────────── */
-
-.day-closed {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-e1);
-}
-
-.day-closed__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
-.day-closed__check {
-  position: relative;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 40px;
-  block-size: 40px;
-  border-radius: var(--radius-full);
-  background: var(--color-btn-primary);
-  color: var(--color-text-on-accent);
-  /* A soft bloom around the check - the peak of the day. */
-  box-shadow: 0 0 28px 8px color-mix(in srgb, var(--color-btn-primary) 40%, transparent);
-}
-
-.day-closed__check svg {
-  position: relative;
-  inline-size: 22px;
-  block-size: 22px;
-  stroke-width: 2.5;
-}
-
-.day-closed__text {
-  flex: 1;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.day-closed__title {
-  margin: 0;
-  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
-  font-variant-numeric: tabular-nums;
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-closed__sub {
-  margin: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.day-closed__tomorrow {
-  display: flex;
-  flex-direction: column;
-  margin: 0 var(--space-4);
-  padding: var(--space-3) 0 var(--space-1);
-  box-shadow: inset 0 0.5px 0 var(--color-separator);
-}
-
-.day-closed__label {
-  margin: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.day-closed__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.day-closed__row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: 48px;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-}
-
-.day-closed__row + .day-closed__row {
-  box-shadow: inset 0 0.5px 0 var(--color-separator);
-}
-
-/* The person edge: a 3pt bar in the person colour (violet for together). */
-.day-closed__row--edge::before {
-  content: '';
-  position: absolute;
-  inset-block: var(--space-2);
-  inset-inline-start: calc(var(--space-4) * -1);
-  inline-size: 3px;
-  background: var(--edge);
-}
-
-.day-closed__when {
-  flex: none;
-  inline-size: 80px;
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-}
-
-.day-closed__what {
-  flex: 1;
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Sections and grouped lists ─────────────────────────── */
-
-.day-section {
+.dz-sec {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.day-section__head {
+.dz-sec__head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.day-section__title {
-  margin: 0;
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-section__count {
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.day-card {
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-.day-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* One row of the plan: 28 leading slot + 12 gap puts every title at 56, and
- * the hairlines are inset to the same column. */
-.day-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: 64px;
-  padding: 0 var(--space-4);
-}
-
-.day-row--single {
-  min-block-size: 48px;
-}
-
-.day-card > li + li::before,
-.day-list--earlier > li::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  block-size: 0.5px;
-  background: var(--color-separator);
-}
-
-.day-row__glyph {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  inline-size: 28px;
-  color: var(--color-text-secondary);
-}
-
-.day-row__glyph svg {
-  inline-size: 20px;
-  block-size: 20px;
-}
-
-.day-row__main {
-  flex: 1;
-  min-inline-size: 0;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  text-decoration: none;
-}
-
-button.day-row__main,
-a.day-row__main {
-  cursor: pointer;
-}
-
-.day-row__main:focus-visible,
-.day-check:focus-visible,
-.day-earlier__toggle:focus-visible,
-.day-more__link:focus-visible,
-.day-link-row:focus-visible,
-.day-tile:focus-visible {
-  outline-offset: var(--focus-ring-offset-inset);
-}
-
-.day-row__body {
-  flex: 1;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
   gap: var(--space-1);
 }
 
-.day-row__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+.dz-sec__title {
+  margin: 0;
+  font-size: var(--type-section);
+  line-height: var(--type-section-lh);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
-.day-row__meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-inline-size: 0;
-  overflow: hidden;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
+/* "Zadania 5": the count beside the heading in the head's size, not in it. */
+.dz-sec__count {
+  font-size: var(--type-section);
+  line-height: var(--type-section-lh);
   color: var(--color-text-secondary);
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.day-row__meta-icon {
+/* "Tydzień", "Wszystkie": a plain word in a 20-tall line keeps its
+ * --target-base hit by hanging into the lines above and below - over the
+ * card's top edge by a few px, so it stands above it. */
+.dz-sec__link {
+  position: relative;
+  z-index: 1;
   flex: none;
-  inline-size: 16px;
-  block-size: 16px;
-  margin-inline-end: calc(var(--space-1) * -1);
+  min-inline-size: var(--target-base);
+  padding: calc((var(--target-base) - var(--type-row-lh)) / 2) var(--space-2);
+  margin-block: calc((var(--target-base) - var(--type-row-lh)) / -2);
+  margin-inline: auto calc(var(--space-2) * -1);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-accent);
+  text-align: end;
+  text-decoration: none;
+  border-radius: var(--radius-xs);
 }
 
-.day-row__meta-text {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.day-row__trail {
+.dz-chevron {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.day-row__time {
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.day-row__chevron {
-  flex: none;
-  display: flex;
-  color: var(--color-text-quaternary);
-}
-
-.day-row__chevron svg {
-  inline-size: 16px;
-  block-size: 16px;
+  inline-size: 18px;
+  block-size: 18px;
+  margin-inline-start: auto;
+  color: var(--color-ink-3);
   stroke-width: 2;
 }
 
-/* Done and past rows step back: the title goes to ink-2. */
-.day-row--done .day-row__title,
-.day-row--past .day-row__title,
-.day-row--quiet .day-row__title {
+.dz-chevron--down,
+.dz-cal__tomorrow .dz-chevron {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+/* ── Weather ────────────────────────────────────────────── */
+
+.dz-weather {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.dz-weather__now {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dz-weather__icon {
+  flex: none;
+  inline-size: 28px;
+  block-size: 28px;
+  color: var(--color-text-secondary);
+  stroke-width: 1.75;
+}
+
+.dz-weather__temp {
+  flex: none;
+  font-size: var(--type-page);
+  line-height: var(--type-page-lh);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--type-page-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+.dz-weather__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dz-weather__desc {
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+}
+
+.dz-weather__meta {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rain line sits under a hairline: the umbrella and its window, or the
+ * sun and "Bez deszczu do wieczora". */
+.dz-weather__rain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-separator-inner);
+}
+
+.dz-weather__rain-icon {
+  flex: none;
+  inline-size: 18px;
+  block-size: 18px;
+  color: var(--color-rain-ink);
+  stroke-width: 1.75;
+}
+
+.dz-weather__rain--dry .dz-weather__rain-icon {
   color: var(--color-text-secondary);
 }
 
-/* ── The check circle (spec "Kółko odhaczania") ─────────── */
-/* Ring, tick and the done fill are the app's one check circle (`.check-ring`,
- * list-row.css, 2026-10-24); the plan row sets its 44 hit and puts the 24 ring
- * in the 28 slot. */
+.dz-weather__rain-label {
+  min-width: 0;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
 
+.dz-weather__chance {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The chart: fourteen hours from the one before now, 24 high. A bar from 40%
+ * is rain blue, below it the pale blue, the current hour in ink. */
+.dz-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dz-chart__bars,
+.dz-chart__labels {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.dz-chart__bars {
+  align-items: end;
+  block-size: 24px;
+}
+
+.dz-chart__bar {
+  display: block;
+  block-size: var(--bar, 3px);
+  border-radius: var(--radius-2xs);
+  background: var(--color-rain-soft);
+}
+
+.dz-chart__bar--wet {
+  background: var(--color-rain);
+}
+
+.dz-chart__bar--now {
+  background: var(--color-text-primary);
+}
+
+.dz-chart__labels {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dz-chart__now {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Kalendarz ──────────────────────────────────────────── */
+
+.dz-cal--12h {
+  --dz-time-col: 4.5rem;
+}
+
+.dz-cal__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* "1 wcześniej · 08:00 Przedszkole": what is over, folded into one line. */
+.dz-cal__earlier {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+  cursor: pointer;
+}
+
+.dz-cal__earlier > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dz-cal__earlier[aria-expanded="true"] .dz-chevron--down {
+  transform: rotate(180deg);
+}
+
+.dz-cal__row {
+  position: relative;
+}
+
+/* Hairlines between rows, indented to the time column; the earlier rows,
+ * when open, join the list above the current one. */
+.dz-cal__row + .dz-cal__row::before,
+.dz-cal__list--earlier > .dz-cal__row:first-child::before,
+.dz-cal__list--earlier:not([hidden]) + .dz-cal__list > .dz-cal__row:first-child::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: var(--space-4) 0;
+  border-block-start: 1px solid var(--color-separator-inner);
+}
+
+.dz-cal__link {
+  display: grid;
+  grid-template-columns: var(--dz-time-col) 12px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  min-block-size: 48px;
+  padding: 0 var(--space-4);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.dz-cal__row--now .dz-cal__link {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-wash), var(--color-surface));
+}
+
+.dz-cal__list--earlier .dz-cal__title {
+  color: var(--color-text-secondary);
+}
+
+.dz-cal__time {
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* "cały dzień" has no hour: it stands small and may take two lines. */
+.dz-cal__time--allday {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+/* The person dot; two overlapping for "razem", the second ringed in the card. */
+.dz-dots {
+  position: relative;
+  display: block;
+  inline-size: 12px;
+  block-size: 8px;
+}
+
+.dz-dot {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--radius-full);
+  background: var(--dot, var(--color-ink-3));
+}
+
+.dz-dot--second {
+  inset-inline-start: 4px;
+  box-shadow: 0 0 0 1.5px var(--color-surface);
+}
+
+.dz-dot--none {
+  background: var(--color-ink-3);
+}
+
+.dz-cal__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+}
+
+.dz-cal__meta {
+  max-inline-size: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+}
+
+.dz-cal__meta--now {
+  max-inline-size: none;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.dz-cal__empty {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-secondary);
+}
+
+/* "Jutro · 08:00 Przedszkole · i 2 więcej" under a full hairline. */
+.dz-cal__tomorrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-4);
+  border-block-start: 1px solid var(--color-separator-inner);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.dz-cal__tomorrow-day {
+  flex: none;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.dz-cal__tomorrow-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Zadania ────────────────────────────────────────────── */
+
+.dz-tasks__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dz-task {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 48px;
+  padding: 0 var(--space-4) 0 var(--space-2);
+}
+
+.dz-task + .dz-task::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 48px 0;
+  border-block-start: 1px solid var(--color-separator-inner);
+}
+
+/* The check circle is the app's one ring (`.check-ring`, list-row.css); the
+ * row gives it a 36 slot and the --target-base hit around it. */
 .day-check {
   flex: none;
   /* Own stacking context: the tick bloom (::before, z-index -1) sits under
@@ -2365,7 +1987,7 @@ a.day-row__main {
   isolation: isolate;
   inline-size: var(--target-base);
   block-size: var(--target-base);
-  margin: 0 calc((var(--target-base) - 28px) / -2);
+  margin-inline: calc((36px - var(--target-base)) / 2);
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
@@ -2373,23 +1995,112 @@ a.day-row__main {
   cursor: pointer;
 }
 
-.day-check:disabled {
-  cursor: default;
+.dz-task__spacer {
+  flex: none;
+  inline-size: var(--space-2);
+}
+
+.dz-task__title {
+  flex: 1;
+  min-width: 0;
+  min-block-size: var(--target-base);
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* Done steps back, struck through. The design's #8D8C87 is 3.37:1 on the
+ * card - too light for text; ink-3 of the text ramp holds 4.5:1. */
+.dz-task--done .dz-task__title {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.dz-task__aside {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dz-task__flag {
+  inline-size: 14px;
+  block-size: 14px;
+  color: var(--color-overdue);
+  stroke-width: 2;
+}
+
+.dz-task__due {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dz-task__due--late {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-overdue);
+}
+
+.dz-task--done .dz-task__due--late {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.dz-tasks__empty {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-secondary);
+}
+
+.dz-tasks__add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--target-base);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-block-start: 1px solid var(--color-separator-inner);
+  background: none;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-accent);
+  text-align: start;
+  cursor: pointer;
+}
+
+.dz-tasks__add svg {
+  flex: none;
+  inline-size: 18px;
+  block-size: 18px;
+  stroke-width: 2;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .day-row__title {
+  .dz-task__title {
     transition: color var(--duration-sm) var(--ease-out);
   }
 
-  /* The tick is drawn, then one bloom - the row folds into "Wcześniej"
-   * after the hold (pages/dashboard.js). */
-  .day-row--ticking .day-check > svg {
+  /* The tick is drawn, then one bloom; the row leaves after the hold
+   * (pages/dashboard.js). */
+  .dz-task--ticking .day-check > svg {
     stroke-dasharray: 24;
     animation: day-tick-draw var(--duration-md) var(--ease-out) var(--duration-xs) both;
   }
 
-  .day-row--ticking .day-check::before {
+  .dz-task--ticking .day-check::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -2413,534 +2124,94 @@ a.day-row__main {
   to { transform: scale(1.8); opacity: 0; }
 }
 
-/* ── "Wcześniej" ────────────────────────────────────────── */
+/* ── Wkrótce ────────────────────────────────────────────── */
 
-.day-earlier {
+/* Quiet on purpose: no card, a muted head, 44 rows. */
+.dz-soon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dz-soon__title {
+  margin: 0;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.dz-soon__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dz-soon__list > li {
   position: relative;
 }
 
-.day-earlier__toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  block-size: var(--target-base);
-  padding: 0 var(--space-4);
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
+.dz-soon__list > li + li::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 30px 0;
+  border-block-start: 1px solid var(--color-separator);
 }
 
-.day-earlier__lead {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  inline-size: 28px;
-  color: var(--color-text-quaternary);
-}
-
-.day-earlier__label {
-  flex: 1;
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-earlier__chevron {
-  flex: none;
-  display: flex;
-  color: var(--color-text-quaternary);
-}
-
-.day-earlier__lead svg,
-.day-earlier__chevron svg {
-  inline-size: 16px;
-  block-size: 16px;
-}
-
-.day-earlier__toggle[aria-expanded="true"] .day-earlier__chevron {
-  transform: rotate(180deg);
-}
-
-/* ── Links inside cards ─────────────────────────────────── */
-
-.day-more__link {
+.dz-soon__row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-block-size: var(--target-base);
-  padding: 0 var(--space-4) 0 56px;
-  color: var(--color-accent);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-  text-decoration: none;
-}
-
-.day-more__link span {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.day-more__link svg {
-  inline-size: 16px;
-  block-size: 16px;
-  stroke-width: 2;
-}
-
-.day-more {
-  position: relative;
-}
-
-.day-link-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: 64px;
-  padding: 0 var(--space-4);
   color: var(--color-text-primary);
   text-decoration: none;
 }
 
-/* ── Pytanie tygodnia ───────────────────────────────────── */
-
-.day-question {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-e1);
-}
-
-.day-question__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-block-size: var(--type-footnote-lh);
-}
-
-.day-question__label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.day-question__label svg {
-  inline-size: 16px;
-  block-size: 16px;
-}
-
-.day-question__text,
-.day-question__done {
-  margin: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-}
-
-.day-question__text {
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-question__options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding-block-start: var(--space-2);
-}
-
-/* After an answer the card is one line naming what changed; after three
- * seconds it fades and goes (pages/dashboard.js sets the class, then removes
- * the card). */
-.day-question--leaving {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .day-question--settled {
-    transition: opacity var(--duration-lg) var(--ease-out);
-  }
-}
-
-/* ── Preview tiles ("Kafelek podglądu") ─────────────────── */
-
-.day-tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.day-tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-inline-size: 0;
-  min-block-size: 96px;
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  text-decoration: none;
-}
-
-.day-tile__label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-inline-size: 0;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.day-tile__label svg {
+.dz-soon__icon {
   flex: none;
-  inline-size: 16px;
-  block-size: 16px;
+  inline-size: 18px;
+  block-size: 18px;
+  color: var(--color-ink-3);
+  stroke-width: 1.75;
 }
 
-.day-tile__label span {
+.dz-soon__name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
 }
 
-.day-tile__value {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-tile__note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
+.dz-soon__kind {
+  font-size: var(--type-meta);
   color: var(--color-text-secondary);
 }
 
-.day-ext__body {
-  padding: var(--space-4);
-}
-
-/* ── Empty: "Zacznij tutaj" ─────────────────────────────── */
-
-.day-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  max-inline-size: 20rem;
-  margin: var(--space-8) auto 0;
-  text-align: center;
-}
-
-.day-empty__glyph {
-  display: flex;
-  color: var(--color-text-quaternary);
-}
-
-.day-empty__glyph svg {
-  inline-size: 32px;
-  block-size: 32px;
-}
-
-.day-empty__title {
-  margin: 0;
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-empty__text {
-  margin: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+.dz-soon__when {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
-}
-
-.day-empty__chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-  padding-block-start: var(--space-4);
-}
-
-/* ── "Dostosuj Dziś" ────────────────────────────────────── */
-
-.day-foot {
-  display: flex;
-  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Skeleton ───────────────────────────────────────────── */
 
-.day-skeleton__title {
+.dz-skeleton__title {
   inline-size: 70%;
-  block-size: var(--type-large-title-lh);
+  block-size: var(--type-page-lh);
   border-radius: var(--radius-xs);
 }
 
-.day-skeleton__card {
-  block-size: 214px;
-  border-radius: var(--radius-lg);
+.dz-skeleton__card {
+  block-size: 176px;
+  border-radius: var(--radius-card);
 }
 
-.day-skeleton__list {
-  display: flex;
-  flex-direction: column;
-}
-
-.day-skeleton__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  block-size: 64px;
-  padding: 0 var(--space-4);
-}
-
-.day-skeleton__dot {
-  flex: none;
-  inline-size: 24px;
-  block-size: 24px;
-  border-radius: var(--radius-full);
-}
-
-/* ── The customise sheet ────────────────────────────────── */
-
-.modal-panel:has(.day-sheet) {
-  background: var(--color-bg);
-}
-
-.day-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding-block-end: var(--space-4);
-}
-
-.day-sheet__hint {
-  margin: 0;
-  padding: 0 var(--space-4);
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-sheet__group {
-  display: flex;
-  flex-direction: column;
-}
-
-.day-sheet__heading {
-  margin: 0;
-  padding: 0 var(--space-4) var(--space-2);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-sheet__card {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-.day-sheet__row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: 48px;
-  padding: 0 var(--space-4);
-  background: var(--color-surface);
-}
-
-.day-sheet__row + .day-sheet__row::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 56px 0;
-  block-size: 0.5px;
-  background: var(--color-separator);
-}
-
-.day-sheet__row--dragging {
-  z-index: 1;
-  background: var(--color-raised);
-  box-shadow: var(--shadow-e2);
-}
-
-.day-sheet__grip {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--target-base);
-  block-size: var(--target-base);
-  margin: 0 calc((var(--target-base) - 28px) / -2);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-quaternary);
-  cursor: grab;
-  touch-action: none;
-}
-
-.day-sheet__spacer {
-  flex: none;
-  inline-size: 28px;
-}
-
-.day-sheet__glyph {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  inline-size: 28px;
-  color: var(--color-text-secondary);
-}
-
-.day-sheet__grip svg,
-.day-sheet__glyph svg {
-  inline-size: 20px;
-  block-size: 20px;
-}
-
-.day-sheet__name {
-  flex: 1;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.day-sheet__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-}
-
-.day-sheet__note,
-.day-sheet__footnote {
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-sheet__footnote {
-  margin: 0;
-  padding: var(--space-2) var(--space-4) 0;
-}
-
-.day-sheet__value {
-  flex: none;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  color: var(--color-text-secondary);
-}
-
-.day-sheet__action {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  min-block-size: 48px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.day-sheet__action .day-sheet__title {
-  flex: 1;
-}
-
-.day-sheet__chevron {
-  flex: none;
-  display: flex;
-  color: var(--color-text-quaternary);
-}
-
-.day-sheet__chevron svg {
-  inline-size: 16px;
-  block-size: 16px;
-  stroke-width: 2;
-}
-
-/* The iOS switch: 51x31 track in a --target-base hit box. */
-.day-switch {
-  flex: none;
-  display: flex;
-  align-items: center;
-  inline-size: 51px;
-  block-size: var(--target-base);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.day-switch__track {
-  position: relative;
-  display: block;
-  inline-size: 51px;
-  block-size: 31px;
-  border-radius: var(--radius-full);
-  background: var(--color-fill);
-  box-shadow: inset 0 0 0 1px var(--color-separator);
-}
-
-.day-switch__knob {
-  position: absolute;
-  inset-block-start: 2px;
-  inset-inline-start: 2px;
-  inline-size: 27px;
-  block-size: 27px;
-  border-radius: var(--radius-full);
-  background: var(--color-text-on-accent);
-  box-shadow: var(--shadow-e1);
-}
-
-.day-switch[aria-checked="true"] .day-switch__track {
-  background: var(--color-btn-primary);
-  box-shadow: none;
-}
-
-.day-switch[aria-checked="true"] .day-switch__knob {
-  inset-inline-start: 22px;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .day-switch__track,
-  .day-switch__knob {
-    transition: background-color var(--duration-sm) var(--ease-out), inset-inline-start var(--duration-sm) var(--ease-out);
-  }
+.dz-skeleton__card--weather {
+  block-size: 136px;
 }

@@ -2018,6 +2018,10 @@ export async function render(container, { user, signal } = {}) {
   if (dayLink) {
     state.cursor = dayLink;
     state.view = 'day';
+  } else if (VIEWS.includes(params.get('view'))) {
+    // `?view=week` (Dziś "Tydzień", v2 2026-10-27): opens one view for this
+    // visit without overwriting the remembered choice.
+    state.view = params.get('view');
   }
   if (openId) {
     try {

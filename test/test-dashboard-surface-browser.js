@@ -167,7 +167,8 @@ test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Inhalt (de
     const fab = [...document.querySelectorAll('.page-fab:not([hidden])')].find((el) => getComputedStyle(el).position === 'fixed');
     if (!fab) return { reach: true, ids: [] };
     const f = fab.getBoundingClientRect();
-    const blocks = [...document.querySelectorAll('[data-today] .day-card, [data-today] .day-now, [data-today] .day-closed, [data-today] .day-tile, [data-today] .day-question')];
+    // 2026-10-27, v2: die Karten von Dziś und die Zeilen von Wkrótce.
+    const blocks = [...document.querySelectorAll('[data-today] .dz-card, [data-today] .dz-soon__row')];
     return {
       reach: blocks.length > 0,
       ids: blocks.filter((b) => {
@@ -205,12 +206,13 @@ test('Nachlauf: eine Seite mit eigenem Scrollport behaelt ihre Hoehe (desktop)',
  * 2. Der Kopf der Uebersicht
  * ──────────────────────────────────────────────────────────────────────────── */
 
+// 2026-10-27, v2: der Kopf heisst `.dz-head` (Datum 15, Gruss 26/32, Avatar).
 async function measureHead(page) {
-  await page.waitForSelector('[data-today] .day-head__greeting');
+  await page.waitForSelector('[data-today] .dz-head__greeting');
   await freeze(page);
   return page.evaluate(() => {
     const q = (s) => document.querySelector(s);
-    const title = q('.day-head__greeting');
+    const title = q('.dz-head__greeting');
     const lines = (text) => {
       title.textContent = text;
       const cs = getComputedStyle(title);
@@ -237,16 +239,16 @@ async function measureHead(page) {
     const range = document.createRange();
     range.selectNodeContents(title);
     const text = range.getBoundingClientRect();
-    const first = q('[data-today] .day-now, [data-today] .day-closed, [data-today] .day-empty');
+    const first = q('[data-today] .dz-weather, [data-today] .dz-sec, [data-today] .dz-soon');
     return {
       titleLines,
       titleText: title.textContent.trim(),
       titleRight: Math.round(text.right),
-      date: box('.day-head__date'),
-      title: box('.day-head__greeting'),
-      tools: box('.day-head__me'),
-      disc: box('.day-head__me .day-disc'),
-      overview: box('.day-head'),
+      date: box('.dz-head__date'),
+      title: box('.dz-head__greeting'),
+      tools: box('.dz-head__me'),
+      disc: box('.dz-head__me .day-disc'),
+      overview: box('.dz-head'),
       updated: box('.wall__updated'),
       firstContent: first ? Math.round(first.getBoundingClientRect().top) : null,
     };
@@ -263,16 +265,15 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 812 }
 
     const umbrochen = Object.entries(m.titleLines).filter(([, n]) => n !== 1);
     assert.deepEqual(umbrochen, [], `Der Gruss bricht um: ${umbrochen.map(([t, n]) => `"${t}" ${n} Zeilen`).join(', ')}`);
-    // TAFLA (2026-10-19): rechts in der Datumszeile steht nur noch der eigene
-    // Avatar (36, Treffer 44). Er ragt wie im Entwurf in den Zeilenabstand des
-    // Grusses, aber nie in dessen Schrift.
-    assert.ok(m.disc.bottom <= m.title.top + 8,
-      `Der Avatar steht neben dem Titel statt in der Datumszeile (Avatar bis ${m.disc.bottom}, Titel ab ${m.title.top})`);
-    assert.ok(m.titleRight <= m.disc.left || m.disc.bottom <= m.title.top + 8, 'Gruss und Avatar beruehren sich nicht');
+    // TAFLA (2026-10-19): rechts steht nur der eigene Avatar (36, Treffer 44).
+    // v2 (2026-10-27): er steht oben buendig mit dem Datum und reicht neben
+    // den Gruss - die Schrift des Grusses endet vor ihm.
+    assert.ok(Math.abs(m.disc.top - m.date.top) <= 2, `Der Avatar steht oben buendig mit dem Datum (${m.disc.top} / ${m.date.top})`);
+    assert.ok(m.titleRight <= m.disc.left, `Gruss und Avatar beruehren sich nicht (Gruss bis ${m.titleRight}, Avatar ab ${m.disc.left})`);
     assert.ok(m.date.top < m.title.top && m.date.bottom <= m.title.top + 1, 'Das Datum steht ueber dem Titel');
     assert.ok(!m.updated?.shown, 'Der Stand-Anker gehoert der Wand, nicht dem Telefon');
-    // Vorher 227px (ohne Wetterzeile) bzw. 274px (mit). Die Grenze laesst der
-    // Wetterzeile Platz, die der Seed nicht immer traegt.
+    // Vorher 227px (ohne Wetterzeile) bzw. 274px (mit). v2: Kopf 56 und 24
+    // Abstand - die erste Karte steht unter 190.
     assert.ok(m.firstContent !== null && m.firstContent <= 190,
       `Der erste Inhalt beginnt erst bei ${m.firstContent}px`);
   });
@@ -283,13 +284,12 @@ test('Kopf desktop: nicht hoeher als vorher, Werkzeuge rechts auf Hoehe des Datu
   await gotoRoute(page, '/');
   const m = await measureHead(page);
   await page.close();
-  // TAFLA (2026-10-19): Datum 18, Gruss 41, die Wetterzeile 22 (wenn es
-  // Wetter gibt), dazwischen je 4 - hoechstens 89px. Vorher 67px ohne
-  // Wetterzeile, die damals unter dem Gruss nur mobil stand.
-  assert.ok(m.overview.height <= 89, `Der Kopf ist am Desktop ${m.overview.height}px hoch`);
+  // TAFLA (2026-10-19): Datum 18, Gruss 41, die Wetterzeile 22 - hoechstens
+  // 89px. v2 (2026-10-27): Datum 20, 4 Abstand, Gruss 32 - 56px; das Wetter
+  // ist eine eigene Karte darunter.
+  assert.ok(m.overview.height <= 60, `Der Kopf ist am Desktop ${m.overview.height}px hoch`);
   assert.equal(m.titleLines['Guten Morgen, Linda'], 1);
-  const middle = (b) => (b.top + b.bottom) / 2;
-  assert.ok(Math.abs(middle(m.disc) - middle(m.date)) <= 2, 'Der Avatar steht auf der Datumszeile');
+  assert.ok(Math.abs(m.disc.top - m.date.top) <= 2, 'Der Avatar steht oben buendig mit dem Datum');
   assert.ok(!m.updated?.shown, 'Kein Stand-Anker ausserhalb des Wand-Modus');
 });
 
@@ -298,7 +298,7 @@ test('Kopf in der kompakten Hoehenklasse (640x400): nur die Datumszeile bleibt s
   await gotoRoute(page, '/');
   const m = await measureHead(page);
   const a11y = await page.evaluate(() => {
-    const t = document.querySelector('.day-head__greeting');
+    const t = document.querySelector('.dz-head__greeting');
     return { tag: t?.tagName, text: t?.textContent.trim() };
   });
   await page.close();
@@ -442,10 +442,13 @@ test('Wand-Modus: Einschalten sagt, was das ist und wie man herauskommt; Zurueck
   const page = await openPage(harness, { device: 'mobile' });
   await page.setViewport(WALL_VIEWPORTS[0]);
   await page.evaluate(() => localStorage.removeItem('yuvomi-wall-mode'));
-  await gotoRoute(page, '/');
+  // 2026-10-27, v2: der Einstieg steht in „Więcej" und fuehrt per Navigation
+  // auf `/` - im selben Dokument. Die Marke steht deshalb auf /more, und die
+  // Tiefe zaehlt diese eine Navigation mit.
+  await gotoRoute(page, '/more');
   await markDocument(page);
   const depthBefore = await page.evaluate(() => history.length);
-  await enterDashboardWall(page);
+  await clickLive(page, '[data-more-action="wall"]', { timeout: 15000 });
   await page.waitForFunction(() => document.documentElement.hasAttribute('data-wall-mode'), { timeout: 5000 });
   await wait(300);
   const hint = await page.evaluate(async () => {
@@ -460,7 +463,7 @@ test('Wand-Modus: Einschalten sagt, was das ist und wie man herauskommt; Zurueck
 
   assert.ok(hint.toasts.some((text) => text.includes(hint.exitWord)),
     `Kein Hinweis beim Einschalten, der den Ausstieg nennt ("${hint.exitWord}"): ${JSON.stringify(hint.toasts)}`);
-  assert.equal(depthIn, depthBefore + 1, 'Die Wand legt genau EINEN History-Eintrag an');
+  assert.equal(depthIn, depthBefore + 2, 'Die Navigation auf / und genau EIN History-Eintrag der Wand');
   assert.ok(out.sameDoc, 'Zurueck hat das Dokument verlassen statt die Wand zu beenden');
   assert.equal(out.path, '/');
   assert.ok(!out.wallAttr && !out.wallSurface, 'Nach Zurueck steht noch die Wand');
@@ -488,134 +491,91 @@ test('Wand-Modus nach einem Neustart: Zurueck beendet ihn, statt die App zu verl
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
- * 3. Dziś: Reihenfolge, Zeilen, Kacheln und „Dostosuj Dziś"
+ * 3. Dziś v2 (2026-10-27): die Seite des Entwurfs „Main"
  * ──────────────────────────────────────────────────────────────────────────── */
 
-async function saveLayout(page, layout) {
-  await page.evaluate(async (items) => {
-    const { api } = await import('/api.js');
-    const { WIDGET_IDS } = await import('/utils/dashboard-widgets.js');
-    // JEDE bekannte Id steht im Layout, die uebrigen ausgeblendet. Fehlt eine,
-    // ergaenzt die Normalisierung sie mit ihrer Default-Sichtbarkeit - im Seed
-    // war das `metrics`, und die Sonde mass ein Raster mit einer vierten Kachel.
-    const visible = new Map(items.map((w) => [w.id, { ...w, visible: true }]));
-    const rest = WIDGET_IDS.filter((id) => !visible.has(id)).map((id) => ({ id, size: '1x1', visible: false }));
-    const cfg = [...visible.values(), ...rest].map((w, i) => ({ ...w, order: i }));
-    await api.put('/preferences', { dashboard_widgets: cfg });
-  }, layout);
-}
+/* TAFLA (2026-10-19) mass hier die Reihenfolge der Person, die Zeilen des
+ * Plans bei 56, die Vorschaukacheln und „Dostosuj Dziś". Mit v2 ist die
+ * Reihenfolge die des Entwurfs, und es gibt nichts anzupassen; gemessen wird,
+ * was der Entwurf zusagt: Kopf, Wetter, Kalender, Aufgaben, Wkrótce von oben
+ * nach unten, 16 Rand am Telefon, Zeilen 48 hoch, Ziele 44, nichts scrollt
+ * waagerecht. */
 
-/* TAFLA (2026-10-19): Dziś hat kein Kachelraster mehr - die Raster-Sonden
- * (Loecher, Ziehen, Groessen-Hinweis, die hohe Budget-Kachel) messen jetzt,
- * was an ihre Stelle trat: die Abschnitte in der Reihenfolge der Person, die
- * Zeilengeometrie des Plans, die Vorschaukacheln und „Dostosuj Dziś". */
+/** Ein nasser Tag in jeder Stunde: Regenzeile und Diagramm stehen immer. */
+const RAINY = {
+  data: {
+    provider: 'open-meteo', city: 'Dortmund', units: 'metric',
+    current: { temp: 11, feels_like: 9, humidity: 80, icon: 'cloud-rain', desc: 'wmo.61', wind_speed: 11 },
+    today: { date: '2026-10-27', temp_min: 8, temp_max: 14, icon: 'cloud-rain', desc: 'wmo.61', pop_max: 85, rain_window: { from: 0, to: 23 } },
+    today_hours: Array.from({ length: 24 }, (_, hour) => ({ hour, pop: hour % 2 ? 85 : 20, mm: 0.4 })),
+    forecast: [],
+  },
+};
 
-async function openCustomize(page) {
-  await clickLive(page, '[data-day-action="customize"]', { timeout: 15000 });
-  await page.waitForSelector('.day-sheet [data-section-list]', { timeout: 10000 });
-  await wait(300);
-}
-
-test('Dziś: die gespeicherte Reihenfolge ist die Reihenfolge der Abschnitte', async () => {
+test('Dziś: von oben nach unten Kopf, Wetter, Kalender, Aufgaben, Wkrótce - 16 Rand, Zeilen 48, Ziele 44', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  await saveLayout(page, [
-    { id: 'today-soon', size: '1x1' },
-    { id: 'today-shopping', size: '1x1' },
-    { id: 'today-tomorrow', size: '1x1' },
-  ]);
+  answerWeather(page, RAINY);
   await gotoRoute(page, '/');
-  await page.waitForSelector('[data-today]');
-  const order = await page.evaluate(() => [...document.querySelectorAll('[data-today] .day-section__title[id]')]
-    .map((h) => h.id).filter((id) => id !== 'day-plan-title'));
-  await page.close();
-  const known = order.filter((id) => ['day-soon-title', 'day-shopping-title', 'day-tomorrow-title'].includes(id));
-  assert.ok(known.length >= 1, `Reichweite: keiner der Abschnitte steht (${order.join(', ')})`);
-  const expected = ['day-soon-title', 'day-shopping-title', 'day-tomorrow-title'].filter((id) => known.includes(id));
-  assert.deepEqual(known, expected, `Reihenfolge auf der Seite: ${order.join(', ')}`);
-});
-
-test('Dziś: jede Zeile des Plans beginnt bei 56, und jedes Ziel ist 44 hoch', async () => {
-  const page = await openPage(harness, { device: 'mobile' });
-  await gotoRoute(page, '/');
-  await page.waitForSelector('[data-today]');
+  await page.waitForSelector('[data-today] .dz-weather');
   await freeze(page);
   const m = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll('[data-today] .day-card > .day-row')];
+    const top = (sel) => document.querySelector(sel)?.getBoundingClientRect().top ?? null;
+    const order = ['.dz-head', '.dz-weather', '.dz-sec--calendar', '.dz-sec--tasks', '.dz-soon']
+      .map((sel) => [sel, top(`[data-today] ${sel}`)]).filter(([, y]) => y !== null);
+    const rows = [...document.querySelectorAll('[data-today] .dz-cal__link, [data-today] .dz-task')]
+      .map((el) => Math.round(el.getBoundingClientRect().height));
     return {
-      rows: rows.length,
-      offsets: rows.map((row) => {
-        const card = row.closest('.day-card').getBoundingClientRect();
-        const title = row.querySelector('.day-row__title').getBoundingClientRect();
-        return Math.round(title.left - card.left);
-      }),
+      order,
+      left: Math.round(document.querySelector('[data-today]').getBoundingClientRect().left),
+      rows,
       small: [...document.querySelectorAll('[data-today] button, [data-today] a')]
         .map((el) => ({ el, r: el.getBoundingClientRect() }))
         .filter(({ r }) => r.width > 0 && (r.height < 43.5 || r.width < 43.5))
-        .filter(({ el }) => !el.classList.contains('day-row__main') && !el.classList.contains('day-link-row'))
         .map(({ el, r }) => `${el.className || el.tagName} ${Math.round(r.width)}x${Math.round(r.height)}`),
       overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     };
   });
   await page.close();
-  assert.ok(m.rows > 0, 'Reichweite: der Plan hat keine Zeilen');
-  assert.deepEqual([...new Set(m.offsets)], [56], `Titel nicht bei 56: ${m.offsets.join(', ')}`);
+  assert.ok(m.order.length >= 4, `Reichweite: ${m.order.map(([s]) => s).join(', ')}`);
+  const ys = m.order.map(([, y]) => y);
+  assert.deepEqual([...ys].sort((a, b) => a - b), ys, `Reihenfolge: ${m.order.map(([sel, y]) => `${sel}@${Math.round(y)}`).join(', ')}`);
+  assert.equal(m.left, 16, 'der Rand am Telefon ist 16');
+  assert.ok(m.rows.length > 0, 'Reichweite: keine Zeilen');
+  assert.deepEqual(m.rows.filter((h) => h < 48), [], `Zeilen unter 48: ${m.rows.join(', ')}`);
   assert.deepEqual(m.small, [], `Ziele unter 44: ${m.small.join('; ')}`);
   assert.ok(!m.overflow, 'Dziś scrollt waagerecht');
 });
 
-test('Dziś: Vorschaukacheln stehen zu zweit nebeneinander, gleich breit', async () => {
+test('Dziś: das Regendiagramm - Balken am Boden, hoechstens 14, eine Stunde „teraz", Regen ab 40 % in seinem Blau', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  await saveLayout(page, [
-    { id: 'today-shopping', size: '1x1' },
-    { id: 'budget', size: '1x1' },
-    { id: 'notes', size: '1x1' },
-    { id: 'health', size: '1x1' },
-    { id: 'housekeeping', size: '1x1' },
-  ]);
+  answerWeather(page, RAINY);
   await gotoRoute(page, '/');
-  await page.waitForSelector('[data-today]');
+  await page.waitForSelector('[data-today] .dz-chart');
   await freeze(page);
-  const tiles = await page.evaluate(() => [...document.querySelectorAll('[data-today] .day-tile')]
-    .map((t) => { const r = t.getBoundingClientRect(); return { top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; }));
-  await page.close();
-  assert.ok(tiles.length >= 2, `Reichweite: nur ${tiles.length} Vorschaukachel(n) mit Aussage im Seed`);
-  assert.equal(tiles[0].top, tiles[1].top, 'die ersten beiden stehen in einer Zeile');
-  assert.ok(Math.abs(tiles[0].width - tiles[1].width) <= 1, 'gleich breit');
-  assert.ok(tiles.every((t) => t.height >= 96), 'mindestens 96 hoch');
-});
-
-test('Dziś: „Dostosuj Dziś" wartet auf die Daten, auch wenn /dashboard spaet antwortet', async () => {
-  const page = await openPage(harness, { device: 'desktop' });
-  page.__yuvomiRequestInterceptor = (req) => {
-    if (!/\/api\/v1\/dashboard(\?|$)/.test(req.url())) return false;
-    setTimeout(() => { req.continue().catch(() => {}); }, 4000);
-    return true;
-  };
-  await gotoRoute(page, '/');
-  await openCustomize(page);
-  const rows = await page.evaluate(() => document.querySelectorAll('.day-sheet [data-section-id]').length);
-  await page.close();
-  assert.ok(rows >= 3, 'Reichweite: das Blatt steht mit seinen Abschnitten');
-});
-
-test('Dziś: ein Schalter im Blatt nimmt den Abschnitt sofort von der Seite und speichert ihn', async () => {
-  const page = await openPage(harness, { device: 'mobile' });
-  await saveLayout(page, [{ id: 'today-shopping', size: '1x1' }, { id: 'today-tomorrow', size: '1x1' }]);
-  await gotoRoute(page, '/');
-  await openCustomize(page);
-  await page.click('.day-sheet [data-switch="today-shopping"]');
-  await wait(800);
-  const after = await page.evaluate(async () => {
-    const { api } = await import('/api.js');
-    const prefs = await api.get('/preferences');
+  const c = await page.evaluate(() => {
+    const bars = [...document.querySelectorAll('[data-today] .dz-chart__bar')];
+    const box = document.querySelector('[data-today] .dz-chart__bars').getBoundingClientRect();
+    const color = (el) => getComputedStyle(el).backgroundColor;
     return {
-      section: !!document.querySelector('[data-today] #day-shopping-title'),
-      saved: prefs.data.dashboard_widgets.find((w) => w.id === 'today-shopping')?.visible,
+      count: bars.length,
+      now: bars.filter((b) => b.classList.contains('dz-chart__bar--now')).length,
+      bottoms: [...new Set(bars.map((b) => Math.round(b.getBoundingClientRect().bottom)))],
+      chartBottom: Math.round(box.bottom),
+      height: Math.round(box.height),
+      wet: [...new Set(bars.filter((b) => b.classList.contains('dz-chart__bar--wet')).map(color))],
+      dry: [...new Set(bars.filter((b) => !b.className.includes('--')).map(color))],
+      umbrella: !!document.querySelector('[data-today] .dz-weather__rain:not(.dz-weather__rain--dry)'),
+      labels: document.querySelector('[data-today] .dz-chart__labels').children.length,
     };
   });
   await page.close();
-  assert.equal(after.section, false, 'der Abschnitt steht noch auf der Seite');
-  assert.equal(after.saved, false, 'die Aenderung ist nicht gespeichert');
+  assert.ok(c.count >= 1 && c.count <= 14, `${c.count} Balken`);
+  assert.equal(c.labels, c.count, 'unter jedem Balken seine Stelle fuer die Stunde');
+  assert.equal(c.now, 1, 'genau eine Stunde ist „teraz"');
+  assert.deepEqual(c.bottoms, [c.chartBottom], 'alle Balken stehen am Boden');
+  assert.equal(c.height, 24);
+  assert.ok(c.umbrella, 'der Regen steht in Worten mit dem Schirm');
+  if (c.wet.length && c.dry.length) assert.notDeepEqual(c.wet, c.dry, 'Regen und Trockenes haben zwei Blau');
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -637,51 +597,35 @@ function answerWeather(page, reply) {
   };
 }
 
-/* TAFLA (2026-10-19): Dziś hat keine Wetterkachel mehr; das Wetter ist eine
- * Zeile im Kopf und in „Dostosuj Dziś" abschaltbar. Dieselbe Regel wie vorher:
- * eingerichtet, aber gescheitert, bleibt der Schalter erreichbar; nicht
- * eingerichtet gibt es ihn nicht, wie bei einem abgeschalteten Modul. */
+/* TAFLA (2026-10-19): das Wetter war eine Zeile im Kopf, abschaltbar in
+ * „Dostosuj Dziś". v2 (2026-10-27): es ist die erste Karte unter dem Kopf,
+ * und es gibt nichts abzuschalten. Die Regel bleibt: ohne Wetter steht keine
+ * leere Karte da - weder bei einem Fehlschlag noch ohne Einrichtung - und der
+ * Rest der Seite steht trotzdem. */
 async function weatherState(page) {
-  await page.waitForSelector('[data-today]');
+  await page.waitForSelector('[data-today] .dz-head');
+  await wait(300);
   return page.evaluate(() => ({
-    line: !!document.querySelector('[data-today] .day-head__weather'),
-    page: !!document.querySelector('[data-today]'),
+    card: !!document.querySelector('[data-today] .dz-weather'),
+    page: !!document.querySelector('[data-today] .dz-sec'),
   }));
-}
-
-async function weatherSwitch(page) {
-  await openCustomize(page);
-  return page.evaluate(() => !!document.querySelector('.day-sheet [data-switch="today-weather"]'));
 }
 
 for (const [label, reply] of [
   ['der Anbieter scheitert (upstream_error)', { data: null, reason: 'upstream_error' }],
   ['die Anfrage selbst scheitert (Seed hat Wetter eingerichtet)', 'abort'],
+  ['nicht eingerichtet', { data: null, reason: 'not_configured' }],
 ]) {
-  test(`Wetter: ${label} - keine Zeile ohne Wetter, der Schalter bleibt im Blatt`, async () => {
+  test(`Wetter: ${label} - keine leere Karte, der Rest von Dziś steht`, async () => {
     const page = await openPage(harness, { device: 'mobile' });
     answerWeather(page, reply);
     await gotoRoute(page, '/');
     const s = await weatherState(page);
-    const toggle = await weatherSwitch(page);
     await page.close();
-    assert.ok(s.page, 'Reichweite: Dziś steht');
-    assert.ok(!s.line, 'ohne Wetter keine leere Wetterzeile');
-    assert.ok(toggle, 'eingerichtetes Wetter bleibt in „Dostosuj Dziś" erreichbar');
+    assert.ok(s.page, 'Reichweite: Dziś steht mit seinen Abschnitten');
+    assert.ok(!s.card, 'ohne Wetter keine Wetterkarte');
   });
 }
-
-test('Wetter: nicht eingerichtet - weder im Kopf noch im Blatt, wie ein abgeschaltetes Modul', async () => {
-  const page = await openPage(harness, { device: 'mobile' });
-  answerWeather(page, { data: null, reason: 'not_configured' });
-  await gotoRoute(page, '/');
-  const s = await weatherState(page);
-  const toggle = await weatherSwitch(page);
-  await page.close();
-  assert.ok(s.page, 'Reichweite: Dziś steht');
-  assert.ok(!s.line, 'keine Wetterzeile');
-  assert.ok(!toggle, 'und kein Schalter fuer ein Wetter, das es nicht gibt');
-});
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Der FAB nach einem Neuaufbau aus der Seite heraus (#1588)
@@ -737,15 +681,19 @@ function assertChromeIntact(state, when) {
  * wird deshalb angehalten: gemessen wird der Moment, bevor die Daten da sind. */
 test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange die Daten laden (mobile, #1588)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
-  // 2026-10-27, v2: gewartet wird auf die Leiste - das + gibt es nicht mehr.
+  // 2026-10-27, v2: der Einstieg steht in „Więcej"; angehalten wird erst dort,
+  // denn auch „Więcej" fragt /dashboard (seine Zahlen). Gewartet wird auf die
+  // Leiste - das + gibt es nicht mehr.
+  await gotoRoute(page, '/more');
   await page.waitForSelector('.nav-bottom__items .nav-item');
+  await page.waitForSelector('[data-more-action="wall"]');
   const held = [];
   page.__yuvomiRequestInterceptor = (req) => {
     if (!/\/api\/v1\/dashboard(\?|$)/.test(req.url())) return false;
     held.push(req);
     return true;
   };
-  await enterDashboardWall(page);
+  await clickLive(page, '[data-more-action="wall"]');
   await page.waitForSelector('.wall #wall-exit');
   await wait(300);
   const state = await page.evaluate(() => ({

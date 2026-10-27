@@ -35,7 +35,6 @@ register('./test-browser-loader.mjs', import.meta.url);
 
 const { get } = await import('../server/db.js');
 const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
-const { __test } = await import('../public/pages/dashboard.js');
 
 // --------------------------------------------------------------------------
 // Server: welche Daten gehen an wen
@@ -119,11 +118,6 @@ test('Server: wer weder sammelt noch freigibt, sieht die Familie, aber keine fre
 // Dziś: was davon erscheint
 // --------------------------------------------------------------------------
 
-const KINO = { id: 1, name: 'Kinoabend', cost: 60, remaining: null };
-
-const emma = (balance) => ({ id: 7, display_name: 'Emma', avatar_color: '#34C759', balance });
-const leo = (balance) => ({ id: 8, display_name: 'Leo', avatar_color: '#FF9500', balance });
-
 test('der Tagesplan nennt offene Geld-Anfragen mit, und weiter nur fuer den, der freigibt', async () => {
   const { TODAY_SHEET_SOURCES } = await import('../public/utils/today-sheet.js');
   const approvals = TODAY_SHEET_SOURCES.find((source) => source.id === 'approvals');
@@ -135,47 +129,16 @@ test('der Tagesplan nennt offene Geld-Anfragen mit, und weiter nur fuer den, der
   assert.equal(title({ view: 'self', pending: 0, moneyPending: 2 }), undefined, 'die eigene Bitte eines Kindes ist keine Freigabe');
 });
 
-// Was Dziś der Kachel mitgibt (todayTile in pages/dashboard.js): Dosen und
-// Freigaben stehen im Tagesplan, die Kachel wiederholt sie nicht.
-const PLAN_SPEAKS = new Set(['doses', 'approvals']);
-const rewardsTile = (rewards) => __test.metricTileFor('rewards', { rewards }, 'EUR', PLAN_SPEAKS);
-
-test('Vorschaukachel: das Kind sieht den eigenen Stand und sein Ziel, niemand einen Spitzenreiter', () => {
-  global.window = { yuvomi: null };
-  const kid = rewardsTile({ view: 'self', me: 7, standings: [emma(45)], catalog: [KINO] });
-  assert.ok(kid, 'die eigene Punktzahl ist eine Kennzahl');
-  assert.match(kid.value, /"count":45/);
-  assert.match(kid.note, /rewards\.remainingToReward.*Kinoabend/, 'darunter das Ziel, nicht ein Name');
-  assert.equal(kid.route, '/rewards');
-
-  // Ein Minus steht nie ohne Satz da (#1607), auch ohne Katalog.
-  assert.match(rewardsTile({ view: 'self', me: 7, standings: [emma(-50)], catalog: [KINO] }).note, /rewards\.balanceBelowZero/);
-  assert.match(rewardsTile({ view: 'self', me: 7, standings: [emma(-50)], catalog: [] }).note, /rewards\.balanceBelowZero/);
-  // Eine vergriffene Praemie ist kein Ziel (utils/reward-goal.js).
-  const soldOut = rewardsTile({ view: 'self', me: 7, standings: [emma(30)], catalog: [{ id: 2, name: 'Eis', cost: 40, remaining: 0 }, KINO] });
-  assert.match(soldOut.note, /Kinoabend/);
-
-  // Wer freigibt, bekommt keine Kachel mit Namen - und die offenen Anfragen
-  // stehen an GENAU EINER Stelle: als Zeile im Tagesplan (Quelle 'approvals').
-  for (const rewards of [
-    { view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 0 },
-    { view: 'approver', me: 1, standings: [leo(60), emma(30)], catalog: [KINO], pending: 1, moneyPending: 2 },
-    { view: 'family', me: 99, standings: [emma(30), leo(60)], catalog: [KINO], pending: 0, moneyPending: 2 },
-  ]) {
-    const tile = rewardsTile(rewards);
-    assert.ok(!tile || !/Leo|Emma|rewardsPending/.test(`${tile.value} ${tile.note}`),
-      `${rewards.view}: kein Spitzenreiter und keine zweite Freigabe-Zahl`);
-  }
-});
-
-test('Verdrahtung: das Ziel kommt aus EINER Regel, und Dziś laesst die Freigaben dem Plan', () => {
+// 2026-10-27, v2: Dziś zeichnet keine Punkte-Kachel mehr (Entwurf „Main":
+// Wetter, Kalender, Aufgaben, Wkrótce). Was die Kachel zusagte - das Kind
+// sieht Stand und Ziel, niemand einen Spitzenreiter, die Freigaben stehen
+// nicht doppelt - ging mit ihr; die Freigaben bleiben eine Zeile des
+// Tagesplans (oben) und das Ziel EINE Regel.
+test('Verdrahtung: das Ziel kommt aus EINER Regel, und Dziś v2 rechnet keines', () => {
   const dash = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(dash, /metricTileFor\(id, data, currency, new Set\(\['doses', 'approvals'\]\)\)/,
-    'die Vorschaukachel wiederholt nicht, was der Tagesplan schon sagt');
+  assert.doesNotMatch(dash, /reward-goal|metricTileFor/, 'Dziś v2 hat keine Punkte-Kachel');
   const page = readFileSync(new URL('../public/pages/rewards.js', import.meta.url), 'utf8');
-  for (const [name, text] of [['dashboard.js', dash], ['rewards.js', page]]) {
-    assert.ok(/from '\/utils\/reward-goal\.js'/.test(text), `${name} rechnet das naechste Ziel selbst statt ueber utils/reward-goal.js`);
-  }
+  assert.ok(/from '\/utils\/reward-goal\.js'/.test(page), 'rewards.js rechnet das naechste Ziel ueber utils/reward-goal.js');
 });
 
 // --------------------------------------------------------
@@ -188,6 +151,10 @@ test('Verdrahtung: das Ziel kommt aus EINER Regel, und Dziś laesst die Freigabe
 // Lesemass, das Raster breit, und die Kopfpille an der Kante ihres Inhalts.
 // --------------------------------------------------------
 
+// Die Seite liest `window.yuvomi` und `window.lucide` beim Zeichnen. Bis v2
+// (2026-10-27) setzte der Test der Punkte-Kachel von Dziś dieses Fenster im
+// Vorbeigehen; die Kachel ist gegangen, also steht es hier ausdruecklich.
+global.window = { yuvomi: null };
 const { __test: rewardsPage } = await import('../public/pages/rewards.js');
 
 /** Ein Inhaltsknoten, der das Markup einsammelt - mehr fassen die Renderer nicht an. */
