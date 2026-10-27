@@ -1824,7 +1824,10 @@
   --nav-height-mobile: 48px;
   --nav-bar-pad-top: 6px;
   --nav-bar-pad-bottom: max(6px, calc(var(--safe-area-inset-bottom) - 14px));
-  --nav-bar-border: #E6E5E1;
+  /* Die Kante ist die v2-Haarlinie (#EAE9E5). Der Entwurf zeichnet #E6E5E1 -
+   * ein Hauch dunkler, im Bild nicht zu unterscheiden; eine Haarlinie fuer die
+   * ganze App statt einer zweiten fuer die Leiste. */
+  --nav-bar-border: var(--color-separator);
   --nav-pill-width: 52px;
   --nav-pill-height: 30px;
   --nav-icon-size: 22px;

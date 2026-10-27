@@ -54,7 +54,7 @@ test('(1) die Tab-Leiste liegt ueber dem Inhalt, nicht im Flex-Fluss', () => {
   assert.notEqual(decl(body, 'pointer-events'), 'none',
     'die deckende Leiste nimmt jeden Tipp selbst - sonst traefe einer im Polster eine unsichtbare Zeile');
   assert.equal(decl(body, 'background-color'), 'var(--color-surface)', 'deckend weiss, kein Glas');
-  assert.equal(decl(body, 'border-top'), '1px solid var(--nav-bar-border)', 'eine 1px-Kante oben (#E6E5E1)');
+  assert.equal(decl(body, 'border-top'), '1px solid var(--nav-bar-border)', 'eine 1px-Kante oben, die v2-Haarlinie');
   assert.equal(decl(body, 'backdrop-filter'), null, 'kein Glas');
 });
 
