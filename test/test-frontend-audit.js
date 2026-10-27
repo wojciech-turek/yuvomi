@@ -6697,27 +6697,31 @@ test('phase 3 Tasks bulk actions appear only in select mode, in the shell pill (
   assert.doesNotMatch(tasksCss, /\.bulk-actions-bar|\.task-bulk-checkbox/);
 });
 
-// TAFLA (2026-10-19): the add bar is ONE row on the phone - name (with the
-// plus glyph), quantity, sender - and with a pointer the aisle field joins
-// it. Name, quantity, aisle and sender stay separate controls (this test's
-// promise); the name no longer takes a row of its own, because the bar is a
-// 52pt capsule docked above the tab capsule.
-test('phase 3 mobile Shopping quick-add separates name, quantity, category, and add controls', () => {
+// TAFLA (2026-10-19): the add bar is ONE row on the phone, and with a pointer
+// the aisle field joins it.
+//
+// v2 (2026-10-27): ONE FIELD for name and amount. The owner's iPhone showed
+// what two fields cost: a "Ilość" field popping up in the bar and iOS's
+// previous/next bar over the keyboard. The amount is now read from the line
+// ("jajka 10", "250 g sera") and said inside the field. The promise of this
+// test moves with it: the line, the aisle (with a pointer) and the sender stay
+// separate controls - and there is no second text field.
+test('phase 3 mobile Shopping quick-add: one field for name and amount, the aisle with a pointer, a separate sender', () => {
   const shoppingPage = read('../public/pages/shopping.js');
   const shoppingCss = read('../public/styles/shopping.css');
 
-  assert.match(shoppingPage, /<div class="quick-add__input-wrap">[\s\S]*id="item-name-input"[\s\S]*id="autocomplete-dropdown" hidden[\s\S]*<\/div>\s*<input class="quick-add__qty"/);
+  assert.match(shoppingPage, /<div class="quick-add__input-wrap">[\s\S]*id="item-name-input"[\s\S]*id="quick-add-hint"[\s\S]*id="autocomplete-dropdown" hidden[\s\S]*<\/div>\s*<select class="quick-add__cat"/);
+  assert.doesNotMatch(shoppingPage, /id="item-qty-input"/, 'no second text field in the bar: iOS would draw its previous/next bar');
   // Die Aufteilung (#1372) pinnt der Guard darunter als Regel - hier nur die
-  // Zusage dieses Tests: flexible Spuren, der Knopf am Ende.
+  // Zusage dieses Tests: eine flexible Spur, der Knopf am Ende.
   assert.match(
     shoppingCss,
-    /\.quick-add__form\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*\d+fr\)\s*minmax\(0,\s*\d+fr\)\s*var\(--target-base\)/
+    /\.quick-add__form\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*\d+fr\)\s*var\(--target-base\)/
   );
-  assert.match(shoppingCss, /\.quick-add__qty\s*\{[\s\S]*position:\s*static/);
-  assert.match(shoppingCss, /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*var\(--target-base\)/,
-    'alle drei Felder tragen das volle Ziel und duerfen schrumpfen');
+  assert.match(shoppingCss, /\.quick-add__input,\s*\.quick-add__cat\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*var\(--target-base\)/,
+    'beide Felder tragen das volle Ziel und duerfen schrumpfen');
   // The aisle field shows with a pointer; on the phone the guess while typing
-  // chooses the aisle and the fresh row offers "zmień".
+  // chooses the aisle and the hint in the field says which one.
   assert.match(shoppingCss, /@media \(min-width: 1024px\)\s*\{[\s\S]*?\.quick-add__cat\s*\{\s*display:\s*block/);
 });
 
@@ -6778,30 +6782,27 @@ test('#1372 quick-add fields stretch with their row, and no translated field get
     .filter(({ value }) => value);
   assert.ok(templates.length >= 2, `erwartet: eine Basis- und eine Desktop-Aufteilung, gefunden ${templates.length}`);
 
-  // TAFLA (2026-10-19): the phone bar carries no aisle track (name, quantity,
-  // sender - the aisle comes from the guess while typing); the pointer row
-  // keeps all three fields. The rule stays: every field track flexible, the
-  // button the only fixed one, and the wider word gets the wider track -
-  // the aisle over the quantity where both stand, the name over the
-  // quantity on the phone.
+  // v2 (2026-10-27): the quantity field is gone - the amount is read from the
+  // line. The phone bar is the line and the sender; the pointer row adds the
+  // aisle. The rule stays: every field track flexible, the button the only
+  // fixed one, and the wider content gets the wider track - the line (name
+  // and amount) over the aisle (one word).
   for (const { at, value } of templates) {
     const list = tracks(value);
     assert.equal(list.at(-1), 'var(--target-base)', `${at}: die letzte Spur ist der Knopf`);
     const fields = list.slice(0, -1);
+    assert.ok(fields.length >= 1, `${at}: die Zeile hat ein Feld`);
     for (const track of fields) {
       assert.match(track, FLEX_TRACK,
         `${at}: Spur „${track}" ist nicht flexibel - ein uebersetzter Platzhalter kennt keine feste Breite (#1372)`);
     }
-    if (fields.length >= 3) {
-      const [qty, cat] = fields.slice(-2).map(frOf);
-      assert.ok(cat > qty, `${at}: die Kategorie (${cat}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
-    } else {
-      const [name, qty] = fields.map(frOf);
-      assert.ok(name > qty, `${at}: der Name (${name}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
+    if (fields.length >= 2) {
+      const [line, cat] = fields.map(frOf);
+      assert.ok(line > cat, `${at}: die Zeile (${line}fr) muss mehr Platz bekommen als die Kategorie (${cat}fr)`);
     }
   }
 
-  for (const cls of ['.quick-add__qty', '.quick-add__cat']) {
+  for (const cls of ['.quick-add__cat']) {
     const base = rules.find(({ selector, at }) => selector.trim() === cls && at.length === 0);
     assert.ok(base, `${cls}: Basisregel fehlt`);
     assert.match(base.body, /text-overflow\s*:\s*ellipsis/,
@@ -21634,20 +21635,27 @@ test('D3: die Unternavigation der Module ist Text, keine Icon-Reiter', () => {
 // Suche), ihre Felder darin sind nackt. Je Feld eine eigene Kapsel waere in der
 // Leiste eine Kapsel in der Kapsel. Die Zusage bleibt: eine Haut, keine zweite
 // Fassung - deshalb fuehrt page-search.css die Felder auch nicht mehr.
-test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche - einmal, um die Leiste', () => {
+//
+// v2 (2026-10-27): the owner's redesign gives the bar its own skin - a white
+// "Dodaj produkt" bar, radius 12, a hairline edge (design-v2 ZakupyIdle) -
+// instead of the search's fill capsule. The promise of D5 stays: ONE skin,
+// around the bar, the fields in it bare, the focus coming with the skin, and
+// no second skin for the fields in page-search.css.
+test('D5: die Schnellzeile des Einkaufs traegt EINE Haut - um die Leiste, die Felder darin nackt', () => {
   const search = [...eachRule(read('../public/styles/page-search.css'))].filter((r) => !r.at.length);
-  const skin = search.find((r) => r.selector.split(',').map((x) => x.trim()).includes('.page-search__input')
-    && /border-radius:\s*var\(--radius-full\)/.test(r.body));
-  assert.ok(skin && /background-color:\s*var\(--color-fill-field\)/.test(skin.body), 'Vorbedingung: die Suchhaut steht in page-search.css');
   assert.ok(!search.some((r) => /\.quick-add__/.test(r.selector)), 'die Felder der Leiste tragen keine zweite, eigene Haut');
 
   const shopping = [...eachRule(read('../public/styles/shopping.css'))];
   const bar = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar');
-  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-full\)/, 'die Leiste ist die Kapsel');
-  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-fill(?:-field)?\)/, 'mit der Flaeche der Suche (Tafla: --color-fill)');
+  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-md\)/, 'die Leiste ist die Haut (v2: Radius 12)');
+  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-surface\)/, 'weiss wie eine Karte (v2)');
+  // The hairline is a ring inside the bar's 48 (`--addbar-edge`), the focus
+  // turns the same ring to the accent.
+  assert.match(bar?.body ?? '', /--addbar-edge:\s*var\(--color-border\)/, 'mit der Haarlinie der Karten (v2)');
+  assert.match(bar?.body ?? '', /box-shadow:\s*inset 0 0 0 1px var\(--addbar-edge\)/, 'die Haarlinie ist ein Ring der Haut');
   const focus = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar:focus-within');
-  assert.match(focus?.body ?? '', /border-color:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut - wie an der Suche');
-  const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat/.test(r.selector));
+  assert.match(focus?.body ?? '', /--addbar-edge:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut');
+  const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__cat/.test(r.selector));
   assert.match(bare?.body ?? '', /border:\s*0/, 'die Felder sind nackt');
   assert.match(bare?.body ?? '', /background-color:\s*transparent/, 'die Felder sind nackt');
 });

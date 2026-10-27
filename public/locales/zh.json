@@ -672,7 +672,9 @@
         "clearList": "Clear the list",
         "changeAisle": "{{category}} · change",
         "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
-        "usualQuantity": "usually {{quantity}}"
+        "usualQuantity": "usually {{quantity}}",
+        "frequentLabel": "常买",
+        "itemAdded": "已添加"
     },
     "meals": {
         "ingredientCount_one": "{{count}} 种食材",

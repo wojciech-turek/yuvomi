@@ -751,6 +751,8 @@
         "changeAisle": "{{category}} · change",
         "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
         "usualQuantity": "usually {{quantity}}",
+        "frequentLabel": "Часто",
+        "itemAdded": "добавлено",
         "allBoughtMeta_few": "{{count}} items from {{name}}",
         "allBoughtMeta_many": "{{count}} items from {{name}}"
     },
