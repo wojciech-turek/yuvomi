@@ -154,34 +154,17 @@ db.prepare(`INSERT INTO budget_entries (title, amount, category, subcategory, da
 
 console.log('\n[Dashboard-Test] API-Abfragen\n');
 
-test('Das Erfassen bietet nur an, was der Betrachter anlegen darf (#1208, Tafla)', async () => {
-  // Der Speed-Dial stand ungefiltert da: wer Notizen auf `none` hatte, bekam
-  // trotzdem „Notiz anlegen" angeboten und lief in ein 403. Seit Tafla ersetzt
-  // ihn das globale Erfassen-Blatt - dieselbe Zusage gilt fuer seine Typen.
+// 2026-10-27, v2: hier stand „Das Erfassen bietet nur an, was der Betrachter
+// anlegen darf (#1208, Tafla)" - die Typen des globalen Erfassen-Blatts folgten
+// den Rechten. Blatt und + sind weg: jede Seite legt in ihrem Kopf an, und ihr
+// Knopf folgt dort den Rechten des Moduls (test:module-readonly-ui). Dziś
+// selbst traegt keinen Anlege-Knopf und ruft kein Erfassen mehr.
+test('Dziś traegt keinen eigenen Anlege-Knopf und ruft kein globales Erfassen (v2)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
-  const { availableCaptureKinds } = await import('../public/components/capture-sheet.js');
-  const { setPermissions, clearPermissions } = await import('../public/permissions.js');
-  const keys = () => availableCaptureKinds().map((kind) => kind.key);
-
-  setPermissions({ admin: false, modules: {}, widgets: {}, capabilities: {} });
-  assert(keys().join() === 'task,event,shopping,meal,note', 'ohne Einschraenkung stehen alle fuenf da');
-
-  // Ein eingeschraenktes Mitglied: Notizen weg, der Rest bleibt.
-  setPermissions({ admin: false, modules: { notes: 'none' }, widgets: {}, capabilities: {} });
-  assert(!keys().includes('note'), 'ein gesperrtes Modul wird nicht angeboten');
-  assert(keys().includes('task'), 'die uebrigen bleiben');
-
-  // Ein Wandtablett: alles nur lesend, also nichts zu erfassen.
-  setPermissions({
-    admin: false,
-    modules: { tasks: 'read', calendar: 'read', shopping: 'none', meals: 'read', notes: 'none' },
-    widgets: {}, capabilities: {},
-  });
-  assert(keys().length === 0, 'nur Lesezugriff heisst kein Typ');
-  // Und die Uebersicht traegt am Telefon keinen eigenen Knopf mehr.
-  assert(__test.renderFab() === '', 'kein Speed-Dial - das + der Shell');
-
-  clearPermissions();
+  const { readFile } = await import('node:fs/promises');
+  assert(__test.renderFab() === '', 'kein Speed-Dial, kein Knopf');
+  const src = await readFile(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  assert(!/openCapture|capture-sheet/.test(src), 'Dziś ruft kein globales Erfassen mehr');
 });
 
 /* „Heute"/„Morgen" an einem echten ZEITPUNKT (#829, Nachlese #851).

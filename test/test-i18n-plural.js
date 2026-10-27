@@ -335,10 +335,8 @@ const PLURAL_EXCEPTIONS = {
   // subscriptions.js:150-154 - dueLabel() faengt d<0, d===0 und d===1 vorher ab,
   // diese Zeile sieht nur noch d >= 2.
   'subscriptions.dueInDays': 'GUARDED',
-  // capture-sheet.js - shoppingOne/shoppingMany pair: the button text uses
-  // `count > 1 ? shoppingMany : shopping`, the saved toast `items.length === 1 ? shoppingOne : …`.
-  'capture.primary.shoppingMany': 'GUARDED',
-  'capture.saved.shoppingMany': 'GUARDED',
+  // 2026-10-27, v2: hier standen capture.primary/saved.shoppingMany - das
+  // Erfassungsblatt und seine Schluessel sind mit dem globalen + entfallen.
   // health.js visitPill() - d<0 ("zaległe"), d===0 und d===1 gehen vorher ab,
   // die Pille steht nur bis d<=3: diese Zeile sieht nur 2 und 3 (Tafla, Wizyty).
   'health.overview.pillInDays': 'GUARDED',

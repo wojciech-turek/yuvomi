@@ -371,8 +371,9 @@ test('Der Klappzustand wird beim Listenwechsel geladen', async () => {
 function formular({ cat = 'Sonstiges', options = [...CATEGORIES.map((c) => c.name), 'Sonstiges'] } = {}) {
   const listeners = {};
   const catListeners = {};
+  // ONE FIELD (2026-10-27, v2): the amount is typed into the name field
+  // ("Karotten 2 kg") or rides with a pick - there is no quantity field.
   const name = { value: '', focus() {}, classList: { add() {}, remove() {} }, addEventListener() {} };
-  const qty = { value: '' };
   const catSelect = {
     value: cat, options: options.map((value) => ({ value })),
     addEventListener(type, fn) { catListeners[type] = fn; },
@@ -381,9 +382,9 @@ function formular({ cat = 'Sonstiges', options = [...CATEGORIES.map((c) => c.nam
     addEventListener(type, fn) { (listeners[type] ??= []).push(fn); },
     querySelector: () => null,
   };
-  const els = { '#quick-add-form': form, '#item-name-input': name, '#item-qty-input': qty, '#item-cat-select': catSelect };
+  const els = { '#quick-add-form': form, '#item-name-input': name, '#item-cat-select': catSelect };
   return {
-    name, qty, catSelect,
+    name, catSelect,
     container: { querySelector: (sel) => els[sel] ?? null, querySelectorAll: () => [], isConnected: true },
     absenden: () => Promise.all((listeners.submit ?? []).map((fn) => fn({ preventDefault() {} }))),
     /** Die Kategorie von Hand waehlen, wie es das Feld meldet. */
@@ -400,7 +401,7 @@ test('Vorschlag fuer einen abgehakten Artikel dieser Liste: das Formular zeigt S
   shopping.applyAutocompleteSuggestion(f.container, { dataset: { name: 'karotten', category: 'Obst', quantity: '500 g' } });
   assert.equal(f.name.value, 'Karotten');
   assert.equal(f.catSelect.value, 'Milch');
-  assert.equal(f.qty.value, '1 kg');
+  assert.equal(shopping.quickAddEntry(f.name.value).quantity, '1 kg', 'its amount rides with the pick (v2: one field)');
 });
 
 test('Vorschlag fuer einen Namen, der hier nicht abgehakt steht: wie bisher', () => {
@@ -409,7 +410,7 @@ test('Vorschlag fuer einen Namen, der hier nicht abgehakt steht: wie bisher', ()
   shopping.applyAutocompleteSuggestion(f.container, { dataset: { name: 'Karotten', category: 'Obst', quantity: '500 g' } });
   assert.equal(f.name.value, 'Karotten');
   assert.equal(f.catSelect.value, 'Obst');
-  assert.equal(f.qty.value, '500 g');
+  assert.equal(shopping.quickAddEntry(f.name.value).quantity, '500 g', 'its amount rides with the pick (v2: one field)');
 });
 
 test('Absenden nach der Wahl: die abgehakte Zeile kommt zurueck, es entsteht KEINE zweite', async () => {
@@ -459,8 +460,7 @@ test('Getippte Menge ueberschreibt, eine NICHT gewaehlte Kategorie schreibt nich
   zustand([item(2, 'Karotten', 'Milch', { is_checked: 1, quantity: '1 kg' })]);
   const f = formular({ cat: 'Sonstiges' }); // das Feld zeigt seinen Standard
   shopping.wireQuickAdd(f.container);
-  f.name.value = 'Karotten';
-  f.qty.value = '2 kg';
+  f.name.value = 'Karotten 2 kg'; // v2: the amount in the same line
 
   const liste = await aufrufe(() => f.absenden(), {
     'PATCH /shopping/items/2': { data: item(2, 'Karotten', 'Milch', { is_checked: 0, quantity: '2 kg' }) },
@@ -609,8 +609,7 @@ test('Lehnt der Server die getippte Menge ab, ist nichts halb geschrieben: Haken
   zustand([item(2, 'Karotten', 'Obst', { is_checked: 1, quantity: '1 kg' })]);
   const f = formular();
   shopping.wireQuickAdd(f.container);
-  f.name.value = 'Karotten';
-  f.qty.value = '2 kg';
+  f.name.value = 'Karotten 2 kg'; // v2: the amount in the same line
 
   const fehler = Object.assign(new Error('Menge zu lang.'), { status: 400, data: { error: 'Menge zu lang.', code: 400 } });
   // Ein Server, der den blossen Haken annimmt und alles mit Menge ablehnt.
@@ -620,8 +619,7 @@ test('Lehnt der Server die getippte Menge ab, ist nichts halb geschrieben: Haken
   assert.equal(liste.length, 1, 'eine Anfrage, nicht Haken und Menge getrennt');
   assert.equal(shopping.checkedOf(shopping.state.items[0]), 1, 'die Zeile steht weiter abgehakt');
   assert.equal(shopping.state.items[0].quantity, '1 kg');
-  assert.equal(f.name.value, 'Karotten', 'der Name bleibt im Feld');
-  assert.equal(f.qty.value, '2 kg', 'die getippte Menge bleibt im Feld');
+  assert.equal(f.name.value, 'Karotten 2 kg', 'Name und getippte Menge bleiben im Feld');
   assert.deepEqual(toasts, [['common.errorGeneric', 'danger']], 'die Fehlermeldung steht, keine Erfolgsmeldung darueber');
 });
 

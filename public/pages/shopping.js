@@ -29,6 +29,7 @@ import { amountPlaceholder, formatMoney, currencyFractionDigits, centsToAmountIn
 import { startLiveFeed } from '/utils/live-feed.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
+import { parseCapture } from '/utils/capture-parse.js';
 
 
 // --------------------------------------------------------
@@ -72,10 +73,13 @@ const state = {
    *  Gespeichert wie die Kategorien - je Mitglied und Liste -, nur mit dem
    *  umgekehrten Grundzustand: er startet ZU, also wird das Offene gemerkt. */
   tickedOpen: false,
+  /** "Często" over the composer: { name, category, quantity }[] from
+   *  GET /shopping/frequent (2026-10-27, v2). */
+  frequent: [],
   /** "Pewnie się kończy" - the last answer of GET /shopping/predictions. */
   predictions: [],
-  /** The row the add bar just created: it shows its aisle with "zmień" for a
-   *  moment (Tafla), because on the phone the bar has no category field. */
+  /** The row the add bar just created: for a moment it stands in the accent
+   *  wash and says "dodano" (v2, 2026-10-27). */
   freshItemId: null,
 };
 
@@ -1323,28 +1327,32 @@ function renderListContent(container) {
 
   content.replaceChildren();
   content.insertAdjacentHTML('beforeend', `
-    ${readOnly() ? '' : `<!-- Quick-Add: Tafla's docked add bar. On the phone it floats above
-         the tab capsule (shopping.css) and rides the keyboard while typing;
-         with a pointer it is the first row above the list. The aisle comes
-         from the guess while typing, so the category field only shows with a
-         pointer; on the phone the fresh row offers "zmien". -->
+    ${readOnly() ? '' : `<!-- The add bar (2026-10-27, v2). Idle it is one white "Dodaj produkt"
+         bar above the tab bar; focused it becomes the composer that sits on
+         the keyboard (wireAddBar): the "Często" chips over ONE field, the
+         parse of that field ("10 szt. · Nabiał") inside it, and the send
+         circle. One field and no second one on the phone, so iOS draws no
+         previous/next bar. The aisle comes from the guess while typing;
+         only with a pointer does the aisle field show. -->
     <div class="quick-add shopping-addbar">
-      <div class="shopping-addbar__predictions" id="shopping-addbar-predictions"
-           role="group" aria-label="${esc(t('shopping.predictionsLabel'))}"></div>
+      <div class="shopping-addbar__frequent" id="shopping-addbar-frequent"
+           role="group" aria-labelledby="shopping-addbar-frequent-label" hidden>
+        <span class="shopping-addbar__frequent-label" id="shopping-addbar-frequent-label">${esc(t('shopping.frequentLabel'))}</span>
+      </div>
       <form class="quick-add__form" id="quick-add-form" novalidate autocomplete="off">
         <div class="quick-add__input-wrap">
           <i data-lucide="plus" class="quick-add__glyph" aria-hidden="true"></i>
-          <input class="quick-add__input" type="text" id="item-name-input" enterkeyhint="enter"
-                 placeholder="${t('shopping.itemNamePlaceholder')}" aria-label="${t('shopping.itemNameLabel')}" autocomplete="off">
+          <input class="quick-add__input" type="text" id="item-name-input" enterkeyhint="send"
+                 placeholder="${t('shopping.itemNamePlaceholder')}" aria-label="${t('shopping.itemNameLabel')}"
+                 aria-describedby="quick-add-hint" autocomplete="off">
+          <span class="quick-add__hint" id="quick-add-hint"></span>
           <div class="autocomplete-dropdown" id="autocomplete-dropdown" hidden></div>
         </div>
-        <input class="quick-add__qty" type="text" id="item-qty-input"
-               placeholder="${t('shopping.itemQtyPlaceholder')}" aria-label="${t('shopping.itemQtyLabel')}" autocomplete="off">
         <select class="quick-add__cat" id="item-cat-select" aria-label="${t('shopping.categoryLabel')}">
           ${state.categories.map((c) => `<option value="${esc(c.name)}" ${c.name === DEFAULT_CATEGORY_NAME ? 'selected' : ''}>${esc(categoryLabel(c.name))}</option>`).join('')}
         </select>
-        <!-- The sender appears once there is text: an accent arrow, the one
-             plus of the screen stays the global capture button. -->
+        <!-- The sender appears once there is text: a 44 accent circle with
+             an arrow. Enter does the same and keeps the field for the next. -->
         <button class="quick-add__btn" type="submit" aria-label="${t('shopping.addItemLabel')}">
           <i data-lucide="arrow-up" class="icon-lg" aria-hidden="true"></i>
         </button>
@@ -1388,6 +1396,7 @@ function renderListContent(container) {
   wireAutocomplete(container);
   wireQuickAdd(container);
   loadPredictions(container);
+  loadFrequent(container);
   wireAddBar(container);
 }
 
@@ -1652,16 +1661,13 @@ function renderReadActions(item) {
 }
 
 /**
- * The aisle a fresh row landed in, with the way to change it (Tafla): on the
- * phone the add bar has no category field - the guess while typing chose the
- * aisle, and this tag under the new row says which one and opens the editor.
+ * "dodano" on the row the bar just made (2026-10-27, v2): a word in the
+ * accent before its amount ("dodano · 200 g"), while the row is washed in the
+ * accent. The aisle is no longer told here - the composer said it before the
+ * send ("10 szt. · Nabiał"), and the row stands at the top of that aisle.
  */
 function freshTagHtml(item) {
-  const aisle = categoryLabel(categoryOf(item));
-  return `<button type="button" class="shopping-item__fresh" data-action="item-details" data-id="${item.id}"
-          aria-label="${esc(t('shopping.changeAisleLabel', { name: item.name, category: aisle }))}">
-    <i data-lucide="sparkles" aria-hidden="true"></i>${esc(t('shopping.changeAisle', { category: aisle }))}
-  </button>`;
+  return `<span class="shopping-item__fresh">${esc(t('shopping.itemAdded'))}${item.quantity ? ' ·' : ''}</span>`;
 }
 
 /** Ends the "fresh" moment of a row in place - no rebuild of the list. */
@@ -1671,10 +1677,13 @@ function clearFreshItem(container) {
   if (id == null) return;
   const row = container?.querySelector?.(`.shopping-item[data-item-id="${id}"]`);
   row?.classList.remove('shopping-item--fresh');
-  row?.querySelector('.shopping-item__fresh')?.remove();
+  const tag = row?.querySelector('.shopping-item__fresh');
+  const meta = tag?.parentElement;
+  tag?.remove();
+  if (meta && !meta.children.length) meta.remove();
 }
 
-const FRESH_ITEM_MS = 6000;
+const FRESH_ITEM_MS = 3000;
 let _freshTimer = null;
 
 function markFreshItem(container, id) {
@@ -1703,11 +1712,11 @@ function renderItem(item) {
         ${renderItemCheck(item, isDone)}
         <div class="list-row__main">
           <div class="list-row__name">${esc(item.name)}${renderItemMeta(item)}</div>
-          ${item.quantity || item.tags?.length ? `<div class="list-row__meta">
+          ${item.quantity || item.tags?.length || fresh ? `<div class="list-row__meta">
+            ${fresh ? freshTagHtml(item) : ''}
             ${item.quantity ? `<span class="shopping-item__quantity">${esc(item.quantity)}</span>` : ''}
             ${renderItemTags(item.tags)}
           </div>` : ''}
-          ${fresh ? freshTagHtml(item) : ''}
         </div>
         <!-- Geteilte .row-action-Grammatik aus layout.css (app-weit von sieben
              Modulen genutzt), gruppiert in der geteilten .list-row__actions -
@@ -1822,7 +1831,6 @@ async function reviveTickedItem(container, item, { quantity, category }) {
  */
 function applyAutocompleteSuggestion(container, el) {
   const nameInput = container.querySelector('#item-name-input');
-  const qtyInput  = container.querySelector('#item-qty-input');
   const catSelect = container.querySelector('#item-cat-select');
   if (!nameInput) return;
 
@@ -1835,24 +1843,20 @@ function applyAutocompleteSuggestion(container, el) {
   // auf irgendeiner Liste: was beim Absenden zurueckkommt, soll dastehen. Ein
   // Merker ist dafuer nicht noetig - das Absenden gleicht den Namen selbst ab,
   // gewaehlt oder getippt.
+  //
+  // ONE FIELD (2026-10-27, v2): the name goes into it, the amount the pick
+  // knows rides along as `quickAddPicked` and shows in the field's hint - as
+  // long as the name stays the picked one and nothing else is typed.
   const ticked = tickedItemNamed(el.dataset.name);
-  if (ticked) {
-    nameInput.value = ticked.name;
-    if (catSelect && [...catSelect.options].some((o) => o.value === ticked.category)) {
-      catSelect.value = ticked.category;
-    }
-    if (qtyInput && ticked.quantity) qtyInput.value = ticked.quantity;
-    return;
+  const pick = ticked
+    ? { name: ticked.name, quantity: ticked.quantity || null, category: ticked.category }
+    : { name: el.dataset.name ?? '', quantity: el.dataset.quantity || null, category: el.dataset.category };
+  nameInput.value = pick.name;
+  quickAddPicked = { name: pick.name, quantity: pick.quantity };
+  if (catSelect && pick.category && [...catSelect.options].some((o) => o.value === pick.category)) {
+    catSelect.value = pick.category;
   }
-
-  nameInput.value = el.dataset.name ?? '';
-  if (catSelect && el.dataset.category
-    && [...catSelect.options].some((o) => o.value === el.dataset.category)) {
-    catSelect.value = el.dataset.category;
-  }
-  if (qtyInput && el.dataset.quantity) {
-    qtyInput.value = el.dataset.quantity;
-  }
+  updateQuickAddHint(container);
 }
 
 function wireAutocomplete(container) {
@@ -1864,14 +1868,19 @@ function wireAutocomplete(container) {
 
   input.addEventListener('input', () => {
     clearTimeout(autocompleteTimeout);
-    const q = input.value.trim();
+    // The list of suggestions is the pointer's (2026-10-27, v2): on the phone
+    // the composer has the "Często" chips and the field's hint instead, and a
+    // list opening over the chips would cover them. Asked for the NAME of the
+    // line ("jajka 10" asks for "jajka").
+    if (window.matchMedia?.('(max-width: 1023px)')?.matches) { dropdown.hidden = true; return; }
+    const q = parseQuickEntry(input.value).name;
     if (q.length < 1) { dropdown.hidden = true; return; }
 
     autocompleteTimeout = setTimeout(async () => {
       try {
         const data = await api.get(`/shopping/suggestions?q=${encodeURIComponent(q)}`);
         // The field moved on (sent, cleared, retyped): this answer is stale.
-        if (input.value.trim() !== q) return;
+        if (parseQuickEntry(input.value).name !== q) return;
         const suggestions = data.data ?? [];
         if (!suggestions.length) { dropdown.hidden = true; return; }
 
@@ -1986,26 +1995,6 @@ function predictionsHtml() {
     </section>`;
 }
 
-/**
- * The same chips ride above the add bar while it has focus and no name yet
- * (Tafla, "Pasek dodawania"): with the keyboard up the list's own row is far
- * away. CSS shows the row only in that state; a press on a chip keeps the
- * field's focus (pointerdown, renderListContent).
- */
-function renderBarPredictions(container) {
-  const box = container?.querySelector?.('#shopping-addbar-predictions');
-  if (!box?.insertAdjacentHTML) return;
-  box.replaceChildren();
-  const items = visiblePredictions();
-  if (!items.length) return;
-  box.insertAdjacentHTML('beforeend', items.map((i) => `
-    <button type="button" class="shopping-predictions__chip" data-action="add-prediction" data-name="${esc(i.name)}"
-            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">
-      <i data-lucide="plus" aria-hidden="true"></i>${esc(i.name)}
-    </button>`).join(''));
-  window.lucide?.createIcons({ el: box });
-}
-
 async function loadPredictions(container) {
   if (readOnly() || predictionsHiddenToday()) return;
   const listId = state.activeListId;
@@ -2086,60 +2075,362 @@ function _flashAddBtn(btn) {
 }
 
 // --------------------------------------------------------
-// The docked add bar (Tafla, 2026-10-19)
+// The add bar and its composer (2026-10-27, v2)
 // --------------------------------------------------------
 
 /**
- * Tafla docks the add bar above the tab capsule and keeps it there: the list
- * is what you shop from, the bar is how it grows, and both stay in reach of
- * the thumb. The old disclosure (hidden on touch, opened by the FAB, revealed
- * at the top of the list) is gone with the `(hover: none)` rule that hid it.
+ * ONE FIELD, THE AMOUNT INCLUDED (2026-10-27, v2). The bar had a name field
+ * and a quantity field; on an iPhone two fields meant iOS's previous/next bar
+ * over the keyboard and a second target in a 52pt capsule. Now the amount is
+ * read from the same line: "2 mleko", "mleko 2", "250 g sera", "jajka 10".
  *
- * WHILE TYPING THE BAR RIDES THE KEYBOARD. Safari leaves `position: fixed;
- * bottom` under the keyboard (the visual viewport shrinks, the layout viewport
- * does not), so the bar reads the covered height from `visualViewport` and
- * hands it to CSS as `--addbar-keyboard`; `.shopping-addbar--typing` lifts it
- * 8px above the keyboard and lets the capsule step aside (shopping.css). Without
- * `visualViewport` nothing moves - the bar then simply stays above the capsule.
+ * The capture parser (utils/capture-parse.js) knows units, "2x" and the
+ * genitive after an amount ("sera" -> "ser"). Two things are the bar's own:
+ *   - a bare number AFTER the name is an amount here ("jajka 10"); in a free
+ *     capture line it may be a time, so the parser leaves it in the name;
+ *   - the name keeps the case it was typed in (the parser capitalises it),
+ *     and a line the parser splits into several items ("sól i pieprz") stays
+ *     one item, as typed - the bar adds one thing per send.
+ * A number without a unit counts pieces: "10 szt.".
  *
- * ONE listener pair at a time: the bar is rebuilt with the list content, and
- * the viewport outlives it.
+ * @param {string} text
+ * @returns {{ name: string, quantity: string|null }}
  */
-let _addBarSync = null;
+function parseQuickEntry(text) {
+  const raw = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!raw) return { name: '', quantity: null };
+  const trail = /^(.*\S)\s+(\d+(?:[.,]\d+)?)$/u.exec(raw);
+  const source = trail ? `${trail[2]} ${trail[1]}` : raw;
+  const parsed = parseCapture(source, { type: 'shopping' });
+  const item = parsed.items?.length === 1 ? parsed.items[0] : null;
+  const amount = parsed.tokens?.find((tk) => tk.kind === 'amount')?.text ?? '';
+  if (!item?.name || item.quantity == null || !amount) return { name: raw, quantity: null };
+
+  const typedName = trail ? trail[1] : source.replace(amount, '').trim();
+  const first = typedName.charAt(0);
+  const cased = first && first !== first.toUpperCase() ? item.name.charAt(0).toLowerCase() + item.name.slice(1) : item.name;
+  const name = nominativeAdjectives(typedName, cased);
+  const number = /\d+(?:[.,]\d+)?/.exec(amount)?.[0] ?? String(item.quantity);
+  const quantity = item.unit ? amount : `${number} ${t('pantry.units.pcs', { count: item.quantity })}`;
+  return { name, quantity };
+}
+
+/** Lower case without diacritics (ł too) - for comparing a typed word with a parsed one. */
+function foldWord(word) {
+  return String(word ?? '').toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}+/gu, '');
+}
+
+/**
+ * THE ADJECTIVE FOLLOWS ITS NOUN (2026-10-27, v2). After an amount Polish puts
+ * the whole phrase in the genitive: "200 g sera żółtego". The capture parser
+ * turns the noun back ("sera" -> "ser") from its small table; this does the
+ * same for the adjectives right after it, so the list says "ser żółty".
+ *
+ * LOW RISK BY CONSTRUCTION: it acts only when the parser DID change the noun -
+ * the one sure sign that the phrase was in the genitive - and only on the words
+ * directly after it that carry a genitive adjective ending; the first word
+ * that does not ("w plastrach") ends it. A noun the table does not know
+ * ("kiełbasy śląskiej") keeps the whole phrase as typed, rather than a noun in
+ * one case and its adjective in another.
+ *
+ *   -ego -> -y / -i (masculine: "żółtego", "greckiego"), -e / -ie when the
+ *           noun is neuter, i.e. ends in -o or -e ("mleka świeżego")
+ *   -ej  -> -a ("pszennej"; "słodkiej" -> "słodka")
+ *   -ych -> -e, -ich -> -ie (plural: "naturalnych", "wiejskich")
+ */
+function nominativeAdjectives(typedName, parsedName) {
+  const typed = typedName.trim().split(/\s+/);
+  const words = parsedName.trim().split(/\s+/);
+  if (words.length < 2 || foldWord(typed[0]) === foldWord(words[0])) return parsedName;
+  const neuter = /[oe]$/i.test(words[0]);
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    let next = null;
+    if (/iego$/i.test(w)) next = w.replace(/iego$/i, neuter ? 'ie' : 'i');
+    else if (/ego$/i.test(w)) next = w.replace(/ego$/i, neuter ? 'e' : 'y');
+    else if (/[kg]iej$/i.test(w)) next = w.replace(/iej$/i, 'a');
+    else if (/ej$/i.test(w)) next = w.replace(/ej$/i, 'a');
+    else if (/ich$/i.test(w)) next = w.replace(/ich$/i, 'ie');
+    else if (/ych$/i.test(w)) next = w.replace(/ych$/i, 'e');
+    if (!next) break;
+    words[i] = next;
+  }
+  return words.join(' ');
+}
+
+/** What the field will add, said inside it: "10 szt. · Nabiał" (empty while nothing is known). */
+function quickAddHintText(entry, category) {
+  return [entry.quantity, category ? categoryLabel(category) : ''].filter(Boolean).join(' · ');
+}
+
+/** The category the field stands for, once somebody or something chose it. */
+function quickAddKnownCategory(catSelect) {
+  if (!catSelect) return '';
+  return quickAddCategoryChosen || quickAddCategoryGuessed || quickAddFromSuggestion ? catSelect.value : '';
+}
+
+/** Writes the parse into the field's hint. */
+function updateQuickAddHint(container) {
+  const input = container.querySelector('#item-name-input');
+  const hint = container.querySelector('#quick-add-hint');
+  if (!input || !hint) return;
+  const entry = quickAddEntry(input.value);
+  const catSelect = container.querySelector('#item-cat-select');
+  // With a pointer the aisle has its own field; the hint then says the amount only.
+  const catShown = typeof Element !== 'undefined' && catSelect instanceof Element
+    && getComputedStyle(catSelect).display !== 'none';
+  hint.textContent = entry.name ? quickAddHintText(entry, catShown ? '' : quickAddKnownCategory(catSelect)) : '';
+}
+
+/**
+ * The line as it will be sent: the parse, plus the amount of a picked
+ * suggestion while the name is still the picked one (a pick fills the name;
+ * its usual amount rides along unseen until something is typed instead).
+ */
+function quickAddEntry(text) {
+  const entry = parseQuickEntry(text);
+  if (!entry.quantity && quickAddPicked && entry.name.toLowerCase() === quickAddPicked.name.toLowerCase()) {
+    return { ...entry, quantity: quickAddPicked.quantity || null };
+  }
+  return entry;
+}
+
+/** The suggestion picked into the field: { name, quantity } until the next send. */
+let quickAddPicked = null;
+
+// "Często": what the household buys most (GET /shopping/frequent), as chips
+// over the field while it has focus. One tap adds the item at once.
+const FREQUENT_CHIPS = 8;
+
+/** The chips still worth showing: not already open on this list. */
+function visibleFrequent() {
+  if (readOnly()) return [];
+  const open = new Set(state.items.filter((i) => !checkedOf(i)).map((i) => i.name.trim().toLowerCase()));
+  return (state.frequent ?? []).filter((i) => !open.has(i.name.trim().toLowerCase())).slice(0, FREQUENT_CHIPS);
+}
+
+function renderFrequentChips(container) {
+  const row = container?.querySelector?.('#shopping-addbar-frequent');
+  if (!row?.insertAdjacentHTML) return;
+  row.querySelectorAll('.shopping-addbar__chip').forEach((chip) => chip.remove());
+  const items = visibleFrequent();
+  row.hidden = !items.length;
+  row.insertAdjacentHTML('beforeend', items.map((i) => `
+    <button type="button" class="shopping-addbar__chip" data-action="add-frequent" data-name="${esc(i.name)}"
+            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">${esc(i.name)}</button>`).join(''));
+}
+
+async function loadFrequent(container) {
+  if (readOnly()) return;
+  try {
+    state.frequent = (await api.get('/shopping/frequent')).data ?? [];
+  } catch {
+    return;
+  }
+  if (container.isConnected === false) return;
+  renderFrequentChips(container);
+}
+
+/** One tap on a "Często" chip: the item lands on the open list, the field keeps its focus. */
+async function addFrequent(container, chip) {
+  const item = (state.frequent ?? []).find((i) => i.name === chip.dataset.name);
+  if (!item || chip.disabled) return;
+  chip.disabled = true;
+  try {
+    await addQuickItem(container, {
+      name: item.name,
+      quantity: item.quantity ?? null,
+      category: item.category,
+      source: 'suggestion',
+    });
+  } catch (err) {
+    reportError(err, container);
+  } finally {
+    chip.disabled = false;
+  }
+}
+
+/**
+ * Adds one item from the bar (field or chip) and shows where it went. A name
+ * that stands ticked on this list comes back instead (#1816). A new row
+ * stands at the TOP of its aisle (`position: 'top'`), washed in the accent
+ * for a moment with "dodano", and scrolls into view above the composer.
+ *
+ * @returns {Promise<'revived'|'added'|null>}
+ */
+async function addQuickItem(container, { name, quantity, category, source, chosenCategory }) {
+  const revive = tickedItemNamed(name);
+  if (revive) {
+    const back = await reviveTickedItem(container, revive, { quantity, category: chosenCategory });
+    if (!back) return null;
+    // Die Zeile taucht irgendwo in der Liste auf, nicht unter dem Feld:
+    // ein Satz sagt, was aus der Eingabe geworden ist.
+    window.yuvomi.showToast(t('shopping.itemBackToast', { name: revive.name }), 'info');
+    return 'revived';
+  }
+  const known = category && state.categories.some((c) => c.name === category);
+  const data = await api.post(`/shopping/${state.activeListId}/items`, {
+    name,
+    quantity,
+    category: known ? category : DEFAULT_CATEGORY_NAME,
+    category_source: known ? source : 'default',
+    position: 'top',
+  });
+  acknowledgeOwnChange(data);
+  state.items.push(data.data);
+  if (data.data?.id != null) markFreshItem(container, data.data.id);
+  updateItemsList(container);
+  updateListCounter(state.activeListId, 1, 0);
+  renderTabs(container);
+  container.querySelector?.(`.shopping-item[data-item-id="${data.data?.id}"]`)
+    ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  return 'added';
+}
+
+/**
+ * THE COMPOSER SITS ON THE KEYBOARD (2026-10-27, v2).
+ *
+ * Idle, the bar is a white "Dodaj produkt" bar above the tab bar. With the
+ * focus it becomes the composer: full width, directly on the keyboard, while
+ * the header and the segments stay where they are.
+ *
+ * What went wrong before (the owner's iPhone, Brave): the bar is
+ * `position: fixed`, but `.shopping-page` is a size container, and a
+ * container is the containing block of its fixed descendants - "bottom: the
+ * keyboard height" was measured from the page, not from the screen, and the
+ * bar landed over the title. On the phone the page is no container any more
+ * (shopping.css), so fixed means the screen again.
+ *
+ * WHERE THE KEYBOARD IS. iOS shrinks only the visual viewport; the covered
+ * height is `innerHeight - (visualViewport.height + offsetTop)`, handed to
+ * CSS as `--addbar-keyboard` on the root (the list reads it for its end
+ * padding, the toast stack for where it stands). Two things keep the header in place:
+ *   - BEFORE THE KEYBOARD ARRIVES the composer already stands where it will
+ *     end (the last keyboard height, else 45% of the screen). iOS scrolls a
+ *     focused field into view only when the keyboard would cover it - a
+ *     field left at the bottom made Safari push the whole page up.
+ *   - should iOS scroll the document anyway, it goes back to 0: this page
+ *     never scrolls the document, its list scrolls inside.
+ * No software keyboard after a second (a hardware keyboard, a desktop
+ * window): the composer stays above the tab bar.
+ *
+ * CLOSING. Escape lets go of the field (wireQuickAdd). A tap outside does too
+ * - iOS keeps a field focused when you tap a plain element - and that tap is
+ * only the closing: it does not also tick the row under the finger.
+ *
+ * ONE wiring at a time: the bar is rebuilt with the list content, and the
+ * viewport and document outlive it.
+ */
+let _addBarWiring = null;
+let _keyboardGuess = 0;
+const KEYBOARD_WAIT_MS = 1000;
+const KEYBOARD_GUESS_KEY = 'yuvomi-keyboard-height';
+
+function keyboardGuess() {
+  if (_keyboardGuess) return _keyboardGuess;
+  let stored = 0;
+  try { stored = Number(sessionStorage.getItem(KEYBOARD_GUESS_KEY)) || 0; } catch { /* no storage: the default */ }
+  return stored || Math.round(window.innerHeight * 0.45);
+}
+
+function rememberKeyboard(height) {
+  _keyboardGuess = height;
+  try { sessionStorage.setItem(KEYBOARD_GUESS_KEY, String(height)); } catch { /* this session only */ }
+}
 
 function wireAddBar(container) {
+  _addBarWiring?.detach();
+  _addBarWiring = null;
   const bar = container.querySelector?.('.shopping-addbar');
-  const vv = window.visualViewport;
-  if (_addBarSync) {
-    vv?.removeEventListener('resize', _addBarSync);
-    vv?.removeEventListener('scroll', _addBarSync);
-    _addBarSync = null;
-  }
   if (!bar) return;
+  // On the root, not the page: the list reads them for its end padding, and
+  // the toast stack (outside the page) for where it stands over the composer.
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  const media = (q) => window.matchMedia?.(q)?.matches ?? false;
+  const phone = () => media('(max-width: 1023px)');
+  let pending = 0;
+  let swallowUntil = 0;
+
+  const covered = () => (vv ? Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop))) : 0);
   const sync = () => {
     if (!bar.isConnected) return;
     const typing = bar.contains(document.activeElement);
-    const covered = typing && vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-    bar.style.setProperty('--addbar-keyboard', `${Math.round(covered)}px`);
-    bar.classList.toggle('shopping-addbar--typing', typing && covered > 0);
-    bar.classList.toggle('shopping-addbar--focused', typing);
+    let keyboard = typing ? covered() : 0;
+    if (keyboard > 0) {
+      clearTimeout(pending);
+      pending = 0;
+      rememberKeyboard(keyboard);
+    } else if (typing && pending) {
+      keyboard = keyboardGuess();
+    }
+    root.style.setProperty('--addbar-keyboard', `${keyboard}px`);
+    bar.classList.toggle('shopping-addbar--typing', typing);
+    bar.classList.toggle('shopping-addbar--keyboard', typing && keyboard > 0);
+    if (typing) root.style.setProperty('--addbar-height', `${bar.offsetHeight || 0}px`);
+    if (typing && phone() && window.scrollY) window.scrollTo(0, 0);
   };
-  _addBarSync = sync;
-  bar.addEventListener('focusin', sync);
-  // `focusout` fires before the new focus lands - measure after it. The short
-  // grace lets a tap on a suggestion chip above the bar land before the chips
-  // step away with the focus.
-  bar.addEventListener('focusout', () => setTimeout(sync, 250));
-  // A press on a chip keeps the field (and the keyboard) where it is.
-  bar.querySelector('#shopping-addbar-predictions')?.addEventListener('mousedown', (e) => e.preventDefault());
+
+  const onFocusIn = () => {
+    // A finger on a phone: the keyboard is on its way - stand where it will end.
+    if (!bar.classList.contains('shopping-addbar--typing') && phone() && media('(pointer: coarse)') && vv && covered() === 0) {
+      clearTimeout(pending);
+      pending = setTimeout(() => { pending = 0; sync(); }, KEYBOARD_WAIT_MS);
+    }
+    renderFrequentChips(container);
+    sync();
+  };
+  // `focusout` fires before the new focus lands - measure after it.
+  const onFocusOut = () => setTimeout(sync, 0);
+  // A press on a chip or the sender keeps the field (and the keyboard): the
+  // button never takes the focus. Not on the aisle field - it needs it.
+  const onMouseDown = (e) => { if (e.target.closest?.('button')) e.preventDefault(); };
+
+  const onPointerDown = (e) => {
+    swallowUntil = 0;
+    if (!phone() || !bar.classList.contains('shopping-addbar--typing')) return;
+    if (bar.contains(e.target) || e.target.closest?.('.shell-bottom-stack, .toast, .modal-overlay, [popover]')) return;
+    swallowUntil = Date.now() + 600;
+    document.activeElement?.blur?.();
+  };
+  const onClick = (e) => {
+    if (!swallowUntil) return;
+    const swallow = Date.now() < swallowUntil && !bar.contains(e.target);
+    swallowUntil = 0;
+    if (!swallow) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  bar.addEventListener('focusin', onFocusIn);
+  bar.addEventListener('focusout', onFocusOut);
+  bar.addEventListener('mousedown', onMouseDown);
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('click', onClick, true);
   vv?.addEventListener('resize', sync);
   vv?.addEventListener('scroll', sync);
+  window.addEventListener('scroll', sync, { passive: true });
+
+  const wiring = {
+    sync,
+    detach() {
+      clearTimeout(pending);
+      root.style.removeProperty('--addbar-keyboard');
+      root.style.removeProperty('--addbar-height');
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('click', onClick, true);
+      vv?.removeEventListener('resize', sync);
+      vv?.removeEventListener('scroll', sync);
+      window.removeEventListener('scroll', sync);
+    },
+  };
+  _addBarWiring = wiring;
   _routeSignal?.addEventListener?.('abort', () => {
-    if (_addBarSync !== sync) return;
-    vv?.removeEventListener('resize', sync);
-    vv?.removeEventListener('scroll', sync);
-    _addBarSync = null;
+    if (_addBarWiring !== wiring) return;
+    wiring.detach();
+    _addBarWiring = null;
   }, { once: true });
+  sync();
 }
 
 /**
@@ -2192,6 +2483,8 @@ function quickAddCategorySource() {
 function wireQuickAdd(container) {
   const form = container.querySelector('#quick-add-form');
   if (!form) return;
+  // A new form starts without a pick (the bar is rebuilt with the list).
+  quickAddPicked = null;
 
   // Esc leaves the bar: open suggestions close first (the autocomplete's own
   // handler), a second Esc lets go of the field and with it the keyboard.
@@ -2208,29 +2501,35 @@ function wireQuickAdd(container) {
   // THE AISLE FILLS ITSELF while the name is typed (fork, 2026-10-19): a pause
   // asks the server, which answers from the household's own history and Polish
   // keywords first and only then, if AI is on, from a model. A hand choice in
-  // the field stops it for this item.
+  // the field stops it for this item. Asked for the NAME of the line, not the
+  // line: "jajka 10" is a question about "jajka" (2026-10-27, v2).
   const guessInput = container.querySelector('#item-name-input');
   const guessSelect = container.querySelector('#item-cat-select');
   let guessTimer = null;
   let guessSeq = 0;
   guessInput?.addEventListener?.('input', () => {
-    quickAddFromSuggestion = false;
+    const entry = parseQuickEntry(guessInput.value);
+    if (quickAddPicked && entry.name.toLowerCase() !== quickAddPicked.name.toLowerCase()) quickAddPicked = null;
+    if (!quickAddPicked) quickAddFromSuggestion = false;
     clearTimeout(guessTimer);
-    if (quickAddCategoryChosen || !guessSelect) return;
-    const typed = guessInput.value.trim();
+    updateQuickAddHint(container);
+    if (quickAddCategoryChosen || quickAddFromSuggestion || !guessSelect) return;
+    const typed = entry.name;
     if (typed.length < 3) {
       if (quickAddCategoryGuessed) resetQuickAddCategory(guessSelect);
+      updateQuickAddHint(container);
       return;
     }
     guessTimer = setTimeout(async () => {
       const seq = ++guessSeq;
       try {
         const res = await api.get(`/shopping/category-guess?name=${encodeURIComponent(typed)}`);
-        if (seq !== guessSeq || quickAddCategoryChosen || quickAddFromSuggestion || guessInput.value.trim() !== typed) return;
+        if (seq !== guessSeq || quickAddCategoryChosen || quickAddFromSuggestion || parseQuickEntry(guessInput.value).name !== typed) return;
         const cat = res.data?.category;
         if (cat && [...guessSelect.options].some((o) => o.value === cat)) {
           guessSelect.value = cat;
           quickAddCategoryGuessed = true;
+          updateQuickAddHint(container);
         }
       } catch { /* no guess: the field keeps what it shows */ }
     }, 450);
@@ -2245,11 +2544,9 @@ function wireQuickAdd(container) {
     e.preventDefault();
     if (submitting) return;
     const nameInput = container.querySelector('#item-name-input');
-    const qtyInput  = container.querySelector('#item-qty-input');
     const catSelect = container.querySelector('#item-cat-select');
 
-    const name     = nameInput.value.trim();
-    const quantity = qtyInput.value.trim() || null;
+    const { name, quantity } = quickAddEntry(nameInput.value);
     const category = catSelect.value;
 
     if (!name) { nameInput.focus(); return; }
@@ -2259,35 +2556,19 @@ function wireQuickAdd(container) {
       // Steht der Name abgehakt auf dieser Liste, kommt DIESE Zeile zurueck
       // (#1816) - gewaehlt aus dem Vorschlag oder von Hand getippt, verglichen
       // wie der Vorschlag sucht. Jeder andere Name wird angelegt.
-      const revive = tickedItemNamed(name);
-      if (revive) {
-        const back = await reviveTickedItem(container, revive, {
-          quantity, category: quickAddCategoryChosen ? category : undefined,
-        });
-        if (!back) return;
-        // Die Zeile taucht irgendwo in der Liste auf, nicht unter dem Feld:
-        // ein Satz sagt, was aus der Eingabe geworden ist.
-        window.yuvomi.showToast(t('shopping.itemBackToast', { name: revive.name }), 'info');
-      } else {
-        const source = quickAddCategorySource();
-        const data = await api.post(`/shopping/${state.activeListId}/items`, { name, quantity, category, category_source: source });
-        acknowledgeOwnChange(data);
-        state.items.push(data.data);
-        // The app chose the aisle (guess, suggestion or the default): the new
-        // row says which one for a moment, with "zmień" (Tafla).
-        if (source !== 'hand' && data.data?.id != null) markFreshItem(container, data.data.id);
-        // Einfügen in DOM ohne komplettes Re-Render
-        updateItemsList(container);
-        updateListCounter(state.activeListId, 1, 0);
-        renderTabs(container);
-        // The bar sits at the bottom, the row lands in its aisle somewhere
-        // above: bring it into view so the eye can follow it (Tafla).
-        container.querySelector?.(`.shopping-item[data-item-id="${data.data?.id}"]`)
-          ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-      }
+      const done = await addQuickItem(container, {
+        name,
+        quantity,
+        category,
+        source: quickAddCategorySource(),
+        chosenCategory: quickAddCategoryChosen ? category : undefined,
+      });
+      if (!done) return;
       nameInput.value = '';
-      qtyInput.value  = '';
+      quickAddPicked = null;
       resetQuickAddCategory(catSelect);
+      updateQuickAddHint(container);
+      renderFrequentChips(container);
       // The suggestions belonged to the name that was just sent.
       clearTimeout(autocompleteTimeout);
       const dropdown = container.querySelector('#autocomplete-dropdown');
@@ -3240,7 +3521,7 @@ function updateItemsList(container) {
       maybeShowSwipeHint(container);
     }
   }
-  renderBarPredictions(container);
+  renderFrequentChips(container);
   updateCheckedActions(container);
 }
 
@@ -4505,6 +4786,11 @@ function wireListContentEvents(container) {
       hidePredictions(container);
     }
 
+    // ---- "Często" over the composer (2026-10-27, v2) ----
+    if (action === 'add-frequent') {
+      await addFrequent(container, target);
+    }
+
     // ---- Artikel löschen (mit Undo, 5s Fenster) ----
     if (action === 'delete-item') {
       deleteItemUndoable(Number(target.dataset.id), container);
@@ -5107,6 +5393,16 @@ export const __test = {
   setItemsListForTest: (listId) => { _itemsListId = listId; },
   wireQuickAdd,
   wireAutocomplete,
+  // The one field of the bar (2026-10-27, v2): the parse of a line, the line
+  // as it will be sent (with a pick's amount), the hint inside the field, the
+  // "Często" chips and the composer's wiring.
+  parseQuickEntry,
+  quickAddEntry,
+  quickAddHintText,
+  renderFrequentChips,
+  visibleFrequent,
+  wireAddBar,
+  addQuickItem,
   persistItemOrder,
   setSettlePauseMsForTest: (ms) => { SETTLE_PAUSE_MS_OVERRIDE = ms; },
   settlePauseMs,

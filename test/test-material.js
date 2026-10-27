@@ -337,7 +337,10 @@ test('R18: die Icon-Mulde der Seitenleiste ist eine Mulde', () => {
 
 const isDesktop = (rule) => rule.at.some((a) => /min-width:\s*1024px/.test(a));
 
-test('R18: die Seitenleiste ist am Desktop eine schwebende Glastafel', () => {
+// 2026-10-27, v2: „schwebende GLAStafel" - die Geometrie bleibt (Abstand,
+// Radius, Breite), das Material nicht: die Tafel ist deckend hell wie die
+// Leiste am Telefon, ohne Blur und ohne Schatten; eine 1px-Kante fasst sie.
+test('R18/v2: die Seitenleiste ist am Desktop eine schwebende helle Tafel', () => {
   const geometry = rulesFor(LAYOUT, '.nav-sidebar').find((r) => isDesktop(r) && /position:\s*fixed/.test(r.body));
   assert.ok(geometry, 'die Desktop-Regel der Seitenleiste fehlt');
   for (const side of ['top', 'left', 'bottom']) {
@@ -351,9 +354,10 @@ test('R18: die Seitenleiste ist am Desktop eine schwebende Glastafel', () => {
   assert.ok(gap >= 6 && gap <= 12, `Abstand ${gap}px - Groessenordnung der Luft um die mobile Kapsel (8px)`);
 
   const shadows = rulesFor(GLASS, '.nav-sidebar').filter((r) => isDesktop(r) && /box-shadow/.test(r.body));
-  assert.equal(shadows.length, 1, 'genau EINE Regel setzt den Schatten der Tafel (vorher zwei, eine tot)');
-  assert.match(shadows[0].body, /var\(--glass-inset-elevated\)/, 'Lichtkante');
-  assert.match(shadows[0].body, /var\(--glass-shadow-md\)/, 'Schatten der schwebenden Stufe');
+  assert.equal(shadows.length, 0, 'v2: die Tafel traegt keinen Glas-Schatten mehr (vorher Lichtkante + --glass-shadow-md)');
+  const material = rulesFor(GLASS, '.nav-sidebar').find((r) => isDesktop(r) && /background\s*:/.test(r.body));
+  assert.match(material?.body ?? '', /background:\s*var\(--color-surface\)/, 'deckend hell');
+  assert.ok(!rulesFor(GLASS, '.nav-sidebar').some((r) => /backdrop-filter/.test(r.body)), 'kein Blur');
 
   // Der Flyout der eingeklappten Schiene liegt UEBER Inhalt: er ersetzt den
   // Schatten und muss die Lichtkante dabei behalten.
@@ -391,14 +395,15 @@ test('R18: die schwebende Tafel nimmt dem Inhalt keine Breite', () => {
  * Die zwei Zeilen ausserhalb der Liste (Einstellungen, Konto) faerbten sich
  * ueber die volle Breite. In der runden Tafel schneidet die untere Ecke eine
  * randbuendige Flaeche an; mit dem Einzug der Pille liegt sie in der Kurve.
+ * 2026-10-27, v2: der gepinnte Eintrag „Einstellungen" ist entfallen (die
+ * Seitenleiste fuehrt die fuenf Ziele der Leiste); es bleibt die Kontozeile.
  */
-test('R18: Einstellungen und Kontozeile tragen den Einzug der gleitenden Pille', () => {
+test('R18: die Kontozeile traegt den Einzug der gleitenden Pille', () => {
   const pill = rulesFor(LAYOUT, '.nav-sidebar__indicator').find((r) => /left\s*:/.test(r.body));
   const inset = pill.body.match(/left:\s*(var\(--[\w-]+\))/)[1];
   const rows = [...eachRule(LAYOUT)].find((r) => isDesktop(r)
-    && r.selector.includes('.nav-sidebar > .nav-item--pinned-end')
     && r.selector.includes('.nav-sidebar__account-trigger') && /margin-inline/.test(r.body));
-  assert.ok(rows, 'die gemeinsame Regel der beiden Zeilen fehlt');
+  assert.ok(rows, 'die Regel der Kontozeile fehlt');
   assert.ok(rows.body.includes(`margin-inline: ${inset}`), `Einzug ${inset} wie die Pille`);
 });
 

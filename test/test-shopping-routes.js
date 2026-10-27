@@ -126,6 +126,45 @@ test('GET /suggestions: created_at schlägt id - jünger gewinnt auch mit KLEINE
 });
 
 // --------------------------------------------------------------------------
+// "Często" (2026-10-27, v2): what the household buys most, for the add bar
+// --------------------------------------------------------------------------
+test('GET /frequent: the purchase log ranks first, recent list names fill up, each name once', async () => {
+  const insert = db.prepare('INSERT INTO shopping_purchases (name, name_key, category, quantity, purchased_at) VALUES (?, ?, ?, ?, ?)');
+  const ago = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+  insert.run('Mleko', 'mleko', 'Sonstiges', '2 l', ago(1));
+  insert.run('mleko', 'mleko', 'Sonstiges', '2 l', ago(4));
+  insert.run('Mleko', 'mleko', 'Sonstiges', '1 l', ago(0));
+  insert.run('Kawa', 'kawa', 'Sonstiges', null, ago(2));
+  const list = await newList('Czesto');
+  await call('POST', `/${list}/items`, { name: 'Ogórki' });
+  await call('POST', `/${list}/items`, { name: 'KAWA' }); // already ranked from the log
+
+  const r = await call('GET', '/frequent');
+  assert.equal(r.status, 200);
+  const names = r.body.data.map((i) => i.name);
+  assert.deepEqual(names.slice(0, 2), ['Mleko', 'Kawa'], 'bought three times recently before bought once');
+  assert.deepEqual(r.body.data[0], { name: 'Mleko', category: 'Sonstiges', quantity: '1 l' }, 'the newest purchase speaks for the name');
+  assert.ok(names.includes('Ogórki'), 'a name only put on a list fills up the thin log');
+  assert.equal(names.filter((n) => n.toLowerCase() === 'kawa').length, 1, 'a name stands once, whatever its case');
+  assert.ok(names.length <= 12);
+});
+
+test('POST /:listId/items with position "top": the row stands first among the open items of its aisle', async () => {
+  const list = await newList('Oben');
+  const a = await call('POST', `/${list}/items`, { name: 'Apfel' });
+  const b = await call('POST', `/${list}/items`, { name: 'Birne' });
+  const top1 = await call('POST', `/${list}/items`, { name: 'Kiwi', position: 'top' });
+  const top2 = await call('POST', `/${list}/items`, { name: 'Mango', position: 'top' });
+  const end = await call('POST', `/${list}/items`, { name: 'Zitrone' });
+  assert.equal(top1.status, 201);
+  const r = await call('GET', `/${list}/items`);
+  assert.deepEqual(r.body.data.map((i) => i.name), ['Mango', 'Kiwi', 'Apfel', 'Birne', 'Zitrone'],
+    'the newest top row first; without the flag a row still goes to the end of its aisle');
+  assert.ok([a, b, end].every((x) => x.body.data.sort_order > 0), 'the trigger still numbers the rest');
+  assert.ok(top2.body.data.sort_order < top1.body.data.sort_order && top1.body.data.sort_order < 0);
+});
+
+// --------------------------------------------------------------------------
 // Listen-CRUD
 // --------------------------------------------------------------------------
 test('POST /: leerer Name → 400', async () => {

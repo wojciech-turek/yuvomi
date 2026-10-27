@@ -2092,10 +2092,9 @@ async function wirePhotoButton(btn) {
 }
 
 /**
- * Reads one photo into the draft list and opens the review. Exported for the
- * global capture (components/capture-sheet.js): its long-press menu picks the
- * photo itself (the file dialog needs the tap's user gesture), opens this page
- * and hands the file over - the review needs the page's locations.
+ * Reads one photo into the draft list and opens the review. (It was exported
+ * for the global capture's long-press menu, which went with v2 on 2026-10-27;
+ * the page's own photo button calls it.)
  * @param {File} file
  */
 export async function scanPantryPhoto(file) {

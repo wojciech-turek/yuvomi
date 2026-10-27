@@ -633,8 +633,8 @@
 }
 
 /* TAFLA: der Rueckweg des Blatts ("Wróć: Ustawienia") ist ein 36er Kreis
- * wie der geschobener Seiten (`.page-back`, capture.css) - Tinte, kein
- * Violett. Eigene Klasse, nicht `.page-back`: capture.css nimmt den Kreis der
+ * wie der geschobener Seiten (`.page-back`, page-head.css) - Tinte, kein
+ * Violett. Eigene Klasse, nicht `.page-back`: page-head.css nimmt den Kreis der
  * Shell zurueck, sobald ein Modul selbst zurueckfuehrt
  * (`:has(> .settings-toolbar__back) > .page-back`). */
 .settings-toolbar__back {

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { eachRule } from './css-rules.js';
 
 // Minimales Window/Navigator-Mock für Node
-const { stagger, vibrate, withBusy, scheduleUndoableDelete, wireSwipeToDismiss, wireCollapsingHeader, collapseOut, expandIn, watchNavCapsuleHeight, wireScrollFade, nextNavMinimized, NAV_MINIMIZE_DOWN, NAV_MINIMIZE_UP, bindNavMinimize, navMiniWidth, NAV_MINI_ITEM, STAGGER_ROWS, durationToken } = await (async () => {
+const { stagger, vibrate, withBusy, scheduleUndoableDelete, wireSwipeToDismiss, wireCollapsingHeader, collapseOut, expandIn, watchNavCapsuleHeight, wireScrollFade, STAGGER_ROWS, durationToken } = await (async () => {
   global.window = {
     matchMedia: () => ({ matches: false }),
     addEventListener: () => {},
@@ -1916,92 +1916,12 @@ test('toggleRegion: auf faellt hidden sofort, zu erst nach dem Einklappen - auch
   }
 });
 
-/*
- * R19 (Entscheidung Ulas 2026-10-16): DIE KAPSEL MINIMIERT BEIM LESEN.
- * Die Entscheidung ist eine reine Funktion - Schwellen, Richtung und die
- * Ausnahmen oben/Ende/ohne Geste stehen hier ohne DOM.
- */
-test('nextNavMinimized: abwaerts aus einer Geste minimiert, aufwaerts, oben und am Ende faehrt sie aus', () => {
-  const open = { minimized: false, travel: 0 };
-  const step = (s, top, delta, { max = 2000, gesture = true } = {}) => nextNavMinimized(s, { top, max, delta, gesture });
-  // Kleine Strecken summieren sich in einer Richtung.
-  let s = step(open, 100, 10);
-  assert.equal(s.minimized, false);
-  s = step(s, 120, NAV_MINIMIZE_DOWN - 10);
-  assert.equal(s.minimized, true, `ab ${NAV_MINIMIZE_DOWN}px abwaerts`);
-  // Ein Zittern gegen die Richtung setzt die Strecke zurueck, faehrt aber nicht aus.
-  s = step(s, 117, -3);
-  assert.equal(s.minimized, true, 'drei Pixel zurueck sind kein Aufwaertsscrollen');
-  s = step(s, 100, -(NAV_MINIMIZE_UP - 3));
-  assert.equal(s.minimized, false, `ab ${NAV_MINIMIZE_UP}px aufwaerts`);
-  // Ohne Geste (Scroll-Restore, scrollIntoView) minimiert nichts ...
-  assert.equal(step(open, 500, 400, { gesture: false }).minimized, false, 'ein Restore liest nicht');
-  // ... aber zurueck geht es immer, auch im Nachschwung ohne Finger.
-  assert.equal(step({ minimized: true, travel: 40 }, 300, -40, { gesture: false }).minimized, false);
-  // Oben und am Seitenende ist sie ganz da.
-  assert.deepEqual(step({ minimized: true, travel: 80 }, 4, 0), open, 'oben');
-  assert.deepEqual(step({ minimized: true, travel: 80 }, 1999, 30), open, 'am Ende');
-  // Ohne Bewegung (waagerechte Leiste) aendert sich nichts.
-  const held = { minimized: true, travel: 30 };
-  assert.equal(step(held, 300, 0), held);
-});
-
-// Review #2049: renderAppShell() baut die Shell bei Logout/Login neu, mit einer
-// NEUEN Kapsel. Der Router hielt den alten Minimierer (`!navMinimizer`), der an
-// der abgehaengten Kapsel hing - die neue minimierte nie. bindNavMinimize haengt
-// den alten ab und legt fuer die neue Kapsel einen neuen an.
-test('bindNavMinimize: eine neue Kapsel bekommt einen neuen Minimierer, der alte haengt ab', () => {
-  const savedElement = globalThis.Element;
-  globalThis.Element = class {};
-  const listeners = new Map();
-  const classes = (set = new Set()) => ({
-    set,
-    contains: (c) => set.has(c),
-    toggle: (c, on) => { if (on) set.add(c); else set.delete(c); return on; },
-    remove: (c) => set.delete(c),
-  });
-  const doc = {
-    documentElement: { classList: classes() },
-    addEventListener: (type, fn) => listeners.set(`${type}`, [...(listeners.get(type) ?? []), fn]),
-    removeEventListener: (type, fn) => listeners.set(type, (listeners.get(type) ?? []).filter((f) => f !== fn)),
-  };
-  const makeNav = () => ({ classList: classes(), getClientRects: () => [{}] });
-  const port = Object.assign(new globalThis.Element(), {
-    scrollTop: 100, scrollHeight: 3000, clientHeight: 800,
-    closest: (sel) => (sel === '.app-content' ? {} : null),
-  });
-  const fire = (type, target) => (listeners.get(type) ?? []).forEach((fn) => fn({ target }));
-  const readDown = () => {
-    fire('wheel', port);
-    fire('scroll', port);
-    port.scrollTop += NAV_MINIMIZE_DOWN + 6;
-    fire('scroll', port);
-  };
-  try {
-    const oldNav = makeNav();
-    const first = bindNavMinimize(null, oldNav, { doc });
-    readDown();
-    assert.equal(oldNav.classList.contains('nav-bottom--minimized'), true, 'die erste Kapsel minimiert beim Lesen');
-    assert.equal(doc.documentElement.classList.contains('nav-minimized'), true);
-    assert.equal(bindNavMinimize(first, oldNav, { doc }), first, 'dieselbe Kapsel behaelt ihren Minimierer');
-
-    // Logout/Login: renderAppShell() setzt eine neue Kapsel ein.
-    const newNav = makeNav();
-    const second = bindNavMinimize(first, newNav, { doc });
-    assert.notEqual(second, first, 'die neue Kapsel bekommt einen eigenen Minimierer');
-    assert.equal(listeners.get('scroll').length, 1, 'der alte hoert nicht mehr zu');
-    assert.equal(doc.documentElement.classList.contains('nav-minimized'), false,
-      'der Zustand der alten Kapsel bleibt nicht am Root haengen');
-    port.scrollTop = 100;
-    readDown();
-    assert.equal(newNav.classList.contains('nav-bottom--minimized'), true, 'die neue Kapsel minimiert');
-    second.expand();
-    assert.equal(newNav.classList.contains('nav-bottom--minimized'), false, 'expand() trifft die neue Kapsel');
-    second.destroy();
-  } finally {
-    globalThis.Element = savedElement;
-  }
-});
+// 2026-10-27, v2: hier standen die Guards der minimierenden Kapsel
+// (nextNavMinimized, R19 - Entscheidung Ulas 2026-10-16; bindNavMinimize,
+// Review #2049). Die Leiste minimiert nicht mehr: sie ist ein buendiges,
+// ruhiges Rechteck (Main.dc.html), und ux.js fuehrt die Funktionen nicht mehr.
+// Dass niemand sie zurueckholt, haelt test-mobile-chrome („v2: die Leiste
+// minimiert beim Scrollen nicht").
 
 // R20 (Re-Critique 2026-10-17 a6 P2, 200+ Aufgaben bei 4x CPU): stagger las
 // seinen Dauer-Default per getComputedStyle direkt nach dem Einsetzen der Liste
@@ -2024,73 +1944,11 @@ test('R20: Bewegungs-Tokens werden einmal gelesen, stagger animiert nur den Anfa
   }
 });
 
-// Tafla (2026-10-19, chrome.py --mini): DIE MINIMIERTE KAPSEL IST EINE KAPSEL
-// AUS ZEICHEN - alle Ziele bleiben, je 48 breit; die Breite wird gerechnet,
-// damit sie gleiten kann (R20 schrumpfte sie noch auf das aktive Ziel).
-test('navMiniWidth: Polster + Ziele zu je 48 + Polster + Rand', () => {
-  assert.equal(NAV_MINI_ITEM, 48, 'ein minimiertes Ziel ist 48 breit');
-  // 390pt, fuenf Ziele, 4pt Polster, 1pt Rand: 4 + 240 + 4 + 2 = 250.
-  assert.equal(navMiniWidth({ count: 5, padStart: 4, border: 1 }), 250);
-  // Ohne Kueche (abgeschaltet) vier Ziele.
-  assert.equal(navMiniWidth({ count: 4, padStart: 4, border: 1 }), 202);
-  assert.equal(navMiniWidth({ count: -1, padStart: 4 }), 8, 'keine negative Breite');
-});
-
-test('watchNavMinimize Tafla: minimiert navigiert ein Tipp wie sonst; pin haelt geschobene Seiten minimiert', () => {
-  const savedElement = globalThis.Element;
-  globalThis.Element = class {};
-  const docListeners = new Map();
-  const navListeners = new Map();
-  const classes = (set = new Set()) => ({
-    set, contains: (c) => set.has(c),
-    toggle: (c, on) => { if (on) set.add(c); else set.delete(c); return on; },
-    remove: (c) => set.delete(c),
-  });
-  const add = (map) => (type, fn) => map.set(type, [...(map.get(type) ?? []), fn]);
-  const doc = {
-    documentElement: { classList: classes() },
-    addEventListener: add(docListeners),
-    removeEventListener: (type, fn) => docListeners.set(type, (docListeners.get(type) ?? []).filter((f) => f !== fn)),
-  };
-  const nav = {
-    classList: classes(), getClientRects: () => [{}],
-    addEventListener: add(navListeners),
-    removeEventListener: (type, fn) => navListeners.set(type, (navListeners.get(type) ?? []).filter((f) => f !== fn)),
-  };
-  const port = Object.assign(new globalThis.Element(), {
-    scrollTop: 100, scrollHeight: 3000, clientHeight: 800,
-    closest: (sel) => (sel === '.app-content' ? {} : null),
-  });
-  const fire = (map, type, event) => (map.get(type) ?? []).forEach((fn) => fn(event));
-  try {
-    const m = bindNavMinimize(null, nav, { doc });
-    fire(docListeners, 'wheel', { target: port });
-    fire(docListeners, 'scroll', { target: port });
-    port.scrollTop += NAV_MINIMIZE_DOWN + 6;
-    fire(docListeners, 'scroll', { target: port });
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), true);
-    // Alle Ziele bleiben minimiert sichtbar: kein Zuhoerer faengt den Tipp ab.
-    assert.equal((navListeners.get('click') ?? []).length, 0, 'ein Tipp auf ein Zeichen navigiert');
-    // Geschobene Seite (hinter Więcej): die Kapsel bleibt minimiert, auch
-    // wenn aufwaerts gescrollt wird.
-    m.expand();
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), false);
-    m.pin(true);
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), true, 'pin minimiert sofort');
-    port.scrollTop -= NAV_MINIMIZE_UP + 10;
-    fire(docListeners, 'scroll', { target: port });
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), true, 'gepinnt aendert Scrollen nichts');
-    m.pin(false);
-    m.expand();
-    assert.equal(nav.classList.contains('nav-bottom--minimized'), false, 'ohne Pin faehrt sie wieder aus');
-    m.destroy();
-    assert.equal(doc.documentElement.classList.contains('nav-minimized'), false, 'destroy() raeumt den Wurzelzustand');
-  } finally {
-    globalThis.Element = savedElement;
-  }
-});
-
-test('watchNavCapsuleHeight: minimiert oder auf dem Rueckweg misst die Kapsel nicht - die Zone steht still (R19)', () => {
+// 2026-10-27, v2: hier standen navMiniWidth und watchNavMinimize (Tafla,
+// chrome.py --mini: minimiert alle Ziele je 48 breit). Mit der Minimierung
+// entfallen. Die Messung der Tab-Hoehe bleibt - ohne Zustaende, die sie
+// aussetzen: jede gerenderte Hoehe zaehlt.
+test('watchNavCapsuleHeight v2: kein Zustand der Leiste setzt die Messung aus', () => {
   const saved = globalThis.ResizeObserver;
   const observers = [];
   globalThis.ResizeObserver = class {
@@ -2100,21 +1958,16 @@ test('watchNavCapsuleHeight: minimiert oder auf dem Rueckweg misst die Kapsel ni
   };
   const props = new Map();
   const root = { style: { setProperty: (k, v) => props.set(k, v), removeProperty: (k) => props.delete(k) } };
-  let state = '';
-  const items = { isConnected: true, closest: (sel) => (state && sel.includes(state) ? {} : null) };
+  // Frueher fragte die Messung `closest('.nav-bottom--minimized, …')` - eine
+  // Leiste, die auf alles antwortet, darf heute nichts mehr anhalten.
+  const items = { isConnected: true, closest: () => ({}) };
   try {
     watchNavCapsuleHeight(items, root);
     const fire = (blockSize) => observers[0].cb([{ target: items, borderBoxSize: [{ blockSize }] }]);
+    fire(48);
+    assert.equal(props.get('--nav-capsule-height'), '48px');
     fire(64);
-    state = 'nav-bottom--minimized';
-    fire(56);
-    assert.equal(props.get('--nav-capsule-height'), '64px', 'minimiert gilt die ausgefahrene Hoehe weiter');
-    state = 'nav-bottom--settling';
-    fire(60);
-    assert.equal(props.get('--nav-capsule-height'), '64px', 'Zwischenhoehen auf dem Rueckweg zaehlen nicht');
-    state = '';
-    fire(72);
-    assert.equal(props.get('--nav-capsule-height'), '72px', 'ausgefahren misst sie wieder');
+    assert.equal(props.get('--nav-capsule-height'), '64px', 'ein zweizeiliges Label hebt die Zone sofort');
   } finally {
     globalThis.ResizeObserver = saved;
   }

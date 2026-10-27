@@ -128,8 +128,8 @@ function getOnboardingSteps() {
     { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
       target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
     { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
-      // Tafla: das globale + der Shell (Telefon) bzw. die Pille „Dodaj" im Kopf.
-      target: () => [...document.querySelectorAll('.capture-plus, .page-fab')].find(isShownOnScreen) ?? null },
+      // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins steht.
+      target: () => [...document.querySelectorAll('.page-fab')].find(isShownOnScreen) ?? null },
   ];
 }
 
@@ -802,18 +802,10 @@ function wireWallExit(container, rerender, signal) {
   holdWallMarker(leave);
 }
 
-/** Am Telefon traegt die Uebersicht keinen eigenen FAB mehr - das + der Shell. */
+/** Dziś traegt keinen eigenen FAB: angelegt wird in den Bereichen selbst
+ *  (v2, 2026-10-27 - das globale + der Shell ist entfallen). */
 function renderFab() {
   return '';
-}
-
-function initFab(signal) {
-  findPageFab('fab-main')?.addEventListener('click', (e) => {
-    // Der Kurzbefehl `n` klickt den Knopf auch, wenn er ausgeblendet ist
-    // (triggerPageFab) - im Anpassen-Modus oeffnet er nichts.
-    if (e.currentTarget.hidden) return;
-    window.yuvomi?.openCapture?.();
-  }, { signal });
 }
 
 // --------------------------------------------------------
@@ -1458,7 +1450,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // test-frontend-audit.js).
     findPageFab('fab-main')?.remove();
   } else {
-    initFab(signal);
     // Die Popover-Menues der Seite (Werkzeuge, Kachelgroesse) - bis Tafla
     // verdrahtete sie wireNewMenu() mit, das mit dem Speed-Dial entfallen ist.
     installPopoverMenus(container);

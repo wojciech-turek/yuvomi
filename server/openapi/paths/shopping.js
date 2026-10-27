@@ -39,6 +39,14 @@ export function shoppingPaths() {
     '/api/v1/shopping/category-guess': {
       get: op({ summary: 'Guess the aisle for an item name (hand picks, history, keywords, then AI if enabled)', tag: 'Shopping' }),
     },
+    '/api/v1/shopping/frequent': {
+      get: op({
+        summary: 'Items the household buys most, for the "Często" chips of the add bar',
+        description: 'Ranked by the purchase log (bought often and recently first), filled up with the names put on lists most '
+          + 'recently while the log is thin. Up to 12 objects { name, category, quantity }; no AI switch involved.',
+        tag: 'Shopping',
+      }),
+    },
     '/api/v1/shopping/predictions': {
       get: op({ summary: 'Items that are probably due again, from the purchase rhythm (empty unless AI shopping help is on)', tag: 'Shopping' }),
     },
@@ -117,7 +125,15 @@ export function shoppingPaths() {
         tag: 'Shopping',
         params: [idParam('listId', 'List ID')],
       }),
-      post: op({ summary: 'Add item to shopping list', tag: 'Shopping', params: [idParam('listId', 'List ID')], stateChanging: true, requestBody: jsonBody(null) }),
+      post: op({
+        summary: 'Add item to shopping list',
+        description: 'Since 2026-10-27 the body may carry `position: "top"`: the new row then stands first among the open items of its '
+          + 'category (the add bar uses it). Without it the row goes to the end of its category, as before.',
+        tag: 'Shopping',
+        params: [idParam('listId', 'List ID')],
+        stateChanging: true,
+        requestBody: jsonBody(null),
+      }),
     },
     '/api/v1/shopping/{listId}/import-pantry': {
       post: op({

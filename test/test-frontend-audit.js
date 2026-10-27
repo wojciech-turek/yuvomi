@@ -2626,7 +2626,10 @@ test('Aktiv-Indikatoren erscheinen am Ziel: die erste Platzierung gleitet nicht 
   // Nullposition herein (Codex-Review zu #2025).
   assert.match(place, /if \(indicator\.getClientRects\(\)\.length\) indicator\.dataset\.placed = '1';/,
     'markiert wird nur ein Indikator mit gezeichneter Box');
-  for (const name of ['positionSidebarIndicator', 'positionTabIndicator']) {
+  // 2026-10-27, v2: die Tab-Leiste hat keinen gleitenden Indikator mehr - die
+  // Pille steht fest hinter dem Zeichen des aktiven Tabs (layout.css). Es
+  // bleibt der Indikator der Seitenleiste.
+  for (const name of ['positionSidebarIndicator']) {
     const body = functionBody(source, name);
     assert.ok(body, `${name} fehlt`);
     assert.match(body, /placeNavIndicator\(indicator,/, `${name} platziert ueber placeNavIndicator`);
@@ -2642,7 +2645,7 @@ test('Aktiv-Indikatoren erscheinen am Ziel: die erste Platzierung gleitet nicht 
       'startGlideAt am Listenindikator nur, wenn er schon platziert ist');
   }
   assert.match(source, /indicator\.className = 'nav-sidebar__indicator';\s*indicator\.setAttribute\('aria-hidden', 'true'\);\s*indicator\.style\.opacity = '0';/);
-  assert.match(source, /tabIndicator\.className = 'nav-bottom__indicator';\s*tabIndicator\.setAttribute\('aria-hidden', 'true'\);\s*tabIndicator\.style\.opacity = '0';/);
+  assert.doesNotMatch(source, /nav-bottom__indicator|positionTabIndicator/, 'v2: die Leiste baut keinen Tab-Indikator mehr');
 });
 
 test('Mehr-Knopf in Ruhe traegt keinen Ton: der Zustand nimmt den Modulton zurueck, statt ihn auf Akzent zu setzen', () => {
@@ -2827,19 +2830,15 @@ test('mobile navigation uses neutral inactive wells and one active indicator', (
 test('mobile navigation Quiet Precision keeps state feedback stable and accessible', () => {
   const layout = read('../public/styles/layout.css');
   const glass = read('../public/styles/glass.css');
-  // Exakt gelesen: seit R18 steht `html.page-swapping .nav-bottom__indicator`
-  // (Uebergangsname) VOR der Regel der Pille, und `cssRuleBody` faende dessen
-  // Rumpf - der Guard gegen die width-Transition darunter waere blind.
-  const indicatorRule = [...eachRule(layout)].find((r) => r.selector.trim() === '.nav-bottom__indicator')?.body ?? '';
-  assert.match(indicatorRule, /position:\s*absolute/, 'Vorbedingung: die Regel der Pille ist gefunden');
-  const indicatorSurfaceRule = cssRuleBody(layout, '.nav-bottom__indicator::before');
-  const indicatorSurfaceGlass = cssRuleBody(glass, '.nav-bottom__indicator::before');
+  // 2026-10-27, v2: hier wurde die gleitende Pille gelesen (Tafla: die Pille
+  // IST der aktive Tab, keine width-Transition). Die Leiste hat keinen
+  // Indikator mehr - die Pille steht fest hinter dem Zeichen des aktiven Tabs.
+  // Geprueft wird, dass keiner zurueckkommt; die uebrigen Zusagen (Fokusring,
+  // Druck, Kontrast, erzwungene Farben) gelten unveraendert.
+  assert.ok(![...eachRule(layout), ...eachRule(glass)].some((r) => /nav-bottom__indicator/.test(r.selector)),
+    'v2: kein gleitender Indikator in der Leiste');
   const focusRule = cssRuleBody(layout, '.nav-bottom .nav-item:focus-visible');
   const pressedWellRule = cssRuleBody(layout, '.nav-bottom .nav-item:active .nav-item__icon-well');
-
-  // Tafla: die Pille IST der aktive Tab (Zeichen und Label), kein Einzug.
-  assert.match(indicatorSurfaceRule, /inset:\s*0/);
-  assert.doesNotMatch(indicatorRule, /transition:[^;]*\bwidth\b/);
   // Gesucht ist die REGEL, die das aktive Tab-Bar-Label faerbt, nicht ihre
   // Selektorliste: die Erweiterung um die Sidebar (Runde 6, Phase 3) haette
   // eine wortwoertliche Suche gebrochen, ohne dass sich an der Zusage etwas
@@ -2862,7 +2861,9 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   // Der 70-%-Mix war die Antwort auf eine durchscheinende Toenung ueber Glas;
   // das Token-Paar --color-accent auf --color-accent-tint haelt AA ohne ihn
   // (#6C3AED auf #F0EBFD 6,1:1, dunkel #B49CFF auf #3A3249 6,0:1).
-  assert.match(activeNavLabelRule, /color:\s*var\(--color-accent\)/);
+  // 2026-10-27, v2 (Main.dc.html): das aktive Label steht in TINTE, 600, nicht
+  // auf der Pille (die umfasst nur das Zeichen); die Stimme traegt das Zeichen.
+  assert.match(activeNavLabelRule, /color:\s*var\(--color-text-primary\)/);
   assert.match(
     activeNavLabelRule,
     /font-weight:\s*var\(--font-weight-semibold\)/,
@@ -2880,17 +2881,12 @@ test('mobile navigation Quiet Precision keeps state feedback stable and accessib
   assert.match(pressedWellRule, /transform:\s*translateY\(var\(--space-px\)\) scale\(0\.96\)/);
   assert.doesNotMatch(layout, /(^|\n)\.nav-item:active\s*\{[\s\S]*?transform:/);
   assert.doesNotMatch(layout, /\.nav-bottom \.nav-item:active\s*\{[\s\S]*?transform:/);
-  // EINE Tint-Schicht: der Akzent-Fill sitzt am Indikator selbst; das ::before
-  // trägt nur noch den Specular-Highlight (kein zweiter Tint → keine matschige
-  // Kante der gleitenden Pille).
+  // 2026-10-27, v2: hier stand die EINE Tint-Schicht des Indikators in
+  // glass.css (samt reduzierter Transparenz). Die Pille ist jetzt eine Regel
+  // an der Mulde des aktiven Tabs - Akzent zu 8 %, ohne Glas.
   assert.match(
-    glass,
-    /\.nav-bottom__indicator\s*\{[\s\S]*?background:\s*var\(--color-accent-tint\)/,
-  );
-  assert.doesNotMatch(indicatorSurfaceGlass, /background:/);
-  assert.match(
-    glass,
-    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.nav-bottom__indicator\s*\{[\s\S]*?background:/,
+    cssRuleBody(layout, '.nav-bottom .nav-item--active .nav-item__icon-well'),
+    /background-color:\s*color-mix\(in srgb, var\(--color-btn-primary\) 8%, transparent\)/,
   );
   assert.match(
     layout,
@@ -2964,10 +2960,16 @@ test('bottom-nav target fills the 44x44 touch-comfort zone', () => {
   // beide) - mindestens 44 breit und 48 hoch; die Mulde ist entfallen.
   const itemRule = cssRuleBody(layout, '.nav-bottom .nav-item');
   assert.match(itemRule, /min-width:\s*var\(--target-base\)/);
-  assert.match(itemRule, /min-height:\s*var\(--space-12\)/);
+  // 2026-10-27, v2: der Tab ist so hoch wie die Tab-Zeile (48, Main.dc.html),
+  // und die Zeile ist nicht mehr die ganze Leiste - darueber und darunter
+  // liegen 6px Polster und oben die 1px-Kante.
+  assert.match(itemRule, /min-height:\s*var\(--nav-height-mobile\)/);
+  assert.match(tokens, /--nav-height-mobile:\s*48px/);
 
-  // Bar-Höhe innerhalb der iOS/Android-Norm (≥60px exkl. Safe-Area).
-  assert.match(tokens, /--nav-height-mobile:\s*6[0-4]px/);
+  // Bar-Höhe innerhalb der iOS/Android-Norm (≥60px exkl. Safe-Area):
+  // 1 + 6 + 48 + 6 = 61.
+  assert.match(tokens, /--nav-bar-pad-top:\s*6px/);
+  assert.match(tokens, /--nav-bottom-height:\s*calc\(1px \+ var\(--nav-bar-pad-top\) \+ var\(--nav-capsule-height, var\(--nav-height-mobile\)\) \+ var\(--nav-bar-pad-bottom\)\)/);
 });
 
 test('bottom nav keeps a navigation landmark with a navigating Więcej tab, not a tablist', () => {
@@ -3039,7 +3041,12 @@ test('mobile bottom navigation avoids clipped Android labels and sparse icon spa
 
   // Tafla: der Tab traegt 4pt oben/unten, das Zeichen steht ohne Mulde; die
   // Labels duerfen zweizeilig umbrechen (Regel am Bar-Label), statt zu kappen.
-  assert.match(navItemRule, /padding:\s*var\(--space-1\) 0/);
+  // 2026-10-27, v2: das Polster sitzt an der Leiste (6px oben und unten), der
+  // Tab selbst traegt keins - die Pillen aller fuenf stehen auf einer Linie.
+  assert.match(navItemRule, /padding:\s*0/);
+  // Exakt gelesen: `html.page-swapping .nav-bottom` (Uebergangsname) steht davor.
+  const barRule = [...eachRule(layout)].find((r) => r.at.length === 0 && r.selector.trim() === '.nav-bottom')?.body ?? '';
+  assert.match(barRule, /padding:\s*var\(--nav-bar-pad-top\)/);
   assert.match(iconWellRule, /border-radius:\s*var\(--radius-full\)/);
   assert.match(labelRule, /line-height:\s*1\.2/);
   const barLabel = cssRuleBody(layout, '.nav-bottom .nav-item__label');
@@ -4376,39 +4383,33 @@ test('der FAB weicht der Zeile, statt eine Gasse zu reservieren', () => {
   // Weg, die #634-Zusicherung zu halten - und sie kostete auf dem Telefon 92px
   // ueber die volle Breite (11 % des Geraets). Sitzt er dagegen IN der
   // Nav-Kapsel, steht unter ihm Chrome statt Inhalt, und dieselbe Zusicherung
-  // haelt ohne reservierten Streifen. Beides wird hier geprueft, weil beides
-  // gleichzeitig gilt: Desktop schwebend MIT Zone, mobil eingesetzt OHNE.
+  // haelt ohne reservierten Streifen.
+  //
+  // 2026-10-27, v2: die Kapsel und das globale + sind weg. Ein Seiten-FAB dockt
+  // am Telefon als Geisterkreis im Kopf; wo der Kopf keinen Platz hat
+  // (Kalender, Spiżarnia, Posiłki), SCHWEBT er ueber der flachen Leiste - also
+  // ueber Inhalt, und die Zone gilt wieder auf jeder Breite. Geprueft wird
+  // deshalb das Gegenteil von vorher: kein Block nullt sie neben der Leiste.
   assert.match(tokens, /--fab-safe-zone:\s*calc\([^;]*--fab-gap[^;]*--fab-size[^;]*;/,
     'der SCHWEBENDE Fall braucht seine Zone weiter, abgeleitet aus --fab-gap und --fab-size');
-  assert.match(
+  assert.doesNotMatch(
     tokens,
     /@media\s*\(max-width:\s*1023px\)\s*\{\s*:root\s*\{[^}]*--fab-safe-zone:\s*0px/,
-    'wo die Bottom-Nav steht, faellt --fab-safe-zone auf 0 - der FAB sitzt dort in der Kapsel'
+    'v2: neben der Leiste schwebt der FAB ueber Inhalt - eine Zone 0 macht am Scroll-Ende Zeilenaktionen unerreichbar'
   );
-  // Der eingesetzte FAB rechnet aus der Kapselgeometrie, nicht aus --fab-gap:
-  // er soll in der Bar-Zeile ZENTRIERT sitzen, und das haengt an der Barhoehe
-  // und an seiner eigenen Groesse.
-  // TAFLA: das globale + steht NEBEN der Kapsel und zentriert sich auf ihr.
+  // Der schwebende FAB steht ueber der Leiste, nicht in ihr: sein Abstand
+  // rechnet aus der GANZEN Leistenhoehe (Rand, Polster, gemessene Zeile,
+  // Safe-Area-Polster), nicht mehr aus einer Kapsel und --capture-size.
   assert.match(
     tokens,
-    /--fab-offset-bottom:\s*calc\([^;]*var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)[^;]*--capture-size[^;]*\)/s,
-    'das + zentriert sich aus der GEMESSENEN Kapselhoehe (Fallback --nav-height-mobile) und --capture-size'
+    /--fab-offset-bottom:\s*calc\(\s*var\(--nav-bottom-height\)\s*\+[^;]*\)/,
+    'v2: der schwebende FAB steht ueber der flachen Leiste (--nav-bottom-height)'
   );
-  // Dieselbe Hoehe fuer den hinteren Abstand: mit zweizeiligen Labels (el,
-  // fil) waechst die Kapsel auf 72px, und mit der Sollhoehe sass der Knopf
-  // 16/8px statt mittig (Nav-Polish 2026-10-15).
-  assert.match(
-    tokens,
-    /--nav-fab-inset:\s*calc\(\(var\(--nav-capsule-height,\s*var\(--nav-height-mobile\)\)\s*-\s*var\(--capture-size\)\)\s*\/\s*2\)/,
-    'der Abstand des + rechnet aus derselben gemessenen Kapselhoehe'
-  );
-  // Und die Zone haelt ihm seinen Platz frei, aus derselben Groesse - sonst
-  // stuende die Kapsel unter dem Knopf.
-  assert.match(
-    layout,
-    /\.nav-bottom\s*\{[^}]*padding-inline:[^;]*var\(--capture-size\)/,
-    'die Zone muss das + aus --capture-size freihalten'
-  );
+  const tokensLive = tokens.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const gone of ['--capture-size', '--nav-fab-inset', '--nav-capture-gap']) {
+    assert.doesNotMatch(tokensLive, new RegExp(`${gone}\\s*:`),
+      `v2: ${gone} gehoerte zum globalen + und darf nicht zurueckkommen`);
+  }
   // PADDING, NICHT MARGE - seit 2026-08-12, und der Wechsel ist eine Korrektur
   // der Invariante, nicht des Mechanismus. Die Marge verkuerzte den Scrollport um
   // 96px ueber die volle Breite und sicherte damit „bei KEINEM Scrollstand liegt
@@ -4551,6 +4552,9 @@ test('jede CSS-Ausblendung des FAB nullt seinen Nachlauf', () => {
   // TAFLA: unter 1024px steht die Zone schon am Token auf 0 (tokens.css, der
   // FAB sass dort in der Kapsel; heute schwebt dort keiner mehr). Eine Regel,
   // die den Seiten-FAB NUR in dieser Breite ausblendet, ist damit gepaart.
+  // 2026-10-27, v2: die Null ist gefallen (der FAB schwebt am Telefon wieder,
+  // wo der Kopf keinen Platz hat) - `zoneZeroCompact` ist damit falsch, und
+  // eine Ausblendung nur in dieser Breite braucht wieder ihr eigenes Paar.
   const tokensCss = read('../public/styles/tokens.css');
   const zoneZeroCompact = /@media\s*\(max-width:\s*1023px\)\s*\{\s*:root\s*\{[^}]*--fab-safe-zone:\s*0px/.test(tokensCss);
   const ohnePaar = versteckt.filter(({ file, selector, compact }) => !(compact && zoneZeroCompact) && !nullt.some((z) =>
@@ -6501,10 +6505,11 @@ test('dashboard polish keeps one page heading and native quick-action controls',
   assert.equal((dashboard.match(/<h1\b/g) || []).length, 1, 'dashboard must expose one h1');
   // TAFLA (2026-10-24): der Kopf der alten Uebersicht (h2 mit Gruss, runde
   // Werkzeugknoepfe) ist mit dem Raster gegangen; Dziś traegt seinen eigenen.
-  // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnet das
-  // Erfassen-Blatt (components/capture-sheet.js), und dort sind es echte Knoepfe.
+  // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnete das
+  // Erfassen-Blatt. 2026-10-27, v2: auch das + und das Blatt sind weg; jede
+  // Seite legt in ihrem Kopf an, Dziś hat keinen eigenen Anlege-Knopf.
   assert.doesNotMatch(dashboard, /class="fab-action"/);
-  assert.match(read('../public/components/capture-sheet.js'), /btn\.type = 'button';\s*btn\.className = 'capture-plus';/);
+  assert.doesNotMatch(dashboard, /openCapture|capture-sheet/, 'Dziś ruft kein globales Erfassen mehr');
   assert.doesNotMatch(dashboard, /<button class="fab-action__btn"/);
 });
 
@@ -6693,27 +6698,31 @@ test('phase 3 Tasks bulk actions appear only in select mode, in the shell pill (
   assert.doesNotMatch(tasksCss, /\.bulk-actions-bar|\.task-bulk-checkbox/);
 });
 
-// TAFLA (2026-10-19): the add bar is ONE row on the phone - name (with the
-// plus glyph), quantity, sender - and with a pointer the aisle field joins
-// it. Name, quantity, aisle and sender stay separate controls (this test's
-// promise); the name no longer takes a row of its own, because the bar is a
-// 52pt capsule docked above the tab capsule.
-test('phase 3 mobile Shopping quick-add separates name, quantity, category, and add controls', () => {
+// TAFLA (2026-10-19): the add bar is ONE row on the phone, and with a pointer
+// the aisle field joins it.
+//
+// v2 (2026-10-27): ONE FIELD for name and amount. The owner's iPhone showed
+// what two fields cost: a "Ilość" field popping up in the bar and iOS's
+// previous/next bar over the keyboard. The amount is now read from the line
+// ("jajka 10", "250 g sera") and said inside the field. The promise of this
+// test moves with it: the line, the aisle (with a pointer) and the sender stay
+// separate controls - and there is no second text field.
+test('phase 3 mobile Shopping quick-add: one field for name and amount, the aisle with a pointer, a separate sender', () => {
   const shoppingPage = read('../public/pages/shopping.js');
   const shoppingCss = read('../public/styles/shopping.css');
 
-  assert.match(shoppingPage, /<div class="quick-add__input-wrap">[\s\S]*id="item-name-input"[\s\S]*id="autocomplete-dropdown" hidden[\s\S]*<\/div>\s*<input class="quick-add__qty"/);
+  assert.match(shoppingPage, /<div class="quick-add__input-wrap">[\s\S]*id="item-name-input"[\s\S]*id="quick-add-hint"[\s\S]*id="autocomplete-dropdown" hidden[\s\S]*<\/div>\s*<select class="quick-add__cat"/);
+  assert.doesNotMatch(shoppingPage, /id="item-qty-input"/, 'no second text field in the bar: iOS would draw its previous/next bar');
   // Die Aufteilung (#1372) pinnt der Guard darunter als Regel - hier nur die
-  // Zusage dieses Tests: flexible Spuren, der Knopf am Ende.
+  // Zusage dieses Tests: eine flexible Spur, der Knopf am Ende.
   assert.match(
     shoppingCss,
-    /\.quick-add__form\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*\d+fr\)\s*minmax\(0,\s*\d+fr\)\s*var\(--target-base\)/
+    /\.quick-add__form\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*\d+fr\)\s*var\(--target-base\)/
   );
-  assert.match(shoppingCss, /\.quick-add__qty\s*\{[\s\S]*position:\s*static/);
-  assert.match(shoppingCss, /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*var\(--target-base\)/,
-    'alle drei Felder tragen das volle Ziel und duerfen schrumpfen');
+  assert.match(shoppingCss, /\.quick-add__input,\s*\.quick-add__cat\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*var\(--target-base\)/,
+    'beide Felder tragen das volle Ziel und duerfen schrumpfen');
   // The aisle field shows with a pointer; on the phone the guess while typing
-  // chooses the aisle and the fresh row offers "zmień".
+  // chooses the aisle and the hint in the field says which one.
   assert.match(shoppingCss, /@media \(min-width: 1024px\)\s*\{[\s\S]*?\.quick-add__cat\s*\{\s*display:\s*block/);
 });
 
@@ -6774,30 +6783,27 @@ test('#1372 quick-add fields stretch with their row, and no translated field get
     .filter(({ value }) => value);
   assert.ok(templates.length >= 2, `erwartet: eine Basis- und eine Desktop-Aufteilung, gefunden ${templates.length}`);
 
-  // TAFLA (2026-10-19): the phone bar carries no aisle track (name, quantity,
-  // sender - the aisle comes from the guess while typing); the pointer row
-  // keeps all three fields. The rule stays: every field track flexible, the
-  // button the only fixed one, and the wider word gets the wider track -
-  // the aisle over the quantity where both stand, the name over the
-  // quantity on the phone.
+  // v2 (2026-10-27): the quantity field is gone - the amount is read from the
+  // line. The phone bar is the line and the sender; the pointer row adds the
+  // aisle. The rule stays: every field track flexible, the button the only
+  // fixed one, and the wider content gets the wider track - the line (name
+  // and amount) over the aisle (one word).
   for (const { at, value } of templates) {
     const list = tracks(value);
     assert.equal(list.at(-1), 'var(--target-base)', `${at}: die letzte Spur ist der Knopf`);
     const fields = list.slice(0, -1);
+    assert.ok(fields.length >= 1, `${at}: die Zeile hat ein Feld`);
     for (const track of fields) {
       assert.match(track, FLEX_TRACK,
         `${at}: Spur „${track}" ist nicht flexibel - ein uebersetzter Platzhalter kennt keine feste Breite (#1372)`);
     }
-    if (fields.length >= 3) {
-      const [qty, cat] = fields.slice(-2).map(frOf);
-      assert.ok(cat > qty, `${at}: die Kategorie (${cat}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
-    } else {
-      const [name, qty] = fields.map(frOf);
-      assert.ok(name > qty, `${at}: der Name (${name}fr) muss mehr Platz bekommen als die Menge (${qty}fr)`);
+    if (fields.length >= 2) {
+      const [line, cat] = fields.map(frOf);
+      assert.ok(line > cat, `${at}: die Zeile (${line}fr) muss mehr Platz bekommen als die Kategorie (${cat}fr)`);
     }
   }
 
-  for (const cls of ['.quick-add__qty', '.quick-add__cat']) {
+  for (const cls of ['.quick-add__cat']) {
     const base = rules.find(({ selector, at }) => selector.trim() === cls && at.length === 0);
     assert.ok(base, `${cls}: Basisregel fehlt`);
     assert.match(base.body, /text-overflow\s*:\s*ellipsis/,
@@ -6855,16 +6861,20 @@ test('phase 4 keeps Kitchen navigation identity stable', () => {
   assert.doesNotMatch(routerSource, /sidebarIcon\)\s*sidebarIcon\.dataset\.lucide\s*=\s*kitchenTarget\.icon/);
 });
 
-test('global navigation groups domains with translated section labels', () => {
+// 2026-10-27, v2: hier pruefte der Guard, dass die Seitenleiste ihre Module in
+// uebersetzte Sektionen gruppiert (navSectionLabelKey im Router). Die Leiste
+// fuehrt jetzt die fuenf Ziele der Tab-Leiste, ohne Sektionen; die Gruppierung
+// lebt auf der Seite Więcej. Die Namen-Tabelle bleibt in module-order.js.
+test('global navigation: the section names stay in module-order.js, the sidebar is the five destinations', () => {
   const routerSource = read('../public/router.js');
-  // R19: die Namen-Tabelle steht nur noch in settings/module-order.js (der
-  // Router hatte eine Abschrift); der Router loest sie ueber navSectionLabelKey.
   const orderSource = read('../public/settings/module-order.js');
-  assert.match(routerSource, /navSectionLabelKey\(/);
   for (const key of ['sectionOverview', 'sectionPlan', 'sectionHousehold', 'sectionPeople', 'sectionFinance', 'sectionCustomModules']) {
     assert.match(orderSource, new RegExp(`'nav\\.${key}'`));
   }
-  assert.match(routerSource, /t\(labelKey\)/);
+  const sidebar = functionBody(routerSource, 'sidebarNavItems');
+  assert.ok(sidebar, 'sidebarNavItems fehlt');
+  assert.match(sidebar, /mobileFavoriteItems\(\)/, 'dieselben Favoriten wie die Leiste');
+  assert.match(sidebar, /sidebarMoreEl\(\)/, 'Więcej schliesst die Seitenleiste ab');
 
   // The replaced household section label is no longer referenced.
   assert.doesNotMatch(routerSource, /nav\.section\.household/);
@@ -6873,10 +6883,14 @@ test('global navigation groups domains with translated section labels', () => {
 test('global navigation derives exactly one Kitchen destination', () => {
   const routerSource = read('../public/router.js');
 
-  // Kitchen is inserted once via sidebarKitchenEl(), gated by a single-shot flag.
-  // It is appended into the current section group via appendNavEl().
-  assert.equal((routerSource.match(/appendNavEl\(sidebarKitchenEl\(\)\)/g) ?? []).length, 1);
-  assert.match(routerSource, /if \(!kitchenAdded\)/);
+  // 2026-10-27, v2: Jedzenie (kitchen) kommt aus den Favoriten der Leiste und
+  // steht genau einmal in der Seitenleiste - ohne Sektionsgruppen, also ohne
+  // appendNavEl()/kitchenAdded wie vorher.
+  const sidebar = functionBody(routerSource, 'sidebarNavItems');
+  assert.match(sidebar, /item\.navId === 'kitchen' \? sidebarKitchenEl\(\)/);
+  assert.equal((sidebar.match(/sidebarKitchenEl\(\)/g) ?? []).length, 2,
+    'einmal fuer die fuenf Ziele, einmal fuer die kurze Liste von Gast und Wandtablett');
+  assert.match(sidebar, /findIndex\(\(x\) => x\.id === 'sidebar-kitchen-nav'\) === i/, 'die kurze Liste fuehrt es nur einmal');
 });
 
 test('navigation settings leaf reuses the canonical module-order helpers', () => {
@@ -6893,15 +6907,18 @@ test('phase 4 keeps More bottom-nav identity stable while exposing active sectio
   assert.match(routerSource, /moreBtnLabel\.textContent\s*=\s*t\('nav\.more'\)/);
   // TAFLA: „Więcej" ist ein Ziel (das Verzeichnis aller Bereiche), kein
   // Ueberlauf mehr - es fuehrt das Raster (spec-navigation.txt, TAB_ICON).
+  // 2026-10-27, v2: das Raster ist Lucides layout-grid, wie Main.dc.html es
+  // zeichnet (`tab-more`, vier gleiche Quadrate, rx 1) - das gerundete
+  // `layout-grid` bleibt das Zeichen der Kennzahlen.
   assert.match(routerSource, /replaceNavIcon\(moreBtn,\s*'\.nav-item__icon',\s*TAB_ICON\.more\)/);
-  assert.match(routerSource, /more:\s*'layout-grid'/);
+  assert.match(routerSource, /more:\s*'tab-more'/);
   assert.doesNotMatch(routerSource, /const\s+moreIcon\s*=\s*activeSecondary\s*\?\s*activeSecondary\.icon/);
   assert.doesNotMatch(routerSource, /moreBtnLabel\.textContent\s*=\s*moreLabel/);
 
   // Der Aufbau laeuft seit 2026-08-17 ueber `moduleIconEl`; geprueft wird der
   // NAME - seit Tafla das Raster aus TAB_ICON, nicht das mehrdeutige 2x2.
   const navIcons = read('../public/nav-icons.js');
-  assert.match(navIcons, /'layout-grid':\s*\[/);
+  assert.match(navIcons, /'tab-more':\s*\[/);
   assert.match(routerSource, /moduleIconEl\(TAB_ICON\.more,\s*'nav-item__icon'\)/);
   assert.doesNotMatch(routerSource, /grid-2x2/);
 });
@@ -18248,7 +18265,6 @@ test('SHELL: die Seitenleiste fasst 15 Module ohne Scrollen auf 800px Fensterhoe
   const itemsPad = box(prop(rule('.nav-sidebar__items'), 'padding'));
   const sidebarPad = box(prop(rule('.nav-sidebar'), 'padding'));
   const logo = rule('.nav-sidebar__logo');
-  const pinned = rule('.nav-sidebar > .nav-item--pinned-end');
   const account = rule('.nav-sidebar__account');
   const accountRow = val(prop(rule('.nav-sidebar .nav-item.nav-sidebar__account-trigger'), 'min-height'));
 
@@ -18264,7 +18280,9 @@ test('SHELL: die Seitenleiste fasst 15 Module ohne Scrollen auf 800px Fensterhoe
   const frame = floatGap + 2 * tok('--space-px')
     + sidebarPad.top + sidebarPad.bottom
     + val(prop(logo, 'height')) + val(prop(logo, 'margin-bottom'))
-    + row + val(prop(pinned, 'margin-top'))
+    // 2026-10-27, v2: hier stand die Zeile des gepinnten Eintrags
+    // „Einstellungen" samt Naht - mit den fuenf Zielen entfallen (die Rechnung
+    // ueber 15 Module bleibt als obere Schranke stehen).
     + val(prop(account, 'padding-top')) + val(prop(account, 'margin-top')) + 1 + accountRow;
   const total = list + frame;
   assert.ok(total <= 800,
@@ -21362,7 +21380,11 @@ test('D6: eine Zeile mit sichtbarem Mehr-Knopf zeigt keinen Wisch-Chevron', () =
     'der Wisch-Chevron ("tippe fuer Detail") faellt weg, wo der Mehr-Knopf am Zeilenende steht');
 });
 
-test('Sidebar: der gepinnte Eintrag (Einstellungen) traegt dieselbe Pille, keinen Streifen und keine Toenung', () => {
+// 2026-10-27, v2: der Guard hiess „der gepinnte Eintrag (Einstellungen) traegt
+// dieselbe Pille". Den Eintrag gibt es nicht mehr - die Seitenleiste fuehrt die
+// fuenf Ziele der Leiste, die Einstellungen stehen im Konto-Menue. Es bleibt
+// die Haelfte, die jede Zeile betrifft: kein Streifen, keine statische Toenung.
+test('Sidebar: kein aktiver Eintrag traegt Streifen oder statische Toenung; Einstellungen im Konto-Menue', () => {
   const layout = read('../public/styles/layout.css');
   const glass = read('../public/styles/glass.css');
   const active = (src) => [...eachRule(src)].filter(({ selector }) => selector.split(',').map((s) => s.trim())
@@ -21372,12 +21394,9 @@ test('Sidebar: der gepinnte Eintrag (Einstellungen) traegt dieselbe Pille, keine
     assert.doesNotMatch(selector, /::before/, `${selector}: der alte 3px-Akzentstreifen`);
   }
   const router = read('../public/router.js');
-  assert.match(router, /pill\.className = 'nav-sidebar__indicator nav-sidebar__indicator--pinned';/,
-    'der gepinnte Eintrag bringt eine Pille aus derselben Klasse mit (Material aus glass.css)');
-  const place = functionBody(router, 'positionSidebarIndicator');
-  assert.match(place, /glidePillFrom\(pinnedPill,/, 'die Pille gleitet von der Stelle der Listenpille her');
-  const pinned = [...eachRule(layout)].find(({ selector }) => selector.trim() === '.nav-sidebar__indicator--pinned');
-  assert.match(pinned?.body ?? '', /z-index\s*:\s*-1/, 'hinter Zeichen und Wort');
+  assert.doesNotMatch(router, /nav-item--pinned-end|nav-sidebar__indicator--pinned/, 'kein gepinnter Eintrag mehr');
+  assert.match(router, /item\('settings', 'settings', 'nav\.settings'/, 'die Einstellungen stehen im Konto-Menue');
+  assert.match(router, /if \(action === 'settings'\) navigate\('\/settings\?view=domains'\)/);
 });
 
 test('Notizen: eine Kartenhaut fuer angepinnt und nicht angepinnt; Loeschen im Mehr-Knopf', () => {
@@ -21438,20 +21457,27 @@ test('D3: die Unternavigation der Module ist Text, keine Icon-Reiter', () => {
 // Suche), ihre Felder darin sind nackt. Je Feld eine eigene Kapsel waere in der
 // Leiste eine Kapsel in der Kapsel. Die Zusage bleibt: eine Haut, keine zweite
 // Fassung - deshalb fuehrt page-search.css die Felder auch nicht mehr.
-test('D5: die Schnellzeile des Einkaufs traegt die Kapsel+Fill-Haut der Suche - einmal, um die Leiste', () => {
+//
+// v2 (2026-10-27): the owner's redesign gives the bar its own skin - a white
+// "Dodaj produkt" bar, radius 12, a hairline edge (design-v2 ZakupyIdle) -
+// instead of the search's fill capsule. The promise of D5 stays: ONE skin,
+// around the bar, the fields in it bare, the focus coming with the skin, and
+// no second skin for the fields in page-search.css.
+test('D5: die Schnellzeile des Einkaufs traegt EINE Haut - um die Leiste, die Felder darin nackt', () => {
   const search = [...eachRule(read('../public/styles/page-search.css'))].filter((r) => !r.at.length);
-  const skin = search.find((r) => r.selector.split(',').map((x) => x.trim()).includes('.page-search__input')
-    && /border-radius:\s*var\(--radius-full\)/.test(r.body));
-  assert.ok(skin && /background-color:\s*var\(--color-fill-field\)/.test(skin.body), 'Vorbedingung: die Suchhaut steht in page-search.css');
   assert.ok(!search.some((r) => /\.quick-add__/.test(r.selector)), 'die Felder der Leiste tragen keine zweite, eigene Haut');
 
   const shopping = [...eachRule(read('../public/styles/shopping.css'))];
   const bar = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar');
-  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-full\)/, 'die Leiste ist die Kapsel');
-  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-fill(?:-field)?\)/, 'mit der Flaeche der Suche (Tafla: --color-fill)');
+  assert.match(bar?.body ?? '', /border-radius:\s*var\(--radius-card\)/, 'die Leiste ist die Haut (v2: --radius-card, 12)');
+  assert.match(bar?.body ?? '', /background-color:\s*var\(--color-surface\)/, 'weiss wie eine Karte (v2)');
+  // The hairline is a ring inside the bar's 48 (`--addbar-edge`), the focus
+  // turns the same ring to the accent.
+  assert.match(bar?.body ?? '', /--addbar-edge:\s*var\(--color-border\)/, 'mit der Haarlinie der Karten (v2)');
+  assert.match(bar?.body ?? '', /box-shadow:\s*inset 0 0 0 1px var\(--addbar-edge\)/, 'die Haarlinie ist ein Ring der Haut');
   const focus = shopping.find((r) => !r.at.length && r.selector.trim() === '.shopping-addbar:focus-within');
-  assert.match(focus?.body ?? '', /border-color:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut - wie an der Suche');
-  const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__qty,\s*\.quick-add__cat/.test(r.selector));
+  assert.match(focus?.body ?? '', /--addbar-edge:\s*var\(--color-accent\)/, 'der Fokus kommt mit der Haut');
+  const bare = shopping.find((r) => !r.at.length && /\.quick-add__input,\s*\.quick-add__cat/.test(r.selector));
   assert.match(bare?.body ?? '', /border:\s*0/, 'die Felder sind nackt');
   assert.match(bare?.body ?? '', /background-color:\s*transparent/, 'die Felder sind nackt');
 });

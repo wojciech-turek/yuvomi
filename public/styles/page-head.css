@@ -1,0 +1,191 @@
+/**
+ * Modul: Seitenkopf der Shell - Rueckweg und Leiste geschobener Seiten
+ * Zweck: der 36pt-Rueckweg (router.js, syncPageBack), die Ordnung des Kopfes
+ *        geschobener Seiten (Kreise in der Rueckweg-Zeile, grosser Titel
+ *        darunter) und das Einklappen zu EINER Leiste (utils/ux.js,
+ *        wireCollapsingHeader).
+ * Herkunft: stand bis 2026-10-27 in capture.css, neben dem globalen + und dem
+ *        Erfassen-Blatt. Die sind mit v2 entfallen (jede Seite legt selbst an);
+ *        der Kopf bleibt und hat seine eigene Datei.
+ * Abhaengigkeiten: tokens.css, layout.css (.page-toolbar)
+ */
+
+/* ================================================================
+ * Der Rueckweg geschobener Seiten (router.js, syncPageBack)
+ *
+ * Seiten hinter „Więcej" tragen vorn im Kopf einen 36pt-Kreis mit Chevron
+ * (44 Treffer), der zur Seite Więcej (/more) fuehrt - „Wróć: Więcej"
+ * (Artboards Notatki/Budzet.dc.html). Am Desktop fuehrt die Seitenleiste; dort
+ * entfaellt er.
+ * ================================================================ */
+.page-back {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .page-back {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--target-base);
+    block-size: var(--target-base);
+    margin-inline-start: calc(-1 * var(--ghost-circle-inset));
+    padding: var(--ghost-circle-inset);
+    border: 0;
+    border-radius: var(--radius-full);
+    background-color: var(--color-fill);
+    background-clip: content-box;
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  /* DIE RUECKWEG-ZEILE TRAEGT DIE KREISE, DER GROSSE TITEL DIE GANZE BREITE
+   * (Tafla ROUND2 „Pushed pages", Befund Ingenieur 7 bei 390px: „Odbiór
+   * odpadó…"). Zeile 1: der Rueckweg links, die Kopfkreise (Aktionen, Such-Icon)
+   * rechts - `order` holt sie vor den Titel, der Auto-Rand des Rueckwegs schiebt
+   * sie ans Zeilenende. Zeile 2: der Large Title mit voller Basis. Darunter, was
+   * der Kopf sonst traegt (Reiter, Zeitraum). Nur der Budget-Kopf
+   * (`--period-inline`) behaelt Titel und Zeitraum in einer Zeile: dort steht
+   * kein Kreis neben dem Titel, und der Kopf misst auf jedem Reiter gleich. */
+  .page-toolbar:has(> .page-back) {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):has(> .page-back) > .page-back {
+    order: -2;
+    margin-inline-end: auto;
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):has(> .page-back) > :is(.page-toolbar__actions, .page-search) {
+    order: -1;
+    margin-inline-start: 0;
+  }
+
+  /* Budget: der Rueckweg steht allein, Titel und Zeitraum teilen Zeile 2. */
+  .page-toolbar.page-toolbar--period-inline:not(.page-toolbar--in-group):has(> .page-back) > .page-back {
+    margin-inline-end: 100%;
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> .page-back) > .page-toolbar__title {
+    flex: 1 0 100%;
+    max-inline-size: none;
+  }
+
+  /* Die Reiter-Koepfe (Belohnungen, Schichtplan, Haushaltshilfe) liessen ihren
+   * Titel unter 768px aus dem Bild, um in EINER Zeile zu stehen (R19). Mit der
+   * Rueckweg-Zeile ist der Kopf ohnehin mehrzeilig - dann steht auch der
+   * Titel da, wie auf jeder geschobenen Seite; die Reiter bekommen ihre Zeile. */
+  .page-toolbar.page-toolbar--tabs-title:not(.page-toolbar--in-group):has(> .page-back) > .page-toolbar__title {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+
+  .page-toolbar.page-toolbar--tabs-title:not(.page-toolbar--in-group):has(> .page-back) > .page-toolbar__bar {
+    flex-basis: 100%;
+  }
+
+  /* EIN MODUL, DAS SELBST ZURUECKFUEHRT, BRAUCHT DEN KREIS NICHT: ein
+   * Gesundheits-Bereich („‹ Zdrowie") und ein Einstellungs-Blatt
+   * („‹ Ustawienia") fuehren eine Ebene hoeher, nicht nach Więcej. Zwei
+   * Rueckwege nebeneinander waeren zwei Antworten auf eine Frage - der Kreis
+   * tritt ab, und der Kopf ordnet sich, wie das Modul ihn baut. */
+  .page-toolbar:has(> :is(.health-toolbar__back:not([hidden]), .settings-toolbar__back)) > .page-back {
+    display: none;
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):has(> :is(.health-toolbar__back:not([hidden]), .settings-toolbar__back)) > :is(.page-toolbar__actions, .page-search) {
+    order: 0;
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> :is(.health-toolbar__back:not([hidden]), .settings-toolbar__back)) > .page-toolbar__title {
+    flex: 1 1 0;
+  }
+
+  /* EINGEKLAPPT (gedeckelte Koepfe) UND IN DER KOMPAKTEN HOEHE steht der Kopf
+   * als EINE Leiste: Rueckweg, Titel im Inline-Schnitt, Kreise - die
+   * Navigationsleiste, in die der Large Title hineinschrumpft. Der Titel tritt
+   * dafuer zwischen Rueckweg und Kreise (gleiche `order` wie die Kreise, im
+   * Baum steht er vor ihnen) und nimmt den Platz dazwischen. */
+  .page-toolbar--capped.is-collapsed:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> .page-back) > .page-back {
+    margin-inline-end: 0;
+  }
+
+  .page-toolbar--capped.is-collapsed:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> .page-back) > .page-toolbar__title {
+    order: -1;
+    flex: 1 1 0;
+  }
+
+  /* Dieselbe Leiste auf den SCROLLENDEN Seiten (`--bar`, wireCollapsingHeader
+   * in utils/ux.js): sie klebt bei 0 wie die gedeckelten Koepfe und behaelt
+   * eingeklappt ihren Platz im Fluss als Rand unten - der Inhalt darunter
+   * bleibt stehen, der Kopf wird nur kuerzer. */
+  .page-toolbar--bar.is-collapsed {
+    margin-block-end: var(--bar-collapse-gap, 0px);
+  }
+
+  /* Der kleine Titel eines Kopfes, dessen grosser Titel im Inhalt steht
+   * (Einstellungs-Blatt, `[data-large-title]`): eingeklappt steht er neben dem
+   * Rueckweg - „‹ Wygląd" (Tafla, 2026-10-24). */
+  .page-toolbar--capped.is-collapsed > .page-toolbar__dock-title {
+    display: block;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Der Rueckweg des Blatts steht in Ruhe allein in seiner Zeile
+   * (settings.css); eingeklappt teilt er sie mit dem kleinen Titel - sonst
+   * braeche der Titel in eine zweite Zeile, und der Kopf wuchse beim
+   * Einklappen. */
+  .page-toolbar--capped.is-collapsed > .settings-toolbar__back {
+    margin-inline-end: 0;
+  }
+}
+
+/* DIE KREISE BLEIBEN IN DER EINGEKLAPPTEN LEISTE - auch das Such-Icon (Tafla,
+ * 2026-10-24). layout.css nimmt die Suche eingeklappt aus dem Bild (Apples
+ * hidesSearchBarWhenScrolling) - gemeint war das FELD. Am Telefon ist sie ein
+ * Kreis wie die Aktionen daneben, ein Knopf der Leiste, und geht nicht mit dem
+ * Titel. Ab 768px ist sie wieder Feld, dort gilt die Regel weiter. */
+@media (max-width: 767px) {
+  .page-toolbar--capped.is-collapsed
+    > .page-search.page-toolbar__center:not(:focus-within):not(:has(input:not(:placeholder-shown))) {
+    display: grid;
+  }
+}
+
+@media (max-width: 1023px) and (max-height: 499px) {
+  .page-toolbar:not(.page-toolbar--in-group):has(> .page-back) > .page-back {
+    margin-inline-end: 0;
+  }
+
+  /* Auch der Budget-Kopf: quer steht der Rueckweg vor Titel und Zeitraum,
+   * nicht in einer eigenen Zeile darueber (Sonde 15, 640x400: 3 -> 2 Zeilen). */
+  .page-toolbar.page-toolbar--period-inline:not(.page-toolbar--in-group):has(> .page-back) > .page-back {
+    margin-inline-end: 0;
+  }
+
+  .page-toolbar:not(.page-toolbar--in-group):not(.page-toolbar--period-inline):has(> .page-back) > .page-toolbar__title {
+    order: -1;
+    flex: 1 1 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  .page-back svg {
+    width: var(--space-5);
+    height: var(--space-5);
+    stroke-width: var(--tab-icon-stroke-active);
+  }
+
+  .page-back:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-accent);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+}

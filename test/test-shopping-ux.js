@@ -2142,7 +2142,11 @@ test('applyAutocompleteSuggestion: übernimmt Name, Kategorie und Menge aus dem 
 
   assert.equal(name.value, 'Bananen', 'der Name darf nie das Objekt selbst als String zeigen ("[object Object]")');
   assert.equal(cat.value, 'Obst & Gemüse');
-  assert.equal(qty.value, '1 Bund');
+  // ONE FIELD (2026-10-27, v2): no quantity field to fill - the amount rides
+  // with the pick and goes out with the send while the name stays the same.
+  assert.equal(qty.value, '', 'there is no quantity field any more');
+  assert.equal(__test.quickAddEntry(name.value).quantity, '1 Bund');
+  assert.equal(__test.quickAddEntry('Bananen 2 kg').quantity, '2 kg', 'a typed amount wins over the pick');
 });
 
 test('applyAutocompleteSuggestion: eine nicht mehr vorhandene Kategorie überschreibt das Feld nicht', () => {
@@ -2306,6 +2310,35 @@ test('Einkauf: kein Wisch-Chevron an der Zeile, keine Reserve dafuer', async () 
 // wenn ein Name dasteht, als 36er-Kreis in der Stimme mit einem Pfeil nach oben
 // (Spec "Pasek dodawania": "A 36 accent arrow-up send circle appears once
 // there is text"). Kein Plus, kein Dauer-Akzent: ohne Text steht er nicht da.
+// v2 (2026-10-27): ONE field, the amount read from the line. The piece word
+// is the locale's ("10 szt." in Polish - measured with real texts in
+// test-shopping-composer-browser.js); this loader's t() hands back the key.
+test('v2: die Zeile liest ihre Menge - "2 mleko", "mleko 2", "250 g sera", "jajka 10"', () => {
+  const pcs = (n) => `pantry.units.pcs${JSON.stringify({ count: n })}`;
+  assert.deepEqual(__test.parseQuickEntry('2 mleko'), { name: 'mleko', quantity: `2 ${pcs(2)}` });
+  assert.deepEqual(__test.parseQuickEntry('mleko 2'), { name: 'mleko', quantity: `2 ${pcs(2)}` }, 'a number AFTER the name is an amount in the bar');
+  assert.deepEqual(__test.parseQuickEntry('250 g sera'), { name: 'ser', quantity: '250 g' }, 'the genitive after an amount becomes the name');
+  assert.deepEqual(__test.parseQuickEntry('jajka 10'), { name: 'jajka', quantity: `10 ${pcs(10)}` });
+  assert.deepEqual(__test.parseQuickEntry('Mleko 2 l'), { name: 'Mleko', quantity: '2 l' }, 'the name keeps the case it was typed in');
+  assert.deepEqual(__test.parseQuickEntry('  sól i   pieprz '), { name: 'sól i pieprz', quantity: null }, 'one send is one item');
+  assert.deepEqual(__test.parseQuickEntry('Mleko 2%'), { name: 'Mleko 2%', quantity: null });
+  // The adjective after a noun the parser turned back follows it (2026-10-27, v2).
+  assert.deepEqual(__test.parseQuickEntry('200 g sera żółtego'), { name: 'ser żółty', quantity: '200 g' }, '-ego -> -y');
+  assert.deepEqual(__test.parseQuickEntry('2 l mleka świeżego'), { name: 'mleko świeże', quantity: '2 l' }, 'a neuter noun takes -e');
+  assert.deepEqual(__test.parseQuickEntry('1 kg mąki pszennej'), { name: 'mąka pszenna', quantity: '1 kg' }, '-ej -> -a');
+  assert.deepEqual(__test.parseQuickEntry('papryki słodkiej 2'), { name: 'papryka słodka', quantity: `2 ${pcs(2)}` }, '-kiej -> -ka, the amount behind');
+  assert.deepEqual(__test.parseQuickEntry('10 jajek wiejskich'), { name: 'jajka wiejskie', quantity: `10 ${pcs(10)}` }, '-ich -> -ie');
+  assert.deepEqual(__test.parseQuickEntry('3 jogurtów naturalnych'), { name: 'jogurty naturalne', quantity: `3 ${pcs(3)}` }, '-ych -> -e');
+  assert.deepEqual(__test.parseQuickEntry('jogurtu greckiego 2'), { name: 'jogurt grecki', quantity: `2 ${pcs(2)}` }, '-iego -> -i');
+  assert.deepEqual(__test.parseQuickEntry('500 g sera w plastrach'), { name: 'ser w plastrach', quantity: '500 g' },
+    'the first word without an adjective ending ends the phrase');
+  assert.deepEqual(__test.parseQuickEntry('2 kiełbasy śląskiej'), { name: 'kiełbasy śląskiej', quantity: `2 ${pcs(2)}` },
+    'a noun the parser does not turn back keeps its adjective as typed - never one case for the noun and another for the adjective');
+  assert.deepEqual(__test.parseQuickEntry('ser żółty 200 g'), { name: 'ser żółty', quantity: '200 g' }, 'already nominative: untouched');
+  assert.equal(__test.quickAddHintText({ name: 'jajka', quantity: '10 szt.' }, ''), '10 szt.');
+  assert.equal(__test.quickAddHintText({ name: 'ser', quantity: null }, ''), '', 'nothing known, nothing said');
+});
+
 test('Einkauf: EIN Plus - der Absender ist ein Pfeil, und er erscheint erst mit Text', async () => {
   const src = readFileSync(new URL('../public/pages/shopping.js', import.meta.url), 'utf8');
   const btn = /<button class="quick-add__btn"[^>]*>\s*<i data-lucide="([^"]+)"/.exec(src);

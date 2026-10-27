@@ -953,16 +953,17 @@ test('kein Stylesheet nutzt ein Konstrukt, das an der Mindestversion einen ganze
 
 // DIE MINIMIERTE KAPSEL (R20, Review; Tafla 2026-10-19): die R20-Pille
 // verschob das aktive Ziel mit `translate` (Chromium 104) und schnitt mit
-// `overflow: clip` (90) - darum stand sie in `@supports (translate: 0)`. Seit
-// Tafla bleiben minimiert ALLE Ziele stehen und die Kapsel wird nur schmaler
-// und flacher; sie braucht keines der beiden Konstrukte mehr. Der Guard haelt
-// fest, dass keines zurueckkommt, ohne wieder unter @supports zu stehen.
-test('die minimierte Kapsel braucht weder translate noch overflow: clip (Mindestversion Chrome 87)', () => {
+// `overflow: clip` (90) - darum stand sie in `@supports (translate: 0)`.
+// 2026-10-27, v2: die Leiste minimiert gar nicht mehr. Die Absicht bleibt fuer
+// die ganze Leiste: keine ihrer Regeln braucht eines der beiden Konstrukte,
+// ohne unter @supports zu stehen - und die Minimierung kommt nicht zurueck.
+test('die Tab-Leiste braucht weder translate noch overflow: clip (Mindestversion Chrome 87)', () => {
   const css = read('public/styles/layout.css');
-  const capsuleRules = [...eachRule(css)].filter(({ selector }) => /nav-bottom--minimized|nav-bottom--settling/.test(selector));
-  assert.ok(capsuleRules.length >= 4, `Reichweite: nur ${capsuleRules.length} Regeln der minimierten Kapsel gefunden`);
-  const risky = capsuleRules.filter(({ body, at }) => (/(?:^|[;\s])translate\s*:/.test(body) || /overflow:\s*clip/.test(body))
+  const barRules = [...eachRule(css)].filter(({ selector }) => /\.nav-bottom\b/.test(selector));
+  assert.ok(barRules.length >= 4, `Reichweite: nur ${barRules.length} Regeln der Leiste gefunden`);
+  const risky = barRules.filter(({ body, at }) => (/(?:^|[;\s])translate\s*:/.test(body) || /overflow:\s*clip/.test(body))
     && !at.some((a) => /^@supports \(translate: 0\)/.test(a)));
-  assert.deepEqual(risky.map((r) => r.selector), [], 'Regeln der minimierten Kapsel mit translate/clip ohne @supports');
-  assert.ok(![...eachRule(css)].some(({ selector }) => /nav-item--pill/.test(selector)), 'die R20-Pille ist entfallen');
+  assert.deepEqual(risky.map((r) => r.selector), [], 'Regeln der Leiste mit translate/clip ohne @supports');
+  assert.ok(![...eachRule(css)].some(({ selector }) => /nav-bottom--minimized|nav-bottom--settling|nav-item--pill/.test(selector)),
+    'Minimierung und R20-Pille sind entfallen');
 });
