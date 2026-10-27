@@ -195,7 +195,7 @@ class YuvomiInstallPrompt extends HTMLElement {
          * --install-prompt-lift (layout.css) den Banner ueber ihn. Er liegt auf
          * der Toast-Ebene und gewaenne sonst jeden Treffer - derselbe Befund,
          * der unter Tafla mit dem FAB in der Kapsel entfallen war. */
-        bottom: calc(var(--nav-bottom-height) + var(--space-2) + var(--install-prompt-lift, 0px));
+        bottom: calc(var(--nav-bottom-height) + var(--space-2) + var(--install-prompt-lift));
         left: var(--space-3);
         right: var(--space-3);
         z-index: var(--z-toast);

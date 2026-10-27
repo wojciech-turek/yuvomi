@@ -601,6 +601,9 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
  * benutzt wird. An `:root` deklariert hätte sie alle drei als 0 gelesen. */
 :root {
   --install-prompt-tail: 0px;
+  /* Kein Summand des Nachlaufs, sondern der Hub des Banners ueber einen
+   * schwebenden FAB (v2, Regel bei --fab-tail). */
+  --install-prompt-lift: 0px;
   --fab-tail: 0px;
   --bulk-pill-tail: 0px;
   --nav-tail: 0px;
