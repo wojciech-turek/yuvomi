@@ -1,9 +1,10 @@
 /**
  * Modul: Kopfregel mobil - statische Guards (DESIGN.md „Kopfregel mobil")
  * Zweck: Haelt die Shell-Seite der Regel vom 2026-09-26 fest:
- *        (1) die Tab-Kapsel liegt UEBER dem Inhalt, nicht im Flex-Fluss, und
+ *        (1) die Tab-Leiste liegt UEBER dem Inhalt, nicht im Flex-Fluss, und
  *            ihre Zone ist ein Summand des Nachlaufs - sonst klebt die letzte
- *            Zeile unter dem Glas;
+ *            Zeile unter ihr (v2, 2026-10-27: eine deckende, buendige Leiste
+ *            statt der Glas-Kapsel);
  *        (2) keine Chipreihe/Filterzeile klebt (sticky/fixed) - fest ueber dem
  *            Port kostete sie dauerhaft 60-65px, die kein Kollaps zurueckholt;
  *        (3) nichts im Inhalt klebt mit `bottom: 0` an der Unterkante - dort
@@ -36,20 +37,25 @@ const decl = (body, prop) => {
 };
 const topLevel = (css, selector) => rules(css).filter((r) => r.at.length === 0 && r.selector === selector);
 
-test('(1) die Tab-Kapsel liegt ueber dem Inhalt, nicht im Flex-Fluss', () => {
+test('(1) die Tab-Leiste liegt ueber dem Inhalt, nicht im Flex-Fluss', () => {
   const nav = topLevel(layoutCss, '.nav-bottom');
   assert.equal(nav.length, 1, 'genau eine Basisregel .nav-bottom in layout.css');
   const body = nav[0].body;
   const position = decl(body, 'position');
   assert.ok(position === 'absolute' || position === 'fixed',
     `.nav-bottom muss aus dem Fluss (absolute an der Shell), ist aber "${position}" - `
-    + 'als Flex-Kind nimmt sie dem Scrollport ihre Zone, und unter dem Glas laeuft nie Inhalt');
+    + 'als Flex-Kind nimmt sie dem Scrollport ihre Zone');
   assert.equal(decl(body, 'flex-shrink'), null, 'flex-shrink an .nav-bottom verraet ein Flex-Kind');
-  assert.equal(decl(body, 'bottom'), '0', 'die Zone sitzt an der Unterkante der Shell');
-  assert.equal(decl(body, 'pointer-events'), 'none',
-    'die transparente Zone darf Tipps auf den Inhalt darunter nicht schlucken');
-  const items = topLevel(layoutCss, '.nav-bottom__items');
-  assert.ok(items.some((r) => decl(r.body, 'pointer-events') === 'auto'), 'die Kapsel selbst nimmt Treffer an');
+  assert.equal(decl(body, 'bottom'), '0', 'die Leiste sitzt buendig an der Unterkante der Shell');
+  // 2026-10-27, v2: hier stand `pointer-events: none` - die Zone um die
+  // Glas-Kapsel war durchsichtig, Tipps sollten zum Inhalt darunter. Die Leiste
+  // ist jetzt DECKEND: was unter ihrem Polster liegt, sieht niemand, also darf
+  // ein Tipp dorthin auch nichts ausloesen.
+  assert.notEqual(decl(body, 'pointer-events'), 'none',
+    'die deckende Leiste nimmt jeden Tipp selbst - sonst traefe einer im Polster eine unsichtbare Zeile');
+  assert.equal(decl(body, 'background-color'), 'var(--color-surface)', 'deckend weiss, kein Glas');
+  assert.equal(decl(body, 'border-top'), '1px solid var(--nav-bar-border)', 'eine 1px-Kante oben (#E6E5E1)');
+  assert.equal(decl(body, 'backdrop-filter'), null, 'kein Glas');
 });
 
 test('(1) die Zone der Kapsel ist ein Summand des Nachlaufs, und nur dort, wo sie steht', () => {
@@ -591,79 +597,80 @@ test('"Mehr" ist auf einem Einstellungsblatt sofort aktiv, auch nach dem Kaltsta
     'beim Kaltstart wird das Ziel erst nach dem Rendern der Seite markiert');
 });
 
-// R19 (Critique 2026-10-16, Persona Casey): DIE TABS STEHEN STILL - Kapsel
-// und Tabs springen nicht je Seite oder Reiter. Seit Tafla (2026-10-19) steht
-// das + NEBEN der Kapsel: den Platz haelt die ZONE frei, und keine Regel fragt,
-// ob eine Seite einen eigenen Knopf hat.
-test('Tafla: das + steht neben der Kapsel - die Zone haelt seinen Platz, immer', () => {
+// R19 (Critique 2026-10-16, Persona Casey): DIE TABS STEHEN STILL - Leiste
+// und Tabs springen nicht je Seite oder Reiter: keine Regel fragt, ob eine
+// Seite einen eigenen Knopf hat.
+// 2026-10-27, v2 (Main.dc.html): hier stand „das + steht neben der Kapsel".
+// Kapsel und globales + sind weg; die Leiste ist ein buendiges Rechteck aus
+// fuenf gleichen Spalten, und jede Seite legt in ihrem eigenen Kopf an.
+test('v2: die Leiste ist ein buendiges Rechteck aus fuenf gleichen Spalten - ohne + und ohne Reserve dafuer', () => {
   const all = rules(layoutCss);
   const conditional = all.filter((r) => r.selector.endsWith('.nav-bottom__items') && /page-fab|fab-holding/.test(r.selector));
-  assert.deepEqual(conditional.map((r) => r.selector), [], 'keine Kapselregel fragt, ob die Seite einen FAB hat');
+  assert.deepEqual(conditional.map((r) => r.selector), [], 'keine Leistenregel fragt, ob die Seite einen FAB hat');
   const [zone] = topLevel(layoutCss, '.nav-bottom');
-  assert.match(decl(zone.body, 'padding-inline') ?? '',
-    /^var\(--nav-capsule-inset\) calc\(var\(--nav-capsule-inset\) \+ var\(--capture-size\) \+ var\(--nav-capture-gap\)\)$/,
-    'die Zone haelt hinten das + und seine Fuge frei (390pt: Kapsel 12-318, + 326-378)');
+  assert.equal(decl(zone.body, 'padding'), 'var(--nav-bar-pad-top) var(--space-1) var(--nav-bar-pad-bottom)',
+    'oben 6px, unten 6px oder Safe-Area minus 14px - und hinten kein Platz fuer ein +');
   const tokens = read('../public/styles/tokens.css');
-  assert.match(tokens, /--capture-size:\s*52px;/, 'das + ist 52pt');
-  assert.match(tokens, /--nav-bar-gutter:\s*var\(--space-3\);/, '12pt vom Rand');
-  const capture = read('../public/styles/capture.css');
-  const [plus] = topLevel(capture, '.capture-plus');
-  assert.equal(decl(plus.body, 'inset-inline-end'), 'var(--nav-capsule-inset)', 'das + steht an derselben Kante wie die Gruppe');
-  assert.equal(decl(plus.body, 'bottom'), 'var(--fab-offset-bottom)', 'mittig auf der Kapsel');
-  assert.ok(!all.some((r) => r.selector.endsWith('.nav-bottom__items') && !r.selector.includes('nav-bottom--minimized')
-    && decl(r.body, 'inline-size')), 'keine eigene Breite der Kapsel ausser minimiert');
-});
-
-// R19 (Entscheidung Ulas 2026-10-16) / Tafla: DIE KAPSEL MINIMIERT BEIM LESEN
-// zu einer 48pt hohen Kapsel aus Zeichen - alle Ziele bleiben, die Labels gehen.
-test('R19/Tafla: die Kapsel minimiert beim Abwaertsscrollen - 48pt, nur Zeichen, Ziele und Zone bleiben', () => {
-  const all = rules(layoutCss);
-  const tokens = read('../public/styles/tokens.css');
-  assert.match(tokens, /--nav-height-minimized:\s*var\(--space-12\);/, 'minimiert ist die Kapsel 48pt hoch');
-  const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a));
-  const capsule = all.find((r) => compact(r) && r.selector === '.nav-bottom--minimized:not(:focus-within) .nav-bottom__items');
-  assert.equal(capsule && decl(capsule.body, 'min-height'), 'var(--nav-height-minimized)');
-  assert.match(decl(capsule.body, 'margin-block') ?? '', /var\(--nav-height-mobile\) - var\(--nav-height-minimized\)/,
-    'sie schrumpft um ihre Mitte - die Zone darunter bleibt gleich hoch (kein Layout-Shift)');
-  const label = all.find((r) => compact(r) && r.selector === '.nav-bottom--minimized:not(:focus-within) .nav-item__label');
-  assert.ok(label, 'die Labels blenden minimiert aus');
-  assert.equal(decl(label.body, 'opacity'), '0');
-  assert.equal(decl(label.body, 'display'), null, 'unsichtbar, nicht entfernt - der Name des Tabs bleibt im Baum');
-  assert.equal(decl(label.body, 'visibility'), null);
-  const plus = all.find((r) => compact(r) && r.selector.startsWith('html.nav-minimized') && r.selector.includes('.capture-plus'));
-  assert.ok(plus && decl(plus.body, '--capture-scale'), 'das + schrumpft mit (per transform, ohne Layout)');
-  const calm = all.filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a))
-    && r.selector.includes('.nav-bottom__items') && r.selector.includes('.nav-item__label'));
-  assert.ok(calm.some((r) => decl(r.body, 'transition') === 'none'), 'reduzierte Bewegung: Zustandswechsel ohne Gleiten');
+  const live = tokens.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(live, /--nav-bar-pad-top:\s*6px;/);
+  assert.match(live, /--nav-bar-pad-bottom:\s*max\(6px,\s*calc\(var\(--safe-area-inset-bottom\)\s*-\s*14px\)\);/,
+    'die Labels stehen ueber dem Home-Indikator, aber ohne leeren Streifen darunter');
+  for (const gone of ['--capture-size', '--nav-capture-gap', '--nav-bar-gutter', '--nav-capsule-inset', '--nav-capsule-bottom']) {
+    assert.doesNotMatch(live, new RegExp(`${gone}\\s*:`), `${gone} gehoerte zur Kapsel oder zum + und ist entfallen`);
+  }
+  const [items] = topLevel(layoutCss, '.nav-bottom__items');
+  assert.equal(decl(items.body, 'display'), 'grid');
+  assert.equal(decl(items.body, 'grid-auto-columns'), 'minmax(0, 1fr)', 'gleich breite Spalten, so viele wie Ziele');
+  assert.ok(!all.some((r) => r.selector.endsWith('.nav-bottom__items') && decl(r.body, 'inline-size')),
+    'keine eigene Breite der Reihe');
   const router = read('../public/router.js');
-  // Review #2049: an der JEWEILS aktuellen Kapsel - renderAppShell() baut sie neu.
-  assert.match(router, /navMinimizer = bindNavMinimize\(navMinimizer, nav\)/, 'der Router verdrahtet die Minimierung an der aktuellen Kapsel');
-  assert.doesNotMatch(router, /!navMinimizer\)/, 'ein vorhandener Minimierer darf eine neue Kapsel nicht ausschliessen');
-  assert.match(router, /function updateNav\(rawPath\) \{\n[^\n]*\n\s*navMinimizer\?\.expand\(\);/,
-    'jeder Seitenwechsel beginnt mit ausgefahrener Kapsel');
-  assert.match(router, /navMinimizer\?\.pin\?\.\(isPushedRoute\(path\)\)/,
-    'geschobene Seiten (hinter Więcej) stehen mit minimierter Kapsel');
+  assert.doesNotMatch(router, /capture-plus|createCapturePlus|openCapture/, 'die Shell baut kein globales + mehr');
+  assert.doesNotMatch(router, /nav-sidebar__add/, 'auch die Seitenleiste nicht');
+  assert.ok(!sheets.some(({ file }) => file === 'capture.css'), 'capture.css ist entfallen (Kopfregeln: page-head.css)');
 });
 
-// Tafla (spec-navigation.txt, chrome.py --mini): minimiert bleiben ALLE Ziele
-// stehen, je 48 breit - die R20-Pille (nur das aktive Ziel) ist entfallen.
-test('Tafla: minimiert bleiben alle Ziele sichtbar, die Breite gleitet gemessen', () => {
+// 2026-10-27, v2: hier standen zwei Guards fuer die minimierte Kapsel (R19,
+// Entscheidung Ulas 2026-10-16; Tafla: alle Ziele 48 breit). Die Leiste
+// minimiert nicht mehr - sie ist ein ruhiges Rechteck und bleibt stehen.
+test('v2: die Leiste minimiert beim Scrollen nicht - kein Zustand, keine Regel, kein Beobachter', () => {
+  for (const { file, css } of sheets) {
+    assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /nav-bottom--minimized|html\.nav-minimized/,
+      `${file}: Regeln der minimierten Kapsel sind entfallen`);
+  }
+  assert.doesNotMatch(read('../public/styles/tokens.css').replace(/\/\*[\s\S]*?\*\//g, ''), /--nav-height-minimized\s*:/);
+  const router = read('../public/router.js');
+  assert.doesNotMatch(router, /bindNavMinimize|navMinimizer/, 'der Router verdrahtet keine Minimierung');
+  const ux = read('../public/utils/ux.js');
+  assert.doesNotMatch(ux, /export function (?:bindNavMinimize|watchNavMinimize|nextNavMinimized|navMiniWidth)\b/);
+});
+
+// v2 (Main.dc.html): AKTIV ist eine 52x30-Pille in der Stimme zu 8 % hinter dem
+// Zeichen, das Zeichen in der Stimme, das Label 600 in Tinte; ruhend Tinte-2 400.
+// Zeichen 22px, Label 12/16.
+test('v2: aktiv traegt die Pille hinter dem Zeichen, das Label wird nur kraeftiger', () => {
   const all = rules(layoutCss);
-  const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a));
-  const find = (sel, prop = null) => all.find((r) => compact(r) && r.selector === sel && (!prop || decl(r.body, prop)));
-  const capsule = find('.nav-bottom--minimized:not(:focus-within) .nav-bottom__items', 'inline-size');
-  assert.equal(decl(capsule?.body ?? '', 'inline-size'), 'var(--nav-mini-width, 100%)');
-  const item = find('.nav-bottom--minimized:not(:focus-within) .nav-item');
-  assert.equal(decl(item?.body ?? '', 'flex'), 'none');
-  assert.equal(decl(item?.body ?? '', 'inline-size'), 'var(--space-12)', 'jedes Ziel 48 breit');
-  assert.ok(!all.some((r) => r.selector.includes('nav-bottom--minimized') && decl(r.body, 'visibility') === 'hidden'),
-    'kein Ziel verschwindet minimiert');
-  assert.ok(!all.some((r) => /nav-item--pill/.test(r.selector)), 'die Pille aus R20 ist entfallen');
-  const tr = find('.nav-bottom .nav-bottom__items', 'transition');
-  assert.match(decl(tr?.body ?? '', 'transition') ?? '', /inline-size/, 'die Breite gleitet (und schlaegt glass.css per Spezifitaet)');
-  const calm = all.filter((r) => r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)) && r.selector.includes('.nav-bottom .nav-item,'));
-  assert.ok(calm.some((r) => decl(r.body, 'transition') === 'none'), 'reduzierte Bewegung: ohne Gleiten');
-  assert.match(read('../public/utils/ux.js'), /if \(minimized\) measureNavMini\(nav\);/, 'gemessen wird an der ausgefahrenen Kapsel');
+  const one = (sel) => all.find((r) => r.at.length === 0 && r.selector.split(',').map((s) => s.trim()).includes(sel));
+  const well = one('.nav-bottom .nav-item__icon-well');
+  assert.equal(decl(well.body, 'width'), 'var(--nav-pill-width)');
+  assert.equal(decl(well.body, 'height'), 'var(--nav-pill-height)');
+  assert.equal(decl(well.body, 'background'), 'transparent', 'ruhend keine Flaeche');
+  const active = one('.nav-bottom .nav-item[aria-current="page"] .nav-item__icon-well');
+  assert.equal(decl(active.body, 'background-color'), 'color-mix(in srgb, var(--color-btn-primary) 8%, transparent)');
+  assert.equal(decl(active.body, 'color'), 'var(--color-accent)');
+  const label = one('.nav-bottom .nav-item__label');
+  assert.equal(decl(label.body, 'font-size'), 'var(--nav-label-size)');
+  assert.equal(decl(label.body, 'line-height'), 'var(--nav-label-lh)');
+  assert.equal(decl(label.body, 'font-weight'), 'var(--font-weight-regular)');
+  const activeLabel = one('.nav-bottom .nav-item[aria-current="page"] .nav-item__label');
+  assert.equal(decl(activeLabel.body, 'color'), 'var(--color-text-primary)');
+  assert.equal(decl(activeLabel.body, 'font-weight'), 'var(--font-weight-semibold)');
+  const item = one('.nav-bottom .nav-item');
+  assert.equal(decl(item.body, 'color'), 'var(--color-text-secondary)', 'ruhend Tinte-2');
+  const tokens = read('../public/styles/tokens.css');
+  assert.match(tokens, /--nav-pill-width:\s*52px;/);
+  assert.match(tokens, /--nav-pill-height:\s*30px;/);
+  assert.match(tokens, /--nav-icon-size:\s*22px;/);
+  assert.ok(!all.some((r) => /nav-bottom__indicator/.test(r.selector)), 'kein gleitender Indikator mehr in der Leiste');
 });
 
 // R20 (Re-Critique 2026-10-17): der Bereichskopf der Gesundheit blieb beim Lesen
@@ -724,7 +731,9 @@ test('Tafla: der grosse Titel der Kuechen-Leiste klappt beim Scrollen ein, ohne 
 });
 
 test('Tafla: geschobene Seiten - Kreise in der Rueckweg-Zeile, Titel auf voller Breite und sichtbar', () => {
-  const capture = rules(read('../public/styles/capture.css'));
+  // 2026-10-27, v2: die Kopfregeln standen am Ende von capture.css; mit dem
+  // Erfassungsblatt ist die Datei entfallen, die Regeln stehen in page-head.css.
+  const capture = rules(read('../public/styles/page-head.css'));
   const compact = (r) => r.at.some((a) => /max-width:\s*1023px/.test(a)) && !r.at.some((a) => /max-height/.test(a));
   const pushed = capture.filter((r) => compact(r) && r.selector.includes(':has(> .page-back)') && !r.selector.includes('is-collapsed'));
   const back = pushed.find((r) => r.selector.endsWith('> .page-back') && !r.selector.includes('period-inline'));

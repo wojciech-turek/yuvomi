@@ -959,7 +959,7 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   z-index: var(--z-nav);
 }
 
-/* ── Items-Reihe: die schwebende Glas-Kapsel ── */
+/* ── Items-Reihe: fuenf Spalten in der Leiste (v2: keine Kapsel mehr) ── */
 .nav-bottom__items {
   /* Fuenf gleich breite Spalten - so viele wie Ziele (Gast und Wand fuehren
    * andere Mengen; die Spalten folgen der Zahl). Mindestens --nav-height-mobile
@@ -972,10 +972,10 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   position: relative;
 }
 
-/* DER PLATZ DES KNOPFS: seit Tafla haelt ihn die ZONE frei (padding-inline
- * an `.nav-bottom`), nicht mehr die Kapsel - das + steht neben ihr. Kapsel und
- * Tabs bleiben in jedem Modul und Reiter gleich breit (Re-Kritik 2026-10-17):
- * keine Regel fragt, ob eine Seite einen eigenen Knopf hat. */
+/* KEIN PLATZ FUER EINEN KNOPF (v2, 2026-10-27). Unter Tafla hielt die Zone
+ * hinten das globale + frei; das ist weg, jede Seite legt in ihrem Kopf an.
+ * Die Tabs bleiben in jedem Modul und Reiter gleich breit (Re-Kritik
+ * 2026-10-17): keine Regel fragt, ob eine Seite einen eigenen Knopf hat. */
 
 /* ── More-Button (Button-Basis, ansonsten wie nav-item) ── */
 .nav-item--more,
@@ -1813,7 +1813,6 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
     opacity var(--duration-xs) var(--ease-out);
 }
 
-/* Das Zeichen: 24pt, Strich 1.75 - aktiv 2.25 statt einer Fuellung. */
 .nav-bottom .nav-item__icon {
   /* Das Zeichen: 22px, Strich 1.75 - auch aktiv (die Pille traegt den Zustand). */
   width: var(--nav-icon-size);
@@ -1875,7 +1874,8 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   fill: color-mix(in srgb, currentColor 30%, transparent);
 }
 
-/* Bottom-Nav aktiv: die gleitende Indikatorfläche übernimmt den Zustand. */
+/* Bottom-Nav aktiv: der Tab selbst traegt keine Flaeche - die Pille um das
+ * Zeichen traegt den Zustand (v2: der gleitende Indikator ist entfallen). */
 .nav-bottom .nav-item[aria-current="page"],
 .nav-bottom .nav-item--active {
   background: none;
@@ -1904,17 +1904,12 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
  * „Einst…"; zwei zentrierte Zeilen erhalten die Recognition.
  * overflow-wrap:anywhere bricht auch fugenlose Langwörter.
  *
- * EINE STUFE KLEINER ALS DIE UEBRIGEN LABELS (2026-08-10), UND DAS IST DER
- * PLATTFORM-WERT, NICHT DIE NOTLOESUNG. iOS setzt Tab-Bar-Titel auf 10pt; die
- * App stand bei 12px und damit ueber dem Kanon. Der Anlass war der FAB, der in
- * die Kapsel gezogen ist und ihr 60px abnimmt: bei 375px blieben 58px je Slot,
- * „Übersicht" wollte 58 und bekam 54 - die Bar wuchs auf zwei Zeilen und 74px
- * Hoehe. --type-micro (Caption 2, 11px) ist die kleinste TEXTROLLE der Skala
- * und damit die richtige Stufe; darunter faengt --text-2xs an, und das ist eine
- * Badge-Groesse. Bei 11px will das laengste deutsche Label 53px und passt
- * einzeilig. Der Umbruch bleibt trotzdem: er faengt die Sprachen ab, fuer die
- * auch das nicht reicht - deshalb steht er in DERSELBEN Regel wie die Groesse
- * und nicht in einer zweiten mit gleichem Selektor. */
+ * HIER STAND 11px (--type-micro, 2026-08-10): der FAB sass damals in der
+ * Kapsel und nahm ihr 60px, „Übersicht" brach bei 375px sonst um. v2
+ * (2026-10-27): ohne Knopf in der Leiste hat jeder der fuenf Tabs die volle
+ * Fuenftelbreite, und das Label steht wieder bei 12/16 wie im Entwurf
+ * (Main.dc.html). Der Umbruch bleibt in DERSELBEN Regel wie die Groesse: er
+ * faengt die Sprachen ab, fuer die auch das nicht reicht. */
 .nav-bottom .nav-item__label {
   /* v2: 12/16, ruhend 400 in Tinte-2, aktiv 600 in Tinte (Regel unten). Lange
    * Sprachen brechen auf zwei Zeilen um - mit Trennstrich, nicht mitten im
@@ -1948,20 +1943,11 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   font-weight: var(--font-weight-semibold);
 }
 
-/* Das Label steht auf der getönten Indikator-Pille, also auf einer Tönung
- * SEINER EIGENEN FARBE - genau der Fall, für den tokens.css die Konvention
- * „Akzent-Text auf akzent-getöntem Grund" führt (70 % Akzent + 30 %
- * text-primary). Zehn Stylesheets wenden sie an; die Tab-Bar war die einzige
- * Stelle, die den rohen Akzent schrieb.
- *
- * Gemessen am gerenderten Pixel im Dark, vorher → nachher: Übersicht 3.41 →
- * 4.92:1, Kalender 4.14 → 5.51:1, Aufgaben 5.88 → 6.58:1, Einkauf 4.85 →
- * 5.94:1. Zwei der vier lagen unter AA, und kein Token-Guard konnte das sehen:
- * das Paar entsteht erst aus Fläche plus Tint plus Glas im Dokument.
- *
- * Das ICON behält den vollen Akzent - für Nicht-Text gilt 3:1, und die
- * Konvention sagt das ausdrücklich. */
-/* Und dieselbe Konvention in der SIDEBAR, aus demselben Grund (Runde 6,
+/* v2 (2026-10-27): in der Leiste steht das aktive Label in TINTE, nicht in
+ * der Stimme, und nicht auf der Pille (die umfasst nur das Zeichen) - die
+ * Frage „Akzent-Text auf akzent-getoentem Grund" stellt sich dort nicht mehr.
+ * Das ICON auf der Pille traegt den vollen Akzent: Nicht-Text, 3:1. */
+/* In der SIDEBAR steht das Label weiter in der Stimme auf der Toenung (Runde 6,
  * Phase 3). Der gleitende Indikator tönt dort dieselbe Farbe, die das Label
  * schreibt; gemessen im Dark auf der Übersicht: 4.20:1 gegen #29292D, also
  * unter AA.
@@ -1981,10 +1967,10 @@ html:has(.list-bulkbar) yuvomi-install-prompt {
   font-weight: var(--font-weight-semibold);
 }
 
-/* Fokusring um den ganzen Tab (Tafla): die aktive Pille umfasst Zeichen und
- * Label, also tut es der Ring auch - rund, in der Stimme (Eine-Stimme-Regel:
- * kein Modulton, ein Ring fuer alle fuenf Ziele), innen an der Tabkante, damit
- * ihn die Rundung der Kapsel nicht beschneidet. */
+/* Fokusring um den ganzen Tab: Zeichen und Label sind EIN Ziel, also umfasst
+ * der Ring beide - in der Stimme (Eine-Stimme-Regel: kein Modulton, ein Ring
+ * fuer alle fuenf Ziele), innen an der Tabkante, damit ihn die Leistenkante
+ * und der Bildschirmrand nicht beschneiden. */
 .nav-bottom .nav-item:focus-visible {
   --focus-ring-color: var(--color-accent);
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
