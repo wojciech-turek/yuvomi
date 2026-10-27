@@ -251,15 +251,15 @@ test('R14 P2: die Wand sammelt nicht - dort klappt nichts auf', async () => {
 // Tafla (2026-10-19): der Speed-Dial ist entfallen. Am Desktop bleibt die
 // angedockte Pille - sie heisst jetzt „Dodaj" und oeffnet das globale
 // Erfassen-Blatt (dasselbe wie das + neben der Kapsel), statt eines Menues.
-test('R14/Tafla: die Uebersicht ruft das globale Erfassen und baut keinen Speed-Dial', () => {
-  // Der Kopf der alten Uebersicht (renderDashboardOverview) mit seiner
-  // angedockten Pille ist gegangen; das Erfassen kommt aus der Shell.
+// 2026-10-27, v2: Blatt, + und die Pille auf Dziś sind weg - jede Seite legt
+// in ihrem eigenen Kopf an. Dziś baut weder Speed-Dial noch Knopf.
+test('R14/v2: die Uebersicht baut keinen Speed-Dial und ruft kein globales Erfassen', () => {
   assert.equal(__test.renderFab(), '', 'kein schwebender Speed-Dial');
-  assert.match(dashboardSource, /window\.yuvomi\?\.openCapture\?\.\(\)/, 'der Knopf ruft das globale Erfassen');
+  assert.doesNotMatch(dashboardSource, /openCapture/, 'kein globales Erfassen mehr');
   assert.doesNotMatch(dashboardSource, /FAB_ACTIONS|FAB_NEW_BTN|function wireNewMenu/, 'der Speed-Dial ist entfallen');
 });
 
-test('Tafla: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf - das + der Shell', () => withStage(true, () => {
+test('v2: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf', () => withStage(true, () => {
   assert.equal(__test.renderFab(), '');
 }));
 

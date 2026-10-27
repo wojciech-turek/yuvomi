@@ -321,7 +321,10 @@ test('Seitenleiste: Pille <= 300ms aus Tokens, Hover-Absicht 150-250ms aus einem
     const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const rules = [...layout.matchAll(new RegExp(`${esc}\\s*\\{([^}]*)\\}`, 'g'))]
       .map((m) => m[1].match(/transition:([^;]*);/)?.[1])
-      .filter(Boolean);
+      // 2026-10-27, v2: `transition: none` (reduzierte Bewegung) ist keine
+      // Dauer. Bis v2 stand `.nav-bottom__indicator` am Ende derselben
+      // Selektorliste, und der Regex sah die Regel nie.
+      .filter((v) => v && v.trim() !== 'none');
     assert.ok(rules.length, `${sel}: keine Regel mit transition`);
     return rules;
   };

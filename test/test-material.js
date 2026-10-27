@@ -337,7 +337,10 @@ test('R18: die Icon-Mulde der Seitenleiste ist eine Mulde', () => {
 
 const isDesktop = (rule) => rule.at.some((a) => /min-width:\s*1024px/.test(a));
 
-test('R18: die Seitenleiste ist am Desktop eine schwebende Glastafel', () => {
+// 2026-10-27, v2: „schwebende GLAStafel" - die Geometrie bleibt (Abstand,
+// Radius, Breite), das Material nicht: die Tafel ist deckend hell wie die
+// Leiste am Telefon, ohne Blur und ohne Schatten; eine 1px-Kante fasst sie.
+test('R18/v2: die Seitenleiste ist am Desktop eine schwebende helle Tafel', () => {
   const geometry = rulesFor(LAYOUT, '.nav-sidebar').find((r) => isDesktop(r) && /position:\s*fixed/.test(r.body));
   assert.ok(geometry, 'die Desktop-Regel der Seitenleiste fehlt');
   for (const side of ['top', 'left', 'bottom']) {
@@ -351,9 +354,10 @@ test('R18: die Seitenleiste ist am Desktop eine schwebende Glastafel', () => {
   assert.ok(gap >= 6 && gap <= 12, `Abstand ${gap}px - Groessenordnung der Luft um die mobile Kapsel (8px)`);
 
   const shadows = rulesFor(GLASS, '.nav-sidebar').filter((r) => isDesktop(r) && /box-shadow/.test(r.body));
-  assert.equal(shadows.length, 1, 'genau EINE Regel setzt den Schatten der Tafel (vorher zwei, eine tot)');
-  assert.match(shadows[0].body, /var\(--glass-inset-elevated\)/, 'Lichtkante');
-  assert.match(shadows[0].body, /var\(--glass-shadow-md\)/, 'Schatten der schwebenden Stufe');
+  assert.equal(shadows.length, 0, 'v2: die Tafel traegt keinen Glas-Schatten mehr (vorher Lichtkante + --glass-shadow-md)');
+  const material = rulesFor(GLASS, '.nav-sidebar').find((r) => isDesktop(r) && /background\s*:/.test(r.body));
+  assert.match(material?.body ?? '', /background:\s*var\(--color-surface\)/, 'deckend hell');
+  assert.ok(!rulesFor(GLASS, '.nav-sidebar').some((r) => /backdrop-filter/.test(r.body)), 'kein Blur');
 
   // Der Flyout der eingeklappten Schiene liegt UEBER Inhalt: er ersetzt den
   // Schatten und muss die Lichtkante dabei behalten.

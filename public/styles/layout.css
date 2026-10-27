@@ -225,27 +225,21 @@
  * -------------------------------------------------------- */
 /* Die Chrome-Namen stehen NUR waehrend des Wechsels:
  * swapPage setzt `html.page-swapping` vor startViewTransition und nimmt es nach
- * dem letzten Wechsel wieder ab. Dauerhaft gesetzt macht ein Name die Leiste
- * zur Backdrop Root - der `backdrop-filter` der Kapsel `.nav-bottom__items` und
- * des Seitenleisten-Indikators sah dann nur den transparenten Elternknoten, und
- * Schrift lief scharf durchs Glas (Re-Critique 2026-09-28, A1 P1-1). Waehrend
- * des Wechsels ist das egal: dort steht die Leiste als eigenes Bild still.
+ * dem letzten Wechsel wieder ab. Dauerhaft gesetzt macht ein Name sein Element
+ * zur Backdrop Root - der `backdrop-filter` von Glas darin sah dann nur den
+ * transparenten Elternknoten, und Schrift lief scharf durchs Glas (Re-Critique
+ * 2026-09-28, A1 P1-1). Waehrend des Wechsels ist das egal: dort steht die
+ * Leiste als eigenes Bild still.
  * Guard: test-motion.js (8). */
 html.page-swapping .nav-sidebar {
   view-transition-name: nav-sidebar;
 }
 
-/* DIE KAPSEL TRAEGT DEN NAMEN SELBST, nicht ihr Elternknoten (Critique R18).
- * An `.nav-bottom` machte der Name die Zone auch waehrend des Wechsels zur
- * Backdrop Root: die Kapsel darin verlor fuer die rund 200ms der Blende ihr
- * Glas, Zeilentext lief scharf durch sie hindurch (Zwischenbild bei 67ms).
- * Am Glas-Element selbst uebernimmt der Browser dessen `backdrop-filter` an
- * die Gruppe des Uebergangs - und die blurrt das Wurzelbild darunter. Eine
- * Engine, die das nicht tut, zeigt die Kapsel wie vorher: kurz ohne Blur.
- *
- * Die Pille ist ein GESCHWISTER der Kapsel (misst echte Rects) und laege im
- * Wurzelbild unter dem Glas - sie bekommt deshalb ihren eigenen Namen und
- * gleitet wie bisher lebend zum Ziel.
+/* DIE LEISTE TRAEGT DEN NAMEN SELBST (v2, 2026-10-27). Unter Tafla sass er
+ * an der Glas-Kapsel `.nav-bottom__items`, weil er am Elternknoten die Kapsel
+ * waehrend der Blende ihr Glas kostete (Critique R18), und die gleitende Pille
+ * hatte einen eigenen Namen. Die v2-Leiste ist EIN deckendes Rechteck ohne
+ * Glas und ohne Indikator - sie steht als ein Bild still.
  *
  * Jeder Name hat genau EINEN Traeger (test:motion): ein doppelter verwirft
  * die ganze Transition. */
@@ -305,8 +299,9 @@ html.page-swapping .fab-layer .page-fab {
 }
 
 /* Der `backdrop-filter`, den die Gruppe vom Glas-Element uebernimmt, folgt
- * IHREM Kasten: ohne Rundung blurrte ein Rechteck ueber die Ecken der Kapsel
- * hinaus (im Zwischenbild gesehen). Kapsel und FAB sind voll gerundet. */
+ * IHREM Kasten: ohne Rundung blurrte ein Rechteck ueber die Ecken hinaus (im
+ * Zwischenbild gesehen). Der FAB ist voll gerundet; die v2-Leiste ist ein
+ * Rechteck ohne Glas und braucht keine Rundung. */
 ::view-transition-group(page-fab) {
   border-radius: var(--radius-full);
 }

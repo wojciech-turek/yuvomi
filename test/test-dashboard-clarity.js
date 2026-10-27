@@ -737,8 +737,11 @@ test('Onboarding: Bildmarke im ersten Schritt, Lichtring auf Leiste und Plus-Kno
   assert.match(steps, /step2Title[^\n]*\n\s*target: \(\) => document\.querySelector\(desktop \? '\.nav-sidebar' : '\.nav-bottom__items'\)/,
     'Schritt 2 zeigt auf die Seitenleiste bzw. die Kapsel');
   // Tafla: das globale + der Shell (Telefon) oder die Pille im Kopf (Desktop).
-  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)?\s*target: \(\) => \[\.\.\.document\.querySelectorAll\('\.capture-plus, \.page-fab'\)\]/,
-    'Schritt 3 zeigt auf den sichtbaren Plus-Knopf');
+  // 2026-10-27, v2: das globale + ist weg - Schritt 3 zeigt auf das „Neu" der
+  // Seite, wo eines sichtbar steht (auf Dziś keins: dann ohne Ring).
+  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)?\s*target: \(\) => \[\.\.\.document\.querySelectorAll\('\.page-fab'\)\]\.find\(isShownOnScreen\)/,
+    'Schritt 3 zeigt auf den sichtbaren Knopf der Seite');
+  assert.doesNotMatch(steps, /capture-plus/);
   assert.match(show, /function placeSpotlight\(\)/);
   assert.match(show, /classList\.toggle\('onboarding-overlay--spot', shown\)/, 'ohne sichtbares Ziel bleibt die Unschaerfe');
   assert.match(show, /spot\.setAttribute\('aria-hidden', 'true'\)/);

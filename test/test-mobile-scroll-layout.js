@@ -73,59 +73,43 @@ test('mobile bottom navigation reserves safe-area space without scroll-time root
   // dem HIG-Rollout ist die Bar eine transparente Zone mit schwebender
   // Glas-Kapsel: die Reserve steht als dritter Wert im padding-Shorthand und
   // trägt zusätzlich die Luft unter der Kapsel.
-  // Tafla: der untere Abstand ist --nav-capsule-bottom - 20pt, oder auf einem
-  // Telefon mit Home-Indikator so viel, dass er frei bleibt. Die Safe-Area
-  // steckt im Token, nicht mehr als eigener Summand.
+  // Tafla: der untere Abstand war --nav-capsule-bottom - 20pt, oder auf einem
+  // Telefon mit Home-Indikator so viel, dass er frei bleibt.
+  // 2026-10-27, v2: die Leiste steht buendig an der Unterkante; ihr unteres
+  // Polster ist 6px oder die Safe-Area minus 14px (--nav-bar-pad-bottom) - die
+  // Labels bleiben ueber dem Home-Indikator, ohne leeren Streifen darunter.
   assert.match(
     navRule,
-    /padding(-block|-bottom)?:[^;]*var\(--nav-capsule-bottom\)/,
+    /padding(-block|-bottom)?:[^;]*var\(--nav-bar-pad-bottom\)/,
     'die Bar muss die Safe-Area selbst reservieren',
   );
-  assert.match(tokensCss, /--nav-capsule-bottom:\s*max\([^;]*var\(--safe-area-inset-bottom\)/,
-    'der Abstand der Kapsel richtet sich nach der Safe-Area');
-  // Die Zone rechnet mit der gemessenen Kapselhoehe und der Token-Hoehe als
+  assert.match(tokensCss, /--nav-bar-pad-bottom:\s*max\(6px,\s*calc\(var\(--safe-area-inset-bottom\)\s*-\s*14px\)\)/,
+    'das untere Polster richtet sich nach der Safe-Area');
+  // Die Zone rechnet mit der gemessenen Tab-Hoehe und der Token-Hoehe als
   // Rueckfall (Review zu #1475, test:mobile-chrome); die Zusage hier ist nur,
   // dass die Safe-Area in der Zone steckt.
   const zone = tokensCss.match(/--nav-bottom-height:\s*([^;]+);/)?.[1] ?? '';
   assert.match(zone, /var\(--nav-height-mobile\)/);
-  assert.match(zone, /var\(--nav-capsule-bottom\)\)$/);
+  assert.match(zone, /var\(--nav-bar-pad-bottom\)\)$/);
   assert.equal(rootRule.includes('nav-bottom--hidden'), false);
 });
 
-test('mobile bottom navigation keeps five equal slots with inset indicator geometry', () => {
+// 2026-10-27, v2: hier standen zwei Guards fuer die Glas-Kapsel - fuenf
+// Flex-Slots mit eingerueckter Indikator-Geometrie, und der Indikator als
+// gemessener aktiver Tab (positionTabIndicator, Tafla). Die v2-Leiste ist ein
+// Raster aus fuenf gleichen Spalten ohne Indikator; die Pille steht fest
+// hinter dem Zeichen. Die Zusage „fuenf gleiche Plaetze" bleibt.
+test('mobile bottom navigation keeps five equal slots (v2: grid, no indicator)', () => {
   const itemsRule = cssRuleBody(layoutCss, '.nav-bottom__items');
   const itemRule = cssRuleBody(layoutCss, '.nav-bottom .nav-item');
-  const baseItemRule = cssRuleBody(layoutCss, '.nav-item');
-  const indicatorRule = cssRuleBody(layoutCss, '.nav-bottom__indicator');
-  const indicatorSurfaceRule = cssRuleBody(layoutCss, '.nav-bottom__indicator::before');
-
-  assert.match(itemsRule, /display:\s*flex/);
-  assert.match(baseItemRule, /flex:\s*1/);
-  // Tafla: ein Tab ist mindestens ein Ziel breit und teilt sich den Rest der
-  // Kapsel; lange Labels brechen um, statt die Kapsel zu sprengen.
+  assert.match(itemsRule, /display:\s*grid/);
+  assert.match(itemsRule, /grid-auto-flow:\s*column/);
+  assert.match(itemsRule, /grid-auto-columns:\s*minmax\(0, 1fr\)/, 'gleich breit, egal wie lang ein Label ist');
+  // Ein Tab ist mindestens ein Ziel breit; lange Labels brechen um, statt die
+  // Leiste zu sprengen.
   assert.match(itemRule, /min-width:\s*var\(--target-base\)/);
-  assert.match(itemRule, /flex:\s*1 1 auto/);
-  // Die Pille ist der aktive Tab selbst (Zeichen UND Label, 48 hoch); sie
-  // steht im 4/8pt-Polster der Kapsel und laeuft nie in deren Rundung.
-  assert.match(indicatorSurfaceRule, /inset:\s*0/);
-  assert.match(indicatorRule, /top:\s*0/);
-  assert.match(indicatorRule, /bottom:\s*auto/);
-  assert.match(indicatorRule, /height:\s*var\(--space-12\)/);
-  assert.match(itemsRule, /padding:\s*var\(--space-2\) var\(--space-1\)/);
-  assert.doesNotMatch(indicatorRule, /transition:[^;]*\bwidth\b/);
-});
-
-test('mobile tab indicator is the active tab itself, measured inside the capsule (Tafla)', () => {
-  // Tafla (spec-navigation.txt): die aktive Pille umfasst Zeichen UND Label.
-  // Sie liegt IN der Kapsel (zwischen Glas und Tabs - deckend ueber den Tabs
-  // malte sie sonst Zeichen und Label zu) und misst den ganzen Tab.
-  const fn = routerJs.slice(routerJs.indexOf('function positionTabIndicator'));
-  const body = fn.slice(0, fn.indexOf('\n}\n') + 2);
-  assert.match(body, /document\.querySelector\('\.nav-bottom__items'\)/);
-  assert.match(body, /indicator\.style\.width = `\$\{ar\.width\}px`/);
-  assert.match(body, /indicator\.style\.height = `\$\{ar\.height\}px`/);
-  assert.match(body, /translate\(\$\{left\}px, \$\{top\}px\)/);
-  assert.match(routerJs, /bottomItems\.prepend\(tabIndicator\)/, 'der Indikator haengt in der Kapsel');
+  assert.equal(cssRuleBody(layoutCss, '.nav-bottom__indicator'), '', 'kein Tab-Indikator mehr');
+  assert.doesNotMatch(routerJs, /function positionTabIndicator|tabIndicator/, 'der Router baut und misst keinen Tab-Indikator');
 });
 
 test('cold dashboard load does not transform the scroll surface', () => {

@@ -1461,12 +1461,14 @@ test('R19: eine Sektion mit nur einem Eintrag hat keinen Namen in der Navigation
   assert.equal(counts.get(NAV_SECTION.finance), 1);
   const router = await readFile(new URL('../public/router.js', import.meta.url), 'utf8');
   const sidebar = router.slice(router.indexOf('function sidebarNavItems()'), router.indexOf('function isModuleDisabled('));
-  assert.match(sidebar, /navSectionLabelKey\(section, entryCounts\.get\(section\)\)/, 'die Seitenleiste fragt die Regel');
   assert.doesNotMatch(router, /const NAV_SECTION_LABEL_KEYS = /, 'keine Abschrift der Namen-Tabelle im Router');
   // 2026-10-24, Tafla: das Mehr-Blatt, der zweite Leser der Regel, ist entfernt
-  // (Więcej ist die Seite /more mit eigener Ordnung). Gezaehlt wird weiter an
-  // der ganzen Seitenleiste.
-  assert.match(sidebar, /navSectionEntryCounts\(items/, 'gezaehlt wird an der Seitenleiste');
+  // (Więcej ist die Seite /more mit eigener Ordnung).
+  // 2026-10-27, v2: auch die Seitenleiste liest sie nicht mehr - sie fuehrt die
+  // fuenf Ziele der Leiste, ohne Sektionen und damit ohne Sektionsnamen. Die
+  // Regel selbst bleibt oben geprueft (module-order.js), falls wieder ein
+  // Leser gruppiert; die Seitenleiste darf keine Namen ohne sie setzen.
+  assert.doesNotMatch(sidebar, /nav-section-label|startSection\(/, 'v2: die Seitenleiste gruppiert nicht');
 });
 
 test('desktop navigation order is applied only inside each section', () => {

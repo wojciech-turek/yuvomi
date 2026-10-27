@@ -120,11 +120,9 @@
     border-color: var(--nav-bar-border);
   }
 
-  /* Active-State in Sidebar: die Flaeche traegt die Pille (Abschnitt 38,
-   * auch am gepinnten Eintrag). Hier stand eine eigene statische Toenung mit
-   * Glanzkante - in der Liste per `--liquid` abgeschaltet, an Einstellungen
-   * blieb sie stehen (Critique 2026-10-16). Uebrig bleibt die Ecke, die auch
-   * die Hover-Flaeche des gepinnten Eintrags rundet. */
+  /* Active-State in Sidebar: die Flaeche traegt die Pille (Abschnitt 38).
+   * Hier stand eine eigene statische Toenung mit Glanzkante (Critique
+   * 2026-10-16). Uebrig bleibt die Ecke der Zeile. */
   .nav-sidebar .nav-item[aria-current="page"] {
     border-radius: var(--radius-sm);
   }
