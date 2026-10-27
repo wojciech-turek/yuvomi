@@ -580,7 +580,8 @@ test('Donut-Palette wiederholt keine Farbe und borgt keine Modul-Akzente', () =>
  * Ocker (dE2000 0,9) sowie Indigo und Blau (1,9) im hellen Thema praktisch
  * aufeinander. Simuliert wird nach Machado et al. (2009, Schwere 1,0) auf
  * linearem RGB; jedes Paar der Palette muss bei Deuteranopie UND Protanopie
- * mindestens dE 8 auseinanderliegen, in beiden Themes. */
+ * mindestens dE 8 auseinanderliegen. (2026-10-27, v2: light only - die dunkle Palette
+ * ist mit dem Dark Mode gegangen.) */
 test('R19: die Datenreihen bleiben bei Rot-Gruen-Schwaeche unterscheidbar', async () => {
   const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
   const toSrgb = (c) => { c = Math.min(1, Math.max(0, c)); return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055); };
@@ -620,7 +621,6 @@ test('R19: die Datenreihen bleiben bei Rot-Gruen-Schwaeche unterscheidbar', asyn
   };
   const themes = {
     hell: block(/--_chart-series-1: #4F4DC9[\s\S]*?--_chart-series-7: #[0-9A-Fa-f]{6}/),
-    dunkel: block(/--_chart-series-1: #7D7AFF;[\s\S]*?--_chart-series-7: #[0-9A-Fa-f]{6}/),
   };
   for (const [name, pal] of Object.entries(themes)) {
     for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++) {
@@ -679,13 +679,12 @@ test('R20: die Schraffur folgt der Kategorie in Ring, Balken und Plan', async ()
   assert.ok(rules.some((r) => r.selector === '.budget-stats__hatch-line' && /fill: var\(--chart-texture-ink\)/.test(r.body)), 'Donut-Muster');
 });
 
-test('die Datenreihen-Tokens existieren in beiden Themes', () => {
+// 2026-10-27, v2: light only: eine Definition je Serie (vorher Basis plus zwei Dark-Bloecke).
+test('die Datenreihen-Tokens existieren', () => {
   for (let i = 1; i <= 7; i++) {
     assert.match(tokensCss, new RegExp(`--chart-series-${i}:\\s*var\\(--_chart-series-${i}\\)`));
+    assert.equal([...tokensCss.matchAll(new RegExp(`--_chart-series-${i}:`, 'g'))].length, 1, `--_chart-series-${i} genau einmal`);
   }
-  // Basis + zwei Dark-Blöcke (@media und [data-theme="dark"]).
-  const defs = [...tokensCss.matchAll(/--_chart-series-1:/g)];
-  assert.equal(defs.length, 3, 'Dark-Mode-Variante fehlt in einem der beiden Dark-Blöcke');
 });
 
 /**
@@ -813,9 +812,10 @@ test('keine Datenreihe deckt sich mit dem Modulton einer Seite, die Diagramme ze
     const family = familyOf.get(mod);
     assert.ok(family, `--module-${mod} löst in tokens.css auf keinen Familienton auf`);
     const familyValues = valuesOf(`--_family-${family}`);
-    assert.ok(familyValues.length >= 2, `--_family-${family} fehlt ein Theme-Wert`);
+    assert.ok(familyValues.length >= 1, `--_family-${family} fehlt sein Wert`);
 
-    for (const [themeIndex, theme] of [[0, 'light'], [1, 'dark']]) {
+    // 2026-10-27, v2: light only (vorher je Theme).
+    for (const [themeIndex, theme] of [[0, 'light']]) {
       for (let i = 1; i <= 7; i++) {
         const series = valuesOf(`--_chart-series-${i}`)[themeIndex];
         assert.ok(series, `--_chart-series-${i} fehlt für Theme ${theme}`);
@@ -832,7 +832,7 @@ test('keine Datenreihe deckt sich mit dem Modulton einer Seite, die Diagramme ze
       }
     }
   }
-  assert.ok(checked >= 14, `Nur ${checked} Paare gemessen - erwartet werden 7 Serien x 2 Themes je Modul.`);
+  assert.ok(checked >= 7, `Nur ${checked} Paare gemessen - erwartet werden 7 Serien je Modul.`);
 });
 
 test('die Trendkurve beschriftet Skala und Zeitraum - IM Bild', () => {
@@ -890,9 +890,9 @@ test('die Datenreihen-Farben tragen ≥3:1 gegen den Seitengrund (WCAG 1.4.11)',
     return (hi + 0.05) / (lo + 0.05);
   };
 
-  // Erste Definition = Light, alle weiteren = die beiden Dark-Blöcke.
+  // 2026-10-27, v2: light only: eine Definition, der helle Grund (vorher dazu zwei Dark-Bloecke).
   const backgrounds = [...tokensCss.matchAll(/--_neutral-100:\s*(#[\da-fA-F]{6})/g)].map((m) => m[1]);
-  assert.ok(backgrounds.length >= 2, 'Hintergrund-Token für beide Themes erwartet');
+  assert.equal(backgrounds.length, 1, 'genau ein Seitengrund');
 
   const seriesFor = (themeIndex) => {
     const values = [];
@@ -904,7 +904,7 @@ test('die Datenreihen-Farben tragen ≥3:1 gegen den Seitengrund (WCAG 1.4.11)',
     return values;
   };
 
-  for (const [themeIndex, theme] of [[0, 'light'], [1, 'dark']]) {
+  for (const [themeIndex, theme] of [[0, 'light']]) {
     const bg = hex(backgrounds[themeIndex]);
     seriesFor(themeIndex).forEach((color, i) => {
       const ratio = contrast(hex(color), bg);
@@ -6073,17 +6073,17 @@ test('R18 Verlauf: drei Gitterlinien, kurze Zeitachse, EIN Strichmuster, Punkt m
   assert.match(body('.budget-stats__mark-value'), /paint-order:\s*stroke/, 'ein Hof haelt Gitter und Kurve aus den Ziffern');
   assert.match(body('.budget-stats__card'), /background:\s*var\(--color-surface\)/);
   assert.match(body('.budget-stats__card'), /border-radius:\s*var\(--radius-lg\)/);
-  // Grafikkontrast 3:1 gegen den Traeger, in beiden Themes gerechnet.
+  // Grafikkontrast 3:1 gegen den Traeger. 2026-10-27, v2: light only: Erfolg #1C7134,
+  // v2-Tinte-2 #5F5E5A auf der Karte (vorher dazu die dunklen Werte).
   const { contrastRatio } = await import('../public/utils/contrast.js');
   for (const [name, ink, surface] of [
-    // Tafla-Werte (2026-10-19): Erfolg #1C7134 / #5CC27D, Tinte-2 #5E5A53 / #B3ACA1.
-    ['Einnahmen hell', '#1C7134', '#FFFFFF'], ['Einnahmen dunkel', '#5CC27D', '#2B2825'],
-    ['Ausgaben hell', '#5E5A53', '#FFFFFF'], ['Ausgaben dunkel', '#B3ACA1', '#2B2825'],
+    ['Einnahmen', '#1C7134', '#FFFFFF'],
+    ['Ausgaben', '#5F5E5A', '#FFFFFF'],
   ]) {
     assert.ok(contrastRatio(ink, surface) >= 3, `${name}: ${contrastRatio(ink, surface)}`);
   }
   const tokens = read('../public/styles/tokens.css');
-  for (const hex of ['--_color-success:       #1C7134', '--_color-success:       #5CC27D', '--_neutral-600: #5E5A53', '--_neutral-600: #B3ACA1', '--_color-surface:          #2B2825']) {
+  for (const hex of ['--_color-success:       #1C7134', '--_neutral-600: #5F5E5A', '--_color-surface:       #FFFFFF']) {
     assert.ok(tokens.includes(hex), `die gerechneten Werte sind die der Tokens: ${hex}`);
   }
 });

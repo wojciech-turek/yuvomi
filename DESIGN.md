@@ -2,46 +2,45 @@
 name: Yuvomi
 description: Familienplaner in Apples Handwerk und Yuvomis Handschrift - warme Buehne, eine violette Stimme, WCAG AA als Invariante
 colors:
-  # Tafla (2026-10-19): Werte aus tokens.css, Dark-Werte im Kommentar.
+  # v2 (2026-10-27, design-v2/project/Foundations.dc.html): light only, values
+  # from tokens.css. Tafla's dark values are gone with dark mode.
   accent-violet: "#6C3AED"
   accent-violet-hover: "#5A2BD6"   # = accent-pressed
-  accent-violet-dark: "#B49CFF"    # Dark als TEXT; als Flaeche btn-primary #7C52F2
-  accent-fill-dark: "#7C52F2"
-  accent-tint: "#F0EBFD"           # dark #3A3249
+  accent-tint: "#F0EBFD"
   accent-light: "#F3EFFE"
-  grouped-bg: "#F5F3ED"
-  surface: "#FFFFFF"
-  surface-dark: "#2B2825"
-  surface-3: "#ECE8E0"
-  fill-well: "#ECE8E0"             # = Tafla fill; dark #36322D
-  raised-dark: "#423D37"           # Tafla raised (light = surface)
-  surface-elevated: "#FBFAF7"
-  surface-elevated-hover: "#ECE8E0"
-  bg-dark: "#191816"
-  label: "#1C1B19"                 # Tafla ink; dark #F5F1E8
-  text-secondary: "#5E5A53"        # Tafla ink-2; dark #B3ACA1
-  text-tertiary: "#6B675F"
-  text-quaternary: "#8C8880"
-  ink-3: "#A29D94"                 # non-text only; dark #6F6A61
-  border: "#E4E0D7"
-  border-subtle: "#E2DDD3"         # = Tafla separator; dark #3E3933
-  border-strong: "#CFC9BC"
-  field-border: "#8A857C"          # dark #8A8378
+  grouped-bg: "#F6F6F3"            # v2 ground (--color-bg)
+  surface: "#FFFFFF"               # v2 card
+  surface-3: "#ECEBE7"
+  fill-well: "#ECEBE7"             # = --color-fill, segment track
+  surface-elevated: "#FBFBF9"
+  surface-elevated-hover: "#ECEBE7"
+  label: "#1A1A19"                 # v2 ink
+  text-secondary: "#5F5E5A"        # v2 ink-2
+  text-tertiary: "#696863"
+  text-quaternary: "#8D8C87"
+  ink-3: "#8D8C87"                 # v2 decorative grey: icons, never small text
+  border: "#EAE9E5"                # v2 hairline = card edge (--color-card-border)
+  border-subtle: "#EAE9E5"         # = --color-separator
+  separator-inner: "#EFEEEA"       # rows inside a card
+  border-strong: "#DCDBD6"
+  field-border: "#87867F"          # ring and field edge: a hair under #8D8C87 so it holds 3:1 on the fill too
   ink-on-vivid: "#FFFFFF"
-  success: "#1C7134"               # tint #E3F1E6; dark #5CC27D on #1F3A2B
-  warning: "#8F5000"               # tint #F7ECDC; dark #E6A94F on #40331F
-  danger: "#C41E3A"                # tint #FAE6E9; dark #FF7B76 on #46282A
+  overdue: "#C2410C"               # "Po terminie"
+  rain: "#5B8DEF"                  # rain bars; dry hours #DCE5F6
+  success: "#1C7134"               # tint #E3F1E6
+  warning: "#8F5000"               # tint #F7ECDC
+  danger: "#C41E3A"                # tint #FAE6E9
   info: "#0663C7"
-  hearth: "#FBEFE3"                # dark #33291F; only behind tonight's dinner
-  toast: "#2B2825"                 # dark #3A3631; text #F5F1E8, action #B49CFF / #C6B4FF
-  person-1: "#2A64A8"              # blue, tint #E1E9F3; dark #7AAEEB on #2F3A47
-  person-2: "#AD3568"              # rose, tint #F4E3EA; dark #F08AB4 on #4A3139
-  person-3: "#2A6E45"              # green, tint #E0EFE5; dark #6ABA8C on #2A3D31
-  person-4: "#A3461C"              # terracotta, tint #F6E5DA; dark #EC9A70 on #47322A
-  person-5: "#8F4398"              # plum, tint #F2E4F4; dark #D396DB on #42324A
-  person-6: "#146B77"              # teal, tint #DCEDEF; dark #5BBAC4 on #253C3F
-  cook-stage: "#141311"            # both themes; panel #24211E, ink #F5F1E8, ink-2 #B8B2A7, accent #B49CFF
-  wall-night: "#0E0C0A"            # both themes; amber digits #B8792E
+  hearth: "#FBEFE3"                # only behind tonight's dinner
+  toast: "#2B2825"                 # text #F5F1E8, action #B49CFF
+  person-1: "#1F4FA8"              # blue (Wojtek), tint #E3ECFB, dot #2F6FDB
+  person-2: "#A3264F"              # rose (Mariola), tint #FBE4EC, dot #D9467A
+  person-3: "#2A6E45"              # green, tint #E0EFE5
+  person-4: "#A3461C"              # terracotta, tint #F6E5DA
+  person-5: "#8F4398"              # plum, tint #F2E4F4
+  person-6: "#146B77"              # teal, tint #DCEDEF
+  cook-stage: "#141311"            # always dark (cook mode); panel #24211E, ink #F5F1E8, ink-2 #B8B2A7, accent #B49CFF
+  wall-night: "#0E0C0A"            # always dark (the wall's Noc scene); amber digits #B8792E
   # TAFLA (2026-10-19): die Familien haben das Chrome verlassen - in tokens.css
   # zeigt jedes --_family-* auf Tinte-2 (#5E5A53 / #B3ACA1). Die Werte unten
   # sind die zurueckgezogenen Toene; die Webseite (docs/assets/site.css) fuehrt
@@ -78,41 +77,63 @@ colors:
   weather-storm: "#8B2FC9"
 typography:
   display:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "clamp(3rem, 9vw, 4.5rem)"
     fontWeight: 700
   # Tafla: vier Groessen (34/41, 22/28, 17/22, 13/18), zwei Gewichte (400/600).
   large-title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "2.125rem"
     fontWeight: 600
     lineHeight: 1.21
     letterSpacing: "0"
-  rounded-numerals:
-    fontFamily: "ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  # v2: no rounded face any more - numerals are Inter with tabular-nums.
+  page-title:
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    fontSize: "1.625rem"
     fontWeight: 600
-    note: "clock, timers, cook step number, the one hero number, peak lines; tabular-nums"
+    lineHeight: "2rem"
+    letterSpacing: "-0.02em"
+    note: "v2 --type-page (26/32)"
+  section:
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    fontSize: "1.0625rem"
+    fontWeight: 600
+    lineHeight: "1.5rem"
+    note: "v2 --type-section (17/24)"
+  row:
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    fontSize: "0.9375rem"
+    fontWeight: 400
+    lineHeight: "1.25rem"
+    note: "v2 --type-row (15/20)"
+  meta:
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: "400 | 600"
+    lineHeight: "1rem"
+    note: "v2 --type-meta (12/16); times and temperatures tabular-nums"
   title-1:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.75rem"
     fontWeight: 700
     lineHeight: 1.21
     letterSpacing: "-0.015em"
   title-2:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.375rem"
     fontWeight: 600
     lineHeight: 1.21
     letterSpacing: "0"
   # Tafla: der Bereichstitel ist Title 22/600 (vorher Title 3, 20px).
   title-3:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.375rem"
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "0"
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 600
     lineHeight: 1.3
@@ -120,38 +141,38 @@ typography:
   # Eine Zeile ist Lesetext mit Betonung, eine Karte fuehrt ihren Titel als
   # headline; Zeilenhoehe des Body (R16, 2026-10-05, test:typography).
   row-title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 400
     lineHeight: 1.47
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 400
     lineHeight: 1.47
   # Tafla: Subheadline (15) ist aufgegangen - die Rolle --type-secondary steht
   # auf der Footnote.
   subheadline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: 1.47
   footnote:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: 1.21
   # Tafla: der Gruppenkopf ist Body 17/600 in Satzschreibung, keine Versalien,
   # kein Tracking (vorher Versal-Mikro-Label 12px/0.05em).
   micro-label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 600
     lineHeight: 1.29
     letterSpacing: "0"
   # Tafla: Caption 2 (11) ist aufgegangen, --type-micro steht auf 13.
   caption-2:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, Arial, sans-serif"
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 600
     lineHeight: 1.21
@@ -409,6 +430,41 @@ composition modes, and extension layout rules - lives in
 `public/utils/page-layout.js`.
 
 ## Direction Contract
+
+### v2 (2026-10-27): light only, Inter, the v2 tokens
+
+The owner disliked the deployed Tafla look ("different font, not these rounded
+cartoonish ones, should feel more like productivity app"; "light mode only").
+The redesign goes page by page; the foundation is in `tokens.css`:
+
+- **One theme, light.** No dark token blocks, no theme choice in Wygląd, no
+  `data-theme`; `color-scheme: light`, one `<meta name="theme-color">` =
+  `--color-bg` #F6F6F3. A stored `yuvomi-theme` is removed by `theme-init.js`.
+  Deliberately dark, and not "dark mode": the cook stage (`--cook-*`) and the
+  wall's Noc scene (`--wall-night-*`, which now carries its own ink).
+- **Inter** (`--font-sans` leads with it), self-hosted from
+  `/fonts/inter/InterVariable.woff2` (100-900, `font-display: swap`). Until the
+  file lands the system font shows; no preload, no precache. `--font-rounded`
+  is gone; numerals are Inter with `font-variant-numeric: tabular-nums`.
+- **Colours** (Foundations.dc.html): ground #F6F6F3, card #FFFFFF, ink
+  #1A1A19, ink-2 #5F5E5A, decorative grey #8D8C87 (`--color-ink-3`: icons,
+  never small text; rings and field edges `--color-border-control` #87867F, a
+  hair darker so they hold 3:1 on the fill as well), hairline
+  #EAE9E5 (`--color-separator`, `--color-border`, `--color-card-border`), rows
+  inside a card #EFEEEA (`--color-separator-inner`), overdue #C2410C
+  (`--color-overdue`), rain #5B8DEF / #DCE5F6 (`--color-rain`,
+  `--color-rain-soft`), Wojtek and Mariola as person slots 1 and 2 (disc
+  #1F4FA8 on #E3ECFB, #A3264F on #FBE4EC; dots `--person-1-dot` #2F6FDB,
+  `--person-2-dot` #D9467A), the violet #6C3AED unchanged.
+- **Type** `--type-page` 26/32 600 -0.02em, `--type-section` 17/24 600,
+  `--type-row` 15/20 400, `--type-meta` 12/16 400|600 (each with `-lh`).
+  The Tafla roles (34/22/17/13) stay until a page gets its v2 round.
+- **Cards** `--radius-card` 12, `--shadow-card: none`, a 1px
+  `--color-card-border`; the shared carriers (`.card`, `.row-carrier`,
+  `.inset-card`, `.metric-card`) already use them.
+
+Everything below is the Tafla contract it replaces step by step; where it
+names dark values or the rounded face, v2 wins.
 
 **THESIS:** Apples HANDWERK, Yuvomis HANDSCHRIFT. The structure is platform canon
 (grouped lists, capsule controls, the type scale, motion, AA discipline); the skin

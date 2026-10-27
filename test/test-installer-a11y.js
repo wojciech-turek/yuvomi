@@ -552,22 +552,18 @@ function cssVar(css, name, from = 0) {
  * layout.css:4225) und dort einen Elementselektor dagegen gesetzt. Der Installer
  * hat diese Lehre nie bekommen, weil test-frontend-audit.js nur public/ scannt -
  * deshalb steht der Guard hier, nicht dort. */
-test('Platzhaltertext erfüllt AA auf dem Feldgrund, in beiden Themes', () => {
+// 2026-10-27, v2: light only (vorher in beiden Themes).
+test('Platzhaltertext erfüllt AA auf dem Feldgrund', () => {
   // Die Regel muss überhaupt existieren, sonst gewinnt der UA-Default.
   assert.match(html, /input::placeholder/,
     'ohne eigene ::placeholder-Regel gilt Chromes #757575, das dem Theme nicht folgt');
   assert.match(html, /::placeholder[\s\S]{0,200}?opacity:\s*1/,
     'Firefox setzt ::placeholder sonst auf opacity < 1 und senkt den Kontrast erneut');
 
-  const htmlDark = html.indexOf('@media (prefers-color-scheme: dark)');
-  const tokensDark = tokensCss.indexOf('@media (prefers-color-scheme: dark)');
-
   const paare = [
-    ['Inline-Fallback hell', cssVar(html, '--color-text-placeholder'), cssVar(html, '--color-surface')],
-    ['Inline-Fallback dunkel', cssVar(html, '--color-text-placeholder', htmlDark), cssVar(html, '--color-surface', htmlDark)],
+    ['Inline-Fallback', cssVar(html, '--color-text-placeholder'), cssVar(html, '--color-surface')],
     // tokens.css leitet --color-text-placeholder aus --color-text-tertiary ab.
-    ['tokens.css hell', cssVar(tokensCss, '--_color-text-tertiary'), cssVar(tokensCss, '--_color-surface')],
-    ['tokens.css dunkel', cssVar(tokensCss, '--_color-text-tertiary', tokensDark), cssVar(tokensCss, '--_color-surface', tokensDark)],
+    ['tokens.css', cssVar(tokensCss, '--_color-text-tertiary'), cssVar(tokensCss, '--_color-surface')],
   ];
 
   for (const [label, fg, bg] of paare) {
@@ -577,20 +573,16 @@ test('Platzhaltertext erfüllt AA auf dem Feldgrund, in beiden Themes', () => {
   }
 });
 
-test('Primäraktionen des Installers erfüllen AA auf Akzentgrund, in beiden Themes', () => {
-  // Inline-Fallback: :root ist Light, der prefers-color-scheme-Block ist Dark.
-  const htmlDark = html.indexOf('@media (prefers-color-scheme: dark)');
-  assert.ok(htmlDark > 0, 'Dark-Block im Inline-Fallback nicht gefunden');
+// 2026-10-27, v2: light only: weder der Fallback noch tokens.css fuehren einen
+// Dark-Block, und der darf auch nicht zurueckkommen.
+test('Primäraktionen des Installers erfüllen AA auf Akzentgrund', () => {
+  assert.equal(html.includes('prefers-color-scheme: dark'), false, 'kein Dark-Block im Inline-Fallback');
+  assert.doesNotMatch(tokensCss.replace(/\/\*[\s\S]*?\*\//g, ''), /prefers-color-scheme:\s*dark|\[data-theme="dark"\]/, 'kein Dark-Block in tokens.css');
 
   // tokens.css setzt die Basiswerte auf --_-Variablen; --color-* verweist darauf.
-  const tokensDark = tokensCss.indexOf('@media (prefers-color-scheme: dark)');
-  assert.ok(tokensDark > 0, 'Dark-Block in tokens.css nicht gefunden');
-
   const paare = [
-    ['Inline-Fallback, Light', cssVar(html, '--color-ink-on-vivid'), cssVar(html, '--color-accent')],
-    ['Inline-Fallback, Dark', cssVar(html, '--color-ink-on-vivid', htmlDark), cssVar(html, '--color-accent', htmlDark)],
-    ['tokens.css, Light', cssVar(tokensCss, '--_color-ink-on-vivid'), cssVar(tokensCss, '--_color-accent')],
-    ['tokens.css, Dark', cssVar(tokensCss, '--_color-ink-on-vivid', tokensDark), cssVar(tokensCss, '--_color-accent', tokensDark)],
+    ['Inline-Fallback', cssVar(html, '--color-ink-on-vivid'), cssVar(html, '--color-accent')],
+    ['tokens.css', cssVar(tokensCss, '--_color-ink-on-vivid'), cssVar(tokensCss, '--_color-accent')],
   ];
 
   for (const [quelle, ink, accent] of paare) {
@@ -607,14 +599,12 @@ test('Primäraktionen des Installers erfüllen AA auf Akzentgrund, in beiden The
  * haelt das in test-frontend-audit.js ueber ihre Regeln; der Installer ist eine
  * Einzeldatei mit eigenem Fallback und braucht die Zusicherung hier. Dass die
  * Werte zu tokens.css passen, haelt "der Inline-Fallback stimmt Wert fuer Wert". */
-test('die ausgeschaltete Schalterbahn des Installers haelt 3:1, in beiden Themes', () => {
+// 2026-10-27, v2: light only (vorher in beiden Themes).
+test('die ausgeschaltete Schalterbahn des Installers haelt 3:1', () => {
   assert.match(html, /\.toggle__track\s*\{[^}]*background-color:\s*var\(--color-switch-off\)/,
     'die Bahn (.toggle__track) muss --color-switch-off tragen, sonst misst dieser Guard eine Farbe, die keiner zeigt');
-  const htmlDark = html.indexOf('@media (prefers-color-scheme: dark)');
-  assert.ok(htmlDark > 0, 'Dark-Block im Inline-Fallback nicht gefunden');
-
   const paare = [];
-  for (const [theme, from] of [['hell', 0], ['dunkel', htmlDark]]) {
+  for (const [theme, from] of [['hell', 0]]) {
     const track = cssVar(html, '--color-switch-off', from);
     // Karte (--color-surface) und Buehne (--color-bg); der Knopf traegt --color-surface.
     for (const ground of ['--color-surface', '--color-bg']) paare.push([theme, track, ground, cssVar(html, ground, from)]);
@@ -647,10 +637,9 @@ test('der Installer nutzt kein --color-text-on-accent (folgt dem Theme nicht)', 
  * Nichts hat das geprueft: die Werte sind zwei Kopien ohne Naht dazwischen.
  * Dieser Guard ist die Naht. Er prueft nur Tokens, die BEIDE Seiten fuehren -
  * der Fallback darf bewusst kleiner sein als tokens.css. */
+// 2026-10-27, v2: light only: ein Theme, ein Vergleich (vorher hell und dunkel).
 test('der Inline-Fallback stimmt Wert fuer Wert mit tokens.css ueberein', () => {
-  const darkHtml = html.indexOf('@media (prefers-color-scheme: dark)');
-  const darkTokens = tokensCss.indexOf('@media (prefers-color-scheme: dark)');
-  assert.ok(darkHtml > 0 && darkTokens > 0, 'Dark-Block nicht gefunden');
+  const styleEnd = html.indexOf('</style>');
 
   // Die :root-Deklarationen des Fallbacks, je Theme.
   const fallbackVars = (from, to) => {
@@ -666,11 +655,11 @@ test('der Inline-Fallback stimmt Wert fuer Wert mit tokens.css ueberein', () => 
     }
     return map;
   };
-  const light = fallbackVars(0, darkHtml);
-  const dark = fallbackVars(darkHtml, html.indexOf('</style>', darkHtml));
+  const light = fallbackVars(0, styleEnd);
+  assert.ok(light.size >= 20, `nur ${light.size} Fallback-Tokens gelesen`);
 
   const drift = [];
-  for (const [theme, vars, tokensFrom] of [['light', light, 0], ['dark', dark, darkTokens]]) {
+  for (const [theme, vars, tokensFrom] of [['light', light, 0]]) {
     for (const [name, value] of vars) {
       // tokens.css fuehrt die Basiswerte auf privaten --_-Variablen.
       const privateName = name.replace(/^--/, '--_');
@@ -792,19 +781,14 @@ test('Formularfelder tragen im Ruhezustand die 3:1-Kante --color-border-control'
 
   // Das Token traegt in beiden Quellen denselben Wert - seit Tafla (2026-10-19)
   // die Feldkante der Spezifikation statt der Rampenstufe --neutral-500 ...
-  const htmlDark = html.indexOf('@media (prefers-color-scheme: dark)');
-  const tokensDark = tokensCss.indexOf('@media (prefers-color-scheme: dark)');
+  // (2026-10-27, v2: light only: die dunkle Feldkante ist mit dem Dark Mode gegangen.)
   assert.equal(cssVar(html, '--color-border-control'), cssVar(tokensCss, '--_color-border-control'),
-    'Fallback und tokens.css tragen dieselbe helle Feldkante');
-  assert.equal(cssVar(html, '--color-border-control', htmlDark), cssVar(tokensCss, '--color-border-control', tokensDark),
-    'Fallback und tokens.css tragen dieselbe dunkle Feldkante');
+    'Fallback und tokens.css tragen dieselbe Feldkante');
 
-  // ... und dieser Wert haelt 3:1 auf der Feldflaeche, hell und dunkel.
+  // ... und dieser Wert haelt 3:1 auf der Feldflaeche.
   const paare = [
-    ['Inline-Fallback hell', cssVar(html, '--color-border-control'), cssVar(html, '--color-surface')],
-    ['Inline-Fallback dunkel', cssVar(html, '--color-border-control', htmlDark), cssVar(html, '--color-surface', htmlDark)],
-    ['tokens.css hell', cssVar(tokensCss, '--_color-border-control'), cssVar(tokensCss, '--_color-surface')],
-    ['tokens.css dunkel', cssVar(tokensCss, '--color-border-control', tokensDark), cssVar(tokensCss, '--_color-surface', tokensDark)],
+    ['Inline-Fallback', cssVar(html, '--color-border-control'), cssVar(html, '--color-surface')],
+    ['tokens.css', cssVar(tokensCss, '--_color-border-control'), cssVar(tokensCss, '--_color-surface')],
   ];
   for (const [label, edge, field] of paare) {
     const ratio = contrastRatio(edge, field);
@@ -2112,12 +2096,11 @@ test('jede Boolean-Einstellung ist ein Schalter der App, keine nackte Checkbox',
   assert.match(val('label.toggle-row:has(input:focus-visible)', 'box-shadow') ?? '', /var\(--color-accent\)/,
     'der Schalter zeigt keinen Tastaturfokus');
   assert.ok(Number(val('.toggle input:disabled + .toggle__track', 'opacity')) < 1, 'ein gesperrter Schalter sieht aus wie ein freier');
-  // Jedes neue Token steht im Fallback, --color-switch-off in beiden Themes.
+  // Jedes neue Token steht im Fallback (2026-10-27, v2: light only - es gibt
+  // keinen Dunkel-Fallback mehr, der es zusaetzlich tragen muesste).
   for (const name of ['--color-switch-off', '--ease-glass', '--glass-inset-thumb']) {
     assert.ok(ROOT_VARS.has(name), `${name} fehlt im Inline-Fallback`);
   }
-  const dark = html.slice(html.indexOf('@media (prefers-color-scheme: dark)'), html.indexOf('</style>'));
-  assert.match(dark, /--color-switch-off:\s*#/, '--color-switch-off fehlt im Dunkel-Fallback');
 });
 
 /* Der Docker-Schritt hatte in der Liste keinen Eintrag: waehrend des laengsten

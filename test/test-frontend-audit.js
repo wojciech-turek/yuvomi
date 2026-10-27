@@ -1311,14 +1311,14 @@ test('jede Sub-Tab-Leiste erklärt ihre Semantik, und zwar die, die ihre Routen 
     'Auswahl und Panel-Sichtbarkeit sind eine Operation - zwei Besitzer laufen auseinander');
 });
 
-test('settings theme toggle exposes pressed state', () => {
-  // Seit dem Komponenten-Kanon (2026-09-26) ist das Theme ein Segment: genau
-  // einer gilt, also radiogroup mit aria-checked (wireTablist mode 'select'
-  // pflegt es) statt drei unabhaengiger aria-pressed-Knoepfe.
+test('Wygląd traegt keine Theme-Wahl mehr - die App ist immer hell', () => {
+  // 2026-10-27, v2: light only. Bis hierher: das Theme als Segment (radiogroup mit aria-checked,
+  // wireTablist mode 'select'). Kommt eine Wahl zurueck, kommt auch ein
+  // zweites Theme zurueck - das ist eine Entscheidung, kein Nebeneffekt.
   const source = read('../public/settings/pages/personal-appearance.js');
-  assert.match(source, /role="radiogroup"/);
-  assert.match(source, /role="radio"[\s\S]*aria-checked=/);
-  assert.match(source, /mode: 'select'/);
+  assert.doesNotMatch(source, /theme-toggle|yuvomi-theme|data-theme|settings\.theme(?:System|Light|Dark)/);
+  assert.doesNotMatch(read('../public/settings/registry.js'), /settings\.theme(?:System|Light|Dark)/,
+    'die Suche der Einstellungen findet keine Theme-Wahl mehr');
 });
 
 test('personal settings leaves exist and export async render functions', () => {
@@ -1493,18 +1493,13 @@ test('#934: die Waehrung steht ausserhalb der ausblendbaren Formatkarte', () => 
   assert.match(source, /currencyDuringRegion\?\.isConnected\) currencyDuringRegion\.disabled = false/);
 });
 
-test('personal appearance leaf owns theme, locale, and regional preferences', () => {
+test('personal appearance leaf owns locale and regional preferences', () => {
+  // 2026-10-27, v2: light only: die Theme-Wahl (Segment mit monitor/sun/moon) ist gegangen.
   const source = read('../public/settings/pages/personal-appearance.js');
 
   assert.match(source, /await getPreferences\(\)/);
   assert.match(source, /getSupportedLocales\(\)/);
   assert.match(source, /setLocale\(/);
-  assert.match(source, /role="radiogroup"/);
-  assert.match(source, /mode: 'select'/);
-  assert.match(source, /icon: 'monitor'/);
-  assert.match(source, /icon: 'sun'/);
-  assert.match(source, /icon: 'moon'/);
-  assert.match(source, /data-lucide="\$\{icon\}"/);
   assert.match(source, /date_format/);
   assert.match(source, /time_format/);
   assert.match(source, /savePreferences\(\{/);
@@ -2669,7 +2664,7 @@ test('Mehr-Knopf in Ruhe traegt keinen Ton: der Zustand nimmt den Modulton zurue
   assert.match(body, /if \(inMore\) \{[\s\S]*?setProperty\('--item-module-accent', moduleAccentVar\(activeSecondary\.module\)\)/);
 });
 
-test('Sidebar-Pille: EIN Material in hell und dunkel - Akzent-Toenung, Akzent-Rand, Schatten ohne Weissring', () => {
+test('Sidebar-Pille: EIN Material - Akzent-Toenung, Akzent-Rand, Schatten ohne Weissring', () => {
   // Entscheidung Ulas 2026-10-15: hell 12 % Akzent mit Weissraendern (auf hellem
   // Glas unsichtbar, Pille 1,19:1 gegen die Sidebar), dunkel eine grau-violette
   // Glasplatte - zwei Stimmen. Messung in tokens.css an --sidebar-indicator-*.
@@ -2684,7 +2679,8 @@ test('Sidebar-Pille: EIN Material in hell und dunkel - Akzent-Toenung, Akzent-Ra
   assert.match(body, /box-shadow:\s*none/, 'kein Schatten');
   assert.doesNotMatch(body, /--glass-border-subtle|--glass-shadow-sm/, 'kein Weissrand und kein Weissring mehr');
   const shadows = [...tokens.matchAll(/--_sidebar-indicator-shadow:\s*([^;]+);/g)].map((m) => m[1]);
-  assert.equal(shadows.length, 3, 'hell plus beide Dark-Pfade setzen den Schatten');
+  // 2026-10-27, v2: light only: nur noch der helle Pfad setzt den Schatten (bis hierher drei).
+  assert.equal(shadows.length, 1, 'der Schatten steht genau einmal (hell)');
   for (const value of shadows) {
     assert.doesNotMatch(value, /255,\s*255,\s*255/, `Schatten ohne Weissring: ${value}`);
     assert.match(value, /^0 [1-9]\d*px [1-9]\d*px /, `Schatten mit Versatz und Weichzeichnung: ${value}`);
@@ -6092,16 +6088,13 @@ test('der entschiedene Nicht-Text-Kontrast bleibt an den Tokens dokumentiert', (
   const block = tokens.slice(0, tokens.indexOf('--color-border:'));
   assert.match(block, /WCAG 1\.4\.11/, 'der Befund muss an den Kanten-Tokens dokumentiert bleiben');
   assert.match(block, /#1230/, 'der Vorgang, in dem entschieden wurde, gehoert dazu');
-  // Tafla (2026-10-19): das Token ist die Feldkante der Spezifikation, nicht
-  // mehr die Rampenstufe --neutral-500 - Kommentar und Wert ziehen gemeinsam um.
-  assert.match(block, /--color-border-control ist seit Tafla[\s\S]{0,40}die Feldkante der\s+\*?\s*Spezifikation, #8A857C hell \/ #8A8378 dunkel/,
-    'welcher Wert das Token ist und woher er kommt, gehoert dazu');
-  assert.match(block, /3,30 auf der Buehne/, 'der knappste helle Grund gehoert dazu');
-  assert.match(block, /3,39 auf -raised/, 'der knappste dunkle Grund gehoert dazu');
   assert.match(block, /NUR FELDKANTEN/,
     'die Abgrenzung Feldkante gegen Kartenkante gehoert dazu - der Critique warf beides zusammen');
-  assert.match(tokens, /--_color-border-control:\s*#8A857C;/, 'das Token selbst muss so stehen, wie der Kommentar es beschreibt');
-  assert.match(darkAttrBlock(tokens)[1], /--color-border-control:\s*#8A8378;/, 'der dunkle Wert ebenso');
+  // 2026-10-27, v2: light only: der Wert ist die Ring- und Feldkante (#87867F, eine Spur unter
+  // dem dekorativen Grau #8D8C87, damit sie auch auf der Fuellung 3:1 haelt); sein Messwert
+  // steht an der Wertzeile selbst. Der dunkle Zwilling ist gegangen.
+  assert.match(tokens, /--_color-border-control:\s*#87867F;\s*\/\*[^*]*\d[.,]\d\d[^*]*\*\//,
+    'das Token steht mit seinem Wert und seinem gemessenen Kontrast an der Wertzeile');
 });
 
 /**
@@ -6939,15 +6932,13 @@ test('phase 4 touched icon markup uses icon classes instead of inline icon sizin
   }
 });
 
-test('phase 4 settings theme toggle uses Lucide placeholders instead of inline SVG icons', () => {
+test('phase 4 settings appearance leaf carries no inline SVG icons', () => {
+  // 2026-10-27, v2: light only: der Theme-Umschalter mit seinen Lucide-Zeichen ist gegangen; die
+  // Zusage gegen eingebettete SVGs bleibt.
   const settings = read('../public/settings/pages/personal-appearance.js');
 
   assert.doesNotMatch(settings, /<svg\s+width="18"\s+height="18"[\s\S]*?data-theme-value=/);
   assert.doesNotMatch(settings, /<svg\b[\s\S]*?data-tab-id=/);
-  assert.match(settings, /icon: 'monitor'/);
-  assert.match(settings, /icon: 'sun'/);
-  assert.match(settings, /icon: 'moon'/);
-  assert.match(settings, /<i data-lucide="\$\{icon\}"/);
 });
 
 test('⌘K bei offener Suche: kein zweiter Focus-Trap, und Schliessen gibt den Fokus an den Ausloeser zurueck', () => {
@@ -7382,45 +7373,41 @@ test('phase 7 locale files keep the de reference key set complete', () => {
   }
 });
 
-test('dark-mode token blocks stay in sync between @media and [data-theme="dark"]', () => {
+// 2026-10-27, v2: light only. Bis hierher hielt dieser Guard die zwei Dark-Bloecke (System-
+// Praeferenz und `[data-theme="dark"]`) Wert fuer Wert synchron. Es gibt nur
+// noch das helle Theme: kein Dark-Block in tokens.css, und kein Stylesheet
+// schaltet ueber `prefers-color-scheme: dark` oder `[data-theme="dark"]` um.
+// Dunkel bleiben mit Absicht nur Kochbuehne und Wandnacht - ueber eigene
+// Tokens (--cook-*, --wall-night-*), nicht ueber ein Theme.
+test('v2: ein Theme - kein Dark-Block in tokens.css, keine Dark-Regel in einem Stylesheet', () => {
   const tokens = read('../public/styles/tokens.css');
+  assert.equal(darkSchemeBlock(tokens), null, 'tokens.css fuehrt wieder einen prefers-color-scheme-Dark-Block');
+  assert.equal(darkAttrBlock(tokens), null, 'tokens.css fuehrt wieder einen [data-theme="dark"]-Block');
 
-  const mediaBlock = darkSchemeBlock(tokens);
-  const attrBlock = darkAttrBlock(tokens);
-
-  assert.ok(mediaBlock, 'expected a prefers-color-scheme dark block');
-  assert.ok(attrBlock, 'expected a [data-theme="dark"] block');
-
-  const parseVars = (block) => {
-    const map = new Map();
-    for (const [, name, value] of block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-      map.set(name, value.trim());
+  const styles = new URL('../public/styles/', import.meta.url);
+  const offenders = [];
+  let rules = 0;
+  for (const file of readdirSync(styles).filter((entry) => entry.endsWith('.css'))) {
+    for (const rule of eachRule(readFileSync(new URL(file, styles), 'utf8'))) {
+      rules += 1;
+      if (rule.at.some((a) => /prefers-color-scheme:\s*dark/.test(a)) || /\[data-theme=["']?dark/.test(rule.selector)) {
+        offenders.push(`${file}: ${rule.selector.trim()}`);
+      }
     }
-    return map;
-  };
-
-  const media = parseVars(mediaBlock[1]);
-  const attr = parseVars(attrBlock[1]);
-
-  assert.ok(media.size > 0 && attr.size > 0, 'both dark blocks must declare variables');
-  const allKeys = new Set([...media.keys(), ...attr.keys()]);
-  const divergent = [...allKeys].filter((k) => media.get(k) !== attr.get(k));
-  assert.deepEqual(divergent, [], `dark token blocks diverge for: ${divergent.join(', ')}`);
+  }
+  assert.ok(rules > 1000, `nur ${rules} Regeln gelesen - der Scanner greift nicht`);
+  assert.deepEqual(offenders, [], 'eine Regel schaltet auf ein dunkles Theme, das es nicht mehr gibt');
 });
 
-test('phase 1 defines synchronized surface roles for readable work areas', () => {
+test('phase 1 defines surface roles for readable work areas', () => {
+  // 2026-10-27, v2: light only: die Dark-Overrides der privaten Flaechen-Tokens sind gegangen; die
+  // oeffentliche Fassade ueber den privaten Wert bleibt.
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const mediaBlock = darkSchemeBlock(tokens);
-  const attrBlock = darkAttrBlock(tokens);
 
   assert.ok(rootBlock, 'expected a :root token block');
-  assert.ok(mediaBlock, 'expected a prefers-color-scheme dark block');
-  assert.ok(attrBlock, 'expected a [data-theme="dark"] block');
 
   const root = parseTokenMap(rootBlock[1]);
-  const media = parseTokenMap(mediaBlock[1]);
-  const attr = parseTokenMap(attrBlock[1]);
   // Die beiden `--app-backdrop-*-strength` standen hier bis R18 (2026-10-07):
   // Staerken eines Shell-Verlaufs, den der opake Scrollport verdeckte. Mit dem
   // Verlauf gestrichen; dass sie nicht zurueckkommen, haelt test:material.
@@ -7443,10 +7430,7 @@ test('phase 1 defines synchronized surface roles for readable work areas', () =>
   }
 
   for (const token of privateSurfaceTokens) {
-    assert.ok(root.has(token), `${token} should have a light-mode value`);
-    assert.ok(media.has(token), `${token} should have a system dark-mode override`);
-    assert.ok(attr.has(token), `${token} should have an explicit dark-mode override`);
-    assert.equal(media.get(token), attr.get(token), `${token} dark values must stay synchronized`);
+    assert.ok(root.has(token), `${token} should have a value`);
   }
 });
 
@@ -7565,12 +7549,11 @@ test('calendar draws its gutter from the shared page token and compacts weekday 
 test('Tafla: module accents leave the chrome - every family is ink-2 and every module draws from one', () => {
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
 
   assert.ok(rootBlock, 'expected a :root token block');
-  assert.ok(darkBlock, 'expected a [data-theme="dark"] block');
 
-  for (const [theme, block] of [['light', rootBlock[1]], ['dark', darkBlock[1]]]) {
+  // 2026-10-27, v2: light only: nur noch der :root-Block (bis hierher dazu der Dark-Block).
+  for (const [theme, block] of [['light', rootBlock[1]]]) {
     const values = parseTokenMap(block);
     const families = [...values.entries()].filter(([name]) => name.startsWith('--_family-'));
     assert.ok(
@@ -7676,16 +7659,13 @@ function compositeColor(foreground, background) {
   return `#${channels.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
 }
 
-test('text/surface token pairs meet WCAG AA 4.5:1 in both themes', () => {
+test('text/surface token pairs meet WCAG AA 4.5:1', () => {
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
   assert.ok(rootBlock, 'expected a :root token block');
-  assert.ok(darkBlock, 'expected a [data-theme="dark"] block');
 
   const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [k, v] of parseTokenMap(darkBlock[1])) dark.set(k, v);
 
   // Normaltext-Paare, die laut Design AA erfüllen müssen.
   //
@@ -7742,7 +7722,7 @@ test('text/surface token pairs meet WCAG AA 4.5:1 in both themes', () => {
     ['--wall-night-ink', '--wall-night-bg'],
   ];
 
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     for (const [fg, bg] of pairs) {
       const fgHex = resolveColor(fg, map);
       const bgHex = resolveColor(bg, map);
@@ -7783,11 +7763,10 @@ test('Tafla: Violett kommt nur ueber die Akzent-Tokens, nie als Literal im Style
 // Pruefkreises und jede Feldkante auf den Gruenden, auf denen sie stehen, die
 // violette Fuellung als Form (gecheckter Kreis, +) auf Grund und Karte, und
 // der 3pt-Rand eines Termins in jeder Personenfarbe.
-test('Tafla: Grafikpaare halten 3:1 in beiden Themes', () => {
+test('Tafla: Grafikpaare halten 3:1', () => {
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const tokens = read('../public/styles/tokens.css');
   const light = parseTokenMap(tokens.match(/:root\s*\{([\s\S]*?)\n\}/)[1]);
-  const dark = new Map(light);
-  for (const [k, v] of parseTokenMap(darkAttrBlock(tokens)[1])) dark.set(k, v);
   const pairs = [
     ['--color-field-border', '--color-surface'],
     ['--color-field-border', '--color-bg'],
@@ -7796,7 +7775,7 @@ test('Tafla: Grafikpaare halten 3:1 in beiden Themes', () => {
     ['--cook-accent-fill', '--cook-stage'],
     ...[1, 2, 3, 4, 5, 6].map((n) => [`--person-${n}`, '--color-surface']),
   ];
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     for (const [fg, bg] of pairs) {
       const ratio = contrastRatio(resolveColor(fg, map), resolveColor(bg, map));
       assert.ok(ratio >= 3, `${theme}: ${fg} on ${bg} is ${ratio.toFixed(2)}:1, below WCAG 1.4.11 3:1`);
@@ -7843,13 +7822,11 @@ const COPAIR_CATEGORY = new Map([
 ]);
 
 test('jede Regel, die Farbe UND Untergrund setzt, haelt ihr eigenes Paar', () => {
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
-  assert.ok(rootBlock && darkBlock, 'expected :root and [data-theme="dark"] token blocks');
+  assert.ok(rootBlock, 'expected a :root token block');
   const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [k, v] of parseTokenMap(darkBlock[1])) dark.set(k, v);
 
   // `var(--x, fallback)` mitnehmen: `.settings-backup-card__icon` schreibt so,
   // und ein Parser, der nur `var(--x)` kennt, uebersieht die Regel still.
@@ -7899,7 +7876,7 @@ test('jede Regel, die Farbe UND Untergrund setzt, haelt ihr eigenes Paar', () =>
       const min = category ? category[1].min : (large ? 3 : 4.5);
       if (min === 0) continue;
 
-      for (const [theme, map] of [['light', light], ['dark', dark]]) {
+      for (const [theme, map] of [['light', light]]) {
         const fg = resolveValue(fgRaw, map);
         const bg = resolveValue(bgRaw, map);
         if (!fg || !bg) continue;
@@ -7974,13 +7951,13 @@ test('jede Regel, die Farbe UND Untergrund setzt, haelt ihr eigenes Paar', () =>
 const FIELD_SELECTOR = /(?:^|[\s>+~])(?:input|select|textarea)(?![\w-])|\.(?:input|form-input)(?![\w-])|__input(?![\w-])|search__control(?![\w-])|quick-add__(?:qty|cat)(?![\w-])|__select(?![\w-])/;
 
 test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrund', () => {
-  const { light, dark } = themeTokenMaps();
+  const { light } = themeTokenMaps();
   // Die Gruende, auf denen ein Feld in der Messung stand: Karte/Modal/Login
   // (surface, surface-work), Settings-Blatt (surface-raised), Modal-Feldgrund
   // (surface-2) und die Buehne (bg).
   const GROUNDS = ['--color-surface', '--color-surface-work', '--color-surface-raised', '--color-surface-2', '--color-bg'];
   const tokenFindings = [];
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const edge = resolveColor('--color-border-control', map);
     assert.ok(/^#[0-9a-f]{6}$/i.test(edge ?? ''), `${theme}: --color-border-control loest nicht auf eine Hex-Farbe auf (${edge})`);
     for (const ground of GROUNDS) {
@@ -8081,11 +8058,8 @@ test('Feldkanten tragen --color-border-control und halten 3:1 auf jedem Feldgrun
  * liesse die Position nicht erkennen. Beide Dark-Bloecke, weil beide gelten.
  * ──────────────────────────────────────────────────────────────────────────── */
 test('die ausgeschaltete Schalterbahn haelt 3:1 auf jeder Flaeche, auf der ein Schalter steht', () => {
-  const { light, dark } = themeTokenMaps();
-  const scheme = darkSchemeBlock(read('../public/styles/tokens.css'));
-  assert.ok(scheme, 'prefers-color-scheme-Dark-Block in tokens.css nicht gefunden');
-  const darkScheme = new Map(light);
-  for (const [k, v] of parseTokenMap(scheme[1])) darkScheme.set(k, v);
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme (bis hierher dazu beide Dark-Bloecke).
+  const { light } = themeTokenMaps();
 
   const styles = new URL('../public/styles/', import.meta.url);
   const rules = readdirSync(styles)
@@ -8119,7 +8093,7 @@ test('die ausgeschaltete Schalterbahn haelt 3:1 auf jeder Flaeche, auf der ein S
   for (const { part, file, value } of offTrack) {
     const token = tokenOf(value);
     if (!token) { findings.push(`${file} ${part}: Bahn ohne Token (${value})`); continue; }
-    for (const [theme, map] of [['light', light], ['dark [data-theme]', dark], ['dark prefers-color-scheme', darkScheme]]) {
+    for (const [theme, map] of [['light', light]]) {
       const track = resolveColor(token, map);
       if (!/^#[0-9a-f]{6}$/i.test(track ?? '')) { findings.push(`${theme}: ${token} loest nicht auf eine Hex-Farbe auf (${track})`); continue; }
       for (const ground of GROUNDS) {
@@ -8153,12 +8127,9 @@ test('die ausgeschaltete Schalterbahn haelt 3:1 auf jeder Flaeche, auf der ein S
  * und was darauf steht, haelt seinen Kontrast.
  * ──────────────────────────────────────────────────────────────────────────── */
 function r18ThemeMaps() {
-  const { light, dark } = themeTokenMaps();
-  const scheme = darkSchemeBlock(read('../public/styles/tokens.css'));
-  assert.ok(scheme, 'prefers-color-scheme-Dark-Block in tokens.css nicht gefunden');
-  const darkScheme = new Map(light);
-  for (const [k, v] of parseTokenMap(scheme[1])) darkScheme.set(k, v);
-  return [['light', light], ['dark [data-theme]', dark], ['dark prefers-color-scheme', darkScheme]];
+  // 2026-10-27, v2: light only: ein Theme (bis hierher dazu die zwei Dark-Wege).
+  const { light } = themeTokenMaps();
+  return [['light', light]];
 }
 
 const r18Lum = (hex) => relLum(hexToRgb(hex));
@@ -8220,7 +8191,8 @@ test('R18: der Segmentdaumen ist in jedem Theme heller als seine Bahn, und die M
       if (ratio + 0.005 < 4.5) findings.push(`${theme}: Tinte ${name} (${ink}) auf dem Daumen ${thumb} ${ratio.toFixed(2)}:1`);
     }
   }
-  assert.ok(inks >= 27, `Reichweite: ${inks} Tinten gemessen (neun Familien, drei Theme-Bloecke)`);
+  // 2026-10-27, v2: light only: neun Familien in einem Theme (bis hierher drei Theme-Bloecke, 27).
+  assert.ok(inks >= 9, `Reichweite: ${inks} Tinten gemessen (neun Familien)`);
   assert.deepEqual(findings, []);
 });
 
@@ -8301,7 +8273,7 @@ test('der Schalterknopf spiegelt in RTL: an steht auf der fuehrenden Seite', () 
  * Textfarben zurueck" und "zurueckgenommene Karten und Zeilen" weiter unten.
  * ──────────────────────────────────────────────────────────────────────────── */
 test('das Etikett einer Listenzeile haelt 4.5:1 in jedem Zustand, der es zuruecknimmt', () => {
-  const { light, dark } = themeTokenMaps();
+  const { light } = themeTokenMaps();
   const resolveHex = (value, map) => {
     const ref = String(value ?? '').trim().match(/^var\(\s*(--[\w-]+)\s*\)$/);
     const hex = ref ? resolveColor(ref[1], map) : String(value ?? '').trim();
@@ -8333,7 +8305,7 @@ test('das Etikett einer Listenzeile haelt 4.5:1 in jedem Zustand, der es zurueck
   const findings = [];
   for (const rule of states) {
     const opacity = Number(declOf(rule.body, 'opacity') ?? 1);
-    for (const [theme, map] of [['light', light], ['dark', dark]]) {
+    for (const [theme, map] of [['light', light]]) {
       const fg = resolveHex(declOf(rule.body, 'color') ?? baseColor, map);
       const bg = resolveHex(baseBg, map);
       assert.ok(fg && bg, `${theme}: Farbe oder Pille von ${rule.selector} laesst sich nicht aufloesen`);
@@ -8361,7 +8333,7 @@ test('das Etikett einer Listenzeile haelt 4.5:1 in jedem Zustand, der es zurueck
  * Textfarbe, die er setzt, haelt 4.5:1 auf den Gruenden der Zeile.
  * ──────────────────────────────────────────────────────────────────────────── */
 test('die abgehakte Einkaufszeile nimmt sich ueber Textfarben zurueck, nicht ueber opacity', () => {
-  const { light, dark } = themeTokenMaps();
+  const { light } = themeTokenMaps();
   const styles = new URL('../public/styles/', import.meta.url);
   const stateRules = readdirSync(styles)
     .filter((entry) => entry.endsWith('.css') && entry !== 'tokens.css')
@@ -8385,7 +8357,7 @@ test('die abgehakte Einkaufszeile nimmt sich ueber Textfarben zurueck, nicht ueb
     const decl = [...rule.body.matchAll(/(?:^|;)\s*color\s*:\s*var\(\s*(--[\w-]+)\s*\)/g)].pop();
     if (!decl) continue;
     colors += 1;
-    for (const [theme, map] of [['light', light], ['dark', dark]]) {
+    for (const [theme, map] of [['light', light]]) {
       const fg = resolveColor(decl[1], map);
       for (const ground of ['--color-surface', '--color-surface-2']) {
         const bg = resolveColor(ground, map);
@@ -8540,7 +8512,7 @@ function notArguments(compound) {
 }
 
 test('zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity, und ihre Textfarben halten 4.5:1', () => {
-  const { light, dark } = themeTokenMaps();
+  const { light } = themeTokenMaps();
   const STATE = RECEDED_STATE;
   // Deckung einer Deklaration in beiden Themes: Zahl, Prozent oder var() mit
   // optionalem Rueckfall. NaN heisst "nicht lesbar" und zaehlt als Verstoss.
@@ -8571,7 +8543,7 @@ test('zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity, und ihre Te
 
       const opacityDecl = [...rule.body.matchAll(/(?:^|;)\s*opacity\s*:\s*([^;]+)/g)].pop();
       if (opacityDecl) {
-        const values = [light, dark].map((map) => opacityIn(opacityDecl[1], map));
+        const values = [light].map((map) => opacityIn(opacityDecl[1], map));
         if (values.some((value) => Number.isNaN(value))) {
           dimmed.push(`${where}  opacity ${opacityDecl[1].trim()} (nicht aufloesbar)`);
         } else if (Math.min(...values) < 1) {
@@ -8588,7 +8560,7 @@ test('zurueckgenommene Karten und Zeilen dimmen nicht ueber opacity, und ihre Te
       // auf Violett, bis 2026-10-26 Tinte auf Gruen), steht nicht auf surface - ihr Paar prueft "jede Regel, die
       // Farbe UND Untergrund setzt, haelt ihr eigenes Paar" weiter oben.
       if (/(?:^|;)\s*background(?:-color)?\s*:/.test(rule.body)) continue;
-      for (const [theme, map] of [['light', light], ['dark', dark]]) {
+      for (const [theme, map] of [['light', light]]) {
         const fg = resolveColor(decl[1], map);
         if (!/^#[0-9a-f]{6}$/i.test(fg ?? '')) continue;
         colors += 1;
@@ -8845,25 +8817,23 @@ test('keine spezifischere Regel ueberschreibt eine zurueckgenommene Zustandsrege
     + '(ohne !important), oder eine Zustandsregel mit derselben Pseudoklasse ergaenzen.');
 });
 
-test('module accents stay readable as text on the page background in both themes', () => {
+test('module accents stay readable as text on the page background', () => {
   // `.btn--secondary` faerbt seine Beschriftung mit --active-module-accent
   // (layout.css). Steht so ein Button auf dem Seitenhintergrund statt in einer
   // Karte, entscheidet allein die Modulfarbe ueber die Lesbarkeit - im Light-
   // Theme lagen sechs Farben darunter (Settings-Audit 2026-07-27: 4.13:1 bei
   // "Kanal hinzufuegen", 4.20:1 bei "Aus Kontakten importieren").
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
-  assert.ok(rootBlock && darkBlock, 'expected :root and [data-theme="dark"] token blocks');
+  assert.ok(rootBlock, 'expected a :root token block');
 
   const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [k, v] of parseTokenMap(darkBlock[1])) dark.set(k, v);
 
   const moduleTokens = [...light.keys()].filter((name) => /^--module-[\w-]+$/.test(name));
   assert.ok(moduleTokens.length >= 15, `expected the module palette, found ${moduleTokens.length}`);
 
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const background = resolveColor('--color-bg', map);
     for (const token of moduleTokens) {
       const accent = resolveColor(token, map);
@@ -8895,15 +8865,14 @@ function localModuleAccent(src) {
   return m ? m[1] : null;
 }
 
+// 2026-10-27, v2: light only: die Token-Karte des einen Themes. Bis hierher lieferte der Helfer
+// dazu eine Dark-Karte aus `[data-theme="dark"]`; die Aufrufer messen jetzt nur
+// noch `light`.
 function themeTokenMaps() {
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
-  assert.ok(rootBlock && darkBlock, 'expected :root and [data-theme="dark"] token blocks');
-  const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [k, v] of parseTokenMap(darkBlock[1])) dark.set(k, v);
-  return { light, dark };
+  assert.ok(rootBlock, 'expected a :root token block');
+  return { light: parseTokenMap(rootBlock[1]) };
 }
 
 // Die Flaechen, die ein Fuell-Token in einem Theme annehmen kann. Fuer
@@ -8919,22 +8888,8 @@ function fillColors(token, map, scopedAccent) {
   return hex && /^#[0-9a-f]{6}$/i.test(hex) ? [{ label: token, hex }] : [];
 }
 
-/**
- * Genau die Flaechen, um die es geht: die, die zwischen den Themes die
- * TEXTPOLARITAET wechseln - im Light gesaettigt-dunkel (weiss traegt), im Dark
- * pastellig-hell (weiss traegt nicht). Das ist das Muster der gesamten
- * Yuvomi-Akzentpalette und der Grund, warum eine statische Textfarbe dort
- * zwangslaeufig in einem der beiden Themes falsch liegt.
- *
- * Ruhige Flaechen (Surfaces, Rahmen) kippen nicht: sie sind in beiden Themes
- * auf derselben Seite. Sie gehoeren nicht unter diese Regel, sonst zieht der
- * Guard jeden gewoehnlichen Text-auf-Karte-Fall herein und misst etwas, das er
- * gar nicht meint.
- */
-function flipsTextPolarity(lightHex, darkHex) {
-  if (!lightHex || !darkHex) return false;
-  return contrastRatio('#ffffff', lightHex) >= 4.5 && contrastRatio('#ffffff', darkHex) < 4.5;
-}
+// 2026-10-27, v2: light only - hier stand `flipsTextPolarity` (Flaechen, die
+// zwischen den Themes die Textpolaritaet wechseln). Mit einem Theme kippt nichts.
 
 /**
  * Die Regel, nicht die Fundstellen.
@@ -8951,8 +8906,11 @@ function flipsTextPolarity(lightHex, darkHex) {
  * existiert. Eine Allowlist haette genau das nicht geleistet - sie deckt N
  * Dateien ab, nicht die Regel.
  */
-test('Textfarbe auf vividen Fuellflaechen haelt WCAG AA in beiden Themes', () => {
-  const { light, dark } = themeTokenMaps();
+test('Textfarbe auf vividen Fuellflaechen haelt WCAG AA', () => {
+  // 2026-10-27, v2: light only: bis hierher wurden nur Fuellungen gemessen, deren Textpolaritaet
+  // zwischen den Themes kippt (dort brach Weiss). Mit einem Theme kippt nichts
+  // mehr - gemessen wird deshalb JEDE reine Token-Fuellung mit Textfarbe.
+  const { light } = themeTokenMaps();
   const dir = new URL('../public/styles/', import.meta.url);
   const violations = [];
 
@@ -8973,44 +8931,32 @@ test('Textfarbe auf vividen Fuellflaechen haelt WCAG AA in beiden Themes', () =>
       if (!fill || !textColor) continue;
 
       const fillToken = fill[1];
-      const lightFills = fillColors(fillToken, light, scopedAccent);
-      const darkFills = new Map(
-        fillColors(fillToken, dark, scopedAccent).map((f) => [f.label, f.hex]),
-      );
-
-      for (const surface of lightFills) {
-        const darkHex = darkFills.get(surface.label);
-        if (!flipsTextPolarity(surface.hex, darkHex)) continue;
-
-        for (const [theme, map, surfaceHex] of [
-          ['light', light, surface.hex],
-          ['dark', dark, darkHex],
-        ]) {
-          const ink = resolveColor(textColor[1], map);
-          if (!ink || !/^#[0-9a-f]{6}$/i.test(ink)) continue;
-          const ratio = contrastRatio(ink, surfaceHex);
-          if (ratio >= 4.5) continue;
-          violations.push(
-            `${file} {${selector.trim().split('\n').pop().trim()}}: ${theme} ` +
-            `${textColor[1]} (${ink}) auf ${surface.label} (${surfaceHex}) = ${ratio.toFixed(2)}:1`,
-          );
-        }
+      for (const surface of fillColors(fillToken, light, scopedAccent)) {
+        if (!surface.hex || !/^#[0-9a-f]{6}$/i.test(surface.hex)) continue;
+        const ink = resolveColor(textColor[1], light);
+        if (!ink || !/^#[0-9a-f]{6}$/i.test(ink)) continue;
+        const ratio = contrastRatio(ink, surface.hex);
+        if (ratio >= 4.5) continue;
+        violations.push(
+          `${file} {${selector.trim().split('\n').pop().trim()}}: ` +
+          `${textColor[1]} (${ink}) auf ${surface.label} (${surface.hex}) = ${ratio.toFixed(2)}:1`,
+        );
       }
     }
   }
 
   assert.deepEqual(violations, [],
-    'Textfarbe auf vivider Fuellflaeche unter 4,5:1 - --color-ink-on-vivid kippt mit dem Theme, --color-text-on-accent nicht');
+    'Textfarbe auf vivider Fuellflaeche unter 4,5:1');
 });
 
-test('--color-ink-on-vivid traegt auf jedem Modulakzent, --color-text-on-accent nicht', () => {
-  // Die Gegenprobe zum Guard darueber: sie belegt, dass der vorgeschriebene
-  // Token die Schwelle ueberhaupt halten KANN, und dass der alte es nicht tut.
-  // Ohne diese Haelfte koennte jemand die Regel erfuellen, indem er auf ein
-  // drittes, ebenso untaugliches Token ausweicht.
-  const { light, dark } = themeTokenMaps();
+test('--color-ink-on-vivid traegt auf jedem Modulakzent', () => {
+  // Die Gegenprobe zum Guard darueber: der vorgeschriebene Token haelt die
+  // Schwelle auf jeder Modulflaeche. 2026-10-27, v2: light only: die zweite Haelfte (statisches
+  // Weiss faellt im Dark unter 3:1, sonst waere die Regel gegenstandslos) ist
+  // mit dem Dark-Theme gegangen.
+  const { light } = themeTokenMaps();
 
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const ink = resolveColor('--color-ink-on-vivid', map);
     const modules = [...map.keys()].filter((name) => /^--module-[\w-]+$/.test(name));
     assert.ok(modules.length >= 15, `expected the module palette, found ${modules.length}`);
@@ -9022,16 +8968,6 @@ test('--color-ink-on-vivid traegt auf jedem Modulakzent, --color-text-on-accent 
         `${theme}: --color-ink-on-vivid (${ink}) auf ${token} (${surface}) ist ${ratio.toFixed(2)}:1`);
     }
   }
-
-  // Im Dark-Theme muss das statische Weiss messbar durchfallen - sonst waere
-  // der ganze Umbau unnoetig und dieser Guard wuerde eine tote Regel bewachen.
-  const staticWhite = resolveColor('--color-text-on-accent', dark);
-  assert.equal(staticWhite.toLowerCase(), '#ffffff', '--color-text-on-accent ist statisches Weiss');
-  const worst = [...dark.keys()]
-    .filter((name) => /^--module-[\w-]+$/.test(name))
-    .map((name) => contrastRatio(staticWhite, resolveColor(name, dark)));
-  assert.ok(Math.min(...worst) < 3,
-    'Dark-Modulakzente muessen weissen Text unterschreiten, sonst ist die Regel gegenstandslos');
 });
 
 /**
@@ -9058,8 +8994,9 @@ test('--color-ink-on-vivid traegt auf jedem Modulakzent, --color-text-on-accent 
  * ohne eigene Textfarbe (`.settings-retry-state`) erbt Fliesstext und ist kein
  * Paar; sie bleibt zu Recht ungeprueft.
  */
-test('Text auf getoenter Flaeche haelt WCAG AA in beiden Themes', () => {
-  const { light, dark } = themeTokenMaps();
+test('Text auf getoenter Flaeche haelt WCAG AA', () => {
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
+  const { light } = themeTokenMaps();
   const dir = new URL('../public/styles/', import.meta.url);
   const TINT = /^--color-[\w-]+-light$/;
   const PURE_VAR = /^var\(\s*(--[\w-]+)\s*\)$/;
@@ -9110,7 +9047,7 @@ test('Text auf getoenter Flaeche haelt WCAG AA in beiden Themes', () => {
         ? [{ token: tint.own, where: tint.where }]
         : base;
       for (const ink of inks) {
-        for (const [theme, map] of [['light', light], ['dark', dark]]) {
+        for (const [theme, map] of [['light', light]]) {
           const surface = resolveColor(tint.token, map);
           const color = resolveColor(ink.token, map);
           if (!/^#[0-9a-f]{6}$/i.test(surface ?? '') || !/^#[0-9a-f]{6}$/i.test(color ?? '')) continue;
@@ -9245,7 +9182,7 @@ test('der Toenungs-Guard sieht die Toenungsflaechen der App', () => {
  * nur an EINER Stelle entstehen, und jeder Weg, der das Theme zur Laufzeit
  * umschaltet, muss sie neu berechnen.
  */
-test('module accent is recomputed on every runtime theme switch', () => {
+test('module accent has one writer, and navigate() goes through it', () => {
   const router = read('../public/router.js');
 
   // 1. Genau ein Schreiber im ganzen Frontend. Ein zweiter waere eine zweite
@@ -9273,57 +9210,12 @@ test('module accent is recomputed on every runtime theme switch', () => {
   // 2. Der Seitenwechsel geht durch denselben Helfer (keine Inline-Kopie).
   assert.match(router, /applyModuleAccentForRoute\(route\)/, 'navigate() must use the helper');
 
-  // 3. Expliziter Theme-Wechsel (window.yuvomi.applyTheme) berechnet neu.
-  const applyTheme = router.match(/applyTheme:\s*\(value\) => \{[\s\S]*?\n {2}\},/);
-  assert.ok(applyTheme, 'expected the applyTheme export');
-  assert.match(
-    applyTheme[0],
-    /data-theme/,
-    'sanity: applyTheme is the function that flips the theme',
-  );
-  assert.match(
-    applyTheme[0],
-    /applyModuleAccentForRoute\(currentRoute\(\)\)/,
-    'applyTheme must recompute the module accent for the current route',
-  );
-
-  // 4. Theme "Automatisch" schaltet ohne applyTheme um - rein per CSS-Media-
-  //    Query. Ohne Listener liefe derselbe Kontrast-Bruch beim Sonnenuntergang
-  //    des Systems, nur ohne Nutzeraktion.
-  //
-  //    Die MediaQueryList muss dabei in einem Modul-Binding leben. Als
-  //    Wegwerf-Ausdruck (`matchMedia(...).addEventListener(...)`) darf die
-  //    Engine sie einsammeln - der Listener verstummt dann still, und der
-  //    Fehler kaeme genau in der Sitzung zurueck, die lange genug offen war.
-  assert.match(
-    router,
-    /const darkSchemeQuery = window\.matchMedia\??\.?\(\s*'\(prefers-color-scheme: dark\)'\s*\)/,
-    'the prefers-color-scheme query must be held in a module binding, not a throwaway expression',
-  );
-  assert.doesNotMatch(
-    router,
-    /matchMedia\??\.?\(\s*'\(prefers-color-scheme: dark\)'\s*\)\s*\??\.?\s*addEventListener/,
-    'do not attach the listener to an unreferenced MediaQueryList',
-  );
-
-  const listener = router.match(
-    /darkSchemeQuery\s*\??\.?\s*addEventListener[\s\S]{0,120}?'change'[\s\S]{0,200}?;/,
-  );
-  assert.ok(listener, 'expected a prefers-color-scheme change listener for auto mode');
-  assert.match(
-    listener[0],
-    /applyModuleAccentForRoute\(currentRoute\(\)\)/,
-    'the auto-mode listener must recompute the module accent too',
-  );
-
-  // 5. Das Anwenden darf nicht hinter einem werfenden localStorage haengen:
-  //    stand die Persistenz zuerst, brach ein Quota-Fehler ab, bevor der Akzent
-  //    neu berechnet war.
-  assert.ok(
-    applyTheme[0].indexOf('applyModuleAccentForRoute')
-      < applyTheme[0].indexOf("localStorage.setItem('yuvomi-theme'"),
-    'applyTheme must apply theme and accent before persisting the choice',
-  );
+  // 2026-10-27, v2: light only: die Teile 3 bis 5 (applyTheme und der prefers-color-scheme-
+  // Listener berechnen neu, Persistenz zuletzt) sind mit dem Theme-Wechsel
+  // gegangen. Es gibt keinen Laufzeit-Wechsel mehr, der die Momentaufnahme
+  // veralten liesse.
+  assert.doesNotMatch(router, /applyTheme|darkSchemeQuery|prefers-color-scheme/,
+    'router.js schaltet wieder ein Theme um - dann muss der Akzent bei jedem Wechsel neu berechnet werden');
 });
 
 /**
@@ -9338,43 +9230,15 @@ test('module accent is recomputed on every runtime theme switch', () => {
  * dem Akzent-Befund durchrutschte - die Regel ist aber dieselbe: Jeder Weg, der
  * das Theme zur Laufzeit umschaltet, muss BEIDE neu berechnen.
  */
-test('the standalone status bar colour is recomputed on a runtime theme switch too', () => {
+test('the standalone status bar colour has one way back after an overlay', () => {
+  // 2026-10-27, v2: light only: bis hierher zogen applyTheme und der Auto-Modus-Listener die
+  // Statusbar nach einem Theme-Wechsel nach (refreshThemeColorForTheme). Den
+  // Wechsel gibt es nicht mehr; was bleibt, ist der Rueckweg nach einem Modal
+  // (restoreThemeColor) ueber dieselbe Routenfarbe.
   const router = read('../public/router.js');
-
-  const helper = router.match(/function refreshThemeColorForTheme\(\)[\s\S]*?\n\}/);
-  assert.ok(helper, 'expected refreshThemeColorForTheme to own the status bar refresh');
-  assert.match(
-    helper[0],
-    /updateThemeColorForRoute\(currentRoute\(\)\)/,
-    'the helper must recompute the status bar colour for the current route',
-  );
-  // Ein offenes Modal haelt die Statusbar abgedunkelt und stellt sie beim
-  // Schliessen ueber restoreThemeColor selbst wieder her. Zoege der Auto-Modus
-  // die Routenfarbe nach, waere die Abdunklung mitten im Modal weg.
-  assert.match(
-    helper[0],
-    /shared-modal-overlay/,
-    'the helper must leave the status bar alone while a modal dims it',
-  );
-
-  // Beide Umschaltwege ziehen nach - derselbe Anspruch wie beim Modul-Akzent.
-  const applyTheme = router.match(/applyTheme:\s*\(value\) => \{[\s\S]*?\n {2}\},/);
-  assert.ok(applyTheme, 'expected the applyTheme export');
-  assert.match(
-    applyTheme[0],
-    /refreshThemeColorForTheme\(\)/,
-    'applyTheme must refresh the status bar colour',
-  );
-
-  const listener = router.match(
-    /darkSchemeQuery\s*\??\.?\s*addEventListener[\s\S]{0,120}?'change'[\s\S]{0,300}?\n {4}\}\);/,
-  );
-  assert.ok(listener, 'expected a prefers-color-scheme change listener for auto mode');
-  assert.match(
-    listener[0],
-    /refreshThemeColorForTheme\(\)/,
-    'the auto-mode listener must refresh the status bar colour too',
-  );
+  assert.doesNotMatch(router, /refreshThemeColorForTheme|applyTheme/, 'kein Theme-Wechsel mehr im Router');
+  assert.match(router, /restoreThemeColor:\s*\(\)\s*=>\s*\{\s*updateThemeColorForRoute\(currentRoute\(\)\);/,
+    'restoreThemeColor stellt die Routenfarbe wieder her');
 });
 
 /**
@@ -9392,41 +9256,30 @@ test('the standalone status bar colour is recomputed on a runtime theme switch t
  * Metas auf die aktive Farbe setzen. Nur ohne `data-theme` bleibt das Paar ein
  * Paar - dort ist das System die richtige Quelle.
  */
-test('die Statusbar folgt der ausdruecklichen Theme-Wahl, nicht nur dem System', () => {
+test('ein theme-color-Meta, keine Theme-Wahl im Erstzustand', () => {
+  // 2026-10-27, v2: light only. Bis hierher: zwei system-gebundene Metas (hell/dunkel), und
+  // setThemeColor wie theme-init.js lasen die ausdrueckliche Wahl
+  // (`data-theme`), damit die Statusbar nicht dem System folgte. Jetzt gibt es
+  // EIN Meta ohne media-Bindung, setThemeColor schreibt jedes Meta mit
+  // derselben Farbe, und theme-init.js raeumt eine alte Wahl ab, statt sie
+  // anzuwenden.
   const router = read('../public/router.js');
   const fn = router.match(/function setThemeColor\([\s\S]*?\n\}/);
   assert.ok(fn, 'expected setThemeColor to own the meta writes');
+  assert.doesNotMatch(fn[0], /data-theme/, 'setThemeColor liest keine Theme-Wahl mehr');
+  assert.match(fn[0], /querySelectorAll\('meta\[name="theme-color"\]'\)/, 'setThemeColor schreibt jedes theme-color-Meta');
 
-  assert.match(fn[0], /getAttribute\('data-theme'\)/,
-    'setThemeColor muss die ausdrueckliche Wahl lesen - die Metas folgen sonst dem System');
-
-  // Der Anfangszustand gehoert dorthin, wo die Theme-Entscheidung faellt: der
-  // Router korrigiert die Bewegung, aber die Offline-Huelle hat keinen Router.
-  const init = read('../public/theme-init.js');
-  assert.match(init, /meta\[name="theme-color"\]/,
-    'theme-init.js muss die Statusbar auf die gewaehlte Farbe stellen - sonst haengt die Offline-Huelle');
-
-  // DIE REGEL, NICHT DIE ZWEI DATEIEN: jedes Dokument mit system-gebundenen
-  // theme-color-Metas braucht das Skript, das die Wahl darauf anwendet. Ohne
-  // diesen Teil deckte der Guard genau die Seiten ab, die heute existieren -
-  // und offline.html war genau die, die beim ersten Anlauf fehlte.
-  const docs = ['index.html', 'offline.html'];
-  const scopedDocs = [];
-  const unfixed = [];
-  for (const name of docs) {
+  for (const name of ['index.html', 'offline.html']) {
     const src = read(`../public/${name}`);
-    const scoped = [...src.matchAll(/<meta name="theme-color"[^>]*media="\(prefers-color-scheme/g)];
-    if (!scoped.length) continue;
-    scopedDocs.push(name);
-    assert.equal(scoped.length, 2, `${name}: erwartet zwei system-gebundene Metas, gefunden ${scoped.length}`);
-    if (!/<script[^>]+src="\/theme-init\.js"/.test(src)) unfixed.push(name);
+    const metas = [...src.matchAll(/<meta name="theme-color"[^>]*>/g)].map((m) => m[0]);
+    assert.equal(metas.length, 1, `${name}: erwartet EIN theme-color-Meta, gefunden ${metas.length}`);
+    assert.doesNotMatch(metas[0], /media=/, `${name}: das Meta haengt nicht am System-Farbschema`);
+    assert.match(src, /<script[^>]+src="\/theme-init\.js"/, `${name} laedt den Erstzustand (theme-init.js)`);
   }
 
-  // Reichweite vor dem Urteil.
-  assert.deepEqual(scopedDocs, docs,
-    `erwartet: beide Dokumente tragen die system-gebundenen Metas, gefunden: ${scopedDocs.join(', ')}`);
-  assert.deepEqual(unfixed, [],
-    'ein Dokument mit system-gebundenen theme-color-Metas muss theme-init.js laden');
+  const init = read('../public/theme-init.js');
+  assert.match(init, /localStorage\.removeItem\('yuvomi-theme'\)/, 'eine alte Theme-Wahl wird abgeraeumt');
+  assert.doesNotMatch(init, /setAttribute\('data-theme'/, 'der Erstzustand setzt kein data-theme');
 });
 
 test('modal Enter submits the form instead of advancing to the next field (audit 1.4)', () => {
@@ -10533,16 +10386,13 @@ test('wireTablist scrolls only its own bar, never via scrollIntoView (#565)', ()
   );
 });
 
-test('priority badges and meal labels meet WCAG AA contrast in both themes', () => {
+test('priority badges and meal labels meet WCAG AA contrast', () => {
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
-  const darkBlock = darkAttrBlock(tokens);
   assert.ok(rootBlock, 'expected a :root token block');
-  assert.ok(darkBlock, 'expected a [data-theme="dark"] block');
 
   const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [key, value] of parseTokenMap(darkBlock[1])) dark.set(key, value);
 
   const pairs = [
     ['--color-priority-low', '--color-priority-low-bg'],
@@ -10551,7 +10401,7 @@ test('priority badges and meal labels meet WCAG AA contrast in both themes', () 
     ['--color-priority-urgent', '--color-priority-urgent-bg'],
   ];
 
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const surface = resolveColor('--color-surface-work', map);
     for (const [foregroundToken, backgroundToken] of pairs) {
       const foreground = resolveColor(foregroundToken, map);
@@ -10578,11 +10428,10 @@ test('priority badges and meal labels meet WCAG AA contrast in both themes', () 
 test('R19: Mahlzeittoene sind vier Toene, und keiner ist der Akzent', () => {
   const tokens = read('../public/styles/tokens.css');
   const rootBlock = tokens.match(/:root\s*\{([\s\S]*?)\n\}/);
+  // 2026-10-27, v2: light only: gemessen wird das eine (helle) Theme.
   const light = parseTokenMap(rootBlock[1]);
-  const dark = new Map(light);
-  for (const [key, value] of parseTokenMap(darkAttrBlock(tokens)[1])) dark.set(key, value);
   const meals = ['--meal-breakfast', '--meal-lunch', '--meal-dinner', '--meal-snack'];
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const rgb = (name) => { const h = resolveColor(name, map).replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
     const accent = resolveColor('--color-accent', map).toLowerCase();
     for (const m of meals) assert.notEqual(resolveColor(m, map).toLowerCase(), accent, `${theme}: ${m} ist der Akzent`);
@@ -10601,15 +10450,15 @@ test('R19: Mahlzeittoene sind vier Toene, und keiner ist der Akzent', () => {
  * hardcoding 'mealie'/'tandoor' here - a future third provider's badge falls
  * under this same check automatically, without this test needing an edit.
  */
-test('recipe provider source badges meet WCAG AA contrast in both themes', () => {
+test('recipe provider source badges meet WCAG AA contrast', () => {
   const recipesCss = read('../public/styles/recipes.css');
   const providers = [...recipesCss.matchAll(
     /\.source-badge--([\w-]+)\s*\{\s*background:\s*var\(--source-\1-light\);\s*color:\s*var\(--source-\1\);\s*\}/g,
   )].map((m) => m[1]);
   assert.ok(providers.length >= 2, `expected at least the mealie/tandoor badge rules, found ${providers.length}`);
 
-  const { light, dark } = themeTokenMaps();
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  const { light } = themeTokenMaps();
+  for (const [theme, map] of [['light', light]]) {
     for (const provider of providers) {
       const foreground = resolveColor(`--source-${provider}`, map);
       const background = resolveColor(`--source-${provider}-light`, map);
@@ -11676,10 +11525,9 @@ test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fu
   const roh = (rumpf, name) => new RegExp(`(?:^|[;{\\s])${name}:\\s*(#[0-9A-Fa-f]{6})\\b`).exec(rumpf)?.[1] ?? null;
   const tint = Number(/--tint-surface:\s*(\d+)%/.exec(tokensCss)?.[1]) / 100;
   assert.equal(tint, 0.16, '--tint-surface gelesen');
+  // 2026-10-27, v2: light only: ein Theme (bis hierher dazu System-Dark und Schalter-Dark).
   const themes = {
     light: tokensCss,
-    'dark (System)': darkSchemeBlock(tokensCss)?.[1],
-    'dark (Schalter)': darkAttrBlock(tokensCss)?.[1],
   };
   const kanaele = (hex) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
   const hex = (rgb) => `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
@@ -11701,7 +11549,7 @@ test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fu
       gemessen += 2;
     }
   }
-  assert.equal(gemessen, palette.length * 3 * 2, 'jede Farbe in jedem Theme fuer Name und Zeit gemessen');
+  assert.equal(gemessen, palette.length * 2, 'jede Farbe fuer Name und Zeit gemessen');
 
   // --- Gegenprobe der Rechnung: der alte Zustand faellt ----------------------
   // Weiss auf dem 90-%-Vollton ueber der hellen Arbeitsflaeche: genau der
@@ -14126,42 +13974,11 @@ test('ein Inset-Specular kommt aus dem Token, nie als rohes rgba', () => {
  * `prefers-contrast`) sind ausdruecklich NICHT gemeint: sie schalten keine
  * Farbwelt um, sie haerten - und beides soll auf Papier gelten.
  */
-test('was das Display umfaerbt, gilt nur fuers Display', () => {
-  const css = read('../public/styles/tokens.css');
-  const offenders = [];
-  let themeRules = 0;
-  let themedTokens = 0;
-
-  for (const rule of eachRule(css)) {
-    const declared = [...rule.body.matchAll(/(--_[a-z0-9-]+)\s*:/gi)];
-    if (!declared.length) continue;
-
-    const chain = rule.at.join(' ');
-    const meansOneTheme = /prefers-color-scheme/.test(chain) || /\[data-theme=/.test(rule.selector);
-    if (!meansOneTheme) continue;
-
-    // Der Zaehler geht an derselben Stelle hoch, an der auch ein Finding
-    // entstehen koennte - nicht davor.
-    themeRules += 1;
-    themedTokens += declared.length;
-
-    if (!/\bscreen\b/.test(chain)) {
-      offenders.push(`${rule.selector} (At-Kette: ${chain || 'keine'}) setzt `
-        + `${declared.length} Theme-Tokens ohne @media screen`);
-    }
-  }
-
-  assert.ok(themeRules >= 2 && themedTokens >= 100,
-    `Nur ${themeRules} Theme-Regeln mit ${themedTokens} Tokens gelesen - der Guard hat `
-    + 'nichts gemessen, statt nichts zu finden. tokens.css fuehrt zwei Dark-Bloecke '
-    + '(System-Praeferenz und expliziter Nutzer-Override) mit je ueber siebzig Tokens.');
-
-  assert.deepEqual(offenders, [],
-    'Ein Block, der die Farbwelt umschaltet, gehoert unter `@media screen`. Ohne ihn '
-    + 'druckt die App ihre Bildschirmfarben auf Papier: erst schwarze Tinte auf '
-    + 'schwarzem Grund, nach dem Neutralisieren der Flaechen vivide Dark-Akzente auf '
-    + `Weiss.\n${offenders.join('\n')}`);
-});
+// 2026-10-27, v2: light only: hier stand der Guard "was das Display umfaerbt, gilt nur fuers
+// Display" - jeder Theme-Block in tokens.css musste unter `@media screen`
+// stehen, damit der Drucker keine Dark-Farben auf Papier bringt. Es gibt keine
+// Theme-Bloecke mehr; dass keiner zurueckkommt, haelt "v2: ein Theme - kein
+// Dark-Block in tokens.css" weiter oben.
 
 /**
  * Die Kasten-in-Kasten-Regel, die im Stylesheet scharfe Haelfte: ein Well ist
@@ -14991,7 +14808,9 @@ test('die Deaktiviert-Farbe steht an keinem erreichbaren Bedienelement', () => {
  * die Erwartung wird aus `tokens.css` aufgeloest, indem die `var()`-Kette von
  * `--color-bg` verfolgt wird - hell aus `:root`, dunkel aus `[data-theme=dark]`.
  */
-test('the status bar colour is the page background, in both themes', () => {
+test('the status bar colour is the page background', () => {
+  // 2026-10-27, v2: light only: ein Theme, ein Meta je Dokument und ein Literal im Router (bis
+  // hierher je ein Paar fuer hell und dunkel).
   const tokens = read('../public/styles/tokens.css');
 
   /**
@@ -15017,7 +14836,6 @@ test('the status bar colour is the page background, in both themes', () => {
   };
 
   const light = propsOf(':root');
-  const dark = new Map([...light, ...propsOf('[data-theme="dark"]')]);
 
   /** Folgt `var(--a)` -> `var(--b)` -> `#hex`, hoechstens zehn Stufen tief. */
   const resolve = (scope, name) => {
@@ -15030,33 +14848,24 @@ test('the status bar colour is the page background, in both themes', () => {
     return value?.toUpperCase();
   };
 
-  const expected = {
-    light: resolve(light, '--color-bg'),
-    dark: resolve(dark, '--color-bg'),
-  };
+  const expected = resolve(light, '--color-bg');
 
   // Reichweiten-Nachweis: loest die Kette ins Leere, prueft der Guard nichts.
-  assert.match(expected.light ?? '', /^#[0-9A-F]{6}$/, '--color-bg (hell) liess sich nicht bis auf einen Hexwert aufloesen');
-  assert.match(expected.dark ?? '', /^#[0-9A-F]{6}$/, '--color-bg (dunkel) liess sich nicht bis auf einen Hexwert aufloesen');
-  assert.notEqual(expected.light, expected.dark, 'Hell und Dunkel loesen auf denselben Wert auf - die Dark-Quelle wurde nicht gelesen');
+  assert.match(expected ?? '', /^#[0-9A-F]{6}$/, '--color-bg liess sich nicht bis auf einen Hexwert aufloesen');
 
   const offenders = [];
 
   for (const file of ['../public/index.html', '../public/offline.html']) {
     const html = read(file);
     const metas = [...html.matchAll(/<meta\b[^>]*\bname=["']theme-color["'][^>]*>/g)].map((m) => m[0]);
-    assert.equal(metas.length, 2, `${file}: erwartet je ein theme-color-Meta fuer hell und dunkel, gefunden ${metas.length}`);
-    for (const meta of metas) {
-      const value = meta.match(/\bcontent=["']([^"']+)["']/)?.[1]?.toUpperCase();
-      const scheme = /prefers-color-scheme:\s*dark/.test(meta) ? 'dark' : 'light';
-      if (value !== expected[scheme]) offenders.push(`${file} (${scheme}): ${value} statt ${expected[scheme]}`);
-    }
+    assert.equal(metas.length, 1, `${file}: erwartet genau ein theme-color-Meta, gefunden ${metas.length}`);
+    const value = metas[0].match(/\bcontent=["']([^"']+)["']/)?.[1]?.toUpperCase();
+    if (value !== expected) offenders.push(`${file}: ${value} statt ${expected}`);
   }
 
-  const call = read('../public/router.js').match(/setThemeColor\(\s*'(#[0-9A-Fa-f]{6})'\s*,\s*'(#[0-9A-Fa-f]{6})'\s*\)/);
-  assert.ok(call, 'expected router.js to set the route-independent status bar colour from two literals');
-  if (call[1].toUpperCase() !== expected.light) offenders.push(`router.js (light): ${call[1]} statt ${expected.light}`);
-  if (call[2].toUpperCase() !== expected.dark) offenders.push(`router.js (dark): ${call[2]} statt ${expected.dark}`);
+  const call = read('../public/router.js').match(/setThemeColor\(\s*'(#[0-9A-Fa-f]{6})'\s*\)/);
+  assert.ok(call, 'expected router.js to set the route-independent status bar colour from one literal');
+  if (call[1].toUpperCase() !== expected) offenders.push(`router.js: ${call[1]} statt ${expected}`);
 
   assert.deepEqual(
     offenders,
@@ -20712,8 +20521,9 @@ test('ein gesperrtes Feld sieht gesperrt aus - eine Regel an der Feldhaut, nur T
   const decls = (rule) => new Map(rule.body.split(';').map((d) => d.trim()).filter(Boolean)
     .map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]));
   const tokenOf = (value) => String(value ?? '').match(/^var\(\s*(--[\w-]+)\s*\)$/)?.[1] ?? null;
-  const { light, dark } = themeTokenMaps();
-  const THEMES = [['light', light], ['dark', dark]];
+  // 2026-10-27, v2: light only: ein Theme.
+  const { light } = themeTokenMaps();
+  const THEMES = [['light', light]];
   // Die Gruende, auf denen ein Feld steht - die Liste des Kanten-Guards, dazu
   // die Mulde, die Hover-Stufen und die erhoehte Flaeche: ein Feld ohne eigene
   // Flaeche zeigt seinen Wert auf dem, was gerade darunter liegt (die Gruppe
@@ -20922,20 +20732,15 @@ test('R18: eine Feldhaut - 1px auf dem 3:1-Minimum, eine Fuellung, eigenes Auswa
     .map((rule) => `${rule.file}: ${rule.selector.trim()}`);
   assert.deepEqual(refill, [], 'eine Regel gibt dem Feld eine eigene Flaeche statt --color-field-bg (zweite Feldhaut).');
 
-  // 4. Die Zahlen: dunkel ist das Feld eine Mulde UEBER der Karte (nicht das
-  //    Fast-Schwarz darunter), und die Kante steht am Minimum - nicht darunter
-  //    und nicht weit darueber.
-  const { light, dark } = themeTokenMaps();
+  // 4. Die Zahlen: die Kante steht am Minimum - nicht darunter und nicht weit
+  //    darueber. (2026-10-27, v2: light only: die Dark-Haelfte - das Feld als Mulde ueber der
+  //    dunklen Karte - ist mit dem Dark-Theme gegangen.)
+  const { light } = themeTokenMaps();
   const hex = (name, map) => resolveColor(name, map);
-  const lum = (h) => relLum([1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
-  assert.ok(lum(hex('--color-field-bg', dark)) > lum(hex('--color-surface', dark)),
-    `dunkel: das Feld (${hex('--color-field-bg', dark)}) muss heller sein als die Karte (${hex('--color-surface', dark)}) - eine Mulde, kein Loch`);
-  assert.ok(contrastRatio(hex('--color-text-placeholder', dark), hex('--color-field-bg', dark)) >= 4.5,
-    'dunkel: der Platzhalter haelt 4,5:1 auf der Feldmulde');
   assert.ok(contrastRatio(hex('--color-text-placeholder', light), hex('--color-field-bg', light)) >= 4.5,
     'hell: der Platzhalter haelt 4,5:1 auf der Feldflaeche');
   const GROUNDS = ['--color-surface', '--color-surface-work', '--color-surface-raised', '--color-bg'];
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const worst = Math.min(...GROUNDS.map((g) => contrastRatio(hex('--color-border-control', map), hex(g, map))));
     assert.ok(worst >= 3, `${theme}: die Feldkante faellt auf ${worst.toFixed(2)}:1`);
     // Tafla (2026-10-19): die Feldkante der Spezifikation ist zugleich der
@@ -20956,8 +20761,9 @@ test('R18: eine Feldhaut - 1px auf dem 3:1-Minimum, eine Fuellung, eigenes Auswa
   assert.ok(all.some((rule) => rule.file === 'layout.css' && parts(rule).some((p) => /^\[dir="rtl"\] select\.form-input/.test(p))
     && /background-position:\s*left/.test(rule.body)), 'das Zeichen wechselt in RTL die Seite');
   const tokens = read('../public/styles/tokens.css');
-  assert.equal((tokens.match(/--_field-chevron:\s*url\(/g) ?? []).length, 3,
-    'das Zeichen hat einen hellen Wert und einen Zwilling in BEIDEN Dark-Bloecken');
+  // 2026-10-27, v2: light only: ein Wert (bis hierher dazu ein Zwilling in jedem Dark-Block).
+  assert.equal((tokens.match(/--_field-chevron:\s*url\(/g) ?? []).length, 1,
+    'das Zeichen hat genau einen Wert');
 
   // 6. Zahlfelder ohne Spin-Pfeile.
   assert.ok(all.some((rule) => rule.file === 'layout.css' && /input\[type="number"\]::-webkit-inner-spin-button/.test(rule.selector)
@@ -21066,9 +20872,9 @@ test('R18: die Brettspalte ist eine Mulde unter den Karten, die leere Spalte tra
   assert.match(col.body, /background-color:\s*var\(--color-board-well\)/);
   const card = rules.find((rule) => rule.at.length === 0 && rule.selector.trim() === '.kanban-card');
   assert.match(card.body, /background-color:\s*var\(--color-surface\)/);
-  const { light, dark } = themeTokenMaps();
+  const { light } = themeTokenMaps();
   const lumOf = (h) => relLum(hexToRgb(h));
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  for (const [theme, map] of [['light', light]]) {
     const well = resolveColor('--color-board-well', map);
     const surface = resolveColor('--color-surface', map);
     assert.ok(lumOf(surface) > lumOf(well), `${theme}: die Karte (${surface}) muss HELLER sein als die Spalte (${well})`);
@@ -21503,11 +21309,8 @@ test('die offene Auswahlliste traegt Flaeche und Farbschema des Themes (#2022)',
   assert.equal(decl(baseRoot.body, 'color-scheme'), 'light',
     'die Basis von tokens.css nennt ihr Farbschema nicht (`color-scheme: light`)');
 
-  for (const [name, block] of [['System-Dark', darkSchemeBlock(tokensCss)], ['data-theme="dark"', darkAttrBlock(tokensCss)]]) {
-    assert.ok(block, `der Dark-Block (${name}) in tokens.css wurde nicht gefunden`);
-    assert.equal(decl(block[1], 'color-scheme'), 'dark',
-      `der Dark-Block (${name}) setzt kein \`color-scheme: dark\` - die offene Auswahlliste und andere native Teile bleiben hell`);
-  }
+  // 2026-10-27, v2: light only: die Dark-Bloecke mit ihrem `color-scheme: dark` sind gegangen; das
+  // helle Schema an der Basis ist das einzige.
 
   const layoutCss = readFileSync(new URL('../public/styles/layout.css', import.meta.url), 'utf8');
   const parts = (rule) => rule.selector.split(',').map((s) => s.trim().replace(/\s+/g, ' '));
@@ -21686,8 +21489,8 @@ test('R20: das Einkaufskaestchen traegt die Ruhe des Abhakkreises und haelt 3:1'
   assert.match(read('../public/pages/shopping.js'), /class="item-check check-ring/, 'der Einkauf nimmt den geteilten Kreis');
   const token = ring.body.match(/box-shadow:\s*inset[^;]*var\((--[\w-]+)\)/)?.[1];
   assert.ok(token, 'die Kante kommt aus einem Token');
-  const { light, dark } = themeTokenMaps();
-  for (const [theme, map] of [['light', light], ['dark', dark]]) {
+  const { light } = themeTokenMaps();
+  for (const [theme, map] of [['light', light]]) {
     const edge = resolveColor(token, map);
     for (const ground of ['--color-surface', '--color-bg']) {
       const ratio = contrastRatio(edge, resolveColor(ground, map));

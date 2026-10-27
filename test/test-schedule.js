@@ -2833,16 +2833,14 @@ test('P9: a shift type created without a colour starts on the palette default, n
   await call('DELETE', `/shift-types/${created.body.data.id}`, { as: ADMIN });
 });
 
-// Swatches im Dark mit Kante: ein Farbpunkt von 0,7rem traegt die Glance-
-// Information des Moduls; im Dark bekommt er eine Kante aus einem Token, damit
-// auch eine BESTANDSFARBE (die keine Migration anfasst) nicht in der Flaeche
-// verschwindet. Beide Dark-Wege (System-Dark und erzwungenes Dark).
-test('P9: the shift swatch carries an edge in both dark paths', async () => {
-  const { eachRule } = await import('./css-rules.js');
-  const css = readFileSync(new URL('../public/styles/schedule.css', import.meta.url), 'utf8');
-  const rules = [...eachRule(css)].filter((r) => /\.schedule-swatch\b/.test(r.selector) && /box-shadow:\s*inset 0 0 0 1px var\(--/.test(r.body));
-  assert.ok(rules.some((r) => /:root\[data-theme="dark"\]/.test(r.selector)), 'erzwungenes Dark');
-  assert.ok(rules.some((r) => /prefers-color-scheme: dark/.test(r.at.join(' ')) && /:root:not\(\[data-theme="light"\]\)/.test(r.selector)), 'System-Dark');
+// Swatches im Dark mit Kante (P9): ein Farbpunkt von 0,7rem bekam im Dark eine
+// Kante aus einem Token, damit eine Bestandsfarbe nicht in der Flaeche
+// verschwand. 2026-10-27, v2: light only - die Dark-Regeln des Schichtplans
+// (Kante der Swatches, dunkles Farbschema der Zeit- und Monatsfelder) sind mit
+// dem Dark Mode gegangen und kommen nicht zurueck.
+test('P9: the schedule styles carry no dark-mode rules any more (v2: light only)', async () => {
+  const css = readFileSync(new URL('../public/styles/schedule.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(css, /prefers-color-scheme:\s*dark|data-theme="dark"|data-theme="light"|color-scheme:\s*dark/);
 });
 
 // P4 (Re-Critique 2026-09-28, A2 P2-6): Planung ohne Schichtart stapelte DREI

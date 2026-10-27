@@ -26,24 +26,48 @@
  *  12. Sidebar
  *  13. Übergänge
  *  14. Z-Indizes
- *  15. Dark Mode
  *
- * Dark-Mode-Architektur (§8.2):
- *   Private Tokens (--_name) halten den aktuellen Wert.
- *   Öffentliche Tokens (--name) zeigen immer auf var(--_name).
- *   Dark-Mode-Blöcke überschreiben nur die privaten Tokens —
- *   die öffentliche API bleibt stabil und muss nie doppelt geändert werden.
+ * Private Tokens (--_name) halten den Wert, oeffentliche (--name) zeigen auf
+ * var(--_name). Bis 2026-10-27 ueberschrieben zwei Dark-Mode-Bloecke die
+ * privaten Haelften; seit v2 gibt es nur das helle Theme (siehe unten), die
+ * Paare bleiben als stabile API.
  *
  * TAFLA (approved 2026-10-19, DESIGN.md "Direction Contract"). The redesign is
  * mostly this file: ink #1C1B19 / ink-2 #5E5A53 on warm paper, one violet voice
  * (dark: fill #7C52F2, text #B49CFF), module tones out of the chrome (section
  * 4 points every family at ink-2), status as a word on a tint, a curated person
  * palette (section 4c), the hearth, the dark cook stage and the wall night
- * (section 4d), the 34/22/17/13 type scale with --font-rounded (section 10),
+ * (section 4d), the 34/22/17/13 type scale with rounded numerals (section 10),
  * radii 8/12/20/28 (section 9), warm shadows E1-E3 plus the accent glow
  * (section 8) and the spring motion set (section 14). Every new text pair is
  * measured in "text/surface token pairs meet WCAG AA" (test-frontend-audit.js).
+ *
+ * v2 (2026-10-27, design-v2/project/Foundations.dc.html). The owner: "different
+ * font, not these rounded cartoonish ones, should feel more like productivity
+ * app" and "light mode only". So: ONE light theme (the dark blocks, the theme
+ * choice and data-theme="dark" are gone; the cook stage and the wall's night
+ * scene in 4d stay dark on purpose), Inter instead of the system and rounded
+ * faces (section 10), a neutral ground #F6F6F3 with ink #1A1A19 / ink-2
+ * #5F5E5A, hairline #EAE9E5 (rows inside a card #EFEEEA), the decorative grey
+ * #8D8C87 for icons and rings only, cards at radius 12 without shadow, and the
+ * v2 type scale 26/17/15/12 (--type-page, --type-section, --type-row,
+ * --type-meta). Pages move to the rest of v2 one round at a time.
  */
+
+/* INTER, SELBST GEHOSTET (v2, 2026-10-27). Die CSP erlaubt nur
+ * `font-src 'self'`. Eine variable Datei traegt 100-900 und Latin samt
+ * Latin Extended (Polnisch). `swap`: bis die Datei da ist, steht die
+ * Systemschrift (der Rest von --font-sans), nie unsichtbarer Text.
+ * DIE DATEI LIEGT NOCH NICHT IM REPO - der Download wartet auf das OK des
+ * Eigentuemers. Deshalb bewusst KEIN Preload und KEIN Eintrag im Precache von
+ * sw.js: ein 404 im Precache bricht die Installation des Service Workers. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter/InterVariable.woff2") format("woff2");
+}
 
 :root {
   /* DAS FARBSCHEMA GEHT MIT DEN TOKENS (#2022). Was der Browser selbst malt -
@@ -51,10 +75,9 @@
    * Fuellungen ohne eigene Farbe - fragt nicht nach den Tokens, sondern nach
    * `color-scheme`. Ohne die Angabe blieb das alles hell, auch im Dark: Chrome
    * unter Windows malte die offene Liste der randlosen Zeilen-Auswahl weiss,
-   * waehrend ihre Optionen die helle Dark-Schrift erbten. Beide Dark-Bloecke
-   * unten setzen `dark`, genau dort, wo auch die Dark-Werte greifen - also nie
-   * ein dunkles Schema unter hellen Tokens (data-theme="light" am dunklen
-   * System) und auf Papier nie (beide stehen unter `@media screen`). */
+   * waehrend ihre Optionen die helle Dark-Schrift erbten. Seit v2
+   * (2026-10-27) gibt es nur das helle Theme - `light`, immer. Dunkel malen
+   * nur die Kochbuehne (cook-mode.css) und die Nachtszene der Wand. */
   color-scheme: light;
 
   /* --------------------------------------------------------
@@ -79,38 +102,38 @@
    * REALEN Grund, und sieben Modultoene liegen bei 4,55:1 - ein dunklerer
    * Grund haette sie unter AA gezogen.
    * -------------------------------------------------------- */
-  --_neutral-50:  #FBFAF7;
+  --_neutral-50:  #FBFBF9;
   --neutral-50:   var(--_neutral-50);
-  --_neutral-100: #F5F3ED;   /* Grouped Background — warmes Papier, L=0.8962 */
+  --_neutral-100: #F6F6F3;   /* v2 ground (Foundations "Tlo"); vorher warmes Papier #F5F3ED */
   --neutral-100:  var(--_neutral-100);
-  --_neutral-150: #ECE8E0;   /* Inset-Well = Tafla --color-fill — 1.22:1 unter Weiß (vorher #EDEAE3) */
+  --_neutral-150: #ECEBE7;   /* Inset-Well = --color-fill, v2 segment track (vorher #ECE8E0) */
   --neutral-150:  var(--_neutral-150);
-  --_neutral-200: #E4E0D7;
+  --_neutral-200: #EAE9E5;   /* v2 hairline = card edge (vorher #E4E0D7) */
   --neutral-200:  var(--_neutral-200);
-  --_neutral-250: #D9D4C9;
+  --_neutral-250: #E2E1DC;
   --neutral-250:  var(--_neutral-250);
-  --_neutral-300: #CFC9BC;
+  --_neutral-300: #DCDBD6;
   --neutral-300:  var(--_neutral-300);
-  --_neutral-400: #AEAAA0;
+  --_neutral-400: #ADACA7;
   --neutral-400:  var(--_neutral-400);
-  --_neutral-500: #8C8880;
+  --_neutral-500: #8D8C87;   /* v2 decorative grey: icons and rings, never small text */
   --neutral-500:  var(--_neutral-500);
-  --_neutral-600: #5E5A53;   /* Tafla ink-2. WCAG AA: 6.86 weiß, 6.18 bg, 5.61 fill, 6.06 hearth, 5.88 accent-tint */
+  --_neutral-600: #5F5E5A;   /* v2 ink-2. WCAG AA: 6.49 weiß, 5.99 bg, 5.44 fill, 5.74 hearth, 5.57 accent-tint */
   --neutral-600:  var(--_neutral-600);
-  --_neutral-700: #4A4741;
+  --_neutral-700: #474643;
   --neutral-700:  var(--_neutral-700);
-  --_neutral-800: #2D2A25;
+  --_neutral-800: #2C2C2A;
   --neutral-800:  var(--_neutral-800);
-  --_neutral-900: #1C1B19;   /* Tafla ink — 17.21 weiß, 15.51 bg, 15.21 hearth */
+  --_neutral-900: #1A1A19;   /* v2 ink — 17.42 weiß, 16.09 bg, 15.39 hearth */
   --neutral-900:  var(--_neutral-900);
-  --_neutral-950: #0E0D0B;
+  --_neutral-950: #0E0E0D;
   --neutral-950:  var(--_neutral-950);
 
   /* Semantische Aliase (abwärtskompatibel) */
   --color-bg:             var(--neutral-100);
   --_color-surface:       #FFFFFF;
   --color-surface:        var(--_color-surface);
-  /* surface-2: recessed/vertieft (dunkler als bg in dark mode — kein Elevations-Token) */
+  /* surface-2: recessed/vertieft (kein Elevations-Token) */
   --color-surface-2:      var(--neutral-50);
   --_color-surface-3:     var(--_neutral-150);
   --color-surface-3:      var(--_color-surface-3);
@@ -121,13 +144,12 @@
    * WCAG 1.4.11 fuer die Grenze eines Bedienelements verlangt (die Entscheidung
    * vom 2026-07-30 hatte das bewusst offen gelassen).
    *
-   * --color-border-control ist seit Tafla (2026-10-19) die Feldkante der
-   * Spezifikation, #8A857C hell / #8A8378 dunkel (vorher die Rampenstufe
-   * --neutral-500), und haelt 3:1 auf jedem Grund, auf dem ein Feld gemessen
-   * stand: light 3,67 auf Weiss, 3,51 auf -raised, 3,30 auf der Buehne; dark
-   * 3,91 auf -surface, 3,39 auf -raised (= Tafla-Fill), 4,73 auf der Buehne.
-   * Die knappere Alternative von damals (#938E85 / #7A746B) fiel auf der hellen
-   * Buehne auf 2,93 und auf dem dunklen -raised auf 2,71.
+   * --color-border-control ist seit v2 (2026-10-27) #87867F - eine Spur
+   * unter dem dekorativen Grau der Foundations (#8D8C87, das auf der Fuellung
+   * #ECEBE7 nur 2,82 haelt; die Felder der Zugangsseite stehen dort). Es haelt
+   * 3:1 auf jedem Grund, auf dem ein Feld oder Ring steht: 3,65 auf Weiss,
+   * 3,38 auf dem Grund #F6F6F3, 3,06 auf der Fuellung - und bleibt "leise"
+   * (am knappsten Grund unter 3,4). Tafla: #8A857C.
    *
    * NUR FELDKANTEN (input, select, textarea, .input, .form-input, Such-Huellen).
    * Trennlinien, Karten- und Gruppenkanten behalten --color-border - sie global
@@ -135,19 +157,17 @@
    * der Akzent. Guard: test-frontend-audit.js, "Feldkanten tragen
    * --color-border-control".
    *
-   * TAFLA: the control edge is the spec's field border (#8A857C / #8A8378),
-   * also the ring of every check circle (--color-field-border): 3.67 on white,
-   * 3.30 on --color-bg, 3.50 on -raised, 3.00 on --color-fill (no ring sits on
-   * the fill, spec rule). The hairline between rows is --color-separator
-   * (#E2DDD3 / #3E3933), and --color-border-subtle - the token every row
-   * divider already reads - now points at it, so the whole app moves at once.
-   * Decorative, no contrast promise. */
-  --_color-separator:     #E2DDD3;
+   * The control edge is also the ring of every check circle
+   * (--color-field-border). The hairline is --color-separator (v2 #EAE9E5;
+   * rows inside a card: --color-separator-inner #EFEEEA), and
+   * --color-border-subtle - the token every row divider already reads - points
+   * at it, so the whole app moves at once. Decorative, no contrast promise. */
+  --_color-separator:     #EAE9E5;   /* v2 hairline */
   --color-separator:      var(--_color-separator);
   --color-border:         var(--neutral-200);
   --color-border-subtle:  var(--color-separator);
   --color-border-strong:  var(--neutral-300);  /* kräftigere Trennlinie (Hover, betonte Rahmen) */
-  --_color-border-control: #8A857C;
+  --_color-border-control: #87867F;   /* v2 ring/field edge: 3.65 weiss, 3.38 bg, 3.06 fill */
   --color-border-control: var(--_color-border-control);  /* Ruhekante von Eingabefeldern, 3:1 (WCAG 1.4.11) */
   --color-field-border:   var(--color-border-control);   /* Tafla-Name: Feldkante und Prüfkreis */
   /* DIE BAHN EINES AUSGESCHALTETEN SCHALTERS (#1572). Die `.toggle`-Bahn stand
@@ -165,7 +185,7 @@
    * 4,51 auf -surface, 3,86 auf -raised und dem Hover, 3,25 auf dem Hover
    * der erhoehten Flaeche. Guard: test-frontend-audit.js, "die ausgeschaltete
    * Schalterbahn haelt 3:1". Der Installer traegt dieselben Werte inline. */
-  --_color-switch-off:    #88847C;
+  --_color-switch-off:    #87867F;
   --color-switch-off:     var(--_color-switch-off);
   /* DER KNOPF IST HELL, IN BEIDEN THEMES (R18). Er trug --color-surface und
    * war damit im Dark ein dunkler Punkt (#2B2825) auf heller Bahn - der
@@ -201,7 +221,7 @@
    * Placeholder war damit die eine kalte Stimme auf dem warmen Papier. Der
    * neue Wert haelt dieselben Zusagen mit Luft: 5.63 auf Weiss (vorher 5.53),
    * 5.07 auf --color-bg (vorher 4.98), 4.69 auf dem Well (vorher 4.60). */
-  --_color-text-tertiary: #6B675F;
+  --_color-text-tertiary: #696863;
   --color-text-tertiary:  var(--_color-text-tertiary);  /* WCAG AA: ≥4.6:1 auf --color-bg, ≥5.2:1 auf weiß */
   --color-text-quaternary: var(--neutral-500);  /* nur dekorativ (z.B. Kbd-Hint), nie für Fließtext */
   /* NUR für wirklich Deaktiviertes. Der Wert trägt auf KEINER Fläche der App
@@ -253,9 +273,9 @@
    * Glas, Abschnitt 16 a). Auf -raised gemessen: Sekundaertext 5,93:1 (vorher
    * 5,99), Tertiaertext 5,39 (5,45), Akzent 5,81 (5,86), Feldkante 3,38
    * (3,42). */
-  --_color-surface-raised:    #FBFAF7;
+  --_color-surface-raised:    #FBFBF9;
   --color-surface-raised:     var(--_color-surface-raised);
-  --_color-surface-glass:     rgba(251, 250, 247, 0.62);
+  --_color-surface-glass:     rgba(251, 251, 249, 0.62);
 
   /* KASTEN-IN-KASTEN-VOKABULAR (HIG-Rollout Runde 2, 2026-08-06).
    * Karten sind randlos auf dem Grouped-Grund. Was IN einer Karte liegt, bekommt
@@ -315,7 +335,7 @@
   --color-fill:               var(--color-surface-3);
   --_color-raised:            #FFFFFF;
   --color-raised:             var(--_color-raised);
-  --_color-ink-3:             #A29D94;
+  --_color-ink-3:             #8D8C87;   /* v2 decorative grey */
   --color-ink-3:              var(--_color-ink-3);
   --_color-hearth:            #FBEFE3;
   --color-hearth:             var(--_color-hearth);
@@ -344,8 +364,7 @@
    * --field-chevron ist das Zeichen eines select mit appearance: none - der
    * Lucide-Pfad chevron-down als Bild, weil ein select kein Pseudo-Element
    * traegt, an dem eine Maske haengen koennte. Die Farbe steht deshalb IM Bild
-   * und hat einen Dark-Zwilling: hell #5E5A53 (6,86:1 auf Weiss), dunkel
-   * #B3ACA1 (5,65:1 auf der Mulde, 6,51:1 auf -surface) - das Zeichen traegt
+   * und folgt --_neutral-600 (v2 #5F5E5A, 6,49:1 auf Weiss) - das Zeichen traegt
    * die 3:1 als Erkennungsmerkmal auch dort, wo die Auswahl selbst keine Kante
    * hat (die randlose Auswahl der Formularzeile, .form-row in layout.css).
    * Guard: test-frontend-audit.js, "R18: eine Feldhaut". */
@@ -372,7 +391,7 @@
    * sekundaer 5,15 / 8,76, tertiaer 4,69 / 7,71:1. */
   --_color-board-well:        var(--_neutral-150);
   --color-board-well:         var(--_color-board-well);
-  --_field-chevron:           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E5A53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --_field-chevron:           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235F5E5A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --field-chevron:            var(--_field-chevron);
 
   /* DIE ZEILENLISTEN-REGEL (HIG-Rollout Runde 3, 2026-08-06).
@@ -938,21 +957,21 @@
    * identity. Your own items carry no avatar.
    *
    * Every ink holds AA as text on white, --color-bg, --color-fill, hearth and
-   * its own tint, white on it >= 6.0; dark inks on the dark card, stage, fill,
-   * hearth and their own tint (the 3:1 for the edge and dot is implied):
-   *   1 blue        #2A64A8 / #E1E9F3  tint 4.92  ·  dark #7AAEEB / #2F3A47 5.00
-   *   2 rose        #AD3568 / #F4E3EA  tint 4.88  ·  dark #F08AB4 / #4A3139 5.03
-   *   3 green       #2A6E45 / #E0EFE5  tint 5.17  ·  dark #6ABA8C / #2A3D31 4.98
-   *   4 terracotta  #A3461C / #F6E5DA  tint 4.97  ·  dark #EC9A70 / #47322A 5.36
-   *   5 plum        #8F4398 / #F2E4F4  tint 5.02  ·  dark #D396DB / #42324A 5.12
-   *   6 teal        #146B77 / #DCEDEF  tint 5.12  ·  dark #5BBAC4 / #253C3F 5.16
+   * its own tint, white on it >= 6.0 (v2, light only; the dark pairs went with
+   * dark mode on 2026-10-27, slots 1 and 2 are the Foundations discs):
+   *   1 blue        #1F4FA8 / #E3ECFB  tint 6.44   dot #2F6FDB
+   *   2 rose        #A3264F / #FBE4EC  tint 5.91   dot #D9467A
+   *   3 green       #2A6E45 / #E0EFE5  tint 5.17
+   *   4 terracotta  #A3461C / #F6E5DA  tint 4.97
+   *   5 plum        #8F4398 / #F2E4F4  tint 5.02
+   *   6 teal        #146B77 / #DCEDEF  tint 5.12
    * Guard: "text/surface token pairs meet WCAG AA" (test-frontend-audit.js)
    * and test/test-person-color.js.
    * -------------------------------------------------------- */
-  --_person-1:      #2A64A8;
-  --_person-1-tint: #E1E9F3;
-  --_person-2:      #AD3568;
-  --_person-2-tint: #F4E3EA;
+  --_person-1:      #1F4FA8;   /* v2 (Wojtek): disc ink, 6.44 on its tint */
+  --_person-1-tint: #E3ECFB;
+  --_person-2:      #A3264F;   /* v2 (Mariola): disc ink, 5.91 on its tint */
+  --_person-2-tint: #FBE4EC;
   --_person-3:      #2A6E45;
   --_person-3-tint: #E0EFE5;
   --_person-4:      #A3461C;
@@ -973,6 +992,15 @@
   --person-5-tint:  var(--_person-5-tint);
   --person-6:       var(--_person-6);
   --person-6-tint:  var(--_person-6-tint);
+  /* v2: the 8pt identity dot (calendar rows, Dzis) is the vivid colour of
+   * slots 1 and 2 (Foundations "Wojtek" #2F6FDB, "Mariola" #D9467A; 4.75 and
+   * 4.11 on white as a shape); the other slots dot in their ink. */
+  --person-1-dot:   #2F6FDB;
+  --person-2-dot:   #D9467A;
+  --person-3-dot:   var(--person-3);
+  --person-4-dot:   var(--person-4);
+  --person-5-dot:   var(--person-5);
+  --person-6-dot:   var(--person-6);
 
   /* --------------------------------------------------------
    * 4d. Kochbuehne und Wandnacht (Tafla) - in BEIDEN Themes gleich
@@ -993,6 +1021,23 @@
   --cook-accent-fill: #7C52F2;
   --wall-night-bg:    #0E0C0A;
   --wall-night-ink:   #B8792E;
+
+  /* --------------------------------------------------------
+   * 4e. v2-Rollen (2026-10-27, Foundations.dc.html)
+   *   --color-separator-inner  the line BETWEEN rows inside a card (#EFEEEA);
+   *                            the card edge and section rules are
+   *                            --color-separator / --color-border (#EAE9E5)
+   *   --color-overdue          "Po terminie": overdue dates, high priority
+   *                            flag; 5.18 on white, 4.78 on the ground
+   *   --color-rain             hourly rain bars (#5B8DEF, a shape: 3.23 on
+   *                            the card), --color-rain-soft the dry hours
+   *   --color-card-border      the 1px edge of a card (no shadow in v2)
+   * -------------------------------------------------------- */
+  --color-separator-inner: #EFEEEA;
+  --color-overdue:         #C2410C;
+  --color-rain:            #5B8DEF;
+  --color-rain-soft:       #DCE5F6;
+  --color-card-border:     var(--color-separator);
 
   /* KONVENTION "Akzent-Text auf akzent-getöntem Grund" (Chips, Badges,
    * Initialen-Avatare): der rohe Akzent scheitert dort, weil der Grund eine
@@ -1342,24 +1387,26 @@
    *    prefers-reduced-transparency and prefers-contrast switch them off with
    *    every other specular. Dark values: both dark blocks.
    * -------------------------------------------------------- */
-  --shadow-drop-icon: drop-shadow(0 2px 4px rgba(41, 37, 31, 0.14));
-  --_shadow-sm: 0 1px 2px rgba(41, 37, 31, 0.04), 0 2px 6px rgba(41, 37, 31, 0.04);
+  --shadow-drop-icon: drop-shadow(0 2px 4px rgba(26, 26, 25, 0.14));
+  --_shadow-sm: 0 1px 2px rgba(26, 26, 25, 0.04), 0 2px 6px rgba(26, 26, 25, 0.04);
   --shadow-sm:  var(--_shadow-sm);
-  --_shadow-md: 0 2px 10px rgba(41, 37, 31, 0.08), 0 1px 2px rgba(41, 37, 31, 0.04);
+  --_shadow-md: 0 2px 10px rgba(26, 26, 25, 0.08), 0 1px 2px rgba(26, 26, 25, 0.04);
   --shadow-md:  var(--_shadow-md);
-  --_shadow-lg: 0 8px 28px rgba(41, 37, 31, 0.12), 0 2px 6px rgba(41, 37, 31, 0.04);
+  --_shadow-lg: 0 8px 28px rgba(26, 26, 25, 0.12), 0 2px 6px rgba(26, 26, 25, 0.04);
   --shadow-lg:  var(--_shadow-lg);
-  --_shadow-xl: 0 18px 56px rgba(41, 37, 31, 0.18), 0 4px 12px rgba(41, 37, 31, 0.06);
+  --_shadow-xl: 0 18px 56px rgba(26, 26, 25, 0.18), 0 4px 12px rgba(26, 26, 25, 0.06);
   --shadow-xl:  var(--_shadow-xl);
-  --_shadow-xs: 0 1px 2px rgba(41, 37, 31, 0.08);
+  --_shadow-xs: 0 1px 2px rgba(26, 26, 25, 0.08);
   --shadow-xs:  var(--_shadow-xs);
-  --_shadow-e1: 0 1px 2px rgba(41, 37, 31, 0.04), 0 6px 20px rgba(41, 37, 31, 0.06);
+  --_shadow-e1: 0 1px 2px rgba(26, 26, 25, 0.04), 0 6px 20px rgba(26, 26, 25, 0.06);
   --shadow-e1:  var(--_shadow-e1);
-  --_shadow-e2: 0 2px 6px rgba(41, 37, 31, 0.06), 0 8px 32px rgba(41, 37, 31, 0.12),
+  --_shadow-e2: 0 2px 6px rgba(26, 26, 25, 0.06), 0 8px 32px rgba(26, 26, 25, 0.12),
                 inset 0 0.5px 0 rgba(255, 255, 255, calc(0.70 * var(--glass-inset-strength)));
   --shadow-e2:  var(--_shadow-e2);
-  --_shadow-e3: 0 -12px 48px rgba(41, 37, 31, 0.14);
+  --_shadow-e3: 0 -12px 48px rgba(26, 26, 25, 0.14);
   --shadow-e3:  var(--_shadow-e3);
+  /* v2: a card has no shadow - its edge is --color-card-border. */
+  --shadow-card: none;
   --_shadow-accent-glow: 0 6px 20px rgba(108, 58, 237, 0.30),
                          inset 0 1px 0 rgba(255, 255, 255, calc(0.22 * var(--glass-inset-strength)));
   --shadow-accent-glow:  var(--_shadow-accent-glow);
@@ -1419,20 +1466,36 @@
   --radius-lg: 20px;
   --radius-xl: 28px;
   --radius-full: 9999px;
+  /* v2: every card 12 (Foundations "karty: promien 12"). */
+  --radius-card: 12px;
 
   /* --------------------------------------------------------
    * 10. Typografie
-   *     System-Font-Stack: SF Pro auf Apple-Geräten, ehrliche
-   *     Plattform-Grotesk überall sonst. Apple-Typo-Skala.
+   *     v2 (2026-10-27): Inter (selbst gehostet, @font-face oben), dahinter
+   *     der System-Stack, der steht, bis die Datei da ist. Vorher fuehrte
+   *     der System-Stack, und Zahlen und Gipfelzeilen trugen ui-rounded
+   *     (--font-rounded) - "rounded cartoonish", sagt der Eigentuemer. Zahlen
+   *     sind jetzt Inter mit `font-variant-numeric: tabular-nums`.
    * -------------------------------------------------------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
-  /* TAFLA: rounded numerals and peak lines ONLY - the wall clock, timers, the
-   * cook step number, the one hero number per screen ("Zostało 2 504 zł") and
-   * the peaks ("Smacznego!", "Dzień ogarnięty"), always 600 with tabular-nums.
-   * Zero bytes: SF Pro Rounded ships with every Apple device, everything else
-   * falls back to the UI face. No web font, on purpose. */
-  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* v2 TYPE SCALE (Foundations): four sizes, 400/600.
+   *   --type-page     26/32 600, -0.02em   page title ("Dzien dobry, Wojtek")
+   *   --type-section  17/24 600            section heading ("Kalendarz")
+   *   --type-row      15/20 400            row text, fields, buttons
+   *   --type-meta     12/16 400|600        meta, dates, labels, the tab bar
+   * Times and temperatures stand in columns: tabular-nums. The Tafla roles
+   * below (34/22/17/13) stay until each page gets its v2 round. */
+  --type-page:          1.625rem;   /* 26px */
+  --type-page-lh:       2rem;       /* 32px */
+  --type-page-tracking: -0.02em;
+  --type-section:       1.0625rem;  /* 17px */
+  --type-section-lh:    1.5rem;     /* 24px */
+  --type-row:           0.9375rem;  /* 15px */
+  --type-row-lh:        1.25rem;    /* 20px */
+  --type-meta:          0.75rem;    /* 12px */
+  --type-meta-lh:       1rem;       /* 16px */
 
   /* TAFLA: DIE iPHONE-SKALA HAT VIER GROESSEN UND ZWEI GEWICHTE (400/600):
    *   Large title  34/41  screen titles, greeting, the one hero number
@@ -2005,7 +2068,7 @@
   --sidebar-bg:            var(--_sidebar-bg);
   --_sidebar-shadow-light: rgba(255, 255, 255, 0.6);
   --sidebar-shadow-light:  var(--_sidebar-shadow-light);
-  --_sidebar-shadow-dark:  rgba(41, 37, 31, 0.08);
+  --_sidebar-shadow-dark:  rgba(26, 26, 25, 0.08);
   --sidebar-shadow-dark:   var(--_sidebar-shadow-dark);
   --safe-area-inset-top:    env(safe-area-inset-top, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
@@ -2119,7 +2182,7 @@
    * Die Rechnung laeuft in test:material mit (aus diesen Tokens, nicht aus
    * einer Kopie der Zahlen): wer einen Glaswert oder eine Tinte anfasst,
    * sieht dort, was unter 4,5:1 faellt. */
-  --_glass-bg-elevated: rgba(251, 250, 247, 0.86);
+  --_glass-bg-elevated: rgba(251, 251, 249, 0.86);
   --glass-bg-elevated:  var(--_glass-bg-elevated);
   /* a1) Die schwebende Tab-Bar-Kapsel: duenneres Glas als die uebrigen
    * Chrome-Flaechen (Entscheid von Ulas 2026-10-01: "mehr Glas im Hintergrund,
@@ -2144,7 +2207,7 @@
    * misst alle neu. Ohne backdrop-filter bleibt --glass-bg-elevated (glass.css,
    * Abschnitt 1); prefers-reduced-transparency und prefers-contrast: more
    * kippen die Toenung auf --color-surface (Bloecke unten). */
-  --_glass-bg-capsule:   rgba(251, 250, 247, 0.66);
+  --_glass-bg-capsule:   rgba(251, 251, 249, 0.66);
   --glass-bg-capsule:    var(--_glass-bg-capsule);
   --_glass-capsule-tone: brightness(1);
   --glass-capsule-tone:  var(--_glass-capsule-tone);
@@ -2187,13 +2250,13 @@
    * 24 % nur 4,19:1 fuers Label. */
   --sidebar-indicator-tint:     24%;
   --sidebar-indicator-rim-tint: 18%;
-  --_sidebar-indicator-shadow:  0 2px 10px rgba(41, 37, 31, 0.06);
+  --_sidebar-indicator-shadow:  0 2px 10px rgba(26, 26, 25, 0.06);
   --sidebar-indicator-shadow:   var(--_sidebar-indicator-shadow);
 
   /* a2) Glass-Hintergründe: Vibrancy-Stufe (transparenter, mehr Durchschein) */
   --_glass-bg-card:       var(--_color-surface-glass);
   --glass-bg-card:        var(--_glass-bg-card);
-  --_glass-bg-card-hover: rgba(251, 250, 247, 0.74);
+  --_glass-bg-card-hover: rgba(251, 251, 249, 0.74);
   --glass-bg-card-hover:  var(--_glass-bg-card-hover);
 
   /* a3) Tint: Modul-Akzentfarbe als subtile Glass-Tonung */
@@ -2273,11 +2336,11 @@
   --glass-inset-input:        inset 0  1px 2px rgba(0, 0, 0, calc(0.04 * var(--glass-inset-strength)));
 
   /* e) Glass-Schatten */
-  --_glass-shadow-sm: 0 2px 10px rgba(41, 37, 31, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.55);
+  --_glass-shadow-sm: 0 2px 10px rgba(26, 26, 25, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.55);
   --glass-shadow-sm:  var(--_glass-shadow-sm);
-  --_glass-shadow-md: 0 6px 24px rgba(41, 37, 31, 0.10), 0 0 0 1px rgba(255, 255, 255, 0.50);
+  --_glass-shadow-md: 0 6px 24px rgba(26, 26, 25, 0.10), 0 0 0 1px rgba(255, 255, 255, 0.50);
   --glass-shadow-md:  var(--_glass-shadow-md);
-  --_glass-shadow-lg: 0 10px 44px rgba(41, 37, 31, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.45);
+  --_glass-shadow-lg: 0 10px 44px rgba(26, 26, 25, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.45);
   --glass-shadow-lg:  var(--_glass-shadow-lg);
   /* Die schwebende Tab-Kapsel braucht dunklen Halt statt des weissen Rings der
      drei Stufen darueber: auf dem hellen Grouped Background ist der Ring
@@ -2287,9 +2350,9 @@
      Themes, seit es sie gibt, und so ist sie gemessen. Wer hier eine dunkle
      Fassung ergaenzt, aendert das Aussehen - das ist eine Entscheidung, kein
      Nachziehen einer Luecke. */
-  --_glass-shadow-capsule: 0 8px 24px rgba(41, 37, 31, 0.14),
-                           0 2px 8px rgba(41, 37, 31, 0.08),
-                           0 0 0 0.5px rgba(41, 37, 31, 0.06);
+  --_glass-shadow-capsule: 0 8px 24px rgba(26, 26, 25, 0.14),
+                           0 2px 8px rgba(26, 26, 25, 0.08),
+                           0 0 0 0.5px rgba(26, 26, 25, 0.06);
   --glass-shadow-capsule:  var(--_glass-shadow-capsule);
 
   /* f) Glass-Radien. TAFLA: a glass card is a card (20, was 26 - it stood next
@@ -2468,584 +2531,15 @@
 }
 
 /* ================================================================
- * Dark Mode — private Tokens überschreiben, öffentliche API bleibt stabil.
+ * Dark Mode - entfallen (v2, 2026-10-27: "light mode only").
  *
- * Apple-Dark: Near-Black-Grund (#0A0A0C), Flächen #1C1C1E / #2C2C2E,
- * vivide Dark-Varianten der Systemfarben.
- *
- * Zwei Selektoren aktivieren Dark Mode:
- *   1. @media (prefers-color-scheme: dark) — System-Präferenz
- *   2. [data-theme="dark"] — expliziter Override durch den Nutzer
- *
- * BEIDE gelten nur am BILDSCHIRM (`@media screen`). Papier leuchtet nicht: eine
- * Farbwelt für dunkle Displays wird auf ihm unlesbar, und das galt hier bis
- * 2026-08-09 in voller Breite. Der Druckblock in layout.css färbte nur den
- * `body` ein - seine Textfarbe griff app-weit, sein Grund aber nur auf ihm
- * selbst, während jede Fläche darunter ihren Dark-Token behielt. Gemessen kam
- * schwarze Tinte auf schwarzem Grund aus dem Drucker (1.06:1 am Modultitel,
- * 1.23:1 auf Karten, 11 von 16 Modulen); nach dem Neutralisieren der Flächen
- * standen die vividen Dark-Akzente auf weißem Papier bei 1.4-2.8:1 (78
- * Paarungen auf 37 Routenzuständen).
- *
- * DIE BEDINGUNG STATT DER WERTE: der Druck könnte auch die Light-Werte
- * wiederholen, aber das wären über fünfzig - Neutrale, Semantik, 17 Modul-Tints,
- * sieben Chart-Serien - und jeder neue Token liefe still daneben. `screen` sagt
- * dasselbe einmal, und ein Token, den es morgen gibt, ist von selbst mitgemeint.
+ * Hier standen zwei Bloecke, `@media screen and (prefers-color-scheme: dark)`
+ * und `[data-theme="dark"]`, die die privaten --_-Tokens auf eine warme
+ * Kohle-Welt umstellten. Die App ist seit v2 immer hell; theme-init.js setzt
+ * kein data-theme mehr und raeumt eine gespeicherte Wahl ab. Dunkel bleiben
+ * mit Absicht nur die Kochbuehne (--cook-*) und die Nachtszene der Wand
+ * (--wall-night-*), Abschnitt 4d.
  * ================================================================ */
-@media screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    /* Native Teile im Dark - Begruendung an der Basis `:root` oben (#2022). */
-    color-scheme: dark;
-
-    /* Neutral-Skala — Apple Dark.
-     *
-     * DIE FLAECHEN SIND 2026-08-17 GESTIEGEN, DIE BUEHNE NICHT (Dark-Kur,
-     * Etappe 1). Der Anlass war gemessen, nicht gefuehlt: Buehne->Surface lag
-     * bei 1.15:1 (dE2000 3.9), und die Dark-Schatten (rgba 0,0,0) sind auf
-     * dieser Buehne physikalisch wirkungslos - die Karte trennte sich nicht,
-     * das Board las als Wand gleich dunkler Rechtecke. Die Buehne #191816
-     * bleibt, wo ihre dokumentierte Entscheidung sie hingestellt hat (dreifach
-     * ueber dem OLED-Near-Black #0A0A0C); gestiegen ist die KARTE: jede
-     * Flaechenstufe rueckt eine knappe halbe Rampenstufe nach oben, und die
-     * Leiter behaelt ihre Sprossenabstaende (1.21 / 1.17 / 1.19:1). Messlauf:
-     * .impeccable/redesign-tools/dark-ramp-final.mjs */
-    --_neutral-50:  #0F0E0D;
-    --_neutral-100: #191816;   /* Buehne — warme Kohle, L=0.0092 (dreifach ueber #0A0A0C) */
-    --_neutral-150: #2B2825;   /* Surface — 1.21:1 ueber der Buehne (vorher 1.15:1) */
-    --_neutral-200: #36322D;
-    --_neutral-250: #443E37;
-    --_neutral-300: #514B45;
-    --_neutral-400: #6B665E;
-    --_neutral-500: #948E85;
-    --_neutral-600: #B3ACA1;   /* Tafla ink-2: 6.51 auf --color-surface, 7.88 Buehne, 5.65 Fill/-raised, 4.78 --color-raised */
-    --_neutral-700: #CBC5BC;
-    --_neutral-800: #E7E2DA;
-    --_neutral-900: #F5F1E8;   /* Tafla ink: 13.00 surface, 15.74 Buehne */
-    --_neutral-950: #FBFAF7;
-
-    --_color-surface:          #2B2825;
-    --_color-surface-3:        #36322D;   /* = Tafla --color-fill */
-    --_color-surface-elevated: #36322D;
-    /* EINE STUFE, NICHT ZWEI (Critique R1, A10). Der Hover stand auf
-     * --_neutral-250 und damit zwei Rampenstufen ueber der Flaeche
-     * (--_neutral-150), waehrend er im Light genau eine unter Weiss liegt.
-     * Gemessen an der Cockpit-Zeile: dark 1.414:1, light 1.201:1 - derselbe
-     * Zeiger, zwei verschieden laute Antworten, und die lautere gehoerte
-     * ausgerechnet dem Theme, in dem ein Helligkeitssprung mehr auffaellt.
-     * Mit --_neutral-200 sind es 1.17:1, also die luminanzgleiche
-     * Entsprechung. Dass der Wert damit auf --_color-surface-3 faellt, ist
-     * kein Zufall und kein Fehler: im Light tut er dasselbe (beide
-     * --_neutral-150). Der Hover ist in beiden Themes die naechste
-     * Flaechenstufe, nicht eine eigene Farbe. */
-    --_color-surface-hover:    #36322D;
-    /* Die Stufe ueber der erhoehten Flaeche - im Dark der Wert, den
-     * --_color-surface-hover bis 2026-08-11 fuer ALLE Flaechen trug. */
-    --_color-surface-elevated-hover: #443E37;
-    --_color-surface-work:     #2B2825;
-    --_color-surface-raised:   #36322D;
-    --_color-surface-glass:    rgba(43, 40, 37, 0.66);
-
-    /* Kanten: im Dark eigenständig gesetzt statt aus der Neutral-Rampe
-     * abgeleitet — die Rampe liegt zu dicht an --color-surface, eine
-     * Kartenkante in der Farbe ihrer eigenen Fläche wäre unsichtbar
-     * (Critique 2026-07-29). Mit der Flaechen-Kur eine knappe Stufe
-     * mitgerueckt, damit die Sichtbarkeit auf der helleren Surface haelt
-     * (subtle 1.28:1, border 1.47:1 gegen #2B2825 - vorher 1.23 / 1.51).
-     * Die Standardkante bleibt dabei unter #48423C: eine Bestandsstelle
-     * fuellt mit --color-border eine Flaeche UNTER Sekundaertext
-     * (.md-toolbar__sep:hover; der zweite Fall, der Avatar von „Niemand",
-     * ist 2026-09-24 entfallen), und der Guard verlangt dort zu Recht 4.5 -
-     * #47423B trug 4.52. Tafla-Tinte-2 #B3ACA1 ist eine Spur dunkler, also
-     * rueckt die Kante eine Spur nach (#45403A: 4.56 unter Tinte-2, 1.43:1
-     * gegen #2B2825). */
-    --color-border-subtle: #3E3933;  /* Trenner, ruhige Kartenkante */
-    --color-border:        #45403A;  /* Standardkante (Karten, Gruppen); Feldkanten: --color-border-control */
-    --color-border-strong: #6F6A61;  /* Hover, betonte Rahmen (~2.7:1) */
-    /* Feldkante und Feldmulde (R18, Rechnung im :root-Block bei --color-field-bg). */
-    --color-border-control: #8A8378;
-    --_color-field-bg:      #36322D;  /* = Stufe von --color-fill-well */
-    --_media-sheet-opacity: 0.82;
-    --_color-board-well:    #0F0E0D;  /* = --_neutral-50, unter der Buehne */
-    --_field-chevron:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23B3ACA1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    /* Bahn des ausgeschalteten Schalters (#1572, Werte im :root-Block). Als Hex,
-     * nicht als var(): die Naht zum Installer-Fallback vergleicht Wert fuer Wert. */
-    --_color-switch-off:   #948E85;  /* = --_neutral-500 */
-    /* Der Segmentdaumen: eine Stufe UEBER der Bahn (#37332E), Begruendung im :root-Block. */
-    --_seg-active-bg:      #423D37;  /* = --_color-raised */
-    /* Tafla-Flaechen (Werte und Messung im :root-Block). */
-    --_color-raised:       #423D37;
-    --_color-separator:    #3E3933;
-    --_color-ink-3:        #6F6A61;
-    --_color-hearth:       #33291F;
-    --_color-scrim:        rgba(0, 0, 0, 0.5);
-
-    --_sidebar-bg:           #221F1D;
-    --_sidebar-shadow-light: rgba(255, 255, 255, 0.04);
-    --_sidebar-shadow-dark:  rgba(0, 0, 0, 0.5);
-
-    /* Akzent — Violett Dark
-     *
-     * DIE ZUSAGE GILT FUER DIE HELLSTE FLAECHE, AUF DER DER AKZENT ALS TEXT
-     * STEHT, nicht fuer eine ausgesuchte. Die App setzt Akzent-Text auch auf
-     * --color-surface-raised (#37332E), nicht nur auf --color-surface - eine
-     * Zusage, die nur eine der drei Flaechen nennt, gilt fuer drei und haelt
-     * fuer eine. Gefunden am aktiven Domaenenkopf der Settings-Navigation
-     * (zwei Regeln, 23 Blaetter).
-     *
-     * Der Lift ist der Weg und NICHT der Ink-Mix aus Abschnitt 4: der gilt
-     * ausdruecklich fuer akzent-getoenten Grund, hier ist der Grund neutral.
-     * Die FLAECHEN-Rolle bleibt unberuehrt - sie haengt an --_color-btn-primary,
-     * das weisses Label traegt und darum nicht mitwandern darf. */
-    --_color-accent:            #B49CFF;   /* Text: 5.54 auf #36322D, 6.38 auf #2B2825, 7.72 auf #191816 */
-    /* Zieht mit, und im Dark geht die Leiter NACH OBEN: eine abgedunkelte
-     * Hellfarbe auf warmer Kohle liest niemand als Hover. Abstand 1.19 wie
-     * zuvor - die Leiter wandert, ihre Sprosse nicht. */
-    --_color-accent-hover:      #C6B4FF;
-    --_color-accent-light:      #241A45;  /* >=4.5:1 unter --color-accent (5.87) */
-    --_color-accent-subtle:     #1D1438;
-    --_color-btn-primary:       #7C52F2;   /* Weißes Label 5.70:1 */
-    --_color-btn-primary-hover: #6A42E0;
-    --_color-accent-pressed:    #6A42E0;   /* Weiss 6.05 */
-    --_color-accent-tint:       #3A3249;   /* Akzent-Text 5.28, Tinte 10.75 */
-    --_color-accent-secondary:  #C4B5FD;
-
-    /* Semantik — Apple Dark-Varianten */
-    --_color-success:       #5CC27D;
-    --_color-warning:       #E6A94F;
-    --_color-danger:        #FF7B76;   /* 5.82 auf #2B2825, 5.23 auf der eigenen Toenung */
-    --_color-info:          #409CFF;
-    /* WARM STATT KUEHL (Dark-Kur 2026-08-17). #98989F stand bei Hue 291
-     * (Lab), ein kuehl-violetter Rest der abgeloesten Apple-Rampe, waehrend
-     * jede andere Neutralstufe beider Themes bei Hue 74-97 laeuft - der
-     * Placeholder war die eine kalte Stimme im warmen Raum. Der Warm-Tausch
-     * loest zugleich einen Alt-Riss: auf der gestiegenen Well-Flaeche #37332E
-     * haette der alte Wert nur noch 4.37:1 getragen, der neue haelt 5.01:1
-     * (bg 7.09, surface 5.86). Abstand zu secondary bleibt 1.16x. */
-    --_color-text-tertiary: #A9A39A;
-    --_color-success-light: #1F3A2B;
-    --_color-warning-light: #40331F;
-    --_color-danger-light:  #46282A;
-    --_color-info-light:    #10263E;
-
-    /* Die Hover-Stufe der Semantik geht im Dark Mode NACH OBEN, nicht nach
-     * unten. Sie fehlte hier zwölf Sessions lang, und damit galt der
-     * Light-Wert weiter - eine abgedunkelte Hellfarbe auf einem Near-Black-
-     * Grund. Gemessen war das kein Schönheitsfehler, sondern drei AA-Brüche
-     * aus EINER Ursache:
-     *   .btn--danger:hover        #0A0A0C auf #B80012   2,87:1
-     *   .btn--danger-ghost:hover  #B80012 auf #050507   2,95:1
-     *   .settings-module-status--enabled
-     *                             #186A2C auf 14%-Grün  1,97:1
-     * Der Bestand wusste die Antwort schon: --_color-accent-hover (#9B98FF)
-     * steht oben HELLER als --_color-accent (#8A87FF). Die Semantik ist beim
-     * Dark-Rollout einfach nicht mitgekommen.
-     *
-     * Die Werte sind auf die SCHRITTWEITE eingestellt, nicht geraten: das
-     * Verhältnis Basis zu Hover liegt im Light bei 1,26-1,31 und beim
-     * Dark-Akzent bei 1,195. Diese vier treffen 1,19-1,20 (+17 bis +28 %
-     * Weiß, je nach Ausgangshelligkeit - Orange braucht mehr als Blau).
-     * Danach: 8,39:1 / 8,64:1 / 7,78:1 an denselben drei Stellen. */
-    --_color-success-hover: #7AD596;
-    --_color-warning-hover: #F2BE6E;
-    --_color-danger-hover:  #FF9993;
-    --_color-info-hover:    #60ACFF;
-
-    /* Die lesbare Stufe geht im Dark Mode aus demselben Grund nach oben wie die
-     * Hover-Stufe: die Füllung ist hier die DUNKLE Variante, die Tinte darauf
-     * muss heller sein als die Vollfarbe, nicht dunkler. Ohne diese vier stünde
-     * auf `#3A1210` ein `#B80012` - der Light-Wert, wieder. */
-    --_color-success-ink:   #7AD596;
-    --_color-warning-ink:   #F2BE6E;
-    --_color-danger-ink:    #FF9993;
-    --_color-info-ink:      #60ACFF;
-
-    /* Toast: dunkler Text auf vividen Farben */
-    --_toast-warning-text: #2B1A00;   /* auf #E6A94F */
-    --_toast-danger-text:  #330606;   /* auf #FF7B76 */
-
-    /* Shell-Material: gehobenes dunkles Glas statt des hellen --neutral-800
-     * (Begruendung und Messwerte im :root-Block). Die Shell-Tinten brauchen
-     * hier keinen eigenen Wert mehr - das Material dreht sich nicht mit. */
-    --_toast-bg:             #3A3631;   /* Tafla: eine Stufe ueber der Karte, nie hell */
-    --_toast-action:         #C6B4FF;   /* 4,77 auch auf dem Glas ueber Weiss (:root) */
-    --_toast-text:           var(--_neutral-900);
-    --_toast-text-secondary: var(--_neutral-700);
-
-    /* Dunkle Tinte auf den vividen Hell-Füllungen des Dark Mode (FAB, Badges, aktive Chips) */
-    --_color-ink-on-vivid: #0A0A0C;
-
-    /* Datenreihen: aufgehellte Varianten, damit die Segmente auf dunkler
-     * Kartenfläche ≥3:1 tragen (Grafik-Kontrast, WCAG 1.4.11). */
-    --_chart-series-1: #7D7AFF;
-    /* Cyan statt Teal-400: der Dark-Wert deckte sich ebenso mit --_family-money
-     * (beide #2DD4BF). Getauscht wie der Light-Wert - dE 16.2 zu money, 12.5 zu
-     * time, 22.4 zur nächsten Serie, und mit 8.56:1 praktisch luminanzgleich
-     * zum abgelösten Wert (8.31:1). Begründung am Light-Block. */
-    --_chart-series-2: #22D3EE;
-    --_chart-series-3: #FB923C;
-    --_chart-series-4: #60A5FA;
-    --_chart-series-5: #FCD34D;
-    --_chart-series-6: #F472B6;
-    --_chart-series-7: #4ADE80;
-
-    /* Modul-Akzente: Tafla nimmt die Familientoene aus dem Chrome, auch im
-     * Dark (Tinte-2, 6,51 auf der Karte; unter --color-ink-on-vivid 8,4). */
-    --_family-overview: var(--_neutral-600);   /* Tafla: alle Familien = Tinte-2, siehe :root */
-    --_family-time:     var(--_neutral-600);
-    --_family-work:     var(--_neutral-600);
-    --_family-kitchen:  var(--_neutral-600);
-    --_family-money:    var(--_neutral-600);
-    --_family-people:   var(--_neutral-600);
-    --_family-health:   var(--_neutral-600);
-    --_family-records:  var(--_neutral-600);
-    --_family-neutral:  var(--_neutral-600);
-
-    /* Personenfarben (4c): heller auf Kohle, Toenung dunkel. */
-    --_person-1:      #7AAEEB;
-    --_person-1-tint: #2F3A47;
-    --_person-2:      #F08AB4;
-    --_person-2-tint: #4A3139;
-    --_person-3:      #6ABA8C;
-    --_person-3-tint: #2A3D31;
-    --_person-4:      #EC9A70;
-    --_person-4-tint: #47322A;
-    --_person-5:      #D396DB;
-    --_person-5-tint: #42324A;
-    --_person-6:      #5BBAC4;
-    --_person-6-tint: #253C3F;
-    --cycle-period:    #F871A0;
-    --cycle-fertile:   #34D3B0;
-    --cycle-ovulation: #56C7F5;
-
-    --_meal-breakfast:       #FF9F0A;
-    --_meal-breakfast-light: #33230A;
-    --_meal-lunch:           #4ADE80;
-    --_meal-lunch-light:     #0E2E17;
-    --_meal-dinner:          #8C9EFF;
-    --_meal-dinner-light:    #1A1F45;
-    --_meal-snack:           #F472B6;
-    --_meal-snack-light:     #3D1426;
-    /* Die lesbare Stufe geht im Dark nach oben, wie bei der Semantik. */
-    --_meal-breakfast-ink:   #FFB84A;
-    --_meal-lunch-ink:       #89EAAC;
-    --_meal-dinner-ink:      #AEBBFF;
-    --_meal-snack-ink:       #F9A8D4;
-
-    --_source-mealie:        #2DD4BF;
-    --_source-mealie-light:  #0F2E2A;
-    --_source-tandoor:        #60A5FA;
-    --_source-tandoor-light:  #172554;
-
-    --_color-priority-low:       #C7C7CC;
-    --_color-priority-medium:    #FBBF24;
-    --_color-priority-high:      #FB923C;
-    --_color-priority-urgent:    #FCA5A5;
-    --_color-priority-none-bg:   rgba(142, 142, 147, 0.12);
-    --_color-priority-low-bg:    rgba(142, 142, 147, 0.18);
-    --_color-priority-medium-bg: rgba(230, 147, 10, 0.18);
-    --_color-priority-high-bg:   rgba(212, 81, 30, 0.18);
-    --_color-priority-urgent-bg: rgba(229, 83, 75, 0.18);
-
-    --_color-overlay:       rgba(0, 0, 0, 0.6);
-    --_color-overlay-light: rgba(0, 0, 0, 0.35);
-
-    /* DER RING IST IM DARK DIE TRENNUNG, DIE DER SCHATTEN NICHT LEISTEN KANN
-     * (Dark-Kur 2026-08-17). "Die Trennung leistet der Schatten, nicht eine
-     * Kante" (DESIGN.md) ist auf der Kohle-Buehne gemessen falsch herum: ein
-     * rgba(0,0,0)-Wurf auf #191816 ist unsichtbar, die Karte hing allein an
-     * 1.15:1 Flaechenkontrast. Die Glas-Schatten dieses Blocks kennen die
-     * Antwort seit jeher - ein eingebauter 1px-Weiss-Ring. Die opaken
-     * Elevation-Stufen uebernehmen ihn jetzt in leiserer Dosierung
-     * (0.05-0.06 statt 0.05-0.07); im Light bleibt alles unveraendert, dort
-     * traegt der Schatten wirklich. xs bleibt ohne Ring: die kleinste Stufe
-     * sitzt auf Elementen, denen eine Kontur mehr Laerm als Halt gaebe. */
-    --_shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_shadow-md: 0 4px 14px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_shadow-xl: 0 18px 56px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --_shadow-e1: inset 0 0.5px 0 rgba(255, 255, 255, calc(0.06 * var(--glass-inset-strength)));
-    --_shadow-e2: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 0.5px 0 rgba(255, 255, 255, calc(0.08 * var(--glass-inset-strength)));
-    --_shadow-e3: 0 -12px 48px rgba(0, 0, 0, 0.5);
-    --_shadow-accent-glow: 0 6px 20px rgba(124, 82, 242, 0.35), inset 0 1px 0 rgba(255, 255, 255, calc(0.22 * var(--glass-inset-strength)));
-
-    /* WARMES GLAS (Dark-Kur 2026-08-17): rgba(44,44,46) war iOS-Neutralgrau -
-     * die Tab-Bar stand als kuehle Scheibe auf der warmen Buehne. Jetzt die
-     * Glas-Fassung der eigenen Surface (#2D2A27-Basis), gleiche Deckung. */
-    --_glass-bg-elevated:      rgba(45, 42, 39, 0.88);
-    /* Kapsel (a1 im Light-Block): gleiche Toenung wie oben, duenner; der
-     * Ton-Filter dunkelt statt aufzuhellen, weil die Zeichen hier hell sind. */
-    --_glass-bg-capsule:       rgba(45, 42, 39, 0.50);
-    --_glass-capsule-tone:     contrast(0.65) brightness(0.4);
-    --_glass-sheen-capsule:    rgba(255, 255, 255, 0.07);
-    --_glass-capsule-rim-top:  0.18;
-    --_glass-capsule-rim-edge: 0.10;
-    --_glass-border:           rgba(255, 255, 255, 0.12);
-    --_sheet-grabber:         var(--glass-border);
-    --_nav-indicator-tint:    calc(var(--tint-surface) + 8%);
-    --_sidebar-indicator-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-    --_glass-border-subtle:    rgba(255, 255, 255, 0.14);
-    --_glass-highlight:        rgba(255, 255, 255, 0.09);
-    --_glass-highlight-subtle: rgba(255, 255, 255, 0.05);
-    --_glass-sheen: rgba(255, 255, 255, 0.16);
-    --_glass-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.07);
-    --_glass-shadow-md: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_glass-shadow-lg: 0 10px 44px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_glass-bg-card:          var(--_color-surface-glass);
-    --_glass-bg-card-hover:    rgba(43, 40, 37, 0.80);
-    --_glass-tint-strength:    6%;
-    --_brand-field-opacity:    0.26;
-  }
-}
-
-/* `screen` aus demselben Grund wie oben beim System-Dark: die ausdrückliche
- * Wahl des Nutzers gilt für sein Display, nicht für seinen Drucker. */
-@media screen {
-  [data-theme="dark"] {
-    /* Zwilling des System-Dark-Blocks (#2022). */
-    color-scheme: dark;
-
-    /* Neutral-Skala — Apple Dark. Flaechen-Kur 2026-08-17: Werte und
-     * Begruendung im Media-Block oben. */
-    --_neutral-50:  #0F0E0D;
-    --_neutral-100: #191816;   /* Buehne — warme Kohle, L=0.0092 (dreifach ueber #0A0A0C) */
-    --_neutral-150: #2B2825;   /* Surface — 1.21:1 ueber der Buehne (vorher 1.15:1) */
-    --_neutral-200: #36322D;
-    --_neutral-250: #443E37;
-    --_neutral-300: #514B45;
-    --_neutral-400: #6B665E;
-    --_neutral-500: #948E85;
-    --_neutral-600: #B3ACA1;   /* Tafla ink-2: 6.51 auf --color-surface, 7.88 Buehne, 5.65 Fill/-raised, 4.78 --color-raised */
-    --_neutral-700: #CBC5BC;
-    --_neutral-800: #E7E2DA;
-    --_neutral-900: #F5F1E8;   /* Tafla ink: 13.00 surface, 15.74 Buehne */
-    --_neutral-950: #FBFAF7;
-
-    /* Semantische Aliase folgen automatisch via var(--neutral-*) */
-    --_color-surface:          #2B2825;
-    --_color-surface-3:        #36322D;   /* = Tafla --color-fill */
-    --_color-surface-elevated: #36322D;
-    /* EINE STUFE, NICHT ZWEI (Critique R1, A10). Der Hover stand auf
-     * --_neutral-250 und damit zwei Rampenstufen ueber der Flaeche
-     * (--_neutral-150), waehrend er im Light genau eine unter Weiss liegt.
-     * Gemessen an der Cockpit-Zeile: dark 1.414:1, light 1.201:1 - derselbe
-     * Zeiger, zwei verschieden laute Antworten, und die lautere gehoerte
-     * ausgerechnet dem Theme, in dem ein Helligkeitssprung mehr auffaellt.
-     * Mit --_neutral-200 sind es 1.17:1, also die luminanzgleiche
-     * Entsprechung. Dass der Wert damit auf --_color-surface-3 faellt, ist
-     * kein Zufall und kein Fehler: im Light tut er dasselbe (beide
-     * --_neutral-150). Der Hover ist in beiden Themes die naechste
-     * Flaechenstufe, nicht eine eigene Farbe. */
-    --_color-surface-hover:    #36322D;
-    /* Die Stufe ueber der erhoehten Flaeche - im Dark der Wert, den
-     * --_color-surface-hover bis 2026-08-11 fuer ALLE Flaechen trug. */
-    --_color-surface-elevated-hover: #443E37;
-    --_color-surface-work:     #2B2825;
-    --_color-surface-raised:   #36322D;
-    --_color-surface-glass:    rgba(43, 40, 37, 0.66);
-
-    /* Kanten: eigenständig gesetzt (siehe Media-Block oben) */
-    --color-border-subtle: #3E3933;
-    --color-border:        #45403A;
-    --color-border-strong: #6F6A61;
-    /* Feldkante und Feldmulde (R18, Rechnung im :root-Block bei --color-field-bg). */
-    --color-border-control: #8A8378;
-    --_color-field-bg:      #36322D;  /* = Stufe von --color-fill-well */
-    --_media-sheet-opacity: 0.82;
-    --_color-board-well:    #0F0E0D;  /* = --_neutral-50, unter der Buehne */
-    --_field-chevron:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23B3ACA1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    --_color-switch-off:   #948E85;  /* = --_neutral-500 */
-    /* Der Segmentdaumen: eine Stufe UEBER der Bahn (#37332E), Begruendung im :root-Block. */
-    --_seg-active-bg:      #423D37;  /* = --_color-raised */
-    /* Tafla-Flaechen (Werte und Messung im :root-Block). */
-    --_color-raised:       #423D37;
-    --_color-separator:    #3E3933;
-    --_color-ink-3:        #6F6A61;
-    --_color-hearth:       #33291F;
-    --_color-scrim:        rgba(0, 0, 0, 0.5);
-
-    /* Sidebar */
-    --_sidebar-bg:           #221F1D;
-    --_sidebar-shadow-light: rgba(255, 255, 255, 0.04);
-    --_sidebar-shadow-dark:  rgba(0, 0, 0, 0.5);
-
-    /* Akzent — Violett Dark (Werte und Begruendung: Dark-Block oben) */
-    --_color-accent:            #B49CFF;   /* Text: 5.54 auf #36322D, 6.38 auf #2B2825, 7.72 auf #191816 */
-    --_color-accent-hover:      #C6B4FF;
-    --_color-accent-light:      #241A45;  /* >=4.5:1 unter --color-accent (5.87) */
-    --_color-accent-subtle:     #1D1438;
-    --_color-btn-primary:       #7C52F2;
-    --_color-btn-primary-hover: #6A42E0;
-    --_color-accent-pressed:    #6A42E0;   /* Weiss 6.05 */
-    --_color-accent-tint:       #3A3249;   /* Akzent-Text 5.28, Tinte 10.75 */
-    --_color-accent-secondary:  #C4B5FD;
-
-    /* Semantische Farben */
-    --_color-success:       #5CC27D;
-    --_color-warning:       #E6A94F;
-    --_color-danger:        #FF7B76;   /* 5.82 auf #2B2825, 5.23 auf der eigenen Toenung */
-    --_color-info:          #409CFF;
-    /* Warm statt kuehl - Begruendung im Media-Block oben (Dark-Kur 2026-08-17). */
-    --_color-text-tertiary: #A9A39A;
-    --_color-success-light: #1F3A2B;
-    --_color-warning-light: #40331F;
-    --_color-danger-light:  #46282A;
-    --_color-info-light:    #10263E;
-
-    /* Die Hover-Stufe der Semantik geht im Dark Mode NACH OBEN, nicht nach
-     * unten. Sie fehlte hier zwölf Sessions lang, und damit galt der
-     * Light-Wert weiter - eine abgedunkelte Hellfarbe auf einem Near-Black-
-     * Grund. Gemessen war das kein Schönheitsfehler, sondern drei AA-Brüche
-     * aus EINER Ursache:
-     *   .btn--danger:hover        #0A0A0C auf #B80012   2,87:1
-     *   .btn--danger-ghost:hover  #B80012 auf #050507   2,95:1
-     *   .settings-module-status--enabled
-     *                             #186A2C auf 14%-Grün  1,97:1
-     * Der Bestand wusste die Antwort schon: --_color-accent-hover (#9B98FF)
-     * steht oben HELLER als --_color-accent (#8A87FF). Die Semantik ist beim
-     * Dark-Rollout einfach nicht mitgekommen.
-     *
-     * Die Werte sind auf die SCHRITTWEITE eingestellt, nicht geraten: das
-     * Verhältnis Basis zu Hover liegt im Light bei 1,26-1,31 und beim
-     * Dark-Akzent bei 1,195. Diese vier treffen 1,19-1,20 (+17 bis +28 %
-     * Weiß, je nach Ausgangshelligkeit - Orange braucht mehr als Blau).
-     * Danach: 8,39:1 / 8,64:1 / 7,78:1 an denselben drei Stellen. */
-    --_color-success-hover: #7AD596;
-    --_color-warning-hover: #F2BE6E;
-    --_color-danger-hover:  #FF9993;
-    --_color-info-hover:    #60ACFF;
-
-    /* Die lesbare Stufe geht im Dark Mode aus demselben Grund nach oben wie die
-     * Hover-Stufe: die Füllung ist hier die DUNKLE Variante, die Tinte darauf
-     * muss heller sein als die Vollfarbe, nicht dunkler. Ohne diese vier stünde
-     * auf `#3A1210` ein `#B80012` - der Light-Wert, wieder. */
-    --_color-success-ink:   #7AD596;
-    --_color-warning-ink:   #F2BE6E;
-    --_color-danger-ink:    #FF9993;
-    --_color-info-ink:      #60ACFF;
-
-    /* Toast: dunkler Text auf vividen Farben */
-    --_toast-warning-text: #2B1A00;   /* auf #E6A94F */
-    --_toast-danger-text:  #330606;   /* auf #FF7B76 */
-
-    /* Shell-Material, siehe den Zwilling im prefers-color-scheme-Block. */
-    --_toast-bg:             #3A3631;   /* Tafla: eine Stufe ueber der Karte, nie hell */
-    --_toast-action:         #C6B4FF;   /* 4,77 auch auf dem Glas ueber Weiss (:root) */
-    --_toast-text:           var(--_neutral-900);
-    --_toast-text-secondary: var(--_neutral-700);
-
-    /* Dunkle Tinte auf den vividen Hell-Füllungen des Dark Mode (FAB, Badges, aktive Chips) */
-    --_color-ink-on-vivid: #0A0A0C;
-
-    /* Datenreihen */
-    --_chart-series-1: #7D7AFF;
-    --_chart-series-2: #22D3EE;   /* Cyan - siehe Dark-Block oben */
-    --_chart-series-3: #FB923C;
-    --_chart-series-4: #60A5FA;
-    --_chart-series-5: #FCD34D;
-    --_chart-series-6: #F472B6;
-    --_chart-series-7: #4ADE80;
-
-    /* Modul-Akzente (Familientoene) */
-    --_family-overview: var(--_neutral-600);   /* Tafla: alle Familien = Tinte-2, siehe :root */
-    --_family-time:     var(--_neutral-600);
-    --_family-work:     var(--_neutral-600);
-    --_family-kitchen:  var(--_neutral-600);
-    --_family-money:    var(--_neutral-600);
-    --_family-people:   var(--_neutral-600);
-    --_family-health:   var(--_neutral-600);
-    --_family-records:  var(--_neutral-600);
-    --_family-neutral:  var(--_neutral-600);
-
-    /* Personenfarben (4c): heller auf Kohle, Toenung dunkel. */
-    --_person-1:      #7AAEEB;
-    --_person-1-tint: #2F3A47;
-    --_person-2:      #F08AB4;
-    --_person-2-tint: #4A3139;
-    --_person-3:      #6ABA8C;
-    --_person-3-tint: #2A3D31;
-    --_person-4:      #EC9A70;
-    --_person-4-tint: #47322A;
-    --_person-5:      #D396DB;
-    --_person-5-tint: #42324A;
-    --_person-6:      #5BBAC4;
-    --_person-6-tint: #253C3F;
-    --cycle-period:    #F871A0;
-    --cycle-fertile:   #34D3B0;
-    --cycle-ovulation: #56C7F5;
-
-    /* Mahlzeit-Typ */
-    --_meal-breakfast:       #FF9F0A;
-    --_meal-breakfast-light: #33230A;
-    --_meal-lunch:           #4ADE80;
-    --_meal-lunch-light:     #0E2E17;
-    --_meal-dinner:          #8C9EFF;
-    --_meal-dinner-light:    #1A1F45;
-    --_meal-snack:           #F472B6;
-    --_meal-snack-light:     #3D1426;
-    /* Die lesbare Stufe geht im Dark nach oben, wie bei der Semantik. */
-    --_meal-breakfast-ink:   #FFB84A;
-    --_meal-lunch-ink:       #89EAAC;
-    --_meal-dinner-ink:      #AEBBFF;
-    --_meal-snack-ink:       #F9A8D4;
-
-    --_source-mealie:        #2DD4BF;
-    --_source-mealie-light:  #0F2E2A;
-    --_source-tandoor:        #60A5FA;
-    --_source-tandoor-light:  #172554;
-
-    /* Priority-Badge Hintergründe */
-    --_color-priority-low:       #C7C7CC;
-    --_color-priority-medium:    #FBBF24;
-    --_color-priority-high:      #FB923C;
-    --_color-priority-urgent:    #FCA5A5;
-    --_color-priority-none-bg:   rgba(142, 142, 147, 0.12);
-    --_color-priority-low-bg:    rgba(142, 142, 147, 0.18);
-    --_color-priority-medium-bg: rgba(230, 147, 10, 0.18);
-    --_color-priority-high-bg:   rgba(212, 81, 30, 0.18);
-    --_color-priority-urgent-bg: rgba(229, 83, 75, 0.18);
-
-    /* Overlay */
-    --_color-overlay:       rgba(0, 0, 0, 0.6);
-    --_color-overlay-light: rgba(0, 0, 0, 0.35);
-
-    /* Schatten stärker im Dark Mode; der 1px-Weiss-Ring ist die Trennung,
-     * die der Schwarz-Wurf auf der Kohle nicht leisten kann (Media-Block oben). */
-    --_shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_shadow-md: 0 4px 14px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_shadow-xl: 0 18px 56px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --_shadow-e1: inset 0 0.5px 0 rgba(255, 255, 255, calc(0.06 * var(--glass-inset-strength)));
-    --_shadow-e2: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 0.5px 0 rgba(255, 255, 255, calc(0.08 * var(--glass-inset-strength)));
-    --_shadow-e3: 0 -12px 48px rgba(0, 0, 0, 0.5);
-    --_shadow-accent-glow: 0 6px 20px rgba(124, 82, 242, 0.35), inset 0 1px 0 rgba(255, 255, 255, calc(0.22 * var(--glass-inset-strength)));
-
-    /* Glass — warm statt iOS-Neutralgrau (Media-Block oben) */
-    --_glass-bg-elevated:     rgba(45, 42, 39, 0.88);
-    /* Kapsel - Zwilling des prefers-color-scheme-Blocks. */
-    --_glass-bg-capsule:      rgba(45, 42, 39, 0.50);
-    --_glass-capsule-tone:    contrast(0.65) brightness(0.4);
-    --_glass-sheen-capsule:   rgba(255, 255, 255, 0.07);
-    --_glass-capsule-rim-top:  0.18;
-    --_glass-capsule-rim-edge: 0.10;
-    --_glass-border:          rgba(255, 255, 255, 0.12);
-    --_sheet-grabber:         var(--glass-border);
-    --_nav-indicator-tint:    calc(var(--tint-surface) + 8%);
-    --_sidebar-indicator-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-    --_glass-border-subtle:   rgba(255, 255, 255, 0.14);
-    --_glass-highlight:       rgba(255, 255, 255, 0.09);
-    --_glass-highlight-subtle: rgba(255, 255, 255, 0.05);
-    --_glass-sheen: rgba(255, 255, 255, 0.16);
-    --_glass-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.07);
-    --_glass-shadow-md: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --_glass-shadow-lg: 0 10px 44px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --_glass-bg-card:         var(--_color-surface-glass);
-    --_glass-bg-card-hover:   rgba(43, 40, 37, 0.80);
-    --_glass-tint-strength:   6%;
-    --_brand-field-opacity:   0.26;
-  }
-}
 
 /* ================================================================
  * Accessibility: prefers-reduced-transparency
@@ -3117,9 +2611,8 @@
     /* Specular aus, siehe der Schwesterblock oben. */
     --glass-inset-strength: 0;
 
-    /* Tafla: die Haarlinie zwischen Zeilen ist dekorativ (1,35:1 hell). Wer
-     * mehr Kontrast verlangt, bekommt die kraeftige Kante - sie folgt dem
-     * Theme, weil die Dark-Bloecke --color-border-strong selbst setzen. */
+    /* Tafla: die Haarlinie zwischen Zeilen ist dekorativ. Wer mehr Kontrast
+     * verlangt, bekommt die kraeftige Kante. */
     --color-separator: var(--color-border-strong);
   }
 }

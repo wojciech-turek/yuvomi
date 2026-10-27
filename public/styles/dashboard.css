@@ -551,7 +551,8 @@
 .wall__clock,
 .wall__timer-value {
   flex: none;
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-display);
   line-height: var(--wall-display-lh);
   font-weight: var(--font-weight-semibold);
@@ -581,7 +582,8 @@
 }
 
 .wall__clock-small {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
@@ -613,7 +615,8 @@
 }
 
 .wall__weather-temp {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-title);
   line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
@@ -953,7 +956,8 @@
 }
 
 .wall-row__time {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--wall-body);
   line-height: var(--wall-text-lh);
   font-weight: var(--font-weight-semibold);
@@ -1397,9 +1401,16 @@
  * Das Problem im dunklen Flur ist die Leuchtdichte. Nachts bleibt nur die Uhr,
  * bernsteinfarben auf fast Schwarz (`--wall-night-bg`, `--wall-night-ink`,
  * 5.40:1), dazu das Datum und was morgen als Erstes ansteht; Ausstieg und
- * Minutnik bleiben bedienbar. Die Wahl des Themes bleibt unberuehrt
- * (utils/wall-mode.js erzwingt nachts nur das dunkle). */
+ * Minutnik bleiben bedienbar.
+ *
+ * v2 (2026-10-27): bis hierher schaltete die Wurzel nachts zusaetzlich auf das
+ * dunkle Theme. Das gibt es nicht mehr - die Szene traegt ihr Dunkel allein,
+ * und was in ihr noch Tinte, Tinte-2 oder Akzent nimmt (Wetter, ein
+ * abgelaufener Timer), nimmt hier den Bernstein. */
 .wall[data-scene="noc"] {
+  --color-text-primary: var(--wall-night-ink);
+  --color-text-secondary: var(--wall-night-ink);
+  --color-accent: var(--wall-night-ink);
   background: var(--wall-night-bg);
   color: var(--wall-night-ink);
 }
@@ -1933,7 +1944,7 @@ a.day-now__lead {
 
 /* The running timer is the card's one hero number: rounded numerals. */
 .day-now__clock {
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
   font-size: var(--type-large-title);
   line-height: var(--type-large-title-lh);
   font-weight: var(--font-weight-semibold);
@@ -2080,7 +2091,8 @@ a.day-now__lead {
 
 .day-closed__title {
   margin: 0;
-  font-family: var(--font-rounded);
+  font-family: var(--font-sans);  /* v2: Inter, nicht mehr ui-rounded */
+  font-variant-numeric: tabular-nums;
   font-size: var(--type-title);
   line-height: var(--type-title-lh);
   font-weight: var(--font-weight-semibold);
