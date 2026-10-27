@@ -2171,8 +2171,23 @@ function dockFabIntoToolbar(fab) {
     // Suche, und der Kalender blendet seinen Slot unter 1024px aus (calendar.css
     // - ein dritter Kreis kuerzte dort „Kalendarz" auf „Kalenda…"). Dann bleibt
     // der Knopf in der fab-layer und schwebt ueber der Leiste.
-    if (!slot.getClientRects().length) return false;
-    return dockFabAsGhost(fab, slot);
+    //
+    // GEFRAGT WIRD NACH DEM EINHAENGEN, nicht davor: ein LEERER Slot ist unter
+    // 1024px immer ausgeblendet (`.page-toolbar__actions:empty`, layout.css),
+    // und leer ist er, bis der Knopf darin steht. Die Vorabfrage liess deshalb
+    // auch Belohnungen schweben, deren Kopf Platz hat. Gemessen wird der Slot,
+    // nicht der Knopf: ein Knopf mit `hidden` (Belohnungen auf „Punkty") hat
+    // nie Geometrie, sein Slot aber schon, sobald er ihn traegt. Misslingt
+    // der Versuch, steht der Knopf wieder, wo er war - der Aufrufer zieht ihn
+    // von dort in die Ebene (oder laesst ihn dort, wenn er schon darin stand).
+    const home = fab.parentNode;
+    const next = fab.nextSibling;
+    dockFabAsGhost(fab, slot);
+    if (slot.getClientRects().length) return true;
+    fab.classList.remove('page-fab--ghost');
+    syncFabName(fab);
+    home?.insertBefore(fab, next);
+    return false;
   }
   const label = fab.dataset.dockLabel;
   if (!label) return false;
