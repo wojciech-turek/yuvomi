@@ -712,6 +712,8 @@
         "changeAisle": "{{category}} · change",
         "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
         "usualQuantity": "usually {{quantity}}",
+        "frequentLabel": "Často",
+        "itemAdded": "přidáno",
         "allBoughtMeta_few": "{{count}} items from {{name}}"
     },
     "meals": {

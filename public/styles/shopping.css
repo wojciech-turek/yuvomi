@@ -17,9 +17,9 @@
 .shopping-page {
   /* Geteilter Küchen-Akzent, siehe --module-kitchen in tokens.css. */
   --module-accent: var(--module-kitchen);
-  /* The docked add bar: 52 tall, 12 above the capsule. Its height is a
-   * tail of the list's scrollport (below), so the last row ends above it. */
-  --shopping-addbar-height: 52px;
+  /* The add bar: 48 tall, 12 above the tab bar (v2, 2026-10-27). Its height
+   * is a tail of the list's scrollport (below), so the last row ends above it. */
+  --shopping-addbar-height: 48px;
   --shopping-addbar-gap: var(--space-3);
 }
 
@@ -337,13 +337,18 @@
 }
 
 /* --------------------------------------------------------
- * The add bar (Quick-Add)
+ * The add bar (Quick-Add) - v2, 2026-10-27
  *
- * TAFLA: one glass capsule, docked above the tab capsule on the phone and
- * always there - the `(hover: none)` rule that hid the field behind the FAB
- * is gone. The bar is the skin (capsule, glass, focus ring); the fields in it
- * are bare. With a pointer it is the first row above the list, filled
- * instead of glass, and shows the aisle field too.
+ * IDLE: one white "Dodaj produkt" bar, 48 tall, radius 12, a hairline edge
+ * and a soft shadow, the accent plus in front. On the phone it is pinned 12
+ * above the tab bar and the list scrolls under it; with a pointer it is the
+ * first row above the list.
+ *
+ * TYPING (phone): the bar becomes the composer that sits directly on the
+ * keyboard (wireAddBar, `--addbar-keyboard`): full width, white, a hairline
+ * on top. Over the field the "Często" chips, in the field the parse of the
+ * line ("10 szt. · Nabiał"), after it the 44 send circle. ONE field - the
+ * aisle field shows only with a pointer, so iOS has no previous/next bar.
  * -------------------------------------------------------- */
 .quick-add {
   flex-shrink: 0;
@@ -353,33 +358,35 @@
 }
 
 .shopping-addbar {
-  border-radius: var(--radius-full);
-  background-color: var(--color-fill);
-  border: 1.5px solid transparent;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  --addbar-edge: var(--color-border);
+  border: 0;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  /* The hairline is a ring inside the 48, not a border around it. */
+  box-shadow: inset 0 0 0 1px var(--addbar-edge), 0 4px 16px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  transition: box-shadow var(--transition-fast);
 }
 
 .shopping-addbar:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) var(--tint-shadow), transparent);
+  --addbar-edge: var(--color-accent);
 }
 
 @media (prefers-contrast: more) {
   .shopping-addbar {
-    border-color: var(--color-border-control);
+    --addbar-edge: var(--color-border-control);
   }
 }
 
-/* The row inside the capsule: name (with the plus glyph), quantity, aisle,
- * sender. The tracks stay flexible - a translated placeholder knows no fixed
- * width (#1372); only the sender is fixed. */
+/* The row inside the bar: the field (plus, line, parse), the sender - and
+ * with a pointer the aisle between them. Only the sender has a fixed track;
+ * a translated placeholder knows no fixed width (#1372). */
 .quick-add__form {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 2fr) var(--target-base);
+  grid-template-columns: minmax(0, 1fr) var(--target-base);
   align-items: center;
-  column-gap: var(--space-1);
+  column-gap: var(--space-2);
   min-height: var(--shopping-addbar-height);
-  padding-inline: var(--space-2) var(--space-1);
+  padding-inline: var(--space-4) var(--space-1);
 }
 
 .quick-add__input-wrap {
@@ -392,17 +399,15 @@
 
 .quick-add__glyph {
   flex: none;
-  width: var(--icon-lg);
-  height: var(--icon-lg);
-  margin-inline-start: var(--space-1);
-  color: var(--color-text-secondary);
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent);
   pointer-events: none;
 }
 
-/* Bare fields: the capsule around them is the skin. 17px (body) - never
- * below 16, or iOS zooms on focus. */
+/* Bare fields: the bar around them is the skin. 16px (--text-base) - never
+ * below, or iOS zooms on focus. */
 .quick-add__input,
-.quick-add__qty,
 .quick-add__cat {
   min-width: 0;
   min-height: var(--target-base);
@@ -411,39 +416,40 @@
   background-color: transparent;
   color: var(--color-text-primary);
   font-family: inherit;
-  font-size: var(--type-body);
+  font-size: var(--text-base);
   outline: none;
 }
 
-.quick-add__input::placeholder,
-.quick-add__qty::placeholder {
+.quick-add__input::placeholder {
   color: var(--color-text-secondary);
 }
 
 .quick-add__input {
-  flex: 1 1 auto;
-  width: 100%;
+  flex: 1 1 0;
+  width: auto;
   padding: 0;
   caret-color: var(--color-accent);
 }
 
-/* The quantity joins in once you are typing (or it holds a value). */
-.quick-add__qty {
-  position: static;
-  width: 100%;
-  padding: 0 var(--space-2);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
+/* What the line will add, inside the field: "10 szt. · Nabiał". */
+.quick-add__hint {
+  flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: inset 0.5px 0 0 var(--color-separator);
+  white-space: nowrap;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-.shopping-addbar:not(:focus-within) .quick-add__qty:placeholder-shown {
-  visibility: hidden;
+.quick-add__hint:empty {
+  display: none;
 }
 
-/* The aisle: chosen by the guess while typing on the phone (and changed on
- * the fresh row), a field of its own with a pointer. */
+/* The aisle: a field of its own only with a pointer. On the phone the guess
+ * while typing chooses it and the parse in the field says which one. */
 .quick-add__cat {
   display: none;
   width: 100%;
@@ -460,15 +466,16 @@
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
   background-size: var(--icon-md) var(--icon-md);
-  box-shadow: inset 0.5px 0 0 var(--color-separator);
+  box-shadow: inset 1px 0 0 var(--color-separator);
 }
 
 [dir="rtl"] .quick-add__cat {
   background-position: left var(--space-3) center;
 }
 
-/* The sender: a 36 accent circle with an arrow, once there is a name. The
- * button keeps its full target; the circle is drawn inside it. */
+/* The sender: a 44 accent circle with an arrow, once there is a line. The
+ * circle is drawn in the button's target (::before), the button itself stays
+ * without a fill. */
 .quick-add__btn {
   position: relative;
   width: var(--target-base);
@@ -488,7 +495,7 @@
 .quick-add__btn::before {
   content: '';
   position: absolute;
-  inset: calc((var(--target-base) - 36px) / 2);
+  inset: calc((var(--target-base) - 44px) / 2);
   border-radius: var(--radius-full);
   background-color: var(--color-btn-primary);
   transition: background-color var(--transition-fast);
@@ -496,6 +503,8 @@
 
 .quick-add__btn > * {
   position: relative;
+  width: 20px;
+  height: 20px;
 }
 
 .quick-add__btn:focus-visible {
@@ -507,9 +516,14 @@
   visibility: hidden;
 }
 
-/* On the phone the bar floats: 16 from the edges, 12 above the tab capsule.
- * It is chrome over the list that runs under it, in the chrome tone.
- * While typing it rides 8 above the keyboard and the capsule steps aside. */
+/* "Często": only in the composer (phone, typing). */
+.shopping-addbar__frequent {
+  display: none;
+}
+
+/* On the phone the bar is pinned 12 above the tab bar, 16 from the edges.
+ * "Fixed" means the screen there because the page is no size container on
+ * the phone (see "ON THE PHONE THE PAGE IS NO CONTAINER" below). */
 @media (max-width: 1023px) {
   .shopping-addbar {
     position: fixed;
@@ -517,39 +531,6 @@
     bottom: calc(var(--nav-bottom-height) + var(--shopping-addbar-gap));
     z-index: var(--z-sticky, 20);
     max-width: none;
-    background-color: var(--color-raised);
-    box-shadow: 0 0 0 0.5px var(--color-border), var(--shadow-e2);
-  }
-
-  /* Nothing inside `.app-content` may blur (glass.css, the iOS blank-screen
-   * guard), so the bottom gets the scroll-edge fade of the Tafla bottom stack
-   * instead: from 32 above the bar the list fades into the paper, and the bar
-   * sits on that. The fade belongs to the page, not to the bar - a pseudo
-   * inside the bar's stacking context would paint over its own surface. */
-  .shopping-page:has(.shopping-addbar)::after {
-    content: '';
-    position: absolute;
-    z-index: calc(var(--z-sticky, 20) - 1);
-    inset-inline: 0;
-    bottom: 0;
-    block-size: calc(var(--nav-bottom-height) + var(--shopping-addbar-gap) + var(--shopping-addbar-height) + var(--space-8));
-    background: linear-gradient(to bottom,
-      color-mix(in srgb, var(--color-bg) 0%, transparent) 0,
-      color-mix(in srgb, var(--color-bg) 92%, transparent) var(--space-8),
-      var(--color-bg) 100%);
-    pointer-events: none;
-  }
-
-  .shopping-addbar.shopping-addbar--typing {
-    bottom: calc(var(--addbar-keyboard, 0px) + var(--space-2));
-  }
-
-  .shopping-page:has(.shopping-addbar--typing)::after {
-    display: none;
-  }
-
-  html:has(.shopping-addbar--typing) .nav-bottom {
-    visibility: hidden;
   }
 
   /* Toasts and the bulk pill stand above the bar, not on it. */
@@ -567,31 +548,107 @@
     scroll-padding-block-end: calc(var(--nav-tail) + var(--shopping-addbar-height) + var(--shopping-addbar-gap) + var(--space-4));
   }
 
-  /* Suggestions open upwards from a bar at the bottom. */
-  .shopping-addbar .autocomplete-dropdown {
-    top: auto;
-    bottom: calc(100% + var(--space-3));
-    inset-inline: calc(-1 * var(--space-3)) calc(-1 * var(--space-2));
-  }
-}
-
-/* "Pewnie się kończy" rides above the bar while it has focus and no name yet
- * (phone only - with a pointer the list's own row stands right under the
- * bar). */
-.shopping-addbar__predictions {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  .shopping-addbar--focused:has(.quick-add__input:placeholder-shown) .shopping-addbar__predictions:not(:empty) {
-    position: absolute;
+  /* THE COMPOSER. Full width, directly on the keyboard; without a keyboard
+   * (a hardware one) on the tab bar. */
+  .shopping-addbar.shopping-addbar--typing {
     inset-inline: 0;
-    bottom: calc(100% + var(--space-2));
+    bottom: var(--nav-bottom-height);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 0;
+    box-shadow: inset 0 1px 0 var(--color-separator), 0 -8px 24px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  }
+
+  .shopping-addbar.shopping-addbar--keyboard {
+    bottom: var(--addbar-keyboard, 0px);
+  }
+
+  html:has(.shopping-addbar--keyboard) .nav-bottom {
+    visibility: hidden;
+  }
+
+  /* A toast ("… jest znowu na liście") stands over the composer, not
+   * behind the keyboard. */
+  html:has(.shopping-addbar--keyboard) .shell-bottom-stack:not([data-dock]) {
+    bottom: calc(var(--addbar-keyboard, 0px) + var(--addbar-height, 0px) + var(--space-2));
+  }
+
+  /* With the keyboard up the list ends above the composer: its last rows and
+   * a fresh row scrolled into view stop there, not under the keys. */
+  .shopping-page:has(.shopping-addbar--keyboard) .items-list {
+    --scrollport-pad: calc(var(--addbar-keyboard, 0px) + var(--addbar-height, 0px) + var(--space-4));
+  }
+
+  .shopping-page:has(.shopping-addbar--keyboard) .items-list.page-scrollport {
+    scroll-padding-block-end: calc(var(--addbar-keyboard, 0px) + var(--addbar-height, 0px) + var(--space-4));
+  }
+
+  .shopping-addbar--typing .quick-add__form {
+    column-gap: var(--space-2);
+    min-height: 0;
+    padding: 0;
+  }
+
+  /* The field: filled, the accent edge says where the letters go. */
+  .shopping-addbar--typing .quick-add__input-wrap {
+    gap: var(--space-2);
+    min-height: var(--target-base);
+    padding-inline: var(--space-3);
+    border: 1.5px solid var(--color-accent);
+    border-radius: calc(var(--radius-card) - 2px);
+    background-color: var(--color-bg);
+  }
+
+  .shopping-addbar--typing .quick-add__glyph {
+    display: none;
+  }
+
+  .shopping-addbar--typing .shopping-addbar__frequent:not([hidden]) {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .shopping-addbar__frequent::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shopping-addbar__frequent-label {
+    flex: none;
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-lh);
+    color: var(--color-text-secondary);
+  }
+
+  .shopping-addbar__chip {
+    flex: none;
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-full);
+    background-color: var(--color-fill);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--type-row);
+    line-height: var(--type-row-lh);
+    cursor: pointer;
+  }
+
+  .shopping-addbar__chip:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* Suggestions are the pointer's (wireAutocomplete); the list never opens
+   * over the chips. */
+  .shopping-addbar .autocomplete-dropdown {
+    display: none;
   }
 }
 
@@ -602,15 +659,11 @@
   }
 
   .quick-add__form {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 2fr) minmax(0, 3fr) var(--target-base);
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr) var(--target-base);
   }
 
   .quick-add__cat {
     display: block;
-  }
-
-  .shopping-addbar:not(:focus-within) .quick-add__qty:placeholder-shown {
-    visibility: visible;
   }
 }
 
@@ -823,6 +876,17 @@
  * Masonry hinter `@supports`. Die Abfrage misst die Seite, nicht den Viewport. */
 .shopping-page {
   container: shopping-surface / inline-size;
+}
+
+/* ON THE PHONE THE PAGE IS NO CONTAINER (v2, 2026-10-27). A size container
+ * is the containing block of its fixed descendants, so the add bar's
+ * "fixed, the keyboard height from the bottom" was measured from the page and
+ * landed over the title on the owner's iPhone. Two columns need 60rem of
+ * page - a phone never has them - so the query loses nothing here. */
+@media (max-width: 1023px) {
+  .shopping-page {
+    container-type: normal;
+  }
 }
 
 /* Schmal traegt die Huelle nichts: die Gruppen stehen wie bisher direkt im
@@ -1212,15 +1276,20 @@
   color: var(--color-text-tertiary);
 }
 
-/* A FRESH ROW (Tafla): the add bar just made it. An accent-tint wash fades
- * out, and under the name "sparkles Nabiał · zmień" opens the editor. */
+/* A FRESH ROW (v2, 2026-10-27): the add bar just made it, at the top of its
+ * aisle. It stands in the accent wash (--tint-wash, 8%) for a moment, then
+ * the wash fades; before its amount it says "dodano". The word stays ink-2 -
+ * the accent already speaks as the wash, and a wash with accent ink inside
+ * would name it twice. With reduced motion the wash simply stands while the
+ * word does. */
 .shopping-item--fresh {
+  background-color: color-mix(in srgb, var(--color-accent) var(--tint-wash), transparent);
   animation: shopping-fresh calc(6 * var(--duration-2xl)) var(--ease-out) both;
 }
 
 @keyframes shopping-fresh {
-  from { background-color: var(--color-accent-tint); }
-  to { background-color: transparent; }
+  0%, 50% { background-color: color-mix(in srgb, var(--color-accent) var(--tint-wash), transparent); }
+  100% { background-color: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1228,33 +1297,11 @@
 }
 
 .shopping-item__fresh {
-  order: 2;
-  flex-basis: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  justify-content: flex-start;
-  width: fit-content;
-  min-height: var(--target-base);
-  margin-block: calc((var(--type-footnote-lh) - var(--target-base)) / 2);
-  margin-inline: calc(-1 * var(--space-2));
-  padding: 0 var(--space-2);
-  border: 0;
-  border-radius: var(--radius-full);
-  background: none;
-  color: var(--color-accent);
-  font-family: inherit;
-  font-size: var(--type-footnote);
-  line-height: var(--type-footnote-lh);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
-  cursor: pointer;
-}
-
-.shopping-item__fresh svg,
-.shopping-item__fresh i {
-  width: 14px;
-  height: 14px;
 }
 
 /* Zeilenaktionen (Griff, Mehr-Knopf): with a pointer they stay at the row's

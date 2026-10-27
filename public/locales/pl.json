@@ -768,7 +768,9 @@
         "changeAisleLabel": "{{name}} w dziale {{category}}, zmień dział",
         "allBoughtMeta_few": "{{count}} produkty z listy {{name}}",
         "allBoughtMeta_many": "{{count}} produktów z listy {{name}}",
-        "usualQuantity": "zwykle {{quantity}}"
+        "usualQuantity": "zwykle {{quantity}}",
+        "frequentLabel": "Często",
+        "itemAdded": "dodano"
     },
     "meals": {
         "randomizeSuccess_few": "Zaplanowano {{count}} posiłki.",

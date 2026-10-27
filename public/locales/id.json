@@ -688,7 +688,9 @@
         "clearList": "Clear the list",
         "changeAisle": "{{category}} · change",
         "changeAisleLabel": "{{name}} in {{category}}, change the aisle",
-        "usualQuantity": "usually {{quantity}}"
+        "usualQuantity": "usually {{quantity}}",
+        "frequentLabel": "Sering",
+        "itemAdded": "ditambahkan"
     },
     "meals": {
         "ingredientCount_one": "{{count}} bahan",
