@@ -151,3 +151,33 @@ export function isStyleApplied(href, doc = document) {
   return [...doc.styleSheets].some((sheet) => (sheet.href ?? '').endsWith(href)
     && !sheet.disabled && sheet.media?.mediaText !== RESTING);
 }
+
+/**
+ * Das Blatt einer Seite sicherstellen, wenn ihr Formular von AUSSEN aufgeht
+ * (Kalender, Mahlzeiten von der Uebersicht aus). Gilt es schon, passiert
+ * nichts; ein ruhendes Blatt zaehlt nicht (isStyleApplied) - dann kommt ein
+ * eigener <link>, auf den gewartet wird, sonst zeigt das Blatt seinen Inhalt
+ * einmal roh. Ein Fehler loest ebenfalls auf: ein fehlendes Blatt ist ein
+ * Schoenheitsfehler, kein Grund, das Formular nicht zu zeigen.
+ *
+ * @param {string} href - z. B. '/styles/calendar.css'
+ * @param {Document} [doc]
+ * @returns {Promise<void>}
+ */
+export function ensureStyleApplied(href, doc = document) {
+  if (isStyleApplied(href, doc)) return Promise.resolve();
+  const vorhanden = doc.querySelector(`link[data-outside-styles][href="${href}"]`);
+  if (vorhanden) return vorhanden.dataset.ready === '1'
+    ? Promise.resolve()
+    : new Promise((resolve) => vorhanden.addEventListener('load', resolve, { once: true }));
+  const link = doc.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.dataset.outsideStyles = '';
+  const ready = new Promise((resolve) => {
+    link.onload = () => { link.dataset.ready = '1'; resolve(); };
+    link.onerror = () => { link.dataset.ready = '1'; resolve(); };
+  });
+  doc.head.appendChild(link);
+  return ready;
+}

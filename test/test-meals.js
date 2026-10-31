@@ -1178,7 +1178,9 @@ test('onNarrowWeekLabelQueryChange() zeichnet die Wochen-Navigation neu, wenn de
 // ersten Laden wieder korrekt einstellt.
 test('render() synchronisiert „Heute" VOR dem ersten Laden, gegen das Aufblitzen (Befund 5)', () => {
   const renderStart = mealsSource.indexOf('export async function render(container, { user }) {');
-  const loadIdx = mealsSource.indexOf('await Promise.all([loadWeek(monday)');
+  // Der erste Ladevorgang steht seit Schnell-Erfassen (Aufgabe 10) in loadMealsData(),
+  // das auch der Oeffner von aussen nutzt.
+  const loadIdx = mealsSource.indexOf('await loadMealsData(monday)', renderStart);
   assert(renderStart > -1 && loadIdx > -1, 'render()/Promise.all-Aufruf nicht gefunden');
   const syncIdx = mealsSource.indexOf('syncTodayButton();', renderStart);
   assert(syncIdx > -1 && syncIdx < loadIdx,

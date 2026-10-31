@@ -61,6 +61,7 @@ import { toggleRowHtml } from '/settings/components.js';
 import { localizeBirthdayEvent } from '/utils/birthday-event.js';
 import { googleTargetValue, caldavTargetValue, outlookTargetValue, assigneeSyncTarget } from '/utils/sync-target.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
+import { ensureStyleApplied } from '/utils/page-style.js';
 import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
@@ -1945,6 +1946,62 @@ async function loadUsers() {
   state.userDirectory = directory;
 }
 
+/**
+ * Was das Termin-Formular aus den Einstellungen liest: Standarddauer,
+ * Erinnerungen, Zuweisung, Sync-Ziel, Ablage der Anhaenge. Eine Stelle fuer
+ * render() und den Einstieg von aussen (openNewEventFrom).
+ */
+function applyEventFormState(prefsRes, documentOptionsRes) {
+  state.holidayPrefs  = prefsRes.data ?? {};
+  state.weekStart     = weekStartIndex(prefsRes.data?.week_start);
+  state.defaultDuration = Number(prefsRes.data?.calendar_default_duration) || 60;
+  // Standardwerte für neue Termine (#497/#498).
+  state.defaultReminders = Array.isArray(prefsRes.data?.calendar_default_reminders)
+    ? prefsRes.data.calendar_default_reminders.map(Number)
+    : [];
+  state.defaultAssignMe  = !!prefsRes.data?.calendar_default_assign_me;
+  // Standard-Sync-Ziel für eigene neue Termine (#620).
+  state.defaultSyncTarget = prefsRes.data?.calendar_default_target || '';
+  state.documentUploadBackend = documentOptionsRes.data?.active_upload_backend ?? 'local';
+}
+
+/**
+ * Naechste volle Stunde im Haushalt als 'HH:00'; der Deckel ist '23:00'.
+ * @param {Date} [now]
+ * @returns {string}
+ */
+export function nextFullHour(now = new Date()) {
+  const { hour } = nowFields(now);
+  return `${String(Math.min(hour + 1, 23)).padStart(2, '0')}:00`;
+}
+
+/**
+ * Das Formular „Neuer Termin" von ausserhalb des Kalenders oeffnen (Uebersicht).
+ * Heute, naechste volle Stunde. Steht die Seite nicht, laedt es, was das
+ * Formular liest (Mitglieder, Kalender, Einstellungen), und fasst sonst nichts
+ * an; `onChanged` frischt den Aufrufer nach dem Speichern auf.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff
+ */
+export async function openNewEventFrom({ user = null, onChanged = () => {} } = {}) {
+  if (readOnly()) return false;
+  const [prefsRes, documentOptionsRes] = await Promise.all([
+    api.get('/preferences').catch(() => ({ data: {} })),
+    api.get('/documents/meta/options').catch(() => ({ data: {} })),
+    loadUsers(),
+    loadLocalCalendars(),
+    ensureStyleApplied('/styles/calendar.css'),
+  ]);
+  applyEventFormState(prefsRes, documentOptionsRes);
+  state.currentUserId = user?.id ?? state.currentUserId;
+  state.user = user ?? state.user;
+  const today = todayKey();
+  state.today = today;
+  openEventModal({ mode: 'create', date: today, time: nextFullHour(), onChanged });
+  return true;
+}
+
 // --------------------------------------------------------
 // Entry Point
 // --------------------------------------------------------
@@ -2045,17 +2102,7 @@ export async function render(container, { user, signal } = {}) {
     api.get('/preferences').catch(() => ({ data: {} })),
     api.get('/documents/meta/options').catch(() => ({ data: {} })),
   ]);
-  state.holidayPrefs  = prefsRes.data ?? {};
-  state.weekStart     = weekStartIndex(prefsRes.data?.week_start);
-  state.defaultDuration = Number(prefsRes.data?.calendar_default_duration) || 60;
-  // Standardwerte für neue Termine (#497/#498).
-  state.defaultReminders = Array.isArray(prefsRes.data?.calendar_default_reminders)
-    ? prefsRes.data.calendar_default_reminders.map(Number)
-    : [];
-  state.defaultAssignMe  = !!prefsRes.data?.calendar_default_assign_me;
-  // Standard-Sync-Ziel für eigene neue Termine (#620).
-  state.defaultSyncTarget = prefsRes.data?.calendar_default_target || '';
-  state.documentUploadBackend = documentOptionsRes.data?.active_upload_backend ?? 'local';
+  applyEventFormState(prefsRes, documentOptionsRes);
   state.layerHolidays = localStorage.getItem(LAYER_HOLIDAYS_KEY) !== 'false';
   state.layerSchool   = localStorage.getItem(LAYER_SCHOOL_KEY)   !== 'false';
   state.layerBirthdays = localStorage.getItem(LAYER_BIRTHDAYS_KEY) !== 'false';
@@ -8388,7 +8435,7 @@ function wireVisibilityWarning(panel, selectSel, msName, warnSel, privateWarnSel
   update();
 }
 
-function openEventModal({ mode, event = null, date = null, reminder = null, time = null }) {
+function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null }) {
   // DER LETZTE RIEGEL VOR DEM FORMULAR. Es gibt sieben Wege hierher - Kopfknopf,
   // FAB, Doppelklick oder langer Druck in eine leere Stunde der Wochen- und der
   // Tagesansicht (wireTimeGridCreate), zwei Leerzustands-CTAs und der
@@ -8409,7 +8456,7 @@ function openEventModal({ mode, event = null, date = null, reminder = null, time
     size: 'md',
     // Ein neuer Termin startet weiterhin mit dem Fokus im Titelfeld: Hier ist
     // Tippen die Absicht, hier ist der Autofokus richtig.
-    onSave(panel) { wireEventForm(panel, { mode, event, reminder }); },
+    onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); },
   });
 }
 
@@ -8427,7 +8474,7 @@ function hasCurrentAttachment(attachmentState, event) {
   return Boolean(attachmentState?.name) || (!attachmentState?.changed && hasAttachment(event));
 }
 
-function wireEventForm(panel, { mode, event = null, reminder = null }) {
+function wireEventForm(panel, { mode, event = null, reminder = null, onChanged = null }) {
   const isEdit = mode === 'edit';
   // Der Wiederholungsbaustein kennt absichtlich keine Feld-IDs des Kalenders.
   // Der Kalender liefert ihm das aktive Startdatum ausdrücklich: bei einem
@@ -8743,7 +8790,7 @@ function wireEventForm(panel, { mode, event = null, reminder = null }) {
     refocusAfterRender();
   });
 
-  panel.querySelector('#modal-save').addEventListener('click', () => saveEvent(panel, mode, event, reminder, attachmentState));
+  panel.querySelector('#modal-save').addEventListener('click', () => saveEvent(panel, mode, event, reminder, attachmentState, onChanged));
   // Pflichtfelder melden sich beim Verlassen inline statt erst beim
   // Speichern als ortloser Toast (Critique P1).
   wireBlurValidation(panel);
@@ -9249,7 +9296,12 @@ function seriesEndConflict(mode, event, ruleToSave, startDatetime) {
   return seriesTouched && seriesEndsBeforeStart(ruleToSave, startDatetime);
 }
 
-async function saveEvent(overlay, mode, event, existingReminder = null, attachmentState = null) {
+/** Der Aufrufer von aussen frischt sich auf; scheitert er, ist die Speicherung trotzdem gelungen. */
+async function notifyChanged(onChanged) {
+  try { await onChanged?.(); } catch (err) { console.error('[Calendar] onChanged:', err); }
+}
+
+async function saveEvent(overlay, mode, event, existingReminder = null, attachmentState = null, onChanged = null) {
   // Dasselbe wie in handleFormSubmit der Aufgabenseite: das Formular steht bei
   // `calendar: read` nicht offen, aber ein Dialog kann es gewesen sein, als die
   // Rechte wechselten.
@@ -9566,7 +9618,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     }
     if (savedEventId) refreshReminders();
 
-    if (reloadAfter) {
+    // Steht die Seite nicht (von der Uebersicht aus geoeffnet), holt ihr
+    // naechstes render() ohnehin alles frisch - nichts nachladen, nichts zeichnen.
+    const pageShown = Boolean(_container);
+    if (reloadAfter && pageShown) {
       const reload = await reloadCalendarEventsOnly();
       // Scheitert das Neuladen oder kommt es aus dem Cache, kennt der Zustand
       // die neue Serie nicht. Dann steht sie wie vor dem Neuladen als
@@ -9578,8 +9633,9 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     }
 
     closeModal({ force: true });
-    renderView();
+    if (pageShown) renderView();
     window.yuvomi?.showToast(mode === 'create' ? t('calendar.createdToast') : t('calendar.savedToast'), 'success');
+    await notifyChanged(onChanged);
   } catch (err) {
     // Server-Validierungsmeldung bevorzugen, sonst lokalisierter Fallback; der
     // rohe err.message-Text (Netzwerk/JS) wird nie gezeigt. Das Modal bleibt offen

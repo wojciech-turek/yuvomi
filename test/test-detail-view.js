@@ -351,7 +351,7 @@ test('ein neuer Termin startet weiterhin direkt im Formular', async () => {
 
 test('die Termin-Verdrahtung ist zweigeteilt', async () => {
   const src = await calendarJs();
-  assert.match(src, /function wireEventForm\(panel, \{ mode, event = null, reminder = null \}\)/);
+  assert.match(src, /function wireEventForm\(panel, \{ mode, event = null, reminder = null, onChanged = null \}\)/);
   assert.match(src, /onSave\(panel\) \{ wireEventForm\(panel/, 'openEventModal nutzt dieselbe Verdrahtung');
   assert.match(src, /mount: \(panel, pane\) =>/, 'die Detailansicht mountet das Formular später');
 

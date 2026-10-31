@@ -20,6 +20,7 @@ import { normalizeRecipeMealTypes, recipeSupportsMealType, recipeAllowsMealType 
 import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-state.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
+import { ensureStyleApplied } from '/utils/page-style.js';
 import { pageToolsMenuHtml, popoverMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
 import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
@@ -717,6 +718,49 @@ function mealsLayoutHtml() {
       </button>`}`;
 }
 
+/**
+ * Alles, was der Plan und der Mahlzeit-Dialog lesen: die Woche, Listen,
+ * Einstellungen, Kategorien, Rezepte, Mitglieder, Vorrat und - nach den Listen -
+ * was schon auf einer steht. Eine Stelle fuer render() und openNewMealFrom().
+ */
+async function loadMealsData(monday) {
+  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
+  // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
+  await loadListedNames();
+}
+
+/**
+ * Der erste Platz des Tages ohne Mahlzeit, in der Reihenfolge des Plans; sind
+ * alle belegt, der letzte.
+ * @param {string[]} types sichtbare Mahlzeitarten
+ * @param {Array<{meal_type: string}>} meals Mahlzeiten dieses Tages
+ * @returns {string}
+ */
+export function firstEmptyMealSlot(types, meals) {
+  const taken = new Set((meals ?? []).map((meal) => meal.meal_type));
+  return types.find((type) => !taken.has(type)) ?? types[types.length - 1] ?? 'lunch';
+}
+
+/**
+ * Das Formular „Mahlzeit hinzufuegen" von ausserhalb der Seite oeffnen
+ * (Uebersicht): heute, der naechste noch leere Platz. Laedt, was der Dialog
+ * liest, wie render() es tut; gezeichnet wird nichts, solange die Seite nicht
+ * steht, und ihr naechstes render() holt alles frisch.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff
+ */
+export async function openNewMealFrom({ user = null, onChanged = () => {} } = {}) {
+  if (readOnly()) return false;
+  const today = todayKey();
+  await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
+  state.userId = user?.id ?? state.userId;
+  const types = MEAL_TYPE_KEYS.filter((key) => state.visibleMealTypes.includes(key));
+  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today));
+  openMealModal({ mode: 'create', date: today, mealType, onChanged });
+  return true;
+}
+
 export async function render(container, { user }) {
   _container = container;
   _railSettled = false;
@@ -768,9 +812,7 @@ export async function render(container, { user }) {
   state.currentWeek = monday;
   syncTodayButton();
 
-  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
-  // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
-  await loadListedNames();
+  await loadMealsData(monday);
   renderWeekGrid();
   wirePhoneWeek();
   renderRecipeSidebar();
@@ -3886,7 +3928,15 @@ function closeModal({ force = false } = {}) {
   state.modal = null;
 }
 
+/** Der Aufrufer von aussen frischt sich auf; scheitert er, ist die Speicherung trotzdem gelungen. */
+async function notifyChanged(onChanged) {
+  try { await onChanged?.(); } catch (err) { console.error('[Meals] onChanged:', err); }
+}
+
 async function saveModal(overlay) {
+  // Von der Uebersicht aus geoeffnet steht die Wochenansicht nicht: nichts
+  // zeichnen, ihr naechstes render() laedt ohnehin alles frisch.
+  const redrawWeek = () => { if (_container) renderWeekGrid(); };
   // Zweite Linie hinter openMealModal(): die Rechte koennen sich aendern,
   // waehrend der Dialog offen steht.
   if (readOnly()) return;
@@ -3934,8 +3984,10 @@ async function saveModal(overlay) {
   saveBtn.disabled    = true;
   saveBtn.textContent = '…';
 
+  let onChanged = null;
   try {
     const { mode, meal } = state.modal;
+    onChanged = state.modal.onChanged ?? null;
 
     if (mode === 'create') {
       const res     = await api.post('/meals', { date, meal_type, title, notes, recipe_url, recipe_id, cook_user_id, ingredients, repeat_weekly, repeat_until });
@@ -3983,8 +4035,8 @@ async function saveModal(overlay) {
       try {
         const res = await api.post(`/meals/${created.id}/to-shopping-list`, { listId: list.id });
         await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
-        renderWeekGrid();
-        refocusAfterRender();
+        redrawWeek();
+        if (_container) refocusAfterRender();
         announceTransfer({
           message: t('meals.sheetSavedItems', {
             meal: mealTypeInSentence(meal_type), day: t(DAY_ACC_KEYS[zonedWeekday(date)]), count: res.data?.transferred ?? 0, list: list.name,
@@ -3992,16 +4044,18 @@ async function saveModal(overlay) {
           addedIds: res.data?.added_ids ?? [],
           onUndone: async () => {
             await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
-            renderWeekGrid();
+            redrawWeek();
+            await notifyChanged(onChanged);
           },
         });
+        await notifyChanged(onChanged);
         return;
       } catch (err) {
         // Die Mahlzeit steht - nur der Transfer scheiterte. Die Karte bietet ihn weiter an.
         window.yuvomi?.showToast(errorSentence(err), 'danger');
       }
     }
-    renderWeekGrid();
+    redrawWeek();
     // Das Ergebnis, nicht der Dialogtitel: „Mahlzeit hinzufügen" als
     // Erfolgsmeldung liest sich wie eine Aufforderung (R16).
     // ONE TAP TO THE SHOPPING LIST (fork, 2026-10-19): a new meal with
@@ -4016,6 +4070,7 @@ async function saveModal(overlay) {
     } else {
       window.yuvomi?.showToast(mode === 'create' ? t('meals.mealSaved') : t('meals.mealUpdated'), 'success');
     }
+    await notifyChanged(onChanged);
   } catch (err) {
     // Der Satz der App, nie der Text des Servers (#1909): ein inzwischen
     // geloeschtes Rezept nennt der Server `meals_selected_recipe_not_found`.
