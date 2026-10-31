@@ -25,7 +25,7 @@ import { renderDocumentAttachField, bindDocumentAttachField } from '/components/
 import { emptyStateHTML, mountLoadError, searchEmptyHTML } from '/utils/empty-state.js';
 import '/components/category-manager.js';
 import { findPageFab } from '/utils/fab.js';
-import { isStyleApplied } from '/utils/page-style.js';
+import { ensureStyleApplied } from '/utils/page-style.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { isSoloHousehold, hidesPrivacyControls } from '/utils/household.js';
 import { popoverMenuHtml, installPopoverMenus, pageToolsMenuHtml, pageToolsActionEl, syncPopoverMenuItem } from '/utils/popover-menu.js';
@@ -5914,24 +5914,9 @@ function mountTaskSplit(container, signal) {
  * Schoenheitsfehler, kein Grund, die Aufgabe nicht zu zeigen.
  */
 function ensureTaskStyles() {
-  const href = '/styles/tasks.css';
-  // Auch das Seiten-Blatt des Routers zaehlt: steht man auf /tasks, gilt es.
-  if (isStyleApplied(href)) return Promise.resolve();
-  const vorhanden = document.querySelector(`link[data-task-styles][href="${href}"]`);
-  if (vorhanden) return vorhanden.dataset.ready === '1'
-    ? Promise.resolve()
-    : new Promise((resolve) => vorhanden.addEventListener('load', resolve, { once: true }));
-
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = href;
-  link.dataset.taskStyles = '';
-  const ready = new Promise((resolve) => {
-    link.onload = () => { link.dataset.ready = '1'; resolve(); };
-    link.onerror = () => { link.dataset.ready = '1'; resolve(); };
-  });
-  document.head.appendChild(link);
-  return ready;
+  // Das Blatt bleibt hier fuer die Sitzung stehen (kein release): die Aufgaben-Wege
+  // (Lese-, Bearbeiten-, Neu-Blatt, Diktat) haben keinen gemeinsamen Schliessen-Punkt.
+  return ensureStyleApplied('/styles/tasks.css').then(() => {});
 }
 
 /**

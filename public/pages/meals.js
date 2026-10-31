@@ -730,15 +730,24 @@ async function loadMealsData(monday) {
 }
 
 /**
- * Der erste Platz des Tages ohne Mahlzeit, in der Reihenfolge des Plans; sind
- * alle belegt, der letzte.
- * @param {string[]} types sichtbare Mahlzeitarten
+ * Der naechste Platz des Tages, der noch leer ist - nach der Uhr: ab der
+ * Mahlzeit, die jetzt dran ist (`startType`), die erste ohne Mahlzeit. Der
+ * Zwischensnack ist nie die Vermutung (wie mealTypeForHour); gibt es dahinter
+ * nichts Freies, bleibt es bei `startType`. Ohne `startType` beginnt die Suche
+ * vorn und endet beim letzten Platz.
+ * @param {string[]} types sichtbare Mahlzeitarten, in Planreihenfolge
  * @param {Array<{meal_type: string}>} meals Mahlzeiten dieses Tages
+ * @param {string} [startType]
  * @returns {string}
  */
-export function firstEmptyMealSlot(types, meals) {
+export function firstEmptyMealSlot(types, meals, startType = null) {
   const taken = new Set((meals ?? []).map((meal) => meal.meal_type));
-  return types.find((type) => !taken.has(type)) ?? types[types.length - 1] ?? 'lunch';
+  const guessable = types.filter((type) => type !== 'snack');
+  const pool = guessable.length ? guessable : types;
+  const rank = (type) => MEAL_TYPE_KEYS.indexOf(type);
+  const fromHere = pool.filter((type) => rank(type) >= rank(startType));
+  const fallback = pool.includes(startType) ? startType : (pool[pool.length - 1] ?? 'lunch');
+  return (fromHere.length ? fromHere : pool).find((type) => !taken.has(type)) ?? fallback;
 }
 
 /**
@@ -753,11 +762,13 @@ export function firstEmptyMealSlot(types, meals) {
 export async function openNewMealFrom({ user = null, onChanged = () => {} } = {}) {
   if (readOnly()) return false;
   const today = todayKey();
-  await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
+  const [, release] = await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
   state.userId = user?.id ?? state.userId;
   const types = MEAL_TYPE_KEYS.filter((key) => state.visibleMealTypes.includes(key));
-  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today));
-  openMealModal({ mode: 'create', date: today, mealType, onChanged });
+  const startType = mealTypeForHour(nowFields().hour);
+  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today), startType);
+  // Das Blatt gilt nur, solange der Dialog offen ist (generische Selektoren).
+  openMealModal({ mode: 'create', date: today, mealType, onChanged, onClose: release });
   return true;
 }
 
@@ -1014,7 +1025,7 @@ function wireRailToggle() {
   if (gespeichert) {
     hidden = gespeichert === 'hidden';
   } else {
-    const grid = _container.querySelector('#week-grid');
+    const grid = _container?.querySelector('#week-grid');
     const desktop = !window.matchMedia?.('(max-width: 639px)').matches;
     hidden = Boolean(desktop && grid && grid.scrollWidth > grid.clientWidth + 1);
   }
@@ -1083,7 +1094,7 @@ function renderWeekGrid() {
 }
 
 function renderBoardGrid() {
-  const grid = _container.querySelector('#week-grid');
+  const grid = _container?.querySelector('#week-grid');
   if (!grid) return;
 
   updateWeekLabel();
@@ -3050,6 +3061,7 @@ function openMealModal(opts) {
     title: date ? t('meals.sheetTitle', { meal: mealTypeLabel(sheetType), day: shortDayLabel(date) }) : (isEdit ? t('meals.editMeal') : t('meals.addMealTitle')),
     content,
     size: 'md',
+    onClose: opts.onClose,
     onSave(panel) {
       wireMealTypeChips(panel);
       // Zutaten
@@ -3936,7 +3948,7 @@ async function notifyChanged(onChanged) {
 async function saveModal(overlay) {
   // Von der Uebersicht aus geoeffnet steht die Wochenansicht nicht: nichts
   // zeichnen, ihr naechstes render() laedt ohnehin alles frisch.
-  const redrawWeek = () => { if (_container) renderWeekGrid(); };
+  const redrawWeek = () => { if (_container?.isConnected) renderWeekGrid(); };
   // Zweite Linie hinter openMealModal(): die Rechte koennen sich aendern,
   // waehrend der Dialog offen steht.
   if (readOnly()) return;
@@ -4036,7 +4048,7 @@ async function saveModal(overlay) {
         const res = await api.post(`/meals/${created.id}/to-shopping-list`, { listId: list.id });
         await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
         redrawWeek();
-        if (_container) refocusAfterRender();
+        if (_container?.isConnected) refocusAfterRender();
         announceTransfer({
           message: t('meals.sheetSavedItems', {
             meal: mealTypeInSentence(meal_type), day: t(DAY_ACC_KEYS[zonedWeekday(date)]), count: res.data?.transferred ?? 0, list: list.name,
@@ -4065,7 +4077,7 @@ async function saveModal(overlay) {
       const created = createdWithIngredients;
       window.yuvomi?.showToast(t('meals.mealSaved'), 'success', 8000, {
         label: t('meals.toShoppingListAction'),
-        onClick: () => transferMeal(created.id),
+        onClick: () => transferMeal(created.id, undefined, onChanged),
       });
     } else {
       window.yuvomi?.showToast(mode === 'create' ? t('meals.mealSaved') : t('meals.mealUpdated'), 'success');
@@ -4247,7 +4259,7 @@ async function deleteMeal(mealId, { scope } = {}) {
 // Zutaten → Einkaufsliste (Quick-Transfer vom Slot aus)
 // --------------------------------------------------------
 
-async function transferMeal(mealId, btn) {
+async function transferMeal(mealId, btn, onChanged = null) {
   // Zweite Linie hinter dem Markup (Regel 2 in utils/module-access.js): der
   // Knopf fehlt ohne beide Rechte, und der Handler loest den Aufruf dann auch
   // nicht aus.
@@ -4262,7 +4274,8 @@ async function transferMeal(mealId, btn) {
     const res = await api.post(`/meals/${mealId}/to-shopping-list`, { listId: target.id });
     if (res.data.transferred > 0) {
       await loadWeek(state.currentWeek);
-      renderWeekGrid();
+      if (_container?.isConnected) renderWeekGrid();
+      await notifyChanged(onChanged);
       // Der Toast nennt die ZIEL-Liste. „5 Zutaten übernommen." sagte nicht, wohin -
       // und bei mehreren Listen ist genau das die Frage, die offen bleibt (Critique
       // 2026-07-30, P1). Der Kreislauf endet nicht mit „übernommen", sondern in
@@ -4276,7 +4289,8 @@ async function transferMeal(mealId, btn) {
         addedIds: res.data.added_ids ?? [],
         onUndone: async () => {
           await loadWeek(state.currentWeek);
-          renderWeekGrid();
+          if (_container?.isConnected) renderWeekGrid();
+          await notifyChanged(onChanged);
         },
       });
     } else {

@@ -11,7 +11,7 @@
  *            braucht, stellen das Seitenblatt sicher (auch ein ruhendes),
  *            oeffnen mit heute/Vorgaben; Speichern zeichnet nichts
  *            (kein _container), wirft nicht und ruft onChanged.
- * Zone: Haushalt Europe/Warsaw.
+ * Zone: Haushalt Europe/Warsaw, Prozesszone UTC (ein getHours() schluege hier fehl).
  * Ausfuehren: npm run test:outside-openers
  */
 import test from 'node:test';
@@ -55,8 +55,10 @@ function fakeOverlay(fields = {}) {
   const make = (value = '') => ({
     value, checked: false, dataset: {}, disabled: false, textContent: '',
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    getAttribute: () => null, setAttribute() {}, focus() {}, scrollIntoView() {},
-    addEventListener() {}, closest: () => null, querySelector: () => null, querySelectorAll: () => [],
+    getAttribute: () => null, setAttribute() {}, removeAttribute() {}, focus() {}, scrollIntoView() {},
+    replaceChildren() {}, insertAdjacentHTML() {}, append() {}, appendChild() {}, remove() {}, style: {}, options: [], children: [],
+    dispatchEvent() {}, removeEventListener() {}, matches: () => false, contains: () => false,
+    listeners: {}, addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }, closest: () => make(), querySelector: () => make(), querySelectorAll: () => [],
   });
   const cache = new Map();
   return {
@@ -66,6 +68,17 @@ function fakeOverlay(fields = {}) {
     },
     querySelectorAll: () => [],
   };
+}
+
+/** Die Uhr auf `iso` stellen (Date ohne Argument), solange `fn` laeuft. */
+async function atTime(iso, fn) {
+  const RealDate = globalThis.Date;
+  const fixed = new RealDate(iso).getTime();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixed])); }
+    static now() { return fixed; }
+  };
+  try { return await fn(); } finally { globalThis.Date = RealDate; }
 }
 
 function recordingApi(handlers = {}) {
@@ -94,6 +107,18 @@ test('firstEmptyMealSlot: the first type without a meal, else the last type', ()
   assert.equal(meals.firstEmptyMealSlot(types, [{ meal_type: 'breakfast' }]), 'lunch');
   assert.equal(meals.firstEmptyMealSlot(types, [{ meal_type: 'lunch' }]), 'breakfast');
   assert.equal(meals.firstEmptyMealSlot(types, types.map((meal_type) => ({ meal_type }))), 'dinner');
+});
+
+test('firstEmptyMealSlot: starts at the meal that is due now, never guesses the snack', () => {
+  const all = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const planned = (...kinds) => kinds.map((meal_type) => ({ meal_type }));
+  assert.equal(meals.firstEmptyMealSlot(all, [], 'breakfast'), 'breakfast', '07:00, nothing planned');
+  assert.equal(meals.firstEmptyMealSlot(all, planned('breakfast'), 'lunch'), 'lunch', '12:00, breakfast planned');
+  assert.equal(meals.firstEmptyMealSlot(all, planned('breakfast'), 'breakfast'), 'lunch', '07:00, breakfast planned: the next empty one');
+  assert.equal(meals.firstEmptyMealSlot(all, planned('dinner'), 'dinner'), 'dinner', '19:00, dinner taken: stays on the due meal');
+  assert.equal(meals.firstEmptyMealSlot(all, planned('breakfast', 'lunch', 'dinner'), 'lunch'), 'lunch', 'nothing free at or after: the due meal');
+  assert.notEqual(meals.firstEmptyMealSlot(all, planned('breakfast', 'lunch', 'dinner'), 'breakfast'), 'snack', 'never the snack');
+  assert.equal(meals.firstEmptyMealSlot(['snack'], [], 'dinner'), 'snack', 'unless it is the only type');
 });
 
 test('read-only: both openers resolve false, call no API and open nothing', async () => {
@@ -140,6 +165,11 @@ test('openNewEventFrom, cold: loads the form state, applies a resting sheet, ope
     const today = todayKey();
     assert.match(sheet.content, new RegExp(`id="modal-start-date"[^>]*value="${today}"`));
     assert.match(sheet.content, /id="modal-start-time"[^>]*value="\d\d:00"/, 'a full hour');
+    // Das Blatt gilt nur, solange das Formular offen ist.
+    appended[0].sheet = { media: { mediaText: 'all' } };
+    assert.equal(typeof sheet.onClose, 'function', 'closing releases the sheet');
+    sheet.onClose();
+    assert.equal(appended[0].sheet.media.mediaText, 'not all', 'resting again after the form closes');
   } finally {
     globalThis.document.head = previousHead;
     globalThis.document.styleSheets = previousSheets;
@@ -166,10 +196,6 @@ test('saveEvent with no page container: no render, no throw, onChanged called on
       '#modal-start-date': todayKey(), '#modal-start-time': '10:00',
       '#modal-end-date': todayKey(), '#modal-end-time': '11:00',
     });
-    // Das echte Verdrahten braucht ein DOM; gespeichert wird ueber den Klick-Weg.
-    const handlers = [];
-    overlay.querySelector('#modal-save').addEventListener = (type, fn) => handlers.push(fn);
-    try { modals.opened[0].onSave(overlay); } catch { /* das Formular-Doppel ist knapp */ }
     assert.ok(typeof calendar.__test.saveEvent === 'function');
     const before = api.calls.length;
     await calendar.__test.saveEvent(overlay, 'create', null, [], null, () => { changed += 1; });
@@ -188,7 +214,7 @@ test('openNewMealFrom, cold: loads recipes, lists, members, pantry; the first em
   const modals = captureModals();
   const previousSheets = globalThis.document.styleSheets;
   globalThis.document.styleSheets = [{ href: 'http://localhost/styles/meals.css', disabled: false, media: { mediaText: 'all' } }];
-  const today = todayKey();
+  const today = await atTime('2026-11-01T11:00:00Z', () => todayKey());
   const api = recordingApi({
     '/preferences': async () => ({ data: { visible_meal_types: ['breakfast', 'lunch', 'dinner'] } }),
   });
@@ -201,7 +227,7 @@ test('openNewMealFrom, cold: loads recipes, lists, members, pantry; the first em
   const previous = globalThis.__apiStub;
   globalThis.__apiStub = api.stub;
   try {
-    assert.equal(await meals.openNewMealFrom({ user: { id: 7 } }), true);
+    assert.equal(await atTime('2026-11-01T11:00:00Z', () => meals.openNewMealFrom({ user: { id: 7 } })), true);
     const paths = api.calls.map((c) => c.path);
     for (const path of ['/recipes', '/shopping', '/shopping/categories', '/family/members', '/pantry', '/preferences']) {
       assert.ok(paths.includes(path), `loads ${path}`);
@@ -235,6 +261,82 @@ test('saveModal with no page container: no render, no throw, onChanged called', 
     assert.equal(changed, 1, 'onChanged once');
   } finally {
     delete globalThis.__closeModal;
+    globalThis.document.styleSheets = previousSheets;
+    globalThis.__apiStub = previousApi;
+    modals.restore();
+  }
+});
+
+test('onChanged travels openEventModal -> wireEventForm -> saveEvent (the click on Save)', async () => {
+  const modals = captureModals();
+  const api = recordingApi({ post: async () => ({ data: { id: 5 } }) });
+  const previousApi = globalThis.__apiStub;
+  const previousSheets = globalThis.document.styleSheets;
+  globalThis.document.styleSheets = [{ href: 'http://localhost/styles/calendar.css', disabled: false, media: { mediaText: 'all' } }];
+  globalThis.__apiStub = api.stub;
+  globalThis.__closeModal = () => {};
+  globalThis.__rruleValues = { recurrence_rule: null, valid_until: true };
+  let changed = 0;
+  try {
+    await calendar.openNewEventFrom({ user: { id: 7 }, onChanged: () => { changed += 1; } });
+    const overlay = fakeOverlay({
+      '#modal-title': 'Dentysta',
+      '#modal-start-date': todayKey(), '#modal-start-time': '10:00',
+      '#modal-end-date': todayKey(), '#modal-end-time': '11:00',
+    });
+    modals.opened[0].onSave(overlay);
+    const [click] = overlay.querySelector('#modal-save').listeners.click ?? [];
+    assert.equal(typeof click, 'function', 'the form wires the Save click');
+    await click();
+    assert.ok(api.calls.some((c) => c.method === 'post' && c.path === '/calendar'), 'the event is posted');
+    assert.equal(changed, 1, 'onChanged once, through the form');
+  } finally {
+    delete globalThis.__rruleValues;
+    delete globalThis.__closeModal;
+    globalThis.document.styleSheets = previousSheets;
+    globalThis.__apiStub = previousApi;
+    modals.restore();
+  }
+});
+
+test('cold meal save with ingredients, then the toast action: no throw, onChanged runs after the transfer', async () => {
+  const modals = captureModals();
+  const toasts = [];
+  const previousToast = globalThis.window.yuvomi.showToast;
+  globalThis.window.yuvomi.showToast = (...args) => { toasts.push(args); };
+  const api = recordingApi();
+  api.stub.get = async (path) => {
+    api.calls.push({ method: 'get', path });
+    if (path === '/shopping') return { data: [{ id: 3, name: 'Zakupy' }] };
+    return { data: [] };
+  };
+  api.stub.post = async (path) => {
+    api.calls.push({ method: 'post', path });
+    if (path === '/meals') return { data: { id: 9, ingredients: [] } };
+    return { data: { transferred: 2, added_ids: [1, 2] } };
+  };
+  const previousApi = globalThis.__apiStub;
+  const previousSheets = globalThis.document.styleSheets;
+  globalThis.document.styleSheets = [{ href: 'http://localhost/styles/meals.css', disabled: false, media: { mediaText: 'all' } }];
+  globalThis.__apiStub = api.stub;
+  globalThis.__closeModal = () => {};
+  let changed = 0;
+  try {
+    await meals.openNewMealFrom({ user: { id: 7 }, onChanged: () => { changed += 1; } });
+    const overlay = fakeOverlay({ '#modal-title': 'Zupa', '#modal-date': todayKey(), '#modal-type': 'lunch' });
+    const chip = { dataset: { name: 'Mleko', qty: '1 l' }, getAttribute: () => 'true' };
+    overlay.querySelectorAll = (sel) => (sel === '.ingredient-chip' ? [chip] : []);
+    await meals.__test.saveModal(overlay);
+    assert.equal(changed, 1, 'onChanged after the save');
+    const saved = toasts.find((args) => args[3]?.onClick);
+    assert.ok(saved, 'the success toast offers the shopping list');
+    await saved[3].onClick();
+    assert.ok(api.calls.some((c) => c.path === '/meals/9/to-shopping-list'), 'the transfer ran');
+    assert.equal(toasts.some((args) => args[1] === 'danger'), false, 'no error toast');
+    assert.equal(changed, 2, 'onChanged after the transfer');
+  } finally {
+    delete globalThis.__closeModal;
+    globalThis.window.yuvomi.showToast = previousToast;
     globalThis.document.styleSheets = previousSheets;
     globalThis.__apiStub = previousApi;
     modals.restore();

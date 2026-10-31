@@ -1986,7 +1986,7 @@ export function nextFullHour(now = new Date()) {
  */
 export async function openNewEventFrom({ user = null, onChanged = () => {} } = {}) {
   if (readOnly()) return false;
-  const [prefsRes, documentOptionsRes] = await Promise.all([
+  const [prefsRes, documentOptionsRes, , , release] = await Promise.all([
     api.get('/preferences').catch(() => ({ data: {} })),
     api.get('/documents/meta/options').catch(() => ({ data: {} })),
     loadUsers(),
@@ -1998,7 +1998,8 @@ export async function openNewEventFrom({ user = null, onChanged = () => {} } = {
   state.user = user ?? state.user;
   const today = todayKey();
   state.today = today;
-  openEventModal({ mode: 'create', date: today, time: nextFullHour(), onChanged });
+  // Das Blatt gilt nur, solange das Formular offen ist (generische Selektoren).
+  openEventModal({ mode: 'create', date: today, time: nextFullHour(), onChanged, onClose: release });
   return true;
 }
 
@@ -8435,7 +8436,7 @@ function wireVisibilityWarning(panel, selectSel, msName, warnSel, privateWarnSel
   update();
 }
 
-function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null }) {
+function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null, onClose = undefined }) {
   // DER LETZTE RIEGEL VOR DEM FORMULAR. Es gibt sieben Wege hierher - Kopfknopf,
   // FAB, Doppelklick oder langer Druck in eine leere Stunde der Wochen- und der
   // Tagesansicht (wireTimeGridCreate), zwei Leerzustands-CTAs und der
@@ -8454,6 +8455,7 @@ function openEventModal({ mode, event = null, date = null, reminder = null, time
     title: isEdit ? t('calendar.editEvent') : t('calendar.newEvent'),
     content,
     size: 'md',
+    onClose,
     // Ein neuer Termin startet weiterhin mit dem Fokus im Titelfeld: Hier ist
     // Tippen die Absicht, hier ist der Autofokus richtig.
     onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); },
@@ -9620,7 +9622,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
 
     // Steht die Seite nicht (von der Uebersicht aus geoeffnet), holt ihr
     // naechstes render() ohnehin alles frisch - nichts nachladen, nichts zeichnen.
-    const pageShown = Boolean(_container);
+    const pageShown = Boolean(_container?.isConnected);
     if (reloadAfter && pageShown) {
       const reload = await reloadCalendarEventsOnly();
       // Scheitert das Neuladen oder kommt es aus dem Cache, kennt der Zustand

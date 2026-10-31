@@ -550,7 +550,7 @@
     "test:task-dictation": "node --experimental-sqlite --test test/test-task-dictation.js",
     "test:task-sheet": "node --loader ./test/test-browser-loader.mjs --test test/test-task-sheet.js",
     "test:task-dictation-ui": "node --loader ./test/test-browser-loader.mjs --test test/test-task-dictation-ui.js",
-    "test:outside-openers": "TZ=Europe/Warsaw node --loader ./test/test-browser-loader.mjs --test test/test-outside-openers.js"
+    "test:outside-openers": "TZ=UTC node --loader ./test/test-browser-loader.mjs --test test/test-outside-openers.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

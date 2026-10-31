@@ -287,6 +287,10 @@ test('the tab bar answers a tap without the double-tap wait', () => {
 test('opening a task from elsewhere does not mistake a resting tasks.css for a loaded one', () => {
   const tasks = read('../public/pages/tasks.js');
   const fn = body(tasks, 'function ensureTaskStyles() {');
-  assert.match(fn, /isStyleApplied\(href\)/);
-  assert.doesNotMatch(fn, /document\.styleSheets/, 'ein ruhendes Seitenblatt steht auch in document.styleSheets');
+  // Seit Schnell-Erfassen (Aufgabe 10) fragt der geteilte Baustein, ob das Blatt GILT.
+  assert.match(fn, /ensureStyleApplied\(/);
+  const helper = read('../public/utils/page-style.js');
+  const shared = helper.slice(helper.indexOf('export async function ensureStyleApplied'));
+  assert.match(shared, /isStyleApplied\(href, doc\)/);
+  assert.doesNotMatch(shared, /\.styleSheets/, 'ein ruhendes Seitenblatt steht auch in document.styleSheets');
 });

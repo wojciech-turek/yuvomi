@@ -154,30 +154,56 @@ export function isStyleApplied(href, doc = document) {
 
 /**
  * Das Blatt einer Seite sicherstellen, wenn ihr Formular von AUSSEN aufgeht
- * (Kalender, Mahlzeiten von der Uebersicht aus). Gilt es schon, passiert
- * nichts; ein ruhendes Blatt zaehlt nicht (isStyleApplied) - dann kommt ein
- * eigener <link>, auf den gewartet wird, sonst zeigt das Blatt seinen Inhalt
- * einmal roh. Ein Fehler loest ebenfalls auf: ein fehlendes Blatt ist ein
- * Schoenheitsfehler, kein Grund, das Formular nicht zu zeigen.
+ * (Kalender, Mahlzeiten, Aufgaben von der Uebersicht aus). Gilt es schon (das
+ * Blatt der Seite, auf der man steht), passiert nichts; ein ruhendes Blatt
+ * zaehlt nicht (isStyleApplied) - dann kommt ein eigener <link>, auf den
+ * gewartet wird, sonst zeigt das Blatt seinen Inhalt einmal roh. Ein Fehler
+ * loest ebenfalls auf: ein fehlendes Blatt ist ein Schoenheitsfehler, kein
+ * Grund, das Formular nicht zu zeigen.
+ *
+ * DIE ANTWORT IST DER RUECKWEG. Seitenblaetter tragen allgemeine Selektoren
+ * (`.color-swatch`, `.ingredient-list` gibt es auch auf anderen Seiten); ein
+ * von aussen angeschaltetes Blatt darf deshalb nicht fuer den Rest der Sitzung
+ * auf jeder Seite gelten. `release()` legt NUR den eigenen <link> wieder still
+ * - das Blatt des Routers (utils/page-style.js `load`) ist ein anderer <link>
+ * und bleibt unberuehrt, es gibt also nichts, worum man mit ihm streitet.
  *
  * @param {string} href - z. B. '/styles/calendar.css'
  * @param {Document} [doc]
- * @returns {Promise<void>}
+ * @returns {Promise<() => void>} release: nach dem Schliessen des Blatts rufen
  */
-export function ensureStyleApplied(href, doc = document) {
-  if (isStyleApplied(href, doc)) return Promise.resolve();
-  const vorhanden = doc.querySelector(`link[data-outside-styles][href="${href}"]`);
-  if (vorhanden) return vorhanden.dataset.ready === '1'
-    ? Promise.resolve()
-    : new Promise((resolve) => vorhanden.addEventListener('load', resolve, { once: true }));
-  const link = doc.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = href;
-  link.dataset.outsideStyles = '';
-  const ready = new Promise((resolve) => {
-    link.onload = () => { link.dataset.ready = '1'; resolve(); };
-    link.onerror = () => { link.dataset.ready = '1'; resolve(); };
-  });
-  doc.head.appendChild(link);
-  return ready;
+export async function ensureStyleApplied(href, doc = document) {
+  if (isStyleApplied(href, doc)) return () => {};
+  let link = doc.querySelector(`link[data-outside-styles][href="${href}"]`);
+  let ready = Promise.resolve();
+  if (link) {
+    if (link.dataset.ready !== '1') {
+      ready = new Promise((resolve) => {
+        link.addEventListener('load', resolve, { once: true });
+        link.addEventListener('error', resolve, { once: true });
+      });
+    } else if (link.sheet && link.sheet.media?.mediaText === RESTING) {
+      link.sheet.media.mediaText = SHOWN;
+    }
+  } else {
+    link = doc.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.dataset.outsideStyles = '';
+    ready = new Promise((resolve) => {
+      link.onload = () => { link.dataset.ready = '1'; resolve(); };
+      link.onerror = () => { link.dataset.ready = '1'; resolve(); };
+    });
+    doc.head.appendChild(link);
+  }
+  link.dataset.users = String(Number(link.dataset.users ?? 0) + 1);
+  await ready;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const left = Number(link.dataset.users ?? 1) - 1;
+    link.dataset.users = String(left);
+    if (left <= 0 && link.sheet?.media) link.sheet.media.mediaText = RESTING;
+  };
 }

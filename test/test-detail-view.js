@@ -590,8 +590,12 @@ test('wer die Aufgabe von aussen oeffnet, bekommt ihr Blatt (#918)', async () =>
   assert.match(src, /function ensureTaskStyles\(\)/, 'der Einstieg von aussen stellt das Blatt sicher');
   const fn = src.slice(src.indexOf('function ensureTaskStyles()'),
                        src.indexOf('export async function openTaskById('));
-  assert.match(fn, /link\.onload/, 'und WARTET darauf - sonst steht der Inhalt einmal roh da');
-  assert.match(fn, /link\.onerror/, 'ein fehlendes Blatt darf die Aufgabe nicht verschlucken');
+  // Seit Schnell-Erfassen (Aufgabe 10) im geteilten Baustein: ensureStyleApplied.
+  assert.match(fn, /ensureStyleApplied\('\/styles\/tasks\.css'\)/, 'ueber den geteilten Baustein');
+  const shared = await readFile(new URL('../public/utils/page-style.js', import.meta.url), 'utf8');
+  const helper = shared.slice(shared.indexOf('export async function ensureStyleApplied'));
+  assert.match(helper, /link\.onload/, 'und WARTET darauf - sonst steht der Inhalt einmal roh da');
+  assert.match(helper, /link\.onerror/, 'ein fehlendes Blatt darf die Aufgabe nicht verschlucken');
   assert.match(src, /ensureTaskStyles\(\),/,
     'der Aufruf haengt im selben await wie das Laden der Aufgabe');
 
