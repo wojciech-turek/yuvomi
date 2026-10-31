@@ -37,7 +37,9 @@ function schemaFor(names) {
       remind_time: { type: 'string' },
       assignees: {
         type: 'array',
-        items: { type: 'string', enum: names },
+        // Ohne Namen kein enum (leeres enum ist kein gueltiges Schema); der
+        // Server-Filter unten haelt die Antwort trotzdem sauber.
+        items: names.length ? { type: 'string', enum: names } : { type: 'string' },
       },
       for_speaker: { type: 'boolean' },
     },
@@ -66,7 +68,13 @@ function cleanTitle(value, fallback) {
   return raw.charAt(0).toLocaleUpperCase('pl') + raw.slice(1);
 }
 
+function addDays(key, days) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 function systemPrompt({ today, weekday, time, zone, names, speaker }) {
+  const tomorrow = addDays(today, 1);
   return [
     'You turn one sentence, dictated by a person in a Polish household, into the fields of a to-do task. The sentence was produced by speech recognition, so ignore small recognition slips.',
     'Answer in the language of the sentence (normally Polish). Never guess a missing part: an empty string means "not said".',
@@ -74,12 +82,13 @@ function systemPrompt({ today, weekday, time, zone, names, speaker }) {
     `People with an account in this household: ${names.join(', ')}. The person speaking is ${speaker || 'unknown'}.`,
     'title: the task itself, short, without command filler. Drop "dodaj zadanie", "zapisz", "nowe zadanie", "przypomnij mi żeby" and similar when they only introduce the task. Keep other people\'s names in the title (children and relatives without an account, e.g. "Marysi") and keep the sentence\'s own wording otherwise. Drop the day and time words that went into the date fields.',
     'due_date / due_time: only when a day (or an hour) is said for doing the task. Use due_time only together with a day or when an hour is clearly the deadline.',
-    'remind_date / remind_time: only when a reminder is asked for ("przypomnienie", "przypomnij"). "Przypomnij mi jutro o 7:30" gives remind_date tomorrow and remind_time 07:30. If a reminder names only an hour, the reminder day is the due day, or today when there is none.',
+    'remind_date / remind_time: only when a reminder is asked for ("przypomnienie", "przypomnij") AND a day and an hour for the reminder are said. A reminder without an hour leaves both reminder fields empty. A reminder that names only an hour uses the due day, or today when there is no due day. "Przypomnij mi żeby ..." or "przypomnij mi o ..." with no day or hour is only filler: drop it from the title and leave the reminder fields empty. A reminder alone never sets due_date or due_time.',
     `assignees: only names from the list above, in any Polish case (${names.map((n) => `"${n}"`).join(', ')} and their inflected forms) when the sentence gives the task to that person. Never put anyone else there; a name that is not on the list ("Marysia", "Marysi") stays in the title.`,
     'for_speaker: true when the sentence is in the first person ("muszę", "przypomnij mi", "mam", "chcę"), meaning the person speaking should do it.',
     'Examples:',
     '"Dodaj zadanie ubezpiecz samochód" -> title "Ubezpiecz samochód", every other string empty, assignees [], for_speaker false.',
-    '"Weź jutro Marysi spodenki do przedszkola, ustaw przypomnienie na jutro 7:30" (today 2026-10-29) -> title "Weź Marysi spodenki do przedszkola", due_date "2026-10-30", due_time "", remind_date "2026-10-30", remind_time "07:30", assignees [], for_speaker false.',
+    `"Weź jutro Marysi spodenki do przedszkola, ustaw przypomnienie na jutro 7:30" (today ${today}) -> title "Weź Marysi spodenki do przedszkola", due_date "${tomorrow}", due_time "", remind_date "${tomorrow}", remind_time "07:30", assignees [], for_speaker false.`,
+    `"Przypomnij mi jutro o 7:30 żeby zadzwonić do lekarza" (today ${today}) -> title "Zadzwonić do lekarza", due_date "", due_time "" (a reminder alone sets no due date), remind_date "${tomorrow}", remind_time "07:30", assignees [], for_speaker true.`,
     '"Wyrzuć śmieci" -> title "Wyrzuć śmieci", every other string empty, assignees [], for_speaker false.',
   ].join('\n');
 }
@@ -92,7 +101,11 @@ function systemPrompt({ today, weekday, time, zone, names, speaker }) {
 export async function parseTaskSentence({ text, userId, now = new Date(), database = db.get(), client = claude }) {
   const sentence = String(text ?? '').trim();
   const members = memberNames(database);
-  const names = members.map((m) => m.display_name);
+  // Zwei Mitglieder mit gleichem Namen: nicht raten, der Name gehoert niemandem.
+  const keyOf = (n) => String(n).trim().toLocaleLowerCase('pl');
+  const counts = new Map();
+  for (const m of members) counts.set(keyOf(m.display_name), (counts.get(keyOf(m.display_name)) ?? 0) + 1);
+  const names = [...new Set(members.map((m) => m.display_name))];
   const zone = householdTimeZone(database);
   const wall = utcToWall(now.toISOString(), zone);
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'long' }).format(now);
@@ -113,17 +126,21 @@ export async function parseTaskSentence({ text, userId, now = new Date(), databa
 
   const ids = new Set();
   for (const name of Array.isArray(out?.assignees) ? out.assignees : []) {
-    const hit = members.find((m) => m.display_name.toLocaleLowerCase('pl') === String(name).trim().toLocaleLowerCase('pl'));
+    if (counts.get(keyOf(name)) !== 1) continue;
+    const hit = members.find((m) => keyOf(m.display_name) === keyOf(name));
     if (hit) ids.add(hit.id);
   }
   if (out?.for_speaker === true && members.some((m) => m.id === userId)) ids.add(userId);
 
+  // Eine Uhrzeit ohne Tag ist keine Aussage: beide Felder des Paares fallen weg.
+  const dueDate = cleanDate(out?.due_date);
+  const remindDate = cleanDate(out?.remind_date);
   return {
     title: cleanTitle(out?.title, sentence),
-    due_date: cleanDate(out?.due_date),
-    due_time: cleanTime(out?.due_time),
-    remind_date: cleanDate(out?.remind_date),
-    remind_time: cleanTime(out?.remind_time),
+    due_date: dueDate,
+    due_time: dueDate ? cleanTime(out?.due_time) : null,
+    remind_date: remindDate,
+    remind_time: remindDate ? cleanTime(out?.remind_time) : null,
     assigned_to: [...ids],
   };
 }

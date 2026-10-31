@@ -116,6 +116,32 @@ test('bad dates and times become null; real ones pass', async () => {
   assert.equal(ok.due_time, '09:05');
 });
 
+test('a time without its day is dropped (reminder and due)', async () => {
+  const { client } = fakeClaude({ ...base, due_time: '09:00', remind_time: '07:30' });
+  const out = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client });
+  assert.equal(out.due_time, null);
+  assert.equal(out.remind_time, null);
+  const withDay = fakeClaude({ ...base, remind_date: '2026-10-30', remind_time: '07:30' });
+  const ok = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client: withDay.client });
+  assert.deepEqual([ok.due_date, ok.due_time, ok.remind_date, ok.remind_time], [null, null, '2026-10-30', '07:30']);
+});
+
+test('a display account speaker is never added; shared display names map to nobody', async () => {
+  const { client } = fakeClaude({ ...base, for_speaker: true });
+  const out = await parseTaskSentence({ text: 'x', userId: KUCHNIA, now: NOW, database: db, client });
+  assert.deepEqual(out.assigned_to, []);
+  const twin = seedUser('Wojtek2');
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Wojtek', twin);
+  try {
+    const dup = fakeClaude({ ...base, assignees: ['Wojtek', 'Mariola'] });
+    const r = await parseTaskSentence({ text: 'x', userId: MARIOLA, now: NOW, database: db, client: dup.client });
+    assert.deepEqual(r.assigned_to, [MARIOLA], 'ambiguous name is not guessed');
+    assert.deepEqual(dup.sent[0].output_config.format.schema.properties.assignees.items.enum, ['Wojtek', 'Mariola']);
+  } finally {
+    db.prepare('DELETE FROM users WHERE id = ?').run(twin);
+  }
+});
+
 test('title: trimmed, first letter upper case, raw sentence when empty', async () => {
   const a = fakeClaude({ ...base, title: '  wyrzuć śmieci ' });
   assert.equal((await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client: a.client })).title, 'Wyrzuć śmieci');
@@ -129,8 +155,9 @@ test('the prompt carries the household day (not the UTC day), weekday, time, zon
     text: 'Zadzwoń do lekarza', userId: MARIOLA, now: new Date('2026-10-29T23:30:00Z'), database: db, client,
   });
   const prompt = `${sent[0].system}\n${sent[0].messages[0].content[0].text}`;
-  assert.match(prompt, /2026-10-30/, 'Warsaw is already on the 30th');
-  assert.match(prompt, /Friday/);
+  assert.match(sent[0].system, /Today in the household is 2026-10-30 \(Friday\)/, 'Warsaw is already on the 30th');
+  assert.doesNotMatch(sent[0].system, /Today in the household is 2026-10-29/);
+  assert.doesNotMatch(sent[0].system, /today 2026-10-29/, 'examples use the live date');
   assert.match(prompt, /00:30/);
   assert.match(prompt, /Europe\/Warsaw/);
   assert.match(prompt, /Wojtek/);
@@ -152,14 +179,29 @@ test('dictation is a known feature and ON by default once AI is enabled', () => 
   db.prepare(`DELETE FROM sync_config WHERE key = 'ai_enabled'`).run();
 });
 
+test('an ai_features blob stored before task_dictation existed leaves it ON', () => {
+  db.prepare(`INSERT INTO sync_config (key, value) VALUES ('ai_enabled', '1')
+    ON CONFLICT(key) DO UPDATE SET value = '1'`).run();
+  db.prepare(`INSERT INTO sync_config (key, value) VALUES ('ai_features', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify({ shopping_smart: false, nudges: true }));
+  try {
+    assert.equal(featureOn('task_dictation'), true);
+    assert.equal(featureOn('shopping_smart'), false);
+  } finally {
+    db.prepare(`DELETE FROM sync_config WHERE key IN ('ai_enabled', 'ai_features')`).run();
+  }
+});
+
 // ---------------------------------------------------------------- route
 
 let actor = { id: WOJTEK, role: 'admin' };
+let authMethod = 'session';
 const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
   req.authUserId = actor.id;
   req.authRole = actor.role;
+  req.authMethod = authMethod;
   req.session = { userId: actor.id, role: actor.role };
   next();
 });
@@ -190,4 +232,13 @@ test('route: nothing is saved', async () => {
   const before = db.prepare('SELECT COUNT(*) AS n FROM tasks').get().n;
   await post({ text: 'Wyrzuć śmieci' });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tasks').get().n, before);
+});
+
+test('route: a wall display with wall writes off is refused (403)', async () => {
+  authMethod = 'display';
+  try {
+    const r = await post({ text: 'Wyrzuć śmieci' });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.reason, 'wall_read_only');
+  } finally { authMethod = 'session'; }
 });
