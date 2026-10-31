@@ -85,3 +85,17 @@ test('.page-loading__spinner ist derselbe Ring wie der Startring und nutzt app-s
   assert.match(body, /animation:\s*app-spin 800ms linear infinite/);
   assert.equal((css.match(/@keyframes app-spin/g) || []).length, 1, 'app-spin wird nicht zweimal definiert');
 });
+
+test('die leere Einkaufs-Tableiste und die Gesundheits-Ladung halten ihr Mass', () => {
+  const shopping = readFileSync(join(PUBLIC, 'pages/shopping.js'), 'utf8');
+  assert.match(shopping, /<div class="list-tabs-bar" id="list-tabs-bar"><\/div>/, 'leer, ohne Leerraum - sonst greift :empty nicht');
+  const sCss = readFileSync(join(PUBLIC, 'styles/shopping.css'), 'utf8');
+  const bar = [...eachRule(sCss)].find((r) => r.selector.trim() === '.list-tabs-bar:empty');
+  assert.ok(bar && /min-block-size:\s*36px/.test(bar.body), 'die leere Leiste haelt die Hoehe der Pillen');
+  const hCss = readFileSync(join(PUBLIC, 'styles/health.css'), 'utf8');
+  const small = [...eachRule(hCss)].find((r) => /\.health-loading \.page-loading/.test(r.selector));
+  assert.ok(small && /min-block-size:\s*8rem/.test(small.body), 'der Ring im Bereich ist klein, nicht 40vh');
+  const health = readFileSync(join(PUBLIC, 'pages/health.js'), 'utf8');
+  assert.match(health, /__loading health-loading" role="status"/);
+  assert.match(health, /health-cycle__loading health-loading"/);
+});

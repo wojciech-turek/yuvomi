@@ -5163,8 +5163,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
   container.replaceChildren();
   container.insertAdjacentHTML('beforeend', `
     <div class="shopping-page page-measure--narrow">
-      <div class="list-tabs-bar" id="list-tabs-bar">
-      </div>
+      <div class="list-tabs-bar" id="list-tabs-bar"></div>
       <div id="list-content" style="flex:1;display:flex;flex-direction:column">
         ${loadingSpinnerHtml()}
       </div>

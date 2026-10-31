@@ -7,7 +7,7 @@
  * Abhaengigkeiten: keine (gibt reine HTML-Strings zurueck; Caller fuegen via
  *        insertAdjacentHTML/replaceChildren ein).
  *
- * Der Ring (.page-loading, layout.css) erscheint erst nach 300 ms: ein
+ * Der Ring (.page-loading, layout.css) erscheint erst nach --duration-2xl (400 ms): ein
  * schneller Aufbau zeigt gar nichts. Der Wrapper traegt aria-hidden="true";
  * die Lade-Semantik (aria-busy) gehoert an den umgebenden Live-Region-Container
  * des Callers.

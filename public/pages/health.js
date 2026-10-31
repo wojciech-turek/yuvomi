@@ -7283,7 +7283,7 @@ function maybeMountFasting(activeRoute) {
  */
 function areaLoadingMarkup(area, shape) {
   const skeleton = shape === 'chart' ? renderSkeletonChart({ charts: 2 }) : renderSkeletonList({ rows: 3, lines: 2 });
-  return `<div class="health-${area}__loading" role="status">
+  return `<div class="health-${area}__loading health-loading" role="status">
     <span class="sr-only">${esc(t('common.loading'))}</span>
     ${skeleton}
   </div>`;
@@ -7295,7 +7295,7 @@ function cycleSkeletonMarkup() {
 
 async function mountCycle() {
   cycle.root.replaceChildren();
-  cycle.root.insertAdjacentHTML('beforeend', `<div class="health-cycle__loading" role="status">
+  cycle.root.insertAdjacentHTML('beforeend', `<div class="health-cycle__loading health-loading" role="status">
     <span class="sr-only">${esc(t('common.loading'))}</span>
     ${cycleSkeletonMarkup()}
   </div>`);

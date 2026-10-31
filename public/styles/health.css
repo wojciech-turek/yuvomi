@@ -234,7 +234,10 @@
   display: flex;
 }
 
-.health-priority-skeleton .page-loading {
+.health-priority-skeleton .page-loading,
+/* Ein Bereich lädt innerhalb der Seite: kleiner Ring, nicht die 40vh der
+ * Ganzseiten-Ladung - sonst springt die Seite, wenn der kürzere Inhalt kommt. */
+.health-loading .page-loading {
   min-block-size: 8rem;
 }
 

@@ -263,7 +263,7 @@ export function renderTodayPage(state) {
     </div>`;
 }
 
-/** The page before the data: one quiet spinner (appears after 300 ms). */
+/** The page before the data: one quiet spinner (fades in after 400 ms). */
 export function renderTodaySkeleton() {
   return loadingSpinnerHtml();
 }
