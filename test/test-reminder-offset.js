@@ -173,3 +173,41 @@ test('Oeffnen und Speichern ohne Anfassen laesst die Erinnerung stehen (der Kern
   }
   assert.equal(reminder.remind_at, '2026-09-25T06:00:00', 'der Zeitpunkt wandert nicht');
 });
+
+// --------------------------------------------------------------------------
+// Feste Uhrzeit statt Vorlauf (Quick-Add, Task 6): Datum + Uhrzeit in der
+// Haushaltszone <-> naiv-UTC `remind_at`. Prozess in UTC+5, Haushalt in
+// Warschau - ein Rechenfehler ueber die Geraetezone faellt so auf.
+// --------------------------------------------------------------------------
+const { setDisplayTimeZone } = await import('../public/utils/timezone.js');
+const { remindAtFromWallTime, wallTimeFromRemindAt } = await import('../public/utils/reminder-offset.js');
+
+function inWarsaw(fn) {
+  setDisplayTimeZone('Europe/Warsaw');
+  try { return fn(); } finally { setDisplayTimeZone(null); }
+}
+
+test('remindAtFromWallTime: Wanduhrzeit des Haushalts als naiv-UTC (Winter- und Sommerzeit)', () => inWarsaw(() => {
+  assert.equal(remindAtFromWallTime('2026-10-30', '07:30'), '2026-10-30T06:30:00'); // CET nach dem 25.10.
+  assert.equal(remindAtFromWallTime('2026-07-01', '07:30'), '2026-07-01T05:30:00'); // CEST
+}));
+
+test('remindAtFromWallTime: unlesbare Eingaben ergeben null', () => inWarsaw(() => {
+  assert.equal(remindAtFromWallTime('2026-10-30', '25:00'), null);
+  assert.equal(remindAtFromWallTime('2026-10-30', ''), null);
+  assert.equal(remindAtFromWallTime('', '07:30'), null);
+  assert.equal(remindAtFromWallTime('30.10.2026', '07:30'), null);
+  assert.equal(remindAtFromWallTime(undefined, undefined), null);
+}));
+
+test('wallTimeFromRemindAt: die Gegenrichtung, auch ueber Mitternacht', () => inWarsaw(() => {
+  assert.deepEqual(wallTimeFromRemindAt('2026-10-30T06:30:00'), { date: '2026-10-30', time: '07:30' });
+  assert.deepEqual(wallTimeFromRemindAt('2026-10-30T23:30:00'), { date: '2026-10-31', time: '00:30' });
+  assert.equal(wallTimeFromRemindAt(''), null);
+  assert.equal(wallTimeFromRemindAt('kaputt'), null);
+}));
+
+test('Roundtrip ueber Datum und Uhrzeit bleibt stehen', () => inWarsaw(() => {
+  const at = remindAtFromWallTime('2026-10-25', '08:15');
+  assert.deepEqual(wallTimeFromRemindAt(at), { date: '2026-10-25', time: '08:15' });
+}));

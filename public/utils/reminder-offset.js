@@ -12,7 +12,7 @@
  * `dueInstantMs` in einen Zeitpunkt umgerechnet - nicht per `new Date()`, das
  * die Ziffern in der Zone des Geraets liest (#1522).
  */
-import { wallTimeToInstantMs } from './timezone.js';
+import { wallTimeToInstantMs, zonedFields } from './timezone.js';
 
 const TZ_SUFFIX = /[zZ]|[+-]\d{2}:?\d{2}$/;
 
@@ -153,4 +153,41 @@ export function remindAtFromPreset(preset, {
   const due = dueInstantMs(dueDate, dueTime);
   if (due === null) return null;
   return new Date(due - offsetMs).toISOString().slice(0, 19);
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/**
+ * Eine feste Erinnerung: Datum + Uhrzeit als Wanduhr der Haushaltszone, abgelegt
+ * als naiv-UTC wie `remind_at` (siehe `parseRemindAtAsUtc`).
+ * @param {string} date `YYYY-MM-DD`
+ * @param {string} time `HH:MM`
+ * @returns {string|null} `YYYY-MM-DDTHH:MM:SS` in UTC, null bei unlesbarer Eingabe
+ */
+export function remindAtFromWallTime(date, time) {
+  if (!DATE_RE.test(String(date ?? '')) || !TIME_RE.test(String(time ?? ''))) return null;
+  const ms = wallTimeToInstantMs(`${date}T${time}:00`);
+  if (ms === null || Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19);
+}
+
+/**
+ * Die Gegenrichtung: ein gespeichertes `remind_at` als Datum + Uhrzeit der
+ * Haushaltszone.
+ * @param {string} remindAt naiv-UTC (oder mit Zonen-Suffix)
+ * @returns {{date: string, time: string}|null}
+ */
+export function wallTimeFromRemindAt(remindAt) {
+  if (!remindAt) return null;
+  const when = parseRemindAtAsUtc(String(remindAt));
+  if (Number.isNaN(when.getTime())) return null;
+  const f = zonedFields(when);
+  if (!f) return null;
+  return {
+    date: `${f.year}-${pad2(f.month)}-${pad2(f.day)}`,
+    time: `${pad2(f.hour)}:${pad2(f.minute)}`,
+  };
 }
