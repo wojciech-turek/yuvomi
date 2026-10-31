@@ -29,7 +29,7 @@ import { amountPlaceholder, formatMoney, currencyFractionDigits, centsToAmountIn
 import { startLiveFeed } from '/utils/live-feed.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
-import { parseQuickEntry, rememberShoppingList } from '/utils/shopping-entry.js';
+import { parseQuickEntry, rememberShoppingList, guessAisle, frequentChipsHtml, quickItemBody } from '/utils/shopping-entry.js';
 import { loadingSpinnerHtml } from '/utils/skeleton.js';
 
 
@@ -2136,9 +2136,7 @@ function renderFrequentChips(container) {
   row.querySelectorAll('.shopping-addbar__chip').forEach((chip) => chip.remove());
   const items = visibleFrequent();
   row.hidden = !items.length;
-  row.insertAdjacentHTML('beforeend', items.map((i) => `
-    <button type="button" class="shopping-addbar__chip" data-action="add-frequent" data-name="${esc(i.name)}"
-            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">${esc(i.name)}</button>`).join(''));
+  row.insertAdjacentHTML('beforeend', frequentChipsHtml(items, 'shopping-addbar__chip'));
 }
 
 async function loadFrequent(container) {
@@ -2190,13 +2188,7 @@ async function addQuickItem(container, { name, quantity, category, source, chose
     return 'revived';
   }
   const known = category && state.categories.some((c) => c.name === category);
-  const data = await api.post(`/shopping/${state.activeListId}/items`, {
-    name,
-    quantity,
-    category: known ? category : DEFAULT_CATEGORY_NAME,
-    category_source: known ? source : 'default',
-    position: 'top',
-  });
+  const data = await api.post(`/shopping/${state.activeListId}/items`, quickItemBody({ name, quantity, category, source, known }));
   acknowledgeOwnChange(data);
   state.items.push(data.data);
   if (data.data?.id != null) markFreshItem(container, data.data.id);
@@ -2444,9 +2436,8 @@ function wireQuickAdd(container) {
     guessTimer = setTimeout(async () => {
       const seq = ++guessSeq;
       try {
-        const res = await api.get(`/shopping/category-guess?name=${encodeURIComponent(typed)}`);
+        const cat = await guessAisle(typed);
         if (seq !== guessSeq || quickAddCategoryChosen || quickAddFromSuggestion || parseQuickEntry(guessInput.value).name !== typed) return;
-        const cat = res.data?.category;
         if (cat && [...guessSelect.options].some((o) => o.value === cat)) {
           guessSelect.value = cat;
           quickAddCategoryGuessed = true;

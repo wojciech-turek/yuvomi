@@ -1,33 +1,29 @@
 /**
  * Modul: Einkaufsblatt (Quick-Add, 2026-10-29)
- * Zweck: Die Zakupy-Leiste als kleines Blatt ueber der Uebersicht: EIN Feld
- *        ("2 mleka" - die Menge steht in der Zeile), "Często" darueber, ein
- *        Knopf (die Auswahl der Liste steht darunter, damit das Feld den Erstfokus bekommt). Es legt auf der Liste an, die zuletzt auf Zakupy offen war
- *        (je Geraet); der Listenname steht im Kopf, eine Auswahl gibt es nur
- *        bei mehr als einer Liste. Nach jedem Anlegen bleibt der Fokus im Feld,
- *        damit mehrere Artikel hintereinander gehen.
+ * Zweck: Die Zakupy-Leiste als kleines Blatt ueber der Uebersicht. Es hat ein
+ *        Feld, in dem die Menge mitsteht ("2 mleka"), die Chips von "Często"
+ *        und einen Knopf. Angelegt wird auf der Liste, die zuletzt auf Zakupy
+ *        offen war (je Geraet gemerkt). Der Listenname steht im Kopf; eine
+ *        Auswahl gibt es nur, wenn mehr als eine Liste existiert. Sie steht
+ *        unter dem Feld, damit das Feld den Erstfokus bekommt. Nach jedem
+ *        Anlegen bleibt der Fokus im Feld, so gehen mehrere Artikel
+ *        hintereinander.
  *
- *        Die Stile liegen in layout.css (immer geladen): shopping.css gilt
- *        ausserhalb von /shopping nicht.
+ *        Lesen der Zeile, Gangvermutung, Chips und Anfragekoerper kommen aus
+ *        utils/shopping-entry.js, dieselben wie auf Zakupy. Die Stile liegen in
+ *        layout.css, weil shopping.css ausserhalb von /shopping nicht gilt.
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { openModal } from '/components/modal.js';
 import { mayWritePath } from '/utils/module-access.js';
-import { DEFAULT_CATEGORY_NAME } from '/utils/shopping-categories.js';
 import { errorSentence } from '/utils/friendly-error.js';
-import { parseQuickEntry, guessAisle, pickShoppingList } from '/utils/shopping-entry.js';
+import { parseQuickEntry, guessAisle, pickShoppingList, frequentChipsHtml, quickItemBody } from '/utils/shopping-entry.js';
 
 const FREQUENT_CHIPS = 8;
 const GUESS_DELAY_MS = 450;
 const GUESS_MIN_CHARS = 3;
-
-function chipsHtml(items) {
-  return items.map((i) => `
-    <button type="button" class="shopping-sheet__chip" data-action="add-frequent" data-name="${esc(i.name)}"
-            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">${esc(i.name)}</button>`).join('');
-}
 
 function sheetHtml(lists, list, frequent) {
   const switcher = lists.length > 1 ? `
@@ -37,7 +33,7 @@ function sheetHtml(lists, list, frequent) {
   return `
     <div class="shopping-sheet">
       <div class="shopping-sheet__frequent" id="shopping-sheet-frequent" role="group"
-           aria-label="${esc(t('shopping.frequentLabel'))}" ${frequent.length ? '' : 'hidden'}>${chipsHtml(frequent)}</div>
+           aria-label="${esc(t('shopping.frequentLabel'))}" ${frequent.length ? '' : 'hidden'}>${frequentChipsHtml(frequent, 'shopping-sheet__chip')}</div>
       <form class="shopping-sheet__form" id="shopping-sheet-form" novalidate autocomplete="off">
         <input class="form-input shopping-sheet__input" type="text" id="shopping-sheet-input" enterkeyhint="done"
                placeholder="${esc(t('shopping.itemNamePlaceholder'))}" aria-label="${esc(t('shopping.itemNameLabel'))}"
@@ -51,10 +47,12 @@ function sheetHtml(lists, list, frequent) {
 /**
  * Das Blatt "Artikel hinzufuegen" von ausserhalb der Seite oeffnen.
  *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ * Die Uebersicht MUSS `user` mitgeben: die gemerkte Liste haengt an seiner id.
+ *
+ * @param {{user: object, onChanged?: () => (void|Promise<void>)}} [opts]
  * @returns {Promise<boolean>} false bei nur lesendem Zugriff oder ohne Liste
  */
-export async function openShoppingAddFrom({ user = null, onChanged = () => {} } = {}) {
+export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
   if (!mayWritePath('/shopping')) return false;
   let lists = [];
   let frequent = [];
@@ -69,6 +67,7 @@ export async function openShoppingAddFrom({ user = null, onChanged = () => {} } 
     window.yuvomi?.showToast(errorSentence(err), 'danger');
     return false;
   }
+  if (user?.id == null) console.warn('openShoppingAddFrom: `user` fehlt, die gemerkte Liste geht verloren');
   const first = pickShoppingList(lists, user?.id);
   if (!first) {
     window.yuvomi?.showToast(t('shopping.noLists'), 'info');
@@ -105,13 +104,7 @@ export async function openShoppingAddFrom({ user = null, onChanged = () => {} } 
       });
 
       const post = async ({ name, quantity = null, category = null, source = 'default' }) => {
-        await api.post(`/shopping/${list.id}/items`, {
-          name,
-          quantity,
-          category: category ?? DEFAULT_CATEGORY_NAME,
-          category_source: category ? source : 'default',
-          position: 'top',
-        });
+        await api.post(`/shopping/${list.id}/items`, quickItemBody({ name, quantity, category, source }));
         added += 1;
       };
 
@@ -156,7 +149,8 @@ export async function openShoppingAddFrom({ user = null, onChanged = () => {} } 
 
       panel.querySelector('#shopping-sheet-list')?.addEventListener('change', (e) => {
         list = lists.find((l) => String(l.id) === e.target.value) ?? list;
-        const title = document.getElementById('shared-modal-title');
+        // Der Kopf gehoert zum Dialog dieses Blatts: von hier aus nach oben suchen.
+        const title = panel.closest?.('.modal-overlay')?.querySelector('.modal-panel__title');
         if (title) title.textContent = list.name;
         input.focus();
       });

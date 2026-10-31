@@ -8,6 +8,8 @@
 import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { parseCapture } from '/utils/capture-parse.js';
+import { esc } from '/utils/html.js';
+import { DEFAULT_CATEGORY_NAME } from '/utils/shopping-categories.js';
 
 const LAST_LIST_KEY = 'yuvomi.shopping.lastList.';
 
@@ -34,6 +36,30 @@ export async function guessAisle(name, { get = (path) => api.get(path) } = {}) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Die Chips von "Często" (ein Knopf je Artikel). Zakupy und das Blatt der
+ * Uebersicht zeichnen sie hiermit; nur die CSS-Klasse unterscheidet sich.
+ */
+export function frequentChipsHtml(items, chipClass) {
+  return items.map((i) => `
+    <button type="button" class="${chipClass}" data-action="add-frequent" data-name="${esc(i.name)}"
+            aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">${esc(i.name)}</button>`).join('');
+}
+
+/**
+ * Der Koerper von POST /shopping/:listId/items fuer die Eingabezeile. `known`:
+ * die Kategorie ist der Liste der Gaenge bekannt; sonst gilt der Standard.
+ */
+export function quickItemBody({ name, quantity = null, category = null, source = 'default', known = !!category }) {
+  return {
+    name,
+    quantity,
+    category: known && category ? category : DEFAULT_CATEGORY_NAME,
+    category_source: known && category ? source : 'default',
+    position: 'top',
+  };
 }
 
 /**

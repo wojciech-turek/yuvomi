@@ -194,3 +194,16 @@ test('an empty field posts nothing; a "Często" chip adds its item', async () =>
     assert.equal(post.body.position, 'top');
   } finally { s.done(); }
 });
+
+test('a caller without a user gets a console warning and the first list', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  const warns = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => warns.push(a);
+  try {
+    assert.equal(await openShoppingAddFrom({}), true);
+    assert.equal(s.opened[0].title, 'Biedronka');
+    assert.equal(warns.length, 1);
+  } finally { console.warn = realWarn; s.done(); }
+});
