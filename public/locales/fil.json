@@ -6529,7 +6529,8 @@
         "keyMissing": "wala",
         "keyFromServer": "mula sa server",
         "keyRemove": "Alisin ang key",
-        "capChange": "Baguhin ang limitasyon"
+        "capChange": "Baguhin ang limitasyon",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

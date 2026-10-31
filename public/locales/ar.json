@@ -6963,7 +6963,8 @@
         "capChange": "تغيير الحد",
         "memoryCount_two": "الجمل: {{count}}",
         "memoryCount_few": "الجمل: {{count}}",
-        "memoryCount_many": "الجمل: {{count}}"
+        "memoryCount_many": "الجمل: {{count}}",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

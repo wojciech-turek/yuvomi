@@ -6683,7 +6683,8 @@
         "keyFromServer": "ze serveru",
         "keyRemove": "Odebrat klíč",
         "capChange": "Změnit limit",
-        "memoryCount_few": "{{count}} věty"
+        "memoryCount_few": "{{count}} věty",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

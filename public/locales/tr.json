@@ -6529,7 +6529,8 @@
         "keyMissing": "yok",
         "keyFromServer": "sunucudan",
         "keyRemove": "Anahtarı kaldır",
-        "capChange": "Limiti değiştir"
+        "capChange": "Limiti değiştir",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

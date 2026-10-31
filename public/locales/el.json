@@ -6529,7 +6529,8 @@
         "keyMissing": "κανένα",
         "keyFromServer": "από τον διακομιστή",
         "keyRemove": "Αφαίρεση κλειδιού",
-        "capChange": "Αλλαγή ορίου"
+        "capChange": "Αλλαγή ορίου",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

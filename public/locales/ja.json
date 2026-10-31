@@ -6529,7 +6529,8 @@
         "keyMissing": "なし",
         "keyFromServer": "サーバーから",
         "keyRemove": "キーを削除",
-        "capChange": "上限を変更"
+        "capChange": "上限を変更",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

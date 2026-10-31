@@ -19,6 +19,7 @@ export const FEATURES = Object.freeze([
   'meal_ideas',       // ideas for empty meal slots
   'nudges',           // a daily heads-up when something matters
   'questions',        // an occasional question that teaches the memory
+  'task_dictation',   // a spoken sentence becomes the fields of a new task
 ]);
 
 export const SMART_MODELS = Object.freeze([MODELS.smart, MODELS.fast]);

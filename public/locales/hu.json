@@ -6529,7 +6529,8 @@
         "keyMissing": "nincs",
         "keyFromServer": "a szerverről",
         "keyRemove": "Kulcs eltávolítása",
-        "capChange": "Limit módosítása"
+        "capChange": "Limit módosítása",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

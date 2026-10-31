@@ -6529,7 +6529,8 @@
         "keyMissing": "ندارد",
         "keyFromServer": "از سرور",
         "keyRemove": "حذف کلید",
-        "capChange": "تغییر سقف"
+        "capChange": "تغییر سقف",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

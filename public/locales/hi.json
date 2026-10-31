@@ -6529,7 +6529,8 @@
         "keyMissing": "कोई नहीं",
         "keyFromServer": "सर्वर से",
         "keyRemove": "कुंजी हटाएँ",
-        "capChange": "सीमा बदलें"
+        "capChange": "सीमा बदलें",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

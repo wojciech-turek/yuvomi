@@ -6811,7 +6811,8 @@
         "keyMissing": "brak",
         "keyFromServer": "z serwera",
         "keyRemove": "Usuń klucz",
-        "capChange": "Zmień limit"
+        "capChange": "Zmień limit",
+        "featureTaskDictation": "Zadania dyktowane"
     },
     "today": {
         "addedToast": "Dopisane do Zakupów: {{n}}",

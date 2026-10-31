@@ -6529,7 +6529,8 @@
         "keyMissing": "无",
         "keyFromServer": "来自服务器",
         "keyRemove": "删除密钥",
-        "capChange": "更改上限"
+        "capChange": "更改上限",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

@@ -6531,7 +6531,8 @@
         "keyMissing": "nenhuma",
         "keyFromServer": "do servidor",
         "keyRemove": "Remover a chave",
-        "capChange": "Alterar o limite"
+        "capChange": "Alterar o limite",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

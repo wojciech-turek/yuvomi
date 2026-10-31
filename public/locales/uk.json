@@ -6811,7 +6811,8 @@
         "keyRemove": "Видалити ключ",
         "capChange": "Змінити ліміт",
         "memoryCount_few": "{{count}} речення",
-        "memoryCount_many": "{{count}} речень"
+        "memoryCount_many": "{{count}} речень",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

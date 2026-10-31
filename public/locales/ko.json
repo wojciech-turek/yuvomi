@@ -6529,7 +6529,8 @@
         "keyMissing": "없음",
         "keyFromServer": "서버에서 제공",
         "keyRemove": "키 삭제",
-        "capChange": "한도 변경"
+        "capChange": "한도 변경",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

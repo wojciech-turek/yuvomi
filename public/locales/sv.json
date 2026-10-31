@@ -6529,7 +6529,8 @@
         "keyMissing": "ingen",
         "keyFromServer": "från servern",
         "keyRemove": "Ta bort nyckeln",
-        "capChange": "Ändra gränsen"
+        "capChange": "Ändra gränsen",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

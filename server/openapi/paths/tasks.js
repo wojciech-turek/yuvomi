@@ -35,6 +35,9 @@ export function tasksPaths() {
       }),
       post: op({ summary: 'Create task', tag: 'Tasks', stateChanging: true, requestBody: jsonBody(null), description: 'Body accepts `locked: true` to close the task definition to everyone but its creator and administrators (#830). A subtask under a locked parent inherits the lock, and adding one requires the same rights. `status` may be set on creation (#807); it runs through the same transition handling as PUT and PATCH, so creating a task as `done` writes its completion entry. `null`, an empty string and `archived` all fall back to `open` - filing a task away is a separate axis and not something a creation can do.' }),
     },
+    '/api/v1/tasks/parse': {
+      post: op({ summary: 'Turn one dictated sentence into task fields (AI)', tag: 'Tasks', stateChanging: true, requestBody: jsonBody(null), description: 'Body: { text } with 1 to 500 characters after trimming (else 400). Sends the sentence to Haiku with the household date, weekday, time and zone and the member names (AI feature `task_dictation`). Saves nothing: the client prefills the New Task sheet and the person checks it. Returns `{ data: { source: \'ai\', fields } }` with `fields` = { title, due_date, due_time, remind_date, remind_time, assigned_to } (dates `YYYY-MM-DD`, times `HH:MM`, unclear parts null, `assigned_to` member ids), or, when the AI cannot answer (switched off, no key, monthly limit, network), `{ data: { source: null, unavailable: code } }` with status 200. A paired wall display is refused with 403 when ticking on the wall is switched off.' }),
+    },
     '/api/v1/tasks/meta/options': { get: op({ summary: 'Get task metadata', tag: 'Tasks' }) },
     '/api/v1/tasks/completions': {
       get: op({

@@ -30,6 +30,8 @@ import { displayActingPerson, isDisplayRequest } from '../services/display-actin
 import { refuseWallWrite } from '../services/wall-settings.js';
 import { pushService } from '../services/push.js';
 import { todayKey } from '../utils/timezone.js';
+import { AiError } from '../ai/index.js';
+import { parseTaskSentence } from '../services/task-dictation.js';
 import { runExternalJob } from '../utils/restore-state.js';
 import {
   allTags, applyTagChanges, loadTags, loadTagsFor, normalizeTags,
@@ -2434,6 +2436,32 @@ router.delete('/:id/comments/:commentId', (req, res) => {
     res.json({ data: { id: found.row.id } });
   } catch (err) {
     log.error('DELETE /:id/comments/:commentId error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
+// POST /api/v1/tasks/parse (fork, 2026-10-29)
+// Body: { text: string (1-500 after trim) }
+// Dictation: one spoken sentence (already text, the iPhone does the speech)
+// becomes the fields of the New Task sheet. Nothing is saved here; the person
+// checks the form and adds the task. An AI failure (switch, key, limit,
+// network) answers 200 with `unavailable`, like the meal suggestions: the
+// sheet simply stays empty. The sentence is private and is not logged.
+// Response: { data: { source: 'ai', fields } } | { data: { source: null, unavailable } }
+// --------------------------------------------------------
+router.post('/parse', async (req, res) => {
+  if (refuseWallWrite(req, res, { db: db.get() })) return;
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text || text.length > 500) {
+    return res.status(400).json({ error: 'Text must be 1 to 500 characters.', code: 400 });
+  }
+  try {
+    const fields = await parseTaskSentence({ text, userId: req.authUserId || req.session?.userId });
+    res.json({ data: { source: 'ai', fields } });
+  } catch (err) {
+    if (err instanceof AiError) return res.json({ data: { source: null, unavailable: err.code } });
+    log.error('POST /parse error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }
 });

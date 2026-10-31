@@ -6529,7 +6529,8 @@
         "keyMissing": "none",
         "keyFromServer": "from the server",
         "keyRemove": "Remove key",
-        "capChange": "Change the limit"
+        "capChange": "Change the limit",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",

@@ -25,7 +25,7 @@ import {
   createInlineError, createRetryState, bindInstantSwitch, taflaRowHtml, taflaGroupHtml, taflaSwitchHtml,
 } from '/settings/components.js';
 
-const FEATURES = ['shopping_smart', 'meal_ingredients', 'pantry_photo', 'meal_ideas', 'nudges', 'questions'];
+const FEATURES = ['shopping_smart', 'meal_ingredients', 'pantry_photo', 'meal_ideas', 'nudges', 'questions', 'task_dictation'];
 const TOPICS = ['household', 'meals', 'shopping'];
 const FEATURE_GLYPH = {
   shopping_smart: 'shopping-cart',
@@ -34,6 +34,7 @@ const FEATURE_GLYPH = {
   meal_ideas: 'lightbulb',
   nudges: 'bell',
   questions: 'message-circle',
+  task_dictation: 'mic',
 };
 
 function toast(message, tone = 'default') {
@@ -59,6 +60,7 @@ function featureLabel(f) {
     meal_ideas: t('ai.featureMealIdeas'),
     nudges: t('ai.featureNudges'),
     questions: t('ai.featureQuestions'),
+    task_dictation: t('ai.featureTaskDictation'),
     'admin-test': t('ai.test'),
   }[f] ?? f;
 }

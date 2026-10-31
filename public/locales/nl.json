@@ -6529,7 +6529,8 @@
         "keyMissing": "geen",
         "keyFromServer": "van de server",
         "keyRemove": "Sleutel verwijderen",
-        "capChange": "Limiet wijzigen"
+        "capChange": "Limiet wijzigen",
+        "featureTaskDictation": "Dictated tasks"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
