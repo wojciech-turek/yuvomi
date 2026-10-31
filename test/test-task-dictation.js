@@ -164,6 +164,8 @@ test('the prompt carries the household day (not the UTC day), weekday, time, zon
   assert.match(prompt, /Mariola/);
   assert.doesNotMatch(prompt, /Kuchnia/);
   assert.match(sent[0].messages[0].content[0].text, /Zadzwoń do lekarza/);
+  assert.match(sent[0].system, /Przypomnij mi jutro żeby zadzwonić do lekarza" \(today 2026-10-30\) -> .*remind_date "2026-10-31", remind_time "09:00"/);
+  assert.match(sent[0].system, /day but no hour gets remind_time "09:00"/);
   for (const example of ['Dodaj zadanie ubezpiecz samochód', 'Wyrzuć śmieci', 'ustaw przypomnienie na jutro 7:30']) {
     assert.ok(sent[0].system.includes(example), `worked example: ${example}`);
   }
