@@ -32,6 +32,7 @@ import { setDisplayTimeZone, zonedDateKey } from '/utils/timezone.js';
 import { rememberZonePrefs, forgetZonePrefs, noteZoneDecision } from '/utils/household-zone-hint.js';
 import { isKitchenRoute, getLastKitchenRoute } from '/utils/kitchen-tabs.js';
 import { swapPage } from '/utils/view-transition.js';
+import { createPageStyles } from '/utils/page-style.js';
 import { moduleAccentToken, moduleAccentVar } from '/utils/module-accent.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
 import { getLastHealthRoute, HEALTH_ROUTES } from '/utils/health-tabs.js';
@@ -248,53 +249,23 @@ function updateThemeColorForRoute(route) {
 }
 
 // --------------------------------------------------------
-// Dynamisches Stylesheet-Loading pro Seitenmodul
+// Seitenblaetter: eines je Seitenmodul, geladen bleibt jedes (utils/page-style.js)
+//
+// Bis Schnell-Erfassen (Aufgabe 3) legte jeder Wechsel einen neuen <link> an
+// und warf den alten weg - auch zurueck auf einen eben besuchten Tab wartete
+// der Tausch eine Rundreise ab (gemessen 210 ms bei Fast 4G). Jetzt bleibt
+// jedes Blatt im Dokument, und ein Wechsel schaltet nur um, welches gilt.
 // --------------------------------------------------------
-let activePageStyle = null;
+const pageStyles = createPageStyles();
+
+/** Das Seitenblatt einer Route, oder null. Dieselbe Regel wie loadPageStyle(). */
+function pageStyleHref(route) {
+  return route?.style || (route?.module && !route.thirdPartyModule ? `/styles/${route.module}.css` : null);
+}
 
 function loadPageStyle(moduleName, routeStyle = null) {
   if (!moduleName && !routeStyle) return { ready: Promise.resolve(), cleanup: () => {}, abandon: () => {} };
-  const href = routeStyle || `/styles/${moduleName}.css`;
-  if (activePageStyle?.getAttribute('href') === href) {
-    return { ready: Promise.resolve(), cleanup: () => {}, abandon: () => {} };
-  }
-
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = href;
-
-  const oldLink = activePageStyle;
-
-  const ready = new Promise((resolve) => {
-    link.onload = resolve;
-    link.onerror = resolve;
-  });
-
-  document.head.appendChild(link);
-  activePageStyle = link;
-
-  return {
-    ready,
-    cleanup: () => { if (oldLink) oldLink.remove(); },
-    // Die Seite kommt doch nicht (ueberholt): ihr Blatt geht, das alte gilt weiter.
-    abandon: () => {
-      link.remove();
-      if (activePageStyle === link) activePageStyle = oldLink;
-    },
-  };
-}
-
-/**
- * Loest auf, sobald keine Navigation mehr laeuft - hoechstens nach 2 s, damit
- * ein haengender Seitenaufbau nichts festhaelt. Fuer den nachgereichten Tipp
- * aus utils/view-transition.js.
- */
-function navigationIdle() {
-  const until = Date.now() + 2000;
-  return new Promise((resolve) => {
-    const check = () => (!routerState.isNavigating || Date.now() > until ? resolve() : setTimeout(check, 16));
-    check();
-  });
+  return pageStyles.load(routeStyle || `/styles/${moduleName}.css`);
 }
 
 /**
@@ -416,12 +387,23 @@ async function importPage(pagePath) {
 // vorwärmen. Ohne Bundler löst jeder navigate() erst beim Klick den ES-Modul-
 // Import-Wasserfall (Seite + transitive Imports) und einen frischen CSS-Fetch
 // aus — der spürbare Verzug vor dem Skeleton. `modulepreload` lädt und parst
-// den kompletten Modulgraphen vorab (ein späteres import() löst dann sofort aus
-// dem Cache auf), `prefetch` wärmt das Stylesheet ohne es anzuwenden.
+// das Seitenmodul vorab (ein späteres import() findet es in der Modul-Map);
+// Seitenblaetter legt pageStyles.warm() ruhend an (utils/page-style.js) - sie
+// bleiben danach im Dokument, ein Wechsel dorthin wartet nicht mehr.
 // Reine Resource-Hints: kein Modul wird vorzeitig ausgeführt.
 // --------------------------------------------------------
 const _prefetchedPages = new Set();
-const _prefetchedStyles = new Set();
+const _preloadedStyles = new Set();
+
+/** modulepreload fuer das Seitenmodul einer Route - einmal je Modul. */
+function preloadPageModule(route) {
+  if (!route?.page || moduleCache.has(route.page) || _prefetchedPages.has(route.page)) return;
+  _prefetchedPages.add(route.page);
+  const link = document.createElement('link');
+  link.rel = 'modulepreload';
+  link.href = route.page;
+  document.head.appendChild(link);
+}
 
 function prefetchRoute(path, { now = false } = {}) {
   if (!path) return;
@@ -432,41 +414,61 @@ function prefetchRoute(path, { now = false } = {}) {
   const route = allRoutes().find((r) => r.path === path);
   if (!route) return;
 
-  if (route.page && !moduleCache.has(route.page) && !_prefetchedPages.has(route.page)) {
-    _prefetchedPages.add(route.page);
-    const link = document.createElement('link');
-    link.rel = 'modulepreload';
-    link.href = route.page;
-    document.head.appendChild(link);
-  }
+  preloadPageModule(route);
 
-  const cssHref = route.style || (route.module && !route.thirdPartyModule ? `/styles/${route.module}.css` : null);
-  if (cssHref && !_prefetchedStyles.has(cssHref)) {
-    _prefetchedStyles.add(cssHref);
-    const link = document.createElement('link');
-    // Die Startroute braucht ihr Blatt SOFORT (Critique R19): `prefetch` legte
-    // es nur in den HTTP-Cache, und weil Blaetter mit `no-cache` ausgeliefert
-    // werden, holte loadPageStyle() es gleich danach ein zweites Mal ueber die
-    // Leitung (gemessen: dashboard.css zweimal, 57 KB und eine Rundreise).
-    // `preload` reicht die Antwort direkt an den <link rel="stylesheet"> weiter.
-    link.rel = now ? 'preload' : 'prefetch';
-    link.as = 'style';
-    link.href = cssHref;
-    document.head.appendChild(link);
+  const cssHref = pageStyleHref(route);
+  if (!cssHref) return;
+  if (!now) {
+    // Absicht (Druck, Hover): das Blatt ruhend anlegen, der Tipp findet es vor.
+    pageStyles.warm([cssHref]);
+    return;
   }
+  if (_preloadedStyles.has(cssHref)) return;
+  _preloadedStyles.add(cssHref);
+  const link = document.createElement('link');
+  // Die Startroute braucht ihr Blatt SOFORT (Critique R19): `prefetch` legte
+  // es nur in den HTTP-Cache, und weil Blaetter mit `no-cache` ausgeliefert
+  // werden, holte loadPageStyle() es gleich danach ein zweites Mal ueber die
+  // Leitung (gemessen: dashboard.css zweimal, 57 KB und eine Rundreise).
+  // `preload` reicht die Antwort direkt an den <link rel="stylesheet"> weiter.
+  link.rel = 'preload';
+  link.as = 'style';
+  link.href = cssHref;
+  document.head.appendChild(link);
+}
+
+/**
+ * Die Seitenblaetter der Ziele, die die untere Leiste ZEIGT - aus der Leiste
+ * gelesen, nicht aus einer Liste: Favoriten, Gast und Wand fuehren jeweils
+ * andere. „Kuchnia" und „Więcej" sind Knoepfe ohne `data-route`; die Kueche
+ * fuehrt auf ihr zuletzt besuchtes Ziel (kitchenNavButtonEl).
+ */
+function bottomBarStyles() {
+  const paths = [...document.querySelectorAll('.nav-bottom [data-route]')].map((el) => prefetchPathOf(el.dataset));
+  if (document.querySelector('.nav-bottom #kitchen-btn')) paths.push(currentKitchenDestination()?.path);
+  if (document.querySelector('.nav-bottom #more-btn')) paths.push(MORE_PATH);
+  const routes = allRoutes();
+  return [...new Set(paths.map((path) => pageStyleHref(routes.find((r) => r.path === path))).filter(Boolean))];
 }
 
 // Nach dem Mount die sichtbaren Hauptnavigations-Ziele im Leerlauf vorwärmen,
-// damit schon die erste Navigation ohne Kaltstart-Wasserfall auskommt.
+// damit schon die erste Navigation ohne Kaltstart-Wasserfall auskommt:
+// die Seitenmodule aller Navigationsziele (modulepreload), die Blaetter nur
+// fuer die Ziele der unteren Leiste - die tippt man am Telefon, und jedes
+// gewaermte Blatt bleibt fuer die Sitzung im Dokument.
 // saveData respektiert Datensparmodus; das Dashboard (currentPath) wird
 // übersprungen, da bereits geladen.
 function warmPrimaryRoutes() {
   if (navigator.connection?.saveData) return;
   const run = () => {
+    // Nach angekuendigtem Update nichts mehr vorwaermen (#616, prefetchRoute).
+    if (shellStale) return;
     try {
+      const routes = allRoutes();
       navItems().forEach((item) => {
-        if (item.path && item.path !== routerState.currentPath) prefetchRoute(item.path);
+        if (item.path && item.path !== routerState.currentPath) preloadPageModule(routes.find((r) => r.path === item.path));
       });
+      pageStyles.warm(bottomBarStyles());
     } catch { /* Prefetch ist rein spekulativ — Fehler nie eskalieren. */ }
   };
   if ('requestIdleCallback' in window) {
@@ -1415,7 +1417,7 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
       // Ebene oder (Desktop) angedockt in ihrem Kopf, der mit dem Inhalt gleich
       // faellt: der naechste poppt dann nicht neu herein (holdFabAcrossSwap).
       holdFabAcrossSwap();
-      // Alter Inhalt ist jetzt weg - altes Stylesheet kann entfernt werden
+      // Alter Inhalt geht jetzt - sein Stylesheet ruht ab style.cleanup() unten
       pageWrapper = document.createElement('div');
       pageWrapper.className = 'page-transition';
       // Sofort sichtbar: das neue Bild der View Transition wird gleich nach
@@ -1508,10 +1510,12 @@ async function renderPage(route, previousPath = null, scrollTarget = 0, { signal
       content,
       from: previousPath,
       animate: shouldAnimate,
-      // Ein Tipp, der die Blende abbrach, wird nachgereicht (R19) - aber erst,
-      // wenn diese Navigation durch ist: navigate() verwirft jeden Aufruf,
-      // solange `isNavigating` steht.
-      whenSettled: navigationIdle,
+      // Ein Tipp, der die Blende abbrach, wird nachgereicht (R19) - gleich nach
+      // ihrem Ende. Laeuft diese Navigation dann noch (ihre Daten), stellt
+      // navigate() den Tipp an und bricht sie ab (R19, Nachlese 1b). Bis
+      // Schnell-Erfassen (Aufgabe 3) wartete das Nachreichen hier, bis sie
+      // durch war - bis zu 2 s fuer einen Tipp, der laengst gezaehlt war.
+      whenSettled: null,
     });
 
     // Mit View Transition macht der Browser die Blende - seit 2026-10-16 auch

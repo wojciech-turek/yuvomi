@@ -25,6 +25,7 @@ import { emptyStateHTML, mountLoadError, searchEmptyHTML } from '/utils/empty-st
 import '/components/category-manager.js';
 import '/components/tag-manager.js';
 import { findPageFab } from '/utils/fab.js';
+import { isStyleApplied } from '/utils/page-style.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { isSoloHousehold, hidesPrivacyControls } from '/utils/household.js';
 import { popoverMenuHtml, installPopoverMenus, pageToolsMenuHtml, pageToolsActionEl, syncPopoverMenuItem } from '/utils/popover-menu.js';
@@ -6380,9 +6381,13 @@ function mountTaskSplit(container, signal) {
 /**
  * Das Blatt dieses Moduls sicherstellen, wenn es von aussen geoeffnet wird.
  *
- * DER ROUTER HAELT GENAU EIN SEITEN-BLATT (loadPageStyle in router.js). Auf der
- * Uebersicht ist das dashboard.css, im Kalender calendar.css - tasks.css ist
- * dort nicht geladen. Die Leseansicht einer Aufgabe UND das Bearbeiten-Formular
+ * DER ROUTER LAESST GENAU EIN SEITEN-BLATT GELTEN (loadPageStyle in router.js).
+ * Auf der Uebersicht ist das dashboard.css, im Kalender calendar.css - tasks.css
+ * gilt dort nicht. Es kann trotzdem im Dokument stehen: seit Schnell-Erfassen
+ * (Aufgabe 3) bleiben besuchte und gewaermte Seitenblaetter geladen und ruhen
+ * (utils/page-style.js), und ein ruhendes Blatt steht auch in
+ * `document.styleSheets`. Gefragt wird deshalb, ob es GILT (isStyleApplied).
+ * Die Leseansicht einer Aufgabe UND das Bearbeiten-Formular
  * holen ihr Aussehen aber von dort: Kommentare, Dokument-Chips,
  * Bildvorschauen, Etiketten, Prioritaets-Abzeichen, der Serienverlauf, und im
  * Formular die Tag-Zeile und die Feldhinweise. Ohne dieses Blatt erscheint das
@@ -6403,8 +6408,8 @@ function mountTaskSplit(container, signal) {
  */
 function ensureTaskStyles() {
   const href = '/styles/tasks.css';
-  // Auch das Seiten-Blatt des Routers zaehlt: steht man auf /tasks, ist es da.
-  if ([...document.styleSheets].some((sheet) => (sheet.href ?? '').endsWith(href))) return Promise.resolve();
+  // Auch das Seiten-Blatt des Routers zaehlt: steht man auf /tasks, gilt es.
+  if (isStyleApplied(href)) return Promise.resolve();
   const vorhanden = document.querySelector(`link[data-task-styles][href="${href}"]`);
   if (vorhanden) return vorhanden.dataset.ready === '1'
     ? Promise.resolve()

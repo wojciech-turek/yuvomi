@@ -771,7 +771,12 @@ test('renderPage: ein ueberholtes Ziel rendert nach dem Laden nichts, sein Blatt
     'renderPage wartet blank auf render() - ein haengender Abruf blockiert den naechsten Tipp');
   assert.match(render, /if \(!\(await unlessAborted\(renderPromise, signal\)\)\) return true;/,
     'ueberholt nach dem Tausch: renderPage kehrt zurueck, ohne die Seite fertigzustellen');
-  const style = router.slice(router.indexOf('function loadPageStyle('), router.indexOf('function loadPageStyle(') + 1600);
-  assert.equal((style.match(/abandon:/g) ?? []).length, 3, 'jede Antwort von loadPageStyle() kann ihr Blatt zuruecknehmen');
-  assert.match(style, /abandon: \(\) => \{\s*link\.remove\(\);\s*if \(activePageStyle === link\) activePageStyle = oldLink;/);
+  // Seit Schnell-Erfassen (Aufgabe 3) haelt utils/page-style.js die Blaetter;
+  // dass `abandon()` das Blatt der stehenden Seite gelten laesst, prueft
+  // test:page-style am Verhalten. Hier: jede Antwort traegt es.
+  const style = router.slice(router.indexOf('function loadPageStyle('), router.indexOf('function loadPageStyle(') + 600);
+  assert.match(style, /abandon: \(\) => \{\}/, 'die Antwort ohne Blatt kann nichts zuruecknehmen, muss es aber anbieten');
+  assert.match(style, /return pageStyles\.load\(/);
+  const pageStyle = readFileSync(new URL('../public/utils/page-style.js', import.meta.url), 'utf8');
+  assert.equal((pageStyle.match(/abandon(?:\(\) \{|: \(\) =>)/g) ?? []).length, 2, 'jede Antwort von load() kann ihr Blatt zuruecknehmen');
 });

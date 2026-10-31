@@ -549,12 +549,17 @@ test('swapPage R19: der Tipp, der die Blende abbricht, kommt nach ihrem Ende an 
     await new Promise((r) => setTimeout(r, 1100));
     assert.equal(env.listeners.filter((l) => l.type === 'click').length, 0, 'ein Zuhoerer ohne click haengt weiter');
 
-    // Der Router reicht erst nach, wenn seine Navigation durch ist: navigate()
-    // verwirft jeden Aufruf, solange `isNavigating` steht (im Browser gemessen:
-    // ohne das kam der erste Tipp einer Runde nicht an).
+    // Der Router reicht gleich nach der Blende nach (Schnell-Erfassen, Aufgabe 3).
+    // Bis dahin wartete er, bis seine Navigation durch war - bis zu 2 s, weil
+    // navigate() einmal jeden Aufruf verwarf, solange `isNavigating` stand. Seit
+    // R19 (Nachlese 1b) stellt navigate() den Tipp an und bricht die laufende
+    // Navigation ab; das Warten hielt nur noch den Tipp auf.
     const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
-    assert.match(router, /await swapPage\(swap, \{[^}]*whenSettled: navigationIdle,/);
-    assert.match(router, /function navigationIdle\(\) \{[\s\S]*?routerState\.isNavigating/);
+    assert.match(router, /await swapPage\(swap, \{[^}]*whenSettled: null,/);
+    assert.doesNotMatch(router, /function navigationIdle\(/, 'das Warten auf das Ende der Navigation ist zurueck');
+    const navigate = readFileSync(new URL('../public/utils/router-navigate.js', import.meta.url), 'utf8');
+    assert.match(navigate, /if \(state\.isNavigating\) \{[\s\S]*?running\?\.abort\(NAVIGATION_SUPERSEDED\);[\s\S]*?queued = \{ args: \[path, userOrPushState, pushState\], resolve \};/,
+      'navigate() stellt einen Tipp waehrend einer Navigation nicht mehr an - dann muesste das Nachreichen wieder warten');
   } finally {
     delete globalThis.document;
     delete globalThis.matchMedia;

@@ -891,6 +891,10 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   background-color: var(--color-surface);
   border-top: 1px solid var(--nav-bar-border);
   z-index: var(--z-nav);
+  /* Ein Tipp ist ein Tipp (Schnell-Erfassen, Aufgabe 3): ohne Doppeltipp-Zoom
+   * wartet WebKit nicht erst, ob ein zweiter folgt. Wischen und Aufziehen
+   * bleiben erlaubt (`manipulation` = pan-x pan-y pinch-zoom). */
+  touch-action: manipulation;
 }
 
 /* ── Items-Reihe: fuenf Spalten in der Leiste (v2: keine Kapsel mehr) ── */
