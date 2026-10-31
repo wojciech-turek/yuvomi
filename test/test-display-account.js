@@ -572,10 +572,15 @@ test('das Display steht in keiner Personenliste', async () => {
   const ids = (members.body.data ?? []).map((m) => m.id);
   assert.ok(!ids.includes(displayId), 'die Mitgliederliste zeigt kein Wandtablett');
 
+  // Die Chips "Wer" im Blatt "Neue Aufgabe" kommen aus dieser Liste. Sie
+  // antwortet OHNE `data`-Huelle (server/routes/tasks.js) - hier stand
+  // `body.data?.users`, das immer leer war: die Zusicherung prueft seitdem
+  // eine Liste, in der wirklich jemand steht.
   const options = await admin('GET', '/tasks/meta/options');
   assert.equal(options.status, 200);
-  const optionIds = (options.body.data?.users ?? []).map((u) => u.id);
-  assert.ok(!optionIds.includes(displayId), 'auch der Zuweisungs-Picker nicht');
+  const optionIds = (options.body.users ?? []).map((u) => u.id);
+  assert.ok(optionIds.length > 0, 'die Liste nennt die Mitglieder');
+  assert.ok(!optionIds.includes(displayId), 'auch der Zuweisungs-Picker nicht - das Wandtablett ist nie ein "Wer"');
 });
 
 test('das Display kann nicht als erledigende Person benannt werden (#1205)', async () => {
