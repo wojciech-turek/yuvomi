@@ -2155,7 +2155,7 @@ function renderShell() {
   </div>`);
   // Geteilte Tablist-Verhaltensschicht (Klick + Pfeiltasten/Home/End + Roving-
   // Tabindex + ARIA, utils/tablist.js) statt einer Handnachbildung ohne
-  // Tastatursteuerung - dieselbe Grammatik wie Budget/Kalender/Rewards/
+  // Tastatursteuerung - dieselbe Grammatik wie Budget/Kalender/
   // Haushaltshilfe fuer ihre jeweilige Haupt-Tab-Leiste. wireTablist() malt den
   // aktiven Tab selbst (Klasse/aria-selected/tabindex) und bringt die
   // Scroll-Fade-Affordanz gleich mit - eine zusaetzliche wireScrollFade()-Zeile

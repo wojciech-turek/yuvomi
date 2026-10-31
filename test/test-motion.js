@@ -1307,7 +1307,6 @@ const pageSource = (name) => readFileSync(new URL(`../public/pages/${name}.js`, 
 
 test('Inhaltswechsel: Reiter, Zeitraeume und Bereiche tauschen ueber swapContent/swapPeriod', () => {
   const carriers = [
-    ['rewards', /swapContent\(el, draw, \{ direction/, 'Reiterwechsel'],
     ['housekeeping', /swapContent\(content, \(\) => \{/, 'Reiterwechsel'],
     ['housekeeping', /swapPeriod\(content, towards, \(\) => renderReports\(content\)\)/, 'Berichtsmonat'],
     ['budget', /swapContent\(_container\.querySelector\('#budget-body'\), renderBody, \{ direction \}\)/, 'Reiterwechsel'],
@@ -1334,7 +1333,6 @@ test('Listenbewegung: Module, die ihre Zeilen neu bauen, nutzen list-motion bzw.
   const modules = [
     ['housekeeping', /redrawList\(content, \(\) => drawTasks\(content\)/, 'Aufgabenliste'],
     ['housekeeping', /collapseRow\(row\)\.then\(repaint\)/, 'geloeschte Aufgabe klappt aus'],
-    ['rewards', /await collapseRow\(row, \{ group:/, 'entschiedene Anfrage klappt aus'],
     ['waste', /redrawList\(host, \(\) => drawUpcoming\(host\)/, 'Abholungen'],
     ['waste', /redrawList\(host, \(\) => drawTypes\(host\)/, 'Abfallarten'],
     ['waste', /redrawList\(host, \(\) => drawSources\(host\)/, 'Quellen'],
@@ -1345,10 +1343,6 @@ test('Listenbewegung: Module, die ihre Zeilen neu bauen, nutzen list-motion bzw.
   ];
   const missing = modules.filter(([name, pattern]) => !pattern.test(pageSource(name))).map(([name, , what]) => `${name}.js: ${what}`);
   assert.deepEqual(missing, [], `Liste ohne Bewegung:\n  ${missing.join('\n  ')}`);
-  // Belohnungen: das Skelett steht nur beim ersten Aufbau, nicht bei jedem Wechsel.
-  const rewards = pageSource('rewards');
-  const fn = rewards.slice(rewards.indexOf('async function renderCurrentTab('), rewards.indexOf('async function renderCurrentTab(') + 900);
-  assert.match(fn, /if \(first\) \{\s*el\.replaceChildren\(\);\s*el\.insertAdjacentHTML\('beforeend', renderSkeletonList/, 'Skelett nur unter `first`');
 });
 
 /* R17, Bewegung: "das System steht, die Abdeckung fehlt". Acht Seiten bauten
@@ -1818,7 +1812,7 @@ const SHARED_PRESSABLE = [
  *  -> 206 (2026-10-24): das Kachelraster der Uebersicht ist mit Tafla gegangen.
  *  -> 198 (2026-10-26): beides zusammengefuehrt - Chips und Kachelraster entfallen gemeinsam.
  *  -> 197 (2026-10-26): der Hover der toten `.notes-page .note-item` (glass.css) ist weg. */
-const UNGUARDED_HOVER_MAX = 197;
+const UNGUARDED_HOVER_MAX = 193;
 
 function hoverRules() {
   const out = [];

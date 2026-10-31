@@ -257,7 +257,7 @@ test('das Badge haengt am Icon, nicht am ganzen Nav-Eintrag', async () => {
 // Die Ableitung aus der /dashboard-Antwort
 //
 // SIE STAND BIS #868 MITTEN IM ROUTER und rief dort ein `isAdmin()`, das es in
-// jener Datei nie gab - es lebt modul-lokal in pages/rewards.js. Der Aufruf
+// jener Datei nie gab - es lebte modul-lokal in einer Seitendatei. Der Aufruf
 // warf bei JEDEM Durchlauf, ein `catch` schluckte den ReferenceError, und die
 // Zaehlstaende der Modulkacheln kamen nie an. Es fiel niemandem auf, weil ein
 // Blatt ohne Badges genauso aussieht wie eines ohne wartende Arbeit.
@@ -272,7 +272,6 @@ const DASHBOARD = Object.freeze({
   openTaskCount: 7,
   overdueTaskCount: 3,
   shoppingOpenCount: 4,
-  rewards: { pending: 2 },
   health: { dosesTotal: 5, dosesTaken: 1, dosesSkipped: 1 },
   // Die Liste ist der gedeckelte Vorrat der Kachel; der Zaehler daneben ist
   // die ungedeckelte Wahrheit - hier absichtlich groesser als die Liste.
@@ -287,26 +286,14 @@ const DASHBOARD = Object.freeze({
 
 test('die Ableitung laeuft ueberhaupt durch (#868)', () => {
   // Der eigentliche Regressionstest. Vorher warf dieser Aufruf.
-  assert.doesNotThrow(() => moduleCountsFrom(DASHBOARD, { isAdmin: true, shoppingVisible: true }));
+  assert.doesNotThrow(() => moduleCountsFrom(DASHBOARD, { shoppingVisible: true }));
 });
 
 test('die Zahlen der Modulkacheln kommen aus der Nutzlast', () => {
-  const counts = moduleCountsFrom(DASHBOARD, { isAdmin: true, shoppingVisible: true });
+  const counts = moduleCountsFrom(DASHBOARD, { shoppingVisible: true });
   assert.equal(counts.tasks, 7, 'die Kachel zeigt OFFENE, nicht ueberfaellige Aufgaben');
   assert.equal(counts.shopping, 4);
   assert.equal(counts.health, 3, 'offene Dosen = gesamt minus genommen minus uebersprungen');
-});
-
-test('die offene Belohnungsanfrage sieht nur ein Elternteil', () => {
-  // `rewards.pending` zaehlt den ganzen Haushalt; einem Kind waerbe die Zahl
-  // mit Arbeit, hinter der fuer es nichts steht.
-  assert.equal(moduleCountsFrom(DASHBOARD, { isAdmin: true }).rewards, 2);
-  assert.equal(moduleCountsFrom(DASHBOARD, { isAdmin: false }).rewards, 0);
-  // Geld-Anfragen (#1734) fuehrt der Server in einem eigenen Feld; das Zeichen
-  // am Modul zaehlt beide, und weiter nur fuer Eltern.
-  const mitGeld = { ...DASHBOARD, rewards: { pending: 2, moneyPending: 3 } };
-  assert.equal(moduleCountsFrom(mitGeld, { isAdmin: true }).rewards, 5);
-  assert.equal(moduleCountsFrom(mitGeld, { isAdmin: false }).rewards, 0);
 });
 
 test('die Kuechenkachel traegt den Einkauf nur, wenn er offensteht', () => {
@@ -322,7 +309,7 @@ test('mehr genommene Dosen als geplante ergeben keine negative Zahl', () => {
 
 test('eine leere Antwort ergibt Nullen, keine Ausnahme', () => {
   assert.doesNotThrow(() => moduleCountsFrom(undefined));
-  assert.deepEqual(moduleCountsFrom(null), { tasks: 0, shopping: 0, rewards: 0, health: 0, kitchen: 0 });
+  assert.deepEqual(moduleCountsFrom(null), { tasks: 0, shopping: 0, health: 0, kitchen: 0 });
 });
 
 test('die Zahlen der Nav-Ziele sind ANDERE als die der Kacheln (#868)', () => {

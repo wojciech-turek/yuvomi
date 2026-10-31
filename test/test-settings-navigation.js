@@ -224,7 +224,7 @@ test('die Blaetter verteilen sich wie beschlossen auf drei Bereiche, je Modul ei
   // Dazu "Eigenes Modul hinzufuegen" (modules-install): Drittmodule zu
   // installieren ist eine Handlung im Modul-Bereich, kein Modul - deshalb ein
   // Blatt ohne `module`, aber in derselben Domaene.
-  assert.deepEqual(perDomain, { personal: 5, admin: 9, modules: 16 }); // admin-ai (fork, 2026-10-19)
+  assert.deepEqual(perDomain, { personal: 5, admin: 9, modules: 15 }); // admin-ai (fork, 2026-10-19)
   assert.deepEqual(SETTINGS_DOMAINS.map((domain) => domain.id), ['personal', 'admin', 'modules']);
   // Jedes Blatt haengt an einem existierenden Bereich, jeder Abschnitt an
   // einem existierenden Blatt, und kein Blatt ist leer.
@@ -1428,9 +1428,6 @@ test('navigation sections match the grouped desktop information architecture', (
   assert.equal(moduleSection('housekeeping'), NAV_SECTION.household);
   assert.equal(moduleSection('documents'), NAV_SECTION.household);
   assert.equal(moduleSection('inventory'), NAV_SECTION.household);
-  // R19 (Ulas 2026-10-16): die Belohnungen sind die Gegenseite der Aufgaben
-  // und stehen unter Planen, nicht mehr unter Haushalt.
-  assert.equal(moduleSection('rewards'), NAV_SECTION.plan);
   assert.equal(moduleSection('schedule'), NAV_SECTION.plan);
   assert.equal(moduleSection('contacts'), NAV_SECTION.people);
   assert.equal(moduleSection('birthdays'), NAV_SECTION.people);
@@ -2153,7 +2150,7 @@ test('die zwei Blaetter schreiben zwei disjunkte Schluesselmengen', () => {
   // adminOnly-Blatt, das per-user-Schluessel schreibt, ist genau der Fall, den
   // test:settings-admin-gate sucht.
   const personal = buildOrderPayload(['calendar', 'kitchen']);
-  const household = buildActiveModulesPayload(['notes', 'rewards']);
+  const household = buildActiveModulesPayload(['notes', 'waste']);
 
   assert.deepEqual(Object.keys(personal), ['module_order']);
   assert.deepEqual(Object.keys(household), ['disabled_modules']);
@@ -2400,10 +2397,10 @@ test('Wochenstart ist das Segment der Shell, kein eigener Umschalter - und es gi
   assert.deepEqual(rules.filter((rule) => /\.theme-toggle/.test(rule.selector)).map((rule) => rule.selector), []);
 });
 
-// ── Re-Critique 2026-09-27 (R8, H12): ein Speichermodell auf der Belohnungs-Seite ──
+// ── Re-Critique 2026-09-27 (R8, H12): ein Speichermodell fuer Kurzfelder ──
 
 /** Das Blatt mit Fake-Flaechen: jedes per Id gefragte Element merkt sich seine Listener. */
-function rewardsSheet() {
+function fakeSheet() {
   const els = new Map();
   const el = (id) => {
     if (!els.has(id)) {
@@ -2433,61 +2430,9 @@ function rewardsSheet() {
   };
 }
 
-test('Belohnungen: das Punktefeld speichert wie die Schalter - ohne eigenen Knopf, beim Verlassen (H12)', async () => {
-  const { render } = await import('/settings/pages/modules-rewards.js');
-  const { resetPreferencesCache } = await import('/settings/preferences-cache.js');
-  const puts = [];
-  const toasts = [];
-  const prevWindow = globalThis.window;
-  globalThis.window = { yuvomi: { showToast: (...args) => toasts.push(args) } };
-  globalThis.__apiStub = {
-    get: async (url) => (url === '/preferences' ? { data: { tasks_default_points: 0, disabled_modules: [] } } : { data: { count: 0 } }),
-    put: async (url, body) => { puts.push([url, body]); return { data: body }; },
-  };
-  resetPreferencesCache();
-  try {
-    const sheet = rewardsSheet();
-    await render(sheet, { user: { role: 'admin' } });
-    const form = sheet.html.match(/<form\b[^>]*id="rewards-default-points-form"[\s\S]*?<\/form>/)?.[0] ?? '';
-    assert.match(form, /id="rewards-default-points"/, 'Reichweite: das Punktefeld steht im Formular');
-    assert.doesNotMatch(form, /type="submit"/, 'kein Speichern-Knopf nur fuer dieses Feld');
-
-    const input = sheet.el('rewards-default-points');
-    const error = sheet.el('rewards-default-points-error');
-    input.value = '-3';
-    await input.fire('blur');
-    assert.deepEqual(puts, [], 'ein ungueltiger Wert wird nicht geschrieben');
-    assert.equal(error.hidden, false, 'sondern benannt');
-    assert.equal(input.getAttribute('aria-invalid'), 'true');
-
-    input.value = '5';
-    await input.fire('blur');
-    assert.deepEqual(puts, [['/preferences', { tasks_default_points: 5 }]], 'beim Verlassen gespeichert');
-    assert.equal(error.hidden, true, 'und der Fehler ist weg');
-    assert.equal(input.getAttribute('aria-invalid'), null);
-    assert.ok(toasts.some(([key]) => key === 'settings.rewardsDefaultPointsSaved'), `mit Rueckmeldung: ${JSON.stringify(toasts)}`);
-
-    await input.fire('blur');
-    assert.equal(puts.length, 1, 'derselbe Wert ein zweites Mal ist kein neuer Schreibzugriff');
-
-    input.value = '7';
-    await sheet.el('rewards-default-points-form').fire('submit');
-    assert.deepEqual(puts.at(-1), ['/preferences', { tasks_default_points: 7 }], 'Enter speichert ebenso');
-
-    input.value = '9';
-    await input.fire('keydown', { key: 'Escape' });
-    assert.equal(input.value, '7', 'Escape nimmt die ungespeicherte Eingabe zurueck');
-  } finally {
-    delete globalThis.__apiStub;
-    globalThis.window = prevWindow;
-    resetPreferencesCache();
-  }
-});
-
 // R17 Schritt 5: dieselbe Regel auf dem Blatt "Uebersicht". Das eine Zahlfeld
 // (Nachfrist fuer Countdowns) hatte einen eigenen Speichern-Knopf - ein
-// einzelnes Kurzfeld speichert beim Verlassen und mit Enter, mit derselben
-// Quittung wie das Punktefeld der Belohnungen.
+// einzelnes Kurzfeld speichert beim Verlassen und mit Enter, mit der Quittung der Schalter.
 test('Uebersicht: die Nachfrist speichert beim Verlassen und mit Enter - ohne eigenen Knopf', async () => {
   const { render } = await import('/settings/pages/modules-countdowns.js');
   const { resetPreferencesCache } = await import('/settings/preferences-cache.js');
@@ -2501,7 +2446,7 @@ test('Uebersicht: die Nachfrist speichert beim Verlassen und mit Enter - ohne ei
   };
   resetPreferencesCache();
   try {
-    const sheet = rewardsSheet();
+    const sheet = fakeSheet();
     await render(sheet, { user: { role: 'admin' } });
     const form = sheet.html.match(/<form\b[^>]*id="countdown-grace-days-form"[\s\S]*?<\/form>/)?.[0] ?? '';
     assert.match(form, /id="countdown-grace-days"/, 'Reichweite: das Feld steht im Formular');
@@ -2721,7 +2666,6 @@ const PRE_R10_LEAVES = Object.freeze({
   '/settings/modules/kitchen': { id: 'modules-kitchen', adminOnly: true, labelKey: 'settings.pageKitchen', options: ['settings.mealTypesLabel', 'settings.mealTypeNamesLabel', 'settings.recipeProvidersTitle'] },
   '/settings/modules/calendar': { id: 'modules-calendar', adminOnly: true, labelKey: 'settings.pageCalendarModule', options: ['settings.calendarDurationTitle', 'settings.weekStartTitle', 'settings.holidayPublicLabel', 'settings.holidaySchoolLabel'] },
   '/settings/modules/options': { id: 'modules-options', adminOnly: true, labelKey: 'settings.pageModuleOptions', options: ['settings.budgetModePersonalLabel', 'settings.healthCycleEnableLabel', 'settings.housekeepingPaymentTasksLabel', 'settings.tasksSubtasksExpandedLabel', 'settings.scheduleTemplatesTitle'] },
-  '/settings/modules/rewards': { id: 'modules-rewards', adminOnly: true, labelKey: 'settings.pageRewardsModule', options: ['settings.rewardsEnableLabel', 'settings.rewardsApprovalLabel', 'settings.rewardsDefaultPointsLabel'] },
   '/settings/modules/health': { id: 'modules-health', adminOnly: true, labelKey: 'settings.pageHealthModule', options: ['settings.healthPreventionTypesTitle'] },
   '/settings/modules/countdowns': { id: 'modules-countdowns', adminOnly: true, labelKey: 'settings.pageCountdownsModule', options: ['settings.countdownGraceDaysTitle'] },
   '/settings/sync/calendar': { id: 'sync-calendar', adminOnly: true, labelKey: 'settings.pageSyncCalendar', options: ['settings.caldavTitle', 'settings.moreProviders', 'settings.sync.backfillTitle'] },
@@ -2751,15 +2695,6 @@ const PRE_R10_ALIASES = Object.freeze({
 });
 
 /**
- * Optionen, die es bewusst nicht mehr gibt - mit dem Ort, der sie heute
- * traegt. Nur ein Eintrag: der zweite An/Aus-Schalter fuer Belohnungen (A7
- * P1-3). An und aus geht ein Modul nur in Aktive Module.
- */
-const RETIRED_OPTIONS = Object.freeze({
-  'settings.rewardsEnableLabel': 'modules-active',
-});
-
-/**
  * Optionen, die ersatzlos weg sind. 2026-10-27, v2: light only - die
  * Theme-Wahl (Abschnitt "Design" in Wygląd) hat keinen neuen Ort.
  */
@@ -2785,7 +2720,7 @@ function landing(path, search = '') {
 
 test('S2: jede Adresse von vor R10 landet auf einem existierenden Blatt samt Abschnitt', () => {
   const paths = [...Object.keys(PRE_R10_LEAVES), ...Object.keys(PRE_R10_ALIASES)];
-  assert.ok(paths.length >= 38, `nur ${paths.length} Alt-Adressen - liest der Test das Ledger noch?`);
+  assert.ok(paths.length >= 37, `nur ${paths.length} Alt-Adressen - liest der Test das Ledger noch?`);
   const routed = new Set([...SETTINGS_LEAVES.map((leaf) => leaf.path), ...RENAMED_SETTINGS_SOURCE_PATHS]);
   for (const path of paths) {
     // Der Router kennt die Adresse, sonst matcht ein Lesezeichen gar nichts.
@@ -2895,7 +2830,6 @@ test('S2: die Suche findet jede Option und jedes Blatt von vor R10', async () =>
   for (const old of Object.values(PRE_R10_LEAVES)) {
     const homes = sectionsOfOldLeaf(old.id).map((entry) => entry.id);
     for (const key of old.options) {
-      if (RETIRED_OPTIONS[key]) continue;
       if (DROPPED_OPTIONS.has(key)) {
         assert.equal(SETTINGS_SECTIONS.some((section) => (section.options ?? [])
           .some((entry) => (typeof entry === 'string' ? entry : entry.key) === key)), false, `${key} steht wieder im Index`);
@@ -2917,37 +2851,10 @@ test('S2: die Suche findet jede Option und jedes Blatt von vor R10', async () =>
     assert.ok(found || old.id === 'modules-options', `Blattname "${name}" (${old.id}) findet nichts mehr`);
   }
   assert.ok(seen >= 70, `nur ${seen} Optionen geprueft - liest der Test das Ledger noch?`);
-  // Die ausgemusterte Option ist wirklich weg - und ihr Ort ist findbar.
-  for (const [key, home] of Object.entries(RETIRED_OPTIONS)) {
-    assert.equal(SETTINGS_SECTIONS.some((section) => (section.options ?? [])
-      .some((entry) => (typeof entry === 'string' ? entry : entry.key) === key)), false, `${key} steht wieder im Index`);
-    assert.ok(searchSettings(translate('settings.pageActiveModules'), { user: admin, translate })
-      .leaves.some((leaf) => leaf.id === home));
-  }
   // Ein Abschnitt-Treffer springt an seinen Abschnitt.
   const feeds = searchSettings(translate('settings.pageFeeds'), { user: admin, translate }).sections
     .find((hit) => hit.section.id === 'personal-feeds');
   assert.equal(settingsSectionUrl(feeds.leaf, feeds.section.id), '/settings/modules/calendar?section=personal-feeds');
-});
-
-// Codex P2 zu R10: ein Suchtreffer von vor R10
-// (`/settings/modules/rewards?option=settings.rewardsEnableLabel`) landete auf
-// dem Belohnungen-Blatt ohne die Option - das Blatt lebt weiter, nur der
-// Schalter nicht. Die Adresse fuehrt an den Ort, der ihn heute traegt.
-test('S2: eine ausgemusterte Option fuehrt von jedem alten Blatt an ihren heutigen Ort', () => {
-  const oldHomes = Object.entries(PRE_R10_LEAVES).filter(([, old]) => old.options.some((key) => RETIRED_OPTIONS[key]));
-  assert.ok(oldHomes.length > 0, 'das Ledger kennt das Blatt der ausgemusterten Option nicht mehr');
-  for (const [key, home] of Object.entries(RETIRED_OPTIONS)) {
-    for (const path of [...oldHomes.map(([oldPath]) => oldPath), '/settings/modules/options']) {
-      const { sheet, section, params } = landing(path, `option=${key}`);
-      assert.equal(sheet?.id, home, `${path}?option=${key}: landet auf ${sheet?.id}, erwartet ${home}`);
-      assert.ok(settingsSheetSections(sheet, admin).some((entry) => entry.id === section), `${path}: Abschnitt ${section} fehlt im Blatt`);
-      assert.equal(params.get('option'), null, 'die Option, die es nicht mehr gibt, faellt aus der Adresse');
-    }
-  }
-  // Gegenprobe: eine lebende Option auf ihrem lebenden Blatt bleibt, wo sie ist.
-  assert.equal(movedSettingsUrl('/settings/modules/rewards', 'option=settings.rewardsApprovalLabel'), null);
-  assert.equal(movedSettingsUrl('/settings/modules/rewards'), null);
 });
 
 /**
@@ -2979,16 +2886,6 @@ async function runSettingsController(pathname, search, { soft = false } = {}) {
     globalThis.sessionStorage = prev.sessionStorage;
   }
 }
-
-test('S2: der Controller leitet ein lebendes Blatt mit ausgemusterter Option per replaceState um', async () => {
-  const { replaced, navigated, softResult } = await runSettingsController(
-    '/settings/modules/rewards', '?option=settings.rewardsEnableLabel', { soft: true });
-  assert.deepEqual(replaced, ['/settings/modules/active?section=modules-active'], 'die Adresse zeigt aufs heutige Blatt');
-  assert.deepEqual(navigated, [['/settings/modules/active?section=modules-active', false]], 'und der Router zeichnet es');
-  // Soft-Navigation auf dieselbe Adresse rendert nicht inkrementell, sondern
-  // ueberlaesst sie dem regulaeren Pfad, der umleitet.
-  assert.equal(softResult, false);
-});
 
 test('S1: Admin-Abschnitte bleiben fuer Nicht-Admins verborgen - im Blatt, in der Liste und in der Suche', async () => {
   const de = JSON.parse(await readFile(new URL('../public/locales/de.json', import.meta.url), 'utf8'));
@@ -3034,8 +2931,6 @@ test('S1: ein Modul geht nur in Aktive Module an und aus - die Modulblaetter zei
     if (/(^|[{,])\s*disabled_modules\s*:/m.test(text)) writers.push(file);
   }
   assert.deepEqual(writers, ['modules-active.js'], 'ein zweites Blatt schaltet Module fuer den Haushalt');
-  const rewards = await readFile(new URL('../public/settings/pages/modules-rewards.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(strip(rewards), /rewards-enabled|rewardsEnableLabel/, 'der Belohnungen-Schalter ist zurueck');
 
   // Die Statuszeile: Zustand fuer alle, der Weg zum Schalter nur fuer Admins.
   const shell = await settingsShellSource();
@@ -3227,18 +3122,17 @@ test('R14: Modulblaetter stehen in der Reihenfolge der Seitenleiste', async () =
   assert.equal(plain.at(-1), 'modules-install', 'Hinzufuegen steht am Ende');
   assert.equal(ids(['budget', 'tasks']).at(-1), 'modules-install', 'auch bei eigener Anordnung');
   const mods = plain.slice(2, -1);
-  // R19 (Ulas 2026-10-16): Planen = Kalender, Aufgaben, Belohnungen, Notizen,
-  // Schichtplan. Notizen haben kein eigenes Modulblatt.
-  assert.deepEqual(mods, ['dashboard', 'calendar', 'tasks', 'rewards', 'schedule', 'kitchen', 'housekeeping', 'waste', 'documents',
+  // Planen = Kalender, Aufgaben, Notizen, Schichtplan. Notizen haben kein eigenes Modulblatt.
+  assert.deepEqual(mods, ['dashboard', 'calendar', 'tasks', 'schedule', 'kitchen', 'housekeeping', 'waste', 'documents',
     'inventory', 'contacts', 'health', 'budget'], 'ohne eigene Anordnung genau wie die Seitenleiste (gemessen 1440)');
   const pos = (id) => mods.indexOf(id);
   assert.equal(mods[0], 'dashboard', 'die Uebersicht fuehrt wie in der Seitenleiste');
   assert.ok(pos('tasks') < pos('kitchen') && pos('kitchen') < pos('contacts') && pos('contacts') < pos('budget'),
     `Planen, Haushalt, Menschen, Finanzen: ${mods}`);
   assert.ok(pos('health') < pos('budget'), 'Gesundheit (Menschen) vor Budget (Finanzen)');
-  const custom = ids(['tasks', 'schedule', 'calendar', 'rewards', 'kitchen']).slice(2, -1);
+  const custom = ids(['tasks', 'schedule', 'calendar', 'kitchen']).slice(2, -1);
   assert.ok(custom.indexOf('tasks') < custom.indexOf('calendar'), 'die eigene Reihenfolge des Haushalts zaehlt');
-  assert.ok(custom.indexOf('rewards') < custom.indexOf('kitchen'), 'Planen vor Haushalt');
+  assert.ok(custom.indexOf('schedule') < custom.indexOf('kitchen'), 'Planen vor Haushalt');
   const router = await readFile(new URL('../public/router.js', import.meta.url), 'utf8');
   assert.match(router, /moduleOrder: \(\) => _moduleOrder\.slice\(\)/, 'die Einstellungen lesen dieselbe Reihenfolge wie die Seitenleiste');
 });
@@ -3798,7 +3692,7 @@ test('R17: kein Einstellungsblatt rendert eine Karte mit genau einem Bedieneleme
   const GROUPED = [
     'personal-appearance', 'personal-notifications', 'admin-family', 'modules-countdowns',
     'personal-calendar', 'personal-feeds', 'modules-calendar', 'options-schedule', 'options-tasks',
-    'options-budget', 'options-housekeeping', 'options-health', 'modules-rewards', 'personal-health',
+    'options-budget', 'options-housekeeping', 'options-health', 'personal-health',
     'feed-birthdays', 'feed-schedule', 'feed-cycle', 'feed-inventory', 'feed-waste',
   ];
   // TAFLA (2026-10-20): die Tafla-Liste (components.js taflaGroupHtml, Karte
@@ -4460,7 +4354,7 @@ test('R19: der Schichtplan hat eine eigene Glyphe, keine Kalenderform', async ()
   const { MODULE_ICON } = await import('../public/nav-icons.js');
   const glyph = MODULE_ICON.schedule;
   assert.ok(!/^calendar/.test(glyph), `Schichtplan zeichnet "${glyph}" - wieder eine Kalenderform`);
-  const neighbours = ['calendar', 'tasks', 'rewards', 'notes'].map((id) => MODULE_ICON[id]);
+  const neighbours = ['calendar', 'tasks', 'notes'].map((id) => MODULE_ICON[id]);
   assert.ok(!neighbours.includes(glyph), 'kein Zeichen eines Nachbarn in Planen');
   const pascal = glyph.replace(/(^|-)(\w)/g, (_m, _d, c) => c.toUpperCase());
   const lucide = await readFile(new URL('../public/lucide.min.js', import.meta.url), 'utf8');

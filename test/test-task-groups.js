@@ -502,7 +502,7 @@ test('Aufgabendialog: Prioritaet und Kategorie offen im Hauptteil, der Aufklappe
     }
     const hint = optionen.at(-1)?.hint ?? '';
     assert.ok(hint.length > 0, 'ohne hint sagt "Weitere Einstellungen" nicht, was dahinter liegt');
-    for (const key of ['tasks.startDateLabel', 'tasks.pointsLabel', 'tasks.tagsLabel']) {
+    for (const key of ['tasks.startDateLabel', 'tasks.tagsLabel']) {
       assert.ok(hint.includes(key), `der Hinweis nennt ${key}: ${hint}`);
     }
     assert.ok(!hint.includes('tasks.priorityLabel'), 'was offen steht, nennt der Hinweis nicht');

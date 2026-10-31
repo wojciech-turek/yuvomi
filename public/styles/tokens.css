@@ -943,7 +943,6 @@
   --cycle-ovulation: #0E7FB0;   /* Eisprung-Spitzentag — Cyan-Blau (~4.8:1 auf weiß) */
   --module-settings:  var(--_family-neutral);
   --module-reminders: var(--_family-time);
-  --module-rewards:   var(--_family-work);
 
   /* --------------------------------------------------------
    * 4c. Personenfarben (Tafla, 2026-10-19)

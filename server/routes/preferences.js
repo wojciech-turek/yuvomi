@@ -162,12 +162,6 @@ const MAX_DEFAULT_REMINDERS = 5;
 // wer welchen Kalender bespielt, ist eine persönliche Entscheidung.
 const MAX_CALENDAR_TARGET_LENGTH = 500;
 
-// Standard-Punktwert für neue Aufgaben (#578, haushaltweit). 0 = kein Standard,
-// das Punktefeld bleibt wie bisher leer. Obergrenze spiegelt MAX_POINTS in
-// server/routes/tasks.js.
-const DEFAULT_TASK_POINTS = 0;
-const MAX_TASK_POINTS = 10000;
-
 // Obergrenze für die Countdown-Nachfrist in Tagen (#969, haushaltweit). Der
 // Standard selbst kommt aus services/countdowns.js - eine Kopie hier wäre eine
 // zweite Antwort, die von der ersten abweichen könnte (docs/DECISIONS.md #2).
@@ -186,17 +180,9 @@ function parseDefaultReminders(raw) {
   }
 }
 
-/** Persistierten Standard-Punktwert als ganze Zahl im gültigen Bereich lesen. */
-function parseTaskDefaultPoints(raw) {
-  const n = Math.trunc(Number(raw));
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_TASK_POINTS;
-  return Math.min(n, MAX_TASK_POINTS);
-}
-
 /**
- * Persistierte Countdown-Nachfrist lesen - anders als parseTaskDefaultPoints
- * ist hier `0` ein gültiger, bewusst gesetzter Wert ("keine Nachfrist") und
- * fällt nicht auf den Standard zurück.
+ * Persistierte Countdown-Nachfrist lesen. `0` ist ein gültiger, bewusst
+ * gesetzter Wert ("keine Nachfrist") und fällt nicht auf den Standard zurück.
  */
 function parseCountdownGraceDays(raw) {
   if (raw === null || raw === undefined) return DEFAULT_OVERDUE_GRACE_DAYS;
@@ -243,10 +229,10 @@ const SCHEDULE_TEMPLATE_KEYS = ['work', 'school', 'university'];
 export const TOGGLEABLE_MODULES = [
   'tasks', 'calendar', 'meals', 'recipes', 'shopping', 'pantry', 'inventory',
   'birthdays', 'notes', 'contacts', 'budget', 'documents',
-  'housekeeping', 'waste', 'rewards', 'health', 'schedule',
+  'housekeeping', 'waste', 'health', 'schedule',
 ];
-const MODULE_ORDER_RE = /^(dashboard|tasks|calendar|meals|recipes|shopping|pantry|inventory|birthdays|notes|contacts|budget|documents|housekeeping|waste|rewards|health|schedule|third-party-[a-z0-9][a-z0-9-]{1,62}[a-z0-9])$/;
-const MOBILE_NAV_ORDER_RE = /^(tasks|calendar|kitchen|meals|recipes|shopping|pantry|inventory|birthdays|notes|contacts|budget|documents|housekeeping|waste|rewards|health|schedule|third-party-[a-z0-9][a-z0-9-]{1,62}[a-z0-9])$/;
+const MODULE_ORDER_RE = /^(dashboard|tasks|calendar|meals|recipes|shopping|pantry|inventory|birthdays|notes|contacts|budget|documents|housekeeping|waste|health|schedule|third-party-[a-z0-9][a-z0-9-]{1,62}[a-z0-9])$/;
+const MOBILE_NAV_ORDER_RE = /^(tasks|calendar|kitchen|meals|recipes|shopping|pantry|inventory|birthdays|notes|contacts|budget|documents|housekeeping|waste|health|schedule|third-party-[a-z0-9][a-z0-9-]{1,62}[a-z0-9])$/;
 const KITCHEN_NAV_IDS = new Set(['kitchen', 'meals', 'recipes', 'shopping', 'pantry']);
 
 // --------------------------------------------------------
@@ -670,14 +656,12 @@ router.get('/', (req, res) => {
         // Opt-in wie cycle_settings.notify_partner_user_id: der Eigentuemer
         // veroeffentlicht bewusst, es teilt nichts von selbst.
         health_prevention_notify_caregivers: cfgUserGet('health_prevention_notify_caregivers', req.authUserId) === '1',
-        rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
         // The kitchen wall (Tafla, 2026-10-19): may it tick things off, and
         // which sections does it show. Household-wide; the display reads both
         // (DISPLAY_PREFERENCE_KEYS) to draw itself, the routes enforce the first.
         wall_allow_ticking: cfgGet('wall_allow_ticking') === '1',
         wall_sections: parseWallSections(cfgGet('wall_sections')),
-        tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
         countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -
         // dieselbe Form wie calendar_default_target, damit beide Dialoge ihr
@@ -745,7 +729,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, rewards_require_approval, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_points, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -1197,16 +1181,6 @@ router.put('/', (req, res) => {
       }
     }
 
-    if (rewards_require_approval !== undefined) {
-      if (!isAdminRequest(req)) {
-        return res.status(403).json({ error: 'Admin access required.', code: 403 });
-      }
-      if (typeof rewards_require_approval !== 'boolean') {
-        return res.status(400).json({ error: 'rewards_require_approval must be a boolean', code: 400 });
-      }
-      cfgSet('rewards_require_approval', rewards_require_approval ? '1' : '0');
-    }
-
     if (tasks_subtasks_expanded !== undefined) {
       if (!isAdminRequest(req)) {
         return res.status(403).json({ error: 'Admin access required.', code: 403 });
@@ -1238,18 +1212,6 @@ router.put('/', (req, res) => {
         return res.status(400).json({ error: 'wall_sections must map known wall sections to booleans', code: 400 });
       }
       cfgSet('wall_sections', JSON.stringify(sections));
-    }
-
-    // Standard-Punktwert für neue Aufgaben (#578). 0 schaltet den Standard ab.
-    if (tasks_default_points !== undefined) {
-      if (!isAdminRequest(req)) {
-        return res.status(403).json({ error: 'Admin access required.', code: 403 });
-      }
-      const points = Number(tasks_default_points);
-      if (!Number.isInteger(points) || points < 0 || points > MAX_TASK_POINTS) {
-        return res.status(400).json({ error: `tasks_default_points must be an integer between 0 and ${MAX_TASK_POINTS}`, code: 400 });
-      }
-      cfgSet('tasks_default_points', String(points));
     }
 
     // Nachfrist für abgelaufene Countdowns (#969). 0 = keine Nachfrist.
@@ -1516,14 +1478,12 @@ router.put('/', (req, res) => {
         // Opt-in wie cycle_settings.notify_partner_user_id: der Eigentuemer
         // veroeffentlicht bewusst, es teilt nichts von selbst.
         health_prevention_notify_caregivers: cfgUserGet('health_prevention_notify_caregivers', req.authUserId) === '1',
-        rewards_require_approval: cfgGet('rewards_require_approval') !== '0',
         tasks_subtasks_expanded: cfgGet('tasks_subtasks_expanded') === '1',
         // The kitchen wall (Tafla, 2026-10-19): may it tick things off, and
         // which sections does it show. Household-wide; the display reads both
         // (DISPLAY_PREFERENCE_KEYS) to draw itself, the routes enforce the first.
         wall_allow_ticking: cfgGet('wall_allow_ticking') === '1',
         wall_sections: parseWallSections(cfgGet('wall_sections')),
-        tasks_default_points: parseTaskDefaultPoints(cfgGet('tasks_default_points')),
         countdown_grace_days: parseCountdownGraceDays(cfgGet('countdown_grace_days')),
         // Standard-Erinnerungsliste fuer neue Aufgaben (per-user, #695) -
         // dieselbe Form wie calendar_default_target, damit beide Dialoge ihr

@@ -185,8 +185,8 @@ export function resetNavBadges() {
  * `/dashboard`-Antwort, ohne den Router.
  *
  * SIE STAND BIS #868 MITTEN IM ROUTER, und das war nicht nur unordentlich: sie
- * rief dort ein `isAdmin()`, das es in jener Datei nie gab (die Funktion lebt
- * modul-lokal in pages/rewards.js). Der Aufruf warf also bei JEDEM Durchlauf,
+ * rief dort ein `isAdmin()`, das es in jener Datei nie gab (die Funktion lebte
+ * modul-lokal in einer Seitendatei). Der Aufruf warf also bei JEDEM Durchlauf,
  * ein `catch` schluckte den ReferenceError, und die Zaehlstaende der
  * Modulkacheln kamen nie an. Niemand sah es, weil ein Blatt ohne Badges
  * genauso aussieht wie eines ohne wartende Arbeit.
@@ -196,21 +196,14 @@ export function resetNavBadges() {
  * damit ein Test sie beantworten kann, statt eine halbe Shell nachzubauen.
  *
  * @param {object} data - die `/dashboard`-Antwort.
- * @param {{isAdmin?: boolean, shoppingVisible?: boolean}} viewer
+ * @param {{shoppingVisible?: boolean}} viewer
  */
-export function moduleCountsFrom(data, { isAdmin = false, shoppingVisible = false } = {}) {
+export function moduleCountsFrom(data, { shoppingVisible = false } = {}) {
   const openDoses = Math.max(0, (data?.health?.dosesTotal ?? 0)
     - (data?.health?.dosesTaken ?? 0) - (data?.health?.dosesSkipped ?? 0));
   const counts = {
     tasks: data?.openTaskCount ?? 0,
     shopping: data?.shoppingOpenCount ?? 0,
-    /* NUR FUER ELTERN. `rewards.pending` zaehlt serverseitig JEDE offene Anfrage
-     * des Haushalts, waehrend die Belohnungsseite einem Nicht-Admin nur die
-     * EIGENEN zeigt: hat ein Geschwister eine offene Anfrage und man selbst
-     * keine, warb das Badge mit Arbeit, hinter der nichts stand (Codex-Review
-     * zu PR #754). Eine mitgliedseigene Zahl gaebe es nur mit einem neuen Feld
-     * in der Nutzlast; bis dahin ist keine Zahl richtiger als eine falsche. */
-    rewards: isAdmin ? (Number(data?.rewards?.pending) || 0) + (Number(data?.rewards?.moneyPending) || 0) : 0,
     health: openDoses,
   };
   /* Die Küche ist im mobilen Menü EIN Ziel für vier Module; was dort wartet,

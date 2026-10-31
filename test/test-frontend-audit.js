@@ -315,7 +315,6 @@ const LATE_MODAL_CLOSE_BESTAND = {
   'pages/inventory.js': 2,
   'pages/meals.js': 4,
   'pages/pantry.js': 1,
-  'pages/rewards.js': 7,
   'pages/schedule.js': 4,
   'pages/shopping.js': 8,
   'pages/split-expenses.js': 6,
@@ -2938,7 +2937,7 @@ test('bottom-nav labels wrap to two lines instead of clipping across locales', (
   // selbst zwei Zeilen in einem ~72px-Slot es nicht mehr fassen.
   const NAV_KEYS = [
     'dashboard', 'calendar', 'tasks', 'notes', 'kitchen', 'contacts', 'birthdays',
-    'budget', 'documents', 'housekeeping', 'rewards', 'health', 'settings', 'more',
+    'budget', 'documents', 'housekeeping', 'health', 'settings', 'more',
     'shopping', 'meals', 'recipes',
   ];
   const localeFiles = readdirSync(new URL('../public/locales/', import.meta.url)).filter((f) => f.endsWith('.json'));
@@ -10106,7 +10105,7 @@ test('page-inline-pad contract holds across every stylesheet (#577)', () => {
   // Dashboard und Settings sind dokumentierte Ausnahmen: beide haben keinen
   // Canonical Page Head und behalten ihren zentrierten Block.
   const bleedModules = [
-    'tasks', 'notes', 'contacts', 'documents', 'housekeeping', 'rewards',
+    'tasks', 'notes', 'contacts', 'documents', 'housekeeping',
     'budget', 'calendar', 'birthdays', 'meals', 'shopping', 'recipes', 'health',
   ];
 
@@ -17970,7 +17969,7 @@ test('PAGE-020: eine Aussenkante je Modul - kein Reiter schaltet das Mass oder d
     assert.doesNotMatch(src, /classList\.toggle\('[\w-]*toolbar--[\w-]+'/,
       `PAGE-020 ${name}: schaltet einen Kopf-Modifier um - der Kopf steht in jedem Reiter an derselben Kante`);
   }
-  assert.ok(users >= 3, `PAGE-020: nur ${users} Seiten mit Spaltenraster gefunden - Belohnungen, Entsorgung und Haushaltshilfe sollten es sein`);
+  assert.ok(users >= 2, `PAGE-020: nur ${users} Seiten mit Spaltenraster gefunden - Entsorgung und Haushaltshilfe sollten es sein`);
 });
 
 test('Gesundheit: die letzten Vitalwerte ueberspannen die Spalten der Uebersicht', () => {
@@ -19817,34 +19816,6 @@ test('Familie: Mitglied und Einladung oeffnen einen Dialog, der Knopf bleibt Fok
   assert.match(submit, /closeModal\(\{ force: true \}\)/, 'nach dem Anlegen schliesst der Dialog und gibt den Fokus zurueck');
 });
 
-/* Lucide ersetzt `<i data-lucide>` durch ein `<svg>` - eine Regel auf `… i`
- * greift danach ins Leere. Im Praemienkatalog stand die Groesse der Glyphen
- * nur in solchen Regeln (`.rw-reward-card__icon i`, `.rw-cost i`), die SVGs
- * blieben ungemessen und schrumpften in der 243px-Karte als Flex-Kinder auf
- * 0-4px: das Geschenk im "Einloesen"-Knopf war ein Punkt (Critique
- * 2026-09-26). Jede Glyphe der Karte hat deshalb eine Groesse, die das SVG
- * erreicht, und schrumpft nicht. */
-test('Praemienkarte: jede Glyphe ist bemessen und schrumpft nicht', () => {
-  const src = read('../public/pages/rewards.js');
-  const card = src.slice(src.indexOf('function renderRewardCard('), src.indexOf('function renderCatalog('));
-  assert.ok(card.length > 100, 'renderRewardCard nicht gefunden');
-  const rules = [...eachRule(read('../public/styles/rewards.css'))];
-  const svgRule = (container) => rules.find((rule) => rule.selector.split(',').map((s) => s.trim()).includes(`${container} svg`));
-  const ungemessen = [];
-  for (const m of card.matchAll(/<i data-lucide=\\?"([a-z-]+)\\?"([^>]*)>/g)) {
-    if (/class="icon-(?:sm|md|lg|xl)"/.test(m[2])) continue; // .icon-* bringt Groesse und flex-shrink: 0 mit
-    // Sonst traegt der Behaelter eine svg-Regel: die Kachel-Glyphe ohne eigenes Zeichen.
-    const before = card.slice(0, m.index);
-    const container = before.match(/class="([\w-]+)"[^<]*$/)?.[1];
-    const rule = container && svgRule(`.${container}`);
-    if (!rule || !/width:/.test(rule.body) || !/flex-shrink:\s*0/.test(rule.body)) ungemessen.push(m[1]);
-  }
-  assert.deepStrictEqual(ungemessen, [], `ungemessene Glyphen in der Praemienkarte: ${ungemessen.join(', ')}`);
-  const tot = rules.flatMap((rule) => rule.selector.split(',').map((s) => s.trim()))
-    .filter((s) => /^\.rw-(?:reward-card__icon|cost) i$/.test(s));
-  assert.deepStrictEqual(tot, [], 'Regeln auf das ersetzte <i> sind tot');
-});
-
 /* Projektregel "-" statt Em-/En-Dash gilt fuer UI-Texte (CLAUDE.md) - in den
  * Locales haelt sie die i18n-Kette, in den Seiten stand sie nirgends: Zeitraeume
  * ("21.09. – 27.09."), Referenzbereiche und Leerwerte kamen als Literal aus dem
@@ -19952,25 +19923,11 @@ test('R16: der Abschnittstitel als Weg ist ein Baustein, kein Nachbau je Modul',
   const link = layout.find((rule) => rule.selector.trim() === '.section-title-link');
   assert.ok(link, 'layout.css fuehrt `.section-title-link`');
   assert.match(link.body, /min-height:\s*var\(--target-base\)/);
-  for (const [file, cls] of [['rewards.css', '.rw-section__more'], ['calendar.css', '.day-rail__more']]) {
+  for (const [file, cls] of [['calendar.css', '.day-rail__more']]) {
     const nachbau = rulesOf(read(`../public/styles/${file}`)).filter((rule) => selectorsOf(rule).some((sel) => sel.startsWith(cls)));
     assert.deepStrictEqual(nachbau.map((rule) => rule.selector.trim()), [], `${file} traegt keine eigene Fassung mehr`);
   }
-  assert.match(read('../public/pages/rewards.js'), /class="section-title-link rw-section__more"/);
   assert.match(read('../public/pages/calendar.js'), /class="section-title-link day-rail__more"/);
-});
-
-test('R16: die Buchungszeile der Belohnungen ist eine `.list-row` im `.row-carrier`', () => {
-  const page = read('../public/pages/rewards.js');
-  assert.doesNotMatch(page, /<li class="rw-ledger-row/, 'keine Zeile ohne `.list-row`');
-  assert.match(page, /<li class="list-row rw-ledger-row">[\s\S]*?class="list-row__main"[\s\S]*?class="list-row__name rw-ledger-row__reason"/);
-  assert.match(page, /<ul class="rw-ledger row-carrier">/);
-  const css = rulesOf(read('../public/styles/rewards.css'));
-  const eigen = css.filter((rule) => selectorsOf(rule).some((sel) => /^\.rw-ledger(?:-row)?$/.test(sel)))
-    .filter((rule) => /background|box-shadow|border-radius|padding:\s*var|display:\s*flex/.test(rule.body));
-  assert.deepStrictEqual(eigen.map((rule) => rule.selector.trim()), [], 'Flaeche, Radius und Polster kommen vom Traeger und von der Zeile');
-  // Abschnittstitel tragen kein Icon - in keinem anderen Modul tun sie es.
-  assert.doesNotMatch(page, /class="rw-section__title u-section-title"[^>]*><i data-lucide/);
 });
 
 test('R16: ein Dialog traegt den Ton des offenen Moduls (aktiver Chip im Filterblatt)', () => {
@@ -20278,7 +20235,7 @@ function openThing(item) {
   const footer = `
 function openThing(item) {
   openSharedModal({
-    title: t('rewards.addReward'),
+    title: t('tasks.addTask'),
     content: \`<form id="f">
       <div class="modal-panel__footer">
         <button type="submit" class="btn btn--primary">\${isEdit ? esc(t('common.save')) : esc(t('tasks.emptyAction'))}</button>
@@ -20425,7 +20382,7 @@ test('R17 E6: die Zwei-Felder-Zeile steht einmal in layout.css, kein Modulblatt 
 // Liste darf nur schrumpfen.
 const ALIAS_PENDING = new Set([
   '../public/pages/health.js', '../public/pages/tasks.js', '../public/pages/documents.js',
-  '../public/pages/rewards.js', '../public/pages/calendar.js', '../public/pages/setup.js',
+  '../public/pages/calendar.js', '../public/pages/setup.js',
   '../public/pages/join.js', '../public/pages/login.js', '../public/pages/reset-password.js',
   '../public/pages/forgot-password.js', '../public/components/user-multi-select.js',
   '../public/components/tag-manager.js',
@@ -21441,7 +21398,7 @@ test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {
 // zweiten Form. (Der Lese-/Bearbeiten-Umschalter im Notizdialog ist keine
 // Unternavigation und bleibt aussen vor.)
 test('D3: die Unternavigation der Module ist Text, keine Icon-Reiter', () => {
-  for (const page of ['budget', 'rewards', 'housekeeping', 'schedule']) {
+  for (const page of ['budget', 'housekeeping', 'schedule']) {
     const src = read(`../public/pages/${page}.js`);
     assert.match(src, /class="[^"]*\bsub-tab\b/, `Vorbedingung: ${page} rendert Reiter`);
     assert.doesNotMatch(src, /sub-tab__icon/, `${page}: Reiter tragen nur ihr Wort`);
@@ -21626,9 +21583,6 @@ test('R20: sichtbare Etiketten stehen im Namen, und es gibt genau einen Hauptber
   assert.match(sync, /avatar\.dataset\.initials = initials\(displayName\)/, 'Initialen des Kontoknopfs als Zeichnung');
   assert.doesNotMatch(sync, /avatar\.textContent = initials/, 'kein Textknoten „LI" im Etikett');
   assert.match(read('../public/styles/layout.css'), /\.nav-sidebar__avatar\[data-initials\]::before \{\s*content: attr\(data-initials\);/);
-  const rewards = read('../public/pages/rewards.js');
-  assert.match(rewards, /class="rw-avatar rw-avatar--initials" aria-hidden="true" data-initials=/);
-  assert.match(read('../public/styles/rewards.css'), /\.rw-avatar--initials::before \{ content: attr\(data-initials\); \}/);
 
   const fab = read('../public/utils/fab.js');
   assert.match(fab, /export function syncFabName\(/, 'eine Namensregel fuer den FAB');
@@ -21676,4 +21630,14 @@ test('!important-Sperrklinke: echte !important-Deklarationen in public/styles we
   assert.ok(found.length > 20, `Reichweite: nur ${found.length} Treffer - zaehlt der Scanner noch?`);
   assert.ok(found.length <= IMPORTANT_CEILING,
     `${found.length} echte !important statt hoechstens ${IMPORTANT_CEILING}. Neue Vorrangregel ueber Spezifitaet oder Quellreihenfolge loesen, nicht ueber !important:\n${found.join('\n')}`);
+});
+
+/* Nagrody (Praemien) und Punkte sind ausgebaut: die App ist fuer zwei Erwachsene.
+ * Keine Datei unter public/ laedt die Seite noch, und der Navigationskatalog
+ * kennt kein Modul 'rewards'. */
+test('Nagrody ist ausgebaut: kein Import der Seite, kein Navigationspunkt', () => {
+  const files = walkFrontendFiles('../public/').filter((f) => !f.includes('/locales/'));
+  const hits = files.filter((f) => read(f).includes('/pages/rewards.js'));
+  assert.deepStrictEqual(hits, [], 'jemand laedt /pages/rewards.js noch');
+  assert.ok(!/module:\s*'rewards'/.test(read('../public/router.js')), "Navigationspunkt mit module: 'rewards'");
 });

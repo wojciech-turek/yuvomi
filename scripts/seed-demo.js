@@ -281,7 +281,6 @@ const dashboardWidgets = [
   // auf eines der vier kuratierten Presets ab (1x1, 1x2, 2x1, 2x2), ein `3x1`
   // im Seed kaeme als `2x1` an.
   { id: 'weather',   visible: true,  size: '2x1' },
-  { id: 'rewards',   visible: true,  size: '1x1' },
   { id: 'notes',     visible: true,  size: '2x1' },
   // Ausgeblendet, aber in der Liste: die Reihenfolge bleibt stabil, wenn ein
   // Haushalt sie im Anpassen-Modus wieder einblendet. tasks/calendar/shopping/

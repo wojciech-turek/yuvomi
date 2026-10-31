@@ -6735,11 +6735,10 @@ test('Statistik: das Ziel steht als Text, und seine Marke klemmt nicht an der Ka
 // unter der Buehne).
 test('R19: Fortschrittsbahnen sind Mulden, keine Loecher', () => {
   // TAFLA (2026-10-24): die Budget-Kachel der Uebersicht ist mit dem Raster gegangen.
-  const sheets = { budget: budgetCss, panel: read('../public/styles/panel.css'), rewards: read('../public/styles/rewards.css') };
+  const sheets = { budget: budgetCss, panel: read('../public/styles/panel.css') };
   const wanted = {
     budget: ['.budget-loan-card__progress', '.budget-plan-row__track'],
     panel: ['.metric-card__progress'],
-    rewards: ['.rw-ledger-row__icon'],
   };
   for (const [sheet, selectors] of Object.entries(wanted)) {
     const rules = [...eachRule(sheets[sheet])].filter((r) => !r.at.length);

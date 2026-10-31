@@ -129,7 +129,6 @@ const ROUTES = [
   { path: '/documents', page: '/pages/documents.js', requiresAuth: true, module: 'documents', titleKey: 'nav.documents' },
   { path: '/housekeeping', page: '/pages/housekeeping.js', requiresAuth: true, module: 'housekeeping', titleKey: 'nav.housekeeping' },
   { path: '/waste', page: '/pages/waste.js', requiresAuth: true, module: 'waste', titleKey: 'nav.waste' },
-  { path: '/rewards',  page: '/pages/rewards.js',    requiresAuth: true, module: 'rewards',   titleKey: 'nav.rewards' },
   // Więcej (Tafla): the fifth tab is a page now, not an overflow sheet. No
   // module of its own - it gathers the enabled ones.
   { path: '/more',     page: '/pages/more.js',      requiresAuth: true, module: null, style: '/styles/more.css', titleKey: 'nav.more' },
@@ -1240,7 +1239,6 @@ function invalidateModuleCounts() {
 function primeModuleCountsFrom(data, { filtered = false } = {}) {
   if (filtered || !data) return;
   _moduleCounts = moduleCountsFrom(data, {
-    isAdmin: routerState.currentUser?.role === 'admin',
     shoppingVisible: navItems().some((item) => item.module === 'shopping'),
   });
   _moduleCountsAt = Date.now();
@@ -1280,7 +1278,6 @@ async function refreshModuleCounts() {
     const res = await api.get('/dashboard');
     if (gen !== _moduleCountsGen) return false;
     _moduleCounts = moduleCountsFrom(res, {
-      isAdmin: routerState.currentUser?.role === 'admin',
       // `navItems()` ist bereits nach Zugang gefiltert und damit die richtige
       // Quelle fuer die Frage, ob der Einkauf diesem Mitglied offensteht.
       shoppingVisible: navItems().some((item) => item.module === 'shopping'),
@@ -1294,7 +1291,7 @@ async function refreshModuleCounts() {
      *
      * ABER ER DARF AUCH NICHT SPURLOS SEIN. Dieser Block schluckte bis #868
      * einen ReferenceError mit: `moduleCountsFrom()` rief ein `isAdmin()`, das
-     * es in dieser Datei nie gab (es lebt modul-lokal in pages/rewards.js).
+     * es in dieser Datei nie gab (es lebte modul-lokal in einer Seitendatei).
      * Der Aufruf warf also bei JEDEM Durchlauf, seit die Zeile 2026 dazukam -
      * die Zaehlstaende der Modulkacheln waren nie da, und niemand sah es, weil
      * ein leeres Sheet genauso aussieht wie eines ohne wartende Arbeit.
@@ -2037,7 +2034,7 @@ function renderAppShell(container) {
  *
  * Idempotent: Der Aufruf sucht einen FAB im Inhalt und zieht ihn um; ist
  * keiner da, bleibt der bereits umgezogene stehen. Ein DOM-Umzug behält
- * Event-Listener, Referenzen (health/housekeeping/rewards halten ihren FAB)
+ * Event-Listener, Referenzen (health/housekeeping halten ihren FAB)
  * bleiben gültig.
  */
 function adoptPageFab() {
@@ -3595,7 +3592,7 @@ function mountExtensionPage(wrapper, thirdPartyModule) {
  * mehr oder weniger. Deshalb kostet sie auch keinen zusaetzlichen Aufruf: ein
  * Feld in `/auth/me` waere der genauere Weg und fuer diesen Nutzen zu teuer.
  */
-const DISPLAY_ACTING_MODULES = ['tasks', 'rewards'];
+const DISPLAY_ACTING_MODULES = ['tasks'];
 
 function applyModuleReadonly(moduleName, pageWrapper) {
   const readOnly = navModuleAccess(moduleName) === 'read';
@@ -3641,7 +3638,6 @@ function navItems({ catalog = false } = {}) {
       { path: '/',         label: t('nav.dashboard'), icon: MODULE_ICON.dashboard, module: 'dashboard' },
       { path: '/calendar', label: t('nav.calendar'),  icon: MODULE_ICON.calendar,  module: 'calendar' },
       { path: '/tasks',    label: t('nav.tasks'),     icon: MODULE_ICON.tasks,     module: 'tasks' },
-      { path: '/rewards',  label: t('nav.rewards'),   icon: MODULE_ICON.rewards,   module: 'rewards' },
       // DIE HAUSHALTWEITE ABSCHALTUNG GILT AUCH HIER. Was ein Display DARF,
       // steht fest - was es GIBT, entscheidet der Haushalt, und `navigate()`
       // weist ein abgeschaltetes Modul ohnehin ab. Ohne diesen Filter stuende
@@ -3666,7 +3662,6 @@ function navItems({ catalog = false } = {}) {
     // Plan
     { path: '/calendar',  label: t('nav.calendar'),  module: 'calendar',  section: NAV_SECTION.plan },
     { path: '/tasks',     label: t('nav.tasks'),     module: 'tasks',     section: NAV_SECTION.plan },
-    { path: '/rewards',   label: t('nav.rewards'),   module: 'rewards',   section: NAV_SECTION.plan },
     { path: '/notes',     label: t('nav.notes'),     module: 'notes',     section: NAV_SECTION.plan },
     { path: '/schedule',  label: t('nav.schedule'),  module: 'schedule',  section: NAV_SECTION.plan },
     // Haushalt — Kitchen-Gruppe zuerst, dann die übrigen Haushalts-Module

@@ -42,7 +42,6 @@ const MODULE_ACCENT = {
   documents: 'var(--module-documents)',
   housekeeping: 'var(--module-housekeeping)',
   waste: 'var(--module-waste)',
-  rewards: 'var(--module-rewards)',
   health: 'var(--module-health)',
 };
 
@@ -58,7 +57,6 @@ const WIDGET_LABEL_KEYS = {
   shopping: 'nav.shopping',
   birthdays: 'nav.birthdays',
   budget: 'nav.budget',
-  rewards: 'nav.rewards',
   health: 'nav.health',
   fasting: 'health.fasting.title',
   // Wie das Fasten aus dem Wort des Tabs selbst: die Kachel heisst im

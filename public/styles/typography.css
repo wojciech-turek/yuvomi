@@ -334,8 +334,7 @@
 .list-row__name,
 .agenda-event__title,
 .contact-item__name,
-.subscription-card__name,
-.rw-standing__name {
+.subscription-card__name {
   /* Tafla: der Zeilentitel ist Body 17/400 (vorher 16, medium). --text-base
    * bleibt den Feldern (iOS-Zoom-Schwelle); --font-weight-medium ist 400. */
   font-size: var(--type-body);
@@ -363,7 +362,6 @@
 .task-card__title,
 .contact-item__name,
 .subscription-card__name,
-.rw-standing__name,
 .agenda-event__title > span {
   display: -webkit-box;
   -webkit-box-orient: vertical;

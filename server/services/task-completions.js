@@ -6,15 +6,6 @@
  * Abhängigkeiten: better-sqlite3-Handle (synchron), wird vom Aufrufer übergeben;
  *        visibilityWhere aus services/visibility.js.
  *
- * WARUM DAS NEBEN rewards.js STEHT UND NICHT DARIN. Beide hängen am selben
- * Statuswechsel und sehen sich deshalb ähnlich, aber sie beantworten
- * verschiedene Fragen. Der Ledger bucht einen VERDIENST: er geht an die
- * Zuständigen, kann sich auf mehrere teilen, und er existiert nur, wenn die
- * Aufgabe Punkte trägt und das Modul an ist. Ein Verlaufseintrag hält einen
- * VORGANG fest: er passiert einmal, durch genau einen Klick, und er gilt für
- * jede Aufgabe. Eine gemeinsame Funktion müsste diese Unterschiede in Flags
- * ausdrücken, und das wäre die schlechtere Beschreibung von beidem.
- *
  * WAS HIER BEWUSST NICHT AUFGEZEICHNET WIRD: Teilaufgaben. Eine Unteraufgabe
  * ist ein Checklistenpunkt derselben Anweisung (siehe lockingTask in
  * routes/tasks.js) - "Zelt einpacken" neben "Bad geputzt" im selben Verlauf
@@ -123,9 +114,8 @@ export function revokeCompletion(d, taskId) {
  * Kopplung an den Aufgaben-Statuswechsel. Hält beim Übergang nach 'done' fest
  * und räumt beim Verlassen von 'done' ab; alles andere ist ein No-op.
  *
- * Aufzurufen an genau den Stellen, an denen auch `syncTaskRewards` steht - die
- * beiden Wege, auf denen eine Person eine Aufgabe abhakt (PUT /:id über das
- * Formular, PATCH /:id/status über Checkbox, Swipe und Sammelaktion). Das
+ * Aufzurufen an den beiden Wegen, auf denen eine Person eine Aufgabe abhakt
+ * (PUT /:id über das Formular, PATCH /:id/status über Checkbox, Swipe und Sammelaktion). Das
  * Ablegen ist keiner davon: es ist kein Statuswechsel (#688). Und die
  * Zahlungsaufgabe der Haushaltshilfe, die routes/housekeeping.js direkt auf
  * 'done' setzt, ist es ebenso wenig - sie spiegelt einen Zahlungsstand, es hakt
@@ -134,8 +124,7 @@ export function revokeCompletion(d, taskId) {
  * BEKANNTE GRENZE, ausdrücklich und nicht geerbt: der eingehende CalDAV-Sync
  * (services/caldav-reminders-sync.js) schreibt `status` direkt in die Zeile und
  * kommt hier nicht vorbei. Wer eine gespiegelte Aufgabe in Apple Erinnerungen
- * abhakt, taucht also nicht im Verlauf auf. Dieselbe Lücke hat der
- * reward_ledger schon heute, und der Grund ist derselbe: dieser Lauf hat keine
+ * abhakt, taucht also nicht im Verlauf auf. Der Grund: dieser Lauf hat keine
  * handelnde Person - er läuft mit den Zugangsdaten des Haushalts, nicht denen
  * eines Mitglieds. Ein Eintrag ohne Person wäre möglich (die Spalte lässt NULL
  * zu), braucht aber eine eigene Darstellung: "Nicht mehr im Haushalt" wäre für

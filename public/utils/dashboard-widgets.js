@@ -48,7 +48,7 @@ import { EVENT_LIMIT_DEFAULT, clampEventLimit } from './dashboard-event-limit.js
  * list, so a saved layout that predates them gets them on top, in this order
  * (normalizeDashboardConfig inserts a missing id at its default position). */
 export const TODAY_SECTION_IDS = Object.freeze(['today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon']);
-export const WIDGET_IDS = [...TODAY_SECTION_IDS, 'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget', 'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
+export const WIDGET_IDS = [...TODAY_SECTION_IDS, 'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
 
 // Vier kuratierte Formen statt sechs: über vier Auswahlmöglichkeiten pro Widget
 // (× bis zu 12 Widgets) kippt der Anpassen-Modus in Mikro-Entscheidungs-Overhead
@@ -117,7 +117,7 @@ export function defaultWidgetSize(id) {
   // (PR #930 review).
   // `pantry` („Laeuft bald ab") ist dieselbe Kachel wie die Geburtstage: eine
   // nach Naehe sortierte Liste aus Name und „noch so lange".
-  if (['tasks', 'calendar', 'rewards', 'budget', 'family', 'notes', 'birthdays', 'countdown', 'schedule', 'waste', 'pantry'].includes(id)) return '1x2';
+  if (['tasks', 'calendar', 'budget', 'family', 'notes', 'birthdays', 'countdown', 'schedule', 'waste', 'pantry'].includes(id)) return '1x2';
   // Die Uhr startet breit statt quadratisch: Uhrzeit und darunter der ausgeschriebene
   // Wochentag brauchen Zeile, nicht Höhe - auf 1x1 bräche das Datum um (#651).
   // `quicklinks` steht bei der Uhr und nicht bei den Listen: es ist eine ZEILE
@@ -173,7 +173,7 @@ export function defaultWidgetSize(id) {
 // Die Domaenen, die Dziś selbst als Plan zeigt - ihre alten Kacheln starten aus.
 const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping', 'meals']);
 
-export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'pantry', 'clock', 'weather', 'quicklinks']);
+export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'pantry', 'clock', 'weather', 'quicklinks']);
 
 export function defaultWidgetVisible(id) {
   return !DEFAULT_HIDDEN_WIDGETS.has(id);
@@ -238,7 +238,7 @@ export function normalizeDashboardConfig(input) {
   for (const id of WIDGET_IDS) {
     if (presentIds.has(id)) continue;
     // Neu hinzugekommene Widget-IDs (bei bestehenden, gespeicherten Layouts) erben den
-    // Standard-Sichtbarkeitswert ihrer Domäne — Opt-in-Module (rewards/health/housekeeping)
+    // Standard-Sichtbarkeitswert ihrer Domäne — Opt-in-Module (health/housekeeping)
     // erscheinen also nicht ungefragt, sondern bleiben im „Anpassen"-Panel angeboten.
     ordered.splice(defaultInsertIndex(ordered, id), 0, { id, visible: defaultWidgetVisible(id), order: 0, size: defaultWidgetSize(id) });
     // Zwei neue Ids nacheinander: die erste zählt für die zweite bereits als

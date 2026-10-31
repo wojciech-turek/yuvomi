@@ -14,22 +14,22 @@
  *            nichts tut. Die Begründung steht seit #1209 an der Teilaufgabe
  *            des Wandtabletts; hier gilt sie Wort für Wort.
  *          - Ein reiner HANDLUNGSKNOPF (bearbeiten, löschen, ablegen,
- *            Unteraufgabe anlegen, Sammelaktionsleiste, einlösen, freigeben)
+ *            Unteraufgabe anlegen, Sammelaktionsleiste, freigeben)
  *            VERSCHWINDET. Er sagt nichts, was neben ihm nicht schon stünde.
  *
  *        Die verbindliche Sperre bleibt serverseitig (server/index.js); dies
  *        ist die ehrliche UI-Entsprechung dazu.
  *
- *        EIN WANDTABLETT IST EIN NUR-LESEN-NUTZER MIT ZWEI AUSNAHMEN (#1209).
- *        Seine Scope-Liste ist `tasks:read`/`rewards:read`, die zwei erlaubten
- *        Schreibwege führt der Server als benannte Routen
+ *        EIN WANDTABLETT IST EIN NUR-LESEN-NUTZER MIT EINER AUSNAHME (#1209).
+ *        Seine Scope-Liste ist `tasks:read`, den einen erlaubten
+ *        Schreibweg führt der Server als benannte Route
  *        (`DISPLAY_WRITE_ROUTES`), nicht als Modulrecht. Die Modulregel hier
- *        darf sie deshalb nicht mitreißen - ohne Personenauswahl und
- *        Einlöse-Knopf hätte ein Tablett genau die zwei Dinge verloren, für
- *        die es aufgehängt wird. Jede dieser Stellen fragt zuerst
+ *        darf sie deshalb nicht mitreißen - ohne Personenauswahl
+ *        hätte ein Tablett genau das Ding verloren, für
+ *        das es aufgehängt wird. Jede dieser Stellen fragt zuerst
  *        `actingAsDisplay()`; die Tests unten halten beide Richtungen fest.
  *
- *        Aufgaben und Belohnungen werden am echten Markup gemessen: ihre
+ *        Aufgaben werden am echten Markup gemessen: ihre
  *        Zeilen-, Karten- und Leerzustands-Renderer sind reine Funktionen und
  *        über `__test` erreichbar. Der Kalender hat keine solche Funktion -
  *        sein Kopf und seine Detailansicht bauen direkt ins DOM -, deshalb
@@ -77,7 +77,6 @@ const { canEditTaskDefinition } = await import('../public/utils/task-fields.js')
 const { __test: detail } = await import('../public/components/task-detail.js');
 const { renderMarkdownLight } = await import('../public/utils/html.js');
 const { __test: tasks } = await import('../public/pages/tasks.js');
-const { __test: rewards } = await import('../public/pages/rewards.js');
 const { __test: calendar } = await import('../public/pages/calendar.js');
 // #1265 P1: Pinnwand, Kontakte, Geburtstage.
 const { __test: notes } = await import('../public/pages/notes.js');
@@ -114,7 +113,6 @@ function withAccess(modules, fn) {
   return ergebnis;
 }
 
-const mitglied = (over = {}) => ({ id: 3, display_name: 'Emma', balance: 120, ...over });
 
 const aufgabe = (over = {}) => ({
   id: 7, title: 'Müll rausbringen', status: 'open', category: 'household',
@@ -615,12 +613,12 @@ test('Teilaufgabe der Leseansicht: Knopf mit Schreibrecht, Zustandszeichen ohne'
 // -------------------------------------------------------------------------
 
 /** `tasks: read` UND ein Display-Konto - so sieht ein Wandtablett sich selbst. */
-function amTablett(fn, { people = [{ id: 5, display_name: 'Lea', can_redeem: 1 }] } = {}) {
+function amTablett(fn, { people = [{ id: 5, display_name: 'Lea' }] } = {}) {
   const vorher = { user: tasks.state.user, displayPeople: tasks.state.displayPeople };
   tasks.state.user = { access_scope: 'display' };
   tasks.state.displayPeople = people;
   try {
-    return withAccess({ tasks: 'read', rewards: 'read' }, fn);
+    return withAccess({ tasks: 'read' }, fn);
   } finally {
     Object.assign(tasks.state, vorher);
   }
@@ -653,499 +651,6 @@ test('am Tablett steht KEIN Statuszeichen neben dem Picker', () => {
   // Ohne Display-Konto ist genau dieses Zeichen die Auskunft, die bleiben muss.
   withAccess({ tasks: 'read' }, () => {
     assert.match(tasks.renderTaskCard(aufgabe()), /task-status-btn--static/);
-  });
-});
-
-test('am Tablett bleibt der Einloese-Knopf, wo der Server ihn erlaubt', () => {
-  const vorher = { user: rewards.state.user, overview: rewards.state.overview, catalog: rewards.state.catalog, displayPeople: rewards.state.displayPeople };
-  rewards.state.user = { access_scope: 'display' };
-  rewards.state.overview = { me: null, balances: [mitglied()] };
-  rewards.state.catalog = [{ id: 11, name: 'Kinoabend', cost: 100, is_active: 1 }];
-  try {
-    withAccess({ rewards: 'read' }, () => {
-      rewards.state.displayPeople = [{ id: 3, can_redeem: 1 }];
-      assert.match(rewards.renderStandingRow(mitglied()), /rw-redeem-open/,
-        'die Antwort kommt von /displays/people (can_redeem), nicht aus einer zweiten Regel hier');
-
-      // Und sie folgt dem Server auch in die andere Richtung.
-      rewards.state.displayPeople = [{ id: 3, can_redeem: 0 }];
-      assert.doesNotMatch(rewards.renderStandingRow(mitglied()), /rw-redeem-open/,
-        'wem der Server das Einloesen verwehrt, dem bietet das Tablett es nicht an');
-    });
-  } finally {
-    Object.assign(rewards.state, vorher);
-  }
-});
-
-// -------------------------------------------------------------------------
-// Belohnungen
-// -------------------------------------------------------------------------
-
-function mitBelohnungsstand(fn) {
-  const vorher = { overview: rewards.state.overview, catalog: rewards.state.catalog, redemptions: rewards.state.redemptions, user: rewards.state.user };
-  rewards.state.user = { role: 'admin' };
-  rewards.state.overview = { me: 3, balances: [mitglied()], setup: { participantCount: 0, pointedTaskCount: 0, catalogCount: 0 } };
-  rewards.state.catalog = [{ id: 11, name: 'Kinoabend', cost: 100, is_active: 1 }];
-  rewards.state.redemptions = [{ id: 21, user_id: 3, user_name: 'Emma', reward_name: 'Kinoabend', cost: 100, status: 'pending' }];
-  try {
-    return fn();
-  } finally {
-    Object.assign(rewards.state, vorher);
-  }
-}
-
-test('Punktestandzeile mit `rewards: read`: Saldo bleibt, Einlösen verschwindet', () => {
-  mitBelohnungsstand(() => {
-    withAccess({ rewards: 'write' }, () => {
-      assert.match(rewards.renderStandingRow(mitglied()), /rw-redeem-open/);
-    });
-    withAccess({ rewards: 'read' }, () => {
-      const html = rewards.renderStandingRow(mitglied());
-      assert.doesNotMatch(html, /rw-redeem-open/,
-        'der Server hat für /rewards/redemptions keine Ausnahme wie /schedule/preferences - der POST endet im 403');
-      // Die Auskunft selbst bleibt vollständig.
-      assert.match(html, /Emma/);
-      assert.match(html, /data-countup="120"/);
-      assert.match(html, /role="progressbar"/);
-      assert.match(html, /rw-standing__id/, 'der Weg in die Mitgliedsansicht bleibt');
-    });
-  });
-});
-
-test('Prämienkarte mit `rewards: read`: weder bearbeiten noch einlösen', () => {
-  mitBelohnungsstand(() => {
-    const praemie = { id: 11, name: 'Kinoabend', cost: 100, is_active: 1 };
-    withAccess({ rewards: 'write' }, () => {
-      const html = rewards.renderRewardCard(praemie);
-      assert.match(html, /data-edit="11"/);
-      assert.match(html, /data-redeem-item="11"/);
-    });
-    withAccess({ rewards: 'read' }, () => {
-      const html = rewards.renderRewardCard(praemie);
-      assert.doesNotMatch(html, /data-edit="11"/);
-      assert.doesNotMatch(html, /data-redeem-item="11"/);
-      assert.match(html, /Kinoabend/, 'was es gibt und was es kostet, bleibt lesbar');
-      assert.match(html, /rewards\.pointsUnit/);
-    });
-  });
-});
-
-test('Offene Anfragen mit `rewards: read`: die Liste bleibt, die Entscheidung fällt weg', () => {
-  mitBelohnungsstand(() => {
-    withAccess({ rewards: 'write' }, () => {
-      const html = rewards.renderPendingPanel();
-      assert.match(html, /data-decide="fulfill"/);
-      assert.match(html, /data-decide="reject"/);
-    });
-    withAccess({ rewards: 'read' }, () => {
-      const html = rewards.renderPendingPanel();
-      assert.doesNotMatch(html, /data-decide=/,
-        'genehmigen, ablehnen und abbrechen sind reine Handlungen');
-      assert.doesNotMatch(html, /rw-pending__actions/,
-        'der Flex-Behaelter geht mit: eine leere Box mit gap waere eine Spalte fuer nichts');
-      assert.match(html, /Kinoabend/, 'DASS eine Anfrage offen ist, bleibt eine Auskunft');
-      assert.match(html, /rw-pending__title/);
-    });
-  });
-});
-
-test('Ersteinrichtung mit `rewards: read`: keine Aufforderung, die ins 403 führt', () => {
-  mitBelohnungsstand(() => {
-    withAccess({ rewards: 'write' }, () => {
-      assert.match(rewards.renderSetupHints(), /data-setup="participants"/);
-    });
-    withAccess({ rewards: 'read' }, () => {
-      assert.equal(rewards.renderSetupHints(), '',
-        'alle drei Schritte legen etwas an');
-    });
-  });
-});
-
-// Taschengeld (#1734): der Geld-Saldo ist ein Zustand, Abheben/Einzahlen/
-// Buchen/Plan sind Handlungen. WER ein Konto sieht, entscheidet der Server -
-// hier steht nur, was die Seite aus der Antwort macht.
-function mitTaschengeld(fn, { role = 'member', me = 3, former = false } = {}) {
-  const vorher = { overview: rewards.state.overview, user: rewards.state.user, money: rewards.state.money, redemptions: rewards.state.redemptions };
-  rewards.state.user = { role };
-  rewards.state.overview = { me, balances: [] };
-  // DER HAUSHALT FUEHRT INZWISCHEN YEN, das Konto wurde in EUR eroeffnet (#1734):
-  // jede Zahl unten muss aus der Waehrung des KONTOS kommen. Kaeme sie aus der
-  // des Haushalts, staende "7.731 JPY" da und kein "77,31".
-  const EUR = { currency: 'EUR', minor_unit: 2 };
-  rewards.state.money = {
-    currency: 'JPY', minor_unit: 0,
-    accounts: [{ id: 3, display_name: 'Emma', balance_minor: 7731, former, ...EUR, plan: { amount_minor: 500, ...EUR, frequency: 'weekly', anchor_day: 5, next_run_date: '2026-10-09', paused: false } }],
-    candidates: role === 'admin' ? [{ id: 4, display_name: 'Leo' }] : [],
-  };
-  rewards.state.redemptions = [{ id: 31, user_id: 3, user_name: 'Emma', kind: 'withdrawal', reward_name: 'withdrawal', cost: 421, ...EUR, user_balance: 7731, status: 'pending' }];
-  // Wie bei withAccess oben: ein `finally` um ein Promise feuert am ersten
-  // `await`. Ein async Aufrufer bekaeme den Zustand mitten im Test weggeraeumt.
-  const restore = () => Object.assign(rewards.state, vorher);
-  let result;
-  try {
-    result = fn();
-  } catch (err) {
-    restore();
-    throw err;
-  }
-  if (typeof result?.then === 'function') return result.finally(restore);
-  restore();
-  return result;
-}
-
-test('Taschengeld mit `rewards: read`: der Stand bleibt, Abheben und Einzahlen verschwinden', () => {
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      const html = rewards.renderMoneySection();
-      assert.match(html, /data-money-request="withdrawal"/);
-      assert.match(html, /data-money-request="deposit"/);
-      assert.doesNotMatch(html, /data-money-book|data-money-plan|rw-money-setup/, 'ein Kind bucht nicht und plant nicht');
-    });
-    withAccess({ rewards: 'read' }, () => {
-      const html = rewards.renderMoneySection();
-      assert.doesNotMatch(html, /data-money-request=/, 'der POST endete im 403 - wie beim Einloesen');
-      assert.doesNotMatch(html, /rw-standing__actions/, 'der leere Behaelter geht mit');
-      assert.match(html, /Emma/);
-      assert.match(html, /77[.,]31/, 'der Saldo bleibt lesbar');
-      assert.match(html, /rewards\.money\.planWeekly/, 'und der Plan auch');
-      assert.match(html, /data-money-member="3"/, 'der Weg in den Verlauf bleibt');
-    });
-  });
-});
-
-test('Taschengeld: das eigene Konto traegt die Anfrage-Knoepfe, ein fremdes nie', () => {
-  // Der Server schickt einem Kind kein fremdes Konto. Kaeme doch eines an,
-  // haengt an ihm trotzdem kein Knopf: die Anfrage gilt immer der eigenen Person.
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      assert.doesNotMatch(rewards.renderMoneySection(), /data-money-request=|data-money-book=/);
-    });
-  }, { me: 9 });
-});
-
-test('Taschengeld fuer Eltern: buchen, planen, einrichten - und mit `rewards: read` nichts davon', () => {
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      const html = rewards.renderMoneySection();
-      assert.match(html, /data-money-book="3"/);
-      assert.match(html, /data-money-plan="3"/);
-      assert.match(html, /rw-money-setup/, 'Leo hat noch kein Konto');
-      assert.doesNotMatch(html, /data-money-request=/, 'Eltern buchen direkt, sie stellen keine Anfrage');
-    });
-    withAccess({ rewards: 'read' }, () => {
-      const html = rewards.renderMoneySection();
-      assert.doesNotMatch(html, /data-money-book|data-money-plan|rw-money-setup/);
-      assert.match(html, /77[.,]31/);
-    });
-  }, { role: 'admin', me: 1 });
-});
-
-test('Taschengeld: ein ehemaliges Konto traegt das Zeichen und genau eine Handlung - auszahlen', () => {
-  const vorher = globalThis.__openModal;
-  const dialoge = [];
-  globalThis.__openModal = (options) => { dialoge.push(options); };
-  try {
-    mitTaschengeld(() => {
-      withAccess({ rewards: 'write' }, () => {
-        const html = rewards.renderMoneySection();
-        assert.match(html, /settings\.memberFormerBadge/, 'als ehemalig gekennzeichnet');
-        assert.match(html, /data-money-book="3"/, 'abbuchen geht');
-        assert.match(html, /rewards\.money\.debit/);
-        assert.doesNotMatch(html, /rewards\.money\.book[^a-zA-Z]/, 'nicht "Buchen": gutschreiben gibt es nicht mehr');
-        assert.doesNotMatch(html, /data-money-plan|data-money-request/, 'kein Plan, keine Anfrage');
-        assert.match(html, /77[.,]31/, 'das Restguthaben steht da');
-
-        rewards.openMoneyPlanModal(3);
-        assert.equal(dialoge.length, 0, 'der Plan-Dialog oeffnet fuer ein ehemaliges Konto nicht');
-        rewards.openMoneyBookModal(3);
-        assert.equal(dialoge.length, 1);
-        assert.match(dialoge[0].content, /type="hidden" id="rw-money-direction" value="debit"/, 'der Dialog bucht nur ab');
-        assert.doesNotMatch(dialoge[0].content, /value="credit"/);
-      });
-      withAccess({ rewards: 'read' }, () => {
-        const html = rewards.renderMoneySection();
-        assert.doesNotMatch(html, /data-money-book/, 'nur-lesen: auch das Auszahlen ist eine Handlung');
-        assert.match(html, /settings\.memberFormerBadge/);
-      });
-    }, { role: 'admin', me: 1, former: true });
-    // Ein aktives Konto bietet weiter beides.
-    mitTaschengeld(() => withAccess({ rewards: 'write' }, () => {
-      dialoge.length = 0;
-      rewards.openMoneyBookModal(3);
-      assert.match(dialoge[0].content, /value="credit"/);
-      assert.doesNotMatch(rewards.renderMoneySection(), /settings\.memberFormerBadge/);
-    }), { role: 'admin', me: 1 });
-  } finally {
-    globalThis.__openModal = vorher;
-  }
-});
-
-test('Taschengeld: Konto eroeffnen ist ein eigener Dialog, und schliessen laesst sich nur, was der Server leer nennt', async () => {
-  const vorher = globalThis.__openModal;
-  const dialoge = [];
-  globalThis.__openModal = (options) => { dialoge.push(options); };
-  try {
-    await mitTaschengeld(async () => {
-      withAccess({ rewards: 'write' }, () => {
-        // Eroeffnen: die Mitglieder ohne Konto, kein Betrag, kein Plan.
-        rewards.openMoneyAccountModal();
-        assert.equal(dialoge.length, 1);
-        assert.match(dialoge[0].content, /id="rw-account-member"/);
-        assert.match(dialoge[0].content, /<option value="4">Leo<\/option>/);
-        assert.match(dialoge[0].content, /rewards\.money\.openAccount/);
-        assert.doesNotMatch(dialoge[0].content, /rw-money-amount|rw-plan-frequency/, 'ein Konto braucht weder Betrag noch Plan');
-
-        // Schliessen: nur am leeren Konto.
-        assert.doesNotMatch(rewards.renderMoneySection(), /data-money-close/, 'mit Guthaben und Plan: kein Schliessen');
-        rewards.state.money.accounts[0] = { ...rewards.state.money.accounts[0], balance_minor: 0, plan: null, closable: true };
-        assert.match(rewards.renderMoneySection(), /data-money-close="3"/);
-      });
-      withAccess({ rewards: 'read' }, () => {
-        assert.doesNotMatch(rewards.renderMoneySection(), /data-money-close|rw-money-setup/, 'nur-lesen: weder eroeffnen noch schliessen');
-        dialoge.length = 0;
-        rewards.openMoneyAccountModal();
-        assert.equal(dialoge.length, 0);
-      });
-
-      // Zwischen Anzeige und Klick ging eine Anfrage ein: der Server weist ab,
-      // die Seite sagt es in ihrer Sprache und laedt neu.
-      await withAccess({ rewards: 'write' }, () => mitSeitenSonde(async (sonde) => {
-        globalThis.__apiStub = { delete: async () => { throw Object.assign(new Error('Only an empty account can be closed'), { data: { reason: 'money_account_not_empty' } }); } };
-        await assert.doesNotReject(rewards.closeMoneyAccount(rewards.state.money.accounts[0]));
-        assert.equal(sonde.gefragt.length, 2, 'die Rueckfrage und die Absage');
-        assert.match(sonde.gefragt[0], /rewards\.money\.confirmCloseAccount/);
-        assert.match(sonde.gefragt[1], /rewards\.money\.accountNotEmpty/);
-        assert.equal(sonde.reloads, 1);
-        const calls = [];
-        globalThis.__apiStub = { delete: async (path) => { calls.push(path); return { ok: true }; } };
-        await rewards.closeMoneyAccount(rewards.state.money.accounts[0]);
-        assert.deepEqual(calls, ['/rewards/money/accounts/3']);
-      }));
-    }, { role: 'admin', me: 1 });
-    // Das Kind selbst schliesst nichts und eroeffnet nichts.
-    mitTaschengeld(() => withAccess({ rewards: 'write' }, () => {
-      rewards.state.money.accounts[0] = { ...rewards.state.money.accounts[0], balance_minor: 0, plan: null, closable: true };
-      assert.doesNotMatch(rewards.renderMoneySection(), /data-money-close|rw-money-setup/);
-      dialoge.length = 0;
-      rewards.openMoneyAccountModal();
-      assert.equal(dialoge.length, 0);
-    }));
-  } finally {
-    globalThis.__openModal = vorher;
-  }
-});
-
-test('Taschengeld: ohne Antwort oder ohne Konto steht kein leerer Abschnitt da', () => {
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      rewards.state.money = null;
-      assert.equal(rewards.renderMoneySection(), '', 'ohne Antwort: kein Abschnitt (auch am Wandtablett)');
-      rewards.state.money = { currency: 'EUR', minor_unit: 2, accounts: [], candidates: [] };
-      assert.equal(rewards.renderMoneySection(), '', 'ein Kind ohne Konto sieht keine Ueberschrift ueber nichts');
-    });
-  });
-});
-
-test('Taschengeld ohne Konto: wer eines eroeffnen kann, liest im selben Traeger, wofuer der Abschnitt da ist (#1774)', () => {
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      const kandidaten = [{ id: 4, display_name: 'Leo' }];
-      rewards.state.money = { currency: 'EUR', minor_unit: 2, accounts: [], candidates: kandidaten };
-      const leer = rewards.renderMoneySection();
-      assert.match(leer, /<ul class="row-carrier rw-standings"><li class="list-row rw-money-empty"><p class="list-row__meta">rewards\.money\.empty<\/p><\/li><\/ul>/,
-        'ein Satz im Zeilentraeger, kein nacktes Ende unter der Ueberschrift');
-      assert.match(leer, /rw-money-setup/, 'die Handlung steht weiter im Kopf');
-      // Mit einem Konto sieht der Abschnitt aus wie bisher: keine Erklaerung mehr.
-      rewards.state.money = { currency: 'EUR', minor_unit: 2, candidates: kandidaten,
-        accounts: [{ id: 3, display_name: 'Emma', balance_minor: 100, former: false, currency: 'EUR', minor_unit: 2, plan: null }] };
-      const voll = rewards.renderMoneySection();
-      assert.doesNotMatch(voll, /rw-money-empty|rewards\.money\.empty/);
-      assert.match(voll, /rw-standing/);
-    });
-    // nur-lesen: weder Handlung noch Satz - der Abschnitt entfaellt ganz
-    withAccess({ rewards: 'read' }, () => {
-      rewards.state.money = { currency: 'EUR', minor_unit: 2, accounts: [], candidates: [{ id: 4, display_name: 'Leo' }] };
-      assert.equal(rewards.renderMoneySection(), '');
-    });
-  }, { role: 'admin' });
-});
-
-test('eine Geld-Anfrage in der Liste: Betrag in Geld, nicht in Punkten - und nur-lesen ohne Entscheidung', () => {
-  mitTaschengeld(() => {
-    withAccess({ rewards: 'write' }, () => {
-      const html = rewards.renderPendingPanel();
-      assert.match(html, /rewards\.money\.ledgerWithdrawal/, 'der Titel ist die Art der Anfrage, nicht der Marker aus der Datenbank');
-      assert.match(html, /4[.,]21/);
-      assert.doesNotMatch(html, /rewards\.pointsUnit/, '421 Cent sind keine 421 Punkte');
-      assert.match(html, /77[.,]31/, 'wer entscheidet, liest das Guthaben daneben');
-      assert.match(html, /data-decide="fulfill"/);
-    });
-    withAccess({ rewards: 'read' }, () => {
-      assert.doesNotMatch(rewards.renderPendingPanel(), /data-decide=/);
-    });
-  }, { role: 'admin', me: 1 });
-});
-
-// DIE NACHKOMMASTELLEN KOMMEN VOM SERVER (Review zu #1745). Der Plan-Dialog
-// belegte sein Betragsfeld ueber `Intl` vor: fuer COP, HUF, IDR, IRR und PYG
-// (CLDR 0 Stellen, ISO 4217 zwei) stand der Betrag hundertfach im Feld, und
-// jedes Speichern verhundertfachte das Taschengeld. Gemessen wird der ganze
-// Rundlauf - Server-Betrag -> Feld -> Pruefung -> Text an den Server ->
-// Server-Betrag - mit dem ECHTEN Parser des Servers und fuer JEDE waehlbare
-// Waehrung, nicht fuer drei Beispiele.
-test('Taschengeld: ein Betrag ueberlebt den Rundlauf durch das Feld, in jeder waehlbaren Waehrung', async () => {
-  const { CURRENCY_CODES } = await import('../public/utils/currency-codes.js');
-  const { minorUnit, parseMoneyToMinor } = await import('../server/services/split-expenses.js');
-  const { toDecimalString, currencyFractionDigits } = await import('../public/utils/money.js');
-  assert.ok(CURRENCY_CODES.length >= 20, 'die Liste der Waehrungen ist da');
-  const vorher = rewards.state.money;
-  const abweichend = [];
-  try {
-    for (const currency of CURRENCY_CODES) {
-      const digits = minorUnit(currency);
-      if (digits !== currencyFractionDigits(currency)) abweichend.push(currency);
-      // Das KONTO rechnet in `currency`; der Haushalt fuehrt inzwischen eine
-      // andere Waehrung mit anderen Stellen (#1734). Jede Rechnung muss dem
-      // Konto folgen.
-      const household = digits === 0 ? { currency: 'KWD', minor_unit: 3 } : { currency: 'JPY', minor_unit: 0 };
-      rewards.state.money = { ...household, accounts: [], candidates: [] };
-      const account = { currency, minor_unit: digits };
-      // Glatt, mit Nachkommastellen (wo die Waehrung welche hat), klein, gross.
-      for (const minor of [5000 * 10 ** digits, 123456, 1, 10 ** 12]) {
-        const field = rewards.minorToAmountInput(minor, account);
-        assert.equal(rewards.moneyAmountProblem(field, account), null, `${currency} ${minor}: "${field}" ist speicherbar`);
-        assert.equal(parseMoneyToMinor(toDecimalString(field), currency), minor,
-          `${currency}: ${minor} steht als "${field}" im Feld und kommt als derselbe Betrag zurueck`);
-        assert.equal(rewards.decimalToMinor(toDecimalString(field), account), minor, `${currency}: der Vergleich mit dem Guthaben rechnet gleich`);
-      }
-      // Eine Stelle mehr, als der Server annimmt, ist ein Grund am Feld.
-      assert.equal(rewards.moneyAmountProblem(`1,${'1'.repeat(digits + 1)}`, account), 'precision', `${currency}: zu viele Stellen`);
-      // Ohne Konto (ein neues wird eroeffnet) gilt die Waehrung des Haushalts.
-      assert.equal(rewards.minorToAmountInput(1, undefined), rewards.minorToAmountInput(1, household));
-    }
-  } finally {
-    rewards.state.money = vorher;
-  }
-  // Ohne diese Waehrungen maesse der Rundlauf den Fehler gar nicht.
-  assert.ok(abweichend.includes('HUF') && abweichend.includes('IDR'),
-    `die Probe braucht Waehrungen, bei denen Intl und ISO 4217 auseinandergehen (gefunden: ${abweichend.join(', ')})`);
-});
-
-test('Taschengeld: der Plan-Dialog eines Forint-Haushalts zeigt 5000, nicht 500000', () => {
-  const vorher = rewards.state.money;
-  try {
-    rewards.state.money = { currency: 'HUF', minor_unit: 2, accounts: [], candidates: [] };
-    assert.equal(rewards.minorToAmountInput(500000), '5000');
-    assert.equal(rewards.minorToAmountInput(500050), '5000,50', 'ein Betrag mit Filler bleibt, wie er gespeichert ist');
-    rewards.state.money = { currency: 'EUR', minor_unit: 2, accounts: [], candidates: [] };
-    assert.equal(rewards.minorToAmountInput(500), '5,00');
-    rewards.state.money = { currency: 'JPY', minor_unit: 0, accounts: [], candidates: [] };
-    assert.equal(rewards.minorToAmountInput(500), '500');
-    rewards.state.money = { currency: 'KWD', minor_unit: 3, accounts: [], candidates: [] };
-    assert.equal(rewards.minorToAmountInput(1234), '1,234');
-  } finally {
-    rewards.state.money = vorher;
-  }
-});
-
-test('Taschengeld: der Plan-Dialog selbst belegt das Feld mit dem Betrag, den der Server gespeichert hat', () => {
-  // Der Helfer oben kann stimmen und der Dialog trotzdem an ihm vorbei rechnen:
-  // gelesen wird deshalb das Feld, das der Dialog baut.
-  const vorher = { money: rewards.state.money, user: rewards.state.user, open: globalThis.__openModal };
-  const dialoge = [];
-  globalThis.__openModal = (options) => { dialoge.push(options); };
-  try {
-    rewards.state.user = { role: 'admin' };
-    withAccess({ rewards: 'write' }, () => {
-      for (const [currency, minor_unit, stored, shown] of [['HUF', 2, 500000, '5000'], ['IDR', 2, 15000000, '150000'], ['EUR', 2, 500, '5,00'], ['JPY', 0, 500, '500'], ['KWD', 3, 1500, '1,500']]) {
-        // Der Haushalt fuehrt eine ANDERE Waehrung als das Konto.
-        const household = minor_unit === 0 ? { currency: 'KWD', minor_unit: 3 } : { currency: 'JPY', minor_unit: 0 };
-        rewards.state.money = {
-          ...household, candidates: [],
-          accounts: [{ id: 3, display_name: 'Emma', balance_minor: 0, currency, minor_unit, plan: { amount_minor: stored, currency, minor_unit, frequency: 'weekly', anchor_day: 5, next_run_date: '2026-10-09', paused: false } }],
-        };
-        dialoge.length = 0;
-        rewards.openMoneyPlanModal(3);
-        assert.equal(dialoge.length, 1, `${currency}: der Dialog oeffnet`);
-        const value = dialoge[0].content.match(/id="rw-money-amount"[^>]*value="([^"]*)"/)?.[1];
-        assert.equal(value, shown, `${currency}: ${stored} kleinste Einheiten stehen als "${shown}" im Feld`);
-        assert.match(dialoge[0].content, new RegExp(`\\(${currency}\\)`), `${currency}: das Feld nennt die Waehrung des Kontos, nicht die des Haushalts`);
-      }
-    });
-  } finally {
-    rewards.state.money = vorher.money;
-    rewards.state.user = vorher.user;
-    globalThis.__openModal = vorher.open;
-  }
-});
-
-/** Zaehlt, wie oft die Seite sich neu laden will (`refreshActiveTab` sucht ihren Traeger). */
-async function mitSeitenSonde(fn) {
-  const vorher = { document: globalThis.document, api: globalThis.__apiStub, confirm: globalThis.__confirmModal };
-  const sonde = { reloads: 0, gefragt: [] };
-  globalThis.document = {
-    querySelector: (sel) => { if (sel === '.rewards-page') sonde.reloads += 1; return null; },
-    getElementById: () => null,
-    body: {},
-  };
-  globalThis.__confirmModal = async (text) => { sonde.gefragt.push(text); return true; };
-  try {
-    return await fn(sonde);
-  } finally {
-    globalThis.document = vorher.document;
-    globalThis.__apiStub = vorher.api;
-    globalThis.__confirmModal = vorher.confirm;
-  }
-}
-
-test('Taschengeld: scheitert "Plan beenden", sagt die Seite es - keine unbehandelte Rejection', async () => {
-  await mitTaschengeld(() => withAccess({ rewards: 'write' }, () => mitSeitenSonde(async (sonde) => {
-    globalThis.__apiStub = { delete: async () => { throw Object.assign(new Error('Server nicht erreichbar'), { status: 503 }); } };
-    await assert.doesNotReject(rewards.removeMoneyPlan({ id: 3, display_name: 'Emma' }),
-      'das Formular ist schon zu - der Fehler darf nicht ins Leere fallen');
-    assert.deepEqual(sonde.gefragt, ['Server nicht erreichbar'], 'die Meldung steht in einem Dialog');
-    assert.equal(sonde.reloads, 1, 'und die Liste zeigt danach, was gilt');
-
-    sonde.gefragt.length = 0;
-    const calls = [];
-    globalThis.__apiStub = { delete: async (path) => { calls.push(path); return { ok: true }; } };
-    await rewards.removeMoneyPlan({ id: 3, display_name: 'Emma' });
-    assert.deepEqual(calls, ['/rewards/money/plans/3']);
-    assert.deepEqual(sonde.gefragt, [], 'gelingt es, fragt niemand nach');
-  })), { role: 'admin', me: 1 });
-});
-
-test('Taschengeld: reicht das Guthaben bei der Freigabe nicht mehr, laedt die Liste neu', async () => {
-  await mitTaschengeld(() => withAccess({ rewards: 'write' }, () => mitSeitenSonde(async (sonde) => {
-    globalThis.__apiStub = {
-      patch: async () => { throw Object.assign(new Error('The balance no longer covers this withdrawal'), { data: { reason: 'insufficient_funds' } }); },
-    };
-    await rewards.decideRedemption(31, 'fulfill', null);
-    assert.equal(sonde.gefragt.length, 1);
-    assert.match(sonde.gefragt[0], /rewards\.money\.insufficientOnApprove/, 'der Satz ist uebersetzt, nicht der Servertext');
-    assert.equal(sonde.reloads, 1, 'das Guthaben neben der Anfrage war der Stand von vor der Absage');
-
-    // Ein anderer Fehler laesst die Liste stehen, wie bisher.
-    sonde.reloads = 0;
-    globalThis.__apiStub = { patch: async () => { throw new Error('kaputt'); } };
-    await rewards.decideRedemption(31, 'fulfill', null);
-    assert.equal(sonde.reloads, 0);
-  })), { role: 'admin', me: 1 });
-});
-
-test('Geldbuchungen im Verlauf: was sie waren, steht in ihren Feldern', () => {
-  mitTaschengeld(() => {
-    assert.equal(rewards.moneyRowKind({ delta: 500, type: 'bonus', allowance_date: '2026-10-09' }), 'allowance');
-    assert.equal(rewards.moneyRowKind({ delta: 2000, type: 'bonus', request_kind: 'deposit' }), 'deposit');
-    assert.equal(rewards.moneyRowKind({ delta: -1234, type: 'redeem', request_kind: 'withdrawal' }), 'withdrawal');
-    assert.equal(rewards.moneyRowKind({ delta: 300, type: 'bonus' }), 'credit');
-    assert.equal(rewards.moneyRowKind({ delta: -300, type: 'adjust' }), 'debit');
-    const html = rewards.moneyLedgerRowHtml({ delta: -1234, currency: 'EUR', minor_unit: 2, type: 'redeem', request_kind: 'withdrawal', reason: '<b>Kino</b>', created_at: '2026-10-06T10:00:00Z' });
-    // Eine Zeile aus der Zeit vor einem Neuanfang traegt ihre eigene Waehrung.
-    assert.match(rewards.moneyLedgerRowHtml({ delta: 500, currency: 'KWD', minor_unit: 3, type: 'bonus', created_at: '2026-10-06T10:00:00Z' }), /0[.,]500/);
-    assert.match(html, /12[.,]34/);
-    assert.match(html, /rw-delta--neg/);
-    assert.doesNotMatch(html, /<b>Kino<\/b>/, 'die Notiz des Kindes laeuft durch esc()');
   });
 });
 
@@ -1212,16 +717,14 @@ test('Kalender-Detailansicht: Löschen, Zurücksetzen und Bearbeiten fallen weg,
 });
 
 // -------------------------------------------------------------------------
-// Die Begründung für das Ausblenden des Einlösens - am Server gemessen
+// Die Begründung für das Ausblenden - am Server gemessen
 // -------------------------------------------------------------------------
 
 test('die Ausnahmen vom Modulrecht stehen am Server, und es sind genau zwei Sorten', async () => {
-  // WOVON DIESE SEITE ABHÄNGT. Bekäme `/rewards/redemptions` eine
-  // Niveau-Senkung wie `/schedule/preferences`, gehörte der Einlöse-Knopf
-  // einem Menschen mit `rewards: read` zurück. Und verlöre ein Display seine
-  // benannten Schreibrouten, gehörten Personenauswahl und Tablett-Einlösen
-  // weg. Beides sind Entscheidungen, die anderswo fallen - dieser Test macht
-  // die Kopplung sichtbar, statt sie zu erraten.
+  // WOVON DIESE SEITE ABHÄNGT. Verlöre ein Display seine benannte
+  // Schreibroute, gehörte die Personenauswahl am Tablett weg. Das ist eine
+  // Entscheidung, die anderswo fällt - dieser Test macht die Kopplung
+  // sichtbar, statt sie zu erraten.
   //
   // Die Senkungen stehen seit #1290 in EINER Tabelle (`READ_LEVEL_WRITES` in
   // server/scopes.js), die beide Gates lesen - gemessen wird deshalb das
@@ -1229,12 +732,8 @@ test('die Ausnahmen vom Modulrecht stehen am Server, und es sind genau zwei Sort
   const { READ_LEVEL_WRITES, sessionModuleAccessRequirement } = await import('../server/scopes.js');
   assert.equal(sessionModuleAccessRequirement('/schedule/preferences', 'PUT').access, 'read',
     'Gegenprobe: die Tabelle wird wirklich gelesen');
-  for (const pfad of ['/rewards/redemptions', '/rewards/redemptions/1/approve', '/rewards/1/redeem', '/rewards']) {
-    assert.equal(sessionModuleAccessRequirement(pfad, 'POST').access, 'write',
-      `eine Senkung für ${pfad} hieße: der Einlöse-Knopf gehört in rewards.js zurück`);
-  }
-  assert.ok(!READ_LEVEL_WRITES.some((e) => /rewards/i.test(e.pattern)),
-    'eine Senkung für /rewards hieße: der Einlöse-Knopf gehört in rewards.js zurück');
+  assert.ok(!READ_LEVEL_WRITES.some((e) => /tasks/i.test(e.pattern)),
+    'eine Senkung für /tasks hieße: die Modulregel dieser Seite greift am Tablett nicht mehr');
 
   // Die zweite Sorte: benannte Routen für ein gekoppeltes Gerät.
   const display = readFileSync(new URL('../server/display-scopes.js', import.meta.url), 'utf8');
@@ -1743,7 +1242,7 @@ test('das Markup traegt die Faelligkeit, die der Riegel im Speichern liest', asy
 //
 // Was hier NICHT steht, weil es diese drei Seiten nicht betrifft: eine
 // Display-Ausnahme. `DISPLAY_WRITE_ROUTES` (server/display-scopes.js) fuehrt
-// genau zwei Routen, `/tasks/:id/status` und `/rewards/redemptions` - fuer
+// genau eine Route, `/tasks/:id/status` - fuer
 // Notizen, Kontakte und Geburtstage gibt es keine. Ein Tablett traegt auf
 // `calendar` (und damit auf den Geburtstagen) `read` und darf dort nichts;
 // `notes` und `contacts` stehen gar nicht in seiner Scope-Liste. Die Modulregel
@@ -1757,10 +1256,10 @@ test('keine der drei Seiten hat eine Display-Ausnahme - der Server gibt keine he
   const liste = routen.slice(0, routen.indexOf(']);'));
   assert.ok(!/notes|contacts|birthdays/.test(liste),
     'gaebe es hier eine Route, brauchte die betroffene Seite ein actingAsDisplay() VOR der Modulregel');
-  // Und die Gegenrichtung: die zwei, die es gibt, stehen noch da. Verschwaenden
+  // Und die Gegenrichtung: die eine, die es gibt, steht noch da. Verschwaende
   // sie, waere der Satz oben trivial wahr.
   assert.match(liste, /\/tasks\\\/\\d\+\\\/status/);
-  assert.match(liste, /\/rewards\\\/redemptions/);
+  assert.doesNotMatch(liste, /rewards/);
 });
 
 // -------------------------------------------------------------------------

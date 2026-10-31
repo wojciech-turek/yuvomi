@@ -28,7 +28,7 @@ const SLIDES = [
   { n: 2, shot: 'calendar-light-web.png',  l1: 'Everyone’s calendar,', l2: 'in one place.' },
   { n: 3, shot: 'meals-light-web.png',     l1: 'From meal plan', l2: 'to shopping list.' },
   { n: 4, shot: 'budget-light-web.png',    l1: 'The household budget,', l2: 'at a glance.' },
-  { n: 5, shot: 'tasks-light-web.png',     l1: 'Chores, points', l2: 'and rewards.' },
+  { n: 5, shot: 'tasks-light-web.png',     l1: 'Chores and tasks,', l2: 'done together.' },
 ];
 
 const html = ({ imgB64, l1, l2 }) => `<!DOCTYPE html>

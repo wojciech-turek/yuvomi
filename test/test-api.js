@@ -825,8 +825,6 @@ const REASONS_WITHOUT_SENTENCE = new Set([
   'browser_session_required',
   // Wandtablett und Gastkonto: aus der Oberflaeche dieser Konten nicht erreichbar.
   'display_account', 'display_only', 'display_action', 'acting_person_no_access', 'split_guest_scope',
-  // Taschengeld am Wandtablett (#1734): die Seite fragt dort gar nicht erst nach Geld.
-  'money_not_on_display',
   // Die Oberflaeche bietet das Loeschen dort nicht an; der Servertext ist deutsch.
   'family_member_contact',
   'FASTING_CAPABILITY_REQUIRED', 'FASTING_SUBJECT_FORBIDDEN', 'FASTING_ACK_FORBIDDEN', 'FASTING_SETTINGS_FORBIDDEN',
@@ -855,8 +853,6 @@ const REASONS_PASSED_THROUGH = new Map([
     why: 'keine Antwort; wird zu error.code und reist mit 400' }],
   ['routes/tasks.js: actor.reason', { sites: 1, at403: [['acting_person_no_access', 'services/display-acting.js']],
     why: 'displayActingPerson: 400 ohne Grund oder 403 mit diesem' }],
-  ['routes/rewards.js: actor.reason', { sites: 1, at403: [['acting_person_no_access', 'services/display-acting.js']],
-    why: 'displayActingPerson, wie in tasks.js' }],
   ['routes/health/fasting.js: error.reason', { sites: 1, at403: [
     ['FASTING_CAPABILITY_REQUIRED', 'services/fasting.js'], ['FASTING_SUBJECT_FORBIDDEN', 'services/fasting.js'],
     ['FASTING_ACK_FORBIDDEN', 'services/fasting.js'], ['FASTING_SETTINGS_FORBIDDEN', 'services/fasting.js'],
@@ -918,12 +914,6 @@ const REASONS_PASSED_THROUGH = new Map([
   ['middleware/restore-gate.js: RESTORE_IN_PROGRESS_REASON', { sites: 1, at403: [], why: '503 oder 409' }],
   ['routes/weather.js: WEATHER_REASON.NOT_CONFIGURED', { sites: 1, at403: [], why: 'Antwort 200 ohne Daten' }],
   ['routes/weather.js: WEATHER_REASON.UPSTREAM_ERROR', { sites: 5, at403: [], why: 'Antwort 200 ohne Daten (Wetter 3x, Ortssuche 2x)' }],
-  ['routes/rewards.js: item.name', { sites: 1, at403: [], why: 'Buchungstext im Punktekonto, keine Antwort' }],
-  ['routes/rewards.js: row.reward_name', { sites: 1, at403: [], why: 'Buchungstext im Punktekonto, keine Antwort' }],
-  ['routes/rewards.js: row.note', { sites: 1, at403: [], why: 'Buchungstext im Taschengeldkonto (#1734), keine Antwort' }],
-  // Eingabefehler am Taschengeld (#1734): der einzige Grund ist `currency_mismatch`, immer an einer 400.
-  ['routes/rewards.js: input.reason', { sites: 1, at403: [], why: 'feste 400' }],
-  ['services/reward-money.js: err.reason', { sites: 1, at403: [], why: 'Rueckgabe an die Route, dort feste 400' }],
   ['services/ics-parser.js: !uid ? \'missing UID\' : \'missing or unparsable DTSTART\'', { sites: 1, at403: [],
     why: 'onSkip fuers Log, keine Antwort' }],
 ]);

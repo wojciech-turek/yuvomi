@@ -4,9 +4,9 @@ import { wireScrollFade } from '/utils/ux.js';
  * Modul: Tablist-Verhalten — geteilte WAI-ARIA-Tab-Navigation
  *
  * EINE Verhaltens-Quelle (Klick + Pfeiltasten/Home/End + Roving-Tabindex + ARIA)
- * für Tab-Leisten, deren Buttons bereits im Markup stehen (rewards,
- * housekeeping, budget, calendar). `renderSubTabs` ist die Variante, die die
- * Leiste selbst baut und dabei Deep-Link-Routen, Zustandszahlen und
+ * für Tab-Leisten, deren Buttons bereits im Markup stehen (housekeeping,
+ * budget, calendar). `renderSubTabs` ist die Variante, die die Leiste
+ * selbst baut und dabei Deep-Link-Routen, Zustandszahlen und
  * Panel-Synchronisierung mitbringt (health, kitchen). So teilen beide dieselbe
  * Interaktions-Grammatik, ohne dass ein Modul die Tastatur-Navigation erneut
  * von Hand nachbaut.

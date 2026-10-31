@@ -48,7 +48,6 @@
  * Kontos.
  */
 import { deleteBirthdayArtifacts } from './birthdays.js';
-import { closeFormerMoney } from './reward-money.js';
 
 /**
  * Spalten, die auf `users(id)` zeigen und trotzdem keine Spur in geteilten
@@ -294,11 +293,6 @@ function deactivate(database, userId) {
   database.prepare(`
     UPDATE users SET ${FEED_TOKEN_COLUMNS.map((column) => `${column} = NULL`).join(', ')} WHERE id = ?
   `).run(userId);
-  // TASCHENGELD (#1734): HIER wechselt der Zustand, also endet hier, was an ihm
-  // haengt - offene Geld-Anfragen werden storniert, der Plan pausiert. Ein
-  // Restguthaben bleibt und wird von den Eltern ausgezahlt; die Regel dazu
-  // steht in server/services/reward-money.js (`closeFormerMoney`).
-  closeFormerMoney(database, userId);
   database.prepare('DELETE FROM password_resets WHERE user_id = ?').run(userId);
   database.prepare('DELETE FROM idempotency_keys WHERE user_id = ?').run(userId);
   // Wiederherstellungscodes sind Einmal-Geheimnisse auf Papier, die den zweiten

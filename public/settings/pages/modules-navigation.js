@@ -104,7 +104,7 @@ function buildRows(preferences, thirdPartyModules) {
   // damit es konsistent mit der globalen Navigation erscheint.
   const ordered = [];
   for (const row of rows) {
-    if (!kitchenInserted && ['housekeeping', 'documents', 'rewards', 'contacts', 'birthdays', 'health', 'budget'].includes(row.id)) {
+    if (!kitchenInserted && ['housekeeping', 'documents', 'contacts', 'birthdays', 'health', 'budget'].includes(row.id)) {
       ordered.push(kitchenRow);
       kitchenInserted = true;
     }

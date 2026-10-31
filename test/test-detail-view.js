@@ -662,7 +662,7 @@ test('die Aufgaben-Detailansicht führt die Leseinformationen der Karte', async 
   const fn = src.slice(src.indexOf('function renderTaskDetail'), src.indexOf('export function openTaskDetail'));
   // Seit R18 stehen Faelligkeit und Personen im Kopf (taskDetailHead).
   for (const key of ['tasks.statusLabel', 'tasks.priorityLabel', 'tasks.startDateLabel',
-    'tasks.categoryLabel', 'tasks.pointsLabel', 'tasks.tagsLabel',
+    'tasks.categoryLabel', 'tasks.tagsLabel',
     'tasks.subtasksLabel', 'tasks.documentsLabel', 'tasks.descriptionLabel']) {
     assert.match(fn, new RegExp(reLiteral(key)), `${key} fehlt in der Detailansicht`);
   }

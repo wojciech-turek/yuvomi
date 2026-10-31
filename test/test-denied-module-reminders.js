@@ -338,7 +338,7 @@ test('ein Admin faellt nie heraus, auch mit einer Sperrzeile auf seiner ID', asy
 // --------------------------------------------------------------------------
 test('jede Herkunft zeigt auf ein Modul der Rechtematrix', () => {
   const gateable = new Set(PERMISSION_MODULES.map((m) => m.key));
-  assert.ok(gateable.size >= 15, `nur ${gateable.size} Rechte-Module gefunden - PERMISSION_MODULES wurde nicht gelesen`);
+  assert.ok(gateable.size >= 14, `nur ${gateable.size} Rechte-Module gefunden - PERMISSION_MODULES wurde nicht gelesen`);
   const entries = Object.entries(ORIGIN_MODULE);
   assert.ok(entries.length >= 12, `nur ${entries.length} Herkuenfte in ORIGIN_MODULE`);
   const ungated = entries.filter(([, moduleKey]) => !gateable.has(moduleKey));

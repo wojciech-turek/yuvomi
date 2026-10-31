@@ -166,7 +166,6 @@ export const SCOPE_MODULES = Object.freeze([
   { key: 'budget',       prefixes: ['budget', 'split-expenses'] },
   { key: 'documents',    prefixes: ['documents'] },
   { key: 'health',       prefixes: ['health'] },
-  { key: 'rewards',      prefixes: ['rewards'] },
   { key: 'housekeeping', prefixes: ['housekeeping'] },
   { key: 'waste',        prefixes: ['waste'] },
   { key: 'weather',      prefixes: ['weather'] },

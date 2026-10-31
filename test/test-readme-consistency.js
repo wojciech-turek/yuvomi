@@ -524,9 +524,9 @@ const README_FACTS = [
     what: 'Medikamenten-Erinnerungen (server/services/medication-scheduler.js) und Dokumentablauf (reminder-origins.js)' },
   // Die Familien-Sektion (RD2 derselben Critique), aus docs/index.html fam_1..3 abgeleitet:
   // dieselben Stellen im Code, an denen test-docs-landing.js (10) die Homepage haelt.
-  { says: { en: /pick who did it, and the points go to them/, de: /ausw[aä]hlen, wer sie erledigt hat, und die Punkte gehen an diese Person/ },
-    holds: (s) => s.display.includes("method: 'PATCH', pattern: /^\\/tasks\\/\\d+\\/status$/") && /if \(doneByUserId\) return enrolled\.has\(doneByUserId\)/.test(s.rewards),
-    what: 'das Wand-Tablet hakt fuer eine gewaehlte Person ab (server/display-scopes.js PATCH /tasks/:id/status, server/services/rewards.js)' },
+  { says: { en: /pick who did it, and the history names them/, de: /ausw[aä]hlen, wer sie erledigt hat, und der Verlauf nennt diese Person/ },
+    holds: (s) => s.display.includes("method: 'PATCH', pattern: /^\\/tasks\\/\\d+\\/status$/") && /done_by_user_id/.test(s.taskCompletions),
+    what: 'das Wand-Tablet hakt fuer eine gewaehlte Person ab, der Verlauf nennt sie (server/display-scopes.js PATCH /tasks/:id/status, server/services/task-completions.js done_by_user_id)' },
   { says: { en: /the last shopping list you opened stays readable without signal/, de: /die zuletzt ge[oö]ffnete Einkaufsliste bleibt lesbar/ },
     holds: (s) => /API_CACHE_WHITELIST = \[[^\]]*'\/shopping'/.test(s.sw),
     what: "Offline-Cache der Einkaufsliste (public/sw.js API_CACHE_WHITELIST '/shopping')" },
@@ -605,7 +605,7 @@ function factSources() {
     medicationScheduler: existsSync(resolve(ROOT, 'server/services/medication-scheduler.js')),
     reminderOrigins: src('server/services/reminder-origins.js'),
     display: src('server/display-scopes.js'),
-    rewards: src('server/services/rewards.js'),
+    taskCompletions: src('server/services/task-completions.js'),
     sw: src('public/sw.js'),
     permissions: src('server/permissions.js'),
     twoFactor: src('server/services/two-factor.js'),

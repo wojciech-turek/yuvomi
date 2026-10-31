@@ -432,7 +432,7 @@ class YuvomiInstallPrompt extends HTMLElement {
     // DER BANNER MELDET SEINE HOEHE AN DIE SHELL.
     //
     // Er liegt fixiert auf der Toast-Ebene und verdeckte damit das Ende jeder
-    // Seite: auf /rewards lagen 89px der letzten Punktestandszeile dauerhaft
+    // Seite: 89px der letzten Zeile lagen dauerhaft
     // unter ihm, ohne dass man weiterscrollen konnte. Die Nachlauf-Regeln in
     // layout.css rechnen den Wert in `padding-block-end` von `.app-content`
     // ein; ohne Banner steht die Variable auf 0.

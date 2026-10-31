@@ -1571,7 +1571,7 @@ test('die Installationsseiten-Guards erkennen den Schaden, gegen den sie gebaut 
 const PAGE_MODULE = {
   f_tasks: 'tasks', m_cal: 'calendar', m_sched: 'schedule', m_notes: 'notes', m_contacts: 'contacts',
   f_meals: 'meals', m_recipes: 'recipes', m_shop: 'shopping', m_pantry: 'pantry',
-  m_house: 'housekeeping', m_waste: 'waste', m_docs: 'documents', m_inv: 'inventory', m_rewards: 'rewards',
+  m_house: 'housekeeping', m_waste: 'waste', m_docs: 'documents', m_inv: 'inventory',
   f_health: 'health', m_bday: 'birthdays', f_budget: 'budget',
   m_family: null, m_rem: null, m_api: null, m_backup: null,
 };
@@ -1679,8 +1679,8 @@ test('der Menuegruppen-Guard erkennt den Schaden, gegen den er gebaut ist', () =
     + groups.map(([g, keys]) => `<h3 class="mod-group-head" data-t="grp_${g}">${g}</h3>` + keys.map(card).join('')).join('')
     + '</div><button id="modToggle">';
   const healthy = page([
-    // R19 (Ulas 2026-10-16): Belohnungen unter Planen, Schichtplan am Ende.
-    ['plan', ['f_tasks', 'm_cal', 'm_rewards', 'm_notes', 'm_sched']],
+    // Schichtplan am Ende von Planen.
+    ['plan', ['f_tasks', 'm_cal', 'm_notes', 'm_sched']],
     ['household', ['f_meals', 'm_recipes', 'm_shop', 'm_pantry', 'm_house', 'm_waste', 'm_docs', 'm_inv']],
     ['people', ['f_health', 'm_contacts', 'm_bday']],
     ['finance', ['f_budget']],
@@ -1697,9 +1697,9 @@ test('der Menuegruppen-Guard erkennt den Schaden, gegen den er gebaut ist', () =
   assert.match(found, /m_backup: steht nicht im Menue, aber in der Gruppe people/);
   assert.match(found, /m_new: ohne Zuordnung/);
   // Vertauschte Reihenfolge innerhalb einer Gruppe.
-  const swapped = healthy.replace('<h4 data-t="m_cal_t">x</h4><h4 data-t="m_rewards_t">x</h4>',
-    '<h4 data-t="m_rewards_t">x</h4><h4 data-t="m_cal_t">x</h4>');
-  assert.match(navGroupProblems(swapped, ROUTER()).join('\n'), /plan: Reihenfolge rewards, calendar/);
+  const swapped = healthy.replace('<h4 data-t="m_cal_t">x</h4><h4 data-t="m_notes_t">x</h4>',
+    '<h4 data-t="m_notes_t">x</h4><h4 data-t="m_cal_t">x</h4>');
+  assert.match(navGroupProblems(swapped, ROUTER()).join('\n'), /plan: Reihenfolge notes, calendar/);
   // Das ausfuehrliche Modul rutscht aus der Spitze seiner Gruppe.
   const featLate = healthy.replace('<h4 data-t="f_tasks_t">x</h4><h4 data-t="m_cal_t">x</h4>',
     '<h4 data-t="m_cal_t">x</h4><h4 data-t="f_tasks_t">x</h4>');
@@ -2879,13 +2879,6 @@ const R2_CLAIMS = [
   { where: 'ho_4_d', says: { en: /reminds you before something expires/, de: /erinnert euch, bevor etwas abläuft/ },
     holds: (s) => /expires_on/.test(s.pantryReminders) && !/min_quantity/.test(s.pantryReminders),
     what: 'Erinnerungen nur an Ablaufdaten (server/services/pantry-reminders.js liest expires_on, nie min_quantity)' },
-  // Punkte
-  { where: 'ho_2_d', says: { en: /go to whoever did it/, de: /Die bekommt, wer sie erledigt hat/ },
-    holds: (s) => /if \(doneByUserId\) return enrolled\.has\(doneByUserId\)/.test(s.rewards),
-    what: 'die benannte Person schlaegt die Zuweisung (server/services/rewards.js rewardTargets)' },
-  { where: 'm_rewards_d', says: { en: /go to whoever did it/, de: /bekommt, wer sie erledigt hat/ },
-    holds: (s) => /if \(doneByUserId\) return enrolled\.has\(doneByUserId\)/.test(s.rewards),
-    what: 'die benannte Person schlaegt die Zuweisung (server/services/rewards.js rewardTargets)' },
   // Sicherheit (long_a4)
   { where: 'long_a4', says: { en: /an admin can require it for the whole household/, de: /ein Admin kann ihn für den ganzen Haushalt verlangen/ },
     holds: (s) => /export function setRequiredForHousehold/.test(s.twoFactor) && /export function isRequiredForHousehold/.test(s.twoFactor),
@@ -2920,7 +2913,6 @@ function r2Sources() {
     pantryPage: src('public/pages/pantry.js'),
     shoppingPage: src('public/pages/shopping.js'),
     pantryReminders: src('server/services/pantry-reminders.js'),
-    rewards: src('server/services/rewards.js'),
     twoFactor: src('server/services/two-factor.js'),
     totp: existsSync(resolve(ROOT, 'server/utils/totp.js')),
     auth: src('server/auth.js'),
@@ -2952,7 +2944,7 @@ function r2Findings(html, sources) {
   return found;
 }
 
-test('index.html + READMEs: Vorrat, Punkte und Sicherheit sagen nur, was der Code haelt', () => {
+test('index.html + READMEs: Vorrat und Sicherheit sagen nur, was der Code haelt', () => {
   assert.deepEqual(r2Findings(read('index.html'), r2Sources()), []);
 });
 
@@ -2961,12 +2953,10 @@ test('der Guard aus (16) erkennt den Schaden, gegen den er gebaut ist', () => {
   const real = r2Sources();
   const hit = (list, re) => list.some((l) => re.test(l));
   // Die alten Saetze, auf der Seite und in der README.
-  const oldPage = html.replace("ho_4_b:'One tap puts it on the shopping list'", "ho_4_b:'It is already on the shopping list'")
-    .replace("m_rewards_d:'Points on tasks go to whoever did it,", "m_rewards_d:'Points on tasks credit the assigned member,");
-  assert.notEqual(oldPage, html, 'Vorbedingung: ho_4_b und m_rewards_d stehen so im Woerterbuch');
+  const oldPage = html.replace("ho_4_b:'One tap puts it on the shopping list'", "ho_4_b:'It is already on the shopping list'");
+  assert.notEqual(oldPage, html, 'Vorbedingung: ho_4_b steht so im Woerterbuch');
   const f1 = r2Findings(oldPage, real);
   assert.ok(hit(f1, /ho_4_b \(en\) sagt nicht mehr/) && hit(f1, /ho_4_b \(en\) sagt wieder/), f1.join(' | '));
-  assert.ok(hit(f1, /m_rewards_d \(en\) sagt wieder/), f1.join(' | '));
   const oldReadme = { ...real, readmes: { ...real.readmes, 'README.md': real.readmes['README.md'].replace('goes on the list with one tap', 'is already on the list') } };
   assert.ok(hit(r2Findings(html, oldReadme), /README\.md sagt wieder/), 'README-Satz faellt nicht auf');
   // Die Uebergabe Wochenplan -> Einkauf wird wieder zum Tipp.
@@ -2980,8 +2970,6 @@ test('der Guard aus (16) erkennt den Schaden, gegen den er gebaut ist', () => {
   // Der Code verliert, woran die Zusage haengt.
   const lowStock = { ...real, pantryReminders: real.pantryReminders + '\nconst low = item.min_quantity;' };
   assert.ok(hit(r2Findings(html, lowStock), /ho_4_d \(de\): haengt an Erinnerungen nur an Ablaufdaten/), 'Vorrats-Erinnerung blind');
-  const assignee = { ...real, rewards: real.rewards.replace('if (doneByUserId) return enrolled.has(doneByUserId)', 'if (false) return null') };
-  assert.ok(hit(r2Findings(html, assignee), /ho_2_d \(en\): haengt an/), 'Punkte-Guard blind');
   const noLogout = { ...real, auth: real.auth.replace("router.post('/logout-others'", "router.post('/logout-all'") };
   assert.ok(hit(r2Findings(html, noLogout), /long_a4 \(de\): haengt an andere Sitzungen beenden/), 'Abmelde-Guard blind');
   const no2fa = { ...real, twoFactor: real.twoFactor.replace('export function setRequiredForHousehold', 'function setRequiredForHousehold') };

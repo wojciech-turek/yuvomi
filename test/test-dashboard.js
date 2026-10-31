@@ -618,58 +618,6 @@ test('Dashboard-Endpoint filtert heutige Mahlzeiten nach sichtbaren Typen', asyn
   }
 });
 
-// Die Rangfolge nach Punkten ist mit der Critique 2026-09-23 entfallen: wer
-// freigibt, sieht die Kinder nach NAMEN, und die Sicht haengt an der Rolle
-// (authRole). Die Sichten einzeln prueft test/test-dashboard-rewards.js.
-test('Dashboard-Endpoint: Belohnungen liefert Punktestand, Teilnehmerzahl und offene Freigaben', async () => {
-  const { get } = await import('../server/db.js');
-  const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
-  const routeDb = get();
-
-  routeDb.prepare("DELETE FROM users WHERE username LIKE 'dashboard-rewards-%'").run();
-
-  const parent = routeDb.prepare(`
-    INSERT INTO users (username, display_name, password_hash, avatar_color, role)
-    VALUES ('dashboard-rewards-parent', 'Rewards Parent', 'x', '#007AFF', 'admin')
-  `).run().lastInsertRowid;
-  const kidA = routeDb.prepare(`
-    INSERT INTO users (username, display_name, password_hash, avatar_color, role)
-    VALUES ('dashboard-rewards-kid-a', 'Kid A', 'x', '#34C759', 'member')
-  `).run().lastInsertRowid;
-  const kidB = routeDb.prepare(`
-    INSERT INTO users (username, display_name, password_hash, avatar_color, role)
-    VALUES ('dashboard-rewards-kid-b', 'Kid B', 'x', '#FF9500', 'member')
-  `).run().lastInsertRowid;
-
-  for (const uid of [kidA, kidB]) {
-    routeDb.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(uid);
-  }
-  routeDb.prepare("INSERT INTO reward_ledger (user_id, delta, type) VALUES (?, 30, 'earn')").run(kidA);
-  routeDb.prepare("INSERT INTO reward_ledger (user_id, delta, type) VALUES (?, 80, 'earn')").run(kidB);
-  routeDb.prepare(`INSERT INTO reward_redemptions (user_id, reward_name, cost, status)
-    VALUES (?, 'Kino', 50, 'pending')`).run(kidB);
-
-  const app = express();
-  app.use((req, _res, next) => { req.authUserId = parent; req.authRole = 'admin'; req.session = { userId: parent }; next(); });
-  app.use('/', dashboardRouter);
-  const server = app.listen(0, '127.0.0.1');
-  await new Promise((resolve) => server.once('listening', resolve));
-  try {
-    const body = await (await fetch(`http://127.0.0.1:${server.address().port}/`)).json();
-    const names = body.rewards.standings.map((s) => s.display_name);
-    nodeAssert.equal(body.rewards.view, 'approver');
-    nodeAssert.equal(names[0], 'Kid A', 'nach Namen, nicht nach Saldo - Kid B hat mehr und steht nicht vorn');
-    nodeAssert.ok(names.includes('Kid A'), 'zweiter Teilnehmer ist enthalten');
-    nodeAssert.ok(!names.includes('Rewards Parent'), 'Nicht-Teilnehmer erscheinen nicht');
-    nodeAssert.equal(body.rewards.standings.find((s) => s.display_name === 'Kid B').balance, 80);
-    nodeAssert.equal(body.rewards.participantCount, 2);
-    nodeAssert.equal(body.rewards.pending, 1);
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-    routeDb.prepare("DELETE FROM users WHERE username LIKE 'dashboard-rewards-%'").run();
-  }
-});
-
 test('Dashboard-Endpoint: Gesundheit zählt heute fällige eigene Dosen und Nachbestellungen', async () => {
   const { get } = await import('../server/db.js');
   const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
@@ -1916,7 +1864,7 @@ function layoutOhne(missing) {
 const ERWARTETE_WIDGET_IDS = [
   'today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon',
   'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget',
-  'rewards', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule',
+  'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule',
   'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks',
 ];
 
@@ -1955,7 +1903,7 @@ test('Widget-Merge: ein umsortiertes Layout laesst den Neuzugang seinem Vorgaeng
   // keine Default-Position mehr, nur noch Nachbarn - der Neuzugang haengt sich
   // an seinen Vorgaenger, nicht ans Ende. Das ist die Entscheidung, und sie
   // steht hier, weil sie sonst niemandem auffaellt.
-  const demo = ['weather', 'family', 'budget', 'birthdays', 'rewards', 'notes',
+  const demo = ['weather', 'family', 'budget', 'birthdays', 'waste', 'notes',
     'tasks', 'calendar', 'shopping', 'meals', 'housekeeping', 'health', 'cycle']
     .map((id, i) => ({ id, order: i, visible: i < 6, size: '1x1' }));
   const merged = widgets.normalizeDashboardConfig(demo);
@@ -1964,7 +1912,7 @@ test('Widget-Merge: ein umsortiertes Layout laesst den Neuzugang seinem Vorgaeng
   // dieselbe Zusicherung ein zweites Mal: sein Vorgaenger in WIDGET_IDS ist
   // `birthdays`, und dorthin gehoert er - nicht ans Ende. Die fuenf
   // Tafla-Abschnitte (2026-10-19) haben keinen Vorgaenger und stehen vorn.
-  assert(sichtbar.join(',') === 'today-weather,today-shopping,today-tomorrow,today-question,today-soon,weather,metrics,family,budget,birthdays,countdown,rewards,notes',
+  assert(sichtbar.join(',') === 'today-weather,today-shopping,today-tomorrow,today-question,today-soon,weather,metrics,family,budget,birthdays,countdown,waste,notes',
     `Neuzugang an unerwarteter Stelle: ${sichtbar.join(',')}`);
 });
 
@@ -2059,7 +2007,7 @@ test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetrag
   const widgets = await import('../public/utils/dashboard-widgets.js');
   assert(widgets.WIDGET_IDS.includes('schedule'), 'WIDGET_IDS fehlt schedule');
   assert(widgets.DEFAULT_HIDDEN_WIDGETS.has('schedule'),
-    'schedule muss wie rewards/health/housekeeping erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
+    'schedule muss wie health/housekeeping erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
 });
 
 // --------------------------------------------------------

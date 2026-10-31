@@ -1233,8 +1233,7 @@ export function focusRestoreTarget(memo) {
  *
  * Der ganze Vorgang hier dreht sich darum, dass `.focus()` still fehlschlaegt.
  * Genau das kann auch ein Ersatz: der neu gebaute Knopf ist vielleicht
- * `disabled` (in rewards wird der Einloesen-Knopf es, sobald die Punkte nicht
- * mehr reichen) oder ausgeblendet. Dann ist er der eindeutige Treffer, nimmt
+ * `disabled` (ein Knopf, der nur bei erfuellter Bedingung gilt) oder ausgeblendet. Dann ist er der eindeutige Treffer, nimmt
  * den Fokus aber nicht an - und ohne diese Rueckmeldung wuesste niemand davon.
  *
  * Nur die Seitenwurzel bekommt `preventScroll`: sie IST der Scrollport

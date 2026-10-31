@@ -685,7 +685,7 @@
        .mod-list zu `display: contents`, die Eintraege stehen dann wieder
        direkt im Raster der Gruppe (Karte ueber zwei Spalten, Eintraege daneben
        und darunter). Vorher galt das nur am Telefon, und am Schirm lief der
-       Katalog mit allen zwanzig Beschreibungen 3.201px lang. Ohne JS steht wie
+       Katalog mit allen neunzehn Beschreibungen 3.201px lang. Ohne JS steht wie
        beim .reveal-Fallback alles da, weil dieses Publikum JS gern abschaltet. */
     .mod-list { display: contents; }
     .mod-toggle { display: none; }
@@ -1236,7 +1236,7 @@
        Anfang jeder Zeile aus. -->
   <div class="wrap">
     <span class="pi"><span id="gh-stars-proof" data-gh-stars>★ 1.7k</span></span>
-    <span class="pi"><b>20</b> <span data-t="proof_modules">modules</span></span>
+    <span class="pi"><b>19</b> <span data-t="proof_modules">modules</span></span>
     <span class="pi"><b>26</b> <span data-t="proof_langs">languages</span></span>
     <!-- "0 trackers" is the strongest claim on the page for a privacy product and
          stays on phones, where it used to be the one that got dropped. It links
@@ -1277,7 +1277,7 @@
       fam_title:'On the kitchen wall, in every pocket, <em>for every age.</em>',
       fam_desc:'Everyone in the house gets their own login from a link and the app on their phone. A terminal, if needed at all, is only for whoever sets it up.',
       fam_1_t:'The tablet on the kitchen wall',
-      fam_1_d:'Wall mode shows today’s plan and who is up, readable across the room. The tablet has an account of its own: tap a task, pick who did it, and the points go to them.',
+      fam_1_d:'Wall mode shows today’s plan and who is up, readable across the room. The tablet has an account of its own: tap a task, pick who did it, and the history names them.',
       fam_2_t:'The app on every phone',
       fam_2_d:'It goes on the home screen straight from the browser, no app store. Reminders arrive as notifications even while it is closed (your server needs HTTPS for that), and the last shopping list you opened stays readable without signal.',
       fam_3_t:'An invite, and just the right access',
@@ -1302,8 +1302,6 @@
       ho_desc:'This is the part a folder full of separate apps cannot do. What happens in one module shows up where you need it, without anyone re-typing it.',
       ho_1_a:'Meal plan for the week', ho_1_b:'Ingredients on the shopping list',
       ho_1_d:'One import sends every ingredient from the week\'s plan to the shared list, sorted by aisle, with the next seven days pre-selected. Nobody transcribes a recipe into a notes app again.',
-      ho_2_a:'A chore gets ticked off', ho_2_b:"Points land on your kid's balance",
-      ho_2_d:'Any task can carry points. They go to whoever did it - the assignee, or the person picked when it is ticked off - and buy rewards from a catalog you control.',
       ho_3_a:'A receipt gets filed', ho_3_b:'It’s attached to the expense',
       ho_3_d:'Attach it to the budget entry from the documents you already keep, or upload it on the spot. Filed once, findable from both sides.',
       alt_hero:"Yuvomi overview showing what is on today for the whole family, with the family and budget cards below",
@@ -1358,7 +1356,6 @@
       m_bday_t:'Birthdays', m_bday_d:'Birthday tracker with optional name days, automatic annual calendar events, age display and custom reminders.',
       m_house_t:'Housekeeping', m_house_d:'Manage household staff: schedules, check-in/out, daily or hourly billing, chores and supplies.',
       m_inv_t:'Inventory', m_inv_d:'What you own: brand, model, serial number, storage location, purchase price, warranty and condition, with linked receipts and bookings. Off by default; households turn it on.',
-      m_rewards_t:'Rewards', m_rewards_d:'Points on tasks go to whoever did it, with a configurable default for new tasks, a parent-approved catalog, an auditable ledger and pocket money per child.',
       m_recipes_t:'Recipes', m_recipes_d:'Create, duplicate and scale reusable recipes, then pre-fill meal slots or send the ingredients to a shopping list. A self-hosted Mealie or Tandoor instance can be mirrored read-only.',
       m_rem_t:'Reminders', m_rem_d:'Reminders on tasks, events, shifts, subscription renewals, warranties, best-before dates and waste pickups, with an in-app badge, opt-in push notifications and household Gotify, ntfy, webhook or email channels.',
       m_backup_t:'Backup', m_backup_d:'Scheduled backups with optional WebDAV upload (Nextcloud, ownCloud, Hetzner, etc.). Every restore saves the current state first, and a backup from another installation restores in the browser, no shell needed.', plat_title:'Runs on <em>your</em> hardware',
@@ -1400,7 +1397,7 @@
       fam_title:'An der Küchenwand, in jeder Hosentasche, <em>für jedes Alter.</em>',
       fam_desc:'Alle im Haus bekommen per Link ein eigenes Konto und die App aufs Handy. Ein Terminal braucht, wenn überhaupt, nur wer es einrichtet.',
       fam_1_t:'Das Tablet an der Küchenwand',
-      fam_1_d:'Der Wand-Modus zeigt den Tagesplan und wer heute dran ist, lesbar quer durch den Raum. Das Tablet hat ein eigenes Konto: Aufgabe antippen, auswählen, wer sie erledigt hat, und die Punkte gehen an diese Person.',
+      fam_1_d:'Der Wand-Modus zeigt den Tagesplan und wer heute dran ist, lesbar quer durch den Raum. Das Tablet hat ein eigenes Konto: Aufgabe antippen, auswählen, wer sie erledigt hat, und der Verlauf nennt diese Person.',
       fam_2_t:'Die App auf jedem Handy',
       fam_2_d:'Sie kommt direkt aus dem Browser auf den Startbildschirm, ohne App Store. Erinnerungen kommen als Mitteilung, auch wenn die App zu ist (dafür braucht euer Server HTTPS), und die zuletzt geöffnete Einkaufsliste bleibt lesbar, wenn kein Netz da ist.',
       fam_3_t:'Eine Einladung und genau die richtigen Rechte',
@@ -1425,8 +1422,6 @@
       ho_desc:'Genau das kann ein Ordner voller einzelner Apps nicht. Was in einem Modul passiert, taucht dort auf, wo ihr es braucht, ohne dass es jemand abtippt.',
       ho_1_a:'Mahlzeitenplan für die Woche', ho_1_b:'Zutaten auf der Einkaufsliste',
       ho_1_d:'Ein Import schickt alle Zutaten der Wochenplanung nach Gang sortiert auf die geteilte Liste; die nächsten sieben Tage sind schon ausgewählt. Niemand überträgt mehr ein Rezept in eine Notiz-App.',
-      ho_2_a:'Eine Aufgabe wird abgehakt', ho_2_b:'Punkte landen auf dem Konto des Kindes',
-      ho_2_d:'Jede Aufgabe kann Punkte tragen. Die bekommt, wer sie erledigt hat: die zugewiesene Person oder die beim Abhaken ausgewählte. Eingelöst werden sie gegen Belohnungen aus einem Katalog, den ihr bestimmt.',
       ho_3_a:'Ein Beleg wird abgelegt', ho_3_b:'Er hängt an der Buchung',
       ho_3_d:'Hängt ihn aus euren vorhandenen Dokumenten an den Budget-Eintrag oder ladet ihn direkt hoch. Einmal ablegen, von beiden Seiten auffindbar.',
       alt_hero:"Yuvomi-Übersicht: was heute für die ganze Familie ansteht, darunter die Karten für Familie und Budget",
@@ -1478,7 +1473,6 @@
       m_bday_t:'Geburtstage', m_bday_d:'Geburtstags-Tracker mit optionalen Namenstagen, automatischen jährlichen Kalendereinträgen, Altersanzeige und Erinnerungen.',
       m_house_t:'Haushaltshilfe', m_house_d:'Haushaltspersonal verwalten: Pläne, Ein-/Ausstempeln, Tages- oder Stundenabrechnung, Hausarbeiten und Bedarf.',
       m_inv_t:'Inventar', m_inv_d:'Was ihr besitzt: Marke, Modell, Seriennummer, Lagerort, Kaufpreis, Garantie und Zustand, mit verknüpften Belegen und Buchungen. Standardmäßig aus; Haushalte schalten es ein.',
-      m_rewards_t:'Belohnungen', m_rewards_d:'Punkte auf Aufgaben bekommt, wer sie erledigt hat, mit einstellbarem Standardwert für neue Aufgaben, Prämien-Katalog mit Eltern-Freigabe, nachvollziehbarem Punktekonto und Taschengeld je Kind.',
       m_recipes_t:'Rezepte', m_recipes_d:'Wiederverwendbare Rezepte erstellen, duplizieren und skalieren, dann Mahlzeiten vorausfüllen oder die Zutaten auf die Einkaufsliste schicken. Eine selbst gehostete Mealie- oder Tandoor-Instanz lässt sich nur lesend daneben spiegeln.',
       m_rem_t:'Erinnerungen', m_rem_d:'Erinnerungen für Aufgaben, Termine, Schichten, Abo-Verlängerungen, Garantien, Mindesthaltbarkeit und Abfuhrtermine, mit In-App-Badge, optionalen Push-Benachrichtigungen und Gotify-, ntfy-, Webhook- oder E-Mail-Kanälen des Haushalts.',
       m_backup_t:'Backup', m_backup_d:'Geplante Backups mit optionalem WebDAV-Upload (Nextcloud, ownCloud, Hetzner\xa0usw.). Vor jeder Wiederherstellung wird der aktuelle Stand gesichert, und ein Backup einer anderen Installation spielt ihr ohne Shell im Browser ein.', plat_title:'Läuft auf <em>eurer</em> Hardware',
@@ -1722,20 +1716,6 @@
       </li>
       <li class="ho-row reveal">
         <div class="ho-flow">
-          <span class="ho-step" style="--m: var(--m-tasks)">
-            <span class="ho-ico"><span class="ho-token" aria-hidden="true"></span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-            <span class="ho-label" data-t="ho_2_a">A chore gets ticked off</span>
-          </span>
-          <span class="ho-arrow" aria-hidden="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="19" y2="12"/><polyline points="14 7 19 12 14 17"/></svg></span>
-          <span class="ho-step ho-step--to" style="--m: var(--m-rewards)">
-            <span class="ho-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></span>
-            <span class="ho-label" data-t="ho_2_b">Points land on your kid's balance</span>
-          </span>
-        </div>
-        <p class="ho-note" data-t="ho_2_d">Any task can carry points. They go to whoever did it - the assignee, or the person picked when it is ticked off - and buy rewards from a catalog you control.</p>
-      </li>
-      <li class="ho-row reveal">
-        <div class="ho-flow">
           <span class="ho-step" style="--m: var(--m-documents)">
             <span class="ho-ico"><span class="ho-token" aria-hidden="true"></span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
             <span class="ho-label" data-t="ho_3_a">A receipt gets filed</span>
@@ -1810,7 +1790,7 @@
           <span class="fam-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="4.5" rx="2"/><line x1="18" x2="18.01" y1="12" y2="12"/></svg></span>
           <div class="fam-text">
             <h3 data-t="fam_1_t">The tablet on the kitchen wall</h3>
-            <p data-t="fam_1_d">Wall mode shows today’s plan and who is up, readable across the room. The tablet has an account of its own: tap a task, pick who did it, and the points go to them.</p>
+            <p data-t="fam_1_d">Wall mode shows today’s plan and who is up, readable across the room. The tablet has an account of its own: tap a task, pick who did it, and the history names them.</p>
           </div>
         </li>
         <li class="fam-item reveal d1">
@@ -1879,10 +1859,6 @@
           <div class="mod-card" style="--m: var(--m-calendar)">
             <div class="mod-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
             <h4 data-t="m_cal_t">Calendar</h4><p data-t="m_cal_d">Two-way sync with Google and CalDAV, one-way push to Outlook.com via Microsoft Graph, public ICS subscriptions, recurring events, holiday overlays and per-event visibility.</p>
-          </div>
-          <div class="mod-card" style="--m: var(--m-rewards)">
-            <div class="mod-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></div>
-            <h4 data-t="m_rewards_t">Rewards</h4><p data-t="m_rewards_d">Points on tasks go to whoever did it, with a configurable default for new tasks, a parent-approved catalog, an auditable ledger and pocket money per child.</p>
           </div>
           <div class="mod-card" style="--m: var(--m-notes)">
             <div class="mod-ico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></div>

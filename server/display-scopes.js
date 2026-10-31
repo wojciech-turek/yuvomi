@@ -43,7 +43,6 @@ export const DISPLAY_SCOPES = Object.freeze([
   'dashboard:read',
   'calendar:read',
   'tasks:read',
-  'rewards:read',
   // Wetter kam am 16.09.2026 dazu, bewusst und ueber die vier des Tickets
   // hinaus (Entscheidung Ulas): ein Kuechentablett ohne Wetter ist der eine
   // Fall, fuer den solche Geraete ueberhaupt aufgehaengt werden, und die Route
@@ -77,17 +76,9 @@ export const DISPLAY_SCOPES = Object.freeze([
  * eine Zahl, und was keine ist, hat an dieser Stelle nichts verloren. Kein
  * `startsWith`: `/tasks/1/status` ist gemeint, `/tasks/1/status-irgendwas` nicht
  * - derselbe Fehler, gegen den DISPLAY_READ_PATHS exakt vergleicht.
- *
- * WARUM DIE EINLOESUNG EIN POST AUF DIE SAMMELROUTE IST UND KEIN EIGENER PFAD:
- * das Beantragen ist genau diese Route, fuer jeden Menschen auch. Ein zweiter
- * Pfad nur fuer Displays waere eine zweite Stelle, an der dieselbe Buchung
- * entsteht - und die beiden liefen mit der Zeit auseinander. Das ENTSCHEIDEN
- * einer Einloesung (`PATCH /rewards/redemptions/:id`) steht bewusst nicht hier:
- * die Freigabe bleibt, wo der Haushalt sie hingelegt hat.
  */
 export const DISPLAY_WRITE_ROUTES = Object.freeze([
   Object.freeze({ method: 'PATCH', pattern: /^\/tasks\/\d+\/status$/ }),
-  Object.freeze({ method: 'POST', pattern: /^\/rewards\/redemptions$/ }),
   // THE WALL'S OWN WRITES (Tafla, 2026-10-19), behind the household switch
   // "Pozwól odhaczać na ścianie" (services/wall-settings.js, `refuseWallWrite`,
   // checked in each route - off by default): a running-out item onto a list

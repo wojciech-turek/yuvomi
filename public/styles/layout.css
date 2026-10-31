@@ -3178,16 +3178,12 @@ html.fab-steady .page-fab {
  * kein selbstpolsterndes Element` in test/test-frontend-audit.js - er liest
  * beide Seiten aus dem Stylesheet und findet die Ueberschneidung von allein. */
 .page-measure--narrow :is(
-  .rewards-tabs,
   /* Die Karten der Hauswirtschaft, deren Zeilen per Bleed an ihrer Kante
    * fluchten: die Liste selbst hat keine eigene Flaeche, die Karte hat sie,
    * also traegt die Karte das Mass. */
   .housekeeping-card,
   /* Ein Gruppenkopf endet mit der Gruppe, die er benennt. */
   .contact-group__header,
-  /* Der Traeger der offenen Anfragen, direkt ueber dem Traeger der
-   * Punktestaende - zwei gestapelte Bloecke auf einem Bildschirm. */
-  .rw-pending-panel,
   /* Der Diagrammabschnitt steht ueber der Buchungsliste und ist selbst eine
    * Zeilenfolge (Kategoriezeilen), also gilt dasselbe Mass. */
   .budget-chart-section,
@@ -3197,10 +3193,8 @@ html.fab-steady .page-fab {
   .housekeeping-worker-strip
 ),
 .app-page :is(
-  .rewards-tabs,
   .housekeeping-card,
   .contact-group__header,
-  .rw-pending-panel,
   .budget-chart-section,
   .metric-grid,
   .housekeeping-worker-strip

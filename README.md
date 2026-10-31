@@ -31,7 +31,7 @@
     <img src="docs/screenshots/dashboard-light-web.webp" alt="The Yuvomi overview: today's events, tasks and shopping for the whole family, with the family, budget and birthdays below" width="820">
   </picture>
 
-  <sub><b>20</b> modules&nbsp;&nbsp;·&nbsp; <b>26</b> languages&nbsp;&nbsp;·&nbsp; <b>0</b> trackers&nbsp;&nbsp;·&nbsp; optional&nbsp;<b>AES&#8209;256</b>&nbsp;database&nbsp;encryption</sub>
+  <sub><b>19</b> modules&nbsp;&nbsp;·&nbsp; <b>26</b> languages&nbsp;&nbsp;·&nbsp; <b>0</b> trackers&nbsp;&nbsp;·&nbsp; optional&nbsp;<b>AES&#8209;256</b>&nbsp;database&nbsp;encryption</sub>
 </div>
 
 Most households glue their life together from a dozen paid apps, each with its own account, its
@@ -57,7 +57,6 @@ This is the part a folder full of separate apps cannot do:
 
 - **One import turns the week's meal plan into a shopping list.** The next seven days come pre-selected, and every ingredient lands on the shared list, sorted by aisle.
 - **The last jar out of the pantry goes on the list with one tap.** After the shop, one button books what you ticked off back into the pantry, with amount and unit.
-- **A ticked-off chore pays out.** Points on a task go to whoever did it - the assignee, or the person picked when it is ticked off - and are spent in a reward catalog you control.
 - **A filed receipt hangs on the booking.** Upload it once and it belongs to the transaction, the shared expense and the inventory item at the same time.
 
 ## On the kitchen wall, in every pocket
@@ -69,18 +68,18 @@ This is the part a folder full of separate apps cannot do:
   </picture>
 </div>
 
-- **The tablet on the kitchen wall** shows today's plan and who is up in wall mode, readable across the room. It has an account of its own: tap a task, pick who did it, and the points go to them. When it sits idle, an Immich screensaver can show your own photos.
+- **The tablet on the kitchen wall** shows today's plan and who is up in wall mode, readable across the room. It has an account of its own: tap a task, pick who did it, and the history names them. When it sits idle, an Immich screensaver can show your own photos.
 - **The app on every phone** goes on the home screen straight from the browser, no app store. Reminders arrive as push notifications even while it is closed (your server needs HTTPS for that), and the last shopping list you opened stays readable without signal.
 - **Every member joins by invite link** and picks their own password; a child without a phone gets an account created directly. Per family role, each module is full, read only or not at all.
 
 [More on yuvomi.cloud](https://yuvomi.cloud/#family)
 
-## The twenty modules
+## The nineteen modules
 
 Switch off what your household doesn't need, and it disappears from everyone's menu. Inventory,
 Waste collection and Schedule start switched off.
 
-- **Plan** - Tasks · Calendar · Rewards · Notes · Schedule
+- **Plan** - Tasks · Calendar · Notes · Schedule
 - **Household** - Meals · Recipes · Shopping · Pantry · Housekeeping · Waste collection · Documents · Inventory
 - **People** - Health · Contacts · Birthdays
 - **Finance** - Budget
@@ -102,7 +101,6 @@ Waste collection and Schedule start switched off.
 | **Budget** | Income, expenses, accounts, loans, subscriptions and shared expenses with debt simplification. |
 | **Housekeeping** | Household staff: schedules, check-in/out, billing, chores and supply requests. |
 | **Waste collection** | Pickup schedules per waste type, even "the last Friday", or a subscribed municipal ICS calendar. Off by default. |
-| **Rewards** | Points from tasks, a parent-approved catalog, an auditable ledger and pocket money per child. |
 | **Health** | Per-member vitals, medications, preventive care, labs, activity, cycle tracking, a fasting journal and a nutrition log, with trend charts. |
 | **Schedule** | Rotating shifts and fixed weekly timetables, shown as an overlay in the calendar. Off by default. |
 | **Notes &amp; Contacts** | Markdown sticky notes with tappable checklists, plus contacts with CardDAV sync and vCard import/export. |

@@ -1191,7 +1191,6 @@ function taskAdvancedTopics({ privacy = true, recurrence = false, reminder = fal
   const topics = [
     t('tasks.startDateLabel'),
     countdown ? t('dashboard.countdownTitle') : null,
-    t('tasks.pointsLabel'),
     t('tasks.tagsLabel'),
     t('tasks.statusLabel'),
     privacy ? t('common.visibility.label') : null,
@@ -1225,12 +1224,6 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   const priorityOptions = PRIORITIES().map((p) =>
     `<option value="${p.value}" ${(task?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
   ).join('');
-
-  // Punkte neuer Aufgaben mit dem Haushalt-Standard vorbelegen (#578).
-  const prefillPoints = !isEdit && state.defaultPoints > 0 ? state.defaultPoints : 0;
-  const pointsValue = isEdit
-    ? (Number(task?.points) > 0 ? Number(task.points) : '')
-    : (prefillPoints || '');
 
   /* WAS IN DER SEKTION STEHT, NENNT IHRE ZUSAMMENFASSUNG - dann muss sie nicht
    * auf (Critique 2026-08-10, P1 „Enterprise-SaaS-Antireferenz").
@@ -1267,8 +1260,6 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   // stehen offen im Hauptteil (A3 P1-2, siehe unten).
   const advancedSummary = [];
   if (isEdit && task.start_date) advancedSummary.push(formatDate(task.start_date));
-  const summaryPoints = isEdit ? Number(task.points) : prefillPoints;
-  if (summaryPoints > 0) advancedSummary.push(t('tasks.pointsSummary', { count: summaryPoints }));
   if (isEdit && task.tags?.length) advancedSummary.push(task.tags.join(', '));
   // Der Schwanz hinter dem Aufklapper ist eingezogen (Critique 2026-08-31):
   // Status, Sync-Ziel, Sichtbarkeit, Sperre und Anhaenge standen als offene
@@ -1351,15 +1342,6 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
           <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
           <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
                  value="${esc(formatDateInput(task?.start_date))}"></yuvomi-datepicker>
-        </div>
-        <div class="form-group">
-          <label class="label" for="task-points">${t('tasks.pointsLabel')}</label>
-          <input class="input" type="number" id="task-points" name="points" inputmode="numeric"
-                 min="0" step="1" value="${pointsValue}"
-                 placeholder="0">
-          <p class="task-field-hint">${prefillPoints
-            ? t('tasks.pointsDefaultHint', { count: prefillPoints })
-            : t('tasks.pointsHint')}</p>
         </div>
       </div>
 
@@ -1591,7 +1573,6 @@ let state = {
    *  Kategorien und Mitglieder fuer autoritativ - und das Beschneiden warf
    *  dann ein Chip weg, das es noch gibt. */
   metaStale:       { users: false, categories: false, tags: false },
-  defaultPoints:   0,        // Haushalt-Standard für neue Aufgaben (#578), 0 = aus
   currentUserId:   null,
   isAdmin:         false,    // darf fremde Kommentare entfernen (#734)
   /** Wer an diesem Wandtablett abhaken darf (#1209) - leer fuer jeden Menschen. */
@@ -2912,7 +2893,6 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     recurrence_from_completion: rrule.recurrence_from_completion ? 1 : 0,
     countdown:       form.querySelector('#task-countdown')?.checked ? 1 : 0,
     locked:          form.querySelector('#task-locked')?.checked ? 1 : 0,
-    points:          Math.max(0, Math.trunc(Number(form.points?.value)) || 0),
   };
   // Das Feld fehlt bei Unteraufgaben und bei bereits gespiegelten Aufgaben - in
   // beiden Fällen soll gar kein Ziel mitgeschickt werden, sonst nähme der Server
@@ -6446,7 +6426,6 @@ async function ensureTaskMeta() {
     state.users         = meta.users      ?? state.users;
     state.categories    = meta.categories ?? state.categories;
     state.allTags       = meta.tags       ?? state.allTags;
-    state.defaultPoints = Number(meta.default_points) || state.defaultPoints;
   } catch { /* Ansicht steht auch ohne - nur weniger aufgeloest. */ }
 }
 
@@ -6730,7 +6709,6 @@ export async function render(container, { user, signal } = {}) {
     state.displayPeople = (displayPeople.data ?? []).filter((p) => p.can_tick_off);
     state.categories = meta.categories ?? [];
     state.allTags = meta.tags ?? [];
-    state.defaultPoints = Number(meta.default_points) || 0;
     state.subtasksExpandedByDefault = preferencesData.data?.tasks_subtasks_expanded === true;
     state.defaultSyncTarget = preferencesData.data?.tasks_default_target || '';
     restoreWho();
@@ -6749,7 +6727,6 @@ export async function render(container, { user, signal } = {}) {
     state.categories = [];
     state.allTags = [];
     state.metaStale = { users: false, categories: false, tags: false };
-    state.defaultPoints = 0;
     state.subtasksExpandedByDefault = false;
     state.defaultSyncTarget = '';
   }

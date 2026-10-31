@@ -144,7 +144,6 @@ const MODULES = [
   { path: '/housekeeping', name: 'housekeeping-tasks',   tab: '.housekeeping-tabs [data-tab-id="tasks"]' },
   { path: '/housekeeping', name: 'housekeeping-reports', tab: '.housekeeping-tabs [data-tab-id="reports"]' },
   { path: '/housekeeping', name: 'housekeeping-staff',   tab: '.housekeeping-tabs [data-tab-id="staff"]' },
-  { path: '/rewards',         name: 'rewards'         },
   { path: '/health',          name: 'health'          },
   { path: '/health/vitals',   name: 'health-vitals'   },
   { path: '/health/cycle',    name: 'health-cycle'    },

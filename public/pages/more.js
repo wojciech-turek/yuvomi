@@ -45,7 +45,7 @@ const TAB_MODULES = new Set(['dashboard', 'settings', 'calendar', 'tasks']);
 const GROUPS = [
   { id: 'home', labelKey: 'more.groupHome', modules: ['housekeeping', 'documents', 'contacts', 'inventory', 'waste'] },
   { id: 'money', labelKey: 'more.groupMoney', modules: ['budget', 'health'] },
-  { id: 'daily', labelKey: 'more.groupDaily', modules: ['notes', 'birthdays', 'rewards', 'schedule'] },
+  { id: 'daily', labelKey: 'more.groupDaily', modules: ['notes', 'birthdays', 'schedule'] },
 ];
 
 /** One bare glyph per module (ink-2, as in the artboards). */
@@ -59,7 +59,6 @@ const GLYPH = {
   health: 'heart-pulse',
   notes: 'sticky-note',
   birthdays: 'cake',
-  rewards: 'award',
   schedule: 'calendar-clock',
   'split-expenses': 'arrow-left-right',
 };

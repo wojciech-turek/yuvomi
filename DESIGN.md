@@ -51,7 +51,7 @@ colors:
   # Quellen"). Quelle der Wahrheit und Modul-Zuordnung:
   # public/styles/tokens.css, Abschnitt 4.
   # overview: dashboard - time: calendar, schedule, reminders - work: tasks,
-  # housekeeping, waste, rewards - kitchen: meals, recipes, shopping, pantry -
+  # housekeeping, waste - kitchen: meals, recipes, shopping, pantry -
   # money: budget, split-expenses - people: contacts, birthdays -
   # health: health - records: documents, notes, inventory - neutral: settings
   family-overview: "#6C3AED"
@@ -1696,7 +1696,6 @@ Kernseite fuehrt es. Die Zuordnung aller Seiten:
 
 | Seite | Regime | Umsetzung |
 |---|---|---|
-| `rewards.js` Belohnungen | Flaeche | `dashboard` + Spalten (`.page-columns`); der Katalog ist ein Raster ueber das Mass |
 | `waste.js` Entsorgung | Flaeche | `dashboard` + Spalten (`.page-columns`) |
 | `housekeeping.js` Haushaltshilfe | Flaeche | `dashboard` + Spalten (`.page-columns`); die Uebersicht fuehrt zwei gleiche Karten |
 | `birthdays.js` Geburtstage | Liste + Detail | `reading` + `list-detail` |
@@ -2710,18 +2709,14 @@ Einladung); bestehende Konten und ein spaeterer Rollenwechsel bleiben unberuehrt
   Sichtbarkeitsregel haelt sie aus Liste, Detail, Uebersicht, Suche und MCP. Checkt ein Konto ohne
   Betraege ein, wird die erste Admin-Person Erstellerin, weil die Regel die Erstellerin immer
   durchlaesst.
-- **Die Uebersicht eines Kindes** folgt der Vorgabe mit zwei Abweichungen
-  (`childDefaultWidgetConfig`): Belohnungen zuerst und sichtbar, Budget aus. Im Heute-Blatt
+- **Die Uebersicht eines Kindes** folgt der Vorgabe mit einer Abweichung
+  (`childDefaultWidgetConfig`): Budget aus. Im Heute-Blatt
   ruecken Aufgaben, die nur anderen gehoeren, ans Ende und fallen zuerst unter „+N weitere".
-- **Die eigene Karte auf /rewards** (`.rw-own`): Stand im Large-Title-Grad, das naechste Ziel
-  mit Zeichen, Name und Preis ueber dem Balken, „Verlauf" leise und „Anfragen" primaer erst,
-  wenn der Stand reicht. Opak und randlos wie die Praemienkarte, der Modulton nur im Zeichen
-  des Ziels - kein Spiel-Look.
 - **Anlegen und Einladen** nennen die Startrechte unter der Familienrolle, nur bei Kind
   (`settings.childStartHint`), und nur dann zeigt `aria-describedby` darauf.
 
 Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboard-today`,
-`test:dashboard-rewards`, `test:member-order`.
+`test:member-order`.
 
 ### Navigation
 

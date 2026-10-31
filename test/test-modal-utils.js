@@ -1979,18 +1979,6 @@ test('#1775: der Schnappschuss des Verwerfen-Schutzes unterscheidet gesetzte von
   }
 });
 
-// Ein Blatt, dessen Haken SOFORT speichern, hat nichts zu verwerfen - mit dem
-// Schnappschuss oben fragte sein Schliessen sonst nach einem Verlust, den es
-// nicht gibt. Die Teilnehmer der Belohnungen sind so ein Blatt (PUT je Haken).
-test('#1775: das Teilnehmer-Blatt der Belohnungen ist ein Ansichtsblatt (dirtyGuard: false)', () => {
-  const rewards = readFileSync(fileURLToPath(new URL('../public/pages/rewards.js', import.meta.url)), 'utf8');
-  const start = rewards.indexOf("title: t('rewards.manageParticipants'),");
-  assert.ok(start > 0, 'das Blatt heisst noch so');
-  const sheet = rewards.slice(start, rewards.indexOf('async function openMemberDetail', start));
-  assert.match(sheet, /cb\.addEventListener\('change', async \(\) => \{[\s\S]*?await api\.put\(`\/rewards\/participants\//, 'Vorbedingung: der Haken speichert sofort');
-  assert.match(sheet.replace(/^\s*\/\/.*$/gm, ''), /^\s*dirtyGuard: false,$/m);
-});
-
 // --------------------------------------------------------
 // #1784: die Dirty-Basis je Element aendert nichts fuer Dialoge, die nie tauschen
 // --------------------------------------------------------

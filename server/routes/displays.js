@@ -28,7 +28,6 @@ import { householdMemberSql, memberOrderSql, memberPositionSql } from '../servic
 import { resolvePermissions } from '../permissions.js';
 import { DISPLAY_AREA_MODULES } from '../display-scopes.js';
 import { wallWritesAllowed } from '../services/wall-settings.js';
-import { isEnrolled } from '../services/rewards.js';
 import { CURRENT_ONBOARDING_VERSION, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from '../auth.js';
 import {
   DISPLAY_COOKIE,
@@ -191,9 +190,8 @@ peopleRouter.get('/people', (req, res) => {
     }
     const d = db.get();
     // THE WALL SWITCH (Tafla): while the household keeps the wall read-only,
-    // nobody can be ticked or redeemed for here - the picker on the tasks
-    // page, the redeem buttons on the rewards page and the rings on the wall
-    // disappear with these flags, before the route refuses.
+    // nobody can be ticked for here - the picker on the tasks page and the
+    // rings on the wall disappear with this flag, before the route refuses.
     const mayTick = wallWritesAllowed({ db: d });
     const rows = d.prepare(`
       SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.role, u.family_role,
@@ -210,7 +208,6 @@ peopleRouter.get('/people', (req, res) => {
         avatar_color: row.avatar_color,
         avatar_data: row.avatar_data,
         can_tick_off: mayTick && (admin || modules.tasks === 'write'),
-        can_redeem: mayTick && (admin || modules.rewards === 'write') && isEnrolled(d, row.id),
       };
     });
     res.json({ data });

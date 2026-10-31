@@ -142,9 +142,6 @@ db.prepare(`
   VALUES ('Miete', -1200, 'housing', 'rent_mortgage', ?, ?)
 `).run(`${currentMonth}-06`, PARENT);
 
-db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(KID);
-db.prepare("INSERT INTO reward_ledger (user_id, delta, type) VALUES (?, 42, 'earn')").run(KID);
-
 // Gesundheit ist der persönlichste Teil der Antwort: das sind die EIGENEN
 // Medikamente des Betrachters, nicht die der Familie.
 const medId = db.prepare(`
@@ -262,7 +259,6 @@ test('Vorbedingung: ohne Einschränkung liefert der Endpoint dem Mitglied jeden 
   assert.equal(body.birthdayCount, 1);
   assert.equal(body.budget.income, 3000);
   assert.equal(body.budget.expenses, 1200);
-  assert.equal(body.rewards.participantCount, 1);
   assert.equal(body.health.hasMeds, true);
   assert.equal(body.health.dosesTotal, 1);
   assert.equal(body.housekeeping.present, true);
@@ -361,7 +357,6 @@ const MODULE_PROBES = {
   notes: (b) => b.pinnedNotes.length + b.pinnedNotesCount + b.notesTotal,
   shopping: (b) => b.shoppingLists.length + b.shoppingOpenCount + b.shoppingOpenLists,
   budget: (b) => b.budget.income + b.budget.expenses + b.budget.entryCount,
-  rewards: (b) => b.rewards.standings.length + b.rewards.participantCount,
   health: (b) => (b.health.hasMeds ? 1 : 0) + b.health.dosesTotal + b.health.lowStockCount,
   housekeeping: (b) => (b.housekeeping.configured ? 1 : 0) + (b.housekeeping.present ? 1 : 0),
   waste: (b) => b.wastePickups.length,

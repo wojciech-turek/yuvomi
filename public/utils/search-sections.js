@@ -116,7 +116,6 @@ export const NEW_ACTIONS = Object.freeze([
   { module: 'inventory', route: '/inventory', labelKey: 'newLabel.inventory' },
   { module: 'budget', route: '/budget', labelKey: 'newLabel.budget' },
   { module: 'waste', route: '/waste', labelKey: 'newLabel.waste' },
-  { module: 'rewards', route: '/rewards', labelKey: 'newLabel.rewards' },
 ]);
 
 /**

@@ -129,7 +129,6 @@ const LISTS = {
 };
 /** Dieselbe Frage an die Listen, die nur ein Administrator bekommt. */
 const ADMIN_LISTS = {
-  'GET /rewards/participants': async (call) => names((await call('GET', '/rewards/participants')).body.data),
   'GET /permissions/catalog (members)': async (call) => names((await call('GET', '/permissions/catalog')).body.data.members),
   'GET /auth/2fa/overview': async (call) => names((await call('GET', '/auth/2fa/overview')).body.data, 'user_id'),
   'GET /auth/api-tokens (subjects)': async (call) => names((await call('GET', '/auth/api-tokens')).body.subjects),
@@ -212,7 +211,6 @@ const RECORDED_BEFORE = {
     'GET /schedule/household-members': ['Anna', 'Ben', 'Mara', 'Zoe', 'Ömer'],
   },
   admin: {
-    'GET /rewards/participants': ['Anna', 'Ben', 'Mara', 'Zoe', 'Ömer'],
     'GET /permissions/catalog (members)': ['Anna', 'Ben', 'Carla Putzhilfe', 'Gustav Gast', 'Mara', 'Wandtablett', 'Zoe', 'Ömer'],
     'GET /auth/2fa/overview': ['Anna', 'Ben', 'Carla Putzhilfe', 'Gustav Gast', 'Mara', 'Wandtablett', 'Zoe', 'Ömer'],
     'GET /auth/api-tokens (subjects)': ['Anna', 'Ben', 'Carla Putzhilfe', 'Mara', 'Zoe', 'Ömer'],
@@ -443,18 +441,6 @@ test('shared expenses: the people offered for a group and its balances follow th
     names(candidates.body.data.filter((row) => row.source === 'user'), 'user_id'),
     ['Mara', 'emil', 'Ömer', 'Zoe', 'Anna', 'Élise', 'Frida'],
   );
-});
-
-test('lists that rank by something else first use the member order only for ties', async () => {
-  // Punktestand: Anna (Platz 5) fuehrt, Mara und emil stehen gleich.
-  for (const name of ['Mara', 'emil', 'Anna']) {
-    db.prepare('INSERT OR REPLACE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(ID[name]);
-  }
-  db.prepare("INSERT INTO reward_ledger (user_id, delta, type, reason, created_by) VALUES (?, 10, 'bonus', 'Test', ?)").run(ID.Anna, ID.Mara);
-  // Die Haushaltsreihenfolge umdrehen: emil vor Mara.
-  assert.equal((await reorder(admin, ids('emil', 'Mara', 'Ömer', 'Zoe', 'Anna', 'Élise', 'Frida'))).status, 200);
-  const overview = (await admin('GET', '/rewards/overview')).body.data;
-  assert.deepEqual(names(overview.balances), ['Anna', 'emil', 'Mara'], 'Stand zuerst, Gleichstand nach Haushaltsreihenfolge');
 });
 
 // --------------------------------------------------------------------------

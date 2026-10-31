@@ -23,7 +23,6 @@ Independent modules - turn on what fits, ignore the rest:
 - Calendar - family calendar with recurring events and reminders
 - Budget - income, expenses, accounts, subscriptions and loans, with shared costs split automatically
 - Health - vitals, medications, lab results and activity, per household member
-- Rewards - points on chores, a parent-approved catalogue and an auditable ledger
 - Inventory - what you own, with warranties and deadlines (off by default)
 - Housekeeping - chores, supplies and staff/session tracking
 - Waste collection - pickup schedules per waste type, or a subscribed municipal ICS calendar (off by default)

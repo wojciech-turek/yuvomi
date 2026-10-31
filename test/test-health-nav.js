@@ -247,11 +247,11 @@ test('Settings-Toggle: health in BUILT_IN_MODULES', () => {
   assert.match(src, /\{ id: 'health', labelKey: 'nav\.health' \}/);
 });
 
-test('Server-Allowlist: rewards ist toggelbar/sortierbar (Backend-Parität zur Nav)', () => {
+test('Server-Allowlist: rewards (Nagrody) ist ausgebaut, gespeicherte Werte fallen heraus', () => {
   const src = read('server/routes/preferences.js');
-  assert.match(src, /TOGGLEABLE_MODULES = \[[\s\S]*'rewards'[\s\S]*\]/);
-  assert.match(src, /MODULE_ORDER_RE =[^\n]*\|rewards\|/);
-  assert.match(src, /MOBILE_NAV_ORDER_RE =[^\n]*\|rewards\|/);
+  assert.doesNotMatch(src, /TOGGLEABLE_MODULES = \[[^\]]*'rewards'/);
+  assert.doesNotMatch(src, /MODULE_ORDER_RE =[^\n]*rewards/);
+  assert.doesNotMatch(src, /MOBILE_NAV_ORDER_RE =[^\n]*rewards/);
 });
 
 // --------------------------------------------------------

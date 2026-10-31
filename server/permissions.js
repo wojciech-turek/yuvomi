@@ -64,7 +64,6 @@ export const PERMISSION_MODULES = Object.freeze([
   { key: 'documents',    labelKey: 'nav.documents',    icon: 'folder-lock',   navIds: ['documents'] },
   { key: 'housekeeping', labelKey: 'nav.housekeeping', icon: 'paintbrush',    navIds: ['housekeeping'] },
   { key: 'waste',        labelKey: 'nav.waste',        icon: 'trash-2',       navIds: ['waste'] },
-  { key: 'rewards',      labelKey: 'nav.rewards',      icon: 'award',         navIds: ['rewards'] },
   { key: 'health',       labelKey: 'nav.health',       icon: 'heart-pulse',   navIds: ['health'] },
   { key: 'schedule',     labelKey: 'nav.schedule',     icon: 'calendar-clock', navIds: ['schedule'] },
 ]);
@@ -90,7 +89,6 @@ export const PERMISSION_WIDGETS = Object.freeze([
   { id: 'shopping',     module: 'shopping' },
   { id: 'birthdays',    module: 'calendar' },
   { id: 'budget',       module: 'budget' },
-  { id: 'rewards',      module: 'rewards' },
   { id: 'health',       module: 'health' },
   { id: 'cycle',        module: 'health' },
   { id: 'fasting',      module: 'health' },
