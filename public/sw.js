@@ -381,6 +381,8 @@ const PAGE_MODULES = [
   // Das Diktat (Hoerblatt, Spracherkennung, Satz -> Entwurf) - ebenfalls nur
   // ueber pages/tasks.js.
   '/components/task-dictation.js',
+  '/components/shopping-add-sheet.js',
+  '/utils/shopping-entry.js',
   '/utils/speech.js',
   '/utils/task-draft.js',
   '/vendor/sortablejs/sortable.esm.min.js',

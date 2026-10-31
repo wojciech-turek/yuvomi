@@ -10449,3 +10449,48 @@ p.field-hint--warn svg {
   --person-disc-size: var(--space-10);
   font-size: var(--type-body);
 }
+
+/* ---- Einkaufsblatt (Quick-Add): die Zakupy-Leiste als Blatt ueber der Uebersicht.
+ * Hier und nicht in shopping.css, das ausserhalb von /shopping nicht gilt. ---- */
+.shopping-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.shopping-sheet__form {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.shopping-sheet__input {
+  flex: 1;
+}
+
+.shopping-sheet__frequent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shopping-sheet__frequent[hidden] {
+  display: none;
+}
+
+.shopping-sheet__chip {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  cursor: pointer;
+}
+
+.shopping-sheet__chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
