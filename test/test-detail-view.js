@@ -478,20 +478,17 @@ test('die Wisch-Geste heißt Ansehen, nicht Bearbeiten', async () => {
   assert.doesNotMatch(src, /tasks\.swipeEdit/, 'der alte ist ersetzt, nicht umgedeutet');
 });
 
-test('die Aufgaben-Verdrahtung ist zweigeteilt und behält die Tag-Reihenfolge', async () => {
+test('die Aufgaben-Verdrahtung ist zweigeteilt und kennt keine Tag-Working-Sets mehr', async () => {
   const src = await tasksJs();
   assert.match(src, /function wireTaskForm\(panel, \{ task = null, container = null, onChanged = \(\) => loadTasks\(container\) \}\)/);
 
-  // modalTags ist ein Working-Set, das renderTagChips direkt nach dem Rendern
-  // liest - es muss VOR renderModalContent gesetzt werden. Der Mount-Block
-  // steht seit #918 in dieser Datei und nicht mehr in der Ansicht: das Formular
-  // gehört dem Modul, die Leseansicht bekommt es gereicht.
+  // Der Mount-Block steht seit #918 in dieser Datei und nicht mehr in der
+  // Ansicht: das Formular gehört dem Modul, die Leseansicht bekommt es gereicht.
   const mountStart = src.indexOf('mount: (panel, pane) =>');
   const mount = src.slice(mountStart, src.indexOf('wireTaskForm(panel, { task, container });', mountStart));
   assert.ok(mount.length > 0, 'der Mount-Block muss auffindbar sein');
-  const tags = mount.indexOf('modalTags =');
-  const render = mount.indexOf('renderModalContent(');
-  assert.ok(tags > -1 && render > -1 && tags < render, 'modalTags wird vor dem Rendern gesetzt');
+  assert.ok(mount.includes('renderModalContent('), 'der Mount-Block rendert das Formular');
+  assert.doesNotMatch(src, /modalTags/, 'kein Tag-Working-Set mehr');
 });
 
 
@@ -662,9 +659,12 @@ test('die Aufgaben-Detailansicht führt die Leseinformationen der Karte', async 
   const fn = src.slice(src.indexOf('function renderTaskDetail'), src.indexOf('export function openTaskDetail'));
   // Seit R18 stehen Faelligkeit und Personen im Kopf (taskDetailHead).
   for (const key of ['tasks.statusLabel', 'tasks.priorityLabel', 'tasks.startDateLabel',
-    'tasks.categoryLabel', 'tasks.tagsLabel',
+    'tasks.categoryLabel',
     'tasks.subtasksLabel', 'tasks.documentsLabel', 'tasks.descriptionLabel']) {
     assert.match(fn, new RegExp(reLiteral(key)), `${key} fehlt in der Detailansicht`);
+  }
+  for (const key of ['tasks.tagsLabel', 'tasks.lockedLabel']) {
+    assert.doesNotMatch(fn, new RegExp(reLiteral(key)), `${key} steht nicht mehr in der Detailansicht`);
   }
   // Der Anker ab Erledigung reist als zweites Argument mit (#658), die Zeile
   // bleibt aber die geteilte - deshalb offen bis zur Klammer statt exakt.

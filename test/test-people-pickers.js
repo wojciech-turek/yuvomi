@@ -453,14 +453,13 @@ test('privacy: with one member, the protective fields stay while another account
     setOtherReaders(['calendar', 'documents', 'tasks']);
     let html = render();
     assert.equal(fieldGroupHidden(html.task, 'id="task-visibility"'), false, 'task visibility');
-    assert.equal(fieldGroupHidden(html.task, 'id="task-locked"'), false, 'task lock');
+    assert(!html.task.includes('id="task-locked"'), 'the lock switch is gone from the task dialog');
     assert.equal(fieldGroupHidden(html.document, 'id="document-visibility"'), false, 'document visibility');
     assert.equal(fieldGroupHidden(html.event, 'id="modal-visibility"'), false, 'event visibility');
 
     setOtherReaders([]);
     html = render();
     assert.equal(fieldGroupHidden(html.task, 'id="task-visibility"'), true, 'nobody else reads: task visibility hidden as before');
-    assert.equal(fieldGroupHidden(html.task, 'id="task-locked"'), true, 'task lock hidden as before');
     assert.equal(fieldGroupHidden(html.document, 'id="document-visibility"'), true, 'document visibility hidden as before');
     assert.equal(fieldGroupHidden(html.event, 'id="modal-visibility"'), true, 'event visibility hidden as before');
   } finally {

@@ -638,13 +638,13 @@ test('t() waehlt in cs, pl, ru, uk und ar die Form fuer 2, 5 und 11 (#1473)', as
     ['cs', 'dashboard.daysLeft', 5, 'Za 5 dní'],
     // 2026-10-27, v2: `dashboard.metricPoints` ging mit der Punkte-Kachel von
     // Dziś; dieselbe Stichprobe an einem lebenden Schluessel.
-    ['pl', 'tasks.tagUsageCount', 2, '2 zadania'],
-    ['pl', 'tasks.tagUsageCount', 5, '5 zadań'],
-    ['pl', 'tasks.tagUsageCount', 22, '22 zadania'],
+    ['pl', 'dashboard.daysLeft', 1, '1 dzień'],
+    ['pl', 'dashboard.daysLeft', 5, '5 dni'],
+    ['pl', 'dashboard.daysLeft', 22, '22 dni'],
     ['ru', 'dashboard.daysLeft', 2, '2 дня'],
     ['ru', 'dashboard.daysLeft', 11, '11 дн.'],
-    ['uk', 'tasks.tagUsageCount', 3, '3 завдання'],
-    ['uk', 'tasks.tagUsageCount', 12, '12 завдань'],
+    ['uk', 'dashboard.daysLeft', 3, '3 дні'],
+    ['uk', 'dashboard.daysLeft', 12, '12 дн.'],
     ['ar', 'dashboard.daysLeft', 2, 'يومان'],
     ['ar', 'dashboard.daysLeft', 5, '5 أيام'],
     ['ar', 'dashboard.daysLeft', 11, '11 يومًا'],

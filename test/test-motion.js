@@ -1727,7 +1727,7 @@ test('R18: der Aufgaben-Dialog schliesst mit dem Speichern - die aufziehende Zei
   assert.doesNotMatch(save, /setTimeout\(\(\) => closeModal/, 'kein verzoegertes Schliessen');
   // Das Neuzeichnen steht in einem eigenen try: sein Fehler gehoert auf die
   // Seite, nicht an den geschlossenen Dialog (Review zu #1794, Test weiter unten).
-  assert.match(save, /closeModal\(\{ force: true \}\);\s*try \{\s*await refreshTags\(\);\s*await onChanged\(\);/, 'schliessen, dann neu zeichnen');
+  assert.match(save, /closeModal\(\{ force: true \}\);\s*try \{\s*await onChanged\(\);/, 'schliessen, dann neu zeichnen');
   // Die Reihenfolge der Enthuellung bleibt: erst der Dialog weg, dann die
   // History wieder bei der Seite, dann die Zeile (sonst traegt `back()` die
   // alte Adresse wieder herein).
@@ -2225,7 +2225,7 @@ test('tasks: a failing reload after the dialog closed is reported on the page, n
   const closed = submit.indexOf('closeModal({ force: true });');
   assert.ok(closed > 0, 'der Dialog schliesst vor dem Neuladen');
   const after = submit.slice(closed, submit.indexOf('\n  } catch (err) {\n    resetSubmit(err.message);', closed));
-  const reload = after.match(/try \{\s*await refreshTags\(\);\s*await onChanged\(\);[\s\S]*?\n    \} catch \((\w+)\) \{([\s\S]*?)\n    \}/);
+  const reload = after.match(/try \{\s*await onChanged\(\);[\s\S]*?\n    \} catch \((\w+)\) \{([\s\S]*?)\n    \}/);
   assert.ok(reload, 'das Neuladen nach dem Schliessen hat einen eigenen catch');
   assert.match(reload[2], /showToast\([\s\S]*?'danger'\)/, 'der Fehler steht als Toast auf der Seite');
   assert.doesNotMatch(reload[2], /resetSubmit|btnError/, 'nicht an Bedienelementen des geschlossenen Dialogs');

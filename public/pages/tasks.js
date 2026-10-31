@@ -23,7 +23,6 @@ import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { emptyStateHTML, mountLoadError, searchEmptyHTML } from '/utils/empty-state.js';
 import '/components/category-manager.js';
-import '/components/tag-manager.js';
 import { findPageFab } from '/utils/fab.js';
 import { isStyleApplied } from '/utils/page-style.js';
 import { isNavModuleReadOnly } from '/permissions.js';
@@ -43,7 +42,7 @@ import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import {
   PRIORITIES, PRIO_ORDER, STATUSES, FILTER_STATUSES, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
-  FALLBACK_CATEGORY, isArchived, formatDueDate, normalizeTagList, seriesDoneText,
+  FALLBACK_CATEGORY, isArchived, formatDueDate, seriesDoneText,
   catLabel as catLabelOf, catSortIndex as catSortIndexOf,
   canEditTaskDefinition as canEditTaskDefinitionFor,
 } from '/utils/task-fields.js';
@@ -415,17 +414,6 @@ async function wireSyncTarget(panel, task) {
   }
 }
 
-/**
- * Das Schloss einer gesperrten Aufgabe - EINE Bauart fuer Liste und Brett
- * (#1607: das Brett liess es weg, wer die Ansicht wechselte, erfuhr die Sperre
- * erst am abgelehnten Zug). `role="img"`, damit das `aria-label` gilt.
- */
-function renderLockedBadge(task) {
-  if (!task.locked) return '';
-  const label = esc(t('tasks.lockedBadge'));
-  return `<span class="task-card__glyph" role="img" aria-label="${label}" title="${label}"><i data-lucide="lock" aria-hidden="true"></i></span>`;
-}
-
 // --------------------------------------------------------
 // Die Tafla-Zeile (2026-10-20): Kreis, Titel, eine Metazeile in Worten,
 // hinten nur die Fahne (Hoch/Dringend) und die Person nach der Personenregel.
@@ -495,15 +483,13 @@ function hashTag(label) {
 
 /**
  * Die Metazeile: Pille, Wiederholungszeichen und EIN Text, der mit Ellipse
- * endet - Wann · Rhythmus · #Kategorie · #Tag · razem · Beschreibung. Dahinter
- * leise Zeichen fuer Anhang, Sperre und eingeschraenkte Sichtbarkeit.
+ * endet - Wann · Rhythmus · #Kategorie · razem · Beschreibung. Dahinter
+ * leise Zeichen fuer Anhang und eingeschraenkte Sichtbarkeit.
  */
 function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const when = taskWhen(task, bucket);
   const parts = [when.text, rhythmText(task)];
   if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(hashTag(catLabel(task.category)));
-  const tag = (task.tags ?? []).find(Boolean);
-  if (tag) parts.push(hashTag(tag));
   if (whoOf(task.assigned_users).kind === 'razem' && includesViewer(task.assigned_users, rowViewerId())) parts.push(t('tasks.together'));
   parts.push(descriptionLead(task.description));
   const text = parts.filter(Boolean).join(' · ');
@@ -511,7 +497,6 @@ function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const glyphs = [
     archived ? `<span class="task-card__glyph task-card__archived" role="img" aria-label="${esc(t('tasks.statusArchived'))}"><i data-lucide="archive" aria-hidden="true"></i></span>` : '',
     task.document_count > 0 ? `<span class="task-card__glyph task-card__docs" role="img" aria-label="${esc(t('tasks.documentsCount', { count: task.document_count }))}"><i data-lucide="paperclip" aria-hidden="true"></i></span>` : '',
-    renderLockedBadge(task),
     task.visibility && task.visibility !== 'all'
       ? `<span class="task-card__glyph task-card__visibility" role="img" aria-label="${esc(task.visibility === 'private' ? t('common.visibility.private') : t('common.visibility.assignees'))}"><i data-lucide="${task.visibility === 'private' ? 'lock-keyhole' : 'users'}" aria-hidden="true"></i></span>`
       : '',
@@ -543,7 +528,7 @@ function taskTrailHtml(task) {
  *
  * Die Zeile trug bis zu acht Elemente mit `flex-wrap: wrap` und wurde damit je
  * nach Aufgabe zwei- bis dreizeilig - der eigentliche Höhentreiber der Liste,
- * nicht die Polsterung. Drei Regeln nehmen das zurück, ohne Information zu
+ * nicht die Polsterung. Zwei Regeln nehmen das zurück, ohne Information zu
  * verstecken, die es nur hier gibt:
  *
  * 1. ZWEI DATEN SIND EINS ZU VIEL. Das Startdatum erscheint nur, wenn es keine
@@ -552,8 +537,6 @@ function taskTrailHtml(task) {
  * 2. DIE KATEGORIE STEHT NICHT ZWEIMAL. Beim Gruppieren nach Kategorie ist der
  *    Gruppenkopf darüber schon die Antwort - das Etikett wiederholte ihn in
  *    jeder Zeile der Gruppe.
- * 3. EIN TAG STATT DREI, der Rest als „+N". Der Marker existiert bereits
- *    (.task-tag--more) und sagt, dass etwas fehlt - das tut ein Abschnitt nicht.
  *
  * Anhänge werden zur reinen Glyphe: die Zahl daneben war die einzige Stelle der
  * Zeile, an der eine Anzahl OHNE ihren Gegenstand stand.
@@ -695,7 +678,7 @@ function renderTaskCard(task, opts = {}) {
                 Abzeichen - kein Prioritaetswort, keine Uhr, keine Etiketten-
                 Knoepfe. Die Kategorie steht als "#dom" im Text, die Faelligkeit
                 als Wort ("od pt 16 paź", "do 19:00", "śr 21 paź"), ueberfaellig
-                als Pille "zaległe". Die Tag-Filter-Knoepfe bleiben dem Brett. */ ''}
+                als Pille "zaległe". */ ''}
           ${meta}
         </div>
 
@@ -981,169 +964,20 @@ function todayDoneHtml(groups, now) {
 // Task-Modal (Erstellen / Bearbeiten)
 // --------------------------------------------------------
 
-// --------------------------------------------------------
-// Tags (#586)
-// Freie Etiketten, gespiegelt aus VTODO CATEGORIES. Bewusst getrennt von der
-// Kategorie: eine Aufgabe liegt in einer Schublade, trägt aber beliebig viele
-// Etiketten.
-// --------------------------------------------------------
-// Working-Set des offenen Bearbeiten-Dialogs, analog zu den verknüpften
-// Dokumenten. Wird beim Öffnen aus der Aufgabe gefüllt und beim Speichern gelesen.
-let modalTags = [];
-/** Zeichnet die Chips des Tag-Editors neu. */
-function renderTagChips(container) {
-  const wrap = container.querySelector('#task-tags-chips');
-  if (!wrap) return;
-  wrap.replaceChildren();
-
-  modalTags.forEach((tag, index) => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'task-tag task-tag--editable';
-    chip.dataset.tagIndex = String(index);
-    chip.setAttribute('aria-label', t('tasks.tagRemove', { tag }));
-    chip.appendChild(document.createTextNode(tag));
-
-    const icon = document.createElement('i');
-    icon.setAttribute('data-lucide', 'x');
-    icon.className = 'icon-sm';
-    icon.setAttribute('aria-hidden', 'true');
-    chip.appendChild(icon);
-
-    wrap.appendChild(chip);
-  });
-
-  if (window.lucide) window.lucide.createIcons({ el: wrap });
-}
-
 /**
- * Verdrahtet den Tag-Editor: Enter oder Komma übernimmt, Klick auf ein Chip
- * entfernt, Backspace im leeren Feld nimmt das letzte zurück.
+ * Gruppenkopf auf- und zuklappen (#812). Delegiert am Container, weil die
+ * Liste laufend neu gezeichnet wird.
+ *
+ * DIE ZEILEN KLAPPEN, STATT ZU SPRINGEN (Critique 2026-09-26, A3 P1-4). Die
+ * Liste zeichnet eine zugeklappte Gruppe ohne `.row-carrier` - also klappt
+ * beim Zuklappen erst die alte Zeilenflaeche weg und danach wird neu
+ * gezeichnet; beim Aufklappen wird erst gezeichnet und die neue Flaeche von
+ * null aufgezogen. Der Winkel dreht dabei ueber seine eigene Transition
+ * (list-row.css), auch am frisch gezeichneten Knopf. Der Fokus bleibt auf dem
+ * Kopf: das Neuzeichnen ersetzt den Knopf, und ohne Rueckgabe landete er auf
+ * <body>.
  */
-function wireTagEditor(panel) {
-  const input = panel.querySelector('#task-tag-input');
-  const chips = panel.querySelector('#task-tags-chips');
-  if (!input || !chips) return;
-
-  const commit = () => {
-    // Eine eingefügte Liste („Garten, Haus") in einem Rutsch übernehmen.
-    const added = input.value.split(',');
-    if (!added.some((v) => v.trim())) return;
-    modalTags = normalizeTagList([...modalTags, ...added]);
-    input.value = '';
-    renderTagChips(panel);
-  };
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      // Enter darf im Tag-Feld nicht das Formular abschicken.
-      e.preventDefault();
-      commit();
-      return;
-    }
-    if (e.key === 'Backspace' && !input.value && modalTags.length) {
-      modalTags = modalTags.slice(0, -1);
-      renderTagChips(panel);
-    }
-  });
-
-  // Verlassen des Feldes übernimmt ebenfalls: sonst geht ein getippter Tag beim
-  // Speichern still verloren.
-  input.addEventListener('blur', commit);
-  // Auswahl aus der Vorschlagsliste löst kein keydown aus.
-  input.addEventListener('change', commit);
-
-  chips.addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-tag-index]');
-    if (!chip) return;
-    modalTags.splice(Number(chip.dataset.tagIndex), 1);
-    renderTagChips(panel);
-  });
-}
-
-// Wie viele Tags eine Karte zeigt, bevor sie zusammenfasst. Analog zum
-// Avatar-Stack: eine Karte, die 32 Etiketten ausrollt, ist keine Karte mehr.
-const TAG_BADGES_VISIBLE = 3;
-
-/* Die Etiketten-Knoepfe stehen nur noch im Brett (bis drei); die Listenzeile
- * nennt ihren ersten Tag als "#tag" im Text ihrer Metazeile (Tafla). */
-
-/**
- * Tag-Chips einer Aufgabe für Karten und Kanban.
- *
- * Die Chips sind Buttons, keine Beschriftungen: ein Tag anzuklicken und die
- * Liste darauf zu filtern ist die Geste, die man von einem Etikett erwartet.
- * Den Klick fängt die Delegation in wireTagBadgeFilter ab, die ihn auch vom
- * Karten-Klick (Aufgabe öffnen) trennt.
- */
-/**
- * @param {string} [priority]  Die Priorität der Aufgabe, deren Etiketten das
- *   hier sind. Ein Etikett, das GENAU SO heisst wie sie, wird weggelassen.
- *
- * WARUM: gemessen stand auf /tasks der Prioritäts-Chip „• Dringend" direkt
- * neben dem gespiegelten CalDAV-Etikett „dringend" - zwei Formen, dasselbe
- * Wort, in einer Metazeile, die seit dem Zeilenschnitt einzeilig ist und jedes
- * Element bezahlt. Beide kommen aus derselben Quelle: eine VTODO trägt ihre
- * Dringlichkeit als PRIORITY und noch einmal als CATEGORIES.
- *
- * NUR DIE EIGENE PRIORITÄT, nicht jedes Prioritätswort: trägt eine Aufgabe mit
- * Priorität „hoch" ein Etikett „dringend", ist das keine Doppelung, sondern ein
- * Widerspruch - und den soll man sehen.
- *
- * Verglichen wird gegen das ANGEZEIGTE Label, nicht gegen den Schlüssel: das
- * Etikett kommt aus einer fremden Liste und ist in der Sprache geschrieben, in
- * der der Nutzer es dort angelegt hat.
- */
-function renderTagBadges(tags, limit = TAG_BADGES_VISIBLE, priority = null) {
-  if (!tags?.length) return '';
-  const eigenes = priority && priority !== 'none' ? PRIORITY_LABELS()[priority] : null;
-  if (eigenes) {
-    const norm = (s) => String(s).trim().toLocaleLowerCase();
-    tags = tags.filter((tag) => norm(tag) !== norm(eigenes));
-    if (!tags.length) return '';
-  }
-  const shown = tags.slice(0, limit);
-  const rest  = tags.length - shown.length;
-  const chips = shown.map((tag) => `
-    <button type="button" class="task-tag task-tag--filter" data-tag-filter="${esc(tag)}"
-            aria-label="${esc(t('tasks.tagFilterBy', { tag }))}">${esc(tag)}</button>`);
-  // Der Rest bleibt lesbar statt anklickbar: er benennt keinen einzelnen Tag,
-  // also gäbe es auch nichts, worauf ein Klick filtern könnte.
-  if (rest > 0) {
-    chips.push(`<span class="task-tag task-tag--more"
-                      title="${esc(tags.slice(limit).join(', '))}">+${rest}</span>`);
-  }
-  return chips.join('');
-}
-
-/**
- * Klick auf ein Tag-Chip filtert die Liste danach (#586).
- *
- * Delegiert, weil Karten laufend neu gezeichnet werden - und in der
- * Capture-Phase, nicht beim Bubbling. Im Kanban öffnet ein Klick irgendwo auf
- * der Karte den Bearbeiten-Dialog, und dieser Handler sitzt am Board, also
- * unterhalb des Containers: beim Bubbling käme er zuerst dran und hätte den
- * Dialog längst geöffnet, bevor ein stopPropagation hier noch etwas ausrichtet.
- */
-function wireTagBadgeFilter(container) {
-  container.addEventListener('click', async (e) => {
-    const chip = e.target.closest('[data-tag-filter]');
-    if (!chip || !container.contains(chip)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    await toggleTagFilter(chip.dataset.tagFilter, container);
-  }, true);
-
-  // Gruppenkopf auf- und zuklappen (#812).
-  //
-  // DIE ZEILEN KLAPPEN, STATT ZU SPRINGEN (Critique 2026-09-26, A3 P1-4). Die
-  // Liste zeichnet eine zugeklappte Gruppe ohne `.row-carrier` - also klappt
-  // beim Zuklappen erst die alte Zeilenflaeche weg und danach wird neu
-  // gezeichnet; beim Aufklappen wird erst gezeichnet und die neue Flaeche von
-  // null aufgezogen. Der Winkel dreht dabei ueber seine eigene Transition
-  // (list-row.css), auch am frisch gezeichneten Knopf. Der Fokus bleibt auf dem
-  // Kopf: das Neuzeichnen ersetzt den Knopf, und ohne Rueckgabe landete er auf
-  // <body>.
+function wireGroupToggle(container) {
   container.addEventListener('click', async (e) => {
     const toggle = e.target.closest('[data-group-toggle]');
     if (!toggle || !container.contains(toggle)) return;
@@ -1191,7 +1025,6 @@ function taskAdvancedTopics({ privacy = true, recurrence = false, reminder = fal
   const topics = [
     t('tasks.startDateLabel'),
     countdown ? t('dashboard.countdownTitle') : null,
-    t('tasks.tagsLabel'),
     t('tasks.statusLabel'),
     privacy ? t('common.visibility.label') : null,
     t('tasks.documentsLabel'),
@@ -1260,9 +1093,8 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
   // stehen offen im Hauptteil (A3 P1-2, siehe unten).
   const advancedSummary = [];
   if (isEdit && task.start_date) advancedSummary.push(formatDate(task.start_date));
-  if (isEdit && task.tags?.length) advancedSummary.push(task.tags.join(', '));
   // Der Schwanz hinter dem Aufklapper ist eingezogen (Critique 2026-08-31):
-  // Status, Sync-Ziel, Sichtbarkeit, Sperre und Anhaenge standen als offene
+  // Status, Sync-Ziel, Sichtbarkeit und Anhaenge standen als offene
   // Feldgruppen NACH der Sektion - dieselbe Sorte Sekundaerfeld, nur an der
   // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
   // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
@@ -1271,7 +1103,6 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
     advancedSummary.push(STATUSES().find((s) => s.value === statusValue).label);
   }
   if (!hidesPrivacyControls('tasks') && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
-  if (!hidesPrivacyControls('tasks') && task?.locked) advancedSummary.push(t('tasks.lockedBadge'));
   if (task?.documents?.length) advancedSummary.push(task.documents.map((d) => d.name).join(', '));
 
   const advancedLabel = advancedSummary.length
@@ -1345,20 +1176,6 @@ function renderModalContent({ task = null, users = [], reminder = null } = {}) {
         </div>
       </div>
 
-      <div class="form-group task-tags-field" style="margin-top:var(--space-4)">
-        <label class="label" for="task-tag-input">${t('tasks.tagsLabel')}</label>
-        <div class="task-tags-editor" id="task-tags-editor">
-          <div class="task-tags-editor__chips" id="task-tags-chips"></div>
-          <input class="input task-tags-editor__input" type="text" id="task-tag-input"
-                 list="task-tag-suggestions" autocomplete="off"
-                 placeholder="${t('tasks.tagsPlaceholder')}">
-          <datalist id="task-tag-suggestions">
-            ${state.allTags.map((entry) => `<option value="${esc(entry.tag)}"></option>`).join('')}
-          </datalist>
-        </div>
-        <p class="task-field-hint">${t('tasks.tagsHint')}</p>
-      </div>
-
       <!-- DAS FELD STAND BIS #807 NUR IM BEARBEITEN-ZWEIG. Vergessen war es
            nicht, aber die Annahme darunter stimmte nicht: notiert wird oft
            etwas, das laengst laeuft, und dafuer brauchte es bisher zwei
@@ -1402,19 +1219,6 @@ ${syncTargetFieldHtml(task)}
         <p class="task-field-hint field-hint--warn" id="task-visibility-private-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.privateAssignedHint')}</span></p>
       </div>
 
-      <!-- #830: Die Sperre steht neben der Sichtbarkeit, weil beide dieselbe
-           Frage beantworten - wer darf hier was. Sichtbarkeit regelt das Sehen,
-           die Sperre das Aendern. In einem Ein-Personen-Haushalt sagen beide
-           nichts, also verschwinden sie zusammen (isSoloHousehold). -->
-      <div class="form-group" style="margin-top:var(--space-4)"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="task-locked" name="locked" aria-describedby="task-locked-hint"
-                 ${task?.locked ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('tasks.lockedToggle')}</span>
-        </label>
-        <p class="task-field-hint" id="task-locked-hint">${t('tasks.lockedHint')}</p>
-      </div>
 
       ${renderDocumentAttachField({
         attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
@@ -1538,7 +1342,7 @@ ${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`
  * einen dritten Zustand mit leerem Status, der auch Erledigtes zeigt.
  */
 const DEFAULT_STATUS_FILTER = Object.freeze(['open']);
-const defaultFilters = () => ({ status: [...DEFAULT_STATUS_FILTER], priority: [], assigned_to: [], category: [], tags: [] });
+const defaultFilters = () => ({ status: [...DEFAULT_STATUS_FILTER], priority: [], assigned_to: [], category: [] });
 
 let state = {
   tasks:           [],
@@ -1551,36 +1355,32 @@ let state = {
   user:            null,
   users:           [],
   categories:      [],
-  allTags:         [],       // [{ tag, count }] für Filterleiste und Vorschläge (#586)
   /** Welche Referenzlisten sind gerade NICHT nachweislich frisch?
    *
    *  Zwei Wege dorthin, und beide enden gleich. Erstens der Offline-Cache:
    *  `/tasks` steht in `API_CACHE_WHITELIST` (sw.js), also auch
-   *  `/tasks/meta/options`, `/tasks/tags` und `/tasks/categories` - und
+   *  `/tasks/meta/options` und `/tasks/categories` - und
    *  `networkFirstApi` antwortet bei Netzfehler mit dem Cache und Status 200.
    *  Zweitens eine fehlgeschlagene Auffrischung, die die alte Liste stehen
-   *  laesst (`refreshTags`). In beiden Faellen sind die Listen beliebig alt,
-   *  und eine Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
+   *  laesst. In beiden Faellen sind die Listen beliebig alt, und eine
+   *  Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
    *
    *  Deshalb heisst das Feld nicht `metaFromCache`: der Cache ist nur der
    *  haeufigere der beiden Wege.
    *
-   *  UND JE LISTE, nicht als ein Flag fuer drei. Die drei Endpunkte sind
-   *  getrennte Cache-Eintraege und werden getrennt aufgefrischt: `refreshTags`
-   *  holt nur `/tasks/tags`, der Kategorie-Manager nur `/tasks/categories`,
-   *  und allein `/tasks/meta/options` bringt alle drei. Als EIN gemeinsames
-   *  Flag erklaerte eine netzfrische Tag-Auffrischung die noch gecachten
-   *  Kategorien und Mitglieder fuer autoritativ - und das Beschneiden warf
+   *  UND JE LISTE, nicht als ein Flag fuer beide. Die Endpunkte sind getrennte
+   *  Cache-Eintraege und werden getrennt aufgefrischt: der Kategorie-Manager
+   *  holt nur `/tasks/categories`, allein `/tasks/meta/options` bringt beide.
+   *  Als EIN gemeinsames Flag erklaerte eine netzfrische Kategorien-Auffrischung
+   *  die noch gecachten Mitglieder fuer autoritativ - und das Beschneiden warf
    *  dann ein Chip weg, das es noch gibt. */
-  metaStale:       { users: false, categories: false, tags: false },
+  metaStale:       { users: false, categories: false },
   currentUserId:   null,
   isAdmin:         false,    // darf fremde Kommentare entfernen (#734)
   /** Wer an diesem Wandtablett abhaken darf (#1209) - leer fuer jeden Menschen. */
   displayPeople:   [],
-  // `tags` ist eine Liste, keine Auswahl: mehrere Tags engen UND-verknüpft ein,
-  // wie jeder andere Filter in dieser Leiste auch (#586).
   // Status, Priorität und Person halten mehrere Werte (#671); innerhalb einer
-  // Achse wirken sie ODER, zwischen den Achsen UND. Tags bleiben UND-verknüpft.
+  // Achse wirken sie ODER, zwischen den Achsen UND.
   filters:         defaultFilters(),
   // Tafla (2026-10-20): die Zeitkoerbe sind die Vorgabe; die Wahl im Blatt
   // merkt sich das Geraet (GROUP_MODE_KEY).
@@ -1717,8 +1517,7 @@ function searchedTasks() {
   if (!q) return base;
   return base.filter((task) =>
     (task.title       || '').toLowerCase().includes(q) ||
-    (task.description || '').toLowerCase().includes(q) ||
-    (task.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+    (task.description || '').toLowerCase().includes(q)
   );
 }
 
@@ -1897,9 +1696,8 @@ function taskQuery() {
   // senden, sonst blieben "In Bearbeitung"/"Erledigt" trotz vorhandener Aufgaben
   // leer (Audit A1-07/P3). In der Liste wirkt er normal; state bleibt erhalten,
   // sodass der Filter beim Zurückwechseln wieder greift.
-  // append statt set: jeder Wert ist ein eigener Parameter. Bei den Tags, damit
-  // ein Tag mit Komma im Namen am Server nicht in zwei zerfällt; bei den übrigen
-  // Achsen, weil sie seit #671 mehrere Werte tragen (ODER-verknüpft).
+  // append statt set: jeder Wert ist ein eigener Parameter, weil die Achsen
+  // seit #671 mehrere Werte tragen (ODER-verknüpft).
   if (state.viewMode !== 'kanban') state.filters.status.forEach((v) => params.append('status', v));
   // Im Kanban ist die Ablage eine Spalte — sie muss also mitkommen, obwohl der
   // Server sie sonst ausblendet (#688).
@@ -1909,7 +1707,6 @@ function taskQuery() {
   // Der Server kannte die Achse schon (normalizeCategoryFilter, mehrere Werte
   // ODER-verknuepft); nur das Panel hatte sie nie angeboten (D#1017).
   state.filters.category.forEach((v) => params.append('category', v));
-  state.filters.tags.forEach((tag) => params.append('tag', tag));
   if (state.showFuture)          params.set('include_future', '1');
   return params.toString() ? `?${params}` : '';
 }
@@ -2060,26 +1857,6 @@ function revealCreatedTask(container, taskId) {
   // zur vorher gewaehlten Aufgabe.
   if (taskMd?.isSplit()) taskMd.select(String(taskId), { history: 'push' });
   return true;
-}
-
-/**
- * Vergebene Tags nachladen (#586). Nur nach dem Speichern nötig, nicht bei jedem
- * Filterwechsel - die Liste ändert sich ausschließlich durch Bearbeiten.
- * Scheitert der Aufruf, bleibt die alte Liste stehen: veraltete Vorschläge sind
- * harmloser als eine plötzlich verschwundene Filtergruppe.
- */
-async function refreshTags() {
-  try {
-    const { data, fromCache } = await api.getWithSource('/tasks/tags');
-    state.allTags = data.data ?? [];
-    // NUR die Tags: ueber Kategorien und Mitglieder sagt dieser Rundlauf
-    // nichts, ihr Zustand bleibt, wie er war.
-    state.metaStale.tags = fromCache === true;
-  } catch {
-    // Alte Liste behalten - aber sie ist ab jetzt nicht mehr nachweislich
-    // frisch, und `getRecentFilters` darf nicht mehr dagegen beschneiden.
-    state.metaStale.tags = true;
-  }
 }
 
 /**
@@ -2538,8 +2315,6 @@ function openTaskModal({ task = null, users = [], reminder = null, onChanged = n
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
   const isEdit = !!task;
-  // Working-Set VOR dem Rendern setzen: renderTagChips liest ihn direkt danach.
-  modalTags = normalizeTagList(task?.tags);
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
     content: renderModalContent({ task, users, reminder }),
@@ -2591,10 +2366,6 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
   wireVisibilityWarning(panel, '#task-visibility', 'task_assigned', '#task-visibility-warning', '#task-visibility-private-warning',
     task?.created_by ?? state.currentUserId);
   wireCountdownGate(panel);
-
-  // Tag-Editor (#586)
-  renderTagChips(panel);
-  wireTagEditor(panel);
 
   // Formatierungsleiste ueber der Notiz (#731). Die Leseansicht rendert sie
   // seit v2.7.0 als Markdown, geschrieben werden musste sie aber von Hand -
@@ -2667,110 +2438,6 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     ?.addEventListener('click', (e) => deleteTaskWithUndo(e.currentTarget.dataset.id, {
       container, onChanged,
     }));
-}
-
-// --------------------------------------------------------
-// Tag-Verwaltung und Bulk-Vergabe (#586)
-// --------------------------------------------------------
-
-/**
- * Tags haushaltsweit umbenennen, zusammenführen und entfernen.
- * Nach jeder Änderung wandert die frische Liste direkt in den State - der
- * Server liefert sie in derselben Antwort mit, ein Nachladen entfällt.
- */
-function openTagManager(container) {
-  if (readOnly()) return;
-  let manager = null;
-  const onChanged = async (e) => {
-    state.allTags = e.detail?.tags ?? state.allTags;
-    // Ein Tag, der gerade umbenannt oder gelöscht wurde, kann noch im Filter
-    // stehen. Bliebe er dort, filterte die Liste auf einen Namen, den es nicht
-    // mehr gibt, und zeigte dauerhaft nichts an.
-    const known = new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
-    state.filters.tags = state.filters.tags.filter((tag) => known.has(tag.toLowerCase()));
-    renderFilters(container);
-    await loadTasks(container);
-  };
-  openSharedModal({
-    title: t('tasks.manageTags'),
-    content: '<yuvomi-tag-manager></yuvomi-tag-manager>',
-    size: 'lg',
-    onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-tag-manager');
-      manager.addEventListener('tag-manager-changed', onChanged);
-    },
-    onClose: () => manager?.removeEventListener('tag-manager-changed', onChanged),
-  });
-}
-
-/**
- * Tag an die ausgewählten Aufgaben hängen oder von ihnen nehmen.
- *
- * Beim Entfernen kommen die Vorschläge aus den ausgewählten Aufgaben selbst,
- * nicht aus dem Gesamtbestand: einen Tag anzubieten, den keine der markierten
- * Aufgaben trägt, wäre eine Aktion, die garantiert nichts tut.
- */
-function openBulkTagDialog(taskIds, mode, container) {
-  if (readOnly()) return;
-  const selected = state.tasks.filter((task) => taskIds.includes(task.id));
-  const pool = mode === 'remove'
-    ? [...new Map(selected.flatMap((task) => task.tags ?? [])
-        .map((tag) => [tag.toLowerCase(), tag])).values()].sort((a, b) =>
-          a.localeCompare(b, getLocale(), { sensitivity: 'base' }))
-    : state.allTags.map((entry) => entry.tag);
-
-  openSharedModal({
-    title: mode === 'add' ? t('tasks.bulkTagAdd') : t('tasks.bulkTagRemove'),
-    size: 'sm',
-    content: `
-      <form id="bulk-tag-form">
-        <div class="form-group">
-          <label class="label" for="bulk-tag-input">${t('tasks.tagsLabel')}</label>
-          <input class="input" type="text" id="bulk-tag-input" name="tag" autocomplete="off"
-                 list="bulk-tag-suggestions" maxlength="64"
-                 placeholder="${t('tasks.tagsPlaceholder')}">
-          <datalist id="bulk-tag-suggestions">
-            ${pool.map((tag) => `<option value="${esc(tag)}"></option>`).join('')}
-          </datalist>
-          <p class="task-field-hint">${t('tasks.bulkTagHint', { count: taskIds.length })}</p>
-        </div>
-        <div class="modal-panel__footer modal-panel__footer--plain">
-          <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
-          <button type="submit" class="btn btn--primary">${t('common.apply')}</button>
-        </div>
-      </form>`,
-    onSave: (panel) => {
-      const form = panel.querySelector('#bulk-tag-form');
-      panel.querySelector('#bulk-tag-input')?.focus();
-      form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const tag = form.elements.tag.value.trim();
-        if (!tag) return;
-        try {
-          const body = mode === 'add' ? { ids: taskIds, add: [tag] } : { ids: taskIds, remove: [tag] };
-          const res = await api.post('/tasks/tags/apply', body);
-          state.allTags = res.data?.tags ?? state.allTags;
-          // Der Server ueberspringt gesperrte Aufgaben, statt den ganzen Aufruf
-          // abzuweisen (#830). Eine stille Teilausfuehrung waere schlimmer als
-          // ein Fehler, also sagt der Toast, was liegen blieb.
-          const skipped = res.data?.skipped ?? 0;
-          window.yuvomi.showToast(
-            skipped
-              ? `${t('tasks.tagsUpdated', { count: res.data?.updated ?? 0 })} ${t('tasks.tagsSkippedLocked', { count: skipped })}`
-              : t('tasks.tagsUpdated', { count: res.data?.updated ?? 0 }),
-            'success');
-          closeModal({ force: true });
-          state.selectedTaskIds.clear();
-          updateBulkActionsBar(container);
-          renderFilters(container);
-          await loadTasks(container);
-          refocusAfterRender();
-        } catch (err) {
-          window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
-        }
-      });
-    },
-  });
 }
 
 // --------------------------------------------------------
@@ -2873,17 +2540,12 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     submitBtn.textContent = originalLabel;
     return;
   }
-  // Ein noch nicht übernommener Tag im Eingabefeld zählt mit — wer tippt und
-  // direkt speichert, hat ihn gemeint.
-  const pendingTag = form.querySelector('#task-tag-input')?.value ?? '';
-  const tags = normalizeTagList([...modalTags, ...pendingTag.split(',')]);
 
   const body = {
     title:           form.title.value.trim(),
     description:     form.description.value.trim() || null,
     priority:        form.priority.value,
     category:        form.category.value,
-    tags,
     start_date:      startDate || null,
     due_date:        dueDate || null,
     assigned_to:     getSelectedUserIds(form, 'task_assigned'),
@@ -2892,7 +2554,8 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     recurrence_rule: rrule.recurrence_rule,
     recurrence_from_completion: rrule.recurrence_from_completion ? 1 : 0,
     countdown:       form.querySelector('#task-countdown')?.checked ? 1 : 0,
-    locked:          form.querySelector('#task-locked')?.checked ? 1 : 0,
+    // Weder `tags` noch `locked`: PUT laesst Fehlendes am Server stehen, ein
+    // Bearbeiten nimmt der Aufgabe also keine bestehenden Etiketten.
   };
   // Das Feld fehlt bei Unteraufgaben und bei bereits gespiegelten Aufgaben - in
   // beiden Fällen soll gar kein Ziel mitgeschickt werden, sonst nähme der Server
@@ -3039,7 +2702,6 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
           // schickt dieselbe Liste.
           resetSubmit(t('tasks.documentsLinkFailed'));
           btnError(submitBtn);
-          await refreshTags();
           await onChanged();
           return;
         }
@@ -3053,15 +2715,11 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     // der Toast oben - ein Knopf, hinter dem beides wartet, haelt nur auf.
     // `btnSuccess` bleibt der Baustein fuer Formulare, die offen bleiben.
     closeModal({ force: true });
-    // Erst die Tag-Liste, dann neu zeichnen: ein gerade vergebener Tag soll
-    // sofort in Filterleiste und Vorschlägen stehen (#586).
-    //
     // EIGENER catch: der Dialog ist zu. Der aeussere schreibt an Knopf und
     // Fehlerzeile des Formulars - die gibt es hier nicht mehr, und oben steht
     // schon der gruene Toast. Scheitert das Neuladen, ist die Aufgabe trotzdem
     // gespeichert; die Liste ist nur alt, und das muss man auf der Seite lesen.
     try {
-      await refreshTags();
       await onChanged();
       // Der Dialog ist jetzt VOR dem Neuzeichnen zu: sein Fokus-Rueckweg (der
       // Stift der bearbeiteten Zeile) wird mit der Liste ersetzt. Im selben
@@ -3252,8 +2910,6 @@ function renderKanbanCard(task) {
       <button type="button" class="kanban-card__title u-card-title u-compact">${esc(task.title)}</button>
       <div class="kanban-card__meta">
         ${due ? `<span class="due-date ${due.cls}"><i data-lucide="clock" class="icon-sm" aria-hidden="true"></i> ${due.label}</span>` : ''}
-        ${renderLockedBadge(task)}
-        ${renderTagBadges(task.tags, TAG_BADGES_VISIBLE, task.priority)}
       </div>
       <div class="kanban-card__footer">
         ${/* Tafla: dieselbe Fahne (nur Hoch/Dringend) und dieselbe
@@ -4161,7 +3817,6 @@ function activeFilterCount() {
     + state.filters.priority.length
     + state.filters.assigned_to.length
     + state.filters.category.length
-    + state.filters.tags.length
     + (state.showFuture ? 1 : 0)
     + (state.dueToday ? 1 : 0);
 }
@@ -4221,18 +3876,12 @@ function toolsMenuItems() {
     // die in der einzeiligen Pille keinen Platz haben.
     items.push(
       { action: 'bulk-archive', label: t('tasks.bulkArchive'), icon: 'archive', disabled: true },
-      { action: 'bulk-tag-add', label: t('tasks.bulkTagAdd'), icon: 'tag', disabled: true },
-      { action: 'bulk-tag-remove', label: t('tasks.bulkTagRemove'), icon: 'eraser', disabled: true },
     );
   }
   if (!readOnly()) {
     items.push(
       { separator: true },
       { action: 'manage-categories', label: t('tasks.manageCategories'), icon: 'folder-tree' },
-      // Das Etiketten-Icon fuer die Tags, der Ordnerbaum fuer die Kategorien:
-      // die beiden Achsen sind bewusst getrennt, dieselbe Bildsprache haette
-      // sie wieder eingeebnet.
-      { action: 'manage-tags', label: t('tasks.manageTags'), icon: 'tags' },
     );
   }
   return items;
@@ -4252,13 +3901,13 @@ function toolsMenuItems() {
  *   „Der eine Filterblatt-Baustein").
  * - Gruppieren nach: nur in der Liste; das Brett gruppiert nach Status.
  * - Status (nicht im Kanban, Audit A1-07), Prioritaet, Person, Kategorie
- *   (D#1017), Tag: je Wert ein Chip, Mehrfachauswahl je Achse (#671).
+ *   (D#1017): je Wert ein Chip, Mehrfachauswahl je Achse (#671).
  */
 function filterSheetGroups() {
   const groups = [];
   const chipsHtml = (key, label, items) => filterChipsHtml(key, label, items.map((item) => ({
     ...item,
-    active: key === 'tag' ? hasTagFilter(item.value) : hasFilter(key, item.value),
+    active: hasFilter(key, item.value),
   })));
 
   const statusLabels = STATUS_LABELS();
@@ -4267,8 +3916,7 @@ function filterSheetGroups() {
     const parts = [];
     // Jeder Wert jeder Achse wird benannt: seit #671 kann ein gemerktes Set
     // "Hoch" UND "Mittel" enthalten, und ein Chip, der nur den ersten nennt,
-    // schaltete beim Klick mehr, als er behauptet. Die Tags gehoeren dazu,
-    // weil der Chip sie mitsetzt (#586).
+    // schaltete beim Klick mehr, als er behauptet.
     f.status.forEach((v) => parts.push(statusLabels[v] ?? v));
     f.priority.forEach((v) => parts.push(priorityLabels[v] ?? v));
     f.assigned_to.forEach((v) => {
@@ -4276,7 +3924,6 @@ function filterSheetGroups() {
       if (u) parts.push(u.display_name);
     });
     f.category.forEach((v) => parts.push(catLabel(v)));
-    parts.push(...f.tags);
     return parts.length ? { set: f, label: parts.join(' · ') } : null;
   }).filter(Boolean);
   if (recent.length) {
@@ -4321,12 +3968,6 @@ function filterSheetGroups() {
     groups.push({ heading: t('tasks.categoryLabel'),
       fold: state.filters.category.length ? 'open' : 'closed',
       html: chipsHtml('category', t('tasks.categoryLabel'), state.categories.map((c) => ({ value: c.key, label: catLabel(c.key) }))) });
-  }
-  // Tags nur, wenn welche vergeben sind - sonst stuende eine leere Gruppe da (#586).
-  if (state.allTags.length) {
-    groups.push({ heading: t('tasks.filterGroupTag'),
-      fold: state.filters.tags.length ? 'open' : 'closed',
-      html: chipsHtml('tag', t('tasks.filterGroupTag'), state.allTags.map((entry) => ({ value: entry.tag, label: entry.tag }))) });
   }
 
   // ANSICHT, ABGESETZT AM ENDE (R16). „Gruppieren nach" und „Geplante anzeigen"
@@ -4390,7 +4031,6 @@ function sheetToolRows() {
   return [
     ...(state.viewMode === 'list' ? [['bulk-select', 'tasks.bulkSelect', 'list-checks', false]] : []),
     ['manage-categories', 'tasks.manageCategories', 'folder-tree', true],
-    ['manage-tags', 'tasks.manageTags', 'tags', true],
   ];
 }
 
@@ -4404,13 +4044,11 @@ function sheetToolRows() {
 function syncFilterSheet(panel) {
   if (!panel?.isConnected) return;
   panel.querySelectorAll('[data-filter]').forEach((chip) => {
-    const on = chip.dataset.filter === 'tag'
-      ? hasTagFilter(chip.dataset.value)
-      : hasFilter(chip.dataset.filter, chip.dataset.value);
+    const on = hasFilter(chip.dataset.filter, chip.dataset.value);
     chip.classList.toggle('filter-chip--active', on);
     chip.setAttribute('aria-pressed', String(on));
     // WAS WIRKT, STEHT OFFEN - auch wenn es NACH dem Oeffnen des Blatts gesetzt
-    // wurde. Ein gemerktes Set ("Zuletzt benutzt") kann Kategorie oder Tag
+    // wurde. Ein gemerktes Set ("Zuletzt benutzt") kann eine Kategorie
     // setzen, waehrend deren Aufklapper zu ist: der Chip wurde aktiv, blieb
     // aber verborgen. Nur aufklappen, nie zuklappen und nichts neu bauen - der
     // Fokus steht vielleicht gerade in der Falte.
@@ -4561,10 +4199,6 @@ async function onFilterSheetClick(e, container) {
   }
   const chip = e.target.closest('[data-filter]');
   if (!chip) return;
-  if (chip.dataset.filter === 'tag') {
-    await toggleTagFilter(chip.dataset.value, container);
-    return;
-  }
   await toggleValueFilter(chip.dataset.filter, chip.dataset.value, container);
 }
 
@@ -4584,8 +4218,6 @@ function runSheetTool(tool, container) {
       focusVisibleTool(container, { force: true });
     } else if (tool === 'manage-categories') {
       openTaskCategoryManager(container);
-    } else if (tool === 'manage-tags') {
-      openTagManager(container);
     }
   });
 }
@@ -4632,7 +4264,7 @@ async function resetTaskFilters(container) {
  * `state.tasks` beantwortet eine andere Frage: es ist die GEFILTERTE Liste
  * dieser Ansicht. Der Standardfilter zeigt nur `open` (schliesst also
  * „In Bearbeitung" aus), das Kanban laesst den Statusfilter ganz weg, und
- * Priorität, Zuweisung und Tags engen zusaetzlich ein. Aus dieser Liste
+ * Priorität und Zuweisung engen zusaetzlich ein. Aus dieser Liste
  * gezaehlt sprang die Zahl beim blossen Wechsel zwischen Liste und Kanban -
  * ohne dass sich an den Daten etwas geaendert haette. Dieselbe Zahl stand
  * ausserdem in zwei ZONEN: der Server rechnet in der Haushaltszone, eine
@@ -4690,32 +4322,12 @@ function persistAssignedToMe() {
   try { localStorage.setItem(ASSIGNED_TO_ME_KEY, isAssignedToMe() ? '1' : '0'); } catch {}
 }
 
-/** Ist dieser Tag gerade gefiltert? Schreibweise zählt dabei nicht. */
-function hasTagFilter(tag) {
-  const key = String(tag).toLowerCase();
-  return state.filters.tags.some((active) => active.toLowerCase() === key);
-}
-
-/**
- * Tag im Filter an- oder abwählen. Mehrere Tags engen UND-verknüpft ein, also
- * fügt ein Klick hinzu statt zu ersetzen.
- */
-async function toggleTagFilter(tag, container) {
-  const key = String(tag).toLowerCase();
-  state.filters.tags = hasTagFilter(tag)
-    ? state.filters.tags.filter((active) => active.toLowerCase() !== key)
-    : [...state.filters.tags, tag];
-  if (state.filters.tags.length) saveRecentFilter(state.filters);
-  renderFilters(container);
-  await loadTasks(container);
-}
-
 /**
  * Ein gespeichertes Filter-Set auf die aktuelle Form bringen.
  *
  * Einzelne Strings stammen aus Einträgen, die vor der jeweiligen Mehrfachauswahl
- * im localStorage gelandet sind - `tag` vor der Tag-Auswahl, `status`,
- * `priority` und `assigned_to` vor #671. Ohne die Umschreibung wären das dort
+ * im localStorage gelandet sind - `status`, `priority` und `assigned_to`
+ * vor #671. Eine alte Tag-Achse faellt hier weg: die App kennt keine Tags mehr. Ohne die Umschreibung wären das dort
  * keine Arrays, und der erste `.includes` darauf risse die Seite auf, für Werte,
  * die niemand mehr absichtlich gesetzt hat.
  */
@@ -4726,7 +4338,6 @@ function normalizeFilterSet(f = {}) {
     priority:    asList(f.priority),
     assigned_to: asList(f.assigned_to),
     category:    asList(f.category),
-    tags:        asList(Array.isArray(f.tags) ? f.tags : (f.tag ? [f.tag] : [])),
   };
 }
 
@@ -4756,7 +4367,7 @@ async function toggleValueFilter(key, value, container) {
  * Getrennt von `getRecentFilters()`, weil `saveRecentFilter()` sonst die
  * gefilterte Fassung zurueckschriebe: das waere Bereinigen beim Schreiben durch
  * die Hintertuer, und ein einmal unvollstaendiger Referenzbestand (Ladefehler,
- * noch nicht geladene Tags) haette die Chips fuer immer entfernt.
+ * noch nicht geladene Kategorien) haette die Chips fuer immer entfernt.
  */
 function storedRecentFilters() {
   try {
@@ -4768,8 +4379,7 @@ function storedRecentFilters() {
  * Die gemerkten Sets, wie sie ANGEBOTEN werden duerfen.
  *
  * Was ein Set nennt, kann verschwinden, nachdem es gespeichert wurde: eine
- * geloeschte Kategorie, ein umbenannter oder zusammengefuehrter Tag, ein
- * entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
+ * geloeschte Kategorie, ein entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
  * in `state.filters` zurueck, die Liste filterte auf etwas, das es nicht mehr
  * gibt - dauerhaft leer, und ein Neuladen aenderte nichts, weil der Wert im
  * localStorage steht.
@@ -4785,7 +4395,7 @@ function storedRecentFilters() {
  */
 function getRecentFilters() {
   const sets = storedRecentFilters();
-  // Nach einem Ladefehler stehen `users`, `categories` und `allTags` auf `[]`
+  // Nach einem Ladefehler stehen `users` und `categories` auf `[]`
   // (siehe den catch-Zweig in render()). „Leer" hiesse dann „gibt es nicht",
   // und ein Serverfehler naehme dem Nutzer seine gemerkten Filter weg - genau
   // die Verwechslung aus dem Leer-Zweig, die der Ladefehler-Zustand behebt.
@@ -4799,10 +4409,9 @@ function getRecentFilters() {
   if (state.loadError) return sets;
 
   // JE ACHSE: eine Liste, die gerade nicht nachweislich frisch ist, beschneidet
-  // nicht - die beiden anderen schon. `null` heisst hier „kein Urteil".
+  // nicht - die andere schon. `null` heisst hier „kein Urteil".
   const stale = state.metaStale;
   const knownCategories = stale.categories ? null : new Set(state.categories.map((c) => c.key));
-  const knownTags       = stale.tags       ? null : new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
   const knownUsers      = stale.users      ? null : new Set(state.users.map((u) => String(u.id)));
 
   const beschnitten = sets
@@ -4810,14 +4419,11 @@ function getRecentFilters() {
       ...f,
       assigned_to: knownUsers ? f.assigned_to.filter((id) => knownUsers.has(String(id))) : f.assigned_to,
       category:    knownCategories ? f.category.filter((key) => knownCategories.has(key)) : f.category,
-      // Tag-Vergleich kleingeschrieben, wie ueberall sonst in dieser Datei
-      // (`hasTagFilter`): der Server behaelt die Schreibweise des Anlegens.
-      tags:        knownTags ? f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())) : f.tags,
     }))
     // Ein Set, von dem nichts uebrig bleibt, ist kein Chip mehr. Es bliebe
     // sonst als leere Pille stehen und setzte beim Klick alle Filter zurueck.
     .filter((f) => f.status.length || f.priority.length || f.assigned_to.length
-      || f.category.length || f.tags.length);
+      || f.category.length);
 
   // Und was nach dem Beschneiden gleich AUSSIEHT, ist auch gleich: „Offen +
   // Garten" faellt mit „Offen" zusammen, sobald es Garten nicht mehr gibt.
@@ -4848,36 +4454,16 @@ function getRecentFilters() {
  * Achse dazukommt - und dann still.
  */
 function recentFilterKey(f) {
-  // STRUKTURELL KODIERT, NICHT MIT TRENNZEICHEN VERKETTET.
-  //
-  // Hier stand `join(',')` INNERHALB einer Achse, und das Komma darf in einem
-  // Wert vorkommen: `normalizeTags` splittet nur eine STRING-Eingabe an
-  // Kommas, ein Array-Element behaelt seines (`normalizeTags(['a,b'])` ->
-  // `['a,b']`), und die Route nimmt Arrays. Damit ergaben der eine Tag `a,b`
-  // und die zwei Tags `a` und `b` denselben Schluessel: `getRecentFilters`
-  // verbarg den einen Chip als Dublette, und `saveRecentFilter` verdraengte
-  // beim Speichern den jeweils anderen.
-  //
-  // Das `join('|')` DARUEBER war dagegen in Ordnung, auch wenn ein Tag ein
-  // `|` tragen darf: die Achsenzahl ist fest, also bleibt jede Position
-  // eindeutig. Eine Probe dafuer stand hier kurz und wurde wieder entfernt -
-  // sie blieb gruen, wenn man den alten Trenner zuruecknahm, und maass damit
-  // nichts. Ersetzt wird er trotzdem mit, weil eine Formel mit zwei Regeln
-  // schwerer zu halten ist als eine ohne.
-  //
-  // Der Server hat dieselbe Frage schon beantwortet und begruendet
-  // (`tagsKey` in server/utils/task-tags.js trennt mit U+0000, "weil ein Tag
-  // Leerzeichen enthalten darf"). JSON braucht die Frage gar nicht erst zu
-  // stellen: es kodiert die Achsen als Struktur, also kann kein Wert seinen
-  // eigenen Trenner tragen. Der Schluessel wird bei jedem Aufruf neu gerechnet
-  // und nirgends gespeichert - die geaenderte Form braucht keine Migration.
+  // STRUKTURELL KODIERT, NICHT MIT TRENNZEICHEN VERKETTET: JSON kodiert die
+  // Achsen als Struktur, also kann kein Wert seinen eigenen Trenner tragen. Der
+  // Schluessel wird bei jedem Aufruf neu gerechnet und nirgends gespeichert.
   const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort();
-  return JSON.stringify([f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis));
+  return JSON.stringify([f.status, f.priority, f.assigned_to, f.category].map(axis));
 }
 
 function saveRecentFilter(filters) {
   const set = normalizeFilterSet(filters);
-  if (!set.status.length && !set.priority.length && !set.assigned_to.length && !set.category.length && !set.tags.length) return;
+  if (!set.status.length && !set.priority.length && !set.assigned_to.length && !set.category.length) return;
   const key = recentFilterKey(set);
   const recent = storedRecentFilters().filter((f) => recentFilterKey(f) !== key);
   recent.unshift(set);
@@ -5355,7 +4941,7 @@ function wireToolbar(container) {
     const item = pageToolsActionEl(e.target);
     if (!item || item.disabled) return;
     // Der Fokus steht auf einem Eintrag, den das Menue gerade versteckt hat.
-    // Ein Dialog (Kategorien, Tags) gaebe ihn beim Schliessen dorthin zurueck,
+    // Ein Dialog (Kategorien) gaebe ihn beim Schliessen dorthin zurueck,
     // und er fiele aufs Dokument - also vorher auf den Menueknopf.
     toolbar.querySelector('.page-tools-btn')?.focus();
     switch (item.dataset.action) {
@@ -5374,17 +4960,8 @@ function wireToolbar(container) {
       case 'bulk-archive':
         runBulkAction('archive', container);
         break;
-      case 'bulk-tag-add':
-        runBulkAction('tag-add', container);
-        break;
-      case 'bulk-tag-remove':
-        runBulkAction('tag-remove', container);
-        break;
       case 'manage-categories':
         if (!readOnly()) openTaskCategoryManager(container);
-        break;
-      case 'manage-tags':
-        if (!readOnly()) openTagManager(container);
         break;
       default:
     }
@@ -5424,9 +5001,8 @@ function wireNewTaskBtn(container) {
  * DIE PILLE IST EINZEILIG, und ihre Kapseln schrumpfen nie - also traegt sie
  * drei: den Status, Loeschen und „Fertig", den sichtbaren Ausstieg. Der Status
  * ist EINE Kapsel, die dem Bestand folgt: sind alle gewaehlten Aufgaben
- * erledigt, heisst sie „Offen", sonst „Erledigt". Ablegen und die beiden
- * Tag-Aktionen stehen waehrend der Auswahl beschriftet im Werkzeugmenue
- * (syncBulkMenu). Gemessen bei 390px (2026-09-27): mit „Archivieren" als
+ * erledigt, heisst sie „Offen", sonst „Erledigt". Ablegen steht waehrend der
+ * Auswahl beschriftet im Werkzeugmenue (syncBulkMenu). Gemessen bei 390px (2026-09-27): mit „Archivieren" als
  * vierter Kapsel blieben dem Subjekt auf Deutsch 30 von 86px („3 …"), und
  * Ungarisch („Befejezettként jelölés") liefe ueber die Pille hinaus.
  *
@@ -5478,14 +5054,14 @@ function updateBulkActionsBar(container) {
 }
 
 /**
- * Ablegen und die Tag-Eintraege des Werkzeugmenues gibt es nur waehrend der
- * Auswahl, und erst mit einer Aufgabe darin sind sie bedienbar.
+ * Ablegen im Werkzeugmenue gibt es nur waehrend der Auswahl, und erst mit
+ * einer Aufgabe darin ist es bedienbar.
  */
 function syncBulkMenu(container) {
   const menu = container?.querySelector?.('#tasks-tools-menu');
   if (!menu) return;
   const on = state.bulkSelectMode && !readOnly();
-  menu.querySelectorAll('.popover-menu__item[data-action="bulk-archive"], .popover-menu__item[data-action^="bulk-tag-"]').forEach((item) => {
+  menu.querySelectorAll('.popover-menu__item[data-action="bulk-archive"]').forEach((item) => {
     item.hidden = !on;
     item.disabled = !on || state.selectedTaskIds.size === 0;
   });
@@ -5500,11 +5076,6 @@ async function runBulkAction(action, container) {
   // Löschen läuft über dasselbe Optimistic-Undo-Muster wie der Einzel-Delete.
   if (action === 'delete') {
     handleBulkDelete(taskIds, container);
-    return;
-  }
-
-  if (action === 'tag-add' || action === 'tag-remove') {
-    openBulkTagDialog(taskIds, action === 'tag-add' ? 'add' : 'remove', container);
     return;
   }
 
@@ -5602,22 +5173,14 @@ const ARCHIVE_BATCH = 500;
  *
  * Geschickt werden die IDs, die die Ansicht zeigt, nie "alles Erledigte": was
  * jemand anderes erledigt, nachdem die Liste gezeichnet war, bleibt liegen.
- * Gesperrte Aufgaben ueberspringt der Server und zaehlt sie; der Toast sagt
- * das, statt eine stille Teilausfuehrung als Erfolg zu melden. Neu geladen
- * wird in jedem Fall, auch nach einem Fehler.
+ * Neu geladen wird in jedem Fall, auch nach einem Fehler.
  */
 async function archiveTaskIds(taskIds, container) {
-  let skipped = 0;
   try {
     for (let i = 0; i < taskIds.length; i += ARCHIVE_BATCH) {
-      const res = await api.post('/tasks/archive', { ids: taskIds.slice(i, i + ARCHIVE_BATCH) });
-      skipped += res?.data?.skipped ?? 0;
+      await api.post('/tasks/archive', { ids: taskIds.slice(i, i + ARCHIVE_BATCH) });
     }
-    window.yuvomi.showToast(
-      skipped
-        ? `${t('tasks.bulkArchived')} ${t('tasks.tagsSkippedLocked', { count: skipped })}`
-        : t('tasks.bulkArchived'),
-      'success');
+    window.yuvomi.showToast(t('tasks.bulkArchived'), 'success');
   } catch (err) {
     window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
   }
@@ -6062,9 +5625,6 @@ function openTaskView(task, reminder, container, { pane = null } = {}) {
     // eingehaengt wuerde.
     edit: readOnly() ? null : {
       mount: (panel, pane) => {
-        // Working-Set VOR dem Rendern setzen: renderTagChips in wireTaskForm
-        // liest ihn direkt danach.
-        modalTags = normalizeTagList(task.tags);
         pane.insertAdjacentHTML('beforeend', renderModalContent({ task, users: state.users, reminder }));
         wireTaskForm(panel, { task, container });
       },
@@ -6370,7 +5930,7 @@ function mountTaskSplit(container, signal) {
  * Die Leseansicht einer Aufgabe UND das Bearbeiten-Formular
  * holen ihr Aussehen aber von dort: Kommentare, Dokument-Chips,
  * Bildvorschauen, Etiketten, Prioritaets-Abzeichen, der Serienverlauf, und im
- * Formular die Tag-Zeile und die Feldhinweise. Ohne dieses Blatt erscheint das
+ * Formular die Feldhinweise. Ohne dieses Blatt erscheint das
  * alles fast ungestaltet - gemessen kam ein Etikett mit `border-radius: 0`
  * heraus und die Autorenzeile eines Kommentars mit Gewicht 400.
  *
@@ -6408,7 +5968,7 @@ function ensureTaskStyles() {
 }
 
 /**
- * Mitglieder, Kategorien und Tags einmal holen, wenn diese Seite noch nie
+ * Mitglieder und Kategorien einmal holen, wenn diese Seite noch nie
  * stand. Ohne sie blieben @-Erwaehnungen unaufgeloest, die Kategoriezeile
  * zeigte ihren internen Schluessel und das Formular haette keine Auswahl
  * anzubieten.
@@ -6422,10 +5982,9 @@ async function ensureTaskMeta() {
   try {
     const { data: meta = {}, fromCache } = await api.getWithSource('/tasks/meta/options');
     const alleStale = fromCache === true;
-    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
+    state.metaStale = { users: alleStale, categories: alleStale };
     state.users         = meta.users      ?? state.users;
     state.categories    = meta.categories ?? state.categories;
-    state.allTags       = meta.tags       ?? state.allTags;
   } catch { /* Ansicht steht auch ohne - nur weniger aufgeloest. */ }
 }
 
@@ -6516,7 +6075,6 @@ export async function openTaskById(taskId, { user = null, container = null, onCh
     onChanged,
     edit: !canOfferEdit ? null : {
       mount: (panel, pane) => {
-        modalTags = normalizeTagList(task.tags);
         pane.insertAdjacentHTML('beforeend', renderModalContent({ task, users: state.users, reminder }));
         // `container` reist MIT, obwohl es hier die Uebersicht ist und keine
         // Aufgabenliste haelt: sein zweiter Zweck ist das Ausblenden der Zeile
@@ -6600,7 +6158,7 @@ export async function render(container, { user, signal } = {}) {
           <!-- KOPFREGEL MOBIL (2026-09-26): unter dem Large Title EINE Zeile -
                Such-Icon, Ansicht, „Filter (n)" und EIN Werkzeugmenue, wie in
                den Dokumenten. Vorher standen hier sechs lose Knoepfe (Liste,
-               Kanban, Verlauf, Mehrfachauswahl, Kategorien, Tags), die Suche
+               Kanban, Verlauf, Mehrfachauswahl, Kategorien), die Suche
                fiel dadurch allein in eine dritte Zeile, und darunter kam noch
                eine Chipzeile: Kopf 176px, erste Aufgabe bei y=287 (A3 P1-2).
                Die Chipzeile ist ins Filterblatt gewandert - "Offen", "Mir
@@ -6703,12 +6261,11 @@ export async function render(container, { user, signal } = {}) {
     const meta = metaData.data ?? {};
     // `/tasks/meta/options` bringt als einziger Pfad alle drei.
     const alleStale = metaData.fromCache === true;
-    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
+    state.metaStale = { users: alleStale, categories: alleStale };
     state.tasks = tasksData.data ?? [];
     state.users = meta.users ?? [];
     state.displayPeople = (displayPeople.data ?? []).filter((p) => p.can_tick_off);
     state.categories = meta.categories ?? [];
-    state.allTags = meta.tags ?? [];
     state.subtasksExpandedByDefault = preferencesData.data?.tasks_subtasks_expanded === true;
     state.defaultSyncTarget = preferencesData.data?.tasks_default_target || '';
     restoreWho();
@@ -6725,8 +6282,7 @@ export async function render(container, { user, signal } = {}) {
     state.users = [];
     state.displayPeople = [];
     state.categories = [];
-    state.allTags = [];
-    state.metaStale = { users: false, categories: false, tags: false };
+    state.metaStale = { users: false, categories: false };
     state.subtasksExpandedByDefault = false;
     state.defaultSyncTarget = '';
   }
@@ -6739,7 +6295,7 @@ export async function render(container, { user, signal } = {}) {
   wireTaskList(container);
   wireWhoSegment(container);
   wireBulkEscape(container);
-  wireTagBadgeFilter(container);
+  wireGroupToggle(container);
   renderFilters(container);
   // Im Verlauf holt renderTaskList den Bestand selbst nach - er steckt nicht in
   // `/tasks`, und sein Ladefehler ist ein eigener.
@@ -6852,9 +6408,9 @@ export const __test = {
   // und Schalterweg im Blatt steht mit hier, weil er die Verdrahtung ist.
   renderFilters, activeFilterCount, toolsMenuItems, filterSheetGroups, syncFilterSheet,
   onFilterSheetClick, onFilterSheetChange, resetTaskFilters,
-  // Die Frische der Referenzlisten ist nur verhaltensgetrieben pruefbar: sie
-  // haengt daran, WIE die Antwort kam, nicht daran, dass eine kam.
-  refreshTags,
+  // Der Gruppenkopf klappt per Delegation am Container - nur ueber einen
+  // Klick auf einen Kopf pruefbar, nicht ueber den Quelltext.
+  wireGroupToggle,
   // Erinnerungen liegen im Kalender-Modul (siehe reminderAccess). Der Riegel
   // steht an ZWEI Stellen - im Markup und im Speichern -, und nur der zweite
   // entscheidet, ob eine Anfrage rausgeht. Ein Textguard kann das nicht sehen:

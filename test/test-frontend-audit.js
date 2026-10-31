@@ -318,7 +318,7 @@ const LATE_MODAL_CLOSE_BESTAND = {
   'pages/schedule.js': 4,
   'pages/shopping.js': 8,
   'pages/split-expenses.js': 6,
-  'pages/tasks.js': 2,
+  'pages/tasks.js': 1,
   'pages/waste.js': 15,
   'settings/pages/admin-family.js': 2,
   'settings/pages/modules-health.js': 2,
@@ -5464,58 +5464,26 @@ test('die Rückfrage der Pille bricht um, statt zu kappen', () => {
 });
 
 /**
- * Ein Etikett sagt nicht dasselbe wie der Chip daneben.
- *
- * Anlass (Critique 2026-08-13): auf /tasks stand „• Dringend" direkt neben dem
- * gespiegelten CalDAV-Etikett „dringend" - zwei Formen, dasselbe Wort, in einer
- * Metazeile, die seit dem Zeilenschnitt einzeilig ist und jedes Element
- * bezahlt. Eine VTODO traegt ihre Dringlichkeit als PRIORITY und noch einmal
- * als CATEGORIES.
- *
- * Geprueft wird die PAARUNG, nicht der Wortlaut: die Etiketten-Funktion muss die
- * Prioritaet kennen und gegen deren Label filtern, und beide Aufrufstellen
- * muessen sie mitgeben. Eine davon zu vergessen ist der stille Fall - die
- * Zeile sieht dann genauso aus wie vorher.
+ * Aufgaben haben in der App keine Etiketten (Tags) mehr (Quick-Add-Runde,
+ * 2026-10-29). Der Server spiegelt sie weiter (CalDAV CATEGORIES, MCP), die
+ * Oberflaeche zeigt, filtert und vergibt sie nicht. Dieser Guard haelt den Weg
+ * zurueck zu: kein Chip, kein Filter, kein Editor, kein Verwalter.
  */
-test('ein Etikett verschwindet, wenn es heisst wie die eigene Prioritaet', () => {
-  const src = read('../public/pages/tasks.js');
-
-  const fn = src.match(/function renderTagBadges\([^)]*\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(fn, 'renderTagBadges nicht gefunden');
-  assert.match(fn[0], /priority\s*=\s*null/,
-    'die Etiketten-Funktion muss die Prioritaet kennen, sonst kann sie sie nicht vergleichen');
-  // DER RUMPF, NICHT DIE SIGNATUR. Eine erste Fassung prueft nur, dass die
-  // Bestandteile irgendwo im Rumpf vorkommen - und blieb gruen, als die
-  // Filterzeile entfernt wurde: `PRIORITY_LABELS()[priority]` und die
-  // Kleinschreibung standen weiter da, sie taten nur nichts mehr. Also wird der
-  // Name der Label-Variablen gelesen und verlangt, dass GENAU DER in einem
-  // Filter ueber die Etiketten vorkommt.
-  const labelVar = fn[0].match(/const\s+(\w+)\s*=[^;]*PRIORITY_LABELS\(\)\[priority\]/);
-  assert.ok(labelVar,
-    'verglichen wird gegen das ANGEZEIGTE Label, nicht gegen den Schluessel - das Etikett kommt '
-    + 'aus einer fremden Liste und ist in der Sprache geschrieben, in der es dort steht');
-  const filterMitLabel = new RegExp(`tags\\s*=\\s*tags\\.filter\\([\\s\\S]{0,160}?\\b${labelVar[1]}\\b`);
-  assert.match(fn[0], filterMitLabel,
-    `das Label (\`${labelVar[1]}\`) muss die Etiketten wirklich filtern - eine Variable, die nur `
-    + 'berechnet und nie benutzt wird, ist ein Guard ohne Gegenstand');
-  assert.match(fn[0], /toLocaleLowerCase|toLowerCase/,
-    'gross/klein darf den Vergleich nicht entscheiden - „Dringend" und „dringend" sind dasselbe Wort');
-
-  // JEDE Aufrufstelle, sonst greift der Fix nur in einer Ansicht. Seit Tafla
-  // (2026-10-20) ist das nur noch das Brett: die Listenzeile traegt keine
-  // Etiketten-Knoepfe und kein Prioritaetswort mehr (nur die Fahne), ihr erster
-  // Tag steht als "#tag" im Text - es gibt dort kein Wort, das sich doppeln kann.
-  const aufrufe = [...src.matchAll(/renderTagBadges\(([^)]*)\)/g)]
-    .map((m) => m[1]).filter((args) => !args.includes('limit ='));
-  assert.ok(aufrufe.length >= 1, `erwartet mindestens eine Aufrufstelle (das Brett), gefunden ${aufrufe.length}`);
-  const zeile = src.slice(src.indexOf('function renderTaskCard('), src.indexOf('function effectiveDue('));
-  assert.doesNotMatch(zeile, /renderTagBadges\(|PRIORITY_LABELS\(\)\[task\.priority\][^\n]*priority-badge/,
-    'die Listenzeile baut keine Etiketten-Knoepfe und kein Prioritaetswort');
-  for (const args of aufrufe) {
-    assert.match(args, /task\.priority/,
-      `eine Aufrufstelle gibt die Prioritaet nicht mit (\`${args}\`) - dort steht das Etikett `
-      + 'weiter neben seinem Zwilling');
+test('Aufgaben-Oberflaeche: keine Tags, keine Sperre', () => {
+  const page = read('../public/pages/tasks.js');
+  const detail = read('../public/components/task-detail.js');
+  for (const name of ['renderTagBadges', 'wireTagBadgeFilter', 'toggleTagFilter', 'hasTagFilter', 'openTagManager',
+    'openBulkTagDialog', 'renderTagChips', 'wireTagEditor', 'refreshTags', 'renderLockedBadge', 'modalTags',
+    'data-tag-filter', 'yuvomi-tag-manager', 'filters.tags', 'state.allTags']) {
+    assert.ok(!page.includes(name), `${name} steht noch in pages/tasks.js`);
   }
+  assert.doesNotMatch(page, /params\.append\('tag'/, 'die Abfrage schickt keinen Tag-Filter');
+  assert.doesNotMatch(page, /id="task-locked"|name="locked"|\blocked:\s/, 'der Dialog schickt keine Sperre');
+  assert.doesNotMatch(page, /^\s+tags,?$/m, 'der Dialog schickt keine Tags');
+  for (const name of ['tagChipsNode', 'tasks.tagsLabel', 'tasks.lockedLabel']) {
+    assert.ok(!detail.includes(name), `${name} steht noch in components/task-detail.js`);
+  }
+  assert.ok(!existsSync(new URL('../public/components/tag-manager.js', import.meta.url)), 'tag-manager.js ist geloescht');
 });
 
 /**
@@ -6263,10 +6231,10 @@ test('Tasks toolbar follows the mobile header rule: one tools menu, "Filter (n)"
   // Ansicht, Filter und Menue stehen in DERSELBEN Zeile wie die Suche.
   assert.match(actions, /id="view-toggle"[\s\S]*filterButtonHtml\(\{ id: 'tasks-filter-btn'[\s\S]*pageToolsMenuHtml\(\{ id: 'tasks-tools-menu'/);
   // Keine losen Verwaltungsknoepfe mehr im Kopf - sie sind Menue-Eintraege.
-  for (const id of ['btn-bulk-select', 'btn-manage-categories', 'btn-manage-tags']) {
+  for (const id of ['btn-bulk-select', 'btn-manage-categories']) {
     assert.doesNotMatch(tasksPage, new RegExp(`id="${id}"`), `#${id} steht wieder lose im Kopf`);
   }
-  for (const action of ['bulk-select', 'view-history', 'manage-categories', 'manage-tags']) {
+  for (const action of ['bulk-select', 'view-history', 'manage-categories']) {
     assert.match(tasksPage, new RegExp(`action: '${action}'`), `das Werkzeugmenue bietet "${action}" nicht an`);
   }
   // R19 (Critique 2026-10-16): der Verlauf ist die DRITTE Ansicht im Segment.
@@ -12096,58 +12064,6 @@ test('die schwersten Settings-Dialoge bleiben als gefaehrlich markiert', () => {
     assert.ok(block?.includes('danger: true'), `${datei}: ${confirmKey} braucht danger: true`);
     assert.ok(block.includes(detailKey), `${datei}: ${confirmKey} braucht den Folgen-Text ${detailKey}`);
   }
-});
-
-// --------------------------------------------------------
-// Aufgaben-Tags (#586)
-// Drei Entscheidungen, die im Quelltext unscheinbar aussehen und deren Verlust
-// sich in der Oberflaeche erst spaet zeigt.
-// --------------------------------------------------------
-
-test('Tag-Chips auf Karten sind Filter-Buttons, keine Beschriftungen', () => {
-  const source = read('../public/pages/tasks.js');
-  const fn = source.slice(source.indexOf('function renderTagBadges'),
-                          source.indexOf('function wireTagBadgeFilter'));
-
-  assert.match(fn, /<button type="button" class="task-tag task-tag--filter"/,
-    'Ein Tag anzuklicken und danach zu filtern ist die erwartete Geste - als <span> gibt es sie nicht');
-  assert.match(fn, /data-tag-filter="\$\{esc\(tag\)\}"/, 'Der Wert muss escaped am Chip haengen');
-  assert.match(fn, /aria-label="\$\{esc\(t\('tasks\.tagFilterBy'/,
-    'Der Button braucht eine Beschriftung, die seine Wirkung nennt');
-
-  // Die Zusammenfassung ab dem vierten Tag darf kein Button sein: sie benennt
-  // keinen einzelnen Tag, auf den ein Klick filtern koennte.
-  const more = fn.slice(fn.indexOf('task-tag--more') - 120, fn.indexOf('task-tag--more') + 200);
-  assert.match(more, /<span/, '+N ist eine Anzeige, kein Ziel');
-});
-
-test('der Tag-Klick wird in der Capture-Phase abgefangen', () => {
-  const source = read('../public/pages/tasks.js');
-  const fn = source.slice(source.indexOf('function wireTagBadgeFilter'),
-                          source.indexOf('function wireTagBadgeFilter') + 600);
-
-  assert.match(fn, /e\.stopPropagation\(\)/,
-    'Ohne stopPropagation oeffnet derselbe Klick zusaetzlich den Bearbeiten-Dialog');
-  // Das `true` am Ende ist der ganze Punkt: der Kanban-Board-Handler sitzt
-  // unterhalb des Containers und kaeme beim Bubbling zuerst dran.
-  assert.match(fn, /\}, true\);/,
-    'Der Listener muss in der Capture-Phase haengen, sonst hat das Board den Dialog schon geoeffnet');
-});
-
-test('der Tag-Filter ist ueberall eine Liste, nirgends mehr ein einzelner Wert', () => {
-  const source = read('../public/pages/tasks.js');
-
-  // `filters.tag` (Singular) war die Fassung vor der Mehrfachauswahl. Bleibt
-  // irgendwo ein Zugriff darauf stehen, ist er still wirkungslos: er liest
-  // undefined und filtert nie.
-  const singular = [...source.matchAll(/filters\.tag\b(?!s)/g)];
-  assert.equal(singular.length, 0,
-    `filters.tag (Singular) darf nicht mehr vorkommen, gefunden: ${singular.length}`);
-
-  // Mehrere Tags muessen als eigene Parameter reisen, sonst zerfaellt ein Tag
-  // mit Komma im Namen (aus CATEGORIES) am Server in zwei.
-  assert.match(source, /params\.append\('tag', tag\)/,
-    'Jeder Tag gehoert als eigener Query-Parameter in die Anfrage');
 });
 
 /**
@@ -20385,7 +20301,6 @@ const ALIAS_PENDING = new Set([
   '../public/pages/calendar.js', '../public/pages/setup.js',
   '../public/pages/join.js', '../public/pages/login.js', '../public/pages/reset-password.js',
   '../public/pages/forgot-password.js', '../public/components/user-multi-select.js',
-  '../public/components/tag-manager.js',
   '../public/settings/pages/modules-health.js',
 ]);
 

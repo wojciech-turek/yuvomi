@@ -11106,6 +11106,13 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_ai_questions_status ON ai_questions(status, created_at);
     `,
   },
+  {
+    version: 253,
+    description: 'Tasks: every task unlocked - the app no longer offers the lock (quick-add round, 2026-10-29)',
+    // The server-side lock code stays dormant; without this a task locked
+    // earlier would stay closed to everyone but its creator with no switch left.
+    up: `UPDATE tasks SET locked = 0 WHERE locked <> 0;`,
+  },
 ];
 
 /**

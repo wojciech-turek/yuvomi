@@ -502,9 +502,10 @@ test('Aufgabendialog: Prioritaet und Kategorie offen im Hauptteil, der Aufklappe
     }
     const hint = optionen.at(-1)?.hint ?? '';
     assert.ok(hint.length > 0, 'ohne hint sagt "Weitere Einstellungen" nicht, was dahinter liegt');
-    for (const key of ['tasks.startDateLabel', 'tasks.tagsLabel']) {
+    for (const key of ['tasks.startDateLabel', 'tasks.statusLabel']) {
       assert.ok(hint.includes(key), `der Hinweis nennt ${key}: ${hint}`);
     }
+    assert.ok(!hint.includes('tasks.tagsLabel'), 'Etiketten gibt es im Dialog nicht mehr');
     assert.ok(!hint.includes('tasks.priorityLabel'), 'was offen steht, nennt der Hinweis nicht');
   } finally {
     if (vorher === undefined) delete globalThis.__advancedSection; else globalThis.__advancedSection = vorher;

@@ -60,7 +60,6 @@ import { holdUntilStyled, warmStyle } from '/utils/component-style.js';
 
 // Nicht in index.html (Critique R19): vorgeladen, sobald eine Seite dieses
 // Modul importiert, und der Verwalter zeigt sich erst mit seinem Blatt.
-// Der Tag-Verwalter (tag-manager.js) traegt dieselben Klassen.
 const CATEGORY_MANAGER_STYLE = '/styles/category-manager.css';
 warmStyle(CATEGORY_MANAGER_STYLE);
 

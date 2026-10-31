@@ -105,7 +105,7 @@ test('die defer-Skripte im Kopf laden mit hoher Prioritaet - die Modulskripte wa
 
 const LAZY = {
   datepicker: ['/components/datepicker.js'],
-  'category-manager': ['/components/category-manager.js', '/components/tag-manager.js'],
+  'category-manager': ['/components/category-manager.js'],
   'icon-picker': ['/components/icon-picker.js'],
   'document-attach': ['/components/document-attach.js'],
   screensaver: ['/components/photo-screensaver.js'],

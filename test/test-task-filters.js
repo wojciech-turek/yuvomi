@@ -43,16 +43,15 @@ globalThis.localStorage = {
 const { __test: tasks } = await import('../public/pages/tasks.js');
 
 const KEY = 'yuvomi:recentTaskFilters';
-const emptySet = { status: [], priority: [], assigned_to: [], category: [], tags: [] };
+const emptySet = { status: [], priority: [], assigned_to: [], category: [] };
 
 /** Setzt den Bestand, gegen den die gemerkten Sets geprueft werden. */
-function withKnown({ categories = [], tags = [], users = [], loadError = null, fromCache = false } = {}) {
+function withKnown({ categories = [], users = [], loadError = null, fromCache = false } = {}) {
   store.clear();
   tasks.state.categories = categories.map((key) => ({ key, name: key, sort_order: 0 }));
-  tasks.state.allTags = tags.map((tag) => ({ tag, count: 1 }));
   tasks.state.users = users.map((id) => ({ id, display_name: `U${id}` }));
   tasks.state.loadError = loadError;
-  tasks.state.metaStale = { users: fromCache, categories: fromCache, tags: fromCache };
+  tasks.state.metaStale = { users: fromCache, categories: fromCache };
 }
 
 const put = (...sets) => store.set(KEY, JSON.stringify(sets.map((s) => ({ ...emptySet, ...s }))));
@@ -67,15 +66,24 @@ test('eine geloeschte Kategorie wird nicht mehr angeboten, der Rest des Sets ble
   assert.deepEqual(set.status, ['open'], 'was noch gilt, bleibt stehen');
 });
 
-test('dieselbe Veraltung trifft Tags und Zustaendige, nicht nur Kategorien', () => {
-  // Der halbe Sweep waere hier die Falle: die Kategorie ist behandelt, Tag und
+test('dieselbe Veraltung trifft Zustaendige, nicht nur Kategorien', () => {
+  // Der halbe Sweep waere hier die Falle: die Kategorie ist behandelt, die
   // Person nicht - und beide kommen aus derselben Verwaltung.
-  withKnown({ categories: ['haushalt'], tags: ['Garten'], users: [3] });
-  put({ category: ['haushalt'], tags: ['garten', 'urlaub'], assigned_to: ['3', '9'] });
+  withKnown({ categories: ['haushalt'], users: [3] });
+  put({ category: ['haushalt'], assigned_to: ['3', '9'] });
 
   const [set] = tasks.getRecentFilters();
-  assert.deepEqual(set.tags, ['garten'], 'der Tag-Vergleich ignoriert die Schreibweise');
   assert.deepEqual(set.assigned_to, ['3'], 'das entfernte Mitglied faellt weg');
+});
+
+test('ein altes Set mit Tag-Achse verliert den Tag, der Rest bleibt', () => {
+  // Gemerkte Sets aus der Zeit der Tag-Auswahl stehen noch im localStorage.
+  withKnown({ categories: ['haushalt'] });
+  store.set(KEY, JSON.stringify([{ status: ['open'], priority: [], assigned_to: [], category: [], tags: ['garten'] }]));
+
+  const [set] = tasks.getRecentFilters();
+  assert.deepEqual(set.status, ['open']);
+  assert(!('tags' in set), 'die App kennt keine Tag-Achse mehr');
 });
 
 test('ein Set, von dem nichts uebrig bleibt, verschwindet ganz', () => {
@@ -117,15 +125,14 @@ test('der Speicher wird nicht umgeschrieben - auch nicht beim naechsten Sichern'
 });
 
 test('nach einem Ladefehler wird NICHT gefiltert', () => {
-  // Im catch-Zweig von render() stehen users/categories/allTags auf []. Wuerde
+  // Im catch-Zweig von render() stehen users/categories auf []. Wuerde
   // „leer" als „gibt es nicht" gelesen, naehme ein Serverfehler dem Nutzer
   // saemtliche gemerkten Filter weg - und das dauerhaft aussehend.
   withKnown({ loadError: new Error('500') });
-  put({ category: ['garten'], tags: ['urlaub'], assigned_to: ['9'] });
+  put({ category: ['garten'], assigned_to: ['9'] });
 
   const [set] = tasks.getRecentFilters();
   assert.deepEqual(set.category, ['garten']);
-  assert.deepEqual(set.tags, ['urlaub']);
   assert.deepEqual(set.assigned_to, ['9']);
 });
 
@@ -160,98 +167,41 @@ test('gegen Referenzlisten aus dem Offline-Cache wird NICHT gefiltert', () => {
   // geloeschte stuende noch drin und boete ein totes an. Offline gilt deshalb
   // dasselbe wie beim Ladefehler.
   withKnown({ categories: ['haushalt'], fromCache: true });
-  put({ category: ['garten'], tags: ['urlaub'], assigned_to: ['9'] });
+  put({ category: ['garten'], assigned_to: ['9'] });
 
   const [set] = tasks.getRecentFilters();
   assert.deepEqual(set.category, ['garten'], 'der Cache darf kein Chip wegnehmen');
-  assert.deepEqual(set.tags, ['urlaub']);
   assert.deepEqual(set.assigned_to, ['9']);
 
   // Sobald die Listen netzfrisch sind, greift die Bereinigung wieder.
-  tasks.state.metaStale = { users: false, categories: false, tags: false };
+  tasks.state.metaStale = { users: false, categories: false };
   assert.equal(tasks.getRecentFilters().length, 0, 'netzfrisch wird wieder beschnitten');
 });
 
-test('refreshTags haelt fest, ob die neue Tag-Liste nachweislich frisch ist', async () => {
-  // `/tasks/tags` faellt unter das `/tasks`-Praefix der Whitelist, kann also aus
-  // dem Cache kommen; und schlaegt der Aufruf fehl, bleibt die ALTE Liste
-  // stehen. Beide Male ist sie nicht mehr autoritativ, und `getRecentFilters`
-  // darf nicht dagegen beschneiden (Codex-Befund P2 zu PR #1072, siebte Runde).
-  withKnown({ tags: ['garten'] });
-
-  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [{ tag: 'garten', count: 1 }] }, fromCache: false }) };
-  await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale.tags, false, 'netzfrisch');
-
-  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [] }, fromCache: true }) };
-  await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale.tags, true, 'aus dem Cache');
-
-  globalThis.__apiStub = { getWithSource: async () => { throw new Error('offline'); } };
-  tasks.state.metaStale = { users: false, categories: false, tags: false };
-  const vorher = tasks.state.allTags;
-  await tasks.refreshTags();
-  assert.equal(tasks.state.metaStale.tags, true, 'ein Fehlschlag laesst die alte Liste stehen');
-  assert.equal(tasks.state.allTags, vorher, 'und die alte Liste bleibt wirklich stehen');
-
-  // UND NUR DIE TAGS. Ueber Kategorien und Mitglieder sagt dieser Rundlauf
-  // nichts - als EIN gemeinsames Flag erklaerte er sie faelschlich fuer frisch,
-  // und das Beschneiden warf ein Chip weg, das es noch gibt.
-  tasks.state.metaStale = { users: true, categories: true, tags: true };
-  globalThis.__apiStub = { getWithSource: async () => ({ data: { data: [] }, fromCache: false }) };
-  await tasks.refreshTags();
-  assert.deepEqual(tasks.state.metaStale, { users: true, categories: true, tags: false },
-    'eine frische Tag-Auffrischung sagt nichts ueber die anderen beiden Listen');
-
-  delete globalThis.__apiStub;
-});
-
-test('eine stale Achse beschneidet nicht, die frischen schon', () => {
+test('eine stale Achse beschneidet nicht, die frische schon', () => {
   // Der Kern der Aufteilung: gecachte Kategorien duerfen kein Kategorie-Chip
-  // wegnehmen, waehrend frische Tags ihres sehr wohl beschneiden.
-  withKnown({ categories: ['haushalt'], tags: ['garten'], users: [3] });
-  tasks.state.metaStale = { users: false, categories: true, tags: false };
-  put({ category: ['weg'], tags: ['weg'], assigned_to: ['9'] });
+  // wegnehmen, waehrend die frische Mitgliederliste ihres sehr wohl beschneidet.
+  withKnown({ categories: ['haushalt'], users: [3] });
+  tasks.state.metaStale = { users: false, categories: true };
+  put({ category: ['weg'], assigned_to: ['9'] });
 
   const [set] = tasks.getRecentFilters();
   assert.deepEqual(set.category, ['weg'], 'die stale Kategorienliste faellt kein Urteil');
-  assert.deepEqual(set.tags, [], 'die frische Tag-Liste beschneidet');
-  assert.deepEqual(set.assigned_to, [], 'die frische Mitgliederliste ebenso');
-});
-
-test('ein Tag mit Komma kollidiert nicht mit zwei Tags', () => {
-  // Codex-Befund P2 zu PR #1072, am Code nachgemessen: `normalizeTags`
-  // splittet nur eine STRING-Eingabe an Kommas, ein Array-Element behaelt
-  // seines (`normalizeTags(['a,b'])` -> `['a,b']`), und die Route nimmt
-  // Arrays. Der Schluessel verband die Achse aber mit `,` - der eine Tag
-  // `a,b` und die zwei Tags `a` und `b` ergaben denselben.
-  //
-  // Zwei Schaeden aus einer Ursache, und beide werden hier gemessen: die
-  // Ansicht verbarg den einen Chip als Dublette, und `saveRecentFilter`
-  // verdraengte beim Speichern den jeweils anderen.
-  withKnown({ tags: ['a,b', 'a', 'b'] });
-  put({ tags: ['a,b'] }, { tags: ['a', 'b'] });
-
-  assert.equal(tasks.getRecentFilters().length, 2,
-    'zwei verschiedene Filter, zwei Chips');
-
-  // Und die Speicherseite: das eine Set darf das andere nicht verdraengen.
-  store.clear();
-  tasks.saveRecentFilter({ ...emptySet, tags: ['a,b'] });
-  tasks.saveRecentFilter({ ...emptySet, tags: ['a', 'b'] });
-  assert.equal(raw().length, 2, 'beide Sets stehen im Speicher');
+  assert.deepEqual(set.assigned_to, [], 'die frische Mitgliederliste beschneidet');
 });
 
 test('derselbe Filter verdraengt sich weiterhin selbst', () => {
-  // Die Gegenrichtung, ohne die der Fix nur "alles ist verschieden" hiesse:
-  // dieselben Werte in anderer Reihenfolge und Schreibweise bleiben EIN Set.
-  withKnown({ tags: ['garten', 'urlaub'] });
+  // Die Gegenrichtung, ohne die der Schluessel nur "alles ist verschieden"
+  // hiesse: dieselben Werte in anderer Reihenfolge bleiben EIN Set, andere Werte ein zweites.
+  withKnown({ categories: ['haushalt', 'garten'] });
   store.clear();
-  tasks.saveRecentFilter({ ...emptySet, tags: ['garten', 'urlaub'] });
-  tasks.saveRecentFilter({ ...emptySet, tags: ['Urlaub', 'Garten'] });
-
-  assert.equal(raw().length, 1, 'Reihenfolge und Schreibweise machen kein neues Set');
+  tasks.saveRecentFilter({ ...emptySet, category: ['haushalt', 'garten'] });
+  tasks.saveRecentFilter({ ...emptySet, category: ['garten', 'haushalt'] });
+  assert.equal(raw().length, 1, 'die Reihenfolge macht kein neues Set');
   assert.equal(tasks.getRecentFilters().length, 1);
+
+  tasks.saveRecentFilter({ ...emptySet, category: ['garten'] });
+  assert.equal(raw().length, 2, 'andere Werte sind ein anderes Set');
 });
 
 // ---------------------------------------------------------------------------
@@ -274,7 +224,7 @@ const { setPermissions, clearPermissions } = await import('../public/permissions
 
 /** Ausgangslage: Liste, zwei Personen, Standardfilter „Offen". */
 function baseState(overrides = {}) {
-  withKnown({ users: [1, 2], categories: ['haushalt'], tags: ['garten'] });
+  withKnown({ users: [1, 2], categories: ['haushalt'] });
   Object.assign(tasks.state, {
     viewMode: 'list',
     currentUserId: 1,
@@ -282,7 +232,7 @@ function baseState(overrides = {}) {
     groupMode: 'category',
     bulkSelectMode: false,
     filterSheet: null,
-    filters: { status: ['open'], priority: [], assigned_to: [], category: [], tags: [] },
+    filters: { status: ['open'], priority: [], assigned_to: [], category: [] },
     ...overrides,
   });
 }
@@ -294,13 +244,12 @@ test('Filter (n): die Zahl nennt nur ABWEICHUNGEN vom Standard (R16)', () => {
   baseState();
   assert.equal(tasks.activeFilterCount(), 0, 'der Standard ist kein Filter');
   tasks.state.filters.priority = ['high', 'urgent'];
-  tasks.state.filters.tags = ['garten'];
-  assert.equal(tasks.activeFilterCount(), 3, 'jeder Wert jeder Achse zaehlt (#671)');
+  assert.equal(tasks.activeFilterCount(), 2, 'jeder Wert jeder Achse zaehlt (#671)');
   tasks.state.showFuture = true;
-  assert.equal(tasks.activeFilterCount(), 4,
+  assert.equal(tasks.activeFilterCount(), 3,
     '„Geplante anzeigen" hatte einen eigenen Chip - ohne ihn traegt allein die Zahl, dass er an ist');
   tasks.state.viewMode = 'kanban';
-  assert.equal(tasks.activeFilterCount(), 4,
+  assert.equal(tasks.activeFilterCount(), 3,
     'im Brett wirkt der Status nicht (die Spalten SIND er) - mitgezaehlt behauptete die Zahl einen unsichtbaren Filter');
 });
 
@@ -321,7 +270,7 @@ test('Filter (n): ein Status abseits von „Offen" ist eine Abweichung - auch de
   assert.equal(tasks.activeFilterCount(), 0);
 });
 
-test('das Blatt: Filter zuerst, Kategorie und Tag eingeklappt, „Ansicht" abgesetzt am Ende (R16)', () => {
+test('das Blatt: Filter zuerst, Kategorie eingeklappt, „Ansicht" abgesetzt am Ende (R16)', () => {
   baseState();
   const groups = () => tasks.filterSheetGroups();
   const headingsOf = () => groups().map((g) => g.heading);
@@ -330,7 +279,7 @@ test('das Blatt: Filter zuerst, Kategorie und Tag eingeklappt, „Ansicht" abges
 
   assert.deepEqual(headingsOf(), [
     'tasks.filterGroupShow', 'tasks.filterGroupStatus', 'tasks.filterGroupPriority',
-    'tasks.filterGroupPerson', 'tasks.categoryLabel', 'tasks.filterGroupTag', 'tasks.viewToggleLabel',
+    'tasks.filterGroupPerson', 'tasks.categoryLabel', 'tasks.viewToggleLabel',
   ]);
   const show = htmlOf('tasks.filterGroupShow');
   assert.match(show, /role="switch"[^>]*data-filter-due-today/, '„Bis heute faellig" ist ein Schalter (D2), kein Haken');
@@ -351,12 +300,12 @@ test('das Blatt: Filter zuerst, Kategorie und Tag eingeklappt, „Ansicht" abges
   assert.match(htmlOf('tasks.filterGroupStatus'), /data-filter="status" data-value="open" aria-pressed="true"/,
     'der gewaehlte Status traegt seinen Zustand als aria-pressed');
 
-  // Kategorie und Tag: eingeklappt, solange nichts gewaehlt ist - offen, sobald etwas wirkt.
-  assert.deepEqual([groupOf('tasks.categoryLabel').fold, groupOf('tasks.filterGroupTag').fold], ['closed', 'closed']);
+  // Kategorie: eingeklappt, solange nichts gewaehlt ist - offen, sobald etwas wirkt.
+  assert.equal(groupOf('tasks.categoryLabel').fold, 'closed');
+  assert(!headingsOf().includes('tasks.filterGroupTag'), 'keine Tag-Gruppe im Blatt');
   assert.equal(groupOf('tasks.filterGroupStatus').fold, undefined, 'die haeufigen Achsen bleiben offen');
   tasks.state.filters.category = ['haushalt'];
-  tasks.state.filters.tags = ['garten'];
-  assert.deepEqual([groupOf('tasks.categoryLabel').fold, groupOf('tasks.filterGroupTag').fold], ['open', 'open'],
+  assert.equal(groupOf('tasks.categoryLabel').fold, 'open',
     'eine gesetzte Wahl ist nie hinter einem Aufklapper versteckt');
 
   // Das Brett: kein Status (die Spalten sind er), keine Gruppierung - „Geplante" bleibt.
@@ -378,12 +327,12 @@ test('das Blatt: Filter zuerst, Kategorie und Tag eingeklappt, „Ansicht" abges
 
 test('gemerkte Sets stehen zuerst im Blatt, als Aktion ohne Ein/Aus-Zustand', () => {
   baseState();
-  put({ priority: ['high'], tags: ['garten'] });
+  put({ priority: ['high'], category: ['haushalt'] });
   const [first] = tasks.filterSheetGroups();
   assert.equal(first.heading, 'tasks.filterGroupRecent');
   assert.match(first.html, /data-recent-filter="/);
   assert.doesNotMatch(first.html, /aria-pressed/, 'ein Set anwenden ist eine Aktion, kein Schalter');
-  assert.match(first.html, /garten/, 'die Tags gehoeren in die Beschriftung, weil der Chip sie mitsetzt (#586)');
+  assert.match(first.html, /haushalt/i, 'jeder gesetzte Wert steht in der Beschriftung');
 });
 
 /** Ein Knoten mit genau dem, was das Blatt anfasst. */
@@ -412,7 +361,7 @@ function mountSheet() {
   const chips = [
     new SheetEl({ dataset: { filter: 'status', value: 'open' } }),
     new SheetEl({ dataset: { filter: 'priority', value: 'high' } }),
-    new SheetEl({ dataset: { filter: 'tag', value: 'Garten' } }),
+    new SheetEl({ dataset: { filter: 'category', value: 'haushalt' } }),
   ];
   const mine = new SheetEl({ dataset: { filterMine: 'true' } });
   const future = new SheetEl({ dataset: { filterFuture: 'true' } });
@@ -438,8 +387,7 @@ test('ein Chip im Blatt schaltet seinen Wert und bleibt DERSELBE Knoten (Lehre a
   assert.equal(high.classList.contains('filter-chip--active'), true);
   assert.equal(chips[0].getAttribute('aria-pressed'), 'true', 'die anderen Chips werden mit abgeglichen');
 
-  // Tags vergleichen ohne Schreibweise - der Chip heisst „Garten", der Filter „garten".
-  tasks.state.filters.tags = ['garten'];
+  tasks.state.filters.category = ['haushalt'];
   tasks.renderFilters(container);
   assert.equal(chips[2].getAttribute('aria-pressed'), 'true');
 
@@ -448,7 +396,7 @@ test('ein Chip im Blatt schaltet seinen Wert und bleibt DERSELBE Knoten (Lehre a
   assert.equal(high.getAttribute('aria-pressed'), 'false');
 });
 
-// Review PR #1673: Kategorie und Tag stehen im Blatt eingeklappt, solange
+// Review PR #1673: Die Kategorie steht im Blatt eingeklappt, solange
 // nichts gewaehlt ist. Ein gemerktes Set setzt sie bei OFFENEM Blatt - der Chip
 // wurde aktiv, seine Falte blieb zu, und ein wirkender Filter war verborgen.
 test('ein gemerktes Set klappt die Falte seiner Achse auf - derselbe Knoten, nichts klappt zu', async () => {
@@ -460,31 +408,31 @@ test('ein gemerktes Set klappt die Falte seiner Achse auf - derselbe Knoten, nic
     chip.closest = (sel) => (sel === 'details.filter-sheet__fold' ? f : SheetEl.prototype.closest.call(chip, sel));
     return chip;
   };
-  const tagFold = fold(false);
   const catFold = fold(false);
-  const tagChip = withFold({ filter: 'tag', value: 'Garten' }, tagFold);
+  const otherFold = fold(false);
   const catChip = withFold({ filter: 'category', value: 'household' }, catFold);
-  chips.push(tagChip, catChip);
+  const otherChip = withFold({ filter: 'priority', value: 'urgent' }, otherFold);
+  chips.push(catChip, otherChip);
   tasks.state.filterSheet = panel;
 
   const recent = new SheetEl({ dataset: {
-    recentFilter: JSON.stringify({ status: ['open'], priority: [], assigned_to: [], category: [], tags: ['garten'] }),
+    recentFilter: JSON.stringify({ status: ['open'], priority: [], assigned_to: [], category: ['household'] }),
   } });
   await tasks.onFilterSheetClick({ target: recent }, container);
-  assert.deepEqual(tasks.state.filters.tags, ['garten']);
-  assert.equal(tagChip.getAttribute('aria-pressed'), 'true');
-  assert.equal(tagFold.open, true, 'die Falte mit dem wirkenden Tag steht offen');
-  assert.equal(catFold.open, false, 'eine Achse ohne Wahl bleibt zu');
+  assert.deepEqual(tasks.state.filters.category, ['household']);
+  assert.equal(catChip.getAttribute('aria-pressed'), 'true');
+  assert.equal(catFold.open, true, 'die Falte mit der wirkenden Kategorie steht offen');
+  assert.equal(otherFold.open, false, 'eine Achse ohne Wahl bleibt zu');
 
   // Faellt die Wahl wieder weg, bleibt die Falte offen: zuklappen naehme dem
   // Chip, auf dem der Fokus steht, den Boden.
-  await tasks.onFilterSheetClick({ target: tagChip }, container);
-  assert.deepEqual(tasks.state.filters.tags, []);
-  assert.equal(tagFold.open, true);
+  await tasks.onFilterSheetClick({ target: catChip }, container);
+  assert.deepEqual(tasks.state.filters.category, []);
+  assert.equal(catFold.open, true);
 });
 
 test('die Schalter im Blatt: „Mir zugewiesen" ist die eigene ID in der Personenachse', async () => {
-  baseState({ filters: { status: ['open'], priority: [], assigned_to: ['2'], category: [], tags: [] } });
+  baseState({ filters: { status: ['open'], priority: [], assigned_to: ['2'], category: [] } });
   const { mine, future, container } = mountSheet();
   await tasks.onFilterSheetChange(mine, container);
   assert.deepEqual(tasks.state.filters.assigned_to, ['2', '1'],
@@ -505,7 +453,7 @@ test('„Filter zuruecksetzen" stellt den Standard her, keinen dritten Zustand (
   tasks.state.filters.status = ['done'];
   const { container } = mountSheet();
   await tasks.resetTaskFilters(container);
-  assert.deepEqual(tasks.state.filters, { status: ['open'], priority: [], assigned_to: [], category: [], tags: [] });
+  assert.deepEqual(tasks.state.filters, { status: ['open'], priority: [], assigned_to: [], category: [] });
   assert.equal(tasks.state.showFuture, false);
   assert.equal(tasks.activeFilterCount(), 0);
 });
@@ -517,14 +465,12 @@ test('das Werkzeugmenue: Verwalten nur mit Schreibrecht, Auswahl nur in der List
   // der Ansichtsgruppe (view-history, neben Liste und Kanban).
   const views = () => Object.fromEntries(tasks.toolsMenuItems().find((i) => i.group)?.items.map((i) => [i.action, i]) ?? []);
   assert.deepEqual(Object.keys(views()), ['view-list', 'view-kanban', 'view-history']);
-  assert.deepEqual(Object.keys(byAction()), ['bulk-select', 'bulk-archive', 'bulk-tag-add', 'bulk-tag-remove', 'manage-categories', 'manage-tags'],
+  assert.deepEqual(Object.keys(byAction()), ['bulk-select', 'bulk-archive', 'manage-categories'],
     'alles, was vorher als loses Icon im Kopf stand, steht beschriftet im Menue');
   assert.equal(byAction()['bulk-select'].disabled, false);
-  // Ablegen und die Tag-Sammelaktionen passen nicht in die einzeilige Pille
-  // (D5): sie stehen im Menue, gesperrt, bis eine Auswahl sie freigibt.
+  // Ablegen passt nicht in die einzeilige Pille (D5): es steht im Menue,
+  // gesperrt, bis eine Auswahl es freigibt.
   assert.equal(byAction()['bulk-archive'].disabled, true);
-  assert.equal(byAction()['bulk-tag-add'].disabled, true);
-  assert.equal(byAction()['bulk-tag-remove'].disabled, true);
   assert.equal(views()['view-history'].checked, false);
 
   tasks.state.viewMode = 'kanban';
@@ -559,12 +505,12 @@ test('das Blatt traegt am Telefon die Ansicht und die Werkzeuge des Menues', () 
   assert.match(choice(), /data-tab-id="list" aria-checked="true"/);
   assert.ok(view().indexOf('id="tasks-sheet-view"') < view().indexOf('id="group-mode-toggle"'),
     'die Ansicht steht vor der Gruppierung, die zu ihr gehoert');
-  assert.deepEqual(tools(), ['bulk-select', 'manage-categories', 'manage-tags'],
-    'Mehrfachauswahl und die beiden Verwaltungen, wie im Menue');
+  assert.deepEqual(tools(), ['bulk-select', 'manage-categories'],
+    'Mehrfachauswahl und die Kategorien, wie im Menue');
 
   tasks.state.viewMode = 'kanban';
   assert.match(choice(), /data-tab-id="kanban" aria-checked="true"/);
-  assert.deepEqual(tools(), ['manage-categories', 'manage-tags'], 'im Brett gibt es keine Mehrfachauswahl');
+  assert.deepEqual(tools(), ['manage-categories'], 'im Brett gibt es keine Mehrfachauswahl');
 
   setPermissions({ admin: false, modules: { tasks: 'read' }, widgets: {}, capabilities: {} });
   try {
@@ -679,7 +625,7 @@ test('?due=today weitet den Standard-Status auf „In Bearbeitung" - einen eigen
     'die Heute-Liste der Uebersicht zeigt begonnene Aufgaben mit - der Link muss sie auch zeigen');
   assert.match(tasks.taskQuery(), /status=open&status=in_progress/, 'und der Server bekommt beide');
 
-  baseState({ filters: { status: ['done'], priority: [], assigned_to: [], category: [], tags: [] } });
+  baseState({ filters: { status: ['done'], priority: [], assigned_to: [], category: [] } });
   tasks.applyDueTodayFromAddress('?due=today');
   assert.deepEqual(tasks.state.filters.status, ['done'], 'ein bewusst gesetzter Status bleibt');
 
@@ -748,7 +694,7 @@ test('„Bis heute faellig": Blatt und Adresse ergeben denselben Status und dies
 
     // Ein bewusst gesetzter Status bleibt in beide Richtungen stehen.
     baseState({ dueToday: false, dueTodayWidened: false,
-      filters: { status: ['open', 'in_progress'], priority: [], assigned_to: [], category: [], tags: [] } });
+      filters: { status: ['open', 'in_progress'], priority: [], assigned_to: [], category: [] } });
     input.checked = true;
     await tasks.onFilterSheetChange(input, container);
     input.checked = false;
@@ -1221,4 +1167,56 @@ test('am Display: kein Schalter „Mir zugewiesen", und ein gespeicherter Wert w
     tasks.state.user = vorher;
     store.clear();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Quick-Add-Runde (2026-10-29): keine Tags und keine Sperre in der App
+// ---------------------------------------------------------------------------
+test('Aufgabendialog und Karte kennen weder Tags noch Sperre', () => {
+  baseState();
+  const task = { id: 7, title: 'Fenster', status: 'open', priority: 'none', category: 'haushalt',
+    tags: ['garten', 'urlaub'], locked: 1, assigned_to: null, assignees: [] };
+  const dialog = tasks.renderModalContent({ task, users: [], reminder: null });
+  const card = tasks.renderTaskCard(task, {});
+  for (const [name, html] of [['Dialog', dialog], ['Karte', card]]) {
+    for (const needle of ['task-tag', 'task-locked', 'tasks.lockedBadge', 'tasks.tagsLabel', 'data-tag-filter']) {
+      assert(!html.includes(needle), `${name} enthaelt noch "${needle}"`);
+    }
+  }
+  assert(!/name="locked"/.test(dialog), 'kein Sperr-Schalter im Dialog');
+});
+
+test('das Werkzeugmenue bietet keine Tag-Wege an', () => {
+  baseState();
+  const actions = tasks.toolsMenuItems().filter((i) => i.action).map((i) => i.action);
+  assert(!actions.includes('manage-tags'));
+  assert(!actions.some((a) => a.startsWith('bulk-tag')));
+});
+
+test('wireGroupToggle: ein Klick auf den Gruppenkopf klappt die Gruppe weiter zu', async () => {
+  baseState();
+  let handler = null;
+  const container = {
+    addEventListener: (type, fn) => { if (type === 'click') handler = fn; },
+    contains: () => true,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  tasks.wireGroupToggle(container);
+  assert.equal(typeof handler, 'function', 'der Klick-Handler haengt am Container');
+  const toggle = {
+    dataset: { groupToggle: 'haushalt' },
+    setAttribute() {}, querySelector: () => null, closest: () => null,
+  };
+  const target = { closest: (sel) => (sel === '[data-group-toggle]' ? toggle : null) };
+  const sizeBefore = tasks.state.collapsedGroups.size;
+  globalThis.document = globalThis.document ?? { activeElement: null };
+  await handler({ target });
+  assert.equal(tasks.state.collapsedGroups.size, sizeBefore + 1, 'der Klick klappt die Gruppe zu');
+  assert.equal(toggle.dataset.groupToggle, 'haushalt');
+  await handler({ target: { closest: () => null } });
+  assert.equal(tasks.state.collapsedGroups.size, sizeBefore + 1, 'ein Klick daneben aendert nichts');
+  delete toggle.dataset.moving;
+  await handler({ target });
+  assert.equal(tasks.state.collapsedGroups.size, sizeBefore, 'und der zweite klappt sie wieder auf');
 });

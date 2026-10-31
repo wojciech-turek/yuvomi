@@ -680,75 +680,6 @@
   }
 }
 
-/* --------------------------------------------------------
-   Tags (#586)
-   Gespiegelte VTODO-CATEGORIES und lokal vergebene Etiketten. Bewusst leiser
-   als die Prioritäts-Badges: Tags ordnen, sie warnen nicht.
-   -------------------------------------------------------- */
-
-.task-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-0h) var(--space-2);
-  border: var(--space-px) solid var(--color-border-subtle);
-  border-radius: var(--radius-full);
-  background: var(--color-surface-2);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  /* Ein sehr langer Fremd-Tag darf die Zeile nicht sprengen. */
-  max-width: 14rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Auf den Karten ist das Chip ein Button (Klick filtert). Die Button-Herkunft
- * abräumen, damit es wie ein Etikett aussieht und nicht wie eine Schaltfläche -
- * es ordnet, es ruft nicht zur Handlung auf. */
-.task-tag--filter {
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.task-tag--filter:hover {
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-}
-
-/* Die Zusammenfassung ab dem vierten Tag ist kein Ziel: sie benennt keinen
- * einzelnen Tag, auf den ein Klick filtern könnte. */
-.task-tag--more {
-  cursor: default;
-}
-
-/* Im Editor entfernt der Klick das Chip - dieselbe Aufräumarbeit, andere
- * Bedeutung, daher die abweichende Hover-Farbe. */
-.task-tag--editable {
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.task-tag--editable:hover {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-}
-
-.task-tags-editor__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-/* Nur wenn Chips da sind Abstand halten — sonst klafft über dem leeren Feld
- * eine Lücke. */
-.task-tags-editor__chips:not(:empty) {
-  margin-bottom: var(--space-2);
-}
-
 /* KEINE ANIMATION AN `--done` (#467, R18). Die Quittung des Hakens startet der
  * Handler (`acknowledgeCheck`, utils/ux.js), am beruehrten Knopf, einmal. An
  * der Zustandsklasse lief sie bei jedem Neuzeichnen der Liste los und
@@ -1983,13 +1914,6 @@
   }
 
   .kanban-card__meta:empty {
-    display: none;
-  }
-
-  /* Die Etiketten gehen wie in der Listenzeile (unter 420px Zeilenbreite):
-   * als Filter-Knopf tragen sie eine Trefferhoehe, die die Metazeile auf 35px
-   * streckte - die Karte waere wieder hoeher als eine Zeile. */
-  .kanban-card__meta > .task-tag {
     display: none;
   }
 
