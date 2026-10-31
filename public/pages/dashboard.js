@@ -1071,7 +1071,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   function renderToday(shell) {
     dzisState = buildDzisState();
-    const fromSkeleton = Boolean(shell.querySelector('.dz-skeleton'))
+    const fromSkeleton = Boolean(shell.querySelector('.page-loading'))
       && !document.documentElement.classList.contains('page-swapping');
     const { key: keepFocus } = captureRebuildFocus(shell, document.activeElement, document.body);
     swapContent(shell, () => setHtml(shell, renderTodayPage(dzisState)), { animate: fromSkeleton });

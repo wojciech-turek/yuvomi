@@ -38,6 +38,7 @@ import { makeSortable } from '/utils/sortable.js';
 import { mountMasterDetail, splitViewDetailHtml, setSelectionBulk } from '/utils/master-detail.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel } from '/utils/day-label.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import {
   PRIORITIES, PRIO_ORDER, STATUSES, FILTER_STATUSES, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
@@ -6274,12 +6275,7 @@ async function renderTaskPane(id, body, signal, container) {
   const slow = setTimeout(() => {
     if (signal.aborted) return;
     body.replaceChildren();
-    body.insertAdjacentHTML('beforeend', `
-      <div class="tasks-pane-skeleton" aria-hidden="true">
-        <div class="skeleton skeleton-line skeleton-line--medium"></div>
-        <div class="skeleton skeleton-line skeleton-line--full"></div>
-        <div class="skeleton skeleton-line skeleton-line--short"></div>
-      </div>`);
+    body.insertAdjacentHTML('beforeend', loadingSpinnerHtml());
   }, 150);
   let task = null;
   let reminder = null;
@@ -6676,12 +6672,7 @@ export async function render(container, { user, signal } = {}) {
         <div class="sr-only" role="status" aria-live="polite" id="tasks-reorder-announce"></div>
         <div class="split-view tasks-split">
         <div id="task-list" class="split-view__list">
-          ${[1,2,3].map(() => `
-            <div class="widget-skeleton" style="margin-bottom:var(--space-2)">
-              <div class="skeleton skeleton-line skeleton-line--medium" style="height:18px;margin-bottom:var(--space-3)"></div>
-              <div class="skeleton skeleton-line skeleton-line--full" style="height:14px;margin-bottom:var(--space-2)"></div>
-              <div class="skeleton skeleton-line skeleton-line--short" style="height:12px"></div>
-            </div>`).join('')}
+          ${loadingSpinnerHtml()}
         </div>
         ${splitViewDetailHtml({
           id: 'tasks',

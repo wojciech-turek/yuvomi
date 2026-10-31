@@ -2335,36 +2335,24 @@ test('Kalender: die Ansicht baut erst, wenn die Kapsel gleitet (afterGlideStart 
 // Frame, auf jeder Linie, genau waehrend des Starts), und die Linien standen
 // ab dem ersten Frame da - auch wenn der Inhalt 80ms spaeter kam.
 // --------------------------------------------------------------------------
-test('R19: das Skelett blendet nach --duration-sm ein und schimmert nur mit transform', () => {
+test('Aufgabe 2 (2026-10-29): der Seitenring blendet erst nach --duration-2xl ein und dreht nur mit transform', () => {
+  // Ersetzt den Skelett-Guard von R19: es gibt keine Skelette mehr, nur noch
+  // den Ring (.page-loading). Die Verzoegerung selbst pinnt test-no-skeletons.
   const layout = [...eachRule(css('layout.css'))];
-  const base = layout.find((r) => r.selector.trim() === '.skeleton' && r.at.length === 0);
-  assert.ok(base, '.skeleton hat keine Basisregel in layout.css');
-  assert.match(base.body, /animation:\s*skeleton-in\s+var\(--duration-\w+\)\s+var\(--ease-[\w-]+\)\s+var\(--duration-sm\)\s+backwards/,
-    'die Linien stehen ab dem ersten Frame - ein Aufblitzen fuer 80ms ist Flackern, kein Status');
-  assert.doesNotMatch(base.body, /background-size|background-position/);
-  const sheen = layout.find((r) => r.selector.trim() === '.skeleton::after' && r.at.length === 0);
-  assert.ok(sheen, 'kein Schimmer-Band als ::after');
-  assert.match(sheen.body, /animation:\s*skeleton-shimmer\b/);
-  const frames = keyframesBody('skeleton-shimmer');
-  assert.match(frames, /transform:/);
-  assert.doesNotMatch(frames, /background-position/, 'der Schimmer malt wieder in jedem Frame');
-  for (const file of allSheets) {
-    for (const rule of eachRule(css(file))) {
-      if (/(^|[\s,])\.skeleton(?![\w-])/.test(rule.selector)) {
-        assert.doesNotMatch(rule.body, /background-(size|position)/, `${file}: ${rule.selector} bringt den alten Schimmer zurueck`);
-      }
-    }
-  }
-  const reduced = layout.find((r) => r.selector.trim() === '.skeleton::after' && r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)));
-  assert.ok(reduced && /animation:\s*none/.test(reduced.body), 'unter reduzierter Bewegung schimmert es weiter');
+  const base = layout.find((r) => r.selector.trim() === '.page-loading' && r.at.length === 0);
+  assert.ok(base, '.page-loading hat keine Basisregel in layout.css');
+  assert.match(base.body, /animation-delay:\s*var\(--duration-2xl\)/, 'ein Aufblitzen fuer 80ms ist Flackern, kein Status');
+  assert.match(base.body, /opacity:\s*0\b/);
+  assert.match(keyframesBody('page-loading-in'), /opacity:/);
+  assert.match(keyframesBody('app-spin'), /transform:/, 'der Ring dreht per transform, nicht per Paint');
 });
 
 test('R19: die Uebersicht blendet vom Skelett zum Inhalt ueber swapContent', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   // TAFLA (2026-10-19): das Skelett ist das von Dziś, der Inhalt kommt aus
   // renderTodayPage() - dieselbe Blende, nur andere Namen.
-  // 2026-10-27, v2: das Skelett heisst `.dz-skeleton`, der Zustand `dzisState`.
-  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.dz-skeleton'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
+  // 2026-10-29: das Skelett ist der Ring `.page-loading`, der Zustand `dzisState`.
+  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.page-loading'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
   assert.match(src, /swapContent\(shell, \(\) => setHtml\(shell, renderTodayPage\(dzisState\)\), \{ animate: fromSkeleton \}\);/);
 });
 

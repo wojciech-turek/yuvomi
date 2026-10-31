@@ -234,18 +234,9 @@
   display: flex;
 }
 
-.health-priority-skeleton__pill {
-  /* Tafla: der Segment-Schalter, volle Breite, 36 hoch. */
-  inline-size: 100%;
-  block-size: 36px;
-  border-radius: var(--radius-full);
+.health-priority-skeleton .page-loading {
+  min-block-size: 8rem;
 }
-
-.health-priority-skeleton__card {
-  border-radius: var(--radius-lg);
-}
-
-.health-priority-skeleton__card--due   { min-block-size: 14.5rem; }
 
 .health-priority > .health-overview__card {
   margin-bottom: 0;
@@ -2462,35 +2453,6 @@ button.health-med-card:hover {
  * entfallen. Das Skelett steht buendig, wo gleich die Karten stehen. */
 .health-cycle__loading {
   padding: var(--space-4) 0;
-}
-
-/* Lade-Skeleton: spiegelt die Hero-Silhouette (Ring + Statistikspalte). */
-.cycle-skeleton {
-  display: flex;
-  gap: var(--space-6);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.cycle-skeleton__ring {
-  width: var(--cycle-ring-size);
-  height: var(--cycle-ring-size);
-  border-radius: var(--radius-full);
-  flex: 0 0 auto;
-  margin-inline: auto;
-}
-
-.cycle-skeleton__side {
-  flex: 1 1 260px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-@media (max-width: 639px) {
-  .cycle-skeleton { flex-direction: column; }
-  .cycle-skeleton__ring { width: 200px; height: 200px; }
 }
 
 /* ---- Hero: Ring + Statistik ---- */

@@ -30,6 +30,7 @@ import { showToast } from '/utils/toast-show.js';
 import { openModal, closeModal } from '/components/modal.js';
 import { enterWallMode } from '/utils/wall-mode.js';
 import { createPageController } from '/utils/page-lifecycle.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { renderAppPage, renderPageHeader, renderPageTitle, renderPageBody } from '/utils/page-layout.js';
 
 // --------------------------------------------------------
@@ -772,10 +773,7 @@ function renderContent(state) {
 function renderSkeleton() {
   return `
     ${renderSearch()}
-    <div class="more-skeleton" aria-hidden="true">
-      <div class="skeleton more-skeleton__card"></div>
-      <div class="more-skeleton__tiles"><div class="skeleton more-skeleton__tile"></div><div class="skeleton more-skeleton__tile"></div></div>
-    </div>`;
+    ${loadingSpinnerHtml()}`;
 }
 
 // --------------------------------------------------------

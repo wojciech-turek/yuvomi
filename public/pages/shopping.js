@@ -30,6 +30,7 @@ import { startLiveFeed } from '/utils/live-feed.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
 import { parseCapture } from '/utils/capture-parse.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 
 
 // --------------------------------------------------------
@@ -5163,15 +5164,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
   container.insertAdjacentHTML('beforeend', `
     <div class="shopping-page page-measure--narrow">
       <div class="list-tabs-bar" id="list-tabs-bar">
-        <div class="skeleton skeleton-line skeleton-line--medium" style="height:36px;width:120px;border-radius:var(--radius-full)"></div>
-        <div class="skeleton skeleton-line skeleton-line--short"  style="height:36px;width:80px; border-radius:var(--radius-full)"></div>
       </div>
       <div id="list-content" style="flex:1;display:flex;flex-direction:column">
-        <div style="padding:var(--space-6)">
-          ${[1,2,3].map(() => `
-            <div class="skeleton skeleton-line skeleton-line--full" style="height:48px;margin-bottom:var(--space-2);border-radius:var(--radius-sm)"></div>
-          `).join('')}
-        </div>
+        ${loadingSpinnerHtml()}
       </div>
     </div>
   `);

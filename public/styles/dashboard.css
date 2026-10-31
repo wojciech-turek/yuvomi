@@ -2151,20 +2151,3 @@
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
-
-/* ── Skeleton ───────────────────────────────────────────── */
-
-.dz-skeleton__title {
-  inline-size: 70%;
-  block-size: var(--type-page-lh);
-  border-radius: var(--radius-xs);
-}
-
-.dz-skeleton__card {
-  block-size: 176px;
-  border-radius: var(--radius-card);
-}
-
-.dz-skeleton__card--weather {
-  block-size: 136px;
-}

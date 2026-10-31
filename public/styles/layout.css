@@ -8199,93 +8199,41 @@ textarea::placeholder {
 }
 
 /* --------------------------------------------------------
- * Skeleton-Loading
+ * Seiten-Ladering (utils/skeleton.js -> loadingSpinnerHtml)
  *
- * ERST NACH EINEM AUGENBLICK, UND NUR MIT TRANSFORM (Critique R19).
- * - Ein Platzhalter, der fuer 80ms aufblitzt, ist Flackern, kein Status: die
- *   Linien blenden erst nach `--duration-sm` ein (`fill: backwards` haelt sie
- *   bis dahin unsichtbar). Kommt der Inhalt schneller, sieht man sie nie;
- *   die Kartenflaechen darunter stehen sofort und halten das Layout.
- * - Der Schimmer lief ueber `background-position` - das ist Paint in jedem
- *   Frame, auf jeder Linie, am gedrosselten Telefon genau dann, wenn die CPU
- *   mit dem Start beschaeftigt ist. Jetzt gleitet ein Band als `::after` per
- *   `transform` darueber: Compositor, kein Paint.
+ * Ein stiller Ring, sonst nichts - dieselbe Sprache wie der Startring
+ * (.app-loading__spinner). Er blendet erst nach --duration-2xl (400 ms) ein: ein schneller
+ * Aufbau zeigt gar nichts, also kein Aufblitzen. Die Verzoegerung gehoert an
+ * den Wrapper (animation-delay, fill-mode forwards haelt ihn bis dahin bei
+ * Deckkraft 0); der Ring selbst dreht sich nur mit app-spin.
  * -------------------------------------------------------- */
-.skeleton {
-  /* Linienfarbe aus Surface + Ink gemischt: garantierter Kontrast in beiden
-   * Themes mit EINER Definition (zuvor border-subtle/surface-2 — im Dark Mode
-   * deckungsgleich mit der Kartenfläche #222220, dadurch unsichtbar). */
-  position: relative;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--color-text-primary) 18%, var(--color-surface));
-  border-radius: var(--radius-sm);
-  animation: skeleton-in var(--duration-md) var(--ease-out) var(--duration-sm) backwards;
+.page-loading {
+  display: grid;
+  place-items: center;
+  min-block-size: 40vh;
+  opacity: 0;
+  animation-name: page-loading-in;
+  animation-duration: var(--duration-md);
+  animation-timing-function: var(--ease-out);
+  animation-delay: var(--duration-2xl);
+  animation-fill-mode: forwards;
 }
 
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 25%,
-    color-mix(in srgb, var(--color-text-primary) 30%, var(--color-surface)) 50%,
-    transparent 75%
-  );
-  transform: translateX(-100%);
-  animation: skeleton-shimmer 1.5s var(--ease-in-out) var(--duration-sm) infinite;
+.page-loading__spinner {
+  inline-size: 28px;
+  block-size: 28px;
+  box-sizing: border-box;
+  /* Einzelne Eigenschaften, weil der Ring ein Ring ist und keine .btn--secondary. */
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: app-spin 800ms linear infinite;
 }
 
-@keyframes skeleton-in {
-  from { opacity: 0; }
-}
-
-@keyframes skeleton-shimmer {
-  to { transform: translateX(100%); }
-}
-
-/* Reduced-Motion: Schimmer aus, statische Fläche bleibt sichtbar - sie blendet
- * nur verzoegert ein (Deckkraft, keine Bewegung). */
-@media (prefers-reduced-motion: reduce) {
-  .skeleton::after { animation: none; display: none; }
-}
-
-/* ── Geteilte Skeleton-Liste (alle Module) ──
- * EINE Lade-Sprache statt modul-eigener „Lädt…"-Texte. Global definiert,
- * damit die Breiten-Varianten auf JEDER Seite greifen (zuvor lagen sie nur
- * in dashboard.css und waren außerhalb des Dashboards wirkungslos).
- * Markup-Hilfe: public/utils/skeleton.js → renderSkeletonList(). */
-.skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.skeleton-card {
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.skeleton-line {
-  height: 14px;
-  border-radius: var(--radius-xs);
-}
-
-.skeleton-line--title  { height: 18px; width: 45%; }
-.skeleton-line--short  { width: 35%; }
-.skeleton-line--medium { width: 60%; }
-.skeleton-line--full   { width: 100%; }
-
-/* Diagramm-Block (renderSkeletonChart): die Hoehe einer Diagrammflaeche, damit
- * die Seite beim Eintreffen der Daten nicht in eine andere Gliederung springt. */
-.skeleton-chart {
-  height: calc(var(--space-12) * 3);
-  border-radius: var(--radius-sm);
+@keyframes page-loading-in {
+  to { opacity: 1; }
 }
 
 /* --------------------------------------------------------

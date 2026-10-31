@@ -92,14 +92,6 @@
  * 420-520px-Bahn auf 116px quetschten. Seit R18 ist es EIN Knopf, und "nur
  * im Detail" ist genau der versteckte Weg, den D6 ausschliesst. */
 
-/* Platzhalter, solange eine Aufgabe fuer die Spalte laedt (tasks.js,
- * renderTaskPane) - erst nach 150ms, ein schneller Wechsel blinkt nicht. */
-.tasks-pane-skeleton {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-5);
-}
-
 /* --------------------------------------------------------
  * Header + Toolbar
  * -------------------------------------------------------- */

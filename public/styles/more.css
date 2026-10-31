@@ -531,21 +531,3 @@ button.more-row {
     transition: none;
   }
 }
-
-/* ── Loading ────────────────────────────────────────────── */
-
-.more-skeleton__card {
-  block-size: 64px;
-  border-radius: var(--radius-lg);
-}
-
-.more-skeleton__tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.more-skeleton__tile {
-  block-size: 96px;
-  border-radius: var(--radius-lg);
-}
