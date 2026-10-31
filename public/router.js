@@ -3583,7 +3583,7 @@ function mountExtensionPage(wrapper, thirdPartyModule) {
 
 /**
  * Die Module, in denen ein Wandtablett trotz `read` etwas TUN kann (#1209):
- * eine Aufgabe abhaken und eine Einloesung beantragen.
+ * eine Aufgabe abhaken.
  *
  * DIE WAHRHEIT STEHT AUF DEM SERVER (`DISPLAY_WRITE_ROUTES` in
  * server/display-scopes.js), und diese Liste hier ist bewusst KEINE zweite
@@ -3597,8 +3597,8 @@ const DISPLAY_ACTING_MODULES = ['tasks'];
 function applyModuleReadonly(moduleName, pageWrapper) {
   const readOnly = navModuleAccess(moduleName) === 'read';
   // DAS BAND WIDERSPRAECHE SONST DEM KNOPF DARUNTER. Ein Tablett traegt auf
-  // Aufgaben und Belohnungen `read`, und das stimmt fuer alles ausser den zwei
-  // Handlungen, die es hat - „Aenderungen sind nicht moeglich" liest sich davor
+  // Aufgaben `read`, und das stimmt fuer alles ausser der einen
+  // Handlung, die es hat - „Aenderungen sind nicht moeglich" liest sich davor
   // wie ein Fehler des Geraets, waehrend die Zeile darunter sich abhaken laesst
   // (im Browser gemessen). Ein widerspruechlicher Hinweis ist schlechter als
   // keiner; das Band bleibt ueberall sonst, auch am Display.

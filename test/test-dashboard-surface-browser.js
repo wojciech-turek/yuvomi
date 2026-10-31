@@ -117,7 +117,7 @@ async function tailAtEnd(page) {
  * `:root:has(yuvomi-install-prompt[data-shown])` tut, statt das Bauteil
  * vorzutaeuschen. Die Rechnung darueber (`--shell-tail` an `.app-content`)
  * laeuft unveraendert. */
-const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/rewards', '/birthdays'];
+const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/birthdays'];
 
 for (const device of ['desktop', 'mobile']) {
   test(`Nachlauf: am Seitenende liegt der volle Nachlauf unter dem letzten Inhalt (${device})`, async () => {

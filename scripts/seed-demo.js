@@ -7,7 +7,7 @@
  * Requires a database already migrated to the current schema (open the app once,
  * or run the server, before seeding). Populates EVERY module:
  *   - Users: alex (admin/dad), linda (admin/mom), emma & leo (children), maria (housekeeper)
- *   - Tasks (categories, priorities, statuses, start/due dates, multi-assignment, tags, points)
+ *   - Tasks (categories, priorities, statuses, start/due dates, multi-assignment, tags)
  *   - Calendar events (appointments, activities, recurring, assignments)
  *   - Meals (full week, all slots incl. today) linked to recipes,
  *     plus a recurring meal template with this week's occurrence
@@ -25,7 +25,6 @@
  *     a recurring expense, ledger, settlement)
  *   - Health (vitals, activities, medications + schedules/logs, lab reports, cycle,
  *     plus caregiver grants: both parents may record for the two children)
- *   - Rewards (participants, catalog, points ledger, fulfilled + pending redemptions)
  *   - Pocket money (Emma: account, monthly plan, scheduled credits, a parent bonus,
  *     an approved and an open withdrawal; Leo has no account yet)
  *   - Budget subscriptions (streaming, storage, gym - mixed billing cycles, one ending)
@@ -421,14 +420,6 @@ for (const [title, description, category, priority, status, start_date, due_date
   for (const u of assignees) insertTaskAssign.run(id, u);
   for (const tag of tags) insertTaskTag.run(id, tag, tagKey(tag));
 }
-// Point values on the children's chores (drives the Rewards module)
-const setTaskPoints = db.prepare('UPDATE tasks SET points = ? WHERE id = ?');
-[
-  [L('Tidy bedroom',   'Kinderzimmer aufräumen'), 10],
-  [L('Practice piano', 'Klavier üben'),           15],
-  [L('Water the plants', 'Pflanzen gießen'),       5],
-].forEach(([title, p]) => setTaskPoints.run(p, taskIdByTitle[title]));
-
 // ── Calendar Events ──────────────────────────────────────────────────────────
 
 console.log('Inserting calendar events…');
@@ -1373,108 +1364,6 @@ const insertCycleLog = db.prepare('INSERT INTO cycle_day_logs (user_id, log_date
   [-3, 'light',    'fatigue',              'good',      null],
   [-2, 'spotting', '',                     'good',      null],
 ].forEach(([d, flow, symptoms, mood, note]) => insertCycleLog.run(lindaId, daysFromNow(d), flow, symptoms, mood, note, 'family'));
-
-// ── Rewards ──────────────────────────────────────────────────────────────────
-
-console.log('Inserting rewards…');
-const insertRewardParticipant = db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)');
-insertRewardParticipant.run(emmaId);
-insertRewardParticipant.run(leoId);
-
-const insertRewardItem = db.prepare(`
-  INSERT INTO reward_catalog (name, cost, icon, description, is_active, sort_order, created_by)
-  VALUES (?, ?, ?, ?, 1, ?, ?)
-`);
-const REWARD_ICE_CREAM = L('Ice cream trip',  'Eis essen gehen');
-const REWARD_GAMING    = L('Video game hour', 'Eine Stunde zocken');
-[
-  [L('Extra 30 min screen time', '30 Minuten extra Bildschirmzeit'), 20, '📺', L('One extra half-hour of tablet or TV',   'Eine halbe Stunde mehr Tablet oder Fernsehen')],
-  [REWARD_ICE_CREAM,                                                 25, '🍦', L('A visit to the ice cream parlour',      'Ein Besuch in der Eisdiele')],
-  [L('Choose movie night film',  'Filmabend aussuchen'),             30, '🎬', L('Pick what the family watches on Friday','Aussuchen, was die Familie freitags schaut')],
-  [REWARD_GAMING,                                                    40, '🎮', L('A full hour of gaming',                 'Eine ganze Stunde Videospiele')],
-  [L('€5 pocket money',          '5 € Taschengeld'),                 50, '💶', L('Five euros added to your savings',      'Fünf Euro fürs Sparschwein')],
-  [L('Friend sleepover',         'Übernachtungsbesuch'),             60, '🛌', L('Invite a friend to stay over',          'Eine Freundin oder einen Freund einladen')],
-].forEach((r, i) => insertRewardItem.run(r[0], r[1], r[2], r[3], i, alexId));
-
-const insertRewardLedger = db.prepare(`
-  INSERT INTO reward_ledger (user_id, delta, type, reason, task_id, redemption_id, created_by, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`);
-// Emma earns points, then redeems an ice cream trip
-[
-  [10, 'earn',  L('Tidied her bedroom',      'Zimmer aufgeräumt'),          -9],
-  [15, 'earn',  L('Helped with the dishes',  'Beim Abwasch geholfen'),      -7],
-  [20, 'bonus', L('Great school week 🎉',    'Tolle Schulwoche 🎉'),        -5],
-  [10, 'earn',  L('Fed the cat all week',    'Die ganze Woche Katze gefüttert'), -2],
-].forEach(([delta, type, reason, d]) => insertRewardLedger.run(emmaId, delta, type, reason, null, null, alexId, isoFromNow(d, 18, 0)));
-// Leo earns points (has a pending redemption, not yet deducted)
-[
-  [15, 'earn',  L('Practised piano',          'Klavier geübt'),             -8],
-  [10, 'earn',  L('Watered the plants',       'Pflanzen gegossen'),         -6],
-  [20, 'bonus', L('Kept his room tidy all week','Zimmer die ganze Woche ordentlich'), -4],
-  [15, 'earn',  L('Homework done on time',    'Hausaufgaben pünktlich erledigt'), -1],
-].forEach(([delta, type, reason, d]) => insertRewardLedger.run(leoId, delta, type, reason, null, null, alexId, isoFromNow(d, 18, 0)));
-
-const insertRedemption = db.prepare(`
-  INSERT INTO reward_redemptions (user_id, catalog_id, reward_name, reward_icon, cost, status, note, requested_by, decided_by, decided_at, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-// Emma: fulfilled ice cream trip (catalog id 2) - creates a matching spend in the ledger
-const emmaRedemptionId = insertRedemption.run(
-  emmaId, 2, REWARD_ICE_CREAM, '🍦', 25, 'fulfilled', null, emmaId, alexId, isoFromNow(-3, 19, 0), isoFromNow(-3, 16, 0)
-).lastInsertRowid;
-insertRewardLedger.run(emmaId, -25, 'redeem', REWARD_ICE_CREAM, null, emmaRedemptionId, alexId, isoFromNow(-3, 19, 0));
-// Leo: pending request awaiting a parent's approval (no ledger entry yet)
-insertRedemption.run(leoId, 4, REWARD_GAMING, '🎮', 40, 'pending',
-  L('Please? Finished all my homework!', 'Bitte? Ich habe alle Hausaufgaben fertig!'),
-  leoId, null, null, isoFromNow(-1, 17, 30));
-
-// ── Rewards: Pocket money (#1734) ────────────────────────────────────────────
-// Emma has an account with a monthly plan; Leo has none, so he shows up as a
-// "Set up" candidate. The rows mirror what the write paths in
-// server/services/reward-money.js and server/routes/rewards.js produce.
-
-console.log('Inserting pocket money…');
-// Hard-coded like the other money rows here: the household currency is set once, above.
-db.prepare('INSERT INTO reward_money_accounts (user_id, currency, created_by) VALUES (?, ?, ?)')
-  .run(emmaId, 'EUR', alexId);
-// The next run has to lie after today, or the scheduler books catch-up credits right after start.
-db.prepare(`
-  INSERT INTO reward_allowances (user_id, amount_minor, currency, frequency, anchor_day, next_run_date, created_by)
-  VALUES (?, ?, 'EUR', 'monthly', 1, ?, ?)
-`).run(emmaId, 1000, thisMonthDate(1) > daysFromNow(0) ? thisMonthDate(1) : `${thisMonthKey(1)}-01`, alexId);
-
-// Credits by the plan: one per 1st of the month, all before the next run (unique per person and date)
-const insertAllowanceCredit = db.prepare(`
-  INSERT INTO reward_ledger (user_id, delta, type, reason, created_by, unit, currency, allowance_date, created_at)
-  VALUES (?, 1000, 'bonus', NULL, NULL, 'money', 'EUR', ?, ?)
-`);
-[-2, -1, 0].forEach((m) => {
-  const day = `${thisMonthKey(m)}-01`;
-  insertAllowanceCredit.run(emmaId, day, `${day}T07:00:00Z`);
-});
-const insertMoneyLedger = db.prepare(`
-  INSERT INTO reward_ledger (user_id, delta, type, reason, redemption_id, created_by, unit, currency, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, 'money', 'EUR', ?)
-`);
-// A parent bonus with a reason
-insertMoneyLedger.run(emmaId, 1500, 'bonus', L('Birthday money from Grandma', 'Geburtstagsgeld von Oma'), null, alexId, isoFromNow(-12, 18, 0));
-
-// Withdrawals are requests with `kind = 'withdrawal'`; the name column holds the kind as a marker.
-const insertMoneyRedemption = db.prepare(`
-  INSERT INTO reward_redemptions (user_id, catalog_id, kind, currency, reward_name, reward_icon, cost, status, note, requested_by, decided_by, decided_at, created_at)
-  VALUES (?, NULL, 'withdrawal', 'EUR', 'withdrawal', NULL, ?, ?, ?, ?, ?, ?, ?)
-`);
-// Approved: a matching payout in the ledger
-const paidNote = L('Cinema with friends', 'Kino mit Freunden');
-const paidId = insertMoneyRedemption.run(
-  emmaId, 2000, 'fulfilled', paidNote, emmaId, alexId, isoFromNow(-6, 19, 0), isoFromNow(-6, 16, 0)
-).lastInsertRowid;
-insertMoneyLedger.run(emmaId, -2000, 'redeem', paidNote, paidId, alexId, isoFromNow(-6, 19, 0));
-// Still open: 10 EUR, within the remaining balance of 25 EUR
-insertMoneyRedemption.run(
-  emmaId, 1000, 'pending', L('For the new football', 'Für den neuen Fußball'), emmaId, null, null, isoFromNow(-1, 17, 0)
-);
 
 // ── Budget: Subscriptions ────────────────────────────────────────────────────
 

@@ -828,6 +828,8 @@ const MOVED_SETTINGS_PATHS = Object.freeze({
  * fuehrt die Adresse dorthin - egal, von welchem Blatt sie kommt. Sonst
  * landete der Link auf seinem alten Blatt, ohne die Option und ohne Hinweis.
  */
+// Leer heute; der Mechanismus (und sein Verbraucher unten) bleibt, damit die naechste
+// ausgemusterte Option hier eingetragen werden kann: Schluessel -> { path, section }.
 const RETIRED_SETTINGS_OPTIONS = Object.freeze({});
 
 /**

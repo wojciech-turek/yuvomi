@@ -169,15 +169,11 @@ export const peopleRouter = express.Router();
  * WARUM DIE ANTWORT SAGT, WER WAS DARF. Die
  * Auswahl soll niemanden zeigen, den die Route hinterher ablehnt, und
  * niemanden verbergen, den sie akzeptiert - so steht es schon ueber
- * `isHouseholdMember` in services/household-members.js. Ohne die beiden
- * Flaggen zeigte der Picker jedes Mitglied, und ein Kind ohne Schreibrecht auf
+ * `isHouseholdMember` in services/household-members.js. Ohne die
+ * Flagge zeigte der Picker jedes Mitglied, und ein Kind ohne Schreibrecht auf
  * Aufgaben bekaeme an der Wand eine 403, die aussieht wie ein kaputtes Geraet.
- * Die Flaggen folgen DERSELBEN Quelle wie die Absage in
+ * Die Flagge folgt DERSELBEN Quelle wie die Absage in
  * services/display-acting.js: `resolvePermissions`, nicht eine zweite Liste.
- *
- * `can_redeem` traegt zusaetzlich die Teilnahme am Belohnungssystem
- * (`isEnrolled`): wer nicht teilnimmt, hat keinen Punktestand, und ein Antrag
- * fuer ihn endet an derselben Stelle wie fuer das Tablett selbst.
  */
 peopleRouter.get('/people', (req, res) => {
   try {

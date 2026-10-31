@@ -83,8 +83,8 @@ export const DISPLAY_WRITE_ROUTES = Object.freeze([
   // "Pozwól odhaczać na ścianie" (services/wall-settings.js, `refuseWallWrite`,
   // checked in each route - off by default): a running-out item onto a list
   // (the "+" chips of the shopping card; the route takes only a name from a
-  // display) and the answer to the weekly question. The tick and the
-  // redemption above are behind the same switch: every write of a display is.
+  // display) and the answer to the weekly question. The tick above is behind
+  // the same switch: every write of a display is.
   Object.freeze({ method: 'POST', pattern: /^\/shopping\/\d+\/items$/ }),
   Object.freeze({ method: 'POST', pattern: /^\/ai\/questions\/\d+\/(?:answer|dismiss)$/ }),
 ]);

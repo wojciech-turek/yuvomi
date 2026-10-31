@@ -1028,7 +1028,7 @@ uebernommen. Als Guard im Repo steht die Messung in `test/test-document-guards.j
 (Sonde 2 misst den komponierten Kontrast am gerenderten Dokument).
 
 **Die Zuruecknahme-Regel (#1230, 2026-09-15).** Was beiseitegelegt ist - erledigte und
-archivierte Aufgaben, archivierte Konten, pausierte Abos, inaktive Medikamente und Praemien,
+archivierte Aufgaben, archivierte Konten, pausierte Abos, inaktive Medikamente,
 schon importierte Zeilen -, tritt ueber drei Token-Rollen zurueck, nie ueber `opacity`:
 `--color-surface-receded` (die Flaeche sinkt auf die vertiefte Stufe),
 `--color-border-receded` (die ruhigste Kante) und `--color-text-receded` (der Sekundaertext
@@ -1200,7 +1200,7 @@ Subheadline 15, Footnote 13, Caption 2 11.
   Aufgabentitel behaelt die enge Zeilenhoehe.
   Guard: `test:typography`, "der Zeilentitel ist eine Rolle".
   **Titelregel (R19): hoechstens ZWEI Zeilen, dann Ellipse** - fuer jeden Zeilentitel
-  (`.list-row__name`, Aufgabe, Kontakt, Abo, Buchung, Belohnungen, Agenda-Text) aus EINER
+  (`.list-row__name`, Aufgabe, Kontakt, Abo, Buchung, Agenda-Text) aus EINER
   Regel in typography.css; vorher vier (einzeilig, unbegrenzt, mobil anders als Desktop).
   Kein Modulblatt setzt dort `nowrap` oder eine andere Zeilenzahl (Guard `test:typography`).
 - **Body** (regular, 17px, lh 1.47 = Apples 17/25): Fliesstext, Listenzellen.
@@ -1246,7 +1246,7 @@ entscheidet, sondern das Benannte. Ausgeschrieben in typography.css.
 Kopf-Navigation und traegt keinen Titel ueber sich - der Tab-Name IST der Modulname (Kueche:
 vier eigenstaendige Module unter einer Leiste). Wechselt sie ihn nicht, oder wechselt sie gar
 keine Route, gehoert sie unter den Large Title in den kanonischen `page-toolbar`-Kopf
-(Budget, Belohnungen, Haushaltshilfe). Sektionen mit eigener Shell
+(Budget, Haushaltshilfe). Sektionen mit eigener Shell
 (Einstellungen) fuehren ihren Titel in ihrem eigenen Kopf; das ist der dritte Fall der Regel,
 keine Ausnahme von ihr - als Ausnahme stuende er beim achtzehnten Modul wieder offen.
 
@@ -1442,7 +1442,7 @@ das Verhaeltnis haelt.
   Leeren blendet einmal gestaffelt ein, eine neue Zeile tritt ein (`expandIn`), eine reine
   Umsortierung gleitet (FLIP) - nie zwei Bewegungen uebereinander. Eine Zeile, die geht, klappt
   VOR dem Neuzeichnen aus (`collapseRow`). Nutzer: Aufgaben und Einkauf (Bestand),
-  Haushaltshilfe, Entsorgung (drei Listen), Vorrat, Belohnungen; seit R17 auch Notizen,
+  Haushaltshilfe, Entsorgung (drei Listen), Vorrat; seit R17 auch Notizen,
   Dokumente, Kontakte, die Buchungsliste des Budgets, Inventar, Abos, Aufteilung (Ausgaben und
   Serien) und Geburtstage - jede Seite ueber einen Schalter `motion: true`, den nur setzt, wer
   die DATEN geaendert hat. In einem Kartenraster (Notizen, Dokumente im Raster) klappt die
@@ -1644,9 +1644,9 @@ Stapelkontext (`isolation: isolate`, layout.css) - fuer jede Split-Detailspalte
 
 **Eine Aussenkante je Modul, kurze Listen zweispaltig** (R16, 2026-10-05). Die Messmatrix
 vom 05.10. fand die 720px-Spalte weiter in leerer Flaeche: Haushaltshilfe (Aufgaben, Berichte,
-Personal), Entsorgung und Belohnungen (Uebersicht, Verlauf) nutzten 67,9 % der Flaeche bei
+Personal), Entsorgung nutzten 67,9 % der Flaeche bei
 1280 und 59,0 % bei 1440. Wo ein Reiter breit war, wechselte die Kante je Reiter, und der
-angedockte Primaerknopf sprang mit (Belohnungen 271/431px). Seitdem gilt:
+angedockte Primaerknopf sprang mit. Seitdem gilt:
 
 - **Der Kopf endet in jedem Reiter eines Moduls an derselben Kante**, der breiten. Kein
   Reiter schaltet `--page-measure` oder den Kopf um (kein `[data-tab]`-Mass, kein
@@ -1656,9 +1656,7 @@ angedockte Primaerknopf sprang mit (Belohnungen 271/431px). Seitdem gilt:
   Reiter gleich breit.
 - **Ab `--layout-split-threshold` steht rechts eine Seitenspalte** bis zur Modulkante,
   mindestens `--layout-rail-min` (360px, die Inhaltsbreite eines Telefons) breit. Sie bekommt
-  nur, was es als Daten und Baustein schon gibt: Belohnungen/Uebersicht die letzten Buchungen
-  (der Abschnittstitel fuehrt in den Reiter Verlauf), Belohnungen/Verlauf die Punktestaende,
-  Entsorgung Abfallarten und Quellen neben den Abholungen, Haushaltshilfe/Berichte die
+  nur, was es als Daten und Baustein schon gibt: Entsorgung Abfallarten und Quellen neben den Abholungen, Haushaltshilfe/Berichte die
   Kennzahlen (`railFirst`: mobil ueber der Liste, am Desktop daneben), Haushaltshilfe/Haushaltshilfen
   das Protokoll der gewaehlten Person, Haushaltshilfe/Aufgaben seit R17 die zwei Kennzahlen
   „Faellig" und „Erledigt im Monat" (dieselben wie auf der Uebersicht; unter 640px bleiben sie
@@ -1923,7 +1921,7 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
 | Folge gleichartiger Zeilen | `.row-carrier` (Surface, `--radius-lg`, `--shadow-sm`, Haarlinien `> * + *`); liegt die Liste schon in einer Karte: `.row-divided` | list-row.css | `.list-rows` (12px, ohne Schatten) - laeuft aus, danach faellt die Regel |
 | Anlegen | `page-fab` MIT Nomen: mobil in der Kapsel, am Desktop angedockt als Kopf-Pille "+ Nomen" (Kuerzel "n" angesagt); ein Kontext-FAB nennt je Tab sein Nomen (ein Nomen, keine Verbphrase) | `createPageFab({ dockLabel })`, `setPageFabAction(fab, { label, dockLabel, onClick })` (utils/fab.js) | schwebender FAB ohne Nomen, dessen Bedeutung mit dem Tab wechselt; Inline-Anlegeformulare ueber der Liste; eigener Kopfknopf `.toolbar-new-btn` |
 | Dialogknoepfe | `.modal-panel__footer`: [Loeschen `btn--danger-outline` MIT Text, am Anfangsrand] ... [Abbrechen] [Primaer `btn--primary`]; `mountFooter()` hebt ihn an den Blattrand, mobil ueber die Falz - auch die geteilten Rueckfragen (confirm/prompt/select). **Das Verb (R17, E6): Anlegen = "Hinzufuegen" (`common.add`), Bearbeiten = "Speichern" (`common.save`), in jedem Dialog;** eine benannte Handlung behaelt ihr Verb (Hochladen, Einloesen, Freigeben, Zahlung eintragen). Neben einem absendenden Primaerknopf steht immer Abbrechen; ein Blatt, dessen Schalter sofort wirken (Teilnehmer der Belohnungen), schliesst mit "Fertig" allein, ein Leseblatt mit "Schliessen" vor der Handlung. Gehalten in `test:frontend-audit` ueber `test/dialog-grammar.js` (liest das Markup der oeffnenden Funktion, beurteilt die Beschriftung am deutschen Locale-Wert). Den Anfangsrand haelt EINE Regel in layout.css an `.modal-panel__delete` (setzt `decorateFooterDelete`, RTL gespiegelt), kein `margin` je Modul (R16) | modal.js; Vorbild Kalender-Termin, Aufgabe | `.modal-actions` im scrollenden Koerper, Loeschen als rotes Icon; "Erstellen"/"Aufgabe erstellen"/"Darlehen erstellen" neben "Hinzufuegen"; ein Primaerknopf ohne Abbrechen (Belohnungen bis R17); `btn--primary` linksbuendig im Formular (Haushaltshilfe bis R17) |
-| Speichern in den Einstellungen (R17, E8) | **Schalter und Auswahl wirken sofort; ein Formular (Konto, Passwort, CalDAV, SMTP ...) speichert per Knopf (und Enter), und der sitzt rechts im Kartenfuss** - als Letzter im Markup, Nebenaktionen (Testen, Entfernen) davor, wie im Dialogfuss. Ein langes Blatt darf die Zeile kleben lassen (`.perm-actions`), aber rechts. **Ein einzelnes Zahl- oder Kurzfeld ohne Formular drumherum speichert beim Verlassen und mit Enter, quittiert per Toast, Escape nimmt die Eingabe zurueck** (H12 vom 2026-09-27, "ein Speichermodell auf der Seite"): Standard-Punkte der Belohnungen und Nachfrist der Uebersicht. R17 Schritt 4 hatte beiden kurz einen Knopf gegeben; Schritt 5 hat H12 wiederhergestellt und auf die Uebersicht ausgedehnt | `.settings-form-actions` (settings.css; `:has(> .btn--primary)` schliesst rechts ab); `bindDefaultPoints`, `bindGraceDays`; `test:frontend-audit`, `test:settings-navigation` | 99px linksbuendig, 612px vollbreit ("Passwort speichern" nackt in der Formularspalte), ein Speichern-Knopf fuer EIN Zahlfeld neben sofort wirkenden Schaltern |
+| Speichern in den Einstellungen (R17, E8) | **Schalter und Auswahl wirken sofort; ein Formular (Konto, Passwort, CalDAV, SMTP ...) speichert per Knopf (und Enter), und der sitzt rechts im Kartenfuss** - als Letzter im Markup, Nebenaktionen (Testen, Entfernen) davor, wie im Dialogfuss. Ein langes Blatt darf die Zeile kleben lassen (`.perm-actions`), aber rechts. **Ein einzelnes Zahl- oder Kurzfeld ohne Formular drumherum speichert beim Verlassen und mit Enter, quittiert per Toast, Escape nimmt die Eingabe zurueck** (H12 vom 2026-09-27, "ein Speichermodell auf der Seite"): die Nachfrist der Uebersicht. R17 Schritt 4 hatte ihr kurz einen Knopf gegeben; Schritt 5 hat H12 wiederhergestellt | `.settings-form-actions` (settings.css; `:has(> .btn--primary)` schliesst rechts ab); `bindGraceDays`; `test:frontend-audit`, `test:settings-navigation` | 99px linksbuendig, 612px vollbreit ("Passwort speichern" nackt in der Formularspalte), ein Speichern-Knopf fuer EIN Zahlfeld neben sofort wirkenden Schaltern |
 | Boolean in den Einstellungen | Schalter (`.toggle`-Bahn, `role="switch"`), Label links, Zustand rechts; Bahn aus = `--color-switch-off` (3:1, siehe Kanten), der Knopf startet per `inset-inline-start` und laeuft in RTL nach links wie bei Apple (#1572) | `toggleRowHtml({ ..., control: 'switch' })` (settings/components.js) | native 18px-Checkbox, "Aktiviert"-Badge neben dem Haken |
 | Auswahl aus 2-4 Werten (Theme) | `.segmented`, seit 2026-10-26 die Tafla-Spur (Abschnitt "Segmented Controls") | panel.css | drei getrennte Rahmenknoepfe |
 | Auswahl in einer Segment-/Tab-Leiste zeigen | EINE Bewegung: eine Kapsel hinter den Labels gleitet (`--duration-lg` + `--ease-out`, nur `transform`, Breite nur wenn sie sich aendert; reduzierte Bewegung springt); die Sidebar-Pille behaelt ihre Feder, hoechstens `--duration-xl`. Die Pille der mobilen Tab-Leiste folgt derselben Regel (bis 2026-10-15 `--duration-md`). Gleiten antwortet auf einen WECHSEL: die erste Platzierung eines frisch gebauten Indikators (Laden, Neubau der Leiste) springt ans Ziel, sonst glitt er sichtbar vom ersten Eintrag herein (`placeNavIndicator` in router.js, 2026-10-15) | `attachSegmentIndicator(bar)` (utils/segment-indicator.js; folgt jedem Wechsel des aktiven Eintrags selbst), `renderSubTabs({ indicator })`, `{ key }` fuer Leisten, die neu gebaut werden | springende Flaeche am aktiven Tab; eigene WAAPI-Kapseln; Literal-Dauern (450ms) |
@@ -2876,7 +2874,7 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
   Die System-Reihe darunter bleibt eine volle Reihe aus vier monochromen Zielen. Die Listen
   dunkel eine Stufe ueber dem Blatt (`--sheet-tile-bg` = `--color-surface-raised` #37332E auf
   #2B2825, 1,00 -> 1,17:1); hell bleiben sie Surface, dort trennt `--shadow-xs`.
-- **Navigations-Ordnung (R19, Ulas 2026-10-16):** Planen = Kalender, Aufgaben, Belohnungen,
+- **Navigations-Ordnung (R19, Ulas 2026-10-16):** Planen = Kalender, Aufgaben,
   Notizen, Schichtplan; Haushalt = Kueche, Haushaltshilfe, Entsorgung, Dokumente, Inventar;
   Menschen = Kontakte, Geburtstage, Gesundheit; Budget. **Eine Sektion mit nur einem Eintrag
   hat keinen Kopf** (`navSectionLabelKey`, settings/module-order.js) - Budget steht ohne
@@ -2975,7 +2973,7 @@ seiner 7ch-Untergrenze ellipsiert); mobil zeigte Gesundheit 3 von 6, die Haushal
    Sichtbarkeitsgewinn.
 
 Traeger: die Klasse sitzt direkt an einer Pillen-Leiste (budget-tabs, sub-tabs-bar im Kopf,
-housekeeping-/rewards-tabs) oder als neutraler Wrapper um einen Segment-Traeger, dessen
+housekeeping-tabs) oder als neutraler Wrapper um einen Segment-Traeger, dessen
 Well nicht die ganze Zeile faerben darf (Kalender-Views). **Die Werkzeuge der Ansicht stehen
 am Ende derselben Zeile** (Kalender: Filter und Suche, Critique 2026-09-24): im Aktions-Slot
 bauten sie mobil eine eigene Kopfzeile und standen je nach Kollaps-Zustand links oder
@@ -3566,8 +3564,8 @@ Wechsel.
 Der Kopf bleibt in ZEILENRICHTUNG - kein Modul setzt eine eigene Flex-Richtung auf einer
 Kopf-Klasse. Eine Tab-Leiste im Kopf ist eine eigene, horizontal scrollende Zeile UNTER dem
 Large Title; die Shell erkennt sie an `[role="tablist"]`, nicht an einem Klassennamen (die
-vier heissen `.housekeeping-tabs`, `.rewards-tabs`, `.cal-toolbar__views`, `.budget-tabs` -
-eine Regel ueber diese Liste fehlte beim fuenften). Wer dort steht, sagt die Leisten-Regel
+drei heissen `.housekeeping-tabs`, `.cal-toolbar__views`, `.budget-tabs` -
+eine Regel ueber diese Liste fehlte beim vierten). Wer dort steht, sagt die Leisten-Regel
 oben.
 
 Verdrahtet wird EINMAL, von der Shell (`wireCollapsingHeader` in `utils/ux.js`, aufgerufen

@@ -188,7 +188,6 @@ const README_HEADINGS = {
   budget: 'Budget',
   documents: 'Documents',
   health: 'Health',
-  rewards: 'Rewards',
   housekeeping: 'Housekeeping',
   waste: 'Waste collection',
 };

@@ -1724,8 +1724,7 @@ function spawnRecurrenceFollowup(task) {
       // Die Serie reist als WERT mit, nicht als Verweis (#1603).
       // `recurrence_origin_id` daneben ist ON DELETE SET NULL: wird das eben
       // erledigte Vorkommen geloescht, weiss die Folgeinstanz nicht mehr, woher
-      // sie kommt - und der Punkte-Deckel je Serie saehe in ihr eine neue
-      // Aufgabe. Die Kennung ist die ID des ersten Vorkommens und ueberlebt es.
+      // sie kommt - und die Serie waere nicht mehr zu erkennen. Die Kennung ist die ID des ersten Vorkommens und ueberlebt es.
       task.recurrence_series_id ?? seriesRootOf(db.get(), task.id),
       // Die Folgeinstanz nimmt den Platz ihrer Vorgaengerin ein (Review an
       // #1646): sonst fiele eine Aufgabe, die jemand an eine Stelle der Liste
@@ -1759,10 +1758,9 @@ function spawnRecurrenceFollowup(task) {
         // auch dort an) - die geerbte der Elternaufgabe kommt ueber
         // lockingTask(), die eigene muss mitkopiert werden (#1488).
         sub.points, sub.visibility, sub.locked ? 1 : 0, sub.id,
-        // Auch die Teilaufgabe traegt ihre eigene Serie (#1603): sie hat
-        // eigene Punkte, entsteht mit jeder Folgeinstanz neu und steht nicht im
-        // Verlauf - ohne Kennung zahlte dieselbe Checklistenzeile mit jeder
-        // Kopie am selben Tag noch einmal.
+        // Auch die Teilaufgabe traegt ihre eigene Serie (#1603): sie entsteht
+        // mit jeder Folgeinstanz neu und steht nicht im Verlauf - ohne Kennung
+        // waere dieselbe Checklistenzeile in den Kopien nicht wiederzuerkennen.
         sub.recurrence_series_id ?? seriesRootOf(db.get(), sub.id)
       );
       setAssignments(db.get(), newSub.lastInsertRowid, subAssignments);

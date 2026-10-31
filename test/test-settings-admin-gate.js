@@ -267,7 +267,7 @@ test('kein adminOnly-Blatt schreibt eine per-Nutzer-Preference', () => {
 // ein neues `req.authRole === 'admin'` oder ein Session-Fallback neben dem
 // Helfer wird rot. Die Regel selbst (Mitglied bekommt 403, Admin kommt durch)
 // halten die Verhaltenstests der Routen, etwa test-email.js,
-// test-rewards-routes.js, test-screensaver.js und test-notifications.js.
+// test-screensaver.js und test-notifications.js.
 //
 // Gelesen wird der ganze Quelltext ohne Kommentare, nicht Zeile fuer Zeile:
 // zeilenweise sah der Guard `req.authRole` und `=== 'admin'` auf zwei Zeilen

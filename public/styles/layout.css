@@ -2237,10 +2237,10 @@ html.fab-steady .page-fab {
  * `main.app-content` horizontal clippt. Die Richtung des Kopfes ist damit keine
  * Modulentscheidung mehr.
  *
- * WARUM ÜBER `[role="tablist"]` UND NICHT ÜBER KLASSENNAMEN: die vier Leisten
- * heissen `.housekeeping-tabs`, `.rewards-tabs`, `.cal-toolbar__views` und
- * `.budget-tabs`. Eine Regel über diese Liste gilt für vier Dateien, nicht für
- * die Bauart - und beim fünften Modul fehlt sie. Die ARIA-Rolle ist das
+ * WARUM ÜBER `[role="tablist"]` UND NICHT ÜBER KLASSENNAMEN: die drei Leisten
+ * heissen `.housekeeping-tabs`, `.cal-toolbar__views` und
+ * `.budget-tabs`. Eine Regel über diese Liste gilt für drei Dateien, nicht für
+ * die Bauart - und beim vierten Modul fehlt sie. Die ARIA-Rolle ist das
  * Merkmal, das die Leiste zur Leiste macht, und sie ist im Markup ohnehin
  * Pflicht.
  *
@@ -2274,7 +2274,7 @@ html.fab-steady .page-fab {
  * `.page-toolbar__bar` ist der vierte Slot des Canonical Page Head: die volle
  * Zeile UNTER Titel/Center/Aktionen, in der die Werkzeug-Leiste des Moduls
  * wohnt. Die Klasse sitzt direkt an einer Pillen-Leiste (budget-tabs,
- * sub-tabs-bar, housekeeping-tabs, rewards-tabs) oder als neutraler Wrapper
+ * sub-tabs-bar, housekeeping-tabs) oder als neutraler Wrapper
  * um einen Segment-Traeger, dessen Well nicht die ganze Zeile faerben darf
  * (Kalender-Views). `order: 4` stellt sie hinter den mobilen Center-Slot
  * (order: 3 in .page-toolbar--wrap); das :has() erspart jedem Kopf das

@@ -609,6 +609,31 @@ test('das Zyklus-Opt-out gilt pro Person, nicht fuer den Haushalt (#760)', async
   cfgDelete('health_cycle_enabled:user:7');
 });
 
+test('PUT tasks_subtasks_expanded: Mitglied -> 403, Admin non-boolean 400, true persist', async () => {
+  assert.equal((await put({ tasks_subtasks_expanded: true }, { role: 'member' })).status, 403);
+  assert.equal((await put({ tasks_subtasks_expanded: 'yes' }, { role: 'admin' })).status, 400);
+  assert.equal((await put({ tasks_subtasks_expanded: true }, { role: 'admin' })).body.data.tasks_subtasks_expanded, true);
+});
+test('PUT wall_allow_ticking: Mitglied -> 403, Admin non-boolean 400, true persist (Tafla)', async () => {
+  assert.equal((await put({ wall_allow_ticking: true }, { role: 'member' })).status, 403);
+  assert.equal((await put({ wall_allow_ticking: 'yes' }, { role: 'admin' })).status, 400);
+  assert.equal((await put({ wall_allow_ticking: true }, { role: 'admin' })).body.data.wall_allow_ticking, true);
+  assert.equal((await get({ role: 'member' })).body.data.wall_allow_ticking, true, 'every member reads the household choice');
+  assert.equal((await put({ wall_allow_ticking: false }, { role: 'admin' })).body.data.wall_allow_ticking, false);
+});
+test('PUT wall_sections: admin only, known ids with booleans, a partial write keeps the rest (Tafla)', async () => {
+  assert.equal((await put({ wall_sections: { shopping: false } }, { role: 'member' })).status, 403);
+  for (const bad of [['shopping'], { shopping: 'no' }, { budget: false }, 'shopping']) {
+    assert.equal((await put({ wall_sections: bad }, { role: 'admin' })).status, 400, JSON.stringify(bad));
+  }
+  const res = await put({ wall_sections: { shopping: false } }, { role: 'admin' });
+  assert.deepEqual(res.body.data.wall_sections, { dinner: true, plan: true, shopping: false, timers: true, weather: true });
+  const next = await put({ wall_sections: { weather: false } }, { role: 'admin' });
+  assert.deepEqual(next.body.data.wall_sections, { dinner: true, plan: true, shopping: false, timers: true, weather: false },
+    'the earlier choice stays');
+  await put({ wall_sections: { shopping: true, weather: true } }, { role: 'admin' });
+});
+
 // --------------------------------------------------------
 // Weather (haushaltweit, admin only) - gezielt die ungedeckten Validierungen
 // --------------------------------------------------------

@@ -30,7 +30,6 @@ import { householdTimeZone, utcToWall, todayKey, shiftDateKey } from '../utils/t
 import { isAdminUser, serializeEvents } from './calendar/helpers.js';
 import { getOccurrences as getWasteOccurrences } from '../services/waste-store.js';
 import { scheduleData } from '../services/schedule.js';
-import { isAdminRequest } from '../middleware/require-admin.js';
 import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL } from '../services/meal-cook.js';
 import { clampEventLimit } from '../../public/utils/dashboard-event-limit.js';
 import { nameKey } from '../utils/name-key.js';
