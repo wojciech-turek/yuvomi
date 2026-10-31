@@ -492,7 +492,18 @@
         "whoSwitcherLabel": "Čí úkoly",
         "dueShort": "Due",
         "removeDue": "Remove due date",
-        "removeNote": "Remove note"
+        "removeNote": "Remove note",
+        "dictation": {
+            "title": "Say a task",
+            "listening": "Listening… say the task",
+            "heard": "Tap Done, or the mic to say it again",
+            "noSpeech": "Didn't catch that. Tap the mic to try again.",
+            "keyboardHint": "Tap the mic on your keyboard, then Done",
+            "textLabel": "The task in one sentence",
+            "typeInstead": "Type instead",
+            "done": "Done",
+            "stop": "Stop listening"
+        }
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} jídla",

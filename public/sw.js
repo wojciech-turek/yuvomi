@@ -378,6 +378,11 @@ const PAGE_MODULES = [
   '/utils/sortable.js',
   // Schnellwahl des Blatts „Neue Aufgabe" - nur pages/tasks.js laedt sie.
   '/utils/task-quick-dates.js',
+  // Das Diktat (Hoerblatt, Spracherkennung, Satz -> Entwurf) - ebenfalls nur
+  // ueber pages/tasks.js.
+  '/components/task-dictation.js',
+  '/utils/speech.js',
+  '/utils/task-draft.js',
   '/vendor/sortablejs/sortable.esm.min.js',
   // libphonenumber-js: lazy im Kontaktmodul, aber vorab gecacht → Telefon-
   // Formatierung funktioniert auch offline (Kernmodul). Versions-gecacht.

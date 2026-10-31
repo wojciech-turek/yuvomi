@@ -1976,7 +1976,11 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
   stehen hinter "Mehr". Beim Bearbeiten ist ein Abschnitt offen, sobald er einen Wert traegt,
   und "Mehr" geht auf, sobald darin etwas abseits der Vorgabe steht (seine Zeile nennt es auch
   zugeklappt). Nach einem Diktat stehen gesetzte Werte als kompakte Zeilen mit x (Entwurf
-  TaskSpoken); ein Tipp auf die Zeile klappt ihre Felder auf. Keine Etiketten, keine Sperre, kein
+  TaskSpoken); ein Tipp auf die Zeile klappt ihre Felder auf. Davor steht das Hoerblatt (TaskSpoken,
+  `components/task-dictation.js`): Status, Mitschrift gross und mittig (`aria-live`), Mikrofon-Ring,
+  "Type instead" | "Done" zu gleichen Teilen; ohne Spracherkennung ein Textfeld mit dem Hinweis auf
+  das Tastatur-Mikrofon. Das Mikrofon steht nur beim Anlegen im Titelfeld, und ein diktiertes Blatt
+  fragt beim Schliessen "Verwerfen?" (`test:task-dictation-ui`). Keine Etiketten, keine Sperre, kein
   Sync-Ziel, kein Markdown im Blatt (`test:task-sheet`). Der Fuss beim Anlegen ist nur
   "Aufgabe hinzufuegen" in voller Breite (Entwurf TaskNew; geschlossen wird ueber das x und das
   Ziehen des Blatts), beim Bearbeiten bleibt Loeschen · Abbrechen · Speichern.

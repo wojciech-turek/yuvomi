@@ -464,6 +464,17 @@ function serializeField(el) {
   return `${el.name || el.id}=${el.value}${state}`;
 }
 
+// `[data-dirty-base="…"]` ist das Gegenstueck zu `[data-dirty-ignore]`: die
+// Basis traegt fuer dieses Feld den Wert aus dem Attribut statt seines
+// Oeffnungswerts. Ein Formular, das schon mit fremden Werten aufgeht (ein
+// diktierter Entwurf, pages/tasks.js), gilt damit von Anfang an als geaendert -
+// Wischen oder x fragt "Aenderungen verwerfen?", auch nach dem verzoegerten
+// zweiten Schnappschuss. Nur fuer Wertfelder (text, hidden), nicht fuer Haken.
+function baseEntry(el) {
+  if (!el.hasAttribute?.('data-dirty-base')) return serializeField(el);
+  return `${el.name || el.id}=${el.getAttribute('data-dirty-base')}`;
+}
+
 function isFormDirty(container) {
   // Ein Ansichtsblatt hat nichts Ungespeichertes - siehe _dirtyGuardEnabled.
   if (!_dirtyGuardEnabled) return false;
@@ -478,7 +489,7 @@ function isFormDirty(container) {
 // fuer jeden Dialog, der nie Felder tauscht, ist das der Vergleich von immer.
 function _takeDirtyBase(panel) {
   const fields = formFields(panel);
-  const base = { fields, entries: fields.map(serializeField) };
+  const base = { fields, entries: fields.map(baseEntry) };
   _dirtyBaseByPanel.set(panel, base);
   return base;
 }
@@ -559,7 +570,7 @@ export function swapFieldsKeepingDirtyBase(panel, swap) {
     // hat - gezaehlt in der Basis, nicht im Formular, denn dort koennen Zeilen
     // des Nutzers dazwischenstehen oder fehlen.
     // `gap` ist das ERSTE Entfernte - davor steht also nichts, was fehlt.
-    rows.splice(gap, 0, ...added.map((el) => [el, serializeField(el)]));
+    rows.splice(gap, 0, ...added.map((el) => [el, baseEntry(el)]));
   } else {
     // Der Tausch fuegt nur HINZU: hinter das naechste Feld davor, das die
     // Basis kennt.
@@ -569,7 +580,7 @@ export function swapFieldsKeepingDirtyBase(panel, swap) {
       if (known.has(el)) { anchor = el; continue; }
       if (!fresh.has(el)) continue;
       const at = anchor ? rows.findIndex(([row]) => row === anchor) + 1 : 0;
-      rows.splice(at, 0, [el, serializeField(el)]);
+      rows.splice(at, 0, [el, baseEntry(el)]);
       known.add(el);
       anchor = el;
     }

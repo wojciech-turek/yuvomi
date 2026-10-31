@@ -465,11 +465,17 @@ test('jeder Weg zu einer bestehenden Aufgabe führt in die Detailansicht', async
   assert.match(src, /openTaskView\(task, reminder, container, \{ pane: body \}\)/,
     'die Detailspalte zeigt dieselbe Leseansicht, nicht eine eigene');
 
-  // Übrig bleibt genau ein openTaskModal-Aufruf: der FAB für neue Aufgaben.
+  // Übrig bleiben die Anlege-Pfade: der FAB für neue Aufgaben und, seit
+  // Quick-Add (2026-10-29), das gefüllte Blatt nach einem Diktat
+  // (`dictateOverSheet`). Keiner reicht eine Aufgabe herein - eine bestehende
+  // Aufgabe öffnet weiter nur die Detailansicht.
   // Die Definition darüber trägt Defaults (`= {}`) und zählt nicht mit.
   const modalCalls = [...src.matchAll(/^\s+openTaskModal\(\{.*\}, container\);$/gm)];
-  assert.equal(modalCalls.length, 1, 'nur der Anlege-Pfad öffnet noch direkt das Formular');
-  assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'und zwar ohne task');
+  assert.equal(modalCalls.length, 2, 'nur die Anlege-Pfade öffnen noch direkt das Formular: FAB und Diktat');
+  assert.ok(modalCalls.every((m) => !/\btask\b/.test(m[0])), 'keiner mit einer Aufgabe');
+  assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'der FAB ohne task');
+  assert.match(src, /openTaskModal\(\{ users, onChanged, draft: answer\.draft, spoken: true \}, container\)/,
+    'das Diktat: ein neues, gefülltes Blatt');
 });
 
 test('die Wisch-Geste heißt Ansehen, nicht Bearbeiten', async () => {

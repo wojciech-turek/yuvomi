@@ -527,7 +527,18 @@
         "whoSwitcherLabel": "Czyje zadania",
         "dueShort": "Termin",
         "removeDue": "Usuń termin",
-        "removeNote": "Usuń notatkę"
+        "removeNote": "Usuń notatkę",
+        "dictation": {
+            "title": "Powiedz zadanie",
+            "listening": "Słucham… powiedz zadanie",
+            "heard": "Stuknij Gotowe albo mikrofon, żeby powiedzieć jeszcze raz",
+            "noSpeech": "Nic nie słychać. Stuknij mikrofon i spróbuj jeszcze raz.",
+            "keyboardHint": "Stuknij mikrofon na klawiaturze, potem Gotowe",
+            "textLabel": "Zadanie w jednym zdaniu",
+            "typeInstead": "Wpisz ręcznie",
+            "done": "Gotowe",
+            "stop": "Zatrzymaj słuchanie"
+        }
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} posiłki",

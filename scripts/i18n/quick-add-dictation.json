@@ -1,0 +1,11 @@
+{
+  "tasks.dictation.title": { "en": "Say a task", "pl": "Powiedz zadanie" },
+  "tasks.dictation.listening": { "en": "Listening… say the task", "pl": "Słucham… powiedz zadanie" },
+  "tasks.dictation.heard": { "en": "Tap Done, or the mic to say it again", "pl": "Stuknij Gotowe albo mikrofon, żeby powiedzieć jeszcze raz" },
+  "tasks.dictation.noSpeech": { "en": "Didn't catch that. Tap the mic to try again.", "pl": "Nic nie słychać. Stuknij mikrofon i spróbuj jeszcze raz." },
+  "tasks.dictation.keyboardHint": { "en": "Tap the mic on your keyboard, then Done", "pl": "Stuknij mikrofon na klawiaturze, potem Gotowe" },
+  "tasks.dictation.textLabel": { "en": "The task in one sentence", "pl": "Zadanie w jednym zdaniu" },
+  "tasks.dictation.typeInstead": { "en": "Type instead", "pl": "Wpisz ręcznie" },
+  "tasks.dictation.done": { "en": "Done", "pl": "Gotowe" },
+  "tasks.dictation.stop": { "en": "Stop listening", "pl": "Zatrzymaj słuchanie" }
+}

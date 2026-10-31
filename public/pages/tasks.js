@@ -6,7 +6,7 @@
 
 import { api } from '/api.js';
 import { renderRRuleFields, bindRRuleEvents, getRRuleValues, describeRRule } from '/rrule-ui.js';
-import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender, askOverModal } from '/components/modal.js';
 import { whenHistorySettled } from '/utils/overlay-history.js';
 import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut, expandIn, wireScrollFade } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
@@ -18,6 +18,7 @@ import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderA
 import { withChosenPeople } from '/utils/people-picker.js';
 import { remindAtFromWallTime, wallTimeFromRemindAt } from '/utils/reminder-offset.js';
 import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
+import { openDictationSheet } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
@@ -932,7 +933,7 @@ function wireGroupToggle(container) {
 // Zeilen mit x da (`[data-row]`, `[data-expand]`, Entwurf TaskSpoken).
 //
 // Der Vertrag mit dem Diktat (Task 9) und den Tests: `#task-title` mit
-// `[data-action="dictate"]` im Feld, `[data-reveal]`, `[data-section]` (mit
+// `[data-action="dictate"]` im Feld (nur beim Anlegen, R10), `[data-reveal]`, `[data-section]` (mit
 // `hidden`, solange leer) samt `[data-remove]`, `[data-due-pick]`,
 // `[data-reveal-time]`, `[data-remind-pick]`.
 // --------------------------------------------------------
@@ -1254,16 +1255,21 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
   return `
     <form id="task-form" class="task-sheet" novalidate>
       <input type="hidden" id="task-id" value="${task?.id ?? ''}">
+      ${d ? `<!-- Ein Blatt aus einem Diktat ist schon eine Eingabe: das Schliessen
+           fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
+      <input type="hidden" id="task-from-draft" value="1" data-dirty-base="">` : ''}
 
       <div class="form-group">
-        <div class="form-field task-sheet__title">
+        <div class="form-field task-sheet__title${isEdit ? '' : ' task-sheet__title--mic'}">
           <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
           <input class="input" type="text" id="task-title" name="title"
                  value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
                  required autocomplete="off">
+          ${isEdit ? '' : `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
+               ueberschriebe die Werte einer bestehenden Aufgabe. -->
           <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
             <i data-lucide="mic" class="icon-lg" aria-hidden="true"></i>
-          </button>
+          </button>`}
           <div class="form-field__error">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
@@ -2039,30 +2045,86 @@ function wireCountdownGate(panel) {
  *          spoken?: boolean}} opts
  *        `draft` fuellt ein neues Blatt vor (siehe renderModalContent).
  *        `spoken`: das Blatt kommt aus einem Diktat und traegt im Kopf
- *        „Noch einmal sagen" (`data-action="dictate"`, verdrahtet in Task 9).
+ *        „Noch einmal sagen" (`data-action="dictate"`).
+ *        Beim Anlegen oeffnen das Mikrofon im Titelfeld und „Noch einmal
+ *        sagen" das Hoerblatt (dictateOverSheet).
  */
 function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false } = {}, container) {
   // Der letzte Riegel vor dem Formular - hinter FAB, Kopfknopf und
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
   const isEdit = !!task;
+  // Das Panel kennt erst onSave; der Kopfknopf ruft ueber diesen Griff.
+  let dictate = () => {};
+  const dictateWith = { users, onChanged, container };
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
     content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit }),
     size: 'lg',
-    // Ein Kopfknopf, der vorerst nichts tut: das Diktat haengt sich ueber
-    // `data-action="dictate"` an (Task 9). `type="button"` liefert openModal.
-    headerAction: spoken && !isEdit ? { id: 'task-say-again', label: t('tasks.sayAgain') } : null,
+    // `type="button"` liefert openModal.
+    headerAction: spoken && !isEdit
+      ? { id: 'task-say-again', label: t('tasks.sayAgain'), onClick: () => dictate() }
+      : null,
     // Eine neue Aufgabe startet weiterhin mit dem Fokus im Titelfeld - hier ist
     // Tippen die Absicht.
     // `onChanged` nur von aussen (openNewTaskFrom): dann frischt der Aufrufer
     // seine Flaeche auf, statt dass diese Seite eine Liste nachlaedt, die
     // gar nicht steht.
     onSave(panel) {
-      if (spoken && !isEdit) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+      if (!isEdit) dictate = wireSheetDictation(panel, spoken, dictateWith);
       wireTaskForm(panel, onChanged ? { task, container, onChanged } : { task, container });
     },
   });
+}
+
+/** Mikrofon im Titelfeld und „Noch einmal sagen" eines neuen Blatts; liefert den Aufruf fuer den Kopfknopf. */
+function wireSheetDictation(panel, spoken, opts) {
+  const dictate = () => dictateOverSheet(panel, opts);
+  if (spoken) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+  panel.querySelector('.task-sheet__mic')?.addEventListener('click', (e) => {
+    e.preventDefault?.();
+    dictate();
+  });
+  return dictate;
+}
+
+/**
+ * Diktat aus dem offenen Blatt „Neue Aufgabe" (Mikrofon, „Noch einmal sagen").
+ *
+ * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
+ * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
+ * gefuelltes (`spoken`) - ein erneutes Sagen ersetzt, was vorher drin stand.
+ * Schliessen bringt das Blatt zurueck, wie es war: wer aus Versehen aufs
+ * Mikrofon tippt, verliert nichts. „Type instead" ebenso, nur steht dann, was
+ * schon gesagt oder getippt war, als Titel darin.
+ *
+ * Das Hoerblatt geht synchron im Tipp auf (askOverModal ruft `ask` sofort) -
+ * Safari startet die Erkennung nur aus einer Nutzergeste heraus.
+ */
+async function dictateOverSheet(panel, { users = [], onChanged = null, container = null } = {}) {
+  const initialText = panel.querySelector('#task-title')?.value ?? '';
+  const answer = await askOverModal(() => new Promise((resolve) => {
+    openDictationSheet({
+      initialText,
+      members: users,
+      // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
+      // das gefuellte Blatt es.
+      onDraft: (draft) => { resolve({ draft }); closeModal({ force: true }); },
+      onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
+      onCancel: () => resolve(null),
+    });
+  }));
+  if (answer?.draft) {
+    openTaskModal({ users, onChanged, draft: answer.draft, spoken: true }, container);
+  } else if (answer?.type) {
+    // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
+    const field = panel.querySelector('#task-title');
+    if (field && answer.text && answer.text !== field.value.trim()) {
+      field.value = answer.text;
+      field.dispatchEvent?.(new Event('input', { bubbles: true }));
+    }
+    field?.focus?.();
+  }
 }
 
 // --------------------------------------------------------
@@ -5908,16 +5970,32 @@ function takeOutsideViewer(user) {
  * wird hier, was das Formular braucht (Blatt, Mitglieder, Kategorien); nach
  * dem Speichern frischt `onChanged` die aufrufende Flaeche auf.
  *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} opts
+ * „Say a task" (Quick-Add) oeffnet mit `dictate` zuerst das Hoerblatt; „Done"
+ * oeffnet danach das gefuellte Blatt (`spoken`), „Type instead" das Blatt zum
+ * Tippen (mit dem schon Gesagten als Titel).
+ * Gespeichert wird erst mit „Add task" im Blatt.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
+ *          draft?: object|null, dictate?: boolean}} opts
  * @returns {Promise<boolean>} false, wenn nichts geoeffnet wurde (nur lesend,
  *          oder ohne Kategorien - ein Speichern liefe in die Ablehnung).
  */
-export async function openNewTaskFrom({ user = null, onChanged = () => {} } = {}) {
+export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null, dictate = false } = {}) {
   if (readOnly()) return false;
   await Promise.all([ensureTaskStyles(), ensureTaskMeta()]);
   takeOutsideViewer(user);
   if (!state.categories.length) throw new Error(t('tasks.loadError'));
-  openTaskModal({ users: state.users, onChanged }, null);
+  if (dictate) {
+    // Das Hoerblatt nimmt den Platz ein; was danach oeffnet, ersetzt es.
+    openDictationSheet({
+      members: state.users,
+      onDraft: (spokenDraft) => openTaskModal({ users: state.users, onChanged, draft: spokenDraft, spoken: true }, null),
+      // Was schon gesagt war, steht als Titel da - nichts geht verloren.
+      onTypeInstead: (text) => openTaskModal({ users: state.users, onChanged, draft: text ? { title: text } : null }, null),
+    });
+    return true;
+  }
+  openTaskModal({ users: state.users, onChanged, draft }, null);
   return true;
 }
 
