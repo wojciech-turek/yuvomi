@@ -6654,6 +6654,120 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
   border-top: none;
 }
 
+/* --------------------------------------------------------
+ * Das Hoerblatt (Quick-Add, Entwurf TaskSpoken; components/task-dictation.js)
+ *
+ * HIER UND NICHT IN tasks.css: "Say a task" auf Heute oeffnet es im Tipp, bevor
+ * pages/tasks.js und sein Seitenblatt geladen sind - und tasks.css steht
+ * abseits von /tasks auf inaktiv. layout.css ist immer da.
+ *
+ * Zuhoeren: Status, die Mitschrift gross und mittig, darunter der
+ * Mikrofon-Ring (72 im Kreis von 96), unten "Type instead" | "Done" zu
+ * gleichen Teilen. Ohne Erkennung ein Textfeld mit dem Tastatur-Hinweis.
+ * -------------------------------------------------------- */
+.dictation__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.dictation__body--type {
+  align-items: stretch;
+  gap: var(--space-3);
+  text-align: start;
+}
+
+.dictation__status {
+  margin: 0;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-secondary);
+}
+
+.dictation__transcript {
+  margin: 0;
+  inline-size: 100%;
+  min-block-size: calc(var(--space-16) + var(--space-2));     /* 72: drei Zeilen Platz, ohne Springen */
+  font-size: var(--text-xl);
+  line-height: var(--type-title-lh);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.dictation__mic {
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--space-16) + var(--space-8));        /* 96 */
+  block-size: calc(var(--space-16) + var(--space-8));
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-tint);
+  cursor: pointer;
+}
+
+.dictation__mic-core {
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--space-16) + var(--space-2));        /* 72 */
+  block-size: calc(var(--space-16) + var(--space-2));
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.dictation__mic-core > svg,
+.dictation__mic-core > i {
+  inline-size: calc(var(--space-6) + var(--space-1h));        /* 30 */
+  block-size: calc(var(--space-6) + var(--space-1h));
+}
+
+/* Hoert gerade zu: der Ring atmet. Steht still, wenn er wartet. */
+.dictation__mic[data-listening] {
+  animation: dictation-listening 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes dictation-listening {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-tint); }
+  50%      { box-shadow: 0 0 0 var(--space-2) var(--color-accent-tint); }
+}
+
+.dictation__mic:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+textarea.dictation__text {
+  resize: none;
+  font-size: var(--type-body);
+}
+
+/* Zwei gleich breite Knoepfe, hoch wie "Add task". */
+.dictation__footer {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.dictation__footer > .btn {
+  flex: 1 1 0;
+  min-height: calc(var(--target-lg) + var(--space-1));
+  font-size: var(--type-body);
+}
+
+.dictation__footer > .btn--primary {
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictation__mic[data-listening] { animation: none; }
+}
+
 /* DER FUSS MIT LÖSCHEN AUF DEM TELEFON (Re-Critique 2026-09-27, R9 M8).
  *
  * Gemessen bei 390px: Löschen · Abbrechen · Speichern brauchten 345px, der Fuß

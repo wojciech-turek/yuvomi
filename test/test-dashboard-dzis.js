@@ -388,9 +388,12 @@ test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after
   const entry = tasks.slice(tasks.indexOf('export async function openNewTaskFrom('), tasks.indexOf('export async function openTaskById('));
   assert.match(entry, /if \(readOnly\(\)\) return false;/, 'read-only viewers get no form');
   // Quick-Add (2026-10-29): a draft can come along, and "Say a task" (`dictate`)
-  // opens the dictation sheet first - both end in the same form.
+  // hands over to startTaskDictation BEFORE any await (Safari starts speech
+  // only inside the tap); it ends in the same form (openPreparedNewTask).
   assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged, draft \}, null\);/, 'the one form of the page, not a second one');
-  assert.match(entry, /openDictationSheet\(\{[\s\S]*?openTaskModal\(\{ users: state\.users, onChanged, draft: spokenDraft, spoken: true \}, null\)/,
+  assert.match(entry, /if \(readOnly\(\)\) return false;\n\s*if \(dictate\) return startTaskDictation\(\{ user, onChanged \}\);/,
+    'dictation starts before the first await');
+  assert.match(tasks, /export function openPreparedNewTask\(\{[^\n]*\} = \{\}\) \{\n\s*openTaskModal\(\{ users: state\.users, onChanged, draft, spoken \}, null\);/,
     'dictation fills that same form');
   const header = tasks.slice(tasks.indexOf('function openNewTaskForm('), tasks.indexOf('function wireNewTaskBtn('));
   assert.match(header, /openTaskModal\(\{ users: state\.users \}, container\);/, 'the head of Zadania opens the same modal');

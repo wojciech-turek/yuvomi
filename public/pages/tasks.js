@@ -18,7 +18,7 @@ import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderA
 import { withChosenPeople } from '/utils/people-picker.js';
 import { remindAtFromWallTime, wallTimeFromRemindAt } from '/utils/reminder-offset.js';
 import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
-import { openDictationSheet } from '/components/task-dictation.js';
+import { openDictationSheet, startTaskDictation } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
@@ -5963,6 +5963,26 @@ function takeOutsideViewer(user) {
 }
 
 /**
+ * Was das Blatt "Neue Aufgabe" ausserhalb dieser Seite braucht: Stile,
+ * Mitglieder und Kategorien - und wer es oeffnet (#830). Ohne Kategorien
+ * liefe ein Speichern in die Ablehnung, also bricht es hier ab.
+ *
+ * @param {{user?: object|null}} [opts]
+ * @returns {Promise<object[]>} die Mitglieder (fuer den lokalen Parser des Diktats)
+ */
+export async function prepareNewTask({ user = null } = {}) {
+  await Promise.all([ensureTaskStyles(), ensureTaskMeta()]);
+  takeOutsideViewer(user);
+  if (!state.categories.length) throw new Error(t('tasks.loadError'));
+  return state.users;
+}
+
+/** Das Blatt "Neue Aufgabe", nachdem prepareNewTask gelaufen ist (Diktat von aussen). */
+export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false } = {}) {
+  openTaskModal({ users: state.users, onChanged, draft, spoken }, null);
+}
+
+/**
  * Eine Aufgabe ANLEGEN, ohne auf dieser Seite zu stehen (Dziś v2, 2026-10-27).
  *
  * „Dodaj zadanie" auf Dziś oeffnet DASSELBE Formular wie das „Nowe zadanie"
@@ -5970,10 +5990,12 @@ function takeOutsideViewer(user) {
  * wird hier, was das Formular braucht (Blatt, Mitglieder, Kategorien); nach
  * dem Speichern frischt `onChanged` die aufrufende Flaeche auf.
  *
- * „Say a task" (Quick-Add) oeffnet mit `dictate` zuerst das Hoerblatt; „Done"
- * oeffnet danach das gefuellte Blatt (`spoken`), „Type instead" das Blatt zum
- * Tippen (mit dem schon Gesagten als Titel).
- * Gespeichert wird erst mit „Add task" im Blatt.
+ * Mit `dictate` („Say a task", Quick-Add) gibt es VOR dem Hoerblatt kein
+ * await: startTaskDictation (components/task-dictation.js) oeffnet es und
+ * startet die Erkennung noch in diesem Aufruf und laedt daneben. Wer aus
+ * einem Tipp heraus erst diese Seite importieren muss, ruft
+ * startTaskDictation direkt - ein `await import()` davor kostet in Safari
+ * die Nutzergeste.
  *
  * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
  *          draft?: object|null, dictate?: boolean}} opts
@@ -5982,19 +6004,8 @@ function takeOutsideViewer(user) {
  */
 export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null, dictate = false } = {}) {
   if (readOnly()) return false;
-  await Promise.all([ensureTaskStyles(), ensureTaskMeta()]);
-  takeOutsideViewer(user);
-  if (!state.categories.length) throw new Error(t('tasks.loadError'));
-  if (dictate) {
-    // Das Hoerblatt nimmt den Platz ein; was danach oeffnet, ersetzt es.
-    openDictationSheet({
-      members: state.users,
-      onDraft: (spokenDraft) => openTaskModal({ users: state.users, onChanged, draft: spokenDraft, spoken: true }, null),
-      // Was schon gesagt war, steht als Titel da - nichts geht verloren.
-      onTypeInstead: (text) => openTaskModal({ users: state.users, onChanged, draft: text ? { title: text } : null }, null),
-    });
-    return true;
-  }
+  if (dictate) return startTaskDictation({ user, onChanged });
+  await prepareNewTask({ user });
   openTaskModal({ users: state.users, onChanged, draft }, null);
   return true;
 }

@@ -21,6 +21,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { installMiniDom } from './mini-dom.js';
 
 globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
@@ -44,7 +45,8 @@ const { setDisplayTimeZone } = await import('../public/utils/timezone.js');
 const { setHouseholdSize } = await import('../public/utils/household.js');
 const { speechSupported, startListening } = await import('../public/utils/speech.js');
 const { draftFromSentence } = await import('../public/utils/task-draft.js');
-const { openDictationSheet } = await import('../public/components/task-dictation.js');
+const { openDictationSheet, startTaskDictation } = await import('../public/components/task-dictation.js');
+const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 const { __test: tasks, openNewTaskFrom } = await import('../public/pages/tasks.js');
 // Der Loader stubt '/components/modal.js' fuer die Seiten; hier steht das ECHTE
 // Modul, damit der Dirty-Waechter selbst gefragt wird und nicht seine Attrappe.
@@ -359,6 +361,42 @@ test('draft: a due time without a day is left empty locally (like the server)', 
   assert.equal(draft.due_time, null);
 });
 
+// Der Boden des lokalen Wegs: schlimmstenfalls ist der Satz der Titel - kein
+// Wort geht verloren, das nicht als Datum, Uhrzeit, Person oder Erinnerung
+// gelesen wurde.
+const LOCAL_CASES = [
+  ['Wyślij przypomnienie do przedszkola', { title: 'Wyślij przypomnienie do przedszkola' }],
+  ['Wyślij przypomnienie o fakturze do Kasi jutro', { title: 'Wyślij przypomnienie o fakturze do Kasi', due_date: '2026-10-30' }],
+  ['Ugotuj obiad jutro', { title: 'Ugotuj obiad', due_date: '2026-10-30' }],
+  ['Ugotuj obiad dla Wojtka w piątek', { title: 'Ugotuj obiad', due_date: '2026-10-30', assigned_to: [WOJTEK.id] }],
+  // Die drei Beispiele der Spec.
+  ['Dodaj zadanie ubezpiecz samochód', { title: 'Ubezpiecz samochód' }],
+  ['Weź jutro Marysi spodenki do przedszkola, ustaw przypomnienie na jutro 7:30',
+    { title: 'Weź Marysi spodenki do przedszkola', due_date: '2026-10-30', remind_date: '2026-10-30', remind_time: '07:30' }],
+  ['Wyrzuć śmieci', { title: 'Wyrzuć śmieci' }],
+  // Gesprochen kommt oft kein Komma.
+  ['Weź jutro Marysi spodenki do przedszkola ustaw przypomnienie na jutro 7:30',
+    { title: 'Weź Marysi spodenki do przedszkola', due_date: '2026-10-30', remind_date: '2026-10-30', remind_time: '07:30' }],
+  ['Zapłać rachunek przypomnij mi jutro o 8', { title: 'Zapłać rachunek', remind_date: '2026-10-30', remind_time: '08:00' }],
+];
+
+for (const [sentence, expected] of LOCAL_CASES) {
+  test(`draft: local "${sentence}"`, async () => {
+    const { post } = recordingPost(DISABLED);
+    const { source, draft } = await draftFromSentence(sentence, { members: MEMBERS, now: NOW, post });
+    assert.equal(source, 'local');
+    assert.deepEqual(draft, { ...EMPTY, ...expected });
+  });
+}
+
+test('draft: a reminder clause that is more than a time stays in the title', async () => {
+  const { post } = recordingPost(DISABLED);
+  const { draft } = await draftFromSentence('Zapłać rachunek, ustaw przypomnienie na jutro rano', { members: MEMBERS, now: NOW, post });
+  assert.match(draft.title, /przypomnienie/, 'not cut - "rano" is not understood as a time');
+  assert.match(draft.title, /rano/);
+  assert.equal(draft.remind_date, null);
+});
+
 // --------------------------------------------------------------------------
 // components/task-dictation.js - das Hoerblatt
 // --------------------------------------------------------------------------
@@ -460,6 +498,18 @@ test('sheet: Done -> ONE parse call with what was heard, the mic is off, onDraft
   assert.equal(calls[0].body.text, 'Wyrzuć śmieci jutro');
   assert.equal(drafts.length, 1);
   assert.equal(drafts[0].title, 'Wyrzuć śmieci');
+});
+
+test('sheet: the mic ring does nothing while Done is pending - the transcript stays', async () => {
+  const { win, instances } = fakeWindow();
+  const post = () => new Promise(() => {});
+  const { panel } = mountSheet({ win, post });
+  instances[0].say(['Wyrzuć śmieci', false]);
+  panel.click('[data-dictation-done]');
+  await flush();
+  panel.click('[data-dictation-mic]');
+  assert.equal(instances.length, 1, 'no new recognizer');
+  assert.equal(panel.querySelector('[data-dictation-transcript]').textContent, 'Wyrzuć śmieci');
 });
 
 test('sheet: interim text never calls the server - only Done does', async () => {
@@ -581,8 +631,7 @@ async function finishDictation(sheetOptions, sentence) {
   const box = panel.querySelector('#dictation-text');
   if (box) box.value = sentence;
   panel.click('[data-dictation-done]');
-  await flush();
-  await flush();
+  for (let i = 0; i < 5; i += 1) await flush();
 }
 
 test('the mic in the New Task sheet opens dictation with the title; Done replaces the sheet with a spoken one', async () => {
@@ -708,6 +757,7 @@ test('openNewTaskFrom({ dictate: true }) opens the dictation sheet first, Done o
     again.onSave(sheet);
     sheet.querySelector('#dictation-text').value = 'Zadzwonić do mamy';
     sheet.click('[data-dictation-type]');
+    for (let i = 0; i < 5; i += 1) await flush();
     const typed = modals.opened[3];
     assert.equal(typed?.title, 'tasks.newTask');
     assert.equal(typed.headerAction, null, 'typed, not spoken');
@@ -718,6 +768,174 @@ test('openNewTaskFrom({ dictate: true }) opens the dictation sheet first, Done o
     globalThis.document.styleSheets = previousSheets;
     tasks.state.users = previousUsers;
     tasks.state.categories = previousCategories;
+  }
+});
+
+// --------------------------------------------------------------------------
+// "Say a task" von aussen (Heute "+"): das Hoerblatt geht IM TIPP auf
+// --------------------------------------------------------------------------
+
+/** Ein Erkenner, der sich merkt, ob start() noch vor der ersten Mikroaufgabe lief. */
+function syncProbe() {
+  const { win, instances } = fakeWindow();
+  const probe = { microtask: false, startedInCall: null };
+  const Base = win.webkitSpeechRecognition;
+  win.webkitSpeechRecognition = class extends Base {
+    start() { probe.startedInCall = !probe.microtask; super.start(); }
+  };
+  queueMicrotask(() => { probe.microtask = true; });
+  return { win, instances, probe };
+}
+
+/** openModal wie das echte: onSave laeuft synchron in openModal. */
+function syncModals() {
+  const opened = [];
+  const previous = globalThis.__openModal;
+  globalThis.__openModal = (options) => {
+    const panel = dictationPanel(options.content ?? '');
+    opened.push({ options, panel });
+    options.onSave?.(panel);
+  };
+  return { opened, restore() { globalThis.__openModal = previous; } };
+}
+
+/** Ein Ersatz fuer pages/tasks.js, dessen Vorbereitung der Test aufloest. */
+function fakeTasksModule() {
+  const sheets = [];
+  let resolvePrep;
+  let rejectPrep;
+  const prep = new Promise((resolve, reject) => { resolvePrep = resolve; rejectPrep = reject; });
+  const mod = {
+    prepareNewTask: () => prep,
+    openPreparedNewTask: (opts) => { sheets.push(opts); },
+  };
+  return { mod, sheets, resolvePrep, rejectPrep };
+}
+
+test('startTaskDictation: the listening sheet opens and rec.start() runs inside the call - before any await', () => {
+  const { win, instances, probe } = syncProbe();
+  const modals = syncModals();
+  try {
+    const opened = startTaskDictation({}, { win, loadTasks: () => new Promise(() => {}) });
+    assert.equal(opened, true);
+    assert.equal(modals.opened.length, 1, 'openModal ran in the call');
+    assert.equal(modals.opened[0].options.title, 'tasks.dictation.title');
+    assert.equal(instances.length, 1);
+    assert.equal(instances[0].lang, 'pl-PL');
+    assert.equal(probe.startedInCall, true, 'start() ran before the first microtask - still inside the tap');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('the listening sheet is styled off the Tasks page too: its rules live in layout.css, linked by index.html', () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  assert.match(read('../public/index.html'), /<link rel="stylesheet" href="\/styles\/layout\.css"/);
+  const layout = read('../public/styles/layout.css');
+  for (const cls of ['.dictation__body', '.dictation__transcript', '.dictation__mic', '.dictation__mic-core', '.dictation__footer']) {
+    assert.ok(layout.includes(`${cls} {`) || layout.includes(`${cls},`), `${cls} in layout.css`);
+  }
+  // tasks.css ist ein Seitenblatt: abseits von /tasks steht es auf inaktiv,
+  // bis ensureTaskStyles es holt - zu spaet fuer ein Blatt, das im Tipp aufgeht.
+  assert.doesNotMatch(read('../public/styles/tasks.css'), /\.dictation/);
+});
+
+test('openNewTaskFrom({ dictate: true }) delegates without an await - start() still inside the call', async () => {
+  const { win, instances, probe } = syncProbe();
+  const modals = syncModals();
+  const previous = globalThis.window.webkitSpeechRecognition;
+  globalThis.window.webkitSpeechRecognition = win.webkitSpeechRecognition;
+  try {
+    const pending = openNewTaskFrom({ dictate: true });
+    assert.equal(probe.startedInCall, true);
+    assert.equal(instances.length, 1);
+    assert.equal(await pending, true);
+  } finally {
+    modals.restore();
+    if (previous === undefined) delete globalThis.window.webkitSpeechRecognition;
+    else globalThis.window.webkitSpeechRecognition = previous;
+  }
+});
+
+test('startTaskDictation: Done waits for the members, then the local parser uses them and the spoken sheet opens', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets, resolvePrep } = fakeTasksModule();
+  const { calls, post } = recordingPost(DISABLED);
+  try {
+    const changed = () => {};
+    startTaskDictation({ user: WOJTEK, onChanged: changed }, { win, post, loadTasks: async () => mod });
+    instances[0].say(['Wojtek odbierze paczkę jutro', true]);
+    modals.opened[0].panel.click('[data-dictation-done]');
+    for (let i = 0; i < 3; i += 1) await flush();
+    assert.equal(sheets.length, 0, 'no sheet before the page is ready');
+    resolvePrep(MEMBERS);
+    for (let i = 0; i < 5; i += 1) await flush();
+    assert.equal(calls.length, 1, 'one parse call');
+    assert.equal(sheets.length, 1);
+    assert.equal(sheets[0].spoken, true);
+    assert.equal(sheets[0].onChanged, changed, 'the caller refreshes its own surface');
+    assert.deepEqual(sheets[0].draft.assigned_to, [WOJTEK.id], 'the members arrived before the local parser ran');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startTaskDictation: Type instead opens the sheet to type in, with what was said as its title', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets, resolvePrep } = fakeTasksModule();
+  try {
+    startTaskDictation({}, { win, loadTasks: async () => mod });
+    instances[0].say(['Zadzwonić do mamy', false]);
+    modals.opened[0].panel.click('[data-dictation-type]');
+    assert.equal(instances[0].aborted, 1, 'the mic stops at once');
+    resolvePrep(MEMBERS);
+    for (let i = 0; i < 4; i += 1) await flush();
+    assert.deepEqual(sheets, [{ onChanged: sheets[0].onChanged, draft: { title: 'Zadzwonić do mamy' } }]);
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startTaskDictation: when the page cannot load, Done closes the sheet and says so - nothing opens, nothing is saved', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets, rejectPrep } = fakeTasksModule();
+  const { calls, post } = recordingPost(DISABLED);
+  const toasts = [];
+  const closes = [];
+  const previousToast = globalThis.window.yuvomi.showToast;
+  globalThis.window.yuvomi.showToast = (...args) => toasts.push(args);
+  globalThis.__closeModal = (opts) => { closes.push(opts); };
+  try {
+    startTaskDictation({}, { win, post, loadTasks: async () => mod });
+    instances[0].say(['Wyrzuć śmieci', true]);
+    rejectPrep(new Error('tasks.loadError'));
+    modals.opened[0].panel.click('[data-dictation-done]');
+    for (let i = 0; i < 5; i += 1) await flush();
+    assert.equal(sheets.length, 0);
+    assert.equal(calls.length, 0, 'no parse without a form to fill');
+    assert.deepEqual(closes, [{ force: true }]);
+    assert.deepEqual(toasts, [['tasks.loadError', 'danger']]);
+  } finally {
+    modals.restore();
+    delete globalThis.__closeModal;
+    globalThis.window.yuvomi.showToast = previousToast;
+  }
+});
+
+test('startTaskDictation: read-only tasks open nothing', () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  setPermissions({ admin: false, modules: { tasks: 'read' }, widgets: {}, capabilities: {} });
+  try {
+    assert.equal(startTaskDictation({}, { win, loadTasks: () => { throw new Error('not loaded'); } }), false);
+    assert.equal(modals.opened.length, 0);
+    assert.equal(instances.length, 0, 'no mic');
+  } finally {
+    clearPermissions();
+    modals.restore();
   }
 });
 

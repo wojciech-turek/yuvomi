@@ -22,12 +22,19 @@
  * "Done" oder "Type instead" getippt wird - kein Mikrofon bleibt offen.
  * Je "Done" EIN Aufruf an den Server; Zwischenstaende rufen nichts.
  *
- * `onDraft`/`onTypeInstead` kommen bei noch offenem Blatt: der Aufrufer oeffnet,
- * was folgt (ein neues Modal ersetzt dieses), oder schliesst es selbst.
- * `onCancel` kommt, wenn das Blatt ohne beides zugeht (x, Wischen, Esc).
+ * `onDraft`/`onTypeInstead`/`onFail` kommen bei noch offenem Blatt: der
+ * Aufrufer oeffnet, was folgt (ein neues Modal ersetzt dieses), oder schliesst
+ * es selbst. `onCancel` kommt, wenn das Blatt ohne sie zugeht (x, Wischen, Esc).
+ *
+ * VON AUSSEN ("Say a task" auf Heute) IST `startTaskDictation` DER EINSTIEG:
+ * Safari startet die Erkennung nur innerhalb des Tipps. Das Blatt und
+ * `start()` laufen deshalb im Aufruf selbst; was das Blatt "Neue Aufgabe"
+ * braucht (pages/tasks.js, Stile, Mitglieder, Kategorien), laedt daneben und
+ * wird erst bei "Done" abgewartet.
  */
 import { t } from '/i18n.js';
-import { openModal, swapFieldsKeepingDirtyBase, btnLoading } from '/components/modal.js';
+import { openModal, closeModal, swapFieldsKeepingDirtyBase, btnLoading } from '/components/modal.js';
+import { isNavModuleReadOnly } from '/permissions.js';
 import { esc } from '/utils/html.js';
 import { speechSupported, startListening } from '/utils/speech.js';
 import { draftFromSentence } from '/utils/task-draft.js';
@@ -63,7 +70,7 @@ function sheetHtml(mode, text) {
     </div>`;
 }
 
-function wireDictationSheet(panel, { mode: startMode, initialText, members, onDraft, onTypeInstead, onCancel, win, post }) {
+function wireDictationSheet(panel, { mode: startMode, initialText, members, onDraft, onTypeInstead, onCancel, onFail, win, post }) {
   let mode = startMode;
   let heard = '';
   let listener = null;
@@ -154,14 +161,20 @@ function wireDictationSheet(panel, { mode: startMode, initialText, members, onDr
     const release = button ? btnLoading(button) : null;
     let result;
     try {
-      result = await draftFromSentence(sentence, { members, post });
+      // Die Mitglieder duerfen nachkommen (startTaskDictation) - der lokale
+      // Parser braucht sie, also erst sie, dann der Satz.
+      const people = typeof members === 'function' ? await members() : members;
+      result = await draftFromSentence(sentence, { members: people, post });
+    } catch (err) {
+      result = { error: err };
     } finally {
       busy = false;
       release?.();
     }
     if (over) return;
     over = true;
-    onDraft(result.draft, { source: result.source, text: sentence });
+    if (result.error) onFail(result.error);
+    else onDraft(result.draft, { source: result.source, text: sentence });
   }
 
   function typeInstead() {
@@ -177,6 +190,8 @@ function wireDictationSheet(panel, { mode: startMode, initialText, members, onDr
     if (target?.closest?.('[data-dictation-type]')) { e.preventDefault?.(); typeInstead(); return; }
     if (target?.closest?.('[data-dictation-mic]')) {
       e.preventDefault?.();
+      // Waehrend "Done" laeuft, bleibt die Mitschrift, was gesendet wurde.
+      if (busy || over) return;
       if (listener) settle();
       else listen();
     }
@@ -204,17 +219,21 @@ function wireDictationSheet(panel, { mode: startMode, initialText, members, onDr
  * Oeffnet das Hoerblatt. Nur ueber openModal - das Modal ist ein einziger
  * Platz: was danach oeffnet, ersetzt es.
  *
- * @param {{initialText?: string, members?: Array<{id: number, display_name: string}>,
+ * @param {{initialText?: string,
+ *          members?: Array<{id: number, display_name: string}>|(() => Promise<Array<object>>),
  *          onDraft?: (draft: object, meta: {source: 'ai'|'local', text: string}) => void,
  *          onTypeInstead?: (text: string) => void, onCancel?: () => void,
+ *          onFail?: (err: Error) => void,
  *          win?: object, post?: (path: string, body: object) => Promise<any>}} opts
  *        `initialText` (der Titel des Blatts, aus dem diktiert wird) steht im
  *        Textfeld; beim Zuhoeren beginnt die Mitschrift leer und wird nur
  *        uebernommen, falls die Erkennung ins Textfeld wechselt.
+ *        `members` darf eine Funktion sein, deren Promise "Done" abwartet;
+ *        scheitert sie, kommt `onFail` statt `onDraft`.
  */
 export function openDictationSheet({
   initialText = '', members = [], onDraft = () => {}, onTypeInstead = () => {}, onCancel = () => {},
-  win = globalThis.window, post,
+  onFail = () => {}, win = globalThis.window, post,
 } = {}) {
   const mode = speechSupported(win) ? 'listen' : 'type';
   const text = String(initialText ?? '').trim();
@@ -224,9 +243,54 @@ export function openDictationSheet({
     content: sheetHtml(mode, mode === 'type' ? text : ''),
     onSave(panel) {
       sheet = wireDictationSheet(panel, {
-        mode, initialText: text, members, onDraft, onTypeInstead, onCancel, win, post,
+        mode, initialText: text, members, onDraft, onTypeInstead, onCancel, onFail, win, post,
       });
     },
     onClose() { sheet?.close(); },
   });
+}
+
+/**
+ * "Say a task" von aussen - der Einstieg fuer das "+" auf Heute.
+ *
+ * STATISCH IMPORTIEREN UND IM TIPP-HANDLER OHNE VORHERIGES `await` RUFEN:
+ * das Hoerblatt geht in diesem Aufruf auf, und `start()` der Erkennung laeuft
+ * darin - Safari startet sie nur innerhalb der Nutzergeste, sonst meldet sie
+ * `not-allowed`, und es bliebe nur das Textfeld. pages/tasks.js samt Stilen,
+ * Mitgliedern und Kategorien laedt daneben (`prepareNewTask`); "Done" wartet
+ * darauf und oeffnet dann das gefuellte Blatt "Neue Aufgabe" (`spoken`),
+ * "Type instead" das Blatt zum Tippen mit dem schon Gesagten als Titel. Kann
+ * die Seite nicht laden (offline ohne Cache, keine Kategorien), geht das
+ * Hoerblatt zu, und eine Meldung sagt es - gespeichert wird nie etwas.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ *        `user` ist der angemeldete Mensch der aufrufenden Seite, `onChanged`
+ *        frischt deren Flaeche nach dem Speichern auf.
+ * @param {{win?: object, post?: Function, loadTasks?: () => Promise<object>}} [testing]
+ * @returns {boolean} false, wenn nichts aufging (Aufgaben nur lesbar)
+ */
+export function startTaskDictation({ user = null, onChanged = () => {} } = {}, {
+  win = globalThis.window, post, loadTasks = () => import('/pages/tasks.js'),
+} = {}) {
+  if (isNavModuleReadOnly('tasks')) return false;
+  // DANEBEN, NICHT DAVOR - kein await vor openDictationSheet.
+  const ready = Promise.resolve()
+    .then(loadTasks)
+    .then(async (tasks) => ({ tasks, members: await tasks.prepareNewTask({ user }) }));
+  ready.catch(() => {}); // gemeldet wird, wo es gebraucht wird
+  const fail = (err) => {
+    console.error('[Dictation] Neue Aufgabe konnte nicht geoeffnet werden:', err);
+    closeModal({ force: true });
+    globalThis.window?.yuvomi?.showToast?.(err?.message || t('tasks.loadError'), 'danger');
+  };
+  const openSheet = (opts) => ready.then(({ tasks }) => tasks.openPreparedNewTask({ onChanged, ...opts })).catch(fail);
+  openDictationSheet({
+    win,
+    post,
+    members: () => ready.then((r) => r.members),
+    onDraft: (draft) => { openSheet({ draft, spoken: true }); },
+    onTypeInstead: (text) => { openSheet({ draft: text ? { title: text } : null }); },
+    onFail: fail,
+  });
+  return true;
 }
