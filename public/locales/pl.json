@@ -473,7 +473,6 @@
         "seriesDoneToast": "Zrobione - następny raz: {{date}}",
         "seriesDoneByToast": "Wykonał(a) {{name}} - następny raz: {{date}}",
         "historyTickedBy": "odhaczone przez {{name}}",
-        "reminderLockedNeedsDueDate": "To zadanie ma przypomnienie, którego nie możesz zmienić. Dlatego wymaga terminu.",
         "kanbanColCollapse": "Zwiń kolumnę",
         "kanbanColExpand": "Rozwiń kolumnę",
         "kanbanArchiveDone": "Zarchiwizuj wszystkie ukończone",
@@ -524,7 +523,11 @@
         "sayIt": "Powiedz zamiast pisać",
         "sayAgain": "Powiedz jeszcze raz",
         "addTask": "Dodaj zadanie",
-        "reminderIncomplete": "Wybierz datę i godzinę przypomnienia albo je usuń."
+        "reminderIncomplete": "Wybierz datę i godzinę przypomnienia albo je usuń.",
+        "whoSwitcherLabel": "Czyje zadania",
+        "dueShort": "Termin",
+        "removeDue": "Usuń termin",
+        "removeNote": "Usuń notatkę"
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} posiłki",

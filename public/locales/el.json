@@ -421,7 +421,6 @@
         "seriesDoneToast": "Έγινε - επόμενη φορά: {{date}}",
         "seriesDoneByToast": "Το έκανε ο/η {{name}} - επόμενη φορά: {{date}}",
         "historyTickedBy": "τσεκαρίστηκε από {{name}}",
-        "reminderLockedNeedsDueDate": "Αυτή η εργασία έχει μια υπενθύμιση που δεν επιτρέπεται να αλλάξετε. Χρειάζεται επομένως ημερομηνία λήξης.",
         "kanbanColCollapse": "Σύμπτυξη στήλης",
         "kanbanColExpand": "Επέκταση στήλης",
         "kanbanArchiveDone": "Αρχειοθέτηση όλων των ολοκληρωμένων",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Ποιανού εργασίες",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} είδος διαγράφηκε.",

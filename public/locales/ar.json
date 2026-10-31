@@ -475,7 +475,6 @@
         "seriesDoneToast": "تم الإنجاز - المرة القادمة: {{date}}",
         "seriesDoneByToast": "أنجزها {{name}} - المرة القادمة: {{date}}",
         "historyTickedBy": "وضع العلامة {{name}}",
-        "reminderLockedNeedsDueDate": "هذه المهمة لديها تذكير لا يمكنك تغييره. لذلك تحتاج إلى تاريخ استحقاق.",
         "kanbanColCollapse": "طيّ العمود",
         "kanbanColExpand": "توسيع العمود",
         "kanbanArchiveDone": "أرشفة كل المهام المنجزة",
@@ -527,7 +526,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "مهام من",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} وجبات",

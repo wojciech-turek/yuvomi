@@ -437,7 +437,6 @@
         "seriesDoneToast": "Selesai - berikutnya: {{date}}",
         "seriesDoneByToast": "Dikerjakan oleh {{name}} - berikutnya: {{date}}",
         "historyTickedBy": "dicentang oleh {{name}}",
-        "reminderLockedNeedsDueDate": "Tugas ini memiliki pengingat yang tidak boleh Anda ubah. Karena itu tugas ini memerlukan tanggal jatuh tempo.",
         "kanbanColCollapse": "Ciutkan kolom",
         "kanbanColExpand": "Bentangkan kolom",
         "kanbanArchiveDone": "Arsipkan semua yang selesai",
@@ -486,7 +485,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Tugas siapa",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} item dihapus.",

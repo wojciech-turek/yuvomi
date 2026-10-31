@@ -437,7 +437,6 @@
         "seriesDoneToast": "Erledigt - nächstes Mal am {{date}}",
         "seriesDoneByToast": "Erledigt von {{name}} - nächstes Mal am {{date}}",
         "historyTickedBy": "abgehakt von {{name}}",
-        "reminderLockedNeedsDueDate": "Diese Aufgabe hat eine Erinnerung, die du nicht ändern darfst. Sie braucht deshalb ein Fälligkeitsdatum.",
         "kanbanColCollapse": "Spalte einklappen",
         "kanbanColExpand": "Spalte ausklappen",
         "kanbanArchiveDone": "Alles Erledigte archivieren",
@@ -486,7 +485,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Wessen Aufgaben",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} Artikel gelöscht.",

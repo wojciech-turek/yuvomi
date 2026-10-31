@@ -437,7 +437,6 @@
         "seriesDoneToast": "완료 - 다음: {{date}}",
         "seriesDoneByToast": "{{name}} 님이 했습니다 - 다음: {{date}}",
         "historyTickedBy": "체크한 사람: {{name}}",
-        "reminderLockedNeedsDueDate": "이 작업에는 변경할 수 없는 알림이 있습니다. 따라서 마감일이 필요합니다.",
         "kanbanColCollapse": "열 접기",
         "kanbanColExpand": "열 펼치기",
         "kanbanArchiveDone": "완료된 항목 모두 보관",
@@ -486,7 +485,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "누구의 할 일",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}}개 항목이 삭제되었습니다.",

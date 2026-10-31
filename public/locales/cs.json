@@ -439,7 +439,6 @@
         "seriesDoneToast": "Hotovo - příště: {{date}}",
         "seriesDoneByToast": "Splnil(a) {{name}} - příště: {{date}}",
         "historyTickedBy": "odškrtl(a) {{name}}",
-        "reminderLockedNeedsDueDate": "Tento úkol má připomínku, kterou nemůžeš změnit. Proto potřebuje datum splnění.",
         "kanbanColCollapse": "Sbalit sloupec",
         "kanbanColExpand": "Rozbalit sloupec",
         "kanbanArchiveDone": "Archivovat vše hotové",
@@ -489,7 +488,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Čí úkoly",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} jídla",

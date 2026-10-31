@@ -1973,8 +1973,10 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
   Stelle auf, "Entfernen" klappt es zu und leert es. Faelligkeit mit Schnellwahl (Heute, Morgen,
   Dieses Wochenende, Datum waehlen) und "+ Uhrzeit"; die Erinnerung ist eine feste Uhrzeit.
   Prioritaet, Kategorie, Wiederholung, Sichtbarkeit, Start, Status, Dokumente und Countdown
-  stehen hinter "Mehr". Beim Bearbeiten ist ein Abschnitt offen, sobald er einen Wert traegt;
-  "Mehr" bleibt zu und nennt Gesetztes in seiner Zeile. Keine Etiketten, keine Sperre, kein
+  stehen hinter "Mehr". Beim Bearbeiten ist ein Abschnitt offen, sobald er einen Wert traegt,
+  und "Mehr" geht auf, sobald darin etwas abseits der Vorgabe steht (seine Zeile nennt es auch
+  zugeklappt). Nach einem Diktat stehen gesetzte Werte als kompakte Zeilen mit x (Entwurf
+  TaskSpoken); ein Tipp auf die Zeile klappt ihre Felder auf. Keine Etiketten, keine Sperre, kein
   Sync-Ziel, kein Markdown im Blatt (`test:task-sheet`). Der Fuss beim Anlegen ist nur
   "Aufgabe hinzufuegen" in voller Breite (Entwurf TaskNew; geschlossen wird ueber das x und das
   Ziehen des Blatts), beim Bearbeiten bleibt Loeschen · Abbrechen · Speichern.
@@ -2667,7 +2669,7 @@ nur das gerenderte Dokument sieht, ob eine Liste ueberhaupt verdrahtet ist.
   Aufklapper steht, findet sonst nur, wer schon weiss, dass es existiert. Ausnahme: "Mehr" im
   Blatt "Neue Aufgabe" traegt keinen Hinweis - der erste Blick zeigt dort ausdruecklich nur
   seine sechs Dinge (Entscheidung des Haushalts, Quick-Add 2026-10-29); gesetzte Werte nennt
-  die Zeile trotzdem.
+  die Zeile trotzdem, und beim Bearbeiten steht "Mehr" dann offen.
 
 ### Nur lesen: das Zeichen statt des Knopfs (#1252, #1265)
 Wer ein Modul nur lesen darf, sieht den ZUSTAND, aber keine Handlung. Der Server weist

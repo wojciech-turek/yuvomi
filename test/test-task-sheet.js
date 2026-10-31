@@ -39,7 +39,7 @@ globalThis.CSS = globalThis.CSS ?? { escape: (v) => String(v) };
 globalThis.window = globalThis.window ?? {};
 globalThis.window.yuvomi = { showToast() {} };
 
-const { setDisplayTimeZone } = await import('../public/utils/timezone.js');
+const { setDisplayTimeZone, todayKey } = await import('../public/utils/timezone.js');
 const { renderUserMultiSelect } = await import('../public/components/user-multi-select.js');
 const { setHouseholdSize } = await import('../public/utils/household.js');
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
@@ -208,24 +208,54 @@ test('edit: a reminder made with the old lead-time picker shows as its date and 
   assert.equal(valueOf(html, 'task-remind-time'), '23:59');
 });
 
-test('edit: More stays closed and its summary names the set values', () => {
-  const labels = [];
+/** Die Optionen, mit denen das Blatt "Mehr" baut (label, open). */
+function moreOptions(opts) {
+  const seen = [];
   globalThis.__renderUserMultiSelect = renderUserMultiSelect;
-  globalThis.__advancedSection = (inner, opts = {}) => { labels.push(opts); return `<details class="form-advanced">${inner}</details>`; };
+  globalThis.__advancedSection = (inner, options = {}) => { seen.push(options); return `<details class="form-advanced">${inner}</details>`; };
   try {
-    tasks.renderModalContent({
-      task: { ...FULL_TASK, status: 'in_progress', start_date: '2026-10-20', countdown: 1, recurrence_rule: 'FREQ=WEEKLY' },
-      users: [WOJTEK, MARIOLA],
-    });
+    tasks.renderModalContent({ users: [WOJTEK, MARIOLA], ...opts });
   } finally {
     delete globalThis.__renderUserMultiSelect;
     delete globalThis.__advancedSection;
   }
-  const { label, open } = labels.at(-1);
-  assert.notEqual(open, true, 'More is closed');
-  assert.ok(label.startsWith('tasks.more'), label);
-  for (const needle of ['2026-10-20', 'tasks.countdownDetail']) assert.ok(label.includes(needle), `the summary names ${needle}: ${label}`);
-  assert.ok(/·/.test(label), 'set values follow the label');
+  assert.equal(seen.length, 1, 'More is built once');
+  return seen[0];
+}
+
+// Ruling R8 (Spec: "Set values are shown open, as the form does today").
+test('edit: More opens when it holds a set value, and its line names them', () => {
+  const { label, open } = moreOptions({
+    task: { ...FULL_TASK, status: 'in_progress', start_date: '2026-10-20', countdown: 1, recurrence_rule: 'FREQ=WEEKLY' },
+  });
+  assert.equal(open, true, 'something is set behind More - it shows open');
+  assert.ok(label.startsWith('tasks.more · '), label);
+  for (const needle of ['2026-10-20', 'tasks.countdownDetail', 'tasks.priority']) {
+    assert.ok(label.includes(needle), `the summary names ${needle}: ${label}`);
+  }
+});
+
+test('edit: each kind of set value opens More on its own', () => {
+  const plain = { ...FULL_TASK, priority: 'none', category: 'misc', visibility: 'all', status: 'open',
+    start_date: null, countdown: 0, recurrence_rule: null, documents: [] };
+  for (const [name, over] of [
+    ['priority', { priority: 'high' }], ['category', { category: 'household' }], ['repeat', { recurrence_rule: 'FREQ=WEEKLY' }],
+    ['visibility', { visibility: 'private' }], ['start date', { start_date: '2026-10-20' }], ['status', { status: 'in_progress' }],
+    ['documents', { documents: [{ id: 5, name: 'Polisa.pdf', mime_type: 'application/pdf' }] }], ['countdown', { countdown: 1 }],
+  ]) {
+    assert.equal(moreOptions({ task: { ...plain, ...over } }).open, true, `${name} set: More opens`);
+  }
+});
+
+test('edit with nothing set behind More, and every create: More stays closed as plain "More"', () => {
+  const nothing = moreOptions({ task: { ...FULL_TASK, priority: 'none', category: 'misc', status: 'open' } });
+  assert.equal(nothing.open, false);
+  assert.equal(nothing.label, 'tasks.more');
+  for (const draft of [null, { title: 'Wyrzuć śmieci' }]) {
+    const create = moreOptions({ task: null, draft });
+    assert.equal(create.open, false, 'a new task opens with More closed');
+    assert.equal(create.label, 'tasks.more');
+  }
 });
 
 test('draft: a spoken sentence opens the sheet with title, due and reminder filled', () => {
@@ -255,6 +285,69 @@ test('reminder quick picks follow the due date: none without one, three with a t
   for (const key of ['at_due', 'hour_before', 'day_before']) assert.match(withDue, new RegExp(`data-remind-pick="${key}"`));
 });
 
+test('edit: a due time without a due date is shown, not hidden', () => {
+  const html = sheet({ task: { ...FULL_TASK, due_date: null, due_time: '08:00', description: '' } });
+  assert.equal(isHidden(sectionTag(html, 'due')), false, 'the server accepts a time alone - the sheet shows it');
+  assert.equal(valueOf(html, 'task-due-time'), '08:00');
+  assert.doesNotMatch(tagOf(html, 'task-due-time').length ? html.match(/<div\b[^>]*data-due-time-row[^>]*>/)[0] : '', /\shidden/);
+  assert.equal(isHidden(html.match(/<button\b[^>]*data-reveal="due"[^>]*>/)[0]), true);
+});
+
+test('edit: a stored reminder whose time cannot be read is left alone', () => {
+  const html = sheet({ task: FULL_TASK, reminder: { id: 3, remind_at: 'kaputt' } });
+  assert.equal(isHidden(sectionTag(html, 'reminder')), true);
+  assert.doesNotMatch(html, /data-stored-at/, 'no stored marker - an untouched save sends no DELETE');
+});
+
+// --------------------------------------------------------------------------
+// Nach einem Diktat: gesetzte Werte als kompakte Zeilen mit x (Ruling R6,
+// Entwurf TaskSpoken)
+// --------------------------------------------------------------------------
+
+const TOMORROW = (() => {
+  const [y, m, d] = todayKey().split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+})();
+const SPOKEN_DRAFT = {
+  title: 'Weź Marysi spodenki do przedszkola', due_date: TOMORROW, remind_date: TOMORROW, remind_time: '07:30',
+};
+const rowOf = (html, name) => html.match(new RegExp(`<div class="task-sheet__row" data-row="${name}">[\\s\\S]*?</button>\\s*</div>`))?.[0] ?? '';
+
+test('spoken: due and reminder stand as compact rows with an x, their pickers folded away', () => {
+  const html = sheet({ task: null, draft: SPOKEN_DRAFT, spoken: true });
+  for (const [name, label, value, remove] of [
+    ['due', 'tasks.dueShort', 'common.tomorrow', 'tasks.removeDue'],
+    ['reminder', 'reminders.sectionTitle', 'common.tomorrow, 07:30', 'reminders.removeReminder'],
+  ]) {
+    assert.equal(isHidden(sectionTag(html, name)), false, `${name} is set`);
+    const row = rowOf(html, name);
+    assert.ok(row, `${name} has a row`);
+    assert.match(row, new RegExp(`<button type="button" class="task-sheet__row-main" data-expand="${name}"`), 'the row opens its fields');
+    assert.match(row, new RegExp(`task-sheet__row-label">${label.replace('.', '\\.')}<`));
+    assert.match(row, new RegExp(`task-sheet__row-value">${value}<`));
+    assert.match(row, new RegExp(`<button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${remove.replace('.', '\\.')}"`));
+    assert.match(html, new RegExp(`<div class="task-sheet__body" id="task-${name}-body" hidden>`), `${name}: no expanded pickers`);
+  }
+  assert.equal(isHidden(sectionTag(html, 'note')), true, 'no note in the sentence, no note row');
+  assert.doesNotMatch(html, /data-row="note"/);
+  // Dieselben Felder wie sonst - das Speichern liest sie unveraendert.
+  assert.equal(valueOf(html, 'task-due-date'), TOMORROW);
+  assert.equal(valueOf(html, 'task-remind-time'), '07:30');
+});
+
+test('spoken: only a dictated draft gets rows - typed drafts and edits keep the open fields', () => {
+  for (const opts of [{ task: null, draft: SPOKEN_DRAFT }, { task: FULL_TASK, spoken: true, reminder: { id: 3, remind_at: '2026-10-30T06:30:00' } }]) {
+    const html = sheet(opts);
+    assert.doesNotMatch(html, /data-row=|data-expand=/);
+    assert.doesNotMatch(html, /class="task-sheet__body"[^>]*hidden/);
+  }
+});
+
+test('spoken: a due time alone still reads as a row', () => {
+  const html = sheet({ task: null, draft: { title: 'Zadzwonić', due_time: '18:00' }, spoken: true });
+  assert.match(rowOf(html, 'due'), /task-sheet__row-value">18:00</);
+});
+
 // --------------------------------------------------------------------------
 // Rechte am Kalender: die Erinnerung gehoert dem Kalender
 // --------------------------------------------------------------------------
@@ -264,7 +357,7 @@ test('calendar: read shows an existing reminder read-only and offers no reminder
     const html = sheet({ task: FULL_TASK, reminder: { id: 3, remind_at: '2026-10-30T06:30:00' } });
     const section = sectionTag(html, 'reminder');
     assert.equal(isHidden(section), false);
-    assert.match(section, /data-locked-due="2026-10-30"/);
+    assert.doesNotMatch(html, /data-locked-due/, 'no due-date guard any more (Ruling R7)');
     assert.match(tagOf(html, 'task-remind-date'), /\sdisabled/);
     assert.match(tagOf(html, 'task-remind-time'), /\sdisabled/);
     assert.doesNotMatch(html, /data-remove="reminder"/, 'a locked reminder cannot be removed');
@@ -387,6 +480,84 @@ test('wiring: a due quick pick writes the date', () => {
   click(form, pick);
   assert.match(date.value, /^\d{4}-\d{2}-\d{2}$/, 'today in the household zone');
   assert.ok(date.events.includes('change'));
+});
+
+test('wiring: the x on a spoken row clears the reminder and folds it away, like Remove', () => {
+  const form = fakeEl();
+  const section = fakeEl({ dataset: { section: 'reminder' } });
+  const reveal = fakeEl({ hidden: true, dataset: { reveal: 'reminder' } });
+  const date = fakeEl({ value: '2026-11-01' });
+  const time = fakeEl({ value: '07:30' });
+  const panel = fakePanel({
+    '#task-form': form, '[data-section="reminder"]': section, '[data-reveal="reminder"]': reveal,
+    '#task-remind-date': date, '#task-remind-time': time,
+  });
+  tasks.wireTaskSheet(panel);
+  const x = fakeEl({ dataset: { remove: 'reminder' } });
+  x.closest = (sel) => (sel.includes('[data-remove]') ? x : null);
+  click(form, x);
+  assert.equal(section.hidden, true);
+  assert.equal(date.value, '');
+  assert.equal(time.value, '');
+  assert.equal(reveal.hidden, false, 'the Reminder button is back');
+});
+
+test('wiring: tapping a spoken row expands its fields; reopening after x shows the fields too', () => {
+  const form = fakeEl();
+  const row = fakeEl();
+  const body = fakeEl({ hidden: true });
+  const firstPick = fakeEl();
+  // Das x der Zeile steht im DOM VOR den Feldern - der Fokus darf nicht dort
+  // landen (verborgen), sondern auf dem ersten Vorschlag in den Feldern.
+  const rowX = fakeEl({ dataset: { remove: 'due' } });
+  body.querySelector = (sel) => (sel.includes('[data-due-pick]') ? firstPick : null);
+  const section = fakeEl({ dataset: { section: 'due' } });
+  section.querySelector = (sel) => ({ '[data-row]': row, '.task-sheet__body': body }[sel]
+    ?? (sel.includes('[data-remove]') || sel.includes('[data-due-pick]') ? rowX : null));
+  const panel = fakePanel({ '#task-form': form, '[data-section="due"]': section, '#task-due-date': fakeEl({ value: TOMORROW }) });
+  tasks.wireTaskSheet(panel);
+  const main = fakeEl({ dataset: { expand: 'due' } });
+  main.closest = (sel) => (sel.includes('[data-expand]') ? main : null);
+  click(form, main);
+  assert.equal(row.hidden, true, 'the row gives way');
+  assert.equal(body.hidden, false, 'to the full section');
+  assert.equal(firstPick.focused, true, 'the focus goes into it');
+
+  // x, then the Due date button again: the section comes back with its fields, not the old row.
+  row.hidden = false;
+  body.hidden = true;
+  section.hidden = true;
+  const reveal = fakeEl({ dataset: { reveal: 'due' } });
+  reveal.closest = (sel) => (sel.includes('[data-reveal]') ? reveal : null);
+  click(form, reveal);
+  assert.equal(section.hidden, false);
+  assert.equal(row.hidden, true);
+  assert.equal(body.hidden, false);
+});
+
+test('wiring: a reminder quick pick keeps its buttons (and the focus) - only aria-pressed moves', () => {
+  const form = fakeEl();
+  const buttons = ['at_due', 'hour_before', 'day_before'].map((key) => fakeEl({ dataset: { remindPick: key } }));
+  const host = fakeEl();
+  host.querySelectorAll = () => buttons;
+  let redrawn = 0;
+  host.replaceChildren = () => { redrawn += 1; };
+  host.insertAdjacentHTML = () => {};
+  const date = fakeEl();
+  const time = fakeEl();
+  const panel = fakePanel({
+    '#task-form': form, '[data-remind-picks]': host,
+    '#task-due-date': fakeEl({ value: '2026-11-02' }), '#task-due-time': fakeEl({ value: '18:00' }),
+    '#task-remind-date': date, '#task-remind-time': time,
+  });
+  tasks.wireTaskSheet(panel);
+  const pick = buttons[1];
+  pick.closest = (sel) => (sel.includes('[data-remind-pick]') ? pick : null);
+  click(form, pick);
+  assert.equal(date.value, '2026-11-02');
+  assert.equal(time.value, '17:00');
+  assert.equal(redrawn, 0, 'no redraw - the tapped button stays in the DOM');
+  assert.deepEqual(buttons.map((b) => b.getAttribute('aria-pressed')), ['false', 'true', 'false']);
 });
 
 // --------------------------------------------------------------------------
@@ -572,5 +743,4 @@ test('openTaskModal: the draft reaches the sheet, "Say again" only when spoken',
   const panel = { querySelector: (sel) => (sel === '.modal-panel__action' ? action : null), querySelectorAll: () => [] };
   spoken.onSave(panel);
   assert.equal(action.getAttribute('data-action'), 'dictate', 'Task 9 wires it through data-action');
-  assert.doesNotThrow(() => spoken.headerAction.onClick?.(), 'a click before Task 9 does nothing');
 });

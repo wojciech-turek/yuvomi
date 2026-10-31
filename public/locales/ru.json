@@ -457,7 +457,6 @@
         "seriesDoneToast": "Выполнено - следующий раз: {{date}}",
         "seriesDoneByToast": "Выполнил(а) {{name}} - следующий раз: {{date}}",
         "historyTickedBy": "отметил(а) {{name}}",
-        "reminderLockedNeedsDueDate": "У этой задачи есть напоминание, которое вы не можете изменить. Поэтому ей нужен срок выполнения.",
         "kanbanColCollapse": "Свернуть столбец",
         "kanbanColExpand": "Развернуть столбец",
         "kanbanArchiveDone": "Архивировать все выполненные",
@@ -508,7 +507,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Чьи задачи",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} приёма пищи",

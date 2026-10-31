@@ -37,7 +37,7 @@ import { todayKey, parseLocalDateKey } from '/utils/date.js';
 import { makeSortable } from '/utils/sortable.js';
 import { mountMasterDetail, splitViewDetailHtml, setSelectionBulk } from '/utils/master-detail.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel } from '/utils/day-label.js';
+import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel, relativeDateLabel } from '/utils/day-label.js';
 import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import {
@@ -926,9 +926,10 @@ function wireGroupToggle(container) {
 // Ort und Stelle auf, „Entfernen" klappt es wieder zu und leert es.
 //
 // WAS GESETZT IST, STEHT OFFEN DA. Beim Bearbeiten und aus einem Entwurf
-// (Diktat) ist ein Abschnitt offen, sobald er einen Wert traegt; „Mehr" bleibt
-// zu und nennt die gesetzten Werte in seiner Zeile - dasselbe Muster wie
-// vorher „Weitere Einstellungen" (Critique 2026-08-10).
+// (Diktat) ist ein Abschnitt offen, sobald er einen Wert traegt; „Mehr" geht
+// beim Bearbeiten auf, sobald darin etwas gesetzt ist, und nennt die Werte in
+// seiner Zeile. Nach einem Diktat stehen gesetzte Werte zuerst als kompakte
+// Zeilen mit x da (`[data-row]`, `[data-expand]`, Entwurf TaskSpoken).
 //
 // Der Vertrag mit dem Diktat (Task 9) und den Tests: `#task-title` mit
 // `[data-action="dictate"]` im Feld, `[data-reveal]`, `[data-section]` (mit
@@ -947,6 +948,9 @@ const DUE_PICK_LABELS = Object.freeze({
 const REMIND_PICK_LABELS = Object.freeze({
   at_due: 'tasks.remindAtDue', hour_before: 'tasks.remindHourBefore', day_before: 'tasks.remindDayBefore',
 });
+/** Name und x-Beschriftung der kompakten Zeilen eines Diktats (Entwurf TaskSpoken). */
+const ROW_LABELS = Object.freeze({ due: 'tasks.dueShort', reminder: 'reminders.sectionTitle', note: 'tasks.descriptionLabel' });
+const ROW_REMOVE_LABELS = Object.freeze({ due: 'tasks.removeDue', reminder: 'reminders.removeReminder', note: 'tasks.removeNote' });
 
 /** `HH:MM` aus einer gespeicherten Uhrzeit (der Server fuehrt sie mit oder ohne Sekunden). */
 function hhmm(value) {
@@ -969,41 +973,77 @@ function duePickOf(value, today = todayKey(), chosen = '') {
 
 function sheetSectionHead(name, titleHtml, { removable = true } = {}) {
   return `
-        <div class="task-sheet__section-head">
-          ${titleHtml}
-          ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
+          <div class="task-sheet__section-head">
+            ${titleHtml}
+            ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
+          </div>`;
+}
+
+/**
+ * Ein Abschnitt des Blatts. Mit `row` (nur aus einem Diktat, Entwurf TaskSpoken)
+ * steht er zuerst als kompakte Zeile da - Zeichen, Name, Wert und ein x, das
+ * genau das tut, was „Entfernen" tut. Ein Tipp auf die Zeile klappt die
+ * Felder auf (`[data-expand]`). Die Felder stehen in beiden Faellen im DOM:
+ * das Speichern liest dieselben Eingaben.
+ */
+function sheetSectionHtml(name, { open, attrs = '', labelledBy = '', row = null }, innerHtml) {
+  const group = labelledBy ? ` role="group" aria-labelledby="${labelledBy}"` : '';
+  return `
+      <div class="task-sheet__section" data-section="${name}"${group}${attrs}${open ? '' : ' hidden'}>${row === null ? '' : sheetRowHtml(name, row)}
+        <div class="task-sheet__body" id="task-${name}-body"${row === null ? '' : ' hidden'}>${innerHtml}
+        </div>
+      </div>`;
+}
+
+function sheetRowHtml(name, value) {
+  return `
+        <div class="task-sheet__row" data-row="${name}">
+          <button type="button" class="task-sheet__row-main" data-expand="${name}" aria-expanded="false" aria-controls="task-${name}-body">
+            <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>
+            <span class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
+            <span class="task-sheet__row-value">${esc(value)}</span>
+          </button>
+          <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(ROW_REMOVE_LABELS[name]))}">
+            <i data-lucide="x" class="icon-md" aria-hidden="true"></i>
+          </button>
         </div>`;
 }
 
-function dueSectionHtml({ dueDate, dueTime }) {
+/** Ein Datum mit Uhrzeit in Worten fuer eine kompakte Zeile: „Morgen, 07:30". */
+function rowWhen(date, time) {
+  return [date ? relativeDateLabel(date) : '', time ? formatTime(time) : ''].filter(Boolean).join(', ');
+}
+
+function dueSectionHtml({ dueDate, dueTime, spoken = false }) {
   const pick = duePickOf(dueDate);
   const pills = [...DUE_PICKS, 'pick'].map((key) => `
-          <button type="button" class="task-sheet__pill" data-due-pick="${key}" aria-pressed="${pick === key}">${t(DUE_PICK_LABELS[key])}</button>`).join('');
-  return `
-      <div class="task-sheet__section" data-section="due" role="group" aria-labelledby="task-due-heading"${dueDate ? '' : ' hidden'}>
-        ${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
-        <div class="task-sheet__pills">${pills}
-        </div>
-        <div class="task-sheet__when task-sheet__when--due">
-          <div class="task-sheet__field task-sheet__when-date" data-due-date-row${pick === 'pick' ? '' : ' hidden'}>
-            <label class="sr-only" for="task-due-date">${t('tasks.dueDateLabel')}</label>
-            <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
-                   value="${esc(formatDateInput(dueDate))}"></yuvomi-datepicker>
+            <button type="button" class="task-sheet__pill" data-due-pick="${key}" aria-pressed="${pick === key}">${t(DUE_PICK_LABELS[key])}</button>`).join('');
+  // Eine Uhrzeit ohne Datum nimmt der Server an - sie darf nicht verborgen sein.
+  const open = !!(dueDate || dueTime);
+  return sheetSectionHtml('due', {
+    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null,
+  }, `${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
+          <div class="task-sheet__pills">${pills}
           </div>
-          <div class="task-sheet__field task-sheet__when-time" data-due-time-row${dueTime ? '' : ' hidden'}>
-            <label class="sr-only" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
-            <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
-                   value="${esc(formatTimeInput(dueTime))}"></yuvomi-datepicker>
+          <div class="task-sheet__when task-sheet__when--due">
+            <div class="task-sheet__field task-sheet__when-date" data-due-date-row${pick === 'pick' ? '' : ' hidden'}>
+              <label class="sr-only" for="task-due-date">${t('tasks.dueDateLabel')}</label>
+              <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
+                     value="${esc(formatDateInput(dueDate))}"></yuvomi-datepicker>
+            </div>
+            <div class="task-sheet__field task-sheet__when-time" data-due-time-row${dueTime ? '' : ' hidden'}>
+              <label class="sr-only" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
+              <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
+                     value="${esc(formatTimeInput(dueTime))}"></yuvomi-datepicker>
+            </div>
           </div>
-        </div>
-        <button type="button" class="task-sheet__add-time" data-reveal-time${dueTime ? ' hidden' : ''}>${t('tasks.addTime')}</button>
-      </div>`;
+          <button type="button" class="task-sheet__add-time" data-reveal-time${dueTime ? ' hidden' : ''}>${t('tasks.addTime')}</button>`);
 }
 
 /** Die Vorschlaege der Erinnerung, aus der Faelligkeit; gedrueckt ist der, den die Felder gerade tragen. */
 function remindPicksHtml({ dueDate = '', dueTime = '', wall = null } = {}) {
   return reminderQuickPicks({ dueDate, dueTime }).map((p) => `
-          <button type="button" class="task-sheet__pill" data-remind-pick="${p.key}" aria-pressed="${!!wall && wall.date === p.date && wall.time === p.time}">${t(REMIND_PICK_LABELS[p.key])}</button>`).join('');
+            <button type="button" class="task-sheet__pill" data-remind-pick="${p.key}" aria-pressed="${!!wall && wall.date === p.date && wall.time === p.time}">${t(REMIND_PICK_LABELS[p.key])}</button>`).join('');
 }
 
 /**
@@ -1016,37 +1056,39 @@ function remindPicksHtml({ dueDate = '', dueTime = '', wall = null } = {}) {
  * fuer eine unberuehrte Erinnerung nichts - auch nicht fuer eine aus der alten
  * Vorlauf-Auswahl, deren Sekunden die Felder gar nicht zeigen.
  */
-function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, lockedDue }) {
+function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken = false }) {
   if (access === 'none' || (access === 'read' && !storedAt)) return '';
   const locked = access === 'read';
   const off = locked ? ' disabled' : '';
-  const attrs = [
-    storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
-    // Die Faelligkeit, mit der der Dialog aufging - der Riegel im Speichern
-    // liest sie (siehe handleFormSubmit, Review-Runde 3 zu #1253).
-    locked ? ` data-locked-due="${esc(lockedDue ?? '')}"` : '',
-    wall ? '' : ' hidden',
-  ].join('');
-  return `
-      <div class="task-sheet__section" data-section="reminder" role="group" aria-labelledby="task-remind-heading"${attrs}>
-        ${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
-        <div class="task-sheet__when">
-          <div class="task-sheet__field task-sheet__when-date">
-            <label class="sr-only" for="task-remind-date">${t('reminders.dateLabel')}</label>
-            <yuvomi-datepicker type="date" id="task-remind-date"
-                   value="${esc(formatDateInput(wall?.date ?? ''))}"${off}></yuvomi-datepicker>
+  return sheetSectionHtml('reminder', {
+    open: !!wall,
+    labelledBy: 'task-remind-heading',
+    attrs: storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
+    row: spoken && wall && !locked ? rowWhen(wall.date, wall.time) : null,
+  }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
+          <div class="task-sheet__when">
+            <div class="task-sheet__field task-sheet__when-date">
+              <label class="sr-only" for="task-remind-date">${t('reminders.dateLabel')}</label>
+              <yuvomi-datepicker type="date" id="task-remind-date"
+                     value="${esc(formatDateInput(wall?.date ?? ''))}"${off}></yuvomi-datepicker>
+            </div>
+            <div class="task-sheet__field task-sheet__when-time">
+              <label class="sr-only" for="task-remind-time">${t('reminders.timeLabel')}</label>
+              <yuvomi-datepicker type="time" id="task-remind-time"
+                     value="${esc(formatTimeInput(wall?.time ?? ''))}"${off}></yuvomi-datepicker>
+            </div>
           </div>
-          <div class="task-sheet__field task-sheet__when-time">
-            <label class="sr-only" for="task-remind-time">${t('reminders.timeLabel')}</label>
-            <yuvomi-datepicker type="time" id="task-remind-time"
-                   value="${esc(formatTimeInput(wall?.time ?? ''))}"${off}></yuvomi-datepicker>
-          </div>
-        </div>
-        ${locked
+          ${locked
     ? `<p class="task-field-hint">${t('reminders.readOnlyNotice')}</p>`
     : `<div class="task-sheet__pills" data-remind-picks>${remindPicksHtml({ dueDate, dueTime, wall })}
-        </div>`}
-      </div>`;
+          </div>`}`);
+}
+
+function noteSectionHtml({ note, spoken = false }) {
+  return sheetSectionHtml('note', { open: !!note, row: spoken && note ? note : null },
+    `${sheetSectionHead('note', `<label class="task-sheet__section-title" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
+          <textarea class="input task-sheet__note" id="task-description" name="description"
+                    rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>`);
 }
 
 function revealButtonHtml(name, labelKey, open) {
@@ -1080,10 +1122,13 @@ function moreSummary(task) {
  *                   remind_date?: string, remind_time?: string, assigned_to?: number[]}|null}} opts
  *        `draft` gilt nur beim Anlegen (Diktat, Task 9): was der Satz hergab,
  *        steht schon da, und der Nutzer prueft es vor „Aufgabe hinzufuegen".
+ *        `spoken` (nur beim Anlegen): gesetzte Abschnitte stehen als kompakte
+ *        Zeilen mit x da (Entwurf TaskSpoken) - ein Tipp klappt sie auf.
  */
-function renderModalContent({ task = null, users = [], reminder = null, draft = null } = {}) {
+function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false } = {}) {
   const isEdit = !!task;
   const d = isEdit ? null : (draft ?? null);
+  const rows = spoken && !isEdit;
 
   const selectedIds = isEdit
     ? (task.assigned_users?.map((u) => u.id) ?? (task.assigned_to ? [task.assigned_to] : []))
@@ -1099,12 +1144,15 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
   const note = task?.description ?? '';
 
   const access = reminderAccess();
-  const storedAt = reminder?.remind_at ?? '';
-  const wall = storedAt
-    ? wallTimeFromRemindAt(storedAt)
-    : (d?.remind_date && d?.remind_time ? { date: d.remind_date, time: hhmm(d.remind_time) } : null);
+  // Eine gespeicherte Erinnerung, deren Zeitpunkt sich nicht lesen laesst,
+  // bleibt UNANGETASTET: kein Feld, kein `data-stored-at` - sonst hielte das
+  // Speichern den zugeklappten Abschnitt fuer „entfernt" und loeschte sie.
+  const storedWall = reminder?.remind_at ? wallTimeFromRemindAt(reminder.remind_at) : null;
+  const storedAt = storedWall ? reminder.remind_at : '';
+  const wall = storedWall
+    ?? (d?.remind_date && d?.remind_time ? { date: d.remind_date, time: hhmm(d.remind_time) } : null);
   const reminderHtml = reminderSectionHtml({
-    access, wall, storedAt, dueDate, dueTime, lockedDue: task?.due_date ?? '',
+    access, wall, storedAt, dueDate, dueTime, spoken: rows,
   });
 
   const selectedCat = task?.category ?? FALLBACK_CATEGORY;
@@ -1195,8 +1243,12 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
         <p class="task-field-hint field-hint--warn" id="task-countdown-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('tasks.countdownNeedsDue')}</span></p>
       </div>`;
 
+  // GESETZTES STEHT OFFEN DA (Spec, Anti-Ziel „Daten verlieren"): beim
+  // Bearbeiten geht „Mehr" auf, sobald darin ein Wert abseits der Vorgabe
+  // steht; die Zeile nennt ihn trotzdem. Neu angelegt bleibt „Mehr" zu.
   const summary = moreSummary(task);
   const moreLabel = summary.length ? `${t('tasks.more')} · ${summary.join(' · ')}` : t('tasks.more');
+  const moreOpen = isEdit && summary.length > 0;
   const reminderOpen = !!wall && reminderHtml !== '';
 
   return `
@@ -1228,21 +1280,17 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
       <div class="form-group task-sheet__who"${isSoloHousehold() && assigneePeople.length <= 1 ? ' hidden' : ''}>
         ${renderUserMultiSelect(assigneePeople, selectedIds, 'task_assigned', 'tasks.whoLabel')}
       </div>
-${dueSectionHtml({ dueDate, dueTime })}
+${dueSectionHtml({ dueDate, dueTime, spoken: rows })}
 ${reminderHtml}
-      <div class="task-sheet__section" data-section="note"${note ? '' : ' hidden'}>
-        ${sheetSectionHead('note', `<label class="task-sheet__section-title" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
-        <textarea class="input task-sheet__note" id="task-description" name="description"
-                  rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>
-      </div>
+${noteSectionHtml({ note, spoken: rows })}
 
       <div class="task-sheet__reveals">
-        ${revealButtonHtml('due', 'tasks.addDue', !!dueDate)}
+        ${revealButtonHtml('due', 'tasks.addDue', !!(dueDate || dueTime))}
         ${access === 'write' ? revealButtonHtml('reminder', 'tasks.addReminder', reminderOpen) : ''}
         ${revealButtonHtml('note', 'tasks.addNote', !!note)}
       </div>
 
-      ${advancedSection(moreHtml, { label: moreLabel })}
+      ${advancedSection(moreHtml, { label: moreLabel, open: moreOpen })}
 
       <div id="task-form-error" class="form-error" role="alert" hidden></div>
 
@@ -2000,7 +2048,7 @@ function openTaskModal({ task = null, users = [], reminder = null, onChanged = n
   const isEdit = !!task;
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
-    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft }),
+    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit }),
     size: 'lg',
     // Ein Kopfknopf, der vorerst nichts tut: das Diktat haengt sich ueber
     // `data-action="dictate"` an (Task 9). `type="button"` liefert openModal.
@@ -2051,7 +2099,13 @@ function syncDueSection(panel) {
   syncRemindPicks(panel);
 }
 
-/** Die Vorschlaege der Erinnerung folgen der Faelligkeit (ohne sie: keine). */
+/**
+ * Die Vorschlaege der Erinnerung folgen der Faelligkeit (ohne sie: keine).
+ * Neu gezeichnet wird nur, wenn sich die SORTE der Vorschlaege aendert (eine
+ * Faelligkeit kommt oder geht, eine Uhrzeit bringt „1 Stunde vorher");
+ * sonst wandert nur `aria-pressed` - ein Neuzeichnen naehme dem eben
+ * getippten Vorschlag den Fokus.
+ */
 function syncRemindPicks(panel) {
   const host = panel.querySelector('[data-remind-picks]');
   if (!host) return;
@@ -2060,8 +2114,44 @@ function syncRemindPicks(panel) {
     date: panel.querySelector('#task-remind-date')?.value || '',
     time: hhmm(panel.querySelector('#task-remind-time')?.value),
   };
-  host.replaceChildren();
-  host.insertAdjacentHTML('beforeend', remindPicksHtml({ dueDate: due.date, dueTime: due.time, wall }));
+  const picks = reminderQuickPicks({ dueDate: due.date, dueTime: due.time });
+  const buttons = [...host.querySelectorAll('[data-remind-pick]')];
+  if (buttons.map((b) => b.dataset.remindPick).join() !== picks.map((p) => p.key).join()) {
+    host.replaceChildren();
+    host.insertAdjacentHTML('beforeend', remindPicksHtml({ dueDate: due.date, dueTime: due.time, wall }));
+    return;
+  }
+  for (const btn of buttons) {
+    const pick = picks.find((p) => p.key === btn.dataset.remindPick);
+    btn.setAttribute('aria-pressed', String(!!pick && pick.date === wall.date && pick.time === wall.time));
+  }
+}
+
+/** Zeile oder Felder eines Abschnitts (die Zeile gibt es nur nach einem Diktat). */
+function showSectionBody(section) {
+  setHidden(section.querySelector?.('[data-row]'), true);
+  setHidden(section.querySelector?.('.task-sheet__body'), false);
+}
+
+/**
+ * Der Fokus geht in einen eben geoeffneten Abschnitt: die Notiz bekommt ihr
+ * Textfeld (dort ist Tippen die Absicht), die anderen ihren ersten Vorschlag,
+ * sonst „Entfernen". Gesucht wird in den FELDERN - das x der kompakten Zeile
+ * steht im DOM davor und ist dann verborgen. Ein Datumsfeld zu fokussieren
+ * hiesse auf dem Telefon, die Tastatur ueber das Blatt zu legen.
+ */
+function focusIntoSection(panel, section, name) {
+  if (name === 'note') { panel.querySelector('#task-description')?.focus?.(); return; }
+  const body = section.querySelector?.('.task-sheet__body') ?? section;
+  (body.querySelector?.('[data-due-pick], [data-remind-pick]') ?? body.querySelector?.('[data-remove]'))?.focus?.();
+}
+
+/** Ein Tipp auf eine kompakte Zeile: ihre Felder klappen auf, der Fokus geht hinein. */
+function expandSheetSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  showSectionBody(section);
+  focusIntoSection(panel, section, name);
 }
 
 /** Oeffnet einen Abschnitt; sein Knopf tritt zurueck. Eine leere Erinnerung bekommt eine Vorgabe. */
@@ -2069,6 +2159,7 @@ function openSheetSection(panel, name, button = null) {
   const section = panel.querySelector(`[data-section="${name}"]`);
   if (!section) return;
   section.hidden = false;
+  showSectionBody(section);
   setHidden(button ?? panel.querySelector(`[data-reveal="${name}"]`), true);
   if (name === 'reminder') {
     const date = panel.querySelector('#task-remind-date');
@@ -2082,11 +2173,7 @@ function openSheetSection(panel, name, button = null) {
     syncRemindPicks(panel);
   }
   // Der getippte Knopf ist jetzt verborgen - der Fokus geht in den Abschnitt.
-  // Die Notiz bekommt das Textfeld (dort ist Tippen die Absicht), die anderen
-  // ihren ersten Knopf: ein Datumsfeld zu fokussieren hiesse auf dem Telefon,
-  // die Tastatur ueber das Blatt zu legen.
-  if (name === 'note') panel.querySelector('#task-description')?.focus?.();
-  else section.querySelector?.('[data-due-pick], [data-remind-pick], [data-remove]')?.focus?.();
+  focusIntoSection(panel, section, name);
 }
 
 /**
@@ -2179,6 +2266,8 @@ function wireTaskSheet(panel) {
     if (remove) { e.preventDefault(); closeSheetSection(panel, remove.dataset.remove); return; }
     const reveal = target?.closest?.('[data-reveal]');
     if (reveal) { e.preventDefault(); openSheetSection(panel, reveal.dataset.reveal, reveal); return; }
+    const expand = target?.closest?.('[data-expand]');
+    if (expand) { e.preventDefault(); expandSheetSection(panel, expand.dataset.expand); return; }
     const duePick = target?.closest?.('[data-due-pick]');
     if (duePick) { e.preventDefault(); pickDue(panel, duePick.dataset.duePick); return; }
     const addTime = target?.closest?.('[data-reveal-time]');
@@ -2428,19 +2517,14 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   // die das Blatt zeigt (Datum + HH:MM der Haushaltszone): eine Erinnerung aus
   // der alten Vorlauf-Auswahl traegt Sekunden (23:59:59), die kein Feld zeigt -
   // ein Vergleich der Zeitpunkte schoebe sie bei jedem Speichern um sie.
+  //
+  // Und weil sie keine Faelligkeit braucht, darf auch ein Mitglied mit
+  // `calendar: read` die Faelligkeit leeren: die gesperrte Erinnerung bleibt,
+  // wie sie ist (der fruehere Riegel aus Review-Runde 3 zu #1253 schuetzte eine
+  // Regel, die es nicht mehr gibt - Ruling R7).
   const canWriteReminder = reminderAccess() === 'write';
   const reminderSection = form.querySelector('[data-section="reminder"]');
   const storedRemindAt = reminderSection?.dataset?.storedAt || '';
-  // DER RIEGEL FUER `calendar: read` (Review-Runde 3 zu #1253): eine gesperrte
-  // Erinnerung haengt, und wer die Faelligkeit LEERT, mit der der Dialog
-  // aufging, wird aufgehalten. Gemessen wird der Uebergang, nicht der Zustand:
-  // eine Aufgabe, die schon ohne Faelligkeit kam, bleibt speicherbar.
-  const lockedReminderPresent = !canWriteReminder && !!storedRemindAt;
-  const dueDateWhenOpened = form.querySelector('[data-section="reminder"][data-locked-due]')?.dataset.lockedDue || '';
-  if (lockedReminderPresent && dueDateWhenOpened && !dueDate) {
-    resetSubmit(t('tasks.reminderLockedNeedsDueDate'));
-    return;
-  }
   /** null: nichts tun; 'delete': die gespeicherte entfernen; sonst der neue Zeitpunkt. */
   let reminderChange = null;
   if (canWriteReminder && reminderSection) {
@@ -6031,7 +6115,7 @@ export async function render(container, { user, signal } = {}) {
               (utils/bulk-pill.js, updateBulkActionsBar), wie in Einkauf,
               Kontakten und Vorrat - nicht mehr als eigene Leiste ueber der
               Liste (Re-Critique 2026-09-27, D5). */ ''}
-        <div class="tasks-who" id="tasks-who" role="group" aria-label="${esc(t('tasks.whoLabel'))}" hidden></div>
+        <div class="tasks-who" id="tasks-who" role="group" aria-label="${esc(t('tasks.whoSwitcherLabel'))}" hidden></div>
         <div class="sr-only" role="status" aria-live="polite" id="tasks-reorder-announce"></div>
         <div class="split-view tasks-split">
         <div id="task-list" class="split-view__list">

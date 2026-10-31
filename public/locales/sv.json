@@ -421,7 +421,6 @@
         "seriesDoneToast": "Klar - nästa gång: {{date}}",
         "seriesDoneByToast": "Gjord av {{name}} - nästa gång: {{date}}",
         "historyTickedBy": "bockad av {{name}}",
-        "reminderLockedNeedsDueDate": "Den här uppgiften har en påminnelse som du inte får ändra. Därför behövs ett slutdatum.",
         "kanbanColCollapse": "Fäll ihop kolumnen",
         "kanbanColExpand": "Fäll ut kolumnen",
         "kanbanArchiveDone": "Arkivera allt klart",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Vems uppgifter",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} vara borttagen.",

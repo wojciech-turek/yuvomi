@@ -17,5 +17,8 @@
   "tasks.sayIt": { "en": "Say it instead", "pl": "Powiedz zamiast pisać" },
   "tasks.sayAgain": { "en": "Say again", "pl": "Powiedz jeszcze raz" },
   "tasks.addTask": { "en": "Add task", "pl": "Dodaj zadanie" },
-  "tasks.reminderIncomplete": { "en": "Choose a date and a time for the reminder, or remove it.", "pl": "Wybierz datę i godzinę przypomnienia albo je usuń." }
+  "tasks.reminderIncomplete": { "en": "Choose a date and a time for the reminder, or remove it.", "pl": "Wybierz datę i godzinę przypomnienia albo je usuń." },
+  "tasks.dueShort": { "en": "Due", "pl": "Termin" },
+  "tasks.removeDue": { "en": "Remove due date", "pl": "Usuń termin" },
+  "tasks.removeNote": { "en": "Remove note", "pl": "Usuń notatkę" }
 }

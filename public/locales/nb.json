@@ -421,7 +421,6 @@
         "seriesDoneToast": "Fullført - neste gang: {{date}}",
         "seriesDoneByToast": "Fullført av {{name}} - neste gang: {{date}}",
         "historyTickedBy": "krysset av av {{name}}",
-        "reminderLockedNeedsDueDate": "Denne oppgaven har en påminnelse du ikke har tillatelse til å endre. Den trenger derfor en frist.",
         "kanbanColCollapse": "Skjul kolonne",
         "kanbanColExpand": "Vis kolonne",
         "kanbanArchiveDone": "Arkiver alle fullførte",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Hvem sine oppgaver",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} vare slettet.",

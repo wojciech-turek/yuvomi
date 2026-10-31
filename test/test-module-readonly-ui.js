@@ -813,9 +813,10 @@ const faelligeAufgabe = (over = {}) => aufgabe({
  *
  * Seit Quick-Add (2026-10-29) ist die Erinnerung eine feste Uhrzeit in einem
  * eigenen Abschnitt `[data-section="reminder"]` des Blatts. Gesucht wird der
- * Tag-ANFANG, nicht der ganze Tag: der gesperrte Abschnitt traegt
- * `data-locked-due`, und ein Helfer, der am Markup nur eine Schreibweise
- * kennt, macht jede Zusicherung darueber blind. Er endet, wo die Notiz beginnt.
+ * Tag-ANFANG, nicht der ganze Tag: der Abschnitt traegt je nach Lage
+ * `role`, `data-stored-at` oder `hidden`, und ein Helfer, der am Markup nur
+ * eine Schreibweise kennt, macht jede Zusicherung darueber blind. Er endet, wo
+ * die Notiz beginnt.
  */
 function reminderSection(html) {
   const start = html.search(/<div\b[^>]*data-section="reminder"/);
@@ -924,22 +925,19 @@ test('ohne geladene Rechte bleibt die Erinnerung bei Vollzugriff (fail-open wie 
   for (const tag of reminderControls(section)) assert.doesNotMatch(tag, /\sdisabled/);
 });
 
-test('calendar: write haengt gar kein data-locked-due an - dort gibt es nichts zu bewachen', () => {
-  withAccess({ tasks: 'write', calendar: 'write' }, () => {
-    const section = reminderSection(tasks.renderModalContent({
-      task: faelligeAufgabe(), users: [], reminder: erinnerung(),
-    }));
-    assert.doesNotMatch(section, /data-locked-due/);
-  });
-});
-
-test('das Markup nennt eine leere Faelligkeit auch leer - sonst sperrte der Riegel den Unschuldigen aus', () => {
-  withAccess({ tasks: 'write', calendar: 'read' }, () => {
-    const section = reminderSection(tasks.renderModalContent({
-      task: faelligeAufgabe({ due_date: null }), users: [], reminder: erinnerung(),
-    }));
-    assert.match(section, /data-locked-due=""/, 'kein "null" und kein "undefined" im Attribut');
-  });
+// Ruling R7 (Quick-Add): eine Erinnerung braucht keine Faelligkeit mehr - der
+// Riegel, der einem `calendar: read`-Mitglied das Leeren der Faelligkeit
+// verwehrte, ist mit seiner Regel gegangen, und mit ihm `data-locked-due`.
+test('kein Abschnitt traegt mehr die Faelligkeit fuer einen Riegel', () => {
+  for (const calendar of ['write', 'read']) {
+    withAccess({ tasks: 'write', calendar }, () => {
+      const section = reminderSection(tasks.renderModalContent({
+        task: faelligeAufgabe(), users: [], reminder: erinnerung(),
+      }));
+      assert.ok(section, `calendar: ${calendar} zeigt die Erinnerung`);
+      assert.doesNotMatch(section, /data-locked-due/);
+    });
+  }
 });
 
 // -------------------------------------------------------------------------
@@ -983,7 +981,7 @@ function attrappenDokument(taskId = '') {
  * Faehrt handleFormSubmit gegen einen Attrappen-Dialog und gibt zurueck, was an
  * den Server ging. Der Erinnerungsabschnitt steht, wie das Markup ihn baut:
  * mit Schreibrecht immer (offen oder zugeklappt), bei `read` nur mit einer
- * gespeicherten Erinnerung - dann gesperrt und mit `data-locked-due`.
+ * gespeicherten Erinnerung - dann gesperrt.
  *
  * Das globale `document` gehoert hier dem Mini-DOM aus installMiniDom(); es
  * wird nur fuer die Dauer des Aufrufs getauscht und danach zurueckgegeben,
@@ -992,11 +990,6 @@ function attrappenDokument(taskId = '') {
 async function speichernUndAufrufeSammeln({
   modules, gespeichert = true, offen = true, taskId = '7', dueDate = '2026-10-01',
   remindDate = '2026-10-01', remindTime = '01:59',
-  // Die Faelligkeit, mit der der Dialog AUFGING - im Browser traegt sie der
-  // gesperrte Abschnitt als `data-locked-due`. Standard ist derselbe Wert wie
-  // im Feld, also "unveraendert"; ein Test, der das Leerraeumen messen will,
-  // setzt `dueDate: ''` und laesst diesen stehen.
-  dueDateWhenOpened = '2026-10-01',
 }) {
   const calls = [];
   const record = (method) => async (path, body) => {
@@ -1035,7 +1028,6 @@ async function speichernUndAufrufeSammeln({
       // 2026-09-30T23:59:59 UTC ist 01:59 am 1.10. in Berlin - die Felder
       // zeigen also genau die gespeicherte Erinnerung (unberuehrt).
       ...(gespeichert ? { storedAt: '2026-09-30T23:59:59' } : {}),
-      ...(gesperrt ? { lockedDue: dueDateWhenOpened } : {}),
     },
   } : null;
   const form = attrappenFormular({
@@ -1049,7 +1041,6 @@ async function speichernUndAufrufeSammeln({
     byId: {
       '#task-visibility': { value: 'all' },
       '[data-section="reminder"]': abschnitt,
-      '[data-section="reminder"][data-locked-due]': gesperrt && abschnitt ? abschnitt : null,
       '#task-remind-date': feld(remindDate),
       '#task-remind-time': feld(remindTime),
     },
@@ -1117,19 +1108,19 @@ test('calendar: write loescht die Erinnerung, wenn der Abschnitt entfernt wurde'
   assert.match(deletes[0].path, /entity_type=task&entity_id=7/);
 });
 
-// DER RIEGEL FUER `calendar: read` (Review-Runde 3 zu #1253): eine gesperrte
-// Erinnerung haengt, und wer die Faelligkeit LEERT, mit der der Dialog
-// aufging, wird aufgehalten. Die Meldung nennt das Faelligkeitsdatum, das
-// dieser Nutzer BEDIENEN kann, nicht die Erinnerung, die er nicht bedienen
-// kann. Mit Schreibrecht braucht eine Erinnerung seit Quick-Add keine
-// Faelligkeit mehr (test:task-sheet).
-test('calendar: read darf das Faelligkeitsdatum nicht wegraeumen, solange eine Erinnerung haengt', async () => {
+// RULING R7 (Quick-Add): eine Erinnerung ist eine feste Uhrzeit und braucht
+// keine Faelligkeit mehr. Ein Mitglied mit `calendar: read` darf die
+// Faelligkeit deshalb leeren - die gesperrte Erinnerung bleibt, wie sie ist,
+// und es geht keine Anfrage an `/reminders` (das waere nur ein 403). Bis dahin
+// hielt hier ein Riegel (`tasks.reminderLockedNeedsDueDate`) das Speichern auf.
+test('calendar: read darf das Faelligkeitsdatum leeren, auch wenn eine Erinnerung haengt', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
     modules: { tasks: 'write', calendar: 'read' }, dueDate: '',
   });
-  assert.equal(error, 'tasks.reminderLockedNeedsDueDate', 'die Meldung nennt das bedienbare Feld');
-  assert.deepEqual(calls.filter((c) => c.path === '/tasks/7'), [], 'die Aufgabe geht NICHT raus');
-  assert.deepEqual(erinnerungsAufrufe(calls), [], 'und an der Erinnerung wird auch nichts versucht');
+  assert.equal(error, null, 'kein Riegel mehr');
+  const put = calls.find((c) => c.method === 'put' && c.path === '/tasks/7');
+  assert.equal(put?.body?.due_date, null, 'die Faelligkeit geht leer raus');
+  assert.deepEqual(erinnerungsAufrufe(calls), [], 'und die Erinnerung bleibt unangetastet');
 });
 
 test('calendar: read ohne haengende Erinnerung darf das Faelligkeitsdatum leeren', async () => {
@@ -1149,8 +1140,7 @@ test('calendar: read ohne haengende Erinnerung darf das Faelligkeitsdatum leeren
 test('calendar: read darf eine Aufgabe speichern, die schon OHNE Faelligkeit kam', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
     modules: { tasks: 'write', calendar: 'read' },
-    dueDate: '',
-    dueDateWhenOpened: '', // so ging der Dialog auf: fremde Erinnerung, keine Faelligkeit
+    dueDate: '', // so ging der Dialog auf: fremde Erinnerung, keine Faelligkeit
   });
   assert.equal(error, null, 'wer nichts weggeraeumt hat, wird nicht aufgehalten');
   assert.ok(calls.some((c) => c.method === 'put' && c.path === '/tasks/7'), 'die Titelaenderung geht durch');
@@ -1205,30 +1195,6 @@ test('calendar: none fragt gar nicht erst - der 403 waere die einzige Antwort', 
   const { calls, reminder } = await ladenUndAufrufeSammeln('none');
   assert.deepEqual(calls, [], 'keine Anfrage, die nur ein 403 holen kann');
   assert.equal(reminder, null);
-});
-
-// DIE NAHT ZWISCHEN DEN ZWEI HAELFTEN. Der Riegel im Speichern liest die
-// Faelligkeit, mit der der Dialog aufging, aus `data-locked-due` am Markup -
-// und die Tests darueber reichen diesen Wert als Attrappe herein. Dieser Test
-// holt ihn AUS dem erzeugten Markup und schickt ihn durch den Handler.
-// Verschwindet das Attribut oder wird es umbenannt, kommt '' heraus, der
-// Riegel schweigt und diese Zeile wird rot.
-test('das Markup traegt die Faelligkeit, die der Riegel im Speichern liest', async () => {
-  const task = faelligeAufgabe();
-  const ausDemMarkup = withAccess({ tasks: 'write', calendar: 'read' }, () => {
-    const section = reminderSection(tasks.renderModalContent({
-      task, users: [], reminder: erinnerung(),
-    }));
-    return section.match(/data-locked-due="([^"]*)"/)?.[1] ?? null;
-  });
-  assert.equal(ausDemMarkup, task.due_date, 'der gesperrte Abschnitt nennt die Faelligkeit der Aufgabe');
-
-  const { error } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' },
-    dueDate: '',
-    dueDateWhenOpened: ausDemMarkup,
-  });
-  assert.equal(error, 'tasks.reminderLockedNeedsDueDate', 'und der Handler erkennt daran das Leerraeumen');
 });
 
 // =========================================================================

@@ -421,7 +421,6 @@
         "seriesDoneToast": "Fait - prochaine fois : {{date}}",
         "seriesDoneByToast": "Fait par {{name}} - prochaine fois : {{date}}",
         "historyTickedBy": "coché par {{name}}",
-        "reminderLockedNeedsDueDate": "Cette tâche a un rappel que vous n’êtes pas autorisé à modifier. Elle a donc besoin d’une date d’échéance.",
         "kanbanColCollapse": "Réduire la colonne",
         "kanbanColExpand": "Agrandir la colonne",
         "kanbanArchiveDone": "Archiver tout ce qui est terminé",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Tâches de qui",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} article supprimé.",

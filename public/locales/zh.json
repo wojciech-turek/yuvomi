@@ -421,7 +421,6 @@
         "seriesDoneToast": "已完成 - 下次：{{date}}",
         "seriesDoneByToast": "由 {{name}} 完成 - 下次：{{date}}",
         "historyTickedBy": "由 {{name}} 勾选",
-        "reminderLockedNeedsDueDate": "此任务有一个你无法更改的提醒。因此它需要一个截止日期。",
         "kanbanColCollapse": "收起该列",
         "kanbanColExpand": "展开该列",
         "kanbanArchiveDone": "归档全部已完成",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "谁的任务",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "已删除 {{count}} 件商品。",

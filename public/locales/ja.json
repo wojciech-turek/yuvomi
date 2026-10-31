@@ -421,7 +421,6 @@
         "seriesDoneToast": "完了 - 次回: {{date}}",
         "seriesDoneByToast": "{{name}} がやりました - 次回: {{date}}",
         "historyTickedBy": "チェックしたのは {{name}}",
-        "reminderLockedNeedsDueDate": "このタスクには変更できないリマインダーが設定されています。そのため期限日が必要です。",
         "kanbanColCollapse": "列を閉じる",
         "kanbanColExpand": "列を開く",
         "kanbanArchiveDone": "完了をすべてアーカイブ",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "誰のタスク",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} 件を削除しました。",

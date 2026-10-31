@@ -421,7 +421,6 @@
         "seriesDoneToast": "Gedaan - volgende keer: {{date}}",
         "seriesDoneByToast": "Gedaan door {{name}} - volgende keer: {{date}}",
         "historyTickedBy": "afgevinkt door {{name}}",
-        "reminderLockedNeedsDueDate": "Deze taak heeft een herinnering die je niet mag wijzigen. Daarom is een einddatum nodig.",
         "kanbanColCollapse": "Kolom inklappen",
         "kanbanColExpand": "Kolom uitklappen",
         "kanbanArchiveDone": "Alles wat klaar is archiveren",
@@ -470,7 +469,11 @@
         "sayIt": "Say it instead",
         "sayAgain": "Say again",
         "addTask": "Add task",
-        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it."
+        "reminderIncomplete": "Choose a date and a time for the reminder, or remove it.",
+        "whoSwitcherLabel": "Wiens taken",
+        "dueShort": "Due",
+        "removeDue": "Remove due date",
+        "removeNote": "Remove note"
     },
     "shopping": {
         "itemsRemovedToast_one": "{{count}} artikel verwijderd.",
