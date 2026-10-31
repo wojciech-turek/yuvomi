@@ -76,7 +76,7 @@ test('budget: one member and a new entry still ask no question', () => {
 function assigneeGroup(html) {
   const at = html.indexOf('data-ms-input="task_assigned"');
   assert.ok(at > 0, 'the assignee picker is rendered');
-  const groupStart = html.lastIndexOf('<div class="form-group"', at);
+  const groupStart = html.lastIndexOf('<div class="form-group', at);
   const tag = html.slice(groupStart, html.indexOf('>', groupStart) + 1);
   return { hidden: /\shidden(\s|>)/.test(tag), ids: checkboxIds(html.slice(groupStart)) };
 }
@@ -97,17 +97,16 @@ test('tasks: a solo household keeps hiding the assignee picker when only one per
   assert.equal(assigneeGroup(tasks.renderModalContent({ task: null, users: [ANNA] })).hidden, true);
 });
 
-// Feldfolge des Aufgaben-Dialogs (Critique 2026-10-05, R16). Unter dem Titel
-// stand die Notiz samt Formatierleiste, die Faelligkeit mobil erst bei y=700
-// von 844; Wiederholung und Erinnerung standen offen unter dem Aufklapper,
-// 1455px Formular in 591px. Was eine Aufgabe ausmacht - wann, wer, wie
-// wichtig -, steht jetzt vor dem Freitext, und die beiden seltenen Abschnitte
-// liegen hinter "Weitere Einstellungen", SOLANGE sie leer sind.
+// Feldfolge des Blatts "Neue Aufgabe" (Quick-Add, 2026-10-29). Der erste
+// Blick zeigt nur Titel, Wer, die drei kleinen Knoepfe Faelligkeit /
+// Erinnerung / Notiz, "Mehr" und "Aufgabe hinzufuegen"; jeder Knopf klappt
+// sein Feld an Ort und Stelle auf. Wiederholung und Prioritaet liegen hinter
+// "Mehr" - leer oder gesetzt; was gesetzt ist, nennt die Zeile von "Mehr".
 // Der Loader stubt Aufklapper und Wiederholung auf nichts; hier zaehlt gerade,
 // WO sie stehen, also bekommen beide ein erkennbares Markup.
 function withFormLandmarks(run) {
-  globalThis.__advancedSection = (inner, { hint = '' } = {}) => (
-    `<details class="form-advanced"><span class="form-advanced__hint">${hint}</span>${inner}</details>`);
+  globalThis.__advancedSection = (inner, { label = '', hint = '' } = {}) => (
+    `<details class="form-advanced"><summary class="form-advanced__summary">${label}</summary><span class="form-advanced__hint">${hint}</span>${inner}</details>`);
   globalThis.__renderRRuleFields = (prefix) => `<select id="${prefix}-rrule-freq"></select>`;
   try { return run(); } finally {
     delete globalThis.__advancedSection;
@@ -126,38 +125,46 @@ const inAdvanced = (html, needle) => {
   assert.ok(at > 0, `${needle} fehlt im Dialog`);
   return at > start && at < end;
 };
+const sectionHidden = (html, name) => {
+  const tag = html.match(new RegExp(`<div\\b[^>]*data-section="${name}"[^>]*>`))?.[0];
+  assert.ok(tag, `the ${name} section is in the sheet`);
+  return /\shidden(\s|>|=)/.test(tag);
+};
 
-test('tasks: the dialog asks when, who and how important before the free-text note', () => {
+test('tasks: the sheet reads title, who, the three small buttons, then More', () => {
   setHouseholdSize(2);
   const html = taskDialog({ task: null, users: [ANNA, CLARA] });
-  const order = ['id="task-title"', 'id="task-due-date"', 'id="task-due-time"', 'task_assigned', 'id="task-priority"', 'id="task-description"', '<details class="form-advanced"']
+  const order = ['id="task-title"', 'task_assigned', 'data-reveal="due"', 'data-reveal="reminder"', 'data-reveal="note"', '<details class="form-advanced"']
     .map((needle) => html.indexOf(needle));
   assert.ok(order.every((at) => at > 0), 'every field is in the dialog');
-  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'title, due, assignee, priority, note, more settings');
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'title, who, due/reminder/note buttons, More');
+  for (const name of ['due', 'reminder', 'note']) assert.equal(sectionHidden(html, name), true, `${name} waits until asked for`);
+  for (const id of ['id="task-priority"', 'id="task-category"']) assert.equal(inAdvanced(html, id), true, `${id} is behind More`);
 });
 
-test('tasks: an empty recurrence and an empty reminder wait behind "more settings"', () => {
+test('tasks: repeat waits behind More, the reminder is its own section on the first glance', () => {
   setHouseholdSize(2);
   const html = taskDialog({ task: null, users: [ANNA, CLARA] });
   assert.equal(inAdvanced(html, 'id="task-rrule-freq"'), true);
-  assert.equal(inAdvanced(html, 'id="reminder-toggle"'), true);
-  assert.match(html, /form-advanced__hint">[^<]*rrule\.labelRepeat[^<]*reminders\.sectionTitle/,
-    'the hint names what moved behind the disclosure');
+  assert.equal(inAdvanced(html, 'id="task-remind-date"'), false, 'the reminder is not tucked into More');
+  assert.equal(sectionHidden(html, 'reminder'), true, 'but folded away while empty');
+  assert.match(html, /form-advanced__summary">tasks\.more</, 'More is just "More"');
 });
 
-test('tasks: a set recurrence or reminder is never hidden behind the disclosure', () => {
+test('tasks: a set recurrence is named on More, a set reminder shows open', () => {
   setHouseholdSize(2);
   const task = { id: 9, title: 'Muell', status: 'open', priority: 'none', visibility: 'all', due_date: '2026-10-09', recurrence_rule: 'FREQ=WEEKLY' };
   const series = taskDialog({ task, users: [ANNA, CLARA] });
-  assert.equal(inAdvanced(series, 'id="task-rrule-freq"'), false, 'a series shows its rule');
-  assert.equal(inAdvanced(series, 'id="reminder-toggle"'), true, 'its empty reminder still waits');
+  assert.equal(inAdvanced(series, 'id="task-rrule-freq"'), true, 'the rule sits in More');
+  assert.match(series, /form-advanced__summary">tasks\.more · [^<]*rrule\.labelRepeat/, 'and More names it');
+  assert.equal(sectionHidden(series, 'reminder'), true, 'its empty reminder still waits');
+  assert.equal(sectionHidden(series, 'due'), false, 'its due date shows');
   const reminded = taskDialog({
     task: { ...task, recurrence_rule: null }, users: [ANNA, CLARA],
     reminder: { id: 1, remind_at: '2026-10-08T09:00:00.000Z' },
   });
-  assert.equal(inAdvanced(reminded, 'id="reminder-toggle"'), false, 'a set reminder shows');
-  assert.equal(inAdvanced(reminded, 'id="task-rrule-freq"'), true);
-  assert.doesNotMatch(reminded, /form-advanced__hint">[^<]*reminders\.sectionTitle/, 'the hint only names what is behind it');
+  assert.equal(sectionHidden(reminded, 'reminder'), false, 'a set reminder shows');
+  assert.doesNotMatch(reminded, /form-advanced__summary">[^<]*rrule\.labelRepeat/, 'More names only what is set');
 });
 
 // Die Auswahl "wer hat es getan" beim Abhaken (#1205). Sie hat keinen eigenen
@@ -433,7 +440,7 @@ const { setOtherReaders } = await import('../public/utils/household.js');
 function fieldGroupHidden(html, marker) {
   const at = html.indexOf(marker);
   assert.ok(at > 0, `the field ${marker} is rendered`);
-  const groupStart = html.lastIndexOf('<div class="form-group"', at);
+  const groupStart = html.lastIndexOf('<div class="form-group', at);
   const tag = html.slice(groupStart, html.indexOf('>', groupStart) + 1);
   return /\shidden(\s|>)/.test(tag);
 }

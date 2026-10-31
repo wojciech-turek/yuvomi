@@ -390,7 +390,7 @@ test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after
   assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged \}, null\);/, 'the one form of the page, not a second one');
   const header = tasks.slice(tasks.indexOf('function openNewTaskForm('), tasks.indexOf('function wireNewTaskBtn('));
   assert.match(header, /openTaskModal\(\{ users: state\.users \}, container\);/, 'the head of Zadania opens the same modal');
-  assert.match(tasks, /onSave\(panel\) \{ wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\); \}/,
+  assert.match(tasks, /onSave\(panel\) \{[^}]*?\n\s*wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\);\n\s*\}/,
     'from outside, the caller refreshes its own surface instead of a list that is not there');
 });
 

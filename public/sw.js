@@ -376,6 +376,8 @@ const PAGE_MODULES = [
   '/utils/avatar-crop.js',
   '/utils/lucide-icons.js',
   '/utils/sortable.js',
+  // Schnellwahl des Blatts „Neue Aufgabe" - nur pages/tasks.js laedt sie.
+  '/utils/task-quick-dates.js',
   '/vendor/sortablejs/sortable.esm.min.js',
   // libphonenumber-js: lazy im Kontaktmodul, aber vorab gecacht → Telefon-
   // Formatierung funktioniert auch offline (Kernmodul). Versions-gecacht.

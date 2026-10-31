@@ -4,7 +4,8 @@
  * Deckt ab:
  *  - applyFormat: jede Aktion fuegt ein, was renderMarkdownLight auch liest
  *  - kein Platzhaltertext mehr fest im Quelltext (er landet IM Text des Nutzers)
- *  - beide Aufrufer benutzen dieselbe Datei, keiner baut eine zweite Leiste
+ *  - die Notizen benutzen die geteilte Datei und bauen keine zweite Leiste;
+ *    die Aufgaben-Notiz hat seit Quick-Add (2026-10-29) KEINE Leiste mehr
  *  - die Leiste ist eine geteilte Komponente: eigenes CSS, global eingebunden
  *  - i18n: die `markdown.*`-Sektion in allen Locales, `notes.format*` ist weg
  * Ausfuehren: node --loader ./test/test-browser-loader.mjs --test test/test-markdown-toolbar.js
@@ -144,22 +145,23 @@ test('die Platzhalter kommen aus der Uebersetzung, nicht aus dem Quelltext', asy
 // Eine Leiste, zwei Aufrufer
 // --------------------------------------------------------------------------
 
-test('Notizen und Aufgaben ziehen dieselbe Leiste aus derselben Datei', async () => {
-  for (const page of ['public/pages/notes.js', 'public/pages/tasks.js']) {
-    const src = await read(page);
-    assert.match(src, /from '\/utils\/markdown-toolbar\.js'/, `${page} muss die geteilte Leiste importieren`);
-    assert.match(src, /renderMarkdownToolbar\(\)/, `${page} muss sie rendern`);
-    assert.match(src, /wireMarkdownToolbar\(/, `${page} muss sie verdrahten`);
-    assert.ok(!/function applyFormat\s*\(/.test(src), `${page} darf keine eigene Fassung halten`);
-  }
+test('die Notizen ziehen die Leiste aus der geteilten Datei', async () => {
+  const src = await read('public/pages/notes.js');
+  assert.match(src, /from '\/utils\/markdown-toolbar\.js'/, 'notes.js muss die geteilte Leiste importieren');
+  assert.match(src, /renderMarkdownToolbar\(\)/, 'notes.js muss sie rendern');
+  assert.match(src, /wireMarkdownToolbar\(/, 'notes.js muss sie verdrahten');
+  assert.ok(!/function applyFormat\s*\(/.test(src), 'notes.js darf keine eigene Fassung halten');
 });
 
-test('die Aufgaben-Notiz traegt die Leiste ueber ihrem Textfeld', async () => {
+// Quick-Add (2026-10-29): "meine Frau weiss gar nicht, was Markdown ist". Die
+// Notiz einer Aufgabe ist ein schlichtes Textfeld - ohne Leiste, ohne Hinweis.
+// Gespeicherte Notizen rendern weiter als Markdown (Leseansicht), nur das
+// Werkzeug zum Schreiben ist weg.
+test('die Aufgaben-Notiz ist ein schlichtes Textfeld ohne Leiste und ohne Markdown-Hinweis', async () => {
   const src = await read('public/pages/tasks.js');
-  const i = src.indexOf('${renderMarkdownToolbar()}');
-  assert.ok(i > 0, 'die Leiste muss im Markup stehen');
-  const after = src.slice(i, i + 400);
-  assert.match(after, /id="task-description"/, 'sie gehoert direkt ueber das Notizfeld');
+  assert.doesNotMatch(src, /markdown-toolbar|renderMarkdownToolbar|wireMarkdownToolbar/, 'keine Leiste mehr im Aufgaben-Dialog');
+  assert.doesNotMatch(src, /descriptionMarkdownHint/, 'kein "Markdown wird unterstuetzt."');
+  assert.match(src, /<textarea class="input task-sheet__note" id="task-description"/, 'das Notizfeld steht noch');
 });
 
 test('die Leiste ist eine geteilte Komponente mit eigenem, global geladenem CSS', async () => {
@@ -167,10 +169,11 @@ test('die Leiste ist eine geteilte Komponente mit eigenem, global geladenem CSS'
   assert.match(css, /\.md-toolbar\s*\{/);
   assert.match(css, /\.md-toolbar__btn\s*\{/);
   assert.match(css, /\.md-toolbar__sep\s*\{/);
-  // Beide Textfeld-Klassen: Notizen tragen .form-input, Aufgaben .input.
-  // Nur solange die Leiste steht: verborgen (R16) behaelt das Feld seine Ecken.
+  // Das Textfeld der Notizen traegt .form-input (die Aufgaben-Notiz hat keine
+  // Leiste mehr). Nur solange die Leiste steht: verborgen (R16) behaelt das
+  // Feld seine Ecken.
   assert.match(css, /\.md-toolbar:not\(\[hidden\]\) \+ \.form-input/);
-  assert.match(css, /\.md-toolbar:not\(\[hidden\]\) \+ \.input/);
+  assert.doesNotMatch(css, /\.md-toolbar:not\(\[hidden\]\) \+ \.input/, 'die Regel fuer die Aufgaben-Notiz ist mit ihr gegangen');
 
   const html = await read('public/index.html');
   assert.match(html, /href="\/styles\/markdown-toolbar\.css"/, 'sie gehoert nicht zu einer Seite');

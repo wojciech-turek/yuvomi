@@ -1228,8 +1228,8 @@ test('R19: schmal stehen Label und Wert einer Textzeile in einer Zeile, wo die A
 // R19 (Critique 2026-10-16, Heuristik 3): "Aufgabe bearbeiten" hatte mobil vier
 // Auswege - Zurueck, x, Abbrechen, Papierkorb. Im Formular einer Leseansicht
 // ist Abbrechen jetzt der eine Rueckweg in die Leseansicht, der Kopfknopf
-// "Zurueck" faellt dann weg; und der Countdown liegt ausgeschaltet hinter
-// "Weitere Einstellungen" wie Wiederholung und Erinnerung.
+// "Zurueck" faellt dann weg; und der Countdown liegt hinter "Mehr" (seit
+// Quick-Add 2026-10-29 auch eingeschaltet - die Zeile von "Mehr" nennt ihn).
 test('R19: im Formular einer Leseansicht fuehrt Abbrechen zurueck, der Kopf traegt kein zweites Zurueck', async () => {
   const dv = await read('public/components/detail-view.js');
   const form = dv.slice(dv.indexOf('async function switchToForm('), dv.indexOf('function switchToDetail('));
@@ -1238,11 +1238,11 @@ test('R19: im Formular einer Leseansicht fuehrt Abbrechen zurueck, der Kopf trae
     'vor dem delegierten close-modal der Seite, und nur im Formular');
   assert.match(form, /label: t\('common\.back'\),\s*onClick: \(\) => switchToDetail\(panel, opts, state\),\s*hidden: Boolean\(state\.formCancel\),/,
     'mit Abbrechen im Fuss kein Kopf-Zurueck');
+  // Quick-Add (2026-10-29): der Countdown liegt immer hinter „Mehr" - die
+  // Zeile von „Mehr" nennt ihn, sobald er eingeschaltet ist (moreSummary).
   const tasks = await read('public/pages/tasks.js');
-  assert.match(tasks, /const countdownTucked = !task\?\.countdown;/);
-  assert.match(tasks, /\$\{countdownTucked \? '' : countdownHtml\}/, 'ein gesetzter Countdown bleibt im Hauptteil');
-  assert.match(tasks, /\$\{countdownTucked \? `<div class="task-form__tucked">\$\{countdownHtml\}<\/div>` : ''\}/, 'ausgeschaltet hinter dem Aufklapper');
-  assert.match(tasks, /countdown \? t\('dashboard\.countdownTitle'\) : null,/, 'und die Zeile des Aufklappers nennt ihn');
+  assert.match(tasks, /task\.countdown \? t\('tasks\.countdownDetail'\) : '',/, 'ein gesetzter Countdown steht in der Zeile von „Mehr"');
+  assert.doesNotMatch(tasks, /countdownTucked|task-form__tucked/, 'kein eigener Platz mehr im Hauptteil');
 });
 
 // R19 (Critique 2026-10-16, "Bearbeiten: mal gefuellt primaer, mal umrandet

@@ -809,46 +809,50 @@ const faelligeAufgabe = (over = {}) => aufgabe({
 });
 
 /**
- * Der Erinnerungsabschnitt aus dem echten Dialog-Markup, oder '' .
+ * Der Erinnerungsabschnitt aus dem echten Blatt-Markup, oder '' .
  *
- * Gesucht wird der Tag-ANFANG, nicht der ganze Tag: der gesperrte Abschnitt
- * traegt `data-locked-due`, und ein wortwoertliches
- * `<div class="reminder-section">` fand ihn danach nicht mehr - die Suite
- * meldete "kein Abschnitt", wo einer stand. Ein Helfer, der am Markup nur eine
- * Schreibweise kennt, macht jede Zusicherung darueber blind.
+ * Seit Quick-Add (2026-10-29) ist die Erinnerung eine feste Uhrzeit in einem
+ * eigenen Abschnitt `[data-section="reminder"]` des Blatts. Gesucht wird der
+ * Tag-ANFANG, nicht der ganze Tag: der gesperrte Abschnitt traegt
+ * `data-locked-due`, und ein Helfer, der am Markup nur eine Schreibweise
+ * kennt, macht jede Zusicherung darueber blind. Er endet, wo die Notiz beginnt.
  */
 function reminderSection(html) {
-  const start = html.search(/<div class="reminder-section"[\s>]/);
+  const start = html.search(/<div\b[^>]*data-section="reminder"/);
   if (start < 0) return '';
-  const end = html.indexOf('<div id="task-form-error"', start);
-  assert.ok(end > start, 'der Abschnitt endet vor der Fehlerzeile des Formulars');
-  return html.slice(start, end);
+  const note = html.indexOf('data-section="note"', start);
+  assert.ok(note > start, 'der Abschnitt endet vor der Notiz');
+  return html.slice(start, html.lastIndexOf('<div', note));
 }
 
 /** Jedes Bedienelement des Abschnitts, mit seinem oeffnenden Tag. */
 function reminderControls(section) {
-  return [...section.matchAll(/<(input|select|textarea)\b[^>]*>/g)].map((m) => m[0]);
+  return [...section.matchAll(/<(input|select|textarea|yuvomi-datepicker)\b[^>]*>/g)].map((m) => m[0]);
 }
 
-test('calendar: write laesst den Erinnerungsabschnitt unangetastet', () => {
+test('calendar: write laesst den Erinnerungsabschnitt bedienbar - Felder, Entfernen, Vorschlaege', () => {
   withAccess({ tasks: 'write', calendar: 'write' }, () => {
     const section = reminderSection(tasks.renderModalContent({
       task: faelligeAufgabe(), users: [], reminder: erinnerung(),
     }));
     assert.ok(section, 'der Abschnitt steht im Dialog');
-    assert.ok(reminderControls(section).length >= 4, 'Schalter, Vorlauf und die zwei eigenen Felder');
+    assert.equal(reminderControls(section).length, 2, 'Datum und Uhrzeit');
     for (const tag of reminderControls(section)) {
       assert.doesNotMatch(tag, /\sdisabled/, `kein Feld ist gesperrt: ${tag}`);
     }
+    assert.match(section, /data-remove="reminder"/, 'sie laesst sich entfernen');
+    assert.match(section, /data-remind-pick="at_due"/, 'mit Faelligkeit gibt es Vorschlaege');
     assert.doesNotMatch(section, /reminders\.readOnlyNotice/, 'kein Hinweis, wo es nichts zu erklaeren gibt');
   });
 });
 
-test('calendar: write zeigt den Abschnitt auch OHNE bestehende Erinnerung - dort wird ja angelegt', () => {
+test('calendar: write bietet die Erinnerung auch OHNE bestehende an - dort wird ja angelegt', () => {
   withAccess({ tasks: 'write', calendar: 'write' }, () => {
     for (const task of [null, faelligeAufgabe()]) {
-      const section = reminderSection(tasks.renderModalContent({ task, users: [], reminder: null }));
-      assert.ok(section, 'mit Schreibrecht ist der leere Schalter das Angebot, eine anzulegen');
+      const html = tasks.renderModalContent({ task, users: [], reminder: null });
+      const section = reminderSection(html);
+      assert.ok(section, 'mit Schreibrecht steht der (zugeklappte) Abschnitt bereit');
+      assert.match(html, /data-reveal="reminder"/, 'und der Knopf, der ihn oeffnet');
       assert.equal(reminderControls(section).filter((tag) => /\sdisabled/.test(tag)).length, 0);
     }
   });
@@ -856,18 +860,19 @@ test('calendar: write zeigt den Abschnitt auch OHNE bestehende Erinnerung - dort
 
 test('calendar: read sperrt JEDES Feld des Abschnitts und laesst die Erinnerung stehen', () => {
   withAccess({ tasks: 'write', calendar: 'read' }, () => {
-    const section = reminderSection(tasks.renderModalContent({
-      task: faelligeAufgabe(), users: [], reminder: erinnerung(),
-    }));
+    const html = tasks.renderModalContent({ task: faelligeAufgabe(), users: [], reminder: erinnerung() });
+    const section = reminderSection(html);
     assert.ok(section, 'eine bestehende Erinnerung IST Zustand und bleibt sichtbar');
-    assert.match(section, /id="reminder-toggle"[^>]*\schecked/, 'der gespeicherte Stand steht weiter da');
+    assert.doesNotMatch(section.slice(0, section.indexOf('>')), /\shidden/, 'offen, mit ihrem Wert');
     const tags = reminderControls(section);
-    assert.ok(tags.length >= 4, 'der Abschnitt bringt seine Felder mit');
+    assert.equal(tags.length, 2, 'der Abschnitt bringt seine Felder mit');
     // Die Regel, nicht die Aufzaehlung: ein spaeter dazugekommenes Feld ohne
     // `disabled` faellt hier auf, ohne dass diese Liste gepflegt werden muss.
     for (const tag of tags) {
       assert.match(tag, /\sdisabled/, `gesperrt gehoert auch: ${tag}`);
     }
+    assert.doesNotMatch(section, /data-remove=|data-remind-pick=/, 'weder Entfernen noch Vorschlaege');
+    assert.doesNotMatch(html, /data-reveal="reminder"/, 'und kein Knopf');
     assert.match(section, /reminders\.readOnlyNotice/, 'der Dialog sagt, warum');
   });
 });
@@ -875,14 +880,14 @@ test('calendar: read sperrt JEDES Feld des Abschnitts und laesst die Erinnerung 
 // Die erste Fassung dieses Riegels sperrte den Abschnitt bei `read` immer -
 // auch dort, wo es nichts zu sperren gab. Das widerspricht derselben
 // Faustregel, mit der `none` begruendet ist: gesperrt wird ZUSTAND, und ein
-// leerer Schalter ist keiner. Beide Wege dorthin stehen hier, weil sie
+// leerer Abschnitt ist keiner. Beide Wege dorthin stehen hier, weil sie
 // verschiedene Ursachen haben: im Anlege-Dialog gibt es die Aufgabe noch
 // nicht, an einer bestehenden Aufgabe hing nie eine Erinnerung.
 test('calendar: read zeigt im ANLEGE-Dialog keinen Abschnitt - eine neue Aufgabe hat keinen Zustand', () => {
   withAccess({ tasks: 'write', calendar: 'read' }, () => {
     const html = tasks.renderModalContent({ task: null, users: [], reminder: null });
-    assert.equal(reminderSection(html), '', 'kein gesperrter leerer Schalter');
-    assert.doesNotMatch(html, /id="reminder-toggle"/);
+    assert.equal(reminderSection(html), '', 'kein gesperrter leerer Abschnitt');
+    assert.doesNotMatch(html, /data-reveal="reminder"|id="task-remind-/);
     assert.doesNotMatch(html, /reminders\.readOnlyNotice/, 'auch kein Hinweis auf ein Feld, das es nicht gibt');
   });
 });
@@ -891,22 +896,20 @@ test('calendar: read zeigt an einer Aufgabe OHNE Erinnerung keinen Abschnitt', (
   withAccess({ tasks: 'write', calendar: 'read' }, () => {
     const html = tasks.renderModalContent({ task: faelligeAufgabe(), users: [], reminder: null });
     assert.equal(reminderSection(html), '', 'nichts gespeichert heisst nichts zu zeigen');
-    assert.doesNotMatch(html, /id="reminder-toggle"/);
+    assert.doesNotMatch(html, /data-reveal="reminder"|id="task-remind-/);
   });
 });
 
 test('calendar: none entfernt den Abschnitt ganz - es gibt keinen Zustand zu zeigen', () => {
   withAccess({ tasks: 'write', calendar: 'none' }, () => {
-    // BEIDE Lagen, und die zweite ist der eigentliche Test. Mit `reminder: null`
-    // allein faellt diese Zeile auch dann noch richtig aus, wenn die Bedingung
-    // zu `(none || read) && !reminder` verengt wird - nachgemessen: 51 von 51
-    // blieben gruen. Dass eine Erinnerung hier nie ankommt, liegt allein daran,
-    // dass `loadReminderForTask()` fuer `none` vorher abbiegt; das ist eine
-    // Kopplung zwischen zwei Funktionen, keine Eigenschaft dieser hier.
+    // BEIDE Lagen, und die zweite ist der eigentliche Test: dass eine
+    // Erinnerung hier nie ankommt, liegt allein daran, dass
+    // `loadReminderForTask()` fuer `none` vorher abbiegt - eine Kopplung
+    // zwischen zwei Funktionen, keine Eigenschaft des Markups.
     for (const reminder of [null, erinnerung()]) {
       const html = tasks.renderModalContent({ task: faelligeAufgabe(), users: [], reminder });
-      assert.equal(reminderSection(html), '', 'kein Schalter, der nur einen 403 verspricht');
-      assert.doesNotMatch(html, /id="reminder-toggle"/);
+      assert.equal(reminderSection(html), '', 'kein Abschnitt, der nur einen 403 verspricht');
+      assert.doesNotMatch(html, /data-reveal="reminder"|id="task-remind-/);
     }
   });
 });
@@ -917,6 +920,7 @@ test('ohne geladene Rechte bleibt die Erinnerung bei Vollzugriff (fail-open wie 
   const section = reminderSection(tasks.renderModalContent({
     task: faelligeAufgabe(), users: [], reminder: erinnerung(),
   }));
+  assert.ok(section);
   for (const tag of reminderControls(section)) assert.doesNotMatch(tag, /\sdisabled/);
 });
 
@@ -977,16 +981,17 @@ function attrappenDokument(taskId = '') {
 
 /**
  * Faehrt handleFormSubmit gegen einen Attrappen-Dialog und gibt zurueck, was an
- * den Server ging. `reminderChecked` ist der Stand des (bei `read` gesperrten)
- * Kaestchens - genau der Wert, den ein blindes Wiederholen erneut schicken
- * wuerde.
+ * den Server ging. Der Erinnerungsabschnitt steht, wie das Markup ihn baut:
+ * mit Schreibrecht immer (offen oder zugeklappt), bei `read` nur mit einer
+ * gespeicherten Erinnerung - dann gesperrt und mit `data-locked-due`.
  *
  * Das globale `document` gehoert hier dem Mini-DOM aus installMiniDom(); es
  * wird nur fuer die Dauer des Aufrufs getauscht und danach zurueckgegeben,
  * sonst stehen die Markup-Tests darueber und das Aufraeumen unten ohne da.
  */
 async function speichernUndAufrufeSammeln({
-  modules, reminderChecked, taskId = '7', dueDate = '2026-10-01',
+  modules, gespeichert = true, offen = true, taskId = '7', dueDate = '2026-10-01',
+  remindDate = '2026-10-01', remindTime = '01:59',
   // Die Faelligkeit, mit der der Dialog AUFGING - im Browser traegt sie der
   // gesperrte Abschnitt als `data-locked-due`. Standard ist derselbe Wert wie
   // im Feld, also "unveraendert"; ein Test, der das Leerraeumen messen will,
@@ -1019,11 +1024,20 @@ async function speichernUndAufrufeSammeln({
   // `installMiniDom()` setzt `window.yuvomi = {}` - ohne `showToast` wirft der
   // Handler NACH dem erfolgreichen PUT, das aeussere catch macht daraus eine
   // Fehlermeldung, und die Erinnerungs-Anfrage bleibt aus. Das saehe wie der
-  // Riegel aus und waere keiner: gemessen an
-  // "window.yuvomi.showToast is not a function" in der Fehlerzeile. Der Toast
-  // gehoert also zur Attrappe, nicht zum Befund.
+  // Riegel aus und waere keiner. Der Toast gehoert also zur Attrappe.
   const echterToast = globalThis.window.yuvomi.showToast;
   globalThis.window.yuvomi.showToast = () => {};
+  const gesperrt = modules.calendar === 'read';
+  const mitAbschnitt = !gesperrt || gespeichert;
+  const abschnitt = mitAbschnitt ? {
+    hidden: !offen,
+    dataset: {
+      // 2026-09-30T23:59:59 UTC ist 01:59 am 1.10. in Berlin - die Felder
+      // zeigen also genau die gespeicherte Erinnerung (unberuehrt).
+      ...(gespeichert ? { storedAt: '2026-09-30T23:59:59' } : {}),
+      ...(gesperrt ? { lockedDue: dueDateWhenOpened } : {}),
+    },
+  } : null;
   const form = attrappenFormular({
     title: 'Fenster putzen',
     description: '',
@@ -1032,17 +1046,12 @@ async function speichernUndAufrufeSammeln({
     start_date: '',
     due_date: dueDate,
     due_time: '',
-    points: '0',
     byId: {
-      '#reminder-toggle': { checked: reminderChecked },
-      '#reminder-offset': { value: 'offset_1d' },
       '#task-visibility': { value: 'all' },
-      // Den Abschnitt gibt es nur gesperrt und nur mit haengender Erinnerung -
-      // genau dann traegt er im Browser das Attribut (eigens gemessen, siehe
-      // die Naht-Zusicherung weiter unten).
-      '.reminder-section[data-locked-due]': reminderChecked && modules.calendar === 'read'
-        ? { dataset: { lockedDue: dueDateWhenOpened } }
-        : null,
+      '[data-section="reminder"]': abschnitt,
+      '[data-section="reminder"][data-locked-due]': gesperrt && abschnitt ? abschnitt : null,
+      '#task-remind-date': feld(remindDate),
+      '#task-remind-time': feld(remindTime),
     },
   });
   try {
@@ -1064,23 +1073,23 @@ const erinnerungsAufrufe = (calls) => calls.filter((c) => String(c.path).startsW
 
 test('calendar: read speichert die Aufgabe und laesst die Erinnerung unangetastet', async () => {
   const { calls } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' }, reminderChecked: true,
+    modules: { tasks: 'write', calendar: 'read' }, remindTime: '09:00',
   });
   assert.ok(calls.some((c) => c.method === 'put' && c.path === '/tasks/7'), 'die Aufgabe selbst geht raus');
   assert.deepEqual(erinnerungsAufrufe(calls), [], 'kein POST /reminders, das nur einen 403 holen wuerde');
 });
 
-test('calendar: read schickt auch kein DELETE, wenn das gesperrte Kaestchen leer ist', async () => {
+test('calendar: read schickt auch kein DELETE, wenn der gesperrte Abschnitt zu ist', async () => {
   const { calls } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' }, reminderChecked: false,
+    modules: { tasks: 'write', calendar: 'read' }, offen: false,
   });
   assert.ok(calls.some((c) => c.method === 'put' && c.path === '/tasks/7'));
-  assert.deepEqual(erinnerungsAufrufe(calls), [], 'nicht abgewaehlt heisst nicht geloescht');
+  assert.deepEqual(erinnerungsAufrufe(calls), [], 'nicht entfernt heisst nicht geloescht');
 });
 
-test('calendar: write schreibt die Erinnerung weiter wie bisher', async () => {
+test('calendar: write schreibt eine neue Erinnerung als feste Uhrzeit', async () => {
   const { calls } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'write' }, reminderChecked: true,
+    modules: { tasks: 'write', calendar: 'write' }, gespeichert: false, remindTime: '09:00',
   });
   const posts = erinnerungsAufrufe(calls).filter((c) => c.method === 'post');
   assert.equal(posts.length, 1, 'der Weg mit Schreibrecht bleibt offen');
@@ -1088,33 +1097,35 @@ test('calendar: write schreibt die Erinnerung weiter wie bisher', async () => {
   // Die id kommt aus dem versteckten Feld und ist ein String - so geht sie
   // auch im Browser raus; der Server nimmt sie so.
   assert.equal(posts[0].body.entity_id, '7');
-  // Der Zeitpunkt entsteht als WANDUHRZEIT (`new Date('...T23:59:59')`) und
-  // geht als UTC raus - in Europe/Berlin am 1.10. also zwei Stunden davor. Die
-  // Zone nagelt das npm-Script fest; geprueft wird hier nur, DASS der Wert
-  // unveraendert durchgeht (der Vorlauf selbst haengt an test:reminder-offset).
-  assert.equal(posts[0].body.remind_at, '2026-09-30T21:59:59');
+  // 09:00 Wanduhr in Europe/Berlin am 1.10. (Sommerzeit) ist 07:00 UTC. Die
+  // Zone nagelt das npm-Script fest (test:reminder-offset rechnet die Wege).
+  assert.equal(posts[0].body.remind_at, '2026-10-01T07:00:00');
 });
 
-test('calendar: write loescht die Erinnerung weiter, wenn der Schalter aus ist', async () => {
+test('calendar: write schickt fuer eine unberuehrte Erinnerung nichts', async () => {
+  const { calls, error } = await speichernUndAufrufeSammeln({ modules: { tasks: 'write', calendar: 'write' } });
+  assert.equal(error, null);
+  assert.deepEqual(erinnerungsAufrufe(calls), [], 'Oeffnen und Speichern laesst sie stehen');
+});
+
+test('calendar: write loescht die Erinnerung, wenn der Abschnitt entfernt wurde', async () => {
   const { calls } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'write' }, reminderChecked: false,
+    modules: { tasks: 'write', calendar: 'write' }, offen: false, remindDate: '', remindTime: '',
   });
   const deletes = erinnerungsAufrufe(calls).filter((c) => c.method === 'delete');
-  assert.equal(deletes.length, 1, 'das Abwaehlen loescht weiter');
+  assert.equal(deletes.length, 1, 'das Entfernen loescht');
   assert.match(deletes[0].path, /entity_type=task&entity_id=7/);
 });
 
-// Der Riegel uebersprang mit dem Schreibvorgang auch die VORBEDINGUNG, und die
-// gilt unabhaengig vom Schreibrecht - eine Erinnerung braucht ein
-// Faelligkeitsdatum. Mit `write` verweigert die App genau diese Kombination
-// seit immer; ohne Schreibrecht ging die Aufgabe mit `due_date: null` durch und
-// liess die Erinnerung an einer Aufgabe ohne Faelligkeit zurueck
-// (`server/routes/tasks.js` fasst die Tabelle nicht an). Die Meldung nennt
-// deshalb das Faelligkeitsdatum, das dieser Nutzer BEDIENEN kann, nicht den
-// Schalter, den er nicht bedienen kann.
+// DER RIEGEL FUER `calendar: read` (Review-Runde 3 zu #1253): eine gesperrte
+// Erinnerung haengt, und wer die Faelligkeit LEERT, mit der der Dialog
+// aufging, wird aufgehalten. Die Meldung nennt das Faelligkeitsdatum, das
+// dieser Nutzer BEDIENEN kann, nicht die Erinnerung, die er nicht bedienen
+// kann. Mit Schreibrecht braucht eine Erinnerung seit Quick-Add keine
+// Faelligkeit mehr (test:task-sheet).
 test('calendar: read darf das Faelligkeitsdatum nicht wegraeumen, solange eine Erinnerung haengt', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' }, reminderChecked: true, dueDate: '',
+    modules: { tasks: 'write', calendar: 'read' }, dueDate: '',
   });
   assert.equal(error, 'tasks.reminderLockedNeedsDueDate', 'die Meldung nennt das bedienbare Feld');
   assert.deepEqual(calls.filter((c) => c.path === '/tasks/7'), [], 'die Aufgabe geht NICHT raus');
@@ -1123,7 +1134,7 @@ test('calendar: read darf das Faelligkeitsdatum nicht wegraeumen, solange eine E
 
 test('calendar: read ohne haengende Erinnerung darf das Faelligkeitsdatum leeren', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' }, reminderChecked: false, dueDate: '',
+    modules: { tasks: 'write', calendar: 'read' }, gespeichert: false, dueDate: '',
   });
   assert.equal(error, null, 'ohne Erinnerung gibt es keine Regel zu brechen');
   assert.ok(calls.some((c) => c.method === 'put' && c.path === '/tasks/7'), 'die Aufgabe geht raus');
@@ -1133,14 +1144,11 @@ test('calendar: read ohne haengende Erinnerung darf das Faelligkeitsdatum leeren
 // Erinnerung an ihr haengt, und daran ist dieser Nutzer dann unschuldig:
 // Erinnerungen sind pro `created_by` gefuehrt (server/routes/reminders.js
 // filtert GET, Upsert und DELETE danach) und niemand erzwingt die Regel
-// tabellenuebergreifend - ein ZWEITES Mitglied raeumt das Datum weg und loescht
-// dabei nur seine eigene, nicht vorhandene Zeile. Ein Riegel auf den
-// Endzustand haette den Erstbesitzer danach aus JEDER Aenderung ausgesperrt,
-// auch aus einer Titelkorrektur, und ohne Ausweg.
+// tabellenuebergreifend. Ein Riegel auf den Endzustand haette den
+// Erstbesitzer aus JEDER Aenderung ausgesperrt, auch aus einer Titelkorrektur.
 test('calendar: read darf eine Aufgabe speichern, die schon OHNE Faelligkeit kam', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
     modules: { tasks: 'write', calendar: 'read' },
-    reminderChecked: true,
     dueDate: '',
     dueDateWhenOpened: '', // so ging der Dialog auf: fremde Erinnerung, keine Faelligkeit
   });
@@ -1151,7 +1159,7 @@ test('calendar: read darf eine Aufgabe speichern, die schon OHNE Faelligkeit kam
 
 test('calendar: read darf das Faelligkeitsdatum WECHSELN - das bricht die Regel nicht', async () => {
   const { calls, error } = await speichernUndAufrufeSammeln({
-    modules: { tasks: 'write', calendar: 'read' }, reminderChecked: true, dueDate: '2026-11-15',
+    modules: { tasks: 'write', calendar: 'read' }, dueDate: '2026-11-15',
   });
   assert.equal(error, null);
   const put = calls.find((c) => c.method === 'put' && c.path === '/tasks/7');
@@ -1161,13 +1169,9 @@ test('calendar: read darf das Faelligkeitsdatum WECHSELN - das bricht die Regel 
 
 // DIE PRAEMISSE, AUF DER DER GANZE `read`-ZWEIG STEHT: dass `GET /reminders`
 // fuer `calendar: read` durchgeht und der angezeigte Wert deshalb WIRKLICH da
-// ist und nicht geraten. Der Satz stand dreimal in Prosa und nirgends als
-// Zusicherung. Was das kostet, ist gemessen: aendert man in
-// `loadReminderForTask()` das `=== 'none'` zu `!== 'write'`, bekommt ein
-// `read`-Mitglied nie eine Erinnerung, `renderReminderSection` nimmt dann immer
-// den `(read && !reminder) -> ''`-Ausgang, und der gesamte gesperrte Abschnitt
-// ist produktiv toter Code - bei 51 von 51 gruenen Tests. Dasselbe beim
-// ersatzlosen Loeschen der Zeile (dann nur ein 403 je Dialog).
+// ist und nicht geraten. Aendert man in `loadReminderForTask()` das
+// `=== 'none'` zu `!== 'write'`, bekommt ein `read`-Mitglied nie eine
+// Erinnerung, und der gesamte gesperrte Abschnitt waere produktiv toter Code.
 async function ladenUndAufrufeSammeln(access) {
   const calls = [];
   globalThis.__apiStub = {
@@ -1205,12 +1209,10 @@ test('calendar: none fragt gar nicht erst - der 403 waere die einzige Antwort', 
 
 // DIE NAHT ZWISCHEN DEN ZWEI HAELFTEN. Der Riegel im Speichern liest die
 // Faelligkeit, mit der der Dialog aufging, aus `data-locked-due` am Markup -
-// und alle Tests darueber reichen diesen Wert als Attrappe herein. Damit
-// pruefen beide Haelften einander gegen ihre eigene Annahme: nachgemessen
-// blieben alle Tests gruen, als das Attribut im echten Markup tot gestellt
-// wurde. Dieser Test holt den Wert deshalb AUS dem erzeugten Markup und
-// schickt ihn durch den Handler. Verschwindet das Attribut oder wird es
-// umbenannt, kommt '' heraus, der Riegel schweigt und diese Zeile wird rot.
+// und die Tests darueber reichen diesen Wert als Attrappe herein. Dieser Test
+// holt ihn AUS dem erzeugten Markup und schickt ihn durch den Handler.
+// Verschwindet das Attribut oder wird es umbenannt, kommt '' heraus, der
+// Riegel schweigt und diese Zeile wird rot.
 test('das Markup traegt die Faelligkeit, die der Riegel im Speichern liest', async () => {
   const task = faelligeAufgabe();
   const ausDemMarkup = withAccess({ tasks: 'write', calendar: 'read' }, () => {
@@ -1223,7 +1225,6 @@ test('das Markup traegt die Faelligkeit, die der Riegel im Speichern liest', asy
 
   const { error } = await speichernUndAufrufeSammeln({
     modules: { tasks: 'write', calendar: 'read' },
-    reminderChecked: true,
     dueDate: '',
     dueDateWhenOpened: ausDemMarkup,
   });

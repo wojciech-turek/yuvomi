@@ -1966,13 +1966,21 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
   Frage hat Gruppen:** `popoverMenuHtml` nimmt `{ group, items }` (Ueberschrift als Name der
   Gruppe, kein Eintrag) und `{ separator: true }`; im Einkauf Abgehakt | Liste | Stammdaten |
   Loeschen.
-- **Ein Dialog fragt erst, was den Gegenstand ausmacht, dann den Freitext.** Aufgabe: Titel,
-  Faelligkeit/Uhrzeit, Zugewiesen an, Prioritaet/Kategorie, dann die Notiz. Ein LEERER
-  Abschnitt (Wiederholung, Erinnerung) liegt hinter "Weitere Einstellungen" und wird im
-  Hinweis genannt; ein gesetzter steht offen an seinem Platz. Gemessen 390x844: Faelligkeit
-  y 699 -> 304, Koerper 1455 -> 1076px, Fokusziele 33 -> 17.
+- **Ein Dialog fragt erst, was den Gegenstand ausmacht, dann den Freitext.** Aufgabe (Blatt
+  "Neue Aufgabe", Quick-Add 2026-10-29): der erste Blick ist Titel (mit Mikrofon im Feld), Wer
+  (nur Chips der Mitglieder), drei kleine Knoepfe Faelligkeit / Erinnerung / Notiz, "Mehr" und
+  "Aufgabe hinzufuegen" - ohne Scrollen auf 390x844. Jeder Knopf klappt sein Feld an Ort und
+  Stelle auf, "Entfernen" klappt es zu und leert es. Faelligkeit mit Schnellwahl (Heute, Morgen,
+  Dieses Wochenende, Datum waehlen) und "+ Uhrzeit"; die Erinnerung ist eine feste Uhrzeit.
+  Prioritaet, Kategorie, Wiederholung, Sichtbarkeit, Start, Status, Dokumente und Countdown
+  stehen hinter "Mehr". Beim Bearbeiten ist ein Abschnitt offen, sobald er einen Wert traegt;
+  "Mehr" bleibt zu und nennt Gesetztes in seiner Zeile. Keine Etiketten, keine Sperre, kein
+  Sync-Ziel, kein Markdown im Blatt (`test:task-sheet`). Der Fuss beim Anlegen ist nur
+  "Aufgabe hinzufuegen" in voller Breite (Entwurf TaskNew; geschlossen wird ueber das x und das
+  Ziehen des Blatts), beim Bearbeiten bleibt Loeschen · Abbrechen · Speichern.
 - **Die Formatierleiste ist ein Werkzeug des Felds** (`renderMarkdownToolbar` /
-  `wireMarkdownToolbar`, geteilt von Notizen und Aufgaben): `hidden`, bis das Feld den Fokus
+  `wireMarkdownToolbar`, in den Notizen; die Aufgaben-Notiz ist seit Quick-Add ein schlichtes
+  Textfeld ohne Leiste und ohne Markdown-Hinweis): `hidden`, bis das Feld den Fokus
   hat, danach bleibt sie (ein Ausblenden verschoebe das Feld unter dem Finger); EINE scrollende
   Zeile mit Rand-Fade (162 -> 58px mobil); EIN Tab-Stopp (`role="toolbar"`, wandernder
   `tabindex`, Pfeile/Pos1/Ende; Umschalt+Tab aus dem Feld fuehrt hinein).
@@ -2656,7 +2664,10 @@ nur das gerenderte Dokument sieht, ob eine Liste ueberhaupt verdrahtet ist.
   Bestandsstimme der Aufgaben und Erinnerungen.
 - **„Weitere Einstellungen" nennt, was dahinter liegt:** `advancedSection(..., { hint })` setzt
   unter die Beschriftung eine Caption-Zeile mit den Feldnamen. Ein Feld, das nur hinter dem
-  Aufklapper steht, findet sonst nur, wer schon weiss, dass es existiert.
+  Aufklapper steht, findet sonst nur, wer schon weiss, dass es existiert. Ausnahme: "Mehr" im
+  Blatt "Neue Aufgabe" traegt keinen Hinweis - der erste Blick zeigt dort ausdruecklich nur
+  seine sechs Dinge (Entscheidung des Haushalts, Quick-Add 2026-10-29); gesetzte Werte nennt
+  die Zeile trotzdem.
 
 ### Nur lesen: das Zeichen statt des Knopfs (#1252, #1265)
 Wer ein Modul nur lesen darf, sieht den ZUSTAND, aber keine Handlung. Der Server weist

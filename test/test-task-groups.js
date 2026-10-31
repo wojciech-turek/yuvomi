@@ -488,25 +488,32 @@ test('Teilaufgabe: kein modaler Prompt mehr, weder in der Leseansicht noch aus d
   assert.match(handler.slice(0, 800), /composeSubtaskFor = parentId/);
 });
 
-test('Aufgabendialog: Prioritaet und Kategorie offen im Hauptteil, der Aufklapper nennt, was dahinter liegt (A3 P1-2)', () => {
+// Quick-Add (2026-10-29): Prioritaet und Kategorie stehen hinter „Mehr" -
+// der erste Blick zeigt nur Titel, Wer, die drei kleinen Knoepfe, „Mehr" und
+// „Aufgabe hinzufuegen". Die Zeile heisst schlicht „Mehr" (kein Hinweis
+// darunter: er waere Text auf dem ersten Blick); was GESETZT ist, nennt sie.
+test('Aufgabendialog: Prioritaet und Kategorie liegen hinter „Mehr", das Gesetztes nennt', () => {
   const vorher = globalThis.__advancedSection;
   const optionen = [];
   globalThis.__advancedSection = (inner, options) => { optionen.push(options); return `<ADV>${inner}</ADV>`; };
   try {
     const html = tasks.renderModalContent({ task: null, users: [], reminder: null });
     const adv = html.indexOf('<ADV>');
+    const end = html.indexOf('</ADV>');
     assert.ok(adv > 0, 'der Aufklapper steht im Dialog');
     for (const id of ['task-priority', 'task-category']) {
       const at = html.indexOf(`id="${id}"`);
-      assert.ok(at > 0 && at < adv, `${id} steht vor dem Aufklapper, nicht dahinter`);
+      assert.ok(at > adv && at < end, `${id} steht hinter „Mehr"`);
     }
-    const hint = optionen.at(-1)?.hint ?? '';
-    assert.ok(hint.length > 0, 'ohne hint sagt "Weitere Einstellungen" nicht, was dahinter liegt');
-    for (const key of ['tasks.startDateLabel', 'tasks.statusLabel']) {
-      assert.ok(hint.includes(key), `der Hinweis nennt ${key}: ${hint}`);
-    }
-    assert.ok(!hint.includes('tasks.tagsLabel'), 'Etiketten gibt es im Dialog nicht mehr');
-    assert.ok(!hint.includes('tasks.priorityLabel'), 'was offen steht, nennt der Hinweis nicht');
+    assert.equal(optionen.at(-1)?.label, 'tasks.more', 'eine neue Aufgabe: nur „Mehr"');
+    assert.ok(!optionen.at(-1)?.hint, 'kein Hinweistext auf dem ersten Blick');
+
+    tasks.renderModalContent({
+      task: { id: 3, title: 'Steuer', status: 'open', priority: 'high', category: 'household' }, users: [], reminder: null,
+    });
+    const label = optionen.at(-1)?.label ?? '';
+    assert.ok(label.startsWith('tasks.more · '), `gesetzte Werte folgen der Beschriftung: ${label}`);
+    assert.ok(!label.includes('tasks.tagsLabel'), 'Etiketten gibt es im Dialog nicht mehr');
   } finally {
     if (vorher === undefined) delete globalThis.__advancedSection; else globalThis.__advancedSection = vorher;
   }

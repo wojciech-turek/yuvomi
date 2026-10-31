@@ -40,7 +40,7 @@ import { renderMarkdownLight } from '/utils/html.js';
 import { splitKeepingLineEndings } from '/utils/markdown-checklist.js';
 import { splitMentions, applyMention } from '/utils/mentions.js';
 import { refresh as refreshReminders } from '/reminders.js';
-import { parseRemindAtAsUtc } from '/utils/reminder-offset.js';
+import { wallTimeFromRemindAt } from '/utils/reminder-offset.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { pathAccess } from '/utils/module-access.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
@@ -841,14 +841,17 @@ function commentsNode(task, ctx) {
   return wrap;
 }
 
-/** Erinnerung im Klartext, aus dem gespeicherten Zeitpunkt. */
+/**
+ * Erinnerung im Klartext: Datum und Uhrzeit der Haushaltszone - dieselben
+ * Werte, die das Blatt beim Bearbeiten in seine Felder schreibt
+ * (wallTimeFromRemindAt), damit Ansicht und Formular nie zwei Zeiten nennen.
+ */
 function taskReminderSummary(reminders) {
   const list = Array.isArray(reminders) ? reminders : (reminders ? [reminders] : []);
   return list
     .map((r) => {
-      if (!r?.remind_at) return '';
-      const at = parseRemindAtAsUtc(r.remind_at);
-      return `${formatDate(at)} ${formatTime(at)}`.trim();
+      const wall = r?.remind_at ? wallTimeFromRemindAt(r.remind_at) : null;
+      return wall ? `${formatDate(wall.date)} ${formatTime(wall.time)}`.trim() : '';
     })
     .filter(Boolean)
     .join(', ');

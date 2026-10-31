@@ -10,14 +10,14 @@ import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurVali
 import { whenHistorySettled } from '/utils/overlay-history.js';
 import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut, expandIn, wireScrollFade } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
-import { t, getLocale, formatDate, formatTime, timeSuffix, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
-import { esc, REQUIRED_MARK } from '/utils/html.js';
+import { t, getLocale, formatDate, formatTime, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
+import { esc } from '/utils/html.js';
 import { rowActionHtml, rowMenuHtml } from '/utils/row-action.js';
-import { renderMarkdownToolbar, wireMarkdownToolbar } from '/utils/markdown-toolbar.js';
 import { refresh as refreshReminders } from '/reminders.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 import { withChosenPeople } from '/utils/people-picker.js';
-import { resolveReminderPreset, remindAtFromPreset, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
+import { remindAtFromWallTime, wallTimeFromRemindAt } from '/utils/reminder-offset.js';
+import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
@@ -312,106 +312,6 @@ function renderSwipeRow(task, innerHtml) {
       </div>
       ${innerHtml}
     </div>`;
-}
-
-// --------------------------------------------------------
-// Sync-Ziel einer neuen Aufgabe (#695)
-// --------------------------------------------------------
-
-/**
- * Das Ziel-Feld des Aufgaben-Dialogs.
- *
- * Es fehlt in zwei Faellen, und beide sind Aussagen ueber die Aufgabe, nicht
- * ueber die Oberflaeche:
- *
- * - Unteraufgaben tragen kein eigenes Ziel. Sie gehoeren zu ihrer Elternaufgabe,
- *   und als eigenstaendiges VTODO stuenden sie auf dem Server gleichrangig
- *   daneben.
- * - Eine bereits hochgeladene Aufgabe kann ihre Liste nicht mehr wechseln: einen
- *   Umzug zwischen Listen gibt es bewusst nicht. Statt eines toten Dropdowns
- *   steht dort ein Satz, der sagt, dass sie abgeglichen wird - sonst sieht die
- *   Maske aus, als haette man die Wahl vergessen.
- */
-function syncTargetFieldHtml(task) {
-  if (task?.parent_task_id) return '';
-
-  if (task?.external_source === 'caldav') {
-    return `
-      <div class="form-group">
-        <span class="label">${t('tasks.syncTargetLabel')}</span>
-        <p class="form-hint">${t('tasks.syncTargetMirrored')}</p>
-      </div>
-`;
-  }
-
-  return `
-      <div class="form-group">
-        <label class="label" for="task-sync-target">${t('tasks.syncTargetLabel')}</label>
-        <select class="input" id="task-sync-target" name="sync_target">
-          <option value="">${t('tasks.syncTargetLocal')}</option>
-        </select>
-        <small class="form-hint">${t('tasks.syncTargetHint')}</small>
-      </div>
-`;
-}
-
-/**
- * Fuellt das Ziel-Feld aus /tasks/sync-targets.
- *
- * Faellt der Aufruf aus, bleibt die einzige Option "nur lokal" stehen - das ist
- * derselbe Zustand wie ohne eingerichtete Erinnerungsliste und verliert nichts:
- * ein nicht gesetztes Ziel laesst die Aufgabe lokal, so wie bisher jede.
- *
- * Ein gespeichertes, aber nicht mehr angebotenes Ziel wird nachgetragen, damit
- * die Maske nicht "nur lokal" behauptet, waehrend die Aufgabe auf eine Liste
- * wartet. Der persoenliche Standard dagegen wird NICHT nachgetragen: er soll
- * eine neue Aufgabe nicht auf eine Liste richten, die es nicht mehr gibt.
- */
-async function wireSyncTarget(panel, task) {
-  const select = panel.querySelector('#task-sync-target');
-  if (!select) return;
-
-  let lists = [];
-  try {
-    const res = await api.get('/tasks/sync-targets');
-    lists = res.data?.caldav ?? [];
-  } catch (err) {
-    console.warn('[Tasks] Sync-Ziele nicht ladbar:', err.message);
-  }
-
-  const current = task?.target_caldav_account_id && task?.target_caldav_list_url
-    ? `caldav:${task.target_caldav_account_id}|${task.target_caldav_list_url}`
-    : '';
-
-  const byAccount = new Map();
-  for (const list of lists) {
-    if (!byAccount.has(list.accountName)) byAccount.set(list.accountName, []);
-    byAccount.get(list.accountName).push(list);
-  }
-
-  for (const [accountName, group] of byAccount) {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = accountName;
-    for (const list of group) {
-      const option = document.createElement('option');
-      option.value = `caldav:${list.accountId}|${list.listUrl}`;
-      option.textContent = list.listName || list.listUrl;
-      optgroup.appendChild(option);
-    }
-    select.appendChild(optgroup);
-  }
-
-  if (current && !Array.from(select.options).some((o) => o.value === current)) {
-    const option = document.createElement('option');
-    option.value = current;
-    option.textContent = t('tasks.syncTargetUnavailable');
-    select.appendChild(option);
-  }
-
-  const wanted = current || (task ? '' : state.defaultSyncTarget);
-  if (wanted && Array.from(select.options).some((o) => o.value === wanted)) {
-    select.value = wanted;
-  }
 }
 
 // --------------------------------------------------------
@@ -1016,266 +916,220 @@ function wireGroupToggle(container) {
   });
 }
 
-/**
- * Was hinter „Weitere Einstellungen" des Aufgabendialogs liegt, als Hinweis
- * unter dem Aufklapper (DESIGN.md: „Weitere Einstellungen nennt, was dahinter
- * liegt"; A3 P1-2). Dieselbe Bauart wie eventAdvancedTopics() im Kalender.
- */
-function taskAdvancedTopics({ privacy = true, recurrence = false, reminder = false, countdown = false } = {}) {
-  const topics = [
-    t('tasks.startDateLabel'),
-    countdown ? t('dashboard.countdownTitle') : null,
-    t('tasks.statusLabel'),
-    privacy ? t('common.visibility.label') : null,
-    t('tasks.documentsLabel'),
-    // Nur solange sie leer hinter dem Aufklapper liegen (R16) - der Hinweis
-    // nennt, was dahinter IST, nicht was dort sein koennte.
-    recurrence ? t('rrule.labelRepeat') : null,
-    reminder ? t('reminders.sectionTitle') : null,
-  ].filter(Boolean);
-  try {
-    return new Intl.ListFormat(getLocale(), { style: 'long', type: 'conjunction' }).format(topics);
-  } catch {
-    return topics.join(', ');
-  }
+// --------------------------------------------------------
+// Das Blatt „Neue Aufgabe" (Quick-Add, 2026-10-29)
+//
+// „Wenn ich das Fenster fuer eine neue Aufgabe oeffne, denke ich: uff." Der
+// erste Blick zeigt deshalb nur, was jede Aufgabe braucht: den Titel (mit
+// Mikrofon), wer sie hat, drei kleine Knoepfe - Faelligkeit, Erinnerung,
+// Notiz -, „Mehr" und „Aufgabe hinzufuegen". Jeder Knopf klappt sein Feld an
+// Ort und Stelle auf, „Entfernen" klappt es wieder zu und leert es.
+//
+// WAS GESETZT IST, STEHT OFFEN DA. Beim Bearbeiten und aus einem Entwurf
+// (Diktat) ist ein Abschnitt offen, sobald er einen Wert traegt; „Mehr" bleibt
+// zu und nennt die gesetzten Werte in seiner Zeile - dasselbe Muster wie
+// vorher „Weitere Einstellungen" (Critique 2026-08-10).
+//
+// Der Vertrag mit dem Diktat (Task 9) und den Tests: `#task-title` mit
+// `[data-action="dictate"]` im Feld, `[data-reveal]`, `[data-section]` (mit
+// `hidden`, solange leer) samt `[data-remove]`, `[data-due-pick]`,
+// `[data-reveal-time]`, `[data-remind-pick]`.
+// --------------------------------------------------------
+
+/** Lucide-Zeichen der drei kleinen Knoepfe. */
+const SHEET_ICONS = Object.freeze({ due: 'calendar', reminder: 'bell', note: 'pencil' });
+
+/** Die Schnellwahl der Faelligkeit, in der Reihenfolge des Blatts. */
+const DUE_PICKS = Object.freeze(['today', 'tomorrow', 'weekend']);
+const DUE_PICK_LABELS = Object.freeze({
+  today: 'common.today', tomorrow: 'common.tomorrow', weekend: 'tasks.dueWeekend', pick: 'tasks.duePick',
+});
+const REMIND_PICK_LABELS = Object.freeze({
+  at_due: 'tasks.remindAtDue', hour_before: 'tasks.remindHourBefore', day_before: 'tasks.remindDayBefore',
+});
+
+/** `HH:MM` aus einer gespeicherten Uhrzeit (der Server fuehrt sie mit oder ohne Sekunden). */
+function hhmm(value) {
+  const m = /^(\d{2}):(\d{2})/.exec(String(value ?? ''));
+  return m ? `${m[1]}:${m[2]}` : '';
 }
 
-function renderModalContent({ task = null, users = [], reminder = null } = {}) {
-  const isEdit = !!task;
+/**
+ * Welche Schnellwahl eine Faelligkeit ist. „Dieses Wochenende" kann am Freitag
+ * dasselbe Datum sein wie „Morgen" - dann gewinnt, was zuletzt GEWAEHLT wurde
+ * (`chosen`). Wer „Datum waehlen" getippt hat, bleibt dort, auch wenn sein
+ * Datum zufaellig morgen ist: sonst verschwaende das Feld unter dem Finger.
+ */
+function duePickOf(value, today = todayKey(), chosen = '') {
+  if (chosen === 'pick') return 'pick';
+  if (!value) return '';
+  if (chosen && dueQuickPick(chosen, today) === value) return chosen;
+  return DUE_PICKS.find((key) => dueQuickPick(key, today) === value) ?? 'pick';
+}
 
-  const selectedIds = task?.assigned_users?.map((u) => u.id) ?? (task?.assigned_to ? [task.assigned_to] : []);
-  // Wen der Zustaendigen-Picker anbietet: die Mitglieder und wer schon an der
-  // Aufgabe steht. Versteckt wird er nur, wenn darin wirklich eine Person steht.
+function sheetSectionHead(name, titleHtml, { removable = true } = {}) {
+  return `
+        <div class="task-sheet__section-head">
+          ${titleHtml}
+          ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
+        </div>`;
+}
+
+function dueSectionHtml({ dueDate, dueTime }) {
+  const pick = duePickOf(dueDate);
+  const pills = [...DUE_PICKS, 'pick'].map((key) => `
+          <button type="button" class="task-sheet__pill" data-due-pick="${key}" aria-pressed="${pick === key}">${t(DUE_PICK_LABELS[key])}</button>`).join('');
+  return `
+      <div class="task-sheet__section" data-section="due" role="group" aria-labelledby="task-due-heading"${dueDate ? '' : ' hidden'}>
+        ${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
+        <div class="task-sheet__pills">${pills}
+        </div>
+        <div class="task-sheet__when task-sheet__when--due">
+          <div class="task-sheet__field task-sheet__when-date" data-due-date-row${pick === 'pick' ? '' : ' hidden'}>
+            <label class="sr-only" for="task-due-date">${t('tasks.dueDateLabel')}</label>
+            <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
+                   value="${esc(formatDateInput(dueDate))}"></yuvomi-datepicker>
+          </div>
+          <div class="task-sheet__field task-sheet__when-time" data-due-time-row${dueTime ? '' : ' hidden'}>
+            <label class="sr-only" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
+            <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
+                   value="${esc(formatTimeInput(dueTime))}"></yuvomi-datepicker>
+          </div>
+        </div>
+        <button type="button" class="task-sheet__add-time" data-reveal-time${dueTime ? ' hidden' : ''}>${t('tasks.addTime')}</button>
+      </div>`;
+}
+
+/** Die Vorschlaege der Erinnerung, aus der Faelligkeit; gedrueckt ist der, den die Felder gerade tragen. */
+function remindPicksHtml({ dueDate = '', dueTime = '', wall = null } = {}) {
+  return reminderQuickPicks({ dueDate, dueTime }).map((p) => `
+          <button type="button" class="task-sheet__pill" data-remind-pick="${p.key}" aria-pressed="${!!wall && wall.date === p.date && wall.time === p.time}">${t(REMIND_PICK_LABELS[p.key])}</button>`).join('');
+}
+
+/**
+ * Die Erinnerung als feste Uhrzeit („Erinnere mich: Morgen · 07:30").
+ *
+ * ERINNERUNGEN GEHOEREN DEM KALENDER (reminderAccess): `write` bekommt Knopf
+ * und Felder, `read` sieht eine bestehende Erinnerung gesperrt (ohne
+ * Entfernen) und sonst nichts, `none` gar nichts. Der gespeicherte Zeitpunkt
+ * reist als `data-stored-at` mit: das Speichern vergleicht damit und schickt
+ * fuer eine unberuehrte Erinnerung nichts - auch nicht fuer eine aus der alten
+ * Vorlauf-Auswahl, deren Sekunden die Felder gar nicht zeigen.
+ */
+function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, lockedDue }) {
+  if (access === 'none' || (access === 'read' && !storedAt)) return '';
+  const locked = access === 'read';
+  const off = locked ? ' disabled' : '';
+  const attrs = [
+    storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
+    // Die Faelligkeit, mit der der Dialog aufging - der Riegel im Speichern
+    // liest sie (siehe handleFormSubmit, Review-Runde 3 zu #1253).
+    locked ? ` data-locked-due="${esc(lockedDue ?? '')}"` : '',
+    wall ? '' : ' hidden',
+  ].join('');
+  return `
+      <div class="task-sheet__section" data-section="reminder" role="group" aria-labelledby="task-remind-heading"${attrs}>
+        ${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
+        <div class="task-sheet__when">
+          <div class="task-sheet__field task-sheet__when-date">
+            <label class="sr-only" for="task-remind-date">${t('reminders.dateLabel')}</label>
+            <yuvomi-datepicker type="date" id="task-remind-date"
+                   value="${esc(formatDateInput(wall?.date ?? ''))}"${off}></yuvomi-datepicker>
+          </div>
+          <div class="task-sheet__field task-sheet__when-time">
+            <label class="sr-only" for="task-remind-time">${t('reminders.timeLabel')}</label>
+            <yuvomi-datepicker type="time" id="task-remind-time"
+                   value="${esc(formatTimeInput(wall?.time ?? ''))}"${off}></yuvomi-datepicker>
+          </div>
+        </div>
+        ${locked
+    ? `<p class="task-field-hint">${t('reminders.readOnlyNotice')}</p>`
+    : `<div class="task-sheet__pills" data-remind-picks>${remindPicksHtml({ dueDate, dueTime, wall })}
+        </div>`}
+      </div>`;
+}
+
+function revealButtonHtml(name, labelKey, open) {
+  return `<button type="button" class="task-sheet__chip" data-reveal="${name}"${open ? ' hidden' : ''}>
+          <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>${t(labelKey)}
+        </button>`;
+}
+
+/**
+ * Was hinter „Mehr" gesetzt ist, in Worten fuer seine Zeile. Leer, solange
+ * nichts abseits der Vorgabe steht - dann heisst die Zeile nur „Mehr".
+ */
+function moreSummary(task) {
+  if (!task) return [];
+  const status = STATUSES().find((s) => s.value === task.status);
+  return [
+    task.priority && task.priority !== 'none' ? (PRIORITIES().find((p) => p.value === task.priority)?.label ?? '') : '',
+    task.category && task.category !== FALLBACK_CATEGORY ? catLabel(task.category) : '',
+    task.recurrence_rule ? (describeRRule(task.recurrence_rule) || t('rrule.labelRepeat')) : '',
+    !hidesPrivacyControls('tasks') && (task.visibility ?? 'all') !== 'all' ? t(`common.visibility.${task.visibility}`) : '',
+    task.start_date ? formatDate(task.start_date) : '',
+    status && status.value !== STATUSES()[0].value ? status.label : '',
+    task.documents?.length ? task.documents.map((d) => d.name).join(', ') : '',
+    task.countdown ? t('tasks.countdownDetail') : '',
+  ].filter(Boolean);
+}
+
+/**
+ * @param {{task?: object|null, users?: object[], reminder?: object|null,
+ *          draft?: {title?: string, due_date?: string, due_time?: string,
+ *                   remind_date?: string, remind_time?: string, assigned_to?: number[]}|null}} opts
+ *        `draft` gilt nur beim Anlegen (Diktat, Task 9): was der Satz hergab,
+ *        steht schon da, und der Nutzer prueft es vor „Aufgabe hinzufuegen".
+ */
+function renderModalContent({ task = null, users = [], reminder = null, draft = null } = {}) {
+  const isEdit = !!task;
+  const d = isEdit ? null : (draft ?? null);
+
+  const selectedIds = isEdit
+    ? (task.assigned_users?.map((u) => u.id) ?? (task.assigned_to ? [task.assigned_to] : []))
+    : (Array.isArray(d?.assigned_to) ? d.assigned_to.map(Number).filter(Number.isInteger) : []);
+  // Wen die Auswahl anbietet: die Mitglieder (GET /tasks/meta/options, ohne
+  // Wandtablett, Personal und Gaeste) und wer schon an der Aufgabe steht.
   const assigneePeople = withChosenPeople(users, task?.assigned_users);
-  const visibility  = task?.visibility || 'all';
+  const visibility = task?.visibility || 'all';
+
+  const title = isEdit ? (task.title ?? '') : (d?.title ?? '');
+  const dueDate = String((isEdit ? task.due_date : d?.due_date) ?? '').slice(0, 10);
+  const dueTime = hhmm(isEdit ? task.due_time : d?.due_time);
+  const note = task?.description ?? '';
+
+  const access = reminderAccess();
+  const storedAt = reminder?.remind_at ?? '';
+  const wall = storedAt
+    ? wallTimeFromRemindAt(storedAt)
+    : (d?.remind_date && d?.remind_time ? { date: d.remind_date, time: hhmm(d.remind_time) } : null);
+  const reminderHtml = reminderSectionHtml({
+    access, wall, storedAt, dueDate, dueTime, lockedDue: task?.due_date ?? '',
+  });
 
   const selectedCat = task?.category ?? FALLBACK_CATEGORY;
   const categoryOptions = state.categories.map((c) =>
     `<option value="${esc(c.key)}" ${selectedCat === c.key ? 'selected' : ''}>${esc(catLabel(c.key))}</option>`
   ).join('');
-
   const priorityOptions = PRIORITIES().map((p) =>
     `<option value="${p.value}" ${(task?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
   ).join('');
-
-  /* WAS IN DER SEKTION STEHT, NENNT IHRE ZUSAMMENFASSUNG - dann muss sie nicht
-   * auf (Critique 2026-08-10, P1 „Enterprise-SaaS-Antireferenz").
-   *
-   * Das Formular mass 29 Labels und `scrollHeight 1410` in `clientHeight 528`,
-   * also 2,7 Bildschirme, um eine Aufgabe zu aendern - die haeufigste Handlung
-   * der App auf ihrem ueberladensten Screen. Die progressive Offenlegung war
-   * dabei nicht etwa nicht gebaut: sie war gebaut und abgeschaltet, und der
-   * Schalter war diese eine Zeile.
-   *
-   * `advancedFieldsOpen` verlangte „einen Wert abseits der Defaults", zaehlte
-   * dazu aber `category !== FALLBACK_CATEGORY`. Eine Kategorie hat fast jede
-   * Aufgabe - die Bedingung war also praktisch immer wahr, und die Sektion kam
-   * praktisch immer offen. Eine Regel, die jeden Fall zur Ausnahme erklaert,
-   * hat keine Ausnahme mehr.
-   *
-   * Der Grund hinter der Bedingung war richtig: ein gesetzter Wert darf nicht
-   * unsichtbar sein. Nur ist Aufklappen dafuer die teuerste Antwort. Das Muster
-   * fuer die billige stand schon zwei Zeilen weiter unten - bei den
-   * vorbelegten Punkten, wo der Aufklapper ZU blieb und die Zusammenfassung den
-   * Wert nannte. Es gilt jetzt fuer alle Sekundaerfelder.
-   *
-   * Die Beschreibung traegt die Zusammenfassung nicht: sie ist Freitext, und
-   * eine gekuerzte Notiz im Summary waere eine schlechtere Notiz. Sie steht
-   * deshalb OBEN beim Titel - Titel und Notiz sichtbar, alles andere hinter
-   * einem Einstieg, genau wie Apple Erinnerungen es haelt. */
-  // Der Anfangswert des Statusfelds. Ein Bestandswert ausserhalb der Liste
-  // (bis v1.86.2 stand 'archived' darin) faellt auf den ersten Status zurueck -
-  // vorher waehlte in dem Fall der Browser die erste Option, waehrend die
-  // Zusammenfassung noch den alten Wert nannte.
+  // Ein Bestandswert ausserhalb der Liste (bis v1.86.2 stand 'archived' darin)
+  // faellt auf den ersten Status zurueck.
   const statusValue = STATUSES().find((s) => s.value === task?.status)?.value ?? STATUSES()[0].value;
 
-  // Prioritaet und Kategorie stehen nicht mehr in der Zusammenfassung: sie
-  // stehen offen im Hauptteil (A3 P1-2, siehe unten).
-  const advancedSummary = [];
-  if (isEdit && task.start_date) advancedSummary.push(formatDate(task.start_date));
-  // Der Schwanz hinter dem Aufklapper ist eingezogen (Critique 2026-08-31):
-  // Status, Sync-Ziel, Sichtbarkeit und Anhaenge standen als offene
-  // Feldgruppen NACH der Sektion - dieselbe Sorte Sekundaerfeld, nur an der
-  // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
-  // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
-  // sein Anzeigename kommt asynchron aus /tasks/sync-targets.)
-  if (statusValue !== STATUSES()[0].value) {
-    advancedSummary.push(STATUSES().find((s) => s.value === statusValue).label);
-  }
-  if (!hidesPrivacyControls('tasks') && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
-  if (task?.documents?.length) advancedSummary.push(task.documents.map((d) => d.name).join(', '));
-
-  const advancedLabel = advancedSummary.length
-    ? `${t('modal.moreSettings')} · ${advancedSummary.join(' · ')}`
-    : undefined;
-  /* WIEDERHOLUNG UND ERINNERUNG LIEGEN HINTER DEM AUFKLAPPER, SOLANGE SIE LEER
-   * SIND (Critique 2026-10-05, R16). Beide standen offen unter ihm - eine
-   * Auswahl "Keine" samt Hinweis und ein ausgeschalteter Schalter, zusammen
-   * rund 200px fuer zwei Angaben, die die meisten Aufgaben nicht tragen. Ein
-   * GESETZTER Wert bleibt offen an seinem alten Platz: beim Bearbeiten darf
-   * nichts Gesetztes versteckt sein, und eine Serie in eine Zusammenfassung zu
-   * kuerzen hiesse, ihre Regel zu verschweigen. Der Abschnitt selbst entfaellt
-   * ohne Recht (`renderReminderSection` liefert dann nichts). */
   const recurrenceHtml = renderRRuleFields('task', task?.recurrence_rule, {
     allowFromCompletion: true,
     fromCompletion: !!task?.recurrence_from_completion,
-    // AUSDRUECKLICH FALSE, nicht weggelassen (#960). Eine Aufgabe ist eine
-    // Zeile mit einem Faelligkeitsdatum, das Liste, Ueberfaelligkeit und
-    // Countdown direkt lesen - sie wird nicht wie eine Kalenderserie vom
-    // Startdatum aus expandiert. Der Monatsletzten-Hinweis muss das sagen,
-    // sonst verspricht er einen Termin, den es hier nicht gibt.
+    // AUSDRUECKLICH FALSE, nicht weggelassen (#960): eine Aufgabe wird nicht
+    // wie eine Kalenderserie vom Startdatum aus expandiert.
     expandsFromStart: false,
   });
-  const reminderHtml = renderReminderSection(task, reminder);
-  const recurrenceTucked = !task?.recurrence_rule;
-  const reminderTucked = !reminder && reminderHtml !== '';
-  const advancedHint = taskAdvancedTopics({
-    countdown: !task?.countdown,
-    privacy: !hidesPrivacyControls('tasks'),
-    recurrence: recurrenceTucked,
-    reminder: reminderTucked,
-  });
 
-  // DER COUNTDOWN LIEGT HINTER DEM AUFKLAPPER, SOLANGE ER AUS IST (R19,
-  // Critique 2026-10-16: "Aufgabe bearbeiten" mobil 1027px Formular in 591px).
-  // Dieselbe Regel wie Wiederholung und Erinnerung (R16): ein GESETZTER
-  // Schalter bleibt offen an seinem Platz, beim Bearbeiten ist nichts
-  // Gesetztes versteckt. #647 stellte ihn in den Hauptteil, damit man ihn
-  // findet - das leistet jetzt die Zeile des Aufklappers, die ihn nennt.
-  const countdownTucked = !task?.countdown;
-  const countdownHtml = `
-      <!-- #647: die Haelfte, die @jamespurnama1 beschrieben hat. Fuehrerschein
-           und Luftfilter sind keine Termine, und ihre Ruecksetzung haengt an
-           einer DAUER, nicht an einem Datum - das ist genau eine wiederkehrende
-           Aufgabe „ab Erledigung" (#658), die es hier schon gibt. Der Schalter
-           haengt deshalb an der Aufgabe und nicht an einem dritten Objekt.
-           Ausgeschaltet steht er seit R19 hinter dem Aufklapper, dessen Zeile
-           ihn nennt (countdownTucked oben). -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="task-countdown" name="countdown" aria-describedby="task-countdown-hint"
-                 ${task?.countdown ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('tasks.countdownToggle')}</span>
-        </label>
-        <p class="task-field-hint" id="task-countdown-hint">${t('tasks.countdownHint')}</p>
-        <!-- DER SCHALTER SPERRT SICH SELBST, statt sich auf die Zeile darueber
-             zu verlassen. Ein Hinweis ist keine Fehlervermeidung: ohne
-             Faelligkeit war der Schalter voll bedienbar, speicherte, meldete
-             „Aufgabe erstellt." - und der Countdown erschien nie. Wer sich
-             darauf verlaesst, erfaehrt es, wenn die Frist vorbei ist. -->
-        <p class="task-field-hint field-hint--warn" id="task-countdown-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('tasks.countdownNeedsDue')}</span></p>
-      </div>`;
-
-  const advancedFieldsHtml = `
+  // „MEHR" in der Reihenfolge des Entwurfs (TaskMore): Prioritaet, Kategorie,
+  // Wiederholung, Sichtbarkeit, Startdatum, Status, Dokumente, Countdown.
+  const moreHtml = `
       <div class="modal-grid modal-grid--2">
-        <div class="form-group">
-          <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
-          <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
-                 value="${esc(formatDateInput(task?.start_date))}"></yuvomi-datepicker>
-        </div>
-      </div>
-
-      <!-- DAS FELD STAND BIS #807 NUR IM BEARBEITEN-ZWEIG. Vergessen war es
-           nicht, aber die Annahme darunter stimmte nicht: notiert wird oft
-           etwas, das laengst laeuft, und dafuer brauchte es bisher zwei
-           Schritte - anlegen, wieder oeffnen, umstellen. Die Vorauswahl bleibt
-           der erste Status, damit ein Anlegen, das das Feld nicht beruehrt,
-           sich genau wie vorher verhaelt. -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
-        <select class="input" id="task-status" name="status">
-          ${STATUSES().map((s) =>
-            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
-          ).join('')}
-        </select>
-      </div>
-${syncTargetFieldHtml(task)}
-      <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
-           beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer
-           anderen Zahl - der geladenen Nutzerliste dieses Moduls statt der
-           gezaehlten Haushaltsgroesse. Zwei Quellen fuer eine Frage laufen
-           auseinander, sobald eine von beiden einen Sonderfall bekommt
-           (Split-Gaeste zaehlen in der Nutzerliste mit, im Haushalt nicht).
-
-           UND VERBORGEN, NICHT ENTFERNT - das ist hier kein Stilfrage, sondern
-           die Regel selbst. Der Absende-Pfad liest
-           "#task-visibility?.value || 'all'" (unten): ohne den Knoten schreibt
-           JEDES Speichern im Solo-Haushalt "all" ueber den gespeicherten Wert,
-           und eine als "private" angelegte Aufgabe verliert ihre Sichtbarkeit
-           stillschweigend. Der Fehler steckte schon in der alten
-           users.length-Bedingung; die Solo-Regel sagt ausdruecklich, dass sie
-           keine Daten aendert (utils/household.js), also muss der Knoten
-           stehenbleiben. Dokumente machen es an ihrer Stelle genauso. -->
-      <div class="form-group" style="margin-top:var(--space-4)"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
-        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
-        <select class="input" id="task-visibility" name="visibility">
-          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
-          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
-          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
-        </select>
-        <p class="task-field-hint">${t('common.visibility.hint')}</p>
-        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
-        <p class="task-field-hint field-hint--warn" id="task-visibility-private-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.privateAssignedHint')}</span></p>
-      </div>
-
-
-      ${renderDocumentAttachField({
-        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
-        label: t('tasks.documentsLabel'),
-      })}
-${countdownTucked ? `<div class="task-form__tucked">${countdownHtml}</div>` : ''}
-${recurrenceTucked ? `<div class="task-form__tucked">${recurrenceHtml}</div>` : ''}
-${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`;
-
-  return `
-    <form id="task-form" novalidate>
-      <input type="hidden" id="task-id" value="${task?.id ?? ''}">
-
-      <div class="form-group">
-        <div class="form-field">
-          <label class="label" for="task-title">${t('tasks.titleLabel')}${REQUIRED_MARK}</label>
-          <input class="input" type="text" id="task-title" name="title"
-                 value="${esc(task?.title)}" placeholder="${t('tasks.titlePlaceholder')}"
-                 required autocomplete="off">
-          <div class="form-field__error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
-                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
-            </svg>
-            ${t('common.required')}
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-grid modal-grid--2">
-        <div class="form-group">
-          <label class="label" for="task-due-date">${t('tasks.dueDateLabel')}</label>
-          <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
-                 value="${esc(formatDateInput(task?.due_date))}"></yuvomi-datepicker>
-        </div>
-        <div class="form-group">
-          <label class="label" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
-          <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
-                 value="${esc(formatTimeInput(task?.due_time ?? ''))}"></yuvomi-datepicker>
-        </div>
-      </div>
-
-      <!-- „Zugewiesen an" bot einer Solo-Nutzerin eine Chip-Reihe mit ihr selbst
-           und „- Niemand -" (Critique 2026-08-10). Das Feld bleibt im DOM und
-           behaelt seinen Wert, es wird nur verborgen - der Absende-Pfad liest
-           es unveraendert (utils/household.js). -->
-      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() && assigneePeople.length <= 1 ? ' hidden' : ''}>
-        ${renderUserMultiSelect(assigneePeople, selectedIds, 'task_assigned', 'tasks.assignedLabel')}
-      </div>
-
-      ${countdownTucked ? '' : countdownHtml}
-
-      ${/* PRIORITAET UND KATEGORIE IM HAUPTTEIL, als kompakte Zeile (A3 P1-2).
-          * Die Liste ist standardmaessig nach Kategorie gruppiert; wer sie
-          * hinter „Weitere Einstellungen" nicht fand, landete unter
-          * „Sonstiges", und „Wichtig" suchte man dort gar nicht erst. */ ''}
-      <div class="modal-grid modal-grid--2 task-form__prio-cat" style="margin-top:var(--space-4)">
         <div class="form-group">
           <label class="label" for="task-priority">${t('tasks.priorityLabel')}</label>
           <select class="input" id="task-priority" name="priority">
@@ -1290,41 +1144,120 @@ ${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`
         </div>
       </div>
 
-      <!-- DIE NOTIZ STEHT NACH DEM, WAS EINE AUFGABE AUSMACHT (Critique
-           2026-10-05, R16). Sie stand direkt unter dem Titel, und mit ihrer
-           Formatierleiste lag die Faelligkeit mobil bei y=700 von 844 - wann,
-           wer und wie wichtig kamen erst nach dem Freitext. Im Hauptteil
-           bleibt sie trotzdem: eine Zusammenfassung kann Freitext nicht
-           tragen (#731), hinter den Aufklapper gehoert sie nicht. Die Leiste
-           erscheint erst mit dem Fokus im Feld (utils/markdown-toolbar.js). -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="label" for="task-description">${t('tasks.descriptionLabel')}</label>
-        ${renderMarkdownToolbar()}
-        <textarea class="input" id="task-description" name="description"
-                  rows="6" placeholder="${t('tasks.descriptionPlaceholder')}"
-                 >${esc(task?.description)}</textarea>
-        <small class="form-hint">${t('tasks.descriptionMarkdownHint')}</small>
+      ${recurrenceHtml}
+
+      <!-- VERBORGEN, NICHT ENTFERNT (Solo-Haushalt): der Absende-Pfad liest
+           "#task-visibility?.value || 'all'" - ohne den Knoten schriebe jedes
+           Speichern "all" ueber eine private Aufgabe (utils/household.js). -->
+      <div class="form-group"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
+        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
+        <select class="input" id="task-visibility" name="visibility">
+          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
+          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
+          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
+        </select>
+        <p class="task-field-hint">${t('common.visibility.hint')}</p>
+        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
+        <p class="task-field-hint field-hint--warn" id="task-visibility-private-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.privateAssignedHint')}</span></p>
       </div>
 
-      ${advancedSection(advancedFieldsHtml, { label: advancedLabel, hint: advancedHint })}
+      <div class="form-group">
+        <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
+        <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
+               value="${esc(formatDateInput(task?.start_date))}"></yuvomi-datepicker>
+      </div>
 
-      ${recurrenceTucked ? '' : recurrenceHtml}
+      <!-- Auch beim Anlegen (#807): notiert wird oft, was laengst laeuft. -->
+      <div class="form-group">
+        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
+        <select class="input" id="task-status" name="status">
+          ${STATUSES().map((s) =>
+            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
+          ).join('')}
+        </select>
+      </div>
 
-      ${reminderTucked ? '' : reminderHtml}
+      ${renderDocumentAttachField({
+        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
+        label: t('tasks.documentsLabel'),
+      })}
+
+      <!-- #647: der Countdown haengt an der Faelligkeit und sperrt sich ohne
+           sie selbst (wireCountdownGate). -->
+      <div class="form-group">
+        <label class="toggle" style="margin:0">
+          <input type="checkbox" id="task-countdown" name="countdown" aria-describedby="task-countdown-hint"
+                 ${task?.countdown ? 'checked' : ''}>
+          <span class="toggle__track"></span>
+          <span>${t('tasks.countdownToggle')}</span>
+        </label>
+        <p class="task-field-hint" id="task-countdown-hint">${t('tasks.countdownHint')}</p>
+        <p class="task-field-hint field-hint--warn" id="task-countdown-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('tasks.countdownNeedsDue')}</span></p>
+      </div>`;
+
+  const summary = moreSummary(task);
+  const moreLabel = summary.length ? `${t('tasks.more')} · ${summary.join(' · ')}` : t('tasks.more');
+  const reminderOpen = !!wall && reminderHtml !== '';
+
+  return `
+    <form id="task-form" class="task-sheet" novalidate>
+      <input type="hidden" id="task-id" value="${task?.id ?? ''}">
+
+      <div class="form-group">
+        <div class="form-field task-sheet__title">
+          <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
+          <input class="input" type="text" id="task-title" name="title"
+                 value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
+                 required autocomplete="off">
+          <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
+            <i data-lucide="mic" class="icon-lg" aria-hidden="true"></i>
+          </button>
+          <div class="form-field__error">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
+                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
+            </svg>
+            ${t('common.required')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Wer: nur die Chips der Mitglieder; keiner gewaehlt heisst niemandem
+           zugewiesen. Verborgen, nicht entfernt, wenn nur eine Person in Frage
+           kommt - der Absende-Pfad liest das Feld unveraendert. -->
+      <div class="form-group task-sheet__who"${isSoloHousehold() && assigneePeople.length <= 1 ? ' hidden' : ''}>
+        ${renderUserMultiSelect(assigneePeople, selectedIds, 'task_assigned', 'tasks.whoLabel')}
+      </div>
+${dueSectionHtml({ dueDate, dueTime })}
+${reminderHtml}
+      <div class="task-sheet__section" data-section="note"${note ? '' : ' hidden'}>
+        ${sheetSectionHead('note', `<label class="task-sheet__section-title" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
+        <textarea class="input task-sheet__note" id="task-description" name="description"
+                  rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>
+      </div>
+
+      <div class="task-sheet__reveals">
+        ${revealButtonHtml('due', 'tasks.addDue', !!dueDate)}
+        ${access === 'write' ? revealButtonHtml('reminder', 'tasks.addReminder', reminderOpen) : ''}
+        ${revealButtonHtml('note', 'tasks.addNote', !!note)}
+      </div>
+
+      ${advancedSection(moreHtml, { label: moreLabel })}
 
       <div id="task-form-error" class="form-error" role="alert" hidden></div>
 
+      ${isEdit ? `
       <div class="modal-panel__footer modal-panel__footer--plain">
-        ${isEdit ? `
           <button type="button" class="btn btn--danger-outline" data-action="delete-task"
                   data-id="${task.id}" style="margin-inline-end:auto">
             <i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>${t('common.delete')}
-          </button>` : ''}
+          </button>
         <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
-        <button type="submit" class="btn btn--primary" id="task-submit-btn">
-          ${isEdit ? t('common.save') : t('common.add')}
-        </button>
-      </div>
+        <button type="submit" class="btn btn--primary" id="task-submit-btn">${t('common.save')}</button>
+      </div>` : `
+      <div class="modal-panel__footer modal-panel__footer--plain task-sheet__footer">
+        <button type="submit" class="btn btn--primary task-sheet__submit" id="task-submit-btn">${t('tasks.addTask')}</button>
+      </div>`}
     </form>`;
 }
 
@@ -1924,7 +1857,7 @@ async function loadReminderForTask(taskId) {
   // Ohne JEDEN Kalenderzugriff antwortet `/reminders` mit 403, und das catch
   // unten macht daraus dasselbe null - nur eine Anfrage spaeter. Der Dialog
   // zeigt den Abschnitt in diesem Fall ohnehin nicht (siehe
-  // renderReminderSection), also wird hier gar nicht erst gefragt.
+  // reminderSectionHtml), also wird hier gar nicht erst gefragt.
   // `reminderAccess` steht weiter unten und ist als Funktionsdeklaration
   // gehoistet.
   if (reminderAccess() === 'none') return null;
@@ -1934,21 +1867,6 @@ async function loadReminderForTask(taskId) {
   } catch {
     return null;
   }
-}
-
-/**
- * Der Zeitpunkt einer Erinnerung als lesbarer Text in der Anzeigezone.
- *
- * `remind_at` ist naiv-UTC ohne Zonen-Suffix und darf deshalb NICHT als String
- * weitergereicht werden - `zonedFields` laese ihn dann als Wanduhrzeit und
- * zeigte in einer gesetzten Haushaltszone die falsche Stunde an. Der Umweg
- * ueber `parseRemindAtAsUtc` macht daraus erst einen Zeitpunkt.
- */
-function reminderWhenText(reminder) {
-  if (!reminder?.remind_at) return '';
-  const at = parseRemindAtAsUtc(reminder.remind_at);
-  if (Number.isNaN(at.getTime())) return '';
-  return `${formatDate(at)} ${formatTime(at)} ${timeSuffix()}`.trimEnd();
 }
 
 /**
@@ -1964,13 +1882,13 @@ function reminderWhenText(reminder) {
  *
  * Drei Zustaende, nach der Faustregel „Zustand wird gesperrt, eine reine
  * Handlung verschwindet":
- *   write → unveraendert,
+ *   write → Knopf „Erinnerung" und bedienbare Felder,
  *   read  → gesperrt. Eine bestehende Erinnerung IST Zustand und bleibt
  *           sichtbar; `GET /reminders` laesst `calendar: read` durch, der
  *           Wert steht also wirklich da und ist nicht geraten.
  *   none  → weg. Es gibt keinen Zustand zu zeigen: `GET /reminders` antwortet
  *           mit 403, `loadReminderForTask()` liefert ohnehin null, und ein
- *           leerer Schalter waere nur ein Versprechen auf einen 403.
+ *           Knopf waere nur ein Versprechen auf einen 403.
  *
  * Gemessen wird am Nav-Modul `calendar` (dieselbe Karte wie im Router), nicht
  * am Pfad - `navModuleAccess()` faellt ohne geladene Rechte auf 'write'
@@ -1978,190 +1896,6 @@ function reminderWhenText(reminder) {
  */
 function reminderAccess() {
   return navModuleAccess('calendar');
-}
-
-/**
- * DER DIALOG NENNT AUCH DEN ZUSTAND, DEN SEINE PRESETS NICHT ABBILDEN.
- *
- * Die Auswahl kennt nur Vorlaeufe, `remind_at` ist aber ein absoluter
- * Zeitpunkt. Wer die Faelligkeit VOR eine bestehende Erinnerung zieht, hat
- * keinen Vorlauf mehr, sondern einen Nachlauf - und den gab es in der Liste
- * nicht. Der Rueckfall lautete `offset_at_time`: der Dialog sagte „Zum
- * Startzeitpunkt", waehrend die Erinnerung Tage spaeter feuerte, und das
- * naechste Speichern rechnete aus dieser falschen Anzeige einen neuen
- * Zeitpunkt - die Erinnerung wanderte, ohne dass jemand sie angefasst hatte.
- *
- * Der Zustand bekommt deshalb einen eigenen Eintrag mit Warnton statt einer
- * Notluege. Er steht NUR in der Liste, wenn er gerade zutrifft (man waehlt ihn
- * nicht aus, man ist darin), bleibt danach aber im DOM, damit die Wahl
- * innerhalb des Dialogs umkehrbar ist: wer versehentlich einen Vorlauf
- * anklickt, findet den alten Zustand noch vor.
- *
- * Der gespeicherte Zeitpunkt reist im versteckten Feld mit, weil das Speichern
- * ihn braucht - es rechnet fuer diesen Eintrag NICHT, sondern reicht ihn durch.
- */
-function renderReminderSection(task = null, reminder = null) {
-  const access = reminderAccess();
-  // GESPERRT WIRD NUR, WO ES ZUSTAND GIBT. `none` hat keinen (das Lesen
-  // antwortet mit 403), aber `read` ohne Erinnerung genauso wenig: ein
-  // gesperrter leerer Schalter ist keine Auskunft, sondern eine Tuer, die nie
-  // aufgeht - im Anlege-Dialog, wo es die Aufgabe noch gar nicht gibt, und
-  // ebenso an einer Aufgabe, an der nie eine Erinnerung hing. Beide Faelle
-  // messbar in test:module-readonly-ui, beide waren in der ersten Fassung
-  // dieses Riegels da (Review-Runde 1).
-  if (access === 'none' || (access === 'read' && !reminder)) return '';
-  // Ein gesperrter Abschnitt zeigt weiter, WAS eingestellt ist, und nimmt
-  // nichts an: `disabled` an jedem Bedienelement. Der Riegel im Formular
-  // (handleFormSubmit) haengt nicht daran - `checked` liesse sich auch an einem
-  // disabled-Kaestchen ablesen -, er fragt reminderAccess() selbst.
-  //
-  // `disabled` nimmt die Felder auch aus der TAB-ORDNUNG - der gespeicherte
-  // Wert ist dann sichtbar, aber per Tastatur nicht erreichbar. Fuer Knoepfe
-  // kennt das Haus dafuer `aria-disabled` (layout.css `.btn[aria-disabled]`);
-  // ein Kontrollkaestchen kann kein `readonly` tragen, ein `aria-disabled`-
-  // Kaestchen bliebe also bedienbar und muesste im Skript zurueckgesetzt
-  // werden. Das ist der Tausch, den diese Stelle bewusst macht.
-  //
-  // Die Hinweiszeile traegt `.task-field-hint` aus tasks.css und KEINE eigene
-  // Klasse: derselbe Satz in derselben Rolle darf nicht dreimal verschieden
-  // aussehen. (Der Kalender-Dialog hatte dafuer `.cal-field-hint`; seit
-  // `.form-hint` global in layout.css steht, nimmt er diese.) Tragfaehig ist
-  // das, weil BEIDE Wege in dieses Markup
-  // tasks.css mitbringen - die Route /tasks laedt es als Seiten-Blatt, und
-  // `openTaskById()` (Dashboard, Kalender) awaitet vorher `ensureTaskStyles()`.
-  const locked = access === 'read';
-  const off = locked ? ' disabled' : '';
-  // `off` haengt auch am versteckten Transportfeld weiter unten, obwohl das
-  // nichts annimmt. Der Riegel aus #1253 prueft die REGEL („jedes Feld des
-  // Abschnitts"), nicht eine gepflegte Aufzaehlung - und genau deshalb hat er
-  // das neu dazugekommene Feld gefunden. Ihn dafuer aufzuweichen hiesse, ihn
-  // fuer das naechste Feld blind zu machen. Folgenlos ist es ohnehin: `.value`
-  // laesst sich auch gesperrt lesen, und ohne Schreibrecht wird die Erinnerung
-  // gar nicht erst gespeichert.
-  // Die Faelligkeit, MIT DER dieser Dialog geoeffnet wurde, fuers Speichern -
-  // dort entscheidet sie darueber, ob dieser Nutzer gerade ein Datum WEGRAEUMT
-  // oder ob die Aufgabe schon ohne eines kam (Review-Runde 3). Sie reist am
-  // Abschnitt mit, weil es ihn genau dann gibt, wenn eine gesperrte Erinnerung
-  // haengt - kein zusaetzlicher Modulzustand, der neben dem Dialog altern
-  // koennte.
-  const lockedDue = locked ? ` data-locked-due="${esc(task?.due_date ?? '')}"` : '';
-  const hasReminder = !!reminder;
-  const resolved = resolveReminderPreset(task, reminder);
-  const showCustom = hasReminder && resolved.preset === 'offset_custom';
-  const afterDue = hasReminder && resolved.preset === 'offset_after_due';
-  const whenText = afterDue ? reminderWhenText(reminder) : '';
-
-  return `
-    <div class="reminder-section"${lockedDue}>
-      <div class="reminder-section__header">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="reminder-toggle" ${hasReminder ? 'checked' : ''}${off}>
-          <span class="toggle__track"></span>
-          <span class="reminder-section__title">${t('reminders.enableLabel')}</span>
-        </label>
-      </div>
-      ${locked ? `<p class="task-field-hint">${t('reminders.readOnlyNotice')}</p>` : ''}
-      <div id="reminder-fields" class="reminder-fields" ${hasReminder ? '' : 'style="display:none"'}>
-        <div class="form-group" style="margin:0">
-          <label class="label" for="reminder-offset">${t('reminders.offsetLabel')}</label>
-          <select class="input" id="reminder-offset"${off}>
-            <option value="offset_none">${t('reminders.offsetNone')}</option>
-            ${afterDue ? `<option value="offset_after_due" selected>${t('reminders.offsetAfterDue')}</option>` : ''}
-            <option value="offset_at_time" ${resolved.preset === 'offset_at_time' ? 'selected' : ''}>${t('reminders.offsetAtTime')}</option>
-            <option value="offset_15m" ${resolved.preset === 'offset_15m' ? 'selected' : ''}>${t('reminders.offset15min')}</option>
-            <option value="offset_1h" ${resolved.preset === 'offset_1h' ? 'selected' : ''}>${t('reminders.offset1hour')}</option>
-            <option value="offset_1d" ${resolved.preset === 'offset_1d' ? 'selected' : ''}>${t('reminders.offset1day')}</option>
-            <option value="offset_2d" ${resolved.preset === 'offset_2d' ? 'selected' : ''}>${t('reminders.offset2days')}</option>
-            <option value="offset_1w" ${resolved.preset === 'offset_1w' ? 'selected' : ''}>${t('reminders.offset1week')}</option>
-            <option value="offset_2w" ${resolved.preset === 'offset_2w' ? 'selected' : ''}>${t('reminders.offset2weeks')}</option>
-            <option value="offset_custom" ${resolved.preset === 'offset_custom' ? 'selected' : ''}>${t('reminders.offsetCustom')}</option>
-          </select>
-          <p class="task-field-hint field-hint--warn" id="reminder-after-due-warning" role="status" ${afterDue ? '' : 'hidden'}><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('reminders.afterDueHint', { when: esc(whenText) })}</span></p>
-          <input type="hidden" id="reminder-stored-at" value="${esc(reminder?.remind_at ?? '')}"${off}>
-        </div>
-        <div class="modal-grid modal-grid--2" id="reminder-custom-fields" style="${showCustom ? '' : 'display:none'};margin-top:var(--space-3)">
-          <div class="form-group" style="margin:0">
-            <label class="label" for="reminder-custom-amount">${t('reminders.customAmountLabel')}</label>
-            <input class="input" type="number" min="1" step="1" id="reminder-custom-amount" value="${resolved.amount}"${off}>
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="label" for="reminder-custom-unit">${t('reminders.customUnitLabel')}</label>
-            <select class="input" id="reminder-custom-unit"${off}>
-              <option value="minutes" ${resolved.unit === 'minutes' ? 'selected' : ''}>${t('reminders.customMinutes')}</option>
-              <option value="hours" ${resolved.unit === 'hours' ? 'selected' : ''}>${t('reminders.customHours')}</option>
-              <option value="days" ${resolved.unit === 'days' ? 'selected' : ''}>${t('reminders.customDays')}</option>
-              <option value="weeks" ${resolved.unit === 'weeks' ? 'selected' : ''}>${t('reminders.customWeeks')}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-/**
- * Das Preset, das die Auswahl nach einer Aenderung der Faelligkeit zeigen muss.
- *
- * DER ZUSTAND KANN SICH IM DIALOG HEILEN, und dann darf die Beschriftung nicht
- * stehenbleiben. „Nach der Faelligkeit" ist keine Eigenschaft der Erinnerung,
- * sondern das VERHAELTNIS zweier Zeitpunkte - schiebt jemand die Faelligkeit
- * nach hinten (der naheliegende Weg, das Problem zu beheben), liegt die
- * Erinnerung wieder davor, und der Dialog behauptete sonst weiter einen
- * Nachlauf. Das waere derselbe Fehler, den dieser Abschnitt beseitigen soll,
- * nur in die andere Richtung.
- *
- * Neu aufgeloest wird NUR, solange die Auswahl noch auf `offset_after_due`
- * steht. Wer selbst einen Vorlauf gewaehlt hat, hat entschieden; ihm die Wahl
- * beim naechsten Tastendruck im Datumsfeld umzustellen, waere Bevormundung.
- *
- * ES IST DIE GANZE AUFLOESUNG, NICHT NUR DAS PRESET. Ein geheilter Zustand
- * landet fast immer auf `offset_custom` - ein Datum ohne Uhrzeit faellt auf
- * 23:59:59, und der Abstand dorthin trifft selten einen runden Vorlauf. Nur die
- * Auswahl umzustellen, hiesse die Felder darunter auf ihrem Render-Stand stehen
- * zu lassen: die Auswahl saegte „Benutzerdefiniert", darunter staenden 1 Tag,
- * und das Speichern verschoebe die Erinnerung doch - derselbe Schaden, in einem
- * neuen Gewand. Das Heilen macht deshalb genau das, was das Oeffnen tut.
- *
- * @param {string} currentValue aktueller Wert der Auswahl
- * @returns {{preset: string, amount: string, unit: string}|null} die neue
- *          Auffuellung, oder null wenn nichts umzustellen ist
- */
-function afterDueResolution(currentValue, { dueDate = '', dueTime = null, storedRemindAt = null } = {}) {
-  if (currentValue !== 'offset_after_due') return null;
-  if (!dueDate || !storedRemindAt) return null;
-  const resolved = resolveReminderPreset(
-    { due_date: dueDate, due_time: dueTime },
-    { remind_at: storedRemindAt },
-  );
-  return resolved.preset === 'offset_after_due' ? null : resolved;
-}
-
-/**
- * Der Zeitpunkt, den der ausgefuellte Erinnerungs-Abschnitt ergibt.
- *
- * DIE NAHT ZWISCHEN MARKUP UND SPEICHERN, und sie steht bewusst als eigene
- * Funktion da: welche Felder `renderReminderSection` schreibt und welche das
- * Speichern liest, war vorher nur im Quelltext behauptet und an keiner Stelle
- * messbar. Ein Test kann hier das ECHTE Markup vorne hineingeben und den
- * Zeitpunkt hinten herausnehmen.
- *
- * Gerechnet wird in `remindAtFromPreset` - hier steht nur, was hineingeht. Der
- * Zustand „liegt nach der Faelligkeit" hat keinen Vorlauf, aus dem sich etwas
- * rechnen liesse; er reicht den gespeicherten Zeitpunkt durch und laesst die
- * Erinnerung damit stehen, wo sie steht.
- *
- * @returns {string|null} naiv-UTC `remind_at`, oder null bei „keine" bzw. einer
- *          unbrauchbaren Eingabe
- */
-function reminderRemindAtFromForm(form, { dueDate, dueTime = null } = {}) {
-  const preset = form.querySelector('#reminder-offset')?.value || 'offset_none';
-  if (preset === 'offset_none') return null;
-  return remindAtFromPreset(preset, {
-    dueDate,
-    dueTime,
-    amount: form.querySelector('#reminder-custom-amount')?.value,
-    unit: form.querySelector('#reminder-custom-unit')?.value || 'days',
-    storedRemindAt: form.querySelector('#reminder-stored-at')?.value || null,
-  });
 }
 
 // --------------------------------------------------------
@@ -2252,80 +1986,212 @@ function wireCountdownGate(panel) {
 }
 
 /**
- * Haelt Auswahl und Warnton am ZUSTAND, nicht am Ladezeitpunkt.
- *
- * Zwei Wege fuehren hierher: wer die Auswahl verlaesst, hat das Problem
- * entschieden und soll den Warnton nicht mehr sehen (wer zurueckgeht, wieder);
- * und wer die Faelligkeit verschiebt, aendert das Verhaeltnis, aus dem der
- * Zustand ueberhaupt entsteht. Beide enden in derselben Regel, damit sie nicht
- * auseinanderlaufen koennen.
+ * @param {{task?: object|null, users?: object[], reminder?: object|null,
+ *          onChanged?: (() => (void|Promise<void>))|null, draft?: object|null,
+ *          spoken?: boolean}} opts
+ *        `draft` fuellt ein neues Blatt vor (siehe renderModalContent).
+ *        `spoken`: das Blatt kommt aus einem Diktat und traegt im Kopf
+ *        „Noch einmal sagen" (`data-action="dictate"`, verdrahtet in Task 9).
  */
-function syncReminderAfterDue(panel) {
-  const offset = panel.querySelector('#reminder-offset');
-  const warn   = panel.querySelector('#reminder-after-due-warning');
-  if (!offset) return;
-  // EIN GESPERRTER ABSCHNITT WIRD AUCH HIER NICHT ANGEFASST. Das
-  // Faelligkeitsdatum gehoert dem Aufgaben-Modul und ist mit `calendar: read`
-  // bedienbar, die Erinnerung daneben nicht - ein Feld, das sich unter der Hand
-  // aendert, obwohl es gesperrt ist, behauptete einen gespeicherten Zustand,
-  // den es nicht gibt (das Speichern fasst die Erinnerung ohne Schreibrecht
-  // gar nicht an). Gelesen wird der Riegel, den `renderReminderSection` schon
-  // gesetzt hat, statt die Rechtefrage ein zweites Mal zu stellen.
-  if (offset.disabled) return;
-  const next = afterDueResolution(offset.value, {
-    dueDate: parseDateInput(panel.querySelector('#task-due-date')?.value || ''),
-    dueTime: parseTimeInput(panel.querySelector('#task-due-time')?.value || '') || null,
-    storedRemindAt: panel.querySelector('#reminder-stored-at')?.value || null,
-  });
-  // Nur schreiben, wenn die Auswahl den Eintrag auch fuehrt - sonst faende der
-  // Browser ihn nicht und setzte die Auswahl stillschweigend auf den ersten:
-  // aus „1 Tag vorher" wuerde „Keine", und das Speichern loeschte die
-  // Erinnerung.
-  if (next && [...offset.options].some((o) => o.value === next.preset)) {
-    offset.value = next.preset;
-    const amount = panel.querySelector('#reminder-custom-amount');
-    const unit   = panel.querySelector('#reminder-custom-unit');
-    const custom = panel.querySelector('#reminder-custom-fields');
-    if (amount) amount.value = next.amount;
-    if (unit) unit.value = next.unit;
-    // Ein programmatisch gesetzter Wert loest KEIN `change` aus, der Listener
-    // daneben blendet die Felder also nicht ein. Hier steht es deshalb selbst.
-    if (custom) custom.style.display = next.preset === 'offset_custom' ? '' : 'none';
-  }
-  if (warn) warn.hidden = offset.value !== 'offset_after_due';
-}
-
-/**
- * Die Faelligkeit aendert das Verhaeltnis, aus dem „nach der Faelligkeit"
- * entsteht - beide Felder werden gehoert, `change` wie `input`, aus demselben
- * Grund wie bei `wireCountdownGate`: sonst haengt die Anzeige je nach
- * Bedienweg (Kalenderblatt vs. Tastatur) hinterher.
- */
-function wireReminderAfterDue(panel) {
-  for (const sel of ['#task-due-date', '#task-due-time']) {
-    const field = panel.querySelector(sel);
-    if (!field) continue;
-    field.addEventListener('change', () => syncReminderAfterDue(panel));
-    field.addEventListener('input', () => syncReminderAfterDue(panel));
-  }
-}
-
-function openTaskModal({ task = null, users = [], reminder = null, onChanged = null } = {}, container) {
+function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false } = {}, container) {
   // Der letzte Riegel vor dem Formular - hinter FAB, Kopfknopf und
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
   const isEdit = !!task;
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
-    content: renderModalContent({ task, users, reminder }),
+    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft }),
     size: 'lg',
+    // Ein Kopfknopf, der vorerst nichts tut: das Diktat haengt sich ueber
+    // `data-action="dictate"` an (Task 9). `type="button"` liefert openModal.
+    headerAction: spoken && !isEdit ? { id: 'task-say-again', label: t('tasks.sayAgain') } : null,
     // Eine neue Aufgabe startet weiterhin mit dem Fokus im Titelfeld - hier ist
     // Tippen die Absicht.
     // `onChanged` nur von aussen (openNewTaskFrom): dann frischt der Aufrufer
     // seine Flaeche auf, statt dass diese Seite eine Liste nachlaedt, die
     // gar nicht steht.
-    onSave(panel) { wireTaskForm(panel, onChanged ? { task, container, onChanged } : { task, container }); },
+    onSave(panel) {
+      if (spoken && !isEdit) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+      wireTaskForm(panel, onChanged ? { task, container, onChanged } : { task, container });
+    },
   });
+}
+
+// --------------------------------------------------------
+// Das Blatt: aufklappen, entfernen, Schnellwahl
+//
+// Delegiert am Formular, damit dieselbe Verdrahtung im Modal und in der
+// Detailansicht (Bearbeiten) greift. Programmatisch gesetzte Werte am
+// `yuvomi-datepicker` feuern nichts - wer davon abhaengt (Countdown-Riegel,
+// Erinnerungs-Vorschlaege), bekommt sein `change` ausdruecklich.
+// --------------------------------------------------------
+
+const fireChange = (el) => el?.dispatchEvent?.(new Event('change', { bubbles: true }));
+
+/** Die Faelligkeit, wie das Blatt sie gerade traegt (kanonisch ISO aus dem Datepicker). */
+function sheetDue(panel) {
+  return {
+    date: panel.querySelector('#task-due-date')?.value || '',
+    time: hhmm(panel.querySelector('#task-due-time')?.value),
+  };
+}
+
+function setHidden(el, hidden) {
+  if (el) el.hidden = hidden;
+}
+
+/** Gedrueckte Schnellwahl und Datumsfeld der Faelligkeit nach ihrem Wert; danach die Erinnerungs-Vorschlaege. */
+function syncDueSection(panel) {
+  const section = panel.querySelector('[data-section="due"]');
+  const pick = duePickOf(sheetDue(panel).date, todayKey(), section?.dataset?.pick ?? '');
+  for (const btn of panel.querySelectorAll('[data-due-pick]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.duePick === pick));
+  }
+  if (pick) setHidden(panel.querySelector('[data-due-date-row]'), pick !== 'pick');
+  syncRemindPicks(panel);
+}
+
+/** Die Vorschlaege der Erinnerung folgen der Faelligkeit (ohne sie: keine). */
+function syncRemindPicks(panel) {
+  const host = panel.querySelector('[data-remind-picks]');
+  if (!host) return;
+  const due = sheetDue(panel);
+  const wall = {
+    date: panel.querySelector('#task-remind-date')?.value || '',
+    time: hhmm(panel.querySelector('#task-remind-time')?.value),
+  };
+  host.replaceChildren();
+  host.insertAdjacentHTML('beforeend', remindPicksHtml({ dueDate: due.date, dueTime: due.time, wall }));
+}
+
+/** Oeffnet einen Abschnitt; sein Knopf tritt zurueck. Eine leere Erinnerung bekommt eine Vorgabe. */
+function openSheetSection(panel, name, button = null) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = false;
+  setHidden(button ?? panel.querySelector(`[data-reveal="${name}"]`), true);
+  if (name === 'reminder') {
+    const date = panel.querySelector('#task-remind-date');
+    const time = panel.querySelector('#task-remind-time');
+    if (date && time && !date.value && !time.value) {
+      const due = sheetDue(panel);
+      const fallback = defaultReminder({ dueDate: due.date, dueTime: due.time, now: new Date() });
+      date.value = fallback.date;
+      time.value = fallback.time;
+    }
+    syncRemindPicks(panel);
+  }
+  // Der getippte Knopf ist jetzt verborgen - der Fokus geht in den Abschnitt.
+  // Die Notiz bekommt das Textfeld (dort ist Tippen die Absicht), die anderen
+  // ihren ersten Knopf: ein Datumsfeld zu fokussieren hiesse auf dem Telefon,
+  // die Tastatur ueber das Blatt zu legen.
+  if (name === 'note') panel.querySelector('#task-description')?.focus?.();
+  else section.querySelector?.('[data-due-pick], [data-remind-pick], [data-remove]')?.focus?.();
+}
+
+/**
+ * „Entfernen": klappt den Abschnitt zu UND leert ihn - ein zugeklappter
+ * Abschnitt mit Wert waere ein versteckt gesetzter Wert. Die Faelligkeit meldet
+ * ihr Leeren, damit der Countdown-Riegel und die Erinnerungs-Vorschlaege
+ * nachziehen. Der Fokus geht an den Knopf, der den Abschnitt wieder oeffnet.
+ */
+function closeSheetSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = true;
+  const button = panel.querySelector(`[data-reveal="${name}"]`);
+  setHidden(button, false);
+  if (name === 'due') {
+    if (section.dataset) delete section.dataset.pick;
+    const date = panel.querySelector('#task-due-date');
+    const time = panel.querySelector('#task-due-time');
+    if (time) time.value = '';
+    setHidden(panel.querySelector('[data-due-time-row]'), true);
+    setHidden(panel.querySelector('[data-reveal-time]'), false);
+    if (date) {
+      date.value = '';
+      fireChange(date);
+    }
+    fireChange(time);
+  } else if (name === 'reminder') {
+    for (const sel of ['#task-remind-date', '#task-remind-time']) {
+      const field = panel.querySelector(sel);
+      if (field) field.value = '';
+    }
+  } else if (name === 'note') {
+    const note = panel.querySelector('#task-description');
+    if (note) note.value = '';
+  }
+  button?.focus?.();
+}
+
+/** Eine Schnellwahl der Faelligkeit; „Datum waehlen" zeigt das Feld und oeffnet seinen Kalender. */
+function pickDue(panel, key) {
+  const section = panel.querySelector('[data-section="due"]');
+  const date = panel.querySelector('#task-due-date');
+  if (!date) return;
+  if (key === 'pick') {
+    if (section?.dataset) section.dataset.pick = 'pick';
+    const row = panel.querySelector('[data-due-date-row]');
+    setHidden(row, false);
+    syncDueSection(panel);
+    // Der Kalender-Ausloeser des Datepickers (sein Knopf mit `aria-haspopup`;
+    // die Klasse gehoert dem Bauteil und seinem Blatt, nicht dieser Seite).
+    const trigger = row?.querySelector?.('[aria-haspopup="dialog"]');
+    if (trigger) trigger.click(); else date.focus?.();
+    return;
+  }
+  const value = dueQuickPick(key, todayKey());
+  if (!value) return;
+  if (section?.dataset) section.dataset.pick = key;
+  date.value = value;
+  fireChange(date);
+}
+
+/** „+ Uhrzeit": das Zeitfeld erscheint, sein Auswahlblatt geht auf. */
+function revealDueTime(panel, button) {
+  const row = panel.querySelector('[data-due-time-row]');
+  if (!row) return;
+  row.hidden = false;
+  setHidden(button, true);
+  const trigger = row.querySelector?.('[aria-haspopup="dialog"]');
+  if (trigger) trigger.click(); else panel.querySelector('#task-due-time')?.focus?.();
+}
+
+/** Ein Erinnerungs-Vorschlag schreibt Datum und Uhrzeit - feste Werte, die danach nicht mitwandern. */
+function pickReminder(panel, key) {
+  const due = sheetDue(panel);
+  const pick = reminderQuickPicks({ dueDate: due.date, dueTime: due.time }).find((p) => p.key === key);
+  const date = panel.querySelector('#task-remind-date');
+  const time = panel.querySelector('#task-remind-time');
+  if (!pick || !date || !time) return;
+  date.value = pick.date;
+  time.value = pick.time;
+  syncRemindPicks(panel);
+}
+
+function wireTaskSheet(panel) {
+  const form = panel.querySelector('#task-form');
+  if (!form) return;
+  form.addEventListener('click', (e) => {
+    const target = e.target;
+    const remove = target?.closest?.('[data-remove]');
+    if (remove) { e.preventDefault(); closeSheetSection(panel, remove.dataset.remove); return; }
+    const reveal = target?.closest?.('[data-reveal]');
+    if (reveal) { e.preventDefault(); openSheetSection(panel, reveal.dataset.reveal, reveal); return; }
+    const duePick = target?.closest?.('[data-due-pick]');
+    if (duePick) { e.preventDefault(); pickDue(panel, duePick.dataset.duePick); return; }
+    const addTime = target?.closest?.('[data-reveal-time]');
+    if (addTime) { e.preventDefault(); revealDueTime(panel, addTime); return; }
+    const remindPick = target?.closest?.('[data-remind-pick]');
+    if (remindPick) { e.preventDefault(); pickReminder(panel, remindPick.dataset.remindPick); }
+  });
+  for (const sel of ['#task-due-date', '#task-due-time']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncDueSection(panel));
+  }
+  for (const sel of ['#task-remind-date', '#task-remind-time']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncRemindPicks(panel));
+  }
 }
 
 /**
@@ -2367,11 +2233,8 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     task?.created_by ?? state.currentUserId);
   wireCountdownGate(panel);
 
-  // Formatierungsleiste ueber der Notiz (#731). Die Leseansicht rendert sie
-  // seit v2.7.0 als Markdown, geschrieben werden musste sie aber von Hand -
-  // dieselbe Leiste, die die Notizen seit jeher haben, dieselbe Datei.
-  const description = panel.querySelector('#task-description');
-  if (description) wireMarkdownToolbar(panel, description);
+  // Aufklappen, Entfernen und Schnellwahl des Blatts.
+  wireTaskSheet(panel);
 
   // Verknüpfte Dokumente: hochladen oder ein abgelegtes wählen (#503, #733).
   // Die Vorbelegung steckt bereits im Markup (task.documents aus GET /tasks/:id),
@@ -2405,31 +2268,9 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     },
   });
 
-  // Sync-Ziel nachladen (#695). Ohne await: die Liste kommt aus dem Netz, und
-  // bis sie da ist, steht "nur lokal" - das ist der richtige Zwischenzustand.
-  wireSyncTarget(panel, task);
-
   // Blur-Validierung für required-Felder aktivieren
   wireBlurValidation(panel);
 
-  // Reminder-Toggle: Felder ein-/ausblenden
-  const toggle = panel.querySelector('#reminder-toggle');
-  const fields = panel.querySelector('#reminder-fields');
-  const offset = panel.querySelector('#reminder-offset');
-  const customFields = panel.querySelector('#reminder-custom-fields');
-  // `fields?.` statt `fields.`: die beiden Suchen sind unabhaengig, und seit
-  // der Abschnitt ganz fehlen kann (renderReminderSection gibt '' zurueck),
-  // haengt die Sicherheit dieser Zeile sonst allein daran, dass `toggle` im
-  // SELBEN Fall null ist und der Listener nie haengt. Das ist wahr, aber keine
-  // Zusicherung, die diese Stelle selbst traegt.
-  toggle?.addEventListener('change', () => {
-    if (fields) fields.style.display = toggle.checked ? '' : 'none';
-  });
-  offset?.addEventListener('change', () => {
-    if (customFields) customFields.style.display = offset.value === 'offset_custom' ? '' : 'none';
-    syncReminderAfterDue(panel);
-  });
-  wireReminderAfterDue(panel);
   // Form-Events
   panel.querySelector('#task-form')
     ?.addEventListener('submit', (e) => handleFormSubmit(e, { container, onChanged }));
@@ -2525,14 +2366,13 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   submitBtn.disabled = true;
   submitBtn.textContent = t('common.saving');
 
-  const originalLabel = taskId ? t('common.save') : t('common.add');
+  const originalLabel = taskId ? t('common.save') : t('tasks.addTask');
 
   const startDateRaw = form.start_date?.value || '';
   const startDate = parseDateInput(startDateRaw);
   const dueDateRaw = form.due_date?.value || '';
   const dueDate = parseDateInput(dueDateRaw);
   const rrule = getRRuleValues(document, 'task');
-  const reminderToggle = form.querySelector('#reminder-toggle');
   if ((startDateRaw && !isDateInputValid(startDateRaw)) || !isDateInputValid(dueDateRaw) || !rrule.valid_until) {
     errorEl.textContent = t('calendar.invalidDate');
     errorEl.hidden = false;
@@ -2543,7 +2383,7 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
 
   const body = {
     title:           form.title.value.trim(),
-    description:     form.description.value.trim() || null,
+    description:     form.description?.value.trim() || null,
     priority:        form.priority.value,
     category:        form.category.value,
     start_date:      startDate || null,
@@ -2557,11 +2397,12 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     // Weder `tags` noch `locked`: PUT laesst Fehlendes am Server stehen, ein
     // Bearbeiten nimmt der Aufgabe also keine bestehenden Etiketten.
   };
-  // Das Feld fehlt bei Unteraufgaben und bei bereits gespiegelten Aufgaben - in
-  // beiden Fällen soll gar kein Ziel mitgeschickt werden, sonst nähme der Server
-  // das Fehlen als "auf lokal zurücksetzen" (#695).
-  const syncTargetField = form.querySelector('#task-sync-target');
-  if (syncTargetField) body.sync_target = syncTargetField.value;
+  // DAS SYNC-ZIEL HAT KEIN FELD MEHR (Quick-Add, 2026-10-29: iCloud-Erinnerungen
+  // lassen sich ueber CalDAV nicht abgleichen, siehe TODO.md). Eine NEUE Aufgabe
+  // geht weiter auf die persoenliche Vorgabe (`tasks_default_target`), wenn eine
+  // gesetzt ist; ein Bearbeiten schickt nichts - der Server nimmt das Fehlen als
+  // "unveraendert", und eine Aufgabe zieht nie zwischen Listen um (#695).
+  if (!taskId && state.defaultSyncTarget) body.sync_target = state.defaultSyncTarget;
   const dueTimeRaw = form.due_time?.value || '';
   const dueTime = parseTimeInput(dueTimeRaw);
   const resetSubmit = (msg) => {
@@ -2574,61 +2415,45 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   body.due_time = dueTime || null;
   if (form.status) body.status = form.status.value;
 
-  // Erinnerungs-Vorbedingungen VOR dem Speichern prüfen — verhindert den
-  // widersprüchlichen Zustand "Aufgabe gespeichert (Erfolgs-Toast) + roter
-  // Fehler", wenn Reminder ohne Fälligkeit/Offset gesetzt wird (Critique P2).
+  // DIE ERINNERUNG IST EINE FESTE UHRZEIT (Quick-Add, 2026-10-29). Sie braucht
+  // keine Faelligkeit mehr, und eine verschobene Faelligkeit nimmt sie nicht
+  // mit. Entschieden wird VOR dem Speichern der Aufgabe - sonst stuende
+  // "Aufgabe gespeichert" neben einem roten Fehler (Critique P2).
   //
-  // OHNE SCHREIBRECHT AUF DEN KALENDER FAELLT DIESER TEIL GANZ WEG (siehe
-  // reminderAccess). Der Abschnitt steht dann gesperrt im Dialog, und was
-  // darin steht, ist der GESPEICHERTE Stand - ihn erneut zu schicken hiesse,
-  // einen unveraenderten Wert gegen einen 403 zu senden. Der Riegel sitzt VOR
-  // der Vorbedingungspruefung, nicht erst vor dem Schreiben: sonst blockierte
-  // ein geleertes Faelligkeitsdatum das Speichern mit einer Meldung ueber ein
-  // Feld, das dieser Nutzer gar nicht bedienen kann.
+  // OHNE SCHREIBRECHT AUF DEN KALENDER WIRD SIE NIE ANGEFASST (reminderAccess):
+  // der Abschnitt steht dann gesperrt da, und was darin steht, ist der
+  // GESPEICHERTE Stand - ihn zu schicken hiesse, einen 403 abzuholen.
+  //
+  // EINE UNBERUEHRTE ERINNERUNG SCHICKT NICHTS. Verglichen wird auf der Ebene,
+  // die das Blatt zeigt (Datum + HH:MM der Haushaltszone): eine Erinnerung aus
+  // der alten Vorlauf-Auswahl traegt Sekunden (23:59:59), die kein Feld zeigt -
+  // ein Vergleich der Zeitpunkte schoebe sie bei jedem Speichern um sie.
   const canWriteReminder = reminderAccess() === 'write';
-  const wantsReminder = canWriteReminder && !!reminderToggle?.checked;
-  // DIE EINE VORBEDINGUNG, DIE AUCH OHNE SCHREIBRECHT GILT: eine Erinnerung
-  // braucht ein Faelligkeitsdatum. Die Regel ist nicht neu - mit Schreibrecht
-  // verweigert die Zeile darunter genau diese Kombination -, aber der Riegel
-  // oben machte sie fuer `calendar: read` brechbar: das Datum gehoert dem
-  // Aufgaben-Modul, ist also bedienbar, und wer es leerraeumt, liess bis
-  // Review-Runde 2 eine Erinnerung an einer Aufgabe OHNE Faelligkeit zurueck
-  // (`server/routes/tasks.js` fasst die Tabelle nicht an). Nachgemessen: die
-  // Aufgabe ging mit `due_date: null` durch, ohne Meldung.
-  //
-  // Der harte Block von vorher kommt damit NICHT zurueck. Er nannte den
-  // Erinnerungs-Schalter, den dieser Nutzer nicht bedienen kann; diese Meldung
-  // nennt das Faelligkeitsdatum, das er bedienen kann, und sagt dazu, warum es
-  // gebraucht wird. Ein Datums-WECHSEL bleibt erlaubt - er bricht die Regel
-  // nicht, sondern verschiebt nur den angezeigten Vorlauf. Der eigene Faden,
-  // auf den diese Zeile verwies, ist inzwischen eingeloest: ein negativer
-  // Versatz heisst jetzt `offset_after_due` und wird benannt statt verschwiegen
-  // (siehe renderReminderSection). Fuer diesen Nutzer aendert das nichts - der
-  // Abschnitt ist gesperrt, und gesperrt bleibt er auch beim Datumswechsel.
-  //
-  // GEMESSEN WIRD DER UEBERGANG, NICHT DER ZUSTAND (Review-Runde 3). Eine
-  // Aufgabe kann schon OHNE Faelligkeit ankommen, waehrend eine gesperrte
-  // Erinnerung an ihr haengt, und daran ist dieser Nutzer dann unschuldig:
-  // Erinnerungen sind pro `created_by` gefuehrt (`server/routes/reminders.js`
-  // filtert GET, Upsert und DELETE danach), niemand erzwingt die Regel
-  // tabellenuebergreifend, also raeumt ein ZWEITES Mitglied das Datum weg und
-  // loescht dabei nur seine eigene - nicht vorhandene - Zeile. Ein Riegel auf
-  // den Endzustand haette den Erstbesitzer danach aus der Aufgabe ausgesperrt,
-  // bei JEDER Aenderung, auch einer Titelkorrektur, und ohne Ausweg: den
-  // Schalter, der die Meldung verursacht, kann er nicht bedienen.
-  const lockedReminderPresent = !canWriteReminder && !!reminderToggle?.checked;
-  const dueDateWhenOpened = form.querySelector('.reminder-section[data-locked-due]')?.dataset.lockedDue || '';
+  const reminderSection = form.querySelector('[data-section="reminder"]');
+  const storedRemindAt = reminderSection?.dataset?.storedAt || '';
+  // DER RIEGEL FUER `calendar: read` (Review-Runde 3 zu #1253): eine gesperrte
+  // Erinnerung haengt, und wer die Faelligkeit LEERT, mit der der Dialog
+  // aufging, wird aufgehalten. Gemessen wird der Uebergang, nicht der Zustand:
+  // eine Aufgabe, die schon ohne Faelligkeit kam, bleibt speicherbar.
+  const lockedReminderPresent = !canWriteReminder && !!storedRemindAt;
+  const dueDateWhenOpened = form.querySelector('[data-section="reminder"][data-locked-due]')?.dataset.lockedDue || '';
   if (lockedReminderPresent && dueDateWhenOpened && !dueDate) {
     resetSubmit(t('tasks.reminderLockedNeedsDueDate'));
     return;
   }
-  let remindAt = null;
-  if (wantsReminder) {
-    if (!dueDate) { resetSubmit(t('tasks.reminderNeedsDueDate')); return; }
-    const offsetPreset = form.querySelector('#reminder-offset')?.value || 'offset_none';
-    if (offsetPreset === 'offset_none') { resetSubmit(t('tasks.reminderNeedsDueDate')); return; }
-    remindAt = reminderRemindAtFromForm(form, { dueDate, dueTime: body.due_time });
-    if (!remindAt) { resetSubmit(t('common.invalidInput')); return; }
+  /** null: nichts tun; 'delete': die gespeicherte entfernen; sonst der neue Zeitpunkt. */
+  let reminderChange = null;
+  if (canWriteReminder && reminderSection) {
+    if (!reminderSection.hidden) {
+      const remindDate = parseDateInput(form.querySelector('#task-remind-date')?.value || '');
+      const remindTime = parseTimeInput(form.querySelector('#task-remind-time')?.value || '');
+      const remindAt = remindAtFromWallTime(remindDate, remindTime);
+      if (!remindAt) { resetSubmit(t('tasks.reminderIncomplete')); return; }
+      const stored = storedRemindAt ? wallTimeFromRemindAt(storedRemindAt) : null;
+      if (!stored || stored.date !== remindDate || stored.time !== remindTime) reminderChange = remindAt;
+    } else if (storedRemindAt) {
+      reminderChange = 'delete';
+    }
   }
 
   // Wartende Uploads VOR dem Speichern der Aufgabe (#733): scheitert der
@@ -2664,22 +2489,18 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
       window.yuvomi.showToast(t('tasks.createdToast'), 'success');
     }
 
-    // Erinnerung speichern oder löschen (Vorbedingungen bereits oben geprüft).
-    // `canWriteReminder` gilt auch für den Löschzweig: das stumme catch dort
-    // fängt einen 403 zwar weg, aber der Aufruf wäre eine Löschanfrage für eine
-    // Erinnerung, die dieser Nutzer nicht anfassen darf - und an einer
-    // unveränderten Aufgabe hat er sie auch nicht abgewählt.
+    // Erinnerung speichern oder löschen - entschieden oben, nur mit
+    // Schreibrecht auf den Kalender und nur, wenn sich etwas geaendert hat.
+    // Geloescht wird nur, was gespeichert WAR und jetzt entfernt ist.
     if (savedTaskId) {
-      if (canWriteReminder) {
-        if (wantsReminder) {
-          await api.post('/reminders', { entity_type: 'task', entity_id: savedTaskId, remind_at: remindAt });
+      if (reminderChange === 'delete') {
+        try {
+          await api.delete(`/reminders?entity_type=task&entity_id=${savedTaskId}`);
           refreshReminders();
-        } else {
-          try {
-            await api.delete(`/reminders?entity_type=task&entity_id=${savedTaskId}`);
-            refreshReminders();
-          } catch { /* kein Reminder vorhanden - ignorieren */ }
-        }
+        } catch { /* schon weg - ignorieren */ }
+      } else if (reminderChange) {
+        await api.post('/reminders', { entity_type: 'task', entity_id: savedTaskId, remind_at: reminderChange });
+        refreshReminders();
       }
 
       // Dokument-Verknüpfungen als Replace-Set übernehmen (#503).
@@ -6346,7 +6167,7 @@ export const __test = {
   // muss so viele Spalten legen, wie diese Liste fuehrt, und genau dort ist es
   // einmal auseinandergelaufen. `toggleKanbanCol` kommt mit, damit der
   // eingeklappte Zustand gesetzt werden kann, ohne in den Speicher zu greifen.
-  kanbanBoardHtml, KANBAN_COLS, toggleKanbanCol, taskAdvancedTopics,
+  kanbanBoardHtml, KANBAN_COLS, toggleKanbanCol,
   // Mobil blaettert das Brett (R9 M2): die Punkte ueber den Spalten und ihr
   // Tipp, der zur Spalte fuehrt.
   kanbanPagerHtml, wireKanbanPager,
@@ -6373,15 +6194,9 @@ export const __test = {
   // beim Lesen uebergangen.
   restoreAssignedToMe, persistAssignedToMe,
   // Der Aufgaben-Dialog als Markup: welche Felder er zeigt und wen er anbietet.
-  renderModalContent,
-  // Der Erinnerungs-Abschnitt einzeln, weil er einen Zustand zu BENENNEN hat,
-  // den seine Auswahlliste nicht abbildet: eine Erinnerung nach der
-  // Faelligkeit. Was der Abschnitt dabei sagt, ist der halbe Fix - die andere
-  // Haelfte ist, dass das Speichern daraus nicht rechnet.
-  renderReminderSection, reminderRemindAtFromForm, afterDueResolution,
-  // Die Verdrahtung steht mit hier: die Regel allein zu messen hiesse, den
-  // haeufigsten Ausfall auszulassen - einen Listener, den niemand anhaengt.
-  syncReminderAfterDue, wireReminderAfterDue,
+  // Dazu das Oeffnen (Entwurf, "Noch einmal sagen") und die Verdrahtung des
+  // Blatts - aufklappen, entfernen, Schnellwahl (test:task-sheet).
+  renderModalContent, openTaskModal, wireTaskSheet,
   // Der Countdown-Riegel und WANN er sich erklaert (Critique 2026-09-26: die
   // Warnung stand auf jedem leeren Formular).
   wireCountdownGate,

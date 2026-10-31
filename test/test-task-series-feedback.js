@@ -287,7 +287,7 @@ async function saveInEditForm({ status, response, taskId = '7' }) {
   const form = { querySelector: () => null };
   const fields = {
     title: 'Blumen giessen', description: '', priority: 'none', category: 'household',
-    start_date: '', due_date: THIS_YEAR, due_time: '', points: '0',
+    start_date: '', due_date: THIS_YEAR, due_time: '',
   };
   for (const [name, value] of Object.entries(fields)) form[name] = feld(value);
   // Unteraufgaben und neue Aufgaben haben kein Status-Feld.

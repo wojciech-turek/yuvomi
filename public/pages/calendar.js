@@ -7696,8 +7696,8 @@ function reminderLeadMinutes(anchorMs, remindAt) {
  *
  * EIN VORLAUF KANN NEGATIV SEIN, und dann beschreibt ihn kein Preset. Unter
  * einer Minute bleibt es in BEIDE Richtungen bei „Zum Startzeitpunkt" - sonst
- * hinge an ein paar Sekunden Rundung eine Warnung (dieselbe Grenze wie
- * `resolveReminderPreset`). Die Custom-Felder eines Nachlaufs stehen auf dem
+ * hinge an ein paar Sekunden Rundung eine Warnung (dieselbe Grenze hatte der
+ * Vorlauf des alten Aufgaben-Dialogs). Die Custom-Felder eines Nachlaufs stehen auf dem
  * Vorgabewert einer neuen Zeile, 1 Tag, statt auf der „1 Minute", die frueher
  * aus dem weggeklemmten negativen Wert entstand.
  */

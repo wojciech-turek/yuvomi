@@ -20129,7 +20129,11 @@ const deValueOf = (() => {
   };
 })();
 // Kein Anlegen/Bearbeiten, sondern eine benannte Handlung mit eigenem Verb.
-const NAMED_DIALOG_ACTIONS = ['documents.uploadAction'];
+// Dazu "Aufgabe hinzufuegen" (Quick-Add 2026-10-29): dasselbe Verb wie
+// `common.add`, mit seinem Gegenstand - das Blatt "Neue Aufgabe" hat sonst
+// keinen Kopf-Text im Fuss, und so steht es im Entwurf, den der Haushalt
+// abgenommen hat (Spec "Simpler New Task sheet", Ziel 4).
+const NAMED_DIALOG_ACTIONS = ['documents.uploadAction', 'tasks.addTask'];
 // "Erstellen und hinzufuegen": legt einen Gast an UND nimmt ihn in die Gruppe -
 // zwei Schritte, die das Verb beide nennen muss.
 const COMPOUND_CREATE = ['splitExpenses.createAndAddGuest'];
