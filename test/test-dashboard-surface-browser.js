@@ -117,7 +117,12 @@ async function tailAtEnd(page) {
  * `:root:has(yuvomi-install-prompt[data-shown])` tut, statt das Bauteil
  * vorzutaeuschen. Die Rechnung darueber (`--shell-tail` an `.app-content`)
  * laeuft unveraendert. */
-const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/birthdays'];
+// `/inventory` kam mit Quick-Add (2026-10-29) hinzu: `/rewards` ist mit Nagrody
+// gegangen, und am Desktop tragen `/tasks` und `/health` einen eigenen
+// Scrollport (Listenspalte) - es blieben fuenf Routen fuer eine Reichweite von
+// sechs. Die Latte bleibt; dazu kommt eine weitere echte Seite ohne eigenen
+// Scrollport.
+const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/birthdays', '/inventory'];
 
 for (const device of ['desktop', 'mobile']) {
   test(`Nachlauf: am Seitenende liegt der volle Nachlauf unter dem letzten Inhalt (${device})`, async () => {

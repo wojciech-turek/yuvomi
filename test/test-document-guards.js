@@ -1273,7 +1273,8 @@ const SHAPE_EXEMPT = new Map([
   ['nav-item', 'Zeile: Eintrag der Sidebar-Navigation'],
   // 2026-10-26, Tafla: `note-item` (Notiz im Dashboard-Widget) ist mit dem
   // Widget-Board gegangen, seine letzte Regel stand in glass.css.
-  ['rw-standing__id', 'Zeile: Oeffner einer Mitglieds-Zeile'],
+  // 2026-10-29, Quick-Add: `rw-standing__id` (Oeffner einer Mitglieds-Zeile der
+  // Punkte-Rangliste) ist mit Nagrody gegangen.
   ['documents-folder-item__select', 'Zeile: Ordner in der Dokumentenliste'],
   // Der Chip traegt seit 031597b1 (Juli 2026) role="button" und dieselbe flache
   // Bar wie .month-day__event, dessen Zelle sein Traeger ist (calendar.css:
@@ -4287,7 +4288,12 @@ async function fabAtScrollEnd(page) {
       anlegenSichtbar: shown(fab) || own.some(shown),
       // Die eigenen Wege der Seite, auch unterhalb der Falz: die Zeilen
       // "+ Obiad …" stehen am Telefon bei den Tagen, nicht zwingend im Bild.
-      eigenesAnlegen: own.some((el) => el.getBoundingClientRect().height > 0),
+      // GEZAEHLT WIRD, WAS IM DOKUMENT STEHT, NICHT WAS AUFGEKLAPPT IST. Der
+      // Seed plant jeden Platz der Woche ausser der Przekąska am Donnerstag;
+      // von Freitag an liegt deren Zeile in den eingeklappten vergangenen Tagen
+      // (Hoehe 0), und eine Messung der Hoehe war an drei Wochentagen rot -
+      // eine Aussage ueber den Kalender, nicht ueber die Seite.
+      eigenesAnlegen: own.length > 0,
       anlegenImKopf: !!fab && !!fab.closest('.page-toolbar'),
       // Quick-Add (2026-10-29): auf Dziś ist das Anlegen das + `fab-add`.
       fabId: fab && shown(fab) ? fab.id : null,
@@ -4577,13 +4583,15 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       assert.deepEqual(globalesPlus, [], 'kein globales + mehr (#capture-plus, .nav-sidebar__add)');
       assert.deepEqual(ANLEGEN_SICHTBAR.filter((n) => !mitAnlegen.includes(n)), [],
         `${device}: diese Seiten zeigen beim Betreten keinen Weg zum Anlegen - mit dem globalen + ist ihr Knopf der einzige.`);
-      if (device === 'mobile') {
-        assert.equal(posilkiZeilen, true, 'Posiłki am Telefon: die Zeilen "+ Śniadanie / + Obiad …" sind das Anlegen und stehen im Dokument');
-      }
+      // Das + von Dziś und das Scroll-Ende zuerst: sie haengen nicht am
+      // Wochenplan, und eine rote Posiłki-Zeile darf sie nicht ueberspringen.
       assert.equal(dzisKnopf, 'fab-add', 'Dziś traegt genau sein + (fab-add), sichtbar beim Betreten');
 
       assert.deepEqual(findings, [],
         'Der FAB am Scroll-Ende. Dort gehoert ihm der Nachlauf allein.\n  ' + findings.join('\n  '));
+      if (device === 'mobile') {
+        assert.equal(posilkiZeilen, true, 'Posiłki am Telefon: die Zeilen "+ Śniadanie / + Obiad …" sind das Anlegen und stehen im Dokument');
+      }
     });
   }
 });
@@ -4931,9 +4939,12 @@ describe('Sonde 20 - ein Werkzeug des Kopfs ist sichtbar oder sichtbar angeschni
 
       // Eine Sonde, die nichts gemessen hat, darf nicht urteilen (Muster
       // Sonde 15): gezaehlt werden GEFUNDENE Leisten ueber beide Breiten.
-      assert.ok(seen >= 14,
-        `Nur ${seen} Kopf-Leisten gefunden - erwartet sind mindestens 14 (sieben Leisten `
-        + 'mal zwei Breiten). Hat sich die Schreibweise der Tablists geaendert?');
+      // Sechs Leisten, nicht mehr sieben: die der Seite Nagrody ist mit den
+      // Punkten und Belohnungen gegangen (Quick-Add, 2026-10-29).
+      assert.ok(seen >= 12,
+        `Nur ${seen} Kopf-Leisten gefunden - erwartet sind mindestens 12 (sechs Leisten `
+        + 'mal zwei Breiten; die Nagrody-Leiste ist mit den Belohnungen entfallen). '
+        + 'Hat sich die Schreibweise der Tablists geaendert?');
 
       // Und die Gegenrichtung: mindestens eine Leiste MUSS bei 375px
       // ueberlaufen (die Budget-Tabs tragen 600px Inhalt) - findet die Sonde
