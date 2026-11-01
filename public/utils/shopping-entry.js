@@ -2,8 +2,10 @@
  * Modul: Eingabezeile des Einkaufs
  * Zweck: Was die Zakupy-Leiste UND das kleine Blatt ueber der Uebersicht
  *        (components/shopping-add-sheet.js) teilen: die Zeile lesen
- *        (parseQuickEntry), den Gang raten (guessAisle) und die zuletzt
- *        geoeffnete Liste merken (je Geraet und Person).
+ *        (parseQuickEntry), den Gang raten (guessAisle), die zuletzt
+ *        geoeffnete Liste merken (je Geraet und Person) und nach dem Bestand
+ *        der Liste fragen - welche Chips sich lohnen (visibleFrequent) und
+ *        welcher abgehakte Artikel zurueckkommt (tickedItemNamed).
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
@@ -46,6 +48,50 @@ export function frequentChipsHtml(items, chipClass) {
   return items.map((i) => `
     <button type="button" class="${chipClass}" data-action="add-frequent" data-name="${esc(i.name)}"
             aria-label="${esc(t('shopping.predictionAddLabel', { name: i.name }))}">${esc(i.name)}</button>`).join('');
+}
+
+/** Gleicher Name, Gross-/Kleinschreibung und Raender egal - wie der Vorschlag sucht (COLLATE NOCASE). */
+export function sameItemName(a, b) {
+  return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+}
+
+const isCheckedFlag = (item) => item?.is_checked ?? 0;
+/** Rang einer Zeile: die von Hand gesetzte Reihenfolge, dann die id (wie die Liste sortiert). */
+const byItemRank = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id;
+
+/**
+ * Die Chips von "Często", die sich noch lohnen: nichts, was OFFEN auf der Liste
+ * steht (ein Tipp legte sonst ein zweites "Mleko" an). Abgehakte bleiben - ein
+ * Tipp holt sie zurueck (`tickedItemNamed`).
+ *
+ * Rein, ueber die Zeilen EINER Liste: Zakupy fragt mit `isChecked` seine
+ * Absichten (ein eben getippter Haken, den der Server noch nicht bestaetigt
+ * hat), das Blatt der Uebersicht den Stand vom Server.
+ *
+ * @param {Array<{name: string}>|null} frequent - GET /shopping/frequent
+ * @param {Array<object>|null} items - die Zeilen der Liste
+ * @param {{isChecked?: (item: object) => any, limit?: number}} [opts]
+ */
+export function visibleFrequent(frequent, items, { isChecked = isCheckedFlag, limit = Infinity } = {}) {
+  const open = new Set((items ?? []).filter((i) => !isChecked(i)).map((i) => String(i.name ?? '').trim().toLowerCase()));
+  return (frequent ?? []).filter((i) => !open.has(String(i.name ?? '').trim().toLowerCase())).slice(0, limit);
+}
+
+/**
+ * Die abgehakte Zeile dieses Namens, sonst undefined - die beste nach Rang,
+ * wenn es zwei gibt. Statt einer zweiten Zeile gleichen Namens kommt sie
+ * zurueck (#1816). Eine OFFENE Zeile gleichen Namens zaehlt nicht: dann wird
+ * angelegt, wie Zakupy es tut.
+ *
+ * @param {Array<object>|null} items - die Zeilen EINER Liste
+ * @param {string} name
+ * @param {{isChecked?: (item: object) => any, rank?: (a: object, b: object) => number}} [opts]
+ */
+export function tickedItemNamed(items, name, { isChecked = isCheckedFlag, rank = byItemRank } = {}) {
+  if (!String(name ?? '').trim()) return undefined;
+  return (items ?? [])
+    .filter((i) => isChecked(i) && sameItemName(i.name, name))
+    .sort(rank)[0];
 }
 
 /**

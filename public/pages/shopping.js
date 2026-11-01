@@ -29,7 +29,7 @@ import { amountPlaceholder, formatMoney, currencyFractionDigits, centsToAmountIn
 import { startLiveFeed } from '/utils/live-feed.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
-import { parseQuickEntry, rememberShoppingList, guessAisle, frequentChipsHtml, quickItemBody } from '/utils/shopping-entry.js';
+import { parseQuickEntry, rememberShoppingList, guessAisle, frequentChipsHtml, quickItemBody, visibleFrequent as frequentNotOpen, tickedItemNamed as tickedItemIn } from '/utils/shopping-entry.js';
 import { loadingSpinnerHtml } from '/utils/skeleton.js';
 
 
@@ -1759,11 +1759,6 @@ ${/* ZWEI SICHTBAR, DER REST IM MEHR-KNOPF (Entscheidung 2026-10-07,
 
 let autocompleteTimeout = null;
 
-/** Gleicher Name, Gross-/Kleinschreibung egal - wie der Vorschlag selbst sucht (COLLATE NOCASE). */
-function sameName(a, b) {
-  return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
-}
-
 /**
  * Der abgehakte Artikel dieses Namens auf der OFFENEN Liste, sonst undefined.
  *
@@ -1774,11 +1769,10 @@ function sameName(a, b) {
  * Dann gilt der Name als neu und wird auf der offenen Liste angelegt.
  */
 function tickedItemNamed(name) {
-  if (!String(name ?? '').trim()) return undefined;
   if (_itemsListId !== state.activeListId) return undefined;
-  return state.items
-    .filter((i) => checkedOf(i) && sameName(i.name, name))
-    .sort((a, b) => byRank(a, b))[0];
+  // Die Regel selbst teilt sich Zakupy mit dem Blatt der Uebersicht
+  // (utils/shopping-entry.js); hier zaehlen die Absichten (checkedOf).
+  return tickedItemIn(state.items, name, { isChecked: checkedOf, rank: byRank });
 }
 
 /**
@@ -2123,11 +2117,10 @@ let quickAddPicked = null;
 // over the field while it has focus. One tap adds the item at once.
 const FREQUENT_CHIPS = 8;
 
-/** The chips still worth showing: not already open on this list. */
+/** The chips still worth showing: not already open on this list (shared with the Today sheet, utils/shopping-entry.js). */
 function visibleFrequent() {
   if (readOnly()) return [];
-  const open = new Set(state.items.filter((i) => !checkedOf(i)).map((i) => i.name.trim().toLowerCase()));
-  return (state.frequent ?? []).filter((i) => !open.has(i.name.trim().toLowerCase())).slice(0, FREQUENT_CHIPS);
+  return frequentNotOpen(state.frequent, state.items, { isChecked: checkedOf, limit: FREQUENT_CHIPS });
 }
 
 function renderFrequentChips(container) {

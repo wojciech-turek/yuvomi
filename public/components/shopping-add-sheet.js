@@ -12,6 +12,13 @@
  *        Lesen der Zeile, Gangvermutung, Chips und Anfragekoerper kommen aus
  *        utils/shopping-entry.js, dieselben wie auf Zakupy. Die Stile liegen in
  *        layout.css, weil shopping.css ausserhalb von /shopping nicht gilt.
+ *
+ *        DAS BLATT KENNT DEN BESTAND SEINER LISTE (F2). Es laedt ihre Zeilen
+ *        beim Oeffnen und bei jedem Listenwechsel und tut dann, was Zakupy tut:
+ *        "Często" zeigt nichts, was offen auf der Liste steht, und ein Name,
+ *        der dort abgehakt steht, kommt zurueck (PATCH, #1816) statt ein
+ *        zweites Mal angelegt zu werden. Der Server entdoppelt nicht. Ein Name,
+ *        der OFFEN dasteht, wird wie auf Zakupy noch einmal angelegt.
  */
 import { api } from '/api.js';
 import { t } from '/i18n.js';
@@ -19,7 +26,7 @@ import { esc } from '/utils/html.js';
 import { openModal } from '/components/modal.js';
 import { mayWritePath } from '/utils/module-access.js';
 import { errorSentence } from '/utils/friendly-error.js';
-import { parseQuickEntry, guessAisle, pickShoppingList, frequentChipsHtml, quickItemBody } from '/utils/shopping-entry.js';
+import { parseQuickEntry, guessAisle, pickShoppingList, frequentChipsHtml, quickItemBody, visibleFrequent, tickedItemNamed } from '/utils/shopping-entry.js';
 
 const FREQUENT_CHIPS = 8;
 const GUESS_DELAY_MS = 450;
@@ -73,9 +80,23 @@ export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
     window.yuvomi?.showToast(t('shopping.noLists'), 'info');
     return false;
   }
+  // Die Zeilen je Liste, einmal geladen und danach hier fortgeschrieben (was
+  // das Blatt anlegt oder zurueckholt). Laesst sich eine Liste nicht lesen,
+  // gilt sie als leer: dann wird angelegt, wie vor dem Bestand.
+  const itemsByList = new Map();
+  const itemsOf = (listId) => {
+    if (!itemsByList.has(listId)) {
+      itemsByList.set(listId, api.get(`/shopping/${listId}/items`)
+        .then((res) => (Array.isArray(res?.data) ? res.data : []))
+        .catch(() => []));
+    }
+    return itemsByList.get(listId);
+  };
+  // Vor dem Oeffnen: die ersten Chips sollen schon ohne das Offene dastehen.
+  const firstItems = await itemsOf(first.id);
   let list = first;
   let added = 0;
-  let chips = frequent.slice(0, FREQUENT_CHIPS);
+  let chips = visibleFrequent(frequent, firstItems, { limit: FREQUENT_CHIPS });
 
   openModal({
     title: list.name,
@@ -103,9 +124,39 @@ export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
         }, GUESS_DELAY_MS);
       });
 
-      const post = async ({ name, quantity = null, category = null, source = 'default' }) => {
-        await api.post(`/shopping/${list.id}/items`, quickItemBody({ name, quantity, category, source }));
+      /** Die Chips neu, nach dem Bestand der offenen Liste. */
+      const renderChips = (items) => {
+        chips = visibleFrequent(frequent, items, { limit: FREQUENT_CHIPS });
+        if (!chipRow) return;
+        chipRow.replaceChildren?.();
+        chipRow.insertAdjacentHTML?.('beforeend', frequentChipsHtml(chips, 'shopping-sheet__chip'));
+        chipRow.hidden = !chips.length;
+      };
+
+      /**
+       * Legt an oder holt zurueck - wie `addQuickItem` auf Zakupy. Eine
+       * getippte Menge ersetzt die der abgehakten Zeile, ein Name ohne Menge
+       * laesst sie stehen; die Kategorie bleibt die der Zeile (gewaehlt hat
+       * hier niemand eine). Liefert den Satz fuer den Toast.
+       */
+      const add = async ({ name, quantity = null, category = null, source = 'default' }) => {
+        const target = list;
+        const items = await itemsOf(target.id);
+        const ticked = tickedItemNamed(items, name);
+        let toast;
+        if (ticked) {
+          const changes = quantity && quantity !== (ticked.quantity ?? null) ? { quantity } : {};
+          await api.patch(`/shopping/items/${ticked.id}`, { ...changes, is_checked: 0 });
+          Object.assign(ticked, changes, { is_checked: 0 });
+          toast = [t('shopping.itemBackToast', { name: ticked.name }), 'info'];
+        } else {
+          const res = await api.post(`/shopping/${target.id}/items`, quickItemBody({ name, quantity, category, source }));
+          items.push(res?.data && typeof res.data === 'object' ? res.data : { name, quantity, is_checked: 0 });
+          toast = [`${name} · ${t('shopping.itemAdded')}`, 'success'];
+        }
         added += 1;
+        if (target === list) renderChips(items);
+        return toast;
       };
 
       let busy = false;
@@ -118,10 +169,10 @@ export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
         clearTimeout(timer);
         const category = guess.name === name ? guess.category : null;
         try {
-          await post({ name, quantity, category, source: 'suggestion' });
+          const toast = await add({ name, quantity, category, source: 'suggestion' });
           input.value = '';
           guess = { name: '', category: null };
-          window.yuvomi?.showToast(`${name} · ${t('shopping.itemAdded')}`, 'success');
+          window.yuvomi?.showToast(...toast);
         } catch (err) {
           window.yuvomi?.showToast(errorSentence(err), 'danger');
         } finally {
@@ -136,10 +187,10 @@ export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
         if (!item || chip.disabled) return;
         chip.disabled = true;
         try {
-          await post({ name: item.name, quantity: item.quantity ?? null, category: item.category, source: 'suggestion' });
-          chips = chips.filter((i) => i !== item);
-          chip.remove();
-          if (!chips.length) chipRow.hidden = true;
+          const toast = await add({ name: item.name, quantity: item.quantity ?? null, category: item.category, source: 'suggestion' });
+          // Angelegt nimmt das Neuzeichnen den Chip mit; zurueckgeholt sagt es
+          // ein Satz (die Zeile steht irgendwo auf der Liste).
+          if (toast[1] === 'info') window.yuvomi?.showToast(...toast);
         } catch (err) {
           chip.disabled = false;
           window.yuvomi?.showToast(errorSentence(err), 'danger');
@@ -147,12 +198,16 @@ export async function openShoppingAddFrom({ user, onChanged = () => {} } = {}) {
         input.focus();
       });
 
-      panel.querySelector('#shopping-sheet-list')?.addEventListener('change', (e) => {
+      panel.querySelector('#shopping-sheet-list')?.addEventListener('change', async (e) => {
         list = lists.find((l) => String(l.id) === e.target.value) ?? list;
         // Der Kopf gehoert zum Dialog dieses Blatts: von hier aus nach oben suchen.
         const title = panel.closest?.('.modal-overlay')?.querySelector('.modal-panel__title');
         if (title) title.textContent = list.name;
         input.focus();
+        // Die Chips folgen der neuen Liste, sobald ihr Bestand da ist.
+        const target = list;
+        const items = await itemsOf(target.id);
+        if (target === list) renderChips(items);
       });
     },
   });
