@@ -17,6 +17,8 @@ import { householdTimeZone, todayKey, utcToWall } from '../utils/timezone.js';
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+/** Uhrzeit einer Erinnerung, die nur einen Tag nennt (R9). */
+const DAY_ONLY_REMINDER_TIME = '09:00';
 
 function memberNames(database) {
   return database.prepare(
@@ -83,6 +85,7 @@ function systemPrompt({ today, weekday, time, zone, names, speaker }) {
     'title: the task itself, short, without command filler. Drop "dodaj zadanie", "zapisz", "nowe zadanie", "przypomnij mi żeby" and similar when they only introduce the task. Keep other people\'s names in the title (children and relatives without an account, e.g. "Marysi") and keep the sentence\'s own wording otherwise. Drop the day and time words that went into the date fields.',
     'due_date / due_time: only when a day (or an hour) is said for doing the task. Use due_time only together with a day or when an hour is clearly the deadline.',
     'remind_date / remind_time: only when a reminder is asked for ("przypomnienie", "przypomnij") AND a day or an hour for the reminder is said. A reminder with a day but no hour gets remind_time "09:00" (the default hour for a date-only reminder). A reminder that names only an hour uses the due day, or today when there is no due day. "Przypomnij mi żeby ..." or "przypomnij mi o ..." with no day or hour is only filler: drop it from the title and leave the reminder fields empty. A reminder alone never sets due_date or due_time.',
+    `A reminder hour that has already passed today (at or before ${time}) is for tomorrow at that hour: a reminder in the past is never useful.`,
     `assignees: only names from the list above, in any Polish case (${names.map((n) => `"${n}"`).join(', ')} and their inflected forms) when the sentence gives the task to that person. Never put anyone else there; a name that is not on the list ("Marysia", "Marysi") stays in the title.`,
     'for_speaker: true when the sentence is in the first person ("muszę", "przypomnij mi", "mam", "chcę"), meaning the person speaking should do it.',
     'Examples:',
@@ -112,12 +115,15 @@ export async function parseTaskSentence({ text, userId, now = new Date(), databa
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'long' }).format(now);
   const speaker = database.prepare('SELECT display_name FROM users WHERE id = ?').get(userId)?.display_name ?? '';
 
+  const today = todayKey(database, now);
+  const nowTime = wall?.time?.slice(0, 5) ?? '';
+
   const out = await client.json({
     feature: 'task_dictation',
     tier: 'fast',
     userId,
     system: systemPrompt({
-      today: todayKey(database, now), weekday, time: wall?.time?.slice(0, 5) ?? '', zone, names, speaker,
+      today, weekday, time: nowTime, zone, names, speaker,
     }),
     text: `Zdanie: ${sentence}`,
     schema: schemaFor(names),
@@ -135,13 +141,24 @@ export async function parseTaskSentence({ text, userId, now = new Date(), databa
 
   // Eine Uhrzeit ohne Tag ist keine Aussage: beide Felder des Paares fallen weg.
   const dueDate = cleanDate(out?.due_date);
-  const remindDate = cleanDate(out?.remind_date);
+  let remindDate = cleanDate(out?.remind_date);
+  // Ein Erinnerungstag ohne (brauchbare) Stunde erinnert um 09:00 - die Regel
+  // steht im Prompt, darf dort aber nicht allein stehen: ein leeres Feld liesse
+  // das Blatt den Tag sonst fallen (F3, R9).
+  const remindTime = remindDate ? (cleanTime(out?.remind_time) ?? DAY_ONLY_REMINDER_TIME) : null;
+  // EINE VERGANGENE UHRZEIT VON HEUTE ERINNERT MORGEN (Ruling R16). Der Server
+  // sieht nicht, ob der Satz nur eine Stunde nannte ("przypomnij mi o 8" um
+  // 11:00); eine gesprochene Uhrzeit von heute, die schon vorbei ist, ist aber
+  // nie eine brauchbare Erinnerung - gespeichert ginge sie sofort als Push raus.
+  // Die laufende Minute zaehlt als vorbei. "Heute" und "jetzt" nach der Uhr des
+  // Haushalts.
+  if (remindDate && remindDate === today && remindTime <= nowTime) remindDate = addDays(today, 1);
   return {
     title: cleanTitle(out?.title, sentence),
     due_date: dueDate,
     due_time: dueDate ? cleanTime(out?.due_time) : null,
     remind_date: remindDate,
-    remind_time: remindDate ? cleanTime(out?.remind_time) : null,
+    remind_time: remindTime,
     assigned_to: [...ids],
   };
 }

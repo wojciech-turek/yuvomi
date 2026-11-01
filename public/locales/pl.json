@@ -542,7 +542,8 @@
             "typeInstead": "Wpisz ręcznie",
             "done": "Gotowe",
             "stop": "Zatrzymaj słuchanie"
-        }
+        },
+        "reminderTimePassed": "Ta godzina już minęła."
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} posiłki",

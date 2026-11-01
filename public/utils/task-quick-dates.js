@@ -64,14 +64,23 @@ export function reminderQuickPicks({ dueDate, dueTime } = {}) {
 /**
  * Die Erinnerung, die der Dialog vorbelegt: mit Faelligkeit deren
  * "zur Faelligkeit"-Vorschlag, sonst heute zur naechsten vollen Stunde
- * (nach 21:00 morgen um 09:00) - "heute" nach der Uhr des Haushalts.
+ * (ab 21:00 morgen um 09:00) - "heute" nach der Uhr des Haushalts.
+ *
+ * EINE VORGABE LIEGT NIE ZURUECK. Der Server nimmt ein `remind_at` in der
+ * Vergangenheit an, und der naechste Takt der Benachrichtigungen schickt es
+ * sofort: heute faellig ohne Uhrzeit hiesse um 14:00 "heute 09:00" - ein Push
+ * Sekunden nach dem Speichern und spaeter keiner. Liegt der Vorschlag nicht
+ * NACH jetzt (Wanduhr des Haushalts, minutengenau), gilt die Regel ohne
+ * Faelligkeit.
  * @returns {{date: string, time: string}}
  */
 export function defaultReminder({ dueDate, dueTime, now = new Date() } = {}) {
-  const due = reminderQuickPicks({ dueDate, dueTime })[0];
-  if (due) return { date: due.date, time: due.time };
   const f = zonedFields(now);
   const today = `${f.year}-${pad2(f.month)}-${pad2(f.day)}`;
+  const due = reminderQuickPicks({ dueDate, dueTime })[0];
+  if (due && `${due.date}T${due.time}` > `${today}T${pad2(f.hour)}:${pad2(f.minute)}`) {
+    return { date: due.date, time: due.time };
+  }
   const next = f.hour + 1;
   if (next > 21) return { date: addDays(today, 1), time: '09:00' };
   return { date: today, time: `${pad2(next)}:00` };

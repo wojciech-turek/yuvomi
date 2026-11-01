@@ -354,6 +354,25 @@ test('draft: local reminder rules match the server - a day alone is 09:00, an ho
   assert.equal(hourAlone.draft.title, 'Zapłać rachunek');
 });
 
+// Ruling R16: eine Erinnerung, die NUR eine Stunde nennt und deren Stunde heute
+// schon vorbei ist, erinnert morgen - gespeichert ginge sie sonst sofort raus.
+// NOW = 11:00 in Warschau.
+test('draft: local - an hour-only reminder already passed today rolls to tomorrow', async () => {
+  const { post } = recordingPost(DISABLED);
+  const passed = await draftFromSentence('Zapłać rachunek, ustaw przypomnienie na 8:00', { members: MEMBERS, now: NOW, post });
+  assert.deepEqual([passed.draft.remind_date, passed.draft.remind_time], ['2026-10-30', '08:00']);
+  const thisMinute = await draftFromSentence('Zapłać rachunek, ustaw przypomnienie na 11:00', { members: MEMBERS, now: NOW, post });
+  assert.deepEqual([thisMinute.draft.remind_date, thisMinute.draft.remind_time], ['2026-10-30', '11:00'], 'the current minute counts as passed');
+  const ahead = await draftFromSentence('Zapłać rachunek, ustaw przypomnienie na 11:30', { members: MEMBERS, now: NOW, post });
+  assert.deepEqual([ahead.draft.remind_date, ahead.draft.remind_time], ['2026-10-29', '11:30'], 'still ahead: today');
+  // Faellig heute, Erinnerung nur mit Stunde: auch dann morgen.
+  const dueToday = await draftFromSentence('Zapłać rachunek dzisiaj, przypomnienie o 8:00', { members: MEMBERS, now: NOW, post });
+  assert.deepEqual([dueToday.draft.due_date, dueToday.draft.remind_date, dueToday.draft.remind_time], ['2026-10-29', '2026-10-30', '08:00']);
+  // Ein ausdruecklich gesagter Tag bleibt - das Speichern ruegt ihn (R15).
+  const saidToday = await draftFromSentence('Zapłać rachunek przypomnij mi dzisiaj o 8', { members: MEMBERS, now: NOW, post });
+  assert.deepEqual([saidToday.draft.remind_date, saidToday.draft.remind_time], ['2026-10-29', '08:00']);
+});
+
 test('draft: a due time without a day is left empty locally (like the server)', async () => {
   const { post } = recordingPost(DISABLED);
   const { draft } = await draftFromSentence('Zadzwonić do lekarza o 18', { members: MEMBERS, now: NOW, post });

@@ -507,7 +507,8 @@
             "typeInstead": "Type instead",
             "done": "Done",
             "stop": "Stop listening"
-        }
+        },
+        "reminderTimePassed": "That time has already passed."
     },
     "shopping": {
         "importMealsPreviewMeals_few": "{{count}} jídla",

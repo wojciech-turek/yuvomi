@@ -272,6 +272,19 @@ test('draft: a spoken sentence opens the sheet with title, due and reminder fill
   assert.match(html, /class="user-ms__checkbox" value="2"\s+checked/, 'the spoken assignee is chosen');
 });
 
+// F3: ein Erinnerungstag ohne Stunde (ein Entwurf vom Server oder ein alter
+// Client) faellt nicht weg - er erinnert um 09:00, wie R9 es sagt.
+test('draft: a reminder day without a time opens the reminder at 09:00', () => {
+  for (const remind_time of [null, '', undefined]) {
+    const html = sheet({ task: null, draft: { title: 'Zapłać rachunek', remind_date: '2026-10-30', remind_time } });
+    assert.equal(isHidden(sectionTag(html, 'reminder')), false, `remind_time ${remind_time}: the reminder is set`);
+    assert.equal(valueOf(html, 'task-remind-date'), '2026-10-30');
+    assert.equal(valueOf(html, 'task-remind-time'), '09:00');
+  }
+  const none = sheet({ task: null, draft: { title: 'Zapłać rachunek', remind_time: '07:30' } });
+  assert.equal(isHidden(sectionTag(none, 'reminder')), true, 'a time without its day is still nothing');
+});
+
 test('draft: ignored when editing - a task keeps its own values', () => {
   const html = sheet({ task: FULL_TASK, draft: { title: 'Inny tytuł', due_date: '2026-12-24' } });
   assert.equal(valueOf(html, 'task-title'), FULL_TASK.title);
@@ -459,14 +472,15 @@ test('wiring: opening an empty reminder fills a default time', () => {
   const panel = fakePanel({
     '#task-form': form, '[data-section="reminder"]': section,
     '#task-remind-date': date, '#task-remind-time': time,
-    '#task-due-date': fakeEl({ value: '2026-11-02' }), '#task-due-time': fakeEl({ value: '18:00' }),
+    // Morgen: die Vorgabe liegt nie zurueck (F1), ein festes Datum glitte mit der Zeit in die Vergangenheit.
+    '#task-due-date': fakeEl({ value: TOMORROW }), '#task-due-time': fakeEl({ value: '18:00' }),
   });
   tasks.wireTaskSheet(panel);
   const reveal = fakeEl({ dataset: { reveal: 'reminder' } });
   reveal.closest = (sel) => (sel.includes('[data-reveal]') ? reveal : null);
   click(form, reveal);
   assert.equal(section.hidden, false);
-  assert.equal(date.value, '2026-11-02', 'with a due date: at its time');
+  assert.equal(date.value, TOMORROW, 'with a due date: at its time');
   assert.equal(time.value, '18:00');
 });
 
@@ -566,7 +580,10 @@ test('wiring: a reminder quick pick keeps its buttons (and the focus) - only ari
 
 const feld = (value = '') => ({ value: String(value) });
 
-async function submit({ taskId = '', byId = {}, fields = {}, defaultSyncTarget = '' } = {}) {
+/** Die Uhr der Speicher-Tests: Donnerstag, 29.10.2026, 13:00 in Warschau - vor allen Erinnerungen unten. */
+const SUBMIT_NOW = new Date('2026-10-29T12:00:00Z');
+
+async function submit({ taskId = '', byId = {}, fields = {}, defaultSyncTarget = '', now = SUBMIT_NOW } = {}) {
   const calls = [];
   const record = (method) => async (path, body) => {
     calls.push({ method, path, body });
@@ -593,9 +610,12 @@ async function submit({ taskId = '', byId = {}, fields = {}, defaultSyncTarget =
   for (const [name, value] of Object.entries(named)) form[name] = feld(value);
   const previousTarget = tasks.state.defaultSyncTarget;
   tasks.state.defaultSyncTarget = defaultSyncTarget;
+  const realNow = Date.now;
+  Date.now = () => now.getTime();
   try {
     await tasks.handleFormSubmit({ preventDefault() {}, target: form }, { container: null, onChanged: async () => {} });
   } finally {
+    Date.now = realNow;
     tasks.state.defaultSyncTarget = previousTarget;
     delete globalThis.__apiStub;
     delete globalThis.__rruleValues;
@@ -676,6 +696,88 @@ test('submit edit: removing the reminder section deletes the stored reminder', a
 test('submit edit: no reminder before and none now - nothing to delete', async () => {
   const { calls } = await submit({ taskId: '7', byId: reminderNodes({ hidden: true }) });
   assert.deepEqual(reminderCalls(calls), []);
+});
+
+// Ruling R15: eine NEUE oder GEAENDERTE Erinnerung, deren Zeitpunkt schon
+// vorbei ist, wird nicht gespeichert - der naechste Takt schickte sie sofort.
+// Eine unberuehrte bleibt, wie sie ist (alte Aufgaben tragen vergangene).
+function catchFieldErrors() {
+  const reported = [];
+  globalThis.__reportFieldError = (field, message) => { reported.push({ field, message }); };
+  return { reported, done: () => { delete globalThis.__reportFieldError; } };
+}
+
+test('submit create: a reminder already past today is blocked at its time field - nothing goes out', async () => {
+  const probe = catchFieldErrors();
+  try {
+    const nodes = reminderNodes({ date: '2026-10-29', time: '07:30' });
+    const { calls, error } = await submit({ byId: nodes });
+    assert.deepEqual(calls.filter((c) => c.method !== 'get'), [], 'no task, no reminder');
+    assert.equal(error, null, 'not the form-wide error line - the reminder field says it');
+    assert.equal(probe.reported.length, 1);
+    assert.equal(probe.reported[0].field, nodes['#task-remind-time'], 'today, earlier: the time is what is wrong');
+    assert.equal(probe.reported[0].message, 'tasks.reminderTimePassed');
+  } finally { probe.done(); }
+});
+
+test('submit create: a reminder on a past day is blocked at its date field', async () => {
+  const probe = catchFieldErrors();
+  try {
+    const nodes = reminderNodes({ date: '2026-10-28', time: '18:00' });
+    const { calls } = await submit({ byId: nodes });
+    assert.deepEqual(calls.filter((c) => c.method !== 'get'), []);
+    assert.equal(probe.reported[0]?.field, nodes['#task-remind-date']);
+  } finally { probe.done(); }
+});
+
+test('submit create: the current minute counts as past; the next one saves', async () => {
+  const probe = catchFieldErrors();
+  try {
+    // 12:00:30 UTC = 13:00:30 in Warschau
+    const now = new Date('2026-10-29T12:00:30Z');
+    const blocked = await submit({ now, byId: reminderNodes({ date: '2026-10-29', time: '13:00' }) });
+    assert.deepEqual(blocked.calls.filter((c) => c.method !== 'get'), []);
+    const saved = await submit({ now, byId: reminderNodes({ date: '2026-10-29', time: '13:01' }) });
+    assert.deepEqual(reminderCalls(saved.calls).map((c) => c.body.remind_at), ['2026-10-29T12:01:00']);
+  } finally { probe.done(); }
+});
+
+test('submit: a past reminder collapsed to a spoken row opens its fields to show the error', async () => {
+  const probe = catchFieldErrors();
+  try {
+    const row = { hidden: false };
+    const body = { hidden: true };
+    const nodes = reminderNodes({ date: '2026-10-29', time: '07:30' });
+    nodes['[data-section="reminder"]'].querySelector = (sel) => ({ '[data-row]': row, '.task-sheet__body': body }[sel] ?? null);
+    await submit({ byId: nodes });
+    assert.equal(probe.reported.length, 1);
+    assert.equal(row.hidden, true, 'the row gives way');
+    assert.equal(body.hidden, false, 'to the fields that carry the error');
+  } finally { probe.done(); }
+});
+
+test('submit edit: an untouched reminder already in the past is never blocked', async () => {
+  const probe = catchFieldErrors();
+  try {
+    const { calls, error } = await submit({
+      taskId: '7', now: new Date('2026-11-05T12:00:00Z'),
+      byId: reminderNodes({ storedAt: '2026-10-30T06:30:00', date: '2026-10-30', time: '07:30' }),
+    });
+    assert.equal(error, null);
+    assert.deepEqual(probe.reported, []);
+    assert.ok(calls.some((c) => c.method === 'put' && c.path === '/tasks/7'), 'the task saves');
+    assert.deepEqual(reminderCalls(calls), [], 'and its old reminder is left as it is');
+  } finally { probe.done(); }
+});
+
+test('submit edit: a reminder changed to a past time is blocked', async () => {
+  const probe = catchFieldErrors();
+  try {
+    const nodes = reminderNodes({ storedAt: '2026-10-30T06:30:00', date: '2026-10-29', time: '08:00' });
+    const { calls } = await submit({ taskId: '7', byId: nodes });
+    assert.deepEqual(calls.filter((c) => c.method !== 'get'), [], 'no PUT, no reminder');
+    assert.equal(probe.reported[0]?.field, nodes['#task-remind-time']);
+  } finally { probe.done(); }
 });
 
 test('submit edit: calendar read never touches the reminder', async () => {

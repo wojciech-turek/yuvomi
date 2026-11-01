@@ -126,6 +126,45 @@ test('a time without its day is dropped (reminder and due)', async () => {
   assert.deepEqual([ok.due_date, ok.due_time, ok.remind_date, ok.remind_time], [null, null, '2026-10-30', '07:30']);
 });
 
+// F3: R9s Vorgabe darf nicht nur im Prompt stehen - ein Erinnerungstag ohne
+// Stunde, wie das Modell ihn auch liefern mag, erinnert um 09:00.
+test('a reminder day without an hour gets 09:00 on the server, not only in the prompt', async () => {
+  for (const remind_time of ['', '  ', 'rano']) {
+    const { client } = fakeClaude({ ...base, remind_date: '2026-10-30', remind_time });
+    const out = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client });
+    assert.deepEqual([out.remind_date, out.remind_time], ['2026-10-30', '09:00'], `remind_time ${JSON.stringify(remind_time)}`);
+  }
+});
+
+// Ruling R16: eine gesprochene Uhrzeit, die heute schon vorbei ist, erinnert
+// morgen. Der Server sieht nicht, ob der Satz nur eine Stunde nannte - eine
+// vergangene Uhrzeit von heute ist aber nie eine brauchbare Erinnerung.
+// NOW = 11:00 in Warschau.
+test('a reminder today at a time already passed moves to tomorrow (household clock)', async () => {
+  const cases = [
+    [{ remind_date: '2026-10-29', remind_time: '08:00' }, ['2026-10-30', '08:00']],
+    [{ remind_date: '2026-10-29', remind_time: '11:00' }, ['2026-10-30', '11:00'], 'the current minute counts as passed'],
+    [{ remind_date: '2026-10-29', remind_time: '11:01' }, ['2026-10-29', '11:01'], 'still ahead: stays today'],
+    [{ remind_date: '2026-10-29', remind_time: '' }, ['2026-10-30', '09:00'], 'today without an hour is 09:00, already passed'],
+    [{ remind_date: '2026-10-30', remind_time: '08:00' }, ['2026-10-30', '08:00'], 'another day is left alone'],
+  ];
+  for (const [fields, expected, why] of cases) {
+    const { client } = fakeClaude({ ...base, ...fields });
+    const out = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client });
+    assert.deepEqual([out.remind_date, out.remind_time], expected, why ?? JSON.stringify(fields));
+  }
+  // Der Tag ist der des Haushalts: 23:30 UTC ist in Warschau schon 00:30 am 30.
+  const late = fakeClaude({ ...base, remind_date: '2026-10-30', remind_time: '00:15' });
+  const out = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: new Date('2026-10-29T23:30:00Z'), database: db, client: late.client });
+  assert.deepEqual([out.remind_date, out.remind_time], ['2026-10-31', '00:15']);
+});
+
+test('the prompt says a reminder time already passed today means tomorrow', async () => {
+  const { client, sent } = fakeClaude(base);
+  await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client });
+  assert.match(sent[0].system, /reminder hour that has already passed today \(at or before 11:00\) is for tomorrow/);
+});
+
 test('a display account speaker is never added; shared display names map to nobody', async () => {
   const { client } = fakeClaude({ ...base, for_speaker: true });
   const out = await parseTaskSentence({ text: 'x', userId: KUCHNIA, now: NOW, database: db, client });

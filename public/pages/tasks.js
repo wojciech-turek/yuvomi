@@ -6,7 +6,7 @@
 
 import { api } from '/api.js';
 import { renderRRuleFields, bindRRuleEvents, getRRuleValues, describeRRule } from '/rrule-ui.js';
-import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender, askOverModal } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender, askOverModal, reportFieldError, clearFieldError } from '/components/modal.js';
 import { whenHistorySettled } from '/utils/overlay-history.js';
 import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut, expandIn, wireScrollFade } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
@@ -16,7 +16,7 @@ import { rowActionHtml, rowMenuHtml } from '/utils/row-action.js';
 import { refresh as refreshReminders } from '/reminders.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 import { withChosenPeople } from '/utils/people-picker.js';
-import { remindAtFromWallTime, wallTimeFromRemindAt } from '/utils/reminder-offset.js';
+import { remindAtFromWallTime, wallTimeFromRemindAt, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
 import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
 import { openDictationSheet, startTaskDictation } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
@@ -953,6 +953,9 @@ const REMIND_PICK_LABELS = Object.freeze({
 const ROW_LABELS = Object.freeze({ due: 'tasks.dueShort', reminder: 'reminders.sectionTitle', note: 'tasks.descriptionLabel' });
 const ROW_REMOVE_LABELS = Object.freeze({ due: 'tasks.removeDue', reminder: 'reminders.removeReminder', note: 'tasks.removeNote' });
 
+/** Uhrzeit einer Erinnerung, die nur einen Tag nennt (R9, wie der Server). */
+const DAY_ONLY_REMINDER_TIME = '09:00';
+
 /** `HH:MM` aus einer gespeicherten Uhrzeit (der Server fuehrt sie mit oder ohne Sekunden). */
 function hhmm(value) {
   const m = /^(\d{2}):(\d{2})/.exec(String(value ?? ''));
@@ -1150,8 +1153,11 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
   // Speichern den zugeklappten Abschnitt fuer „entfernt" und loeschte sie.
   const storedWall = reminder?.remind_at ? wallTimeFromRemindAt(reminder.remind_at) : null;
   const storedAt = storedWall ? reminder.remind_at : '';
+  // Ein Erinnerungstag ohne Stunde erinnert um 09:00 (R9) - fiele er weg,
+  // verloere das Blatt eine gesagte Erinnerung (F3). Eine Stunde ohne Tag
+  // bleibt nichts.
   const wall = storedWall
-    ?? (d?.remind_date && d?.remind_time ? { date: d.remind_date, time: hhmm(d.remind_time) } : null);
+    ?? (d?.remind_date ? { date: d.remind_date, time: hhmm(d.remind_time) || DAY_ONLY_REMINDER_TIME } : null);
   const reminderHtml = reminderSectionHtml({
     access, wall, storedAt, dueDate, dueTime, spoken: rows,
   });
@@ -2265,7 +2271,10 @@ function closeSheetSection(panel, name) {
   } else if (name === 'reminder') {
     for (const sel of ['#task-remind-date', '#task-remind-time']) {
       const field = panel.querySelector(sel);
-      if (field) field.value = '';
+      if (field) {
+        field.value = '';
+        clearFieldError(field);
+      }
     }
   } else if (name === 'note') {
     const note = panel.querySelector('#task-description');
@@ -2316,6 +2325,10 @@ function pickReminder(panel, key) {
   if (!pick || !date || !time) return;
   date.value = pick.date;
   time.value = pick.time;
+  // Ein gesetzter Wert feuert am Datepicker nichts - eine Meldung "schon
+  // vorbei" (R15) raeumt sonst erst die naechste Eingabe im Feld.
+  clearFieldError(date);
+  clearFieldError(time);
   syncRemindPicks(panel);
 }
 
@@ -2584,6 +2597,13 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   // `calendar: read` die Faelligkeit leeren: die gesperrte Erinnerung bleibt,
   // wie sie ist (der fruehere Riegel aus Review-Runde 3 zu #1253 schuetzte eine
   // Regel, die es nicht mehr gibt - Ruling R7).
+  //
+  // EINE NEUE ODER GEAENDERTE ERINNERUNG IN DER VERGANGENHEIT WIRD NICHT
+  // GESPEICHERT (Ruling R15). Der Server nimmt sie an, und der naechste Takt
+  // der Benachrichtigungen schickt jede faellige sofort - ein Push Sekunden
+  // nach dem Speichern, spaeter keiner. Die Meldung steht am Feld, das falsch
+  // ist: am Datum, wenn der Tag vorbei ist, sonst an der Uhrzeit. Eine
+  // UNBERUEHRTE Erinnerung wird nie geruegt - alte Aufgaben tragen vergangene.
   const canWriteReminder = reminderAccess() === 'write';
   const reminderSection = form.querySelector('[data-section="reminder"]');
   const storedRemindAt = reminderSection?.dataset?.storedAt || '';
@@ -2596,7 +2616,20 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
       const remindAt = remindAtFromWallTime(remindDate, remindTime);
       if (!remindAt) { resetSubmit(t('tasks.reminderIncomplete')); return; }
       const stored = storedRemindAt ? wallTimeFromRemindAt(storedRemindAt) : null;
-      if (!stored || stored.date !== remindDate || stored.time !== remindTime) reminderChange = remindAt;
+      if (!stored || stored.date !== remindDate || stored.time !== remindTime) {
+        const now = Date.now();
+        if (parseRemindAtAsUtc(remindAt).getTime() <= now) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+          // Eine kompakte Zeile (nach einem Diktat) klappt auf - die Meldung
+          // steht an den Feldern dahinter.
+          showSectionBody(reminderSection);
+          const pastDay = remindDate < zonedDateKey(new Date(now));
+          reportFieldError(form.querySelector(pastDay ? '#task-remind-date' : '#task-remind-time'), t('tasks.reminderTimePassed'));
+          return;
+        }
+        reminderChange = remindAt;
+      }
     } else if (storedRemindAt) {
       reminderChange = 'delete';
     }

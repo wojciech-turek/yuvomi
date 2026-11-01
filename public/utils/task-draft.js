@@ -23,9 +23,9 @@
  *   - "… ustaw przypomnienie na jutro 7:30", "… przypomnij mi o 8",
  *     "…, przypomnienie jutro": ist die Angabe dahinter NUR eine Zeit, ist sie
  *     die Erinnerung, nicht die Faelligkeit. Ein Tag ohne Stunde erinnert um
- *     09:00, eine Stunde ohne Tag am Faelligkeitstag oder heute - die Regeln
- *     des Server-Prompts. Alles andere ("Wyślij przypomnienie do przedszkola")
- *     bleibt Teil des Titels.
+ *     09:00, eine Stunde ohne Tag am Faelligkeitstag oder heute - ist sie
+ *     heute schon vorbei, morgen (R16) - die Regeln des Servers. Alles andere
+ *     ("Wyślij przypomnienie do przedszkola") bleibt Teil des Titels.
  */
 import { api } from '/api.js';
 import { parseCapture } from '/utils/capture-parse.js';
@@ -53,6 +53,20 @@ const blankDraft = () => ({
 function tidyTitle(text) {
   const s = String(text ?? '').replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
   return s ? s.charAt(0).toLocaleUpperCase('pl') + s.slice(1) : '';
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** `HH:MM` jetzt, nach der Uhr des Haushalts. */
+function wallTime(now) {
+  const f = nowFields(now);
+  return f ? `${pad2(f.hour)}:${pad2(f.minute)}` : '';
+}
+
+/** Der Tag nach `dateKey` (Kalenderarithmetik in UTC - frei von Zeitumstellungen). */
+function nextDay(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 /**
@@ -109,8 +123,16 @@ function localDraft(sentence, { members, now }) {
   }
   if (parsed.assignee?.id != null) draft.assigned_to = [parsed.assignee.id];
   if (when) {
-    draft.remind_date = when.date ?? draft.due_date ?? todayKey(now);
+    const today = todayKey(now);
+    draft.remind_date = when.date ?? draft.due_date ?? today;
     draft.remind_time = when.time ?? DAY_ONLY_REMINDER_TIME;
+    // NUR EINE STUNDE, UND DIE IST HEUTE SCHON VORBEI (Ruling R16): morgen zu
+    // dieser Stunde. Gespeichert ginge eine vergangene Erinnerung sofort als
+    // Push raus. Die laufende Minute zaehlt als vorbei. Ein ausdruecklich
+    // gesagter Tag bleibt - das Speichern ruegt ihn (R15).
+    if (!when.date && draft.remind_date === today && draft.remind_time <= wallTime(now)) {
+      draft.remind_date = nextDay(today);
+    }
   }
 
   const found = draft.due_date || draft.assigned_to.length || draft.remind_date;
