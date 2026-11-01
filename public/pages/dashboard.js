@@ -889,13 +889,28 @@ function todayAddFab({ user, access, onClick }) {
  */
 function mountTodayAdd(container, { user, onChanged }) {
   const fab = todayAddFab({ user, access: todayAddAccess(), onClick: () => { void openTodayAddMenu({ user, onChanged }); } });
-  if (fab) container.querySelector('.dashboard')?.appendChild(fab);
+  if (!fab) return;
+  // Der Finger auf dem + holt das Menue schon (F8): zwischen pointerdown und
+  // click liegen am Telefon rund 100 ms - beim ersten Tipp wartet der Klick
+  // sonst auf den ganzen Modulgraphen (Menue, Hoerblatt, Parser).
+  fab.addEventListener('pointerdown', () => { loadAddMenu().catch(() => {}); }, { passive: true });
+  container.querySelector('.dashboard')?.appendChild(fab);
+}
+
+/** Das Menue-Modul, einmal geholt; ein Fehlschlag wird vergessen, der naechste Tipp versucht es neu. */
+let menuModule = null;
+function loadAddMenu() {
+  menuModule ??= import('/components/add-menu.js').catch((err) => {
+    menuModule = null;
+    throw err;
+  });
+  return menuModule;
 }
 
 /** Der Tipp auf das +: das Menue nachladen und oeffnen; scheitert das Laden, sagt es ein Toast. */
 async function openTodayAddMenu({ user, onChanged }) {
   try {
-    const { openAddMenu } = await import('/components/add-menu.js');
+    const { openAddMenu } = await loadAddMenu();
     openAddMenu({ user, onChanged, access: todayAddAccess() });
   } catch (err) {
     console.error('[Dashboard] Das Menue zum Hinzufuegen konnte nicht geladen werden:', err);
@@ -1642,4 +1657,4 @@ async function loadPendingReminders(request = (path) => path, get = (path) => fe
   }
 }
 
-export const __test = { todayAddFab, todayAddAccess, loadPendingReminders, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };
+export const __test = { todayAddFab, todayAddAccess, loadAddMenu, loadPendingReminders, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };

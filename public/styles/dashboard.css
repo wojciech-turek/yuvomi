@@ -2312,3 +2312,26 @@
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: calc(var(--focus-ring-offset) * -1);
 }
+
+/* Das Blatt der Zeile laedt noch (components/add-menu.js, F8): ein kleiner Ring
+ * am Zeilenende, in der Sprache des Seiten-Laderings (.page-loading__spinner).
+ * Er blendet erst nach --duration-2xl ein - ein schnelles Blatt zeigt nichts. */
+.add-menu__row[aria-busy="true"]::after {
+  content: '';
+  flex: none;
+  margin-inline-start: auto;
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+  box-sizing: border-box;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  opacity: 0;
+  animation: app-spin 800ms linear infinite, page-loading-in var(--duration-md) var(--ease-out) var(--duration-2xl) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-menu__row[aria-busy="true"]::after { animation: none; opacity: 1; }
+}

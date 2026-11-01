@@ -24,7 +24,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createPageStyles, isStyleApplied } from '../public/utils/page-style.js';
+import { createPageStyles, isStyleApplied, ensureStyleApplied } from '../public/utils/page-style.js';
 import { eachRule } from './css-rules.js';
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -40,12 +40,18 @@ function createFakeDoc() {
     },
     createElement(tag) {
       const attrs = new Map();
+      const listeners = { load: [], error: [] };
       const link = {
         tagName: tag.toUpperCase(),
         onload: null,
         onerror: null,
         sheet: null,
         isConnected: false,
+        dataset: {},
+        listeners,
+        addEventListener(type, fn) { (listeners[type] ??= []).push(fn); },
+        set rel(value) { attrs.set('rel', String(value)); },
+        set href(value) { attrs.set('href', String(value)); },
         // Jede Attributaenderung an einem GELADENEN Link - in WebKit ein neuer Abruf.
         writesAfterLoad: [],
         setAttribute(name, value) {
@@ -77,6 +83,12 @@ function createFakeDoc() {
         return el;
       },
     },
+    // Nur die eine Frage, die ensureStyleApplied stellt.
+    querySelector(sel) {
+      const m = /^link\[data-outside-styles\]\[href="([^"]+)"\]$/.exec(sel);
+      if (!m) throw new Error(`unbekannter Selektor ${sel}`);
+      return links.find((l) => l.isConnected && 'outsideStyles' in l.dataset && l.href === m[1]) ?? null;
+    },
   };
 }
 
@@ -93,6 +105,7 @@ function fire(type, href) {
   } else {
     link.onerror?.({ type });
   }
+  for (const fn of link.listeners?.[type] ?? []) fn({ type });
 }
 
 /** Das Medium, mit dem das Blatt gilt - am Stylesheet, nicht am Attribut. */
@@ -210,6 +223,70 @@ test('a sheet that failed is fetched again on the next load, still one link per 
   again.cleanup();
   assert.ok(applies(retry));
   assert.ok(!applies(linkFor('/styles/meals.css')));
+});
+
+// F7 (a): ein beim pointerdown gewaermtes Blatt ist noch unterwegs, wenn der
+// Tipp es anfordert. Mit `media="not all"` holt der Browser es mit der
+// niedrigsten Prioritaet - waehrend die Seite darauf wartet.
+test('a warmed sheet still on its way loses media="not all" when it is asked for', async () => {
+  const s = createPageStyles(fakeDoc);
+  s.warm(['/styles/calendar.css']);
+  const link = linkFor('/styles/calendar.css');
+  assert.equal(link.getAttribute('media'), 'not all');
+  const c = s.load('/styles/calendar.css');
+  assert.equal(link.getAttribute('media'), null, 'gebraucht: kein ruhendes Medium mehr, volle Prioritaet');
+  assert.equal(fakeDoc.links.length, 1, 'derselbe Link');
+  fire('load', '/styles/calendar.css');
+  await c.ready;
+  assert.ok(applies(link));
+  assert.deepEqual(link.writesAfterLoad, [], 'geaendert nur, solange es unterwegs war');
+});
+
+test('a sheet asked for and given up while on its way rests again', async () => {
+  const s = createPageStyles(fakeDoc);
+  const a = s.load('/styles/dashboard.css'); fire('load', '/styles/dashboard.css'); await a.ready;
+  s.warm(['/styles/calendar.css']);
+  const c = s.load('/styles/calendar.css');
+  c.abandon();
+  const link = linkFor('/styles/calendar.css');
+  assert.equal(link.getAttribute('media'), 'not all');
+  fire('load', '/styles/calendar.css');
+  assert.ok(!applies(link));
+  assert.ok(applies(linkFor('/styles/dashboard.css')));
+});
+
+// F7 (b): ein Blatt, das von aussen nicht kam (offline), blieb als kaputter
+// Link stehen und wurde bei jedem weiteren Oeffnen wiederverwendet - das
+// Formular ueber der Uebersicht blieb bis zum Neuladen ungestylt.
+test('ensureStyleApplied: a failed outside link is replaced on the next call', async () => {
+  const first = ensureStyleApplied('/styles/meals.css', fakeDoc);
+  const failed = linkFor('/styles/meals.css');
+  assert.ok(failed && 'outsideStyles' in failed.dataset);
+  fire('error', '/styles/meals.css');
+  const release = await first;
+  release();
+  const second = ensureStyleApplied('/styles/meals.css', fakeDoc);
+  const retry = linkFor('/styles/meals.css');
+  assert.notEqual(retry, failed, 'ein neuer Versuch, nicht der kaputte Link');
+  assert.equal(failed.isConnected, false, 'der kaputte geht');
+  assert.equal(fakeDoc.links.filter((l) => l.href === '/styles/meals.css').length, 1);
+  assert.equal(await settledNow(second), 'waiting', 'und es wird auf ihn gewartet');
+  fire('load', '/styles/meals.css');
+  const releaseAgain = await second;
+  assert.ok(applies(retry));
+  releaseAgain();
+  assert.ok(!applies(retry), 'nach dem Schliessen ruht es wieder');
+});
+
+test('ensureStyleApplied: a loaded outside link is reused, not fetched again', async () => {
+  const first = ensureStyleApplied('/styles/meals.css', fakeDoc);
+  fire('load', '/styles/meals.css');
+  (await first)();
+  const link = linkFor('/styles/meals.css');
+  const second = ensureStyleApplied('/styles/meals.css', fakeDoc);
+  assert.equal(await settledNow(second), 'ready');
+  assert.equal(linkFor('/styles/meals.css'), link);
+  assert.ok(applies(link));
 });
 
 test('switching never touches the attributes of a loaded link (WebKit fetches it again)', async () => {

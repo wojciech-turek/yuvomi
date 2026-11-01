@@ -22,11 +22,22 @@
  * ERST ZU, DANN AUF - BEIDES IM TIPP. `closeModal({ force: true })` nimmt das
  * Menue synchron aus der Top-Layer; der Browser gibt den Fokus dabei an das +
  * zurueck, und das naechste Blatt merkt sich das + als Rueckweg statt einer
- * Zeile, die gleich verschwindet.
+ * Zeile, die gleich verschwindet. So laeuft "Say a task".
+ *
+ * DIE VIER ANDEREN LADEN NACH, UND DAS SIEHT MAN (F8). Beim ersten Tipp holt
+ * der Browser das Modul samt seinem Graphen (Aufgaben, Kalender: tausende
+ * Zeilen), danach laedt der Oeffner seine Daten. Bis dahin bleibt das Menue
+ * offen und die getippte Zeile dreht (`aria-busy`); das Blatt ersetzt das
+ * Menue selbst - `openModal` schliesst ein offenes Modal zuerst, der Fokus
+ * geht dabei ans + zurueck wie oben. Wer das Menue inzwischen zumacht oder
+ * woanders steht, bekommt das Blatt nicht mehr: nach dem Laden wird gefragt,
+ * ob das Menue noch offen und die Route dieselbe ist, und ein Blatt, dessen
+ * Daten erst nach einem Seitenwechsel kamen, geht wieder zu. Oeffnet der
+ * Oeffner nichts (keine Liste, nur lesend) oder scheitert er, geht das Menue.
  */
 
 import { t } from '/i18n.js';
-import { openModal, closeModal } from '/components/modal.js';
+import { openModal, closeModal, captureModalContext, isOwnModalOpen } from '/components/modal.js';
 import { esc } from '/utils/html.js';
 import { errorSentence } from '/utils/friendly-error.js';
 // STATISCH, nicht per import(): siehe Kopf ("Say a task" startet im Tipp).
@@ -51,15 +62,58 @@ export function addMenuItems(access = {}) {
   return ROWS.filter((row) => access?.[row.module] === 'write').map(({ id }) => ({ id }));
 }
 
-/** Wer welches Blatt oeffnet. `say` IST startTaskDictation - ohne Promise davor (siehe Kopf). */
+/**
+ * Wer welches Blatt oeffnet. `say` IST startTaskDictation - ohne Promise davor
+ * (siehe Kopf). Die anderen laden erst (`load`, die drehende Zeile) und
+ * oeffnen dann (`open`) - siehe openWhenLoaded.
+ */
 const OPENERS = Object.freeze({
   say: startTaskDictation,
-  task: async (opts) => (await import('/pages/tasks.js')).openNewTaskFrom(opts),
-  event: async (opts) => (await import('/pages/calendar.js')).openNewEventFrom(opts),
+  task: { load: () => import('/pages/tasks.js'), open: (mod, opts) => mod.openNewTaskFrom(opts) },
+  event: { load: () => import('/pages/calendar.js'), open: (mod, opts) => mod.openNewEventFrom(opts) },
   // `user` MUSS mit: das Blatt merkt sich die zuletzt benutzte Liste je Person.
-  shopping: async (opts) => (await import('/components/shopping-add-sheet.js')).openShoppingAddFrom(opts),
-  meal: async (opts) => (await import('/pages/meals.js')).openNewMealFrom(opts),
+  shopping: { load: () => import('/components/shopping-add-sheet.js'), open: (mod, opts) => mod.openShoppingAddFrom(opts) },
+  meal: { load: () => import('/pages/meals.js'), open: (mod, opts) => mod.openNewMealFrom(opts) },
 });
+
+/** Wo die Seite gerade steht - wie captureModalContext() es vergleicht. */
+function currentRoute() {
+  const loc = globalThis.location;
+  return loc ? `${loc.pathname}${loc.search}${loc.hash}` : '';
+}
+
+function setBusy(row, busy) {
+  row?.setAttribute?.('aria-busy', String(busy));
+}
+
+/**
+ * Laedt das Blatt einer Zeile und oeffnet es - wenn es dann noch gewollt ist
+ * (siehe Kopf, F8). Das Menue steht dabei offen, die Zeile dreht.
+ */
+async function openWhenLoaded(row, { load, open }, opts) {
+  const context = captureModalContext();
+  const route = currentRoute();
+  setBusy(row, true);
+  try {
+    const mod = await load();
+    // Zugemacht oder weitergegangen: das Blatt will niemand mehr.
+    if (!isOwnModalOpen(context) || currentRoute() !== route) return;
+    const opened = await open(mod, opts);
+    // Die Daten des Blatts kamen erst nach einem Seitenwechsel: es gehoert
+    // nicht ueber die neue Seite. Geschlossen wird genau das Blatt, das der
+    // Oeffner eben aufgemacht hat (er loest im selben Zug auf, #1997).
+    if (opened !== false && currentRoute() !== route) {
+      const sheet = captureModalContext();
+      await closeModal({ force: true, context: sheet });
+    }
+  } catch (err) {
+    reportOpenFailure(err);
+  } finally {
+    setBusy(row, false);
+    // Nichts hat das Menue ersetzt (keine Liste, nur lesend, ein Fehler): es geht.
+    if (isOwnModalOpen(context)) closeModal({ force: true, context });
+  }
+}
 
 /** Eine einfache Zeile: Zeichen und Nomen (Entwurf PlusMenu). */
 function rowHtml(id, icon, label) {
@@ -116,9 +170,17 @@ export function openAddMenu({ user = null, onChanged = () => {}, access = {} } =
     dirtyGuard: false,
     content: menuHtml(ids),
     onSave(panel) {
+      // Die Zeile, deren Blatt gerade laedt - solange oeffnet kein Tipp ein zweites.
+      let loading = null;
       panel.querySelector('[data-add-menu]')?.addEventListener('click', (event) => {
         const row = event.target?.closest?.('[data-add]');
         const open = row ? openers[row.dataset.add] : null;
+        if (loading) return;
+        if (open && typeof open === 'object' && typeof open.load === 'function') {
+          loading = row;
+          void openWhenLoaded(row, open, { user, onChanged }).finally(() => { loading = null; });
+          return;
+        }
         if (typeof open !== 'function') return;
         // Synchron, kein await bis zum Oeffner (siehe Kopf).
         closeModal({ force: true });

@@ -65,9 +65,17 @@ function fakePanel() {
     root,
     querySelector: (sel) => (sel === '[data-add-menu]' ? root : null),
     querySelectorAll: () => [],
+    rows: {},
     /** Ein Tipp auf die Zeile `id`: das Ziel ist ihr Zeichen, `closest` findet die Zeile. */
     tap(id) {
-      const row = { dataset: { add: id } };
+      const attrs = new Map();
+      const row = this.rows[id] ??= {
+        dataset: { add: id },
+        attrs,
+        setAttribute: (name, value) => { attrs.set(name, String(value)); },
+        removeAttribute: (name) => { attrs.delete(name); },
+        getAttribute: (name) => (attrs.has(name) ? attrs.get(name) : null),
+      };
       const target = { closest: (sel) => (sel === '[data-add]' ? row : null) };
       for (const fn of root.listeners.click ?? []) fn({ target, preventDefault() {} });
     },
@@ -184,6 +192,150 @@ test('a sheet that fails to open says so in a toast, and a tap beside the rows d
   } finally { console.error = realError; s.done(); }
 });
 
+// --------------------------------------------------------------------------
+// F8: die vier Blaetter laden nach - bis dahin dreht die getippte Zeile, und
+// wer inzwischen weitergegangen ist, bekommt das Blatt nicht mehr.
+// --------------------------------------------------------------------------
+
+/** Ein Oeffner mit Lade- und Oeffnungsschritt, dessen Laden der Test freigibt. */
+function deferredOpener(calls, id, { opened = true } = {}) {
+  let release;
+  const loaded = new Promise((resolve) => { release = resolve; });
+  const entry = {
+    load: () => { calls.push(`load:${id}`); return loaded; },
+    open: (mod, opts) => { calls.push(`open:${id}`); entry.got = { mod, opts }; return Promise.resolve(opened); },
+    release: (mod = { id }) => release(mod),
+  };
+  return entry;
+}
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+function withLocation(pathname, run) {
+  const prev = globalThis.location;
+  globalThis.location = { pathname, search: '', hash: '' };
+  return Promise.resolve().then(run).finally(() => { globalThis.location = prev; });
+}
+
+test('a sheet that still loads keeps the menu open with the tapped row busy; then the sheet takes over', () => withLocation('/', async () => {
+  const s = setup();
+  let menuOpen = true;
+  globalThis.__isOwnModalOpen = () => menuOpen;
+  try {
+    const user = { id: 7 };
+    const onChanged = () => {};
+    s.openers.event = deferredOpener(s.calls, 'event');
+    s.openers.event.open = (mod, opts) => { s.calls.push('open:event'); s.openers.event.got = { mod, opts }; menuOpen = false; return Promise.resolve(true); };
+    openAddMenu({ user, onChanged, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('event');
+    assert.deepEqual(s.calls, ['load:event'], 'loading - the menu is not closed yet');
+    assert.equal(panel.rows.event.getAttribute('aria-busy'), 'true', 'the tapped row says it is busy');
+    // Ein zweiter Tipp waehrend des Ladens oeffnet nichts dazu.
+    panel.tap('task');
+    assert.deepEqual(s.calls, ['load:event'], 'one sheet at a time');
+    s.openers.event.release({ openNewEventFrom: true });
+    await flush();
+    assert.deepEqual(s.calls, ['load:event', 'open:event'], 'the sheet replaces the menu (openModal closes it itself)');
+    assert.equal(s.openers.event.got.opts.user, user);
+    assert.equal(s.openers.event.got.opts.onChanged, onChanged);
+    assert.equal(panel.rows.event.getAttribute('aria-busy'), 'false', 'busy ends');
+    assert.deepEqual(s.closed, [], 'the menu was replaced, not closed by hand');
+  } finally { delete globalThis.__isOwnModalOpen; s.done(); }
+}));
+
+test('the route changed while the sheet loaded: nothing opens over the new page', () => withLocation('/', async () => {
+  const s = setup();
+  try {
+    s.openers.meal = deferredOpener(s.calls, 'meal');
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('meal');
+    globalThis.location = { pathname: '/shopping', search: '', hash: '' };
+    s.openers.meal.release();
+    await flush();
+    assert.ok(!s.calls.includes('open:meal'), 'the opener is dropped');
+  } finally { s.done(); }
+}));
+
+test('the menu was closed while the sheet loaded: nothing opens', () => withLocation('/', async () => {
+  const s = setup();
+  let menuOpen = true;
+  globalThis.__isOwnModalOpen = () => menuOpen;
+  try {
+    s.openers.shopping = deferredOpener(s.calls, 'shopping');
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('shopping');
+    menuOpen = false; // weggewischt
+    s.openers.shopping.release();
+    await flush();
+    assert.ok(!s.calls.includes('open:shopping'));
+    assert.equal(panel.rows.shopping.getAttribute('aria-busy'), 'false');
+  } finally { delete globalThis.__isOwnModalOpen; s.done(); }
+}));
+
+test('the route changed while the opener fetched its data: the sheet it opened is closed again', () => withLocation('/', async () => {
+  const s = setup();
+  let menuOpen = true;
+  globalThis.__isOwnModalOpen = () => menuOpen;
+  try {
+    s.openers.task = deferredOpener(s.calls, 'task');
+    s.openers.task.open = async () => {
+      s.calls.push('open:task');
+      globalThis.location = { pathname: '/calendar', search: '', hash: '' }; // weitergegangen, waehrend geladen wurde
+      menuOpen = false; // das Blatt hat das Menue ersetzt
+      return true;
+    };
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('task');
+    s.openers.task.release();
+    await flush();
+    assert.deepEqual(s.calls, ['load:task', 'open:task', 'close'], 'dropped: the sheet does not stay over /calendar');
+  } finally { delete globalThis.__isOwnModalOpen; s.done(); }
+}));
+
+test('an opener that opens nothing (no list, read only) or fails closes the menu; a failure says so', () => withLocation('/', async () => {
+  const s = setup();
+  const realError = console.error;
+  console.error = () => {};
+  try {
+    s.openers.shopping = deferredOpener(s.calls, 'shopping', { opened: false });
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    let panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('shopping');
+    s.openers.shopping.release();
+    await flush();
+    assert.deepEqual(s.calls, ['load:shopping', 'open:shopping', 'close'], 'nothing replaced the menu: it goes');
+    assert.equal(toasts.length, 0, 'the opener said why itself');
+
+    s.calls.length = 0;
+    s.openers.event = { load: () => Promise.reject(Object.assign(new Error('Failed to fetch dynamically imported module'), { status: 0 })), open() { s.calls.push('open:event'); } };
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    panel = fakePanel();
+    s.opened[1].onSave(panel);
+    panel.tap('event');
+    await flush();
+    assert.deepEqual(s.calls, ['close']);
+    assert.equal(toasts.length, 1);
+    assert.equal(toasts[0][1], 'danger');
+    assert.equal(panel.rows.event.getAttribute('aria-busy'), 'false');
+  } finally { console.error = realError; s.done(); }
+}));
+
+test('the busy row shows a ring only after a short wait, and stands still for reduced motion', () => {
+  const css = read('../public/styles/dashboard.css');
+  const rule = css.slice(css.indexOf('.add-menu__row[aria-busy="true"]::after'));
+  assert.ok(rule.length < css.length, 'a ring on the busy row');
+  assert.match(rule.slice(0, 900), /animation[^;]*app-spin/);
+  assert.match(css, /prefers-reduced-motion: reduce\)\s*\{[^}]*\.add-menu__row\[aria-busy="true"\]::after/);
+});
+
 test('Dziś: the + is fab-add, named "Add", only with something to add and never on the display', () => {
   const member = { id: 1, access_scope: 'full' };
   const fab = dash.todayAddFab({ user: member, access: { ...NONE, tasks: 'write' }, onClick() {} });
@@ -198,6 +350,15 @@ test('Dziś: the + is fab-add, named "Add", only with something to add and never
     'the Kuchnia tablet gets no +');
   assert.equal(dash.todayAddFab({ user: member, access: NONE, onClick() {} }), null, 'nothing to add, no +');
   assert.equal(dash.todayAddFab({ user: member, access: { ...NONE, meals: 'write' }, onClick() {} })?.id, 'fab-add');
+});
+
+test('loadAddMenu: one import for the pointerdown and the tap; a failed one is tried again', async () => {
+  const a = dash.loadAddMenu();
+  const b = dash.loadAddMenu();
+  assert.equal(a, b, 'the tap waits for the import the finger started');
+  const mod = await a;
+  assert.equal(typeof mod.openAddMenu, 'function');
+  assert.match(read('../public/pages/dashboard.js'), /menuModule = null/, 'a failed import is forgotten, the next tap tries again');
 });
 
 test('the say row is startTaskDictation itself; each other row has its own opener', () => {
@@ -238,14 +399,18 @@ test('source: dictation is a static import in the menu, the sheets and the menu 
   assert.doesNotMatch(menu, /import\('\/components\/task-dictation\.js'\)/);
   for (const [mod, fn] of [['/pages/tasks.js', 'openNewTaskFrom'], ['/pages/calendar.js', 'openNewEventFrom'],
     ['/components/shopping-add-sheet.js', 'openShoppingAddFrom'], ['/pages/meals.js', 'openNewMealFrom']]) {
-    assert.match(menu, new RegExp(`import\\('${mod.replace(/[./]/g, '\\$&')}'\\)\\)\\.${fn}\\(`), `${fn} from ${mod}`);
+    const esc = mod.replace(/[./]/g, '\\$&');
+    assert.match(menu, new RegExp(`load: \\(\\) => import\\('${esc}'\\), open: \\(mod, opts\\) => mod\\.${fn}\\(opts\\)`), `${fn} from ${mod}`);
   }
   const dashboard = read('../public/pages/dashboard.js');
-  // The menu loads on the tap on the + (not at startup); the mic needs the
-  // gesture only on "Say a task", and by then the menu - and with it
-  // task-dictation.js - is loaded.
+  // The menu loads on the way to the tap on the + (pointerdown, F8), not at
+  // startup; the mic needs the gesture only on "Say a task", and by then the
+  // menu - and with it task-dictation.js - is loaded.
   assert.doesNotMatch(dashboard, /^import [^;]*from '\/components\/add-menu\.js';$/m, 'no static import: the menu is not part of the startup');
-  assert.match(dashboard, /const \{ openAddMenu \} = await import\('\/components\/add-menu\.js'\);/);
+  assert.match(dashboard, /import\('\/components\/add-menu\.js'\)/);
+  assert.match(dashboard, /const \{ openAddMenu \} = await loadAddMenu\(\);/);
+  const mountFn = dashboard.slice(dashboard.indexOf('function mountTodayAdd('), dashboard.indexOf('async function openTodayAddMenu('));
+  assert.match(mountFn, /addEventListener\('pointerdown', \(\) => \{ loadAddMenu\(\)/, 'the finger on the + starts loading the menu');
   const preload = read('../public/index.html');
   for (const mod of ['/components/add-menu.js', '/components/task-dictation.js', '/utils/speech.js', '/utils/task-draft.js', '/utils/capture-parse.js']) {
     assert.ok(!preload.includes(`href="${mod}"`), `${mod} is not preloaded at startup`);

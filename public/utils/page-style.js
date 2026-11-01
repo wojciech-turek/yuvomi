@@ -34,8 +34,13 @@
  * holte der Link das Blatt danach ohnehin noch einmal.
  *
  * Ein Blatt, das nicht kam (offline, Serverfehler), wird beim naechsten
- * `load()` neu angelegt - ersetzt, nicht verdoppelt. Der Fehler haelt die Seite
- * nicht auf: ein fehlendes Blatt ist ein Schoenheitsfehler.
+ * `load()` bzw. `ensureStyleApplied()` neu angelegt - ersetzt, nicht
+ * verdoppelt. Der Fehler haelt die Seite nicht auf: ein fehlendes Blatt ist ein
+ * Schoenheitsfehler.
+ *
+ * Ein gewaermtes Blatt, das noch unterwegs ist, wenn der Tipp es anfordert,
+ * verliert sein `media="not all"` (show): mit dem Attribut holte der Browser
+ * es mit der niedrigsten Prioritaet, waehrend die Seite darauf wartet.
  */
 
 /** Medium eines ruhenden Blatts. */
@@ -70,9 +75,13 @@ export function createPageStyles(doc = document) {
     }
     // Noch unterwegs: was nicht gelten soll, kommt ruhend an. Das Attribut
     // darf sich hier aendern - es ist noch nichts geladen, was neu kaeme.
-    if (!shown && entry.state === 'loading' && entry.link.getAttribute('media') !== RESTING) {
-      entry.link.setAttribute('media', RESTING);
-    }
+    if (entry.state !== 'loading') return;
+    const resting = entry.link.getAttribute('media') === RESTING;
+    if (!shown && !resting) entry.link.setAttribute('media', RESTING);
+    // Und umgekehrt: ein gewaermtes Blatt (pointerdown), auf das der Tipp jetzt
+    // wartet, holt der Browser mit `media="not all"` mit der niedrigsten
+    // Prioritaet. Ohne das Attribut kommt es wie ein gebrauchtes.
+    if (shown && resting) entry.link.removeAttribute('media');
   }
 
   function add(href, shown) {
@@ -175,6 +184,13 @@ export function isStyleApplied(href, doc = document) {
 export async function ensureStyleApplied(href, doc = document) {
   if (isStyleApplied(href, doc)) return () => {};
   let link = doc.querySelector(`link[data-outside-styles][href="${href}"]`);
+  // Ein Blatt, das nicht kam (offline, Serverfehler), bekommt einen neuen
+  // Versuch - wie `load()` oben. Der kaputte Link blieb sonst stehen, und jedes
+  // weitere Oeffnen haette ihn wiederverwendet: ungestylt bis zum Neuladen.
+  if (link?.dataset.failed === '1') {
+    link.remove();
+    link = null;
+  }
   let ready = Promise.resolve();
   if (link) {
     if (link.dataset.ready !== '1') {
@@ -192,7 +208,7 @@ export async function ensureStyleApplied(href, doc = document) {
     link.dataset.outsideStyles = '';
     ready = new Promise((resolve) => {
       link.onload = () => { link.dataset.ready = '1'; resolve(); };
-      link.onerror = () => { link.dataset.ready = '1'; resolve(); };
+      link.onerror = () => { link.dataset.ready = '1'; link.dataset.failed = '1'; resolve(); };
     });
     doc.head.appendChild(link);
   }
