@@ -25,8 +25,6 @@
  *     a recurring expense, ledger, settlement)
  *   - Health (vitals, activities, medications + schedules/logs, lab reports, cycle,
  *     plus caregiver grants: both parents may record for the two children)
- *   - Pocket money (Emma: account, monthly plan, scheduled credits, a parent bonus,
- *     an approved and an open withdrawal; Leo has no account yet)
  *   - Budget subscriptions (streaming, storage, gym - mixed billing cycles, one ending)
  *   - Household preferences (EUR, dd.mm.yyyy, 24h, weather = Dortmund)
  *

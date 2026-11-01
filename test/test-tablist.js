@@ -121,7 +121,7 @@ test('without manualActivation (default, every other wireTablist caller), ArrowR
 
   container.dispatch('keydown', keydown('ArrowRight'));
 
-  assert.deepEqual(changed, ['patterns'], 'automatic activation (the default, unchanged for budget/calendar/rewards/housekeeping/kitchen/health) must still fire onChange on every arrow press');
+  assert.deepEqual(changed, ['patterns'], 'automatic activation (the default, unchanged for budget/calendar/housekeeping/kitchen/health) must still fire onChange on every arrow press');
 });
 
 // R16 (Bewegung): der Reiterwechsel nennt seine Richtung in der Reihenfolge der

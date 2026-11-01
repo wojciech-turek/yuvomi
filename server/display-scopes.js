@@ -63,14 +63,17 @@ export const DISPLAY_SCOPES = Object.freeze([
 ]);
 
 /**
- * Die beiden Schreibrouten, die ein gekoppeltes Display erreichen darf (#1209).
+ * Die Schreibrouten, die ein gekoppeltes Display erreichen darf (#1209).
  *
  * WAS DAS DISPLAY DAMIT TUN KANN, und nichts sonst: eine Aufgabe fuer eine am
- * Geraet gewaehlte Person abhaken, und fuer sie eine Einloesung beantragen. Beide
- * Routen tragen die eigentliche Regel selbst - dass eine Person benannt sein
- * muss, dass sie ein Haushaltsmitglied ist, dass sie das Modul ueberhaupt darf
- * und dass die Aufgabe haushaltssichtbar ist. Diese Liste beantwortet nur die
- * vorgelagerte Frage, ob der Pfad ueberhaupt zu erreichen ist.
+ * Geraet gewaehlte Person abhaken, dazu die eigenen Schreibwege der Wand unten
+ * (ein Artikel auf die Liste, die Antwort auf die Wochenfrage). Die Einloesung
+ * einer Belohnung ist mit Nagrody gegangen (Quick-Add, 2026-10-29). Jede Route
+ * traegt die eigentliche Regel selbst - beim Abhaken etwa, dass eine Person
+ * benannt sein muss, dass sie ein Haushaltsmitglied ist, dass sie das Modul
+ * ueberhaupt darf und dass die Aufgabe haushaltssichtbar ist. Diese Liste
+ * beantwortet nur die vorgelagerte Frage, ob der Pfad ueberhaupt zu erreichen
+ * ist.
  *
  * DIE MUSTER SIND ENG, NICHT BEQUEM. `\d+` und nicht `[^/]+`: eine Kennung ist
  * eine Zahl, und was keine ist, hat an dieser Stelle nichts verloren. Kein

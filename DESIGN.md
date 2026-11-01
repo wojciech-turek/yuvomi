@@ -695,12 +695,13 @@ Ausschalter (in reduced-transparency und prefers-contrast auf 0):
   App;
 - das **Marken-Lichtfeld** (`--brand-field`, Staerke `--brand-field-opacity` 0.20 light /
   0.26 dark; R18, 2026-10-07): drei stehende Kreise in den beiden Farben der Bildmarke,
-  hinter der Glastafel der Zugangsseiten und im Ladebild - den zwei Orten, an denen nichts
-  Opakes darueber liegt. Ohne Filter, ohne Animation. Kein Text steht direkt darauf
-  (Sekundaertext fiele im Kern auf 2,96:1): auf den Zugangsseiten steht alles auf der
-  Tafel, der Schriftzug des Ladebilds in Label-Farbe. Das Ladebild ist seit R20 eine stehende
-  Skizze der Shell (Kopf mit Siegel, drei leere Kartenflaechen, Kapsel bzw. Seitenleiste), ohne
-  Puls; `role="progressbar"` mit dem Markennamen, die Ansage kommt vom Screenreader.
+  hinter der Glastafel der Zugangsseiten und im Zustand "Sitzung nicht pruefbar", der das
+  Ladebild ersetzt - den Orten, an denen nichts Opakes darueber liegt. Ohne Filter, ohne
+  Animation. Kein Text steht direkt darauf (Sekundaertext fiele im Kern auf 2,96:1): auf den
+  Zugangsseiten steht alles auf der Tafel. Das Ladebild selbst ist seit Quick-Add
+  (2026-10-29) ein stiller Ring auf der Seitenflaeche (`.app-loading__spinner`, dieselbe
+  Sprache wie der Seiten-Ladering) - die Skizze der Shell aus R20 ist gegangen;
+  `role="progressbar"` mit dem Markennamen, die Ansage kommt vom Screenreader.
 
 **Die App selbst hat keinen Backdrop mehr.** Bis R18 liefen hinter dem Inhalt vier
 driftende, weichgezeichnete Farbfelder (`.lg-blob`) und ein Akzentverlauf auf der Shell -
@@ -1448,13 +1449,13 @@ das Verhaeltnis haelt.
   die DATEN geaendert hat. In einem Kartenraster (Notizen, Dokumente im Raster) klappt die
   gehende Karte NICHT vorher aus: die Nachbarkarte haelt die Zeilenhoehe, die Nachbarn gleiten
   in die Luecke (FLIP). Filter und Suche zeichnen ohne
-  Bewegung neu - dort wechselt die Frage, nicht die Liste. Ein Skelett gehoert zum ERSTEN
-  Laden; danach bleibt der Inhalt stehen, bis der neue da ist. **Skelett (R19):** die Linien
-  erscheinen erst nach `--duration-sm` (kommt der Inhalt schneller, sieht man sie nie; die
-  Kartenflaechen stehen sofort und halten das Layout), der Schimmer ist ein Band als `::after`,
-  das per `transform` gleitet (vorher `background-position`: Paint je Frame). Die Uebersicht
-  blendet vom Skelett zum Inhalt ueber `swapContent`. `stagger` laeuft seit R19 ueber Web
-  Animations mit `delay` und `fill: backwards` statt ueber Timer und Inline-Werte.
+  Bewegung neu - dort wechselt die Frage, nicht die Liste. Ein Ladezeichen gehoert zum ERSTEN
+  Laden; danach bleibt der Inhalt stehen, bis der neue da ist. **Laden (Quick-Add,
+  2026-10-29):** es gibt keine Skelette mehr (Guard `test:no-skeletons`). Eine Seite, die
+  laedt, zeigt EINEN stillen Ring (`.page-loading`, `utils/skeleton.js` -> `loadingSpinnerHtml`),
+  der erst nach `--duration-2xl` einblendet - ein schneller Aufbau zeigt gar nichts. `stagger`
+  laeuft seit R19 ueber Web Animations mit `delay` und `fill: backwards` statt ueber Timer und
+  Inline-Werte.
 - **Inhaltswechsel - der Standard (`utils/content-swap.js`):** derselbe Traeger, neuer Inhalt
   (Reiterwechsel im Modul, Monats-/Wochen-Blaettern, Bereichswechsel) tauscht ueber
   `swapContent(host, update, { direction })`: Blende ab 0,4 Deckkraft (kein leerer Frame),
@@ -4713,9 +4714,8 @@ Zeile des Aufklappers nennt sie.
 > (`sync_config.wall_allow_ticking`, admin only, default off) and the wall sections
 > (`wall_sections`) live in `/preferences`; the display reads both. Off: no rings, no "+"
 > chips, no answering - and the SERVER refuses the paired display (`refuseWallWrite`,
-> `services/wall-settings.js`: tick, redeem a reward, add a running-out item by name,
-> answer/skip the question, all 403 `wall_read_only`; `/displays/people` names nobody to
-> tick or redeem for). On: 48pt
+> `services/wall-settings.js`: tick, add a running-out item by name, answer/skip the
+> question, all 403 `wall_read_only`; `/displays/people` names nobody to tick for). On: 48pt
 > rings on task rows (the display names who did it - the one assignee, else a chooser),
 > "+" chips for running-out items, the question. **Timers and Gotuj always work.** The
 > display may READ shopping and pantry since Tafla (the shopping card, the dinner meter).

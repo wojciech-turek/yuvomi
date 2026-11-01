@@ -118,8 +118,8 @@ test('Ein Wechsel, der done nicht beruehrt, laesst den Verlauf in Ruhe', () => {
 });
 
 test('Der Eintrag nennt die handelnde Person, nicht die zustaendige', () => {
-  // Die Punktevergabe entscheidet das bewusst anders (rewardTargets). Faellt
-  // dieser Unterschied weg, zeigt der Verlauf am Kiosk-Tablet die Zustaendigen
+  // Die Punktevergabe (bis Quick-Add, 2026-10-29) entschied das bewusst anders:
+  // sie ging an die Zustaendigen. Faellt dieser Unterschied weg, zeigt der Verlauf am Kiosk-Tablet die Zustaendigen
   // statt derjenigen, die dort geklickt hat.
   const id = makeTask({ title: 'Spuelmaschine' });
   db.prepare('INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)').run(id, other);
