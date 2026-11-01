@@ -37,7 +37,6 @@ import * as carddavSync from './services/cardav-sync.js';
 import * as holidays from './services/holidays.js';
 import { startScheduler as startBackupScheduler } from './services/backup-scheduler.js';
 import { startScheduler as startSplitExpenseScheduler } from './services/split-expenses-scheduler.js';
-import { startRewardMoneyScheduler } from './services/reward-money-scheduler.js';
 import { startScheduler as startPushScheduler } from './services/push-scheduler.js';
 import { startAiScheduler } from './ai/scheduler.js';
 import { startScheduler as startMedicationScheduler } from './services/medication-scheduler.js';
@@ -96,7 +95,6 @@ import pushRouter from './routes/push.js';
 import emailRouter from './routes/email.js';
 import notificationsRouter from './routes/notifications.js';
 import healthRouter from './routes/health.js';
-import rewardsRouter from './routes/rewards.js';
 import permissionsRouter from './routes/permissions.js';
 import changelogRouter from './routes/changelog.js';
 import mcpRouter from './mcp/server.js';
@@ -773,7 +771,6 @@ app.use('/api/v1/push', pushRouter);
 app.use('/api/v1/email', emailRouter);
 app.use('/api/v1/notifications', notificationsRouter);
 app.use('/api/v1/health', healthRouter);
-app.use('/api/v1/rewards', rewardsRouter);
 // The specific /schedule/* prefixes must mount before the general /schedule
 // router: schedule.js has no first-segment param route today, so a request
 // like /schedule/feed still falls through to the right router either way -
@@ -937,7 +934,6 @@ const server = app.listen(PORT, BIND_ADDRESS, () => {
   // Backup-Scheduler starten
   startBackupScheduler();
   startSplitExpenseScheduler();
-  startRewardMoneyScheduler();
   startPushScheduler();
   startMedicationScheduler();
   startRecipeProviderScheduler();

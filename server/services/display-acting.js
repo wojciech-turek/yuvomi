@@ -70,7 +70,7 @@ export function isDisplayRequest(req) {
  *
  * @param {object} req
  * @param {*} rawId  die gewaehlte Person, wie sie im Rumpf ankam
- * @param {'tasks'|'rewards'} moduleKey
+ * @param {'tasks'} moduleKey
  * @param {{ db?: object }} [options]
  * @returns {{ ok: true, userId: number } | { ok: false, status: number, error: string }}
  */

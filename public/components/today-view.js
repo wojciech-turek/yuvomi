@@ -21,6 +21,7 @@
 
 import { t, getTimeFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { personToken } from '/utils/person-color.js';
 import { initials, compactInitials } from '/utils/initials.js';
 import { firstName } from '/utils/today-plan.js';
@@ -262,18 +263,7 @@ export function renderTodayPage(state) {
     </div>`;
 }
 
-/** The page before the data: header lines and the shapes of the cards. */
+/** The page before the data: one quiet spinner (fades in after 400 ms). */
 export function renderTodaySkeleton() {
-  return `
-    <div class="dz dz-skeleton" aria-hidden="true">
-      <div class="dz-head">
-        <div class="dz-head__text">
-          <div class="skeleton skeleton-line skeleton-line--short"></div>
-          <div class="skeleton dz-skeleton__title"></div>
-        </div>
-      </div>
-      <div class="skeleton dz-skeleton__card dz-skeleton__card--weather"></div>
-      <div class="skeleton dz-skeleton__card"></div>
-      <div class="skeleton dz-skeleton__card"></div>
-    </div>`;
+  return loadingSpinnerHtml();
 }

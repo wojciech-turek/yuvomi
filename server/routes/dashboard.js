@@ -30,9 +30,6 @@ import { householdTimeZone, utcToWall, todayKey, shiftDateKey } from '../utils/t
 import { isAdminUser, serializeEvents } from './calendar/helpers.js';
 import { getOccurrences as getWasteOccurrences } from '../services/waste-store.js';
 import { scheduleData } from '../services/schedule.js';
-import { isAdminRequest } from '../middleware/require-admin.js';
-import { activeCatalog, ledgerBalanceSql } from '../services/rewards.js';
-import { moneyParams, moneyReader, moneyVisibleSql } from '../services/reward-money.js';
 import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL } from '../services/meal-cook.js';
 import { clampEventLimit } from '../../public/utils/dashboard-event-limit.js';
 import { nameKey } from '../utils/name-key.js';
@@ -84,7 +81,6 @@ const DENIED_PAYLOAD = Object.freeze({
   // Geteilte Ausgaben gehoeren zum Budget-Modul (server/scopes.js fuehrt
   // `split-expenses` als zweiten Praefix von `budget`).
   budget: ({ month }) => ({ budget: emptyBudget(month), splitBalance: emptySplitBalance() }),
-  rewards: () => ({ rewards: { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] } }),
   health: () => ({
     health: {
       hasMeds: false, dosesTotal: 0, dosesTaken: 0, dosesSkipped: 0,
@@ -1226,92 +1222,6 @@ router.get('/', (req, res) => {
   } catch (err) {
     log.error('split balance error:', err.message);
     result.splitBalance = emptySplitBalance();
-  }
-
-  /* BELOHNUNGEN: FORTSCHRITT STATT RANGLISTE (Critique 2026-09-23, Persona Emma).
-   *
-   * Hier stand eine Top-5-Rangliste nach Punkten, fuer jeden Betrachter gleich.
-   * Ein Kind las darin "1 Leo 60 / 2 Emma 30": Wettbewerb unter Geschwistern
-   * statt des eigenen Wegs zur Praemie. Die Antwort teilt jetzt nach der Frage,
-   * die das Modul selbst stellt - wer darf FREIGEBEN (isAdminRequest, dieselbe
-   * Pruefung wie PATCH /rewards/redemptions) -, nicht nach `family_role`:
-   *
-   *   approver - jedes teilnehmende Mitglied, nach NAMEN (kein Platz), dazu alle
-   *              offenen Anfragen;
-   *   self     - wer nicht freigibt, aber selbst sammelt: NUR die eigene Zeile,
-   *              die eigenen offenen Anfragen und die zuletzt verdienten Punkte.
-   *              Die Geschwister gehen gar nicht erst ueber die Leitung - eine
-   *              Rangliste im Netzwerk-Tab ist dieselbe Rangliste;
-   *   family   - wer weder freigibt noch sammelt (Wandtablett, Grosseltern):
-   *              alle nach Namen, ohne fremde Anfragen.
-   *
-   * `catalog` ist die Zielliste fuer den Balken; welche Praemie das Ziel ist,
-   * entscheidet public/utils/reward-goal.js, dieselbe Regel wie auf der Seite. */
-  if (allows('rewards')) try {
-    const MEMBER_FILTER = householdMemberSql('u');
-    const members = d.prepare(`
-      SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, u.family_role,
-             ${memberPositionSql('u')} AS sort_order,
-             ${ledgerBalanceSql('points', 'u.id')} AS balance
-      FROM users u
-      JOIN reward_participants rp ON rp.user_id = u.id AND rp.enabled = 1
-      WHERE ${MEMBER_FILTER}
-      ORDER BY ${memberOrderSql('u')}
-    `).all();
-    const approver = isAdminRequest(req);
-    const own = members.find((m) => m.id === Number(userId));
-    const view = approver ? 'approver' : own ? 'self' : 'family';
-    const standings = view === 'self' ? [own] : members;
-    // Dieselben Personen wie die Liste darueber (#1207): eine alte
-    // Einschreibung von Personal oder Gast bleibt stehen, zaehlt aber nicht.
-    const participantCount = members.length;
-    // `pending` BLEIBT DIE ZAHL DER PRAEMIEN-ANFRAGEN. Geld-Anfragen (#1734)
-    // stehen daneben in `moneyPending`, damit ein Client, der das alte Feld
-    // liest, nichts anderes darin findet. Wer was zaehlt, sagen die Zweige: wer
-    // freigibt, ist Admin und darf jede lesen; wer selbst sammelt, zaehlt nur
-    // die eigenen; die Sicht `family` (Wandtablett, Grosseltern) bekommt bei den
-    // Praemien 0. Geld selbst zeigt die Kachel nicht - weder Saldo noch Buchung.
-    const countPending = (kindSql) => (view === 'approver'
-      ? d.prepare(`SELECT COUNT(*) AS n FROM reward_redemptions WHERE status = 'pending' AND ${kindSql}`).get().n
-      : view === 'self'
-        ? d.prepare(`SELECT COUNT(*) AS n FROM reward_redemptions WHERE status = 'pending' AND user_id = ? AND ${kindSql}`).get(userId).n
-        : 0);
-    const pending = countPending("kind = 'reward'");
-    // DER EIGENE GELD-ZAEHLER HAENGT NICHT AN DER PUNKTE-TEILNAHME. Ein Kind mit
-    // Taschengeldkonto, das keine Punkte sammelt, faellt in die Sicht `family`
-    // und bekam hier 0, obwohl seine Einzahlung offen war (Review zu #1745).
-    // Gezaehlt wird ueber dasselbe Praedikat wie an den Geld-Routen: Admins
-    // alle, ein Mitglied die eigenen, ein Display keine.
-    const reader = moneyReader(req);
-    const moneyPending = d.prepare(`
-      SELECT COUNT(*) AS n FROM reward_redemptions r
-      WHERE r.status = 'pending' AND r.kind != 'reward' AND ${moneyVisibleSql(reader, 'r.user_id')}
-    `).get(moneyParams(reader)).n;
-    // Wer selbst sammelt, sieht seine letzten Gutschriften - verdient oder
-    // geschenkt. Einloesungen und Rueckbuchungen sind kein "verdient".
-    //
-    // UND EINE ZURUECKGENOMMENE GUTSCHRIFT AUCH NICHT (#1607). Seit das
-    // Wiederoeffnen gegenbucht statt zu loeschen, bleibt die earn-Zeile im
-    // Ledger stehen. Hier stuende sie sonst weiter als "zuletzt verdient",
-    // obwohl die Aufgabe wieder offen ist - der vollstaendige Verlauf mit
-    // beiden Zeilen gehoert auf die Belohnungsseite, diese Liste zeigt nur,
-    // was gilt. Die Gegenbuchung zeigt auf ihre Gutschrift (`reverses_id`) und
-    // nicht nur auf dieselbe Aufgabe: wird die Aufgabe geloescht, verlieren
-    // beide Zeilen ihre task_id, und ein Vergleich darueber traefe nie mehr.
-    const ownRecent = own && (view === 'self' || members.length === 1)
-      ? d.prepare(`
-          SELECT delta, type, reason, created_at FROM reward_ledger l
-          WHERE user_id = ? AND delta > 0 AND type IN ('earn', 'bonus') AND l.unit = 'points'
-            AND NOT EXISTS (SELECT 1 FROM reward_ledger r WHERE r.reverses_id = l.id)
-          ORDER BY created_at DESC, id DESC
-          LIMIT 3
-        `).all(userId)
-      : [];
-    const catalog = activeCatalog(d).map((c) => ({ id: c.id, name: c.name, cost: c.cost, remaining: c.remaining }));
-    result.rewards = { view, me: userId, standings, participantCount, pending, moneyPending, catalog, recent: ownRecent };
-  } catch (err) {
-    log.error('rewards error:', err.message);
-    result.rewards = { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] };
   }
 
   // Gesundheit: heute fällige Dosen der EIGENEN Medikamente (private wie familiensichtbare)

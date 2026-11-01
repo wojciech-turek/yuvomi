@@ -2,15 +2,15 @@
  * Test: Was ein Wandtablett TUT (#1209, entschieden in #913)
  *
  * Zweck: Ein gekoppeltes Display war bis #1208 ein Schaufenster. Jetzt darf es
- *        genau zwei Dinge, stellvertretend fuer eine am Geraet gewaehlte Person:
- *        eine Aufgabe abhaken und eine Einloesung beantragen. Diese Suite misst
- *        die Grenzen dieser zwei Handlungen, nicht ihre Bequemlichkeit:
+ *        genau ein Ding, stellvertretend fuer eine am Geraet gewaehlte Person:
+ *        eine Aufgabe abhaken. Diese Suite misst
+ *        die Grenzen dieser Handlung, nicht ihre Bequemlichkeit:
  *          - ohne benannte Person geht nichts;
  *          - benannt werden koennen nur Haushaltsmitglieder (#1207);
  *          - die GEWAEHLTE Person muss das Modul selbst schreiben duerfen;
  *          - nur der Uebergang nach 'done', kein Zuruecknehmen, kein Ablegen;
  *          - nur haushaltssichtbare Aufgaben, und die Absage darauf ist 404;
- *          - jede andere Schreibroute der beiden Module bleibt zu.
+ *          - jede andere Schreibroute des Moduls bleibt zu.
  *
  * WARUM DER ECHTE SERVER UND KEIN NACKTER ROUTER - derselbe Grund wie in
  * test-display-account.js: die Erlaubnis entsteht in den GLOBALEN Gates von
@@ -160,15 +160,12 @@ const MAX = addMember('max', 'Max');
 const GAST = addMember('gast', 'Gast');
 db.prepare('INSERT INTO split_expense_guest_users(user_id) VALUES (?)').run(GAST);
 
-db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(LEA);
-db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(MAX);
-
 /** Eine Aufgabe anlegen, ohne den Umweg ueber die Route - die Sichtbarkeit ist hier das Thema. */
-function addTask(title, visibility = 'all', points = 5) {
+function addTask(title, visibility = 'all') {
   return Number(db.prepare(`
-    INSERT INTO tasks(title, status, visibility, points, created_by)
-    VALUES (?, 'open', ?, ?, 1) RETURNING id
-  `).get(title, visibility, points).id);
+    INSERT INTO tasks(title, status, visibility, created_by)
+    VALUES (?, 'open', ?, 1) RETURNING id
+  `).get(title, visibility).id);
 }
 
 // --------------------------------------------------------
@@ -197,26 +194,13 @@ test('ohne den Schalter hakt das Tablett nichts ab, setzt nichts auf die Liste u
     assert.equal(res.body.reason, 'wall_read_only', action);
   }
 
-  // Auch die Einloesung ist eine Schreibroute des Tabletts - und damit zu.
-  // Sie geht vor der Praemie und der Person durch den Schalter: ein Katalog,
-  // den es nicht gibt, aendert die Antwort nicht.
-  const vorher = db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n;
-  const eis = (await admin('POST', '/rewards/catalog', { name: 'Schalter-Eis', cost: 1 })).body.data.id;
-  for (const body of [{ catalog_id: eis, user_id: LEA }, { catalog_id: 999999, user_id: LEA }]) {
-    const redeem = await display('POST', '/rewards/redemptions', body);
-    assert.equal(redeem.status, 403, JSON.stringify(body));
-    assert.equal(redeem.body.reason, 'wall_read_only', JSON.stringify(body));
-  }
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n, vorher, 'nichts beantragt');
-
-  // Und der Picker zeigt niemanden: die Ringe an der Wand, die Auswahl auf
-  // der Aufgabenseite und die Einloese-Knoepfe verschwinden, bevor die Route
+  // Und der Picker zeigt niemanden: die Ringe an der Wand und die Auswahl auf
+  // der Aufgabenseite verschwinden, bevor die Route
   // absagen muss.
   const people = await display('GET', '/displays/people');
   assert.equal(people.status, 200);
   assert.ok(people.body.data.length >= 2, 'Reichweite: die Mitglieder stehen da');
   assert.ok(people.body.data.every((p) => p.can_tick_off === false), 'niemand ist abhakbar');
-  assert.ok(people.body.data.every((p) => p.can_redeem === false), 'fuer niemanden wird eingeloest');
 
   // Minutnik und Gotuj schreiben nichts - Lesen bleibt offen.
   assert.equal((await display('GET', '/dashboard?audience=household')).status, 200);
@@ -305,8 +289,8 @@ test('GET /displays/people liefert die Mitglieder, ohne ihre Kontaktdaten', asyn
   const lea = names.find((p) => p.id === LEA);
   assert.deepEqual(
     Object.keys(lea).sort(),
-    ['avatar_color', 'avatar_data', 'can_redeem', 'can_tick_off', 'display_name', 'id'],
-    'keine Spalte mehr als diese sechs',
+    ['avatar_color', 'avatar_data', 'can_tick_off', 'display_name', 'id'],
+    'keine Spalte mehr als diese fuenf',
   );
 });
 
@@ -328,13 +312,6 @@ test('das Tablett hakt fuer eine benannte Person ab - und der Verlauf trennt bei
   const row = db.prepare('SELECT user_id, done_by_user_id FROM task_completions WHERE task_id = ?').get(id);
   assert.equal(row.done_by_user_id, LEA, 'getan hat es Lea');
   assert.equal(row.user_id, displayId, 'abgehakt hat es das Tablett');
-
-  // Und die Punkte folgen der Person, nicht dem Geraet: das Display nimmt am
-  // Belohnungssystem gar nicht teil, eine Buchung auf seinen Namen waere ein
-  // Punktestand, den niemand einloesen kann.
-  const ledger = db.prepare('SELECT user_id, delta FROM reward_ledger WHERE task_id = ?').all(id);
-  assert.deepEqual(ledger.map((l) => l.user_id), [LEA]);
-  assert.equal(ledger[0].delta, 5);
 });
 
 test('ohne benannte Person hakt das Tablett nichts ab', async () => {
@@ -376,7 +353,7 @@ test('die gewaehlte Person muss das Modul selbst schreiben duerfen', async () =>
 });
 
 test('das Tablett hakt ab - es nimmt nichts zurueck und legt nichts ab', async () => {
-  // Zuruecknehmen storniert Punkte und verwirft die Folgeinstanz einer Serie.
+  // Zuruecknehmen verwirft die Folgeinstanz einer Serie.
   // Das ist eine Korrektur, und Korrekturen bleiben beim Haushalt.
   const id = addTask('Blumen giessen');
   await display('PATCH', `/tasks/${id}/status`, { status: 'done', done_by_user_id: LEA });
@@ -425,7 +402,7 @@ test('eine unsichtbare Aufgabe antwortet auf JEDE Nutzlast gleich - und wie eine
   }
 });
 
-test('jede andere Schreibroute der beiden Module bleibt zu', async () => {
+test('jede andere Schreibroute des Moduls bleibt zu', async () => {
   // DIE EIGENTLICHE ZUSAGE DES TICKETS: „no creating, editing or deleting, and
   // no settings". Sie haengt daran, dass die Erlaubnis eine Liste von zwei
   // Routen ist und kein Modul-Scope - mit `tasks:write` waeren alle diese hier
@@ -439,8 +416,6 @@ test('jede andere Schreibroute der beiden Module bleibt zu', async () => {
     ['PATCH', `/tasks/${id}/check`, { line: 0 }],
     ['POST', '/tasks/categories', { key: 'neu', name: 'Neu' }],
     ['POST', `/tasks/${id}/comments`, { body: 'hallo' }],
-    ['POST', '/rewards/catalog', { name: 'Eis', cost: 5 }],
-    ['POST', '/rewards/bonus', { user_id: LEA, points: 100 }],
   ];
   for (const [method, path, body] of zu) {
     const res = await display(method, path, body);
@@ -449,62 +424,4 @@ test('jede andere Schreibroute der beiden Module bleibt zu', async () => {
   const row = db.prepare('SELECT title, archived_at FROM tasks WHERE id = ?').get(id);
   assert.equal(row.title, 'Unantastbar');
   assert.equal(row.archived_at, null);
-});
-
-// --------------------------------------------------------
-// Einloesung beantragen
-// --------------------------------------------------------
-
-const KATALOG = await admin('POST', '/rewards/catalog', { name: 'Eis', cost: 3 });
-const EIS = KATALOG.body.data.id;
-
-test('das Tablett beantragt eine Einloesung fuer die gewaehlte Person', async () => {
-  const res = await display('POST', '/rewards/redemptions', { catalog_id: EIS, user_id: LEA });
-  assert.equal(res.status, 201);
-  const row = db.prepare('SELECT user_id, requested_by FROM reward_redemptions WHERE id = ?').get(res.body.data.id);
-  assert.equal(row.user_id, LEA, 'bekommen hat es Lea');
-  assert.equal(row.requested_by, displayId, 'beantragt hat es das Tablett');
-});
-
-test('ohne benannte Person beantragt das Tablett nichts', async () => {
-  // Der Rueckfall auf das Geraet waere hier besonders irrefuehrend: das
-  // Display-Konto nimmt an Belohnungen gar nicht teil, die Absage kaeme also
-  // von `isEnrolled` und spraeche von einem Tippfehler statt von einer
-  // fehlenden Angabe.
-  const vorher = db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n;
-  const res = await display('POST', '/rewards/redemptions', { catalog_id: EIS });
-  assert.equal(res.status, 400);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reward_redemptions').get().n, vorher);
-});
-
-test('die Einloesung folgt denselben Grenzen wie das Abhaken', async () => {
-  for (const wer of [GAST, displayId, 999999]) {
-    assert.equal(
-      (await display('POST', '/rewards/redemptions', { catalog_id: EIS, user_id: wer })).status,
-      400,
-      `abgelehnt: ${wer}`,
-    );
-  }
-  db.prepare(`
-    INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
-    VALUES ('user', ?, 'module', 'rewards', 'read')
-  `).run(String(MAX));
-  assert.equal(
-    (await display('POST', '/rewards/redemptions', { catalog_id: EIS, user_id: MAX })).status,
-    403,
-    'ohne Schreibrecht auf Belohnungen geht es nicht',
-  );
-  db.prepare("DELETE FROM access_permissions WHERE subject_id = ? AND resource_key = 'rewards'").run(String(MAX));
-});
-
-test('das Entscheiden bleibt, wo der Haushalt es hingelegt hat', async () => {
-  // Beantragen ja, freigeben nein - `PATCH /rewards/redemptions/:id` steht
-  // ausdruecklich NICHT in der Route-Allowlist.
-  const beantragt = await display('POST', '/rewards/redemptions', { catalog_id: EIS, user_id: MAX });
-  assert.equal(beantragt.status, 201);
-  const id = beantragt.body.data.id;
-  for (const action of ['fulfill', 'reject', 'cancel']) {
-    assert.equal((await display('PATCH', `/rewards/redemptions/${id}`, { action })).status, 403, action);
-  }
-  assert.equal(db.prepare('SELECT status FROM reward_redemptions WHERE id = ?').get(id).status, 'pending');
 });

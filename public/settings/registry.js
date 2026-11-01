@@ -645,21 +645,6 @@ export const SETTINGS_SECTIONS = freezeEntries([
     props: { part: 'housekeeping' },
   },
   {
-    // Ohne den frueheren Schalter "Belohnungen aktivieren": der war ein
-    // zweiter An/Aus neben Aktive Module (A7 P1-3).
-    id: 'modules-rewards',
-    sheetId: 'module-rewards',
-    scope: 'household',
-    labelKey: 'settings.pageRewardsModule',
-    descriptionKey: 'settings.sheetRewardsDescription',
-    options: [
-      'settings.rewardsApprovalLabel',
-      'settings.rewardsDefaultPointsLabel',
-    ],
-    adminOnly: true,
-    loader: () => import('/settings/pages/modules-rewards.js'),
-  },
-  {
     // Ob ICH den Zyklus sehen will, entscheide ich (#760) - ob der Haushalt ihn
     // fuehrt, steht in `options-health` darunter.
     id: 'personal-health',
@@ -786,7 +771,6 @@ export const SETTINGS_LEAVES = freezeEntries([
   { id: 'module-dashboard', domainId: 'modules', path: '/settings/modules/overview', labelKey: 'nav.dashboard', descriptionKey: 'settings.sheetDashboardDescription', icon: 'layout-dashboard', module: 'dashboard' },
   { id: 'module-calendar', domainId: 'modules', path: '/settings/modules/calendar', labelKey: 'nav.calendar', descriptionKey: 'settings.sheetCalendarDescription', icon: 'calendar', module: 'calendar' },
   { id: 'module-tasks', domainId: 'modules', path: '/settings/modules/tasks', labelKey: 'nav.tasks', descriptionKey: 'settings.sheetTasksDescription', icon: 'check-square', module: 'tasks' },
-  { id: 'module-rewards', domainId: 'modules', path: '/settings/modules/rewards', labelKey: 'nav.rewards', descriptionKey: 'settings.sheetRewardsDescription', icon: 'award', module: 'rewards' },
   { id: 'module-schedule', domainId: 'modules', path: '/settings/modules/schedule', labelKey: 'nav.schedule', descriptionKey: 'settings.sheetScheduleDescription', icon: 'briefcase-business', module: 'schedule' },
   { id: 'module-kitchen', domainId: 'modules', path: '/settings/modules/kitchen', labelKey: 'nav.kitchen', descriptionKey: 'settings.pageKitchenDescription', icon: 'utensils', module: 'kitchen' },
   { id: 'module-housekeeping', domainId: 'modules', path: '/settings/modules/housekeeping', labelKey: 'nav.housekeeping', descriptionKey: 'settings.sheetHousekeepingDescription', icon: 'paintbrush', module: 'housekeeping' },
@@ -844,11 +828,9 @@ const MOVED_SETTINGS_PATHS = Object.freeze({
  * fuehrt die Adresse dorthin - egal, von welchem Blatt sie kommt. Sonst
  * landete der Link auf seinem alten Blatt, ohne die Option und ohne Hinweis.
  */
-const RETIRED_SETTINGS_OPTIONS = Object.freeze({
-  // Der zweite An/Aus neben Aktive Module (A7 P1-3): an und aus geht ein
-  // Modul nur dort.
-  'settings.rewardsEnableLabel': { path: '/settings/modules/active', section: 'modules-active' },
-});
+// Leer heute; der Mechanismus (und sein Verbraucher unten) bleibt, damit die naechste
+// ausgemusterte Option hier eingetragen werden kann: Schluessel -> { path, section }.
+const RETIRED_SETTINGS_OPTIONS = Object.freeze({});
 
 /**
  * Die Sessions-Tabs von vor dem Blatt-Umbau (2026-06). Historisch: Tab-Name ->

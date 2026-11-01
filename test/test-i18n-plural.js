@@ -142,23 +142,6 @@ test('„N von M"-Zähler nutzt bei einem Eintrag die Singularform', async () =>
   );
 });
 
-test('Standard-Punkte (#578): zählende Strings nutzen die Singularform', async () => {
-  // Review-Fund: die vier count-Strings des Features waren hart im Plural
-  // formuliert („1 Aufgaben aktualisiert").
-  await setLocale('de');
-  assert.equal(t('tasks.pointsSummary', { count: 1 }), '1 Punkt');
-  assert.equal(t('tasks.pointsSummary', { count: 10 }), '10 Punkte');
-  assert.equal(t('settings.rewardsDefaultPointsRebased', { count: 1 }), '1 Aufgabe aktualisiert.');
-  assert.equal(t('settings.rewardsDefaultPointsRebased', { count: 3 }), '3 Aufgaben aktualisiert.');
-  assert.match(t('settings.rewardsDefaultPointsRebaseTitle', { count: 1, from: 10, to: 15 }), /^1 Aufgabe von 10 auf 15 /);
-
-  await setLocale('en');
-  assert.equal(t('tasks.pointsSummary', { count: 1 }), '1 point');
-  assert.equal(t('tasks.pointsSummary', { count: 4 }), '4 points');
-  assert.equal(t('settings.rewardsDefaultPointsRebased', { count: 1 }), '1 task updated.');
-  assert.equal(t('settings.rewardsDefaultPointsRebased', { count: 2 }), '2 tasks updated.');
-});
-
 test('Garantie-Restlaufzeit (Inventar, Stufe 4): zählender String nutzt die Singularform', async () => {
   // Review-Fund: der String wurde mit `days` interpoliert. t() wählt die
   // Pluralvariante ausschließlich über einen numerischen `count` - daher stand
@@ -269,7 +252,6 @@ const PLURAL_EXCEPTIONS = {
   'contacts.importDetailFailed': 'NO_NOUN',
   'documents.selectCount': 'NO_NOUN',
   'tasks.bulkSelectedCount': 'NO_NOUN',
-  'dashboard.rewardsPending': 'NO_NOUN',
   'dashboard.healthRefill': 'NO_NOUN',
   'health.labs.abnormalBadge': 'NO_NOUN',
   'subscriptions.activeCount': 'NO_NOUN',
@@ -656,13 +638,13 @@ test('t() waehlt in cs, pl, ru, uk und ar die Form fuer 2, 5 und 11 (#1473)', as
     ['cs', 'dashboard.daysLeft', 5, 'Za 5 dní'],
     // 2026-10-27, v2: `dashboard.metricPoints` ging mit der Punkte-Kachel von
     // Dziś; dieselbe Stichprobe an einem lebenden Schluessel.
-    ['pl', 'tasks.tagUsageCount', 2, '2 zadania'],
-    ['pl', 'tasks.tagUsageCount', 5, '5 zadań'],
-    ['pl', 'tasks.tagUsageCount', 22, '22 zadania'],
+    ['pl', 'dashboard.daysLeft', 1, '1 dzień'],
+    ['pl', 'dashboard.daysLeft', 5, '5 dni'],
+    ['pl', 'dashboard.daysLeft', 22, '22 dni'],
     ['ru', 'dashboard.daysLeft', 2, '2 дня'],
     ['ru', 'dashboard.daysLeft', 11, '11 дн.'],
-    ['uk', 'tasks.pointsSummary', 3, '3 бали'],
-    ['uk', 'tasks.pointsSummary', 12, '12 балів'],
+    ['uk', 'dashboard.daysLeft', 3, '3 дні'],
+    ['uk', 'dashboard.daysLeft', 12, '12 дн.'],
     ['ar', 'dashboard.daysLeft', 2, 'يومان'],
     ['ar', 'dashboard.daysLeft', 5, '5 أيام'],
     ['ar', 'dashboard.daysLeft', 11, '11 يومًا'],

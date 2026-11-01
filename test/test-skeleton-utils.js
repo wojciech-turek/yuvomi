@@ -6,73 +6,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { renderSkeletonCard, renderSkeletonList, placeSkeletonUntilContent } from '../public/utils/skeleton.js';
+import {
+  loadingSpinnerHtml, renderSkeletonCard, renderSkeletonList, renderSkeletonChart, placeSkeletonUntilContent,
+} from '../public/utils/skeleton.js';
 
-test('renderSkeletonCard: Default = 2 Zeilen (Titel + 1)', () => {
-  const html = renderSkeletonCard();
-  const lineDivs = html.match(/class="skeleton skeleton-line skeleton-line--/g) || [];
-  assert.equal(lineDivs.length, 2);
-  assert.match(html, /skeleton-card/);
-  assert.match(html, /skeleton-line--title/);
+// Seit 2026-10-29 (Schnell-Erfassen, Aufgabe 2) gibt es keine Skelette mehr: jede
+// Render-Funktion liefert denselben stillen Ring, die alten Optionen werden
+// angenommen und ignoriert.
+const SPINNER = '<div class="page-loading" aria-hidden="true"><span class="page-loading__spinner"></span></div>';
+
+test('loadingSpinnerHtml: ein stummer Ring in einem aria-hidden-Huelle', () => {
+  assert.equal(loadingSpinnerHtml(), SPINNER);
 });
 
-test('renderSkeletonCard: lines steuert Zeilenanzahl', () => {
-  const html = renderSkeletonCard({ lines: 4 });
-  // 4 line-Divs → "skeleton-line" erscheint 4× (plus Varianten-Suffixe zählen separat)
-  const lineDivs = html.match(/class="skeleton skeleton-line skeleton-line--/g) || [];
-  assert.equal(lineDivs.length, 4);
-});
-
-test('renderSkeletonCard: erste Zeile ist Titel-Variante, Rest rotiert', () => {
-  const html = renderSkeletonCard({ lines: 3 });
-  assert.match(html, /skeleton-line--title/);
-  assert.match(html, /skeleton-line--medium/);
-  assert.match(html, /skeleton-line--full/);
-});
-
-test('renderSkeletonCard: lines<1 wird auf 1 geklemmt', () => {
-  const html = renderSkeletonCard({ lines: 0 });
-  const lineDivs = html.match(/class="skeleton skeleton-line/g) || [];
-  assert.equal(lineDivs.length, 1);
-});
-
-test('renderSkeletonList: Default = 5 Karten', () => {
-  const html = renderSkeletonList();
-  const cards = html.match(/skeleton-card/g) || [];
-  assert.equal(cards.length, 5);
-});
-
-test('renderSkeletonList: rows steuert Kartenanzahl', () => {
-  const html = renderSkeletonList({ rows: 3 });
-  const cards = html.match(/skeleton-card/g) || [];
-  assert.equal(cards.length, 3);
-});
-
-test('renderSkeletonList: Wrapper ist aria-hidden (dekorativ)', () => {
-  const html = renderSkeletonList({ rows: 1 });
-  assert.match(html, /<div class="skeleton-list" aria-hidden="true">/);
-});
-
-test('renderSkeletonList: rows=0 erzeugt leeren, aber gültigen Wrapper', () => {
-  const html = renderSkeletonList({ rows: 0 });
-  assert.match(html, /skeleton-list/);
-  const cards = html.match(/skeleton-card/g) || [];
-  assert.equal(cards.length, 0);
-});
-
-test('renderSkeletonList: nutzt nur global definierte Klassen (keine widget-skeleton)', () => {
-  const html = renderSkeletonList();
-  assert.doesNotMatch(html, /widget-skeleton/);
-});
-
-// R16 (Bewegung): die Statistik laedt in Diagrammform, nicht als Liste.
-test('renderSkeletonChart: Titel, Diagrammblock und Legendenzeile je Karte', async () => {
-  const { renderSkeletonChart } = await import('../public/utils/skeleton.js');
-  const html = renderSkeletonChart({ charts: 2 });
-  assert.equal((html.match(/class="skeleton skeleton-chart"/g) || []).length, 2);
-  assert.equal((html.match(/skeleton-line--title/g) || []).length, 2);
-  assert.match(html, /^<div class="skeleton-list" aria-hidden="true">/, 'dieselbe Huelle wie die Liste, fuer Screenreader stumm');
-  assert.equal((renderSkeletonChart({ charts: 0 }).match(/skeleton-chart/g) || []).length, 1, 'mindestens eine Flaeche');
+test('renderSkeletonCard/List/Chart: liefern genau loadingSpinnerHtml(), egal welche Optionen', () => {
+  assert.equal(renderSkeletonCard(), SPINNER);
+  assert.equal(renderSkeletonCard({ lines: 4 }), SPINNER);
+  assert.equal(renderSkeletonList(), SPINNER);
+  assert.equal(renderSkeletonList({ rows: 3, lines: 3 }), SPINNER);
+  assert.equal(renderSkeletonList({ rows: 0 }), SPINNER);
+  assert.equal(renderSkeletonChart(), SPINNER);
+  assert.equal(renderSkeletonChart({ charts: 2 }), SPINNER);
 });
 
 // ── Skelett, das von selbst geht (Critique R19, 2026-10-16) ─────────────────
@@ -126,7 +80,7 @@ test('placeSkeletonUntilContent: kommt der Inhalt nach dem Skelett, geht das Ske
   await delay(10);
   const skeleton = placeSkeletonUntilContent(host, renderSkeletonList({ rows: 2, lines: 3 }), { Observer: FakeObserver });
   assert.ok(skeleton, 'Vorbedingung: der leere Traeger bekommt ein Skelett');
-  assert.deepEqual(host.childNodes.map((n) => n.name), ['skeleton-list']);
+  assert.deepEqual(host.childNodes.map((n) => n.name), ['page-loading']);
   await render;
   await delay(0);
   assert.deepEqual(host.childNodes.map((n) => n.name), ['settings-section'],

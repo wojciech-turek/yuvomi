@@ -1,8 +1,8 @@
 /**
  * Modul: Tasks-Routen (Härtung)
  * Zweck: End-to-End über den echten Router - die zuvor ungetesteten
- *        Zweige: PUT /:id (Vollupdate inkl. Zuweisungs-Replace, Punkte-Clamp,
- *        Sichtbarkeit, Housekeeping-/Reward-Kopplung), GET /meta/options,
+ *        Zweige: PUT /:id (Vollupdate inkl. Zuweisungs-Replace,
+ *        Sichtbarkeit, Housekeeping-Kopplung), GET /meta/options,
  *        Kategorie-Umbenennen/Löschen (404/400/409), Listen-Filter, POST-
  *        Verschachtelung (Parent-404, Tiefenlimit), PATCH-Status (400/404),
  *        DELETE (404). Die Feature-Suiten (recurrence, multi-assignment,
@@ -103,13 +103,13 @@ test('setup: Default-Kategorien vorhanden', async () => {
 });
 
 // --------------------------------------------------------
-// POST: Punkte-Clamp, Verschachtelung (Parent-404, Tiefenlimit)
+// POST: Verschachtelung (Parent-404, Tiefenlimit)
 // --------------------------------------------------------
 let PARENT, SUB;
-test('POST: Punkte über dem Maximum werden auf 10000 geklemmt', async () => {
+test('POST: ein mitgeschicktes points-Feld wird ignoriert, die Aufgabe steht auf 0', async () => {
   const r = await call('POST', '/', { as: { id: ALICE, role: 'admin' }, body: { title: 'Viele Punkte', points: 99999 } });
   assert.equal(r.status, 201);
-  assert.equal(r.body.data.points, 10000);
+  assert.equal(r.body.data.points, 0);
 });
 
 test('POST: Subtask unter Parent erlaubt; unbekannter Parent → 404', async () => {
@@ -163,9 +163,9 @@ test('GET /:id: unbekannte ID → 404', async () => {
 });
 
 // --------------------------------------------------------
-// PUT /:id: Vollupdate, Zuweisungs-Replace, Sichtbarkeit, Punkte
+// PUT /:id: Vollupdate, Zuweisungs-Replace, Sichtbarkeit
 // --------------------------------------------------------
-test('PUT /:id: aktualisiert Felder, ersetzt Zuweisungen, klemmt Punkte', async () => {
+test('PUT /:id: aktualisiert Felder, ersetzt Zuweisungen, laesst Punkte unberuehrt', async () => {
   const created = await call('POST', '/', { as: { id: ALICE, role: 'admin' }, body: { title: 'Ur-Titel', category: CATEGORY, assigned_to: [ALICE] } });
   const id = created.body.data.id;
   const r = await call('PUT', `/${id}`, {
@@ -176,7 +176,7 @@ test('PUT /:id: aktualisiert Felder, ersetzt Zuweisungen, klemmt Punkte', async 
   assert.equal(r.body.data.title, 'Neu-Titel');
   assert.equal(r.body.data.priority, 'high');
   assert.equal(r.body.data.status, 'in_progress');
-  assert.equal(r.body.data.points, 10000, 'Punkte geklemmt');
+  assert.equal(r.body.data.points, 0, 'points ist kein Feld mehr');
   assert.equal(r.body.data.assigned_users.length, 1);
   assert.equal(r.body.data.assigned_users[0].id, BOB, 'Zuweisung ersetzt');
   assert.ok(Array.isArray(r.body.data.subtasks));
@@ -239,6 +239,15 @@ test('GET /meta/options: Nutzer (ohne Housekeeping-Kraft) + Enum-Listen', async 
   assert.deepEqual(r.body.priorities, ['none', 'low', 'medium', 'high', 'urgent']);
   assert.deepEqual(r.body.statuses, ['open', 'in_progress', 'done', 'archived']);
   assert.ok(Array.isArray(r.body.categories) && r.body.categories.length >= 2);
+  assert.equal('default_points' in r.body, false, 'keine Punkte mehr in den Optionen');
+});
+
+test('POST ohne points speichert 0, die Punkte-Routen sind weg', async () => {
+  const r = await call('POST', '/', { as: { id: ALICE, role: 'admin' }, body: { title: 'Ohne Punkte' } });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.data.points, 0);
+  const paths = tasksRouter.stack.map((layer) => layer.route?.path).filter(Boolean);
+  assert.deepEqual(paths.filter((p) => p.startsWith('/points')), [], 'keine Punkte-Routen mehr');
 });
 
 // --------------------------------------------------------
@@ -449,19 +458,19 @@ test('GET /: Abgelegtes bleibt draußen, bis danach gefragt wird', async () => {
   assert.deepEqual(titles(both.body.data), [`${marker}-abgelegt`, `${marker}-offen`]);
 });
 
-test('Ablegen storniert keine Punkte-Gutschrift', async () => {
+test('Ablegen nimmt das Erledigen nicht zurueck', async () => {
   const admin = { id: ALICE, role: 'admin' };
-  db.prepare('INSERT OR REPLACE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BOB);
 
-  const created = await call('POST', '/', { as: admin, body: { title: `punkte-${randomUUID().slice(0, 8)}`, points: 7, assigned_to: [BOB] } });
+  const created = await call('POST', '/', { as: admin, body: { title: `abgelegt-${randomUUID().slice(0, 8)}`, assigned_to: [BOB] } });
   const id = created.body.data.id;
   await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
 
-  const earned = () => db.prepare("SELECT COALESCE(SUM(delta), 0) AS n FROM reward_ledger WHERE task_id = ? AND type = 'earn'").get(id).n;
-  assert.equal(earned(), 7, 'Erledigen bucht');
+  const completions = () => db.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ?').get(id).n;
+  assert.equal(completions(), 1, 'Erledigen steht im Verlauf');
 
   await call('PATCH', `/${id}/archive`, { as: admin, body: { archived: true } });
-  assert.equal(earned(), 7, 'Ablegen ist keine Rücknahme des Erledigens');
+  assert.equal(completions(), 1, 'Ablegen ist keine Rücknahme des Erledigens');
+  assert.equal(db.prepare('SELECT status FROM tasks WHERE id = ?').get(id).status, 'done');
 });
 
 // --------------------------------------------------------
@@ -772,16 +781,11 @@ test('auch eine gewoehnliche fremde Aufgabe ist nicht loeschbar (#748-Review)', 
 // Statusweg lud die Zeile per id und schrieb darauf - nur der Display-Zweig
 // fragte nach der Sichtbarkeit. Gemessen wird deshalb nicht nur der
 // Antwortcode, sondern alles, was der Uebergang schreibt: Status, Ablage,
-// Punktebuchung, Verlauf und die Folgeinstanz einer Serie.
+// Verlauf und die Folgeinstanz einer Serie.
 
 const STATUS_OWNER    = seedUser('status-owner', 'member');
 const STATUS_ASSIGNEE = seedUser('status-assignee', 'member');
 const STATUS_OUTSIDER = seedUser('status-outsider', 'member');
-// Alle drei nehmen am Punktesystem teil: ohne Einschreibung gaebe es keine
-// Buchung, und "keine Buchung" bewiese dann nichts.
-for (const id of [STATUS_OWNER, STATUS_ASSIGNEE, STATUS_OUTSIDER]) {
-  db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(id);
-}
 const statusOwner    = { id: STATUS_OWNER, role: 'member' };
 const statusAssignee = { id: STATUS_ASSIGNEE, role: 'member' };
 const statusOutsider = { id: STATUS_OUTSIDER, role: 'member' };
@@ -792,19 +796,18 @@ function statusFootprint(id) {
   return {
     status: row.status,
     archived_at: row.archived_at,
-    ledger: db.prepare('SELECT user_id, delta, type FROM reward_ledger WHERE task_id = ? ORDER BY id').all(id),
     completions: db.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ?').get(id).n,
     followups: db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE recurrence_origin_id = ?').get(id).n,
   };
 }
 
-/** Eine taeglich wiederkehrende Aufgabe mit Punkten - jede Nebenwirkung des Abhakens ist an ihr sichtbar. */
+/** Eine taeglich wiederkehrende Aufgabe - jede Nebenwirkung des Abhakens ist an ihr sichtbar. */
 async function seriesTask(visibility, extra = {}) {
   const r = await call('POST', '/', {
     as: statusOwner,
     body: {
       title: `status-${visibility}-${randomUUID().slice(0, 8)}`,
-      category: CATEGORY, visibility, points: 5,
+      category: CATEGORY, visibility,
       due_date: '2030-01-07', is_recurring: 1, recurrence_rule: 'FREQ=DAILY',
       ...extra,
     },
@@ -842,12 +845,11 @@ for (const [label, visibility, extra] of [
     assert.equal(named.status, 404);
     assert.deepEqual(statusFootprint(id), open);
 
-    // Rueckrichtung: wer die Aufgabe sieht, hakt ab - mit Buchung, Verlauf und Folgeinstanz.
+    // Rueckrichtung: wer die Aufgabe sieht, hakt ab - mit Verlauf und Folgeinstanz.
     const ticked = await call('PATCH', `/${id}/status`, { as: statusOwner, body: { status: 'done' } });
     assert.equal(ticked.status, 200);
     const done = statusFootprint(id);
     assert.equal(done.status, 'done');
-    assert.equal(done.ledger.length, 1, 'die Probe braucht eine Buchung, die storniert werden koennte');
     assert.equal(done.completions, 1);
     assert.equal(done.followups, 1, 'die Probe braucht eine Folgeinstanz, die verworfen werden koennte');
 
@@ -855,7 +857,7 @@ for (const [label, visibility, extra] of [
       const r = await call('PATCH', `/${id}/status`, { as: statusOutsider, body: { status } });
       assert.equal(r.status, 404, `${status} auf erledigte unsichtbare Aufgabe`);
       assert.deepEqual(r.body, missing.body);
-      assert.deepEqual(statusFootprint(id), done, `${status} hat storniert, verworfen oder abgelegt`);
+      assert.deepEqual(statusFootprint(id), done, `${status} hat verworfen oder abgelegt`);
     }
   });
 }
@@ -1115,23 +1117,18 @@ test('POST: mitgeschickter Status wird geschrieben, nicht still verworfen', asyn
   assert.equal(row.status, 'in_progress', 'und die Zeile auch');
 });
 
-test('POST: erledigt angelegt bucht Punkte und schreibt den Verlauf', async () => {
+test('POST: erledigt angelegt schreibt den Verlauf', async () => {
   const admin = { id: ALICE, role: 'admin' };
-  db.prepare('INSERT OR REPLACE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BOB);
 
   const r = await call('POST', '/', {
     as: admin,
-    body: { title: `erledigt-angelegt-${randomUUID().slice(0, 8)}`, status: 'done', points: 5, assigned_to: [BOB] },
+    body: { title: `erledigt-angelegt-${randomUUID().slice(0, 8)}`, status: 'done', assigned_to: [BOB] },
   });
   assert.equal(r.status, 201);
   const id = r.body.data.id;
 
-  // Die Zahl kommt aus derselben Abfrage wie beim Abhaken weiter oben: ein
-  // erledigt angelegter Vorgang darf nicht anders zählen als ein erledigt
-  // abgehakter, sonst führen Punktekonto und Verlauf zwei Buchhaltungen.
-  const earned = db.prepare("SELECT COALESCE(SUM(delta), 0) AS n FROM reward_ledger WHERE task_id = ? AND type = 'earn'").get(id).n;
-  assert.equal(earned, 5, 'Anlegen mit done bucht wie das Abhaken');
-
+  // Ein erledigt angelegter Vorgang darf nicht anders zählen als ein erledigt
+  // abgehakter.
   const completions = db.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ?').get(id).n;
   assert.equal(completions, 1, 'und steht im Verlauf');
 });
@@ -1317,11 +1314,10 @@ test('PUT: die Wiederholung laesst sich einschalten, auch ohne Nachfolger', asyn
 // --------------------------------------------------------
 // PATCH /:id/status: wer hat es getan (#1205)
 // --------------------------------------------------------
-test('PATCH status: done_by_user_id landet im Verlauf und bucht die Punkte dorthin', async () => {
+test('PATCH status: done_by_user_id landet im Verlauf', async () => {
   const admin = { id: ALICE, role: 'admin' };
-  db.prepare('INSERT OR IGNORE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BOB);
 
-  const created = await call('POST', '/', { as: admin, body: { title: `getan-von-${randomUUID().slice(0, 8)}`, points: 7 } });
+  const created = await call('POST', '/', { as: admin, body: { title: `getan-von-${randomUUID().slice(0, 8)}` } });
   assert.equal(created.status, 201);
   const id = created.body.data.id;
 
@@ -1332,30 +1328,17 @@ test('PATCH status: done_by_user_id landet im Verlauf und bucht die Punkte dorth
   const row = db.prepare('SELECT user_id, done_by_user_id FROM task_completions WHERE task_id = ?').get(id);
   assert.equal(row.user_id, ALICE, 'wer abgehakt hat');
   assert.equal(row.done_by_user_id, BOB, 'wer es getan hat');
-
-  const earn = db.prepare("SELECT user_id, delta FROM reward_ledger WHERE task_id = ? AND type = 'earn'").all(id);
-  assert.equal(earn.length, 1);
-  assert.equal(earn[0].user_id, BOB, 'ohne die Angabe haette ALICE als handelnde Person gebucht');
-  assert.equal(earn[0].delta, 7);
 });
 
-test('PATCH status: das Zuruecknehmen holt die Punkte der benannten Person zurueck', async () => {
+test('PATCH status: das Zuruecknehmen raeumt den Verlauf der benannten Person ab', async () => {
   const admin = { id: ALICE, role: 'admin' };
-  db.prepare('INSERT OR IGNORE INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BOB);
 
-  const created = await call('POST', '/', { as: admin, body: { title: `zurueck-${randomUUID().slice(0, 8)}`, points: 9 } });
+  const created = await call('POST', '/', { as: admin, body: { title: `zurueck-${randomUUID().slice(0, 8)}` } });
   const id = created.body.data.id;
   await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done', done_by_user_id: BOB } });
   await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'open' } });
 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id = ?').get(id).n, 0);
-  // Seit #1607 bleibt die earn-Zeile stehen und eine Gegenbuchung hebt sie auf:
-  // gemessen wird deshalb, was bei der Person ankommt, nicht die Zeilenzahl.
-  const rows = db.prepare('SELECT user_id, delta, type FROM reward_ledger WHERE task_id = ? ORDER BY id ASC').all(id);
-  assert.deepEqual(rows, [
-    { user_id: BOB, delta: 9, type: 'earn' },
-    { user_id: BOB, delta: -9, type: 'reversal' },
-  ], 'die Gegenbuchung trifft die benannte Person, nicht die abhakende');
 });
 
 test('PATCH status: eine Person ausserhalb des Haushalts wird abgewiesen', async () => {
@@ -1443,226 +1426,4 @@ test('PATCH status: eine bereits erledigte Aufgabe nimmt keine neue Benennung an
   const again = await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done', done_by_user_id: 999999 } });
   assert.equal(again.status, 200);
   assert.equal(db.prepare('SELECT done_by_user_id FROM task_completions WHERE task_id = ?').get(id).done_by_user_id, BOB);
-});
-
-// --------------------------------------------------------
-// Wiederöffnen bucht gegen, statt die Gutschrift zu löschen (#1607)
-// --------------------------------------------------------
-
-/** Ein frisches, teilnehmendes Mitglied - die Salden der anderen Tests stören nicht. */
-function seedEarner(prefix) {
-  const id = seedUser(prefix, 'member');
-  db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(id);
-  return id;
-}
-
-const ledgerOf = (userId) => db.prepare(
-  'SELECT delta, type, task_id FROM reward_ledger WHERE user_id = ? ORDER BY id ASC',
-).all(userId);
-const balanceOf = (userId) => db.prepare(
-  'SELECT COALESCE(SUM(delta), 0) AS n FROM reward_ledger WHERE user_id = ?',
-).get(userId).n;
-
-test('Wiederöffnen lässt die Gutschrift im Verlauf stehen und bucht sie sichtbar zurück (#1607)', async () => {
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-reopen');
-  const created = await call('POST', '/', { as: admin, body: { title: `reopen-${randomUUID().slice(0, 8)}`, points: 60, assigned_to: [kid] } });
-  const id = created.body.data.id;
-
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-  // Die Meldung: 50 Punkte sind schon für eine Prämie reserviert.
-  db.prepare("INSERT INTO reward_ledger (user_id, delta, type, reason) VALUES (?, -50, 'redeem', 'Eis')").run(kid);
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'open' } });
-
-  assert.deepEqual(ledgerOf(kid), [
-    { delta: 60, type: 'earn', task_id: id },
-    { delta: -50, type: 'redeem', task_id: null },
-    { delta: -60, type: 'reversal', task_id: id },
-  ], 'der Verlauf erzählt alle drei Schritte');
-  assert.equal(balanceOf(kid), -50, 'der Saldo ist ehrlich im Minus und erklärt sich aus dem Verlauf');
-});
-
-test('Erneutes Erledigen nach dem Wiederöffnen vergibt genau einmal neu (#1607)', async () => {
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-redo');
-  const created = await call('POST', '/', { as: admin, body: { title: `redo-${randomUUID().slice(0, 8)}`, points: 30, assigned_to: [kid] } });
-  const id = created.body.data.id;
-
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'open' } });
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-  // done -> done ist kein Übergang und darf nichts buchen.
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-
-  assert.deepEqual(ledgerOf(kid).map((r) => [r.type, r.delta]), [
-    ['earn', 30], ['reversal', -30], ['earn', 30],
-  ]);
-  assert.equal(balanceOf(kid), 30);
-
-  // Zweimal zurück: die zweite Rücknahme findet nichts Offenes mehr.
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'open' } });
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'in_progress' } });
-  assert.equal(balanceOf(kid), 0);
-  assert.equal(ledgerOf(kid).length, 4, 'open -> in_progress bucht nicht noch einmal gegen');
-});
-
-test('Eine wiederkehrende Aufgabe bucht beim Weiterrollen keine Gegenbuchung (#1607)', async () => {
-  // Die Serie setzt nie dieselbe Zeile zurück: Erledigen legt eine NEUE
-  // Instanz an, die erledigte bleibt 'done'. Es gibt also keinen Übergang
-  // weg von 'done', an dem eine Gegenbuchung hängen könnte.
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-serie');
-  const created = await call('POST', '/', {
-    as: admin,
-    body: {
-      title: `serie-${randomUUID().slice(0, 8)}`, points: 10, assigned_to: [kid],
-      is_recurring: true, recurrence_rule: 'FREQ=WEEKLY', due_date: '2031-03-03',
-    },
-  });
-  const id = created.body.data.id;
-  await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-
-  const followup = db.prepare('SELECT id, status FROM tasks WHERE recurrence_origin_id = ? AND parent_task_id IS NULL').get(id);
-  assert.equal(followup.status, 'open', 'die Folgeinstanz ist eine eigene Zeile');
-  assert.equal(db.prepare('SELECT status FROM tasks WHERE id = ?').get(id).status, 'done');
-  assert.deepEqual(ledgerOf(kid).map((r) => [r.type, r.delta, r.task_id]), [['earn', 10, id]]);
-});
-
-// --------------------------------------------------------
-// Eine Serie zahlt je Person einmal am Tag (#1603)
-//
-// DIE UHR IST FESTGENAGELT. Der Deckel fragt "heute" - mit der echten Uhr
-// wäre ein Test um Mitternacht entweder rot oder sagte nichts. Gemockt wird nur
-// `Date` (nicht die Timer, an denen fetch und der Server hängen): daraus liest
-// der Deckel den Tag, und daraus schreibt er den Zeitpunkt der Gutschrift.
-// Die Zone steht ausdrücklich, damit der Lauf nicht an `TZ` der Maschine hängt.
-// --------------------------------------------------------
-
-function pinClock(t, iso) {
-  db.prepare("INSERT INTO sync_config (key, value) VALUES ('household_timezone', 'Europe/Berlin') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
-  t.mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
-  t.after(() => db.prepare("DELETE FROM sync_config WHERE key = 'household_timezone'").run());
-}
-
-for (const fromCompletion of [true, false]) {
-  test(`Serie ${fromCompletion ? 'ab Erledigung' : 'ab Fälligkeit'}: mehrfaches Abhaken am selben Tag bringt eine Gutschrift (#1603)`, async (t) => {
-    pinClock(t, '2031-03-03T09:00:00Z');
-    const admin = { id: ALICE, role: 'admin' };
-    const kid = seedEarner(`kid-deckel-${fromCompletion ? 'e' : 'f'}`);
-    const title = `deckel-${randomUUID().slice(0, 8)}`;
-    const created = await call('POST', '/', {
-      as: admin,
-      body: {
-        title, points: 10, assigned_to: [kid], is_recurring: true, recurrence_rule: 'FREQ=DAILY',
-        recurrence_from_completion: fromCompletion, due_date: '2031-03-04',
-      },
-    });
-    assert.equal(created.status, 201);
-
-    // Dreimal hintereinander: jeder Haken legt eine NEUE Instanz an, die sich
-    // sofort wieder abhaken lässt.
-    let id = created.body.data.id;
-    for (let i = 0; i < 3; i++) {
-      const r = await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-      assert.equal(r.status, 200, 'das Abhaken selbst bleibt erlaubt');
-      const next = followupOf(id);
-      assert.ok(next, 'und rollt die Serie weiter');
-      id = next.id;
-    }
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE title = ? AND status = 'done'").get(title).n, 3);
-    assert.equal(balanceOf(kid), 10, 'drei Haken an einem Tag sind eine Gutschrift');
-
-    // Am nächsten Haushaltstag zahlt die Serie wieder - genau einmal.
-    t.mock.timers.setTime(new Date('2031-03-04T09:00:00Z').getTime());
-    await call('PATCH', `/${id}/status`, { as: admin, body: { status: 'done' } });
-    await call('PATCH', `/${followupOf(id).id}/status`, { as: admin, body: { status: 'done' } });
-    assert.equal(balanceOf(kid), 20);
-  });
-}
-
-test('Serie: die Gutschrift einer GELÖSCHTEN Vorgängerin sperrt die Folgeinstanz weiter (#1603)', async (t) => {
-  // Das Löschen der erledigten Instanz nimmt der Folgeinstanz den Verweis
-  // (recurrence_origin_id ist ON DELETE SET NULL) und der Gutschrift die
-  // task_id. Hinge der Deckel an der Kette, wäre "erledigen, löschen,
-  // erledigen" derselbe Punktehahn wie vorher, nur mit einem Klick mehr.
-  pinClock(t, '2031-03-10T09:00:00Z');
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-geloescht');
-  const created = await call('POST', '/', {
-    as: admin,
-    body: { title: `geloescht-${randomUUID().slice(0, 8)}`, points: 10, assigned_to: [kid], is_recurring: true, recurrence_rule: 'FREQ=DAILY', due_date: '2031-03-11' },
-  });
-  const a = created.body.data.id;
-  await call('PATCH', `/${a}/status`, { as: admin, body: { status: 'done' } });
-  const b = followupOf(a).id;
-  assert.equal(db.prepare('SELECT recurrence_series_id FROM tasks WHERE id = ?').get(b).recurrence_series_id, a, 'die Serie reist als Wert mit');
-  assert.equal((await call('DELETE', `/${a}`, { as: admin })).status < 300, true);
-  assert.equal(db.prepare('SELECT recurrence_origin_id FROM tasks WHERE id = ?').get(b).recurrence_origin_id, null, 'Vorbedingung: der Verweis ist weg');
-
-  await call('PATCH', `/${b}/status`, { as: admin, body: { status: 'done' } });
-  assert.equal(balanceOf(kid), 10, 'die Gutschrift der gelöschten Instanz zählt für heute weiter');
-});
-
-test('Serie: eine Teilaufgabe zahlt am selben Tag nicht noch einmal, auch wenn die Folgeinstanz seit Tagen steht (#1603)', async (t) => {
-  // Die Hauptaufgabe wird am 1. abgehakt, ihre Teilaufgabe bleibt liegen. Die
-  // Folgeinstanz mit der KOPIE der Teilaufgabe steht dann vier Tage herum. Am
-  // 5. werden Original und Kopie abgehakt: dieselbe Teilaufgabe, derselbe Tag.
-  pinClock(t, '2031-04-01T09:00:00Z');
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-teilaufgabe');
-  const created = await call('POST', '/', {
-    as: admin,
-    body: { title: `teil-${randomUUID().slice(0, 8)}`, points: 0, is_recurring: true, recurrence_rule: 'FREQ=DAILY', due_date: '2031-04-02' },
-  });
-  const a = created.body.data.id;
-  const sub = await call('POST', '/', { as: admin, body: { title: 'Schritt', points: 5, parent_task_id: a, assigned_to: [kid] } });
-  assert.equal(sub.status, 201);
-  const sa = sub.body.data.id;
-  await call('PATCH', `/${a}/status`, { as: admin, body: { status: 'done' } });
-  const b = followupOf(a).id;
-  const sb = db.prepare('SELECT id FROM tasks WHERE parent_task_id = ?').get(b).id;
-
-  t.mock.timers.setTime(new Date('2031-04-05T09:00:00Z').getTime());
-  await call('PATCH', `/${sa}/status`, { as: admin, body: { status: 'done' } });
-  assert.equal(balanceOf(kid), 5);
-  await call('PATCH', `/${sb}/status`, { as: admin, body: { status: 'done' } });
-  assert.equal(balanceOf(kid), 5, 'Original und Kopie am selben Tag: eine Gutschrift');
-
-  // Und über mehrere Generationen: die Kopie der Kopie gehört zur selben Serie.
-  await call('PATCH', `/${b}/status`, { as: admin, body: { status: 'done' } });
-  const sc = db.prepare('SELECT id FROM tasks WHERE parent_task_id = ?').get(followupOf(b).id).id;
-  await call('PATCH', `/${sc}/status`, { as: admin, body: { status: 'done' } });
-  assert.equal(balanceOf(kid), 5);
-  assert.deepEqual(
-    db.prepare('SELECT recurrence_series_id AS s FROM tasks WHERE id IN (?, ?) ORDER BY id').all(sb, sc).map((r) => r.s),
-    [sa, sa], 'jede Kopie trägt die erste Teilaufgabe als Serie, nicht ihre direkte Vorgängerin',
-  );
-});
-
-test('Serie: Original und Kopie einer Teilaufgabe zahlen auch in umgekehrter Reihenfolge nur einmal (#1603)', async (t) => {
-  // Der Weg aus dem Review: S1 abhaken, Elternaufgabe erledigen (S2 entsteht),
-  // S1 wieder öffnen, S2 abhaken, S1 erneut abhaken. Eine Suche, die von S1 aus
-  // nur RÜCKWÄRTS über die Vorgänger läuft, findet die Gutschrift der jüngeren
-  // Kopie S2 nie - und Teilaufgaben stehen nicht im Verlauf, über den sich die
-  // Serie sonst in beide Richtungen fände.
-  pinClock(t, '2031-05-05T09:00:00Z');
-  const admin = { id: ALICE, role: 'admin' };
-  const kid = seedEarner('kid-rueckwaerts');
-  const created = await call('POST', '/', {
-    as: admin,
-    body: { title: `rueck-${randomUUID().slice(0, 8)}`, points: 0, is_recurring: true, recurrence_rule: 'FREQ=DAILY', due_date: '2031-05-06' },
-  });
-  const tId = created.body.data.id;
-  const s1 = (await call('POST', '/', { as: admin, body: { title: 'Schritt', points: 5, parent_task_id: tId, assigned_to: [kid] } })).body.data.id;
-  const tick = (id, status) => call('PATCH', `/${id}/status`, { as: admin, body: { status } });
-
-  await tick(s1, 'done');
-  await tick(tId, 'done');
-  const s2 = db.prepare('SELECT id FROM tasks WHERE parent_task_id = ?').get(followupOf(tId).id).id;
-  await tick(s1, 'open');
-  assert.equal(balanceOf(kid), 0);
-  await tick(s2, 'done');
-  assert.equal(balanceOf(kid), 5, 'S2 zahlt: die Gutschrift von S1 ist zurückgenommen');
-  await tick(s1, 'done');
-  assert.equal(balanceOf(kid), 5, 'S1 zahlt nicht noch einmal: die Serie ist für heute über S2 vergütet');
 });

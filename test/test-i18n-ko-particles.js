@@ -220,9 +220,9 @@ test('t() in ko: echte Schluessel, je Partikel mit und ohne Batchim', async () =
     ['rrule.lastDayOfMonthHintSame', { date: '오늘 하루' }, '오늘 하루는 이미 해당 월의 마지막 날이며 첫 일정이 됩니다.'],
     ['budget.trendNeutral', { month: '지난달' }, '- 지난달과 동일'],
     ['budget.trendNeutral', { month: '작년 같은 시기' }, '- 작년 같은 시기와 동일'],
-    ['tasks.tagFilterBy', { tag: '집' }, '태그 집으로 필터'],
-    ['tasks.tagFilterBy', { tag: '학교' }, '태그 학교로 필터'],
-    ['tasks.tagFilterBy', { tag: '서울' }, '태그 서울로 필터'],
+    ['settings.memberAddedToast', { name: '집' }, '집이 추가되었습니다.'],
+    ['settings.memberAddedToast', { name: '학교' }, '학교가 추가되었습니다.'],
+    ['settings.memberAddedToast', { name: '서울' }, '서울이 추가되었습니다.'],
     // Zitierter Platzhalter: vier Arten von Anfuehrungszeichen im Bestand.
     ['tasks.subtaskDeleteConfirm', { title: '우유' }, '「우유」를 삭제할까요?'],
     ['shopping.storeDeleteConfirm', { name: '시장' }, '상점 “시장”을 삭제할까요?'],
@@ -260,8 +260,8 @@ test('t() in ko: eine Doppelform im NUTZERWERT wird nicht angefasst', async () =
 
 test('t() in ko: der Pluralweg (count) laeuft durch denselben Aufloeser', async () => {
   await setLocale('ko');
-  assert.equal(t('tasks.tagDeleteConfirm', { tag: '학교', count: 3 }), '학교를 작업 3개에서 제거할까요?');
-  assert.equal(t('tasks.tagDeleteConfirm', { tag: '집', count: 1 }), '집을 작업 1개에서 제거할까요?');
+  assert.equal(t('tasks.bulkDeleteAsk', { count: 3 }), '할 일 3개를 삭제할까요?');
+  assert.equal(t('tasks.bulkDeleteAsk', { count: 1 }), '할 일 1개를 삭제할까요?');
 });
 
 test('t() in ko: Texte eines Erweiterungsmoduls laufen durch denselben Aufloeser', async () => {
@@ -445,8 +445,8 @@ test('translate() in ko: echte Schluessel, je Partikel mit und ohne Batchim', ()
     ['changelog.updateAvailable', { version: '버전' }, '버전 버전을 사용할 수 있습니다.'],
     ['rrule.lastDayOfMonthHintSame', { date: '오늘 하루' }, '오늘 하루는 이미 해당 월의 마지막 날이며 첫 일정이 됩니다.'],
     ['budget.trendNeutral', { month: '지난달' }, '- 지난달과 동일'],
-    ['tasks.tagFilterBy', { tag: '집' }, '태그 집으로 필터'],
-    ['tasks.tagFilterBy', { tag: '서울' }, '태그 서울로 필터'],
+    ['settings.memberAddedToast', { name: '집' }, '집이 추가되었습니다.'],
+    ['settings.memberAddedToast', { name: '서울' }, '서울이 추가되었습니다.'],
     ['tasks.subtaskDeleteConfirm', { title: '우유' }, '「우유」를 삭제할까요?'],
   ];
   const wrong = [];

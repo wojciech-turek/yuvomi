@@ -132,9 +132,10 @@ function nameToolbar(root) {
  * @param {Element}    opts.content  der Scrollport, dessen Inhalt getauscht wird
  * @param {string|null} opts.from    Pfad vor dem Wechsel
  * @param {boolean}    opts.animate  false beim Kaltstart
- * @param {() => Promise<void>} [opts.whenSettled] wann die App einen nachgereichten
- *   Tipp annimmt (der Router: wenn seine Navigation durch ist - vorher verwirft
- *   er jede weitere)
+ * @param {() => Promise<void>} [opts.whenSettled] worauf ein nachgereichter Tipp
+ *   nach der Blende noch wartet. Der Router gibt nichts mit (Schnell-Erfassen,
+ *   Aufgabe 3): navigate() stellt einen Tipp waehrend einer Navigation an,
+ *   statt ihn zu verwerfen - der Tipp kommt gleich nach der Blende an
  * @param {() => void} [opts.settle] bringt, was gerade AUSFAEHRT, an sein Ende,
  *   bevor der Browser das alte Bild aufnimmt (siehe unten)
  * @returns {Promise<{ transition: boolean, finished: Promise<void> }>}

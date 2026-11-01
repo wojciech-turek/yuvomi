@@ -1,7 +1,8 @@
 /**
  * Komponente: Markdown-Formatierungsleiste (.md-toolbar)
  * Die Leiste ueber jedem Textfeld, dessen Inhalt als Markdown gelesen wird -
- * Notizen und Aufgaben-Notizen (#731). Global eingebunden wie die anderen
+ * die Notizen (#731; die Aufgaben-Notiz hat seit Quick-Add 2026-10-29 keine
+ * mehr). Global eingebunden wie die anderen
  * geteilten Komponenten (.sub-tab, .list-row), weil sie zu keiner Seite
  * gehoert; Verhalten und Beschriftungen in /utils/markdown-toolbar.js.
  */
@@ -36,8 +37,7 @@
 }
 
 /* Das Feld behaelt seine oberen Ecken, solange die Leiste nicht darueber steht. */
-.md-toolbar:not([hidden]) + .form-input,
-.md-toolbar:not([hidden]) + .input {
+.md-toolbar:not([hidden]) + .form-input {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }

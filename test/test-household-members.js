@@ -44,7 +44,6 @@ const { default: tasksRouter } = await import('../server/routes/tasks.js');
 const { default: calendarRouter } = await import('../server/routes/calendar.js');
 const { default: budgetRouter } = await import('../server/routes/budget.js');
 const { default: dashboardRouter } = await import('../server/routes/dashboard.js');
-const { default: rewardsRouter } = await import('../server/routes/rewards.js');
 const { default: splitRouter } = await import('../server/routes/split-expenses.js');
 const { default: permissionsRouter } = await import('../server/routes/permissions.js');
 const { default: documentsRouter } = await import('../server/routes/documents.js');
@@ -101,10 +100,6 @@ for (const [id, name] of [[ANNA, 'anna'], [BEN, 'ben'], [CLARA, 'clara'], [DORA,
   db.prepare("INSERT INTO contacts (name, category, email, family_user_id) VALUES (?, 'Familie', ?, ?)")
     .run(name, `${name}@example.org`, id);
 }
-for (const id of [ANNA, BEN, CLARA, DORA]) {
-  db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(id);
-}
-
 // Claras Dienstplan besteht schon - sie ist eine bestehende Besitzerin.
 const SHIFT = Number(db.prepare(`
   INSERT INTO schedule_shift_types (name, short_code, start_time, end_time, color) VALUES ('Frueh', 'F', '06:00', '14:00', '#123456')
@@ -149,7 +144,6 @@ app.use('/tasks', requireAuth, tasksRouter);
 app.use('/calendar', requireAuth, calendarRouter);
 app.use('/budget', requireAuth, budgetRouter);
 app.use('/dashboard', requireAuth, dashboardRouter);
-app.use('/rewards', requireAuth, rewardsRouter);
 app.use('/split-expenses', requireAuth, splitRouter);
 app.use('/permissions', requireAuth, permissionsRouter);
 app.use('/documents', requireAuth, documentsRouter);
@@ -250,22 +244,10 @@ test('members only: a task comment mention notifies neither staff nor guests', a
   assert.deepEqual(byId(pushed), [BEN]);
 });
 
-test('members only: the dashboard user list, reward standings and participant count', async () => {
+test('members only: the dashboard user list', async () => {
   const r = await call('GET', '/dashboard');
   assert.equal(r.status, 200);
   assert.deepEqual(idsOf(r.body.users), MEMBERS);
-  assert.deepEqual(idsOf(r.body.rewards.standings), MEMBERS);
-  assert.equal(r.body.rewards.participantCount, MEMBERS.length, 'an old guest or staff enrolment is not counted');
-});
-
-test('members only: reward balances, participant count and the participant list', async () => {
-  const overview = await call('GET', '/rewards/overview');
-  assert.equal(overview.status, 200);
-  assert.deepEqual(idsOf(overview.body.data.balances), MEMBERS);
-  assert.equal(overview.body.data.setup.participantCount, MEMBERS.length);
-  const participants = await call('GET', '/rewards/participants');
-  assert.equal(participants.status, 200);
-  assert.deepEqual(idsOf(participants.body.data), MEMBERS);
 });
 
 test('members only: householdSize at /auth/me counts neither staff nor guests', async () => {
@@ -503,22 +485,6 @@ test('schedule: staff who already own a schedule keep it editable', async () => 
   assert.equal(override.status, 200, JSON.stringify(override.body));
   const extra = await call('POST', '/schedule/extras', { body: { user_id: CLARA, date_key: '2030-01-09', shift_type_id: SHIFT } });
   assert.equal(extra.status, 201, JSON.stringify(extra.body));
-});
-
-test('rewards: only a household member can be enrolled, an old enrolment can still be switched', async () => {
-  const ok = await call('PUT', `/rewards/participants/${BEN}`, { body: { enabled: true } });
-  assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assertRejectsNonMember(await call('PUT', `/rewards/participants/${EMIL}`, { body: { enabled: true } }), 'guest enrolment');
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM reward_participants WHERE user_id = ?').get(EMIL).n, 0, 'a rejected PUT writes nothing');
-
-  // Doras Einschreibung stammt von frueher: sie bleibt stehen, laesst sich
-  // bestaetigen und abschalten - nur neu anlegen laesst sie sich nicht mehr.
-  const still = await call('PUT', `/rewards/participants/${DORA}`, { body: { enabled: true } });
-  assert.equal(still.status, 200, JSON.stringify(still.body));
-  const off = await call('PUT', `/rewards/participants/${DORA}`, { body: { enabled: false } });
-  assert.equal(off.status, 200, JSON.stringify(off.body));
-  assert.equal(db.prepare('SELECT enabled FROM reward_participants WHERE user_id = ?').get(DORA).enabled, 0, 'switched off, not deleted');
-  assertRejectsNonMember(await call('PUT', `/rewards/participants/${DORA}`, { body: { enabled: true } }), 'switching an old guest enrolment back on');
 });
 
 // --------------------------------------------------------------------------
@@ -810,31 +776,6 @@ test('split member candidates: a stored member who may not join anew stays liste
   const here = await call('GET', `/split-expenses/groups/${GROUP}/member-candidates`);
   assert.ok(!idsOf(here.body.data.filter((row) => row.source === 'user'), 'user_id').includes(CLARA),
     'not offered for a group she does not belong to');
-});
-
-// --------------------------------------------------------------------------
-// Belohnungen: eine alte Einschreibung bleibt stehen, aber sie wirkt nicht
-// --------------------------------------------------------------------------
-
-test('rewards: an old enrolment of an account that is not a member earns, redeems and receives nothing', async () => {
-  // Clara (Hauspersonal) ist seit der Fixture eingeschrieben (enabled = 1).
-  const taskId = Number(db.prepare("INSERT INTO tasks (title, status, points, created_by) VALUES ('Fenster', 'open', 5, ?)").run(ANNA).lastInsertRowid);
-  for (const id of [BEN, CLARA]) db.prepare('INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)').run(taskId, id);
-  const done = await call('PATCH', `/tasks/${taskId}/status`, { body: { status: 'done' } });
-  assert.equal(done.status, 200, JSON.stringify(done.body));
-  const earned = db.prepare("SELECT user_id FROM reward_ledger WHERE task_id = ? AND type = 'earn' ORDER BY user_id").all(taskId)
-    .map((row) => row.user_id);
-  assert.deepEqual(earned, [BEN], 'the member earns the points, the old staff enrolment does not');
-
-  const itemId = Number(db.prepare("INSERT INTO reward_catalog (name, cost, created_by) VALUES ('Eis', 1, ?)").run(ANNA).lastInsertRowid);
-  db.prepare("INSERT INTO reward_ledger (user_id, delta, type, reason, created_by) VALUES (?, 10, 'bonus', 'Altbestand', ?)").run(CLARA, ANNA);
-  const redeem = await call('POST', '/rewards/redemptions', { body: { catalog_id: itemId, user_id: CLARA } });
-  assert.equal(redeem.status, 400, `redeeming for an old staff enrolment: ${JSON.stringify(redeem.body)}`);
-  const bonus = await call('POST', '/rewards/bonus', { body: { user_id: CLARA, delta: 3 } });
-  assert.equal(bonus.status, 400, `a bonus for an old staff enrolment: ${JSON.stringify(bonus.body)}`);
-
-  const ok = await call('POST', '/rewards/redemptions', { body: { catalog_id: itemId, user_id: BEN } });
-  assert.equal(ok.status, 201, `the member redeems as before: ${JSON.stringify(ok.body)}`);
 });
 
 // --------------------------------------------------------------------------

@@ -2,7 +2,7 @@
  * Modul: Waste collection HTTP routes (#1063 Phase 2)
  * Zweck: CRUD, validation, and error-contract coverage for
  *        server/routes/waste/*.js - the isolated-router harness used by
- *        test-task-default-points.js (module/permission/token-scope gating,
+ *        the former default-points suite (module/permission/token-scope gating,
  *        CSRF, and idempotency are all applied once, centrally, at the
  *        /api/v1 mount point in server/index.js, and are covered by the
  *        generic suites for those cross-cutting concerns, not per module).

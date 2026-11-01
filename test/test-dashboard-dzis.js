@@ -263,9 +263,24 @@ test('the page, top to bottom: header, weather, Kalendarz, Zadania, Wkrótce - a
   assert.equal(count(html, /<h2\b/g), 1, 'the sections are h3 under it');
   assert.equal(count(html, /<h3 class="dz-(?:sec|soon)__title"/g), 3);
   assert.match(html, /<a class="dz-head__me" href="\/settings"/);
+  // `page-fab` stays out of the page markup: the + of Quick-Add (2026-10-29)
+  // is built by dashboard.js and lives in the shell layer (next test).
   for (const gone of [/day-now/, /day-plan/, /day-closed/, /data-day-action="cook"/, /data-day-action="customize"/, /page-fab/, /today\.planTitle/]) {
     assert.doesNotMatch(html, gone, `${gone} is gone with v2`);
   }
+});
+
+test('Quick-Add (2026-10-29): Dziś has exactly one +, fab-add, and none of the old capture or speed-dial names', () => {
+  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  const fabs = src.match(/createPageFab\(\{[^}]*\}\)/g) ?? [];
+  assert.deepEqual(fabs.map((f) => /id: '([^']+)'/.exec(f)?.[1]), ['fab-add'], 'one FAB, and it is fab-add');
+  assert.doesNotMatch(src, /pageFabHtml\(|class="page-fab"|page-fab-group/, 'no second FAB as markup, no speed-dial group');
+  for (const gone of [/fab-main/, /capture-plus/, /openCapture/, /capture-sheet/, /FAB_ACTIONS/, /function wireNewMenu/]) {
+    assert.doesNotMatch(src, gone, `${gone} stays gone`);
+  }
+  // The bottom bar still has no + (spec non-goal): the shell builds none.
+  const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(router, /capture-plus|createCapturePlus|nav-bottom__add|nav-sidebar__add/);
 });
 
 test('the weather card is one link to the weather settings; the chart is decoration for the eye only', () => {
@@ -358,7 +373,11 @@ test('the styles: v2 card, the ongoing row in the accent wash, overdue in its to
   assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
   // No hex on the page: the umbrella takes --color-rain-ink (tokens.css).
   const dzis = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').split(' * DZIŚ (design v2, 2026-10-27)')[1];
-  assert.equal(dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/#[0-9a-f]{3,8}\b/gi), null);
+  // Checked in the declaration blocks: a selector like `#fab-add` (the Quick-Add
+  // +) is an id, not a colour.
+  const declarations = (dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/\{[^{}]*\}/g) ?? []).join('\n');
+  assert.ok(declarations.length > 1000, 'reach: the Dziś section has its rules');
+  assert.equal(declarations.match(/#[0-9a-f]{3,8}\b/gi), null);
   assert.match(body('.dz-weather__rain-icon'), /color:\s*var\(--color-rain-ink\)/);
 });
 
@@ -387,10 +406,17 @@ test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after
   const tasks = readFileSync(new URL('../public/pages/tasks.js', import.meta.url), 'utf8');
   const entry = tasks.slice(tasks.indexOf('export async function openNewTaskFrom('), tasks.indexOf('export async function openTaskById('));
   assert.match(entry, /if \(readOnly\(\)\) return false;/, 'read-only viewers get no form');
-  assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged \}, null\);/, 'the one form of the page, not a second one');
+  // Quick-Add (2026-10-29): a draft can come along, and "Say a task" (`dictate`)
+  // hands over to startTaskDictation BEFORE any await (Safari starts speech
+  // only inside the tap); it ends in the same form (openPreparedNewTask).
+  assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged, draft \}, null\);/, 'the one form of the page, not a second one');
+  assert.match(entry, /if \(readOnly\(\)\) return false;\n\s*if \(dictate\) return startTaskDictation\(\{ user, onChanged \}\);/,
+    'dictation starts before the first await');
+  assert.match(tasks, /export function openPreparedNewTask\(\{[^\n]*\} = \{\}\) \{\n\s*openTaskModal\(\{ users: state\.users, onChanged, draft, spoken \}, null\);/,
+    'dictation fills that same form');
   const header = tasks.slice(tasks.indexOf('function openNewTaskForm('), tasks.indexOf('function wireNewTaskBtn('));
   assert.match(header, /openTaskModal\(\{ users: state\.users \}, container\);/, 'the head of Zadania opens the same modal');
-  assert.match(tasks, /onSave\(panel\) \{ wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\); \}/,
+  assert.match(tasks, /onSave\(panel\) \{[^}]*?\n\s*wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\);\n\s*\}/,
     'from outside, the caller refreshes its own surface instead of a list that is not there');
 });
 

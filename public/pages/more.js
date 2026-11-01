@@ -30,6 +30,7 @@ import { showToast } from '/utils/toast-show.js';
 import { openModal, closeModal } from '/components/modal.js';
 import { enterWallMode } from '/utils/wall-mode.js';
 import { createPageController } from '/utils/page-lifecycle.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { renderAppPage, renderPageHeader, renderPageTitle, renderPageBody } from '/utils/page-layout.js';
 
 // --------------------------------------------------------
@@ -44,7 +45,7 @@ const TAB_MODULES = new Set(['dashboard', 'settings', 'calendar', 'tasks']);
 const GROUPS = [
   { id: 'home', labelKey: 'more.groupHome', modules: ['housekeeping', 'documents', 'contacts', 'inventory', 'waste'] },
   { id: 'money', labelKey: 'more.groupMoney', modules: ['budget', 'health'] },
-  { id: 'daily', labelKey: 'more.groupDaily', modules: ['notes', 'birthdays', 'rewards', 'schedule'] },
+  { id: 'daily', labelKey: 'more.groupDaily', modules: ['notes', 'birthdays', 'schedule'] },
 ];
 
 /** One bare glyph per module (ink-2, as in the artboards). */
@@ -58,7 +59,6 @@ const GLYPH = {
   health: 'heart-pulse',
   notes: 'sticky-note',
   birthdays: 'cake',
-  rewards: 'award',
   schedule: 'calendar-clock',
   'split-expenses': 'arrow-left-right',
 };
@@ -772,10 +772,7 @@ function renderContent(state) {
 function renderSkeleton() {
   return `
     ${renderSearch()}
-    <div class="more-skeleton" aria-hidden="true">
-      <div class="skeleton more-skeleton__card"></div>
-      <div class="more-skeleton__tiles"><div class="skeleton more-skeleton__tile"></div><div class="skeleton more-skeleton__tile"></div></div>
-    </div>`;
+    ${loadingSpinnerHtml()}`;
 }
 
 // --------------------------------------------------------

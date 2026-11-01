@@ -8,9 +8,8 @@ const DEFAULT_GRACE_DAYS = 7;
 
 /**
  * Feldwert als Nachfrist-Tage lesen, oder `null` bei ungültiger Eingabe.
- * Ein leeres/nur-Leerzeichen-Feld ist ausdrücklich ungültig statt `0` - anders
- * als bei rewards-default-points ist `0` hier nicht folgenlos, sondern lässt
- * jeden überfälligen Countdown sofort verschwinden (Review-Fund 2026-09-06,
+ * Ein leeres/nur-Leerzeichen-Feld ist ausdrücklich ungültig statt `0` - `0` ist hier
+ * nicht folgenlos, sondern lässt jeden überfälligen Countdown sofort verschwinden (Review-Fund 2026-09-06,
  * #1027). `Number('')` wäre sonst `0` und ein versehentlich geleertes Feld
  * würde diesen Wert unbemerkt speichern.
  */
@@ -54,8 +53,7 @@ function renderPage(container, preferences) {
 }
 
 /**
- * Nachfrist für abgelaufene Countdowns (#969). Speichert wie das Punktefeld der
- * Belohnungen (modules-rewards.js, H12) ohne eigenen Knopf: beim Verlassen des
+ * Nachfrist für abgelaufene Countdowns (#969). Speichert ohne eigenen Knopf: beim Verlassen des
  * Feldes und mit Enter. Nicht bei jedem `change` - an Zahlenfeldern feuert er
  * für jeden Pfeilschritt, und `0` ist hier nicht folgenlos (jeder überfällige
  * Countdown verschwände sofort). Escape nimmt eine noch nicht gespeicherte

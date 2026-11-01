@@ -51,7 +51,7 @@ colors:
   # Quellen"). Quelle der Wahrheit und Modul-Zuordnung:
   # public/styles/tokens.css, Abschnitt 4.
   # overview: dashboard - time: calendar, schedule, reminders - work: tasks,
-  # housekeeping, waste, rewards - kitchen: meals, recipes, shopping, pantry -
+  # housekeeping, waste - kitchen: meals, recipes, shopping, pantry -
   # money: budget, split-expenses - people: contacts, birthdays -
   # health: health - records: documents, notes, inventory - neutral: settings
   family-overview: "#6C3AED"
@@ -695,12 +695,13 @@ Ausschalter (in reduced-transparency und prefers-contrast auf 0):
   App;
 - das **Marken-Lichtfeld** (`--brand-field`, Staerke `--brand-field-opacity` 0.20 light /
   0.26 dark; R18, 2026-10-07): drei stehende Kreise in den beiden Farben der Bildmarke,
-  hinter der Glastafel der Zugangsseiten und im Ladebild - den zwei Orten, an denen nichts
-  Opakes darueber liegt. Ohne Filter, ohne Animation. Kein Text steht direkt darauf
-  (Sekundaertext fiele im Kern auf 2,96:1): auf den Zugangsseiten steht alles auf der
-  Tafel, der Schriftzug des Ladebilds in Label-Farbe. Das Ladebild ist seit R20 eine stehende
-  Skizze der Shell (Kopf mit Siegel, drei leere Kartenflaechen, Kapsel bzw. Seitenleiste), ohne
-  Puls; `role="progressbar"` mit dem Markennamen, die Ansage kommt vom Screenreader.
+  hinter der Glastafel der Zugangsseiten und im Zustand "Sitzung nicht pruefbar", der das
+  Ladebild ersetzt - den Orten, an denen nichts Opakes darueber liegt. Ohne Filter, ohne
+  Animation. Kein Text steht direkt darauf (Sekundaertext fiele im Kern auf 2,96:1): auf den
+  Zugangsseiten steht alles auf der Tafel. Das Ladebild selbst ist seit Quick-Add
+  (2026-10-29) ein stiller Ring auf der Seitenflaeche (`.app-loading__spinner`, dieselbe
+  Sprache wie der Seiten-Ladering) - die Skizze der Shell aus R20 ist gegangen;
+  `role="progressbar"` mit dem Markennamen, die Ansage kommt vom Screenreader.
 
 **Die App selbst hat keinen Backdrop mehr.** Bis R18 liefen hinter dem Inhalt vier
 driftende, weichgezeichnete Farbfelder (`.lg-blob`) und ein Akzentverlauf auf der Shell -
@@ -1028,7 +1029,7 @@ uebernommen. Als Guard im Repo steht die Messung in `test/test-document-guards.j
 (Sonde 2 misst den komponierten Kontrast am gerenderten Dokument).
 
 **Die Zuruecknahme-Regel (#1230, 2026-09-15).** Was beiseitegelegt ist - erledigte und
-archivierte Aufgaben, archivierte Konten, pausierte Abos, inaktive Medikamente und Praemien,
+archivierte Aufgaben, archivierte Konten, pausierte Abos, inaktive Medikamente,
 schon importierte Zeilen -, tritt ueber drei Token-Rollen zurueck, nie ueber `opacity`:
 `--color-surface-receded` (die Flaeche sinkt auf die vertiefte Stufe),
 `--color-border-receded` (die ruhigste Kante) und `--color-text-receded` (der Sekundaertext
@@ -1200,7 +1201,7 @@ Subheadline 15, Footnote 13, Caption 2 11.
   Aufgabentitel behaelt die enge Zeilenhoehe.
   Guard: `test:typography`, "der Zeilentitel ist eine Rolle".
   **Titelregel (R19): hoechstens ZWEI Zeilen, dann Ellipse** - fuer jeden Zeilentitel
-  (`.list-row__name`, Aufgabe, Kontakt, Abo, Buchung, Belohnungen, Agenda-Text) aus EINER
+  (`.list-row__name`, Aufgabe, Kontakt, Abo, Buchung, Agenda-Text) aus EINER
   Regel in typography.css; vorher vier (einzeilig, unbegrenzt, mobil anders als Desktop).
   Kein Modulblatt setzt dort `nowrap` oder eine andere Zeilenzahl (Guard `test:typography`).
 - **Body** (regular, 17px, lh 1.47 = Apples 17/25): Fliesstext, Listenzellen.
@@ -1246,7 +1247,7 @@ entscheidet, sondern das Benannte. Ausgeschrieben in typography.css.
 Kopf-Navigation und traegt keinen Titel ueber sich - der Tab-Name IST der Modulname (Kueche:
 vier eigenstaendige Module unter einer Leiste). Wechselt sie ihn nicht, oder wechselt sie gar
 keine Route, gehoert sie unter den Large Title in den kanonischen `page-toolbar`-Kopf
-(Budget, Belohnungen, Haushaltshilfe). Sektionen mit eigener Shell
+(Budget, Haushaltshilfe). Sektionen mit eigener Shell
 (Einstellungen) fuehren ihren Titel in ihrem eigenen Kopf; das ist der dritte Fall der Regel,
 keine Ausnahme von ihr - als Ausnahme stuende er beim achtzehnten Modul wieder offen.
 
@@ -1442,19 +1443,19 @@ das Verhaeltnis haelt.
   Leeren blendet einmal gestaffelt ein, eine neue Zeile tritt ein (`expandIn`), eine reine
   Umsortierung gleitet (FLIP) - nie zwei Bewegungen uebereinander. Eine Zeile, die geht, klappt
   VOR dem Neuzeichnen aus (`collapseRow`). Nutzer: Aufgaben und Einkauf (Bestand),
-  Haushaltshilfe, Entsorgung (drei Listen), Vorrat, Belohnungen; seit R17 auch Notizen,
+  Haushaltshilfe, Entsorgung (drei Listen), Vorrat; seit R17 auch Notizen,
   Dokumente, Kontakte, die Buchungsliste des Budgets, Inventar, Abos, Aufteilung (Ausgaben und
   Serien) und Geburtstage - jede Seite ueber einen Schalter `motion: true`, den nur setzt, wer
   die DATEN geaendert hat. In einem Kartenraster (Notizen, Dokumente im Raster) klappt die
   gehende Karte NICHT vorher aus: die Nachbarkarte haelt die Zeilenhoehe, die Nachbarn gleiten
   in die Luecke (FLIP). Filter und Suche zeichnen ohne
-  Bewegung neu - dort wechselt die Frage, nicht die Liste. Ein Skelett gehoert zum ERSTEN
-  Laden; danach bleibt der Inhalt stehen, bis der neue da ist. **Skelett (R19):** die Linien
-  erscheinen erst nach `--duration-sm` (kommt der Inhalt schneller, sieht man sie nie; die
-  Kartenflaechen stehen sofort und halten das Layout), der Schimmer ist ein Band als `::after`,
-  das per `transform` gleitet (vorher `background-position`: Paint je Frame). Die Uebersicht
-  blendet vom Skelett zum Inhalt ueber `swapContent`. `stagger` laeuft seit R19 ueber Web
-  Animations mit `delay` und `fill: backwards` statt ueber Timer und Inline-Werte.
+  Bewegung neu - dort wechselt die Frage, nicht die Liste. Ein Ladezeichen gehoert zum ERSTEN
+  Laden; danach bleibt der Inhalt stehen, bis der neue da ist. **Laden (Quick-Add,
+  2026-10-29):** es gibt keine Skelette mehr (Guard `test:no-skeletons`). Eine Seite, die
+  laedt, zeigt EINEN stillen Ring (`.page-loading`, `utils/skeleton.js` -> `loadingSpinnerHtml`),
+  der erst nach `--duration-2xl` einblendet - ein schneller Aufbau zeigt gar nichts. `stagger`
+  laeuft seit R19 ueber Web Animations mit `delay` und `fill: backwards` statt ueber Timer und
+  Inline-Werte.
 - **Inhaltswechsel - der Standard (`utils/content-swap.js`):** derselbe Traeger, neuer Inhalt
   (Reiterwechsel im Modul, Monats-/Wochen-Blaettern, Bereichswechsel) tauscht ueber
   `swapContent(host, update, { direction })`: Blende ab 0,4 Deckkraft (kein leerer Frame),
@@ -1644,9 +1645,9 @@ Stapelkontext (`isolation: isolate`, layout.css) - fuer jede Split-Detailspalte
 
 **Eine Aussenkante je Modul, kurze Listen zweispaltig** (R16, 2026-10-05). Die Messmatrix
 vom 05.10. fand die 720px-Spalte weiter in leerer Flaeche: Haushaltshilfe (Aufgaben, Berichte,
-Personal), Entsorgung und Belohnungen (Uebersicht, Verlauf) nutzten 67,9 % der Flaeche bei
+Personal), Entsorgung nutzten 67,9 % der Flaeche bei
 1280 und 59,0 % bei 1440. Wo ein Reiter breit war, wechselte die Kante je Reiter, und der
-angedockte Primaerknopf sprang mit (Belohnungen 271/431px). Seitdem gilt:
+angedockte Primaerknopf sprang mit. Seitdem gilt:
 
 - **Der Kopf endet in jedem Reiter eines Moduls an derselben Kante**, der breiten. Kein
   Reiter schaltet `--page-measure` oder den Kopf um (kein `[data-tab]`-Mass, kein
@@ -1656,9 +1657,7 @@ angedockte Primaerknopf sprang mit (Belohnungen 271/431px). Seitdem gilt:
   Reiter gleich breit.
 - **Ab `--layout-split-threshold` steht rechts eine Seitenspalte** bis zur Modulkante,
   mindestens `--layout-rail-min` (360px, die Inhaltsbreite eines Telefons) breit. Sie bekommt
-  nur, was es als Daten und Baustein schon gibt: Belohnungen/Uebersicht die letzten Buchungen
-  (der Abschnittstitel fuehrt in den Reiter Verlauf), Belohnungen/Verlauf die Punktestaende,
-  Entsorgung Abfallarten und Quellen neben den Abholungen, Haushaltshilfe/Berichte die
+  nur, was es als Daten und Baustein schon gibt: Entsorgung Abfallarten und Quellen neben den Abholungen, Haushaltshilfe/Berichte die
   Kennzahlen (`railFirst`: mobil ueber der Liste, am Desktop daneben), Haushaltshilfe/Haushaltshilfen
   das Protokoll der gewaehlten Person, Haushaltshilfe/Aufgaben seit R17 die zwei Kennzahlen
   „Faellig" und „Erledigt im Monat" (dieselben wie auf der Uebersicht; unter 640px bleiben sie
@@ -1696,7 +1695,6 @@ Kernseite fuehrt es. Die Zuordnung aller Seiten:
 
 | Seite | Regime | Umsetzung |
 |---|---|---|
-| `rewards.js` Belohnungen | Flaeche | `dashboard` + Spalten (`.page-columns`); der Katalog ist ein Raster ueber das Mass |
 | `waste.js` Entsorgung | Flaeche | `dashboard` + Spalten (`.page-columns`) |
 | `housekeeping.js` Haushaltshilfe | Flaeche | `dashboard` + Spalten (`.page-columns`); die Uebersicht fuehrt zwei gleiche Karten |
 | `birthdays.js` Geburtstage | Liste + Detail | `reading` + `list-detail` |
@@ -1924,7 +1922,7 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
 | Folge gleichartiger Zeilen | `.row-carrier` (Surface, `--radius-lg`, `--shadow-sm`, Haarlinien `> * + *`); liegt die Liste schon in einer Karte: `.row-divided` | list-row.css | `.list-rows` (12px, ohne Schatten) - laeuft aus, danach faellt die Regel |
 | Anlegen | `page-fab` MIT Nomen: mobil in der Kapsel, am Desktop angedockt als Kopf-Pille "+ Nomen" (Kuerzel "n" angesagt); ein Kontext-FAB nennt je Tab sein Nomen (ein Nomen, keine Verbphrase) | `createPageFab({ dockLabel })`, `setPageFabAction(fab, { label, dockLabel, onClick })` (utils/fab.js) | schwebender FAB ohne Nomen, dessen Bedeutung mit dem Tab wechselt; Inline-Anlegeformulare ueber der Liste; eigener Kopfknopf `.toolbar-new-btn` |
 | Dialogknoepfe | `.modal-panel__footer`: [Loeschen `btn--danger-outline` MIT Text, am Anfangsrand] ... [Abbrechen] [Primaer `btn--primary`]; `mountFooter()` hebt ihn an den Blattrand, mobil ueber die Falz - auch die geteilten Rueckfragen (confirm/prompt/select). **Das Verb (R17, E6): Anlegen = "Hinzufuegen" (`common.add`), Bearbeiten = "Speichern" (`common.save`), in jedem Dialog;** eine benannte Handlung behaelt ihr Verb (Hochladen, Einloesen, Freigeben, Zahlung eintragen). Neben einem absendenden Primaerknopf steht immer Abbrechen; ein Blatt, dessen Schalter sofort wirken (Teilnehmer der Belohnungen), schliesst mit "Fertig" allein, ein Leseblatt mit "Schliessen" vor der Handlung. Gehalten in `test:frontend-audit` ueber `test/dialog-grammar.js` (liest das Markup der oeffnenden Funktion, beurteilt die Beschriftung am deutschen Locale-Wert). Den Anfangsrand haelt EINE Regel in layout.css an `.modal-panel__delete` (setzt `decorateFooterDelete`, RTL gespiegelt), kein `margin` je Modul (R16) | modal.js; Vorbild Kalender-Termin, Aufgabe | `.modal-actions` im scrollenden Koerper, Loeschen als rotes Icon; "Erstellen"/"Aufgabe erstellen"/"Darlehen erstellen" neben "Hinzufuegen"; ein Primaerknopf ohne Abbrechen (Belohnungen bis R17); `btn--primary` linksbuendig im Formular (Haushaltshilfe bis R17) |
-| Speichern in den Einstellungen (R17, E8) | **Schalter und Auswahl wirken sofort; ein Formular (Konto, Passwort, CalDAV, SMTP ...) speichert per Knopf (und Enter), und der sitzt rechts im Kartenfuss** - als Letzter im Markup, Nebenaktionen (Testen, Entfernen) davor, wie im Dialogfuss. Ein langes Blatt darf die Zeile kleben lassen (`.perm-actions`), aber rechts. **Ein einzelnes Zahl- oder Kurzfeld ohne Formular drumherum speichert beim Verlassen und mit Enter, quittiert per Toast, Escape nimmt die Eingabe zurueck** (H12 vom 2026-09-27, "ein Speichermodell auf der Seite"): Standard-Punkte der Belohnungen und Nachfrist der Uebersicht. R17 Schritt 4 hatte beiden kurz einen Knopf gegeben; Schritt 5 hat H12 wiederhergestellt und auf die Uebersicht ausgedehnt | `.settings-form-actions` (settings.css; `:has(> .btn--primary)` schliesst rechts ab); `bindDefaultPoints`, `bindGraceDays`; `test:frontend-audit`, `test:settings-navigation` | 99px linksbuendig, 612px vollbreit ("Passwort speichern" nackt in der Formularspalte), ein Speichern-Knopf fuer EIN Zahlfeld neben sofort wirkenden Schaltern |
+| Speichern in den Einstellungen (R17, E8) | **Schalter und Auswahl wirken sofort; ein Formular (Konto, Passwort, CalDAV, SMTP ...) speichert per Knopf (und Enter), und der sitzt rechts im Kartenfuss** - als Letzter im Markup, Nebenaktionen (Testen, Entfernen) davor, wie im Dialogfuss. Ein langes Blatt darf die Zeile kleben lassen (`.perm-actions`), aber rechts. **Ein einzelnes Zahl- oder Kurzfeld ohne Formular drumherum speichert beim Verlassen und mit Enter, quittiert per Toast, Escape nimmt die Eingabe zurueck** (H12 vom 2026-09-27, "ein Speichermodell auf der Seite"): die Nachfrist der Uebersicht. R17 Schritt 4 hatte ihr kurz einen Knopf gegeben; Schritt 5 hat H12 wiederhergestellt | `.settings-form-actions` (settings.css; `:has(> .btn--primary)` schliesst rechts ab); `bindGraceDays`; `test:frontend-audit`, `test:settings-navigation` | 99px linksbuendig, 612px vollbreit ("Passwort speichern" nackt in der Formularspalte), ein Speichern-Knopf fuer EIN Zahlfeld neben sofort wirkenden Schaltern |
 | Boolean in den Einstellungen | Schalter (`.toggle`-Bahn, `role="switch"`), Label links, Zustand rechts; Bahn aus = `--color-switch-off` (3:1, siehe Kanten), der Knopf startet per `inset-inline-start` und laeuft in RTL nach links wie bei Apple (#1572) | `toggleRowHtml({ ..., control: 'switch' })` (settings/components.js) | native 18px-Checkbox, "Aktiviert"-Badge neben dem Haken |
 | Auswahl aus 2-4 Werten (Theme) | `.segmented`, seit 2026-10-26 die Tafla-Spur (Abschnitt "Segmented Controls") | panel.css | drei getrennte Rahmenknoepfe |
 | Auswahl in einer Segment-/Tab-Leiste zeigen | EINE Bewegung: eine Kapsel hinter den Labels gleitet (`--duration-lg` + `--ease-out`, nur `transform`, Breite nur wenn sie sich aendert; reduzierte Bewegung springt); die Sidebar-Pille behaelt ihre Feder, hoechstens `--duration-xl`. Die Pille der mobilen Tab-Leiste folgt derselben Regel (bis 2026-10-15 `--duration-md`). Gleiten antwortet auf einen WECHSEL: die erste Platzierung eines frisch gebauten Indikators (Laden, Neubau der Leiste) springt ans Ziel, sonst glitt er sichtbar vom ersten Eintrag herein (`placeNavIndicator` in router.js, 2026-10-15) | `attachSegmentIndicator(bar)` (utils/segment-indicator.js; folgt jedem Wechsel des aktiven Eintrags selbst), `renderSubTabs({ indicator })`, `{ key }` fuer Leisten, die neu gebaut werden | springende Flaeche am aktiven Tab; eigene WAAPI-Kapseln; Literal-Dauern (450ms) |
@@ -1969,13 +1967,27 @@ sind Dokumente (ein Werkzeugmenue), Kalender (Filterblatt, Dialogfuss) und der B
   Frage hat Gruppen:** `popoverMenuHtml` nimmt `{ group, items }` (Ueberschrift als Name der
   Gruppe, kein Eintrag) und `{ separator: true }`; im Einkauf Abgehakt | Liste | Stammdaten |
   Loeschen.
-- **Ein Dialog fragt erst, was den Gegenstand ausmacht, dann den Freitext.** Aufgabe: Titel,
-  Faelligkeit/Uhrzeit, Zugewiesen an, Prioritaet/Kategorie, dann die Notiz. Ein LEERER
-  Abschnitt (Wiederholung, Erinnerung) liegt hinter "Weitere Einstellungen" und wird im
-  Hinweis genannt; ein gesetzter steht offen an seinem Platz. Gemessen 390x844: Faelligkeit
-  y 699 -> 304, Koerper 1455 -> 1076px, Fokusziele 33 -> 17.
+- **Ein Dialog fragt erst, was den Gegenstand ausmacht, dann den Freitext.** Aufgabe (Blatt
+  "Neue Aufgabe", Quick-Add 2026-10-29): der erste Blick ist Titel (mit Mikrofon im Feld), Wer
+  (nur Chips der Mitglieder), drei kleine Knoepfe Faelligkeit / Erinnerung / Notiz, "Mehr" und
+  "Aufgabe hinzufuegen" - ohne Scrollen auf 390x844. Jeder Knopf klappt sein Feld an Ort und
+  Stelle auf, "Entfernen" klappt es zu und leert es. Faelligkeit mit Schnellwahl (Heute, Morgen,
+  Dieses Wochenende, Datum waehlen) und "+ Uhrzeit"; die Erinnerung ist eine feste Uhrzeit.
+  Prioritaet, Kategorie, Wiederholung, Sichtbarkeit, Start, Status, Dokumente und Countdown
+  stehen hinter "Mehr". Beim Bearbeiten ist ein Abschnitt offen, sobald er einen Wert traegt,
+  und "Mehr" geht auf, sobald darin etwas abseits der Vorgabe steht (seine Zeile nennt es auch
+  zugeklappt). Nach einem Diktat stehen gesetzte Werte als kompakte Zeilen mit x (Entwurf
+  TaskSpoken); ein Tipp auf die Zeile klappt ihre Felder auf. Davor steht das Hoerblatt (TaskSpoken,
+  `components/task-dictation.js`): Status, Mitschrift gross und mittig (`aria-live`), Mikrofon-Ring,
+  "Type instead" | "Done" zu gleichen Teilen; ohne Spracherkennung ein Textfeld mit dem Hinweis auf
+  das Tastatur-Mikrofon. Das Mikrofon steht nur beim Anlegen im Titelfeld, und ein diktiertes Blatt
+  fragt beim Schliessen "Verwerfen?" (`test:task-dictation-ui`). Keine Etiketten, keine Sperre, kein
+  Sync-Ziel, kein Markdown im Blatt (`test:task-sheet`). Der Fuss beim Anlegen ist nur
+  "Aufgabe hinzufuegen" in voller Breite (Entwurf TaskNew; geschlossen wird ueber das x und das
+  Ziehen des Blatts), beim Bearbeiten bleibt Loeschen · Abbrechen · Speichern.
 - **Die Formatierleiste ist ein Werkzeug des Felds** (`renderMarkdownToolbar` /
-  `wireMarkdownToolbar`, geteilt von Notizen und Aufgaben): `hidden`, bis das Feld den Fokus
+  `wireMarkdownToolbar`, in den Notizen; die Aufgaben-Notiz ist seit Quick-Add ein schlichtes
+  Textfeld ohne Leiste und ohne Markdown-Hinweis): `hidden`, bis das Feld den Fokus
   hat, danach bleibt sie (ein Ausblenden verschoebe das Feld unter dem Finger); EINE scrollende
   Zeile mit Rand-Fade (162 -> 58px mobil); EIN Tab-Stopp (`role="toolbar"`, wandernder
   `tabindex`, Pfeile/Pos1/Ende; Umschalt+Tab aus dem Feld fuehrt hinein).
@@ -2118,9 +2130,9 @@ Modulen, direkt neben Kapsel-Knoepfen im selben Kopf. Der Wortlaut:
 **Die vierte Kategorie ist neu und keine neue Idee.** Eine ZEILE ist kein Kasten - das
 sagt das Kasten-in-Kasten-Vokabular seit Runde 5 und die Zeilenlisten-Regel seit Runde 6.
 Ihre Hervorhebung (Hover, Auswahl, Rang) folgt der Form ihres Traegers, nicht der eines
-Knopfes; deshalb behalten `.rw-standing__id` und `.meal-slot__add-more-btn` ihre Form
-(die Rangzeile `.rewards-widget-row` ist mit der Belohnungen-Rangliste entfallen,
-2026-09-23). Ein Knopf IN einer Zeile ist davon nicht gedeckt:
+Knopfes; deshalb behaelt `.meal-slot__add-more-btn` seine Form (die Rangzeile
+`.rewards-widget-row` ist mit der Belohnungen-Rangliste entfallen, 2026-09-23, der
+Oeffner `.rw-standing__id` mit Nagrody, 2026-10-29). Ein Knopf IN einer Zeile ist davon nicht gedeckt:
 `.row-action` ist rund. Wer die Kategorie nicht nennen kann, traegt die Kapsel.
 
 **Geprueft auf zwei Ebenen, weil eine sie nicht traegt.** Im Stylesheet steht weder Tag
@@ -2659,7 +2671,10 @@ nur das gerenderte Dokument sieht, ob eine Liste ueberhaupt verdrahtet ist.
   Bestandsstimme der Aufgaben und Erinnerungen.
 - **„Weitere Einstellungen" nennt, was dahinter liegt:** `advancedSection(..., { hint })` setzt
   unter die Beschriftung eine Caption-Zeile mit den Feldnamen. Ein Feld, das nur hinter dem
-  Aufklapper steht, findet sonst nur, wer schon weiss, dass es existiert.
+  Aufklapper steht, findet sonst nur, wer schon weiss, dass es existiert. Ausnahme: "Mehr" im
+  Blatt "Neue Aufgabe" traegt keinen Hinweis - der erste Blick zeigt dort ausdruecklich nur
+  seine sechs Dinge (Entscheidung des Haushalts, Quick-Add 2026-10-29); gesetzte Werte nennt
+  die Zeile trotzdem, und beim Bearbeiten steht "Mehr" dann offen.
 
 ### Nur lesen: das Zeichen statt des Knopfs (#1252, #1265)
 Wer ein Modul nur lesen darf, sieht den ZUSTAND, aber keine Handlung. Der Server weist
@@ -2710,18 +2725,14 @@ Einladung); bestehende Konten und ein spaeterer Rollenwechsel bleiben unberuehrt
   Sichtbarkeitsregel haelt sie aus Liste, Detail, Uebersicht, Suche und MCP. Checkt ein Konto ohne
   Betraege ein, wird die erste Admin-Person Erstellerin, weil die Regel die Erstellerin immer
   durchlaesst.
-- **Die Uebersicht eines Kindes** folgt der Vorgabe mit zwei Abweichungen
-  (`childDefaultWidgetConfig`): Belohnungen zuerst und sichtbar, Budget aus. Im Heute-Blatt
+- **Die Uebersicht eines Kindes** folgt der Vorgabe mit einer Abweichung
+  (`childDefaultWidgetConfig`): Budget aus. Im Heute-Blatt
   ruecken Aufgaben, die nur anderen gehoeren, ans Ende und fallen zuerst unter „+N weitere".
-- **Die eigene Karte auf /rewards** (`.rw-own`): Stand im Large-Title-Grad, das naechste Ziel
-  mit Zeichen, Name und Preis ueber dem Balken, „Verlauf" leise und „Anfragen" primaer erst,
-  wenn der Stand reicht. Opak und randlos wie die Praemienkarte, der Modulton nur im Zeichen
-  des Ziels - kein Spiel-Look.
 - **Anlegen und Einladen** nennen die Startrechte unter der Familienrolle, nur bei Kind
   (`settings.childStartHint`), und nur dann zeigt `aria-describedby` darauf.
 
 Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboard-today`,
-`test:dashboard-rewards`, `test:member-order`.
+`test:member-order`.
 
 ### Navigation
 
@@ -2737,7 +2748,9 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > das Label 600 in Tinte; ruhend Tinte-2, 400. **Kein globales +** mehr: jede Seite legt in
 > ihrem eigenen Kopf an (Geisterkreis, `dockFabAsGhost`); wo der Kopf am Telefon keinen Platz
 > hat (Kalender, Spiżarnia, Posiłki), schwebt der Knopf der Seite ueber der Leiste
-> (`--fab-offset-bottom`, mit Nachlauf `--fab-safe-zone`). Dziś legt nichts an. Die
+> (`--fab-offset-bottom`, mit Nachlauf `--fab-safe-zone`). **Dziś traegt ein + (Quick-Add,
+> 2026-10-29):** es oeffnet das Menue zum Hinzufuegen (Say a task, Task, Event, Shopping item,
+> Meal; siehe FAB unten). Die Leiste hat weiterhin kein +. Die
 > Seitenleiste am Desktop fuehrt **dieselben fuenf Ziele**, hell und deckend, ohne Sektionen;
 > die Einstellungen stehen im Konto-Menue am Fuss und auf Więcej. „Kuchnia" heisst jetzt
 > **Jedzenie** (en Food) - Schluessel und Routen bleiben `kitchen`. Was unten der Kapsel, dem
@@ -2881,7 +2894,7 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
   Die System-Reihe darunter bleibt eine volle Reihe aus vier monochromen Zielen. Die Listen
   dunkel eine Stufe ueber dem Blatt (`--sheet-tile-bg` = `--color-surface-raised` #37332E auf
   #2B2825, 1,00 -> 1,17:1); hell bleiben sie Surface, dort trennt `--shadow-xs`.
-- **Navigations-Ordnung (R19, Ulas 2026-10-16):** Planen = Kalender, Aufgaben, Belohnungen,
+- **Navigations-Ordnung (R19, Ulas 2026-10-16):** Planen = Kalender, Aufgaben,
   Notizen, Schichtplan; Haushalt = Kueche, Haushaltshilfe, Entsorgung, Dokumente, Inventar;
   Menschen = Kontakte, Geburtstage, Gesundheit; Budget. **Eine Sektion mit nur einem Eintrag
   hat keinen Kopf** (`navSectionLabelKey`, settings/module-order.js) - Budget steht ohne
@@ -2980,7 +2993,7 @@ seiner 7ch-Untergrenze ellipsiert); mobil zeigte Gesundheit 3 von 6, die Haushal
    Sichtbarkeitsgewinn.
 
 Traeger: die Klasse sitzt direkt an einer Pillen-Leiste (budget-tabs, sub-tabs-bar im Kopf,
-housekeeping-/rewards-tabs) oder als neutraler Wrapper um einen Segment-Traeger, dessen
+housekeeping-tabs) oder als neutraler Wrapper um einen Segment-Traeger, dessen
 Well nicht die ganze Zeile faerben darf (Kalender-Views). **Die Werkzeuge der Ansicht stehen
 am Ende derselben Zeile** (Kalender: Filter und Suche, Critique 2026-09-24): im Aktions-Slot
 bauten sie mobil eine eigene Kopfzeile und standen je nach Kollaps-Zustand links oder
@@ -3571,8 +3584,8 @@ Wechsel.
 Der Kopf bleibt in ZEILENRICHTUNG - kein Modul setzt eine eigene Flex-Richtung auf einer
 Kopf-Klasse. Eine Tab-Leiste im Kopf ist eine eigene, horizontal scrollende Zeile UNTER dem
 Large Title; die Shell erkennt sie an `[role="tablist"]`, nicht an einem Klassennamen (die
-vier heissen `.housekeeping-tabs`, `.rewards-tabs`, `.cal-toolbar__views`, `.budget-tabs` -
-eine Regel ueber diese Liste fehlte beim fuenften). Wer dort steht, sagt die Leisten-Regel
+drei heissen `.housekeeping-tabs`, `.cal-toolbar__views`, `.budget-tabs` -
+eine Regel ueber diese Liste fehlte beim vierten). Wer dort steht, sagt die Leisten-Regel
 oben.
 
 Verdrahtet wird EINMAL, von der Shell (`wireCollapsingHeader` in `utils/ux.js`, aufgerufen
@@ -4310,6 +4323,29 @@ die Ziele bleiben 48px. Vorher vier umrandete Kreise je Zeile.
 
 ### FAB (Signature Component)
 
+> **Quick-Add (2026-10-29, Owner: „a '+' sign bottom right that lets me pick what i want to add
+> and then opens the correct bottom sheet"; Entwuerfe HomePlus und PlusMenu; Guards:
+> test:add-menu, test:dashboard-a11y, test:dashboard-dzis, Sonde 18).** Dziś hat ein +, und nur
+> Dziś: `fab-add` (`createPageFab`, pages/dashboard.js), unten rechts ueber der Leiste, am Desktop
+> in derselben Ecke - Dziś hat keinen Kopf mit Aktions-Slot, der Knopf dockt also nicht an und
+> schwebt (mit Nachlauf `--fab-safe-zone`). **Die eine benannte Ausnahme der FAB-Geometrie
+> (Ruling R14):** 56px am Telefon wie am Desktop, deckend in der Stimme (`--color-btn-primary`,
+> weisses Plus, 6,06:1), kein Glas und kein Sheen - so hat der Owner den Entwurf abgenommen. Die
+> Groesse ist ein Token (`--fab-size-today`, tokens.css), das dashboard.css per
+> `:root:has(#fab-add)` zu `--fab-size` macht: Nachlauf und Install-Banner rechnen mit, die Knoepfe
+> aller anderen Seiten bleiben bei 52/48. Lage (16 von der Kante, 16 ueber der Leiste), Ziel und
+> Fokusring (heller Ring, Stimme als Halo) sind die des geteilten `.page-fab`. test-frontend-audit
+> laesst in dashboard.css genau diese zwei Selektoren zu und sonst keine FAB-Geometrie. Er oeffnet
+> das Menue zum Hinzufuegen (components/add-menu.js, beim Tipp nachgeladen - nicht im Start) als
+> Blatt: oben hervorgehoben **Say a task** (Stimme zu 8 %, Mikrofon im 40er-Kreis, darunter ein
+> Beispielsatz), dann **Task, Event, Shopping item, Meal**; jede Zeile nur mit Schreibrecht auf
+> ihr Modul, ohne Zeile kein +, nie am Display. Ein Tipp schliesst das Menue und oeffnet das
+> passende Blatt ueber Dziś; "Say a task" startet die Erkennung noch im Tipp (Safari verlangt die
+> Geste - add-menu.js importiert `task-dictation.js` deshalb statisch, und `startTaskDictation`
+> ist die Zeile selbst). "Dodaj zadanie" in der Karte der Aufgaben bleibt. Der Rundgang nennt am
+> Desktop beide Orte (`onboarding.step3BodyDesktopPlus`). Die Leiste hat weiterhin kein +; kein
+> Speed-Dial, kein globales Erfassen.
+
 > **Tafla (2026-10-19):** am Telefon schwebt kein Seiten-FAB mehr. Das globale **+** neben der
 > Kapsel (deckende Stimme `--color-btn-primary`, Akzent-Glow, 52pt; minimiert 48) oeffnet das
 > Erfassen-Blatt mit dem Typ der Seite vorgewaehlt; Langdruck (400ms) oeffnet Zdjęcie spiżarni
@@ -4678,9 +4714,8 @@ Zeile des Aufklappers nennt sie.
 > (`sync_config.wall_allow_ticking`, admin only, default off) and the wall sections
 > (`wall_sections`) live in `/preferences`; the display reads both. Off: no rings, no "+"
 > chips, no answering - and the SERVER refuses the paired display (`refuseWallWrite`,
-> `services/wall-settings.js`: tick, redeem a reward, add a running-out item by name,
-> answer/skip the question, all 403 `wall_read_only`; `/displays/people` names nobody to
-> tick or redeem for). On: 48pt
+> `services/wall-settings.js`: tick, add a running-out item by name, answer/skip the
+> question, all 403 `wall_read_only`; `/displays/people` names nobody to tick for). On: 48pt
 > rings on task rows (the display names who did it - the one assignee, else a chooser),
 > "+" chips for running-out items, the question. **Timers and Gotuj always work.** The
 > display may READ shopping and pantry since Tafla (the shopping card, the dinner meter).

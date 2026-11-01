@@ -128,7 +128,6 @@ test('Admin legt ein Kind an: Budget aus, Haushaltshilfe nur lesen ohne Betraege
   assert.equal(resolved.widgets.budget, 'none', 'die Budget-Kachel erbt die Sperre');
   assert.equal(resolved.modules.housekeeping, 'read');
   assert.equal(resolved.modules.tasks, 'write', 'was die Vorgabe nicht nennt, bleibt offen');
-  assert.equal(resolved.modules.rewards, 'write');
   assert.equal(resolved.capabilities.health_use_fasting, 'none');
   assert.equal(resolved.capabilities.housekeeping_view_amounts, 'none');
   // Auschecken & Co. sind Schreibrouten - die Modulsperre weist sie ab.

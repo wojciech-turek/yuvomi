@@ -549,12 +549,17 @@ test('swapPage R19: der Tipp, der die Blende abbricht, kommt nach ihrem Ende an 
     await new Promise((r) => setTimeout(r, 1100));
     assert.equal(env.listeners.filter((l) => l.type === 'click').length, 0, 'ein Zuhoerer ohne click haengt weiter');
 
-    // Der Router reicht erst nach, wenn seine Navigation durch ist: navigate()
-    // verwirft jeden Aufruf, solange `isNavigating` steht (im Browser gemessen:
-    // ohne das kam der erste Tipp einer Runde nicht an).
+    // Der Router reicht gleich nach der Blende nach (Schnell-Erfassen, Aufgabe 3).
+    // Bis dahin wartete er, bis seine Navigation durch war - bis zu 2 s, weil
+    // navigate() einmal jeden Aufruf verwarf, solange `isNavigating` stand. Seit
+    // R19 (Nachlese 1b) stellt navigate() den Tipp an und bricht die laufende
+    // Navigation ab; das Warten hielt nur noch den Tipp auf.
     const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
-    assert.match(router, /await swapPage\(swap, \{[^}]*whenSettled: navigationIdle,/);
-    assert.match(router, /function navigationIdle\(\) \{[\s\S]*?routerState\.isNavigating/);
+    assert.match(router, /await swapPage\(swap, \{[^}]*whenSettled: null,/);
+    assert.doesNotMatch(router, /function navigationIdle\(/, 'das Warten auf das Ende der Navigation ist zurueck');
+    const navigate = readFileSync(new URL('../public/utils/router-navigate.js', import.meta.url), 'utf8');
+    assert.match(navigate, /if \(state\.isNavigating\) \{[\s\S]*?running\?\.abort\(NAVIGATION_SUPERSEDED\);[\s\S]*?queued = \{ args: \[path, userOrPushState, pushState\], resolve \};/,
+      'navigate() stellt einen Tipp waehrend einer Navigation nicht mehr an - dann muesste das Nachreichen wieder warten');
   } finally {
     delete globalThis.document;
     delete globalThis.matchMedia;
@@ -1302,7 +1307,6 @@ const pageSource = (name) => readFileSync(new URL(`../public/pages/${name}.js`, 
 
 test('Inhaltswechsel: Reiter, Zeitraeume und Bereiche tauschen ueber swapContent/swapPeriod', () => {
   const carriers = [
-    ['rewards', /swapContent\(el, draw, \{ direction/, 'Reiterwechsel'],
     ['housekeeping', /swapContent\(content, \(\) => \{/, 'Reiterwechsel'],
     ['housekeeping', /swapPeriod\(content, towards, \(\) => renderReports\(content\)\)/, 'Berichtsmonat'],
     ['budget', /swapContent\(_container\.querySelector\('#budget-body'\), renderBody, \{ direction \}\)/, 'Reiterwechsel'],
@@ -1329,7 +1333,6 @@ test('Listenbewegung: Module, die ihre Zeilen neu bauen, nutzen list-motion bzw.
   const modules = [
     ['housekeeping', /redrawList\(content, \(\) => drawTasks\(content\)/, 'Aufgabenliste'],
     ['housekeeping', /collapseRow\(row\)\.then\(repaint\)/, 'geloeschte Aufgabe klappt aus'],
-    ['rewards', /await collapseRow\(row, \{ group:/, 'entschiedene Anfrage klappt aus'],
     ['waste', /redrawList\(host, \(\) => drawUpcoming\(host\)/, 'Abholungen'],
     ['waste', /redrawList\(host, \(\) => drawTypes\(host\)/, 'Abfallarten'],
     ['waste', /redrawList\(host, \(\) => drawSources\(host\)/, 'Quellen'],
@@ -1340,10 +1343,6 @@ test('Listenbewegung: Module, die ihre Zeilen neu bauen, nutzen list-motion bzw.
   ];
   const missing = modules.filter(([name, pattern]) => !pattern.test(pageSource(name))).map(([name, , what]) => `${name}.js: ${what}`);
   assert.deepEqual(missing, [], `Liste ohne Bewegung:\n  ${missing.join('\n  ')}`);
-  // Belohnungen: das Skelett steht nur beim ersten Aufbau, nicht bei jedem Wechsel.
-  const rewards = pageSource('rewards');
-  const fn = rewards.slice(rewards.indexOf('async function renderCurrentTab('), rewards.indexOf('async function renderCurrentTab(') + 900);
-  assert.match(fn, /if \(first\) \{\s*el\.replaceChildren\(\);\s*el\.insertAdjacentHTML\('beforeend', renderSkeletonList/, 'Skelett nur unter `first`');
 });
 
 /* R17, Bewegung: "das System steht, die Abdeckung fehlt". Acht Seiten bauten
@@ -1728,7 +1727,7 @@ test('R18: der Aufgaben-Dialog schliesst mit dem Speichern - die aufziehende Zei
   assert.doesNotMatch(save, /setTimeout\(\(\) => closeModal/, 'kein verzoegertes Schliessen');
   // Das Neuzeichnen steht in einem eigenen try: sein Fehler gehoert auf die
   // Seite, nicht an den geschlossenen Dialog (Review zu #1794, Test weiter unten).
-  assert.match(save, /closeModal\(\{ force: true \}\);\s*try \{\s*await refreshTags\(\);\s*await onChanged\(\);/, 'schliessen, dann neu zeichnen');
+  assert.match(save, /closeModal\(\{ force: true \}\);\s*try \{\s*await onChanged\(\);/, 'schliessen, dann neu zeichnen');
   // Die Reihenfolge der Enthuellung bleibt: erst der Dialog weg, dann die
   // History wieder bei der Seite, dann die Zeile (sonst traegt `back()` die
   // alte Adresse wieder herein).
@@ -1813,7 +1812,7 @@ const SHARED_PRESSABLE = [
  *  -> 206 (2026-10-24): das Kachelraster der Uebersicht ist mit Tafla gegangen.
  *  -> 198 (2026-10-26): beides zusammengefuehrt - Chips und Kachelraster entfallen gemeinsam.
  *  -> 197 (2026-10-26): der Hover der toten `.notes-page .note-item` (glass.css) ist weg. */
-const UNGUARDED_HOVER_MAX = 197;
+const UNGUARDED_HOVER_MAX = 193;
 
 function hoverRules() {
   const out = [];
@@ -2226,7 +2225,7 @@ test('tasks: a failing reload after the dialog closed is reported on the page, n
   const closed = submit.indexOf('closeModal({ force: true });');
   assert.ok(closed > 0, 'der Dialog schliesst vor dem Neuladen');
   const after = submit.slice(closed, submit.indexOf('\n  } catch (err) {\n    resetSubmit(err.message);', closed));
-  const reload = after.match(/try \{\s*await refreshTags\(\);\s*await onChanged\(\);[\s\S]*?\n    \} catch \((\w+)\) \{([\s\S]*?)\n    \}/);
+  const reload = after.match(/try \{\s*await onChanged\(\);[\s\S]*?\n    \} catch \((\w+)\) \{([\s\S]*?)\n    \}/);
   assert.ok(reload, 'das Neuladen nach dem Schliessen hat einen eigenen catch');
   assert.match(reload[2], /showToast\([\s\S]*?'danger'\)/, 'der Fehler steht als Toast auf der Seite');
   assert.doesNotMatch(reload[2], /resetSubmit|btnError/, 'nicht an Bedienelementen des geschlossenen Dialogs');
@@ -2335,36 +2334,24 @@ test('Kalender: die Ansicht baut erst, wenn die Kapsel gleitet (afterGlideStart 
 // Frame, auf jeder Linie, genau waehrend des Starts), und die Linien standen
 // ab dem ersten Frame da - auch wenn der Inhalt 80ms spaeter kam.
 // --------------------------------------------------------------------------
-test('R19: das Skelett blendet nach --duration-sm ein und schimmert nur mit transform', () => {
+test('Aufgabe 2 (2026-10-29): der Seitenring blendet erst nach --duration-2xl ein und dreht nur mit transform', () => {
+  // Ersetzt den Skelett-Guard von R19: es gibt keine Skelette mehr, nur noch
+  // den Ring (.page-loading). Die Verzoegerung selbst pinnt test-no-skeletons.
   const layout = [...eachRule(css('layout.css'))];
-  const base = layout.find((r) => r.selector.trim() === '.skeleton' && r.at.length === 0);
-  assert.ok(base, '.skeleton hat keine Basisregel in layout.css');
-  assert.match(base.body, /animation:\s*skeleton-in\s+var\(--duration-\w+\)\s+var\(--ease-[\w-]+\)\s+var\(--duration-sm\)\s+backwards/,
-    'die Linien stehen ab dem ersten Frame - ein Aufblitzen fuer 80ms ist Flackern, kein Status');
-  assert.doesNotMatch(base.body, /background-size|background-position/);
-  const sheen = layout.find((r) => r.selector.trim() === '.skeleton::after' && r.at.length === 0);
-  assert.ok(sheen, 'kein Schimmer-Band als ::after');
-  assert.match(sheen.body, /animation:\s*skeleton-shimmer\b/);
-  const frames = keyframesBody('skeleton-shimmer');
-  assert.match(frames, /transform:/);
-  assert.doesNotMatch(frames, /background-position/, 'der Schimmer malt wieder in jedem Frame');
-  for (const file of allSheets) {
-    for (const rule of eachRule(css(file))) {
-      if (/(^|[\s,])\.skeleton(?![\w-])/.test(rule.selector)) {
-        assert.doesNotMatch(rule.body, /background-(size|position)/, `${file}: ${rule.selector} bringt den alten Schimmer zurueck`);
-      }
-    }
-  }
-  const reduced = layout.find((r) => r.selector.trim() === '.skeleton::after' && r.at.some((a) => /prefers-reduced-motion:\s*reduce/.test(a)));
-  assert.ok(reduced && /animation:\s*none/.test(reduced.body), 'unter reduzierter Bewegung schimmert es weiter');
+  const base = layout.find((r) => r.selector.trim() === '.page-loading' && r.at.length === 0);
+  assert.ok(base, '.page-loading hat keine Basisregel in layout.css');
+  assert.match(base.body, /animation-delay:\s*var\(--duration-2xl\)/, 'ein Aufblitzen fuer 80ms ist Flackern, kein Status');
+  assert.match(base.body, /opacity:\s*0\b/);
+  assert.match(keyframesBody('page-loading-in'), /opacity:/);
+  assert.match(keyframesBody('app-spin'), /transform:/, 'der Ring dreht per transform, nicht per Paint');
 });
 
 test('R19: die Uebersicht blendet vom Skelett zum Inhalt ueber swapContent', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   // TAFLA (2026-10-19): das Skelett ist das von Dziś, der Inhalt kommt aus
   // renderTodayPage() - dieselbe Blende, nur andere Namen.
-  // 2026-10-27, v2: das Skelett heisst `.dz-skeleton`, der Zustand `dzisState`.
-  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.dz-skeleton'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
+  // 2026-10-29: das Skelett ist der Ring `.page-loading`, der Zustand `dzisState`.
+  assert.match(src, /const fromSkeleton = Boolean\(shell\.querySelector\('\.page-loading'\)\)\s*&& !document\.documentElement\.classList\.contains\('page-swapping'\);/);
   assert.match(src, /swapContent\(shell, \(\) => setHtml\(shell, renderTodayPage\(dzisState\)\), \{ animate: fromSkeleton \}\);/);
 });
 

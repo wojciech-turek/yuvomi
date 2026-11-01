@@ -6,25 +6,26 @@
 
 import { api } from '/api.js';
 import { renderRRuleFields, bindRRuleEvents, getRRuleValues, describeRRule } from '/rrule-ui.js';
-import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender } from '/components/modal.js';
+import { openModal as openSharedModal, closeModal, whenModalClosed, wireBlurValidation, validateAll, btnError, btnLoading, promptModal, confirmModal, advancedSection, refocusAfterRender, askOverModal, reportFieldError, clearFieldError } from '/components/modal.js';
 import { whenHistorySettled } from '/utils/overlay-history.js';
 import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut, expandIn, wireScrollFade } from '/utils/ux.js';
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
-import { t, getLocale, formatDate, formatTime, timeSuffix, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
-import { esc, REQUIRED_MARK } from '/utils/html.js';
+import { t, getLocale, formatDate, formatTime, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
+import { esc } from '/utils/html.js';
 import { rowActionHtml, rowMenuHtml } from '/utils/row-action.js';
-import { renderMarkdownToolbar, wireMarkdownToolbar } from '/utils/markdown-toolbar.js';
 import { refresh as refreshReminders } from '/reminders.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 import { withChosenPeople } from '/utils/people-picker.js';
-import { resolveReminderPreset, remindAtFromPreset, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
+import { remindAtFromWallTime, wallTimeFromRemindAt, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
+import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
+import { openDictationSheet, startTaskDictation } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
 import { emptyStateHTML, mountLoadError, searchEmptyHTML } from '/utils/empty-state.js';
 import '/components/category-manager.js';
-import '/components/tag-manager.js';
 import { findPageFab } from '/utils/fab.js';
+import { ensureStyleApplied } from '/utils/page-style.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { isSoloHousehold, hidesPrivacyControls } from '/utils/household.js';
 import { popoverMenuHtml, installPopoverMenus, pageToolsMenuHtml, pageToolsActionEl, syncPopoverMenuItem } from '/utils/popover-menu.js';
@@ -37,11 +38,12 @@ import { todayKey, parseLocalDateKey } from '/utils/date.js';
 import { makeSortable } from '/utils/sortable.js';
 import { mountMasterDetail, splitViewDetailHtml, setSelectionBulk } from '/utils/master-detail.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel } from '/utils/day-label.js';
+import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel, relativeDateLabel } from '/utils/day-label.js';
+import { loadingSpinnerHtml } from '/utils/skeleton.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import {
   PRIORITIES, PRIO_ORDER, STATUSES, FILTER_STATUSES, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
-  FALLBACK_CATEGORY, isArchived, formatDueDate, normalizeTagList, seriesDoneText,
+  FALLBACK_CATEGORY, isArchived, formatDueDate, seriesDoneText,
   catLabel as catLabelOf, catSortIndex as catSortIndexOf,
   canEditTaskDefinition as canEditTaskDefinitionFor,
 } from '/utils/task-fields.js';
@@ -314,117 +316,6 @@ function renderSwipeRow(task, innerHtml) {
 }
 
 // --------------------------------------------------------
-// Sync-Ziel einer neuen Aufgabe (#695)
-// --------------------------------------------------------
-
-/**
- * Das Ziel-Feld des Aufgaben-Dialogs.
- *
- * Es fehlt in zwei Faellen, und beide sind Aussagen ueber die Aufgabe, nicht
- * ueber die Oberflaeche:
- *
- * - Unteraufgaben tragen kein eigenes Ziel. Sie gehoeren zu ihrer Elternaufgabe,
- *   und als eigenstaendiges VTODO stuenden sie auf dem Server gleichrangig
- *   daneben.
- * - Eine bereits hochgeladene Aufgabe kann ihre Liste nicht mehr wechseln: einen
- *   Umzug zwischen Listen gibt es bewusst nicht. Statt eines toten Dropdowns
- *   steht dort ein Satz, der sagt, dass sie abgeglichen wird - sonst sieht die
- *   Maske aus, als haette man die Wahl vergessen.
- */
-function syncTargetFieldHtml(task) {
-  if (task?.parent_task_id) return '';
-
-  if (task?.external_source === 'caldav') {
-    return `
-      <div class="form-group">
-        <span class="label">${t('tasks.syncTargetLabel')}</span>
-        <p class="form-hint">${t('tasks.syncTargetMirrored')}</p>
-      </div>
-`;
-  }
-
-  return `
-      <div class="form-group">
-        <label class="label" for="task-sync-target">${t('tasks.syncTargetLabel')}</label>
-        <select class="input" id="task-sync-target" name="sync_target">
-          <option value="">${t('tasks.syncTargetLocal')}</option>
-        </select>
-        <small class="form-hint">${t('tasks.syncTargetHint')}</small>
-      </div>
-`;
-}
-
-/**
- * Fuellt das Ziel-Feld aus /tasks/sync-targets.
- *
- * Faellt der Aufruf aus, bleibt die einzige Option "nur lokal" stehen - das ist
- * derselbe Zustand wie ohne eingerichtete Erinnerungsliste und verliert nichts:
- * ein nicht gesetztes Ziel laesst die Aufgabe lokal, so wie bisher jede.
- *
- * Ein gespeichertes, aber nicht mehr angebotenes Ziel wird nachgetragen, damit
- * die Maske nicht "nur lokal" behauptet, waehrend die Aufgabe auf eine Liste
- * wartet. Der persoenliche Standard dagegen wird NICHT nachgetragen: er soll
- * eine neue Aufgabe nicht auf eine Liste richten, die es nicht mehr gibt.
- */
-async function wireSyncTarget(panel, task) {
-  const select = panel.querySelector('#task-sync-target');
-  if (!select) return;
-
-  let lists = [];
-  try {
-    const res = await api.get('/tasks/sync-targets');
-    lists = res.data?.caldav ?? [];
-  } catch (err) {
-    console.warn('[Tasks] Sync-Ziele nicht ladbar:', err.message);
-  }
-
-  const current = task?.target_caldav_account_id && task?.target_caldav_list_url
-    ? `caldav:${task.target_caldav_account_id}|${task.target_caldav_list_url}`
-    : '';
-
-  const byAccount = new Map();
-  for (const list of lists) {
-    if (!byAccount.has(list.accountName)) byAccount.set(list.accountName, []);
-    byAccount.get(list.accountName).push(list);
-  }
-
-  for (const [accountName, group] of byAccount) {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = accountName;
-    for (const list of group) {
-      const option = document.createElement('option');
-      option.value = `caldav:${list.accountId}|${list.listUrl}`;
-      option.textContent = list.listName || list.listUrl;
-      optgroup.appendChild(option);
-    }
-    select.appendChild(optgroup);
-  }
-
-  if (current && !Array.from(select.options).some((o) => o.value === current)) {
-    const option = document.createElement('option');
-    option.value = current;
-    option.textContent = t('tasks.syncTargetUnavailable');
-    select.appendChild(option);
-  }
-
-  const wanted = current || (task ? '' : state.defaultSyncTarget);
-  if (wanted && Array.from(select.options).some((o) => o.value === wanted)) {
-    select.value = wanted;
-  }
-}
-
-/**
- * Das Schloss einer gesperrten Aufgabe - EINE Bauart fuer Liste und Brett
- * (#1607: das Brett liess es weg, wer die Ansicht wechselte, erfuhr die Sperre
- * erst am abgelehnten Zug). `role="img"`, damit das `aria-label` gilt.
- */
-function renderLockedBadge(task) {
-  if (!task.locked) return '';
-  const label = esc(t('tasks.lockedBadge'));
-  return `<span class="task-card__glyph" role="img" aria-label="${label}" title="${label}"><i data-lucide="lock" aria-hidden="true"></i></span>`;
-}
-
-// --------------------------------------------------------
 // Die Tafla-Zeile (2026-10-20): Kreis, Titel, eine Metazeile in Worten,
 // hinten nur die Fahne (Hoch/Dringend) und die Person nach der Personenregel.
 // --------------------------------------------------------
@@ -493,15 +384,13 @@ function hashTag(label) {
 
 /**
  * Die Metazeile: Pille, Wiederholungszeichen und EIN Text, der mit Ellipse
- * endet - Wann · Rhythmus · #Kategorie · #Tag · razem · Beschreibung. Dahinter
- * leise Zeichen fuer Anhang, Sperre und eingeschraenkte Sichtbarkeit.
+ * endet - Wann · Rhythmus · #Kategorie · razem · Beschreibung. Dahinter
+ * leise Zeichen fuer Anhang und eingeschraenkte Sichtbarkeit.
  */
 function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const when = taskWhen(task, bucket);
   const parts = [when.text, rhythmText(task)];
   if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(hashTag(catLabel(task.category)));
-  const tag = (task.tags ?? []).find(Boolean);
-  if (tag) parts.push(hashTag(tag));
   if (whoOf(task.assigned_users).kind === 'razem' && includesViewer(task.assigned_users, rowViewerId())) parts.push(t('tasks.together'));
   parts.push(descriptionLead(task.description));
   const text = parts.filter(Boolean).join(' · ');
@@ -509,7 +398,6 @@ function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const glyphs = [
     archived ? `<span class="task-card__glyph task-card__archived" role="img" aria-label="${esc(t('tasks.statusArchived'))}"><i data-lucide="archive" aria-hidden="true"></i></span>` : '',
     task.document_count > 0 ? `<span class="task-card__glyph task-card__docs" role="img" aria-label="${esc(t('tasks.documentsCount', { count: task.document_count }))}"><i data-lucide="paperclip" aria-hidden="true"></i></span>` : '',
-    renderLockedBadge(task),
     task.visibility && task.visibility !== 'all'
       ? `<span class="task-card__glyph task-card__visibility" role="img" aria-label="${esc(task.visibility === 'private' ? t('common.visibility.private') : t('common.visibility.assignees'))}"><i data-lucide="${task.visibility === 'private' ? 'lock-keyhole' : 'users'}" aria-hidden="true"></i></span>`
       : '',
@@ -541,7 +429,7 @@ function taskTrailHtml(task) {
  *
  * Die Zeile trug bis zu acht Elemente mit `flex-wrap: wrap` und wurde damit je
  * nach Aufgabe zwei- bis dreizeilig - der eigentliche Höhentreiber der Liste,
- * nicht die Polsterung. Drei Regeln nehmen das zurück, ohne Information zu
+ * nicht die Polsterung. Zwei Regeln nehmen das zurück, ohne Information zu
  * verstecken, die es nur hier gibt:
  *
  * 1. ZWEI DATEN SIND EINS ZU VIEL. Das Startdatum erscheint nur, wenn es keine
@@ -550,8 +438,6 @@ function taskTrailHtml(task) {
  * 2. DIE KATEGORIE STEHT NICHT ZWEIMAL. Beim Gruppieren nach Kategorie ist der
  *    Gruppenkopf darüber schon die Antwort - das Etikett wiederholte ihn in
  *    jeder Zeile der Gruppe.
- * 3. EIN TAG STATT DREI, der Rest als „+N". Der Marker existiert bereits
- *    (.task-tag--more) und sagt, dass etwas fehlt - das tut ein Abschnitt nicht.
  *
  * Anhänge werden zur reinen Glyphe: die Zahl daneben war die einzige Stelle der
  * Zeile, an der eine Anzahl OHNE ihren Gegenstand stand.
@@ -693,7 +579,7 @@ function renderTaskCard(task, opts = {}) {
                 Abzeichen - kein Prioritaetswort, keine Uhr, keine Etiketten-
                 Knoepfe. Die Kategorie steht als "#dom" im Text, die Faelligkeit
                 als Wort ("od pt 16 paź", "do 19:00", "śr 21 paź"), ueberfaellig
-                als Pille "zaległe". Die Tag-Filter-Knoepfe bleiben dem Brett. */ ''}
+                als Pille "zaległe". */ ''}
           ${meta}
         </div>
 
@@ -979,169 +865,20 @@ function todayDoneHtml(groups, now) {
 // Task-Modal (Erstellen / Bearbeiten)
 // --------------------------------------------------------
 
-// --------------------------------------------------------
-// Tags (#586)
-// Freie Etiketten, gespiegelt aus VTODO CATEGORIES. Bewusst getrennt von der
-// Kategorie: eine Aufgabe liegt in einer Schublade, trägt aber beliebig viele
-// Etiketten.
-// --------------------------------------------------------
-// Working-Set des offenen Bearbeiten-Dialogs, analog zu den verknüpften
-// Dokumenten. Wird beim Öffnen aus der Aufgabe gefüllt und beim Speichern gelesen.
-let modalTags = [];
-/** Zeichnet die Chips des Tag-Editors neu. */
-function renderTagChips(container) {
-  const wrap = container.querySelector('#task-tags-chips');
-  if (!wrap) return;
-  wrap.replaceChildren();
-
-  modalTags.forEach((tag, index) => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'task-tag task-tag--editable';
-    chip.dataset.tagIndex = String(index);
-    chip.setAttribute('aria-label', t('tasks.tagRemove', { tag }));
-    chip.appendChild(document.createTextNode(tag));
-
-    const icon = document.createElement('i');
-    icon.setAttribute('data-lucide', 'x');
-    icon.className = 'icon-sm';
-    icon.setAttribute('aria-hidden', 'true');
-    chip.appendChild(icon);
-
-    wrap.appendChild(chip);
-  });
-
-  if (window.lucide) window.lucide.createIcons({ el: wrap });
-}
-
 /**
- * Verdrahtet den Tag-Editor: Enter oder Komma übernimmt, Klick auf ein Chip
- * entfernt, Backspace im leeren Feld nimmt das letzte zurück.
+ * Gruppenkopf auf- und zuklappen (#812). Delegiert am Container, weil die
+ * Liste laufend neu gezeichnet wird.
+ *
+ * DIE ZEILEN KLAPPEN, STATT ZU SPRINGEN (Critique 2026-09-26, A3 P1-4). Die
+ * Liste zeichnet eine zugeklappte Gruppe ohne `.row-carrier` - also klappt
+ * beim Zuklappen erst die alte Zeilenflaeche weg und danach wird neu
+ * gezeichnet; beim Aufklappen wird erst gezeichnet und die neue Flaeche von
+ * null aufgezogen. Der Winkel dreht dabei ueber seine eigene Transition
+ * (list-row.css), auch am frisch gezeichneten Knopf. Der Fokus bleibt auf dem
+ * Kopf: das Neuzeichnen ersetzt den Knopf, und ohne Rueckgabe landete er auf
+ * <body>.
  */
-function wireTagEditor(panel) {
-  const input = panel.querySelector('#task-tag-input');
-  const chips = panel.querySelector('#task-tags-chips');
-  if (!input || !chips) return;
-
-  const commit = () => {
-    // Eine eingefügte Liste („Garten, Haus") in einem Rutsch übernehmen.
-    const added = input.value.split(',');
-    if (!added.some((v) => v.trim())) return;
-    modalTags = normalizeTagList([...modalTags, ...added]);
-    input.value = '';
-    renderTagChips(panel);
-  };
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      // Enter darf im Tag-Feld nicht das Formular abschicken.
-      e.preventDefault();
-      commit();
-      return;
-    }
-    if (e.key === 'Backspace' && !input.value && modalTags.length) {
-      modalTags = modalTags.slice(0, -1);
-      renderTagChips(panel);
-    }
-  });
-
-  // Verlassen des Feldes übernimmt ebenfalls: sonst geht ein getippter Tag beim
-  // Speichern still verloren.
-  input.addEventListener('blur', commit);
-  // Auswahl aus der Vorschlagsliste löst kein keydown aus.
-  input.addEventListener('change', commit);
-
-  chips.addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-tag-index]');
-    if (!chip) return;
-    modalTags.splice(Number(chip.dataset.tagIndex), 1);
-    renderTagChips(panel);
-  });
-}
-
-// Wie viele Tags eine Karte zeigt, bevor sie zusammenfasst. Analog zum
-// Avatar-Stack: eine Karte, die 32 Etiketten ausrollt, ist keine Karte mehr.
-const TAG_BADGES_VISIBLE = 3;
-
-/* Die Etiketten-Knoepfe stehen nur noch im Brett (bis drei); die Listenzeile
- * nennt ihren ersten Tag als "#tag" im Text ihrer Metazeile (Tafla). */
-
-/**
- * Tag-Chips einer Aufgabe für Karten und Kanban.
- *
- * Die Chips sind Buttons, keine Beschriftungen: ein Tag anzuklicken und die
- * Liste darauf zu filtern ist die Geste, die man von einem Etikett erwartet.
- * Den Klick fängt die Delegation in wireTagBadgeFilter ab, die ihn auch vom
- * Karten-Klick (Aufgabe öffnen) trennt.
- */
-/**
- * @param {string} [priority]  Die Priorität der Aufgabe, deren Etiketten das
- *   hier sind. Ein Etikett, das GENAU SO heisst wie sie, wird weggelassen.
- *
- * WARUM: gemessen stand auf /tasks der Prioritäts-Chip „• Dringend" direkt
- * neben dem gespiegelten CalDAV-Etikett „dringend" - zwei Formen, dasselbe
- * Wort, in einer Metazeile, die seit dem Zeilenschnitt einzeilig ist und jedes
- * Element bezahlt. Beide kommen aus derselben Quelle: eine VTODO trägt ihre
- * Dringlichkeit als PRIORITY und noch einmal als CATEGORIES.
- *
- * NUR DIE EIGENE PRIORITÄT, nicht jedes Prioritätswort: trägt eine Aufgabe mit
- * Priorität „hoch" ein Etikett „dringend", ist das keine Doppelung, sondern ein
- * Widerspruch - und den soll man sehen.
- *
- * Verglichen wird gegen das ANGEZEIGTE Label, nicht gegen den Schlüssel: das
- * Etikett kommt aus einer fremden Liste und ist in der Sprache geschrieben, in
- * der der Nutzer es dort angelegt hat.
- */
-function renderTagBadges(tags, limit = TAG_BADGES_VISIBLE, priority = null) {
-  if (!tags?.length) return '';
-  const eigenes = priority && priority !== 'none' ? PRIORITY_LABELS()[priority] : null;
-  if (eigenes) {
-    const norm = (s) => String(s).trim().toLocaleLowerCase();
-    tags = tags.filter((tag) => norm(tag) !== norm(eigenes));
-    if (!tags.length) return '';
-  }
-  const shown = tags.slice(0, limit);
-  const rest  = tags.length - shown.length;
-  const chips = shown.map((tag) => `
-    <button type="button" class="task-tag task-tag--filter" data-tag-filter="${esc(tag)}"
-            aria-label="${esc(t('tasks.tagFilterBy', { tag }))}">${esc(tag)}</button>`);
-  // Der Rest bleibt lesbar statt anklickbar: er benennt keinen einzelnen Tag,
-  // also gäbe es auch nichts, worauf ein Klick filtern könnte.
-  if (rest > 0) {
-    chips.push(`<span class="task-tag task-tag--more"
-                      title="${esc(tags.slice(limit).join(', '))}">+${rest}</span>`);
-  }
-  return chips.join('');
-}
-
-/**
- * Klick auf ein Tag-Chip filtert die Liste danach (#586).
- *
- * Delegiert, weil Karten laufend neu gezeichnet werden - und in der
- * Capture-Phase, nicht beim Bubbling. Im Kanban öffnet ein Klick irgendwo auf
- * der Karte den Bearbeiten-Dialog, und dieser Handler sitzt am Board, also
- * unterhalb des Containers: beim Bubbling käme er zuerst dran und hätte den
- * Dialog längst geöffnet, bevor ein stopPropagation hier noch etwas ausrichtet.
- */
-function wireTagBadgeFilter(container) {
-  container.addEventListener('click', async (e) => {
-    const chip = e.target.closest('[data-tag-filter]');
-    if (!chip || !container.contains(chip)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    await toggleTagFilter(chip.dataset.tagFilter, container);
-  }, true);
-
-  // Gruppenkopf auf- und zuklappen (#812).
-  //
-  // DIE ZEILEN KLAPPEN, STATT ZU SPRINGEN (Critique 2026-09-26, A3 P1-4). Die
-  // Liste zeichnet eine zugeklappte Gruppe ohne `.row-carrier` - also klappt
-  // beim Zuklappen erst die alte Zeilenflaeche weg und danach wird neu
-  // gezeichnet; beim Aufklappen wird erst gezeichnet und die neue Flaeche von
-  // null aufgezogen. Der Winkel dreht dabei ueber seine eigene Transition
-  // (list-row.css), auch am frisch gezeichneten Knopf. Der Fokus bleibt auf dem
-  // Kopf: das Neuzeichnen ersetzt den Knopf, und ohne Rueckgabe landete er auf
-  // <body>.
+function wireGroupToggle(container) {
   container.addEventListener('click', async (e) => {
     const toggle = e.target.closest('[data-group-toggle]');
     if (!toggle || !container.contains(toggle)) return;
@@ -1180,314 +917,284 @@ function wireTagBadgeFilter(container) {
   });
 }
 
-/**
- * Was hinter „Weitere Einstellungen" des Aufgabendialogs liegt, als Hinweis
- * unter dem Aufklapper (DESIGN.md: „Weitere Einstellungen nennt, was dahinter
- * liegt"; A3 P1-2). Dieselbe Bauart wie eventAdvancedTopics() im Kalender.
- */
-function taskAdvancedTopics({ privacy = true, recurrence = false, reminder = false, countdown = false } = {}) {
-  const topics = [
-    t('tasks.startDateLabel'),
-    countdown ? t('dashboard.countdownTitle') : null,
-    t('tasks.pointsLabel'),
-    t('tasks.tagsLabel'),
-    t('tasks.statusLabel'),
-    privacy ? t('common.visibility.label') : null,
-    t('tasks.documentsLabel'),
-    // Nur solange sie leer hinter dem Aufklapper liegen (R16) - der Hinweis
-    // nennt, was dahinter IST, nicht was dort sein koennte.
-    recurrence ? t('rrule.labelRepeat') : null,
-    reminder ? t('reminders.sectionTitle') : null,
-  ].filter(Boolean);
-  try {
-    return new Intl.ListFormat(getLocale(), { style: 'long', type: 'conjunction' }).format(topics);
-  } catch {
-    return topics.join(', ');
-  }
+// --------------------------------------------------------
+// Das Blatt „Neue Aufgabe" (Quick-Add, 2026-10-29)
+//
+// „Wenn ich das Fenster fuer eine neue Aufgabe oeffne, denke ich: uff." Der
+// erste Blick zeigt deshalb nur, was jede Aufgabe braucht: den Titel (mit
+// Mikrofon), wer sie hat, drei kleine Knoepfe - Faelligkeit, Erinnerung,
+// Notiz -, „Mehr" und „Aufgabe hinzufuegen". Jeder Knopf klappt sein Feld an
+// Ort und Stelle auf, „Entfernen" klappt es wieder zu und leert es.
+//
+// WAS GESETZT IST, STEHT OFFEN DA. Beim Bearbeiten und aus einem Entwurf
+// (Diktat) ist ein Abschnitt offen, sobald er einen Wert traegt; „Mehr" geht
+// beim Bearbeiten auf, sobald darin etwas gesetzt ist, und nennt die Werte in
+// seiner Zeile. Nach einem Diktat stehen gesetzte Werte zuerst als kompakte
+// Zeilen mit x da (`[data-row]`, `[data-expand]`, Entwurf TaskSpoken).
+//
+// Der Vertrag mit dem Diktat (Task 9) und den Tests: `#task-title` mit
+// `[data-action="dictate"]` im Feld (nur beim Anlegen, R10), `[data-reveal]`, `[data-section]` (mit
+// `hidden`, solange leer) samt `[data-remove]`, `[data-due-pick]`,
+// `[data-reveal-time]`, `[data-remind-pick]`.
+// --------------------------------------------------------
+
+/** Lucide-Zeichen der drei kleinen Knoepfe. */
+const SHEET_ICONS = Object.freeze({ due: 'calendar', reminder: 'bell', note: 'pencil' });
+
+/** Die Schnellwahl der Faelligkeit, in der Reihenfolge des Blatts. */
+const DUE_PICKS = Object.freeze(['today', 'tomorrow', 'weekend']);
+const DUE_PICK_LABELS = Object.freeze({
+  today: 'common.today', tomorrow: 'common.tomorrow', weekend: 'tasks.dueWeekend', pick: 'tasks.duePick',
+});
+const REMIND_PICK_LABELS = Object.freeze({
+  at_due: 'tasks.remindAtDue', hour_before: 'tasks.remindHourBefore', day_before: 'tasks.remindDayBefore',
+});
+/** Name und x-Beschriftung der kompakten Zeilen eines Diktats (Entwurf TaskSpoken). */
+const ROW_LABELS = Object.freeze({ due: 'tasks.dueShort', reminder: 'reminders.sectionTitle', note: 'tasks.descriptionLabel' });
+const ROW_REMOVE_LABELS = Object.freeze({ due: 'tasks.removeDue', reminder: 'reminders.removeReminder', note: 'tasks.removeNote' });
+
+/** Uhrzeit einer Erinnerung, die nur einen Tag nennt (R9, wie der Server). */
+const DAY_ONLY_REMINDER_TIME = '09:00';
+
+/** `HH:MM` aus einer gespeicherten Uhrzeit (der Server fuehrt sie mit oder ohne Sekunden). */
+function hhmm(value) {
+  const m = /^(\d{2}):(\d{2})/.exec(String(value ?? ''));
+  return m ? `${m[1]}:${m[2]}` : '';
 }
 
-function renderModalContent({ task = null, users = [], reminder = null } = {}) {
+/**
+ * Welche Schnellwahl eine Faelligkeit ist. „Dieses Wochenende" kann am Freitag
+ * dasselbe Datum sein wie „Morgen" - dann gewinnt, was zuletzt GEWAEHLT wurde
+ * (`chosen`). Wer „Datum waehlen" getippt hat, bleibt dort, auch wenn sein
+ * Datum zufaellig morgen ist: sonst verschwaende das Feld unter dem Finger.
+ */
+function duePickOf(value, today = todayKey(), chosen = '') {
+  if (chosen === 'pick') return 'pick';
+  if (!value) return '';
+  if (chosen && dueQuickPick(chosen, today) === value) return chosen;
+  return DUE_PICKS.find((key) => dueQuickPick(key, today) === value) ?? 'pick';
+}
+
+function sheetSectionHead(name, titleHtml, { removable = true } = {}) {
+  return `
+          <div class="task-sheet__section-head">
+            ${titleHtml}
+            ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
+          </div>`;
+}
+
+/**
+ * Ein Abschnitt des Blatts. Mit `row` (nur aus einem Diktat, Entwurf TaskSpoken)
+ * steht er zuerst als kompakte Zeile da - Zeichen, Name, Wert und ein x, das
+ * genau das tut, was „Entfernen" tut. Ein Tipp auf die Zeile klappt die
+ * Felder auf (`[data-expand]`). Die Felder stehen in beiden Faellen im DOM:
+ * das Speichern liest dieselben Eingaben.
+ */
+function sheetSectionHtml(name, { open, attrs = '', labelledBy = '', row = null }, innerHtml) {
+  const group = labelledBy ? ` role="group" aria-labelledby="${labelledBy}"` : '';
+  return `
+      <div class="task-sheet__section" data-section="${name}"${group}${attrs}${open ? '' : ' hidden'}>${row === null ? '' : sheetRowHtml(name, row)}
+        <div class="task-sheet__body" id="task-${name}-body"${row === null ? '' : ' hidden'}>${innerHtml}
+        </div>
+      </div>`;
+}
+
+function sheetRowHtml(name, value) {
+  return `
+        <div class="task-sheet__row" data-row="${name}">
+          <button type="button" class="task-sheet__row-main" data-expand="${name}" aria-expanded="false" aria-controls="task-${name}-body">
+            <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>
+            <span class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
+            <span class="task-sheet__row-value">${esc(value)}</span>
+          </button>
+          <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(ROW_REMOVE_LABELS[name]))}">
+            <i data-lucide="x" class="icon-md" aria-hidden="true"></i>
+          </button>
+        </div>`;
+}
+
+/** Ein Datum mit Uhrzeit in Worten fuer eine kompakte Zeile: „Morgen, 07:30". */
+function rowWhen(date, time) {
+  return [date ? relativeDateLabel(date) : '', time ? formatTime(time) : ''].filter(Boolean).join(', ');
+}
+
+function dueSectionHtml({ dueDate, dueTime, spoken = false }) {
+  const pick = duePickOf(dueDate);
+  const pills = [...DUE_PICKS, 'pick'].map((key) => `
+            <button type="button" class="task-sheet__pill" data-due-pick="${key}" aria-pressed="${pick === key}">${t(DUE_PICK_LABELS[key])}</button>`).join('');
+  // Eine Uhrzeit ohne Datum nimmt der Server an - sie darf nicht verborgen sein.
+  const open = !!(dueDate || dueTime);
+  return sheetSectionHtml('due', {
+    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null,
+  }, `${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
+          <div class="task-sheet__pills">${pills}
+          </div>
+          <div class="task-sheet__when task-sheet__when--due">
+            <div class="task-sheet__field task-sheet__when-date" data-due-date-row${pick === 'pick' ? '' : ' hidden'}>
+              <label class="sr-only" for="task-due-date">${t('tasks.dueDateLabel')}</label>
+              <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
+                     value="${esc(formatDateInput(dueDate))}"></yuvomi-datepicker>
+            </div>
+            <div class="task-sheet__field task-sheet__when-time" data-due-time-row${dueTime ? '' : ' hidden'}>
+              <label class="sr-only" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
+              <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
+                     value="${esc(formatTimeInput(dueTime))}"></yuvomi-datepicker>
+            </div>
+          </div>
+          <button type="button" class="task-sheet__add-time" data-reveal-time${dueTime ? ' hidden' : ''}>${t('tasks.addTime')}</button>`);
+}
+
+/** Die Vorschlaege der Erinnerung, aus der Faelligkeit; gedrueckt ist der, den die Felder gerade tragen. */
+function remindPicksHtml({ dueDate = '', dueTime = '', wall = null } = {}) {
+  return reminderQuickPicks({ dueDate, dueTime }).map((p) => `
+            <button type="button" class="task-sheet__pill" data-remind-pick="${p.key}" aria-pressed="${!!wall && wall.date === p.date && wall.time === p.time}">${t(REMIND_PICK_LABELS[p.key])}</button>`).join('');
+}
+
+/**
+ * Die Erinnerung als feste Uhrzeit („Erinnere mich: Morgen · 07:30").
+ *
+ * ERINNERUNGEN GEHOEREN DEM KALENDER (reminderAccess): `write` bekommt Knopf
+ * und Felder, `read` sieht eine bestehende Erinnerung gesperrt (ohne
+ * Entfernen) und sonst nichts, `none` gar nichts. Der gespeicherte Zeitpunkt
+ * reist als `data-stored-at` mit: das Speichern vergleicht damit und schickt
+ * fuer eine unberuehrte Erinnerung nichts - auch nicht fuer eine aus der alten
+ * Vorlauf-Auswahl, deren Sekunden die Felder gar nicht zeigen.
+ */
+function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken = false }) {
+  if (access === 'none' || (access === 'read' && !storedAt)) return '';
+  const locked = access === 'read';
+  const off = locked ? ' disabled' : '';
+  return sheetSectionHtml('reminder', {
+    open: !!wall,
+    labelledBy: 'task-remind-heading',
+    attrs: storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
+    row: spoken && wall && !locked ? rowWhen(wall.date, wall.time) : null,
+  }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
+          <div class="task-sheet__when">
+            <div class="task-sheet__field task-sheet__when-date">
+              <label class="sr-only" for="task-remind-date">${t('reminders.dateLabel')}</label>
+              <yuvomi-datepicker type="date" id="task-remind-date"
+                     value="${esc(formatDateInput(wall?.date ?? ''))}"${off}></yuvomi-datepicker>
+            </div>
+            <div class="task-sheet__field task-sheet__when-time">
+              <label class="sr-only" for="task-remind-time">${t('reminders.timeLabel')}</label>
+              <yuvomi-datepicker type="time" id="task-remind-time"
+                     value="${esc(formatTimeInput(wall?.time ?? ''))}"${off}></yuvomi-datepicker>
+            </div>
+          </div>
+          ${locked
+    ? `<p class="task-field-hint">${t('reminders.readOnlyNotice')}</p>`
+    : `<div class="task-sheet__pills" data-remind-picks>${remindPicksHtml({ dueDate, dueTime, wall })}
+          </div>`}`);
+}
+
+function noteSectionHtml({ note, spoken = false }) {
+  // Eine benannte Gruppe wie Faelligkeit und Erinnerung (F11); ihr Name ist
+  // die Ueberschrift, die zugleich das Etikett des Feldes bleibt.
+  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null },
+    `${sheetSectionHead('note', `<label class="task-sheet__section-title" id="task-note-heading" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
+          <textarea class="input task-sheet__note" id="task-description" name="description"
+                    rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>`);
+}
+
+function revealButtonHtml(name, labelKey, open) {
+  return `<button type="button" class="task-sheet__chip" data-reveal="${name}"${open ? ' hidden' : ''}>
+          <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>${t(labelKey)}
+        </button>`;
+}
+
+/**
+ * Was hinter „Mehr" gesetzt ist, in Worten fuer seine Zeile. Leer, solange
+ * nichts abseits der Vorgabe steht - dann heisst die Zeile nur „Mehr".
+ */
+function moreSummary(task) {
+  if (!task) return [];
+  const status = STATUSES().find((s) => s.value === task.status);
+  return [
+    task.priority && task.priority !== 'none' ? (PRIORITIES().find((p) => p.value === task.priority)?.label ?? '') : '',
+    task.category && task.category !== FALLBACK_CATEGORY ? catLabel(task.category) : '',
+    task.recurrence_rule ? (describeRRule(task.recurrence_rule) || t('rrule.labelRepeat')) : '',
+    !hidesPrivacyControls('tasks') && (task.visibility ?? 'all') !== 'all' ? t(`common.visibility.${task.visibility}`) : '',
+    task.start_date ? formatDate(task.start_date) : '',
+    status && status.value !== STATUSES()[0].value ? status.label : '',
+    task.documents?.length ? task.documents.map((d) => d.name).join(', ') : '',
+    task.countdown ? t('tasks.countdownDetail') : '',
+  ].filter(Boolean);
+}
+
+/**
+ * @param {{task?: object|null, users?: object[], reminder?: object|null,
+ *          draft?: {title?: string, due_date?: string, due_time?: string,
+ *                   remind_date?: string, remind_time?: string, assigned_to?: number[]}|null}} opts
+ *        `draft` gilt nur beim Anlegen (Diktat, Task 9): was der Satz hergab,
+ *        steht schon da, und der Nutzer prueft es vor „Aufgabe hinzufuegen".
+ *        Kommt das Diktat aus einem Blatt, in dem schon gewaehlt war (das
+ *        Mikrofon im Titelfeld, F9), traegt der Entwurf auch dessen Notiz
+ *        (`description`) und die Werte hinter „Mehr" (`more`, geformt wie eine
+ *        Aufgabe: priority, category, visibility, start_date, status,
+ *        countdown, recurrence_rule, recurrence_from_completion).
+ *        `spoken` (nur beim Anlegen): gesetzte Abschnitte stehen als kompakte
+ *        Zeilen mit x da (Entwurf TaskSpoken) - ein Tipp klappt sie auf.
+ */
+function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false } = {}) {
   const isEdit = !!task;
+  const d = isEdit ? null : (draft ?? null);
+  const rows = spoken && !isEdit;
 
-  const selectedIds = task?.assigned_users?.map((u) => u.id) ?? (task?.assigned_to ? [task.assigned_to] : []);
-  // Wen der Zustaendigen-Picker anbietet: die Mitglieder und wer schon an der
-  // Aufgabe steht. Versteckt wird er nur, wenn darin wirklich eine Person steht.
+  const selectedIds = isEdit
+    ? (task.assigned_users?.map((u) => u.id) ?? (task.assigned_to ? [task.assigned_to] : []))
+    : (Array.isArray(d?.assigned_to) ? d.assigned_to.map(Number).filter(Number.isInteger) : []);
+  // Wen die Auswahl anbietet: die Mitglieder (GET /tasks/meta/options, ohne
+  // Wandtablett, Personal und Gaeste) und wer schon an der Aufgabe steht.
   const assigneePeople = withChosenPeople(users, task?.assigned_users);
-  const visibility  = task?.visibility || 'all';
+  // Die Werte hinter „Mehr": die der Aufgabe, beim Anlegen die mitgetragenen
+  // eines Blatts, aus dem diktiert wurde (F9), sonst die Vorgaben.
+  const more = isEdit ? task : (d?.more && typeof d.more === 'object' ? d.more : null);
+  const visibility = more?.visibility || 'all';
 
-  const selectedCat = task?.category ?? FALLBACK_CATEGORY;
+  const title = isEdit ? (task.title ?? '') : (d?.title ?? '');
+  const dueDate = String((isEdit ? task.due_date : d?.due_date) ?? '').slice(0, 10);
+  const dueTime = hhmm(isEdit ? task.due_time : d?.due_time);
+  const note = (isEdit ? task.description : d?.description) ?? '';
+
+  const access = reminderAccess();
+  // Eine gespeicherte Erinnerung, deren Zeitpunkt sich nicht lesen laesst,
+  // bleibt UNANGETASTET: kein Feld, kein `data-stored-at` - sonst hielte das
+  // Speichern den zugeklappten Abschnitt fuer „entfernt" und loeschte sie.
+  const storedWall = reminder?.remind_at ? wallTimeFromRemindAt(reminder.remind_at) : null;
+  const storedAt = storedWall ? reminder.remind_at : '';
+  // Ein Erinnerungstag ohne Stunde erinnert um 09:00 (R9) - fiele er weg,
+  // verloere das Blatt eine gesagte Erinnerung (F3). Eine Stunde ohne Tag
+  // bleibt nichts.
+  const wall = storedWall
+    ?? (d?.remind_date ? { date: d.remind_date, time: hhmm(d.remind_time) || DAY_ONLY_REMINDER_TIME } : null);
+  const reminderHtml = reminderSectionHtml({
+    access, wall, storedAt, dueDate, dueTime, spoken: rows,
+  });
+
+  const selectedCat = more?.category ?? FALLBACK_CATEGORY;
   const categoryOptions = state.categories.map((c) =>
     `<option value="${esc(c.key)}" ${selectedCat === c.key ? 'selected' : ''}>${esc(catLabel(c.key))}</option>`
   ).join('');
-
   const priorityOptions = PRIORITIES().map((p) =>
-    `<option value="${p.value}" ${(task?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
+    `<option value="${p.value}" ${(more?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
   ).join('');
+  // Ein Bestandswert ausserhalb der Liste (bis v1.86.2 stand 'archived' darin)
+  // faellt auf den ersten Status zurueck.
+  const statusValue = STATUSES().find((s) => s.value === more?.status)?.value ?? STATUSES()[0].value;
 
-  // Punkte neuer Aufgaben mit dem Haushalt-Standard vorbelegen (#578).
-  const prefillPoints = !isEdit && state.defaultPoints > 0 ? state.defaultPoints : 0;
-  const pointsValue = isEdit
-    ? (Number(task?.points) > 0 ? Number(task.points) : '')
-    : (prefillPoints || '');
-
-  /* WAS IN DER SEKTION STEHT, NENNT IHRE ZUSAMMENFASSUNG - dann muss sie nicht
-   * auf (Critique 2026-08-10, P1 „Enterprise-SaaS-Antireferenz").
-   *
-   * Das Formular mass 29 Labels und `scrollHeight 1410` in `clientHeight 528`,
-   * also 2,7 Bildschirme, um eine Aufgabe zu aendern - die haeufigste Handlung
-   * der App auf ihrem ueberladensten Screen. Die progressive Offenlegung war
-   * dabei nicht etwa nicht gebaut: sie war gebaut und abgeschaltet, und der
-   * Schalter war diese eine Zeile.
-   *
-   * `advancedFieldsOpen` verlangte „einen Wert abseits der Defaults", zaehlte
-   * dazu aber `category !== FALLBACK_CATEGORY`. Eine Kategorie hat fast jede
-   * Aufgabe - die Bedingung war also praktisch immer wahr, und die Sektion kam
-   * praktisch immer offen. Eine Regel, die jeden Fall zur Ausnahme erklaert,
-   * hat keine Ausnahme mehr.
-   *
-   * Der Grund hinter der Bedingung war richtig: ein gesetzter Wert darf nicht
-   * unsichtbar sein. Nur ist Aufklappen dafuer die teuerste Antwort. Das Muster
-   * fuer die billige stand schon zwei Zeilen weiter unten - bei den
-   * vorbelegten Punkten, wo der Aufklapper ZU blieb und die Zusammenfassung den
-   * Wert nannte. Es gilt jetzt fuer alle Sekundaerfelder.
-   *
-   * Die Beschreibung traegt die Zusammenfassung nicht: sie ist Freitext, und
-   * eine gekuerzte Notiz im Summary waere eine schlechtere Notiz. Sie steht
-   * deshalb OBEN beim Titel - Titel und Notiz sichtbar, alles andere hinter
-   * einem Einstieg, genau wie Apple Erinnerungen es haelt. */
-  // Der Anfangswert des Statusfelds. Ein Bestandswert ausserhalb der Liste
-  // (bis v1.86.2 stand 'archived' darin) faellt auf den ersten Status zurueck -
-  // vorher waehlte in dem Fall der Browser die erste Option, waehrend die
-  // Zusammenfassung noch den alten Wert nannte.
-  const statusValue = STATUSES().find((s) => s.value === task?.status)?.value ?? STATUSES()[0].value;
-
-  // Prioritaet und Kategorie stehen nicht mehr in der Zusammenfassung: sie
-  // stehen offen im Hauptteil (A3 P1-2, siehe unten).
-  const advancedSummary = [];
-  if (isEdit && task.start_date) advancedSummary.push(formatDate(task.start_date));
-  const summaryPoints = isEdit ? Number(task.points) : prefillPoints;
-  if (summaryPoints > 0) advancedSummary.push(t('tasks.pointsSummary', { count: summaryPoints }));
-  if (isEdit && task.tags?.length) advancedSummary.push(task.tags.join(', '));
-  // Der Schwanz hinter dem Aufklapper ist eingezogen (Critique 2026-08-31):
-  // Status, Sync-Ziel, Sichtbarkeit, Sperre und Anhaenge standen als offene
-  // Feldgruppen NACH der Sektion - dieselbe Sorte Sekundaerfeld, nur an der
-  // Regel vorbei. Sie stehen jetzt darin, und gesetzte Werte nennt die
-  // Zusammenfassung, wie bei allen anderen. (Sync-Ziel fehlt in der Summary:
-  // sein Anzeigename kommt asynchron aus /tasks/sync-targets.)
-  if (statusValue !== STATUSES()[0].value) {
-    advancedSummary.push(STATUSES().find((s) => s.value === statusValue).label);
-  }
-  if (!hidesPrivacyControls('tasks') && visibility !== 'all') advancedSummary.push(t(`common.visibility.${visibility}`));
-  if (!hidesPrivacyControls('tasks') && task?.locked) advancedSummary.push(t('tasks.lockedBadge'));
-  if (task?.documents?.length) advancedSummary.push(task.documents.map((d) => d.name).join(', '));
-
-  const advancedLabel = advancedSummary.length
-    ? `${t('modal.moreSettings')} · ${advancedSummary.join(' · ')}`
-    : undefined;
-  /* WIEDERHOLUNG UND ERINNERUNG LIEGEN HINTER DEM AUFKLAPPER, SOLANGE SIE LEER
-   * SIND (Critique 2026-10-05, R16). Beide standen offen unter ihm - eine
-   * Auswahl "Keine" samt Hinweis und ein ausgeschalteter Schalter, zusammen
-   * rund 200px fuer zwei Angaben, die die meisten Aufgaben nicht tragen. Ein
-   * GESETZTER Wert bleibt offen an seinem alten Platz: beim Bearbeiten darf
-   * nichts Gesetztes versteckt sein, und eine Serie in eine Zusammenfassung zu
-   * kuerzen hiesse, ihre Regel zu verschweigen. Der Abschnitt selbst entfaellt
-   * ohne Recht (`renderReminderSection` liefert dann nichts). */
-  const recurrenceHtml = renderRRuleFields('task', task?.recurrence_rule, {
+  const recurrenceHtml = renderRRuleFields('task', more?.recurrence_rule, {
     allowFromCompletion: true,
-    fromCompletion: !!task?.recurrence_from_completion,
-    // AUSDRUECKLICH FALSE, nicht weggelassen (#960). Eine Aufgabe ist eine
-    // Zeile mit einem Faelligkeitsdatum, das Liste, Ueberfaelligkeit und
-    // Countdown direkt lesen - sie wird nicht wie eine Kalenderserie vom
-    // Startdatum aus expandiert. Der Monatsletzten-Hinweis muss das sagen,
-    // sonst verspricht er einen Termin, den es hier nicht gibt.
+    fromCompletion: !!more?.recurrence_from_completion,
+    // AUSDRUECKLICH FALSE, nicht weggelassen (#960): eine Aufgabe wird nicht
+    // wie eine Kalenderserie vom Startdatum aus expandiert.
     expandsFromStart: false,
   });
-  const reminderHtml = renderReminderSection(task, reminder);
-  const recurrenceTucked = !task?.recurrence_rule;
-  const reminderTucked = !reminder && reminderHtml !== '';
-  const advancedHint = taskAdvancedTopics({
-    countdown: !task?.countdown,
-    privacy: !hidesPrivacyControls('tasks'),
-    recurrence: recurrenceTucked,
-    reminder: reminderTucked,
-  });
 
-  // DER COUNTDOWN LIEGT HINTER DEM AUFKLAPPER, SOLANGE ER AUS IST (R19,
-  // Critique 2026-10-16: "Aufgabe bearbeiten" mobil 1027px Formular in 591px).
-  // Dieselbe Regel wie Wiederholung und Erinnerung (R16): ein GESETZTER
-  // Schalter bleibt offen an seinem Platz, beim Bearbeiten ist nichts
-  // Gesetztes versteckt. #647 stellte ihn in den Hauptteil, damit man ihn
-  // findet - das leistet jetzt die Zeile des Aufklappers, die ihn nennt.
-  const countdownTucked = !task?.countdown;
-  const countdownHtml = `
-      <!-- #647: die Haelfte, die @jamespurnama1 beschrieben hat. Fuehrerschein
-           und Luftfilter sind keine Termine, und ihre Ruecksetzung haengt an
-           einer DAUER, nicht an einem Datum - das ist genau eine wiederkehrende
-           Aufgabe „ab Erledigung" (#658), die es hier schon gibt. Der Schalter
-           haengt deshalb an der Aufgabe und nicht an einem dritten Objekt.
-           Ausgeschaltet steht er seit R19 hinter dem Aufklapper, dessen Zeile
-           ihn nennt (countdownTucked oben). -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="task-countdown" name="countdown" aria-describedby="task-countdown-hint"
-                 ${task?.countdown ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('tasks.countdownToggle')}</span>
-        </label>
-        <p class="task-field-hint" id="task-countdown-hint">${t('tasks.countdownHint')}</p>
-        <!-- DER SCHALTER SPERRT SICH SELBST, statt sich auf die Zeile darueber
-             zu verlassen. Ein Hinweis ist keine Fehlervermeidung: ohne
-             Faelligkeit war der Schalter voll bedienbar, speicherte, meldete
-             „Aufgabe erstellt." - und der Countdown erschien nie. Wer sich
-             darauf verlaesst, erfaehrt es, wenn die Frist vorbei ist. -->
-        <p class="task-field-hint field-hint--warn" id="task-countdown-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('tasks.countdownNeedsDue')}</span></p>
-      </div>`;
-
-  const advancedFieldsHtml = `
+  // „MEHR" in der Reihenfolge des Entwurfs (TaskMore): Prioritaet, Kategorie,
+  // Wiederholung, Sichtbarkeit, Startdatum, Status, Dokumente, Countdown.
+  const moreHtml = `
       <div class="modal-grid modal-grid--2">
-        <div class="form-group">
-          <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
-          <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
-                 value="${esc(formatDateInput(task?.start_date))}"></yuvomi-datepicker>
-        </div>
-        <div class="form-group">
-          <label class="label" for="task-points">${t('tasks.pointsLabel')}</label>
-          <input class="input" type="number" id="task-points" name="points" inputmode="numeric"
-                 min="0" step="1" value="${pointsValue}"
-                 placeholder="0">
-          <p class="task-field-hint">${prefillPoints
-            ? t('tasks.pointsDefaultHint', { count: prefillPoints })
-            : t('tasks.pointsHint')}</p>
-        </div>
-      </div>
-
-      <div class="form-group task-tags-field" style="margin-top:var(--space-4)">
-        <label class="label" for="task-tag-input">${t('tasks.tagsLabel')}</label>
-        <div class="task-tags-editor" id="task-tags-editor">
-          <div class="task-tags-editor__chips" id="task-tags-chips"></div>
-          <input class="input task-tags-editor__input" type="text" id="task-tag-input"
-                 list="task-tag-suggestions" autocomplete="off"
-                 placeholder="${t('tasks.tagsPlaceholder')}">
-          <datalist id="task-tag-suggestions">
-            ${state.allTags.map((entry) => `<option value="${esc(entry.tag)}"></option>`).join('')}
-          </datalist>
-        </div>
-        <p class="task-field-hint">${t('tasks.tagsHint')}</p>
-      </div>
-
-      <!-- DAS FELD STAND BIS #807 NUR IM BEARBEITEN-ZWEIG. Vergessen war es
-           nicht, aber die Annahme darunter stimmte nicht: notiert wird oft
-           etwas, das laengst laeuft, und dafuer brauchte es bisher zwei
-           Schritte - anlegen, wieder oeffnen, umstellen. Die Vorauswahl bleibt
-           der erste Status, damit ein Anlegen, das das Feld nicht beruehrt,
-           sich genau wie vorher verhaelt. -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
-        <select class="input" id="task-status" name="status">
-          ${STATUSES().map((s) =>
-            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
-          ).join('')}
-        </select>
-      </div>
-${syncTargetFieldHtml(task)}
-      <!-- EINE QUELLE, NICHT ZWEI: die Bedingung war "users.length > 1" und
-           beantwortete dieselbe Frage wie der Solo-Schalter, nur aus einer
-           anderen Zahl - der geladenen Nutzerliste dieses Moduls statt der
-           gezaehlten Haushaltsgroesse. Zwei Quellen fuer eine Frage laufen
-           auseinander, sobald eine von beiden einen Sonderfall bekommt
-           (Split-Gaeste zaehlen in der Nutzerliste mit, im Haushalt nicht).
-
-           UND VERBORGEN, NICHT ENTFERNT - das ist hier kein Stilfrage, sondern
-           die Regel selbst. Der Absende-Pfad liest
-           "#task-visibility?.value || 'all'" (unten): ohne den Knoten schreibt
-           JEDES Speichern im Solo-Haushalt "all" ueber den gespeicherten Wert,
-           und eine als "private" angelegte Aufgabe verliert ihre Sichtbarkeit
-           stillschweigend. Der Fehler steckte schon in der alten
-           users.length-Bedingung; die Solo-Regel sagt ausdruecklich, dass sie
-           keine Daten aendert (utils/household.js), also muss der Knoten
-           stehenbleiben. Dokumente machen es an ihrer Stelle genauso. -->
-      <div class="form-group" style="margin-top:var(--space-4)"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
-        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
-        <select class="input" id="task-visibility" name="visibility">
-          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
-          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
-          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
-        </select>
-        <p class="task-field-hint">${t('common.visibility.hint')}</p>
-        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
-        <p class="task-field-hint field-hint--warn" id="task-visibility-private-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.privateAssignedHint')}</span></p>
-      </div>
-
-      <!-- #830: Die Sperre steht neben der Sichtbarkeit, weil beide dieselbe
-           Frage beantworten - wer darf hier was. Sichtbarkeit regelt das Sehen,
-           die Sperre das Aendern. In einem Ein-Personen-Haushalt sagen beide
-           nichts, also verschwinden sie zusammen (isSoloHousehold). -->
-      <div class="form-group" style="margin-top:var(--space-4)"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="task-locked" name="locked" aria-describedby="task-locked-hint"
-                 ${task?.locked ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('tasks.lockedToggle')}</span>
-        </label>
-        <p class="task-field-hint" id="task-locked-hint">${t('tasks.lockedHint')}</p>
-      </div>
-
-      ${renderDocumentAttachField({
-        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
-        label: t('tasks.documentsLabel'),
-      })}
-${countdownTucked ? `<div class="task-form__tucked">${countdownHtml}</div>` : ''}
-${recurrenceTucked ? `<div class="task-form__tucked">${recurrenceHtml}</div>` : ''}
-${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`;
-
-  return `
-    <form id="task-form" novalidate>
-      <input type="hidden" id="task-id" value="${task?.id ?? ''}">
-
-      <div class="form-group">
-        <div class="form-field">
-          <label class="label" for="task-title">${t('tasks.titleLabel')}${REQUIRED_MARK}</label>
-          <input class="input" type="text" id="task-title" name="title"
-                 value="${esc(task?.title)}" placeholder="${t('tasks.titlePlaceholder')}"
-                 required autocomplete="off">
-          <div class="form-field__error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
-                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
-            </svg>
-            ${t('common.required')}
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-grid modal-grid--2">
-        <div class="form-group">
-          <label class="label" for="task-due-date">${t('tasks.dueDateLabel')}</label>
-          <yuvomi-datepicker type="date" id="task-due-date" name="due_date"
-                 value="${esc(formatDateInput(task?.due_date))}"></yuvomi-datepicker>
-        </div>
-        <div class="form-group">
-          <label class="label" for="task-due-time">${t('tasks.dueTimeLabel')}</label>
-          <yuvomi-datepicker type="time" id="task-due-time" name="due_time"
-                 value="${esc(formatTimeInput(task?.due_time ?? ''))}"></yuvomi-datepicker>
-        </div>
-      </div>
-
-      <!-- „Zugewiesen an" bot einer Solo-Nutzerin eine Chip-Reihe mit ihr selbst
-           und „- Niemand -" (Critique 2026-08-10). Das Feld bleibt im DOM und
-           behaelt seinen Wert, es wird nur verborgen - der Absende-Pfad liest
-           es unveraendert (utils/household.js). -->
-      <div class="form-group" style="margin-top:var(--space-4)"${isSoloHousehold() && assigneePeople.length <= 1 ? ' hidden' : ''}>
-        ${renderUserMultiSelect(assigneePeople, selectedIds, 'task_assigned', 'tasks.assignedLabel')}
-      </div>
-
-      ${countdownTucked ? '' : countdownHtml}
-
-      ${/* PRIORITAET UND KATEGORIE IM HAUPTTEIL, als kompakte Zeile (A3 P1-2).
-          * Die Liste ist standardmaessig nach Kategorie gruppiert; wer sie
-          * hinter „Weitere Einstellungen" nicht fand, landete unter
-          * „Sonstiges", und „Wichtig" suchte man dort gar nicht erst. */ ''}
-      <div class="modal-grid modal-grid--2 task-form__prio-cat" style="margin-top:var(--space-4)">
         <div class="form-group">
           <label class="label" for="task-priority">${t('tasks.priorityLabel')}</label>
           <select class="input" id="task-priority" name="priority">
@@ -1502,41 +1209,125 @@ ${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`
         </div>
       </div>
 
-      <!-- DIE NOTIZ STEHT NACH DEM, WAS EINE AUFGABE AUSMACHT (Critique
-           2026-10-05, R16). Sie stand direkt unter dem Titel, und mit ihrer
-           Formatierleiste lag die Faelligkeit mobil bei y=700 von 844 - wann,
-           wer und wie wichtig kamen erst nach dem Freitext. Im Hauptteil
-           bleibt sie trotzdem: eine Zusammenfassung kann Freitext nicht
-           tragen (#731), hinter den Aufklapper gehoert sie nicht. Die Leiste
-           erscheint erst mit dem Fokus im Feld (utils/markdown-toolbar.js). -->
-      <div class="form-group" style="margin-top:var(--space-4)">
-        <label class="label" for="task-description">${t('tasks.descriptionLabel')}</label>
-        ${renderMarkdownToolbar()}
-        <textarea class="input" id="task-description" name="description"
-                  rows="6" placeholder="${t('tasks.descriptionPlaceholder')}"
-                 >${esc(task?.description)}</textarea>
-        <small class="form-hint">${t('tasks.descriptionMarkdownHint')}</small>
+      ${recurrenceHtml}
+
+      <!-- VERBORGEN, NICHT ENTFERNT (Solo-Haushalt): der Absende-Pfad liest
+           "#task-visibility?.value || 'all'" - ohne den Knoten schriebe jedes
+           Speichern "all" ueber eine private Aufgabe (utils/household.js). -->
+      <div class="form-group"${hidesPrivacyControls('tasks') ? ' hidden' : ''}>
+        <label class="label" for="task-visibility">${t('common.visibility.label')}</label>
+        <select class="input" id="task-visibility" name="visibility">
+          <option value="all"       ${visibility === 'all'       ? 'selected' : ''}>${t('common.visibility.all')}</option>
+          <option value="assignees" ${visibility === 'assignees' ? 'selected' : ''}>${t('common.visibility.assignees')}</option>
+          <option value="private"   ${visibility === 'private'   ? 'selected' : ''}>${t('common.visibility.private')}</option>
+        </select>
+        <p class="task-field-hint">${t('common.visibility.hint')}</p>
+        <p class="task-field-hint field-hint--warn" id="task-visibility-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.assigneesNobodyHint')}</span></p>
+        <p class="task-field-hint field-hint--warn" id="task-visibility-private-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('common.visibility.privateAssignedHint')}</span></p>
       </div>
 
-      ${advancedSection(advancedFieldsHtml, { label: advancedLabel, hint: advancedHint })}
+      <div class="form-group">
+        <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
+        <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
+               value="${esc(formatDateInput(more?.start_date))}"></yuvomi-datepicker>
+      </div>
 
-      ${recurrenceTucked ? '' : recurrenceHtml}
+      <!-- Auch beim Anlegen (#807): notiert wird oft, was laengst laeuft. -->
+      <div class="form-group">
+        <label class="label" for="task-status">${t('tasks.statusLabel')}</label>
+        <select class="input" id="task-status" name="status">
+          ${STATUSES().map((s) =>
+            `<option value="${s.value}" ${statusValue === s.value ? 'selected' : ''}>${s.label}</option>`
+          ).join('')}
+        </select>
+      </div>
 
-      ${reminderTucked ? '' : reminderHtml}
+      ${renderDocumentAttachField({
+        attachments: (task?.documents ?? []).map((doc) => ({ document_id: doc.id, name: doc.name, mime_type: doc.mime_type })),
+        label: t('tasks.documentsLabel'),
+      })}
+
+      <!-- #647: der Countdown haengt an der Faelligkeit und sperrt sich ohne
+           sie selbst (wireCountdownGate). -->
+      <div class="form-group">
+        <label class="toggle" style="margin:0">
+          <input type="checkbox" id="task-countdown" name="countdown" aria-describedby="task-countdown-hint"
+                 ${more?.countdown ? 'checked' : ''}>
+          <span class="toggle__track"></span>
+          <span>${t('tasks.countdownToggle')}</span>
+        </label>
+        <p class="task-field-hint" id="task-countdown-hint">${t('tasks.countdownHint')}</p>
+        <p class="task-field-hint field-hint--warn" id="task-countdown-warning" role="status" hidden><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('tasks.countdownNeedsDue')}</span></p>
+      </div>`;
+
+  // GESETZTES STEHT OFFEN DA (Spec, Anti-Ziel „Daten verlieren"): beim
+  // Bearbeiten geht „Mehr" auf, sobald darin ein Wert abseits der Vorgabe
+  // steht; die Zeile nennt ihn trotzdem. Neu angelegt bleibt „Mehr" zu.
+  const summary = moreSummary(more);
+  const moreLabel = summary.length ? `${t('tasks.more')} · ${summary.join(' · ')}` : t('tasks.more');
+  const moreOpen = isEdit && summary.length > 0;
+  const reminderOpen = !!wall && reminderHtml !== '';
+
+  return `
+    <form id="task-form" class="task-sheet" novalidate>
+      <input type="hidden" id="task-id" value="${task?.id ?? ''}">
+      ${d ? `<!-- Ein Blatt aus einem Diktat ist schon eine Eingabe: das Schliessen
+           fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
+      <input type="hidden" id="task-from-draft" value="1" data-dirty-base="">` : ''}
+
+      <div class="form-group">
+        <div class="form-field task-sheet__title${isEdit ? '' : ' task-sheet__title--mic'}">
+          <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
+          <input class="input" type="text" id="task-title" name="title"
+                 value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
+                 required maxlength="200" autocomplete="off">
+          ${isEdit ? '' : `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
+               ueberschriebe die Werte einer bestehenden Aufgabe. -->
+          <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
+            <i data-lucide="mic" class="icon-lg" aria-hidden="true"></i>
+          </button>`}
+          <div class="form-field__error">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
+                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
+            </svg>
+            ${t('common.required')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Wer: nur die Chips der Mitglieder; keiner gewaehlt heisst niemandem
+           zugewiesen. Verborgen, nicht entfernt, wenn nur eine Person in Frage
+           kommt - der Absende-Pfad liest das Feld unveraendert. -->
+      <div class="form-group task-sheet__who"${isSoloHousehold() && assigneePeople.length <= 1 ? ' hidden' : ''}>
+        ${renderUserMultiSelect(assigneePeople, selectedIds, 'task_assigned', 'tasks.whoLabel')}
+      </div>
+${dueSectionHtml({ dueDate, dueTime, spoken: rows })}
+${reminderHtml}
+${noteSectionHtml({ note, spoken: rows })}
+
+      <div class="task-sheet__reveals">
+        ${revealButtonHtml('due', 'tasks.addDue', !!(dueDate || dueTime))}
+        ${access === 'write' ? revealButtonHtml('reminder', 'tasks.addReminder', reminderOpen) : ''}
+        ${revealButtonHtml('note', 'tasks.addNote', !!note)}
+      </div>
+
+      ${advancedSection(moreHtml, { label: moreLabel, open: moreOpen })}
 
       <div id="task-form-error" class="form-error" role="alert" hidden></div>
 
+      ${isEdit ? `
       <div class="modal-panel__footer modal-panel__footer--plain">
-        ${isEdit ? `
           <button type="button" class="btn btn--danger-outline" data-action="delete-task"
                   data-id="${task.id}" style="margin-inline-end:auto">
             <i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>${t('common.delete')}
-          </button>` : ''}
+          </button>
         <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
-        <button type="submit" class="btn btn--primary" id="task-submit-btn">
-          ${isEdit ? t('common.save') : t('common.add')}
-        </button>
-      </div>
+        <button type="submit" class="btn btn--primary" id="task-submit-btn">${t('common.save')}</button>
+      </div>` : `
+      <div class="modal-panel__footer modal-panel__footer--plain task-sheet__footer">
+        <button type="submit" class="btn btn--primary task-sheet__submit" id="task-submit-btn">${t('tasks.addTask')}</button>
+      </div>`}
     </form>`;
 }
 
@@ -1554,7 +1345,7 @@ ${reminderTucked ? `<div class="task-form__tucked">${reminderHtml}</div>` : ''}`
  * einen dritten Zustand mit leerem Status, der auch Erledigtes zeigt.
  */
 const DEFAULT_STATUS_FILTER = Object.freeze(['open']);
-const defaultFilters = () => ({ status: [...DEFAULT_STATUS_FILTER], priority: [], assigned_to: [], category: [], tags: [] });
+const defaultFilters = () => ({ status: [...DEFAULT_STATUS_FILTER], priority: [], assigned_to: [], category: [] });
 
 let state = {
   tasks:           [],
@@ -1567,37 +1358,32 @@ let state = {
   user:            null,
   users:           [],
   categories:      [],
-  allTags:         [],       // [{ tag, count }] für Filterleiste und Vorschläge (#586)
   /** Welche Referenzlisten sind gerade NICHT nachweislich frisch?
    *
    *  Zwei Wege dorthin, und beide enden gleich. Erstens der Offline-Cache:
    *  `/tasks` steht in `API_CACHE_WHITELIST` (sw.js), also auch
-   *  `/tasks/meta/options`, `/tasks/tags` und `/tasks/categories` - und
+   *  `/tasks/meta/options` und `/tasks/categories` - und
    *  `networkFirstApi` antwortet bei Netzfehler mit dem Cache und Status 200.
    *  Zweitens eine fehlgeschlagene Auffrischung, die die alte Liste stehen
-   *  laesst (`refreshTags`). In beiden Faellen sind die Listen beliebig alt,
-   *  und eine Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
+   *  laesst. In beiden Faellen sind die Listen beliebig alt, und eine
+   *  Filterentscheidung darauf ist keine. Siehe `getRecentFilters`.
    *
    *  Deshalb heisst das Feld nicht `metaFromCache`: der Cache ist nur der
    *  haeufigere der beiden Wege.
    *
-   *  UND JE LISTE, nicht als ein Flag fuer drei. Die drei Endpunkte sind
-   *  getrennte Cache-Eintraege und werden getrennt aufgefrischt: `refreshTags`
-   *  holt nur `/tasks/tags`, der Kategorie-Manager nur `/tasks/categories`,
-   *  und allein `/tasks/meta/options` bringt alle drei. Als EIN gemeinsames
-   *  Flag erklaerte eine netzfrische Tag-Auffrischung die noch gecachten
-   *  Kategorien und Mitglieder fuer autoritativ - und das Beschneiden warf
+   *  UND JE LISTE, nicht als ein Flag fuer beide. Die Endpunkte sind getrennte
+   *  Cache-Eintraege und werden getrennt aufgefrischt: der Kategorie-Manager
+   *  holt nur `/tasks/categories`, allein `/tasks/meta/options` bringt beide.
+   *  Als EIN gemeinsames Flag erklaerte eine netzfrische Kategorien-Auffrischung
+   *  die noch gecachten Mitglieder fuer autoritativ - und das Beschneiden warf
    *  dann ein Chip weg, das es noch gibt. */
-  metaStale:       { users: false, categories: false, tags: false },
-  defaultPoints:   0,        // Haushalt-Standard für neue Aufgaben (#578), 0 = aus
+  metaStale:       { users: false, categories: false },
   currentUserId:   null,
   isAdmin:         false,    // darf fremde Kommentare entfernen (#734)
   /** Wer an diesem Wandtablett abhaken darf (#1209) - leer fuer jeden Menschen. */
   displayPeople:   [],
-  // `tags` ist eine Liste, keine Auswahl: mehrere Tags engen UND-verknüpft ein,
-  // wie jeder andere Filter in dieser Leiste auch (#586).
   // Status, Priorität und Person halten mehrere Werte (#671); innerhalb einer
-  // Achse wirken sie ODER, zwischen den Achsen UND. Tags bleiben UND-verknüpft.
+  // Achse wirken sie ODER, zwischen den Achsen UND.
   filters:         defaultFilters(),
   // Tafla (2026-10-20): die Zeitkoerbe sind die Vorgabe; die Wahl im Blatt
   // merkt sich das Geraet (GROUP_MODE_KEY).
@@ -1734,8 +1520,7 @@ function searchedTasks() {
   if (!q) return base;
   return base.filter((task) =>
     (task.title       || '').toLowerCase().includes(q) ||
-    (task.description || '').toLowerCase().includes(q) ||
-    (task.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+    (task.description || '').toLowerCase().includes(q)
   );
 }
 
@@ -1914,9 +1699,8 @@ function taskQuery() {
   // senden, sonst blieben "In Bearbeitung"/"Erledigt" trotz vorhandener Aufgaben
   // leer (Audit A1-07/P3). In der Liste wirkt er normal; state bleibt erhalten,
   // sodass der Filter beim Zurückwechseln wieder greift.
-  // append statt set: jeder Wert ist ein eigener Parameter. Bei den Tags, damit
-  // ein Tag mit Komma im Namen am Server nicht in zwei zerfällt; bei den übrigen
-  // Achsen, weil sie seit #671 mehrere Werte tragen (ODER-verknüpft).
+  // append statt set: jeder Wert ist ein eigener Parameter, weil die Achsen
+  // seit #671 mehrere Werte tragen (ODER-verknüpft).
   if (state.viewMode !== 'kanban') state.filters.status.forEach((v) => params.append('status', v));
   // Im Kanban ist die Ablage eine Spalte — sie muss also mitkommen, obwohl der
   // Server sie sonst ausblendet (#688).
@@ -1926,7 +1710,6 @@ function taskQuery() {
   // Der Server kannte die Achse schon (normalizeCategoryFilter, mehrere Werte
   // ODER-verknuepft); nur das Panel hatte sie nie angeboten (D#1017).
   state.filters.category.forEach((v) => params.append('category', v));
-  state.filters.tags.forEach((tag) => params.append('tag', tag));
   if (state.showFuture)          params.set('include_future', '1');
   return params.toString() ? `?${params}` : '';
 }
@@ -2080,26 +1863,6 @@ function revealCreatedTask(container, taskId) {
 }
 
 /**
- * Vergebene Tags nachladen (#586). Nur nach dem Speichern nötig, nicht bei jedem
- * Filterwechsel - die Liste ändert sich ausschließlich durch Bearbeiten.
- * Scheitert der Aufruf, bleibt die alte Liste stehen: veraltete Vorschläge sind
- * harmloser als eine plötzlich verschwundene Filtergruppe.
- */
-async function refreshTags() {
-  try {
-    const { data, fromCache } = await api.getWithSource('/tasks/tags');
-    state.allTags = data.data ?? [];
-    // NUR die Tags: ueber Kategorien und Mitglieder sagt dieser Rundlauf
-    // nichts, ihr Zustand bleibt, wie er war.
-    state.metaStale.tags = fromCache === true;
-  } catch {
-    // Alte Liste behalten - aber sie ist ab jetzt nicht mehr nachweislich
-    // frisch, und `getRecentFilters` darf nicht mehr dagegen beschneiden.
-    state.metaStale.tags = true;
-  }
-}
-
-/**
  * @param {number|string} id
  * @param {string} currentStatus
  * @param {number|null} [doneByUserId] wer es erledigt hat (#1205). Nur beim
@@ -2164,7 +1927,7 @@ async function loadReminderForTask(taskId) {
   // Ohne JEDEN Kalenderzugriff antwortet `/reminders` mit 403, und das catch
   // unten macht daraus dasselbe null - nur eine Anfrage spaeter. Der Dialog
   // zeigt den Abschnitt in diesem Fall ohnehin nicht (siehe
-  // renderReminderSection), also wird hier gar nicht erst gefragt.
+  // reminderSectionHtml), also wird hier gar nicht erst gefragt.
   // `reminderAccess` steht weiter unten und ist als Funktionsdeklaration
   // gehoistet.
   if (reminderAccess() === 'none') return null;
@@ -2174,21 +1937,6 @@ async function loadReminderForTask(taskId) {
   } catch {
     return null;
   }
-}
-
-/**
- * Der Zeitpunkt einer Erinnerung als lesbarer Text in der Anzeigezone.
- *
- * `remind_at` ist naiv-UTC ohne Zonen-Suffix und darf deshalb NICHT als String
- * weitergereicht werden - `zonedFields` laese ihn dann als Wanduhrzeit und
- * zeigte in einer gesetzten Haushaltszone die falsche Stunde an. Der Umweg
- * ueber `parseRemindAtAsUtc` macht daraus erst einen Zeitpunkt.
- */
-function reminderWhenText(reminder) {
-  if (!reminder?.remind_at) return '';
-  const at = parseRemindAtAsUtc(reminder.remind_at);
-  if (Number.isNaN(at.getTime())) return '';
-  return `${formatDate(at)} ${formatTime(at)} ${timeSuffix()}`.trimEnd();
 }
 
 /**
@@ -2204,13 +1952,13 @@ function reminderWhenText(reminder) {
  *
  * Drei Zustaende, nach der Faustregel „Zustand wird gesperrt, eine reine
  * Handlung verschwindet":
- *   write → unveraendert,
+ *   write → Knopf „Erinnerung" und bedienbare Felder,
  *   read  → gesperrt. Eine bestehende Erinnerung IST Zustand und bleibt
  *           sichtbar; `GET /reminders` laesst `calendar: read` durch, der
  *           Wert steht also wirklich da und ist nicht geraten.
  *   none  → weg. Es gibt keinen Zustand zu zeigen: `GET /reminders` antwortet
  *           mit 403, `loadReminderForTask()` liefert ohnehin null, und ein
- *           leerer Schalter waere nur ein Versprechen auf einen 403.
+ *           Knopf waere nur ein Versprechen auf einen 403.
  *
  * Gemessen wird am Nav-Modul `calendar` (dieselbe Karte wie im Router), nicht
  * am Pfad - `navModuleAccess()` faellt ohne geladene Rechte auf 'write'
@@ -2218,190 +1966,6 @@ function reminderWhenText(reminder) {
  */
 function reminderAccess() {
   return navModuleAccess('calendar');
-}
-
-/**
- * DER DIALOG NENNT AUCH DEN ZUSTAND, DEN SEINE PRESETS NICHT ABBILDEN.
- *
- * Die Auswahl kennt nur Vorlaeufe, `remind_at` ist aber ein absoluter
- * Zeitpunkt. Wer die Faelligkeit VOR eine bestehende Erinnerung zieht, hat
- * keinen Vorlauf mehr, sondern einen Nachlauf - und den gab es in der Liste
- * nicht. Der Rueckfall lautete `offset_at_time`: der Dialog sagte „Zum
- * Startzeitpunkt", waehrend die Erinnerung Tage spaeter feuerte, und das
- * naechste Speichern rechnete aus dieser falschen Anzeige einen neuen
- * Zeitpunkt - die Erinnerung wanderte, ohne dass jemand sie angefasst hatte.
- *
- * Der Zustand bekommt deshalb einen eigenen Eintrag mit Warnton statt einer
- * Notluege. Er steht NUR in der Liste, wenn er gerade zutrifft (man waehlt ihn
- * nicht aus, man ist darin), bleibt danach aber im DOM, damit die Wahl
- * innerhalb des Dialogs umkehrbar ist: wer versehentlich einen Vorlauf
- * anklickt, findet den alten Zustand noch vor.
- *
- * Der gespeicherte Zeitpunkt reist im versteckten Feld mit, weil das Speichern
- * ihn braucht - es rechnet fuer diesen Eintrag NICHT, sondern reicht ihn durch.
- */
-function renderReminderSection(task = null, reminder = null) {
-  const access = reminderAccess();
-  // GESPERRT WIRD NUR, WO ES ZUSTAND GIBT. `none` hat keinen (das Lesen
-  // antwortet mit 403), aber `read` ohne Erinnerung genauso wenig: ein
-  // gesperrter leerer Schalter ist keine Auskunft, sondern eine Tuer, die nie
-  // aufgeht - im Anlege-Dialog, wo es die Aufgabe noch gar nicht gibt, und
-  // ebenso an einer Aufgabe, an der nie eine Erinnerung hing. Beide Faelle
-  // messbar in test:module-readonly-ui, beide waren in der ersten Fassung
-  // dieses Riegels da (Review-Runde 1).
-  if (access === 'none' || (access === 'read' && !reminder)) return '';
-  // Ein gesperrter Abschnitt zeigt weiter, WAS eingestellt ist, und nimmt
-  // nichts an: `disabled` an jedem Bedienelement. Der Riegel im Formular
-  // (handleFormSubmit) haengt nicht daran - `checked` liesse sich auch an einem
-  // disabled-Kaestchen ablesen -, er fragt reminderAccess() selbst.
-  //
-  // `disabled` nimmt die Felder auch aus der TAB-ORDNUNG - der gespeicherte
-  // Wert ist dann sichtbar, aber per Tastatur nicht erreichbar. Fuer Knoepfe
-  // kennt das Haus dafuer `aria-disabled` (layout.css `.btn[aria-disabled]`);
-  // ein Kontrollkaestchen kann kein `readonly` tragen, ein `aria-disabled`-
-  // Kaestchen bliebe also bedienbar und muesste im Skript zurueckgesetzt
-  // werden. Das ist der Tausch, den diese Stelle bewusst macht.
-  //
-  // Die Hinweiszeile traegt `.task-field-hint` aus tasks.css und KEINE eigene
-  // Klasse: derselbe Satz in derselben Rolle darf nicht dreimal verschieden
-  // aussehen. (Der Kalender-Dialog hatte dafuer `.cal-field-hint`; seit
-  // `.form-hint` global in layout.css steht, nimmt er diese.) Tragfaehig ist
-  // das, weil BEIDE Wege in dieses Markup
-  // tasks.css mitbringen - die Route /tasks laedt es als Seiten-Blatt, und
-  // `openTaskById()` (Dashboard, Kalender) awaitet vorher `ensureTaskStyles()`.
-  const locked = access === 'read';
-  const off = locked ? ' disabled' : '';
-  // `off` haengt auch am versteckten Transportfeld weiter unten, obwohl das
-  // nichts annimmt. Der Riegel aus #1253 prueft die REGEL („jedes Feld des
-  // Abschnitts"), nicht eine gepflegte Aufzaehlung - und genau deshalb hat er
-  // das neu dazugekommene Feld gefunden. Ihn dafuer aufzuweichen hiesse, ihn
-  // fuer das naechste Feld blind zu machen. Folgenlos ist es ohnehin: `.value`
-  // laesst sich auch gesperrt lesen, und ohne Schreibrecht wird die Erinnerung
-  // gar nicht erst gespeichert.
-  // Die Faelligkeit, MIT DER dieser Dialog geoeffnet wurde, fuers Speichern -
-  // dort entscheidet sie darueber, ob dieser Nutzer gerade ein Datum WEGRAEUMT
-  // oder ob die Aufgabe schon ohne eines kam (Review-Runde 3). Sie reist am
-  // Abschnitt mit, weil es ihn genau dann gibt, wenn eine gesperrte Erinnerung
-  // haengt - kein zusaetzlicher Modulzustand, der neben dem Dialog altern
-  // koennte.
-  const lockedDue = locked ? ` data-locked-due="${esc(task?.due_date ?? '')}"` : '';
-  const hasReminder = !!reminder;
-  const resolved = resolveReminderPreset(task, reminder);
-  const showCustom = hasReminder && resolved.preset === 'offset_custom';
-  const afterDue = hasReminder && resolved.preset === 'offset_after_due';
-  const whenText = afterDue ? reminderWhenText(reminder) : '';
-
-  return `
-    <div class="reminder-section"${lockedDue}>
-      <div class="reminder-section__header">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="reminder-toggle" ${hasReminder ? 'checked' : ''}${off}>
-          <span class="toggle__track"></span>
-          <span class="reminder-section__title">${t('reminders.enableLabel')}</span>
-        </label>
-      </div>
-      ${locked ? `<p class="task-field-hint">${t('reminders.readOnlyNotice')}</p>` : ''}
-      <div id="reminder-fields" class="reminder-fields" ${hasReminder ? '' : 'style="display:none"'}>
-        <div class="form-group" style="margin:0">
-          <label class="label" for="reminder-offset">${t('reminders.offsetLabel')}</label>
-          <select class="input" id="reminder-offset"${off}>
-            <option value="offset_none">${t('reminders.offsetNone')}</option>
-            ${afterDue ? `<option value="offset_after_due" selected>${t('reminders.offsetAfterDue')}</option>` : ''}
-            <option value="offset_at_time" ${resolved.preset === 'offset_at_time' ? 'selected' : ''}>${t('reminders.offsetAtTime')}</option>
-            <option value="offset_15m" ${resolved.preset === 'offset_15m' ? 'selected' : ''}>${t('reminders.offset15min')}</option>
-            <option value="offset_1h" ${resolved.preset === 'offset_1h' ? 'selected' : ''}>${t('reminders.offset1hour')}</option>
-            <option value="offset_1d" ${resolved.preset === 'offset_1d' ? 'selected' : ''}>${t('reminders.offset1day')}</option>
-            <option value="offset_2d" ${resolved.preset === 'offset_2d' ? 'selected' : ''}>${t('reminders.offset2days')}</option>
-            <option value="offset_1w" ${resolved.preset === 'offset_1w' ? 'selected' : ''}>${t('reminders.offset1week')}</option>
-            <option value="offset_2w" ${resolved.preset === 'offset_2w' ? 'selected' : ''}>${t('reminders.offset2weeks')}</option>
-            <option value="offset_custom" ${resolved.preset === 'offset_custom' ? 'selected' : ''}>${t('reminders.offsetCustom')}</option>
-          </select>
-          <p class="task-field-hint field-hint--warn" id="reminder-after-due-warning" role="status" ${afterDue ? '' : 'hidden'}><i data-lucide="alert-triangle" aria-hidden="true"></i><span>${t('reminders.afterDueHint', { when: esc(whenText) })}</span></p>
-          <input type="hidden" id="reminder-stored-at" value="${esc(reminder?.remind_at ?? '')}"${off}>
-        </div>
-        <div class="modal-grid modal-grid--2" id="reminder-custom-fields" style="${showCustom ? '' : 'display:none'};margin-top:var(--space-3)">
-          <div class="form-group" style="margin:0">
-            <label class="label" for="reminder-custom-amount">${t('reminders.customAmountLabel')}</label>
-            <input class="input" type="number" min="1" step="1" id="reminder-custom-amount" value="${resolved.amount}"${off}>
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="label" for="reminder-custom-unit">${t('reminders.customUnitLabel')}</label>
-            <select class="input" id="reminder-custom-unit"${off}>
-              <option value="minutes" ${resolved.unit === 'minutes' ? 'selected' : ''}>${t('reminders.customMinutes')}</option>
-              <option value="hours" ${resolved.unit === 'hours' ? 'selected' : ''}>${t('reminders.customHours')}</option>
-              <option value="days" ${resolved.unit === 'days' ? 'selected' : ''}>${t('reminders.customDays')}</option>
-              <option value="weeks" ${resolved.unit === 'weeks' ? 'selected' : ''}>${t('reminders.customWeeks')}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-/**
- * Das Preset, das die Auswahl nach einer Aenderung der Faelligkeit zeigen muss.
- *
- * DER ZUSTAND KANN SICH IM DIALOG HEILEN, und dann darf die Beschriftung nicht
- * stehenbleiben. „Nach der Faelligkeit" ist keine Eigenschaft der Erinnerung,
- * sondern das VERHAELTNIS zweier Zeitpunkte - schiebt jemand die Faelligkeit
- * nach hinten (der naheliegende Weg, das Problem zu beheben), liegt die
- * Erinnerung wieder davor, und der Dialog behauptete sonst weiter einen
- * Nachlauf. Das waere derselbe Fehler, den dieser Abschnitt beseitigen soll,
- * nur in die andere Richtung.
- *
- * Neu aufgeloest wird NUR, solange die Auswahl noch auf `offset_after_due`
- * steht. Wer selbst einen Vorlauf gewaehlt hat, hat entschieden; ihm die Wahl
- * beim naechsten Tastendruck im Datumsfeld umzustellen, waere Bevormundung.
- *
- * ES IST DIE GANZE AUFLOESUNG, NICHT NUR DAS PRESET. Ein geheilter Zustand
- * landet fast immer auf `offset_custom` - ein Datum ohne Uhrzeit faellt auf
- * 23:59:59, und der Abstand dorthin trifft selten einen runden Vorlauf. Nur die
- * Auswahl umzustellen, hiesse die Felder darunter auf ihrem Render-Stand stehen
- * zu lassen: die Auswahl saegte „Benutzerdefiniert", darunter staenden 1 Tag,
- * und das Speichern verschoebe die Erinnerung doch - derselbe Schaden, in einem
- * neuen Gewand. Das Heilen macht deshalb genau das, was das Oeffnen tut.
- *
- * @param {string} currentValue aktueller Wert der Auswahl
- * @returns {{preset: string, amount: string, unit: string}|null} die neue
- *          Auffuellung, oder null wenn nichts umzustellen ist
- */
-function afterDueResolution(currentValue, { dueDate = '', dueTime = null, storedRemindAt = null } = {}) {
-  if (currentValue !== 'offset_after_due') return null;
-  if (!dueDate || !storedRemindAt) return null;
-  const resolved = resolveReminderPreset(
-    { due_date: dueDate, due_time: dueTime },
-    { remind_at: storedRemindAt },
-  );
-  return resolved.preset === 'offset_after_due' ? null : resolved;
-}
-
-/**
- * Der Zeitpunkt, den der ausgefuellte Erinnerungs-Abschnitt ergibt.
- *
- * DIE NAHT ZWISCHEN MARKUP UND SPEICHERN, und sie steht bewusst als eigene
- * Funktion da: welche Felder `renderReminderSection` schreibt und welche das
- * Speichern liest, war vorher nur im Quelltext behauptet und an keiner Stelle
- * messbar. Ein Test kann hier das ECHTE Markup vorne hineingeben und den
- * Zeitpunkt hinten herausnehmen.
- *
- * Gerechnet wird in `remindAtFromPreset` - hier steht nur, was hineingeht. Der
- * Zustand „liegt nach der Faelligkeit" hat keinen Vorlauf, aus dem sich etwas
- * rechnen liesse; er reicht den gespeicherten Zeitpunkt durch und laesst die
- * Erinnerung damit stehen, wo sie steht.
- *
- * @returns {string|null} naiv-UTC `remind_at`, oder null bei „keine" bzw. einer
- *          unbrauchbaren Eingabe
- */
-function reminderRemindAtFromForm(form, { dueDate, dueTime = null } = {}) {
-  const preset = form.querySelector('#reminder-offset')?.value || 'offset_none';
-  if (preset === 'offset_none') return null;
-  return remindAtFromPreset(preset, {
-    dueDate,
-    dueTime,
-    amount: form.querySelector('#reminder-custom-amount')?.value,
-    unit: form.querySelector('#reminder-custom-unit')?.value || 'days',
-    storedRemindAt: form.querySelector('#reminder-stored-at')?.value || null,
-  });
 }
 
 // --------------------------------------------------------
@@ -2492,82 +2056,387 @@ function wireCountdownGate(panel) {
 }
 
 /**
- * Haelt Auswahl und Warnton am ZUSTAND, nicht am Ladezeitpunkt.
- *
- * Zwei Wege fuehren hierher: wer die Auswahl verlaesst, hat das Problem
- * entschieden und soll den Warnton nicht mehr sehen (wer zurueckgeht, wieder);
- * und wer die Faelligkeit verschiebt, aendert das Verhaeltnis, aus dem der
- * Zustand ueberhaupt entsteht. Beide enden in derselben Regel, damit sie nicht
- * auseinanderlaufen koennen.
+ * @param {{task?: object|null, users?: object[], reminder?: object|null,
+ *          onChanged?: (() => (void|Promise<void>))|null, draft?: object|null,
+ *          spoken?: boolean}} opts
+ *        `draft` fuellt ein neues Blatt vor (siehe renderModalContent).
+ *        `spoken`: das Blatt kommt aus einem Diktat und traegt im Kopf
+ *        „Noch einmal sagen" (`data-action="dictate"`).
+ *        Beim Anlegen oeffnen das Mikrofon im Titelfeld und „Noch einmal
+ *        sagen" das Hoerblatt (dictateOverSheet).
  */
-function syncReminderAfterDue(panel) {
-  const offset = panel.querySelector('#reminder-offset');
-  const warn   = panel.querySelector('#reminder-after-due-warning');
-  if (!offset) return;
-  // EIN GESPERRTER ABSCHNITT WIRD AUCH HIER NICHT ANGEFASST. Das
-  // Faelligkeitsdatum gehoert dem Aufgaben-Modul und ist mit `calendar: read`
-  // bedienbar, die Erinnerung daneben nicht - ein Feld, das sich unter der Hand
-  // aendert, obwohl es gesperrt ist, behauptete einen gespeicherten Zustand,
-  // den es nicht gibt (das Speichern fasst die Erinnerung ohne Schreibrecht
-  // gar nicht an). Gelesen wird der Riegel, den `renderReminderSection` schon
-  // gesetzt hat, statt die Rechtefrage ein zweites Mal zu stellen.
-  if (offset.disabled) return;
-  const next = afterDueResolution(offset.value, {
-    dueDate: parseDateInput(panel.querySelector('#task-due-date')?.value || ''),
-    dueTime: parseTimeInput(panel.querySelector('#task-due-time')?.value || '') || null,
-    storedRemindAt: panel.querySelector('#reminder-stored-at')?.value || null,
-  });
-  // Nur schreiben, wenn die Auswahl den Eintrag auch fuehrt - sonst faende der
-  // Browser ihn nicht und setzte die Auswahl stillschweigend auf den ersten:
-  // aus „1 Tag vorher" wuerde „Keine", und das Speichern loeschte die
-  // Erinnerung.
-  if (next && [...offset.options].some((o) => o.value === next.preset)) {
-    offset.value = next.preset;
-    const amount = panel.querySelector('#reminder-custom-amount');
-    const unit   = panel.querySelector('#reminder-custom-unit');
-    const custom = panel.querySelector('#reminder-custom-fields');
-    if (amount) amount.value = next.amount;
-    if (unit) unit.value = next.unit;
-    // Ein programmatisch gesetzter Wert loest KEIN `change` aus, der Listener
-    // daneben blendet die Felder also nicht ein. Hier steht es deshalb selbst.
-    if (custom) custom.style.display = next.preset === 'offset_custom' ? '' : 'none';
-  }
-  if (warn) warn.hidden = offset.value !== 'offset_after_due';
-}
-
-/**
- * Die Faelligkeit aendert das Verhaeltnis, aus dem „nach der Faelligkeit"
- * entsteht - beide Felder werden gehoert, `change` wie `input`, aus demselben
- * Grund wie bei `wireCountdownGate`: sonst haengt die Anzeige je nach
- * Bedienweg (Kalenderblatt vs. Tastatur) hinterher.
- */
-function wireReminderAfterDue(panel) {
-  for (const sel of ['#task-due-date', '#task-due-time']) {
-    const field = panel.querySelector(sel);
-    if (!field) continue;
-    field.addEventListener('change', () => syncReminderAfterDue(panel));
-    field.addEventListener('input', () => syncReminderAfterDue(panel));
-  }
-}
-
-function openTaskModal({ task = null, users = [], reminder = null, onChanged = null } = {}, container) {
+function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false } = {}, container) {
   // Der letzte Riegel vor dem Formular - hinter FAB, Kopfknopf und
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
   const isEdit = !!task;
-  // Working-Set VOR dem Rendern setzen: renderTagChips liest ihn direkt danach.
-  modalTags = normalizeTagList(task?.tags);
+  // Das Panel kennt erst onSave; der Kopfknopf ruft ueber diesen Griff.
+  let dictate = () => {};
+  const dictateWith = { users, onChanged, container };
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
-    content: renderModalContent({ task, users, reminder }),
+    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit }),
     size: 'lg',
+    // `type="button"` liefert openModal.
+    headerAction: spoken && !isEdit
+      ? { id: 'task-say-again', label: t('tasks.sayAgain'), onClick: () => dictate() }
+      : null,
     // Eine neue Aufgabe startet weiterhin mit dem Fokus im Titelfeld - hier ist
     // Tippen die Absicht.
     // `onChanged` nur von aussen (openNewTaskFrom): dann frischt der Aufrufer
     // seine Flaeche auf, statt dass diese Seite eine Liste nachlaedt, die
     // gar nicht steht.
-    onSave(panel) { wireTaskForm(panel, onChanged ? { task, container, onChanged } : { task, container }); },
+    onSave(panel) {
+      if (!isEdit) dictate = wireSheetDictation(panel, spoken, dictateWith);
+      wireTaskForm(panel, onChanged ? { task, container, onChanged } : { task, container });
+    },
   });
+}
+
+/**
+ * Mikrofon im Titelfeld und „Noch einmal sagen" eines neuen Blatts; liefert den
+ * Aufruf fuer den Kopfknopf. Das Mikrofon BEHAELT, was im Blatt schon gewaehlt
+ * war und der Satz nicht sagt (F9); „Noch einmal sagen" ersetzt - das ist
+ * seine Bedeutung.
+ */
+function wireSheetDictation(panel, spoken, opts) {
+  const sayAgain = () => dictateOverSheet(panel, opts);
+  if (spoken) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+  panel.querySelector('.task-sheet__mic')?.addEventListener('click', (e) => {
+    e.preventDefault?.();
+    dictateOverSheet(panel, { ...opts, keep: true });
+  });
+  return sayAgain;
+}
+
+/**
+ * Was im Blatt gewaehlt ist, als Entwurf: Titel, Wer, Faelligkeit, Erinnerung
+ * und Notiz (nur offene Abschnitte - ein zugeklappter traegt nichts) und die
+ * Werte hinter „Mehr". Angehaengte Dokumente reisen nicht mit: eine wartende
+ * Datei lebt im Bauteil des Blatts, nicht in einem Feld.
+ */
+function sheetDraftValues(panel) {
+  const q = (sel) => panel.querySelector(sel);
+  const open = (name) => {
+    const section = q(`[data-section="${name}"]`);
+    return !!section && !section.hidden;
+  };
+  const due = open('due') ? sheetDue(panel) : { date: '', time: '' };
+  const remind = open('reminder')
+    ? { date: q('#task-remind-date')?.value || '', time: hhmm(q('#task-remind-time')?.value) }
+    : { date: '', time: '' };
+  const rrule = getRRuleValues(panel, 'task');
+  return {
+    title: String(q('#task-title')?.value ?? '').trim(),
+    assigned_to: getSelectedUserIds(panel, 'task_assigned'),
+    due_date: due.date || null,
+    due_time: due.time || null,
+    remind_date: remind.date || null,
+    remind_time: remind.date ? (remind.time || null) : null,
+    description: open('note') ? String(q('#task-description')?.value ?? '') : '',
+    more: {
+      priority: q('#task-priority')?.value || 'none',
+      category: q('#task-category')?.value || FALLBACK_CATEGORY,
+      visibility: q('#task-visibility')?.value || 'all',
+      start_date: q('#task-start-date')?.value || null,
+      status: q('#task-status')?.value || null,
+      countdown: q('#task-countdown')?.checked ? 1 : 0,
+      recurrence_rule: rrule?.is_recurring ? (rrule.recurrence_rule ?? null) : null,
+      recurrence_from_completion: rrule?.recurrence_from_completion ? 1 : 0,
+    },
+  };
+}
+
+/** Der Entwurf aus dem Satz, ergaenzt um das im Blatt Gewaehlte, das der Satz nicht setzt (F9). */
+function keepChosen(draft, chosen) {
+  const out = { ...draft, description: chosen.description, more: chosen.more };
+  if (!String(draft.title ?? '').trim()) out.title = chosen.title;
+  if (!(Array.isArray(draft.assigned_to) && draft.assigned_to.length)) out.assigned_to = chosen.assigned_to;
+  if (!draft.due_date && !draft.due_time) {
+    out.due_date = chosen.due_date;
+    out.due_time = chosen.due_time;
+  }
+  if (!draft.remind_date) {
+    out.remind_date = chosen.remind_date;
+    out.remind_time = chosen.remind_time;
+  }
+  return out;
+}
+
+/**
+ * Diktat aus dem offenen Blatt „Neue Aufgabe" (Mikrofon, „Noch einmal sagen").
+ *
+ * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
+ * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
+ * gefuelltes (`spoken`). Vom Mikrofon im Titelfeld aus (`keep`) traegt es mit,
+ * was schon gewaehlt war und der Satz nicht setzt (Wer, Faelligkeit,
+ * Erinnerung, Notiz, „Mehr" - F9); „Noch einmal sagen" ersetzt, was vorher
+ * drin stand.
+ * Schliessen bringt das Blatt zurueck, wie es war: wer aus Versehen aufs
+ * Mikrofon tippt, verliert nichts. „Type instead" ebenso, nur steht dann, was
+ * schon gesagt oder getippt war, als Titel darin.
+ *
+ * Das Hoerblatt geht synchron im Tipp auf (askOverModal ruft `ask` sofort) -
+ * Safari startet die Erkennung nur aus einer Nutzergeste heraus.
+ */
+async function dictateOverSheet(panel, { users = [], onChanged = null, container = null, keep = false } = {}) {
+  const initialText = panel.querySelector('#task-title')?.value ?? '';
+  // Was schon gewaehlt ist, VOR dem Hoerblatt gelesen - das Blatt steht dann sicher.
+  const chosen = keep ? sheetDraftValues(panel) : null;
+  const answer = await askOverModal(() => new Promise((resolve) => {
+    openDictationSheet({
+      initialText,
+      members: users,
+      // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
+      // das gefuellte Blatt es.
+      onDraft: (draft) => { resolve({ draft }); closeModal({ force: true }); },
+      onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
+      onCancel: () => resolve(null),
+    });
+  }));
+  if (answer?.draft) {
+    const draft = chosen ? keepChosen(answer.draft, chosen) : answer.draft;
+    openTaskModal({ users, onChanged, draft, spoken: true }, container);
+  } else if (answer?.type) {
+    // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
+    const field = panel.querySelector('#task-title');
+    if (field && answer.text && answer.text !== field.value.trim()) {
+      field.value = answer.text;
+      field.dispatchEvent?.(new Event('input', { bubbles: true }));
+    }
+    field?.focus?.();
+  }
+}
+
+// --------------------------------------------------------
+// Das Blatt: aufklappen, entfernen, Schnellwahl
+//
+// Delegiert am Formular, damit dieselbe Verdrahtung im Modal und in der
+// Detailansicht (Bearbeiten) greift. Programmatisch gesetzte Werte am
+// `yuvomi-datepicker` feuern nichts - wer davon abhaengt (Countdown-Riegel,
+// Erinnerungs-Vorschlaege), bekommt sein `change` ausdruecklich.
+// --------------------------------------------------------
+
+const fireChange = (el) => el?.dispatchEvent?.(new Event('change', { bubbles: true }));
+
+/** Die Faelligkeit, wie das Blatt sie gerade traegt (kanonisch ISO aus dem Datepicker). */
+function sheetDue(panel) {
+  return {
+    date: panel.querySelector('#task-due-date')?.value || '',
+    time: hhmm(panel.querySelector('#task-due-time')?.value),
+  };
+}
+
+function setHidden(el, hidden) {
+  if (el) el.hidden = hidden;
+}
+
+/** Gedrueckte Schnellwahl und Datumsfeld der Faelligkeit nach ihrem Wert; danach die Erinnerungs-Vorschlaege. */
+function syncDueSection(panel) {
+  const section = panel.querySelector('[data-section="due"]');
+  const pick = duePickOf(sheetDue(panel).date, todayKey(), section?.dataset?.pick ?? '');
+  for (const btn of panel.querySelectorAll('[data-due-pick]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.duePick === pick));
+  }
+  if (pick) setHidden(panel.querySelector('[data-due-date-row]'), pick !== 'pick');
+  syncRemindPicks(panel);
+}
+
+/**
+ * Die Vorschlaege der Erinnerung folgen der Faelligkeit (ohne sie: keine).
+ * Neu gezeichnet wird nur, wenn sich die SORTE der Vorschlaege aendert (eine
+ * Faelligkeit kommt oder geht, eine Uhrzeit bringt „1 Stunde vorher");
+ * sonst wandert nur `aria-pressed` - ein Neuzeichnen naehme dem eben
+ * getippten Vorschlag den Fokus.
+ */
+function syncRemindPicks(panel) {
+  const host = panel.querySelector('[data-remind-picks]');
+  if (!host) return;
+  const due = sheetDue(panel);
+  const wall = {
+    date: panel.querySelector('#task-remind-date')?.value || '',
+    time: hhmm(panel.querySelector('#task-remind-time')?.value),
+  };
+  const picks = reminderQuickPicks({ dueDate: due.date, dueTime: due.time });
+  const buttons = [...host.querySelectorAll('[data-remind-pick]')];
+  if (buttons.map((b) => b.dataset.remindPick).join() !== picks.map((p) => p.key).join()) {
+    host.replaceChildren();
+    host.insertAdjacentHTML('beforeend', remindPicksHtml({ dueDate: due.date, dueTime: due.time, wall }));
+    return;
+  }
+  for (const btn of buttons) {
+    const pick = picks.find((p) => p.key === btn.dataset.remindPick);
+    btn.setAttribute('aria-pressed', String(!!pick && pick.date === wall.date && pick.time === wall.time));
+  }
+}
+
+/**
+ * Zeile oder Felder eines Abschnitts (die Zeile gibt es nur nach einem Diktat).
+ * Die Zeile ist ein Aufklapper (`aria-expanded`, `aria-controls` auf die
+ * Felder) - ihr Zustand sagt, was sie getan hat, auch wenn sie danach den
+ * Feldern Platz macht (F11).
+ */
+function showSectionBody(section) {
+  section.querySelector?.('[data-expand]')?.setAttribute?.('aria-expanded', 'true');
+  setHidden(section.querySelector?.('[data-row]'), true);
+  setHidden(section.querySelector?.('.task-sheet__body'), false);
+}
+
+/**
+ * Der Fokus geht in einen eben geoeffneten Abschnitt: die Notiz bekommt ihr
+ * Textfeld (dort ist Tippen die Absicht), die anderen ihren ersten Vorschlag,
+ * sonst „Entfernen". Gesucht wird in den FELDERN - das x der kompakten Zeile
+ * steht im DOM davor und ist dann verborgen. Ein Datumsfeld zu fokussieren
+ * hiesse auf dem Telefon, die Tastatur ueber das Blatt zu legen.
+ */
+function focusIntoSection(panel, section, name) {
+  if (name === 'note') { panel.querySelector('#task-description')?.focus?.(); return; }
+  const body = section.querySelector?.('.task-sheet__body') ?? section;
+  (body.querySelector?.('[data-due-pick], [data-remind-pick]') ?? body.querySelector?.('[data-remove]'))?.focus?.();
+}
+
+/** Ein Tipp auf eine kompakte Zeile: ihre Felder klappen auf, der Fokus geht hinein. */
+function expandSheetSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  showSectionBody(section);
+  focusIntoSection(panel, section, name);
+}
+
+/** Oeffnet einen Abschnitt; sein Knopf tritt zurueck. Eine leere Erinnerung bekommt eine Vorgabe. */
+function openSheetSection(panel, name, button = null) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = false;
+  showSectionBody(section);
+  setHidden(button ?? panel.querySelector(`[data-reveal="${name}"]`), true);
+  if (name === 'reminder') {
+    const date = panel.querySelector('#task-remind-date');
+    const time = panel.querySelector('#task-remind-time');
+    if (date && time && !date.value && !time.value) {
+      const due = sheetDue(panel);
+      const fallback = defaultReminder({ dueDate: due.date, dueTime: due.time, now: new Date() });
+      date.value = fallback.date;
+      time.value = fallback.time;
+    }
+    syncRemindPicks(panel);
+  }
+  // Der getippte Knopf ist jetzt verborgen - der Fokus geht in den Abschnitt.
+  focusIntoSection(panel, section, name);
+}
+
+/**
+ * „Entfernen": klappt den Abschnitt zu UND leert ihn - ein zugeklappter
+ * Abschnitt mit Wert waere ein versteckt gesetzter Wert. Die Faelligkeit meldet
+ * ihr Leeren, damit der Countdown-Riegel und die Erinnerungs-Vorschlaege
+ * nachziehen. Der Fokus geht an den Knopf, der den Abschnitt wieder oeffnet.
+ */
+function closeSheetSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = true;
+  const button = panel.querySelector(`[data-reveal="${name}"]`);
+  setHidden(button, false);
+  if (name === 'due') {
+    if (section.dataset) delete section.dataset.pick;
+    const date = panel.querySelector('#task-due-date');
+    const time = panel.querySelector('#task-due-time');
+    if (time) time.value = '';
+    setHidden(panel.querySelector('[data-due-time-row]'), true);
+    setHidden(panel.querySelector('[data-reveal-time]'), false);
+    if (date) {
+      date.value = '';
+      fireChange(date);
+    }
+    fireChange(time);
+  } else if (name === 'reminder') {
+    for (const sel of ['#task-remind-date', '#task-remind-time']) {
+      const field = panel.querySelector(sel);
+      if (field) {
+        field.value = '';
+        clearFieldError(field);
+      }
+    }
+  } else if (name === 'note') {
+    const note = panel.querySelector('#task-description');
+    if (note) note.value = '';
+  }
+  button?.focus?.();
+}
+
+/** Eine Schnellwahl der Faelligkeit; „Datum waehlen" zeigt das Feld und oeffnet seinen Kalender. */
+function pickDue(panel, key) {
+  const section = panel.querySelector('[data-section="due"]');
+  const date = panel.querySelector('#task-due-date');
+  if (!date) return;
+  if (key === 'pick') {
+    if (section?.dataset) section.dataset.pick = 'pick';
+    const row = panel.querySelector('[data-due-date-row]');
+    setHidden(row, false);
+    syncDueSection(panel);
+    // Der Kalender-Ausloeser des Datepickers (sein Knopf mit `aria-haspopup`;
+    // die Klasse gehoert dem Bauteil und seinem Blatt, nicht dieser Seite).
+    const trigger = row?.querySelector?.('[aria-haspopup="dialog"]');
+    if (trigger) trigger.click(); else date.focus?.();
+    return;
+  }
+  const value = dueQuickPick(key, todayKey());
+  if (!value) return;
+  if (section?.dataset) section.dataset.pick = key;
+  date.value = value;
+  fireChange(date);
+}
+
+/** „+ Uhrzeit": das Zeitfeld erscheint, sein Auswahlblatt geht auf. */
+function revealDueTime(panel, button) {
+  const row = panel.querySelector('[data-due-time-row]');
+  if (!row) return;
+  row.hidden = false;
+  setHidden(button, true);
+  const trigger = row.querySelector?.('[aria-haspopup="dialog"]');
+  if (trigger) trigger.click(); else panel.querySelector('#task-due-time')?.focus?.();
+}
+
+/** Ein Erinnerungs-Vorschlag schreibt Datum und Uhrzeit - feste Werte, die danach nicht mitwandern. */
+function pickReminder(panel, key) {
+  const due = sheetDue(panel);
+  const pick = reminderQuickPicks({ dueDate: due.date, dueTime: due.time }).find((p) => p.key === key);
+  const date = panel.querySelector('#task-remind-date');
+  const time = panel.querySelector('#task-remind-time');
+  if (!pick || !date || !time) return;
+  date.value = pick.date;
+  time.value = pick.time;
+  // Ein gesetzter Wert feuert am Datepicker nichts - eine Meldung "schon
+  // vorbei" (R15) raeumt sonst erst die naechste Eingabe im Feld.
+  clearFieldError(date);
+  clearFieldError(time);
+  syncRemindPicks(panel);
+}
+
+function wireTaskSheet(panel) {
+  const form = panel.querySelector('#task-form');
+  if (!form) return;
+  form.addEventListener('click', (e) => {
+    const target = e.target;
+    const remove = target?.closest?.('[data-remove]');
+    if (remove) { e.preventDefault(); closeSheetSection(panel, remove.dataset.remove); return; }
+    const reveal = target?.closest?.('[data-reveal]');
+    if (reveal) { e.preventDefault(); openSheetSection(panel, reveal.dataset.reveal, reveal); return; }
+    const expand = target?.closest?.('[data-expand]');
+    if (expand) { e.preventDefault(); expandSheetSection(panel, expand.dataset.expand); return; }
+    const duePick = target?.closest?.('[data-due-pick]');
+    if (duePick) { e.preventDefault(); pickDue(panel, duePick.dataset.duePick); return; }
+    const addTime = target?.closest?.('[data-reveal-time]');
+    if (addTime) { e.preventDefault(); revealDueTime(panel, addTime); return; }
+    const remindPick = target?.closest?.('[data-remind-pick]');
+    if (remindPick) { e.preventDefault(); pickReminder(panel, remindPick.dataset.remindPick); }
+  });
+  for (const sel of ['#task-due-date', '#task-due-time']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncDueSection(panel));
+  }
+  for (const sel of ['#task-remind-date', '#task-remind-time']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncRemindPicks(panel));
+  }
 }
 
 /**
@@ -2609,15 +2478,8 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     task?.created_by ?? state.currentUserId);
   wireCountdownGate(panel);
 
-  // Tag-Editor (#586)
-  renderTagChips(panel);
-  wireTagEditor(panel);
-
-  // Formatierungsleiste ueber der Notiz (#731). Die Leseansicht rendert sie
-  // seit v2.7.0 als Markdown, geschrieben werden musste sie aber von Hand -
-  // dieselbe Leiste, die die Notizen seit jeher haben, dieselbe Datei.
-  const description = panel.querySelector('#task-description');
-  if (description) wireMarkdownToolbar(panel, description);
+  // Aufklappen, Entfernen und Schnellwahl des Blatts.
+  wireTaskSheet(panel);
 
   // Verknüpfte Dokumente: hochladen oder ein abgelegtes wählen (#503, #733).
   // Die Vorbelegung steckt bereits im Markup (task.documents aus GET /tasks/:id),
@@ -2651,31 +2513,9 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     },
   });
 
-  // Sync-Ziel nachladen (#695). Ohne await: die Liste kommt aus dem Netz, und
-  // bis sie da ist, steht "nur lokal" - das ist der richtige Zwischenzustand.
-  wireSyncTarget(panel, task);
-
   // Blur-Validierung für required-Felder aktivieren
   wireBlurValidation(panel);
 
-  // Reminder-Toggle: Felder ein-/ausblenden
-  const toggle = panel.querySelector('#reminder-toggle');
-  const fields = panel.querySelector('#reminder-fields');
-  const offset = panel.querySelector('#reminder-offset');
-  const customFields = panel.querySelector('#reminder-custom-fields');
-  // `fields?.` statt `fields.`: die beiden Suchen sind unabhaengig, und seit
-  // der Abschnitt ganz fehlen kann (renderReminderSection gibt '' zurueck),
-  // haengt die Sicherheit dieser Zeile sonst allein daran, dass `toggle` im
-  // SELBEN Fall null ist und der Listener nie haengt. Das ist wahr, aber keine
-  // Zusicherung, die diese Stelle selbst traegt.
-  toggle?.addEventListener('change', () => {
-    if (fields) fields.style.display = toggle.checked ? '' : 'none';
-  });
-  offset?.addEventListener('change', () => {
-    if (customFields) customFields.style.display = offset.value === 'offset_custom' ? '' : 'none';
-    syncReminderAfterDue(panel);
-  });
-  wireReminderAfterDue(panel);
   // Form-Events
   panel.querySelector('#task-form')
     ?.addEventListener('submit', (e) => handleFormSubmit(e, { container, onChanged }));
@@ -2684,110 +2524,6 @@ function wireTaskForm(panel, { task = null, container = null, onChanged = () => 
     ?.addEventListener('click', (e) => deleteTaskWithUndo(e.currentTarget.dataset.id, {
       container, onChanged,
     }));
-}
-
-// --------------------------------------------------------
-// Tag-Verwaltung und Bulk-Vergabe (#586)
-// --------------------------------------------------------
-
-/**
- * Tags haushaltsweit umbenennen, zusammenführen und entfernen.
- * Nach jeder Änderung wandert die frische Liste direkt in den State - der
- * Server liefert sie in derselben Antwort mit, ein Nachladen entfällt.
- */
-function openTagManager(container) {
-  if (readOnly()) return;
-  let manager = null;
-  const onChanged = async (e) => {
-    state.allTags = e.detail?.tags ?? state.allTags;
-    // Ein Tag, der gerade umbenannt oder gelöscht wurde, kann noch im Filter
-    // stehen. Bliebe er dort, filterte die Liste auf einen Namen, den es nicht
-    // mehr gibt, und zeigte dauerhaft nichts an.
-    const known = new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
-    state.filters.tags = state.filters.tags.filter((tag) => known.has(tag.toLowerCase()));
-    renderFilters(container);
-    await loadTasks(container);
-  };
-  openSharedModal({
-    title: t('tasks.manageTags'),
-    content: '<yuvomi-tag-manager></yuvomi-tag-manager>',
-    size: 'lg',
-    onSave: (panel) => {
-      manager = panel.querySelector('yuvomi-tag-manager');
-      manager.addEventListener('tag-manager-changed', onChanged);
-    },
-    onClose: () => manager?.removeEventListener('tag-manager-changed', onChanged),
-  });
-}
-
-/**
- * Tag an die ausgewählten Aufgaben hängen oder von ihnen nehmen.
- *
- * Beim Entfernen kommen die Vorschläge aus den ausgewählten Aufgaben selbst,
- * nicht aus dem Gesamtbestand: einen Tag anzubieten, den keine der markierten
- * Aufgaben trägt, wäre eine Aktion, die garantiert nichts tut.
- */
-function openBulkTagDialog(taskIds, mode, container) {
-  if (readOnly()) return;
-  const selected = state.tasks.filter((task) => taskIds.includes(task.id));
-  const pool = mode === 'remove'
-    ? [...new Map(selected.flatMap((task) => task.tags ?? [])
-        .map((tag) => [tag.toLowerCase(), tag])).values()].sort((a, b) =>
-          a.localeCompare(b, getLocale(), { sensitivity: 'base' }))
-    : state.allTags.map((entry) => entry.tag);
-
-  openSharedModal({
-    title: mode === 'add' ? t('tasks.bulkTagAdd') : t('tasks.bulkTagRemove'),
-    size: 'sm',
-    content: `
-      <form id="bulk-tag-form">
-        <div class="form-group">
-          <label class="label" for="bulk-tag-input">${t('tasks.tagsLabel')}</label>
-          <input class="input" type="text" id="bulk-tag-input" name="tag" autocomplete="off"
-                 list="bulk-tag-suggestions" maxlength="64"
-                 placeholder="${t('tasks.tagsPlaceholder')}">
-          <datalist id="bulk-tag-suggestions">
-            ${pool.map((tag) => `<option value="${esc(tag)}"></option>`).join('')}
-          </datalist>
-          <p class="task-field-hint">${t('tasks.bulkTagHint', { count: taskIds.length })}</p>
-        </div>
-        <div class="modal-panel__footer modal-panel__footer--plain">
-          <button type="button" class="btn btn--secondary" data-action="close-modal">${t('common.cancel')}</button>
-          <button type="submit" class="btn btn--primary">${t('common.apply')}</button>
-        </div>
-      </form>`,
-    onSave: (panel) => {
-      const form = panel.querySelector('#bulk-tag-form');
-      panel.querySelector('#bulk-tag-input')?.focus();
-      form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const tag = form.elements.tag.value.trim();
-        if (!tag) return;
-        try {
-          const body = mode === 'add' ? { ids: taskIds, add: [tag] } : { ids: taskIds, remove: [tag] };
-          const res = await api.post('/tasks/tags/apply', body);
-          state.allTags = res.data?.tags ?? state.allTags;
-          // Der Server ueberspringt gesperrte Aufgaben, statt den ganzen Aufruf
-          // abzuweisen (#830). Eine stille Teilausfuehrung waere schlimmer als
-          // ein Fehler, also sagt der Toast, was liegen blieb.
-          const skipped = res.data?.skipped ?? 0;
-          window.yuvomi.showToast(
-            skipped
-              ? `${t('tasks.tagsUpdated', { count: res.data?.updated ?? 0 })} ${t('tasks.tagsSkippedLocked', { count: skipped })}`
-              : t('tasks.tagsUpdated', { count: res.data?.updated ?? 0 }),
-            'success');
-          closeModal({ force: true });
-          state.selectedTaskIds.clear();
-          updateBulkActionsBar(container);
-          renderFilters(container);
-          await loadTasks(container);
-          refocusAfterRender();
-        } catch (err) {
-          window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
-        }
-      });
-    },
-  });
 }
 
 // --------------------------------------------------------
@@ -2875,14 +2611,13 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   submitBtn.disabled = true;
   submitBtn.textContent = t('common.saving');
 
-  const originalLabel = taskId ? t('common.save') : t('common.add');
+  const originalLabel = taskId ? t('common.save') : t('tasks.addTask');
 
   const startDateRaw = form.start_date?.value || '';
   const startDate = parseDateInput(startDateRaw);
   const dueDateRaw = form.due_date?.value || '';
   const dueDate = parseDateInput(dueDateRaw);
   const rrule = getRRuleValues(document, 'task');
-  const reminderToggle = form.querySelector('#reminder-toggle');
   if ((startDateRaw && !isDateInputValid(startDateRaw)) || !isDateInputValid(dueDateRaw) || !rrule.valid_until) {
     errorEl.textContent = t('calendar.invalidDate');
     errorEl.hidden = false;
@@ -2890,17 +2625,12 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     submitBtn.textContent = originalLabel;
     return;
   }
-  // Ein noch nicht übernommener Tag im Eingabefeld zählt mit — wer tippt und
-  // direkt speichert, hat ihn gemeint.
-  const pendingTag = form.querySelector('#task-tag-input')?.value ?? '';
-  const tags = normalizeTagList([...modalTags, ...pendingTag.split(',')]);
 
   const body = {
     title:           form.title.value.trim(),
-    description:     form.description.value.trim() || null,
+    description:     form.description?.value.trim() || null,
     priority:        form.priority.value,
     category:        form.category.value,
-    tags,
     start_date:      startDate || null,
     due_date:        dueDate || null,
     assigned_to:     getSelectedUserIds(form, 'task_assigned'),
@@ -2909,14 +2639,15 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     recurrence_rule: rrule.recurrence_rule,
     recurrence_from_completion: rrule.recurrence_from_completion ? 1 : 0,
     countdown:       form.querySelector('#task-countdown')?.checked ? 1 : 0,
-    locked:          form.querySelector('#task-locked')?.checked ? 1 : 0,
-    points:          Math.max(0, Math.trunc(Number(form.points?.value)) || 0),
+    // Weder `tags` noch `locked`: PUT laesst Fehlendes am Server stehen, ein
+    // Bearbeiten nimmt der Aufgabe also keine bestehenden Etiketten.
   };
-  // Das Feld fehlt bei Unteraufgaben und bei bereits gespiegelten Aufgaben - in
-  // beiden Fällen soll gar kein Ziel mitgeschickt werden, sonst nähme der Server
-  // das Fehlen als "auf lokal zurücksetzen" (#695).
-  const syncTargetField = form.querySelector('#task-sync-target');
-  if (syncTargetField) body.sync_target = syncTargetField.value;
+  // DAS SYNC-ZIEL HAT KEIN FELD MEHR (Quick-Add, 2026-10-29: iCloud-Erinnerungen
+  // lassen sich ueber CalDAV nicht abgleichen, siehe TODO.md). Eine NEUE Aufgabe
+  // geht weiter auf die persoenliche Vorgabe (`tasks_default_target`), wenn eine
+  // gesetzt ist; ein Bearbeiten schickt nichts - der Server nimmt das Fehlen als
+  // "unveraendert", und eine Aufgabe zieht nie zwischen Listen um (#695).
+  if (!taskId && state.defaultSyncTarget) body.sync_target = state.defaultSyncTarget;
   const dueTimeRaw = form.due_time?.value || '';
   const dueTime = parseTimeInput(dueTimeRaw);
   const resetSubmit = (msg) => {
@@ -2929,61 +2660,60 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
   body.due_time = dueTime || null;
   if (form.status) body.status = form.status.value;
 
-  // Erinnerungs-Vorbedingungen VOR dem Speichern prüfen — verhindert den
-  // widersprüchlichen Zustand "Aufgabe gespeichert (Erfolgs-Toast) + roter
-  // Fehler", wenn Reminder ohne Fälligkeit/Offset gesetzt wird (Critique P2).
+  // DIE ERINNERUNG IST EINE FESTE UHRZEIT (Quick-Add, 2026-10-29). Sie braucht
+  // keine Faelligkeit mehr, und eine verschobene Faelligkeit nimmt sie nicht
+  // mit. Entschieden wird VOR dem Speichern der Aufgabe - sonst stuende
+  // "Aufgabe gespeichert" neben einem roten Fehler (Critique P2).
   //
-  // OHNE SCHREIBRECHT AUF DEN KALENDER FAELLT DIESER TEIL GANZ WEG (siehe
-  // reminderAccess). Der Abschnitt steht dann gesperrt im Dialog, und was
-  // darin steht, ist der GESPEICHERTE Stand - ihn erneut zu schicken hiesse,
-  // einen unveraenderten Wert gegen einen 403 zu senden. Der Riegel sitzt VOR
-  // der Vorbedingungspruefung, nicht erst vor dem Schreiben: sonst blockierte
-  // ein geleertes Faelligkeitsdatum das Speichern mit einer Meldung ueber ein
-  // Feld, das dieser Nutzer gar nicht bedienen kann.
+  // OHNE SCHREIBRECHT AUF DEN KALENDER WIRD SIE NIE ANGEFASST (reminderAccess):
+  // der Abschnitt steht dann gesperrt da, und was darin steht, ist der
+  // GESPEICHERTE Stand - ihn zu schicken hiesse, einen 403 abzuholen.
+  //
+  // EINE UNBERUEHRTE ERINNERUNG SCHICKT NICHTS. Verglichen wird auf der Ebene,
+  // die das Blatt zeigt (Datum + HH:MM der Haushaltszone): eine Erinnerung aus
+  // der alten Vorlauf-Auswahl traegt Sekunden (23:59:59), die kein Feld zeigt -
+  // ein Vergleich der Zeitpunkte schoebe sie bei jedem Speichern um sie.
+  //
+  // Und weil sie keine Faelligkeit braucht, darf auch ein Mitglied mit
+  // `calendar: read` die Faelligkeit leeren: die gesperrte Erinnerung bleibt,
+  // wie sie ist (der fruehere Riegel aus Review-Runde 3 zu #1253 schuetzte eine
+  // Regel, die es nicht mehr gibt - Ruling R7).
+  //
+  // EINE NEUE ODER GEAENDERTE ERINNERUNG IN DER VERGANGENHEIT WIRD NICHT
+  // GESPEICHERT (Ruling R15). Der Server nimmt sie an, und der naechste Takt
+  // der Benachrichtigungen schickt jede faellige sofort - ein Push Sekunden
+  // nach dem Speichern, spaeter keiner. Die Meldung steht am Feld, das falsch
+  // ist: am Datum, wenn der Tag vorbei ist, sonst an der Uhrzeit. Eine
+  // UNBERUEHRTE Erinnerung wird nie geruegt - alte Aufgaben tragen vergangene.
   const canWriteReminder = reminderAccess() === 'write';
-  const wantsReminder = canWriteReminder && !!reminderToggle?.checked;
-  // DIE EINE VORBEDINGUNG, DIE AUCH OHNE SCHREIBRECHT GILT: eine Erinnerung
-  // braucht ein Faelligkeitsdatum. Die Regel ist nicht neu - mit Schreibrecht
-  // verweigert die Zeile darunter genau diese Kombination -, aber der Riegel
-  // oben machte sie fuer `calendar: read` brechbar: das Datum gehoert dem
-  // Aufgaben-Modul, ist also bedienbar, und wer es leerraeumt, liess bis
-  // Review-Runde 2 eine Erinnerung an einer Aufgabe OHNE Faelligkeit zurueck
-  // (`server/routes/tasks.js` fasst die Tabelle nicht an). Nachgemessen: die
-  // Aufgabe ging mit `due_date: null` durch, ohne Meldung.
-  //
-  // Der harte Block von vorher kommt damit NICHT zurueck. Er nannte den
-  // Erinnerungs-Schalter, den dieser Nutzer nicht bedienen kann; diese Meldung
-  // nennt das Faelligkeitsdatum, das er bedienen kann, und sagt dazu, warum es
-  // gebraucht wird. Ein Datums-WECHSEL bleibt erlaubt - er bricht die Regel
-  // nicht, sondern verschiebt nur den angezeigten Vorlauf. Der eigene Faden,
-  // auf den diese Zeile verwies, ist inzwischen eingeloest: ein negativer
-  // Versatz heisst jetzt `offset_after_due` und wird benannt statt verschwiegen
-  // (siehe renderReminderSection). Fuer diesen Nutzer aendert das nichts - der
-  // Abschnitt ist gesperrt, und gesperrt bleibt er auch beim Datumswechsel.
-  //
-  // GEMESSEN WIRD DER UEBERGANG, NICHT DER ZUSTAND (Review-Runde 3). Eine
-  // Aufgabe kann schon OHNE Faelligkeit ankommen, waehrend eine gesperrte
-  // Erinnerung an ihr haengt, und daran ist dieser Nutzer dann unschuldig:
-  // Erinnerungen sind pro `created_by` gefuehrt (`server/routes/reminders.js`
-  // filtert GET, Upsert und DELETE danach), niemand erzwingt die Regel
-  // tabellenuebergreifend, also raeumt ein ZWEITES Mitglied das Datum weg und
-  // loescht dabei nur seine eigene - nicht vorhandene - Zeile. Ein Riegel auf
-  // den Endzustand haette den Erstbesitzer danach aus der Aufgabe ausgesperrt,
-  // bei JEDER Aenderung, auch einer Titelkorrektur, und ohne Ausweg: den
-  // Schalter, der die Meldung verursacht, kann er nicht bedienen.
-  const lockedReminderPresent = !canWriteReminder && !!reminderToggle?.checked;
-  const dueDateWhenOpened = form.querySelector('.reminder-section[data-locked-due]')?.dataset.lockedDue || '';
-  if (lockedReminderPresent && dueDateWhenOpened && !dueDate) {
-    resetSubmit(t('tasks.reminderLockedNeedsDueDate'));
-    return;
-  }
-  let remindAt = null;
-  if (wantsReminder) {
-    if (!dueDate) { resetSubmit(t('tasks.reminderNeedsDueDate')); return; }
-    const offsetPreset = form.querySelector('#reminder-offset')?.value || 'offset_none';
-    if (offsetPreset === 'offset_none') { resetSubmit(t('tasks.reminderNeedsDueDate')); return; }
-    remindAt = reminderRemindAtFromForm(form, { dueDate, dueTime: body.due_time });
-    if (!remindAt) { resetSubmit(t('common.invalidInput')); return; }
+  const reminderSection = form.querySelector('[data-section="reminder"]');
+  const storedRemindAt = reminderSection?.dataset?.storedAt || '';
+  /** null: nichts tun; 'delete': die gespeicherte entfernen; sonst der neue Zeitpunkt. */
+  let reminderChange = null;
+  if (canWriteReminder && reminderSection) {
+    if (!reminderSection.hidden) {
+      const remindDate = parseDateInput(form.querySelector('#task-remind-date')?.value || '');
+      const remindTime = parseTimeInput(form.querySelector('#task-remind-time')?.value || '');
+      const remindAt = remindAtFromWallTime(remindDate, remindTime);
+      if (!remindAt) { resetSubmit(t('tasks.reminderIncomplete')); return; }
+      const stored = storedRemindAt ? wallTimeFromRemindAt(storedRemindAt) : null;
+      if (!stored || stored.date !== remindDate || stored.time !== remindTime) {
+        const now = Date.now();
+        if (parseRemindAtAsUtc(remindAt).getTime() <= now) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+          // Eine kompakte Zeile (nach einem Diktat) klappt auf - die Meldung
+          // steht an den Feldern dahinter.
+          showSectionBody(reminderSection);
+          const pastDay = remindDate < zonedDateKey(new Date(now));
+          reportFieldError(form.querySelector(pastDay ? '#task-remind-date' : '#task-remind-time'), t('tasks.reminderTimePassed'));
+          return;
+        }
+        reminderChange = remindAt;
+      }
+    } else if (storedRemindAt) {
+      reminderChange = 'delete';
+    }
   }
 
   // Wartende Uploads VOR dem Speichern der Aufgabe (#733): scheitert der
@@ -3019,22 +2749,18 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
       window.yuvomi.showToast(t('tasks.createdToast'), 'success');
     }
 
-    // Erinnerung speichern oder löschen (Vorbedingungen bereits oben geprüft).
-    // `canWriteReminder` gilt auch für den Löschzweig: das stumme catch dort
-    // fängt einen 403 zwar weg, aber der Aufruf wäre eine Löschanfrage für eine
-    // Erinnerung, die dieser Nutzer nicht anfassen darf - und an einer
-    // unveränderten Aufgabe hat er sie auch nicht abgewählt.
+    // Erinnerung speichern oder löschen - entschieden oben, nur mit
+    // Schreibrecht auf den Kalender und nur, wenn sich etwas geaendert hat.
+    // Geloescht wird nur, was gespeichert WAR und jetzt entfernt ist.
     if (savedTaskId) {
-      if (canWriteReminder) {
-        if (wantsReminder) {
-          await api.post('/reminders', { entity_type: 'task', entity_id: savedTaskId, remind_at: remindAt });
+      if (reminderChange === 'delete') {
+        try {
+          await api.delete(`/reminders?entity_type=task&entity_id=${savedTaskId}`);
           refreshReminders();
-        } else {
-          try {
-            await api.delete(`/reminders?entity_type=task&entity_id=${savedTaskId}`);
-            refreshReminders();
-          } catch { /* kein Reminder vorhanden - ignorieren */ }
-        }
+        } catch { /* schon weg - ignorieren */ }
+      } else if (reminderChange) {
+        await api.post('/reminders', { entity_type: 'task', entity_id: savedTaskId, remind_at: reminderChange });
+        refreshReminders();
       }
 
       // Dokument-Verknüpfungen als Replace-Set übernehmen (#503).
@@ -3057,7 +2783,6 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
           // schickt dieselbe Liste.
           resetSubmit(t('tasks.documentsLinkFailed'));
           btnError(submitBtn);
-          await refreshTags();
           await onChanged();
           return;
         }
@@ -3071,15 +2796,11 @@ async function handleFormSubmit(e, { container = null, onChanged = () => loadTas
     // der Toast oben - ein Knopf, hinter dem beides wartet, haelt nur auf.
     // `btnSuccess` bleibt der Baustein fuer Formulare, die offen bleiben.
     closeModal({ force: true });
-    // Erst die Tag-Liste, dann neu zeichnen: ein gerade vergebener Tag soll
-    // sofort in Filterleiste und Vorschlägen stehen (#586).
-    //
     // EIGENER catch: der Dialog ist zu. Der aeussere schreibt an Knopf und
     // Fehlerzeile des Formulars - die gibt es hier nicht mehr, und oben steht
     // schon der gruene Toast. Scheitert das Neuladen, ist die Aufgabe trotzdem
     // gespeichert; die Liste ist nur alt, und das muss man auf der Seite lesen.
     try {
-      await refreshTags();
       await onChanged();
       // Der Dialog ist jetzt VOR dem Neuzeichnen zu: sein Fokus-Rueckweg (der
       // Stift der bearbeiteten Zeile) wird mit der Liste ersetzt. Im selben
@@ -3270,8 +2991,6 @@ function renderKanbanCard(task) {
       <button type="button" class="kanban-card__title u-card-title u-compact">${esc(task.title)}</button>
       <div class="kanban-card__meta">
         ${due ? `<span class="due-date ${due.cls}"><i data-lucide="clock" class="icon-sm" aria-hidden="true"></i> ${due.label}</span>` : ''}
-        ${renderLockedBadge(task)}
-        ${renderTagBadges(task.tags, TAG_BADGES_VISIBLE, task.priority)}
       </div>
       <div class="kanban-card__footer">
         ${/* Tafla: dieselbe Fahne (nur Hoch/Dringend) und dieselbe
@@ -4179,7 +3898,6 @@ function activeFilterCount() {
     + state.filters.priority.length
     + state.filters.assigned_to.length
     + state.filters.category.length
-    + state.filters.tags.length
     + (state.showFuture ? 1 : 0)
     + (state.dueToday ? 1 : 0);
 }
@@ -4239,18 +3957,12 @@ function toolsMenuItems() {
     // die in der einzeiligen Pille keinen Platz haben.
     items.push(
       { action: 'bulk-archive', label: t('tasks.bulkArchive'), icon: 'archive', disabled: true },
-      { action: 'bulk-tag-add', label: t('tasks.bulkTagAdd'), icon: 'tag', disabled: true },
-      { action: 'bulk-tag-remove', label: t('tasks.bulkTagRemove'), icon: 'eraser', disabled: true },
     );
   }
   if (!readOnly()) {
     items.push(
       { separator: true },
       { action: 'manage-categories', label: t('tasks.manageCategories'), icon: 'folder-tree' },
-      // Das Etiketten-Icon fuer die Tags, der Ordnerbaum fuer die Kategorien:
-      // die beiden Achsen sind bewusst getrennt, dieselbe Bildsprache haette
-      // sie wieder eingeebnet.
-      { action: 'manage-tags', label: t('tasks.manageTags'), icon: 'tags' },
     );
   }
   return items;
@@ -4270,13 +3982,13 @@ function toolsMenuItems() {
  *   „Der eine Filterblatt-Baustein").
  * - Gruppieren nach: nur in der Liste; das Brett gruppiert nach Status.
  * - Status (nicht im Kanban, Audit A1-07), Prioritaet, Person, Kategorie
- *   (D#1017), Tag: je Wert ein Chip, Mehrfachauswahl je Achse (#671).
+ *   (D#1017): je Wert ein Chip, Mehrfachauswahl je Achse (#671).
  */
 function filterSheetGroups() {
   const groups = [];
   const chipsHtml = (key, label, items) => filterChipsHtml(key, label, items.map((item) => ({
     ...item,
-    active: key === 'tag' ? hasTagFilter(item.value) : hasFilter(key, item.value),
+    active: hasFilter(key, item.value),
   })));
 
   const statusLabels = STATUS_LABELS();
@@ -4285,8 +3997,7 @@ function filterSheetGroups() {
     const parts = [];
     // Jeder Wert jeder Achse wird benannt: seit #671 kann ein gemerktes Set
     // "Hoch" UND "Mittel" enthalten, und ein Chip, der nur den ersten nennt,
-    // schaltete beim Klick mehr, als er behauptet. Die Tags gehoeren dazu,
-    // weil der Chip sie mitsetzt (#586).
+    // schaltete beim Klick mehr, als er behauptet.
     f.status.forEach((v) => parts.push(statusLabels[v] ?? v));
     f.priority.forEach((v) => parts.push(priorityLabels[v] ?? v));
     f.assigned_to.forEach((v) => {
@@ -4294,7 +4005,6 @@ function filterSheetGroups() {
       if (u) parts.push(u.display_name);
     });
     f.category.forEach((v) => parts.push(catLabel(v)));
-    parts.push(...f.tags);
     return parts.length ? { set: f, label: parts.join(' · ') } : null;
   }).filter(Boolean);
   if (recent.length) {
@@ -4339,12 +4049,6 @@ function filterSheetGroups() {
     groups.push({ heading: t('tasks.categoryLabel'),
       fold: state.filters.category.length ? 'open' : 'closed',
       html: chipsHtml('category', t('tasks.categoryLabel'), state.categories.map((c) => ({ value: c.key, label: catLabel(c.key) }))) });
-  }
-  // Tags nur, wenn welche vergeben sind - sonst stuende eine leere Gruppe da (#586).
-  if (state.allTags.length) {
-    groups.push({ heading: t('tasks.filterGroupTag'),
-      fold: state.filters.tags.length ? 'open' : 'closed',
-      html: chipsHtml('tag', t('tasks.filterGroupTag'), state.allTags.map((entry) => ({ value: entry.tag, label: entry.tag }))) });
   }
 
   // ANSICHT, ABGESETZT AM ENDE (R16). „Gruppieren nach" und „Geplante anzeigen"
@@ -4408,7 +4112,6 @@ function sheetToolRows() {
   return [
     ...(state.viewMode === 'list' ? [['bulk-select', 'tasks.bulkSelect', 'list-checks', false]] : []),
     ['manage-categories', 'tasks.manageCategories', 'folder-tree', true],
-    ['manage-tags', 'tasks.manageTags', 'tags', true],
   ];
 }
 
@@ -4422,13 +4125,11 @@ function sheetToolRows() {
 function syncFilterSheet(panel) {
   if (!panel?.isConnected) return;
   panel.querySelectorAll('[data-filter]').forEach((chip) => {
-    const on = chip.dataset.filter === 'tag'
-      ? hasTagFilter(chip.dataset.value)
-      : hasFilter(chip.dataset.filter, chip.dataset.value);
+    const on = hasFilter(chip.dataset.filter, chip.dataset.value);
     chip.classList.toggle('filter-chip--active', on);
     chip.setAttribute('aria-pressed', String(on));
     // WAS WIRKT, STEHT OFFEN - auch wenn es NACH dem Oeffnen des Blatts gesetzt
-    // wurde. Ein gemerktes Set ("Zuletzt benutzt") kann Kategorie oder Tag
+    // wurde. Ein gemerktes Set ("Zuletzt benutzt") kann eine Kategorie
     // setzen, waehrend deren Aufklapper zu ist: der Chip wurde aktiv, blieb
     // aber verborgen. Nur aufklappen, nie zuklappen und nichts neu bauen - der
     // Fokus steht vielleicht gerade in der Falte.
@@ -4579,10 +4280,6 @@ async function onFilterSheetClick(e, container) {
   }
   const chip = e.target.closest('[data-filter]');
   if (!chip) return;
-  if (chip.dataset.filter === 'tag') {
-    await toggleTagFilter(chip.dataset.value, container);
-    return;
-  }
   await toggleValueFilter(chip.dataset.filter, chip.dataset.value, container);
 }
 
@@ -4602,8 +4299,6 @@ function runSheetTool(tool, container) {
       focusVisibleTool(container, { force: true });
     } else if (tool === 'manage-categories') {
       openTaskCategoryManager(container);
-    } else if (tool === 'manage-tags') {
-      openTagManager(container);
     }
   });
 }
@@ -4650,7 +4345,7 @@ async function resetTaskFilters(container) {
  * `state.tasks` beantwortet eine andere Frage: es ist die GEFILTERTE Liste
  * dieser Ansicht. Der Standardfilter zeigt nur `open` (schliesst also
  * „In Bearbeitung" aus), das Kanban laesst den Statusfilter ganz weg, und
- * Priorität, Zuweisung und Tags engen zusaetzlich ein. Aus dieser Liste
+ * Priorität und Zuweisung engen zusaetzlich ein. Aus dieser Liste
  * gezaehlt sprang die Zahl beim blossen Wechsel zwischen Liste und Kanban -
  * ohne dass sich an den Daten etwas geaendert haette. Dieselbe Zahl stand
  * ausserdem in zwei ZONEN: der Server rechnet in der Haushaltszone, eine
@@ -4708,32 +4403,12 @@ function persistAssignedToMe() {
   try { localStorage.setItem(ASSIGNED_TO_ME_KEY, isAssignedToMe() ? '1' : '0'); } catch {}
 }
 
-/** Ist dieser Tag gerade gefiltert? Schreibweise zählt dabei nicht. */
-function hasTagFilter(tag) {
-  const key = String(tag).toLowerCase();
-  return state.filters.tags.some((active) => active.toLowerCase() === key);
-}
-
-/**
- * Tag im Filter an- oder abwählen. Mehrere Tags engen UND-verknüpft ein, also
- * fügt ein Klick hinzu statt zu ersetzen.
- */
-async function toggleTagFilter(tag, container) {
-  const key = String(tag).toLowerCase();
-  state.filters.tags = hasTagFilter(tag)
-    ? state.filters.tags.filter((active) => active.toLowerCase() !== key)
-    : [...state.filters.tags, tag];
-  if (state.filters.tags.length) saveRecentFilter(state.filters);
-  renderFilters(container);
-  await loadTasks(container);
-}
-
 /**
  * Ein gespeichertes Filter-Set auf die aktuelle Form bringen.
  *
  * Einzelne Strings stammen aus Einträgen, die vor der jeweiligen Mehrfachauswahl
- * im localStorage gelandet sind - `tag` vor der Tag-Auswahl, `status`,
- * `priority` und `assigned_to` vor #671. Ohne die Umschreibung wären das dort
+ * im localStorage gelandet sind - `status`, `priority` und `assigned_to`
+ * vor #671. Eine alte Tag-Achse faellt hier weg: die App kennt keine Tags mehr. Ohne die Umschreibung wären das dort
  * keine Arrays, und der erste `.includes` darauf risse die Seite auf, für Werte,
  * die niemand mehr absichtlich gesetzt hat.
  */
@@ -4744,7 +4419,6 @@ function normalizeFilterSet(f = {}) {
     priority:    asList(f.priority),
     assigned_to: asList(f.assigned_to),
     category:    asList(f.category),
-    tags:        asList(Array.isArray(f.tags) ? f.tags : (f.tag ? [f.tag] : [])),
   };
 }
 
@@ -4774,7 +4448,7 @@ async function toggleValueFilter(key, value, container) {
  * Getrennt von `getRecentFilters()`, weil `saveRecentFilter()` sonst die
  * gefilterte Fassung zurueckschriebe: das waere Bereinigen beim Schreiben durch
  * die Hintertuer, und ein einmal unvollstaendiger Referenzbestand (Ladefehler,
- * noch nicht geladene Tags) haette die Chips fuer immer entfernt.
+ * noch nicht geladene Kategorien) haette die Chips fuer immer entfernt.
  */
 function storedRecentFilters() {
   try {
@@ -4786,8 +4460,7 @@ function storedRecentFilters() {
  * Die gemerkten Sets, wie sie ANGEBOTEN werden duerfen.
  *
  * Was ein Set nennt, kann verschwinden, nachdem es gespeichert wurde: eine
- * geloeschte Kategorie, ein umbenannter oder zusammengefuehrter Tag, ein
- * entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
+ * geloeschte Kategorie, ein entferntes Haushaltsmitglied. Bliebe der Wert im Chip, brachte ein Klick ihn
  * in `state.filters` zurueck, die Liste filterte auf etwas, das es nicht mehr
  * gibt - dauerhaft leer, und ein Neuladen aenderte nichts, weil der Wert im
  * localStorage steht.
@@ -4803,7 +4476,7 @@ function storedRecentFilters() {
  */
 function getRecentFilters() {
   const sets = storedRecentFilters();
-  // Nach einem Ladefehler stehen `users`, `categories` und `allTags` auf `[]`
+  // Nach einem Ladefehler stehen `users` und `categories` auf `[]`
   // (siehe den catch-Zweig in render()). „Leer" hiesse dann „gibt es nicht",
   // und ein Serverfehler naehme dem Nutzer seine gemerkten Filter weg - genau
   // die Verwechslung aus dem Leer-Zweig, die der Ladefehler-Zustand behebt.
@@ -4817,10 +4490,9 @@ function getRecentFilters() {
   if (state.loadError) return sets;
 
   // JE ACHSE: eine Liste, die gerade nicht nachweislich frisch ist, beschneidet
-  // nicht - die beiden anderen schon. `null` heisst hier „kein Urteil".
+  // nicht - die andere schon. `null` heisst hier „kein Urteil".
   const stale = state.metaStale;
   const knownCategories = stale.categories ? null : new Set(state.categories.map((c) => c.key));
-  const knownTags       = stale.tags       ? null : new Set(state.allTags.map((entry) => entry.tag.toLowerCase()));
   const knownUsers      = stale.users      ? null : new Set(state.users.map((u) => String(u.id)));
 
   const beschnitten = sets
@@ -4828,14 +4500,11 @@ function getRecentFilters() {
       ...f,
       assigned_to: knownUsers ? f.assigned_to.filter((id) => knownUsers.has(String(id))) : f.assigned_to,
       category:    knownCategories ? f.category.filter((key) => knownCategories.has(key)) : f.category,
-      // Tag-Vergleich kleingeschrieben, wie ueberall sonst in dieser Datei
-      // (`hasTagFilter`): der Server behaelt die Schreibweise des Anlegens.
-      tags:        knownTags ? f.tags.filter((tag) => knownTags.has(String(tag).toLowerCase())) : f.tags,
     }))
     // Ein Set, von dem nichts uebrig bleibt, ist kein Chip mehr. Es bliebe
     // sonst als leere Pille stehen und setzte beim Klick alle Filter zurueck.
     .filter((f) => f.status.length || f.priority.length || f.assigned_to.length
-      || f.category.length || f.tags.length);
+      || f.category.length);
 
   // Und was nach dem Beschneiden gleich AUSSIEHT, ist auch gleich: „Offen +
   // Garten" faellt mit „Offen" zusammen, sobald es Garten nicht mehr gibt.
@@ -4866,36 +4535,16 @@ function getRecentFilters() {
  * Achse dazukommt - und dann still.
  */
 function recentFilterKey(f) {
-  // STRUKTURELL KODIERT, NICHT MIT TRENNZEICHEN VERKETTET.
-  //
-  // Hier stand `join(',')` INNERHALB einer Achse, und das Komma darf in einem
-  // Wert vorkommen: `normalizeTags` splittet nur eine STRING-Eingabe an
-  // Kommas, ein Array-Element behaelt seines (`normalizeTags(['a,b'])` ->
-  // `['a,b']`), und die Route nimmt Arrays. Damit ergaben der eine Tag `a,b`
-  // und die zwei Tags `a` und `b` denselben Schluessel: `getRecentFilters`
-  // verbarg den einen Chip als Dublette, und `saveRecentFilter` verdraengte
-  // beim Speichern den jeweils anderen.
-  //
-  // Das `join('|')` DARUEBER war dagegen in Ordnung, auch wenn ein Tag ein
-  // `|` tragen darf: die Achsenzahl ist fest, also bleibt jede Position
-  // eindeutig. Eine Probe dafuer stand hier kurz und wurde wieder entfernt -
-  // sie blieb gruen, wenn man den alten Trenner zuruecknahm, und maass damit
-  // nichts. Ersetzt wird er trotzdem mit, weil eine Formel mit zwei Regeln
-  // schwerer zu halten ist als eine ohne.
-  //
-  // Der Server hat dieselbe Frage schon beantwortet und begruendet
-  // (`tagsKey` in server/utils/task-tags.js trennt mit U+0000, "weil ein Tag
-  // Leerzeichen enthalten darf"). JSON braucht die Frage gar nicht erst zu
-  // stellen: es kodiert die Achsen als Struktur, also kann kein Wert seinen
-  // eigenen Trenner tragen. Der Schluessel wird bei jedem Aufruf neu gerechnet
-  // und nirgends gespeichert - die geaenderte Form braucht keine Migration.
+  // STRUKTURELL KODIERT, NICHT MIT TRENNZEICHEN VERKETTET: JSON kodiert die
+  // Achsen als Struktur, also kann kein Wert seinen eigenen Trenner tragen. Der
+  // Schluessel wird bei jedem Aufruf neu gerechnet und nirgends gespeichert.
   const axis = (values) => [...values].map((v) => String(v).toLowerCase()).sort();
-  return JSON.stringify([f.status, f.priority, f.assigned_to, f.category, f.tags].map(axis));
+  return JSON.stringify([f.status, f.priority, f.assigned_to, f.category].map(axis));
 }
 
 function saveRecentFilter(filters) {
   const set = normalizeFilterSet(filters);
-  if (!set.status.length && !set.priority.length && !set.assigned_to.length && !set.category.length && !set.tags.length) return;
+  if (!set.status.length && !set.priority.length && !set.assigned_to.length && !set.category.length) return;
   const key = recentFilterKey(set);
   const recent = storedRecentFilters().filter((f) => recentFilterKey(f) !== key);
   recent.unshift(set);
@@ -5373,7 +5022,7 @@ function wireToolbar(container) {
     const item = pageToolsActionEl(e.target);
     if (!item || item.disabled) return;
     // Der Fokus steht auf einem Eintrag, den das Menue gerade versteckt hat.
-    // Ein Dialog (Kategorien, Tags) gaebe ihn beim Schliessen dorthin zurueck,
+    // Ein Dialog (Kategorien) gaebe ihn beim Schliessen dorthin zurueck,
     // und er fiele aufs Dokument - also vorher auf den Menueknopf.
     toolbar.querySelector('.page-tools-btn')?.focus();
     switch (item.dataset.action) {
@@ -5392,17 +5041,8 @@ function wireToolbar(container) {
       case 'bulk-archive':
         runBulkAction('archive', container);
         break;
-      case 'bulk-tag-add':
-        runBulkAction('tag-add', container);
-        break;
-      case 'bulk-tag-remove':
-        runBulkAction('tag-remove', container);
-        break;
       case 'manage-categories':
         if (!readOnly()) openTaskCategoryManager(container);
-        break;
-      case 'manage-tags':
-        if (!readOnly()) openTagManager(container);
         break;
       default:
     }
@@ -5442,9 +5082,8 @@ function wireNewTaskBtn(container) {
  * DIE PILLE IST EINZEILIG, und ihre Kapseln schrumpfen nie - also traegt sie
  * drei: den Status, Loeschen und „Fertig", den sichtbaren Ausstieg. Der Status
  * ist EINE Kapsel, die dem Bestand folgt: sind alle gewaehlten Aufgaben
- * erledigt, heisst sie „Offen", sonst „Erledigt". Ablegen und die beiden
- * Tag-Aktionen stehen waehrend der Auswahl beschriftet im Werkzeugmenue
- * (syncBulkMenu). Gemessen bei 390px (2026-09-27): mit „Archivieren" als
+ * erledigt, heisst sie „Offen", sonst „Erledigt". Ablegen steht waehrend der
+ * Auswahl beschriftet im Werkzeugmenue (syncBulkMenu). Gemessen bei 390px (2026-09-27): mit „Archivieren" als
  * vierter Kapsel blieben dem Subjekt auf Deutsch 30 von 86px („3 …"), und
  * Ungarisch („Befejezettként jelölés") liefe ueber die Pille hinaus.
  *
@@ -5496,14 +5135,14 @@ function updateBulkActionsBar(container) {
 }
 
 /**
- * Ablegen und die Tag-Eintraege des Werkzeugmenues gibt es nur waehrend der
- * Auswahl, und erst mit einer Aufgabe darin sind sie bedienbar.
+ * Ablegen im Werkzeugmenue gibt es nur waehrend der Auswahl, und erst mit
+ * einer Aufgabe darin ist es bedienbar.
  */
 function syncBulkMenu(container) {
   const menu = container?.querySelector?.('#tasks-tools-menu');
   if (!menu) return;
   const on = state.bulkSelectMode && !readOnly();
-  menu.querySelectorAll('.popover-menu__item[data-action="bulk-archive"], .popover-menu__item[data-action^="bulk-tag-"]').forEach((item) => {
+  menu.querySelectorAll('.popover-menu__item[data-action="bulk-archive"]').forEach((item) => {
     item.hidden = !on;
     item.disabled = !on || state.selectedTaskIds.size === 0;
   });
@@ -5518,11 +5157,6 @@ async function runBulkAction(action, container) {
   // Löschen läuft über dasselbe Optimistic-Undo-Muster wie der Einzel-Delete.
   if (action === 'delete') {
     handleBulkDelete(taskIds, container);
-    return;
-  }
-
-  if (action === 'tag-add' || action === 'tag-remove') {
-    openBulkTagDialog(taskIds, action === 'tag-add' ? 'add' : 'remove', container);
     return;
   }
 
@@ -5620,22 +5254,14 @@ const ARCHIVE_BATCH = 500;
  *
  * Geschickt werden die IDs, die die Ansicht zeigt, nie "alles Erledigte": was
  * jemand anderes erledigt, nachdem die Liste gezeichnet war, bleibt liegen.
- * Gesperrte Aufgaben ueberspringt der Server und zaehlt sie; der Toast sagt
- * das, statt eine stille Teilausfuehrung als Erfolg zu melden. Neu geladen
- * wird in jedem Fall, auch nach einem Fehler.
+ * Neu geladen wird in jedem Fall, auch nach einem Fehler.
  */
 async function archiveTaskIds(taskIds, container) {
-  let skipped = 0;
   try {
     for (let i = 0; i < taskIds.length; i += ARCHIVE_BATCH) {
-      const res = await api.post('/tasks/archive', { ids: taskIds.slice(i, i + ARCHIVE_BATCH) });
-      skipped += res?.data?.skipped ?? 0;
+      await api.post('/tasks/archive', { ids: taskIds.slice(i, i + ARCHIVE_BATCH) });
     }
-    window.yuvomi.showToast(
-      skipped
-        ? `${t('tasks.bulkArchived')} ${t('tasks.tagsSkippedLocked', { count: skipped })}`
-        : t('tasks.bulkArchived'),
-      'success');
+    window.yuvomi.showToast(t('tasks.bulkArchived'), 'success');
   } catch (err) {
     window.yuvomi.showToast(err.message ?? t('common.errorGeneric'), 'danger');
   }
@@ -6080,9 +5706,6 @@ function openTaskView(task, reminder, container, { pane = null } = {}) {
     // eingehaengt wuerde.
     edit: readOnly() ? null : {
       mount: (panel, pane) => {
-        // Working-Set VOR dem Rendern setzen: renderTagChips in wireTaskForm
-        // liest ihn direkt danach.
-        modalTags = normalizeTagList(task.tags);
         pane.insertAdjacentHTML('beforeend', renderModalContent({ task, users: state.users, reminder }));
         wireTaskForm(panel, { task, container });
       },
@@ -6274,12 +5897,7 @@ async function renderTaskPane(id, body, signal, container) {
   const slow = setTimeout(() => {
     if (signal.aborted) return;
     body.replaceChildren();
-    body.insertAdjacentHTML('beforeend', `
-      <div class="tasks-pane-skeleton" aria-hidden="true">
-        <div class="skeleton skeleton-line skeleton-line--medium"></div>
-        <div class="skeleton skeleton-line skeleton-line--full"></div>
-        <div class="skeleton skeleton-line skeleton-line--short"></div>
-      </div>`);
+    body.insertAdjacentHTML('beforeend', loadingSpinnerHtml());
   }, 150);
   let task = null;
   let reminder = null;
@@ -6384,12 +6002,16 @@ function mountTaskSplit(container, signal) {
 /**
  * Das Blatt dieses Moduls sicherstellen, wenn es von aussen geoeffnet wird.
  *
- * DER ROUTER HAELT GENAU EIN SEITEN-BLATT (loadPageStyle in router.js). Auf der
- * Uebersicht ist das dashboard.css, im Kalender calendar.css - tasks.css ist
- * dort nicht geladen. Die Leseansicht einer Aufgabe UND das Bearbeiten-Formular
+ * DER ROUTER LAESST GENAU EIN SEITEN-BLATT GELTEN (loadPageStyle in router.js).
+ * Auf der Uebersicht ist das dashboard.css, im Kalender calendar.css - tasks.css
+ * gilt dort nicht. Es kann trotzdem im Dokument stehen: seit Schnell-Erfassen
+ * (Aufgabe 3) bleiben besuchte und gewaermte Seitenblaetter geladen und ruhen
+ * (utils/page-style.js), und ein ruhendes Blatt steht auch in
+ * `document.styleSheets`. Gefragt wird deshalb, ob es GILT (isStyleApplied).
+ * Die Leseansicht einer Aufgabe UND das Bearbeiten-Formular
  * holen ihr Aussehen aber von dort: Kommentare, Dokument-Chips,
  * Bildvorschauen, Etiketten, Prioritaets-Abzeichen, der Serienverlauf, und im
- * Formular die Tag-Zeile und die Feldhinweise. Ohne dieses Blatt erscheint das
+ * Formular die Feldhinweise. Ohne dieses Blatt erscheint das
  * alles fast ungestaltet - gemessen kam ein Etikett mit `border-radius: 0`
  * heraus und die Autorenzeile eines Kommentars mit Gewicht 400.
  *
@@ -6406,28 +6028,13 @@ function mountTaskSplit(container, signal) {
  * Schoenheitsfehler, kein Grund, die Aufgabe nicht zu zeigen.
  */
 function ensureTaskStyles() {
-  const href = '/styles/tasks.css';
-  // Auch das Seiten-Blatt des Routers zaehlt: steht man auf /tasks, ist es da.
-  if ([...document.styleSheets].some((sheet) => (sheet.href ?? '').endsWith(href))) return Promise.resolve();
-  const vorhanden = document.querySelector(`link[data-task-styles][href="${href}"]`);
-  if (vorhanden) return vorhanden.dataset.ready === '1'
-    ? Promise.resolve()
-    : new Promise((resolve) => vorhanden.addEventListener('load', resolve, { once: true }));
-
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = href;
-  link.dataset.taskStyles = '';
-  const ready = new Promise((resolve) => {
-    link.onload = () => { link.dataset.ready = '1'; resolve(); };
-    link.onerror = () => { link.dataset.ready = '1'; resolve(); };
-  });
-  document.head.appendChild(link);
-  return ready;
+  // Das Blatt bleibt hier fuer die Sitzung stehen (kein release): die Aufgaben-Wege
+  // (Lese-, Bearbeiten-, Neu-Blatt, Diktat) haben keinen gemeinsamen Schliessen-Punkt.
+  return ensureStyleApplied('/styles/tasks.css').then(() => {});
 }
 
 /**
- * Mitglieder, Kategorien und Tags einmal holen, wenn diese Seite noch nie
+ * Mitglieder und Kategorien einmal holen, wenn diese Seite noch nie
  * stand. Ohne sie blieben @-Erwaehnungen unaufgeloest, die Kategoriezeile
  * zeigte ihren internen Schluessel und das Formular haette keine Auswahl
  * anzubieten.
@@ -6441,11 +6048,9 @@ async function ensureTaskMeta() {
   try {
     const { data: meta = {}, fromCache } = await api.getWithSource('/tasks/meta/options');
     const alleStale = fromCache === true;
-    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
+    state.metaStale = { users: alleStale, categories: alleStale };
     state.users         = meta.users      ?? state.users;
     state.categories    = meta.categories ?? state.categories;
-    state.allTags       = meta.tags       ?? state.allTags;
-    state.defaultPoints = Number(meta.default_points) || state.defaultPoints;
   } catch { /* Ansicht steht auch ohne - nur weniger aufgeloest. */ }
 }
 
@@ -6457,6 +6062,26 @@ function takeOutsideViewer(user) {
 }
 
 /**
+ * Was das Blatt "Neue Aufgabe" ausserhalb dieser Seite braucht: Stile,
+ * Mitglieder und Kategorien - und wer es oeffnet (#830). Ohne Kategorien
+ * liefe ein Speichern in die Ablehnung, also bricht es hier ab.
+ *
+ * @param {{user?: object|null}} [opts]
+ * @returns {Promise<object[]>} die Mitglieder (fuer den lokalen Parser des Diktats)
+ */
+export async function prepareNewTask({ user = null } = {}) {
+  await Promise.all([ensureTaskStyles(), ensureTaskMeta()]);
+  takeOutsideViewer(user);
+  if (!state.categories.length) throw new Error(t('tasks.loadError'));
+  return state.users;
+}
+
+/** Das Blatt "Neue Aufgabe", nachdem prepareNewTask gelaufen ist (Diktat von aussen). */
+export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false } = {}) {
+  openTaskModal({ users: state.users, onChanged, draft, spoken }, null);
+}
+
+/**
  * Eine Aufgabe ANLEGEN, ohne auf dieser Seite zu stehen (Dziś v2, 2026-10-27).
  *
  * „Dodaj zadanie" auf Dziś oeffnet DASSELBE Formular wie das „Nowe zadanie"
@@ -6464,16 +6089,23 @@ function takeOutsideViewer(user) {
  * wird hier, was das Formular braucht (Blatt, Mitglieder, Kategorien); nach
  * dem Speichern frischt `onChanged` die aufrufende Flaeche auf.
  *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} opts
+ * Mit `dictate` („Say a task", Quick-Add) gibt es VOR dem Hoerblatt kein
+ * await: startTaskDictation (components/task-dictation.js) oeffnet es und
+ * startet die Erkennung noch in diesem Aufruf und laedt daneben. Wer aus
+ * einem Tipp heraus erst diese Seite importieren muss, ruft
+ * startTaskDictation direkt - ein `await import()` davor kostet in Safari
+ * die Nutzergeste.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
+ *          draft?: object|null, dictate?: boolean}} opts
  * @returns {Promise<boolean>} false, wenn nichts geoeffnet wurde (nur lesend,
  *          oder ohne Kategorien - ein Speichern liefe in die Ablehnung).
  */
-export async function openNewTaskFrom({ user = null, onChanged = () => {} } = {}) {
+export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null, dictate = false } = {}) {
   if (readOnly()) return false;
-  await Promise.all([ensureTaskStyles(), ensureTaskMeta()]);
-  takeOutsideViewer(user);
-  if (!state.categories.length) throw new Error(t('tasks.loadError'));
-  openTaskModal({ users: state.users, onChanged }, null);
+  if (dictate) return startTaskDictation({ user, onChanged });
+  await prepareNewTask({ user });
+  openTaskModal({ users: state.users, onChanged, draft }, null);
   return true;
 }
 
@@ -6536,7 +6168,6 @@ export async function openTaskById(taskId, { user = null, container = null, onCh
     onChanged,
     edit: !canOfferEdit ? null : {
       mount: (panel, pane) => {
-        modalTags = normalizeTagList(task.tags);
         pane.insertAdjacentHTML('beforeend', renderModalContent({ task, users: state.users, reminder }));
         // `container` reist MIT, obwohl es hier die Uebersicht ist und keine
         // Aufgabenliste haelt: sein zweiter Zweck ist das Ausblenden der Zeile
@@ -6620,7 +6251,7 @@ export async function render(container, { user, signal } = {}) {
           <!-- KOPFREGEL MOBIL (2026-09-26): unter dem Large Title EINE Zeile -
                Such-Icon, Ansicht, „Filter (n)" und EIN Werkzeugmenue, wie in
                den Dokumenten. Vorher standen hier sechs lose Knoepfe (Liste,
-               Kanban, Verlauf, Mehrfachauswahl, Kategorien, Tags), die Suche
+               Kanban, Verlauf, Mehrfachauswahl, Kategorien), die Suche
                fiel dadurch allein in eine dritte Zeile, und darunter kam noch
                eine Chipzeile: Kopf 176px, erste Aufgabe bei y=287 (A3 P1-2).
                Die Chipzeile ist ins Filterblatt gewandert - "Offen", "Mir
@@ -6672,16 +6303,11 @@ export async function render(container, { user, signal } = {}) {
               (utils/bulk-pill.js, updateBulkActionsBar), wie in Einkauf,
               Kontakten und Vorrat - nicht mehr als eigene Leiste ueber der
               Liste (Re-Critique 2026-09-27, D5). */ ''}
-        <div class="tasks-who" id="tasks-who" role="group" aria-label="${esc(t('tasks.whoLabel'))}" hidden></div>
+        <div class="tasks-who" id="tasks-who" role="group" aria-label="${esc(t('tasks.whoSwitcherLabel'))}" hidden></div>
         <div class="sr-only" role="status" aria-live="polite" id="tasks-reorder-announce"></div>
         <div class="split-view tasks-split">
         <div id="task-list" class="split-view__list">
-          ${[1,2,3].map(() => `
-            <div class="widget-skeleton" style="margin-bottom:var(--space-2)">
-              <div class="skeleton skeleton-line skeleton-line--medium" style="height:18px;margin-bottom:var(--space-3)"></div>
-              <div class="skeleton skeleton-line skeleton-line--full" style="height:14px;margin-bottom:var(--space-2)"></div>
-              <div class="skeleton skeleton-line skeleton-line--short" style="height:12px"></div>
-            </div>`).join('')}
+          ${loadingSpinnerHtml()}
         </div>
         ${splitViewDetailHtml({
           id: 'tasks',
@@ -6728,13 +6354,11 @@ export async function render(container, { user, signal } = {}) {
     const meta = metaData.data ?? {};
     // `/tasks/meta/options` bringt als einziger Pfad alle drei.
     const alleStale = metaData.fromCache === true;
-    state.metaStale = { users: alleStale, categories: alleStale, tags: alleStale };
+    state.metaStale = { users: alleStale, categories: alleStale };
     state.tasks = tasksData.data ?? [];
     state.users = meta.users ?? [];
     state.displayPeople = (displayPeople.data ?? []).filter((p) => p.can_tick_off);
     state.categories = meta.categories ?? [];
-    state.allTags = meta.tags ?? [];
-    state.defaultPoints = Number(meta.default_points) || 0;
     state.subtasksExpandedByDefault = preferencesData.data?.tasks_subtasks_expanded === true;
     state.defaultSyncTarget = preferencesData.data?.tasks_default_target || '';
     restoreWho();
@@ -6751,9 +6375,7 @@ export async function render(container, { user, signal } = {}) {
     state.users = [];
     state.displayPeople = [];
     state.categories = [];
-    state.allTags = [];
-    state.metaStale = { users: false, categories: false, tags: false };
-    state.defaultPoints = 0;
+    state.metaStale = { users: false, categories: false };
     state.subtasksExpandedByDefault = false;
     state.defaultSyncTarget = '';
   }
@@ -6766,7 +6388,7 @@ export async function render(container, { user, signal } = {}) {
   wireTaskList(container);
   wireWhoSegment(container);
   wireBulkEscape(container);
-  wireTagBadgeFilter(container);
+  wireGroupToggle(container);
   renderFilters(container);
   // Im Verlauf holt renderTaskList den Bestand selbst nach - er steckt nicht in
   // `/tasks`, und sein Ladefehler ist ein eigener.
@@ -6817,7 +6439,7 @@ export const __test = {
   // muss so viele Spalten legen, wie diese Liste fuehrt, und genau dort ist es
   // einmal auseinandergelaufen. `toggleKanbanCol` kommt mit, damit der
   // eingeklappte Zustand gesetzt werden kann, ohne in den Speicher zu greifen.
-  kanbanBoardHtml, KANBAN_COLS, toggleKanbanCol, taskAdvancedTopics,
+  kanbanBoardHtml, KANBAN_COLS, toggleKanbanCol,
   // Mobil blaettert das Brett (R9 M2): die Punkte ueber den Spalten und ihr
   // Tipp, der zur Spalte fuehrt.
   kanbanPagerHtml, wireKanbanPager,
@@ -6844,15 +6466,9 @@ export const __test = {
   // beim Lesen uebergangen.
   restoreAssignedToMe, persistAssignedToMe,
   // Der Aufgaben-Dialog als Markup: welche Felder er zeigt und wen er anbietet.
-  renderModalContent,
-  // Der Erinnerungs-Abschnitt einzeln, weil er einen Zustand zu BENENNEN hat,
-  // den seine Auswahlliste nicht abbildet: eine Erinnerung nach der
-  // Faelligkeit. Was der Abschnitt dabei sagt, ist der halbe Fix - die andere
-  // Haelfte ist, dass das Speichern daraus nicht rechnet.
-  renderReminderSection, reminderRemindAtFromForm, afterDueResolution,
-  // Die Verdrahtung steht mit hier: die Regel allein zu messen hiesse, den
-  // haeufigsten Ausfall auszulassen - einen Listener, den niemand anhaengt.
-  syncReminderAfterDue, wireReminderAfterDue,
+  // Dazu das Oeffnen (Entwurf, "Noch einmal sagen") und die Verdrahtung des
+  // Blatts - aufklappen, entfernen, Schnellwahl (test:task-sheet).
+  renderModalContent, openTaskModal, wireTaskSheet,
   // Der Countdown-Riegel und WANN er sich erklaert (Critique 2026-09-26: die
   // Warnung stand auf jedem leeren Formular).
   wireCountdownGate,
@@ -6879,9 +6495,9 @@ export const __test = {
   // und Schalterweg im Blatt steht mit hier, weil er die Verdrahtung ist.
   renderFilters, activeFilterCount, toolsMenuItems, filterSheetGroups, syncFilterSheet,
   onFilterSheetClick, onFilterSheetChange, resetTaskFilters,
-  // Die Frische der Referenzlisten ist nur verhaltensgetrieben pruefbar: sie
-  // haengt daran, WIE die Antwort kam, nicht daran, dass eine kam.
-  refreshTags,
+  // Der Gruppenkopf klappt per Delegation am Container - nur ueber einen
+  // Klick auf einen Kopf pruefbar, nicht ueber den Quelltext.
+  wireGroupToggle,
   // Erinnerungen liegen im Kalender-Modul (siehe reminderAccess). Der Riegel
   // steht an ZWEI Stellen - im Markup und im Speichern -, und nur der zweite
   // entscheidet, ob eine Anfrage rausgeht. Ein Textguard kann das nicht sehen:

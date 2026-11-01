@@ -13,7 +13,7 @@
  * von Quellen mit EINER Zeilenform, und Cockpit wie Wand lesen dieselbe.
  *
  * DIE ZEILE. Jede Quelle liefert Objekte dieser Form:
- *   kind      'dose' | 'approval' | ... - was die Zeile ist (Anker, Dedupe)
+ *   kind      'dose' | ... - was die Zeile ist (Anker, Dedupe)
  *   sortKey   'HH:MM' - Platz im Tag; Zeitloses ordnet sich ein:
  *             00:00 schon faellig, 00:01 den ganzen Tag, 00:02 heute ohne Zeit
  *   tone      Raum der Zeile (CSS `today-cockpit-card--<tone>`, `wall-row--<tone>`)
@@ -118,36 +118,6 @@ export const TODAY_SHEET_SOURCES = [
         route: '/health',
         who: null,
         priority: 10,
-        open: true,
-      }];
-    },
-  },
-  {
-    // Wartende Freigaben - entscheiden duerfen nur Admins (PATCH
-    // /rewards/redemptions/:id), also spricht die Zeile nur zu ihnen. Ein Kind
-    // sieht seine eigene Anfrage auf der Belohnungsseite, nicht als Auftrag.
-    // Wer freigibt, sagt die ANTWORT (`rewards.view`, dieselbe Pruefung wie
-    // das Modul): in der Sicht `self` zaehlt `pending` die eigenen Bitten des
-    // Kindes, und die waeren hier als „Freigabe" gelesen worden.
-    id: 'approvals',
-    module: 'rewards',
-    widget: 'rewards',
-    collect(data) {
-      if (data?.rewards?.view !== 'approver') return [];
-      const pending = (Number(data?.rewards?.pending) || 0) + (Number(data?.rewards?.moneyPending) || 0);
-      if (!pending) return [];
-      return [{
-        kind: 'approval',
-        objectId: null,
-        sortKey: SORT_TODAY,
-        timeLabel: '',
-        title: t('dashboard.rewardsPending', { count: pending }),
-        sub: t('nav.rewards'),
-        icon: MODULE_ICON.rewards,
-        tone: 'rewards',
-        route: '/rewards',
-        who: null,
-        priority: 20,
         open: true,
       }];
     },

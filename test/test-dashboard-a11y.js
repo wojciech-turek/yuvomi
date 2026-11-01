@@ -73,6 +73,9 @@ test('am Wandtablett hakt Dziś nichts ab und legt nichts an (#1808, v2)', () =>
   assert.match(dashboardSource, /canCheck: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
   assert.match(dashboardSource, /canAddTask: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
   assert.doesNotMatch(dashboardSource, /canCustomize/);
+  // Quick-Add (2026-10-29): auch das + steht nie am Display (test:add-menu
+  // prueft das Verhalten von todayAddFab).
+  assert.match(dashboardSource, /function todayAddFab\(\{ user, access, onClick \}\) \{\s*if \(user\?\.access_scope === 'display'\) return null;/);
 });
 
 // 2026-10-27, v2: „Abbrechen fragt nur, wenn es etwas zu verlieren gibt"
@@ -235,14 +238,31 @@ test('R14 P2: die Wand sammelt nicht - dort klappt nichts auf', async () => {
 // Erfassen-Blatt (dasselbe wie das + neben der Kapsel), statt eines Menues.
 // 2026-10-27, v2: Blatt, + und die Pille auf Dziś sind weg - jede Seite legt
 // in ihrem eigenen Kopf an. Dziś baut weder Speed-Dial noch Knopf.
+// Quick-Add (2026-10-29): Dziś hat wieder EIN + (siehe den Test darunter) - es
+// oeffnet das eigene Menue, nicht das globale Erfassen.
 test('R14/v2: die Uebersicht baut keinen Speed-Dial und ruft kein globales Erfassen', () => {
   assert.equal(__test.renderFab, undefined, 'kein Knopf-Bauer mehr, auch kein leerer');
   assert.doesNotMatch(dashboardSource, /openCapture|capture-sheet|capture-plus|yuvomi:captured/, 'kein globales Erfassen mehr');
   assert.doesNotMatch(dashboardSource, /FAB_ACTIONS|FAB_NEW_BTN|function wireNewMenu/, 'der Speed-Dial ist entfallen');
 });
 
-test('v2: auf dem Telefon traegt die Uebersicht keinen eigenen Knopf', () => withStage(true, () => {
-  assert.doesNotMatch(dashboardSource, /class="page-fab"|id="fab-main"/, 'Dziś zeichnet keinen schwebenden Knopf');
+// Quick-Add (2026-10-29, Owner: „a '+' sign bottom right that lets me pick
+// what i want to add"): Dziś traegt GENAU EINEN Knopf, das + `fab-add`, das das
+// Menue zum Hinzufuegen oeffnet (components/add-menu.js). Gebaut ueber die
+// geteilte Fabrik, nicht als Markup; Speed-Dial und globales Erfassen bleiben weg.
+test('Quick-Add: Dziś traegt genau einen Knopf - das + fab-add, gebaut von createPageFab', () => withStage(true, () => {
+  assert.doesNotMatch(dashboardSource, /class="page-fab"|id="fab-main"|'fab-main'|pageFabHtml\(|page-fab-group/,
+    'kein Markup-Knopf, kein Speed-Dial');
+  const fabs = dashboardSource.match(/createPageFab\(\{[^}]*\}\)/g) ?? [];
+  assert.equal(fabs.length, 1, 'genau ein Knopf');
+  assert.match(fabs[0], /id: 'fab-add'/);
+  assert.match(fabs[0], /label: t\('dashboard\.addMenuLabel'\)/);
+  assert.match(fabs[0], /dockLabel: t\('dashboard\.addMenuLabel'\)/);
+  assert.match(fabs[0], /icon: 'plus'/);
+  // Nachgeladen, nicht beim Start: der Finger auf dem + holt es (pointerdown),
+  // der Tipp wartet auf denselben Import (Quick-Add F8, `loadAddMenu`).
+  assert.match(dashboardSource, /import\('\/components\/add-menu\.js'\)/, 'er oeffnet das Menue - nachgeladen');
+  assert.match(dashboardSource, /await loadAddMenu\(\)/, 'der Tipp wartet auf das Menue');
 }));
 
 // Critique 2026-10-16: jede Kachel fuehrt mit „Alle" zu ihrer Seite, nur die

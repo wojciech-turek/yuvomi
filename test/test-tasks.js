@@ -249,7 +249,7 @@ test('Filter-Achsen halten Listen, nicht einzelne Werte', () => {
   // kennt wie die beiden.
   assert(/const DEFAULT_STATUS_FILTER = Object\.freeze\(\['open'\]\);/.test(source),
     'der Standard-Status ist eine Liste');
-  assert(/const defaultFilters = \(\) => \(\{ status: \[\.\.\.DEFAULT_STATUS_FILTER\], priority: \[\], assigned_to: \[\], category: \[\], tags: \[\] \}\);/.test(source),
+  assert(/const defaultFilters = \(\) => \(\{ status: \[\.\.\.DEFAULT_STATUS_FILTER\], priority: \[\], assigned_to: \[\], category: \[\] \}\);/.test(source),
     'der Anfangszustand muss je Achse eine Liste sein');
   assert(/filters:\s*defaultFilters\(\),/.test(source), 'der Zustand beginnt mit dem Standard');
   for (const axis of ['status', 'priority', 'assigned_to', 'category']) {

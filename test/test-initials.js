@@ -259,7 +259,6 @@ const FORMER_COPIES = {
   'settings/pages/personal-account.js': "function initials(name) {\n  if (!name) return '?';\n  return name\n    .split(' ')\n    .map((part) => part[0])\n    .slice(0, 2)\n    .join('')\n    .toUpperCase();\n}",
   'pages/birthdays.js': "function initials(name) {\n  return String(name || '')\n    .split(/\\s+/)\n    .filter(Boolean)\n    .slice(0, 2)\n    .map((part) => part[0]?.toUpperCase() || '')\n    .join('') || '?';\n}",
   'pages/tasks.js, dashboard.js, housekeeping.js': "function initials(name = '') {\n  return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();\n}",
-  'pages/rewards.js': "function initials(name = '') {\n  return name.split(' ').filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase() || '?';\n}",
   'pages/contacts.js': "function initials(name) {\n  const parts = String(name || '').trim().split(/\\s+/).filter(Boolean);\n  if (!parts.length) return '?';\n  const first = parts[0][0] || '';\n  const last  = parts.length > 1 ? parts[parts.length - 1][0] : '';\n  return (first + last).toUpperCase();\n}",
   'pages/calendar.js (personInitials)': "function personInitials(name) {\n  return String(name ?? '')\n    .split(' ')\n    .map((w) => w[0] ?? '')\n    .join('')\n    .toUpperCase()\n    .slice(0, 2);\n}",
   'pages/schedule.js': "  const initials = (name ?? '').split(' ').map((w) => w[0] ?? '').join('').toUpperCase().slice(0, 2);",
@@ -470,23 +469,6 @@ test('Geburtstage: Zeile und Vorschau', async () => {
   assertShows(birthdays.birthdayPreviewHtml(MINSU, null), '민수', 'Vorschau');
 });
 
-test('Belohnungen: die Punktestandszeile', async () => {
-  const { __test: rewards } = await import('../public/pages/rewards.js');
-  const s = rewards.state;
-  const before = { user: s.user, overview: s.overview, catalog: s.catalog, redemptions: s.redemptions, prevBalances: s.prevBalances };
-  const member = { id: 3, display_name: MINSU, avatar_color: '#34C759', balance: 20 };
-  try {
-    s.user = { role: 'admin' };
-    s.overview = { me: 1, balances: [member] };
-    s.catalog = [];
-    s.redemptions = [];
-    s.prevBalances = new Map();
-    assertShows(rewards.renderStandingRow(member), '민수', 'Punktestand');
-  } finally {
-    Object.assign(s, before);
-  }
-});
-
 test('Hauspersonal: die Zeile einer Kraft', async () => {
   const { __test: hk } = await import('../public/pages/housekeeping.js');
   const state = hk.state();
@@ -631,7 +613,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const { __test: schedule } = await import('../public/pages/schedule.js');
   const { __test: contacts } = await import('../public/pages/contacts.js');
   const { __test: birthdays } = await import('../public/pages/birthdays.js');
-  const { __test: rewards } = await import('../public/pages/rewards.js');
   const { __test: hk } = await import('../public/pages/housekeeping.js');
   const wallView = await import('../public/components/wall-view.js');
   const todayView = await import('../public/components/today-view.js');
@@ -662,12 +643,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
       family_user_id: 5, family_display_name: name,
     }),
     Geburtstagsvorschau: (name) => birthdays.birthdayPreviewHtml(name, null),
-    'Belohnungen Punktestand': (name) => {
-      const member = { id: 3, display_name: name, avatar_color: '#34C759', balance: 20 };
-      return withState(rewards.state, {
-        user: { role: 'admin' }, overview: { me: 1, balances: [member] }, catalog: [], redemptions: [], prevBalances: new Map(),
-      }, () => rewards.renderStandingRow(member));
-    },
     Hauspersonal: (name) => withState(hk.state(), {
       workers: [{ id: 7, display_name: name, current_session: null, today_session: null }],
     }, () => hk.renderWorkerSummary()),

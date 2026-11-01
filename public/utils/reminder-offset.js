@@ -1,18 +1,19 @@
 /**
- * Reminder-Offset-Helfer (rein, ohne DOM/i18n)
- * Zweck: Rückrechnung des Versatzes zwischen Task-Fälligkeit und gespeichertem
- *        `remind_at`, sowie Auflösung auf ein UI-Preset.
+ * Erinnerungs-Zeitpunkte (rein, ohne DOM/i18n)
+ * Zweck: `remind_at` lesen und schreiben - als Zeitpunkt (Kalender,
+ *        Leseansicht) und als feste Wanduhrzeit der Haushaltszone (das Blatt
+ *        „Neue Aufgabe", Quick-Add 2026-10-29).
  *
- * Wichtig: `remind_at` wird beim Speichern via `Date#toISOString()` als UTC
- * abgelegt (ohne abschließendes "Z"). Daher muss es hier ebenfalls als UTC
- * interpretiert werden — sonst entsteht ein doppelter Zeitzonen-Offset, der
- * sich bei jedem Speichern erneut aufaddiert (Issue #354).
+ * Wichtig: `remind_at` wird als UTC abgelegt (ohne abschließendes "Z"). Daher
+ * muss es hier ebenfalls als UTC interpretiert werden — sonst entsteht ein
+ * doppelter Zeitzonen-Offset, der sich bei jedem Speichern erneut aufaddiert
+ * (Issue #354).
  *
- * Die Faelligkeit ist dagegen WANDUHRZEIT der Haushaltszone und wird ueber
- * `dueInstantMs` in einen Zeitpunkt umgerechnet - nicht per `new Date()`, das
- * die Ziffern in der Zone des Geraets liest (#1522).
+ * Die Vorlauf-Auswahl des Aufgaben-Dialogs (Presets, Rueckrechnung aus der
+ * Faelligkeit) ist mit Quick-Add entfallen: eine Aufgaben-Erinnerung ist eine
+ * feste Uhrzeit und wandert nicht mit der Faelligkeit.
  */
-import { wallTimeToInstantMs } from './timezone.js';
+import { wallTimeToInstantMs, zonedFields } from './timezone.js';
 
 const TZ_SUFFIX = /[zZ]|[+-]\d{2}:?\d{2}$/;
 
@@ -25,75 +26,6 @@ const TZ_SUFFIX = /[zZ]|[+-]\d{2}:?\d{2}$/;
 export function parseRemindAtAsUtc(value) {
   return new Date(TZ_SUFFIX.test(value) ? value : `${value}Z`);
 }
-
-/**
- * Die Faelligkeit als Zeitpunkt: Datum plus Uhrzeit, ohne Uhrzeit 23:59:59 -
- * gelesen in der Haushaltszone, nicht in der des Geraets (#1522).
- * @returns {number|null} ms seit Epoch, oder null bei unlesbarer Faelligkeit
- */
-function dueInstantMs(dueDate, dueTime) {
-  return wallTimeToInstantMs(`${dueDate}T${dueTime || '23:59:59'}`);
-}
-
-/**
- * Millisekunden-Versatz zwischen Fälligkeit (Haushaltszone) und Erinnerung (UTC).
- * @returns {number|null} positiver Versatz in ms, oder null bei fehlenden Daten
- */
-export function parseOffsetMsFromReminder(task, reminder) {
-  if (!task?.due_date || !reminder?.remind_at) return null;
-  const due = dueInstantMs(task.due_date, task.due_time);
-  const remind = parseRemindAtAsUtc(reminder.remind_at);
-  if (due === null || Number.isNaN(remind.getTime())) return null;
-  return due - remind.getTime();
-}
-
-const PRESET_MAP = new Map([
-  [0, 'offset_at_time'],
-  [15 * 60 * 1000, 'offset_15m'],
-  [60 * 60 * 1000, 'offset_1h'],
-  [24 * 60 * 60 * 1000, 'offset_1d'],
-  [2 * 24 * 60 * 60 * 1000, 'offset_2d'],
-  [7 * 24 * 60 * 60 * 1000, 'offset_1w'],
-  [14 * 24 * 60 * 60 * 1000, 'offset_2w'],
-]);
-
-/**
- * Löst Task + Reminder auf das passende UI-Preset auf.
- *
- * EIN VERSATZ KANN NEGATIV SEIN, und dann bildet ihn kein Preset ab. `remind_at`
- * ist ein absoluter Zeitpunkt, der Vorlauf wird daraus zurückgerechnet - zieht
- * jemand die Fälligkeit VOR die bestehende Erinnerung, liegt die Erinnerung
- * danach. Vorher fiel dieser Fall auf `offset_at_time` zurück: der Dialog
- * behauptete „Zum Startzeitpunkt", während die Erinnerung Tage später feuerte,
- * und das nächste Speichern verschob sie ungefragt auf die behauptete Stelle.
- * Jetzt bekommt der Fall einen eigenen Namen (`offset_after_due`), den die
- * Oberfläche benennen und beim Speichern unangetastet lassen kann.
- *
- * Unter einer Minute Versatz bleibt „zum Zeitpunkt" - in BEIDE Richtungen,
- * sonst hinge an ein paar Sekunden Rundung eine Warnung.
- *
- * @returns {{ preset: string, amount: string, unit: string }}
- */
-export function resolveReminderPreset(task, reminder) {
-  const offset = parseOffsetMsFromReminder(task, reminder);
-  if (offset === null) return { preset: 'offset_15m', amount: '15', unit: 'minutes' };
-  if (PRESET_MAP.has(offset)) return { preset: PRESET_MAP.get(offset), amount: '1', unit: 'days' };
-  const minutes = Math.round(offset / 60000);
-  if (minutes > 0) return { preset: 'offset_custom', amount: String(minutes), unit: 'minutes' };
-  if (minutes < 0) return { preset: 'offset_after_due', amount: '1', unit: 'days' };
-  return { preset: 'offset_at_time', amount: '1', unit: 'days' };
-}
-
-const UNIT_FACTOR_MS = new Map([
-  ['minutes', 60 * 1000],
-  ['hours', 60 * 60 * 1000],
-  ['days', 24 * 60 * 60 * 1000],
-  ['weeks', 7 * 24 * 60 * 60 * 1000],
-]);
-
-const PRESET_OFFSET_MS = new Map(
-  [...PRESET_MAP].map(([ms, preset]) => [preset, ms])
-);
 
 /**
  * Schreibt einen `remind_at`-Wert so, wie ihn der Server ablegt: naiv-UTC ohne
@@ -110,47 +42,39 @@ export function naiveUtc(value) {
   return date.toISOString().slice(0, 19);
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const pad2 = (n) => String(n).padStart(2, '0');
+
 /**
- * Der Zeitpunkt, den ein Preset ergibt - die Gegenrichtung zu
- * `resolveReminderPreset`.
- *
- * `offset_after_due` RECHNET NICHT. Für diesen Zustand gibt es keinen Vorlauf,
- * aus dem sich etwas rechnen ließe; gerechnet würde hier stets das Falsche, und
- * der einzige ehrliche Wert ist der gespeicherte Zeitpunkt selbst. Deshalb
- * reicht der Fall `storedRemindAt` unverändert durch, statt die Erinnerung beim
- * Speichern stillschweigend zu verschieben.
- *
- * @param {string} preset UI-Preset (`offset_15m`, `offset_custom`, ...)
- * @param {{dueDate?: string, dueTime?: string|null, amount?: number|string,
- *          unit?: string, storedRemindAt?: string|null}} options
- * @returns {string|null} naiv-UTC `YYYY-MM-DDTHH:MM:SS`, oder null wenn das
- *          Preset keinen Zeitpunkt ergibt (fehlende Fälligkeit, ungültiger
- *          Custom-Wert, kein gespeicherter Zeitpunkt zum Behalten).
+ * Eine feste Erinnerung: Datum + Uhrzeit als Wanduhr der Haushaltszone, abgelegt
+ * als naiv-UTC wie `remind_at` (siehe `parseRemindAtAsUtc`).
+ * @param {string} date `YYYY-MM-DD`
+ * @param {string} time `HH:MM`
+ * @returns {string|null} `YYYY-MM-DDTHH:MM:SS` in UTC, null bei unlesbarer Eingabe
  */
-export function remindAtFromPreset(preset, {
-  dueDate = '', dueTime = null, amount = 0, unit = 'days', storedRemindAt = null,
-} = {}) {
-  if (preset === 'offset_after_due') return naiveUtc(storedRemindAt);
-  if (preset === 'offset_none' || !dueDate) return null;
+export function remindAtFromWallTime(date, time) {
+  if (!DATE_RE.test(String(date ?? '')) || !TIME_RE.test(String(time ?? ''))) return null;
+  const ms = wallTimeToInstantMs(`${date}T${time}:00`);
+  if (ms === null || Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19);
+}
 
-  let offsetMs;
-  if (preset === 'offset_custom') {
-    const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    // Eine unbekannte Einheit wird NICHT geraten. Die abgeloeste Kette liess
-    // sie in den letzten else-Zweig fallen und rechnete sie als Wochen - das
-    // war der Zufall einer Schreibweise, keine Entscheidung. Aus dem Auswahlfeld
-    // kommen nur die vier bekannten Werte; kaeme je ein fuenfter, ist eine
-    // Fehlermeldung ehrlicher als ein stillschweigend falscher Zeitpunkt.
-    const factor = UNIT_FACTOR_MS.get(unit);
-    if (factor === undefined) return null;
-    offsetMs = value * factor;
-  } else {
-    offsetMs = PRESET_OFFSET_MS.get(preset);
-    if (offsetMs === undefined) return null;
-  }
-
-  const due = dueInstantMs(dueDate, dueTime);
-  if (due === null) return null;
-  return new Date(due - offsetMs).toISOString().slice(0, 19);
+/**
+ * Die Gegenrichtung: ein gespeichertes `remind_at` als Datum + Uhrzeit der
+ * Haushaltszone.
+ * @param {string} remindAt naiv-UTC (oder mit Zonen-Suffix)
+ * @returns {{date: string, time: string}|null}
+ */
+export function wallTimeFromRemindAt(remindAt) {
+  if (!remindAt) return null;
+  const when = parseRemindAtAsUtc(String(remindAt));
+  if (Number.isNaN(when.getTime())) return null;
+  const f = zonedFields(when);
+  if (!f) return null;
+  return {
+    date: `${f.year}-${pad2(f.month)}-${pad2(f.day)}`,
+    time: `${pad2(f.hour)}:${pad2(f.minute)}`,
+  };
 }

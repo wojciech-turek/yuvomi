@@ -140,8 +140,8 @@ test('solange ein Statuswechsel laeuft, ist der Nachbarknopf gesperrt', async ()
   // DER GRUND IST KEIN KOSMETISCHER. `btnLoading()` sperrt nur den angeklickten
   // Knopf, und solange je Status genau einer dastand, war das vollstaendig. Mit
   // Erledigen UND Starten nebeneinander kann jemand auf einer langsamen Leitung
-  // beide ausloesen: der erste Aufruf bucht Punkte, schreibt die Erledigung fort
-  // und legt bei einer Serie die naechste Instanz an - der zweite liest `done`
+  // beide ausloesen: der erste Aufruf schreibt die Erledigung fort und legt
+  // bei einer Serie die naechste Instanz an - der zweite liest `done`
   // vor, storniert alles davon und LOESCHT die Folgeinstanz.
   const knoepfe = new Map();
   const machKnopf = (id) => {

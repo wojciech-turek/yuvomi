@@ -128,7 +128,7 @@ export function displaysPaths() {
       get: op({
         summary: 'List the people a paired display may act for',
         tag: 'Displays',
-        description: 'For paired displays only; a signed-in person gets 403 and uses GET /api/v1/family/members instead. Returns the household members (#1207) with name, colour and picture, plus `can_tick_off` and `can_redeem`, which say whether that person may write the Tasks module and whether they may write Rewards and take part in them. The contact details that /family/members carries are deliberately absent: a tablet hangs in the open, and a picker needs a face and a name, not a phone number. The two flags follow the same permission resolution the write routes apply, so the picker never offers someone the next call would refuse (#1209).',
+        description: 'For paired displays only; a signed-in person gets 403 and uses GET /api/v1/family/members instead. Returns the household members (#1207) with name, colour and picture, plus `can_tick_off`, which says whether that person may write the Tasks module. The contact details that /family/members carries are deliberately absent: a tablet hangs in the open, and a picker needs a face and a name, not a phone number. The flag follows the same permission resolution the write route applies, so the picker never offers someone the next call would refuse (#1209).',
       }),
     },
     '/api/v1/displays/{id}/devices/{deviceId}/revoke': {

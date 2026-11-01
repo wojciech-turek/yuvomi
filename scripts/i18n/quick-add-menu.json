@@ -1,0 +1,6 @@
+{
+  "dashboard.addMenuLabel": { "en": "Add", "pl": "Dodaj" },
+  "dashboard.addMenuTitle": { "en": "What to add?", "pl": "Co dodać?" },
+  "dashboard.addMenuSayHint": { "en": "“Wyrzuć śmieci jutro wieczorem”", "pl": "„Wyrzuć śmieci jutro wieczorem”" },
+  "dashboard.addMenuShopping": { "en": "Shopping item", "pl": "Do kupienia" }
+}

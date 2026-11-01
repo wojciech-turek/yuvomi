@@ -156,6 +156,12 @@
   gap: var(--space-0h);
 }
 
+/* Die Leiste steht beim Aufbau leer da (shopping.js) und haelt die Hoehe der
+ * Pillen, damit die Liste nicht nach unten springt, wenn die Tabs kommen. */
+.list-tabs-bar:empty {
+  min-block-size: 36px; /* die Hoehe der Pillen */
+}
+
 /* One row per list: check (only on the chosen one), name, open count. */
 .list-tab {
   display: flex;

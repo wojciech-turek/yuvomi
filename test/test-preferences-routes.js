@@ -94,7 +94,6 @@ test('GET / liefert die dokumentierten Defaults', async () => {
   assert.deepEqual(body.data.visible_meal_types, ['breakfast', 'lunch', 'dinner', 'snack']);
   // Feature-Schalter default an (fehlender Wert => aktiv).
   assert.equal(body.data.health_cycle_enabled, true);
-  assert.equal(body.data.rewards_require_approval, true);
   assert.equal(body.data.tasks_subtasks_expanded, false);
   // The kitchen wall (Tafla): read-only and every section on until an admin decides.
   assert.equal(body.data.wall_allow_ticking, false);
@@ -438,7 +437,7 @@ test('PUT dashboard_widgets: aktuelle 13-Widget-Konfiguration bleibt beim GET er
     { id: 'family', visible: true, order: 6, size: '1x1' },
     { id: 'meals', visible: true, order: 7, size: '1x1' },
     { id: 'budget', visible: true, order: 8, size: '1x1' },
-    { id: 'rewards', visible: true, order: 9, size: '1x2' },
+    { id: 'waste', visible: true, order: 9, size: '1x2' },
     { id: 'health', visible: true, order: 10, size: '2x1' },
     { id: 'cycle', visible: false, order: 11, size: '2x1' },
     { id: 'housekeeping', visible: true, order: 12, size: '1x1' },
@@ -477,6 +476,15 @@ test('PUT calendar_default_reminders: Validierung + dedup/sort persist', async (
 test('PUT calendar_default_assign_me: Boolean -> per-user persist', async () => {
   assert.equal((await put({ calendar_default_assign_me: true })).body.data.calendar_default_assign_me, true);
   assert.equal((await put({ calendar_default_assign_me: false })).body.data.calendar_default_assign_me, false);
+});
+
+test('module_order: ein gespeichertes rewards kommt nicht mehr zurueck, Punkte-Felder sind weg', async () => {
+  cfgSet('module_order:user:1', JSON.stringify(['calendar', 'rewards', 'tasks']));
+  const d = (await get()).body.data;
+  assert.deepEqual(d.module_order, ['calendar', 'tasks']);
+  assert.equal('rewards_require_approval' in d, false);
+  assert.equal('tasks_default_points' in d, false);
+  cfgDelete('module_order:user:1');
 });
 
 test('PUT module_order: Nicht-Array -> 400, gültige Liste -> per-user round-trip', async () => {
@@ -601,11 +609,6 @@ test('das Zyklus-Opt-out gilt pro Person, nicht fuer den Haushalt (#760)', async
   cfgDelete('health_cycle_enabled:user:7');
 });
 
-test('PUT rewards_require_approval: Mitglied -> 403, Admin non-boolean 400, false persist', async () => {
-  assert.equal((await put({ rewards_require_approval: false }, { role: 'member' })).status, 403);
-  assert.equal((await put({ rewards_require_approval: 'no' }, { role: 'admin' })).status, 400);
-  assert.equal((await put({ rewards_require_approval: false }, { role: 'admin' })).body.data.rewards_require_approval, false);
-});
 test('PUT tasks_subtasks_expanded: Mitglied -> 403, Admin non-boolean 400, true persist', async () => {
   assert.equal((await put({ tasks_subtasks_expanded: true }, { role: 'member' })).status, 403);
   assert.equal((await put({ tasks_subtasks_expanded: 'yes' }, { role: 'admin' })).status, 400);

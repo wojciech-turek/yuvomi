@@ -351,7 +351,7 @@ test('ein neuer Termin startet weiterhin direkt im Formular', async () => {
 
 test('die Termin-Verdrahtung ist zweigeteilt', async () => {
   const src = await calendarJs();
-  assert.match(src, /function wireEventForm\(panel, \{ mode, event = null, reminder = null \}\)/);
+  assert.match(src, /function wireEventForm\(panel, \{ mode, event = null, reminder = null, onChanged = null \}\)/);
   assert.match(src, /onSave\(panel\) \{ wireEventForm\(panel/, 'openEventModal nutzt dieselbe Verdrahtung');
   assert.match(src, /mount: \(panel, pane\) =>/, 'die Detailansicht mountet das Formular später');
 
@@ -465,11 +465,19 @@ test('jeder Weg zu einer bestehenden Aufgabe führt in die Detailansicht', async
   assert.match(src, /openTaskView\(task, reminder, container, \{ pane: body \}\)/,
     'die Detailspalte zeigt dieselbe Leseansicht, nicht eine eigene');
 
-  // Übrig bleibt genau ein openTaskModal-Aufruf: der FAB für neue Aufgaben.
+  // Übrig bleiben die Anlege-Pfade: der FAB für neue Aufgaben und, seit
+  // Quick-Add (2026-10-29), das gefüllte Blatt nach einem Diktat
+  // (`dictateOverSheet`). Keiner reicht eine Aufgabe herein - eine bestehende
+  // Aufgabe öffnet weiter nur die Detailansicht.
   // Die Definition darüber trägt Defaults (`= {}`) und zählt nicht mit.
   const modalCalls = [...src.matchAll(/^\s+openTaskModal\(\{.*\}, container\);$/gm)];
-  assert.equal(modalCalls.length, 1, 'nur der Anlege-Pfad öffnet noch direkt das Formular');
-  assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'und zwar ohne task');
+  assert.equal(modalCalls.length, 2, 'nur die Anlege-Pfade öffnen noch direkt das Formular: FAB und Diktat');
+  assert.ok(modalCalls.every((m) => !/\btask\b/.test(m[0])), 'keiner mit einer Aufgabe');
+  assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'der FAB ohne task');
+  // Das Diktat: ein neues, gefülltes Blatt - vom Mikrofon im Titelfeld aus mit
+  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`).
+  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true \}, container\)/,
+    'das Diktat: ein neues, gefülltes Blatt');
 });
 
 test('die Wisch-Geste heißt Ansehen, nicht Bearbeiten', async () => {
@@ -478,20 +486,17 @@ test('die Wisch-Geste heißt Ansehen, nicht Bearbeiten', async () => {
   assert.doesNotMatch(src, /tasks\.swipeEdit/, 'der alte ist ersetzt, nicht umgedeutet');
 });
 
-test('die Aufgaben-Verdrahtung ist zweigeteilt und behält die Tag-Reihenfolge', async () => {
+test('die Aufgaben-Verdrahtung ist zweigeteilt und kennt keine Tag-Working-Sets mehr', async () => {
   const src = await tasksJs();
   assert.match(src, /function wireTaskForm\(panel, \{ task = null, container = null, onChanged = \(\) => loadTasks\(container\) \}\)/);
 
-  // modalTags ist ein Working-Set, das renderTagChips direkt nach dem Rendern
-  // liest - es muss VOR renderModalContent gesetzt werden. Der Mount-Block
-  // steht seit #918 in dieser Datei und nicht mehr in der Ansicht: das Formular
-  // gehört dem Modul, die Leseansicht bekommt es gereicht.
+  // Der Mount-Block steht seit #918 in dieser Datei und nicht mehr in der
+  // Ansicht: das Formular gehört dem Modul, die Leseansicht bekommt es gereicht.
   const mountStart = src.indexOf('mount: (panel, pane) =>');
   const mount = src.slice(mountStart, src.indexOf('wireTaskForm(panel, { task, container });', mountStart));
   assert.ok(mount.length > 0, 'der Mount-Block muss auffindbar sein');
-  const tags = mount.indexOf('modalTags =');
-  const render = mount.indexOf('renderModalContent(');
-  assert.ok(tags > -1 && render > -1 && tags < render, 'modalTags wird vor dem Rendern gesetzt');
+  assert.ok(mount.includes('renderModalContent('), 'der Mount-Block rendert das Formular');
+  assert.doesNotMatch(src, /modalTags/, 'kein Tag-Working-Set mehr');
 });
 
 
@@ -587,8 +592,12 @@ test('wer die Aufgabe von aussen oeffnet, bekommt ihr Blatt (#918)', async () =>
   assert.match(src, /function ensureTaskStyles\(\)/, 'der Einstieg von aussen stellt das Blatt sicher');
   const fn = src.slice(src.indexOf('function ensureTaskStyles()'),
                        src.indexOf('export async function openTaskById('));
-  assert.match(fn, /link\.onload/, 'und WARTET darauf - sonst steht der Inhalt einmal roh da');
-  assert.match(fn, /link\.onerror/, 'ein fehlendes Blatt darf die Aufgabe nicht verschlucken');
+  // Seit Schnell-Erfassen (Aufgabe 10) im geteilten Baustein: ensureStyleApplied.
+  assert.match(fn, /ensureStyleApplied\('\/styles\/tasks\.css'\)/, 'ueber den geteilten Baustein');
+  const shared = await readFile(new URL('../public/utils/page-style.js', import.meta.url), 'utf8');
+  const helper = shared.slice(shared.indexOf('export async function ensureStyleApplied'));
+  assert.match(helper, /link\.onload/, 'und WARTET darauf - sonst steht der Inhalt einmal roh da');
+  assert.match(helper, /link\.onerror/, 'ein fehlendes Blatt darf die Aufgabe nicht verschlucken');
   assert.match(src, /ensureTaskStyles\(\),/,
     'der Aufruf haengt im selben await wie das Laden der Aufgabe');
 
@@ -662,9 +671,12 @@ test('die Aufgaben-Detailansicht führt die Leseinformationen der Karte', async 
   const fn = src.slice(src.indexOf('function renderTaskDetail'), src.indexOf('export function openTaskDetail'));
   // Seit R18 stehen Faelligkeit und Personen im Kopf (taskDetailHead).
   for (const key of ['tasks.statusLabel', 'tasks.priorityLabel', 'tasks.startDateLabel',
-    'tasks.categoryLabel', 'tasks.pointsLabel', 'tasks.tagsLabel',
+    'tasks.categoryLabel',
     'tasks.subtasksLabel', 'tasks.documentsLabel', 'tasks.descriptionLabel']) {
     assert.match(fn, new RegExp(reLiteral(key)), `${key} fehlt in der Detailansicht`);
+  }
+  for (const key of ['tasks.tagsLabel', 'tasks.lockedLabel']) {
+    assert.doesNotMatch(fn, new RegExp(reLiteral(key)), `${key} steht nicht mehr in der Detailansicht`);
   }
   // Der Anker ab Erledigung reist als zweites Argument mit (#658), die Zeile
   // bleibt aber die geteilte - deshalb offen bis zur Klammer statt exakt.
@@ -1228,8 +1240,8 @@ test('R19: schmal stehen Label und Wert einer Textzeile in einer Zeile, wo die A
 // R19 (Critique 2026-10-16, Heuristik 3): "Aufgabe bearbeiten" hatte mobil vier
 // Auswege - Zurueck, x, Abbrechen, Papierkorb. Im Formular einer Leseansicht
 // ist Abbrechen jetzt der eine Rueckweg in die Leseansicht, der Kopfknopf
-// "Zurueck" faellt dann weg; und der Countdown liegt ausgeschaltet hinter
-// "Weitere Einstellungen" wie Wiederholung und Erinnerung.
+// "Zurueck" faellt dann weg; und der Countdown liegt hinter "Mehr" (seit
+// Quick-Add 2026-10-29 auch eingeschaltet - die Zeile von "Mehr" nennt ihn).
 test('R19: im Formular einer Leseansicht fuehrt Abbrechen zurueck, der Kopf traegt kein zweites Zurueck', async () => {
   const dv = await read('public/components/detail-view.js');
   const form = dv.slice(dv.indexOf('async function switchToForm('), dv.indexOf('function switchToDetail('));
@@ -1238,11 +1250,11 @@ test('R19: im Formular einer Leseansicht fuehrt Abbrechen zurueck, der Kopf trae
     'vor dem delegierten close-modal der Seite, und nur im Formular');
   assert.match(form, /label: t\('common\.back'\),\s*onClick: \(\) => switchToDetail\(panel, opts, state\),\s*hidden: Boolean\(state\.formCancel\),/,
     'mit Abbrechen im Fuss kein Kopf-Zurueck');
+  // Quick-Add (2026-10-29): der Countdown liegt immer hinter „Mehr" - die
+  // Zeile von „Mehr" nennt ihn, sobald er eingeschaltet ist (moreSummary).
   const tasks = await read('public/pages/tasks.js');
-  assert.match(tasks, /const countdownTucked = !task\?\.countdown;/);
-  assert.match(tasks, /\$\{countdownTucked \? '' : countdownHtml\}/, 'ein gesetzter Countdown bleibt im Hauptteil');
-  assert.match(tasks, /\$\{countdownTucked \? `<div class="task-form__tucked">\$\{countdownHtml\}<\/div>` : ''\}/, 'ausgeschaltet hinter dem Aufklapper');
-  assert.match(tasks, /countdown \? t\('dashboard\.countdownTitle'\) : null,/, 'und die Zeile des Aufklappers nennt ihn');
+  assert.match(tasks, /task\.countdown \? t\('tasks\.countdownDetail'\) : '',/, 'ein gesetzter Countdown steht in der Zeile von „Mehr"');
+  assert.doesNotMatch(tasks, /countdownTucked|task-form__tucked/, 'kein eigener Platz mehr im Hauptteil');
 });
 
 // R19 (Critique 2026-10-16, "Bearbeiten: mal gefuellt primaer, mal umrandet

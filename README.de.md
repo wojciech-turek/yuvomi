@@ -31,7 +31,7 @@
     <img src="docs/screenshots/de/dashboard-light-web.webp" alt="Die Yuvomi-Übersicht: Termine, Aufgaben und Einkauf des Tages für die ganze Familie, darunter Familie, Budget und Geburtstage" width="820">
   </picture>
 
-  <sub><b>20</b> Module&nbsp;&nbsp;·&nbsp; <b>26</b> Sprachen&nbsp;&nbsp;·&nbsp; <b>0</b> Tracker&nbsp;&nbsp;·&nbsp; optionale&nbsp;<b>AES&#8209;256</b>&#8209;Datenbankverschlüsselung</sub>
+  <sub><b>19</b> Module&nbsp;&nbsp;·&nbsp; <b>26</b> Sprachen&nbsp;&nbsp;·&nbsp; <b>0</b> Tracker&nbsp;&nbsp;·&nbsp; optionale&nbsp;<b>AES&#8209;256</b>&#8209;Datenbankverschlüsselung</sub>
 </div>
 
 Die meisten Haushalte kleben ihren Alltag aus einem Dutzend Bezahl-Apps zusammen, jede mit eigenem
@@ -57,7 +57,6 @@ Das ist der Teil, den ein Ordner voller Einzel-Apps nicht kann:
 
 - **Ein Import macht aus dem Wochenplan eine Einkaufsliste.** Die nächsten sieben Tage sind vorausgewählt, und jede Zutat landet nach Gang sortiert auf der gemeinsamen Liste.
 - **Das letzte Glas aus dem Vorrat kommt mit einem Tipp auf die Liste.** Nach dem Einkauf bucht ein Knopf, was ihr abgehakt habt, mit Menge und Einheit zurück in den Vorrat.
-- **Eine erledigte Aufgabe zahlt aus.** Punkte auf einer Aufgabe bekommt, wer sie erledigt hat - die zugewiesene Person oder die beim Abhaken ausgewählte -, und eingelöst werden sie in einem Belohnungskatalog, den ihr selbst bestimmt.
 - **Ein abgelegter Beleg hängt an der Buchung.** Einmal hochgeladen, gehört er gleichzeitig zur Buchung, zur geteilten Ausgabe und zum Inventargegenstand.
 
 ## An der Küchenwand, in jeder Hosentasche
@@ -69,18 +68,18 @@ Das ist der Teil, den ein Ordner voller Einzel-Apps nicht kann:
   </picture>
 </div>
 
-- **Das Tablet an der Küchenwand** zeigt im Wand-Modus den Tagesplan und wer heute dran ist, lesbar quer durch den Raum. Es hat ein eigenes Konto: Aufgabe antippen, auswählen, wer sie erledigt hat, und die Punkte gehen an diese Person. Steht es still, kann ein Immich-Bildschirmschoner eure eigenen Fotos zeigen.
+- **Das Tablet an der Küchenwand** zeigt im Wand-Modus den Tagesplan und wer heute dran ist, lesbar quer durch den Raum. Es hat ein eigenes Konto: Aufgabe antippen, auswählen, wer sie erledigt hat, und der Verlauf nennt diese Person. Steht es still, kann ein Immich-Bildschirmschoner eure eigenen Fotos zeigen.
 - **Die App auf jedem Handy** kommt direkt aus dem Browser auf den Startbildschirm, ohne App Store. Erinnerungen kommen als Mitteilung, auch wenn die App zu ist (dafür braucht euer Server HTTPS), und die zuletzt geöffnete Einkaufsliste bleibt lesbar, wenn kein Netz da ist.
 - **Jedes Mitglied kommt per Einladungslink** und wählt sein Passwort selbst; ein Kind ohne Handy bekommt sein Konto direkt angelegt. Je Familienrolle ist jedes Modul voll, nur lesen oder gar nicht freigegeben.
 
 [Mehr auf yuvomi.cloud](https://yuvomi.cloud/#family)
 
-## Die zwanzig Module
+## Die neunzehn Module
 
 Schaltet ab, was euer Haushalt nicht braucht, und es verschwindet für alle aus dem Menü. Inventar,
 Entsorgung und Schichtplan sind anfangs aus.
 
-- **Planen** - Aufgaben · Kalender · Belohnungen · Notizen · Schichtplan
+- **Planen** - Aufgaben · Kalender · Notizen · Schichtplan
 - **Haushalt** - Mahlzeiten · Rezepte · Einkauf · Vorrat · Haushaltshilfe · Entsorgung · Dokumente · Inventar
 - **Menschen** - Gesundheit · Kontakte · Geburtstage
 - **Finanzen** - Budget
@@ -102,7 +101,6 @@ Entsorgung und Schichtplan sind anfangs aus.
 | **Budget** | Einnahmen, Ausgaben, Konten, Darlehen, Abos und gemeinsame Ausgaben mit vereinfachten Schulden. |
 | **Haushaltshilfe** | Für Hilfen im Haushalt: Dienstpläne, Ein- und Ausstempeln, Abrechnung, Aufgaben und Materialwünsche. |
 | **Entsorgung** | Abholtermine je Abfallart, auch „der letzte Freitag", oder ein abonnierter kommunaler ICS-Kalender. Standardmäßig aus. |
-| **Belohnungen** | Punkte aus Aufgaben, ein elterlich freigegebener Katalog, ein nachvollziehbares Konto und Taschengeld je Kind. |
 | **Gesundheit** | Vitalwerte, Medikamente, Vorsorge, Laborwerte, Aktivität, Zyklus, ein Fastentagebuch und ein Ernährungstagebuch je Mitglied, mit Verlaufsdiagrammen. |
 | **Schichtplan** | Rotierende Schichten und feste Wochenpläne, als Ebene im Kalender eingeblendet. Standardmäßig aus. |
 | **Notizen &amp; Kontakte** | Markdown-Haftnotizen mit antippbaren Checklisten, dazu Kontakte mit CardDAV-Sync und vCard-Import/-Export. |

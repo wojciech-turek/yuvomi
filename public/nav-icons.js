@@ -360,7 +360,6 @@ export const MODULE_ICON = {
   waste:            'trash-2',
   documents:        'folder-lock',
   inventory:        'package',
-  rewards:          'award',
   contacts:         'book-user',
   birthdays:        'cake',
   health:           'heart-pulse',

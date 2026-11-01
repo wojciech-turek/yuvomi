@@ -1,7 +1,8 @@
 /**
  * Modul: Dashboard
- * Zweck: Startseite mit Begrüßung, Terminen, Aufgaben, Essen, Notizen und FAB
- * Abhängigkeiten: /api.js
+ * Zweck: Startseite mit Begrüßung, Terminen, Aufgaben, Essen, Notizen und dem +
+ *        (Quick-Add, 2026-10-29: es oeffnet das Menue zum Hinzufuegen)
+ * Abhängigkeiten: /api.js (das Menue, /components/add-menu.js, laedt beim Tipp)
  */
 
 import { api, auth } from '/api.js';
@@ -18,7 +19,8 @@ import { esc } from '/utils/html.js';
 // Bezugstag traegt - der Import kommt deshalb unter eigenem Namen herein.
 import { zonedDateKey } from '/utils/timezone.js';
 import { localizeBirthdayEvent } from '/utils/birthday-event.js';
-import { findPageFab } from '/utils/fab.js';
+import { findPageFab, createPageFab } from '/utils/fab.js';
+import { errorSentence } from '/utils/friendly-error.js';
 import { toggleRegion } from '/utils/ux.js';
 import { swapContent } from '/utils/content-swap.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
@@ -124,10 +126,14 @@ function getOnboardingSteps() {
     { mark: true,           title: t('onboarding.step1Title', { name: appName }), body: t('onboarding.step1Body') },
     { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
       target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
-    { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
+    // Quick-Add (2026-10-29): am Desktop nennt der Text beide Orte - das + von
+    // Dziś unten rechts (auf das der Ring zeigt) und das + der Module oben
+    // rechts im Kopf. Neuer Schluessel, weil sich die Aussage geaendert hat.
+    { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktopPlus' : 'onboarding.step3Body'),
       // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins
-      // steht; auf Dziś ist das „Dodaj zadanie" in der Karte der Aufgaben.
-      target: () => [...document.querySelectorAll('.page-fab, [data-today] .dz-tasks__add')].find(isShownOnScreen) ?? null },
+      // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add), sonst
+      // (Display, nur lesend) „Dodaj zadanie" in der Karte der Aufgaben.
+      target: () => [findPageFab('fab-add'), document.querySelector('[data-today] .dz-tasks__add')].find(isShownOnScreen) ?? null },
   ];
 }
 
@@ -832,6 +838,87 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
 }
 
 // --------------------------------------------------------
+// Das + auf Dziś (Quick-Add, 2026-10-29)
+// --------------------------------------------------------
+
+/* DER OWNER: „a '+' sign bottom right that lets me pick what i want to add and
+ * then opens the correct bottom sheet". Ein Knopf, `fab-add`, ueber die geteilte
+ * Fabrik (utils/fab.js); der Router hebt ihn in die Shell-Ebene, und weil Dziś
+ * keinen Kopf mit Aktions-Slot hat, schwebt er dort - am Telefon ueber der
+ * Leiste, am Desktop in derselben Ecke. Die Leiste selbst bekommt kein +.
+ * Er oeffnet components/add-menu.js; "Dodaj zadanie" in der Karte bleibt.
+ *
+ * DAS MENUE LAEDT BEIM TIPP, nicht mit dem Start (Review Task 12): es zieht
+ * das Hoerblatt samt Erkennung und Parser mit, und die gehoeren nicht in den
+ * Start der Startseite. Die Geste braucht erst "Say a task" - und deren Tipp
+ * kommt, wenn das Menue (und mit ihm task-dictation.js, statisch in
+ * add-menu.js) laengst steht. */
+
+/** Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js, ROWS). */
+const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping', 'meals']);
+
+/**
+ * Das Recht je Modul, das das Menue fragt - aus derselben Quelle wie der Rest
+ * von Dziś (moduleAccess); ein abgeschaltetes Modul zaehlt als 'none'.
+ * @returns {{ tasks: string, calendar: string, shopping: string, meals: string }}
+ */
+function todayAddAccess() {
+  const level = (module) => (globalThis.window?.yuvomi?.isModuleDisabled?.(module) ? 'none' : moduleAccess(module));
+  return Object.fromEntries(ADD_MENU_MODULES.map((module) => [module, level(module)]));
+}
+
+/**
+ * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an,
+ * wie bei Haken und „Dodaj zadanie") und wenn es nichts hinzuzufuegen gibt.
+ * „Nichts" heisst: kein Schreibrecht auf eines der vier Module - dieselbe
+ * Regel wie `addMenuItems()` (jede Zeile braucht es auf ihrem Modul), hier
+ * ohne das Menue zu laden; test:add-menu haelt beide gleich.
+ * @returns {HTMLButtonElement|null}
+ */
+function todayAddFab({ user, access, onClick }) {
+  if (user?.access_scope === 'display') return null;
+  if (!ADD_MENU_MODULES.some((module) => access?.[module] === 'write')) return null;
+  return createPageFab({ id: 'fab-add', label: t('dashboard.addMenuLabel'), icon: 'plus', dockLabel: t('dashboard.addMenuLabel'), onClick });
+}
+
+/**
+ * Legt das + in den Seiten-Root - im SYNCHRONEN Teil von render(): der Router
+ * hebt den Knopf direkt danach in die Shell-Ebene (adoptPageFab, auch nach
+ * einem Neuaufbau aus der Seite, replacePageFab). Die Rechte werden beim Tipp
+ * neu gelesen.
+ */
+function mountTodayAdd(container, { user, onChanged }) {
+  const fab = todayAddFab({ user, access: todayAddAccess(), onClick: () => { void openTodayAddMenu({ user, onChanged }); } });
+  if (!fab) return;
+  // Der Finger auf dem + holt das Menue schon (F8): zwischen pointerdown und
+  // click liegen am Telefon rund 100 ms - beim ersten Tipp wartet der Klick
+  // sonst auf den ganzen Modulgraphen (Menue, Hoerblatt, Parser).
+  fab.addEventListener('pointerdown', () => { loadAddMenu().catch(() => {}); }, { passive: true });
+  container.querySelector('.dashboard')?.appendChild(fab);
+}
+
+/** Das Menue-Modul, einmal geholt; ein Fehlschlag wird vergessen, der naechste Tipp versucht es neu. */
+let menuModule = null;
+function loadAddMenu() {
+  menuModule ??= import('/components/add-menu.js').catch((err) => {
+    menuModule = null;
+    throw err;
+  });
+  return menuModule;
+}
+
+/** Der Tipp auf das +: das Menue nachladen und oeffnen; scheitert das Laden, sagt es ein Toast. */
+async function openTodayAddMenu({ user, onChanged }) {
+  try {
+    const { openAddMenu } = await loadAddMenu();
+    openAddMenu({ user, onChanged, access: todayAddAccess() });
+  } catch (err) {
+    console.error('[Dashboard] Das Menue zum Hinzufuegen konnte nicht geladen werden:', err);
+    window.yuvomi?.showToast(errorSentence(err), 'danger');
+  }
+}
+
+// --------------------------------------------------------
 // Haupt-Render
 // --------------------------------------------------------
 
@@ -900,12 +987,20 @@ export async function render(container, { user, signal: routeSignal = null } = {
   // „Pytanie tygodnia" in Dziś, an der Stelle, die die Person waehlt
   // (loadTodayExtras, components/today-view.js).
 
+  // Das + (Quick-Add) steht mit dem Skelett, nicht erst nach den Daten - ein
+  // Tipp darauf soll nie ins Leere gehen. Nie auf der Wand. Nach einem
+  // Speichern frischt Dziś seine Daten auf; das geht erst, wenn sie da sind
+  // (`refreshToday` wird unten neben refreshDashboardData gesetzt).
+  let refreshToday = () => {};
+  if (!wallMode) mountTodayAdd(container, { user, onChanged: () => refreshToday() });
+
   // Ein Neuaufbau AUS DER SEITE HERAUS laeuft nicht durch renderPage() im
   // Router, und damit an dessen FAB-Wechsel vorbei (#634): den alten Knopf aus
   // der Shell-Ebene raeumen, den neuen aus dem Container dorthin heben. Der
-  // synchrone Teil von render() hat den Speed-Dial schon gelegt - oder, auf der
-  // Wand, keinen. Ohne diesen Schritt stand beim Betreten der alte Knopf auf der
-  // Wand und nach dem Verlassen der neue ohne Plus im Scrollport (#1588).
+  // synchrone Teil von render() hat das + schon gelegt (mountTodayAdd) - oder,
+  // auf der Wand, keines. Ohne diesen Schritt stand beim Betreten der alte
+  // Knopf auf der Wand und nach dem Verlassen der neue ohne Plus im Scrollport
+  // (#1588).
   const rerender = () => {
     const done = render(container, { user, signal: routeSignal });
     window.yuvomi?.replacePageFab?.();
@@ -933,7 +1028,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     wireWallExit(container, rerender, signal);
   }
 
-  let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, rewards: {}, health: {}, housekeeping: {} };
+  let data         = { upcomingEvents: [], urgentTasks: [], todayMeals: [], pinnedNotes: [], shoppingLists: [], birthdays: [], countdowns: [], users: [], budget: {}, health: {}, housekeeping: {} };
   // Ein Stand von vorhin darf keine Kachel versprechen: erst nach dem Laden
   // wieder wahr (siehe die Notiz an `countdownAvailable`).
   setCountdownAvailability([]);
@@ -1071,7 +1166,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   function renderToday(shell) {
     dzisState = buildDzisState();
-    const fromSkeleton = Boolean(shell.querySelector('.dz-skeleton'))
+    const fromSkeleton = Boolean(shell.querySelector('.page-loading'))
       && !document.documentElement.classList.contains('page-swapping');
     const { key: keepFocus } = captureRebuildFocus(shell, document.activeElement, document.body);
     swapContent(shell, () => setHtml(shell, renderTodayPage(dzisState)), { animate: fromSkeleton });
@@ -1393,12 +1488,12 @@ export async function render(container, { user, signal: routeSignal = null } = {
   rebuildDashboard();
 
   if (wallMode || loadFailed) {
-    // Kein FAB im Fehler-Zustand: seine Schnellaktionen würden in Module
-    // navigieren, deren Daten gerade nicht geladen werden konnten — das würde
-    // dem Fehler-Banner widersprechen. Retry stellt bei Erfolg alles her.
-    // Dokumentweit, nicht im Container: die Gruppe kann zu diesem Zeitpunkt
-    // schon in der Shell-Layer hängen (adoptPageFab, #634). Das Backdrop reist
-    // als ihr Kind mit und braucht keine zweite Zeile.
+    // Kein + im Fehler-Zustand: seine Blaetter laden aus denselben Modulen,
+    // deren Daten gerade nicht geladen werden konnten - das wuerde dem
+    // Fehler-Banner widersprechen. „Erneut versuchen" baut die Seite neu und
+    // legt das + wieder (mountTodayAdd). Dokumentweit, nicht im Container: der
+    // Knopf haengt zu diesem Zeitpunkt schon in der Shell-Layer (adoptPageFab,
+    // #634).
     //
     // Und keiner im Wand-Modus: eine Anlege-Affordance in einer reinen Anzeige
     // waere ein Versprechen, das die Flaeche nicht einloest. Er wird dort gar
@@ -1407,7 +1502,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
     // per CSS: eine Regel, die `.page-fab` auf `opacity: 0` oder
     // `pointer-events: none` setzt, ist seit #634 verboten (Guard in
     // test-frontend-audit.js).
-    findPageFab('fab-main')?.remove();
+    findPageFab('fab-add')?.remove();
   } else {
     // Die Popover-Menues der Seite (Werkzeuge, Kachelgroesse) - bis Tafla
     // verdrahtete sie wireNewMenu() mit, das mit dem Speed-Dial entfallen ist.
@@ -1430,6 +1525,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
   // Tab), bewusst ohne Skeleton (das gehört dem Erstaufbau) und still bei
   // Fehlern, wie der Wetter-Timer. Dziś ruft ihn auch nach jedem Haken auf.
   let refreshInFlight = false;
+  // Ab hier darf das + nach einem Speichern auffrischen (siehe mountTodayAdd).
+  refreshToday = () => refreshDashboardData();
   async function refreshDashboardData() {
     if (loadFailed || refreshInFlight) return;
     refreshInFlight = true;
@@ -1560,4 +1657,4 @@ async function loadPendingReminders(request = (path) => path, get = (path) => fe
   }
 }
 
-export const __test = { loadPendingReminders, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };
+export const __test = { todayAddFab, todayAddAccess, loadAddMenu, loadPendingReminders, renderWallSurface, createWallFit, rebuildWall, updateWallClock, wireWallSurface, weatherAvailableFrom, focusKeyOf, captureRebuildFocus, restoreFocusAfterRebuild };

@@ -79,7 +79,12 @@ function dismissAllReminders(dbPath) {
   }
 }
 
-/** Die 16 Hauptrouten - dieselbe Liste, die capture.mjs und head-audit belegen. */
+/** Die Hauptrouten - dieselbe Liste, die capture.mjs und head-audit belegen.
+ *
+ * Quick-Add (2026-10-29): `/rewards` steht nicht mehr hier. Nagrody ist mit
+ * Aufgabe 4 ausgebaut; die Adresse fuehrt seitdem als unbekannte Route auf
+ * Dziś (utils/unknown-route.js), und jede Sonde mass Dziś damit ein zweites
+ * Mal - seit Dziś sein + traegt, auch als zweiten „schwebenden" Knopf. */
 export const ROUTES = {
   dashboard: '/',
   tasks: '/tasks',
@@ -94,7 +99,6 @@ export const ROUTES = {
   budget: '/budget',
   documents: '/documents',
   health: '/health',
-  rewards: '/rewards',
   housekeeping: '/housekeeping',
   settings: '/settings',
 };

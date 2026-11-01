@@ -122,7 +122,7 @@ test('Mehrfachauswahl: ein POST /tasks/archive fuer alle, kein PATCH je Aufgabe'
   assert.deepEqual(toasts, [{ msg: 'tasks.bulkArchived', type: 'success' }]);
 });
 
-test('Mehrfachauswahl: uebersprungene gesperrte Aufgaben stehen im Toast', async () => {
+test('Mehrfachauswahl: der Toast kennt keine "gesperrt"-Meldung mehr', async () => {
   recordApi(() => ({ data: { archived: 1, skipped: 2 } }));
   const { click } = fakeContainer();
   select([21, 22, 23]);
@@ -131,7 +131,7 @@ test('Mehrfachauswahl: uebersprungene gesperrte Aufgaben stehen im Toast', async
 
   assert.equal(toasts.length, 1);
   assert.equal(toasts[0].type, 'success');
-  assert.match(toasts[0].msg, /tasks\.tagsSkippedLocked\{"count":2\}/);
+  assert.equal(toasts[0].msg, 'tasks.bulkArchived');
 });
 
 test('Mehrfachauswahl: nach einem Fehler wird trotzdem neu geladen', async () => {

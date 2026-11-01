@@ -377,7 +377,7 @@ test('die Rechte-Nutzlast traegt die Scope-Liste als Modulrechte', async () => {
 
   // Einkauf und Vorrat seit Tafla (2026-10-19): die Einkaufskarte und der
   // Zaehler am Abendessen der Kuechenwand (display-scopes.js).
-  for (const key of ['calendar', 'tasks', 'rewards', 'shopping', 'pantry']) {
+  for (const key of ['calendar', 'tasks', 'shopping', 'pantry']) {
     assert.equal(modules[key], 'read', `${key} muss lesbar sein`);
   }
   for (const key of ['budget', 'documents', 'health', 'notes', 'housekeeping']) {
@@ -572,10 +572,15 @@ test('das Display steht in keiner Personenliste', async () => {
   const ids = (members.body.data ?? []).map((m) => m.id);
   assert.ok(!ids.includes(displayId), 'die Mitgliederliste zeigt kein Wandtablett');
 
+  // Die Chips "Wer" im Blatt "Neue Aufgabe" kommen aus dieser Liste. Sie
+  // antwortet OHNE `data`-Huelle (server/routes/tasks.js) - hier stand
+  // `body.data?.users`, das immer leer war: die Zusicherung prueft seitdem
+  // eine Liste, in der wirklich jemand steht.
   const options = await admin('GET', '/tasks/meta/options');
   assert.equal(options.status, 200);
-  const optionIds = (options.body.data?.users ?? []).map((u) => u.id);
-  assert.ok(!optionIds.includes(displayId), 'auch der Zuweisungs-Picker nicht');
+  const optionIds = (options.body.users ?? []).map((u) => u.id);
+  assert.ok(optionIds.length > 0, 'die Liste nennt die Mitglieder');
+  assert.ok(!optionIds.includes(displayId), 'auch der Zuweisungs-Picker nicht - das Wandtablett ist nie ein "Wer"');
 });
 
 test('das Display kann nicht als erledigende Person benannt werden (#1205)', async () => {
@@ -1039,31 +1044,6 @@ test('ein Display zaehlt nicht als verbleibender Administrator', async () => {
   db.prepare('DELETE FROM users WHERE id = ?').run(id);
 });
 
-test('die Anfragenliste der Belohnungen zeigt einem Nicht-Admin nur die eigene', async () => {
-  // Bis zu 300 Zeilen samt freiem Wunschtext jedes Mitglieds gingen an jeden
-  // hinaus, der das Modul lesen darf - die Oberflaeche filterte erst NACH dem
-  // Herunterladen. Aufgefallen am Wandtablett, das gar keine eigenen Zeilen
-  // haben kann; der Fehler ist aelter und traf jedes Mitglied ohne Adminrecht.
-  const created = await admin('POST', '/displays', { display_name: 'Belohnungsprobe' });
-  const issued = await admin('POST', `/displays/${created.body.data.id}/pairing-code`, {});
-  const display = asDisplay((await pair(issued.body.data.code)).token);
-
-  const adminId = (await admin('GET', '/auth/me')).body.user.id;
-  db.prepare(`
-    INSERT INTO reward_redemptions(user_id, reward_name, cost, status, note, created_at)
-    VALUES (?, 'Kinoabend', 50, 'pending', 'bitte Samstag, nicht vor Mamas Geburtstag', ?)
-  `).run(adminId, new Date().toISOString());
-
-  // Vorbedingung: der Administrator sieht die Zeile samt Notiz.
-  const alsAdmin = await admin('GET', '/rewards/redemptions');
-  assert.equal(alsAdmin.status, 200);
-  assert.ok(alsAdmin.body.data.some((r) => r.note?.includes('Samstag')));
-
-  const alsDisplay = await display('GET', '/rewards/redemptions');
-  assert.equal(alsDisplay.status, 200, 'die Route bleibt erreichbar');
-  assert.deepEqual(alsDisplay.body.data, [], 'ein Display hat keine eigenen Anfragen - also keine');
-});
-
 test('der Katalog nennt die Pfadvariablen der Display-Routen', async () => {
   // OpenAPI verlangt zu jeder Variablen im Pfad einen Parameter; fehlt er,
   // weisen Validatoren das Dokument ab und ein erzeugter Client kann die Id
@@ -1219,7 +1199,7 @@ test('der Hinweis in den Einstellungen nennt genau die Bereiche, die ein Display
   // weg, wird dieser Fall rot und fragt, ob docs/SPEC.md (Display Accounts) und
   // der CHANGELOG die neue Menge nennen. Der Hinweis selbst zieht von allein nach.
   // Tafla (2026-10-19): Einkauf und Vorrat fuer die Kuechenwand.
-  const BEREICHE = ['calendar', 'tasks', 'rewards', 'weather', 'meals', 'shopping', 'pantry'];
+  const BEREICHE = ['calendar', 'tasks', 'weather', 'meals', 'shopping', 'pantry'];
   const { DISPLAY_AREA_MODULES } = await import('../server/display-scopes.js');
 
   const liste = await admin('GET', '/displays');

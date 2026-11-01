@@ -210,7 +210,7 @@ test('der Bereichssatz entsteht aus der Liste des Servers, in der Sprache der Ap
     assert.match(seite.displayAreasText(['calendar', 'tasks', 'weather']), /tasks, and settings\.apiTokenScopeModules\.weather/,
       'die Verbindung folgt der App-Sprache, nicht einer festen');
     // Eine Liste mehr oder weniger aendert den Satz - es gibt keine zweite im Browser.
-    assert.match(seite.displayAreasText(['rewards']), /"areas":"settings\.apiTokenScopeModules\.rewards"/);
+    assert.match(seite.displayAreasText(['shopping']), /"areas":"settings\.apiTokenScopeModules\.shopping"/);
     // Ohne Liste (alte Antwort aus dem Cache): kein halber Satz.
     assert.equal(seite.displayAreasText(undefined), '');
     assert.equal(seite.displayAreasText([]), '');

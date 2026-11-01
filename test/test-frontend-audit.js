@@ -315,11 +315,10 @@ const LATE_MODAL_CLOSE_BESTAND = {
   'pages/inventory.js': 2,
   'pages/meals.js': 4,
   'pages/pantry.js': 1,
-  'pages/rewards.js': 7,
   'pages/schedule.js': 4,
   'pages/shopping.js': 8,
   'pages/split-expenses.js': 6,
-  'pages/tasks.js': 2,
+  'pages/tasks.js': 1,
   'pages/waste.js': 15,
   'settings/pages/admin-family.js': 2,
   'settings/pages/modules-health.js': 2,
@@ -2938,7 +2937,7 @@ test('bottom-nav labels wrap to two lines instead of clipping across locales', (
   // selbst zwei Zeilen in einem ~72px-Slot es nicht mehr fassen.
   const NAV_KEYS = [
     'dashboard', 'calendar', 'tasks', 'notes', 'kitchen', 'contacts', 'birthdays',
-    'budget', 'documents', 'housekeeping', 'rewards', 'health', 'settings', 'more',
+    'budget', 'documents', 'housekeeping', 'health', 'settings', 'more',
     'shopping', 'meals', 'recipes',
   ];
   const localeFiles = readdirSync(new URL('../public/locales/', import.meta.url)).filter((f) => f.endsWith('.json'));
@@ -5465,58 +5464,26 @@ test('die Rückfrage der Pille bricht um, statt zu kappen', () => {
 });
 
 /**
- * Ein Etikett sagt nicht dasselbe wie der Chip daneben.
- *
- * Anlass (Critique 2026-08-13): auf /tasks stand „• Dringend" direkt neben dem
- * gespiegelten CalDAV-Etikett „dringend" - zwei Formen, dasselbe Wort, in einer
- * Metazeile, die seit dem Zeilenschnitt einzeilig ist und jedes Element
- * bezahlt. Eine VTODO traegt ihre Dringlichkeit als PRIORITY und noch einmal
- * als CATEGORIES.
- *
- * Geprueft wird die PAARUNG, nicht der Wortlaut: die Etiketten-Funktion muss die
- * Prioritaet kennen und gegen deren Label filtern, und beide Aufrufstellen
- * muessen sie mitgeben. Eine davon zu vergessen ist der stille Fall - die
- * Zeile sieht dann genauso aus wie vorher.
+ * Aufgaben haben in der App keine Etiketten (Tags) mehr (Quick-Add-Runde,
+ * 2026-10-29). Der Server spiegelt sie weiter (CalDAV CATEGORIES, MCP), die
+ * Oberflaeche zeigt, filtert und vergibt sie nicht. Dieser Guard haelt den Weg
+ * zurueck zu: kein Chip, kein Filter, kein Editor, kein Verwalter.
  */
-test('ein Etikett verschwindet, wenn es heisst wie die eigene Prioritaet', () => {
-  const src = read('../public/pages/tasks.js');
-
-  const fn = src.match(/function renderTagBadges\([^)]*\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(fn, 'renderTagBadges nicht gefunden');
-  assert.match(fn[0], /priority\s*=\s*null/,
-    'die Etiketten-Funktion muss die Prioritaet kennen, sonst kann sie sie nicht vergleichen');
-  // DER RUMPF, NICHT DIE SIGNATUR. Eine erste Fassung prueft nur, dass die
-  // Bestandteile irgendwo im Rumpf vorkommen - und blieb gruen, als die
-  // Filterzeile entfernt wurde: `PRIORITY_LABELS()[priority]` und die
-  // Kleinschreibung standen weiter da, sie taten nur nichts mehr. Also wird der
-  // Name der Label-Variablen gelesen und verlangt, dass GENAU DER in einem
-  // Filter ueber die Etiketten vorkommt.
-  const labelVar = fn[0].match(/const\s+(\w+)\s*=[^;]*PRIORITY_LABELS\(\)\[priority\]/);
-  assert.ok(labelVar,
-    'verglichen wird gegen das ANGEZEIGTE Label, nicht gegen den Schluessel - das Etikett kommt '
-    + 'aus einer fremden Liste und ist in der Sprache geschrieben, in der es dort steht');
-  const filterMitLabel = new RegExp(`tags\\s*=\\s*tags\\.filter\\([\\s\\S]{0,160}?\\b${labelVar[1]}\\b`);
-  assert.match(fn[0], filterMitLabel,
-    `das Label (\`${labelVar[1]}\`) muss die Etiketten wirklich filtern - eine Variable, die nur `
-    + 'berechnet und nie benutzt wird, ist ein Guard ohne Gegenstand');
-  assert.match(fn[0], /toLocaleLowerCase|toLowerCase/,
-    'gross/klein darf den Vergleich nicht entscheiden - „Dringend" und „dringend" sind dasselbe Wort');
-
-  // JEDE Aufrufstelle, sonst greift der Fix nur in einer Ansicht. Seit Tafla
-  // (2026-10-20) ist das nur noch das Brett: die Listenzeile traegt keine
-  // Etiketten-Knoepfe und kein Prioritaetswort mehr (nur die Fahne), ihr erster
-  // Tag steht als "#tag" im Text - es gibt dort kein Wort, das sich doppeln kann.
-  const aufrufe = [...src.matchAll(/renderTagBadges\(([^)]*)\)/g)]
-    .map((m) => m[1]).filter((args) => !args.includes('limit ='));
-  assert.ok(aufrufe.length >= 1, `erwartet mindestens eine Aufrufstelle (das Brett), gefunden ${aufrufe.length}`);
-  const zeile = src.slice(src.indexOf('function renderTaskCard('), src.indexOf('function effectiveDue('));
-  assert.doesNotMatch(zeile, /renderTagBadges\(|PRIORITY_LABELS\(\)\[task\.priority\][^\n]*priority-badge/,
-    'die Listenzeile baut keine Etiketten-Knoepfe und kein Prioritaetswort');
-  for (const args of aufrufe) {
-    assert.match(args, /task\.priority/,
-      `eine Aufrufstelle gibt die Prioritaet nicht mit (\`${args}\`) - dort steht das Etikett `
-      + 'weiter neben seinem Zwilling');
+test('Aufgaben-Oberflaeche: keine Tags, keine Sperre', () => {
+  const page = read('../public/pages/tasks.js');
+  const detail = read('../public/components/task-detail.js');
+  for (const name of ['renderTagBadges', 'wireTagBadgeFilter', 'toggleTagFilter', 'hasTagFilter', 'openTagManager',
+    'openBulkTagDialog', 'renderTagChips', 'wireTagEditor', 'refreshTags', 'renderLockedBadge', 'modalTags',
+    'data-tag-filter', 'yuvomi-tag-manager', 'filters.tags', 'state.allTags']) {
+    assert.ok(!page.includes(name), `${name} steht noch in pages/tasks.js`);
   }
+  assert.doesNotMatch(page, /params\.append\('tag'/, 'die Abfrage schickt keinen Tag-Filter');
+  assert.doesNotMatch(page, /id="task-locked"|name="locked"|\blocked:\s/, 'der Dialog schickt keine Sperre');
+  assert.doesNotMatch(page, /^\s+tags,?$/m, 'der Dialog schickt keine Tags');
+  for (const name of ['tagChipsNode', 'tasks.tagsLabel', 'tasks.lockedLabel']) {
+    assert.ok(!detail.includes(name), `${name} steht noch in components/task-detail.js`);
+  }
+  assert.ok(!existsSync(new URL('../public/components/tag-manager.js', import.meta.url)), 'tag-manager.js ist geloescht');
 });
 
 /**
@@ -6264,10 +6231,10 @@ test('Tasks toolbar follows the mobile header rule: one tools menu, "Filter (n)"
   // Ansicht, Filter und Menue stehen in DERSELBEN Zeile wie die Suche.
   assert.match(actions, /id="view-toggle"[\s\S]*filterButtonHtml\(\{ id: 'tasks-filter-btn'[\s\S]*pageToolsMenuHtml\(\{ id: 'tasks-tools-menu'/);
   // Keine losen Verwaltungsknoepfe mehr im Kopf - sie sind Menue-Eintraege.
-  for (const id of ['btn-bulk-select', 'btn-manage-categories', 'btn-manage-tags']) {
+  for (const id of ['btn-bulk-select', 'btn-manage-categories']) {
     assert.doesNotMatch(tasksPage, new RegExp(`id="${id}"`), `#${id} steht wieder lose im Kopf`);
   }
-  for (const action of ['bulk-select', 'view-history', 'manage-categories', 'manage-tags']) {
+  for (const action of ['bulk-select', 'view-history', 'manage-categories']) {
     assert.match(tasksPage, new RegExp(`action: '${action}'`), `das Werkzeugmenue bietet "${action}" nicht an`);
   }
   // R19 (Critique 2026-10-16): der Verlauf ist die DRITTE Ansicht im Segment.
@@ -6507,7 +6474,8 @@ test('dashboard polish keeps one page heading and native quick-action controls',
   // Werkzeugknoepfe) ist mit dem Raster gegangen; Dziś traegt seinen eigenen.
   // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnete das
   // Erfassen-Blatt. 2026-10-27, v2: auch das + und das Blatt sind weg; jede
-  // Seite legt in ihrem Kopf an, Dziś hat keinen eigenen Anlege-Knopf.
+  // Seite legt in ihrem Kopf an. Quick-Add (2026-10-29): Dziś hat wieder ein
+  // +, das sein eigenes Menue oeffnet (test:add-menu) - kein Speed-Dial.
   assert.doesNotMatch(dashboard, /class="fab-action"/);
   assert.doesNotMatch(dashboard, /openCapture|capture-sheet/, 'Dziś ruft kein globales Erfassen mehr');
   assert.doesNotMatch(dashboard, /<button class="fab-action__btn"/);
@@ -7502,18 +7470,41 @@ test('phase 1 keeps the scroll content on an opaque base without a shell gradien
  * Geprueft wird die REGEL, nicht der Klassenname: dashboard.css darf ueberhaupt
  * keine FAB-Geometrie mehr schreiben. Eine Allowlist der drei bekannten
  * Selektoren haette den vierten nicht gesehen.
+ *
+ * Quick-Add (2026-10-29, Ruling R14): mit EINER benannten Ausnahme, dem + von
+ * Dziś (`#fab-add`) - 56 statt 52 laut abgenommenem Entwurf, als Token, das
+ * zu --fab-size wird. Benannt heisst: genau diese zwei Selektoren, sonst keiner.
  */
-test('the dashboard speed dial owns no FAB geometry of its own', () => {
+test('the dashboard owns no FAB geometry of its own - except the named Today + (fab-add)', () => {
   const dashboard = read('../public/styles/dashboard.css');
   const live = dashboard.replace(/\/\*[\s\S]*?\*\//g, '');
 
   assert.doesNotMatch(live, /\.fab-container|\.fab-main/,
     'der eigene Kasten des Dashboards ist entfallen - der Dial ist eine '
     + '.page-fab-group mit einem .page-fab darin (#634)');
+  // Quick-Add (2026-10-29, Ruling R14): DIE EINE BENANNTE AUSNAHME ist das +
+  // von Dziś (`#fab-add`, Entwurf HomePlus: 56er-Kreis, deckend). Es nimmt
+  // seine Groesse aus einem Token (--fab-size-today, tokens.css) und macht es
+  // zu --fab-size, solange es steht - Nachlauf und Install-Banner rechnen mit.
+  // Jede andere FAB-Regel hier bleibt ohne Geometrie, auch ohne Token.
+  const TODAY_PLUS = new Set([':root:has(#fab-add)', '#fab-add']);
+  const GEOMETRY = /(?:^|[;{\s])(?:width|height|inline-size|block-size|--fab-size)\s*:/;
+  const seenToday = new Set();
   for (const rule of live.match(/[^{}]*\bfab\b[^{]*\{[^}]*\}/g) ?? []) {
-    assert.doesNotMatch(rule, /\b(?:width|height):\s*\d/,
-      `dashboard.css schreibt wieder eine FAB-Groesse von Hand statt --fab-size:\n${rule}`);
+    const selector = rule.slice(0, rule.indexOf('{')).trim();
+    if (TODAY_PLUS.has(selector)) {
+      seenToday.add(selector);
+      assert.doesNotMatch(rule, /\b(?:width|height|inline-size|block-size|--fab-size):\s*\d/,
+        `das + von Dziś liest seine Groesse aus Tokens, nicht aus Zahlen:\n${rule}`);
+      continue;
+    }
+    assert.doesNotMatch(rule, GEOMETRY,
+      `dashboard.css schreibt wieder eine FAB-Groesse von Hand statt --fab-size (einzige Ausnahme: #fab-add):\n${rule}`);
   }
+  assert.deepEqual([...seenToday].sort(), [...TODAY_PLUS].sort(), 'das + von Dziś traegt seine 56 als Token');
+  assert.match(live, /:root:has\(#fab-add\)\s*\{\s*--fab-size:\s*var\(--fab-size-today\);\s*\}/,
+    'die Groesse wird zu --fab-size, damit --fab-safe-zone mitrechnet');
+  assert.match(read('../public/styles/tokens.css'), /--fab-size-today:\s*56px;/);
   assert.doesNotMatch(cssRuleBody(dashboard, '.dashboard'), /padding-bottom/,
     'die FAB-Reserve kommt aus --fab-safe-zone an .app-content; eine zweite '
     + 'Reserve am Modul stapelt sich zu totem Raum (Audit A1-16)');
@@ -10106,7 +10097,7 @@ test('page-inline-pad contract holds across every stylesheet (#577)', () => {
   // Dashboard und Settings sind dokumentierte Ausnahmen: beide haben keinen
   // Canonical Page Head und behalten ihren zentrierten Block.
   const bleedModules = [
-    'tasks', 'notes', 'contacts', 'documents', 'housekeeping', 'rewards',
+    'tasks', 'notes', 'contacts', 'documents', 'housekeeping',
     'budget', 'calendar', 'birthdays', 'meals', 'shopping', 'recipes', 'health',
   ];
 
@@ -12097,58 +12088,6 @@ test('die schwersten Settings-Dialoge bleiben als gefaehrlich markiert', () => {
     assert.ok(block?.includes('danger: true'), `${datei}: ${confirmKey} braucht danger: true`);
     assert.ok(block.includes(detailKey), `${datei}: ${confirmKey} braucht den Folgen-Text ${detailKey}`);
   }
-});
-
-// --------------------------------------------------------
-// Aufgaben-Tags (#586)
-// Drei Entscheidungen, die im Quelltext unscheinbar aussehen und deren Verlust
-// sich in der Oberflaeche erst spaet zeigt.
-// --------------------------------------------------------
-
-test('Tag-Chips auf Karten sind Filter-Buttons, keine Beschriftungen', () => {
-  const source = read('../public/pages/tasks.js');
-  const fn = source.slice(source.indexOf('function renderTagBadges'),
-                          source.indexOf('function wireTagBadgeFilter'));
-
-  assert.match(fn, /<button type="button" class="task-tag task-tag--filter"/,
-    'Ein Tag anzuklicken und danach zu filtern ist die erwartete Geste - als <span> gibt es sie nicht');
-  assert.match(fn, /data-tag-filter="\$\{esc\(tag\)\}"/, 'Der Wert muss escaped am Chip haengen');
-  assert.match(fn, /aria-label="\$\{esc\(t\('tasks\.tagFilterBy'/,
-    'Der Button braucht eine Beschriftung, die seine Wirkung nennt');
-
-  // Die Zusammenfassung ab dem vierten Tag darf kein Button sein: sie benennt
-  // keinen einzelnen Tag, auf den ein Klick filtern koennte.
-  const more = fn.slice(fn.indexOf('task-tag--more') - 120, fn.indexOf('task-tag--more') + 200);
-  assert.match(more, /<span/, '+N ist eine Anzeige, kein Ziel');
-});
-
-test('der Tag-Klick wird in der Capture-Phase abgefangen', () => {
-  const source = read('../public/pages/tasks.js');
-  const fn = source.slice(source.indexOf('function wireTagBadgeFilter'),
-                          source.indexOf('function wireTagBadgeFilter') + 600);
-
-  assert.match(fn, /e\.stopPropagation\(\)/,
-    'Ohne stopPropagation oeffnet derselbe Klick zusaetzlich den Bearbeiten-Dialog');
-  // Das `true` am Ende ist der ganze Punkt: der Kanban-Board-Handler sitzt
-  // unterhalb des Containers und kaeme beim Bubbling zuerst dran.
-  assert.match(fn, /\}, true\);/,
-    'Der Listener muss in der Capture-Phase haengen, sonst hat das Board den Dialog schon geoeffnet');
-});
-
-test('der Tag-Filter ist ueberall eine Liste, nirgends mehr ein einzelner Wert', () => {
-  const source = read('../public/pages/tasks.js');
-
-  // `filters.tag` (Singular) war die Fassung vor der Mehrfachauswahl. Bleibt
-  // irgendwo ein Zugriff darauf stehen, ist er still wirkungslos: er liest
-  // undefined und filtert nie.
-  const singular = [...source.matchAll(/filters\.tag\b(?!s)/g)];
-  assert.equal(singular.length, 0,
-    `filters.tag (Singular) darf nicht mehr vorkommen, gefunden: ${singular.length}`);
-
-  // Mehrere Tags muessen als eigene Parameter reisen, sonst zerfaellt ein Tag
-  // mit Komma im Namen (aus CATEGORIES) am Server in zwei.
-  assert.match(source, /params\.append\('tag', tag\)/,
-    'Jeder Tag gehoert als eigener Query-Parameter in die Anfrage');
 });
 
 /**
@@ -17970,7 +17909,7 @@ test('PAGE-020: eine Aussenkante je Modul - kein Reiter schaltet das Mass oder d
     assert.doesNotMatch(src, /classList\.toggle\('[\w-]*toolbar--[\w-]+'/,
       `PAGE-020 ${name}: schaltet einen Kopf-Modifier um - der Kopf steht in jedem Reiter an derselben Kante`);
   }
-  assert.ok(users >= 3, `PAGE-020: nur ${users} Seiten mit Spaltenraster gefunden - Belohnungen, Entsorgung und Haushaltshilfe sollten es sein`);
+  assert.ok(users >= 2, `PAGE-020: nur ${users} Seiten mit Spaltenraster gefunden - Entsorgung und Haushaltshilfe sollten es sein`);
 });
 
 test('Gesundheit: die letzten Vitalwerte ueberspannen die Spalten der Uebersicht', () => {
@@ -19817,34 +19756,6 @@ test('Familie: Mitglied und Einladung oeffnen einen Dialog, der Knopf bleibt Fok
   assert.match(submit, /closeModal\(\{ force: true \}\)/, 'nach dem Anlegen schliesst der Dialog und gibt den Fokus zurueck');
 });
 
-/* Lucide ersetzt `<i data-lucide>` durch ein `<svg>` - eine Regel auf `… i`
- * greift danach ins Leere. Im Praemienkatalog stand die Groesse der Glyphen
- * nur in solchen Regeln (`.rw-reward-card__icon i`, `.rw-cost i`), die SVGs
- * blieben ungemessen und schrumpften in der 243px-Karte als Flex-Kinder auf
- * 0-4px: das Geschenk im "Einloesen"-Knopf war ein Punkt (Critique
- * 2026-09-26). Jede Glyphe der Karte hat deshalb eine Groesse, die das SVG
- * erreicht, und schrumpft nicht. */
-test('Praemienkarte: jede Glyphe ist bemessen und schrumpft nicht', () => {
-  const src = read('../public/pages/rewards.js');
-  const card = src.slice(src.indexOf('function renderRewardCard('), src.indexOf('function renderCatalog('));
-  assert.ok(card.length > 100, 'renderRewardCard nicht gefunden');
-  const rules = [...eachRule(read('../public/styles/rewards.css'))];
-  const svgRule = (container) => rules.find((rule) => rule.selector.split(',').map((s) => s.trim()).includes(`${container} svg`));
-  const ungemessen = [];
-  for (const m of card.matchAll(/<i data-lucide=\\?"([a-z-]+)\\?"([^>]*)>/g)) {
-    if (/class="icon-(?:sm|md|lg|xl)"/.test(m[2])) continue; // .icon-* bringt Groesse und flex-shrink: 0 mit
-    // Sonst traegt der Behaelter eine svg-Regel: die Kachel-Glyphe ohne eigenes Zeichen.
-    const before = card.slice(0, m.index);
-    const container = before.match(/class="([\w-]+)"[^<]*$/)?.[1];
-    const rule = container && svgRule(`.${container}`);
-    if (!rule || !/width:/.test(rule.body) || !/flex-shrink:\s*0/.test(rule.body)) ungemessen.push(m[1]);
-  }
-  assert.deepStrictEqual(ungemessen, [], `ungemessene Glyphen in der Praemienkarte: ${ungemessen.join(', ')}`);
-  const tot = rules.flatMap((rule) => rule.selector.split(',').map((s) => s.trim()))
-    .filter((s) => /^\.rw-(?:reward-card__icon|cost) i$/.test(s));
-  assert.deepStrictEqual(tot, [], 'Regeln auf das ersetzte <i> sind tot');
-});
-
 /* Projektregel "-" statt Em-/En-Dash gilt fuer UI-Texte (CLAUDE.md) - in den
  * Locales haelt sie die i18n-Kette, in den Seiten stand sie nirgends: Zeitraeume
  * ("21.09. – 27.09."), Referenzbereiche und Leerwerte kamen als Literal aus dem
@@ -19952,25 +19863,11 @@ test('R16: der Abschnittstitel als Weg ist ein Baustein, kein Nachbau je Modul',
   const link = layout.find((rule) => rule.selector.trim() === '.section-title-link');
   assert.ok(link, 'layout.css fuehrt `.section-title-link`');
   assert.match(link.body, /min-height:\s*var\(--target-base\)/);
-  for (const [file, cls] of [['rewards.css', '.rw-section__more'], ['calendar.css', '.day-rail__more']]) {
+  for (const [file, cls] of [['calendar.css', '.day-rail__more']]) {
     const nachbau = rulesOf(read(`../public/styles/${file}`)).filter((rule) => selectorsOf(rule).some((sel) => sel.startsWith(cls)));
     assert.deepStrictEqual(nachbau.map((rule) => rule.selector.trim()), [], `${file} traegt keine eigene Fassung mehr`);
   }
-  assert.match(read('../public/pages/rewards.js'), /class="section-title-link rw-section__more"/);
   assert.match(read('../public/pages/calendar.js'), /class="section-title-link day-rail__more"/);
-});
-
-test('R16: die Buchungszeile der Belohnungen ist eine `.list-row` im `.row-carrier`', () => {
-  const page = read('../public/pages/rewards.js');
-  assert.doesNotMatch(page, /<li class="rw-ledger-row/, 'keine Zeile ohne `.list-row`');
-  assert.match(page, /<li class="list-row rw-ledger-row">[\s\S]*?class="list-row__main"[\s\S]*?class="list-row__name rw-ledger-row__reason"/);
-  assert.match(page, /<ul class="rw-ledger row-carrier">/);
-  const css = rulesOf(read('../public/styles/rewards.css'));
-  const eigen = css.filter((rule) => selectorsOf(rule).some((sel) => /^\.rw-ledger(?:-row)?$/.test(sel)))
-    .filter((rule) => /background|box-shadow|border-radius|padding:\s*var|display:\s*flex/.test(rule.body));
-  assert.deepStrictEqual(eigen.map((rule) => rule.selector.trim()), [], 'Flaeche, Radius und Polster kommen vom Traeger und von der Zeile');
-  // Abschnittstitel tragen kein Icon - in keinem anderen Modul tun sie es.
-  assert.doesNotMatch(page, /class="rw-section__title u-section-title"[^>]*><i data-lucide/);
 });
 
 test('R16: ein Dialog traegt den Ton des offenen Moduls (aktiver Chip im Filterblatt)', () => {
@@ -20256,7 +20153,11 @@ const deValueOf = (() => {
   };
 })();
 // Kein Anlegen/Bearbeiten, sondern eine benannte Handlung mit eigenem Verb.
-const NAMED_DIALOG_ACTIONS = ['documents.uploadAction'];
+// Dazu "Aufgabe hinzufuegen" (Quick-Add 2026-10-29): dasselbe Verb wie
+// `common.add`, mit seinem Gegenstand - das Blatt "Neue Aufgabe" hat sonst
+// keinen Kopf-Text im Fuss, und so steht es im Entwurf, den der Haushalt
+// abgenommen hat (Spec "Simpler New Task sheet", Ziel 4).
+const NAMED_DIALOG_ACTIONS = ['documents.uploadAction', 'tasks.addTask'];
 // "Erstellen und hinzufuegen": legt einen Gast an UND nimmt ihn in die Gruppe -
 // zwei Schritte, die das Verb beide nennen muss.
 const COMPOUND_CREATE = ['splitExpenses.createAndAddGuest'];
@@ -20278,7 +20179,7 @@ function openThing(item) {
   const footer = `
 function openThing(item) {
   openSharedModal({
-    title: t('rewards.addReward'),
+    title: t('tasks.addTask'),
     content: \`<form id="f">
       <div class="modal-panel__footer">
         <button type="submit" class="btn btn--primary">\${isEdit ? esc(t('common.save')) : esc(t('tasks.emptyAction'))}</button>
@@ -20425,10 +20326,9 @@ test('R17 E6: die Zwei-Felder-Zeile steht einmal in layout.css, kein Modulblatt 
 // Liste darf nur schrumpfen.
 const ALIAS_PENDING = new Set([
   '../public/pages/health.js', '../public/pages/tasks.js', '../public/pages/documents.js',
-  '../public/pages/rewards.js', '../public/pages/calendar.js', '../public/pages/setup.js',
+  '../public/pages/calendar.js', '../public/pages/setup.js',
   '../public/pages/join.js', '../public/pages/login.js', '../public/pages/reset-password.js',
   '../public/pages/forgot-password.js', '../public/components/user-multi-select.js',
-  '../public/components/tag-manager.js',
   '../public/settings/pages/modules-health.js',
 ]);
 
@@ -21441,7 +21341,7 @@ test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {
 // zweiten Form. (Der Lese-/Bearbeiten-Umschalter im Notizdialog ist keine
 // Unternavigation und bleibt aussen vor.)
 test('D3: die Unternavigation der Module ist Text, keine Icon-Reiter', () => {
-  for (const page of ['budget', 'rewards', 'housekeeping', 'schedule']) {
+  for (const page of ['budget', 'housekeeping', 'schedule']) {
     const src = read(`../public/pages/${page}.js`);
     assert.match(src, /class="[^"]*\bsub-tab\b/, `Vorbedingung: ${page} rendert Reiter`);
     assert.doesNotMatch(src, /sub-tab__icon/, `${page}: Reiter tragen nur ihr Wort`);
@@ -21626,9 +21526,6 @@ test('R20: sichtbare Etiketten stehen im Namen, und es gibt genau einen Hauptber
   assert.match(sync, /avatar\.dataset\.initials = initials\(displayName\)/, 'Initialen des Kontoknopfs als Zeichnung');
   assert.doesNotMatch(sync, /avatar\.textContent = initials/, 'kein Textknoten „LI" im Etikett');
   assert.match(read('../public/styles/layout.css'), /\.nav-sidebar__avatar\[data-initials\]::before \{\s*content: attr\(data-initials\);/);
-  const rewards = read('../public/pages/rewards.js');
-  assert.match(rewards, /class="rw-avatar rw-avatar--initials" aria-hidden="true" data-initials=/);
-  assert.match(read('../public/styles/rewards.css'), /\.rw-avatar--initials::before \{ content: attr\(data-initials\); \}/);
 
   const fab = read('../public/utils/fab.js');
   assert.match(fab, /export function syncFabName\(/, 'eine Namensregel fuer den FAB');
@@ -21676,4 +21573,14 @@ test('!important-Sperrklinke: echte !important-Deklarationen in public/styles we
   assert.ok(found.length > 20, `Reichweite: nur ${found.length} Treffer - zaehlt der Scanner noch?`);
   assert.ok(found.length <= IMPORTANT_CEILING,
     `${found.length} echte !important statt hoechstens ${IMPORTANT_CEILING}. Neue Vorrangregel ueber Spezifitaet oder Quellreihenfolge loesen, nicht ueber !important:\n${found.join('\n')}`);
+});
+
+/* Nagrody (Praemien) und Punkte sind ausgebaut: die App ist fuer zwei Erwachsene.
+ * Keine Datei unter public/ laedt die Seite noch, und der Navigationskatalog
+ * kennt kein Modul 'rewards'. */
+test('Nagrody ist ausgebaut: kein Import der Seite, kein Navigationspunkt', () => {
+  const files = walkFrontendFiles('../public/').filter((f) => !f.includes('/locales/'));
+  const hits = files.filter((f) => read(f).includes('/pages/rewards.js'));
+  assert.deepStrictEqual(hits, [], 'jemand laedt /pages/rewards.js noch');
+  assert.ok(!/module:\s*'rewards'/.test(read('../public/router.js')), "Navigationspunkt mit module: 'rewards'");
 });

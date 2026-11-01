@@ -450,7 +450,7 @@ test('R18: das Marken-Lichtfeld steht still, ohne Filter, und faellt unter den a
   // Tafla (2026-10-20): the sign-in pages stand on calm paper (no gradient
   // besides the scroll-edge fade and the split disc), so the field lives on
   // the loading screen and its stand-in only.
-  assert.deepEqual(carriers.sort(), ['.app-loading', '.app-shell:has(> .session-unreachable)'].sort(), 'das Feld lebt nur vor der App');
+  assert.deepEqual(carriers.sort(), ['.app-shell:has(> .session-unreachable)'].sort(), 'das Feld lebt nur vor der App');
 });
 
 /**
@@ -508,25 +508,16 @@ test('Tafla: auf dem Papier der Zugangsseite halten Text, Feldkante und Haus ihr
       report.push(`${theme} ${name} ${ratio.toFixed(2)}`);
       assert.ok(ratio >= min, `${theme}: ${name} ${ratio.toFixed(2)}:1 < ${min}`);
     }
-    // Der Schriftzug des Ladebilds steht direkt auf dem Feld - in Tinte.
-    const strength = Number(resolve('--_brand-field-opacity', theme));
-    const worst = peaks.reduce((ground, peak) => over(peak.ink, strength * peak.share, ground), paper);
-    const logo = contrast(tone('--_neutral-900', theme).rgb, worst);
-    report.push(`${theme} Ladebild-Schriftzug ${logo.toFixed(2)}`);
-    assert.ok(logo >= 4.5, `${theme}: Schriftzug des Ladebilds ${logo.toFixed(2)}:1`);
   }
   if (process.env.MATERIAL_REPORT) console.log(report.join('\n'));
 
-  assert.match(rulesFor(LAYOUT, '.app-loading__logo')[0].body, /(?:^|;)\s*color:\s*var\(--color-text-primary\)/,
-    'der Schriftzug des Ladebilds steht in Tinte, nicht im Akzent');
-  // R20 (Re-Critique 2026-10-17 a6 P2/P3): 4,8 s pulsierte am kalten Telefon nur
-  // der Schriftzug, und sein Name war fest deutsch ("Lade Yuvomi…").
-  assert.doesNotMatch(rulesFor(LAYOUT, '.app-loading__logo')[0].body, /animation/, 'das Ladebild pulsiert wieder');
+  // 2026-10-29: das Ladebild ist ein schlichter Ring - keine Skizze der Shell mehr.
   const index = read('../public/index.html');
   assert.match(index, /<div id="app-loading" class="app-loading" role="progressbar" aria-label="Yuvomi">/,
-    'das Ladebild traegt einen festen deutschen Namen statt der Marke');
-  for (const part of ['app-loading__seal', 'app-loading__card', 'app-loading__capsule', 'app-loading__rail']) {
-    assert.ok(index.includes(`class="${part}`), `die Skizze der Shell hat kein ${part}`);
+    'das Ladebild traegt einen festen Namen: die Marke');
+  assert.ok(index.includes('class="app-loading__spinner"'), 'das Ladebild hat keinen Ring');
+  for (const part of ['app-loading__seal', 'app-loading__card', 'app-loading__capsule', 'app-loading__rail', 'app-loading__logo']) {
+    assert.ok(!index.includes(part), `die alte Skizze lebt noch: ${part}`);
   }
   // Der Kopf ist ein Kind von `main.auth-page` (test:auth-pages-ui haelt,
   // dass jede Seite so beginnt), und die Versionszeile steht als letzte

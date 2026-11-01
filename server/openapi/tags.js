@@ -33,7 +33,6 @@ export const apiTags = [
       { name: 'Email' },
       { name: 'Notifications' },
       { name: 'Health' },
-      { name: 'Rewards' },
       { name: 'Schedule' },
       { name: 'Quick links' },
       { name: 'Screensaver' },

@@ -65,7 +65,7 @@ import {
 } from '/utils/health-tabs.js';
 import { mountMasterDetail, splitViewDetailHtml } from '/utils/master-detail.js';
 import { hoistPlan, applyHoistPlan } from '/utils/health-hoist.js';
-import { renderSkeletonList, renderSkeletonChart } from '/utils/skeleton.js';
+import { loadingSpinnerHtml, renderSkeletonList, renderSkeletonChart } from '/utils/skeleton.js';
 import { formatFastingDuration } from '/utils/health-fasting.js';
 import { canUseFasting, isNavModuleReadOnly } from '/permissions.js';
 import { emptyStateHTML, emptyHintHTML, mountLoadError } from '/utils/empty-state.js';
@@ -746,14 +746,7 @@ let _priorityPending = false;
 let _priorityHeight = 0;
 
 function prioritySkeletonMarkup() {
-  return `<div class="health-priority-skeleton" data-health-priority-skeleton aria-hidden="true">
-              <div class="skeleton health-priority-skeleton__pill"></div>
-              <div class="skeleton-card health-priority-skeleton__card health-priority-skeleton__card--due">
-                <div class="skeleton skeleton-line skeleton-line--title"></div>
-                <div class="skeleton skeleton-line skeleton-line--medium"></div>
-                <div class="skeleton skeleton-line skeleton-line--full"></div>
-              </div>
-            </div>`;
+  return `<div class="health-priority-skeleton" data-health-priority-skeleton>${loadingSpinnerHtml()}</div>`;
 }
 
 /** Die Marke an der Region nachfuehren und die Hoehe des Inhalts merken. */
@@ -7290,29 +7283,19 @@ function maybeMountFasting(activeRoute) {
  */
 function areaLoadingMarkup(area, shape) {
   const skeleton = shape === 'chart' ? renderSkeletonChart({ charts: 2 }) : renderSkeletonList({ rows: 3, lines: 2 });
-  return `<div class="health-${area}__loading" role="status">
+  return `<div class="health-${area}__loading health-loading" role="status">
     <span class="sr-only">${esc(t('common.loading'))}</span>
     ${skeleton}
   </div>`;
 }
 
 function cycleSkeletonMarkup() {
-  // Skeleton statt Spinner/Text: spiegelt die Hero-Silhouette (Ring + Statistik),
-  // damit der Layout-Sprung beim Laden ausbleibt (Product-Register).
-  return `
-    <div class="cycle-skeleton" aria-hidden="true">
-      <div class="cycle-skeleton__ring skeleton"></div>
-      <div class="cycle-skeleton__side">
-        <div class="skeleton skeleton-line skeleton-line--title"></div>
-        <div class="skeleton skeleton-line skeleton-line--medium"></div>
-        <div class="skeleton skeleton-line skeleton-line--short"></div>
-      </div>
-    </div>`;
+  return loadingSpinnerHtml();
 }
 
 async function mountCycle() {
   cycle.root.replaceChildren();
-  cycle.root.insertAdjacentHTML('beforeend', `<div class="health-cycle__loading" role="status">
+  cycle.root.insertAdjacentHTML('beforeend', `<div class="health-cycle__loading health-loading" role="status">
     <span class="sr-only">${esc(t('common.loading'))}</span>
     ${cycleSkeletonMarkup()}
   </div>`);

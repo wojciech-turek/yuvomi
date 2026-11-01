@@ -217,6 +217,7 @@ const APP_SHELL = [
   '/utils/page-layout.js',
   '/utils/page-lifecycle.js',
   '/utils/page-search.js',
+  '/utils/page-style.js',
   '/utils/search-sections.js',
   '/utils/palette-combobox.js',
   '/utils/period-stepper.js',
@@ -237,7 +238,6 @@ const APP_SHELL = [
   '/utils/recipe-to-meal.js',
   '/utils/recurrence-scope.js',
   '/utils/reminder-offset.js',
-  '/utils/reward-goal.js',
   '/utils/router-navigate.js',
   '/utils/roving-toolbar.js',
   '/utils/row-action.js',
@@ -353,7 +353,6 @@ const PAGE_MODULES = [
   '/pages/birthdays.js',
   '/pages/budget.js',
   '/pages/documents.js',
-  '/pages/rewards.js',
   '/pages/health.js',
   '/pages/health-fasting.js',
   '/pages/settings.js',
@@ -369,7 +368,6 @@ const PAGE_MODULES = [
   '/pages/subscriptions.js',
   '/components/category-manager.js',
   '/components/icon-picker.js',
-  '/components/tag-manager.js',
   // Der Bildzuschnitt kommt per dynamischem import() aus mehreren Modulen
   // (Avatare, Geburtstage, Vorrat, Rezepte, Haushaltshilfe, Schnellzugriff).
   // Der Precache-Guard las dynamische Importe bis dahin nicht.
@@ -378,6 +376,20 @@ const PAGE_MODULES = [
   '/utils/avatar-crop.js',
   '/utils/lucide-icons.js',
   '/utils/sortable.js',
+  // Schnellwahl des Blatts „Neue Aufgabe" - nur pages/tasks.js laedt sie.
+  '/utils/task-quick-dates.js',
+  // Das Diktat (Hoerblatt, Spracherkennung, Satz -> Entwurf) - ueber
+  // pages/tasks.js und ueber das Menue hinter dem + auf Dziś (add-menu.js,
+  // dort statisch, damit "Say a task" im Tipp startet).
+  '/components/task-dictation.js',
+  // Das Einkaufsblatt von Dziś - per import() aus add-menu.js.
+  '/components/shopping-add-sheet.js',
+  // Das Menue hinter dem + auf Dziś (Quick-Add) - die Uebersicht laedt es per
+  // import() beim Tipp auf das +, nicht mit dem Start.
+  '/components/add-menu.js',
+  '/utils/shopping-entry.js',
+  '/utils/speech.js',
+  '/utils/task-draft.js',
   '/vendor/sortablejs/sortable.esm.min.js',
   // libphonenumber-js: lazy im Kontaktmodul, aber vorab gecacht → Telefon-
   // Formatierung funktioniert auch offline (Kernmodul). Versions-gecacht.
@@ -418,7 +430,6 @@ const PAGE_MODULES = [
   '/settings/pages/modules-kitchen.js',
   '/settings/pages/modules-calendar.js',
   '/settings/pages/modules-options.js',
-  '/settings/pages/modules-rewards.js',
   '/settings/pages/modules-health.js',
   '/settings/pages/modules-countdowns.js',
   '/settings/pages/sync-calendar.js',

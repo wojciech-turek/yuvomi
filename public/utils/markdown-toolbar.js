@@ -9,6 +9,10 @@
  * (#731). Eine Kopie waere die zweite Fassung von 13 Buttons und ihren
  * Einfuegeregeln gewesen; deshalb liegt sie hier, und deshalb heissen ihre
  * i18n-Schluessel `markdown.*` statt `notes.*` - sie gehoert keinem Modul mehr.
+ *
+ * Seit Quick-Add (2026-10-29) traegt die Aufgaben-Notiz sie nicht mehr: dort
+ * ist sie ein schlichtes Textfeld (wer Markdown nicht kennt, braucht keine
+ * Leiste dafuer). Gespeicherte Aufgaben-Notizen rendern weiter als Markdown.
  */
 
 import { t } from '/i18n.js';

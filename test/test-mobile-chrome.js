@@ -691,10 +691,10 @@ test('R20: der Gesundheits-Bereichskopf klappt beim Lesen auf eine Zeile ein', (
 });
 
 // R19 (Critique 2026-10-16 P2 mobil): DIE TAB-LEISTE IST DIE TITELZEILE.
-// Schichtplan, Belohnungen und Haushaltshilfe massen 121/121/129px bei 390px
+// Schichtplan und Haushaltshilfe massen 121/129px bei 390px
 // (Large Title ueber den Reitern), jetzt 65px; bei 834px 118-130 -> 69px.
-const TABS_TITLE_MODULES = ['pages/housekeeping.js', 'pages/rewards.js', 'pages/schedule.js'];
-test('R19: Schichtplan, Belohnungen und Haushaltshilfe fuehren ihre Reiter in der Titelzeile', () => {
+const TABS_TITLE_MODULES = ['pages/housekeeping.js', 'pages/schedule.js'];
+test('R19: Schichtplan und Haushaltshilfe fuehren ihre Reiter in der Titelzeile', () => {
   for (const f of TABS_TITLE_MODULES) {
     assert.match(read(`../public/${f}`), /<header class="page-toolbar [^"]*\bpage-toolbar--tabs-title\b/, `${f}: der Kopf traegt die Variante`);
   }

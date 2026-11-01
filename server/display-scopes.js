@@ -43,7 +43,6 @@ export const DISPLAY_SCOPES = Object.freeze([
   'dashboard:read',
   'calendar:read',
   'tasks:read',
-  'rewards:read',
   // Wetter kam am 16.09.2026 dazu, bewusst und ueber die vier des Tickets
   // hinaus (Entscheidung Ulas): ein Kuechentablett ohne Wetter ist der eine
   // Fall, fuer den solche Geraete ueberhaupt aufgehaengt werden, und die Route
@@ -64,36 +63,31 @@ export const DISPLAY_SCOPES = Object.freeze([
 ]);
 
 /**
- * Die beiden Schreibrouten, die ein gekoppeltes Display erreichen darf (#1209).
+ * Die Schreibrouten, die ein gekoppeltes Display erreichen darf (#1209).
  *
  * WAS DAS DISPLAY DAMIT TUN KANN, und nichts sonst: eine Aufgabe fuer eine am
- * Geraet gewaehlte Person abhaken, und fuer sie eine Einloesung beantragen. Beide
- * Routen tragen die eigentliche Regel selbst - dass eine Person benannt sein
- * muss, dass sie ein Haushaltsmitglied ist, dass sie das Modul ueberhaupt darf
- * und dass die Aufgabe haushaltssichtbar ist. Diese Liste beantwortet nur die
- * vorgelagerte Frage, ob der Pfad ueberhaupt zu erreichen ist.
+ * Geraet gewaehlte Person abhaken, dazu die eigenen Schreibwege der Wand unten
+ * (ein Artikel auf die Liste, die Antwort auf die Wochenfrage). Die Einloesung
+ * einer Belohnung ist mit Nagrody gegangen (Quick-Add, 2026-10-29). Jede Route
+ * traegt die eigentliche Regel selbst - beim Abhaken etwa, dass eine Person
+ * benannt sein muss, dass sie ein Haushaltsmitglied ist, dass sie das Modul
+ * ueberhaupt darf und dass die Aufgabe haushaltssichtbar ist. Diese Liste
+ * beantwortet nur die vorgelagerte Frage, ob der Pfad ueberhaupt zu erreichen
+ * ist.
  *
  * DIE MUSTER SIND ENG, NICHT BEQUEM. `\d+` und nicht `[^/]+`: eine Kennung ist
  * eine Zahl, und was keine ist, hat an dieser Stelle nichts verloren. Kein
  * `startsWith`: `/tasks/1/status` ist gemeint, `/tasks/1/status-irgendwas` nicht
  * - derselbe Fehler, gegen den DISPLAY_READ_PATHS exakt vergleicht.
- *
- * WARUM DIE EINLOESUNG EIN POST AUF DIE SAMMELROUTE IST UND KEIN EIGENER PFAD:
- * das Beantragen ist genau diese Route, fuer jeden Menschen auch. Ein zweiter
- * Pfad nur fuer Displays waere eine zweite Stelle, an der dieselbe Buchung
- * entsteht - und die beiden liefen mit der Zeit auseinander. Das ENTSCHEIDEN
- * einer Einloesung (`PATCH /rewards/redemptions/:id`) steht bewusst nicht hier:
- * die Freigabe bleibt, wo der Haushalt sie hingelegt hat.
  */
 export const DISPLAY_WRITE_ROUTES = Object.freeze([
   Object.freeze({ method: 'PATCH', pattern: /^\/tasks\/\d+\/status$/ }),
-  Object.freeze({ method: 'POST', pattern: /^\/rewards\/redemptions$/ }),
   // THE WALL'S OWN WRITES (Tafla, 2026-10-19), behind the household switch
   // "Pozwól odhaczać na ścianie" (services/wall-settings.js, `refuseWallWrite`,
   // checked in each route - off by default): a running-out item onto a list
   // (the "+" chips of the shopping card; the route takes only a name from a
-  // display) and the answer to the weekly question. The tick and the
-  // redemption above are behind the same switch: every write of a display is.
+  // display) and the answer to the weekly question. The tick above is behind
+  // the same switch: every write of a display is.
   Object.freeze({ method: 'POST', pattern: /^\/shopping\/\d+\/items$/ }),
   Object.freeze({ method: 'POST', pattern: /^\/ai\/questions\/\d+\/(?:answer|dismiss)$/ }),
 ]);

@@ -268,9 +268,7 @@ export async function render(container, { user, signal }) {
              Tafla (Autorenfilter erst ab drei Personen) steht sie bei zwei
              Erwachsenen nur mit Kategorien; das Geraet merkt sich deshalb, ob
              sie beim letzten Mal stand, und haelt den Platz nur dann. -->
-        <div class="notes-filters page-chip-row" id="notes-filters" aria-hidden="true" data-pending${filtersStoodLastTime() ? '' : ' hidden'}>
-          <span class="skeleton notes-filters__skeleton"></span><span class="skeleton notes-filters__skeleton"></span><span class="skeleton notes-filters__skeleton"></span>
-        </div>
+        <div class="notes-filters page-chip-row" id="notes-filters" aria-hidden="true" data-pending${filtersStoodLastTime() ? '' : ' hidden'}></div>
         <div id="notes-grid" class="notes-grid" aria-busy="true">${renderSkeletonList({ rows: 5, lines: 3 })}</div>
       </div>
       <button class="page-fab" id="fab-new-note" aria-label="${t('notes.addNoteLabel')}" data-dock-label="${t('newLabel.notes')}">

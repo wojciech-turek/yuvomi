@@ -78,8 +78,7 @@ export function liftToAnchorDay(value, anchorDay) {
 // Der naechste Termin einer Serie nach `dateText` - die EINE Rechnung, durch die
 // der Buchungslauf der geteilten Ausgaben (generateRecurringExpense in
 // server/services/split-expenses-scheduler.js), das Fortsetzen
-// (nextRunNotBefore) und die Taschengeld-Gutschrift (#1734,
-// server/services/reward-money.js) gehen.
+// (nextRunNotBefore) gehen.
 //
 // Monate und Jahre klemmen aufs Monatsende (server/utils/interval-date.js) und
 // heben den Tag danach wieder auf `anchorDay`, den Tag, fuer den die Serie

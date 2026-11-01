@@ -177,7 +177,7 @@
  * Zuordnung offen). Pausiert meldet nichts - es ist die ABWESENHEIT eines
  * Laufs, vom Nutzer selbst so gewollt. Ein Warnton haette daraus einen Fehler
  * gemacht, den es nicht gibt; kein Modul der App faerbt „pausiert"/„inaktiv"
- * eigens ein (geprueft: budget, rewards, subscriptions, health, settings,
+ * eigens ein (geprueft: budget, subscriptions, health, settings,
  * inventory - alle bleiben neutral).
  *
  * DIE UNTERSCHEIDUNG LIEGT DESHALB IN DER FUELLUNG, NICHT IM TON: statt der

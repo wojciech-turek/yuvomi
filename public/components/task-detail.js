@@ -40,7 +40,7 @@ import { renderMarkdownLight } from '/utils/html.js';
 import { splitKeepingLineEndings } from '/utils/markdown-checklist.js';
 import { splitMentions, applyMention } from '/utils/mentions.js';
 import { refresh as refreshReminders } from '/reminders.js';
-import { parseRemindAtAsUtc } from '/utils/reminder-offset.js';
+import { wallTimeFromRemindAt } from '/utils/reminder-offset.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { pathAccess } from '/utils/module-access.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
@@ -48,7 +48,7 @@ import { zonedDateKey } from '/utils/timezone.js';
 import { historyDayLabel, daysFromToday, relativeDayWord, shortDayLabel, capitalizeFirst } from '/utils/day-label.js';
 import {
   FALLBACK_CATEGORY, PRIORITY_LABELS, STATUS_LABELS, statusLabel,
-  isArchived, canEditTaskDefinition, catLabel, normalizeTagList,
+  isArchived, canEditTaskDefinition, catLabel,
   docMime, docHref, docIcon, seriesDoneText,
 } from '/utils/task-fields.js';
 
@@ -199,25 +199,6 @@ function priorityNode(priority) {
   dot.className = `priority-dot priority-dot--${priority}`;
   badge.append(dot, document.createTextNode(PRIORITY_LABELS()[priority] ?? priority));
   return badge;
-}
-
-/** Eine Chip-Reihe aus einer Liste. Beschriftung liefert der Aufrufer. */
-function chipListNode(items, toLabel) {
-  if (!items.length) return null;
-  const wrap = document.createElement('div');
-  wrap.className = 'detail-chips';
-  items.forEach((item) => {
-    const chip = document.createElement('span');
-    chip.className = 'task-tag';
-    chip.textContent = toLabel(item);
-    wrap.appendChild(chip);
-  });
-  return wrap;
-}
-
-/** Tags als Chips. In der Leseansicht benennen sie, sie filtern nicht. */
-function tagChipsNode(tags) {
-  return chipListNode(normalizeTagList(tags), (tag) => tag);
 }
 
 /** Teilaufgaben mit ihrem Stand - die Liste führt sie, also führt die Ansicht sie auch. */
@@ -860,14 +841,17 @@ function commentsNode(task, ctx) {
   return wrap;
 }
 
-/** Erinnerung im Klartext, aus dem gespeicherten Zeitpunkt. */
+/**
+ * Erinnerung im Klartext: Datum und Uhrzeit der Haushaltszone - dieselben
+ * Werte, die das Blatt beim Bearbeiten in seine Felder schreibt
+ * (wallTimeFromRemindAt), damit Ansicht und Formular nie zwei Zeiten nennen.
+ */
 function taskReminderSummary(reminders) {
   const list = Array.isArray(reminders) ? reminders : (reminders ? [reminders] : []);
   return list
     .map((r) => {
-      if (!r?.remind_at) return '';
-      const at = parseRemindAtAsUtc(r.remind_at);
-      return `${formatDate(at)} ${formatTime(at)}`.trim();
+      const wall = r?.remind_at ? wallTimeFromRemindAt(r.remind_at) : null;
+      return wall ? `${formatDate(wall.date)} ${formatTime(wall.time)}`.trim() : '';
     })
     .filter(Boolean)
     .join(', ');
@@ -919,16 +903,11 @@ function renderTaskDetail(task, reminders = [], ctx) {
     // ANDERES als „offen/erledigt", nicht dasselbe anders (#688).
     { icon: 'archive', label: t('tasks.archivedLabel'), value: isArchived(task) ? formatDate(task.archived_at) : '' },
     { icon: 'flag', label: t('tasks.priorityLabel'), node: priorityNode(task.priority) },
-    // Nur wenn gesetzt - eine Zeile "nicht gesperrt" an jeder Aufgabe waere
-    // Rauschen. Die leere `value` blendet die Zeile aus (#830).
-    { icon: 'lock', label: t('tasks.lockedLabel'), value: task.locked ? t('tasks.lockedDetail') : '' },
     // FAELLIGKEIT und PERSONEN stehen seit R18 im Kopf (taskDetailHead): "Heute
     // faellig" als die eine Angabe ueber den Zeilen, die Personen als Avatare.
     { icon: 'calendar-clock', label: t('tasks.startDateLabel'), value: task.start_date ? formatDate(task.start_date) : '' },
     recurrenceRow(task.recurrence_rule, { fromCompletion: !!task.recurrence_from_completion }),
     { icon: 'folder', label: t('tasks.categoryLabel'), value: task.category && task.category !== FALLBACK_CATEGORY ? catLabel(task.category, ctx.categories) : '' },
-    { icon: 'award', label: t('tasks.pointsLabel'), value: task.points ? String(task.points) : '' },
-    { icon: 'tag', label: t('tasks.tagsLabel'), node: tagChipsNode(task.tags) },
     { icon: 'list-checks', label: t('tasks.subtasksLabel'), node: subtaskListNode(task, ctx) },
     { icon: 'paperclip', label: t('tasks.documentsLabel'), node: documentListNode(task.documents) },
     { icon: 'bell', label: t('reminders.sectionTitle'), value: taskReminderSummary(reminders) },

@@ -137,13 +137,13 @@ test('Ausblenden rührt den Haushalts-Schalter nicht an', async () => {
   const { baseUrl, close } = await startApp();
   try {
     currentRole = 'admin';
-    await write(baseUrl, { disabled_modules: ['rewards'] });
+    await write(baseUrl, { disabled_modules: ['waste'] });
     currentRole = 'member';
 
     await write(baseUrl, { hidden_modules: ['health'] });
 
     const data = await read(baseUrl);
-    assert.deepEqual(data.disabled_modules, ['rewards'], 'der Haushaltswert hat sich mitbewegt');
+    assert.deepEqual(data.disabled_modules, ['waste'], 'der Haushaltswert hat sich mitbewegt');
     assert.deepEqual(data.hidden_modules, ['health']);
     assert.equal(rawValue('hidden_modules'), null,
       'die persönliche Ausblendung landete unter dem haushaltweiten Schlüssel');

@@ -413,5 +413,5 @@ test('R20: die Filterreihe haelt ihren Platz, bis die Daten da sind', () => {
     'nach dem Laden entscheidet renderFilters, die Reihe spricht wieder, und das Geraet merkt es sich');
   assert.match(page, /const showCreators = creators\.length >= 3;/, 'Autorenchips erst ab drei Personen');
   const css = readFileSync(new URL('../public/styles/notes.css', import.meta.url), 'utf8');
-  assert.match(css, /\.notes-filters__skeleton \{[^}]*block-size: var\(--target-md\)/);
+  assert.match(css, /\.notes-filters\[data-pending\] \{[^}]*min-block-size: var\(--target-md\)/, 'der wartende Platzhalter haelt Chiphoehe, auch ohne Pillen');
 });

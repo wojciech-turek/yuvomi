@@ -247,11 +247,11 @@ test('Settings-Toggle: health in BUILT_IN_MODULES', () => {
   assert.match(src, /\{ id: 'health', labelKey: 'nav\.health' \}/);
 });
 
-test('Server-Allowlist: rewards ist toggelbar/sortierbar (Backend-Parität zur Nav)', () => {
+test('Server-Allowlist: rewards (Nagrody) ist ausgebaut, gespeicherte Werte fallen heraus', () => {
   const src = read('server/routes/preferences.js');
-  assert.match(src, /TOGGLEABLE_MODULES = \[[\s\S]*'rewards'[\s\S]*\]/);
-  assert.match(src, /MODULE_ORDER_RE =[^\n]*\|rewards\|/);
-  assert.match(src, /MOBILE_NAV_ORDER_RE =[^\n]*\|rewards\|/);
+  assert.doesNotMatch(src, /TOGGLEABLE_MODULES = \[[^\]]*'rewards'/);
+  assert.doesNotMatch(src, /MODULE_ORDER_RE =[^\n]*rewards/);
+  assert.doesNotMatch(src, /MOBILE_NAV_ORDER_RE =[^\n]*rewards/);
 });
 
 // --------------------------------------------------------
@@ -744,10 +744,9 @@ test('R18: die Heute-Region steht auf dem Telefon vom ersten Bild an - mit Skele
   //    Ziel alles weg, was es nicht selbst umgehaengt hat - als Kind waere es
   //    beim ersten Abgleich fort, vor den Daten.
   const fn = HEALTH_JS.slice(HEALTH_JS.indexOf('function prioritySkeletonMarkup()'), HEALTH_JS.indexOf('function syncPriorityRegion()'));
-  assert.match(fn, /class="health-priority-skeleton" data-health-priority-skeleton aria-hidden="true"/);
-  assert.match(fn, /health-priority-skeleton__pill[\s\S]*health-priority-skeleton__card--due/,
-    'die Form dessen, was kommt: Personenwahl und der Tag');
-  assert.doesNotMatch(fn, /health-priority-skeleton__card--quick/, 'Tafla: Schnell erfassen kommt auf dem Telefon nicht mehr');
+  assert.match(fn, /class="health-priority-skeleton" data-health-priority-skeleton>\$\{loadingSpinnerHtml\(\)\}<\/div>/,
+    'Aufgabe 2: ein stiller Ring statt der Silhouette von Personenwahl und Tag');
+  assert.doesNotMatch(fn, /skeleton__(pill|card)/, 'keine Platzhalter-Flaechen mehr');
   assert.match(body('.health-priority-skeleton'), /display:\s*none/, 'ohne die Marke steht kein Skelett');
   const show = rules.find((r) => /\[data-health-priority-pending\]\s*>\s*\.health-priority:empty\s*~\s*\.health-priority-skeleton/.test(r.selector));
   assert.ok(show && /display:\s*flex/.test(show.body), 'es steht nur, solange die Region wartet UND ihr Ziel leer ist');
@@ -802,5 +801,5 @@ test('R18: kein Bereich laedt mehr mit dem Wort "Lade..." - jeder traegt ein Ske
   assert.match(fn, /<span class="sr-only">\$\{esc\(t\('common\.loading'\)\)\}<\/span>/, 'und das Wort bleibt fuer Screenreader');
   assert.match(fn, /renderSkeletonChart\(\{ charts: 2 \}\)/);
   assert.match(fn, /renderSkeletonList\(\{ rows: 3, lines: 2 \}\)/);
-  assert.match(HEALTH_JS, /import \{ renderSkeletonList, renderSkeletonChart \} from '\/utils\/skeleton\.js';/);
+  assert.match(HEALTH_JS, /import \{ loadingSpinnerHtml, renderSkeletonList, renderSkeletonChart \} from '\/utils\/skeleton\.js';/);
 });

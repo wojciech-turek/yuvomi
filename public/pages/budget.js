@@ -1096,7 +1096,7 @@ function wireNav() {
   };
   findPageFab('fab-new-budget').addEventListener('click', addHandler);
   // Geteilte Tablist-Verhaltensschicht (Klick + Pfeiltasten/Home/End + Roving-
-  // Tabindex + ARIA) — dieselbe Grammatik wie Rewards/Haushaltshilfe statt einer
+  // Tabindex + ARIA) — dieselbe Grammatik wie Haushaltshilfe statt einer
   // modul-eigenen Nachbildung (utils/tablist.js). wireTablist malt den aktiven
   // Tab (sub-tab--active/aria/tabindex); renderBody übernimmt nur noch den Inhalt.
   _tablist = wireTablist(_container.querySelector('.budget-tabs'), {
@@ -1104,7 +1104,7 @@ function wireNav() {
     onChange: changeTab,
   });
   // Edge-Fade + Aktiver-Tab-in-Sicht übernimmt jetzt wireTablist zentral
-  // (Audit A2-18: gleiche Affordanz für Budget, Haushaltshilfe, Rewards).
+  // (Audit A2-18: gleiche Affordanz für Budget, Haushaltshilfe).
   attachSegmentIndicator(_container.querySelector('.budget-tabs'));
   updateLabel();
 }

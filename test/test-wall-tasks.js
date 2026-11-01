@@ -547,7 +547,7 @@ async function asCoupledDisplay(fn) {
 
 function seedPersonal() {
   for (const table of ['reminders', 'medication_schedules', 'medications', 'schedule_extra_shifts',
-    'schedule_shift_types', 'reward_redemptions', 'reward_participants', 'calendar_events', 'ics_subscriptions']) {
+    'schedule_shift_types', 'calendar_events', 'ics_subscriptions']) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
   // Der Haushalt dieser Tests nutzt jedes Modul: ab Werk ist der Schichtplan
@@ -574,13 +574,8 @@ function seedPersonal() {
   const later = addTask('Steuer abgeben', BEN, { due: '2026-10-20' });
   db.prepare('INSERT INTO reminders (entity_type, entity_id, remind_at, created_by) VALUES (?, ?, ?, ?)')
     .run('task', later, '2026-10-08T06:00:00Z', BEN);
-  // Cleo sammelt Punkte und wartet auf eine Praemie und eine Auszahlung; Anna (Admin) gibt frei.
-  db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(CLEO);
-  db.prepare('INSERT INTO reward_participants (user_id, enabled) VALUES (?, 1)').run(BEN);
-  db.prepare("INSERT INTO reward_redemptions (user_id, reward_name, cost, status) VALUES (?, 'Kinoabend', 10, 'pending')").run(CLEO);
-  db.prepare("INSERT INTO reward_redemptions (user_id, reward_name, cost, status, kind, currency) VALUES (?, 'Auszahlung', 5, 'pending', 'withdrawal', 'EUR')").run(CLEO);
 }
-const PERSONAL_WORDS = ['Eisen', 'Fruehdienst', 'Steuer abgeben', 'Kinoabend'];
+const PERSONAL_WORDS = ['Eisen', 'Fruehdienst', 'Steuer abgeben'];
 /** Die Dziś-Karte der gebauten Wand - ohne Uhr und Dock. */
 function wallParts(body) {
   const html = dash.renderWallSurface(body, null, { now: new Date() });
@@ -601,14 +596,6 @@ test('Persoenliches: ohne den Parameter bleibt die Uebersicht persoenlich', with
   assert.deepEqual(ben.health.nextDose, { name: 'Eisen', time: '20:00' });
   assert.deepEqual(ben.myShiftsToday.map((entry) => entry.shift_type.name), ['Fruehdienst']);
   assert.deepEqual((await reminders(BEN)).map((row) => row.entity_title), ['Steuer abgeben']);
-  const anna = await overview(ANNA);
-  assert.equal(anna.rewards.view, 'approver');
-  assert.equal(anna.rewards.pending, 1);
-  assert.equal(anna.rewards.moneyPending, 1);
-  const cleo = await overview(CLEO);
-  assert.equal(cleo.rewards.view, 'self');
-  assert.equal(cleo.rewards.pending, 1);
-  assert.deepEqual(cleo.rewards.standings.map((row) => row.id), [CLEO], 'Vorbedingung: ein Kind bekommt nur die eigene Zeile');
 }));
 
 test('Persoenliches: die Haushaltsfassung traegt es gar nicht - auch nicht fuer die Person, der es gilt', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
@@ -616,24 +603,15 @@ test('Persoenliches: die Haushaltsfassung traegt es gar nicht - auch nicht fuer 
   const display = await asCoupledDisplay(() => overview(DISPLAY));
   assert.equal(display.health.dosesTotal, 0, 'Massstab: ein Display bekommt keine Dosen');
   assert.deepEqual(display.myShiftsToday, [], 'Massstab: und keine Schicht');
-  for (const [who, label] of [[BEN, 'Ben, dem Dosis, Schicht und Erinnerung gelten'], [ANNA, 'Anna, die freigibt'], [CLEO, 'Cleo, die wartet']]) {
+  for (const [who, label] of [[BEN, 'Ben, dem Dosis, Schicht und Erinnerung gelten'], [ANNA, 'Anna, die ihre eigene Uebersicht hat'], [CLEO, 'Cleo, die ein Kind ist']]) {
     const wall = await overview(who, '?audience=household');
     assert.deepEqual(wall.health, display.health, `${label}: Dosen in der leeren Fassung des Displays`);
     assert.deepEqual(wall.fasting, display.fasting, label);
     assert.deepEqual(wall.nutrition, display.nutrition, label);
     assert.deepEqual(wall.myShiftsToday, [], `${label}: keine Schicht`);
-    assert.equal(wall.rewards.view, null, `${label}: keine Sicht auf Belohnungen`);
-    assert.equal(wall.rewards.pending, 0, `${label}: keine wartende Praemie`);
-    // Als ZAHL, wie in jeder anderen Fassung der Scheibe - die leere Form
-    // liess das Feld aus (Codex an #1900).
-    assert.equal(wall.rewards.moneyPending, 0, `${label}: keine wartende Auszahlung`);
-    // Der Parameter verengt nur: aus der Sitzung eines Kindes oeffnet er nicht
-    // die Zeilen der Geschwister, die die Sicht `self` zurueckhaelt.
-    assert.deepEqual(wall.rewards.standings, [], `${label}: keine Staende`);
-    assert.deepEqual(wall.rewards.recent, [], label);
     assert.deepEqual(await reminders(who, '?audience=household'), [], `${label}: keine Erinnerung`);
     const text = JSON.stringify(wall);
-    for (const word of ['Eisen', 'Fruehdienst', 'Kinoabend']) assert.ok(!text.includes(word), `${label}: „${word}" reist nicht mit`);
+    for (const word of ['Eisen', 'Fruehdienst']) assert.ok(!text.includes(word), `${label}: „${word}" reist nicht mit`);
     assert.ok(titles(wall.planTasks).includes('Tisch decken'), `${label}: Reichweite - was alle sehen duerfen, steht da`);
   }
 }));
@@ -650,12 +628,6 @@ test('Persoenliches: auch die Erinnerungen fallen bei doppeltem Parameter nicht 
 test('Persoenliches: das Display bekommt, was es bekam', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedPersonal();
   const display = await asCoupledDisplay(() => overview(DISPLAY));
-  // Belohnungen sind eines der Module, die ein Display lesen darf: seine
-  // normale Uebersicht behaelt die Sicht `family`, ohne fremde Anfragen.
-  assert.equal(display.rewards.view, 'family');
-  assert.equal(display.rewards.pending, 0);
-  assert.equal(display.rewards.moneyPending, 0);
-  assert.deepEqual(display.rewards.standings.map((row) => row.id).sort(), [BEN, CLEO].sort());
   assert.ok(titles(display.urgentTasks).includes('Tisch decken'));
 }));
 
@@ -991,7 +963,6 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     // Den Einkauf liest ein Display seit Tafla (die Einkaufskarte der Wand):
     // die Listen traegt die Wand, die Zahl der Listen nicht.
     assert.equal(wall.shoppingOpenLists, 0);
-    assert.deepEqual(wall.rewards, { view: null, standings: [], participantCount: 0, pending: 0, moneyPending: 0, catalog: [], recent: [] });
     // Was keinem Modul gehoert.
     assert.deepEqual(wall.countdowns, []);
     assert.equal(wall.countdownTotal, 0);
@@ -1027,8 +998,8 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
 
     // KEIN FEHLENDER SCHLUESSEL: die Form der Antwort bleibt.
     assert.deepEqual(Object.keys(wall).sort(), Object.keys(personal).filter((key) => key !== 'shoppingTile').sort());
-    for (const key of ['housekeeping', 'pantryExpiring', 'budget', 'rewards', 'health']) {
-      const own = Object.keys(personal[key]).filter((field) => !(key === 'rewards' && field === 'me')).sort();
+    for (const key of ['housekeeping', 'pantryExpiring', 'budget', 'health']) {
+      const own = Object.keys(personal[key]).sort();
       assert.deepEqual(Object.keys(wall[key]).sort(), own, `„${key}" behaelt seine Felder`);
     }
   }
@@ -1052,7 +1023,7 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   // Geld steht an keiner Wand.
   budget: 'budget', splitBalance: 'budget',
   // Was nur dem Betrachter gilt (#1900).
-  rewards: 'rewards', health: 'health', fasting: 'health', nutrition: 'health', myShiftsToday: 'schedule',
+  health: 'health', fasting: 'health', nutrition: 'health', myShiftsToday: 'schedule',
   // Keinem Modul zugeordnet: nach der anfragenden Person geschnitten.
   countdowns: null, countdownTotal: null, quicklinks: null,
   // Das alte Wand-Programm (bis Tafla, 2026-10-19): die Tafla-Wand liest den
@@ -1100,7 +1071,7 @@ test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der
   // der Antwort desselben Haushalts ohne jede Zeile unterscheidet.
   for (const table of ['tasks', 'calendar_events', 'notes', 'budget_entries', 'expense_ledger_entries', 'quick_links',
     'housekeeping_work_sessions', 'meals', 'shopping_items', 'shopping_lists', 'waste_one_off_pickups', 'pantry_items',
-    'birthdays', 'medication_schedules', 'medications', 'schedule_extra_shifts', 'reward_redemptions', 'reward_participants']) {
+    'birthdays', 'medication_schedules', 'medications', 'schedule_extra_shifts']) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
   const blank = await overview(ANNA, householdQuery());
@@ -1118,7 +1089,7 @@ test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der
   // Reichweite der Messung: persoenlich traegt dieselbe Saat weit mehr.
   const blankPersonal = await overview(ANNA);
   const carriedPersonal = Object.keys(personal).filter((key) => differs(personal[key], blankPersonal[key]));
-  for (const key of ['budget', 'splitBalance', 'pinnedNotes', 'quicklinks', 'countdowns', 'rewards', 'weekEvents', 'openTaskCount']) {
+  for (const key of ['budget', 'splitBalance', 'pinnedNotes', 'quicklinks', 'countdowns', 'weekEvents', 'openTaskCount']) {
     assert.ok(carriedPersonal.includes(key), `Reichweite: persoenlich traegt „${key}"`);
   }
 }));
@@ -1141,7 +1112,7 @@ test('Allowlist: ein unbekannter Schluessel bekommt NEIN - auch einer, den es he
 
 test('Allowlist: was die Wand nicht zeigt, wird auch nicht gelesen', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
-  const OFF_WALL_TABLES = /\b(notes|budget_entries|expense_ledger_entries|quick_links|medications|reward_redemptions|schedule_extra_shifts)\b/;
+  const OFF_WALL_TABLES = /\b(notes|budget_entries|expense_ledger_entries|quick_links|medications|schedule_extra_shifts)\b/;
   const original = db.prepare;
   let seen = [];
   db.prepare = function prepare(sql) { seen.push(String(sql)); return original.call(this, sql); };
@@ -1172,7 +1143,7 @@ test('Allowlist: die gebaute Wand ist dieselbe wie zuvor - nichts, was sie zeich
     // nicht hat.
     const beforeData = {
       ...personal,
-      health: wall.health, fasting: wall.fasting, nutrition: wall.nutrition, rewards: wall.rewards, myShiftsToday: [],
+      health: wall.health, fasting: wall.fasting, nutrition: wall.nutrition, myShiftsToday: [],
       pendingReminders: [],
     };
     const afterData = { ...wall, pendingReminders: [] };
@@ -1194,7 +1165,6 @@ test('Allowlist: das Display ohne den Parameter bekommt, was es bekam', withCloc
   assert.deepEqual(titles(display.countdowns), ['Urlaub in Sicht'], 'Countdowns bleiben der Uebersicht des Displays');
   assert.ok(display.openTaskCount > 0);
   assert.ok(display.weekEvents.length > 0);
-  assert.equal(display.rewards.view, 'family');
   // Und an der Wand folgt auch das Display der Allowlist.
   const wall = await asCoupledDisplay(() => overview(DISPLAY, '?audience=household'));
   assert.deepEqual(wall.countdowns, []);

@@ -20,6 +20,7 @@ import { normalizeRecipeMealTypes, recipeSupportsMealType, recipeAllowsMealType 
 import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-state.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
+import { ensureStyleApplied } from '/utils/page-style.js';
 import { pageToolsMenuHtml, popoverMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
 import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
@@ -717,6 +718,60 @@ function mealsLayoutHtml() {
       </button>`}`;
 }
 
+/**
+ * Alles, was der Plan und der Mahlzeit-Dialog lesen: die Woche, Listen,
+ * Einstellungen, Kategorien, Rezepte, Mitglieder, Vorrat und - nach den Listen -
+ * was schon auf einer steht. Eine Stelle fuer render() und openNewMealFrom().
+ */
+async function loadMealsData(monday) {
+  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
+  // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
+  await loadListedNames();
+}
+
+/**
+ * Der naechste Platz des Tages, der noch leer ist - nach der Uhr: ab der
+ * Mahlzeit, die jetzt dran ist (`startType`), die erste ohne Mahlzeit. Der
+ * Zwischensnack ist nie die Vermutung (wie mealTypeForHour); gibt es dahinter
+ * nichts Freies, bleibt es bei `startType`. Ohne `startType` beginnt die Suche
+ * vorn und endet beim letzten Platz.
+ * @param {string[]} types sichtbare Mahlzeitarten, in Planreihenfolge
+ * @param {Array<{meal_type: string}>} meals Mahlzeiten dieses Tages
+ * @param {string} [startType]
+ * @returns {string}
+ */
+export function firstEmptyMealSlot(types, meals, startType = null) {
+  const taken = new Set((meals ?? []).map((meal) => meal.meal_type));
+  const guessable = types.filter((type) => type !== 'snack');
+  const pool = guessable.length ? guessable : types;
+  const rank = (type) => MEAL_TYPE_KEYS.indexOf(type);
+  const fromHere = pool.filter((type) => rank(type) >= rank(startType));
+  const fallback = pool.includes(startType) ? startType : (pool[pool.length - 1] ?? 'lunch');
+  return (fromHere.length ? fromHere : pool).find((type) => !taken.has(type)) ?? fallback;
+}
+
+/**
+ * Das Formular „Mahlzeit hinzufuegen" von ausserhalb der Seite oeffnen
+ * (Uebersicht): heute, der naechste noch leere Platz. Laedt, was der Dialog
+ * liest, wie render() es tut; gezeichnet wird nichts, solange die Seite nicht
+ * steht, und ihr naechstes render() holt alles frisch.
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff
+ */
+export async function openNewMealFrom({ user = null, onChanged = () => {} } = {}) {
+  if (readOnly()) return false;
+  const today = todayKey();
+  const [, release] = await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
+  state.userId = user?.id ?? state.userId;
+  const types = MEAL_TYPE_KEYS.filter((key) => state.visibleMealTypes.includes(key));
+  const startType = mealTypeForHour(nowFields().hour);
+  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today), startType);
+  // Das Blatt gilt nur, solange der Dialog offen ist (generische Selektoren).
+  openMealModal({ mode: 'create', date: today, mealType, onChanged, onClose: release });
+  return true;
+}
+
 export async function render(container, { user }) {
   _container = container;
   _railSettled = false;
@@ -768,9 +823,7 @@ export async function render(container, { user }) {
   state.currentWeek = monday;
   syncTodayButton();
 
-  await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
-  // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
-  await loadListedNames();
+  await loadMealsData(monday);
   renderWeekGrid();
   wirePhoneWeek();
   renderRecipeSidebar();
@@ -972,7 +1025,7 @@ function wireRailToggle() {
   if (gespeichert) {
     hidden = gespeichert === 'hidden';
   } else {
-    const grid = _container.querySelector('#week-grid');
+    const grid = _container?.querySelector('#week-grid');
     const desktop = !window.matchMedia?.('(max-width: 639px)').matches;
     hidden = Boolean(desktop && grid && grid.scrollWidth > grid.clientWidth + 1);
   }
@@ -1041,7 +1094,7 @@ function renderWeekGrid() {
 }
 
 function renderBoardGrid() {
-  const grid = _container.querySelector('#week-grid');
+  const grid = _container?.querySelector('#week-grid');
   if (!grid) return;
 
   updateWeekLabel();
@@ -3008,6 +3061,7 @@ function openMealModal(opts) {
     title: date ? t('meals.sheetTitle', { meal: mealTypeLabel(sheetType), day: shortDayLabel(date) }) : (isEdit ? t('meals.editMeal') : t('meals.addMealTitle')),
     content,
     size: 'md',
+    onClose: opts.onClose,
     onSave(panel) {
       wireMealTypeChips(panel);
       // Zutaten
@@ -3886,7 +3940,15 @@ function closeModal({ force = false } = {}) {
   state.modal = null;
 }
 
+/** Der Aufrufer von aussen frischt sich auf; scheitert er, ist die Speicherung trotzdem gelungen. */
+async function notifyChanged(onChanged) {
+  try { await onChanged?.(); } catch (err) { console.error('[Meals] onChanged:', err); }
+}
+
 async function saveModal(overlay) {
+  // Von der Uebersicht aus geoeffnet steht die Wochenansicht nicht: nichts
+  // zeichnen, ihr naechstes render() laedt ohnehin alles frisch.
+  const redrawWeek = () => { if (_container?.isConnected) renderWeekGrid(); };
   // Zweite Linie hinter openMealModal(): die Rechte koennen sich aendern,
   // waehrend der Dialog offen steht.
   if (readOnly()) return;
@@ -3934,8 +3996,10 @@ async function saveModal(overlay) {
   saveBtn.disabled    = true;
   saveBtn.textContent = '…';
 
+  let onChanged = null;
   try {
     const { mode, meal } = state.modal;
+    onChanged = state.modal.onChanged ?? null;
 
     if (mode === 'create') {
       const res     = await api.post('/meals', { date, meal_type, title, notes, recipe_url, recipe_id, cook_user_id, ingredients, repeat_weekly, repeat_until });
@@ -3983,8 +4047,8 @@ async function saveModal(overlay) {
       try {
         const res = await api.post(`/meals/${created.id}/to-shopping-list`, { listId: list.id });
         await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
-        renderWeekGrid();
-        refocusAfterRender();
+        redrawWeek();
+        if (_container?.isConnected) refocusAfterRender();
         announceTransfer({
           message: t('meals.sheetSavedItems', {
             meal: mealTypeInSentence(meal_type), day: t(DAY_ACC_KEYS[zonedWeekday(date)]), count: res.data?.transferred ?? 0, list: list.name,
@@ -3992,16 +4056,18 @@ async function saveModal(overlay) {
           addedIds: res.data?.added_ids ?? [],
           onUndone: async () => {
             await Promise.all([loadWeek(state.currentWeek), loadListedNames()]);
-            renderWeekGrid();
+            redrawWeek();
+            await notifyChanged(onChanged);
           },
         });
+        await notifyChanged(onChanged);
         return;
       } catch (err) {
         // Die Mahlzeit steht - nur der Transfer scheiterte. Die Karte bietet ihn weiter an.
         window.yuvomi?.showToast(errorSentence(err), 'danger');
       }
     }
-    renderWeekGrid();
+    redrawWeek();
     // Das Ergebnis, nicht der Dialogtitel: „Mahlzeit hinzufügen" als
     // Erfolgsmeldung liest sich wie eine Aufforderung (R16).
     // ONE TAP TO THE SHOPPING LIST (fork, 2026-10-19): a new meal with
@@ -4011,11 +4077,12 @@ async function saveModal(overlay) {
       const created = createdWithIngredients;
       window.yuvomi?.showToast(t('meals.mealSaved'), 'success', 8000, {
         label: t('meals.toShoppingListAction'),
-        onClick: () => transferMeal(created.id),
+        onClick: () => transferMeal(created.id, undefined, onChanged),
       });
     } else {
       window.yuvomi?.showToast(mode === 'create' ? t('meals.mealSaved') : t('meals.mealUpdated'), 'success');
     }
+    await notifyChanged(onChanged);
   } catch (err) {
     // Der Satz der App, nie der Text des Servers (#1909): ein inzwischen
     // geloeschtes Rezept nennt der Server `meals_selected_recipe_not_found`.
@@ -4192,7 +4259,7 @@ async function deleteMeal(mealId, { scope } = {}) {
 // Zutaten → Einkaufsliste (Quick-Transfer vom Slot aus)
 // --------------------------------------------------------
 
-async function transferMeal(mealId, btn) {
+async function transferMeal(mealId, btn, onChanged = null) {
   // Zweite Linie hinter dem Markup (Regel 2 in utils/module-access.js): der
   // Knopf fehlt ohne beide Rechte, und der Handler loest den Aufruf dann auch
   // nicht aus.
@@ -4207,7 +4274,8 @@ async function transferMeal(mealId, btn) {
     const res = await api.post(`/meals/${mealId}/to-shopping-list`, { listId: target.id });
     if (res.data.transferred > 0) {
       await loadWeek(state.currentWeek);
-      renderWeekGrid();
+      if (_container?.isConnected) renderWeekGrid();
+      await notifyChanged(onChanged);
       // Der Toast nennt die ZIEL-Liste. „5 Zutaten übernommen." sagte nicht, wohin -
       // und bei mehreren Listen ist genau das die Frage, die offen bleibt (Critique
       // 2026-07-30, P1). Der Kreislauf endet nicht mit „übernommen", sondern in
@@ -4221,7 +4289,8 @@ async function transferMeal(mealId, btn) {
         addedIds: res.data.added_ids ?? [],
         onUndone: async () => {
           await loadWeek(state.currentWeek);
-          renderWeekGrid();
+          if (_container?.isConnected) renderWeekGrid();
+          await notifyChanged(onChanged);
         },
       });
     } else {

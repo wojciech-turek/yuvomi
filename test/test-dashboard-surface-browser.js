@@ -117,7 +117,12 @@ async function tailAtEnd(page) {
  * `:root:has(yuvomi-install-prompt[data-shown])` tut, statt das Bauteil
  * vorzutaeuschen. Die Rechnung darueber (`--shell-tail` an `.app-content`)
  * laeuft unveraendert. */
-const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/rewards', '/birthdays'];
+// `/inventory` kam mit Quick-Add (2026-10-29) hinzu: `/rewards` ist mit Nagrody
+// gegangen, und am Desktop tragen `/tasks` und `/health` einen eigenen
+// Scrollport (Listenspalte) - es blieben fuenf Routen fuer eine Reichweite von
+// sechs. Die Latte bleibt; dazu kommt eine weitere echte Seite ohne eigenen
+// Scrollport.
+const PAGE_SCROLL_ROUTES = ['/', '/tasks', '/settings', '/documents', '/health', '/housekeeping', '/birthdays', '/inventory'];
 
 for (const device of ['desktop', 'mobile']) {
   test(`Nachlauf: am Seitenende liegt der volle Nachlauf unter dem letzten Inhalt (${device})`, async () => {
@@ -127,10 +132,10 @@ for (const device of ['desktop', 'mobile']) {
     for (const path of PAGE_SCROLL_ROUTES) {
       await gotoRoute(page, path);
       // Die Uebersicht bringt mobil ihren FAB am Zeiger selbst mit; dort wird
-      // der echte Summand gemessen, nicht der gesetzte. Am Desktop dockt er
-      // seit R14 (Re-Critique 2026-09-28, A8 P3-2) als Pille "+ Neu" im Kopf
-      // - dann schwebt nichts, und die Uebersicht misst wie jede Route den
-      // Summanden des Install-Banners.
+      // der echte Summand gemessen, nicht der gesetzte. Am Desktop dockte er
+      // seit R14 (Re-Critique 2026-09-28, A8 P3-2) als Pille "+ Neu" im Kopf.
+      // Quick-Add (2026-10-29): das + von Dziś schwebt auch am Desktop (kein
+      // Kopf) - dann misst die Uebersicht dort den echten Summanden.
       const floatingFab = await page.evaluate(() => [...document.querySelectorAll('.page-fab:not([hidden])')]
         .some((el) => getComputedStyle(el).position === 'fixed'));
       if (path !== '/' || device === 'mobile' || !floatingFab) {
@@ -155,9 +160,9 @@ for (const device of ['desktop', 'mobile']) {
 }
 
 // TAFLA (2026-10-19): Dziś ist eine Spalte, kein Raster. Die Regel dahinter
-// bleibt: am Seitenende liegt keine schwebende Flaeche auf Inhalt. Steht am
-// Desktop kein schwebender Knopf (der Anlegen-Weg gehoert der Kapsel und ihrem
-// +), gibt es nichts, das verdecken koennte.
+// bleibt: am Seitenende liegt keine schwebende Flaeche auf Inhalt.
+// Quick-Add (2026-10-29): das + von Dziś schwebt am Desktop unten rechts -
+// gemessen wird jetzt wirklich ein Knopf, und ohne ihn ist die Sonde rot.
 test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Inhalt (desktop)', async () => {
   const page = await openPage(harness, { device: 'desktop' });
   await gotoRoute(page, '/');
@@ -165,12 +170,13 @@ test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Inhalt (de
   await tailAtEnd(page);
   const hits = await page.evaluate(() => {
     const fab = [...document.querySelectorAll('.page-fab:not([hidden])')].find((el) => getComputedStyle(el).position === 'fixed');
-    if (!fab) return { reach: true, ids: [] };
+    if (!fab) return { reach: false, fab: false, ids: [] };
     const f = fab.getBoundingClientRect();
     // 2026-10-27, v2: die Karten von Dziś und die Zeilen von Wkrótce.
     const blocks = [...document.querySelectorAll('[data-today] .dz-card, [data-today] .dz-soon__row')];
     return {
       reach: blocks.length > 0,
+      fab: fab.id === 'fab-add',
       ids: blocks.filter((b) => {
         const r = b.getBoundingClientRect();
         return r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top;
@@ -178,6 +184,7 @@ test('Nachlauf: am Seitenende der Uebersicht liegt der FAB auf keinem Inhalt (de
     };
   });
   await page.close();
+  assert.ok(hits.fab, 'Reichweite: das + von Dziś (fab-add) schwebt nicht');
   assert.ok(hits.reach, 'Reichweite: Dziś hat keinen Inhalt');
   assert.deepEqual(hits.ids, [], `Am Seitenende liegt der FAB auf: ${hits.ids.join(', ')}`);
 });
@@ -643,10 +650,11 @@ for (const [label, reply] of [
 /* TAFLA (2026-10-19): der Speed-Dial der Uebersicht ist entfallen. Am Telefon
  * stand dort, wo er stand, das globale + der Shell (`#capture-plus`).
  * 2026-10-27, v2: auch das + ist weg - jede Seite legt in ihrem eigenen Kopf
- * an, und Dziś hat keinen Anlege-Knopf. Die Zusage des Neuaufbaus bleibt: er
- * laesst die Shell heil - die Leiste steht mit allen Tabs, und nirgends
- * (Shell-Ebene oder Scrollport) bleibt ein Knopf zurueck, der hier nichts
- * anlegt. */
+ * an. Quick-Add (2026-10-29): Dziś hat wieder EIN +, `fab-add`, das das Menue
+ * zum Hinzufuegen oeffnet. Die Zusage des Neuaufbaus bleibt: er laesst die
+ * Shell heil - die Leiste steht mit allen Tabs, genau dieser eine Knopf steht
+ * sichtbar in der Shell-Ebene, und kein zweiter (alter Speed-Dial, globales +,
+ * ein Knopf im Scrollport) bleibt zurueck. */
 async function todayChrome(page) {
   await page.waitForFunction(() => {
     const bar = document.querySelector('.nav-bottom__items');
@@ -658,7 +666,8 @@ async function todayChrome(page) {
     const shown = (el) => el.getClientRects().length > 0;
     return {
       plus: document.querySelectorAll('#capture-plus, #fab-main').length,
-      fabs: [...document.querySelectorAll('#fab-layer .page-fab, #main-content .page-fab')].filter(shown).length,
+      fabs: [...document.querySelectorAll('#fab-layer .page-fab, #main-content .page-fab')].filter(shown).map((el) => el.id),
+      inLayer: Boolean(document.querySelector('#fab-layer > #fab-add')),
       slots: [...document.querySelectorAll('.nav-bottom__items > .nav-item')].filter(shown).length,
     };
   });
@@ -670,7 +679,8 @@ function assertChromeIntact(state, when) {
   // nur der erste.
   const findings = [];
   if (state.plus !== 0) findings.push(`${state.plus} globale Plus-Knoepfe (#capture-plus/#fab-main) im Dokument`);
-  if (state.fabs !== 0) findings.push(`${state.fabs} sichtbare Seiten-Knoepfe auf Dziś - die Seite legt nichts an`);
+  if (state.fabs.join() !== 'fab-add') findings.push(`sichtbare Seiten-Knoepfe auf Dziś: [${state.fabs.join(', ')}] - erwartet genau das + (fab-add)`);
+  if (!state.inLayer) findings.push('das + haengt nicht in der Shell-Ebene (#fab-layer)');
   assert.deepEqual(findings, [], `${when}:\n${findings.join('\n')}`);
 }
 
@@ -712,7 +722,7 @@ test('FAB: beim Betreten des Wand-Modus steht keiner auf der Wand, auch solange 
 
 // 2026-10-27, v2: „steht er in der Shell-Ebene, mit Plus, neben der Kapsel" -
 // das + ist weg; geprueft wird, dass der Neuaufbau die Shell heil laesst.
-test('Dziś: nach dem Verlassen des Wand-Modus steht die Leiste, und kein Knopf bleibt zurueck (mobile, #1588, v2)', async () => {
+test('Dziś: nach dem Verlassen des Wand-Modus steht die Leiste und genau das + - kein Knopf bleibt zurueck (mobile, #1588, Quick-Add)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
   assertChromeIntact(await todayChrome(page), 'vor dem Wand-Modus');
   await enterDashboardWall(page);
@@ -723,7 +733,7 @@ test('Dziś: nach dem Verlassen des Wand-Modus steht die Leiste, und kein Knopf 
   assertChromeIntact(after, 'nach dem Verlassen');
 });
 
-test('Dziś: nach "erneut versuchen" steht die Leiste, und kein Knopf bleibt zurueck (mobile, #1588, v2)', async () => {
+test('Dziś: nach "erneut versuchen" steht die Leiste und genau das + - kein Knopf bleibt zurueck (mobile, #1588, Quick-Add)', async () => {
   const page = await openPage(harness, { device: 'mobile' });
   let failNext = true;
   page.__yuvomiRequestInterceptor = (req) => {

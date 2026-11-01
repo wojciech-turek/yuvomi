@@ -1,80 +1,39 @@
 /**
- * Modul: Skeleton-Lade-Hilfen
- * Zweck: EINE geteilte Lade-Sprache für alle Module. Ersetzt modul-eigene
- *        „Lädt…"-Texte und Inline-Skeleton-Markup durch ein konsistentes,
- *        token-getriebenes Skeleton-Muster (Sichtbarkeit des Systemstatus).
- * Abhängigkeiten: keine (gibt reine HTML-Strings zurück; Caller fügen via
+ * Modul: Lade-Hilfen
+ * Zweck: EINE geteilte Lade-Sprache fuer alle Seiten: ein stiller Ring, sonst
+ *        nichts. Seit 2026-10-29 (Schnell-Erfassen, Aufgabe 2) gibt es keine
+ *        Skelette mehr - die Platzhalter-Flaechen sprangen beim Eintreffen der
+ *        Daten und flackerten bei schnellem Aufbau.
+ * Abhaengigkeiten: keine (gibt reine HTML-Strings zurueck; Caller fuegen via
  *        insertAdjacentHTML/replaceChildren ein).
  *
- * Genutzte Klassen (global in layout.css definiert, also auf JEDER Seite
- * verfügbar — anders als das frühere .skeleton-line, das nur in dashboard.css
- * lebte und außerhalb des Dashboards still wirkungslos war):
- *   .skeleton            – Shimmer-Basis (prefers-reduced-motion-fest)
- *   .skeleton-list       – vertikaler Stapel aus Skeleton-Karten
- *   .skeleton-card       – eine Listen-Zeile als Karte
- *   .skeleton-line       – einzelne Textzeile
- *   .skeleton-line--title|short|medium|full – Breiten/Höhen-Varianten
+ * Der Ring (.page-loading, layout.css) erscheint erst nach --duration-2xl (400 ms): ein
+ * schneller Aufbau zeigt gar nichts. Der Wrapper traegt aria-hidden="true";
+ * die Lade-Semantik (aria-busy) gehoert an den umgebenden Live-Region-Container
+ * des Callers.
  *
- * Skeletons sind rein dekorativ: Der Wrapper trägt aria-hidden="true", damit
- * Screenreader sie nicht vorlesen. Die Lade-Semantik (aria-busy) gehört an den
- * umgebenden Live-Region-Container des Callers.
+ * Die Namen renderSkeletonList/-Card/-Chart bleiben (rund 25 Aufrufer) und
+ * nehmen ihre alten Optionen an; alle liefern denselben Ring.
  */
 
-const LINE_WIDTHS = ['medium', 'full', 'short'];
-
-/**
- * Eine Skeleton-Karte (eine Listen-Zeile).
- * @param {object} [opts]
- * @param {number} [opts.lines=2] Anzahl Textzeilen in der Karte (1–4 sinnvoll).
- * @returns {string} HTML
- */
-export function renderSkeletonCard({ lines = 2 } = {}) {
-  const count = Math.max(1, Math.floor(lines));
-  let out = '';
-  for (let i = 0; i < count; i++) {
-    // Erste Zeile = Titel (etwas höher), restliche Breiten rotieren.
-    const variant = i === 0 ? 'title' : LINE_WIDTHS[(i - 1) % LINE_WIDTHS.length];
-    out += `<div class="skeleton skeleton-line skeleton-line--${variant}"></div>`;
-  }
-  return `<div class="skeleton-card">${out}</div>`;
+/** Der Ring fuer eine ladende Seite oder Flaeche. @returns {string} HTML */
+export function loadingSpinnerHtml() {
+  return '<div class="page-loading" aria-hidden="true"><span class="page-loading__spinner"></span></div>';
 }
 
-/**
- * Liste aus N Skeleton-Karten für Listen-/Detail-Lade-Zustände.
- * @param {object} [opts]
- * @param {number} [opts.rows=5] Anzahl Karten.
- * @param {number} [opts.lines=2] Textzeilen pro Karte.
- * @returns {string} HTML (mit aria-hidden-Wrapper)
- */
-export function renderSkeletonList({ rows = 5, lines = 2 } = {}) {
-  const count = Math.max(0, Math.floor(rows));
-  let cards = '';
-  for (let i = 0; i < count; i++) cards += renderSkeletonCard({ lines });
-  return `<div class="skeleton-list" aria-hidden="true">${cards}</div>`;
+/** @returns {string} HTML (Optionen werden angenommen und ignoriert) */
+export function renderSkeletonCard(_opts) {
+  return loadingSpinnerHtml();
 }
 
-/**
- * Skelett fuer eine DIAGRAMM-Flaeche (R16, Bewegung): Titelzeile, darunter ein
- * Block in Diagrammhoehe, darunter eine kurze Legendenzeile. Die Statistik
- * zeigte beim Laden ein Listen-Skelett (vier Karten mit zwei Zeilen) - die
- * falsche Form: was danach kommt, sind Diagramme, und die Flaeche sprang beim
- * Eintreffen der Daten in eine andere Gliederung.
- *
- * @param {object} [opts]
- * @param {number} [opts.charts=2] - Anzahl der Diagramm-Karten
- * @returns {string} HTML-String
- */
-export function renderSkeletonChart({ charts = 2 } = {}) {
-  const count = Math.max(1, Math.floor(charts));
-  let cards = '';
-  for (let i = 0; i < count; i++) {
-    cards += '<div class="skeleton-card">'
-      + '<div class="skeleton skeleton-line skeleton-line--title"></div>'
-      + '<div class="skeleton skeleton-chart"></div>'
-      + '<div class="skeleton skeleton-line skeleton-line--short"></div>'
-      + '</div>';
-  }
-  return `<div class="skeleton-list" aria-hidden="true">${cards}</div>`;
+/** @returns {string} HTML (Optionen werden angenommen und ignoriert) */
+export function renderSkeletonList(_opts) {
+  return loadingSpinnerHtml();
+}
+
+/** @returns {string} HTML (Optionen werden angenommen und ignoriert) */
+export function renderSkeletonChart(_opts) {
+  return loadingSpinnerHtml();
 }
 
 /**

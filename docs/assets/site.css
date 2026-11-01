@@ -137,7 +137,7 @@
      illustration palette, frozen at the app's last values; the guard in
      test/test-docs-landing.js holds the table. */
   --f-time: #00668F;         /* --_family-time: calendar, shifts, reminders */
-  --f-work: #157F3D;         /* --_family-work: tasks, housekeeping, waste, rewards */
+  --f-work: #157F3D;         /* --_family-work: tasks, housekeeping, waste */
   --f-kitchen: #C2410C;      /* --_family-kitchen: meals, recipes, shopping, pantry */
   --f-money: #0F766E;        /* --_family-money: budget, split expenses */
   --f-people: #CE2A63;       /* --_family-people: contacts, birthdays */
@@ -152,7 +152,6 @@
   --m-tasks: var(--f-work);
   --m-housekeeping: var(--f-work);
   --m-waste: var(--f-work);
-  --m-rewards: var(--f-work);
   --m-calendar: var(--f-time);
   --m-schedule: var(--f-time);
   --m-reminders: var(--f-time);

@@ -159,15 +159,6 @@
 /* Auf/Ab am Listenrand ist gesperrt (`disabled`); die Sperre zeichnet
  * `.row-action:disabled` in layout.css, wie `.btn:disabled`. */
 
-/* Häufigkeit im Tag-Manager (<yuvomi-tag-manager>). Leiser als der Name: sie
-   ordnet die Liste, sie ist nicht ihr Inhalt. */
-.cat-row__count {
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
 .cat-add-form {
   display: flex;
   gap: var(--space-2);

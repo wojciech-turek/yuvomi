@@ -42,107 +42,33 @@
 }
 
 /* --------------------------------------------------------
- * Loading-Screen
+ * Loading-Screen: ein Ring in der Mitte, sonst nichts.
  * -------------------------------------------------------- */
 .app-loading {
-  display: block;
-  position: relative;
+  display: grid;
+  place-items: center;
   /* vh-Zwilling fuer Browser ohne dvh (#1276), siehe .app-shell. */
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
   background-color: var(--color-bg);
-  /* Das Marken-Lichtfeld (tokens.css, `--brand-field`): dasselbe stehende
-   * Raumlicht wie hinter der Glastafel der Zugangsseiten - wer abgemeldet
-   * startet, sieht vom Ladebild zur Anmeldung EINEN Raum. Kein Filter, keine
-   * Animation auf der Flaeche; nur der Schriftzug darin pulsiert. */
-  background-image: var(--brand-field);
-  background-repeat: no-repeat;
 }
 
-/* Label-Farbe statt Akzent (R18): der Schriftzug steht direkt auf dem
- * Lichtfeld, und Violett auf violettem Licht faellt im Kern unter 3:1. Die
- * Tinte haelt ueberall auf dem Feld mindestens 8:1 (hell) - und DESIGN.md
- * fuehrt Akzent-Titel ohnehin als Verbot. */
-.app-loading__logo {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
+.app-loading__spinner {
+  inline-size: 28px;
+  block-size: 28px;
+  box-sizing: border-box;
+  /* Einzelne Eigenschaften, weil der Ring ein Ring ist und keine .btn--secondary. */
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: app-spin 800ms linear infinite;
 }
 
-/* DIE SKIZZE DER SHELL (R20, Re-Critique 2026-10-17 a6 P2: 4,8 s ein
- * pulsierender Schriftzug am kalten Telefon). Sie steht still - eine
- * Schleife ueber Sekunden sagt "es haengt", eine ruhige Skizze sagt "gleich
- * hier". Geometrie wie die Shell: Kopf mit Siegel auf dem Seitenrand, Karten
- * im Raster der Uebersicht, unten die Kapsel auf ihrer Hoehe (am Desktop die
- * schwebende Seitenleiste). Die Flaechen sind die der echten Karten, nur leer. */
-.app-loading__page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: calc(var(--safe-area-inset-top) + var(--space-4)) var(--page-gutter) var(--space-4);
-}
-
-.app-loading__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--target-base);
-  margin-block-end: var(--space-2);
-}
-
-.app-loading__seal {
-  flex: 0 0 auto;
-  inline-size: var(--target-sm);
-  block-size: var(--target-sm);
-}
-
-.app-loading__card {
-  block-size: 9rem;
-  border-radius: var(--radius-glass-card);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-xs);
-}
-
-.app-loading__card + .app-loading__card { block-size: 6rem; }
-.app-loading__card:last-child { block-size: 12rem; }
-
-.app-loading__capsule {
-  /* Das Ladebild steht, wo die Leiste stehen wird: buendig unten (v2). */
-  position: fixed;
-  inset-inline: 0;
-  bottom: 0;
-  block-size: var(--nav-bottom-height);
-  border-top: 1px solid var(--nav-bar-border);
-  background-color: var(--color-surface);
-}
-
-.app-loading__rail {
-  display: none;
-}
-
-@media (min-width: 1024px) {
-  .app-loading__capsule {
-    display: none;
-  }
-
-  .app-loading__rail {
-    display: block;
-    position: fixed;
-    inset-block: var(--sidebar-float-gap);
-    inset-inline-start: var(--sidebar-float-gap);
-    inline-size: calc(var(--sidebar-width-expanded) - var(--sidebar-float-gap));
-    /* v2 (2026-10-27): das Ladebild der Seitenleiste ist so hell und deckend
-     * wie die Seitenleiste selbst (glass.css) - kein Glas, kein Schatten. */
-    border: 1px solid var(--nav-bar-border);
-    border-radius: var(--radius-glass-card);
-    background-color: var(--color-surface);
-  }
-
-  .app-loading__page {
-    margin-inline-start: var(--sidebar-width-expanded);
-    max-inline-size: calc(var(--content-max-width) + 2 * var(--page-gutter));
-  }
+@keyframes app-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Sitzung gerade nicht pruefbar (utils/session-unreachable.js, Critique R19):
@@ -965,6 +891,10 @@ html:active-view-transition-type(region-fade)::view-transition-new(region-swap) 
   background-color: var(--color-surface);
   border-top: 1px solid var(--nav-bar-border);
   z-index: var(--z-nav);
+  /* Ein Tipp ist ein Tipp (Schnell-Erfassen, Aufgabe 3): ohne Doppeltipp-Zoom
+   * wartet WebKit nicht erst, ob ein zweiter folgt. Wischen und Aufziehen
+   * bleiben erlaubt (`manipulation` = pan-x pan-y pinch-zoom). */
+  touch-action: manipulation;
 }
 
 /* ── Items-Reihe: fuenf Spalten in der Leiste (v2: keine Kapsel mehr) ── */
@@ -2307,10 +2237,10 @@ html.fab-steady .page-fab {
  * `main.app-content` horizontal clippt. Die Richtung des Kopfes ist damit keine
  * Modulentscheidung mehr.
  *
- * WARUM ÜBER `[role="tablist"]` UND NICHT ÜBER KLASSENNAMEN: die vier Leisten
- * heissen `.housekeeping-tabs`, `.rewards-tabs`, `.cal-toolbar__views` und
- * `.budget-tabs`. Eine Regel über diese Liste gilt für vier Dateien, nicht für
- * die Bauart - und beim fünften Modul fehlt sie. Die ARIA-Rolle ist das
+ * WARUM ÜBER `[role="tablist"]` UND NICHT ÜBER KLASSENNAMEN: die drei Leisten
+ * heissen `.housekeeping-tabs`, `.cal-toolbar__views` und
+ * `.budget-tabs`. Eine Regel über diese Liste gilt für drei Dateien, nicht für
+ * die Bauart - und beim vierten Modul fehlt sie. Die ARIA-Rolle ist das
  * Merkmal, das die Leiste zur Leiste macht, und sie ist im Markup ohnehin
  * Pflicht.
  *
@@ -2344,7 +2274,7 @@ html.fab-steady .page-fab {
  * `.page-toolbar__bar` ist der vierte Slot des Canonical Page Head: die volle
  * Zeile UNTER Titel/Center/Aktionen, in der die Werkzeug-Leiste des Moduls
  * wohnt. Die Klasse sitzt direkt an einer Pillen-Leiste (budget-tabs,
- * sub-tabs-bar, housekeeping-tabs, rewards-tabs) oder als neutraler Wrapper
+ * sub-tabs-bar, housekeeping-tabs) oder als neutraler Wrapper
  * um einen Segment-Traeger, dessen Well nicht die ganze Zeile faerben darf
  * (Kalender-Views). `order: 4` stellt sie hinter den mobilen Center-Slot
  * (order: 3 in .page-toolbar--wrap); das :has() erspart jedem Kopf das
@@ -3248,16 +3178,12 @@ html.fab-steady .page-fab {
  * kein selbstpolsterndes Element` in test/test-frontend-audit.js - er liest
  * beide Seiten aus dem Stylesheet und findet die Ueberschneidung von allein. */
 .page-measure--narrow :is(
-  .rewards-tabs,
   /* Die Karten der Hauswirtschaft, deren Zeilen per Bleed an ihrer Kante
    * fluchten: die Liste selbst hat keine eigene Flaeche, die Karte hat sie,
    * also traegt die Karte das Mass. */
   .housekeeping-card,
   /* Ein Gruppenkopf endet mit der Gruppe, die er benennt. */
   .contact-group__header,
-  /* Der Traeger der offenen Anfragen, direkt ueber dem Traeger der
-   * Punktestaende - zwei gestapelte Bloecke auf einem Bildschirm. */
-  .rw-pending-panel,
   /* Der Diagrammabschnitt steht ueber der Buchungsliste und ist selbst eine
    * Zeilenfolge (Kategoriezeilen), also gilt dasselbe Mass. */
   .budget-chart-section,
@@ -3267,10 +3193,8 @@ html.fab-steady .page-fab {
   .housekeeping-worker-strip
 ),
 .app-page :is(
-  .rewards-tabs,
   .housekeeping-card,
   .contact-group__header,
-  .rw-pending-panel,
   .budget-chart-section,
   .metric-grid,
   .housekeeping-worker-strip
@@ -6730,6 +6654,120 @@ dialog.dialog-surface.dialog-surface--closing::backdrop {
   border-top: none;
 }
 
+/* --------------------------------------------------------
+ * Das Hoerblatt (Quick-Add, Entwurf TaskSpoken; components/task-dictation.js)
+ *
+ * HIER UND NICHT IN tasks.css: "Say a task" auf Heute oeffnet es im Tipp, bevor
+ * pages/tasks.js und sein Seitenblatt geladen sind - und tasks.css steht
+ * abseits von /tasks auf inaktiv. layout.css ist immer da.
+ *
+ * Zuhoeren: Status, die Mitschrift gross und mittig, darunter der
+ * Mikrofon-Ring (72 im Kreis von 96), unten "Type instead" | "Done" zu
+ * gleichen Teilen. Ohne Erkennung ein Textfeld mit dem Tastatur-Hinweis.
+ * -------------------------------------------------------- */
+.dictation__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.dictation__body--type {
+  align-items: stretch;
+  gap: var(--space-3);
+  text-align: start;
+}
+
+.dictation__status {
+  margin: 0;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-secondary);
+}
+
+.dictation__transcript {
+  margin: 0;
+  inline-size: 100%;
+  min-block-size: calc(var(--space-16) + var(--space-2));     /* 72: drei Zeilen Platz, ohne Springen */
+  font-size: var(--text-xl);
+  line-height: var(--type-title-lh);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
+}
+
+.dictation__mic {
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--space-16) + var(--space-8));        /* 96 */
+  block-size: calc(var(--space-16) + var(--space-8));
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-tint);
+  cursor: pointer;
+}
+
+.dictation__mic-core {
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--space-16) + var(--space-2));        /* 72 */
+  block-size: calc(var(--space-16) + var(--space-2));
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.dictation__mic-core > svg,
+.dictation__mic-core > i {
+  inline-size: calc(var(--space-6) + var(--space-1h));        /* 30 */
+  block-size: calc(var(--space-6) + var(--space-1h));
+}
+
+/* Hoert gerade zu: der Ring atmet. Steht still, wenn er wartet. */
+.dictation__mic[data-listening] {
+  animation: dictation-listening 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes dictation-listening {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-tint); }
+  50%      { box-shadow: 0 0 0 var(--space-2) var(--color-accent-tint); }
+}
+
+.dictation__mic:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+textarea.dictation__text {
+  resize: none;
+  font-size: var(--type-body);
+}
+
+/* Zwei gleich breite Knoepfe, hoch wie "Add task". */
+.dictation__footer {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.dictation__footer > .btn {
+  flex: 1 1 0;
+  min-height: calc(var(--target-lg) + var(--space-1));
+  font-size: var(--type-body);
+}
+
+.dictation__footer > .btn--primary {
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictation__mic[data-listening] { animation: none; }
+}
+
 /* DER FUSS MIT LÖSCHEN AUF DEM TELEFON (Re-Critique 2026-09-27, R9 M8).
  *
  * Gemessen bei 390px: Löschen · Abbrechen · Speichern brauchten 345px, der Fuß
@@ -8273,93 +8311,41 @@ textarea::placeholder {
 }
 
 /* --------------------------------------------------------
- * Skeleton-Loading
+ * Seiten-Ladering (utils/skeleton.js -> loadingSpinnerHtml)
  *
- * ERST NACH EINEM AUGENBLICK, UND NUR MIT TRANSFORM (Critique R19).
- * - Ein Platzhalter, der fuer 80ms aufblitzt, ist Flackern, kein Status: die
- *   Linien blenden erst nach `--duration-sm` ein (`fill: backwards` haelt sie
- *   bis dahin unsichtbar). Kommt der Inhalt schneller, sieht man sie nie;
- *   die Kartenflaechen darunter stehen sofort und halten das Layout.
- * - Der Schimmer lief ueber `background-position` - das ist Paint in jedem
- *   Frame, auf jeder Linie, am gedrosselten Telefon genau dann, wenn die CPU
- *   mit dem Start beschaeftigt ist. Jetzt gleitet ein Band als `::after` per
- *   `transform` darueber: Compositor, kein Paint.
+ * Ein stiller Ring, sonst nichts - dieselbe Sprache wie der Startring
+ * (.app-loading__spinner). Er blendet erst nach --duration-2xl (400 ms) ein: ein schneller
+ * Aufbau zeigt gar nichts, also kein Aufblitzen. Die Verzoegerung gehoert an
+ * den Wrapper (animation-delay, fill-mode forwards haelt ihn bis dahin bei
+ * Deckkraft 0); der Ring selbst dreht sich nur mit app-spin.
  * -------------------------------------------------------- */
-.skeleton {
-  /* Linienfarbe aus Surface + Ink gemischt: garantierter Kontrast in beiden
-   * Themes mit EINER Definition (zuvor border-subtle/surface-2 — im Dark Mode
-   * deckungsgleich mit der Kartenfläche #222220, dadurch unsichtbar). */
-  position: relative;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--color-text-primary) 18%, var(--color-surface));
-  border-radius: var(--radius-sm);
-  animation: skeleton-in var(--duration-md) var(--ease-out) var(--duration-sm) backwards;
+.page-loading {
+  display: grid;
+  place-items: center;
+  min-block-size: 40vh;
+  opacity: 0;
+  animation-name: page-loading-in;
+  animation-duration: var(--duration-md);
+  animation-timing-function: var(--ease-out);
+  animation-delay: var(--duration-2xl);
+  animation-fill-mode: forwards;
 }
 
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 25%,
-    color-mix(in srgb, var(--color-text-primary) 30%, var(--color-surface)) 50%,
-    transparent 75%
-  );
-  transform: translateX(-100%);
-  animation: skeleton-shimmer 1.5s var(--ease-in-out) var(--duration-sm) infinite;
+.page-loading__spinner {
+  inline-size: 28px;
+  block-size: 28px;
+  box-sizing: border-box;
+  /* Einzelne Eigenschaften, weil der Ring ein Ring ist und keine .btn--secondary. */
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: app-spin 800ms linear infinite;
 }
 
-@keyframes skeleton-in {
-  from { opacity: 0; }
-}
-
-@keyframes skeleton-shimmer {
-  to { transform: translateX(100%); }
-}
-
-/* Reduced-Motion: Schimmer aus, statische Fläche bleibt sichtbar - sie blendet
- * nur verzoegert ein (Deckkraft, keine Bewegung). */
-@media (prefers-reduced-motion: reduce) {
-  .skeleton::after { animation: none; display: none; }
-}
-
-/* ── Geteilte Skeleton-Liste (alle Module) ──
- * EINE Lade-Sprache statt modul-eigener „Lädt…"-Texte. Global definiert,
- * damit die Breiten-Varianten auf JEDER Seite greifen (zuvor lagen sie nur
- * in dashboard.css und waren außerhalb des Dashboards wirkungslos).
- * Markup-Hilfe: public/utils/skeleton.js → renderSkeletonList(). */
-.skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.skeleton-card {
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.skeleton-line {
-  height: 14px;
-  border-radius: var(--radius-xs);
-}
-
-.skeleton-line--title  { height: 18px; width: 45%; }
-.skeleton-line--short  { width: 35%; }
-.skeleton-line--medium { width: 60%; }
-.skeleton-line--full   { width: 100%; }
-
-/* Diagramm-Block (renderSkeletonChart): die Hoehe einer Diagrammflaeche, damit
- * die Seite beim Eintreffen der Daten nicht in eine andere Gliederung springt. */
-.skeleton-chart {
-  height: calc(var(--space-12) * 3);
-  border-radius: var(--radius-sm);
+@keyframes page-loading-in {
+  to { opacity: 1; }
 }
 
 /* --------------------------------------------------------
@@ -10462,4 +10448,49 @@ p.field-hint--warn svg {
 .person-disc--lg {
   --person-disc-size: var(--space-10);
   font-size: var(--type-body);
+}
+
+/* ---- Einkaufsblatt (Quick-Add): die Zakupy-Leiste als Blatt ueber der Uebersicht.
+ * Hier und nicht in shopping.css, das ausserhalb von /shopping nicht gilt. ---- */
+.shopping-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.shopping-sheet__form {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.shopping-sheet__input {
+  flex: 1;
+}
+
+.shopping-sheet__frequent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.shopping-sheet__frequent[hidden] {
+  display: none;
+}
+
+.shopping-sheet__chip {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--color-fill);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  cursor: pointer;
+}
+
+.shopping-sheet__chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }

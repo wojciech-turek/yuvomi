@@ -12,8 +12,7 @@ import { documentVisibleSql } from '../services/document-access.js';
 import { sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
 import { assertDocumentLinkTargetsAvailable, documentViewer, sendDocumentLinkRefusal } from '../services/document-links.js';
 import { nextDueAfterCompletion } from '../services/recurrence.js';
-import { syncTaskRewards, seriesOfTask } from '../services/rewards.js';
-import { completionFeed, seriesHistory, syncTaskCompletion } from '../services/task-completions.js';
+import { completionFeed, seriesHistory, seriesRootOf, syncTaskCompletion } from '../services/task-completions.js';
 import { normalizeCategoryFilter, taskCategoryWhere, taskScopeNeedsToday, taskScopeWhere } from '../services/task-scope.js';
 import { normalizeVisibility, visibilityWhere } from '../services/visibility.js';
 import {
@@ -31,6 +30,8 @@ import { displayActingPerson, isDisplayRequest } from '../services/display-actin
 import { refuseWallWrite } from '../services/wall-settings.js';
 import { pushService } from '../services/push.js';
 import { todayKey } from '../utils/timezone.js';
+import { AiError } from '../ai/index.js';
+import { parseTaskSentence } from '../services/task-dictation.js';
 import { runExternalJob } from '../utils/restore-state.js';
 import {
   allTags, applyTagChanges, loadTags, loadTagsFor, normalizeTags,
@@ -103,7 +104,6 @@ const REAL_STATUSES = ['open', 'in_progress', 'done'];
 const ARCHIVE_STATUS = 'archived';
 const VALID_STATUSES = [...REAL_STATUSES, ARCHIVE_STATUS];
 
-const MAX_POINTS = 10000;
 const FALLBACK_CATEGORY = 'misc';
 
 /** Zeitstempel im Format der übrigen Spalten (UTC, sekundengenau). */
@@ -152,42 +152,6 @@ function taskCategoryInUseCount(key) {
  */
 function todayInHouseholdZone() {
   return todayKey(db.get());
-}
-
-/** Punktewert einer Aufgabe auf eine nichtnegative Ganzzahl normalisieren. */
-function clampPoints(val) {
-  const n = Math.trunc(Number(val));
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(n, MAX_POINTS);
-}
-
-/**
- * Haushaltweiter Standard-Punktwert für neue Aufgaben (#578). 0 = kein Standard.
- * Liegt in sync_config, damit die Einstellung im selben Speicher wie die
- * übrigen Haushalt-Präferenzen liegt (siehe server/routes/preferences.js).
- */
-function defaultTaskPoints() {
-  const row = db.get().prepare("SELECT value FROM sync_config WHERE key = 'tasks_default_points'").get();
-  return clampPoints(row?.value);
-}
-
-// Erledigte Aufgaben dürfen nicht umbepunktet werden: genau für 'done' hält der
-// reward_ledger eine earn-Buchung über den damaligen Punktwert
-// (awardForCompletion in server/services/rewards.js); ein nachträglicher Wechsel
-// ließe Aufgabenwert und Gutschrift auseinanderlaufen.
-// Alle übrigen Status sind buchungsfrei. Sie mitzuziehen verhindert, dass eine
-// später reaktivierte Aufgabe einen veralteten Wert auszahlt.
-// Das Archiv spielt hier bewusst keine Rolle: es sagt nichts über eine Buchung
-// aus. Eine abgelegte erledigte Aufgabe steht auf 'done' und ist damit ohnehin
-// ausgenommen; eine abgelegte offene ist buchungsfrei wie jede andere offene.
-const REBASE_EXCLUDED_STATUS = 'done';
-
-/** Nicht erledigte Hauptaufgaben, die exakt auf einem Punktwert stehen. */
-function countRebasableTasks(points) {
-  return db.get().prepare(`
-    SELECT COUNT(*) AS n FROM tasks
-    WHERE points = ? AND parent_task_id IS NULL AND status != ?
-  `).get(points, REBASE_EXCLUDED_STATUS).n;
 }
 
 // --------------------------------------------------------
@@ -432,7 +396,6 @@ function validateTaskInput(body, isCreate = true, currentRule = undefined) {
     v.date(body.due_date,   'due_date'),
     v.time(body.due_time,   'due_time'),
     ruleUnchanged ? {} : v.rrule(body.recurrence_rule, 'recurrence_rule'),
-    v.num(body.points,      'points'),
     validateTags(body.tags),
   ]);
 }
@@ -1126,12 +1089,6 @@ router.post('/', (req, res) => {
       recurrence_from_completion = 0,
       countdown       = 0,
     } = req.body;
-    // Ohne expliziten Wert greift der Haushalt-Standard (#578) — aber nur für
-    // Hauptaufgaben: Subtasks sind Checklisten-Punkte der Elternaufgabe und
-    // würden den Punktewert sonst vervielfachen. Eine ausdrückliche 0 bleibt 0.
-    const points = req.body.points === undefined && !parent_task_id
-      ? defaultTaskPoints()
-      : clampPoints(req.body.points);
     const visibility = normalizeVisibility(req.body.visibility);
 
     // Status beim Anlegen (#807). Das Feld stand im Dialog nur im
@@ -1208,12 +1165,12 @@ router.post('/', (req, res) => {
         INSERT INTO tasks
           (title, description, category, priority, status, start_date, due_date, due_time,
            assigned_to, created_by, parent_task_id, is_recurring, recurrence_rule,
-           recurrence_from_completion, points, visibility, countdown, locked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           recurrence_from_completion, visibility, countdown, locked)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         title.trim(), description, category, priority, status,
         start_date, due_date, due_time, firstUid, req.authUserId || req.session.userId, parent_task_id,
-        is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, points, visibility,
+        is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0, visibility,
         countdown ? 1 : 0, req.body.locked ? 1 : 0
       );
       setAssignments(db.get(), result.lastInsertRowid, userIds);
@@ -1226,7 +1183,7 @@ router.post('/', (req, res) => {
       // EIN ANLEGEN MIT STATUS IST EIN STATUSWECHSEL - er faengt nur bei 'open'
       // an statt bei einem gespeicherten Wert. Er laeuft deshalb durch dieselben
       // Uebergangsfunktionen wie PUT und PATCH. Wuerde hier nur die Spalte
-      // gefuellt, haetten Punktekonto und Verlauf zwei Buchhaltungen: dieselbe
+      // gefuellt, fehlte der Verlauf: dieselbe
       // erledigte Aufgabe zaehlte, je nachdem ob sie erledigt angelegt oder
       // erledigt abgehakt wurde.
       //
@@ -1235,7 +1192,6 @@ router.post('/', (req, res) => {
       if (status !== 'open') {
         const actingUserId = req.authUserId || req.session.userId;
         const newId = Number(result.lastInsertRowid);
-        syncTaskRewards(db.get(), newId, 'open', status, actingUserId);
         syncTaskCompletion(db.get(), newId, 'open', status, actingUserId);
         // Erledigt angelegte Serie: die naechste Instanz gehoert dazu, genau wie
         // beim Abhaken. Ohne sie endete eine Serie in dem Moment, in dem sie
@@ -1305,7 +1261,6 @@ router.put('/:id', (req, res) => {
       countdown       = task.countdown,
     } = req.body;
 
-    const points = req.body.points !== undefined ? clampPoints(req.body.points) : task.points;
     const visibility = req.body.visibility !== undefined
       ? normalizeVisibility(req.body.visibility, task.visibility)
       : task.visibility;
@@ -1365,7 +1320,7 @@ router.put('/:id', (req, res) => {
         start_date, due_date, due_time,
         is_recurring: is_recurring ? 1 : 0, recurrence_rule,
         recurrence_from_completion: recurrence_from_completion ? 1 : 0,
-        countdown: countdown ? 1 : 0, points, visibility,
+        countdown: countdown ? 1 : 0, visibility,
       };
       let touchesDefinition = Object.keys(wanted).some((k) => !sameFieldValue(wanted[k], task[k]));
 
@@ -1411,13 +1366,13 @@ router.put('/:id', (req, res) => {
           title = ?, description = ?, category = ?, priority = ?,
           status = ?, start_date = ?, due_date = ?, due_time = ?, assigned_to = ?,
           is_recurring = ?, recurrence_rule = ?, recurrence_from_completion = ?,
-          points = ?, visibility = ?, countdown = ?, locked = ?,
+          visibility = ?, countdown = ?, locked = ?,
           sort_order = CASE WHEN category = ? THEN sort_order ELSE NULL END
         WHERE id = ?
       `).run(title.trim(), description, category, priority,
              status, start_date, due_date, due_time, firstUid,
              is_recurring ? 1 : 0, recurrence_rule, recurrence_from_completion ? 1 : 0,
-             points, visibility, countdown ? 1 : 0, locked,
+             visibility, countdown ? 1 : 0, locked,
              // Der Rang gilt in der alten Nachbarschaft, nicht in der neuen: die
              // Aufgabe landete sonst an einem beliebigen Platz einer Liste, die
              // jemand anderes geordnet hat, meist gleichauf mit der, die diese
@@ -1434,12 +1389,9 @@ router.put('/:id', (req, res) => {
       }
       if (archiveRequested && !task.archived_at) setArchived(task.id, true);
       syncHousekeepingPaymentStatus(db.get(), req.params.id, status);
-      // Punkte erst nach setAssignments: die Zuständigen werden daraus abgeleitet.
-      syncTaskRewards(db.get(), task.id, task.status, status, req.authUserId || req.session.userId);
       // Derselbe Übergang, ein zweiter Vorgang: der Verlauf hält fest, DASS
-      // abgehakt wurde (#791). Bewusst neben der Punktevergabe statt in ihr -
-      // Punkte gehen an die Zuständigen und nur bei eingeschaltetem Modul, ein
-      // Verlaufseintrag gilt für jede Aufgabe und nennt die handelnde Person.
+      // abgehakt wurde (#791). Ein Verlaufseintrag gilt für jede Aufgabe
+      // und nennt die handelnde Person.
       syncTaskCompletion(db.get(), task.id, task.status, status, req.authUserId || req.session.userId);
 
       // Auch über das Bearbeiten-Formular lässt sich ein Abhaken zurücknehmen -
@@ -1629,7 +1581,6 @@ function isFollowupSubtasksTouched(followup) {
       sub.category !== origin.category ||
       sub.priority !== origin.priority ||
       sub.assigned_to !== origin.assigned_to ||
-      sub.points !== origin.points ||
       sub.visibility !== origin.visibility ||
       sub.due_time !== origin.due_time
     ) {
@@ -1775,9 +1726,8 @@ function spawnRecurrenceFollowup(task) {
       // Die Serie reist als WERT mit, nicht als Verweis (#1603).
       // `recurrence_origin_id` daneben ist ON DELETE SET NULL: wird das eben
       // erledigte Vorkommen geloescht, weiss die Folgeinstanz nicht mehr, woher
-      // sie kommt - und der Punkte-Deckel je Serie saehe in ihr eine neue
-      // Aufgabe. Die Kennung ist die ID des ersten Vorkommens und ueberlebt es.
-      seriesOfTask(db.get(), task),
+      // sie kommt - und die Serie waere nicht mehr zu erkennen. Die Kennung ist die ID des ersten Vorkommens und ueberlebt es.
+      task.recurrence_series_id ?? seriesRootOf(db.get(), task.id),
       // Die Folgeinstanz nimmt den Platz ihrer Vorgaengerin ein (Review an
       // #1646): sonst fiele eine Aufgabe, die jemand an eine Stelle der Liste
       // gesetzt hat, bei jedem Abhaken ans Ende. Gerade die wiederkehrenden
@@ -1810,11 +1760,10 @@ function spawnRecurrenceFollowup(task) {
         // auch dort an) - die geerbte der Elternaufgabe kommt ueber
         // lockingTask(), die eigene muss mitkopiert werden (#1488).
         sub.points, sub.visibility, sub.locked ? 1 : 0, sub.id,
-        // Auch die Teilaufgabe traegt ihre eigene Serie (#1603): sie hat
-        // eigene Punkte, entsteht mit jeder Folgeinstanz neu und steht nicht im
-        // Verlauf - ohne Kennung zahlte dieselbe Checklistenzeile mit jeder
-        // Kopie am selben Tag noch einmal.
-        seriesOfTask(db.get(), sub)
+        // Auch die Teilaufgabe traegt ihre eigene Serie (#1603): sie entsteht
+        // mit jeder Folgeinstanz neu und steht nicht im Verlauf - ohne Kennung
+        // waere dieselbe Checklistenzeile in den Kopien nicht wiederzuerkennen.
+        sub.recurrence_series_id ?? seriesRootOf(db.get(), sub.id)
       );
       setAssignments(db.get(), newSub.lastInsertRowid, subAssignments);
       setTags(db.get(), newSub.lastInsertRowid, subTags);
@@ -1840,8 +1789,7 @@ function spawnRecurrenceFollowup(task) {
 //
 // `done_by_user_id` benennt, WER die Aufgabe erledigt hat (#1205) - wer
 // abgehakt hat, steht ohnehin fest und kommt weiter aus der Sitzung. Ohne
-// Angabe aendert sich nichts: der Verlauf zeigt die abhakende Person und die
-// Punkte folgen der Zuweisungsregel. Die Angabe wirkt nur beim UEBERGANG NACH
+// Angabe aendert sich nichts: der Verlauf zeigt die abhakende Person. Die Angabe wirkt nur beim UEBERGANG NACH
 // 'done'; bei jedem anderen Statuswechsel gibt es keine Erledigung, an der sie
 // haengen koennte, und sie wird still verworfen statt abgewiesen - eine
 // Sammelaktion, die alles auf 'open' setzt, soll nicht an einem mitgeschickten
@@ -1933,9 +1881,8 @@ router.patch('/:id/status', (req, res) => {
       displayDoneBy = actor.userId;
     }
 
-    // Ablegen ist kein Statuswechsel: kein Punkte-Storno, keine Serien-Bewegung,
-    // kein CalDAV-Push. Genau daran hing #688 - die Ablage überschrieb das 'done'
-    // und syncTaskRewards nahm die Gutschrift dafür wieder zurück.
+    // Ablegen ist kein Statuswechsel: keine Serien-Bewegung,
+    // kein CalDAV-Push. Genau daran hing #688 - die Ablage überschrieb das 'done'.
     if (status === ARCHIVE_STATUS) {
       const archivedAt = setArchived(req.params.id, true);
       return res.json({ data: { id: Number(req.params.id), status: prev.status, archived_at: archivedAt } });
@@ -1948,7 +1895,7 @@ router.patch('/:id/status', (req, res) => {
     // Benannt werden koennen nur Haushaltsmitglieder (#1207, DECISIONS 4) -
     // dieselbe Grenze, die auch das Zuweisen zieht, und derselbe Fehlertext.
     // Ein Gast oder eine Haushaltshilfe ist keine Person, der der Verlauf eine
-    // Erledigung zuschreiben darf, und der Punktestand erst recht nicht.
+    // Erledigung zuschreiben darf.
     //
     // `isHouseholdMember()` UND NICHT `newNonMembers()`. Die Listenfassung
     // meldet ausdruecklich nur Konten, die es GIBT und die keine Mitglieder
@@ -1995,8 +1942,6 @@ router.patch('/:id/status', (req, res) => {
       pending = markTodoOutbound('tasks', prev, { ...prev, status });
 
       syncHousekeepingPaymentStatus(db.get(), req.params.id, status);
-      // Punkte-Gutschrift/Storno an den Aufgaben-Statuswechsel koppeln.
-      syncTaskRewards(db.get(), Number(req.params.id), prev.status, status, req.authUserId || req.session.userId, doneByUserId);
       // Der Verlauf hängt am selben Übergang (#791). Dieser Weg trägt ihn
       // dreifach: Checkbox, Swipe und die Sammelaktion gehen alle hier durch.
       syncTaskCompletion(db.get(), Number(req.params.id), prev.status, status, req.authUserId || req.session.userId, doneByUserId);
@@ -2496,6 +2441,32 @@ router.delete('/:id/comments/:commentId', (req, res) => {
 });
 
 // --------------------------------------------------------
+// POST /api/v1/tasks/parse (fork, 2026-10-29)
+// Body: { text: string (1-500 after trim) }
+// Dictation: one spoken sentence (already text, the iPhone does the speech)
+// becomes the fields of the New Task sheet. Nothing is saved here; the person
+// checks the form and adds the task. An AI failure (switch, key, limit,
+// network) answers 200 with `unavailable`, like the meal suggestions: the
+// sheet simply stays empty. The sentence is private and is not logged.
+// Response: { data: { source: 'ai', fields } } | { data: { source: null, unavailable } }
+// --------------------------------------------------------
+router.post('/parse', async (req, res) => {
+  if (refuseWallWrite(req, res, { db: db.get() })) return;
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text || text.length > 500) {
+    return res.status(400).json({ error: 'Text must be 1 to 500 characters.', code: 400 });
+  }
+  try {
+    const fields = await parseTaskSentence({ text, userId: req.authUserId || req.session?.userId });
+    res.json({ data: { source: 'ai', fields } });
+  } catch (err) {
+    if (err instanceof AiError) return res.json({ data: { source: null, unavailable: err.code } });
+    log.error('POST /parse error:', err);
+    res.status(500).json({ error: 'Internal server error.', code: 500 });
+  }
+});
+
+// --------------------------------------------------------
 // GET /api/v1/tasks/meta/options
 // Liefert Filteroptionen: alle User + gültige Werte für Dropdowns.
 // Response: { users, priorities, statuses, categories, tags }
@@ -2515,71 +2486,9 @@ router.get('/meta/options', (req, res) => {
       // Sichtbare Tags für Filterleiste und Vorschläge - beim Seitenaufbau
       // mitgeliefert, damit dafür kein zweiter Aufruf nötig ist (#586).
       tags: allTags(db.get(), req.authUserId || req.session.userId),
-      default_points: defaultTaskPoints(),
     });
   } catch (err) {
     log.error('GET /meta/options error:', err);
-    res.status(500).json({ error: 'Internal server error.', code: 500 });
-  }
-});
-
-// --------------------------------------------------------
-// Standard-Punkte nachziehen (#578)
-// Zweisegmentige Pfade — kollidieren nicht mit der /:id-Route.
-// --------------------------------------------------------
-
-// GET /api/v1/tasks/points/affected?points=N
-// Wie viele nicht erledigte Hauptaufgaben stehen exakt auf diesem Punktwert?
-// Vorschau für die Einstellungsseite, bevor sie den Wechsel anbietet — deshalb
-// dasselbe Admin-Gate wie beim Setzen des Standards und beim Nachziehen.
-router.get('/points/affected', (req, res) => {
-  try {
-    if (!isAdminRequest(req)) {
-      return res.status(403).json({ error: 'Admin access required.', code: 403 });
-    }
-    const points = Number(req.query.points);
-    if (!Number.isInteger(points) || points < 0 || points > MAX_POINTS) {
-      return res.status(400).json({ error: `points must be an integer between 0 and ${MAX_POINTS}`, code: 400 });
-    }
-    res.json({ data: { count: countRebasableTasks(points) } });
-  } catch (err) {
-    log.error('GET /points/affected error:', err);
-    res.status(500).json({ error: 'Internal server error.', code: 500 });
-  }
-});
-
-// POST /api/v1/tasks/points/rebase  Body: { from, to } → { data: { updated } }
-// Hebt alle nicht erledigten Hauptaufgaben, die auf dem alten Standard stehen,
-// auf den neuen. „Steht noch auf dem Standard" wird bewusst über den Zahlenwert
-// bestimmt statt über ein verstecktes Flag: eine Aufgabe, der jemand von Hand
-// exakt den alten Standardwert gegeben hat, wandert deshalb mit. Die Anzahl
-// steht vorab im Bestätigungsdialog, der Wechsel ist also nie verdeckt.
-router.post('/points/rebase', (req, res) => {
-  try {
-    if (!isAdminRequest(req)) {
-      return res.status(403).json({ error: 'Admin access required.', code: 403 });
-    }
-    const from = Number(req.body.from);
-    const to   = Number(req.body.to);
-    const inRange = (n) => Number.isInteger(n) && n >= 0 && n <= MAX_POINTS;
-    if (!inRange(from) || !inRange(to)) {
-      return res.status(400).json({ error: `from and to must be integers between 0 and ${MAX_POINTS}`, code: 400 });
-    }
-    // 0 als Quelle würde jede punktelose Aufgabe erfassen — das ist kein
-    // „nutzt noch den Standard", sondern schlicht „hat keine Punkte".
-    if (from === 0) {
-      return res.status(400).json({ error: 'from must be greater than 0.', code: 400 });
-    }
-    if (from === to) return res.json({ data: { updated: 0 } });
-
-    const result = db.get().prepare(`
-      UPDATE tasks SET points = ?
-      WHERE points = ? AND parent_task_id IS NULL AND status != ?
-    `).run(to, from, REBASE_EXCLUDED_STATUS);
-
-    res.json({ data: { updated: result.changes } });
-  } catch (err) {
-    log.error('POST /points/rebase error:', err);
     res.status(500).json({ error: 'Internal server error.', code: 500 });
   }
 });

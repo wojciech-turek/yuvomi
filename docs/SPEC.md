@@ -60,7 +60,7 @@ and writes nothing on a refusal.
   `memberPositionSql()`, never the raw column. A new member is unplaced. A deactivated member
   drops out and the others keep their places; the gap is harmless.
 - **Lists that order by something else first** keep doing so and use the member order to break
-  ties: the reward standings (balance), the members of an expense group (role), the wall
+  ties: the members of an expense group (role), the wall
   display's "who" tile (number of rows). Names written into exported calendar titles
   ("Title (A, B)", ICS feed and Outlook push) stay alphabetical, so reordering the family does
   not rewrite every exported event; the people stored on one record (`assigned_users`,
@@ -241,7 +241,7 @@ One pending invitation per row. The `users` row is only created when the invitat
 | description | TEXT | |
 | category | TEXT | FK → Task Categories (by key), NOT NULL default `misc` |
 | priority | TEXT | none (default), low, medium, high, urgent |
-| status | TEXT | open, in_progress, done — the CHECK still permits the retired `archived` value, but nothing writes it since migration v132. Settable **on creation** since v2.60.0 (#807): the dialog offered the field only when editing, and `POST /tasks` validated a supplied status without ever writing it, so a value that passed validation was silently dropped. Creating with a status runs through the same transition helpers as PUT and PATCH (reward ledger, completion history, recurrence follow-up), because a creation with a status *is* a status change — it merely starts from `open`. A `null`, an empty string or `archived` all fall back to the first status |
+| status | TEXT | open, in_progress, done — the CHECK still permits the retired `archived` value, but nothing writes it since migration v132. Settable **on creation** since v2.60.0 (#807): the dialog offered the field only when editing, and `POST /tasks` validated a supplied status without ever writing it, so a value that passed validation was silently dropped. Creating with a status runs through the same transition helpers as PUT and PATCH (completion history, recurrence follow-up), because a creation with a status *is* a status change — it merely starts from `open`. A `null`, an empty string or `archived` all fall back to the first status |
 | archived_at | TEXT | ISO timestamp, nullable (migration v132, #688) — `NULL` means the task is in play. Archiving is a separate axis from `status`, so a filed-away task keeps whatever status it had |
 | due_date | TEXT | DATE, nullable |
 | due_time | TEXT | TIME, nullable |
@@ -254,7 +254,7 @@ One pending invitation per row. The `users` row is only created when the invitat
 | parent_task_id | INTEGER | FK → Tasks (max 2 levels) |
 | recurrence_origin_id | INTEGER | FK → Tasks, ON DELETE SET NULL (migration v122) — the completed instance whose completion created this one. Deliberately not `parent_task_id`, which means "subtask". **The column carries two meanings and `parent_task_id` tells them apart** (v2.52.1, #924): on a root task it means "I am the next run of X", on a subtask copied into a follow-up (v2.8.4, #742) it means "I am the copy of Y in this run". Only the first is a follow-up, so every read that acts on one must filter for `parent_task_id IS NULL` |
 | recurrence_series_id | INTEGER | nullable, no FK on purpose (migration v230, #1603) - id of the first occurrence of the series, copied as a value to every follow-up instance and every copied subtask so it survives deleting an earlier occurrence. `NULL` = the task is a first occurrence, or it predates v230 |
-| points | INTEGER | NOT NULL DEFAULT 0 — reward points credited to assigned members on completion (Rewards module, migration v69) |
+| points | INTEGER | NOT NULL DEFAULT 0 — retired with the quick-add round (2026-10-29): points and Nagrody are gone, the API ignores a submitted `points` and new tasks store 0. The column and its old values stay (no destructive migration); a recurrence follow-up still copies the value along. Added in migration v69 for the former Rewards module |
 | visibility | TEXT | NOT NULL DEFAULT `all` — `all` \| `assignees` \| `private`; who may see the task (migration v78) |
 | locked | INTEGER | NOT NULL DEFAULT 0 (migration v155, #830) — 1 closes the task **definition** to everyone but its creator and admins, while ticking off, commenting, and assigning oneself stay open for all. A subtask inherits its parent's lock |
 | countdown | INTEGER | NOT NULL DEFAULT 0 (migration v150, #647) — 1 puts the task on the Countdown widget, counting down to its `due_date`. A recurring task carries the flag into the instance its completion creates, which is what makes "always another N years" (driving licence) or "N days after cleaning" (air filter) work together with `recurrence_from_completion` |
@@ -286,7 +286,7 @@ Normalization is shared by every entry point (`server/utils/task-tags.js`): trim
 - **Due by today as an address (2026-09-27 re-critique, S2):** `/tasks?due=today` lists the open tasks due today or earlier, overdue included, and widens the default status filter to open plus in progress (the today sheet shows started tasks too). The filter sheet carries the same switch ("Due by today"), which writes or removes the parameter with `replaceState`; "Clear all filters" removes it. The overview's "+N more today" link points there when only tasks are hidden.
 - **Reading:** `GET /api/v1/tasks/tags` and the `tags` field of `GET /api/v1/tasks/meta/options` return every tag in use with its task count. Both are **visibility-filtered** (#474): a tag is free text and therefore content, so the label of a private task — and its count — stays out of every other member's filter bar.
 - **Managing:** `PUT /api/v1/tasks/tags/{tag}` renames across every visible task; renaming onto an existing tag merges the two and applies the typed spelling everywhere, so one label never ends up stored in two spellings. `DELETE /api/v1/tasks/tags/{tag}` detaches it from every visible task, leaving the tasks themselves alone — unlike categories there is no "still in use" guard, because a tag *is* nothing but its uses. `POST /api/v1/tasks/tags/apply` (`{ ids, add?, remove? }`) tags a whole selection at once. All three act **only on tasks the caller can see**; a rename leaves the tag on someone else's private task, because acting on an invisible row would betray its existence through the reported count.
-- **UI:** tags are chips on the task card and the Kanban card (three, then a `+N` summary); clicking one filters by it. A tag editor sits in the task dialog, a "Manage tags" modal (`yuvomi-tag-manager`) in the toolbar, and add/remove tag actions in the bulk bar.
+- **UI:** none since the quick-add round (2026-10-29): the tag editor, the chips on cards, the tag filters and the `#tag` in the meta line are gone. The routes above and the CalDAV mirror stay, so tags arriving from a foreign calendar survive a round trip.
 - **CalDAV:** mirrored from `CATEGORIES` on VTODO objects and pushed back. `CATEGORIES` is only in the managed property set because Yuvomi holds the **complete** list — mirroring a single value would make every push delete the tags the server knows and Yuvomi never saw.
 
 ### Shopping Item Tags (migration v116, #586)
@@ -382,7 +382,7 @@ last done, or who did it. This table records the transition.
 **Two people, because there are two questions (migration v214, #1205).** `user_id` keeps its meaning
 exactly: whoever ticked the task off. It cannot answer who did the work - on a shared wall tablet
 those are routinely different people, and a child who emptied the dishwasher used to need a parent
-to assign the task first before the points could reach them. `done_by_user_id` answers the second
+to assign the task first before the points (retired 2026-10-29) could reach them. `done_by_user_id` answers the second
 question and is **null in the normal case**, which means "nobody was asked", not "nobody did it".
 Existing rows are deliberately **not** backfilled from `user_id`: that would put a claim into the
 record that was never made. Both read paths resolve the pair once, in SQL, into `person_user_id`
@@ -393,14 +393,11 @@ housekeeping worker is refused with 400, the same boundary that assignment draws
 
 The naming is as idempotent as the entry itself: `INSERT OR IGNORE` leaves an existing row alone, so
 a second status change neither moves the timestamp nor rewrites the person. Correcting it means
-reopening the task and ticking it off again - the same path the points take.
+reopening the task and ticking it off again.
 
-**Where the points go.** A named member who takes part in rewards receives them instead of the
-assignees (`rewardTargets`). A named member who does not take part means **no points at all**, with
-no fallback to the assignees: crediting somebody the record just said did not do the work would be
-the worst of the three possible answers. Reversing a completion still deletes every `earn` row for
-the task regardless of who received it - a person filter there would leave standing exactly the
-booking that the undo exists to remove.
+**No points any more.** Until the quick-add round (2026-10-29) a named member who took part in
+rewards received the task's points instead of the assignees. Points and Nagrody are gone; nothing
+is booked on completion, and `done_by_user_id` only answers who did the work.
 
 **Why a table and not two columns.** A completed recurring task spawns a follow-up instance
 (`recurrence_origin_id`), so the history of one series is spread across a chain of rows whose links
@@ -414,22 +411,21 @@ has hidden it; an entry carrying its own copy of the old level would keep giving
 paths join `tasks` and apply the same `visibilityWhere` as every other task list. The price, paid
 deliberately, is `ON DELETE CASCADE`: deleting a task deletes its completions.
 
-**Who, not whom.** `user_id` is the acting person, which is deliberately different from
-`reward_ledger`, where points go to the *assignees* (`rewardTargets`). Points are a merit and can be
+**Who, not whom.** `user_id` is the acting person, which was deliberately different from the
+former `reward_ledger`, where points went to the *assignees*. Points were a merit and could be
 shared; a completion is an occurrence — it happens once, through one click.
 
 **Subtasks are never recorded.** A subtask is a checklist item of the same instruction; the event of
 the series is the parent being ticked off. Filing a task away (`archived`) is not a status change
 (#688) and writes nothing either.
 
-Reverting deletes the row rather than posting a counter-entry — the same decision as
-`reverseTaskEarnings`, for the same reason: a checkbox toggled three times is noise, not history.
+Reverting deletes the row rather than posting a counter-entry: a checkbox toggled three times is
+noise, not history.
 The UNIQUE index on `task_id` is also the idempotency net if the same transition arrives twice.
 
 **Known boundary:** the inbound CalDAV sync writes `status` straight into the row and does not pass
 through this path, so ticking a mirrored task off in Apple Reminders does not appear in the history.
-The reward ledger has the same gap for the same reason: that run has no acting person - it uses the
-household's credentials, not a member's. An entry without a person is possible (the column allows
+That run has no acting person - it uses the household's credentials, not a member's. An entry without a person is possible (the column allows
 NULL) but needs its own presentation, since "no longer in the household" would be the wrong answer
 for a sync. Stated here as a decision rather than inherited silently.
 
@@ -442,6 +438,12 @@ it. **The history starts empty** — recording began with this migration, and no
 was completed before it.
 
 ### Rewards (migration v70)
+
+> **Removed with the quick-add round (2026-10-29).** The Rewards page (Nagrody), its routes,
+> services, OpenAPI entries and settings, the household default points and the points field on
+> tasks are gone. The tables below stay in the database with their values (no destructive
+> migration) and nothing in the app reads or writes them. What follows describes the module as it
+> was.
 
 Points-and-rewards system. A member earns a task's `points` when the task is marked done (awarded to its assigned members; if unassigned, to the acting user - useful for a wall-mounted kiosk tablet on a single account). Participation is **opt-in per member**; redemptions require **parent/admin approval** by default - an admin can disable this household-wide (`rewards_require_approval` preference, Settings → Modules → Rewards) so redemptions are granted immediately. The Rewards module itself is toggleable in Settings → Modules → Active modules (nav visibility); since R10 the Rewards sheet only shows that state and links there. A member's balance is always `SUM(delta)` over `reward_ledger` - there is no separately stored balance that could drift. Point award is idempotent and reversed when a task leaves the `done` state. The reversal is a booking of its own, not a deletion (#1607, migration v230): the `earn` row stays and a `reversal` row with a negative delta and the same `task_id` takes the booked amount back, so the ledger tells both steps. Whether a task is currently paid out is the net of its `earn` and `reversal` rows per member - above zero means paid, zero means open - and that net carries the idempotence the partial unique index `uniq_reward_earn` used to carry (the index would have swallowed the new award after a reopen). A balance may drop below zero when the reopened task's points are already spent or reserved; the next earnings make up for it, a pending request stays pending for the parents to decide, and the page says so next to the number (`rewards.balanceBelowZero`, plus `rewards.pendingBalanceBelowZero` beside the request for whoever decides). Earnings deleted by versions before v230 are not restored. **A recurring task pays each member once per household day** (#1603): ticking a recurring task off creates its next instance at once, as a new row that can be ticked off again, and the per-task idempotence saw a new task each time. Ticking off stays allowed and keeps the series rolling; only the award is skipped when the member already holds a standing earning of the same series whose booking falls on today in the household timezone (`todayKey()` in `server/utils/timezone.js`). The series is a value, not a reference: `tasks.recurrence_series_id` holds the id of the first occurrence and is copied to every follow-up instance and to every copied subtask when it is created, and each `earn` row stores it as `reward_ledger.series_id`, so the cap asks the ledger directly and still holds after a completed occurrence is deleted (which nulls both `recurrence_origin_id` and the ledger's `task_id`). A task without the value is its own first occurrence; an instance from before v230 that only has `recurrence_origin_id` uses the root of that chain. A reversal points at the earning it takes back (`reward_ledger.reverses_id`), for the same reason. Earnings booked before v230 carry no series and do not count toward the cap. Catching up two missed occurrences of one series on the same day therefore pays once.
 
@@ -5352,7 +5354,7 @@ The surface carries four things, in this order: **the time**, large (this is whe
   - Known boundary: an **inbound CalDAV sync** can still rewrite a locked task's mirrored fields. That sync runs with household credentials rather than per member, and anyone holding them has full access to the list anyway; forcing the mirror to diverge silently would be worse than the gap.
 - Inline reminder presets: offset from due date/time — 15 min, 1 h, 1 d, 2 d, 1 w, 2 w, or fully custom offset
 - **Bulk actions (list view only):** select multiple tasks via checkboxes and apply batch operations (mark done, mark open, archive, delete, add tag, remove tag); bulk select toggle in toolbar
-- **Tags (#586):** free-form labels alongside the single category — see [Task Tags data model](#task-tags-migration-v115-586). Chips on the task card and the Kanban card (three, then a `+N` summary) filter the list on click; several selected tags narrow it. A tag editor with suggestions sits in the task dialog (Enter or comma confirms, Backspace takes the last one back), and a "Manage tags" action in the toolbar opens the `yuvomi-tag-manager` modal to rename, merge and remove a tag across the whole household. Renaming onto an existing tag merges the two.
+- **Tags (#586):** free-form labels alongside the single category — see [Task Tags data model](#task-tags-migration-v115-586). **The app no longer shows them (quick-add round, 2026-10-29):** no chips on cards, no tag filter, no editor in the task dialog, no "Manage tags" and no bulk tag actions. The server keeps the data and the mirroring (CalDAV `CATEGORIES`, MCP tools); an edit sends no `tags`, so existing tags survive. The task dialog's lock switch went the same way and migration 253 unlocks every task.
 - **Start date:** tasks can have an optional start date; tasks with a future start date are hidden from the default list view to reduce cognitive load. A "Show scheduled" toggle chip in the filter bar reveals all upcoming planned tasks. Task cards display a "Starts on …" badge when a start date is set.
 - **"Assigned to me" quick filter:** a toggle chip in the filter bar limits the list to tasks assigned to the current user (a shortcut for the person filter); the choice is remembered per device. Shown only in multi-member households.
 - **Per-task visibility:** an "all / assignees only / private" selector in the task dialog controls who can see the task (server-enforced, no admin bypass — see [Tasks data model](#tasks)); restricted tasks carry a lock/people icon in the list.

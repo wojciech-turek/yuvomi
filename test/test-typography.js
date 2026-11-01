@@ -971,7 +971,7 @@ test('der Zeilentitel ist eine Rolle (R16)', () => {
   // --text-base (16, das bleibt den Feldern), Gewicht medium = 400.
   assert.match(rolle.body, /font-size:\s*var\(--type-body\)/);
   assert.match(rolle.body, /font-weight:\s*var\(--font-weight-medium\)/);
-  for (const sel of ['.u-row-title', '.agenda-event__title', '.contact-item__name', '.subscription-card__name', '.rw-standing__name']) {
+  for (const sel of ['.u-row-title', '.agenda-event__title', '.contact-item__name', '.subscription-card__name']) {
     assert.ok(sels(rolle).includes(sel), `${sel} nimmt die Rolle`);
   }
 
@@ -998,7 +998,7 @@ test('der Zeilentitel ist eine Rolle (R16)', () => {
   const funde = [];
   for (const name of cssFiles.filter((n) => n !== 'typography.css' && n !== 'list-row.css')) {
     for (const rule of eachRule(readFileSync(new URL(name, STYLES_DIR), 'utf8'))) {
-      if (!sels(rule).some((sel) => /\.(?:list-row__name|rw-standing__name|subscription-card__name|contact-item__name)$/.test(sel))) continue;
+      if (!sels(rule).some((sel) => /\.(?:list-row__name|subscription-card__name|contact-item__name)$/.test(sel))) continue;
       const w = rule.body.match(/font-weight:\s*([^;]+)/);
       if (w && !/font-weight-medium/.test(w[1])) funde.push(`${name}: ${rule.selector.trim()} { font-weight: ${w[1].trim()} }`);
     }
@@ -1013,7 +1013,7 @@ test('der Zeilentitel ist eine Rolle (R16)', () => {
 test('R19: die Titelregel - Zeilentitel hoechstens zwei Zeilen, kein Modul weicht ab', () => {
   const typo = [...eachRule(readFileSync(new URL('typography.css', STYLES_DIR), 'utf8'))];
   const sels = (rule) => rule.selector.split(',').map((s) => s.trim());
-  const TITLES = ['.list-row__name', '.task-card__title', '.contact-item__name', '.subscription-card__name', '.rw-standing__name', '.agenda-event__title > span'];
+  const TITLES = ['.list-row__name', '.task-card__title', '.contact-item__name', '.subscription-card__name', '.agenda-event__title > span'];
   const regel = typo.find((rule) => !rule.at.length && TITLES.every((sel) => sels(rule).includes(sel)));
   assert.ok(regel, 'typography.css fuehrt die Titelregel fuer alle Zeilentitel');
   assert.match(regel.body, /display:\s*-webkit-box/);
@@ -1022,7 +1022,7 @@ test('R19: die Titelregel - Zeilentitel hoechstens zwei Zeilen, kein Modul weich
   assert.match(regel.body, /overflow:\s*hidden/);
   // Kein Modulblatt setzt am Zeilentitel eine eigene Fassung: einzeilig,
   // eine andere Zeilenzahl oder eine Anzeige, die die Kappung aufhebt.
-  const TITLE_RE = /\.(?:list-row__name|task-card__title|contact-item__name|subscription-card__name|rw-standing__name|birthday-item__name|budget-entry__title)$|\.agenda-event__title(?:\s*>\s*span)?$/;
+  const TITLE_RE = /\.(?:list-row__name|task-card__title|contact-item__name|subscription-card__name|birthday-item__name|budget-entry__title)$|\.agenda-event__title(?:\s*>\s*span)?$/;
   const funde = [];
   for (const name of cssFiles.filter((n) => n !== 'typography.css')) {
     for (const rule of eachRule(readFileSync(new URL(name, STYLES_DIR), 'utf8'))) {

@@ -241,7 +241,7 @@ router.post('/', (req, res) => {
  * `calendar:read` kam damit an die Kandidatenliste, und die zaehlt JEDEN
  * Kontakt des Haushalts mit Namen und Geburtsdatum auf, ohne
  * Sichtbarkeitsfilter. Gemeldet fuer das Wandtablett aus #1208 (Scopes:
- * dashboard, calendar, tasks, rewards, wetter - `contacts` ist NICHT dabei,
+ * dashboard, calendar, tasks, wetter - `contacts` ist NICHT dabei,
  * seine aufgeloesten Rechte melden `contacts: none`), aber die Luecke ist
  * aelter und trifft jedes gescopte API-Token genauso.
  *

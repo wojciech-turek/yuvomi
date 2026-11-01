@@ -1189,13 +1189,12 @@ const PENDING = {
   // noch dauerhaft zeigen. Die Kette hat die im Auftrag genannten Listen
   // umgestellt (Einkauf, Geburtstage, Schichtplan, Darlehen, Aufgaben,
   // Essensplan); diese hier sind die uebrigen - Verwalter-Dialoge
-  // (Kategorien, Etiketten, Abo-Kategorien), Formularzeilen (Zutat entfernen),
+  // (Kategorien, Abo-Kategorien), Formularzeilen (Zutat entfernen),
   // Kommentare, Einstellungslisten. Wer eine anfasst, zieht sie auf
   // `rowMenuHtml()` um und senkt die Zahl.
   // 2026-10-16 (Critique D6): Notizen und Haushaltshilfe-Besuche loeschen
   // ueber ihren Mehr-Knopf. R19 Schritt 4: der Kategorien-Verwalter auch.
   'row-danger-visible': {
-    'public/components/tag-manager.js': 1,
     'public/components/task-detail.js': 1,
     'public/pages/contacts.js': 1,
     'public/pages/health-fasting.js': 1,

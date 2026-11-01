@@ -22,7 +22,6 @@ export const BUILT_IN_MODULES = Object.freeze([
   { id: 'dashboard', labelKey: 'nav.dashboard', locked: true },
   { id: 'calendar', labelKey: 'nav.calendar' },
   { id: 'tasks', labelKey: 'nav.tasks' },
-  { id: 'rewards', labelKey: 'nav.rewards' },
   { id: 'notes', labelKey: 'nav.notes' },
   { id: 'schedule', labelKey: 'nav.schedule' },
   { id: 'contacts', labelKey: 'nav.contacts' },
@@ -124,13 +123,11 @@ export const DEFAULT_MODULE_ACCENT = 'var(--color-accent)';
 
 const KITCHEN_CHILD_ID_SET = new Set(KITCHEN_CHILD_IDS);
 // PLANEN = was die Familie vorhat und abarbeitet (R19, Ulas 2026-10-16):
-// Kalender, Aufgaben, Belohnungen, Notizen, Schichtplan. Die Belohnungen sind
-// die Gegenseite der Aufgaben (Punkte fuer Erledigtes) und standen unter
-// Haushalt zwischen Inventar und nichts; der Schichtplan stand VOR den
+// Kalender, Aufgaben, Notizen, Schichtplan. Der Schichtplan stand VOR den
 // Aufgaben, obwohl er das seltenste Ziel der Gruppe ist. Die Reihenfolge
 // INNERHALB der Gruppe ist die von BUILT_IN_MODULES bzw. der Routerliste; eine
 // eigene `module_order` des Nutzers bleibt davon unberuehrt.
-const PLAN_MODULE_IDS = new Set(['calendar', 'tasks', 'rewards', 'notes', 'schedule']);
+const PLAN_MODULE_IDS = new Set(['calendar', 'tasks', 'notes', 'schedule']);
 // Ehemals ein einziger „Zuhause"-Sammeltopf (8 Module) — aufgeteilt in semantische
 // Gruppen ≤5, damit die Sidebar-Sektion eine Bedeutung trägt statt „nicht Plan/Übersicht".
 const HOUSEHOLD_MODULE_IDS = new Set(['kitchen', 'meals', 'recipes', 'shopping', 'housekeeping', 'waste', 'documents', 'inventory']);
