@@ -2152,11 +2152,51 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- Das + von Dziś (Quick-Add, 2026-10-29; Entwurf HomePlus, Ruling R14) ----
+ * DIE EINE BENANNTE AUSNAHME von „dashboard.css schreibt keine FAB-Geometrie"
+ * (test-frontend-audit): der Owner hat den Entwurf mit einem 56er-Kreis in
+ * deckender Stimme und weissem Plus abgenommen, und die Spezifikation nennt
+ * ihn so - am Telefon wie am Desktop. Die Groesse kommt als Token
+ * (--fab-size-today, tokens.css) und wird zu --fab-size, SOLANGE das + steht:
+ * damit rechnen der Nachlauf (--fab-safe-zone) und der Abstand des
+ * Install-Banners mit demselben Wert, und die Knoepfe aller anderen Seiten
+ * bleiben, wie sie sind. Lage (16 von der Kante, 16 ueber der Leiste), Ziel
+ * und Fokusring bleiben die des geteilten .page-fab (layout.css). Deckend
+ * statt Glas: kein Blur, kein Sheen - weiss auf #6C3AED haelt 6,06:1. Das
+ * Blatt wirkt nur auf Dziś, und nur dort gibt es `#fab-add`. */
+:root:has(#fab-add) {
+  --fab-size: var(--fab-size-today);
+}
+
+#fab-add {
+  inline-size: var(--fab-size);
+  block-size: var(--fab-size);
+  background-color: var(--color-btn-primary);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--shadow-lg);
+}
+
+#fab-add::before {
+  content: none;
+}
+
+#fab-add:hover {
+  background-color: var(--color-btn-primary-hover);
+}
+
+/* Der Halo des geteilten Fokusrings (.page-fab:focus-visible) - die eigene
+ * box-shadow oben schluege ihn sonst. */
+#fab-add:focus-visible {
+  box-shadow: 0 0 0 4px var(--color-btn-primary);
+}
+
 /* ---- Das Menue hinter dem + (Quick-Add, 2026-10-29; Entwurf PlusMenu) ----
  * components/add-menu.js oeffnet es nur von Dziś aus, deshalb steht es hier
  * und nicht in layout.css. Oben "Say a task" in der Stimme zu 8 % (wie die
  * Pille des aktiven Tabs) mit dem 40er-Kreis in der Stimme, darunter die
- * Zeilen: 52 hoch, Zeichen 22 in Tinte-2, Text 17/24, Trennlinien ab dem Text. */
+ * Zeilen: 52 hoch, Zeichen 22 (--nav-icon-size) in Tinte-2, Text 17/24,
+ * Trennlinien ab dem Text. */
 .add-menu {
   display: flex;
   flex-direction: column;
@@ -2228,7 +2268,7 @@
   content: '';
   position: absolute;
   inset-block-start: 0;
-  inset-inline: calc(var(--space-2) + 22px + var(--space-3)) 0;
+  inset-inline: calc(var(--space-2) + var(--nav-icon-size) + var(--space-3)) 0;
   block-size: 1px;
   background-color: var(--color-separator-inner);
 }
@@ -2238,7 +2278,7 @@
   align-items: center;
   gap: var(--space-3);
   inline-size: 100%;
-  min-block-size: 52px;
+  min-block-size: calc(var(--space-12) + var(--space-1));
   padding: 0 var(--space-2);
   border: 0;
   border-radius: var(--radius-xs);
@@ -2253,8 +2293,8 @@
 
 .add-menu__row svg {
   flex: none;
-  inline-size: 22px;
-  block-size: 22px;
+  inline-size: var(--nav-icon-size);
+  block-size: var(--nav-icon-size);
   color: var(--color-text-secondary);
   stroke-width: 1.75;
 }

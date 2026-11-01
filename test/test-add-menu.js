@@ -11,8 +11,9 @@
  *            die Erkennung nur in der Geste), ein Fehler wird eine Meldung;
  *          - Dziś baut den Knopf `fab-add` nur mit einer Zeile und nie am
  *            Display (Kuchnia-Tablet);
- *          - die Quelltext-Zusagen: task-dictation.js kommt statisch herein, die
- *            vier anderen Blaetter per import() wie "Dodaj zadanie".
+ *          - die Quelltext-Zusagen: task-dictation.js kommt statisch in
+ *            add-menu.js herein, die vier anderen Blaetter per import() wie
+ *            "Dodaj zadanie"; Dziś laedt das Menue erst beim Tipp auf das +.
  * Ausfuehren: npm run test:add-menu
  */
 import test from 'node:test';
@@ -34,7 +35,8 @@ globalThis.window = globalThis.window ?? {};
 const toasts = [];
 globalThis.window.yuvomi = { showToast: (...args) => { toasts.push(args); } };
 
-const { addMenuItems, openAddMenu } = await import('../public/components/add-menu.js');
+const { addMenuItems, openAddMenu, __test: menu } = await import('../public/components/add-menu.js');
+const { startTaskDictation } = await import('../public/components/task-dictation.js');
 const { __test: dash } = await import('../public/pages/dashboard.js');
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -198,6 +200,27 @@ test('Dziś: the + is fab-add, named "Add", only with something to add and never
   assert.equal(dash.todayAddFab({ user: member, access: { ...NONE, meals: 'write' }, onClick() {} })?.id, 'fab-add');
 });
 
+test('the say row is startTaskDictation itself; each other row has its own opener', () => {
+  assert.equal(menu.OPENERS.say, startTaskDictation, '"Say a task" maps to startTaskDictation, not a wrapper with a promise');
+  assert.deepEqual(Object.keys(menu.OPENERS), ['say', 'task', 'event', 'shopping', 'meal']);
+  for (const id of ['task', 'event', 'shopping', 'meal']) {
+    assert.notEqual(menu.OPENERS[id], startTaskDictation, `${id} opens its own sheet`);
+  }
+});
+
+test('Dziś shows the + exactly when the menu has a row (the rule without loading the menu)', () => {
+  const levels = ['write', 'read', 'none'];
+  const member = { id: 1, access_scope: 'full' };
+  let combos = 0;
+  for (const tasks of levels) for (const calendar of levels) for (const shopping of levels) for (const meals of levels) {
+    const access = { tasks, calendar, shopping, meals };
+    combos += 1;
+    assert.equal(Boolean(dash.todayAddFab({ user: member, access, onClick() {} })), addMenuItems(access).length > 0,
+      JSON.stringify(access));
+  }
+  assert.equal(combos, 81);
+});
+
 test('the access comes from the same place as the rest of Dziś: module rights, a switched-off module is none', async () => {
   const { setPermissions, clearPermissions } = await import('../public/permissions.js');
   const prevYuvomi = globalThis.window.yuvomi;
@@ -208,7 +231,7 @@ test('the access comes from the same place as the rest of Dziś: module rights, 
   } finally { clearPermissions(); globalThis.window.yuvomi = prevYuvomi; }
 });
 
-test('source: dictation is a static import, the other sheets load on demand; Dziś builds the + in the synchronous part', () => {
+test('source: dictation is a static import in the menu, the sheets and the menu itself load on demand; Dziś builds the + in the synchronous part', () => {
   const menu = read('../public/components/add-menu.js');
   assert.match(menu, /^import \{ startTaskDictation \} from '\/components\/task-dictation\.js';$/m,
     'static - a dynamic import would put a promise between the tap and start()');
@@ -218,7 +241,15 @@ test('source: dictation is a static import, the other sheets load on demand; Dzi
     assert.match(menu, new RegExp(`import\\('${mod.replace(/[./]/g, '\\$&')}'\\)\\)\\.${fn}\\(`), `${fn} from ${mod}`);
   }
   const dashboard = read('../public/pages/dashboard.js');
-  assert.match(dashboard, /^import \{[^}]*\bopenAddMenu\b[^}]*\} from '\/components\/add-menu\.js';$/m, 'the menu is ready before the tap');
+  // The menu loads on the tap on the + (not at startup); the mic needs the
+  // gesture only on "Say a task", and by then the menu - and with it
+  // task-dictation.js - is loaded.
+  assert.doesNotMatch(dashboard, /^import [^;]*from '\/components\/add-menu\.js';$/m, 'no static import: the menu is not part of the startup');
+  assert.match(dashboard, /const \{ openAddMenu \} = await import\('\/components\/add-menu\.js'\);/);
+  const preload = read('../public/index.html');
+  for (const mod of ['/components/add-menu.js', '/components/task-dictation.js', '/utils/speech.js', '/utils/task-draft.js', '/utils/capture-parse.js']) {
+    assert.ok(!preload.includes(`href="${mod}"`), `${mod} is not preloaded at startup`);
+  }
   const render = dashboard.slice(dashboard.indexOf('export async function render('));
   const firstAwait = render.indexOf('await ');
   const mount = render.indexOf('mountTodayAdd(');

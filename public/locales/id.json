@@ -3633,8 +3633,8 @@
         "done": "Mulai",
         "skip": "Lewati",
         "step2BodyDesktop": "Bilah samping di kiri membawamu langsung ke area terpenting. Semua modul lainnya ada di bawah “Lainnya”.",
-        "step3BodyDesktop": "Tombol + di kanan atas kepala setiap modul membuat entri baru.",
-        "stepProgress": "Langkah {{current}} dari {{total}}"
+        "stepProgress": "Langkah {{current}} dari {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - memulihkan koneksi…",

@@ -3889,8 +3889,8 @@
         "done": "لنبدأ",
         "skip": "تخطي",
         "step2BodyDesktop": "الشريط الجانبي يأخذك مباشرة إلى أهم الأقسام. تجد بقية الوحدات تحت «المزيد».",
-        "step3BodyDesktop": "زر + في أعلى يمين رأس كل وحدة ينشئ إدخالات جديدة.",
-        "stepProgress": "الخطوة {{current}} من {{total}}"
+        "stepProgress": "الخطوة {{current}} من {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "غير متصل - تتم إعادة الاتصال…",

@@ -7470,18 +7470,41 @@ test('phase 1 keeps the scroll content on an opaque base without a shell gradien
  * Geprueft wird die REGEL, nicht der Klassenname: dashboard.css darf ueberhaupt
  * keine FAB-Geometrie mehr schreiben. Eine Allowlist der drei bekannten
  * Selektoren haette den vierten nicht gesehen.
+ *
+ * Quick-Add (2026-10-29, Ruling R14): mit EINER benannten Ausnahme, dem + von
+ * Dziś (`#fab-add`) - 56 statt 52 laut abgenommenem Entwurf, als Token, das
+ * zu --fab-size wird. Benannt heisst: genau diese zwei Selektoren, sonst keiner.
  */
-test('the dashboard speed dial owns no FAB geometry of its own', () => {
+test('the dashboard owns no FAB geometry of its own - except the named Today + (fab-add)', () => {
   const dashboard = read('../public/styles/dashboard.css');
   const live = dashboard.replace(/\/\*[\s\S]*?\*\//g, '');
 
   assert.doesNotMatch(live, /\.fab-container|\.fab-main/,
     'der eigene Kasten des Dashboards ist entfallen - der Dial ist eine '
     + '.page-fab-group mit einem .page-fab darin (#634)');
+  // Quick-Add (2026-10-29, Ruling R14): DIE EINE BENANNTE AUSNAHME ist das +
+  // von Dziś (`#fab-add`, Entwurf HomePlus: 56er-Kreis, deckend). Es nimmt
+  // seine Groesse aus einem Token (--fab-size-today, tokens.css) und macht es
+  // zu --fab-size, solange es steht - Nachlauf und Install-Banner rechnen mit.
+  // Jede andere FAB-Regel hier bleibt ohne Geometrie, auch ohne Token.
+  const TODAY_PLUS = new Set([':root:has(#fab-add)', '#fab-add']);
+  const GEOMETRY = /(?:^|[;{\s])(?:width|height|inline-size|block-size|--fab-size)\s*:/;
+  const seenToday = new Set();
   for (const rule of live.match(/[^{}]*\bfab\b[^{]*\{[^}]*\}/g) ?? []) {
-    assert.doesNotMatch(rule, /\b(?:width|height):\s*\d/,
-      `dashboard.css schreibt wieder eine FAB-Groesse von Hand statt --fab-size:\n${rule}`);
+    const selector = rule.slice(0, rule.indexOf('{')).trim();
+    if (TODAY_PLUS.has(selector)) {
+      seenToday.add(selector);
+      assert.doesNotMatch(rule, /\b(?:width|height|inline-size|block-size|--fab-size):\s*\d/,
+        `das + von Dziś liest seine Groesse aus Tokens, nicht aus Zahlen:\n${rule}`);
+      continue;
+    }
+    assert.doesNotMatch(rule, GEOMETRY,
+      `dashboard.css schreibt wieder eine FAB-Groesse von Hand statt --fab-size (einzige Ausnahme: #fab-add):\n${rule}`);
   }
+  assert.deepEqual([...seenToday].sort(), [...TODAY_PLUS].sort(), 'das + von Dziś traegt seine 56 als Token');
+  assert.match(live, /:root:has\(#fab-add\)\s*\{\s*--fab-size:\s*var\(--fab-size-today\);\s*\}/,
+    'die Groesse wird zu --fab-size, damit --fab-safe-zone mitrechnet');
+  assert.match(read('../public/styles/tokens.css'), /--fab-size-today:\s*56px;/);
   assert.doesNotMatch(cssRuleBody(dashboard, '.dashboard'), /padding-bottom/,
     'die FAB-Reserve kommt aus --fab-safe-zone an .app-content; eine zweite '
     + 'Reserve am Modul stapelt sich zu totem Raum (Audit A1-16)');

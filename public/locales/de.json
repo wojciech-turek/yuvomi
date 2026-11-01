@@ -3633,8 +3633,8 @@
         "done": "Loslegen",
         "skip": "Überspringen",
         "step2BodyDesktop": "Die Seitenleiste links führt direkt zu den wichtigsten Bereichen. Alle weiteren Module findest du unter „Mehr“.",
-        "step3BodyDesktop": "Mit dem +-Knopf oben rechts im Kopf jedes Moduls erstellst du neue Einträge.",
-        "stepProgress": "Schritt {{current}} von {{total}}"
+        "stepProgress": "Schritt {{current}} von {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - Verbindung wird wiederhergestellt…",

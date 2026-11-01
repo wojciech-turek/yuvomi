@@ -3633,8 +3633,8 @@
         "done": "Başla",
         "skip": "Atla",
         "step2BodyDesktop": "Soldaki kenar çubuğu seni doğrudan en önemli alanlara götürür. Diğer tüm modülleri “Daha Fazla” altında bulursun.",
-        "step3BodyDesktop": "Her modülün sağ üstündeki + düğmesiyle yeni kayıt oluşturursun.",
-        "stepProgress": "Adım {{current}}/{{total}}"
+        "stepProgress": "Adım {{current}}/{{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Çevrimdışı - yeniden bağlanılıyor…",

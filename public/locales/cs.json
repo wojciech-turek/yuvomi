@@ -3515,8 +3515,8 @@
         "done": "Začít",
         "skip": "Přeskočit",
         "step2BodyDesktop": "Postranní panel vlevo tě zavede přímo k nejdůležitějším částem. Všechny ostatní moduly najdeš pod „Více“.",
-        "step3BodyDesktop": "Tlačítkem + vpravo nahoře v záhlaví každého modulu vytvoříš nové záznamy.",
-        "stepProgress": "Krok {{current}} z {{total}}"
+        "stepProgress": "Krok {{current}} z {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "userMultiSelect": {
         "nobody": "Nikdo",

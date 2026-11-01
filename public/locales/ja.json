@@ -3633,8 +3633,8 @@
         "done": "はじめる",
         "skip": "スキップ",
         "step2BodyDesktop": "左のサイドバーから主要なエリアに直接移動できます。その他のモジュールは「もっと見る」にあります。",
-        "step3BodyDesktop": "各モジュールのヘッダー右上の＋ボタンで新しい項目を作成できます。",
-        "stepProgress": "ステップ {{current}}/{{total}}"
+        "stepProgress": "ステップ {{current}}/{{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "オフライン - 再接続しています…",

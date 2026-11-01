@@ -3799,8 +3799,8 @@
         "done": "Почніть роботу",
         "skip": "Пропустити",
         "step2BodyDesktop": "Бічна панель ліворуч веде прямо до найважливіших розділів. Решту модулів ви знайдете в розділі «Більше».",
-        "step3BodyDesktop": "Кнопка + у правому верхньому куті кожного модуля створює нові записи.",
-        "stepProgress": "Крок {{current}} з {{total}}"
+        "stepProgress": "Крок {{current}} з {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Офлайн - повторне підключення…",

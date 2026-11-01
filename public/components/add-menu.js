@@ -16,7 +16,8 @@
  * Textfeld. Deshalb kommt task-dictation.js STATISCH herein, und der Tipp ruft
  * `startTaskDictation` ohne ein `await` (und ohne ein Promise) davor. Die vier
  * anderen Blaetter laden per import(), wie "Dodaj zadanie" in der Karte - sie
- * brauchen keine Geste.
+ * brauchen keine Geste. Das Menue selbst laedt Dziś erst beim Tipp auf das +
+ * (pages/dashboard.js) - steht es, steht auch das Hoerblatt.
  *
  * ERST ZU, DANN AUF - BEIDES IM TIPP. `closeModal({ force: true })` nimmt das
  * Menue synchron aus der Top-Layer; der Browser gibt den Fokus dabei an das +
@@ -50,9 +51,9 @@ export function addMenuItems(access = {}) {
   return ROWS.filter((row) => access?.[row.module] === 'write').map(({ id }) => ({ id }));
 }
 
-/** Wer welches Blatt oeffnet. `say` ohne Promise davor (siehe Kopf). */
+/** Wer welches Blatt oeffnet. `say` IST startTaskDictation - ohne Promise davor (siehe Kopf). */
 const OPENERS = Object.freeze({
-  say: (opts) => startTaskDictation(opts),
+  say: startTaskDictation,
   task: async (opts) => (await import('/pages/tasks.js')).openNewTaskFrom(opts),
   event: async (opts) => (await import('/pages/calendar.js')).openNewEventFrom(opts),
   // `user` MUSS mit: das Blatt merkt sich die zuletzt benutzte Liste je Person.
@@ -134,3 +135,5 @@ export function openAddMenu({ user = null, onChanged = () => {}, access = {} } =
   });
   return true;
 }
+
+export const __test = { OPENERS };

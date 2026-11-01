@@ -259,7 +259,7 @@ test('Quick-Add: Dziś traegt genau einen Knopf - das + fab-add, gebaut von crea
   assert.match(fabs[0], /label: t\('dashboard\.addMenuLabel'\)/);
   assert.match(fabs[0], /dockLabel: t\('dashboard\.addMenuLabel'\)/);
   assert.match(fabs[0], /icon: 'plus'/);
-  assert.match(dashboardSource, /from '\/components\/add-menu\.js'/, 'er oeffnet das Menue');
+  assert.match(dashboardSource, /await import\('\/components\/add-menu\.js'\)/, 'er oeffnet das Menue - nachgeladen beim Tipp');
 }));
 
 // Critique 2026-10-16: jede Kachel fuehrt mit „Alle" zu ihrer Seite, nur die

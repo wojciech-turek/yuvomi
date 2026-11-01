@@ -3633,8 +3633,8 @@
         "done": "시작하기",
         "skip": "건너뛰기",
         "step2BodyDesktop": "왼쪽 사이드바에서 가장 중요한 영역으로 바로 이동할 수 있습니다. 나머지 모듈은 ‘더보기’에 있습니다.",
-        "step3BodyDesktop": "각 모듈 상단 오른쪽의 + 버튼으로 새 항목을 만들 수 있습니다.",
-        "stepProgress": "{{total}}단계 중 {{current}}단계"
+        "stepProgress": "{{total}}단계 중 {{current}}단계",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "오프라인 - 연결을 복구하는 중…",

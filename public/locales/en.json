@@ -3633,8 +3633,8 @@
         "done": "Get started",
         "skip": "Skip",
         "step2BodyDesktop": "The sidebar on the left takes you straight to the most important areas. You will find all other modules under “More”.",
-        "step3BodyDesktop": "The + button at the top right of each module's header creates new entries.",
-        "stepProgress": "Step {{current}} of {{total}}"
+        "stepProgress": "Step {{current}} of {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - reconnecting…",

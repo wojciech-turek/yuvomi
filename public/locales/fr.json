@@ -3633,8 +3633,8 @@
         "done": "Commencer",
         "skip": "Passer",
         "step2BodyDesktop": "La barre latérale à gauche mène directement aux espaces les plus importants. Tous les autres modules se trouvent sous « Plus ».",
-        "step3BodyDesktop": "Le bouton + en haut à droite de chaque module crée de nouvelles entrées.",
-        "stepProgress": "Étape {{current}} sur {{total}}"
+        "stepProgress": "Étape {{current}} sur {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Hors ligne - reconnexion…",

@@ -3633,8 +3633,8 @@
         "done": "开始使用",
         "skip": "跳过",
         "step2BodyDesktop": "左侧边栏可直接进入最重要的区域。其他模块都在“更多”中。",
-        "step3BodyDesktop": "每个模块右上角的 + 按钮可创建新条目。",
-        "stepProgress": "第{{current}}步，共{{total}}步"
+        "stepProgress": "第{{current}}步，共{{total}}步",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "离线 - 正在重新连接…",

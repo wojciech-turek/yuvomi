@@ -3633,8 +3633,8 @@
         "done": "Empezar",
         "skip": "Omitir",
         "step2BodyDesktop": "La barra lateral izquierda te lleva directamente a las áreas más importantes. Encontrarás el resto de módulos en «Más».",
-        "step3BodyDesktop": "Con el botón + arriba a la derecha de cada módulo creas nuevas entradas.",
-        "stepProgress": "Paso {{current}} de {{total}}"
+        "stepProgress": "Paso {{current}} de {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Sin conexión - reconectando…",

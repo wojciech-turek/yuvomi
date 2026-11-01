@@ -3633,8 +3633,8 @@
         "done": "Kom i gang",
         "skip": "Hopp over",
         "step2BodyDesktop": "Sidefeltet til venstre tar deg rett til de viktigste områdene. Alle andre moduler finner du under «Mer».",
-        "step3BodyDesktop": "Pluss-knappen øverst til høyre i hver modul oppretter nye oppføringer.",
-        "stepProgress": "Trinn {{current}} av {{total}}"
+        "stepProgress": "Trinn {{current}} av {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Uten nett - kobler til på nytt…",

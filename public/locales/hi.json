@@ -3633,8 +3633,8 @@
         "done": "शुरू करें",
         "skip": "छोड़ें",
         "step2BodyDesktop": "बाईं ओर का साइडबार आपको सीधे सबसे ज़रूरी हिस्सों तक ले जाता है। बाकी सभी मॉड्यूल “और” के अंतर्गत मिलेंगे।",
-        "step3BodyDesktop": "हर मॉड्यूल के ऊपर दाईं ओर का + बटन नई प्रविष्टि बनाता है।",
-        "stepProgress": "चरण {{current}} / {{total}}"
+        "stepProgress": "चरण {{current}} / {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "ऑफ़लाइन - फिर से कनेक्ट किया जा रहा है…",

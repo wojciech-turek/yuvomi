@@ -3633,8 +3633,8 @@
         "done": "Aan de slag",
         "skip": "Overslaan",
         "step2BodyDesktop": "De zijbalk links brengt je direct naar de belangrijkste onderdelen. Alle andere modules vind je onder ‘Meer’.",
-        "step3BodyDesktop": "Met de +-knop rechtsboven in elke module maak je nieuwe items aan.",
-        "stepProgress": "Stap {{current}} van {{total}}"
+        "stepProgress": "Stap {{current}} van {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - opnieuw verbinden…",

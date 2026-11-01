@@ -3633,8 +3633,8 @@
         "done": "شروع",
         "skip": "رد کردن",
         "step2BodyDesktop": "نوار کناری تو را مستقیم به مهم‌ترین بخش‌ها می‌برد. بقیه بخش‌ها را در «بیشتر» پیدا می‌کنی.",
-        "step3BodyDesktop": "با دکمه + در بالای سمت راست سربرگ هر بخش مورد تازه می‌سازی.",
-        "stepProgress": "مرحله {{current}} از {{total}}"
+        "stepProgress": "مرحله {{current}} از {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "آفلاین - در حال بازیابی اتصال…",

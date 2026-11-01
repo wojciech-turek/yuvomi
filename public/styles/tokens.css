@@ -1993,6 +1993,12 @@
    * beim Ausloesen aufgedeckt ist, ist dann auch vollstaendig zu lesen. */
   --swipe-threshold: 80px;
   --fab-size: 52px;
+  /* Quick-Add (2026-10-29, Ruling R14): das + von Dziś (`#fab-add`) ist der
+   * 56er-Kreis des abgenommenen Entwurfs HomePlus, am Telefon wie am Desktop.
+   * dashboard.css macht ihn zu --fab-size, solange das + steht - so rechnen
+   * Nachlauf (--fab-safe-zone) und Install-Banner mit; jeder andere
+   * Seitenknopf bleibt bei --fab-size. */
+  --fab-size-today: 56px;
   --fab-gap: var(--space-6);
   /* v2: ein Seiten-FAB, der keinen Platz im Kopf findet, schwebt 16px ueber
    * der Leiste (am Desktop gilt --fab-gap, Block unter --bp-desktop). */

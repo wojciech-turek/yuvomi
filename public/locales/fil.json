@@ -3633,8 +3633,8 @@
         "done": "Magsimula",
         "skip": "Laktawan",
         "step2BodyDesktop": "Dinadala ka ng sidebar sa kaliwa nang direkta sa pinakamahahalagang bahagi. Makikita mo ang iba pang module sa ilalim ng “Higit pa”.",
-        "step3BodyDesktop": "Ang + na button sa kanang itaas ng header ng bawat module ay gumagawa ng bagong entry.",
-        "stepProgress": "Hakbang {{current}} ng {{total}}"
+        "stepProgress": "Hakbang {{current}} ng {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - muling kumokonekta…",

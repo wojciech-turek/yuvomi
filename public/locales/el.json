@@ -3633,8 +3633,8 @@
         "done": "Ξεκίνα",
         "skip": "Παράλειψη",
         "step2BodyDesktop": "Η πλαϊνή στήλη αριστερά οδηγεί απευθείας στις σημαντικότερες ενότητες. Όλες τις υπόλοιπες θα τις βρεις στο «Περισσότερα».",
-        "step3BodyDesktop": "Με το κουμπί + πάνω δεξιά στην κεφαλίδα κάθε ενότητας δημιουργείς νέες καταχωρίσεις.",
-        "stepProgress": "Βήμα {{current}} από {{total}}"
+        "stepProgress": "Βήμα {{current}} από {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Εκτός σύνδεσης - γίνεται επανασύνδεση…",

@@ -373,7 +373,11 @@ test('the styles: v2 card, the ongoing row in the accent wash, overdue in its to
   assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
   // No hex on the page: the umbrella takes --color-rain-ink (tokens.css).
   const dzis = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').split(' * DZIŚ (design v2, 2026-10-27)')[1];
-  assert.equal(dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/#[0-9a-f]{3,8}\b/gi), null);
+  // Checked in the declaration blocks: a selector like `#fab-add` (the Quick-Add
+  // +) is an id, not a colour.
+  const declarations = (dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/\{[^{}]*\}/g) ?? []).join('\n');
+  assert.ok(declarations.length > 1000, 'reach: the Dziś section has its rules');
+  assert.equal(declarations.match(/#[0-9a-f]{3,8}\b/gi), null);
   assert.match(body('.dz-weather__rain-icon'), /color:\s*var\(--color-rain-ink\)/);
 });
 

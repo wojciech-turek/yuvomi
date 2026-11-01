@@ -3633,8 +3633,8 @@
         "done": "Kom igång",
         "skip": "Skippa",
         "step2BodyDesktop": "Sidofältet till vänster tar dig direkt till de viktigaste områdena. Alla andra moduler hittar du under ”Mer”.",
-        "step3BodyDesktop": "Med +-knappen uppe till höger i varje modul skapar du nya poster.",
-        "stepProgress": "Steg {{current}} av {{total}}"
+        "stepProgress": "Steg {{current}} av {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - återansluter…",

@@ -3799,8 +3799,8 @@
         "done": "Zaczynamy",
         "skip": "Pomiń",
         "step2BodyDesktop": "Pasek boczny po lewej prowadzi bezpośrednio do najważniejszych obszarów. Pozostałe moduły znajdziesz pod „Więcej”.",
-        "step3BodyDesktop": "Przycisk + w prawym górnym rogu każdego modułu tworzy nowe wpisy.",
-        "stepProgress": "Krok {{current}} z {{total}}"
+        "stepProgress": "Krok {{current}} z {{total}}",
+        "step3BodyDesktopPlus": "Na ekranie Dziś przycisk + w prawym dolnym rogu dodaje zadanie, wydarzenie, rzecz do kupienia albo posiłek. W każdym module jego własny + znajduje się w prawym górnym rogu nagłówka."
     },
     "offline": {
         "banner": "Offline - przywracanie połączenia…",

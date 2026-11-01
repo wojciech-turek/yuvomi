@@ -2,7 +2,7 @@
  * Modul: Dashboard
  * Zweck: Startseite mit Begrüßung, Terminen, Aufgaben, Essen, Notizen und dem +
  *        (Quick-Add, 2026-10-29: es oeffnet das Menue zum Hinzufuegen)
- * Abhängigkeiten: /api.js, /components/add-menu.js
+ * Abhängigkeiten: /api.js (das Menue, /components/add-menu.js, laedt beim Tipp)
  */
 
 import { api, auth } from '/api.js';
@@ -20,10 +20,7 @@ import { esc } from '/utils/html.js';
 import { zonedDateKey } from '/utils/timezone.js';
 import { localizeBirthdayEvent } from '/utils/birthday-event.js';
 import { findPageFab, createPageFab } from '/utils/fab.js';
-// STATISCH, wie der Rest der Seite: das Menue und mit ihm das Hoerblatt
-// (task-dictation.js) stehen, bevor jemand das + antippt - "Say a task"
-// startet die Spracherkennung im Tipp, und Safari verlangt die Geste.
-import { openAddMenu, addMenuItems } from '/components/add-menu.js';
+import { errorSentence } from '/utils/friendly-error.js';
 import { toggleRegion } from '/utils/ux.js';
 import { swapContent } from '/utils/content-swap.js';
 import { brandMarkSvg } from '/utils/brand-mark.js';
@@ -129,7 +126,10 @@ function getOnboardingSteps() {
     { mark: true,           title: t('onboarding.step1Title', { name: appName }), body: t('onboarding.step1Body') },
     { icon: 'navigation',   title: t('onboarding.step2Title'), body: t(desktop ? 'onboarding.step2BodyDesktop' : 'onboarding.step2Body'),
       target: () => document.querySelector(desktop ? '.nav-sidebar' : '.nav-bottom__items') },
-    { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktop' : 'onboarding.step3Body'),
+    // Quick-Add (2026-10-29): am Desktop nennt der Text beide Orte - das + von
+    // Dziś unten rechts (auf das der Ring zeigt) und das + der Module oben
+    // rechts im Kopf. Neuer Schluessel, weil sich die Aussage geaendert hat.
+    { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktopPlus' : 'onboarding.step3Body'),
       // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins
       // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add), sonst
       // (Display, nur lesend) „Dodaj zadanie" in der Karte der Aufgaben.
@@ -846,7 +846,16 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
  * Fabrik (utils/fab.js); der Router hebt ihn in die Shell-Ebene, und weil Dziś
  * keinen Kopf mit Aktions-Slot hat, schwebt er dort - am Telefon ueber der
  * Leiste, am Desktop in derselben Ecke. Die Leiste selbst bekommt kein +.
- * Er oeffnet components/add-menu.js; "Dodaj zadanie" in der Karte bleibt. */
+ * Er oeffnet components/add-menu.js; "Dodaj zadanie" in der Karte bleibt.
+ *
+ * DAS MENUE LAEDT BEIM TIPP, nicht mit dem Start (Review Task 12): es zieht
+ * das Hoerblatt samt Erkennung und Parser mit, und die gehoeren nicht in den
+ * Start der Startseite. Die Geste braucht erst "Say a task" - und deren Tipp
+ * kommt, wenn das Menue (und mit ihm task-dictation.js, statisch in
+ * add-menu.js) laengst steht. */
+
+/** Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js, ROWS). */
+const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping', 'meals']);
 
 /**
  * Das Recht je Modul, das das Menue fragt - aus derselben Quelle wie der Rest
@@ -855,17 +864,20 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
  */
 function todayAddAccess() {
   const level = (module) => (globalThis.window?.yuvomi?.isModuleDisabled?.(module) ? 'none' : moduleAccess(module));
-  return { tasks: level('tasks'), calendar: level('calendar'), shopping: level('shopping'), meals: level('meals') };
+  return Object.fromEntries(ADD_MENU_MODULES.map((module) => [module, level(module)]));
 }
 
 /**
  * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an,
  * wie bei Haken und „Dodaj zadanie") und wenn es nichts hinzuzufuegen gibt.
+ * „Nichts" heisst: kein Schreibrecht auf eines der vier Module - dieselbe
+ * Regel wie `addMenuItems()` (jede Zeile braucht es auf ihrem Modul), hier
+ * ohne das Menue zu laden; test:add-menu haelt beide gleich.
  * @returns {HTMLButtonElement|null}
  */
 function todayAddFab({ user, access, onClick }) {
   if (user?.access_scope === 'display') return null;
-  if (!addMenuItems(access).length) return null;
+  if (!ADD_MENU_MODULES.some((module) => access?.[module] === 'write')) return null;
   return createPageFab({ id: 'fab-add', label: t('dashboard.addMenuLabel'), icon: 'plus', dockLabel: t('dashboard.addMenuLabel'), onClick });
 }
 
@@ -876,12 +888,19 @@ function todayAddFab({ user, access, onClick }) {
  * neu gelesen.
  */
 function mountTodayAdd(container, { user, onChanged }) {
-  const fab = todayAddFab({
-    user,
-    access: todayAddAccess(),
-    onClick: () => { openAddMenu({ user, onChanged, access: todayAddAccess() }); },
-  });
+  const fab = todayAddFab({ user, access: todayAddAccess(), onClick: () => { void openTodayAddMenu({ user, onChanged }); } });
   if (fab) container.querySelector('.dashboard')?.appendChild(fab);
+}
+
+/** Der Tipp auf das +: das Menue nachladen und oeffnen; scheitert das Laden, sagt es ein Toast. */
+async function openTodayAddMenu({ user, onChanged }) {
+  try {
+    const { openAddMenu } = await import('/components/add-menu.js');
+    openAddMenu({ user, onChanged, access: todayAddAccess() });
+  } catch (err) {
+    console.error('[Dashboard] Das Menue zum Hinzufuegen konnte nicht geladen werden:', err);
+    window.yuvomi?.showToast(errorSentence(err), 'danger');
+  }
 }
 
 // --------------------------------------------------------

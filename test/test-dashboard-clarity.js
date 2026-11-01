@@ -628,7 +628,13 @@ test('R18: Geld, Zeit und Zaehler der Uebersicht stehen in tabular-nums', async 
 // Pille in den Modulkopf oben rechts (dockFabIntoToolbar/isDesktopViewport).
 // Die Desktop-Fassung beschreibt diesen Ort, in jeder Sprache, und beide Seiten
 // schalten an derselben Breite.
-test('Onboarding Schritt 3 nennt am Desktop den Knopf oben rechts, nicht unten (Critique R19)', async () => {
+// Quick-Add (2026-10-29): seit Dziś sein + traegt, zeigt der Ring am Desktop
+// auf das + UNTEN rechts - hier stand „nennt den Knopf oben rechts, nicht
+// unten" (R19), und das war dann falsch. Der Text nennt jetzt beide Orte: das
+// + von Dziś unten rechts und das der Module oben rechts im Kopf. Neuer
+// Schluessel (die Aussage hat sich geaendert); en und pl sind geschrieben,
+// die uebrigen Sprachen tragen nach der i18n-add-Regel den englischen Satz.
+test('Onboarding Schritt 3 am Desktop: das + von Dziś unten rechts, das der Module oben rechts (Critique R19, Quick-Add)', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const dashboard = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
@@ -637,14 +643,15 @@ test('Onboarding Schritt 3 nennt am Desktop den Knopf oben rechts, nicht unten (
   const dockBreak = /function isDesktopViewport\(\) \{\s*return window\.matchMedia\('\(min-width: (\d+)px\)'\)/.exec(router)?.[1];
   assert.ok(onboardingBreak && dockBreak, 'Breakpoints nicht gefunden');
   assert.equal(onboardingBreak, dockBreak, 'Onboarding und angedockter Knopf schalten an verschiedenen Breiten');
-  const bottom = { de: /unten/, en: /bottom/, fr: /\ben bas\b/, es: /inferior/, nl: /onder/, it: /in basso/ };
-  const top = { de: /oben rechts/, en: /top right/, fr: /en haut/, es: /arriba/, nl: /rechtsboven/, it: /in alto/ };
+  assert.match(steps, /t\(desktop \? 'onboarding\.step3BodyDesktopPlus' : 'onboarding\.step3Body'\)/);
   const dir = new URL('../public/locales/', import.meta.url);
+  const read = (loc) => JSON.parse(readFileSync(new URL(`${loc}.json`, dir), 'utf8')).onboarding;
+  assert.match(read('en').step3BodyDesktopPlus, /bottom right[\s\S]*top right/, 'en: erst das + von Dziś, dann der Kopf der Module');
+  assert.match(read('pl').step3BodyDesktopPlus, /prawym dolnym rogu[\s\S]*prawym górnym rogu/, 'pl: dasselbe');
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
-    const loc = file.slice(0, -5);
-    const text = JSON.parse(readFileSync(new URL(file, dir), 'utf8')).onboarding.step3BodyDesktop;
-    if (bottom[loc]) assert.doesNotMatch(text, bottom[loc], `${loc}: ${text}`);
-    if (top[loc]) assert.match(text, top[loc], `${loc}: ${text}`);
+    const onboarding = JSON.parse(readFileSync(new URL(file, dir), 'utf8')).onboarding;
+    assert.ok(onboarding.step3BodyDesktopPlus, `${file}: der Satz fehlt`);
+    assert.equal(onboarding.step3BodyDesktop, undefined, `${file}: der alte Satz („oben rechts" allein) ist gegangen`);
   }
 });
 

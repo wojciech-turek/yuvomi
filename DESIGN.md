@@ -4327,15 +4327,23 @@ die Ziele bleiben 48px. Vorher vier umrandete Kreise je Zeile.
 > test:add-menu, test:dashboard-a11y, test:dashboard-dzis, Sonde 18).** Dziś hat ein +, und nur
 > Dziś: `fab-add` (`createPageFab`, pages/dashboard.js), unten rechts ueber der Leiste, am Desktop
 > in derselben Ecke - Dziś hat keinen Kopf mit Aktions-Slot, der Knopf dockt also nicht an und
-> schwebt (mit Nachlauf `--fab-safe-zone`). Geometrie aus den `--fab-*`-Tokens wie jeder
-> schwebende Seitenknopf (52px am Telefon, 48 am Desktop; der Entwurf zeichnet 56 - eine
-> FAB-Groesse fuer die App). Er oeffnet das Menue zum Hinzufuegen (components/add-menu.js) als
+> schwebt (mit Nachlauf `--fab-safe-zone`). **Die eine benannte Ausnahme der FAB-Geometrie
+> (Ruling R14):** 56px am Telefon wie am Desktop, deckend in der Stimme (`--color-btn-primary`,
+> weisses Plus, 6,06:1), kein Glas und kein Sheen - so hat der Owner den Entwurf abgenommen. Die
+> Groesse ist ein Token (`--fab-size-today`, tokens.css), das dashboard.css per
+> `:root:has(#fab-add)` zu `--fab-size` macht: Nachlauf und Install-Banner rechnen mit, die Knoepfe
+> aller anderen Seiten bleiben bei 52/48. Lage (16 von der Kante, 16 ueber der Leiste), Ziel und
+> Fokusring (heller Ring, Stimme als Halo) sind die des geteilten `.page-fab`. test-frontend-audit
+> laesst in dashboard.css genau diese zwei Selektoren zu und sonst keine FAB-Geometrie. Er oeffnet
+> das Menue zum Hinzufuegen (components/add-menu.js, beim Tipp nachgeladen - nicht im Start) als
 > Blatt: oben hervorgehoben **Say a task** (Stimme zu 8 %, Mikrofon im 40er-Kreis, darunter ein
 > Beispielsatz), dann **Task, Event, Shopping item, Meal**; jede Zeile nur mit Schreibrecht auf
 > ihr Modul, ohne Zeile kein +, nie am Display. Ein Tipp schliesst das Menue und oeffnet das
 > passende Blatt ueber Dziś; "Say a task" startet die Erkennung noch im Tipp (Safari verlangt die
-> Geste - `task-dictation.js` ist deshalb statisch importiert). "Dodaj zadanie" in der Karte der
-> Aufgaben bleibt. Die Leiste hat weiterhin kein +; kein Speed-Dial, kein globales Erfassen.
+> Geste - add-menu.js importiert `task-dictation.js` deshalb statisch, und `startTaskDictation`
+> ist die Zeile selbst). "Dodaj zadanie" in der Karte der Aufgaben bleibt. Der Rundgang nennt am
+> Desktop beide Orte (`onboarding.step3BodyDesktopPlus`). Die Leiste hat weiterhin kein +; kein
+> Speed-Dial, kein globales Erfassen.
 
 > **Tafla (2026-10-19):** am Telefon schwebt kein Seiten-FAB mehr. Das globale **+** neben der
 > Kapsel (deckende Stimme `--color-btn-primary`, Akzent-Glow, 52pt; minimiert 48) oeffnet das

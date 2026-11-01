@@ -3799,8 +3799,8 @@
         "done": "Начать",
         "skip": "Пропустить",
         "step2BodyDesktop": "Боковая панель слева ведёт прямо к самым важным разделам. Остальные модули находятся в разделе «Ещё».",
-        "step3BodyDesktop": "Кнопка + в правом верхнем углу каждого модуля создаёт новые записи.",
-        "stepProgress": "Шаг {{current}} из {{total}}"
+        "stepProgress": "Шаг {{current}} из {{total}}",
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Офлайн - переподключение…",
