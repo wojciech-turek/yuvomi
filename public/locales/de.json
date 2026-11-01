@@ -268,7 +268,11 @@
         "todayWasteToday": "Abholung heute",
         "todayWasteTonight": "Heute Abend rausstellen",
         "wallScreensaverNone": "Bildschirmschoner nicht verfügbar.",
-        "wallScreensaverStart": "Bildschirmschoner"
+        "wallScreensaverStart": "Bildschirmschoner",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Automatisch sortieren",

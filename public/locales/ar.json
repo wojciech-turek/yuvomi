@@ -297,7 +297,11 @@
         "todayWasteToday": "الجمع اليوم",
         "todayWasteTonight": "أخرجها الليلة",
         "wallScreensaverNone": "شاشة التوقف غير متاحة.",
-        "wallScreensaverStart": "شاشة التوقف"
+        "wallScreensaverStart": "شاشة التوقف",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "الترتيب التلقائي",

@@ -252,7 +252,11 @@
         "todayWasteToday": "Bugün toplanıyor",
         "todayWasteTonight": "Bu akşam dışarı çıkar",
         "wallScreensaverNone": "Ekran koruyucu kullanılamıyor.",
-        "wallScreensaverStart": "Ekran koruyucu"
+        "wallScreensaverStart": "Ekran koruyucu",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Otomatik sırala",

@@ -6474,7 +6474,8 @@ test('dashboard polish keeps one page heading and native quick-action controls',
   // Werkzeugknoepfe) ist mit dem Raster gegangen; Dziś traegt seinen eigenen.
   // Tafla: der Speed-Dial ist entfallen - das globale + der Shell oeffnete das
   // Erfassen-Blatt. 2026-10-27, v2: auch das + und das Blatt sind weg; jede
-  // Seite legt in ihrem Kopf an, Dziś hat keinen eigenen Anlege-Knopf.
+  // Seite legt in ihrem Kopf an. Quick-Add (2026-10-29): Dziś hat wieder ein
+  // +, das sein eigenes Menue oeffnet (test:add-menu) - kein Speed-Dial.
   assert.doesNotMatch(dashboard, /class="fab-action"/);
   assert.doesNotMatch(dashboard, /openCapture|capture-sheet/, 'Dziś ruft kein globales Erfassen mehr');
   assert.doesNotMatch(dashboard, /<button class="fab-action__btn"/);

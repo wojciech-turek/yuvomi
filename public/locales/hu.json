@@ -252,7 +252,11 @@
         "todayWasteToday": "Ma viszik",
         "todayWasteTonight": "Ma este kitenni",
         "wallScreensaverNone": "A képernyővédő nem érhető el.",
-        "wallScreensaverStart": "Képernyővédő"
+        "wallScreensaverStart": "Képernyővédő",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Automatikus rendezés",

@@ -252,7 +252,11 @@
         "todayWasteToday": "Coleta hoje",
         "todayWasteTonight": "Colocar para fora esta noite",
         "wallScreensaverNone": "Protetor de tela não disponível.",
-        "wallScreensaverStart": "Protetor de tela"
+        "wallScreensaverStart": "Protetor de tela",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Ordenar automaticamente",

@@ -268,7 +268,11 @@
         "todayWasteToday": "Diangkut hari ini",
         "todayWasteTonight": "Taruh di luar malam ini",
         "wallScreensaverNone": "Screensaver tidak tersedia.",
-        "wallScreensaverStart": "Screensaver"
+        "wallScreensaverStart": "Screensaver",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Urutkan otomatis",

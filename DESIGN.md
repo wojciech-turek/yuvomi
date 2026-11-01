@@ -2747,7 +2747,9 @@ Gemessen: `test:child-start-permissions`, `test:housekeeping-ui`, `test:dashboar
 > das Label 600 in Tinte; ruhend Tinte-2, 400. **Kein globales +** mehr: jede Seite legt in
 > ihrem eigenen Kopf an (Geisterkreis, `dockFabAsGhost`); wo der Kopf am Telefon keinen Platz
 > hat (Kalender, Spiżarnia, Posiłki), schwebt der Knopf der Seite ueber der Leiste
-> (`--fab-offset-bottom`, mit Nachlauf `--fab-safe-zone`). Dziś legt nichts an. Die
+> (`--fab-offset-bottom`, mit Nachlauf `--fab-safe-zone`). **Dziś traegt ein + (Quick-Add,
+> 2026-10-29):** es oeffnet das Menue zum Hinzufuegen (Say a task, Task, Event, Shopping item,
+> Meal; siehe FAB unten). Die Leiste hat weiterhin kein +. Die
 > Seitenleiste am Desktop fuehrt **dieselben fuenf Ziele**, hell und deckend, ohne Sektionen;
 > die Einstellungen stehen im Konto-Menue am Fuss und auf Więcej. „Kuchnia" heisst jetzt
 > **Jedzenie** (en Food) - Schluessel und Routen bleiben `kitchen`. Was unten der Kapsel, dem
@@ -4319,6 +4321,21 @@ ist Region-Fokusziel ohne Rahmen (`.page-crash`, wie `.page-unreachable`).
 die Ziele bleiben 48px. Vorher vier umrandete Kreise je Zeile.
 
 ### FAB (Signature Component)
+
+> **Quick-Add (2026-10-29, Owner: „a '+' sign bottom right that lets me pick what i want to add
+> and then opens the correct bottom sheet"; Entwuerfe HomePlus und PlusMenu; Guards:
+> test:add-menu, test:dashboard-a11y, test:dashboard-dzis, Sonde 18).** Dziś hat ein +, und nur
+> Dziś: `fab-add` (`createPageFab`, pages/dashboard.js), unten rechts ueber der Leiste, am Desktop
+> in derselben Ecke - Dziś hat keinen Kopf mit Aktions-Slot, der Knopf dockt also nicht an und
+> schwebt (mit Nachlauf `--fab-safe-zone`). Geometrie aus den `--fab-*`-Tokens wie jeder
+> schwebende Seitenknopf (52px am Telefon, 48 am Desktop; der Entwurf zeichnet 56 - eine
+> FAB-Groesse fuer die App). Er oeffnet das Menue zum Hinzufuegen (components/add-menu.js) als
+> Blatt: oben hervorgehoben **Say a task** (Stimme zu 8 %, Mikrofon im 40er-Kreis, darunter ein
+> Beispielsatz), dann **Task, Event, Shopping item, Meal**; jede Zeile nur mit Schreibrecht auf
+> ihr Modul, ohne Zeile kein +, nie am Display. Ein Tipp schliesst das Menue und oeffnet das
+> passende Blatt ueber Dziś; "Say a task" startet die Erkennung noch im Tipp (Safari verlangt die
+> Geste - `task-dictation.js` ist deshalb statisch importiert). "Dodaj zadanie" in der Karte der
+> Aufgaben bleibt. Die Leiste hat weiterhin kein +; kein Speed-Dial, kein globales Erfassen.
 
 > **Tafla (2026-10-19):** am Telefon schwebt kein Seiten-FAB mehr. Das globale **+** neben der
 > Kapsel (deckende Stimme `--color-btn-primary`, Akzent-Glow, 52pt; minimiert 48) oeffnet das

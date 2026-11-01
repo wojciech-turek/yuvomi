@@ -263,9 +263,24 @@ test('the page, top to bottom: header, weather, Kalendarz, Zadania, Wkrótce - a
   assert.equal(count(html, /<h2\b/g), 1, 'the sections are h3 under it');
   assert.equal(count(html, /<h3 class="dz-(?:sec|soon)__title"/g), 3);
   assert.match(html, /<a class="dz-head__me" href="\/settings"/);
+  // `page-fab` stays out of the page markup: the + of Quick-Add (2026-10-29)
+  // is built by dashboard.js and lives in the shell layer (next test).
   for (const gone of [/day-now/, /day-plan/, /day-closed/, /data-day-action="cook"/, /data-day-action="customize"/, /page-fab/, /today\.planTitle/]) {
     assert.doesNotMatch(html, gone, `${gone} is gone with v2`);
   }
+});
+
+test('Quick-Add (2026-10-29): Dziś has exactly one +, fab-add, and none of the old capture or speed-dial names', () => {
+  const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
+  const fabs = src.match(/createPageFab\(\{[^}]*\}\)/g) ?? [];
+  assert.deepEqual(fabs.map((f) => /id: '([^']+)'/.exec(f)?.[1]), ['fab-add'], 'one FAB, and it is fab-add');
+  assert.doesNotMatch(src, /pageFabHtml\(|class="page-fab"|page-fab-group/, 'no second FAB as markup, no speed-dial group');
+  for (const gone of [/fab-main/, /capture-plus/, /openCapture/, /capture-sheet/, /FAB_ACTIONS/, /function wireNewMenu/]) {
+    assert.doesNotMatch(src, gone, `${gone} stays gone`);
+  }
+  // The bottom bar still has no + (spec non-goal): the shell builds none.
+  const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(router, /capture-plus|createCapturePlus|nav-bottom__add|nav-sidebar__add/);
 });
 
 test('the weather card is one link to the weather settings; the chart is decoration for the eye only', () => {

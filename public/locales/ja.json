@@ -252,7 +252,11 @@
         "todayWasteToday": "本日収集",
         "todayWasteTonight": "今夜出す",
         "wallScreensaverNone": "スクリーンセーバーを開始できません。",
-        "wallScreensaverStart": "スクリーンセーバー"
+        "wallScreensaverStart": "スクリーンセーバー",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "自動で並べ替え",

@@ -268,7 +268,11 @@
         "todayWasteToday": "جمع‌آوری امروز",
         "todayWasteTonight": "امشب بیرون بگذارید",
         "wallScreensaverNone": "محافظ صفحه در دسترس نیست.",
-        "wallScreensaverStart": "محافظ صفحه"
+        "wallScreensaverStart": "محافظ صفحه",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "مرتب‌سازی خودکار",

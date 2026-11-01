@@ -268,7 +268,11 @@
         "todayWasteToday": "오늘 수거",
         "todayWasteTonight": "오늘 밤 내놓기",
         "wallScreensaverNone": "화면 보호기를 사용할 수 없습니다.",
-        "wallScreensaverStart": "화면 보호기"
+        "wallScreensaverStart": "화면 보호기",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "자동으로 정렬",

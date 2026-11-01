@@ -4289,6 +4289,8 @@ async function fabAtScrollEnd(page) {
       // "+ Obiad …" stehen am Telefon bei den Tagen, nicht zwingend im Bild.
       eigenesAnlegen: own.some((el) => el.getBoundingClientRect().height > 0),
       anlegenImKopf: !!fab && !!fab.closest('.page-toolbar'),
+      // Quick-Add (2026-10-29): auf Dziś ist das Anlegen das + `fab-add`.
+      fabId: fab && shown(fab) ? fab.id : null,
       globalesPlus: Boolean(document.querySelector('#capture-plus, .capture-plus, .nav-sidebar__add')),
     };
   });
@@ -4417,7 +4419,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       let ohneFab = 0;
       const mitAnlegen = [];
       const globalesPlus = [];
-      let dzisOhneKnopf = null;
+      let dzisKnopf = null;
       let posilkiZeilen = null;
 
       for (const name of sweep('Sonde 18')) {
@@ -4427,7 +4429,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
         if (m.eingeklappt) eingeklappt.push(name);
         if (m.anlegenSichtbar) mitAnlegen.push(name);
         if (m.globalesPlus) globalesPlus.push(name);
-        if (name === 'dashboard') dzisOhneKnopf = !m.anlegenSichtbar;
+        if (name === 'dashboard') dzisKnopf = m.fabId;
         if (name === 'meals') posilkiZeilen = m.eigenesAnlegen;
         // Unabhaengig vom Scrollstand: ob ein Knopf schwebt, ist eine Frage
         // der Seite, nicht davon, ob die Messung ihr Ende erreicht hat.
@@ -4496,9 +4498,15 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Gegengeprueft: mit einem Riegel in `dockFabIntoToolbar` (router.js),
          * der /tasks nicht andocken laesst, wird diese Zeile rot und nennt
          * `tasks`. */
-        assert.deepEqual(schwebend, [],
-          'Auf dem Zeigergeraet schwebt kein FAB ueber dem Inhalt - jede Primaeraktion dockt im Kopf an '
-          + '(seit R14 auch die Uebersicht als Pille "+ Neu"). Es schweben: ' + schwebend.join(', '));
+        /* Quick-Add (2026-10-29): DIE EINE AUSNAHME IST DZIŚ, mit Namen. Sein +
+         * (`fab-add`) sitzt laut Spezifikation am Desktop „in derselben Ecke" -
+         * und Dziś hat keinen Kopf mit Aktions-Slot, an den er andocken
+         * koennte. Er schwebt also, und die Ueberlappungsfrage oben misst ihn
+         * (Nachlauf `--fab-safe-zone`). Jeder andere, der wieder schwebt,
+         * steht hier mit Namen. */
+        assert.deepEqual(schwebend, ['dashboard'],
+          'Auf dem Zeigergeraet schwebt kein FAB ueber dem Inhalt - jede Primaeraktion dockt im Kopf an, '
+          + 'ausser dem + von Dziś (kein Kopf, Spezifikation). Es schweben: ' + schwebend.join(', '));
         /* Die Aufteilung wird MITGEPRUEFT, nicht nur abgezogen: sonst verschwiege
          * die Sonde still, dass ein Modul seinen FAB ganz verloren hat. Mit
          * NAMEN, nicht als Zahl - die Meldung sagt dann, wer fehlt.
@@ -4515,7 +4523,8 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Sein Anlegen war das globale + (am Zeiger der „Dodaj"-Kreis der
          * Seitenleiste). 2026-10-27, v2: das + ist weg, Dziś legt nichts an -
          * jede Seite legt in ihrem eigenen Kopf an; geprueft weiter unten fuer
-         * beide Geraete. */
+         * beide Geraete. Quick-Add (2026-10-29): Dziś hat wieder ein + - es
+         * schwebt (oben, `schwebend`), dockt also nicht an. */
         const ANGEDOCKT_AM_ZEIGER = ['tasks', 'calendar', 'shopping', 'meals', 'recipes',
           'pantry', 'notes', 'contacts', 'birthdays', 'budget', 'documents'];
         assert.deepEqual({ angedockt: [...angedockt].sort(), eingeklappt },
@@ -4534,8 +4543,10 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
          * Telefon wieder Platz hat, nimmt seinen Knopf auf und faellt hier raus.
          * 2026-10-27, v2: Posiłki schwebt nicht mehr - am Telefon sind die
          * Zeilen "+ Śniadanie / + Obiad …" das Anlegen, der Knopf tritt dort
-         * zurueck (`hidden`, meals.js fabStepsBackOnPhone). */
-        const SCHWEBEND_AM_FINGER = ['calendar', 'pantry'];
+         * zurueck (`hidden`, meals.js fabStepsBackOnPhone).
+         * Quick-Add (2026-10-29): Dziś schwebt wieder - sein + steht unten
+         * rechts ueber der Leiste (Entwurf HomePlus); Dziś hat keinen Kopf. */
+        const SCHWEBEND_AM_FINGER = ['calendar', 'dashboard', 'pantry'];
         assert.deepEqual([...schwebend].sort(), SCHWEBEND_AM_FINGER,
           'Am Finger schweben nur die Knoepfe, deren Kopf am Telefon keinen Platz hat.');
         assert.ok(seen >= 1, `Nur ${seen} schwebende Knoepfe an ihrem Scroll-Ende gemessen - die Sonde misst nichts.`);
@@ -4546,10 +4557,11 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
        * globalen + in der Nav-Zone (am Finger) bzw. oben in der Seitenleiste (am
        * Zeiger). Gefragt wird jetzt das Gegenstueck: es gibt kein globales +
        * mehr, und jede Modulseite mit eigener Primaeraktion zeigt sie beim
-       * Betreten - im Kopf oder schwebend. Ausgenommen mit Grund: Dziś (legt
-       * nichts an), Zdrowie (legt je Bereich an, die Uebersicht hat keinen
-       * Knopf), Nagrody und Sprzątanie (der Knopf folgt Reiter bzw. Profil),
-       * Ustawienia.
+       * Betreten - im Kopf oder schwebend. Ausgenommen mit Grund: Zdrowie
+       * (legt je Bereich an, die Uebersicht hat keinen Knopf), Nagrody und
+       * Sprzątanie (der Knopf folgt Reiter bzw. Profil), Ustawienia.
+       * Quick-Add (2026-10-29): Dziś steht wieder in der Liste - sein + oeffnet
+       * das Menue zum Hinzufuegen (components/add-menu.js).
        * 2026-10-27, v2: Zakupy und Posiłki bleiben in der Liste, zeigen ihr
        * Anlegen am Telefon aber nicht als Knopf: Zakupy mit der Leiste "Dodaj
        * produkt" (der Kopf traegt nur die Suche, ZakupyIdle), Posiłki mit den
@@ -4560,7 +4572,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
        * naechsten "+ …"-Zeilen bei den folgenden Tagen unter der Falz -
        * gemessen auf dem Demo-Seed: "+ Przekąska" bei y 1263 von 844. Geprueft
        * wird dort, dass die Zeilen im Dokument stehen. */
-      const ANLEGEN_SICHTBAR = ['tasks', 'calendar', 'shopping', 'meals', 'recipes', 'pantry', 'notes',
+      const ANLEGEN_SICHTBAR = ['dashboard', 'tasks', 'calendar', 'shopping', 'meals', 'recipes', 'pantry', 'notes',
         'contacts', 'birthdays', 'budget', 'documents'].filter((n) => device !== 'mobile' || n !== 'meals');
       assert.deepEqual(globalesPlus, [], 'kein globales + mehr (#capture-plus, .nav-sidebar__add)');
       assert.deepEqual(ANLEGEN_SICHTBAR.filter((n) => !mitAnlegen.includes(n)), [],
@@ -4568,7 +4580,7 @@ describe('Sonde 18 - am Scroll-Ende liegt nichts Bedienbares unter dem FAB', () 
       if (device === 'mobile') {
         assert.equal(posilkiZeilen, true, 'Posiłki am Telefon: die Zeilen "+ Śniadanie / + Obiad …" sind das Anlegen und stehen im Dokument');
       }
-      assert.equal(dzisOhneKnopf, true, 'Dziś traegt keinen eigenen Anlege-Knopf');
+      assert.equal(dzisKnopf, 'fab-add', 'Dziś traegt genau sein + (fab-add), sichtbar beim Betreten');
 
       assert.deepEqual(findings, [],
         'Der FAB am Scroll-Ende. Dort gehoert ihm der Nachlauf allein.\n  ' + findings.join('\n  '));

@@ -267,7 +267,11 @@
         "todayWasteToday": "Odvoz dnes",
         "todayWasteTonight": "Dnes večer vystavit",
         "wallScreensaverNone": "Spořič obrazovky není dostupný.",
-        "wallScreensaverStart": "Spořič obrazovky"
+        "wallScreensaverStart": "Spořič obrazovky",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "Řadit automaticky",

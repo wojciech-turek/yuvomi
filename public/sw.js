@@ -382,6 +382,9 @@ const PAGE_MODULES = [
   // ueber pages/tasks.js.
   '/components/task-dictation.js',
   '/components/shopping-add-sheet.js',
+  // Das Menue hinter dem + auf Dziś (Quick-Add) - die Uebersicht importiert es
+  // statisch, mit ihm das Hoerblatt oben.
+  '/components/add-menu.js',
   '/utils/shopping-entry.js',
   '/utils/speech.js',
   '/utils/task-draft.js',

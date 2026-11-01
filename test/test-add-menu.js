@@ -1,0 +1,228 @@
+/**
+ * Modul: Das "+" auf Dziś und sein Menue (Quick-Add, 2026-10-29, Task 12)
+ * Zweck: Der Owner: "a '+' sign bottom right that lets me pick what i want to
+ *        add and then opens the correct bottom sheet". Geprueft wird:
+ *          - addMenuItems: welche Zeilen das Schreibrecht der Module erlaubt,
+ *            in der Reihenfolge Say a task, Task, Event, Shopping item, Meal;
+ *          - openAddMenu: EIN Blatt (Titel, klein, ohne Dirty-Waechter), "Say a
+ *            task" hervorgehoben oben mit Beispielsatz, darunter die Zeilen;
+ *          - ein Tipp schliesst das Menue und oeffnet das passende Blatt mit
+ *            `user` und `onChanged` - "Say a task" noch IM Tipp (Safari startet
+ *            die Erkennung nur in der Geste), ein Fehler wird eine Meldung;
+ *          - Dziś baut den Knopf `fab-add` nur mit einer Zeile und nie am
+ *            Display (Kuchnia-Tablet);
+ *          - die Quelltext-Zusagen: task-dictation.js kommt statisch herein, die
+ *            vier anderen Blaetter per import() wie "Dodaj zadanie".
+ * Ausfuehren: npm run test:add-menu
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { installMiniDom } from './mini-dom.js';
+
+globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
+globalThis.customElements = globalThis.customElements ?? { define() {}, get() {} };
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => { store.set(k, String(v)); },
+  removeItem: (k) => { store.delete(k); },
+  clear: () => store.clear(),
+};
+installMiniDom();
+globalThis.window = globalThis.window ?? {};
+const toasts = [];
+globalThis.window.yuvomi = { showToast: (...args) => { toasts.push(args); } };
+
+const { addMenuItems, openAddMenu } = await import('../public/components/add-menu.js');
+const { __test: dash } = await import('../public/pages/dashboard.js');
+
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+const ALL_WRITE = { tasks: 'write', calendar: 'write', shopping: 'write', meals: 'write' };
+const NONE = { tasks: 'none', calendar: 'none', shopping: 'none', meals: 'none' };
+
+test('addMenuItems: tasks write -> Say a task and Task; calendar, shopping, meals each need write', () => {
+  assert.deepEqual(addMenuItems({ tasks: 'write', calendar: 'read', shopping: 'write', meals: 'none' }).map((i) => i.id),
+    ['say', 'task', 'shopping']);
+  assert.deepEqual(addMenuItems(NONE), []);
+  assert.deepEqual(addMenuItems(ALL_WRITE).map((i) => i.id), ['say', 'task', 'event', 'shopping', 'meal'], 'in the mockup order');
+  assert.deepEqual(addMenuItems({ tasks: 'read', calendar: 'write', shopping: 'read', meals: 'write' }).map((i) => i.id),
+    ['event', 'meal']);
+  assert.deepEqual(addMenuItems({}), [], 'nothing known, nothing offered');
+  assert.deepEqual(addMenuItems(), []);
+});
+
+/** Ein Blatt mit EINEM Container, der Klick-Listener merkt; Zeilen sind Ziele mit data-add. */
+function fakePanel() {
+  const root = {
+    listeners: {},
+    addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+    removeEventListener() {},
+  };
+  return {
+    root,
+    querySelector: (sel) => (sel === '[data-add-menu]' ? root : null),
+    querySelectorAll: () => [],
+    /** Ein Tipp auf die Zeile `id`: das Ziel ist ihr Zeichen, `closest` findet die Zeile. */
+    tap(id) {
+      const row = { dataset: { add: id } };
+      const target = { closest: (sel) => (sel === '[data-add]' ? row : null) };
+      for (const fn of root.listeners.click ?? []) fn({ target, preventDefault() {} });
+    },
+  };
+}
+
+function setup() {
+  const opened = [];
+  const closed = [];
+  const calls = [];
+  globalThis.__openModal = (opts) => { opened.push(opts); };
+  globalThis.__closeModal = (opts) => { closed.push(opts); calls.push('close'); return true; };
+  const openers = {};
+  for (const id of ['say', 'task', 'event', 'shopping', 'meal']) {
+    openers[id] = (opts) => { calls.push(id); openers[id].got = opts; return id === 'say' ? true : Promise.resolve(true); };
+  }
+  return {
+    opened, closed, calls, openers,
+    done() { delete globalThis.__openModal; delete globalThis.__closeModal; toasts.length = 0; },
+  };
+}
+
+test('openAddMenu: one small sheet, "Say a task" highlighted on top with its example, then the rows', () => {
+  const s = setup();
+  try {
+    assert.equal(openAddMenu({ user: { id: 1 }, onChanged() {}, access: ALL_WRITE }, { openers: s.openers }), true);
+    assert.equal(s.opened.length, 1);
+    const [opts] = s.opened;
+    assert.equal(opts.title, 'dashboard.addMenuTitle');
+    assert.equal(opts.size, 'sm');
+    assert.equal(opts.dirtyGuard, false, 'a menu has nothing to lose');
+    const html = opts.content;
+    const order = ['data-add="say"', 'data-add="task"', 'data-add="event"', 'data-add="shopping"', 'data-add="meal"'].map((m) => html.indexOf(m));
+    assert.ok(order.every((pos) => pos >= 0), `every row is drawn: ${order}`);
+    assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the mockup order');
+    assert.match(html, /<button type="button" class="add-menu__say" data-add="say"/, 'the highlighted row is a button');
+    assert.match(html, /data-lucide="mic"/);
+    assert.match(html, />tasks\.dictation\.title</, '"Say a task"');
+    assert.match(html, />dashboard\.addMenuSayHint</, 'the example sentence under it');
+    assert.match(html, /aria-describedby="add-menu-say-hint"/, 'the example is a description, not part of the name');
+    for (const key of ['dashboard.fabTask', 'dashboard.fabCalendar', 'dashboard.addMenuShopping', 'newLabel.meals']) {
+      assert.match(html, new RegExp(`>${key.replace('.', '\\.')}<`), `${key} names its row`);
+    }
+    assert.equal((html.match(/<button type="button"/g) || []).length, 5, 'five rows, five buttons');
+  } finally { s.done(); }
+});
+
+test('openAddMenu: only the rows the access allows; none -> no sheet', () => {
+  const s = setup();
+  try {
+    openAddMenu({ user: { id: 1 }, access: { tasks: 'read', calendar: 'write', shopping: 'none', meals: 'none' } }, { openers: s.openers });
+    const html = s.opened[0].content;
+    assert.match(html, /data-add="event"/);
+    for (const gone of ['say', 'task', 'shopping', 'meal']) assert.doesNotMatch(html, new RegExp(`data-add="${gone}"`));
+    assert.doesNotMatch(html, /add-menu__say/, 'no highlighted row without tasks write');
+    assert.equal(openAddMenu({ user: { id: 1 }, access: NONE }, { openers: s.openers }), false);
+    assert.equal(s.opened.length, 1, 'nothing to add, no sheet');
+  } finally { s.done(); }
+});
+
+test('a tap closes the menu, then opens its sheet with user and onChanged', async () => {
+  const user = { id: 7, display_name: 'Wojtek' };
+  const onChanged = () => {};
+  for (const id of ['task', 'event', 'shopping', 'meal']) {
+    const s = setup();
+    try {
+      openAddMenu({ user, onChanged, access: ALL_WRITE }, { openers: s.openers });
+      const panel = fakePanel();
+      s.opened[0].onSave(panel);
+      panel.tap(id);
+      assert.deepEqual(s.calls, ['close', id], `${id}: the menu closes first`);
+      assert.deepEqual(s.closed, [{ force: true }], `${id}: closed without asking`);
+      assert.equal(s.openers[id].got.user, user, `${id}: the user goes along (shopping remembers its list per user)`);
+      assert.equal(s.openers[id].got.onChanged, onChanged, `${id}: Dziś refreshes after a save`);
+    } finally { s.done(); }
+  }
+});
+
+test('"Say a task" starts inside the tap: no await, no promise between the tap and the opener', () => {
+  const s = setup();
+  try {
+    openAddMenu({ user: { id: 1 }, onChanged() {}, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('say');
+    // Synchron gemessen: haette der Handler vor dem Oeffner gewartet, stuende
+    // hier erst 'close' (oder gar nichts) - Safari meldete `not-allowed`.
+    assert.deepEqual(s.calls, ['close', 'say'], 'the opener ran before the handler returned');
+  } finally { s.done(); }
+});
+
+test('a sheet that fails to open says so in a toast, and a tap beside the rows does nothing', async () => {
+  const s = setup();
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => { errors.push(args); };
+  try {
+    s.openers.event = () => Promise.reject(Object.assign(new Error('Failed to fetch dynamically imported module'), { status: 0 }));
+    s.openers.say = () => { throw new Error('boom'); };
+    openAddMenu({ user: { id: 1 }, access: ALL_WRITE }, { openers: s.openers });
+    const panel = fakePanel();
+    s.opened[0].onSave(panel);
+    panel.tap('event');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(toasts.length, 1);
+    assert.equal(toasts[0][1], 'danger');
+    assert.doesNotMatch(toasts[0][0], /dynamically imported/, 'the browser text never reaches the toast');
+    panel.tap('say');
+    assert.equal(toasts.length, 2, 'a throwing opener is reported too');
+    assert.equal(errors.length, 2, 'and logged');
+    const before = s.calls.length;
+    for (const fn of panel.root.listeners.click) fn({ target: { closest: () => null } });
+    assert.equal(s.calls.length, before, 'between the rows: nothing closes, nothing opens');
+  } finally { console.error = realError; s.done(); }
+});
+
+test('Dziś: the + is fab-add, named "Add", only with something to add and never on the display', () => {
+  const member = { id: 1, access_scope: 'full' };
+  const fab = dash.todayAddFab({ user: member, access: { ...NONE, tasks: 'write' }, onClick() {} });
+  assert.ok(fab, 'a member with tasks write gets the +');
+  assert.equal(fab.id, 'fab-add');
+  assert.equal(fab.className, 'page-fab');
+  assert.equal(fab.getAttribute('aria-label'), 'dashboard.addMenuLabel');
+  assert.equal(fab.dataset.dockLabel, 'dashboard.addMenuLabel');
+  assert.match(fab.innerHTML, /data-lucide|<i/, 'it carries the plus glyph');
+  assert.equal(fab.listener, 'click', 'the tap is wired');
+  assert.equal(dash.todayAddFab({ user: { id: 9, access_scope: 'display' }, access: ALL_WRITE, onClick() {} }), null,
+    'the Kuchnia tablet gets no +');
+  assert.equal(dash.todayAddFab({ user: member, access: NONE, onClick() {} }), null, 'nothing to add, no +');
+  assert.equal(dash.todayAddFab({ user: member, access: { ...NONE, meals: 'write' }, onClick() {} })?.id, 'fab-add');
+});
+
+test('the access comes from the same place as the rest of Dziś: module rights, a switched-off module is none', async () => {
+  const { setPermissions, clearPermissions } = await import('../public/permissions.js');
+  const prevYuvomi = globalThis.window.yuvomi;
+  try {
+    setPermissions({ admin: false, modules: { tasks: 'write', calendar: 'read', shopping: 'write', meals: 'write' } });
+    globalThis.window.yuvomi = { ...prevYuvomi, isModuleDisabled: (m) => m === 'meals' };
+    assert.deepEqual(dash.todayAddAccess(), { tasks: 'write', calendar: 'read', shopping: 'write', meals: 'none' });
+  } finally { clearPermissions(); globalThis.window.yuvomi = prevYuvomi; }
+});
+
+test('source: dictation is a static import, the other sheets load on demand; Dziś builds the + in the synchronous part', () => {
+  const menu = read('../public/components/add-menu.js');
+  assert.match(menu, /^import \{ startTaskDictation \} from '\/components\/task-dictation\.js';$/m,
+    'static - a dynamic import would put a promise between the tap and start()');
+  assert.doesNotMatch(menu, /import\('\/components\/task-dictation\.js'\)/);
+  for (const [mod, fn] of [['/pages/tasks.js', 'openNewTaskFrom'], ['/pages/calendar.js', 'openNewEventFrom'],
+    ['/components/shopping-add-sheet.js', 'openShoppingAddFrom'], ['/pages/meals.js', 'openNewMealFrom']]) {
+    assert.match(menu, new RegExp(`import\\('${mod.replace(/[./]/g, '\\$&')}'\\)\\)\\.${fn}\\(`), `${fn} from ${mod}`);
+  }
+  const dashboard = read('../public/pages/dashboard.js');
+  assert.match(dashboard, /^import \{[^}]*\bopenAddMenu\b[^}]*\} from '\/components\/add-menu\.js';$/m, 'the menu is ready before the tap');
+  const render = dashboard.slice(dashboard.indexOf('export async function render('));
+  const firstAwait = render.indexOf('await ');
+  const mount = render.indexOf('mountTodayAdd(');
+  assert.ok(mount > 0 && mount < firstAwait, 'the + stands with the skeleton, before the data (the router adopts it right after render starts)');
+  // The "Add task" row in the Tasks card stays (spec).
+  assert.match(read('../public/components/today-view.js'), /data-day-action="add-task"/);
+});

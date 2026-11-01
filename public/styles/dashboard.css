@@ -2151,3 +2151,124 @@
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Das Menue hinter dem + (Quick-Add, 2026-10-29; Entwurf PlusMenu) ----
+ * components/add-menu.js oeffnet es nur von Dziś aus, deshalb steht es hier
+ * und nicht in layout.css. Oben "Say a task" in der Stimme zu 8 % (wie die
+ * Pille des aktiven Tabs) mit dem 40er-Kreis in der Stimme, darunter die
+ * Zeilen: 52 hoch, Zeichen 22 in Tinte-2, Text 17/24, Trennlinien ab dem Text. */
+.add-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.add-menu__say {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--space-16);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--color-btn-primary) 8%, transparent);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.add-menu__say-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-10);
+  block-size: var(--space-10);
+  border-radius: var(--radius-full);
+  background-color: var(--color-btn-primary);
+  color: var(--color-on-accent);
+}
+
+.add-menu__say-icon svg {
+  inline-size: var(--icon-lg);
+  block-size: var(--icon-lg);
+  stroke-width: 2;
+}
+
+.add-menu__say-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.add-menu__say-title {
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.add-menu__say-hint {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  color: var(--color-text-secondary);
+}
+
+.add-menu__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.add-menu__item {
+  position: relative;
+}
+
+.add-menu__item + .add-menu__item::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: calc(var(--space-2) + 22px + var(--space-3)) 0;
+  block-size: 1px;
+  background-color: var(--color-separator-inner);
+}
+
+.add-menu__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: 52px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--type-section-lh);
+  text-align: start;
+  cursor: pointer;
+}
+
+.add-menu__row svg {
+  flex: none;
+  inline-size: 22px;
+  block-size: 22px;
+  color: var(--color-text-secondary);
+  stroke-width: 1.75;
+}
+
+.add-menu__row:active {
+  background-color: var(--color-fill);
+}
+
+.add-menu__say:active {
+  background-color: var(--color-accent-subtle);
+}
+
+.add-menu__row:focus-visible,
+.add-menu__say:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
+}

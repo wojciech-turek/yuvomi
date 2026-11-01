@@ -673,8 +673,12 @@ test('Onboarding: Bildmarke im ersten Schritt, Lichtring auf Leiste und Plus-Kno
   // 2026-10-27, v2: das globale + ist weg - Schritt 3 zeigt auf das „Neu" der
   // Seite, wo eines sichtbar steht (auf Dziś keins: dann ohne Ring).
   // 2026-10-27, v2: auf Dziś ist das „Neu" der Seite „Dodaj zadanie".
-  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*target: \(\) => \[\.\.\.document\.querySelectorAll\('\.page-fab, \[data-today\] \.dz-tasks__add'\)\]\.find\(isShownOnScreen\)/,
-    'Schritt 3 zeigt auf den sichtbaren Knopf der Seite');
+  // Quick-Add (2026-10-29): Dziś hat sein + (fab-add) - der Ring zeigt zuerst
+  // darauf, „Dodaj zadanie" bleibt der Rueckfall (Display, nur lesend). Das +
+  // haengt in der Shell-Ebene HINTER #main-content; in einer gemeinsamen
+  // Dokumentreihenfolge kaeme die Zeile zuerst.
+  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*target: \(\) => \[findPageFab\('fab-add'\), document\.querySelector\('\[data-today\] \.dz-tasks__add'\)\]\.find\(isShownOnScreen\)/,
+    'Schritt 3 zeigt auf das + von Dziś, sonst auf „Dodaj zadanie"');
   assert.doesNotMatch(steps, /capture-plus/);
   assert.match(show, /function placeSpotlight\(\)/);
   assert.match(show, /classList\.toggle\('onboarding-overlay--spot', shown\)/, 'ohne sichtbares Ziel bleibt die Unschaerfe');

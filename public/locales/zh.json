@@ -252,7 +252,11 @@
         "todayWasteToday": "今天收运",
         "todayWasteTonight": "今晚放出",
         "wallScreensaverNone": "屏幕保护程序不可用。",
-        "wallScreensaverStart": "屏幕保护"
+        "wallScreensaverStart": "屏幕保护",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "自动排序",

@@ -158,8 +158,10 @@ console.log('\n[Dashboard-Test] API-Abfragen\n');
 // anlegen darf (#1208, Tafla)" - die Typen des globalen Erfassen-Blatts folgten
 // den Rechten. Blatt und + sind weg: jede Seite legt in ihrem Kopf an, und ihr
 // Knopf folgt dort den Rechten des Moduls (test:module-readonly-ui). Dziś
-// selbst traegt keinen Anlege-Knopf und ruft kein Erfassen mehr.
-test('Dziś traegt keinen eigenen Anlege-Knopf und ruft kein globales Erfassen (v2)', async () => {
+// ruft kein Erfassen mehr. Quick-Add (2026-10-29): Dziś traegt wieder ein +,
+// das sein eigenes Menue oeffnet - die Zeilen folgen dort den Rechten der
+// Module (test:add-menu).
+test('Dziś baut keinen Speed-Dial und ruft kein globales Erfassen (v2, Quick-Add)', async () => {
   const { __test } = await import('../public/pages/dashboard.js');
   const { readFile } = await import('node:fs/promises');
   assert(__test.renderFab === undefined, 'kein Speed-Dial, kein Knopf - auch kein leerer Bauer');

@@ -252,7 +252,11 @@
         "todayWasteToday": "आज संग्रह",
         "todayWasteTonight": "आज रात बाहर रखें",
         "wallScreensaverNone": "स्क्रीनसेवर उपलब्ध नहीं है।",
-        "wallScreensaverStart": "स्क्रीनसेवर"
+        "wallScreensaverStart": "स्क्रीनसेवर",
+        "addMenuLabel": "Add",
+        "addMenuTitle": "What to add?",
+        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Shopping item"
     },
     "tasks": {
         "resetOrder": "अपने-आप क्रमबद्ध करें",

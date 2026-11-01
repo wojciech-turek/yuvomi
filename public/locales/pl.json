@@ -298,7 +298,11 @@
         "todayWasteToday": "Odbiór dziś",
         "todayWasteTonight": "Wystaw dziś wieczorem",
         "wallScreensaverNone": "Wygaszacz ekranu jest niedostępny.",
-        "wallScreensaverStart": "Wygaszacz ekranu"
+        "wallScreensaverStart": "Wygaszacz ekranu",
+        "addMenuLabel": "Dodaj",
+        "addMenuTitle": "Co dodać?",
+        "addMenuSayHint": "„Wyrzuć śmieci jutro wieczorem”",
+        "addMenuShopping": "Do kupienia"
     },
     "tasks": {
         "resetOrder": "Sortuj automatycznie",
