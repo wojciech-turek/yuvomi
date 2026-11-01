@@ -259,7 +259,10 @@ test('Quick-Add: Dziś traegt genau einen Knopf - das + fab-add, gebaut von crea
   assert.match(fabs[0], /label: t\('dashboard\.addMenuLabel'\)/);
   assert.match(fabs[0], /dockLabel: t\('dashboard\.addMenuLabel'\)/);
   assert.match(fabs[0], /icon: 'plus'/);
-  assert.match(dashboardSource, /await import\('\/components\/add-menu\.js'\)/, 'er oeffnet das Menue - nachgeladen beim Tipp');
+  // Nachgeladen, nicht beim Start: der Finger auf dem + holt es (pointerdown),
+  // der Tipp wartet auf denselben Import (Quick-Add F8, `loadAddMenu`).
+  assert.match(dashboardSource, /import\('\/components\/add-menu\.js'\)/, 'er oeffnet das Menue - nachgeladen');
+  assert.match(dashboardSource, /await loadAddMenu\(\)/, 'der Tipp wartet auf das Menue');
 }));
 
 // Critique 2026-10-16: jede Kachel fuehrt mit „Alle" zu ihrer Seite, nur die

@@ -474,7 +474,9 @@ test('jeder Weg zu einer bestehenden Aufgabe führt in die Detailansicht', async
   assert.equal(modalCalls.length, 2, 'nur die Anlege-Pfade öffnen noch direkt das Formular: FAB und Diktat');
   assert.ok(modalCalls.every((m) => !/\btask\b/.test(m[0])), 'keiner mit einer Aufgabe');
   assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'der FAB ohne task');
-  assert.match(src, /openTaskModal\(\{ users, onChanged, draft: answer\.draft, spoken: true \}, container\)/,
+  // Das Diktat: ein neues, gefülltes Blatt - vom Mikrofon im Titelfeld aus mit
+  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`).
+  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true \}, container\)/,
     'das Diktat: ein neues, gefülltes Blatt');
 });
 
