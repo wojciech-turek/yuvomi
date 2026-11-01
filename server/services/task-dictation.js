@@ -64,10 +64,26 @@ function cleanTime(value) {
   return TIME_RE.test(s) ? s : null;
 }
 
+/** Was der Server als Titel annimmt (validate.js, MAX_TITLE). */
+const TITLE_MAX = 200;
+
+/**
+ * Hoechstens TITLE_MAX Zeichen, an einer Wortgrenze gekuerzt (ein Wort ohne
+ * Grenze hart). Ein laengerer Titel fuellte das Blatt und scheiterte erst beim
+ * Speichern mit 400 (F5).
+ */
+function clipTitle(text) {
+  if (text.length <= TITLE_MAX) return text;
+  const head = text.slice(0, TITLE_MAX + 1);
+  const space = head.search(/\s\S*$/u);
+  const cut = space > 0 ? head.slice(0, space) : text.slice(0, TITLE_MAX);
+  return cut.replace(/[\s.,;:]+$/u, '');
+}
+
 function cleanTitle(value, fallback) {
   const raw = String(value ?? '').trim() || String(fallback ?? '').trim();
   if (!raw) return '';
-  return raw.charAt(0).toLocaleUpperCase('pl') + raw.slice(1);
+  return clipTitle(raw.charAt(0).toLocaleUpperCase('pl') + raw.slice(1));
 }
 
 function addDays(key, days) {

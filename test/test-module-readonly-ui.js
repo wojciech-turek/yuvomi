@@ -1045,12 +1045,18 @@ async function speichernUndAufrufeSammeln({
       '#task-remind-time': feld(remindTime),
     },
   });
+  // Die Uhr steht VOR den Erinnerungen dieser Faelle: eine neue Erinnerung in
+  // der Vergangenheit speichert das Blatt nicht (Quick-Add, Ruling R15) - ein
+  // festes Datum glitte sonst mit dem Kalender in die Sperre.
+  const echteUhr = Date.now;
+  Date.now = () => Date.parse('2026-09-30T12:00:00Z');
   try {
     await withAccess(modules, () => tasks.handleFormSubmit(
       { preventDefault() {}, target: form },
       { container: null, onChanged: async () => {} },
     ));
   } finally {
+    Date.now = echteUhr;
     delete globalThis.__apiStub;
     delete globalThis.__rruleValues;
     globalThis.document = echtesDocument;

@@ -44,7 +44,7 @@ globalThis.window.yuvomi = { showToast() {} };
 const { setDisplayTimeZone } = await import('../public/utils/timezone.js');
 const { setHouseholdSize } = await import('../public/utils/household.js');
 const { speechSupported, startListening } = await import('../public/utils/speech.js');
-const { draftFromSentence } = await import('../public/utils/task-draft.js');
+const { draftFromSentence, DICTATION_TIMEOUT_MS } = await import('../public/utils/task-draft.js');
 const { openDictationSheet, startTaskDictation } = await import('../public/components/task-dictation.js');
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 const { __test: tasks, openNewTaskFrom } = await import('../public/pages/tasks.js');
@@ -295,6 +295,37 @@ test('draft: the AI call throws (network, 400, 500) -> local, same result', asyn
   assert.equal(calls.length, 1, 'tried once, no retry');
 });
 
+// F6: eine Anfrage, die haengt, hielte "Fertig" bis zu zwei Minuten am
+// Drehen (gemeinsamer Client: 60 s Zeitlimit, eine Wiederholung). Nach rund
+// acht Sekunden bricht das Blatt ab und fuellt lokal.
+test('draft: a hanging AI call is given up after ~8 s - the local parser fills, the request is aborted', async () => {
+  assert.equal(DICTATION_TIMEOUT_MS, 8000);
+  let signal = null;
+  const post = (_path, _body, opts = {}) => {
+    signal = opts.signal ?? null;
+    return new Promise(() => {}); // antwortet nie
+  };
+  const started = Date.now();
+  const result = await draftFromSentence('Wyrzuć śmieci jutro', { members: MEMBERS, now: NOW, post, timeoutMs: 30 });
+  assert.ok(Date.now() - started < 1000, 'does not wait for the server');
+  assert.deepEqual(result, { source: 'local', draft: { ...EMPTY, title: 'Wyrzuć śmieci', due_date: '2026-10-30' } });
+  assert.ok(signal, 'the request carries a signal');
+  assert.equal(signal.aborted, true, 'and is aborted, not left running');
+});
+
+test('draft: an answer in time is used; the timer does not abort it afterwards', async () => {
+  let signal = null;
+  const fields = { ...EMPTY, title: 'Wyrzuć śmieci' };
+  const post = async (_path, _body, opts = {}) => {
+    signal = opts.signal ?? null;
+    return { data: { source: 'ai', fields } };
+  };
+  const result = await draftFromSentence('Wyrzuć śmieci', { members: MEMBERS, now: NOW, post, timeoutMs: 20 });
+  assert.deepEqual(result, { source: 'ai', draft: fields });
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(signal.aborted, false);
+});
+
 test('draft: the AI answer is the draft', async () => {
   const fields = {
     title: 'Weź Marysi spodenki do przedszkola', due_date: '2026-10-30', due_time: null,
@@ -371,6 +402,16 @@ test('draft: local - an hour-only reminder already passed today rolls to tomorro
   // Ein ausdruecklich gesagter Tag bleibt - das Speichern ruegt ihn (R15).
   const saidToday = await draftFromSentence('Zapłać rachunek przypomnij mi dzisiaj o 8', { members: MEMBERS, now: NOW, post });
   assert.deepEqual([saidToday.draft.remind_date, saidToday.draft.remind_time], ['2026-10-29', '08:00']);
+});
+
+test('draft: local - a title longer than 200 characters is clipped on a word boundary (F5)', async () => {
+  const { post } = recordingPost(DISABLED);
+  const sentence = `Zadzwoń ${'do przedszkola w sprawie wycieczki '.repeat(8)}`.trim();
+  assert.ok(sentence.length > 200);
+  const { draft } = await draftFromSentence(sentence, { members: MEMBERS, now: NOW, post });
+  assert.ok(draft.title.length <= 200, `${draft.title.length} characters`);
+  assert.ok(sentence.startsWith(draft.title));
+  assert.match(sentence.slice(draft.title.length), /^\s/, 'cut where a word ends');
 });
 
 test('draft: a due time without a day is left empty locally (like the server)', async () => {
@@ -684,6 +725,120 @@ test('the mic in the New Task sheet opens dictation with the title; Done replace
   }
 });
 
+/**
+ * Ein Blatt, in dem schon gewaehlt wurde: Mariola, faellig am 03.11. um 18:00,
+ * eine Erinnerung, eine Notiz und hinter "Mehr" Prioritaet, Kategorie,
+ * Sichtbarkeit, Startdatum, Status und Countdown.
+ */
+function chosenPanel(title = 'Kupić') {
+  const panel = taskPanel(title);
+  const nodes = {
+    '[data-section="due"]': fakeEl({ hidden: false }),
+    '#task-due-date': fakeEl({ value: '2026-11-03' }),
+    '#task-due-time': fakeEl({ value: '18:00' }),
+    '[data-section="reminder"]': fakeEl({ hidden: false }),
+    '#task-remind-date': fakeEl({ value: '2026-11-03' }),
+    '#task-remind-time': fakeEl({ value: '17:00' }),
+    '[data-section="note"]': fakeEl({ hidden: false }),
+    '#task-description': fakeEl({ value: 'Tylko bez laktozy' }),
+    '#task-priority': fakeEl({ value: 'high' }),
+    '#task-category': fakeEl({ value: 'garden' }),
+    '#task-visibility': fakeEl({ value: 'assignees' }),
+    '#task-start-date': fakeEl({ value: '2026-11-01' }),
+    '#task-status': fakeEl({ value: 'in_progress' }),
+    '#task-countdown': fakeEl({ checked: true }),
+  };
+  const own = panel.querySelector;
+  panel.querySelector = (sel) => own(sel) ?? nodes[sel] ?? null;
+  return panel;
+}
+
+/** Das Mikrofon im Titelfeld (oder "Say again"), das Diktat mit `fields` als Antwort; liefert das gefuellte Blatt. */
+async function dictateFrom(panelFor, fields, { sayAgain = false } = {}) {
+  const modals = captureModals();
+  const previousApi = globalThis.__apiStub;
+  const previousCategories = tasks.state.categories;
+  tasks.state.categories = [{ key: 'household' }, { key: 'garden' }];
+  globalThis.__apiStub = { post: async (path) => (path === '/tasks/parse' ? { data: { source: 'ai', fields } } : { data: null }) };
+  globalThis.__getSelectedUserIds = () => [MARIOLA.id];
+  globalThis.__renderUserMultiSelect = (_people, selected) => `<div data-who="${selected.join(',')}"></div>`;
+  globalThis.__rruleValues = { is_recurring: 1, recurrence_rule: 'FREQ=WEEKLY', recurrence_from_completion: 0, valid_until: true };
+  globalThis.__renderRRuleFields = (_prefix, rule) => `<div data-rrule="${rule ?? ''}"></div>`;
+  try {
+    tasks.openTaskModal({ users: MEMBERS, ...(sayAgain ? { draft: { title: 'Kupić' }, spoken: true } : {}) }, null);
+    const panel = panelFor();
+    modals.opened[0].onSave(panel);
+    if (sayAgain) modals.opened[0].headerAction.onClick();
+    else for (const fn of panel.mic.listeners.click ?? []) fn({ preventDefault() {} });
+    await finishDictation(modals.opened[1], 'Kupić mleko');
+    return modals.opened[2]?.content ?? '';
+  } finally {
+    modals.restore();
+    globalThis.__apiStub = previousApi;
+    tasks.state.categories = previousCategories;
+    delete globalThis.__getSelectedUserIds;
+    delete globalThis.__renderUserMultiSelect;
+    delete globalThis.__rruleValues;
+    delete globalThis.__renderRRuleFields;
+  }
+}
+
+const selectedOption = (html, id) => html.match(new RegExp(`<select[^>]*id="${id}"[\\s\\S]*?</select>`))?.[0]
+  .match(/<option value="([^"]*)"\s+selected/)?.[1] ?? null;
+const valueIn = (html, id) => html.match(new RegExp(`<[a-z-]+\\b[^>]*id="${id}"[^>]*>`))?.[0].match(/\svalue="([^"]*)"/)?.[1] ?? null;
+
+// F9: das Mikrofon im Titelfeld fuellt, was der Satz sagt - und laesst stehen,
+// was schon gewaehlt war und der Satz nicht beruehrt.
+test('the title mic keeps what was chosen and the sentence does not set: who, due, reminder, note and More', async () => {
+  const html = await dictateFrom(() => chosenPanel(), { ...EMPTY, title: 'Kupić mleko' });
+  assert.match(html, /value="Kupić mleko"/, 'the sentence is the title');
+  assert.match(html, /data-who="2"/, 'Mariola stays chosen');
+  assert.equal(valueIn(html, 'task-due-date'), '2026-11-03');
+  assert.equal(valueIn(html, 'task-due-time'), '18:00');
+  assert.equal(valueIn(html, 'task-remind-date'), '2026-11-03');
+  assert.equal(valueIn(html, 'task-remind-time'), '17:00');
+  assert.match(html, />Tylko bez laktozy<\/textarea>/, 'the note stays');
+  assert.equal(selectedOption(html, 'task-priority'), 'high');
+  assert.equal(selectedOption(html, 'task-category'), 'garden');
+  assert.equal(selectedOption(html, 'task-visibility'), 'assignees');
+  assert.equal(selectedOption(html, 'task-status'), 'in_progress');
+  assert.equal(valueIn(html, 'task-start-date'), '2026-11-01');
+  assert.match(html, /id="task-countdown"[^>]*checked/);
+  assert.match(html, /data-rrule="FREQ=WEEKLY"/, 'the repeat stays');
+});
+
+test('the title mic: what the sentence DOES set wins over the sheet', async () => {
+  const html = await dictateFrom(() => chosenPanel(), {
+    ...EMPTY, title: 'Kupić mleko', due_date: '2026-10-30', remind_date: '2026-10-30', remind_time: '07:30', assigned_to: [WOJTEK.id],
+  });
+  assert.match(html, /data-who="1"/);
+  assert.equal(valueIn(html, 'task-due-date'), '2026-10-30');
+  assert.equal(valueIn(html, 'task-due-time'), '', 'a said day brings its own (empty) time');
+  assert.equal(valueIn(html, 'task-remind-time'), '07:30');
+  assert.equal(selectedOption(html, 'task-priority'), 'high', 'More is never said - it stays');
+});
+
+test('the title mic: a folded-away section is not carried (it holds nothing)', async () => {
+  const html = await dictateFrom(() => {
+    const panel = chosenPanel();
+    const own = panel.querySelector;
+    const folded = fakeEl({ hidden: true });
+    panel.querySelector = (sel) => (['[data-section="due"]', '[data-section="reminder"]', '[data-section="note"]'].includes(sel) ? folded : own(sel));
+    return panel;
+  }, { ...EMPTY, title: 'Kupić mleko' });
+  assert.equal(valueIn(html, 'task-due-date'), '');
+  assert.doesNotMatch(html, /Tylko bez laktozy/);
+});
+
+test('"Say again" still replaces the sheet: nothing chosen before is carried', async () => {
+  const html = await dictateFrom(() => chosenPanel(), { ...EMPTY, title: 'Kupić mleko' }, { sayAgain: true });
+  assert.match(html, /value="Kupić mleko"/);
+  assert.match(html, /data-who=""/, 'nobody chosen');
+  assert.equal(valueIn(html, 'task-due-date'), '');
+  assert.equal(selectedOption(html, 'task-priority'), 'none');
+  assert.doesNotMatch(html, /Tylko bez laktozy/);
+});
+
 test('"Say again" in the header opens dictation with the current title; nothing is posted to /tasks', async () => {
   const modals = captureModals();
   const previousApi = globalThis.__apiStub;
@@ -917,6 +1072,49 @@ test('startTaskDictation: Type instead opens the sheet to type in, with what was
   }
 });
 
+// F10 (#1997): "Type instead" wartet auf pages/tasks.js. Wer das Hoerblatt
+// inzwischen zumacht, bekommt kein Blatt hinterher.
+test('startTaskDictation: Type instead, then the listening sheet is closed while the page loads - nothing opens', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets, resolvePrep } = fakeTasksModule();
+  let open = true;
+  globalThis.__isOwnModalOpen = () => open;
+  try {
+    startTaskDictation({}, { win, loadTasks: async () => mod });
+    instances[0].say(['Zadzwonić do mamy', false]);
+    modals.opened[0].panel.click('[data-dictation-type]');
+    open = false; // zugemacht, waehrend die Seite laedt
+    resolvePrep(MEMBERS);
+    for (let i = 0; i < 4; i += 1) await flush();
+    assert.deepEqual(sheets, [], 'no sheet after the user closed the listening sheet');
+  } finally {
+    delete globalThis.__isOwnModalOpen;
+    modals.restore();
+  }
+});
+
+test('startTaskDictation: Done, then the listening sheet is closed while the page loads - nothing opens', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets, resolvePrep } = fakeTasksModule();
+  const { post } = recordingPost(DISABLED);
+  let open = true;
+  globalThis.__isOwnModalOpen = () => open;
+  try {
+    startTaskDictation({}, { win, post, loadTasks: async () => mod });
+    instances[0].say(['Wyrzuć śmieci', true]);
+    modals.opened[0].panel.click('[data-dictation-done]');
+    open = false; // zugemacht, waehrend die Seite noch laedt
+    resolvePrep(MEMBERS);
+    for (let i = 0; i < 6; i += 1) await flush();
+    assert.deepEqual(sheets, []);
+  } finally {
+    delete globalThis.__isOwnModalOpen;
+    modals.restore();
+  }
+});
+
 test('startTaskDictation: when the page cannot load, Done closes the sheet and says so - nothing opens, nothing is saved', async () => {
   const { win, instances } = fakeWindow();
   const modals = syncModals();
@@ -935,7 +1133,7 @@ test('startTaskDictation: when the page cannot load, Done closes the sheet and s
     for (let i = 0; i < 5; i += 1) await flush();
     assert.equal(sheets.length, 0);
     assert.equal(calls.length, 0, 'no parse without a form to fill');
-    assert.deepEqual(closes, [{ force: true }]);
+    assert.deepEqual(closes, [{ force: true, context: 'test-modal-context' }], 'only the listening sheet it opened (#1997)');
     assert.deepEqual(toasts, [['tasks.loadError', 'danger']]);
   } finally {
     modals.restore();

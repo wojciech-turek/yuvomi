@@ -4,7 +4,8 @@
  *        task-dictation.js); die Antwort fuellt das Blatt "Neue Aufgabe". Ist
  *        die KI aus, ohne Schluessel, am Limit, scheitert sie oder fehlt das
  *        Netz, fuellt der lokale polnische Parser (utils/capture-parse.js), was
- *        er kann. Die Person landet IMMER im gefuellten Blatt und prueft dort -
+ *        er kann - ebenso, wenn die KI nach DICTATION_TIMEOUT_MS nicht geantwortet
+ *        hat. Die Person landet IMMER im gefuellten Blatt und prueft dort -
  *        gespeichert wird hier nichts.
  *
  * Der Entwurf hat genau die Schluessel, die openTaskModal({ draft }) kennt:
@@ -49,9 +50,22 @@ const blankDraft = () => ({
   title: '', due_date: null, due_time: null, remind_date: null, remind_time: null, assigned_to: [],
 });
 
-/** Gross am Anfang, ohne Satzpunkt am Ende, ohne doppelte Leerzeichen. */
+/** Was der Server als Titel annimmt (server/middleware/validate.js, MAX_TITLE). */
+const TITLE_MAX = 200;
+
+/**
+ * Gross am Anfang, ohne Satzpunkt am Ende, ohne doppelte Leerzeichen - und
+ * hoechstens 200 Zeichen, an einer Wortgrenze gekuerzt (ein Wort ohne Grenze
+ * hart): ein laengerer Titel fuellte das Blatt und scheiterte erst beim
+ * Speichern (F5, wie `cleanTitle` am Server).
+ */
 function tidyTitle(text) {
-  const s = String(text ?? '').replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
+  let s = String(text ?? '').replace(/\s+/g, ' ').trim().replace(/[\s.,;:]+$/u, '');
+  if (s.length > TITLE_MAX) {
+    const head = s.slice(0, TITLE_MAX + 1);
+    const space = head.lastIndexOf(' ');
+    s = (space > 0 ? head.slice(0, space) : s.slice(0, TITLE_MAX)).replace(/[\s.,;:]+$/u, '');
+  }
   return s ? s.charAt(0).toLocaleUpperCase('pl') + s.slice(1) : '';
 }
 
@@ -145,20 +159,46 @@ function localDraft(sentence, { members, now }) {
 }
 
 /**
+ * So lange wartet "Fertig" auf die KI, dann fuellt der lokale Parser (F6).
+ * Der gemeinsame Server-Client wartet bis zu 60 s und wiederholt einmal - eine
+ * haengende Anfrage hielte das Blatt sonst rund zwei Minuten am Drehen. Haiku
+ * antwortet auf einen Satz in ein bis zwei Sekunden.
+ */
+export const DICTATION_TIMEOUT_MS = 8000;
+
+/**
  * @param {string} text - der Satz, wie die Erkennung oder die Tastatur ihn lieferte
  * @param {{members?: Array<{id: number, display_name: string}>, now?: Date,
- *          post?: (path: string, body: object) => Promise<any>}} [opts]
+ *          post?: (path: string, body: object, opts?: {signal?: AbortSignal}) => Promise<any>,
+ *          timeoutMs?: number}} [opts]
  * @returns {Promise<{draft: object, source: 'ai'|'local'}>}
  */
-export async function draftFromSentence(text, { members = [], now = new Date(), post = (path, body) => api.post(path, body) } = {}) {
+export async function draftFromSentence(text, {
+  members = [], now = new Date(), post = (path, body, opts) => api.post(path, body, opts), timeoutMs = DICTATION_TIMEOUT_MS,
+} = {}) {
   const sentence = String(text ?? '').trim();
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let timer = null;
   try {
-    const res = await post('/tasks/parse', { text: sentence });
+    const answer = Promise.resolve(post('/tasks/parse', { text: sentence }, controller ? { signal: controller.signal } : {}));
+    // Nach dem Abbruch scheitert die Anfrage noch - das hoert hier niemand mehr.
+    answer.catch(() => {});
+    // Das Rennen, nicht nur das Signal: auch ein `post`, das den Abbruch nicht
+    // kennt, haelt das Blatt nicht auf.
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller?.abort();
+        reject(new Error('dictation timeout'));
+      }, timeoutMs);
+    });
+    const res = await Promise.race([answer, late]);
     const data = res?.data;
     if (data?.source === 'ai' && data.fields && typeof data.fields === 'object') {
       return { source: 'ai', draft: { ...data.fields } };
     }
-  } catch { /* KI nicht erreichbar - der lokale Parser fuellt */ }
+  } catch { /* KI nicht erreichbar oder zu langsam - der lokale Parser fuellt */ } finally {
+    clearTimeout(timer);
+  }
   try {
     return { source: 'local', draft: localDraft(sentence, { members, now }) };
   } catch {

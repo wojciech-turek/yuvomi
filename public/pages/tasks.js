@@ -1089,8 +1089,10 @@ function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken 
 }
 
 function noteSectionHtml({ note, spoken = false }) {
-  return sheetSectionHtml('note', { open: !!note, row: spoken && note ? note : null },
-    `${sheetSectionHead('note', `<label class="task-sheet__section-title" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
+  // Eine benannte Gruppe wie Faelligkeit und Erinnerung (F11); ihr Name ist
+  // die Ueberschrift, die zugleich das Etikett des Feldes bleibt.
+  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null },
+    `${sheetSectionHead('note', `<label class="task-sheet__section-title" id="task-note-heading" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
           <textarea class="input task-sheet__note" id="task-description" name="description"
                     rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>`);
 }
@@ -1126,6 +1128,11 @@ function moreSummary(task) {
  *                   remind_date?: string, remind_time?: string, assigned_to?: number[]}|null}} opts
  *        `draft` gilt nur beim Anlegen (Diktat, Task 9): was der Satz hergab,
  *        steht schon da, und der Nutzer prueft es vor „Aufgabe hinzufuegen".
+ *        Kommt das Diktat aus einem Blatt, in dem schon gewaehlt war (das
+ *        Mikrofon im Titelfeld, F9), traegt der Entwurf auch dessen Notiz
+ *        (`description`) und die Werte hinter „Mehr" (`more`, geformt wie eine
+ *        Aufgabe: priority, category, visibility, start_date, status,
+ *        countdown, recurrence_rule, recurrence_from_completion).
  *        `spoken` (nur beim Anlegen): gesetzte Abschnitte stehen als kompakte
  *        Zeilen mit x da (Entwurf TaskSpoken) - ein Tipp klappt sie auf.
  */
@@ -1140,12 +1147,15 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
   // Wen die Auswahl anbietet: die Mitglieder (GET /tasks/meta/options, ohne
   // Wandtablett, Personal und Gaeste) und wer schon an der Aufgabe steht.
   const assigneePeople = withChosenPeople(users, task?.assigned_users);
-  const visibility = task?.visibility || 'all';
+  // Die Werte hinter „Mehr": die der Aufgabe, beim Anlegen die mitgetragenen
+  // eines Blatts, aus dem diktiert wurde (F9), sonst die Vorgaben.
+  const more = isEdit ? task : (d?.more && typeof d.more === 'object' ? d.more : null);
+  const visibility = more?.visibility || 'all';
 
   const title = isEdit ? (task.title ?? '') : (d?.title ?? '');
   const dueDate = String((isEdit ? task.due_date : d?.due_date) ?? '').slice(0, 10);
   const dueTime = hhmm(isEdit ? task.due_time : d?.due_time);
-  const note = task?.description ?? '';
+  const note = (isEdit ? task.description : d?.description) ?? '';
 
   const access = reminderAccess();
   // Eine gespeicherte Erinnerung, deren Zeitpunkt sich nicht lesen laesst,
@@ -1162,20 +1172,20 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
     access, wall, storedAt, dueDate, dueTime, spoken: rows,
   });
 
-  const selectedCat = task?.category ?? FALLBACK_CATEGORY;
+  const selectedCat = more?.category ?? FALLBACK_CATEGORY;
   const categoryOptions = state.categories.map((c) =>
     `<option value="${esc(c.key)}" ${selectedCat === c.key ? 'selected' : ''}>${esc(catLabel(c.key))}</option>`
   ).join('');
   const priorityOptions = PRIORITIES().map((p) =>
-    `<option value="${p.value}" ${(task?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
+    `<option value="${p.value}" ${(more?.priority ?? 'none') === p.value ? 'selected' : ''}>${p.label}</option>`
   ).join('');
   // Ein Bestandswert ausserhalb der Liste (bis v1.86.2 stand 'archived' darin)
   // faellt auf den ersten Status zurueck.
-  const statusValue = STATUSES().find((s) => s.value === task?.status)?.value ?? STATUSES()[0].value;
+  const statusValue = STATUSES().find((s) => s.value === more?.status)?.value ?? STATUSES()[0].value;
 
-  const recurrenceHtml = renderRRuleFields('task', task?.recurrence_rule, {
+  const recurrenceHtml = renderRRuleFields('task', more?.recurrence_rule, {
     allowFromCompletion: true,
-    fromCompletion: !!task?.recurrence_from_completion,
+    fromCompletion: !!more?.recurrence_from_completion,
     // AUSDRUECKLICH FALSE, nicht weggelassen (#960): eine Aufgabe wird nicht
     // wie eine Kalenderserie vom Startdatum aus expandiert.
     expandsFromStart: false,
@@ -1219,7 +1229,7 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
       <div class="form-group">
         <label class="label" for="task-start-date">${t('tasks.startDateLabel')}</label>
         <yuvomi-datepicker type="date" id="task-start-date" name="start_date"
-               value="${esc(formatDateInput(task?.start_date))}"></yuvomi-datepicker>
+               value="${esc(formatDateInput(more?.start_date))}"></yuvomi-datepicker>
       </div>
 
       <!-- Auch beim Anlegen (#807): notiert wird oft, was laengst laeuft. -->
@@ -1242,7 +1252,7 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
       <div class="form-group">
         <label class="toggle" style="margin:0">
           <input type="checkbox" id="task-countdown" name="countdown" aria-describedby="task-countdown-hint"
-                 ${task?.countdown ? 'checked' : ''}>
+                 ${more?.countdown ? 'checked' : ''}>
           <span class="toggle__track"></span>
           <span>${t('tasks.countdownToggle')}</span>
         </label>
@@ -1253,7 +1263,7 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
   // GESETZTES STEHT OFFEN DA (Spec, Anti-Ziel „Daten verlieren"): beim
   // Bearbeiten geht „Mehr" auf, sobald darin ein Wert abseits der Vorgabe
   // steht; die Zeile nennt ihn trotzdem. Neu angelegt bleibt „Mehr" zu.
-  const summary = moreSummary(task);
+  const summary = moreSummary(more);
   const moreLabel = summary.length ? `${t('tasks.more')} · ${summary.join(' · ')}` : t('tasks.more');
   const moreOpen = isEdit && summary.length > 0;
   const reminderOpen = !!wall && reminderHtml !== '';
@@ -1270,7 +1280,7 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
           <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
           <input class="input" type="text" id="task-title" name="title"
                  value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
-                 required autocomplete="off">
+                 required maxlength="200" autocomplete="off">
           ${isEdit ? '' : `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
                ueberschriebe die Werte einer bestehenden Aufgabe. -->
           <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
@@ -2083,15 +2093,74 @@ function openTaskModal({ task = null, users = [], reminder = null, onChanged = n
   });
 }
 
-/** Mikrofon im Titelfeld und „Noch einmal sagen" eines neuen Blatts; liefert den Aufruf fuer den Kopfknopf. */
+/**
+ * Mikrofon im Titelfeld und „Noch einmal sagen" eines neuen Blatts; liefert den
+ * Aufruf fuer den Kopfknopf. Das Mikrofon BEHAELT, was im Blatt schon gewaehlt
+ * war und der Satz nicht sagt (F9); „Noch einmal sagen" ersetzt - das ist
+ * seine Bedeutung.
+ */
 function wireSheetDictation(panel, spoken, opts) {
-  const dictate = () => dictateOverSheet(panel, opts);
+  const sayAgain = () => dictateOverSheet(panel, opts);
   if (spoken) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
   panel.querySelector('.task-sheet__mic')?.addEventListener('click', (e) => {
     e.preventDefault?.();
-    dictate();
+    dictateOverSheet(panel, { ...opts, keep: true });
   });
-  return dictate;
+  return sayAgain;
+}
+
+/**
+ * Was im Blatt gewaehlt ist, als Entwurf: Titel, Wer, Faelligkeit, Erinnerung
+ * und Notiz (nur offene Abschnitte - ein zugeklappter traegt nichts) und die
+ * Werte hinter „Mehr". Angehaengte Dokumente reisen nicht mit: eine wartende
+ * Datei lebt im Bauteil des Blatts, nicht in einem Feld.
+ */
+function sheetDraftValues(panel) {
+  const q = (sel) => panel.querySelector(sel);
+  const open = (name) => {
+    const section = q(`[data-section="${name}"]`);
+    return !!section && !section.hidden;
+  };
+  const due = open('due') ? sheetDue(panel) : { date: '', time: '' };
+  const remind = open('reminder')
+    ? { date: q('#task-remind-date')?.value || '', time: hhmm(q('#task-remind-time')?.value) }
+    : { date: '', time: '' };
+  const rrule = getRRuleValues(panel, 'task');
+  return {
+    title: String(q('#task-title')?.value ?? '').trim(),
+    assigned_to: getSelectedUserIds(panel, 'task_assigned'),
+    due_date: due.date || null,
+    due_time: due.time || null,
+    remind_date: remind.date || null,
+    remind_time: remind.date ? (remind.time || null) : null,
+    description: open('note') ? String(q('#task-description')?.value ?? '') : '',
+    more: {
+      priority: q('#task-priority')?.value || 'none',
+      category: q('#task-category')?.value || FALLBACK_CATEGORY,
+      visibility: q('#task-visibility')?.value || 'all',
+      start_date: q('#task-start-date')?.value || null,
+      status: q('#task-status')?.value || null,
+      countdown: q('#task-countdown')?.checked ? 1 : 0,
+      recurrence_rule: rrule?.is_recurring ? (rrule.recurrence_rule ?? null) : null,
+      recurrence_from_completion: rrule?.recurrence_from_completion ? 1 : 0,
+    },
+  };
+}
+
+/** Der Entwurf aus dem Satz, ergaenzt um das im Blatt Gewaehlte, das der Satz nicht setzt (F9). */
+function keepChosen(draft, chosen) {
+  const out = { ...draft, description: chosen.description, more: chosen.more };
+  if (!String(draft.title ?? '').trim()) out.title = chosen.title;
+  if (!(Array.isArray(draft.assigned_to) && draft.assigned_to.length)) out.assigned_to = chosen.assigned_to;
+  if (!draft.due_date && !draft.due_time) {
+    out.due_date = chosen.due_date;
+    out.due_time = chosen.due_time;
+  }
+  if (!draft.remind_date) {
+    out.remind_date = chosen.remind_date;
+    out.remind_time = chosen.remind_time;
+  }
+  return out;
 }
 
 /**
@@ -2099,7 +2168,10 @@ function wireSheetDictation(panel, spoken, opts) {
  *
  * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
  * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
- * gefuelltes (`spoken`) - ein erneutes Sagen ersetzt, was vorher drin stand.
+ * gefuelltes (`spoken`). Vom Mikrofon im Titelfeld aus (`keep`) traegt es mit,
+ * was schon gewaehlt war und der Satz nicht setzt (Wer, Faelligkeit,
+ * Erinnerung, Notiz, „Mehr" - F9); „Noch einmal sagen" ersetzt, was vorher
+ * drin stand.
  * Schliessen bringt das Blatt zurueck, wie es war: wer aus Versehen aufs
  * Mikrofon tippt, verliert nichts. „Type instead" ebenso, nur steht dann, was
  * schon gesagt oder getippt war, als Titel darin.
@@ -2107,8 +2179,10 @@ function wireSheetDictation(panel, spoken, opts) {
  * Das Hoerblatt geht synchron im Tipp auf (askOverModal ruft `ask` sofort) -
  * Safari startet die Erkennung nur aus einer Nutzergeste heraus.
  */
-async function dictateOverSheet(panel, { users = [], onChanged = null, container = null } = {}) {
+async function dictateOverSheet(panel, { users = [], onChanged = null, container = null, keep = false } = {}) {
   const initialText = panel.querySelector('#task-title')?.value ?? '';
+  // Was schon gewaehlt ist, VOR dem Hoerblatt gelesen - das Blatt steht dann sicher.
+  const chosen = keep ? sheetDraftValues(panel) : null;
   const answer = await askOverModal(() => new Promise((resolve) => {
     openDictationSheet({
       initialText,
@@ -2121,7 +2195,8 @@ async function dictateOverSheet(panel, { users = [], onChanged = null, container
     });
   }));
   if (answer?.draft) {
-    openTaskModal({ users, onChanged, draft: answer.draft, spoken: true }, container);
+    const draft = chosen ? keepChosen(answer.draft, chosen) : answer.draft;
+    openTaskModal({ users, onChanged, draft, spoken: true }, container);
   } else if (answer?.type) {
     // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
     const field = panel.querySelector('#task-title');
@@ -2195,8 +2270,14 @@ function syncRemindPicks(panel) {
   }
 }
 
-/** Zeile oder Felder eines Abschnitts (die Zeile gibt es nur nach einem Diktat). */
+/**
+ * Zeile oder Felder eines Abschnitts (die Zeile gibt es nur nach einem Diktat).
+ * Die Zeile ist ein Aufklapper (`aria-expanded`, `aria-controls` auf die
+ * Felder) - ihr Zustand sagt, was sie getan hat, auch wenn sie danach den
+ * Feldern Platz macht (F11).
+ */
 function showSectionBody(section) {
+  section.querySelector?.('[data-expand]')?.setAttribute?.('aria-expanded', 'true');
   setHidden(section.querySelector?.('[data-row]'), true);
   setHidden(section.querySelector?.('.task-sheet__body'), false);
 }

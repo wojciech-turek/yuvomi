@@ -188,6 +188,24 @@ test('title: trimmed, first letter upper case, raw sentence when empty', async (
   assert.equal((await parseTaskSentence({ text: ' Wyrzuć śmieci ', userId: WOJTEK, now: NOW, database: db, client: b.client })).title, 'Wyrzuć śmieci');
 });
 
+// F5: der Server nimmt hoechstens 200 Zeichen als Titel (validate.js MAX_TITLE) -
+// ein laengerer Satz fuellte das Blatt und scheiterte erst bei "Dodaj zadanie".
+test('title: longer than 200 characters is clipped on a word boundary', async () => {
+  const long = `Zadzwoń ${'do przedszkola w sprawie wycieczki '.repeat(8)}`.trim();
+  assert.ok(long.length > 200);
+  const { client } = fakeClaude({ ...base, title: long });
+  const { title } = await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client });
+  assert.ok(title.length <= 200, `${title.length} characters`);
+  assert.ok(long.startsWith(title), 'a prefix of what was said');
+  assert.match(long.slice(title.length), /^\s/, 'cut where a word ends');
+  // Ein einziges Wort ohne Grenze wird hart gekuerzt.
+  const word = fakeClaude({ ...base, title: 'a'.repeat(260) });
+  assert.equal((await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client: word.client })).title.length, 200);
+  // Genau 200 bleibt.
+  const exact = fakeClaude({ ...base, title: `W${'x'.repeat(199)}` });
+  assert.equal((await parseTaskSentence({ text: 'x', userId: WOJTEK, now: NOW, database: db, client: exact.client })).title.length, 200);
+});
+
 test('the prompt carries the household day (not the UTC day), weekday, time, zone, names', async () => {
   const { client, sent } = fakeClaude(base);
   await parseTaskSentence({

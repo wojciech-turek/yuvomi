@@ -116,6 +116,12 @@ test('create: title with the mic, who, the three reveal buttons and More', () =>
   assert.match(html, /id="task-submit-btn"[^>]*>\s*tasks\.addTask\s*</, 'Add task');
 });
 
+test('the title takes at most 200 characters - what the server accepts (F5)', () => {
+  for (const html of [sheet({ task: null }), sheet({ task: FULL_TASK })]) {
+    assert.match(tagOf(html, 'task-title'), /\smaxlength="200"/);
+  }
+});
+
 test('create: due, reminder and note are folded away until asked for', () => {
   const html = sheet({ task: null });
   for (const name of ['due', 'reminder', 'note']) {
@@ -127,6 +133,20 @@ test('create: due, reminder and note are folded away until asked for', () => {
     assert.equal(isHidden(button), false, `the ${name} button shows`);
     assert.match(button, /type="button"/, 'a reveal button never submits');
   }
+});
+
+// F11: jeder der drei Abschnitte ist eine benannte Gruppe - die Notiz wie
+// Faelligkeit und Erinnerung.
+test('due, reminder and note are each a named group', () => {
+  const html = sheet({ task: null });
+  for (const [name, heading] of [['due', 'task-due-heading'], ['reminder', 'task-remind-heading'], ['note', 'task-note-heading']]) {
+    const tag = sectionTag(html, name);
+    assert.match(tag, /\srole="group"/, `${name} is a group`);
+    assert.match(tag, new RegExp(`aria-labelledby="${heading}"`), `${name} is named by its heading`);
+    assert.match(html, new RegExp(`id="${heading}"`), `${heading} exists`);
+  }
+  assert.match(html, /<label class="task-sheet__section-title" id="task-note-heading" for="task-description">/,
+    'the note heading stays the label of its field');
 });
 
 test('create: nothing of the old form - no Markdown, points, lock, tags, sync target or lead-time picker', () => {
@@ -526,7 +546,8 @@ test('wiring: tapping a spoken row expands its fields; reopening after x shows t
   const rowX = fakeEl({ dataset: { remove: 'due' } });
   body.querySelector = (sel) => (sel.includes('[data-due-pick]') ? firstPick : null);
   const section = fakeEl({ dataset: { section: 'due' } });
-  section.querySelector = (sel) => ({ '[data-row]': row, '.task-sheet__body': body }[sel]
+  const rowMain = fakeEl({ attrs: { 'aria-expanded': 'false' } });
+  section.querySelector = (sel) => ({ '[data-row]': row, '.task-sheet__body': body, '[data-expand]': rowMain }[sel]
     ?? (sel.includes('[data-remove]') || sel.includes('[data-due-pick]') ? rowX : null));
   const panel = fakePanel({ '#task-form': form, '[data-section="due"]': section, '#task-due-date': fakeEl({ value: TOMORROW }) });
   tasks.wireTaskSheet(panel);
@@ -536,6 +557,7 @@ test('wiring: tapping a spoken row expands its fields; reopening after x shows t
   assert.equal(row.hidden, true, 'the row gives way');
   assert.equal(body.hidden, false, 'to the full section');
   assert.equal(firstPick.focused, true, 'the focus goes into it');
+  assert.equal(rowMain.getAttribute('aria-expanded'), 'true', 'its button says what it did (F11)');
 
   // x, then the Due date button again: the section comes back with its fields, not the old row.
   row.hidden = false;

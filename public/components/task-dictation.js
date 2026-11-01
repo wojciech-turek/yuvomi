@@ -33,7 +33,7 @@
  * wird erst bei "Done" abgewartet.
  */
 import { t } from '/i18n.js';
-import { openModal, closeModal, swapFieldsKeepingDirtyBase, btnLoading } from '/components/modal.js';
+import { openModal, closeModal, swapFieldsKeepingDirtyBase, btnLoading, captureModalContext, isOwnModalOpen } from '/components/modal.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { esc } from '/utils/html.js';
 import { speechSupported, startListening } from '/utils/speech.js';
@@ -278,12 +278,19 @@ export function startTaskDictation({ user = null, onChanged = () => {} } = {}, {
     .then(loadTasks)
     .then(async (tasks) => ({ tasks, members: await tasks.prepareNewTask({ user }) }));
   ready.catch(() => {}); // gemeldet wird, wo es gebraucht wird
+  // DAS HOERBLATT, DAS HIER AUFGEHT (#1997). Das Blatt "Neue Aufgabe" wartet
+  // auf pages/tasks.js; wer das Hoerblatt inzwischen zumacht (x, Wischen),
+  // bekommt es nicht hinterher, und ein spaetes Schliessen trifft nur dieses.
+  let context = null;
   const fail = (err) => {
     console.error('[Dictation] Neue Aufgabe konnte nicht geoeffnet werden:', err);
-    closeModal({ force: true });
+    closeModal({ force: true, context });
     globalThis.window?.yuvomi?.showToast?.(err?.message || t('tasks.loadError'), 'danger');
   };
-  const openSheet = (opts) => ready.then(({ tasks }) => tasks.openPreparedNewTask({ onChanged, ...opts })).catch(fail);
+  const openSheet = (opts) => ready.then(({ tasks }) => {
+    if (!isOwnModalOpen(context)) return;
+    tasks.openPreparedNewTask({ onChanged, ...opts });
+  }).catch(fail);
   openDictationSheet({
     win,
     post,
@@ -292,5 +299,7 @@ export function startTaskDictation({ user = null, onChanged = () => {} } = {}, {
     onTypeInstead: (text) => { openSheet({ draft: text ? { title: text } : null }); },
     onFail: fail,
   });
+  // Gleich nach dem Oeffnen: das Hoerblatt ist jetzt der offene Dialog.
+  context = captureModalContext();
   return true;
 }
