@@ -2855,7 +2855,7 @@
         "notificationChannelNtfyPassword": "ntfy Passwort",
         "notificationChannelWebhookToken": "Bearer-Token (optional)",
         "notificationChannelWebhookTemplate": "Payload-Vorlage (optional)",
-        "notificationChannelWebhookTemplatePlaceholder": "{\"content\": \"{{title}} - {{body}}\"}",
+        "notificationChannelWebhookTemplatePlaceholder": "{\"content\": \"{{title}}: {{body}}\"}",
         "notificationChannelWebhookTemplateHint": "Leer lassen sendet den Standard-Body von Yuvomi. Verfügbare Platzhalter: {{title}}, {{body}}, {{url}}, {{tag}}.",
         "notificationChannelSave": "Kanal speichern",
         "notificationChannelSaved": "Kanal gespeichert.",

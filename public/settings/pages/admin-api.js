@@ -64,7 +64,7 @@ function apiTokenHtml(token, active) {
     : t('settings.apiTokenScopeFull');
   const meta = [
     token.subject_name,
-    `${t('settings.apiTokenPrefix')}: ${token.token_prefix}...`,
+    `${t('settings.apiTokenPrefix')}: ${token.token_prefix}…`,
     scopeSummary,
     token.expires_at
       ? `${t('settings.apiTokenExpires')}: ${formatTokenTime(token.expires_at)}`

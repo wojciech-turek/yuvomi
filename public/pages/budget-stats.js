@@ -262,7 +262,7 @@ function previousPeriodLabel(prev) {
     const [y, m] = prev.from.split('-').map(Number);
     return new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));
   }
-  return `${formatDate(prev.from)} - ${formatDate(prev.to)}`;
+  return `${formatDate(prev.from)}-${formatDate(prev.to)}`;
 }
 
 /* VERGLEICH JE KATEGORIE STATT EINER ZWEITEN KATEGORIELISTE (Critique

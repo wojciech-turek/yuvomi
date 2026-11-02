@@ -1729,7 +1729,7 @@ function renderDetail() {
         <div class="health-chart-section__title">${esc(t(metric.labelKey))}</div>
         <div class="health-vitals__stepper">
           <button class="btn btn--icon" data-step="-1" aria-label="${esc(t('health.vitals.prevPeriod'))}"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
-          <span class="health-vitals__period">${esc(`${formatDate(series.from)} - ${formatDate(series.to)}`)}</span>
+          <span class="health-vitals__period">${esc(`${formatDate(series.from)}-${formatDate(series.to)}`)}</span>
           <button class="btn btn--icon" data-step="1" aria-label="${esc(t('health.vitals.nextPeriod'))}"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
         </div>
       </div>
@@ -1941,7 +1941,7 @@ function vitalSheetMarkup(metric) {
     </div>
     <div class="health-vitals__stepper health-vital-sheet__stepper">
       <button type="button" class="btn btn--icon" data-sheet-step="-1" aria-label="${esc(t('health.vitals.prevPeriod'))}"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
-      <span class="health-vitals__period">${esc(`${formatDate(series.from)} - ${formatDate(series.to)}`)}</span>
+      <span class="health-vitals__period">${esc(`${formatDate(series.from)}-${formatDate(series.to)}`)}</span>
       <button type="button" class="btn btn--icon" data-sheet-step="1" aria-label="${esc(t('health.vitals.nextPeriod'))}"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
     </div>
     <div class="health-vital-sheet__chart">
@@ -4277,7 +4277,7 @@ function resultListMarkup(results) {
 function referenceLabel(refLow, refHigh) {
   const low = refLow == null ? null : fmtNum(refLow);
   const high = refHigh == null ? null : fmtNum(refHigh);
-  if (low !== null && high !== null) return `${low} - ${high}`;
+  if (low !== null && high !== null) return `${low}-${high}`;
   if (low !== null) return `≥ ${low}`;
   if (high !== null) return `≤ ${high}`;
   return '-';
@@ -4928,7 +4928,7 @@ function renderActivityShell() {
     <div class="health-activity__toolbar">
       <div class="health-activity__stepper">
         <button class="btn btn--icon" data-step="-1" aria-label="${esc(t('health.activity.prevWeek'))}"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
-        <span class="health-activity__period">${esc(`${formatDate(summary.from)} - ${formatDate(summary.to)}`)}</span>
+        <span class="health-activity__period">${esc(`${formatDate(summary.from)}-${formatDate(summary.to)}`)}</span>
         <button class="btn btn--icon" data-step="1" aria-label="${esc(t('health.activity.nextWeek'))}"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
       </div>
     </div>
@@ -6649,7 +6649,7 @@ function overviewCycleTileMarkup() {
     // Zyklus-Tab selbst (siehe dort für die ausführliche Begründung).
     const range = (prediction.perimenopause && prediction.nextStartRange) ? prediction.nextStartRange : null;
     value = range
-      ? `${formatDate(range.min)} - ${formatDate(range.max)}`
+      ? `${formatDate(range.min)}-${formatDate(range.max)}`
       : formatDate(prediction.nextStart);
     sub = range
       ? t('health.cycle.status.nextPeriodRangeSub', { date: formatDate(prediction.nextStart) })
@@ -7838,7 +7838,7 @@ function cycleStatsMarkup(prediction) {
     icon: 'calendar-heart',
     labelKey: 'health.cycle.status.nextPeriod',
     value: perimenopauseRange
-      ? `${formatDate(perimenopauseRange.min)} - ${formatDate(perimenopauseRange.max)}`
+      ? `${formatDate(perimenopauseRange.min)}-${formatDate(perimenopauseRange.max)}`
       : formatDate(prediction.nextStart),
     sub: perimenopauseRange
       ? t('health.cycle.status.nextPeriodRangeSub', { date: formatDate(prediction.nextStart) })
@@ -7855,7 +7855,7 @@ function cycleStatsMarkup(prediction) {
     tiles.push(cycleStatCardMarkup({
       icon: 'sparkles',
       labelKey: 'health.cycle.status.fertileWindow',
-      value: `${formatDate(prediction.fertileStart)} - ${formatDate(prediction.fertileEnd)}`,
+      value: `${formatDate(prediction.fertileStart)}-${formatDate(prediction.fertileEnd)}`,
       sub: `${ovulationLabel}: ${formatDate(prediction.ovulationDate)}`,
     }));
   } else if (prediction.fertilitySuppressed === 'contraception') {
@@ -8938,7 +8938,7 @@ function cycleHistoryMarkup(canEdit) {
       <ul class="cycle-history__list">${rows.map((p) => {
         const start = String(p.start_date).slice(0, 10);
         const end = p.end_date ? String(p.end_date).slice(0, 10) : null;
-        const rangeLabel = end ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(start);
+        const rangeLabel = end ? `${formatDate(start)}-${formatDate(end)}` : formatDate(start);
         const lenDays = end ? (Math.round((Date.parse(`${end}T00:00Z`) - Date.parse(`${start}T00:00Z`)) / 86400000) + 1) : null;
         const nextStart = nextStartById.get(p.id);
         const cycleLen = nextStart ? Math.round((Date.parse(`${String(nextStart).slice(0, 10)}T00:00Z`) - Date.parse(`${start}T00:00Z`)) / 86400000) : null;

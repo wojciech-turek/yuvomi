@@ -103,7 +103,7 @@ function buildConnectionForm() {
       })}
       ${settingRowHtml({
         label: t("settings.documentStorageUrl"), labelFor: "document-storage-url",
-        control: `<input class="form-input" type="url" id="document-storage-url" name="url" placeholder="https://..." />`,
+        control: `<input class="form-input" type="url" id="document-storage-url" name="url" placeholder="https://…" />`,
         extra: `<span class="form-hint" data-env-hint="url" hidden>${t("settings.documentStorageEnvHint")}</span>`,
       })}
       ${settingRowHtml({

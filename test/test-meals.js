@@ -630,8 +630,9 @@ test('formatWeekLabel() befragt tatsaechlich matchMedia fuer den schmalen Umscha
 });
 
 // Projektregel „- statt Em-/En-Dash, auch in UI-Texten" (A4 P3, 2026-09-26):
-// das Wochenlabel trug als einziger Zeitraum-Kopf einen Halbgeviertstrich,
-// der Kalender schreibt „27.08. - 29.08.". Der Browser-Loader stubbt die
+// das Wochenlabel trug als einziger Zeitraum-Kopf einen Halbgeviertstrich.
+// Seit dem Copy-Durchgang (2026-11-02) ist eine Spanne ein Bindestrich OHNE
+// Leerzeichen, wie im Kalender („27.08.-29.08."). Der Browser-Loader stubbt die
 // Datumsformate auf `String(d)`; der Trenner ist das Einzige, was die
 // Funktion selbst beitraegt, und genau der wird hier geprueft.
 test('formatWeekLabel() trennt mit Bindestrich, nicht mit Halbgeviertstrich', () => {
@@ -641,7 +642,7 @@ test('formatWeekLabel() trennt mit Bindestrich, nicht mit Halbgeviertstrich', ()
     try {
       const label = mealsUi.formatWeekLabel('2026-09-14');
       assert(!/[\u2013\u2014]/.test(label), `Wochenlabel (${narrow ? 'schmal' : 'breit'}) enthaelt einen Gedankenstrich: ${label}`);
-      assert(/ - /.test(label), 'die beiden Enden trennt „ - "');
+      assert(!/ - /.test(label) && label.includes('-'), `die beiden Enden trennt ein Bindestrich ohne Leerzeichen: ${label}`);
     } finally {
       globalThis.window = zuvorWindow;
     }
@@ -1991,6 +1992,7 @@ test('Tafla: der Wochenbereich traegt keinen Gedankenstrich (Projektregel), auch
       for (const monday of ['2026-10-19', '2026-10-26']) {
         const label = mealsUi.weekRangeLabel(monday);
         assert(!/[–—]/.test(label), `${locale} ${monday}: ${label}`);
+        assert(!/\s-|-\s/.test(label), `${locale} ${monday}: eine Spanne ohne Leerzeichen am Bindestrich: ${label}`);
         assert(/\d/.test(label), `${locale} ${monday}: ${label}`);
       }
     }

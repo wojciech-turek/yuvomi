@@ -36,7 +36,7 @@ function buildAddForm(container) {
       })}
       ${settingRowHtml({
         label: t('settings.dmsBaseUrl'), labelFor: 'dms-url',
-        control: `<input class="form-input" type="url" id="dms-url" required placeholder="https://..." />`,
+        control: `<input class="form-input" type="url" id="dms-url" required placeholder="https://…" />`,
       })}
       ${settingRowHtml({
         label: t('settings.dmsOrgId'), labelFor: 'dms-org-id',

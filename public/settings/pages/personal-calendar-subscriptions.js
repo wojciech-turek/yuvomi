@@ -60,7 +60,7 @@ function renderPage(container) {
             <div class="row-carrier settings-group">
               ${settingRowHtml({
                 label: t('settings.ics.form.url'), labelFor: 'ics-url',
-                control: '<input class="form-input" type="url" id="ics-url" required placeholder="https://..." />',
+                control: '<input class="form-input" type="url" id="ics-url" required placeholder="https://…" />',
               })}
               ${settingRowHtml({
                 label: t('settings.ics.form.name'), labelFor: 'ics-name',
@@ -106,7 +106,7 @@ function renderPage(container) {
             ${settingRowHtml({
               label: t('settings.calendarImport.urlLabel'), labelFor: 'cal-import-url',
               description: t('settings.calendarImport.urlHint'), descriptionId: 'cal-import-url-hint',
-              control: '<input class="form-input" type="url" id="cal-import-url" aria-describedby="cal-import-url-hint" placeholder="https://..." />',
+              control: '<input class="form-input" type="url" id="cal-import-url" aria-describedby="cal-import-url-hint" placeholder="https://…" />',
             })}
             ${settingRowHtml({
               label: t('settings.calendarImport.targetCalendarLabel'), labelFor: 'cal-import-calendar',

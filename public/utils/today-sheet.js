@@ -242,7 +242,7 @@ export const TODAY_SHEET_SOURCES = [
           kind: 'shift',
           objectId: type.id ?? null,
           sortKey: start ?? SORT_ALL_DAY,
-          timeLabel: start && end ? `${formatTime(start)} - ${formatTime(end)}` : '',
+          timeLabel: start && end ? `${formatTime(start)}-${formatTime(end)}` : '',
           title: type.short_code ? `${type.short_code} · ${type.name}` : type.name,
           sub: t('nav.schedule'),
           icon: MODULE_ICON.schedule,

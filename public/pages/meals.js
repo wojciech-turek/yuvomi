@@ -371,11 +371,12 @@ function formatWeekLabel(monday) {
   // Unter 640px faellt das Jahr an BEIDEN Enden weg (`formatDayMonth`): die
   // Kalenderwoche liegt so gut wie nie ueber einen Jahreswechsel, und die
   // gesparte Breite ist hier der knappere Preis - eine Woche wie
-  // "28.12. - 03.01." bleibt trotzdem eindeutig genug fuer den Kopf einer
-  // Seite, die ohnehin "diese Woche" zeigt.
+  // "28.12.-03.01." bleibt trotzdem eindeutig genug fuer den Kopf einer
+  // Seite, die ohnehin "diese Woche" zeigt. Eine Spanne ist ein Bindestrich
+  // ohne Leerzeichen (Copy-Durchgang 2026-11-02, wie calendar.dayRangeLabel).
   const from = narrow ? formatDayMonth(monday) : formatDate(monday);
   const to = narrow ? formatDayMonth(sunday) : formatDate(sunday);
-  return `${from} - ${to}`;
+  return `${from}-${to}`;
 }
 
 /**
@@ -1521,20 +1522,20 @@ function dayMonthLabel(key) {
 
 /**
  * "19-25 paź" (Intl.formatRange in der Sprache der App). Der Halbgeviertstrich
- * der Formatierung wird zum Bindestrich - die Projektregel fuer UI-Texte, wie
- * im Wochenlabel des Boards (formatWeekLabel).
+ * der Formatierung wird zum Bindestrich ohne Leerzeichen - die Projektregel
+ * fuer Spannen in UI-Texten (Copy-Durchgang 2026-11-02), wie im Wochenlabel
+ * des Boards (formatWeekLabel) und in calendar.dayRangeLabel.
  */
 function weekRangeLabel(monday) {
   const sunday = addDays(monday, 6);
   try {
     const fmt = new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
     if (typeof fmt.formatRange === 'function') {
-      // "19-25 pa\u017a" zwischen zwei Ziffern, sonst mit Luft: "26 pa\u017a - 1 lis".
-      return fmt.formatRange(dateFromKey(monday), dateFromKey(sunday))
-        .replace(/(\d?)\s*[\u2013\u2014]\s*(\d?)/g, (_, before, after) => (before && after ? `${before}-${after}` : `${before} - ${after}`));
+      // "19-25 pa\u017a", ueber den Monatswechsel "26 pa\u017a-1 lis".
+      return fmt.formatRange(dateFromKey(monday), dateFromKey(sunday)).replace(/\s*[\u2013\u2014]\s*/g, '-');
     }
   } catch { /* Rueckfall unten */ }
-  return `${dayMonthLabel(monday)} - ${dayMonthLabel(sunday)}`;
+  return `${dayMonthLabel(monday)}-${dayMonthLabel(sunday)}`;
 }
 
 /** Der Name der Mahlzeit fuer Saetze ("Dodaj kolację"); eigene Namen des Haushalts klein. */

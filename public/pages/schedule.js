@@ -1364,7 +1364,7 @@ function overrideRows() {
     const swatchColor = type ? personInk(group.user_id) : 'var(--color-border)';
     const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : t('schedule.freeDay');
     const meta = [userName(group.user_id), typeLabel, group.note].filter(Boolean).join(' · ');
-    const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)} - ${formatDate(group.to)}`;
+    const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)}-${formatDate(group.to)}`;
     const actions = canWrite(group.user_id)
       ? editDeleteMenu({
         key: `override-${group.user_id}-${group.from}`,
@@ -1435,7 +1435,7 @@ function extraRows() {
     const swatchColor = type ? personInk(group.user_id) : 'var(--color-border)';
     const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : '';
     const meta = [userName(group.user_id), typeLabel, group.note].filter(Boolean).join(' · ');
-    const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)} - ${formatDate(group.to)}`;
+    const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)}-${formatDate(group.to)}`;
     const icon = type?.icon ? '<i data-lucide="' + esc(type.icon) + '" class="schedule-type-icon" aria-hidden="true"></i>' : '';
     const actions = canWrite(group.user_id)
       ? editDeleteMenu({
@@ -1990,7 +1990,7 @@ function renderOverview() {
   const showsToday = weekDays.includes(todayKey());
   const weekLabel = overview.viewMode === 'day'
     ? formatDayMonth(weekDays[0])
-    : `${formatDayMonth(weekDays[0])} - ${formatDayMonth(weekDays[weekDays.length - 1])}`;
+    : `${formatDayMonth(weekDays[0])}-${formatDayMonth(weekDays[weekDays.length - 1])}`;
   const viewToggle = `<div class="segmented" role="group" aria-label="${esc(t('calendar.viewWeek'))}/${esc(t('calendar.viewDay'))}">
     <button type="button" class="segmented__item${overview.viewMode === 'week' ? ' is-active' : ''}" data-action="overview-view-mode" data-mode="week" aria-pressed="${overview.viewMode === 'week' ? 'true' : 'false'}">${esc(t('calendar.viewWeek'))}</button>
     <button type="button" class="segmented__item${overview.viewMode === 'day' ? ' is-active' : ''}" data-action="overview-view-mode" data-mode="day" aria-pressed="${overview.viewMode === 'day' ? 'true' : 'false'}">${esc(t('calendar.viewDay'))}</button>
