@@ -3582,9 +3582,9 @@ function renderHistoryPeople() {
    * dem Label der Scheibe.
    *
    * Die Farbe ist der Platz der Person im Haushalt (person-color.js), keine
-   * gespeicherte Farbe. Ein Foto traegt `/meta/options` nicht, also bleiben es
-   * Initialen - wie im Nachbarn `renderUserMultiSelect`, der aus derselben
-   * Liste bedient wird. */
+   * gespeicherte Farbe; ein Profilbild bringt `/meta/options` mit, und die
+   * Scheibe zeigt es - wie der Nachbar `renderUserMultiSelect`, der aus
+   * derselben Liste bedient wird. */
   const personMark = (u) => `<span class="history-people__mark" aria-hidden="true">${
     renderAvatarStack([u], { size: 22, maxVisible: 1 })}</span>`;
   // Nur wer wirklich etwas beisteuern kann: die Housekeeping-Konten sind aus

@@ -2963,7 +2963,10 @@
 }
 
 /* "Gotuje": dieselbe Personenauswahl, im Blatt als Chips der Tafla - Fuell-
- * flaeche, gewaehlt in der einen Stimme statt im Kuechenton. */
+ * flaeche, gewaehlt in der einen Stimme statt im Kuechenton: violetter Rand
+ * auf violetter Toenung wie jeder gewaehlte Personen-Chip
+ * (user-multi-select.css). Der Rand bleibt da, ungewaehlt unsichtbar, damit
+ * die Wahl nichts verschiebt. */
 .meal-sheet .user-ms > .label {
   font-size: var(--type-footnote);
   line-height: var(--type-footnote-lh);
@@ -2973,7 +2976,7 @@
 
 .meal-sheet .user-ms__option {
   min-height: 36px;
-  border: 0;
+  border-color: transparent;
   background-color: var(--color-fill);
 }
 
@@ -2984,6 +2987,7 @@
 }
 
 .meal-sheet .user-ms__option:has(.user-ms__checkbox:checked) {
+  border-color: var(--color-accent);
   background-color: var(--color-accent-tint);
 }
 

@@ -656,11 +656,14 @@ export function notePreviewLines(note, max = 2) {
   return body.slice(0, max);
 }
 
-/** The author's disc - only on someone else's note (Tafla person rule). */
+/** The author's disc - only on someone else's note (Tafla person rule): their photo, else their initials. */
 function creatorDisc(note) {
   const own = state.user && Number(note.created_by) === Number(state.user.id);
   if (own || !note.creator_name) return '';
-  return personDisc({ id: note.created_by, display_name: note.creator_name }, { label: true });
+  return personDisc(
+    { id: note.created_by, display_name: note.creator_name, avatar_data: note.creator_avatar },
+    { label: true },
+  );
 }
 
 /**

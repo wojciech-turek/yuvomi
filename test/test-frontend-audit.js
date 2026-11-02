@@ -9645,6 +9645,30 @@ test('a selected person chip is violet: --color-accent border on --color-accent-
   assert.match(body, /border-color:\s*var\(--color-accent\);/);
   assert.match(body, /background:\s*var\(--color-accent-tint\);/);
   assert.doesNotMatch(css, /--active-module-accent|--module-accent/, 'die Wahl einer Person sieht in jedem Modul gleich aus');
+
+  // Jedes Blatt, das den gewaehlten Chip neu faerbt (das Essensblatt fuellt
+  // seine Chips und nahm ihnen den Rand), traegt dieselbe Stimme: violetter
+  // Rand auf violetter Toenung. Und keine Grundregel eines Chips nimmt den
+  // Rand weg - sonst bliebe fuer die Wahl keiner.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const restyled = [];
+  for (const file of readdirSync(styleDir).filter((f) => f.endsWith('.css'))) {
+    for (const { selector, body: decl } of eachRule(read(`../public/styles/${file}`))) {
+      for (const part of selector.split(',').map((s) => s.trim())) {
+        if (/\.user-ms__option:has\(\.user-ms__checkbox:checked\)$/.test(part)) {
+          restyled.push(`${file}: ${part}`);
+          if (/(?:^|;|\s)(?:background(?:-color)?)\s*:/.test(decl)) {
+            assert.match(decl, /background(?:-color)?:\s*var\(--color-accent-tint\)/, `${file}: ${part} - die Toenung ist violett`);
+          }
+          assert.match(decl, /border-color:\s*var\(--color-accent\)/, `${file}: ${part} - der gewaehlte Chip traegt den violetten Rand`);
+        }
+        if (/\.user-ms__option$/.test(part)) {
+          assert.doesNotMatch(decl, /(?:^|;|\s)border(?:-width)?\s*:\s*(?:0|none)\b/, `${file}: ${part} nimmt dem Chip den Rand`);
+        }
+      }
+    }
+  }
+  assert.ok(restyled.some((r) => r.startsWith('meals.css')), `Vorbedingung: das Essensblatt wird geprueft (${restyled.join(', ')})`);
 });
 
 test('mobile meal actions remain visible and touch-safe after the full cascade', () => {

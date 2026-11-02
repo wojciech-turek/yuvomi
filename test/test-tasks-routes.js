@@ -242,6 +242,23 @@ test('GET /meta/options: Nutzer (ohne Housekeeping-Kraft) + Enum-Listen', async 
   assert.equal('default_points' in r.body, false, 'keine Punkte mehr in den Optionen');
 });
 
+// ONE TODAY (2026-11-02): die Personenscheibe zeigt ein Profilbild ueberall -
+// auch in der Zuweisung und im Filter der Aufgaben, die aus dieser einen Liste
+// bedient werden. Ohne das Feld trug ein Mitglied mit Bild dort nur Initialen.
+test('GET /meta/options: jedes Mitglied bringt sein Profilbild mit (oder null)', async () => {
+  db.prepare('UPDATE users SET avatar_data = ? WHERE id = ?').run('data:image/png;base64,Qk9C', BOB);
+  try {
+    const r = await call('GET', '/meta/options', { as: { id: ALICE, role: 'admin' } });
+    assert.equal(r.status, 200);
+    const byId = new Map(r.body.users.map((u) => [u.id, u]));
+    assert.equal(byId.get(BOB).avatar_data, 'data:image/png;base64,Qk9C');
+    assert.ok('avatar_data' in byId.get(ALICE), 'das Feld steht an jedem Mitglied');
+    assert.equal(byId.get(ALICE).avatar_data, null);
+  } finally {
+    db.prepare('UPDATE users SET avatar_data = NULL WHERE id = ?').run(BOB);
+  }
+});
+
 test('POST ohne points speichert 0, die Punkte-Routen sind weg', async () => {
   const r = await call('POST', '/', { as: { id: ALICE, role: 'admin' }, body: { title: 'Ohne Punkte' } });
   assert.equal(r.status, 201);

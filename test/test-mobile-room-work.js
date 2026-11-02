@@ -303,6 +303,25 @@ test('M13: die Karte oeffnet selbst - der Oeffnen-Knopf ist kein Kreis in der Fu
   assert.equal(oben['z-index'], '1', 'Checklisten-Haken bleiben antippbar, ohne die Notiz zu oeffnen (#704)');
 });
 
+// ONE TODAY (2026-11-02): der Urheber einer fremden Notiz traegt die eine
+// Personenscheibe - mit seinem Profilbild, wenn er eines hat (die Route
+// liefert es als `creator_avatar`), sonst seine Initialen.
+test('One Today: der Urheber einer Notiz zeigt sein Profilbild in der Personenscheibe', () => {
+  const before = notes.state.user;
+  notes.state.user = { id: 1, display_name: 'Ich' };
+  try {
+    const note = { id: 6, title: 'Einkauf', content: 'Milch', pinned: 0, created_by: 2, creator_name: 'Mariola' };
+    const mitBild = notes.renderNoteCard({ ...note, creator_avatar: 'data:image/png;base64,TUE=' });
+    assert.match(mitBild, /class="person-disc person-disc--sm person-disc--photo" role="img" aria-label="Mariola"[^>]*><img src="data:image\/png;base64,TUE=" alt=""/,
+      'das Bild des Urhebers, nicht seine Initialen');
+    assert.match(notes.renderNoteCard(note), /class="person-disc person-disc--sm" role="img" aria-label="Mariola"[^>]*>M<\/span>/,
+      'ohne Bild sein Initial');
+    assert.doesNotMatch(notes.renderNoteCard({ ...note, created_by: 1 }), /person-disc/, 'die eigene Notiz traegt keine Scheibe');
+  } finally {
+    notes.state.user = before;
+  }
+});
+
 test('M13: der Titel ist nicht kleiner als der Text, auf keiner Breite', () => {
   const size = (value) => ({ '--type-card-title': 17, '--type-body': 17, '--type-secondary': 15 })[/var\((--[\w-]+)\)/.exec(value ?? '')?.[1]];
   const titel = size(declarations(notesCss, '.note-card .note-card__title')['font-size']);

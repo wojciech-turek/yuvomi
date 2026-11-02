@@ -92,6 +92,18 @@ test('tasks: a solo household still shows the assignee picker when a stored staf
   assert.deepEqual(group.ids.slice(0, 2), [ANNA.id, CLARA.id]);
 });
 
+// ONE TODAY (2026-11-02): die Zuweisung der Aufgaben wird aus
+// `/tasks/meta/options` bedient; ein Mitglied mit Profilbild zeigt es dort wie
+// ueberall (test:tasks-routes haelt das Feld an der Route).
+test('tasks: an assignee with a profile photo shows it in the assignee chip', () => {
+  setHouseholdSize(2);
+  const html = tasks.renderModalContent({ task: null, users: [ANNA, { ...BEA, avatar_data: 'data:image/png;base64,QkVB' }] });
+  const chip = html.slice(html.indexOf('value="2"'), html.indexOf('</label>', html.indexOf('value="2"')));
+  assert.match(chip, /class="person-disc person-disc--photo user-ms__avatar"[^>]*><img src="data:image\/png;base64,QkVB" alt=""/);
+  const anna = html.slice(html.indexOf('value="1"'), html.indexOf('</label>', html.indexOf('value="1"')));
+  assert.match(anna, /class="person-disc user-ms__avatar"[^>]*>A<\/span>/, 'without a photo: the initial');
+});
+
 test('tasks: a solo household keeps hiding the assignee picker when only one person is in question', () => {
   setHouseholdSize(1);
   assert.equal(assigneeGroup(tasks.renderModalContent({ task: null, users: [ANNA] })).hidden, true);
