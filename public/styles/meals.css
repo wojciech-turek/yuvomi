@@ -1627,6 +1627,28 @@
   }
 }
 
+/* Wide screens, 2026-11-02: at 1280px the week shows all seven days.
+ *
+ * Below 1440px the recipe rail starts collapsed (wireRailToggle in
+ * pages/meals.js; the "Show recipes" entry of the tools menu still opens it).
+ * With the rail gone the board has 996px at 1280 (1060 minus 2 x 32 gutter):
+ * 116 gutter + 7 x 117.7 + 7 x 8 gap. So the columns may shrink below the 140px
+ * of the base rule down to 112px, and the dish names wrap at spaces only
+ * (`hyphens: manual`, no word breaking): "Tomatensuppe" is not cut into
+ * "Tomaten- / suppe" in a 83px title. A word wider than the title stays whole
+ * and is clipped by the two-line clamp, not chopped. With the rail open the
+ * 140px columns and the scroll window stay as they were. */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .meals-layout--rail-hidden .week-grid {
+    grid-template-columns: var(--meal-gutter-width) repeat(7, minmax(112px, 1fr));
+  }
+
+  .meals-layout--rail-hidden .meal-card__title-text {
+    hyphens: manual;
+    overflow-wrap: normal;
+  }
+}
+
 /* --------------------------------------------------------
  * Rezept-Spalte einklappen (Critique 2026-07-29)
  * Die Spalte kostet 272-320px. Genau die fehlen dem Board für den sechsten und

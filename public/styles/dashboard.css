@@ -1468,6 +1468,44 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Wide screens (>=1024px) ────────────────────────────── */
+
+/* Two columns under a full-width head: Next up and the calendar on the left,
+ * tasks, notes and birthdays on the right. The DOM order stays the reading
+ * order and the keyboard order, so the columns are CSS columns, not a grid:
+ * a forced column break before the tasks section ends the left column. A grid
+ * with the sections placed by hand would tie both columns to shared rows (a
+ * tall tasks list would push the calendar down), and a grid that keeps the
+ * columns apart needs two wrappers, which would change the markup. A section
+ * never splits across the break. */
+:root {
+  /* Two 30rem columns and the gap between them. */
+  --dz-max: 62rem;
+}
+
+@media (min-width: 1024px) {
+  .dz {
+    display: block;
+    max-width: var(--dz-max);
+    column-count: 2;
+    column-gap: var(--space-8);
+    column-fill: balance;
+  }
+
+  .dz > * {
+    break-inside: avoid;
+    margin-block: 0 var(--space-6);
+  }
+
+  .dz-head {
+    column-span: all;
+  }
+
+  .dz-sec--tasks {
+    break-before: column;
+  }
+}
+
 /* ── Header ─────────────────────────────────────────────── */
 
 /* Two rows: the date with the weather on the right, then the greeting with
@@ -2225,6 +2263,21 @@
 
 #fab-add:hover {
   background-color: var(--color-btn-primary-hover);
+}
+
+/* Ab 1024px steht das + am unteren rechten Rand der Inhaltsbox von Dziś (die
+ * zwei 30rem-Spalten), nicht am Rand des Fensters. Es liegt ausserhalb von
+ * .app-content (#fab-layer), also rechnet das Blatt die Box aus Fensterbreite,
+ * Seitenleiste (--sidebar-width) und Inhaltsbreite nach: gleiche Rechnung wie
+ * --page-inline-pad am .dashboard und die Mitte von .dz. Nie weiter aussen als
+ * der Fensterabstand des geteilten Knopfes. */
+@media (min-width: 1024px) {
+  #fab-add {
+    --dz-view: calc(100vw - var(--sidebar-width));
+    --dz-pad: max(var(--page-gutter), calc((var(--dz-view) - var(--content-max-width)) / 2));
+    --dz-box: min(calc(var(--dz-view) - 2 * var(--dz-pad)), var(--dz-max));
+    inset-inline-end: max(var(--space-4), calc((var(--dz-view) - var(--dz-box)) / 2));
+  }
 }
 
 /* Der Halo des geteilten Fokusrings (.page-fab:focus-visible) - die eigene

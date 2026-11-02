@@ -197,6 +197,47 @@ for (const device of ['desktop', 'mobile']) {
   });
 }
 
+// Wide screens (2026-11-02): ab 1024px zwei Spalten unter dem vollen Kopf, das +
+// an der Inhaltsbox. Bei 1280x800 gemessen, am Seitenende wie in der Mitte.
+test('Dziś 1280x800: zwei Spalten (Aufgaben rechts vom Kalender), das + an der Kante der Inhaltsbox, auf keiner Karte', async () => {
+  const page = await openPage(harness, { device: 'desktop' });
+  await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+  await gotoRoute(page, '/');
+  await page.waitForSelector('[data-today] .dz-sec--tasks');
+  await tailAtEnd(page);
+  const m = await page.evaluate(() => {
+    const box = (s) => {
+      const r = document.querySelector(s)?.getBoundingClientRect();
+      return r && { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+    };
+    const dz = box('[data-today]');
+    const fab = document.querySelector('#fab-add').getBoundingClientRect();
+    const cards = [...document.querySelectorAll('[data-today] .dz-card, [data-today] .dz-next')];
+    return {
+      dzRight: dz.right, dzWidth: dz.width,
+      cal: box('.dz-sec--calendar'), tasks: box('.dz-sec--tasks'), head: box('.dz-head'),
+      notes: box('.dz-sec--notes'), birthdays: box('.dz-sec--birthdays'), next: box('.dz-next'),
+      fabRight: fab.right,
+      hits: cards.filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.left < fab.right && r.right > fab.left && r.top < fab.bottom && r.bottom > fab.top;
+      }).map((b) => b.className),
+    };
+  });
+  await page.close();
+  assert.ok(m.cal && m.tasks, 'Reichweite: Kalender und Aufgaben fehlen');
+  assert.ok(m.tasks.left > m.cal.right, `Aufgaben (${m.tasks.left}) stehen nicht rechts vom Kalender (${m.cal.right})`);
+  assert.ok(m.head.width > m.cal.width * 1.9, 'der Kopf spannt beide Spalten');
+  assert.ok(m.head.bottom <= Math.min(m.cal.top, m.tasks.top) + 1, 'der Kopf steht ueber beiden Spalten');
+  if (m.next) assert.ok(m.next.bottom <= m.cal.top + 1, 'Naechstes steht ueber dem Kalender, links');
+  for (const [name, r] of [['Notizen', m.notes], ['Geburtstage', m.birthdays]]) {
+    if (r) assert.ok(r.left > m.cal.right, `${name} stehen in der rechten Spalte`);
+  }
+  assert.ok(m.fabRight <= m.dzRight + 24, `das + (${m.fabRight}) steht weiter als 24px rechts der Inhaltsbox (${m.dzRight})`);
+  assert.ok(m.fabRight >= m.dzRight - 24, `das + (${m.fabRight}) steht weit links in der Inhaltsbox (${m.dzRight})`);
+  assert.deepEqual(m.hits, [], `Am Seitenende liegt das + auf: ${m.hits.join(', ')}`);
+});
+
 test('Nachlauf: eine Seite mit eigenem Scrollport behaelt ihre Hoehe (desktop)', async () => {
   // Gegenrichtung: der Nachlauf der Seitenscroller darf die Seiten, deren Root
   // `height: 100%` traegt, nicht aus dem Fenster schieben - dort scrollt

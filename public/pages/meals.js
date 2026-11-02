@@ -982,7 +982,11 @@ function wireRailToggle() {
   } else {
     const grid = _container?.querySelector('#week-grid');
     const desktop = !window.matchMedia?.('(max-width: 639px)').matches;
-    hidden = Boolean(desktop && grid && grid.scrollWidth > grid.clientWidth + 1);
+    // Unter 1440px beginnt die Spalte eingeklappt (Wide screens, 2026-11-02):
+    // nur so zeigt das Board bei 1280px alle sieben Tage. Der Menueeintrag
+    // "Rezepte anzeigen" holt sie zurueck.
+    const narrow = Boolean(window.matchMedia?.('(max-width: 1439px)').matches);
+    hidden = Boolean(desktop && (narrow || (grid && grid.scrollWidth > grid.clientWidth + 1)));
   }
   apply(hidden);
   // Jetzt steht die Breite des Boards fest - erst jetzt die Frage, ob „heute"

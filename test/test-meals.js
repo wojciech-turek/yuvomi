@@ -1705,6 +1705,41 @@ test('A4 P1: bei 1440px passen sieben Tage ohne Querscroll (116 Gutter + 7 Spalt
   assert(need <= 1156, `Bedarf ${need}px > 1156px - bei 1440 laeuft die Woche ueber, der Montag wird angeschnitten`);
 });
 
+test('Wide screens: bei 1280px passen sieben Tage ohne Rezept-Spalte (Gutter + 7 Spalten + 7 Luecken <= 996), Namen brechen nur am Leerzeichen', () => {
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)].filter((r) => r.at?.join(' ').includes('max-width: 1439px'));
+  const grid = rules.find((r) => /\.meals-layout--rail-hidden \.week-grid$/.test(r.selector.trim()));
+  assert(grid, 'keine Regel fuer das Board ohne Rezept-Spalte unter 1440px');
+  const base = [...eachRule(css)].find((r) => r.selector.trim() === '.week-grid' && /--meal-gutter-width/.test(r.body));
+  const gutter = Number(base.body.match(/--meal-gutter-width:\s*(\d+)px/)?.[1]);
+  const col = Number(grid.body.match(/repeat\(7,\s*minmax\((\d+)px/)?.[1]);
+  assert(gutter > 0 && col > 0, `Gutter/Spalte nicht lesbar (${gutter}/${col})`);
+  // 996 = 1280 - 220 Seitenleiste - 2 x 32 Seitenrand.
+  const need = gutter + 7 * col + 7 * 8;
+  assert(need <= 996, `Bedarf ${need}px > 996px - bei 1280 liegt der Sonntag ausserhalb`);
+  const title = rules.find((r) => /\.meal-card__title-text$/.test(r.selector.trim()));
+  assert(title && /hyphens:\s*manual/.test(title.body) && /overflow-wrap:\s*normal/.test(title.body),
+    'Gerichtenamen brechen unter 1440px nur an Leerzeichen (hyphens: manual, kein Wortbruch)');
+});
+
+test('Wide screens: unter 1440px beginnt die Rezept-Spalte eingeklappt, ab 1440px nur wenn die Woche nicht passt', () => {
+  withBoardEnv(null, () => {
+    window.matchMedia = (q) => ({ matches: /1439/.test(q) });
+    const b = mondayBoard();
+    // Die Woche passt auch mit offener Spalte - und doch klappt sie unter 1440 zu.
+    Object.defineProperty(b.grid, 'scrollWidth', { get: () => 100 });
+    mealsUi.setContainerForTest(b.container);
+    mealsUi.wireRailToggle();
+    assert(!b.railOpen(), 'unter 1440px startet die Spalte zu');
+    window.matchMedia = () => ({ matches: false });
+    const c = mondayBoard();
+    Object.defineProperty(c.grid, 'scrollWidth', { get: () => 100 });
+    mealsUi.setContainerForTest(c.container);
+    mealsUi.wireRailToggle();
+    assert(c.railOpen(), 'ab 1440px bleibt sie offen, solange die Woche passt');
+  });
+});
+
 test('D3 Kueche: alle vier Tab-Koepfe halten die Kante der Kuechen-Leiste, keiner das Lesemass (Re-Critique 2026-09-27, A1 P2-5)', () => {
   // Die Primaeraktion dockt am Ende des Kopfes an. Trugen Rezepte, Vorrat und
   // Einkauf `--narrow`, endete ihr Kopf am Lesemass (FAB x 865 bei 1440),
