@@ -178,6 +178,43 @@ test('openNewEventFrom, cold: loads the form state, applies a resting sheet, ope
   }
 });
 
+test('openNewEventFrom with a spoken draft: the sheet opens filled, with the heard sentence and "Powtórz"', async () => {
+  const modals = captureModals();
+  const previousSheets = globalThis.document.styleSheets;
+  globalThis.document.styleSheets = [{ href: 'http://localhost/styles/calendar.css', disabled: false, media: { mediaText: 'all' } }];
+  const api = recordingApi({ 'get /preferences': async () => ({ data: { calendar_default_duration: 90 } }) });
+  const previous = globalThis.__apiStub;
+  globalThis.__apiStub = api.stub;
+  try {
+    const draft = {
+      title: 'Trening Leo', date: '2035-01-18', start_time: '17:00', end_time: null, all_day: false,
+      location: 'Hala', assigned_to: [], reminder_minutes: null,
+    };
+    assert.equal(await calendar.openNewEventFrom({ user: { id: 7 }, draft, spoken: true, heard: 'Trening Leo w czwartek o 17' }), true);
+    const [sheet] = modals.opened;
+    assert.match(sheet.content, /id="modal-title"[^>]*value="Trening Leo"/);
+    assert.match(sheet.content, /id="modal-start-date"[^>]*value="2035-01-18"/);
+    assert.match(sheet.content, /id="modal-start-time"[^>]*value="17:00"/);
+    assert.match(sheet.content, /id="modal-end-time"[^>]*value="18:30"/, 'the household length (90 min)');
+    assert.match(sheet.content, /id="modal-location"[^>]*value="Hala"/);
+    assert.match(sheet.content, /class="sheet-heard"[\s\S]*Trening Leo w czwartek o 17/);
+    assert.match(sheet.content, /data-dirty-base=""/, 'counted as changed (R11)');
+    assert.equal(sheet.headerAction?.id, 'event-say-again');
+    assert.equal(sheet.headerAction?.label, 'tasks.sayAgain');
+
+    // Kein Tag, keine Stunde gesagt: heute zur naechsten vollen Stunde, wie ohne Entwurf.
+    assert.equal(await calendar.openNewEventFrom({ user: { id: 7 }, draft: { ...draft, date: null, start_time: null } }), true);
+    const quiet = modals.opened[1];
+    assert.match(quiet.content, new RegExp(`id="modal-start-date"[^>]*value="${todayKey()}"`));
+    assert.match(quiet.content, /id="modal-start-time"[^>]*value="\d\d:00"/);
+    assert.equal(quiet.headerAction, null, 'not spoken: no "Powtórz"');
+  } finally {
+    globalThis.document.styleSheets = previousSheets;
+    globalThis.__apiStub = previous;
+    modals.restore();
+  }
+});
+
 test('saveEvent with no page container: no render, no throw, onChanged called once', async () => {
   const modals = captureModals();
   const closed = [];

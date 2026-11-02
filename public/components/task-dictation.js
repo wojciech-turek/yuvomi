@@ -70,7 +70,9 @@ function sheetHtml(mode, text) {
     </div>`;
 }
 
-function wireDictationSheet(panel, { mode: startMode, initialText, members, onDraft, onTypeInstead, onCancel, onFail, win, post }) {
+function wireDictationSheet(panel, {
+  mode: startMode, initialText, members, onDraft, onTypeInstead, onCancel, onFail, win, post, toDraft,
+}) {
   let mode = startMode;
   let heard = '';
   let listener = null;
@@ -164,7 +166,7 @@ function wireDictationSheet(panel, { mode: startMode, initialText, members, onDr
       // Die Mitglieder duerfen nachkommen (startTaskDictation) - der lokale
       // Parser braucht sie, also erst sie, dann der Satz.
       const people = typeof members === 'function' ? await members() : members;
-      result = await draftFromSentence(sentence, { members: people, post });
+      result = await toDraft(sentence, { members: people, post });
     } catch (err) {
       result = { error: err };
     } finally {
@@ -224,16 +226,21 @@ function wireDictationSheet(panel, { mode: startMode, initialText, members, onDr
  *          onDraft?: (draft: object, meta: {source: 'ai'|'local', text: string}) => void,
  *          onTypeInstead?: (text: string) => void, onCancel?: () => void,
  *          onFail?: (err: Error) => void,
- *          win?: object, post?: (path: string, body: object) => Promise<any>}} opts
+ *          win?: object, post?: (path: string, body: object) => Promise<any>,
+ *          toDraft?: (sentence: string, opts: {members: Array<object>, post?: Function}) =>
+ *            Promise<{draft: object, source: 'ai'|'local'}>}} opts
  *        `initialText` (der Titel des Blatts, aus dem diktiert wird) steht im
  *        Textfeld; beim Zuhoeren beginnt die Mitschrift leer und wird nur
  *        uebernommen, falls die Erkennung ins Textfeld wechselt.
  *        `members` darf eine Funktion sein, deren Promise "Done" abwartet;
  *        scheitert sie, kommt `onFail` statt `onDraft`.
+ *        `toDraft` macht aus dem Satz den Entwurf (EIN Aufruf je "Done");
+ *        ohne Angabe eine Aufgabe (draftFromSentence). Das Termin-Blatt gibt
+ *        seinen eigenen mit (pages/calendar.js, `kind: 'event'`).
  */
 export function openDictationSheet({
   initialText = '', members = [], onDraft = () => {}, onTypeInstead = () => {}, onCancel = () => {},
-  onFail = () => {}, win = globalThis.window, post,
+  onFail = () => {}, win = globalThis.window, post, toDraft = draftFromSentence,
 } = {}) {
   const mode = speechSupported(win) ? 'listen' : 'type';
   const text = String(initialText ?? '').trim();
@@ -243,7 +250,7 @@ export function openDictationSheet({
     content: sheetHtml(mode, mode === 'type' ? text : ''),
     onSave(panel) {
       sheet = wireDictationSheet(panel, {
-        mode, initialText: text, members, onDraft, onTypeInstead, onCancel, onFail, win, post,
+        mode, initialText: text, members, onDraft, onTypeInstead, onCancel, onFail, win, post, toDraft,
       });
     },
     onClose() { sheet?.close(); },

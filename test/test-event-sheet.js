@@ -342,17 +342,25 @@ function withAccess(modules, run) {
  * Aufklapper (der Loader stubt modal.js), eine erkennbare Wiederholung (der
  * Loader stubt rrule-ui.js). `advanced` haelt fest, was der Aufklapper bekam.
  */
-function render({ mode = 'create', event = null, date = TODAY, time = '10:00', reminder = [], documents = 'write' } = {}) {
+/** Die Wiederholung, wie der Loader sie stubt - mit der Regel, die sie bekam. */
+const rruleStub = (prefix, rule) => `<div class="rrule-fields" data-rule="${rule ?? ''}"><select class="form-input" id="${prefix}-rrule-freq"><option value="">x</option></select></div>`;
+/** „Więcej", erkennbar: ein <details> wie advancedSection() es baut. */
+const advancedStub = (inner, opts = {}) => `<details class="form-advanced"${opts.open ? ' open' : ''}><summary class="form-advanced__summary">${opts.label ?? ''}</summary><div class="form-advanced__body">${inner}</div></details>`;
+
+function render({
+  mode = 'create', event = null, date = TODAY, time = '10:00', reminder = [], documents = 'write',
+  draft = null, spoken = false, heard = '',
+} = {}) {
   let advanced = null;
   globalThis.__renderUserMultiSelect = renderUserMultiSelect;
-  globalThis.__renderRRuleFields = (prefix) => `<div class="rrule-fields"><select class="form-input" id="${prefix}-rrule-freq"><option value="">x</option></select></div>`;
+  globalThis.__renderRRuleFields = rruleStub;
   globalThis.__advancedSection = (inner, opts = {}) => {
     advanced = { inner: String(inner), opts };
-    return `<details class="form-advanced"${opts.open ? ' open' : ''}><summary class="form-advanced__summary">${opts.label ?? ''}</summary><div class="form-advanced__body">${inner}</div></details>`;
+    return advancedStub(inner, opts);
   };
   try {
     const html = withAccess({ calendar: 'write', documents }, () => calendar.buildEventModalContent(
-      mode === 'create' ? { mode, date, time, reminder } : { mode, event, reminder }));
+      mode === 'create' ? { mode, date, time, reminder, draft, spoken, heard } : { mode, event, reminder }));
     return { html, advanced };
   } finally {
     delete globalThis.__renderUserMultiSelect;
@@ -525,8 +533,8 @@ test('edit: More opens for a set repeat (R8), and still for a note, a countdown,
 // --------------------------------------------------------------------------
 
 /** Das Blatt aufbauen und verdrahten wie openModal({ onSave: wireEventForm }). */
-async function openSheet({ mode = 'create', event = null, date = TODAY, time = '10:00', reminder = [] } = {}) {
-  const { html } = render({ mode, event, date, time, reminder, documents: 'none' });
+async function openSheet({ mode = 'create', event = null, date = TODAY, time = '10:00', reminder = [], draft = null } = {}) {
+  const { html } = render({ mode, event, date, time, reminder, draft, documents: 'none' });
   const panel = panelFrom(html);
   globalThis.__apiStub = { get: async () => ({ data: { google: [], caldav: [], outlook: [] } }) };
   try {
@@ -736,4 +744,449 @@ test('save: an error behind a folded row opens the row to show it', async () => 
   const section = panel.querySelector('[data-section="when"]');
   assert.equal(section.querySelector('[data-row]').hidden, true, 'the row gives way');
   assert.equal(section.querySelector('.task-sheet__body').hidden, false, 'to the field that carries the error');
+});
+
+// --------------------------------------------------------------------------
+// Nachgetragen aus dem Review zu Task 10: der Tag ueberlebt den
+// Ganztags-Schalter, und eine entfernte Erinnerung geht beim Speichern
+// --------------------------------------------------------------------------
+
+const pressedPills = (panel) => panel.querySelectorAll('[data-day-pick]').map((b) => b.getAttribute('aria-pressed'));
+const fire = (el, type = 'change') => el.dispatchEvent({ type, bubbles: true });
+
+test('wiring: a day picked in the date field survives switching all day on, and back', async () => {
+  const panel = await openSheet({ date: TODAY, time: '10:00' });
+  panel.querySelector('[data-expand="when"]').click();
+  // Der Kalender des Datepickers schreibt den Tag (ISO) und meldet `change`.
+  const start = panel.querySelector('#modal-start-date');
+  start.value = TOMORROW;
+  fire(start);
+  assert.equal(panel.querySelector('#modal-end-date').value, TOMORROW, 'precondition: the end followed');
+  const allday = panel.querySelector('#modal-allday');
+  allday.checked = true;
+  fire(allday);
+  assert.equal(panel.querySelector('#modal-allday-start').value, TOMORROW, 'the picked day goes along');
+  assert.equal(panel.querySelector('#modal-allday-end').value, TOMORROW, 'the end follows it');
+  assert.deepEqual(pressedPills(panel), ['false', 'true', 'false'], 'the pills show the picked day, not the stale one');
+
+  const alldayStart = panel.querySelector('#modal-allday-start');
+  alldayStart.value = IN_FIVE;
+  fire(alldayStart);
+  allday.checked = false;
+  fire(allday);
+  assert.equal(panel.querySelector('#modal-start-date').value, IN_FIVE, 'and back: the all-day day goes to the timed start');
+  assert.equal(panel.querySelector('#modal-end-date').value, IN_FIVE, 'its end follows');
+  assert.equal(panel.querySelector('#modal-start-time').value, '10:00', 'the hour stays');
+  assert.equal(panel.querySelector('#modal-end-time').value, '11:00');
+  assert.deepEqual(pressedPills(panel), ['false', 'false', 'true']);
+});
+
+test('save: an edit keeps its stored reminder when untouched, and deletes it after Remove or the row x', async () => {
+  const event = { ...EDIT_BASE, start_datetime: '2035-01-17T17:00', end_datetime: '2035-01-17T18:30' };
+  // Eine Stunde vorher: 16:00 in Warschau (Winterzeit) ist 15:00 UTC.
+  const reminder = [{ remind_at: '2035-01-17T15:00:00' }];
+  const reminderCalls = (calls) => calls.filter((c) => c.path.startsWith('/reminders')).map((c) => [c.method, c.body ?? null]);
+
+  const untouched = await openSheet({ mode: 'edit', event, reminder });
+  assert.equal(untouched.querySelector('#modal-reminder-toggle').checked, true, 'precondition: the stored reminder is on');
+  const kept = await save(untouched, { mode: 'edit', event, assigned: [] });
+  assert.deepEqual(kept.errors, []);
+  assert.deepEqual(reminderCalls(kept.calls), [['put', { remind_ats: ['2035-01-17T15:00:00'] }]], 'the same reminder goes back');
+
+  for (const remove of ['[data-section="reminder"] .task-sheet__body [data-remove="reminder"]', '[data-row="reminder"] [data-remove="reminder"]']) {
+    const panel = await openSheet({ mode: 'edit', event, reminder });
+    panel.querySelector(remove).click();
+    assert.equal(panel.querySelector('#modal-reminder-toggle').checked, false, `${remove}: switched off`);
+    const { calls, errors } = await save(panel, { mode: 'edit', event, assigned: [] });
+    assert.deepEqual(errors, []);
+    assert.ok(calls.some((c) => c.method === 'put' && c.path === '/calendar/9'), 'the event is saved');
+    assert.deepEqual(reminderCalls(calls), [['delete', null]], `${remove}: the stored reminder goes`);
+  }
+});
+
+// --------------------------------------------------------------------------
+// Ein Entwurf aus einem Satz (Task 11): das Blatt steht gefuellt da
+// --------------------------------------------------------------------------
+
+/** Was POST /quick-add/parse fuer „Trening Leo, 18.01.2035 um 17" liefert (Task 8). */
+const DRAFT = Object.freeze({
+  title: 'Trening Leo', date: '2035-01-18', start_time: '17:00', end_time: null, all_day: false,
+  location: null, assigned_to: [], reminder_minutes: null,
+});
+const valueOf = (panel, sel) => panel.querySelector(sel)?.value;
+const personChecked = (panel, id) => panel.querySelector(`[data-ms-input="cal_assigned"][value="${id}"]`)?.checked;
+
+test('draft: a timed event starts at its day and hour; with no end said it lasts the usual length', () => {
+  const panel = panelFrom(render({ draft: DRAFT }).html);
+  assert.equal(valueOf(panel, '#modal-title'), 'Trening Leo');
+  assert.equal(panel.querySelector('#modal-allday').checked, false);
+  assert.deepEqual(['#modal-start-date', '#modal-start-time', '#modal-end-date', '#modal-end-time'].map((s) => valueOf(panel, s)),
+    ['2035-01-18', '17:00', '2035-01-18', '18:00'], 'end = start + 60 min');
+  assert.match(panel.querySelector('[data-row="when"] .task-sheet__row-value').textContent, /, 17:00-18:00$/);
+
+  const said = panelFrom(render({ draft: { ...DRAFT, end_time: '18:30' } }).html);
+  assert.equal(valueOf(said, '#modal-end-time'), '18:30', 'a said end stands');
+
+  calendar.state.defaultDuration = 90;
+  try {
+    assert.equal(valueOf(panelFrom(render({ draft: DRAFT }).html), '#modal-end-time'), '18:30', 'the household length counts');
+  } finally {
+    calendar.state.defaultDuration = 60;
+  }
+});
+
+test('draft: a day without an hour is an all-day event on that day', async () => {
+  const draft = { ...DRAFT, date: TOMORROW, start_time: null, all_day: true };
+  const panel = await openSheet({ draft });
+  assert.equal(panel.querySelector('#modal-allday').checked, true);
+  assert.equal(valueOf(panel, '#modal-allday-start'), TOMORROW);
+  assert.equal(valueOf(panel, '#modal-allday-end'), TOMORROW, 'one day');
+  assert.equal(panel.querySelector('[data-row="when"] .task-sheet__row-value').textContent, 'common.tomorrow, calendar.whenAllDay');
+  assert.equal(panel.querySelector('#time-fields').style.display, 'none', 'the hours wait behind the switch');
+  assert.equal(panel.querySelector('#allday-fields').style.display, '', 'the day fields show');
+  assert.deepEqual(pressedPills(panel), ['false', 'true', 'false']);
+});
+
+test('draft: a place, people and a reminder 60 minutes before stand as rows; the reminder is switched on', () => {
+  const panel = panelFrom(render({ draft: { ...DRAFT, location: 'Hala <A>', assigned_to: [BEN.id], reminder_minutes: 60 } }).html);
+  const where = panel.querySelector('[data-section="where"]');
+  assert.equal(where.hidden, false);
+  assert.equal(where.querySelector('.task-sheet__row-value').textContent, 'Hala <A>');
+  assert.equal(valueOf(panel, '#modal-location'), 'Hala <A>');
+  assert.equal(panel.querySelector('[data-reveal="where"]').hidden, true);
+  assert.equal(personChecked(panel, BEN.id), true, 'Ben is chosen');
+  assert.equal(personChecked(panel, ANNA.id), false);
+  const remind = panel.querySelector('[data-section="reminder"]');
+  assert.equal(remind.hidden, false);
+  assert.equal(panel.querySelector('#modal-reminder-toggle').checked, true, 'the reminder is on');
+  assert.equal(panel.querySelectorAll('[data-reminder-row]').length, 1, 'one reminder');
+  assert.equal(valueOf(panel, '.js-reminder-offset'), '60');
+  assert.equal(remind.querySelector('.task-sheet__row-value').textContent, 'reminders.offset1hour');
+  assert.equal(panel.querySelector('[data-reveal="reminder"]').hidden, true);
+});
+
+test('draft: half an hour before is a lead of 30 minutes; its row names the moment, not "Custom"', () => {
+  const panel = panelFrom(render({ draft: { ...DRAFT, reminder_minutes: 30 } }).html);
+  assert.equal(valueOf(panel, '.js-reminder-offset'), 'custom');
+  assert.equal(valueOf(panel, '.js-reminder-custom-amount'), '30');
+  assert.equal(valueOf(panel, '.js-reminder-custom-unit'), 'minutes');
+  const text = panel.querySelector('[data-section="reminder"] .task-sheet__row-value').textContent;
+  assert.ok(text && !/offsetCustom/.test(text), `the row says when: ${text}`);
+});
+
+test('draft: a reminder that would already lie in the past is not preset (R15); household defaults do not step in', () => {
+  calendar.state.defaultReminders = [15];
+  try {
+    const panel = panelFrom(render({ draft: { ...DRAFT, date: addLocalDays(TODAY, -1), start_time: '10:00', reminder_minutes: 60 } }).html);
+    assert.equal(panel.querySelector('#modal-reminder-toggle').checked, false);
+    assert.equal(panel.querySelector('[data-section="reminder"]').hidden, true);
+    assert.equal(panel.querySelector('[data-reveal="reminder"]').hidden, false, 'the chip waits');
+    const quiet = panelFrom(render({ draft: DRAFT }).html);
+    assert.equal(valueOf(quiet, '.js-reminder-offset'), '15', 'no reminder said: the household default, as for any new event');
+  } finally {
+    calendar.state.defaultReminders = [];
+  }
+});
+
+test('draft: no title, no day and no hour -> an empty title, the sheet\'s own day and hour; the rest still applies', () => {
+  const draft = { title: null, date: null, start_time: null, end_time: null, all_day: false, location: 'Dom', assigned_to: [], reminder_minutes: null };
+  const panel = panelFrom(render({ date: TOMORROW, time: '09:00', draft }).html);
+  assert.equal(valueOf(panel, '#modal-title'), '', 'no title, no crash');
+  assert.deepEqual(['#modal-start-date', '#modal-start-time', '#modal-end-date', '#modal-end-time'].map((s) => valueOf(panel, s)),
+    [TOMORROW, '09:00', TOMORROW, '10:00']);
+  assert.equal(valueOf(panel, '#modal-location'), 'Dom');
+  // Ohne KI liefert das Mikrofon nur einen Titel.
+  const titleOnly = panelFrom(render({ date: TODAY, time: '10:00', draft: { title: 'Dentysta' } }).html);
+  assert.equal(valueOf(titleOnly, '#modal-title'), 'Dentysta');
+  assert.equal(valueOf(titleOnly, '#modal-start-date'), TODAY);
+});
+
+test('draft: people named win over "assign me"; when nobody is named, "assign me" still holds', () => {
+  calendar.state.defaultAssignMe = true;
+  try {
+    const named = panelFrom(render({ draft: { ...DRAFT, assigned_to: [BEN.id] } }).html);
+    assert.equal(personChecked(named, BEN.id), true);
+    assert.equal(personChecked(named, ANNA.id), false);
+    const nobody = panelFrom(render({ draft: DRAFT }).html);
+    assert.equal(personChecked(nobody, ANNA.id), true);
+  } finally {
+    calendar.state.defaultAssignMe = false;
+  }
+});
+
+/** Fragt den ECHTEN Dirty-Waechter (components/modal.js) nach dem Blatt, wie es aufgeht. */
+const realModal = await import('../public/components/modal.js');
+function dirtyAfterOpen(html) {
+  const tree = panelFrom(html);
+  const fields = tree.querySelectorAll('input, select, textarea')
+    .filter((el) => el.type !== 'file' && !el.hasAttribute('data-dirty-ignore'));
+  const panel = { querySelectorAll: () => fields };
+  realModal.__test.adoptOverlayForTest({ querySelector: () => panel });
+  try {
+    assert.ok(fields.length > 5, 'precondition: the fields were read from the markup');
+    return realModal.__test.isFormDirty(panel);
+  } finally {
+    realModal.__test.releaseOverlayForTest();
+  }
+}
+
+test('draft: the sheet counts as changed from the start (R11); a typed new sheet and an untouched edit do not', () => {
+  const html = render({ draft: DRAFT, spoken: true, heard: 'Trening Leo' }).html;
+  assert.match(html, /<input type="hidden" id="event-from-draft" value="1" data-dirty-base="">/);
+  assert.equal(dirtyAfterOpen(html), true, 'swiping it away asks first');
+  assert.equal(dirtyAfterOpen(render().html), false, 'an empty new event closes without asking');
+  assert.equal(dirtyAfterOpen(render({ mode: 'edit', event: EDIT_BASE }).html), false);
+});
+
+/** openModal abfangen, solange `run` laeuft. */
+async function capturing(run) {
+  const opened = [];
+  const previous = globalThis.__openModal;
+  globalThis.__openModal = (options) => { opened.push(options); };
+  try { return await run(opened); } finally { globalThis.__openModal = previous; }
+}
+
+test('spoken: the heard sentence stands above the title and "Powtórz" in the header; typed or editing shows neither', async () => {
+  await capturing((opened) => withAccess({ calendar: 'write', documents: 'none' }, () => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', draft: DRAFT, spoken: true, heard: 'Trening Leo <jutro> o 17' });
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', draft: DRAFT });
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', draft: DRAFT, spoken: true });
+    calendar.openEventModal({ mode: 'edit', event: EDIT_BASE, draft: DRAFT, spoken: true, heard: 'x' });
+    const [spoken, typed, noHeard, edit] = opened;
+    assert.equal(spoken.title, 'calendar.newEvent');
+    assert.equal(spoken.headerAction?.id, 'event-say-again');
+    assert.equal(spoken.headerAction?.label, 'tasks.sayAgain', '"Powtórz"');
+    assert.equal(typeof spoken.headerAction?.onClick, 'function');
+    assertInOrder(spoken.content, ['class="sheet-heard"', 'Trening Leo &lt;jutro&gt; o 17', 'id="modal-title"'], 'heard line above the title, escaped');
+    assert.equal(typed.headerAction, null, 'a typed draft has no "Powtórz"');
+    assert.doesNotMatch(typed.content, /sheet-heard/);
+    assert.equal(noHeard.headerAction?.id, 'event-say-again', 'spoken without a sentence: still "Powtórz"');
+    assert.doesNotMatch(noHeard.content, /sheet-heard/, '... but no empty heard line');
+    assert.equal(edit.headerAction, null, 'editing is never spoken');
+    assert.doesNotMatch(edit.content, /sheet-heard|event-from-draft/);
+  }));
+});
+
+// --------------------------------------------------------------------------
+// Das Mikrofon im Titel und „Powtórz": der Satz geht als Termin an den Server
+// --------------------------------------------------------------------------
+
+const AI = (fields) => ({ data: { source: 'ai', kind: 'event', fields: { ...DRAFT, ...fields } } });
+const settle = async () => { for (let i = 0; i < 10; i += 1) await new Promise((r) => setTimeout(r, 0)); };
+
+/**
+ * Ein Ablauf wie im Browser: openModal fangen (mit Kopfknopf, wie modal.js ihn
+ * baut), die Bausteine stellen, die der Loader stubt, und POST mitschreiben.
+ * `answer` ist die Antwort auf POST /quick-add/parse.
+ */
+async function voiceFlow(run, { answer = AI({}), selected = [], rule = null } = {}) {
+  const posts = [];
+  globalThis.__renderUserMultiSelect = renderUserMultiSelect;
+  globalThis.__getSelectedUserIds = () => selected;
+  globalThis.__renderRRuleFields = rruleStub;
+  globalThis.__rruleValues = { recurrence_rule: rule, valid_until: true };
+  globalThis.__advancedSection = advancedStub;
+  globalThis.__closeModal = () => {};
+  globalThis.__apiStub = {
+    get: async () => ({ data: { google: [], caldav: [], outlook: [] } }),
+    post: async (path, body) => { posts.push({ path, body }); return answer; },
+  };
+  setPermissions({ admin: false, modules: { calendar: 'write', documents: 'none' }, widgets: {}, capabilities: {} });
+  try {
+    return await capturing((opened) => run({ opened, posts }));
+  } finally {
+    clearPermissions();
+    for (const key of ['__renderUserMultiSelect', '__getSelectedUserIds', '__renderRRuleFields', '__rruleValues', '__advancedSection', '__closeModal', '__apiStub']) {
+      delete globalThis[key];
+    }
+  }
+}
+
+/** Ein abgefangenes Modal aufbauen und verdrahten (onSave), wie openModal es tut. */
+function mount(options) {
+  const head = options.headerAction
+    ? `<div class="modal-panel__header"><button type="button" class="modal-panel__action" id="${options.headerAction.id}">${options.headerAction.label}</button></div>`
+    : '';
+  const panel = panelFrom(head + options.content);
+  options.onSave?.(panel);
+  return panel;
+}
+
+/** Im Hoerblatt (ohne Erkennung: das Textfeld) einen Satz sagen und "Done" tippen. */
+async function say(listening, sentence) {
+  const panel = mount(listening);
+  panel.querySelector('#dictation-text').value = sentence;
+  panel.querySelector('[data-dictation-done]').click();
+  await settle();
+}
+
+test('the title mic: one parse call as an event; Done replaces the sheet with a spoken one, filled', async () => {
+  await voiceFlow(async ({ opened, posts }) => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('#modal-title').value = 'Trening';
+    sheet.querySelector('.task-sheet__mic').click();
+    const listening = opened[1];
+    assert.equal(listening?.title, 'tasks.dictation.title', 'the mic opened the listening sheet');
+    assert.match(listening.content, />Trening<\/textarea>/, 'the current title goes along');
+    await say(listening, 'Trening Leo w czwartek o 17 na hali');
+    assert.deepEqual(posts.map(({ path, body }) => ({ path, body })),
+      [{ path: '/quick-add/parse', body: { text: 'Trening Leo w czwartek o 17 na hali', kind: 'event' } }],
+      'once, as an event - nothing is saved');
+    const filled = opened[2];
+    assert.ok(filled, 'Done opened the filled sheet');
+    assert.equal(opened.length, 3);
+    assert.equal(filled.title, 'calendar.newEvent');
+    assert.equal(filled.headerAction?.id, 'event-say-again');
+    assert.match(filled.content, /Trening Leo w czwartek o 17 na hali/, 'the heard sentence shows');
+    const panel = mount(filled);
+    assert.equal(valueOf(panel, '#modal-title'), 'Trening Leo');
+    assert.equal(valueOf(panel, '#modal-start-date'), '2035-01-18');
+    assert.equal(valueOf(panel, '#modal-start-time'), '17:00');
+    assert.equal(panel.querySelector('#event-from-draft')?.getAttribute('data-dirty-base'), '', 'counted as changed');
+    assert.equal(panel.querySelector('.modal-panel__action').getAttribute('data-action'), 'dictate');
+  }, { answer: AI({ location: null }) });
+});
+
+test('the title mic keeps what was chosen and the sentence does not set: when, people, place, reminder, note and More', async () => {
+  await voiceFlow(async ({ opened }) => {
+    calendar.openEventModal({ mode: 'create', date: TOMORROW, time: '17:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('#modal-end-time').value = '18:30';
+    sheet.querySelector('[data-reveal="where"]').click();
+    sheet.querySelector('#modal-location').value = 'Hala';
+    sheet.querySelector('[data-reveal="reminder"]').click();
+    sheet.querySelector('.js-reminder-offset').value = '1440';
+    sheet.querySelector('#modal-description').value = 'Stroje';
+    sheet.querySelector('#modal-countdown').checked = true;
+    sheet.querySelector('#modal-visibility').value = 'assignees';
+    sheet.querySelector('.task-sheet__mic').click();
+    await say(opened[1], 'Trening Leo');
+    const panel = mount(opened[2]);
+    assert.equal(valueOf(panel, '#modal-title'), 'Trening Leo', 'the sentence is the title');
+    assert.deepEqual(['#modal-start-date', '#modal-start-time', '#modal-end-date', '#modal-end-time'].map((s) => valueOf(panel, s)),
+      [TOMORROW, '17:00', TOMORROW, '18:30'], 'no day, no hour said: the chosen when stays');
+    assert.equal(personChecked(panel, BEN.id), true, 'Ben stays chosen');
+    assert.equal(valueOf(panel, '#modal-location'), 'Hala');
+    assert.equal(panel.querySelector('#modal-reminder-toggle').checked, true);
+    assert.equal(valueOf(panel, '.js-reminder-offset'), '1440', 'the chosen reminder stays');
+    assert.equal(valueOf(panel, '#modal-description'), 'Stroje');
+    assert.equal(panel.querySelector('#modal-countdown').checked, true);
+    assert.equal(valueOf(panel, '#modal-visibility'), 'assignees');
+    assert.equal(panel.querySelector('.rrule-fields').getAttribute('data-rule'), 'FREQ=WEEKLY', 'the repeat stays');
+  }, { answer: AI({ title: 'Trening Leo', date: null, start_time: null }), selected: [BEN.id], rule: 'FREQ=WEEKLY' });
+});
+
+test('the title mic: what the sentence DOES set wins over the sheet; a sheet without a reminder keeps none', async () => {
+  await voiceFlow(async ({ opened }) => {
+    calendar.openEventModal({ mode: 'create', date: TOMORROW, time: '17:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('[data-reveal="where"]').click();
+    sheet.querySelector('#modal-location').value = 'Hala';
+    sheet.querySelector('.task-sheet__mic').click();
+    await say(opened[1], 'Basen z Anną w niedzielę od 10 do 12');
+    const panel = mount(opened[2]);
+    assert.deepEqual(['#modal-start-date', '#modal-start-time', '#modal-end-time'].map((s) => valueOf(panel, s)), ['2035-01-21', '10:00', '12:00']);
+    assert.equal(valueOf(panel, '#modal-location'), 'Basen');
+    assert.equal(personChecked(panel, ANNA.id), true);
+    assert.equal(personChecked(panel, BEN.id), false);
+    assert.equal(panel.querySelector('#modal-reminder-toggle').checked, false, 'no reminder said, none chosen');
+  }, {
+    answer: AI({ title: 'Basen', date: '2035-01-21', start_time: '10:00', end_time: '12:00', location: 'Basen', assigned_to: [ANNA.id] }),
+    selected: [BEN.id],
+  });
+});
+
+test('the title mic without AI: the sentence becomes the title, the rest of the sheet stays', async () => {
+  await voiceFlow(async ({ opened, posts }) => {
+    calendar.openEventModal({ mode: 'create', date: TOMORROW, time: '17:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('.task-sheet__mic').click();
+    await say(opened[1], 'Trening Leo w czwartek o 17');
+    assert.equal(posts.length, 1);
+    const panel = mount(opened[2]);
+    assert.equal(valueOf(panel, '#modal-title'), 'Trening Leo w czwartek o 17', 'events need the AI: only the title');
+    assert.equal(valueOf(panel, '#modal-start-date'), TOMORROW);
+    assert.equal(valueOf(panel, '#modal-start-time'), '17:00');
+    assert.equal(opened[2].headerAction?.id, 'event-say-again');
+  }, { answer: { data: { source: null, unavailable: 'disabled' } } });
+});
+
+test('"Powtórz" replaces the sheet: nothing chosen is carried, and the new sentence is the one heard', async () => {
+  await voiceFlow(async ({ opened, posts }) => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', draft: { ...DRAFT, location: 'Hala' }, spoken: true, heard: 'Trening Leo na hali' });
+    const sheet = mount(opened[0]);
+    assert.equal(sheet.querySelector('.modal-panel__action').getAttribute('data-action'), 'dictate');
+    opened[0].headerAction.onClick();
+    const listening = opened[1];
+    assert.equal(listening?.title, 'tasks.dictation.title');
+    assert.match(listening.content, />Trening Leo<\/textarea>/, 'the current title goes along');
+    await say(listening, 'Basen w niedzielę o 10');
+    assert.equal(posts[0].body.kind, 'event');
+    const filled = opened[2];
+    assert.match(filled.content, /Basen w niedzielę o 10/, 'the new sentence shows');
+    assert.doesNotMatch(filled.content, /Trening Leo na hali/, 'not the old one');
+    assert.equal(filled.headerAction?.id, 'event-say-again');
+    const panel = mount(filled);
+    assert.equal(valueOf(panel, '#modal-title'), 'Basen');
+    assert.equal(valueOf(panel, '#modal-location'), '', 'the old place is not carried');
+    assert.equal(personChecked(panel, BEN.id), false, 'nor the chosen people');
+    assert.equal(valueOf(panel, '#modal-start-date'), '2035-01-21');
+  }, { answer: AI({ title: 'Basen', date: '2035-01-21', start_time: '10:00' }), selected: [BEN.id] });
+});
+
+test('"Powtórz" with neither a day nor an hour said keeps the sheet\'s own when', async () => {
+  await voiceFlow(async ({ opened }) => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', draft: { ...DRAFT, date: TOMORROW, start_time: '17:00', end_time: '19:00' }, spoken: true, heard: 'x' });
+    mount(opened[0]);
+    opened[0].headerAction.onClick();
+    await say(opened[1], 'Trening Leo');
+    const panel = mount(opened[2]);
+    assert.deepEqual(['#modal-start-date', '#modal-start-time', '#modal-end-date', '#modal-end-time'].map((s) => valueOf(panel, s)),
+      [TOMORROW, '17:00', TOMORROW, '19:00']);
+  }, { answer: AI({ title: 'Trening Leo', date: null, start_time: null }) });
+});
+
+test('closing the listening sheet brings the sheet back as it was: nothing new opens', async () => {
+  await voiceFlow(async ({ opened, posts }) => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('.task-sheet__mic').click();
+    mount(opened[1]);
+    opened[1].onClose();
+    await settle();
+    assert.equal(opened.length, 2);
+    assert.equal(posts.length, 0);
+  });
+});
+
+test('Type instead brings the sheet back with what was said as its title', async () => {
+  await voiceFlow(async ({ opened }) => {
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00' });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('#modal-title').value = 'Tren';
+    sheet.querySelector('.task-sheet__mic').click();
+    const listening = mount(opened[1]);
+    listening.querySelector('#dictation-text').value = 'Trening Leo';
+    listening.querySelector('[data-dictation-type]').click();
+    await settle();
+    assert.equal(opened.length, 2, 'no new sheet - the parked one comes back');
+    assert.equal(valueOf(sheet, '#modal-title'), 'Trening Leo');
+    assert.equal(active, sheet.querySelector('#modal-title'), 'ready to type');
+  });
+});
+
+test('a sheet opened from outside hands its close over to the sheet that replaces it (the calendar styles stay)', async () => {
+  await voiceFlow(async ({ opened }) => {
+    let released = 0;
+    calendar.openEventModal({ mode: 'create', date: TODAY, time: '10:00', onClose: () => { released += 1; } });
+    const sheet = mount(opened[0]);
+    sheet.querySelector('.task-sheet__mic').click();
+    await say(opened[1], 'Trening Leo w czwartek o 17');
+    // openModal schliesst das alte Blatt, wenn das neue aufgeht.
+    opened[0].onClose();
+    assert.equal(released, 0, 'the replaced sheet does not release what the new one still needs');
+    opened[2].onClose();
+    assert.equal(released, 1, 'the new sheet releases it when it closes');
+  });
 });

@@ -65,7 +65,12 @@ import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday, relativeDateLabel } from '/utils/day-label.js';
-import { sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml } from '/utils/sheet-parts.js';
+import { sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml, heardLineHtml } from '/utils/sheet-parts.js';
+// Das Mikrofon im Titel des Termin-Blatts: STATISCH, weil das Hoerblatt im Tipp
+// aufgehen muss - Safari startet die Erkennung nur innerhalb der Nutzergeste,
+// ein `await import()` davor liesse nur das Textfeld (wie pages/tasks.js).
+import { openDictationSheet } from '/components/task-dictation.js';
+import { quickDraftFromSentence } from '/utils/quick-draft.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import { seriesDoneText } from '/utils/task-fields.js';
 import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
@@ -1859,10 +1864,19 @@ export function nextFullHour(now = new Date()) {
  * Formular liest (Mitglieder, Kalender, Einstellungen), und fasst sonst nichts
  * an; `onChanged` frischt den Aufrufer nach dem Speichern auf.
  *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
+ * Aus einem Satz („Powiedz", One Today): `draft` sind die Termin-Felder von
+ * POST /quick-add/parse - `{ title, date, start_time, end_time, all_day,
+ * location, assigned_to, reminder_minutes }` - und fuellen das Blatt (siehe
+ * buildEventModalContent). Ohne gesagten Tag bleibt es bei heute und der
+ * naechsten vollen Stunde. `spoken` setzt „Powtórz" in den Kopf, `heard` ist
+ * der gesagte Satz ueber dem Titel. Gespeichert wird erst mit „Dodaj
+ * wydarzenie"; bis dahin gilt das Blatt als geaendert (R11).
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
+ *          draft?: object|null, spoken?: boolean, heard?: string}} [opts]
  * @returns {Promise<boolean>} false bei nur lesendem Zugriff
  */
-export async function openNewEventFrom({ user = null, onChanged = () => {} } = {}) {
+export async function openNewEventFrom({ user = null, onChanged = () => {}, draft = null, spoken = false, heard = '' } = {}) {
   if (readOnly()) return false;
   const [prefsRes, documentOptionsRes, , , release] = await Promise.all([
     api.get('/preferences').catch(() => ({ data: {} })),
@@ -1877,7 +1891,7 @@ export async function openNewEventFrom({ user = null, onChanged = () => {} } = {
   const today = todayKey();
   state.today = today;
   // Das Blatt gilt nur, solange das Formular offen ist (generische Selektoren).
-  openEventModal({ mode: 'create', date: today, time: nextFullHour(), onChanged, onClose: release });
+  openEventModal({ mode: 'create', date: today, time: nextFullHour(), draft, spoken, heard, onChanged, onClose: release });
   return true;
 }
 
@@ -7940,21 +7954,29 @@ function calendarReminderRows(reminders = [], event = null, defaultOffsets = [])
 
 /**
  * Was die Zeile "Przypomnienie" des Blatts nennt: gespeicherte Erinnerungen wie
- * die Leseansicht (reminderSummary), die Standard-Erinnerungen eines neuen
- * Termins mit dem Namen ihres Vorlaufs.
+ * die Leseansicht (reminderSummary), die Zeilen eines neuen Termins mit dem
+ * Namen ihres Vorlaufs. Ein eigener Vorlauf („pół godziny wcześniej" aus einem
+ * Satz) hat keinen Namen, der etwas sagt - er nennt wie die Leseansicht seinen
+ * Zeitpunkt, gerechnet vom Beginn `start`.
  */
-function eventReminderRowText(event, reminders, rows) {
+function eventReminderRowText(event, reminders, rows, start = '') {
   const stored = reminderList(reminders);
   if (stored.length) return reminderSummary(event, stored);
   const labels = REMINDER_OFFSETS();
+  const momentOf = (row) => {
+    const at = start ? reminderStartMs(start) - customReminderMinutes(row.amount, row.unit) * 60000 : NaN;
+    return Number.isFinite(at) ? reminderWhenText({ remind_at: new Date(at).toISOString().slice(0, 19) }) : '';
+  };
   return rows
-    .map((row) => labels.find((o) => o.value === row.offset && o.value !== '')?.label ?? '')
+    .map((row) => (row.offset === 'custom'
+      ? momentOf(row)
+      : labels.find((o) => o.value === row.offset && o.value !== '')?.label ?? ''))
     .filter(Boolean)
     .join(', ');
 }
 
-function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = []) {
-  const rows = calendarReminderRows(reminders, event, defaultOffsets);
+/** `rows`: die Zeilen, mit denen der Abschnitt aufgeht - ohne Angabe die gespeicherten bzw. die Vorgaben. */
+function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = [], rows = calendarReminderRows(reminders, event, defaultOffsets)) {
   const enabled = rows.length > 0;
   const rowsHtml = (enabled ? rows : [{ offset: '0', amount: 1, unit: 'days' }])
     .map((r) => reminderRowHtml(r)).join('');
@@ -8309,7 +8331,17 @@ function wireVisibilityWarning(panel, selectSel, msName, warnSel, privateWarnSel
   update();
 }
 
-function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null, onClose = undefined }) {
+/**
+ * @param {{mode: 'create'|'edit', event?: object|null, date?: string|null, reminder?: object|object[]|null,
+ *          time?: string|null, onChanged?: Function|null, onClose?: Function,
+ *          draft?: object|null, spoken?: boolean, heard?: string}} opts
+ *        `draft`, `spoken` und `heard` gelten nur beim Anlegen (Diktat, siehe
+ *        buildEventModalContent): `spoken` bringt „Powtórz" in den Kopf.
+ *        `onClose` geht an ein Blatt weiter, das dieses aus einem Diktat
+ *        ersetzt (dictateOverEventSheet) - es gibt frei, was das Blatt braucht
+ *        (das Seitenblatt von aussen), und das neue Blatt braucht es noch.
+ */
+function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null, onClose = undefined, draft = null, spoken = false, heard = '' }) {
   // DER LETZTE RIEGEL VOR DEM FORMULAR. Es gibt sieben Wege hierher - Kopfknopf,
   // FAB, Doppelklick oder langer Druck in eine leere Stunde der Wochen- und der
   // Tagesansicht (wireTimeGridCreate), zwei Leerzustands-CTAs und der
@@ -8322,17 +8354,173 @@ function openEventModal({ mode, event = null, date = null, reminder = null, time
     return;
   }
   const isEdit = mode === 'edit';
-  const content = buildEventModalContent({ mode, event, date, reminder, time });
+  const fromVoice = spoken && !isEdit;
+  const content = buildEventModalContent({
+    mode, event, date, reminder, time, draft: isEdit ? null : draft, spoken: fromVoice, heard,
+  });
+  // Was beim Schliessen frei wird, gehoert dem Blatt, das gerade steht. Ersetzt
+  // ein Diktat das Blatt, nimmt das neue es mit (`handOverClose`): sonst gaebe
+  // das alte, das dabei zugeht, das Seitenblatt unter dem neuen frei.
+  let closing = onClose;
+  const handOverClose = () => {
+    const handed = closing;
+    closing = undefined;
+    return handed;
+  };
+  // Das Panel kennt erst onSave; der Kopfknopf ruft ueber diesen Griff.
+  let sayAgain = () => {};
+  const dictateWith = { onChanged, handOverClose };
 
   openSharedModal({
     title: isEdit ? t('calendar.editEvent') : t('calendar.newEvent'),
     content,
     size: 'md',
-    onClose,
+    onClose: () => closing?.(),
+    // `type="button"` liefert openModal.
+    headerAction: fromVoice
+      ? { id: 'event-say-again', label: t('tasks.sayAgain'), onClick: () => sayAgain() }
+      : null,
     // Ein neuer Termin startet weiterhin mit dem Fokus im Titelfeld: Hier ist
-    // Tippen die Absicht, hier ist der Autofokus richtig.
-    onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); },
+    // Tippen die Absicht, hier ist der Autofokus richtig. Mikrofon und
+    // „Powtórz" gibt es nur beim Anlegen (R10).
+    onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); if (!isEdit) sayAgain = wireEventDictation(panel, fromVoice, dictateWith); },
   });
+}
+
+/**
+ * Das Mikrofon des Termin-Blatts sagt einen TERMIN: der Satz geht mit
+ * `kind: 'event'` an POST /quick-add/parse (Haiku, ein Aufruf). Ohne KI (aus,
+ * am Limit, Fehler, Zeitueberschreitung) gibt es keinen Termin aus dem Satz -
+ * dann bleibt nur der Titel, das Blatt behaelt den Rest. Auch eine Antwort
+ * anderer Art (der Server gibt eine Aufgabe, wo der Kalender nicht
+ * beschreibbar ist) traegt hier nur ihren Titel bei.
+ *
+ * @returns {Promise<{draft: object, source: 'ai'|'local'}>}
+ */
+async function eventDraftFromSentence(sentence, { members = [], post } = {}) {
+  const { kind, draft, source } = await quickDraftFromSentence(sentence, { members, post, kind: 'event' });
+  return { source, draft: kind === 'event' ? draft : { title: draft?.title ?? sentence } };
+}
+
+/**
+ * Was im Blatt steht, als Entwurf: das Wann (auch ein mehrtaegiges), Titel,
+ * Personen, Ort und Erinnerungszeilen (nur offene Abschnitte - ein
+ * zugeklappter traegt nichts), die Beschreibung und was hinter „Więcej" als
+ * Wert im Blatt steht. Kalender, Sync-Ziel und Anhang reisen nicht mit: die
+ * ersten beiden laedt das neue Blatt selbst nach, eine Datei lebt im Feld.
+ */
+function eventSheetValues(panel) {
+  const q = (sel) => panel.querySelector(sel);
+  const open = (name) => {
+    const section = q(`[data-section="${name}"]`);
+    return !!section && !section.hidden;
+  };
+  const allDay = q('#modal-allday')?.checked === true;
+  const reminders = reminderRowsFromForm(panel);
+  return {
+    title: String(q('#modal-title')?.value ?? '').trim(),
+    assigned_to: getSelectedUserIds(panel, 'cal_assigned'),
+    when: {
+      all_day: allDay,
+      date: readDateInput(panel, allDay ? '#modal-allday-start' : '#modal-start-date') || null,
+      start_time: parseTimeInput(q('#modal-start-time')?.value || '') || null,
+      end_date: readDateInput(panel, allDay ? '#modal-allday-end' : '#modal-end-date') || null,
+      // Hinter „ganztaegig" ruhen die Stunden; das neue Blatt rechnet sie neu.
+      end_time: allDay ? null : (parseTimeInput(q('#modal-end-time')?.value || '') || null),
+    },
+    location: open('where') ? String(q('#modal-location')?.value ?? '').trim() : '',
+    reminder_rows: open('reminder') && reminders.enabled
+      ? reminders.rows.map(({ offset, amount, unit }) => ({ offset, amount, unit }))
+      : [],
+    description: String(q('#modal-description')?.value ?? ''),
+    more: {
+      recurrence_rule: getRRuleValues(panel, 'event')?.recurrence_rule ?? null,
+      visibility: q('#modal-visibility')?.value || 'all',
+      countdown: q('#modal-countdown')?.checked === true,
+      icon: q('#modal-icon')?.value || 'calendar',
+    },
+  };
+}
+
+/** Sagt der Satz weder Tag noch Stunde, bleibt das Wann des Blatts (Task 8: `date` ist dann null). */
+function keepSheetWhen(draft, sheet) {
+  if (draft?.date || draft?.start_time) return { ...draft };
+  return { ...draft, ...sheet.when };
+}
+
+/**
+ * Der Entwurf aus dem Satz, ergaenzt um das im Blatt Gewaehlte, das der Satz
+ * nicht setzt (das Mikrofon im Titel, wie F9 im Aufgabenblatt). Was der Satz
+ * sagt, gewinnt. `defaults: false`: die Vorgaben eines neuen Blatts („mich
+ * zuweisen", Standard-Erinnerungen) treten nicht wieder ein - wer sie im Blatt
+ * entfernt hat, hat entschieden.
+ */
+function keepChosenEvent(draft, sheet) {
+  const out = { ...keepSheetWhen(draft, sheet), description: sheet.description, more: sheet.more, defaults: false };
+  if (!String(draft.title ?? '').trim()) out.title = sheet.title;
+  if (!(Array.isArray(draft.assigned_to) && draft.assigned_to.length)) out.assigned_to = sheet.assigned_to;
+  if (!String(draft.location ?? '').trim()) out.location = sheet.location;
+  if (!Number.isInteger(draft.reminder_minutes)) out.reminder_rows = sheet.reminder_rows;
+  return out;
+}
+
+/**
+ * Mikrofon im Titelfeld und „Powtórz" eines neuen Termin-Blatts; liefert den
+ * Aufruf fuer den Kopfknopf. Das Mikrofon BEHAELT, was gewaehlt war und der
+ * Satz nicht sagt; „Powtórz" ersetzt - das ist seine Bedeutung.
+ */
+function wireEventDictation(panel, spoken, opts) {
+  if (spoken) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+  panel.querySelector('.task-sheet__mic')?.addEventListener('click', (e) => {
+    e.preventDefault?.();
+    dictateOverEventSheet(panel, { ...opts, keep: true });
+  });
+  return () => dictateOverEventSheet(panel, opts);
+}
+
+/**
+ * Diktat aus dem offenen Blatt „Nowe wydarzenie" (Mikrofon, „Powtórz").
+ *
+ * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
+ * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
+ * gefuelltes (`spoken`, mit dem eben gesagten Satz als `heard`). Sagt der Satz
+ * weder Tag noch Stunde, bleibt das Wann des Blatts. Schliessen bringt das
+ * Blatt zurueck, wie es war; „Type instead" ebenso, mit dem Gesagten als Titel.
+ *
+ * Das Hoerblatt geht synchron im Tipp auf (askOverModal ruft `ask` sofort) -
+ * Safari startet die Erkennung nur aus einer Nutzergeste heraus.
+ */
+async function dictateOverEventSheet(panel, { onChanged = null, handOverClose = () => undefined, keep = false } = {}) {
+  const initialText = panel.querySelector('#modal-title')?.value ?? '';
+  // VOR dem Hoerblatt gelesen - das Blatt steht dann sicher.
+  const sheet = eventSheetValues(panel);
+  const answer = await askOverModal(() => new Promise((resolve) => {
+    openDictationSheet({
+      initialText,
+      members: state.users,
+      toDraft: eventDraftFromSentence,
+      // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
+      // das gefuellte Blatt es.
+      onDraft: (draft, { text = '' } = {}) => { resolve({ draft, heard: text }); closeModal({ force: true }); },
+      onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
+      onCancel: () => resolve(null),
+    });
+  }));
+  if (answer?.draft) {
+    const draft = keep ? keepChosenEvent(answer.draft, sheet) : keepSheetWhen(answer.draft, sheet);
+    openEventModal({
+      mode: 'create', date: sheet.when.date, time: sheet.when.start_time,
+      draft, spoken: true, heard: answer.heard, onChanged, onClose: handOverClose(),
+    });
+  } else if (answer?.type) {
+    // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
+    const field = panel.querySelector('#modal-title');
+    if (field && answer.text && answer.text !== field.value.trim()) {
+      field.value = answer.text;
+      field.dispatchEvent?.(new Event('input', { bubbles: true }));
+    }
+    field?.focus?.();
+  }
 }
 
 /**
@@ -8453,6 +8641,21 @@ function pickEventDay(panel, key) {
   syncEventDayPills(panel);
 }
 
+/**
+ * Der Ganztags-Schalter wechselt das Startfeld - der gewaehlte Tag geht mit.
+ * Die Tageswahl schreibt beide Felder, der Kalender des Datepickers nur das,
+ * das gerade gilt; ohne das stuende nach dem Umschalten der alte Tag da (und
+ * die Tageswahl zeigte ihn). Das Ende folgt ueber `change` (wireDateFollow).
+ */
+function carryStartDay(panel, toAllDay) {
+  const from = panel.querySelector(toAllDay ? '#modal-start-date' : '#modal-allday-start');
+  const to = panel.querySelector(toAllDay ? '#modal-allday-start' : '#modal-start-date');
+  const day = parseDateInput(from?.value || '');
+  if (!to || !day || !isDateInputValid(from.value) || day === parseDateInput(to.value || '')) return;
+  to.value = day;
+  to.dispatchEvent?.(new Event('change', { bubbles: true }));
+}
+
 /** Zeilen, Chips, „Usuń" und die Tageswahl des Termin-Blatts. */
 function wireEventSheet(panel) {
   const sheet = panel.querySelector('.cal-event-form');
@@ -8502,7 +8705,6 @@ function hasCurrentAttachment(attachmentState, event) {
 }
 
 function wireEventForm(panel, { mode, event = null, reminder = null, onChanged = null }) {
-  const isEdit = mode === 'edit';
   // Der Wiederholungsbaustein kennt absichtlich keine Feld-IDs des Kalenders.
   // Der Kalender liefert ihm das aktive Startdatum ausdrücklich: bei einem
   // Zeit-Termin aus dem Zeitbereich, bei „ganztägig" aus dessen eigenem Feld.
@@ -8524,11 +8726,13 @@ function wireEventForm(panel, { mode, event = null, reminder = null, onChanged =
   const timeFields  = panel.querySelector('#time-fields');
   const alldayFields = panel.querySelector('#allday-fields');
   alldayCheck.addEventListener('change', () => {
+    carryStartDay(panel, alldayCheck.checked);
     if (alldayCheck.checked) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
     else                      { timeFields.style.display = '';     alldayFields.style.display = 'none'; }
     recurrenceBinding.refreshStartDate();
   });
-  if (isEdit && event?.all_day) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
+  // Ganztaegig kann ein Termin schon aufgehen: beim Bearbeiten, und aus einem Satz mit Tag ohne Stunde.
+  if (alldayCheck.checked) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
 
   const iconInput = panel.querySelector('#modal-icon');
   const iconTrigger = panel.querySelector('#modal-icon-trigger');
@@ -9048,30 +9252,109 @@ function eventSaveLabel(mode) {
   return mode === 'edit' ? t('common.save') : t('calendar.addEvent');
 }
 
-function buildEventModalContent({ mode, event, date, reminder = null, time = null }) {
+const DRAFT_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const DRAFT_HOUR = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Was ein Entwurf ueber das Wann sagt; null heisst „nicht gesagt", dann gilt
+ * das Blatt (Tag und Stunde, mit denen es aufgeht). Ein Ende zaehlt nur zu
+ * einem gesagten Beginn.
+ */
+function draftWhen(draft) {
+  const day = (value) => (typeof value === 'string' && DRAFT_DAY.test(value) ? value : null);
+  const hour = (value) => (typeof value === 'string' && DRAFT_HOUR.test(value) ? value : null);
+  const startTime = hour(draft?.start_time);
+  return {
+    date: day(draft?.date),
+    startTime,
+    allDay: draft?.all_day === true,
+    endDate: day(draft?.end_date),
+    endTime: startTime ? hour(draft?.end_time) : null,
+  };
+}
+
+/** Das gesagte Ende (oder das mitgenommene eines Blatts), wenn es nach dem Beginn liegt; sonst null. */
+function draftEnd(when, startDate, startTime) {
+  if (!when.endTime) return null;
+  const date = when.endDate ?? startDate;
+  return `${date}T${when.endTime}` > `${startDate}T${startTime}` ? { date, time: when.endTime } : null;
+}
+
+/**
+ * Die Erinnerungszeilen eines Entwurfs - oder null, wenn er nichts dazu sagt
+ * (dann gelten die Standard-Erinnerungen eines neuen Termins). Gesagte Minuten
+ * werden EINE Zeile mit diesem Vorlauf; laege sie schon in der Vergangenheit,
+ * keine (R15: keine neue Erinnerung in der Vergangenheit). Aus dem Blatt
+ * mitgenommene Zeilen (das Mikrofon) stehen, wie sie waren.
+ */
+function draftReminderRows(draft, start, now = Date.now()) {
+  const minutes = draft?.reminder_minutes;
+  if (Number.isInteger(minutes) && minutes >= 0) {
+    const at = reminderStartMs(start) - minutes * 60000;
+    return Number.isFinite(at) && at > now ? [reminderRowForLead(minutes)] : [];
+  }
+  if (Array.isArray(draft?.reminder_rows)) {
+    return draft.reminder_rows.slice(0, MAX_CALENDAR_REMINDERS)
+      .map(({ offset = '0', amount = 1, unit = 'days' } = {}) => ({ offset: String(offset), amount, unit }));
+  }
+  return null;
+}
+
+/**
+ * @param {{mode: 'create'|'edit', event?: object|null, date?: string|null, reminder?: object|object[]|null,
+ *          time?: string|null, draft?: object|null, spoken?: boolean, heard?: string}} opts
+ *        `draft` (nur beim Anlegen) fuellt das Blatt aus einem Satz (One Today):
+ *        `{ title, date, start_time, end_time, all_day, location, assigned_to,
+ *        reminder_minutes }` wie POST /quick-add/parse sie liefert. Mit Stunde
+ *        beginnt der Termin an `date` um `start_time` und endet um `end_time`
+ *        oder nach der ueblichen Dauer; `all_day` macht ihn ganztaegig an
+ *        `date`. Ohne Tag und Stunde bleiben `date`/`time` des Blatts. Genannte
+ *        Personen ersetzen „mich zuweisen", `reminder_minutes` wird eine
+ *        Erinnerungszeile (nicht in der Vergangenheit, R15). Ein Entwurf aus
+ *        dem Mikrofon traegt dazu, was im Blatt gewaehlt war (`end_date`,
+ *        `reminder_rows`, `description`, `more`, `defaults: false`, siehe
+ *        keepChosenEvent). Jedes Blatt aus einem Entwurf gilt als geaendert
+ *        (R11, `data-dirty-base`).
+ *        `spoken` + `heard`: der gesagte Satz steht klein ueber dem Titel.
+ */
+function buildEventModalContent({ mode, event, date, reminder = null, time = null, draft = null, spoken = false, heard = '' }) {
   const isEdit = mode === 'edit';
   const today  = date || state.today;
+  const fill = isEdit ? null : draft;
+  const said = draftWhen(fill);
 
-  const startDate = isEdit ? localDate(event.start_datetime) : today;
+  const startDate = isEdit ? localDate(event.start_datetime) : (said.date ?? today);
   const startTime = isEdit && event.start_datetime.length > 10
-    ? localTime(event.start_datetime) : (time ?? defaultNewEventTime(today));
+    ? localTime(event.start_datetime) : (said.startTime ?? time ?? defaultNewEventTime(startDate));
   // Standard-Termindauer aus den Präferenzen: neue Termine erhalten ein Ende,
   // das um die konfigurierte Dauer nach dem Start liegt (#441).
   const durationMin = state.defaultDuration || 60;
-  const derivedEnd  = addDurationToDateTime(startDate, startTime, durationMin);
+  const derivedEnd  = draftEnd(said, startDate, startTime) ?? addDurationToDateTime(startDate, startTime, durationMin);
   const endDate   = isEdit && event.end_datetime ? localDate(event.end_datetime) : derivedEnd.date;
   const endTime   = isEdit && event.end_datetime && event.end_datetime.length > 10
     ? localTime(event.end_datetime)
     : derivedEnd.time;
-  const allDay = Boolean(isEdit && event.all_day);
-  const selectedIcon = eventIconName(isEdit ? event.icon : 'calendar');
-  const location = isEdit && event.location ? event.location : '';
+  const allDay = isEdit ? Boolean(event.all_day) : said.allDay;
+  // Ein ganztaegiger Entwurf dauert seinen Tag (oder bis zum mitgenommenen
+  // Ende); die Zeitfelder dahinter behalten Beginn und uebliche Dauer.
+  const alldayEndDate = !isEdit && allDay
+    ? (said.endDate && said.endDate >= startDate ? said.endDate : startDate)
+    : endDate;
+  // Was ein Entwurf aus dem Blatt mitnahm, das ihn diktierte (keepChosenEvent).
+  const kept = fill?.more ?? null;
+  const selectedIcon = eventIconName(isEdit ? event.icon : (kept?.icon ?? 'calendar'));
+  const location = isEdit ? (event.location || '') : String(fill?.location ?? '').trim();
 
-  // Neue Termine: optional den aktuellen Nutzer vorbelegen (#498).
+  // Neue Termine: optional den aktuellen Nutzer vorbelegen (#498) - es sei
+  // denn, der Satz nennt Personen, oder das Blatt, aus dem diktiert wurde,
+  // hatte schon gewaehlt.
+  const draftPeople = Array.isArray(fill?.assigned_to) ? fill.assigned_to.map(Number).filter(Number.isInteger) : [];
   const selectedUserIds = isEdit
     ? (event.assigned_users?.map((u) => u.id) ?? (event.assigned_to ? [event.assigned_to] : []))
-    : (state.defaultAssignMe && state.currentUserId != null ? [state.currentUserId] : []);
-  const visibility = (isEdit ? event.visibility : null) || 'all';
+    : (draftPeople.length || fill?.defaults === false
+      ? draftPeople
+      : (state.defaultAssignMe && state.currentUserId != null ? [state.currentUserId] : []));
+  const visibility = (isEdit ? event.visibility : kept?.visibility) || 'all';
 
   // „WIĘCEJ" GEHT BEIM BEARBEITEN AUF, sobald darin etwas steht, das der
   // Termin sonst nirgends zeigt (R8): eine Wiederholung, eine Beschreibung,
@@ -9099,7 +9382,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
   // Beschreibung, dann was wenige Termine brauchen - Sichtbarkeit, Stichtag,
   // Icon, Sync-Ziel, Anhang.
   const advancedFieldsHtml = `
-    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, {
+    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : (kept?.recurrence_rule ?? null), {
       allowCount: true,
       expandsFromStart: true,
       // Kanonischer Datums-Key aus dem Kalenderzustand. Das Widget formatiert
@@ -9119,7 +9402,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     <div class="form-group">
       <label class="form-label" for="modal-description">${t('calendar.descriptionLabel')}</label>
       <textarea class="form-input" id="modal-description" rows="2"
-                placeholder="${t('calendar.descriptionPlaceholder')}">${esc(isEdit && event.description ? event.description : '')}</textarea>
+                placeholder="${t('calendar.descriptionPlaceholder')}">${esc(isEdit ? (event.description || '') : String(fill?.description ?? ''))}</textarea>
     </div>
 
     <!-- Verborgen, nicht entfernt: der Speicherpfad liest
@@ -9149,7 +9432,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     <div class="form-group">
       <label class="toggle">
         <input type="checkbox" id="modal-countdown" aria-describedby="modal-countdown-hint"
-               ${isEdit && event.countdown ? 'checked' : ''}>
+               ${(isEdit ? event.countdown : kept?.countdown) ? 'checked' : ''}>
         <span class="toggle__track"></span>
         <span>${t('calendar.countdownToggle')}</span>
       </label>
@@ -9195,7 +9478,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     open: true,
     labelledBy: 'event-when-heading',
     idPrefix: 'event',
-    row: eventWhenRowText({ allDay, startDate, startTime, endDate, endTime }),
+    row: eventWhenRowText({ allDay, startDate, startTime, endDate: allDay ? alldayEndDate : endDate, endTime }),
     rowOptions: { ...EVENT_ROW_OPTIONS, removable: false },
   }, `${sheetSectionHead('when', `<span class="task-sheet__section-title" id="event-when-heading">${t('calendar.whenLabel')}</span>`, { removable: false })}
           <div class="task-sheet__pills">${dayPills}
@@ -9212,7 +9495,7 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
             <label class="form-label cal-when__label" for="modal-allday-start">${t('calendar.fromLabel')}</label>
             <yuvomi-datepicker type="date" id="modal-allday-start" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
             <label class="form-label cal-when__label" for="modal-allday-end">${t('calendar.toLabel')}</label>
-            <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
+            <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(alldayEndDate))}"></yuvomi-datepicker>
           </div>
           <div class="form-group">
             <label class="toggle">
@@ -9232,28 +9515,34 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
           <input type="text" class="form-input" id="modal-location"
                  placeholder="${t('calendar.locationPlaceholder')}" value="${esc(location)}">`);
 
-  const defaultOffsets = isEdit ? [] : state.defaultReminders;
-  const reminderRows = calendarReminderRows(reminder, event, defaultOffsets);
+  const defaultOffsets = isEdit || fill?.defaults === false ? [] : state.defaultReminders;
+  const reminderStart = allDay ? startDate : `${startDate}T${startTime}`;
+  const reminderRows = (fill ? draftReminderRows(fill, reminderStart) : null)
+    ?? calendarReminderRows(reminder, event, defaultOffsets);
   const reminderOn = reminderRows.length > 0;
   const reminderHtml = sheetSectionHtml('reminder', {
     open: reminderOn,
     labelledBy: 'event-reminder-heading',
     idPrefix: 'event',
-    row: reminderOn ? eventReminderRowText(event, reminder, reminderRows) : '',
+    row: reminderOn ? eventReminderRowText(event, reminder, reminderRows, reminderStart) : '',
     rowOptions: EVENT_ROW_OPTIONS,
   }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="event-reminder-heading">${t('reminders.sectionTitle')}</span>`)}
-          ${renderCalendarReminderSection(reminder, event, defaultOffsets)}`);
+          ${renderCalendarReminderSection(reminder, event, defaultOffsets, reminderRows)}`);
 
   return `
     <div class="cal-event-form task-sheet">
+    ${fill ? `<!-- Ein Blatt aus einem Diktat ist schon eine Eingabe: das Schliessen
+         fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
+    <input type="hidden" id="event-from-draft" value="1" data-dirty-base="">` : ''}
+    ${spoken && !isEdit ? heardLineHtml(heard) : ''}
     <div class="form-group">
       ${titleFieldHtml({
     id: 'modal-title',
     name: 'title',
-    value: isEdit ? (event.title ?? '') : '',
+    value: isEdit ? (event.title ?? '') : String(fill?.title ?? ''),
     placeholder: t('calendar.titlePlaceholder'),
     labelKey: 'calendar.titleLabel',
-    // Task 11 verdrahtet das Mikrofon (ein Satz fuellt dieses Blatt).
+    // Ein Satz fuellt dieses Blatt (wireEventDictation) - nur beim Anlegen (R10).
     mic: isEdit ? null : { labelKey: 'tasks.sayIt' },
   })}
     </div>
