@@ -1844,9 +1844,9 @@
   align-items: baseline;
   gap: var(--space-1);
   margin: 0;
-  padding: 0 var(--space-4) var(--space-2);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+  padding: 0 0 var(--space-2);
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
@@ -1887,7 +1887,7 @@
 }
 
 .agenda-day__date {
-  font-size: var(--type-body);
+  font-size: var(--type-section-head);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
@@ -1896,7 +1896,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: var(--type-body);
+  font-size: var(--type-section-head);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-secondary);
 }

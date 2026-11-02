@@ -2272,16 +2272,14 @@
 
 .meals-day__title {
   margin: 0;
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
 .meals-day__title--small {
-  padding-inline: var(--space-4);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+  padding-inline: 0;
 }
 
 .meals-card {

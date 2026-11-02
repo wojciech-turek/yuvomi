@@ -166,9 +166,9 @@
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  font-size: var(--type-body);
+  font-size: var(--type-section-head);
   font-weight: var(--font-weight-semibold);
-  line-height: var(--type-body-lh);
+  line-height: var(--type-section-head-lh);
   letter-spacing: var(--tracking-normal);
   color: var(--color-text-primary);
 }

@@ -1622,8 +1622,8 @@
 
 .dz-sec__title {
   margin: 0;
-  font-size: var(--type-section);
-  line-height: var(--type-section-lh);
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }

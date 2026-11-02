@@ -1169,7 +1169,7 @@
         "personalManagementHint": "You can manage your personal categories here. Only you see them; notes in them are visible to the whole household. Household categories remain available in the note editor, but you do not have permission to manage them."
     },
     "notes": {
-        "title": "Board",
+        "title": "Notes",
         "newNote": "New Note",
         "editNote": "Edit Note",
         "viewNote": "Note",

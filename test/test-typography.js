@@ -959,7 +959,7 @@ test('Tafla: kein Stylesheet setzt Versal-Labels mit Tracking, Gruppenkoepfe ste
   assert.match(kopf.body, /font-weight:\s*var\(--font-weight-semibold\)/);
   const gruppe = [...eachRule(readFileSync(new URL('list-row.css', STYLES_DIR), 'utf8'))]
     .find((rule) => rule.selector.trim() === '.list-group__title');
-  assert.match(gruppe.body, /font-size:\s*var\(--type-body\)/, 'der geteilte Gruppenkopf der Listen ist Body-Semibold');
+  assert.match(gruppe.body, /font-size:\s*var\(--type-section-head\)/, 'der geteilte Gruppenkopf der Listen ist der eine Abschnittskopf (20 semibold)');
 });
 
 test('der Zeilentitel ist eine Rolle (R16)', () => {
@@ -1069,4 +1069,50 @@ test('R19 Gesundheit: keine Schrift unter Caption 2, eine Flag-Sprache, ein Diag
   }
   assert.match(body('.health-lab-badge--warn'), /color:\s*var\(--color-warning-ink\)/);
   assert.doesNotMatch(css, /fasting-week__[a-z]+[^{]*\{[^}]*chart-series/, 'die Fastenwoche laeuft auf fremden Serienfarben');
+});
+
+// One-today (Task 18): ONE section header on every page, 20px semibold, on the
+// page's own 16px gutter. The containers already pad the inline edges
+// (--page-inline-pad), so a header that pads again sat at 33pt.
+test('one section header: --type-section-head on every page header, no stacked inline padding', () => {
+  const tokens = readFileSync(new URL('tokens.css', STYLES_DIR), 'utf8');
+  assert.match(tokens, /--type-section-head:\s*1\.25rem;/, 'the header token is 20px');
+  assert.match(tokens, /--type-section-title:\s*1\.375rem;/, '--type-section-title keeps its 22px for its other users');
+  const headers = [
+    ['dashboard.css', '.dz-sec__title'],
+    ['list-row.css', '.list-group__title'],
+    ['inset-list.css', '.inset-group__head'],
+    ['shopping.css', '.shopping-page .list-group__title'],
+    ['pantry.css', '.pantry-group .list-group__title'],
+    ['calendar.css', '.agenda-day__header'],
+    ['calendar.css', '.agenda-day__date'],
+    ['calendar.css', '.agenda-day__weekday'],
+    ['more.css', '.more-section__title'],
+    ['more.css', '.more-group__title'],
+    ['meals.css', '.meals-day__title'],
+  ];
+  for (const [file, selector] of headers) {
+    const rule = [...eachRule(readFileSync(new URL(file, STYLES_DIR), 'utf8'))]
+      .find((r) => !r.at.length && r.selector.trim() === selector);
+    assert.ok(rule, `${file}: ${selector}`);
+    assert.match(rule.body, /font-size:\s*var\(--type-section-head\)/, `${selector} is the section header size`);
+    assert.doesNotMatch(rule.body, /padding(?:-inline)?:\s*0\s+var\(--space-4\)|padding-inline:\s*var\(--space-4\)/,
+      `${selector} stacks its own inline padding on the page gutter`);
+  }
+  const padless = [
+    ['tasks.css', '.tasks-page .task-group > .list-group__title'],
+    ['meals.css', '.meals-day__title--small'],
+  ];
+  for (const [file, selector] of padless) {
+    const rule = [...eachRule(readFileSync(new URL(file, STYLES_DIR), 'utf8'))]
+      .find((r) => !r.at.length && r.selector.trim() === selector);
+    assert.ok(rule, `${file}: ${selector}`);
+    assert.doesNotMatch(rule.body, /var\(--space-4\)/, `${selector} adds inline padding`);
+  }
+});
+
+test('Notes is called Notes in English on the page and in the nav', () => {
+  const en = JSON.parse(readFileSync(new URL('../public/locales/en.json', import.meta.url), 'utf8'));
+  assert.equal(en.notes.title, 'Notes');
+  assert.equal(en.nav.notes, 'Notes');
 });

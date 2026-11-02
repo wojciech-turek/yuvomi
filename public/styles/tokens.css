@@ -1482,6 +1482,10 @@
   --type-page-tracking: -0.02em;
   --type-section:       1.0625rem;  /* 17px */
   --type-section-lh:    1.5rem;     /* 24px */
+  /* The one section header on every page (Today, Tasks, Shopping, Calendar days,
+   * Birthdays months, More, Meals, Notes): 20/24 semibold on the page gutter. */
+  --type-section-head:    1.25rem;    /* 20px */
+  --type-section-head-lh: 1.5rem;     /* 24px */
   --type-row:           0.9375rem;  /* 15px */
   --type-row-lh:        1.25rem;    /* 20px */
   --type-meta:          0.75rem;    /* 12px */

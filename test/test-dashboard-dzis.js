@@ -683,7 +683,7 @@ test('the styles: v2 card, the one heavy Next up card, the ongoing row in the ac
   // The v2 type steps, not the Tafla ones (34/22/17/13).
   assert.match(body('.dz-head__greeting'), /font-size:\s*var\(--type-page\)/);
   assert.match(body('.dz-head__weather'), /font-size:\s*var\(--type-row\)/);
-  assert.match(body('.dz-sec__title'), /font-size:\s*var\(--type-section\)/);
+  assert.match(body('.dz-sec__title'), /font-size:\s*var\(--type-section-head\)/);
   assert.match(body('.dz-cal__title'), /font-size:\s*var\(--type-row\)/);
   assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
   assert.match(body('.dz-next__title'), /font-size:\s*var\(--type-title\)/);

@@ -21435,7 +21435,7 @@ test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und
   // Gruppenkopf wie jeder andere: Body 17, "Dziś · wtorek 20 paź".
   const agenda = [...eachRule(read('../public/styles/calendar.css'))]
     .find(({ selector, at }) => selector.trim() === '.agenda-day__header' && at.length === 0);
-  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-body\)/);
+  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-section-head\)/);
 });
 
 test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {

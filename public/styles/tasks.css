@@ -1003,12 +1003,12 @@ textarea.task-sheet__note {
  * Karte flach (Tafla: gruppierte Listen ohne Schatten), Haarlinien 0,5 und
  * auf x=56 eingerueckt. Zaleg­łe sagt sein Wort in der Gefahrenfarbe. */
 .tasks-page .task-group > .list-group__title {
-  padding: 0 var(--space-4);
+  padding: 0;
 }
 
 .tasks-page .task-group .list-group__count {
   margin-inline-start: 0;
-  font-size: var(--type-body);
+  font-size: var(--type-section-head);
   color: var(--color-text-secondary);
 }
 
@@ -1024,7 +1024,7 @@ textarea.task-sheet__note {
 
 .tasks-page .task-group .list-group__toggle {
   min-height: var(--target-base);
-  margin-block: calc((var(--type-body-lh) - var(--target-base)) / 2);
+  margin-block: calc((var(--type-section-head-lh) - var(--target-base)) / 2);
 }
 
 .tasks-page .task-group > .row-carrier {

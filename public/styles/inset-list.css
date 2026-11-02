@@ -38,9 +38,9 @@
   align-items: baseline;
   gap: 6px;
   margin: 0;
-  padding: 0 var(--space-4);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+  padding: 0;
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
