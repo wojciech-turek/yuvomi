@@ -168,7 +168,10 @@ function renderRow(row, household) {
   const pill = row.pill ? `<span class="wall-pill wall-pill--${esc(row.pill.tone)}">${esc(row.pill.text)}</span>` : '';
   // WITH THE SWITCH ON the ring takes the time rail, so every title still
   // starts on one line; a task's own time moves in front of its title.
-  const rail = ring || `<span class="wall-row__time u-rounded">${esc(row.time)}</span>`;
+  // A plain clock fits the rail; "since 08:30" or a shift's "06:00 - 14:00"
+  // does not, so those step down to label size and wrap onto two lines.
+  const longTime = String(row.time ?? '').length > 5;
+  const rail = ring || `<span class="wall-row__time u-rounded${longTime ? ' wall-row__time--long' : ''}">${esc(row.time)}</span>`;
   const inlineTime = ring && row.time ? `<span class="wall-row__time u-rounded">${esc(row.time)}</span>` : '';
   return `
     <li class="wall-row${row.edge ? ` wall-row--edge-${esc(row.edge)}` : ''}${ring ? ' wall-row--tick' : ''}" data-wall-row${edgeStyle}>

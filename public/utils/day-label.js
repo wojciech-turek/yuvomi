@@ -165,24 +165,25 @@ export function housekeepingSinceLabel(since) {
 
 /** "27 paź" / "Oct 27" / "27. Okt." - day and short month, the year only when
  *  it is not the running one. Takes a date key or an instant. */
-export function shortDayMonth(value) {
+export function shortDayMonth(value, { year = true } = {}) {
   const day = value ? zonedDateKey(value) : '';
   const noon = dayKeyNoonUtc(day);
   if (!Number.isFinite(noon)) return '';
   const options = { day: 'numeric', month: 'short', timeZone: 'UTC' };
-  if (day.slice(0, 4) !== todayKey().slice(0, 4)) options.year = 'numeric';
+  if (year && day.slice(0, 4) !== todayKey().slice(0, 4)) options.year = 'numeric';
   return new Intl.DateTimeFormat(getLocale(), options).format(new Date(noon));
 }
 
 /** "wt 27 paź" - short weekday in front of `shortDayMonth`, for a day that
- *  lies ahead (a past day never gets a weekday, see relativeDateLabel). */
-export function shortWeekdayDayMonth(value) {
+ *  lies ahead (a past day never gets a weekday, see relativeDateLabel).
+ *  `year: false` where a heading above already names the year. */
+export function shortWeekdayDayMonth(value, { year = true } = {}) {
   const day = value ? zonedDateKey(value) : '';
   const noon = dayKeyNoonUtc(day);
   if (!Number.isFinite(noon)) return '';
   const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: 'short', timeZone: 'UTC' })
     .format(new Date(noon)).replace(/\.$/, '');
-  return `${weekday} ${shortDayMonth(day)}`;
+  return `${weekday} ${shortDayMonth(day, { year })}`;
 }
 
 /** When something was last touched, as a row says it: the time today,

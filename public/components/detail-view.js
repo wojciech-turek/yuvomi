@@ -19,6 +19,7 @@
  */
 
 import { t } from '/i18n.js';
+import { focusQuietly } from '/utils/focus-quiet.js';
 import {
   openModal, closeModal, mountFooter, refreshDirtySnapshot, forgetRestore,
   focusFirstField, updateHeaderAction, rememberFocus, restoreFocusAfterClose,
@@ -770,9 +771,9 @@ function openAsSheet(opts, token) {
 
       if (opts.edit) {
         updateHeaderAction(panel, { onClick: () => switchToForm(panel, opts, state), hidden: primaryEdit });
-        (primaryEdit ? panel.querySelector('#detail-view-edit') : panel.querySelector('.modal-panel__action'))?.focus();
+        focusQuietly(primaryEdit ? panel.querySelector('#detail-view-edit') : panel.querySelector('.modal-panel__action'));
       } else {
-        panel.querySelector('.modal-panel__close')?.focus();
+        focusQuietly(panel.querySelector('.modal-panel__close'));
       }
     },
   });

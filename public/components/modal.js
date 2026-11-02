@@ -25,6 +25,7 @@
  */
 
 import { t } from '/i18n.js';
+import { focusQuietly, keyboardWasLast } from '/utils/focus-quiet.js';
 import { esc } from '/utils/html.js';
 import { pushOverlay, dropOverlay, isOverlayOpen } from '/utils/overlay-history.js';
 import { wireSheetDrag } from '/utils/sheet-drag.js';
@@ -258,6 +259,21 @@ const FIRST_FIELD = [
   'select:not([disabled]):not([tabindex="-1"])',
 ].join(', ');
 
+// Text types that support a caret (email/number throw on setSelectionRange).
+const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password', '']);
+
+/**
+ * WebKit selects the whole value when script focuses a filled text field, which
+ * scrolls a long title to its end ("Marysi spodenki..." instead of "Weź
+ * Marysi..."). Chromium puts the caret at the start; this does the same.
+ */
+function _caretToStart(el) {
+  const textual = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && CARET_TYPES.has(el.type ?? ''));
+  if (!textual || !el.value) return;
+  try { el.setSelectionRange(0, 0); } catch { /* not a caret field */ }
+  el.scrollLeft = 0;
+}
+
 // --------------------------------------------------------
 // Focus-Trap (Spec §5.2)
 // --------------------------------------------------------
@@ -396,7 +412,8 @@ function _focusInitialUnlessClaimed(container, target, beimPlanen) {
   const gewaehlt = jetzt && jetzt !== beimPlanen
     && (container.contains(jetzt) || Boolean(jetzt.closest?.('[popover]')));
   if (gewaehlt) return;
-  target.focus();
+  focusQuietly(target);
+  _caretToStart(target);
 }
 
 /**
@@ -420,7 +437,7 @@ export function focusFirstField(panel) {
       // Überschriften sind nicht von Haus aus fokussierbar; tabindex="-1" macht
       // sie programmatisch erreichbar, ohne sie in die Tab-Kette zu hängen.
       if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
-      heading.focus();
+      focusQuietly(heading);
       return heading;
     }
   }
@@ -719,6 +736,10 @@ function _removeOverlay(overlay) {
 function _enterTopLayer(overlay) {
   if (typeof overlay?.showModal === 'function' && !overlay.open && overlay.isConnected) {
     overlay.showModal();
+    // showModal() focused the first control (the X). After a tap, take the
+    // ring off it now, or WebKit carries it to every focus that follows.
+    const auto = document.activeElement;
+    if (!keyboardWasLast() && auto && auto !== document.body && overlay.contains(auto)) focusQuietly(auto);
   }
   _syncTopLayerGuests();
 }

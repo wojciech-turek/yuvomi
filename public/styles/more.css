@@ -239,8 +239,16 @@ button.more-row {
   color: var(--color-text-secondary);
 }
 
+/* A module row (title + value): the name stays whole ("Birthdays", not
+   "Birthd…"); the value gives way and ends in an ellipsis. */
+.more-row__body:has(+ .more-row__value) {
+  flex: 1 0 auto;
+  max-inline-size: 70%;
+}
+
 .more-row__value {
-  flex: none;
+  flex: 0 1 auto;
+  min-inline-size: 0;
   max-inline-size: 55%;
   overflow: hidden;
   text-overflow: ellipsis;

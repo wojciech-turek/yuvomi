@@ -198,12 +198,24 @@
   color: var(--color-text-secondary);
 }
 
+/* At least 76px, and as wide as the longest row name (`data-fit`, an invisible
+   second line), so "Przypomnienie" never runs under its value and the values
+   of all rows still start at one edge. */
 .task-sheet__row-label {
   flex: none;
-  inline-size: calc(var(--space-16) + var(--space-3));   /* 76 */
+  display: inline-grid;
+  min-inline-size: calc(var(--space-16) + var(--space-3));   /* 76 */
+  white-space: nowrap;
   font-size: var(--type-row);
   line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
+}
+
+.task-sheet__row-label::after {
+  content: attr(data-fit);
+  block-size: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .task-sheet__row-value {

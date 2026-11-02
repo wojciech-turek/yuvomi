@@ -861,6 +861,15 @@
   white-space: nowrap;
 }
 
+/* "since 08:30", "06:00 - 14:00": too wide for the 96px rail at body size.
+   Label size, wrapped at the space, so the words never run into the title. */
+.wall-row__time--long {
+  font-size: var(--wall-label);
+  white-space: normal;
+  overflow-wrap: normal;
+  text-wrap: balance;
+}
+
 .wall-row__main {
   min-width: 0;
   display: flex;
