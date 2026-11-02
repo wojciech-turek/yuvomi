@@ -130,3 +130,37 @@ test('splitSpokenItems: commas, "i" and "oraz"', () => {
   assert.deepEqual(splitSpokenItems('sól oraz pieprz').map((i) => i.name), ['sól', 'pieprz']);
   assert.deepEqual(splitSpokenItems(' , '), []);
 });
+
+test('unavailable: comma-separated imperative or prepositional sentences stay tasks', async () => {
+  const { post } = recorder(UNAVAILABLE);
+  for (const sentence of [
+    'Zadzwoń do mamy, odbierz paczkę',
+    'Wyślij mail, zadzwoń do Ani',
+    'Zrób pranie, powieś pranie',
+    'Zadzwonić do babci, kupić mleko',
+    'sprzątanie w kuchni, pranie',
+  ]) {
+    const out = await quickDraftFromSentence(sentence, { post, now: NOW });
+    assert.equal(out.kind, 'task', sentence);
+  }
+});
+
+test('unavailable: lists of short nouns stay shopping, a quantity is allowed', async () => {
+  const { post } = recorder(UNAVAILABLE);
+  for (const [sentence, count] of [['mleko, chleb, masło', 3], ['2 l mleka, jajka, chleb', 3]]) {
+    const out = await quickDraftFromSentence(sentence, { post, now: NOW });
+    assert.equal(out.kind, 'shopping', sentence);
+    assert.equal(out.draft.items.length, count);
+  }
+});
+
+test('"dodaj do listy" alone is not a buying phrase; the shopping phrases are', async () => {
+  const { post } = recorder(UNAVAILABLE);
+  const task = await quickDraftFromSentence('Dodaj do listy zadań sprzątanie', { post, now: NOW });
+  assert.equal(task.kind, 'task');
+  for (const sentence of ['dodaj do zakupów mleko', 'Dodaj do listy zakupów mleko', 'na listę zakupów mleko', 'kupcie mleko']) {
+    const out = await quickDraftFromSentence(sentence, { post, now: NOW });
+    assert.equal(out.kind, 'shopping', sentence);
+    assert.deepEqual(out.draft.items.map((i) => i.name), ['mleko'], sentence);
+  }
+});

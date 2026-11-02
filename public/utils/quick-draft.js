@@ -5,7 +5,7 @@
  *        Ist die KI aus, am Limit, nicht erreichbar oder nach `timeoutMs`
  *        still, entscheidet eine lokale Regel - sie kennt nie einen Termin:
  *          - Einkauf, wenn der Satz mit einem Kaufwort beginnt ("kup",
- *            "dodaj do zakupow", "na liste") oder eine Kommaliste kurzer
+ *            "dodaj do zakupow", "na liste zakupow") oder eine Kommaliste kurzer
  *            Posten ohne Datum, Uhrzeit und Person ist;
  *          - sonst eine Aufgabe ueber `localDraft` (utils/task-draft.js).
  *        Ein erzwungenes `kind: 'event'` ohne KI gibt eine Aufgabe mit dem
@@ -26,12 +26,18 @@ import { localDraft, DICTATION_TIMEOUT_MS } from '/utils/task-draft.js';
 const KINDS = ['task', 'event', 'shopping'];
 const TITLE_MAX = 200;
 
-/** Kaufwort am Satzanfang: "kup", "kupić", "kupcie", "dodaj do zakupów/listy", "na listę". */
-const BUYING_WORD = /^\s*(?:kup(?:ić|ic|cie)?|dodaj\s+do\s+(?:zakup(?:ów|ow)|listy)|na\s+list(?:ę|e))(?=$|[\s,:;.!?])[\s,:;.-]*/iu;
-/** Ein Posten der Kommaliste: ein bis drei Woerter. */
-const SHORT_ITEM = /^\S+(?:\s+\S+){0,2}$/u;
-/** Ein Infinitiv ("zadzwonić", "wyrzucić") ist ein Verb - keine Einkaufsliste. */
-const INFINITIVE = /\p{L}+ć$/iu;
+/**
+ * Kaufwort am Satzanfang: "kup", "kupić", "kupcie", "dodaj do zakupów",
+ * "dodaj do listy zakupów", "na listę zakupów". Ein nacktes "dodaj do listy"
+ * zaehlt NICHT ("Dodaj do listy zadań sprzątanie" ist eine Aufgabe).
+ */
+const BUYING_WORD = /^\s*(?:kup(?:ić|ic|cie)?|dodaj\s+do\s+(?:listy\s+)?zakup(?:ów|ow)|na\s+list(?:ę|e)\s+zakup(?:ów|ow))(?=$|[\s,:;.!?])[\s,:;.-]*/iu;
+/** Ein Posten der Kommaliste: ein bis zwei Woerter, oder "2 l mleka" (Menge vorn). */
+const SHORT_ITEM = /^(?:\S+(?:\s+\S+)?|\d+(?:[.,]\d+)?\s+\S+\s+\S+)$/u;
+/** Ein Verb am Anfang eines Postens: Infinitiv, Befehlsform, haeufige Aufgabenverben. */
+const VERB_START = /^(?:\p{L}+ć|\p{L}*(?:ij|uj|aj|nij|rób|ź|ń)|zadzwoń|odbierz|wyślij|wyslij|zrób|zrob|zapłać|zaplac|napisz|sprawdź|sprawdz|umów|umow|przynieś|przynies|weź|wez|wyrzuć|wyrzuc|posprzątaj|powieś|powies|zanieś|zanies|zamów|zamow|zarezerwuj|pamiętaj|pamietaj|umyj|ugotuj|idź|idz|pojedź|pojedz)$/iu;
+/** Eine Praeposition als eigenes Wort: das ist ein Satz, kein Posten. */
+const PREPOSITION = /^(?:do|na|z|ze|u|dla|w|we|o|od|po|za|przed|nad|pod|przy)$/iu;
 
 function taskTitleOnly(sentence) {
   return {
@@ -54,8 +60,12 @@ function localKindAndDraft(sentence, kind, { members, now }) {
       if (bought) return bought;
     } else if (/,/.test(sentence)) {
       const parts = sentence.split(/\s*,\s*|\s+(?:i|oraz)\s+/iu).filter(Boolean);
-      const plainList = parts.length >= 2
-        && parts.every((part) => SHORT_ITEM.test(part.trim()) && !INFINITIVE.test(part.trim().split(/\s+/)[0]));
+      const plainList = parts.length >= 2 && parts.every((part) => {
+        const words = part.trim().split(/\s+/);
+        return SHORT_ITEM.test(part.trim())
+          && !VERB_START.test(words[0])
+          && !words.some((word) => PREPOSITION.test(word));
+      });
       if (plainList) {
         const read = parseCapture(sentence, { members, type: 'task' });
         if (!read.date && !read.time && read.assignee?.id == null) {
