@@ -525,6 +525,8 @@
         "itemQtyLabel": "数量",
         "categoryLabel": "カテゴリー",
         "addItemLabel": "商品を追加",
+        "addToList": "追加先: {{list}}",
+        "removeSpokenItem": "{{name}}を削除",
         "listActionsLabel": "{{name}}の操作",
         "listsLabel": "買い物リスト",
         "renameListLabel": "リストの名前を変更",

@@ -574,6 +574,8 @@
         "itemQtyLabel": "Кількість",
         "categoryLabel": "Категорія",
         "addItemLabel": "Додати товар",
+        "addToList": "Додати до: {{list}}",
+        "removeSpokenItem": "Прибрати {{name}}",
         "listActionsLabel": "Дії для {{name}}",
         "listsLabel": "Списки покупок",
         "renameListLabel": "Перейменувати список",

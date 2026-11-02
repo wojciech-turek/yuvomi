@@ -525,6 +525,8 @@
         "itemQtyLabel": "Ποσότητα",
         "categoryLabel": "Κατηγορία",
         "addItemLabel": "Προσθήκη είδους",
+        "addToList": "Προσθήκη στο: {{list}}",
+        "removeSpokenItem": "Αφαίρεση {{name}}",
         "listActionsLabel": "Ενέργειες για {{name}}",
         "listsLabel": "Λίστες αγορών",
         "renameListLabel": "Μετονομασία λίστας",

@@ -525,6 +525,8 @@
         "itemQtyLabel": "Miktar",
         "categoryLabel": "Kategori",
         "addItemLabel": "Ürün ekle",
+        "addToList": "Şuraya ekle: {{list}}",
+        "removeSpokenItem": "{{name}} öğesini kaldır",
         "listActionsLabel": "{{name}} için işlemler",
         "listsLabel": "Alışveriş listeleri",
         "renameListLabel": "Listeyi yeniden adlandır",

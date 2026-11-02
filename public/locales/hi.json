@@ -525,6 +525,8 @@
         "itemQtyLabel": "मात्रा",
         "categoryLabel": "श्रेणी",
         "addItemLabel": "आइटम जोड़ें",
+        "addToList": "जोड़ें: {{list}}",
+        "removeSpokenItem": "{{name}} हटाएँ",
         "listActionsLabel": "{{name}} के लिए कार्रवाइयाँ",
         "listsLabel": "खरीदारी सूचियाँ",
         "renameListLabel": "सूची का नाम बदलें",

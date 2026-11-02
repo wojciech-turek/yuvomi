@@ -525,6 +525,8 @@
         "itemQtyLabel": "Antall",
         "categoryLabel": "Kategori",
         "addItemLabel": "Legg til element",
+        "addToList": "Legg til i: {{list}}",
+        "removeSpokenItem": "Fjern {{name}}",
         "listActionsLabel": "Handlinger for {{name}}",
         "listsLabel": "Handlelister",
         "renameListLabel": "Endre navn på liste",

@@ -525,6 +525,8 @@
         "itemQtyLabel": "Kvantitet",
         "categoryLabel": "Kategori",
         "addItemLabel": "Lägg till objekt",
+        "addToList": "Lägg till i: {{list}}",
+        "removeSpokenItem": "Ta bort {{name}}",
         "listActionsLabel": "Åtgärder för {{name}}",
         "listsLabel": "Inköpslistor",
         "renameListLabel": "Byt namn på listan",

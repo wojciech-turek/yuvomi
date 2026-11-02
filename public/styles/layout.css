@@ -10464,12 +10464,56 @@ p.field-hint--warn svg {
 }
 
 .shopping-sheet__form {
+  display: block;
+}
+
+/* Gesprochene Posten: entfernbare Kapseln, das x ist 44px zum Treffen. */
+.shopping-sheet__spoken {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.shopping-sheet__input {
-  flex: 1;
+.shopping-sheet__spoken[hidden] {
+  display: none;
+}
+
+.shopping-sheet__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding-inline: var(--space-3) var(--space-1);
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-tint);
+  color: var(--color-text-primary);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+}
+
+.shopping-sheet__item-qty {
+  color: var(--color-text-secondary);
+}
+
+.shopping-sheet__item-remove {
+  display: grid;
+  place-items: center;
+  inline-size: var(--target-base);
+  block-size: var(--target-base);
+  margin-block: calc((36px - var(--target-base)) / 2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--type-body);
+  cursor: pointer;
+}
+
+.shopping-sheet__item-remove:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .shopping-sheet__frequent {

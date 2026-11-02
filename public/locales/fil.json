@@ -542,6 +542,8 @@
         "itemQtyLabel": "Dami",
         "categoryLabel": "Kategorya",
         "addItemLabel": "Magdagdag ng item",
+        "addToList": "Idagdag sa: {{list}}",
+        "removeSpokenItem": "Alisin ang {{name}}",
         "listActionsLabel": "Mga aksyon para sa {{name}}",
         "listsLabel": "Mga listahan ng bibilhin",
         "renameListLabel": "Palitan ang pangalan ng listahan",

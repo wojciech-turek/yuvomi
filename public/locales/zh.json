@@ -525,6 +525,8 @@
         "itemQtyLabel": "数量",
         "categoryLabel": "分类",
         "addItemLabel": "添加商品",
+        "addToList": "添加到：{{list}}",
+        "removeSpokenItem": "移除{{name}}",
         "listActionsLabel": "{{name}} 的操作",
         "listsLabel": "购物清单",
         "renameListLabel": "重命名清单",

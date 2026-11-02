@@ -80,7 +80,7 @@ function fakePanel() {
     sel, value: '', dataset: {}, disabled: false, hidden: false, textContent: '', innerHTML: '', listeners: {}, focused: 0, children: [],
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
-    removeEventListener() {}, focus() { this.focused += 1; }, setAttribute() {}, removeAttribute() {}, getAttribute: () => null,
+    removeEventListener() {}, focus() { this.focused += 1; }, setAttribute() {}, removeAttribute(name) { (this.removedAttrs ??= []).push(name); }, getAttribute: () => null,
     insertAdjacentHTML(_where, html) { this.innerHTML += html; }, replaceChildren() { this.innerHTML = ''; },
     querySelector: (s) => panel.querySelector(s), querySelectorAll: () => [],
   });
@@ -139,8 +139,9 @@ test('the sheet is titled with the remembered list; the switcher only with sever
   try {
     assert.equal(await openShoppingAddFrom({ user: { id: 7 } }), true);
     const [modal] = s.opened;
-    assert.equal(modal.title, 'Rynek');
-    assert.equal(modal.dirtyGuard, false);
+    assert.equal(modal.title, 'shopping.addToList{"list":"Rynek"}');
+    assert.equal(modal.dirtyGuard, false, 'no spoken items: as before');
+    assert.ok(!modal.content.includes('data-dirty-base'), 'not a changed sheet');
     assert.ok(modal.content.includes('enterkeyhint="done"'), 'one field, done key');
     assert.ok(modal.content.includes('<select'), 'two lists: a switcher');
     assert.ok(!modal.content.includes('item-qty'), 'no quantity field');
@@ -210,7 +211,7 @@ test('a caller without a user gets a console warning and the first list', async 
   console.warn = (...a) => warns.push(a);
   try {
     assert.equal(await openShoppingAddFrom({}), true);
-    assert.equal(s.opened[0].title, 'Biedronka');
+    assert.equal(s.opened[0].title, 'shopping.addToList{"list":"Biedronka"}');
     assert.equal(warns.length, 1);
   } finally { console.warn = realWarn; s.done(); }
 });
@@ -244,8 +245,8 @@ test('tickedItemNamed: the ticked row of that name, first by rank; never an open
   assert.equal(tickedItemNamed(items, 'Mleko', { isChecked: (i) => (i.id === 6 ? 1 : i.is_checked) })?.id, 6);
 });
 
-async function openSheet(s, user = { id: 7 }) {
-  await openShoppingAddFrom({ user });
+async function openSheet(s, user = { id: 7 }, extra = {}) {
+  await openShoppingAddFrom({ user, ...extra });
   const panel = fakePanel();
   await s.opened[0].onSave(panel);
   return {
@@ -258,6 +259,13 @@ async function openSheet(s, user = { id: 7 }) {
     async tapChip(name) {
       const chip = { dataset: { name }, disabled: false, remove() {} };
       for (const fn of panel.querySelector('#shopping-sheet-frequent').listeners.click) await fn({ target: { closest: () => chip } });
+    },
+    async tapAdd() {
+      for (const fn of panel.querySelector('.task-sheet__submit').listeners.click) await fn({ preventDefault() {} });
+    },
+    async removeChip(id) {
+      const btn = { dataset: { removeItem: String(id) } };
+      for (const fn of panel.querySelector('#shopping-sheet-spoken').listeners.click) await fn({ target: { closest: () => btn } });
     },
     async switchTo(id) {
       const select = panel.querySelector('#shopping-sheet-list');
@@ -387,4 +395,186 @@ test('sheet: when the items cannot be read it still adds (no revive to know of)'
     await sheet.submit('Mleko');
     assert.deepEqual(writes(s.calls), ['POST /shopping/2/items']);
   } finally { s.done(); }
+});
+
+// --------------------------------------------------------------------------
+// One Today, Task 12: the shared layout, spoken items as chips
+// --------------------------------------------------------------------------
+
+test('layout: the list switcher sits inside the Więcej section, the primary button is the shared "Dodaj"', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  globalThis.__advancedSection = (inner, options) => `<ADV label="${options.label}">${inner}</ADV>`;
+  try {
+    await openShoppingAddFrom({ user: { id: 7 } });
+    const { content } = s.opened[0];
+    const adv = /<ADV label="([^"]*)">([\s\S]*)<\/ADV>/.exec(content);
+    assert.ok(adv, 'a Więcej section');
+    assert.equal(adv[1], 'tasks.more');
+    assert.ok(adv[2].includes('id="shopping-sheet-list"'), 'the switcher is inside');
+    assert.equal(content.indexOf('<select'), content.lastIndexOf('<select'), 'once');
+    assert.ok(content.includes('id="shopping-sheet-input"') && content.includes('task-sheet__mic'), 'title field with the mic');
+    assert.match(content, /<button[^>]*class="btn btn--primary task-sheet__submit"[^>]*>common\.add</);
+    assert.ok(!content.includes('sheet-heard'), 'no heard line by hand');
+  } finally { delete globalThis.__advancedSection; s.done(); }
+  const one = setup({ lists: [LISTS[0]] });
+  globalThis.__advancedSection = () => '<ADV></ADV>';
+  try {
+    await openShoppingAddFrom({ user: { id: 7 } });
+    assert.ok(!one.opened[0].content.includes('<ADV>'), 'one list: no Więcej section at all');
+  } finally { delete globalThis.__advancedSection; one.done(); }
+});
+
+test('Enter still posts once and keeps the field and the focus (the sheet stays open)', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  let closed = 0;
+  globalThis.__closeModal = () => { closed += 1; };
+  try {
+    const sheet = await openSheet(s);
+    await sheet.submit('chleb');
+    assert.deepEqual(writes(s.calls), ['POST /shopping/2/items']);
+    assert.equal(sheet.input.value, '');
+    assert.ok(sheet.input.focused > 0);
+    assert.equal(closed, 0);
+  } finally { delete globalThis.__closeModal; s.done(); }
+});
+
+test('spoken items: heard line, one removable chip each, dirty guard on with a dirty base', async () => {
+  const s = setup();
+  await openShoppingAddFrom({
+    user: { id: 7 }, heard: 'kup mleko i chleb',
+    draft: { items: [{ name: 'mleko', quantity: '2 l' }, { name: 'chleb', quantity: null }] },
+  });
+  try {
+    const modal = s.opened[0];
+    assert.equal(modal.dirtyGuard, true);
+    assert.ok(modal.content.includes('data-dirty-base=""'), 'counted as changed from the start (R11)');
+    assert.ok(modal.content.includes('sheet-heard') && modal.content.includes('sheet.heardQuote{&quot;text&quot;:&quot;kup mleko i chleb&quot;}'));
+    assert.equal(modal.content.match(/class="shopping-sheet__item"/g)?.length, 2);
+    assert.ok(modal.content.includes('data-item="0"') && modal.content.includes('data-item="1"'));
+    assert.ok(modal.content.includes('data-remove-item="0"'));
+    assert.ok(modal.content.includes('mleko') && modal.content.includes('2 l'));
+    assert.ok(modal.headerAction && modal.headerAction.label === 'tasks.sayAgain', 'Powtórz, as every spoken sheet');
+  } finally { s.done(); }
+});
+
+test('spoken items: removing a chip removes it; with none left the sheet is clean again', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  try {
+    const sheet = await openSheet(s, { id: 7 }, { draft: { items: [{ name: 'mleko', quantity: null }, { name: 'chleb', quantity: null }] } });
+    const holder = sheet.panel.querySelector('#shopping-sheet-spoken');
+    const marker = sheet.panel.querySelector('#shopping-sheet-from-draft');
+    await sheet.removeChip(0);
+    assert.ok(!holder.innerHTML.includes('data-item="0"') && holder.innerHTML.includes('data-item="1"'));
+    await sheet.removeChip(1);
+    assert.equal(holder.innerHTML.trim(), '');
+    assert.equal(holder.hidden, true);
+    assert.ok(marker.removedAttrs?.includes('data-dirty-base'), 'nothing left to lose: not a changed sheet');
+    await sheet.tapAdd();
+    assert.equal(writes(s.calls).length, 0, 'nothing typed, nothing spoken: no post');
+  } finally { s.done(); }
+});
+
+test('"Dodaj" posts every spoken chip once, then the typed text, then closes', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup({ items: { 2: [row(8, 'Masło', { is_checked: 1 })] } });
+  const closes = [];
+  globalThis.__closeModal = (opts) => { closes.push(opts); };
+  const changed = [];
+  try {
+    await openShoppingAddFrom({
+      user: { id: 7 }, onChanged: () => changed.push(1),
+      draft: { items: [{ name: 'mleko', quantity: '2 l' }, { name: 'masło', quantity: null }] },
+    });
+    const panel = fakePanel();
+    await s.opened[0].onSave(panel);
+    panel.querySelector('#shopping-sheet-input').value = 'chleb';
+    for (const fn of panel.querySelector('.task-sheet__submit').listeners.click) await fn({ preventDefault() {} });
+    assert.deepEqual(writes(s.calls), ['POST /shopping/2/items', 'PATCH /shopping/items/8', 'POST /shopping/2/items'], 'chips in order (a ticked name revives), typed text last');
+    const posts = s.calls.filter((c) => c.method === 'post').map((c) => c.body.name);
+    assert.deepEqual(posts, ['mleko', 'chleb'], 'each once');
+    assert.equal(s.calls.find((c) => c.method === 'post').body.quantity, '2 l');
+    assert.equal(closes.length, 1);
+    assert.equal(closes[0].force, true, 'closes without the discard question: it is saved');
+    s.opened[0].onClose();
+    assert.equal(changed.length, 1);
+  } finally { delete globalThis.__closeModal; s.done(); }
+});
+
+test('"Dodaj" with nothing typed and nothing spoken keeps the sheet open on the field', async () => {
+  const s = setup();
+  let closed = 0;
+  globalThis.__closeModal = () => { closed += 1; };
+  try {
+    const sheet = await openSheet(s);
+    await sheet.tapAdd();
+    assert.equal(closed, 0);
+    assert.equal(writes(s.calls).length, 0);
+    assert.ok(sheet.input.focused > 0);
+  } finally { delete globalThis.__closeModal; s.done(); }
+});
+
+test('"Dodaj" when one item fails: the sheet stays open and only what failed stays as a chip', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  const realPost = globalThis.__apiStub.post;
+  globalThis.__apiStub.post = async (path, body) => {
+    if (body.name === 'chleb') throw new Error('offline');
+    return realPost(path, body);
+  };
+  let closed = 0;
+  globalThis.__closeModal = () => { closed += 1; };
+  try {
+    const sheet = await openSheet(s, { id: 7 }, { draft: { items: [{ name: 'mleko', quantity: null }, { name: 'chleb', quantity: null }] } });
+    await sheet.tapAdd();
+    assert.equal(closed, 0);
+    const holder = sheet.panel.querySelector('#shopping-sheet-spoken');
+    assert.ok(!holder.innerHTML.includes('mleko') && holder.innerHTML.includes('chleb'), 'the saved one is gone, the failed one stays');
+    assert.equal(toasts.at(-1)[1], 'danger');
+  } finally { delete globalThis.__closeModal; s.done(); }
+});
+
+test('the title mic opens the listening sheet at once; the heard items join the chips and the typed text stays', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  const asked = [];
+  globalThis.__askOverModal = async (ask) => {
+    asked.push('ask');
+    ask(); // the listening sheet goes up inside the tap (it is the modal opened)
+    return { draft: { items: [{ name: 'ser', quantity: null }] }, heard: 'ser' };
+  };
+  try {
+    const sheet = await openSheet(s, { id: 7 }, { draft: { items: [{ name: 'mleko', quantity: '2 l' }] } });
+    const mic = sheet.panel.querySelector('.task-sheet__mic');
+    assert.equal(mic.listeners.click.length, 1);
+    sheet.panel.querySelector('#shopping-sheet-input').value = 'chleb';
+    const before = s.opened.length;
+    mic.listeners.click[0]({ preventDefault() {} });
+    assert.equal(asked.length, 1);
+    assert.equal(s.opened.length, before + 1, 'the listening sheet is opened synchronously in the tap');
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 20));
+    const next = s.opened.at(-1);
+    assert.ok(next.content.includes('sheet.heardQuote{&quot;text&quot;:&quot;ser&quot;}'), 'the new sentence on top');
+    assert.equal(next.content.match(/class="shopping-sheet__item"/g)?.length, 2, 'kept chip plus the heard one');
+    assert.ok(next.content.indexOf('>mleko<') < next.content.indexOf('>ser<'));
+    assert.ok(next.content.includes('value="chleb"'), 'the typed text stays');
+    assert.equal(next.dirtyGuard, true);
+  } finally { delete globalThis.__askOverModal; s.done(); }
+});
+
+test('"Powtórz" replaces the spoken chips', async () => {
+  rememberShoppingList(7, 2);
+  const s = setup();
+  globalThis.__askOverModal = async () => ({ draft: { items: [{ name: 'jajka', quantity: null }] }, heard: 'jajka' });
+  try {
+    await openSheet(s, { id: 7 }, { draft: { items: [{ name: 'mleko', quantity: null }] } });
+    await s.opened[0].headerAction.onClick();
+    await new Promise((r) => setTimeout(r, 20));
+    const next = s.opened.at(-1);
+    assert.equal(next.content.match(/class="shopping-sheet__item"/g)?.length, 1);
+    assert.ok(next.content.includes('jajka') && !next.content.includes('mleko'));
+  } finally { delete globalThis.__askOverModal; s.done(); }
 });

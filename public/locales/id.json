@@ -542,6 +542,8 @@
         "itemQtyLabel": "Jumlah",
         "categoryLabel": "Kategori",
         "addItemLabel": "Tambah item",
+        "addToList": "Tambahkan ke: {{list}}",
+        "removeSpokenItem": "Hapus {{name}}",
         "listActionsLabel": "Tindakan untuk {{name}}",
         "listsLabel": "Daftar belanja",
         "renameListLabel": "Ubah nama daftar",

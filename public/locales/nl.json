@@ -525,6 +525,8 @@
         "itemQtyLabel": "Hoeveelheid",
         "categoryLabel": "Categorie",
         "addItemLabel": "Item toevoegen",
+        "addToList": "Toevoegen aan: {{list}}",
+        "removeSpokenItem": "{{name}} verwijderen",
         "listActionsLabel": "Acties voor {{name}}",
         "listsLabel": "Boodschappenlijsten",
         "renameListLabel": "Lijst hernoemen",

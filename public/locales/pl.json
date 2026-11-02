@@ -591,6 +591,8 @@
         "itemQtyLabel": "Ilość",
         "categoryLabel": "Kategoria",
         "addItemLabel": "Dodaj artykuł",
+        "addToList": "Dodaj do: {{list}}",
+        "removeSpokenItem": "Usuń {{name}}",
         "listActionsLabel": "Akcje dla {{name}}",
         "listsLabel": "Listy zakupów",
         "renameListLabel": "Zmień nazwę listy",

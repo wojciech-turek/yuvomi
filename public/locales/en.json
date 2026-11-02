@@ -525,6 +525,8 @@
         "itemQtyLabel": "Quantity",
         "categoryLabel": "Category",
         "addItemLabel": "Add item",
+        "addToList": "Add to: {{list}}",
+        "removeSpokenItem": "Remove {{name}}",
         "listActionsLabel": "Actions for {{name}}",
         "listsLabel": "Shopping lists",
         "renameListLabel": "Rename list",

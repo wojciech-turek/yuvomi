@@ -525,6 +525,8 @@
         "itemQtyLabel": "Số lượng",
         "categoryLabel": "Danh mục",
         "addItemLabel": "Thêm mục",
+        "addToList": "Thêm vào: {{list}}",
+        "removeSpokenItem": "Xóa {{name}}",
         "listActionsLabel": "Tác vụ cho {{name}}",
         "listsLabel": "Danh sách mua sắm",
         "renameListLabel": "Đổi tên danh sách",

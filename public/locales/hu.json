@@ -525,6 +525,8 @@
         "itemQtyLabel": "Mennyiség",
         "categoryLabel": "Kategória",
         "addItemLabel": "Elem hozzáadása",
+        "addToList": "Hozzáadás: {{list}}",
+        "removeSpokenItem": "{{name}} eltávolítása",
         "listActionsLabel": "Műveletek: {{name}}",
         "listsLabel": "Bevásárlólisták",
         "renameListLabel": "Lista átnevezése",

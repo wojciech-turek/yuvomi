@@ -542,6 +542,8 @@
         "itemQtyLabel": "수량",
         "categoryLabel": "카테고리",
         "addItemLabel": "항목 추가",
+        "addToList": "추가할 목록: {{list}}",
+        "removeSpokenItem": "{{name}} 삭제",
         "listActionsLabel": "{{name}} 작업",
         "listsLabel": "장보기 목록",
         "renameListLabel": "목록 이름 변경",

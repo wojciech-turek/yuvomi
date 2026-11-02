@@ -551,6 +551,8 @@
         "itemQtyLabel": "Množství",
         "categoryLabel": "Kategorie",
         "addItemLabel": "Přidat položku",
+        "addToList": "Přidat do: {{list}}",
+        "removeSpokenItem": "Odebrat {{name}}",
         "listActionsLabel": "Akce pro {{name}}",
         "listsLabel": "Nákupní seznamy",
         "renameListLabel": "Přejmenovat seznam",

@@ -81,14 +81,15 @@ export function revealButtonHtml(name, labelKey, open, icons = SHEET_ICONS) {
 /**
  * Titelfeld; mit `mic` (`{ labelKey }`, der Name des Knopfes) sitzt das
  * Mikrofon IM Feld, am Ende. `labelKey` ist der Schluessel fuer das
- * unsichtbare Label, `placeholder` der fertige Text im Feld.
+ * unsichtbare Label, `placeholder` der fertige Text im Feld, `inputAttrs`
+ * weitere Attribute des Feldes (fertiges Markup, z. B. `enterkeyhint="done"`).
  */
-export function titleFieldHtml({ id, name, value = '', placeholder = '', labelKey, mic = null }) {
+export function titleFieldHtml({ id, name, value = '', placeholder = '', labelKey, mic = null, inputAttrs = '' }) {
   return `<div class="form-field task-sheet__title${mic ? ' task-sheet__title--mic' : ''}">
           <label class="sr-only" for="${id}">${t(labelKey)}</label>
           <input class="input" type="text" id="${id}" name="${name}"
                  value="${esc(value)}" placeholder="${esc(placeholder)}"
-                 required maxlength="200" autocomplete="off">
+                 required maxlength="200" autocomplete="off"${inputAttrs ? ` ${inputAttrs}` : ''}>
           ${mic ? `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
                ueberschriebe die Werte einer bestehenden Aufgabe. -->
           <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${esc(t(mic.labelKey))}">

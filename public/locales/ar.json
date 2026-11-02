@@ -597,6 +597,8 @@
         "itemQtyLabel": "الكمية",
         "categoryLabel": "الفئة",
         "addItemLabel": "إضافة عنصر",
+        "addToList": "إضافة إلى: {{list}}",
+        "removeSpokenItem": "إزالة {{name}}",
         "listActionsLabel": "إجراءات {{name}}",
         "listsLabel": "قوائم التسوق",
         "renameListLabel": "إعادة تسمية القائمة",

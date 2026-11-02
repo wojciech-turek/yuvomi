@@ -542,6 +542,8 @@
         "itemQtyLabel": "مقدار",
         "categoryLabel": "دسته",
         "addItemLabel": "افزودن قلم",
+        "addToList": "افزودن به: {{list}}",
+        "removeSpokenItem": "حذف {{name}}",
         "listActionsLabel": "اقدامات {{name}}",
         "listsLabel": "فهرست‌های خرید",
         "renameListLabel": "تغییر نام فهرست",
