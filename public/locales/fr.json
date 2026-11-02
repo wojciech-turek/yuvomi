@@ -6603,5 +6603,8 @@
         "pinnedEditLabel": "Modifier les épinglés",
         "pinnedHint": "Jusqu’à {{count}}. Un widget sans nouveauté reste masqué.",
         "pinnedQuiet": "Rien de nouveau dans vos widgets épinglés pour le moment."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

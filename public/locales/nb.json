@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Rediger festede",
         "pinnedHint": "Opptil {{count}}. En flis uten noe nytt holdes skjult.",
         "pinnedQuiet": "Ingenting nytt i de festede flisene akkurat nå."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

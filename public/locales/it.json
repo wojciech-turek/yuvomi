@@ -6603,5 +6603,8 @@
         "pinnedEditLabel": "Modifica i fissati",
         "pinnedHint": "Al massimo {{count}}. Un widget senza novità resta nascosto.",
         "pinnedQuiet": "Per ora non c’è niente di nuovo nei widget fissati."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

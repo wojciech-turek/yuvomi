@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Redigera fästa",
         "pinnedHint": "Högst {{count}}. En ruta utan något nytt döljs.",
         "pinnedQuiet": "Inget nytt i dina fästa rutor just nu."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

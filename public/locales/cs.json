@@ -6759,5 +6759,8 @@
         "notesCount_few": "{{count}} poznámky",
         "turnsAge_few": "{{count}}. narozeniny",
         "peopleAtHome_few": "{{count}} osoby"
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

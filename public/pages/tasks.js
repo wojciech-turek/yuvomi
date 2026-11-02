@@ -12,6 +12,7 @@ import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t, getLocale, formatDate, formatTime, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
 import { esc } from '/utils/html.js';
+import { SHEET_ICONS, sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml, heardLineHtml } from '/utils/sheet-parts.js';
 import { rowActionHtml, rowMenuHtml } from '/utils/row-action.js';
 import { refresh as refreshReminders } from '/reminders.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
@@ -937,9 +938,6 @@ function wireGroupToggle(container) {
 // `[data-reveal-time]`, `[data-remind-pick]`.
 // --------------------------------------------------------
 
-/** Lucide-Zeichen der drei kleinen Knoepfe. */
-const SHEET_ICONS = Object.freeze({ due: 'calendar', reminder: 'bell', note: 'pencil' });
-
 /** Die Schnellwahl der Faelligkeit, in der Reihenfolge des Blatts. */
 const DUE_PICKS = Object.freeze(['today', 'tomorrow', 'weekend']);
 const DUE_PICK_LABELS = Object.freeze({
@@ -951,6 +949,8 @@ const REMIND_PICK_LABELS = Object.freeze({
 /** Name und x-Beschriftung der kompakten Zeilen eines Diktats (Entwurf TaskSpoken). */
 const ROW_LABELS = Object.freeze({ due: 'tasks.dueShort', reminder: 'reminders.sectionTitle', note: 'tasks.descriptionLabel' });
 const ROW_REMOVE_LABELS = Object.freeze({ due: 'tasks.removeDue', reminder: 'reminders.removeReminder', note: 'tasks.removeNote' });
+/** Zeichen und Namen der kompakten Zeilen fuer sheet-parts.js. */
+const ROW_OPTIONS = Object.freeze({ icons: SHEET_ICONS, labels: ROW_LABELS, removeLabels: ROW_REMOVE_LABELS });
 
 /** Uhrzeit einer Erinnerung, die nur einen Tag nennt (R9, wie der Server). */
 const DAY_ONLY_REMINDER_TIME = '09:00';
@@ -974,50 +974,6 @@ function duePickOf(value, today = todayKey(), chosen = '') {
   return DUE_PICKS.find((key) => dueQuickPick(key, today) === value) ?? 'pick';
 }
 
-function sheetSectionHead(name, titleHtml, { removable = true } = {}) {
-  return `
-          <div class="task-sheet__section-head">
-            ${titleHtml}
-            ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
-          </div>`;
-}
-
-/**
- * Ein Abschnitt des Blatts. Mit `row` (nur aus einem Diktat, Entwurf TaskSpoken)
- * steht er zuerst als kompakte Zeile da - Zeichen, Name, Wert und ein x, das
- * genau das tut, was „Entfernen" tut. Ein Tipp auf die Zeile klappt die
- * Felder auf (`[data-expand]`). Die Felder stehen in beiden Faellen im DOM:
- * das Speichern liest dieselben Eingaben.
- */
-function sheetSectionHtml(name, { open, attrs = '', labelledBy = '', row = null }, innerHtml) {
-  const group = labelledBy ? ` role="group" aria-labelledby="${labelledBy}"` : '';
-  return `
-      <div class="task-sheet__section" data-section="${name}"${group}${attrs}${open ? '' : ' hidden'}>${row === null ? '' : sheetRowHtml(name, row)}
-        <div class="task-sheet__body" id="task-${name}-body"${row === null ? '' : ' hidden'}>${innerHtml}
-        </div>
-      </div>`;
-}
-
-/** The widest of the row names in this language: every label is sized to it,
- *  so "Jutro" and "Jutro, 07:30" start in one line under each other. */
-function longestRowLabel() {
-  return Object.values(ROW_LABELS).map((key) => t(key)).sort((a, b) => b.length - a.length)[0] ?? '';
-}
-
-function sheetRowHtml(name, value) {
-  return `
-        <div class="task-sheet__row" data-row="${name}">
-          <button type="button" class="task-sheet__row-main" data-expand="${name}" aria-expanded="false" aria-controls="task-${name}-body">
-            <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>
-            <span data-fit="${esc(longestRowLabel())}" class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
-            <span class="task-sheet__row-value">${esc(value)}</span>
-          </button>
-          <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(ROW_REMOVE_LABELS[name]))}">
-            <i data-lucide="x" class="icon-md" aria-hidden="true"></i>
-          </button>
-        </div>`;
-}
-
 /** Ein Datum mit Uhrzeit in Worten fuer eine kompakte Zeile: „Morgen, 07:30". */
 function rowWhen(date, time) {
   return [date ? relativeDateLabel(date) : '', time ? formatTime(time) : ''].filter(Boolean).join(', ');
@@ -1030,7 +986,7 @@ function dueSectionHtml({ dueDate, dueTime, spoken = false }) {
   // Eine Uhrzeit ohne Datum nimmt der Server an - sie darf nicht verborgen sein.
   const open = !!(dueDate || dueTime);
   return sheetSectionHtml('due', {
-    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null,
+    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null, rowOptions: ROW_OPTIONS,
   }, `${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
           <div class="task-sheet__pills">${pills}
           </div>
@@ -1074,6 +1030,7 @@ function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken 
     labelledBy: 'task-remind-heading',
     attrs: storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
     row: spoken && wall && !locked ? rowWhen(wall.date, wall.time) : null,
+    rowOptions: ROW_OPTIONS,
   }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
           <div class="task-sheet__when">
             <div class="task-sheet__field task-sheet__when-date">
@@ -1096,16 +1053,10 @@ function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken 
 function noteSectionHtml({ note, spoken = false }) {
   // Eine benannte Gruppe wie Faelligkeit und Erinnerung (F11); ihr Name ist
   // die Ueberschrift, die zugleich das Etikett des Feldes bleibt.
-  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null },
+  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null, rowOptions: ROW_OPTIONS },
     `${sheetSectionHead('note', `<label class="task-sheet__section-title" id="task-note-heading" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
           <textarea class="input task-sheet__note" id="task-description" name="description"
                     rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>`);
-}
-
-function revealButtonHtml(name, labelKey, open) {
-  return `<button type="button" class="task-sheet__chip" data-reveal="${name}"${open ? ' hidden' : ''}>
-          <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>${t(labelKey)}
-        </button>`;
 }
 
 /**
@@ -1140,11 +1091,14 @@ function moreSummary(task) {
  *        countdown, recurrence_rule, recurrence_from_completion).
  *        `spoken` (nur beim Anlegen): gesetzte Abschnitte stehen als kompakte
  *        Zeilen mit x da (Entwurf TaskSpoken) - ein Tipp klappt sie auf.
+ *        `heard`: der gesagte Satz; mit `spoken` steht er als Zeile ueber dem Titel.
  */
-function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false } = {}) {
+function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false, heard = '' } = {}) {
   const isEdit = !!task;
   const d = isEdit ? null : (draft ?? null);
   const rows = spoken && !isEdit;
+  const heardHtml = rows ? heardLineHtml(heard) : '';
+  const heardLine = heardHtml ? `${heardHtml}\n      ` : '';
 
   const selectedIds = isEdit
     ? (task.assigned_users?.map((u) => u.id) ?? (task.assigned_to ? [task.assigned_to] : []))
@@ -1280,25 +1234,15 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
            fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
       <input type="hidden" id="task-from-draft" value="1" data-dirty-base="">` : ''}
 
-      <div class="form-group">
-        <div class="form-field task-sheet__title${isEdit ? '' : ' task-sheet__title--mic'}">
-          <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
-          <input class="input" type="text" id="task-title" name="title"
-                 value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
-                 required maxlength="200" autocomplete="off">
-          ${isEdit ? '' : `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
-               ueberschriebe die Werte einer bestehenden Aufgabe. -->
-          <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
-            <i data-lucide="mic" class="icon-lg" aria-hidden="true"></i>
-          </button>`}
-          <div class="form-field__error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
-                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
-            </svg>
-            ${t('common.required')}
-          </div>
-        </div>
+      ${heardLine}<div class="form-group">
+        ${titleFieldHtml({
+    id: 'task-title',
+    name: 'title',
+    value: title,
+    placeholder: t('tasks.titlePlaceholderShort'),
+    labelKey: 'tasks.titlePlaceholderShort',
+    mic: isEdit ? null : { labelKey: 'tasks.sayIt' },
+  })}
       </div>
 
       <!-- Wer: nur die Chips der Mitglieder; keiner gewaehlt heisst niemandem
@@ -2063,14 +2007,15 @@ function wireCountdownGate(panel) {
 /**
  * @param {{task?: object|null, users?: object[], reminder?: object|null,
  *          onChanged?: (() => (void|Promise<void>))|null, draft?: object|null,
- *          spoken?: boolean}} opts
+ *          spoken?: boolean, heard?: string}} opts
  *        `draft` fuellt ein neues Blatt vor (siehe renderModalContent).
  *        `spoken`: das Blatt kommt aus einem Diktat und traegt im Kopf
- *        „Noch einmal sagen" (`data-action="dictate"`).
+ *        „Noch einmal sagen" (`data-action="dictate"`); `heard` ist der gesagte
+ *        Satz, der dann ueber dem Titel steht.
  *        Beim Anlegen oeffnen das Mikrofon im Titelfeld und „Noch einmal
  *        sagen" das Hoerblatt (dictateOverSheet).
  */
-function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false } = {}, container) {
+function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false, heard = '' } = {}, container) {
   // Der letzte Riegel vor dem Formular - hinter FAB, Kopfknopf und
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
@@ -2080,7 +2025,7 @@ function openTaskModal({ task = null, users = [], reminder = null, onChanged = n
   const dictateWith = { users, onChanged, container };
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
-    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit }),
+    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit, heard }),
     size: 'lg',
     // `type="button"` liefert openModal.
     headerAction: spoken && !isEdit
@@ -6072,8 +6017,8 @@ export async function prepareNewTask({ user = null } = {}) {
 }
 
 /** Das Blatt "Neue Aufgabe", nachdem prepareNewTask gelaufen ist (Diktat von aussen). */
-export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false } = {}) {
-  openTaskModal({ users: state.users, onChanged, draft, spoken }, null);
+export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false, heard = '' } = {}) {
+  openTaskModal({ users: state.users, onChanged, draft, spoken, heard }, null);
 }
 
 /**

@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Chỉnh sửa mục đã ghim",
         "pinnedHint": "Tối đa {{count}}. Ô không có gì mới sẽ được ẩn.",
         "pinnedQuiet": "Các ô đã ghim hiện không có gì mới."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

@@ -6891,5 +6891,8 @@
         "turnsAge_many": "{{count}} lat",
         "peopleAtHome_few": "{{count}} osoby",
         "peopleAtHome_many": "{{count}} osób"
+    },
+    "sheet": {
+        "heardQuote": "„{{text}}\""
     }
 }

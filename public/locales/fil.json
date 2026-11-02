@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "I-edit ang naka-pin",
         "pinnedHint": "Hanggang {{count}}. Nakatago ang tile na walang bago.",
         "pinnedQuiet": "Walang bago sa mga naka-pin mong tile ngayon."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

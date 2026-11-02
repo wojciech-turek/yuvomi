@@ -386,7 +386,9 @@ const PAGE_MODULES = [
   // Das Menue hinter dem + auf Dziś (Quick-Add) - die Uebersicht laedt es per
   // import() beim Tipp auf das +, nicht mit dem Start.
   '/components/add-menu.js',
+  '/utils/quick-draft.js',
   '/utils/shopping-entry.js',
+  '/utils/sheet-parts.js',
   '/utils/speech.js',
   '/utils/task-draft.js',
   '/vendor/sortablejs/sortable.esm.min.js',

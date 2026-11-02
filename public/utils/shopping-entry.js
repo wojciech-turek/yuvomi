@@ -187,3 +187,18 @@ function nominativeAdjectives(typedName, parsedName) {
   }
   return words.join(' ');
 }
+
+/**
+ * A spoken or typed list, one entry per item: "mleko, chleb i 2 l soku" ->
+ * mleko, chleb, sok (2 l). Split on commas, " i " and " oraz ", every part
+ * read by parseQuickEntry; empty parts are dropped.
+ *
+ * @param {string} text
+ * @returns {Array<{ name: string, quantity: string|null }>}
+ */
+export function splitSpokenItems(text) {
+  return String(text ?? '')
+    .split(/\s*,\s*|\s+(?:i|oraz)\s+/iu)
+    .map((part) => parseQuickEntry(part))
+    .filter((item) => item.name);
+}

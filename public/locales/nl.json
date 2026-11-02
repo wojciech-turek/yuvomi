@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Vastgezette tegels bewerken",
         "pinnedHint": "Maximaal {{count}}. Een tegel zonder iets nieuws blijft verborgen.",
         "pinnedQuiet": "Op dit moment niets nieuws in je vastgezette tegels."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

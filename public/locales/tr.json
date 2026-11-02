@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Sabitlenenleri düzenle",
         "pinnedHint": "En fazla {{count}}. Yeni bir şey olmayan kart gizli kalır.",
         "pinnedQuiet": "Sabitlenen kartlarda şu an yeni bir şey yok."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Ubah yang disematkan",
         "pinnedHint": "Maksimal {{count}}. Ubin tanpa hal baru disembunyikan.",
         "pinnedQuiet": "Tidak ada yang baru di ubin yang disematkan saat ini."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

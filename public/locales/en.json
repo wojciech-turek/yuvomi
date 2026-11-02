@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Edit pinned",
         "pinnedHint": "Up to {{count}}. A tile with nothing new stays hidden.",
         "pinnedQuiet": "Nothing new in your pinned tiles right now."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

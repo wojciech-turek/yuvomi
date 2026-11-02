@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "编辑置顶",
         "pinnedHint": "最多 {{count}} 个。没有新内容的卡片会隐藏。",
         "pinnedQuiet": "置顶的卡片暂时没有新内容。"
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

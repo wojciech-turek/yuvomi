@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "ピン留めを編集",
         "pinnedHint": "最大{{count}}個まで。新しいことがないタイルは表示されません。",
         "pinnedQuiet": "ピン留めしたタイルに、今は新しいことはありません。"
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

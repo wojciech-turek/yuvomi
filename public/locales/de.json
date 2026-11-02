@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Angeheftete bearbeiten",
         "pinnedHint": "Höchstens {{count}}. Eine Kachel ohne Neues bleibt ausgeblendet.",
         "pinnedQuiet": "In deinen angehefteten Kacheln gibt es gerade nichts Neues."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }

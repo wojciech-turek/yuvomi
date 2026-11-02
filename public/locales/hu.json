@@ -6601,5 +6601,8 @@
         "pinnedEditLabel": "Kitűzöttek szerkesztése",
         "pinnedHint": "Legfeljebb {{count}}. Az a csempe, amelyben nincs semmi új, rejtve marad.",
         "pinnedQuiet": "A kitűzött csempékben most nincs semmi új."
+    },
+    "sheet": {
+        "heardQuote": "\"{{text}}\""
     }
 }
