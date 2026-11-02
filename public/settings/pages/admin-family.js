@@ -7,8 +7,7 @@ import {
 } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
-import { personDisc, setHouseholdOrder } from '/utils/person-color.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc, personToken, setHouseholdOrder } from '/utils/person-color.js';
 import { sortMembers } from '/utils/member-order.js';
 import { makeSortable } from '/utils/sortable.js';
 import { vibrate } from '/utils/ux.js';

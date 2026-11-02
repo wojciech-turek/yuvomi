@@ -4102,6 +4102,11 @@ test('Profil bei `housekeeping: read`: die Leseansicht zeigt jeden Wert des Bear
     assert.ok(!editor.content.includes(farbe) && !lesen.content.includes(farbe), `${farbe}: die Farbe der Haushaltshilfe wird nicht gezeigt`);
   }
   assert.doesNotMatch(editor.content, /type="color"/, 'kein Farbfeld im Editor');
+  // Die Scheibe: gerendert ohne eigene Farbe (die neutrale steht im Stylesheet).
+  assert.match(lesen.content, /<div class="housekeeping-avatar">/, 'Leseansicht: neutrale Scheibe, kein Inline-Stil');
+  assert.match(editor.content, /<button class="housekeeping-avatar housekeeping-avatar--lg" type="button" id="housekeeping-avatar-btn"\s+aria-label/,
+    'Editor: neutrale Scheibe, kein Inline-Stil');
+  assert.doesNotMatch(lesen.content + editor.content, /class="housekeeping-avatar[^"]*"[^>]*style=/);
   assert.doesNotMatch(lesen.content, /housekeeping\.dailyRate/, 'wie im Editor nur der Satz der gewaehlten Abrechnungsart');
 
   // Die Antwort folgt dem Datensatz: was nicht gesetzt ist, bekommt keine Zeile.

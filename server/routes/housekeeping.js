@@ -47,7 +47,6 @@ import {
   utcToWall,
 } from '../utils/timezone.js';
 import { addMonthsClamped } from '../utils/interval-date.js';
-import { recordLocalColorChoice } from '../services/legacy-color-snapshot.js';
 import { paymentTaskAudience, normalizePaymentTaskAudience } from '../services/payment-task-audience.js';
 import {
   byCheckInDesc,
@@ -438,11 +437,10 @@ function createVisitCalendarEvent(database, worker, checkIn, actorId, title = nu
     INSERT INTO calendar_events
       (title, start_datetime, end_datetime, all_day, color, icon, assigned_to, created_by, external_source,
        series_authored)
-    VALUES (?, ?, NULL, 1, ?, ?, ?, ?, 'local', 1)
+    VALUES (?, ?, NULL, 1, NULL, ?, ?, ?, 'local', 1)
   `).run(
     title || visitTitleFallback(database, worker),
     visitDate,
-    worker.calendar_color || DEFAULT_CALENDAR_COLOR,
     HOUSEKEEPING_EVENT_ICON,
     worker.user_id,
     actorId,
@@ -501,29 +499,17 @@ function updateVisitLinks(database, session, worker, visitDate, dailyRate, extra
           start_datetime = ?,
           end_datetime = NULL,
           all_day = 1,
-          color = ?,
-          -- Die Farbe kommt von der Betreuungskraft, nicht vom Provider: mit dem
-          -- Flag daneben führt Yuvomi sie auch weiter (#899). Ohne es schriebe
-          -- der Outbound sie als CSS3-Namen hinaus und der nächste Inbound-Lauf
-          -- holte den gerundeten Wert zurück - der Besuch wechselte still seine
-          -- Farbe, obwohl niemand sie angefasst hat.
-          color_modified = 1,
+          -- Ein Besuch traegt keine Farbe: Hauspersonal ist neutral.
+          color = NULL,
           icon = ?
       WHERE id = ?
     `).run(
       eventTitle,
       visitDate,
-      worker?.calendar_color || DEFAULT_CALENDAR_COLOR,
       HOUSEKEEPING_EVENT_ICON,
       session.calendar_event_id,
     );
     const after = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(session.calendar_event_id);
-    // Die Farbe der Betreuungskraft ist eine lokale Wahl: ein gespiegelter
-    // Besuch ist damit keine Altlast der Farb-Heilung (#1270) mehr.
-    if (before && after && after.external_source === 'caldav'
-        && String(before.color ?? '').toLowerCase() !== String(after.color ?? '').toLowerCase()) {
-      recordLocalColorChoice(database, [session.calendar_event_id]);
-    }
     // Marker inline statt über markEventOutbound, aus zwei Gründen:
     //
     //   - markEventOutbound lehnt einen schreibgeschützten Provider ab
