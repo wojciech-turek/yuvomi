@@ -5249,6 +5249,7 @@
                 "reference": "Референс",
                 "flag": "Оценка"
             },
+            "refRangeWords": "от {{low}} до {{high}}",
             "flag": {
                 "low": "Низкий",
                 "normal": "Норма",

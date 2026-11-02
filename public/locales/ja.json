@@ -5037,6 +5037,7 @@
                 "reference": "基準値",
                 "flag": "評価"
             },
+            "refRangeWords": "{{low}}から{{high}}",
             "flag": {
                 "low": "低い",
                 "normal": "正常",

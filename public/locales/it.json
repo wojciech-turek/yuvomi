@@ -5039,6 +5039,7 @@
                 "reference": "Riferimento",
                 "flag": "Valutazione"
             },
+            "refRangeWords": "da {{low}} a {{high}}",
             "flag": {
                 "low": "Basso",
                 "normal": "Normale",

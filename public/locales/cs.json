@@ -5152,6 +5152,7 @@
                 "reference": "Referenční rozmezí",
                 "flag": "Hodnocení"
             },
+            "refRangeWords": "{{low}} až {{high}}",
             "flag": {
                 "low": "Nízká",
                 "normal": "Normální",

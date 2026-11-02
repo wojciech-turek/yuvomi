@@ -4274,10 +4274,17 @@ function resultListMarkup(results) {
     </ul>`;
 }
 
+/* Eine Spanne ist ein Bindestrich ohne Leerzeichen ("3,5-5", Copy-Durchgang
+ * 2026-11-02). ref_low/ref_high sind freie REAL-Spalten: mit einer negativen
+ * Grenze laese sich "-2-2" (Basenueberschuss) oder "-5--1" wie eine Rechnung,
+ * dort spricht die Spanne deshalb in Worten ("od -2 do 2"). */
 function referenceLabel(refLow, refHigh) {
   const low = refLow == null ? null : fmtNum(refLow);
   const high = refHigh == null ? null : fmtNum(refHigh);
-  if (low !== null && high !== null) return `${low}-${high}`;
+  if (low !== null && high !== null) {
+    if (Number(refLow) < 0 || Number(refHigh) < 0) return t('health.labs.refRangeWords', { low, high });
+    return `${low}-${high}`;
+  }
   if (low !== null) return `≥ ${low}`;
   if (high !== null) return `≤ ${high}`;
   return '-';
@@ -9873,6 +9880,8 @@ export const __test = {
   openMedModal,
   medLogHistoryMarkup,
   labDetailMarkup,
+  // Copy-Durchgang 2026-11-02: die Referenzspanne, mit Worten bei negativen Grenzen.
+  referenceLabel,
   activityRowMarkup,
   preventionRowMarkup,
   // Naehrwerte (#1326): die Zeile des Tagebuchs und die Fortschrittszeile.

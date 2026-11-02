@@ -5364,6 +5364,7 @@
                 "reference": "المرجع",
                 "flag": "التقييم"
             },
+            "refRangeWords": "من {{low}} إلى {{high}}",
             "flag": {
                 "low": "منخفض",
                 "normal": "طبيعي",

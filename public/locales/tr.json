@@ -5037,6 +5037,7 @@
                 "reference": "Referans",
                 "flag": "Değerlendirme"
             },
+            "refRangeWords": "{{low}} ile {{high}} arası",
             "flag": {
                 "low": "Düşük",
                 "normal": "Normal",

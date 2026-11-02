@@ -5037,6 +5037,7 @@
                 "reference": "Referens",
                 "flag": "Bedömning"
             },
+            "refRangeWords": "{{low}} till {{high}}",
             "flag": {
                 "low": "Lågt",
                 "normal": "Normalt",

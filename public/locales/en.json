@@ -5037,6 +5037,7 @@
                 "reference": "Reference",
                 "flag": "Flag"
             },
+            "refRangeWords": "{{low}} to {{high}}",
             "flag": {
                 "low": "Low",
                 "normal": "Normal",

@@ -5249,6 +5249,7 @@
                 "reference": "Zakres referencyjny",
                 "flag": "Ocena"
             },
+            "refRangeWords": "od {{low}} do {{high}}",
             "flag": {
                 "low": "Niski",
                 "normal": "Prawidłowy",
