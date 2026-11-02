@@ -32,6 +32,7 @@ import { notificationsPaths } from './notifications.js';
 import { healthPaths } from './health.js';
 import { schedulePaths } from './schedule.js';
 import { quickLinksPaths } from './quicklinks.js';
+import { quickAddPaths } from './quickadd.js';
 import { screensaverPaths } from './screensaver.js';
 import { recipeProvidersPaths } from './recipeproviders.js';
 import { permissionsPaths } from './permissions.js';
@@ -72,6 +73,7 @@ export function buildPaths() {
     ...healthPaths(),
     ...schedulePaths(),
     ...quickLinksPaths(),
+    ...quickAddPaths(),
     ...screensaverPaths(),
     ...recipeProvidersPaths(),
     ...permissionsPaths(),
