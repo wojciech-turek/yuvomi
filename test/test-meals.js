@@ -2054,6 +2054,21 @@ test('Tafla-Blatt: der Primaerknopf nennt das Ergebnis, die Chips entscheiden, w
     '"Als Rezept speichern" nimmt jeden Chip');
 });
 
+test('Task 13: Mahlzeit-Blatt hat den Kopf wie jedes Blatt: Titel links, schlichtes X rechts, keine graue Scheibe', () => {
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)];
+  const header = rules.filter((r) => r.selector.trim() === '.meal-sheet .modal-panel__header');
+  assert(!header.some((r) => /grid-template-columns/.test(r.body)), 'kein 3-Spalten-Raster im Kopf');
+  const title = rules.filter((r) => r.selector.trim() === '.meal-sheet .modal-panel__title');
+  assert(!title.some((r) => /text-align:\s*center|grid-column/.test(r.body)), 'der Titel steht links, nicht mittig');
+  assert(!rules.some((r) => /\.meal-sheet \.modal-panel__close::before/.test(r.selector)), 'keine Scheibe hinter dem X');
+  assert(!rules.some((r) => /\.meal-sheet \.modal-panel__header-actions/.test(r.selector) && /grid-column/.test(r.body)), 'das X sitzt nicht links');
+  const chip = rules.find((r) => r.selector.trim() === '.meal-sheet .user-ms__option:has(.user-ms__checkbox:checked)');
+  assert(/border-color:\s*var\(--color-accent\)/.test(chip?.body ?? '') && /--color-accent-tint/.test(chip?.body ?? ''), 'Personen-Chip getoent violett');
+  const primary = rules.filter((r) => r.selector.trim() === '.meal-sheet .meal-sheet__primary');
+  assert(!primary.some((r) => /box-shadow/.test(r.body)), 'Primaerknopf ohne Glow');
+});
+
 // --------------------------------------------------------
 // Ergebnis
 // --------------------------------------------------------

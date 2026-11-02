@@ -2615,7 +2615,7 @@
 /* ========================================================
  * TAFLA: DAS BLATT "DODAJ POSIŁEK"
  *
- * Derselbe Dialog wie bisher (openMealModal), als Blatt gekleidet: X links,
+ * Derselbe Dialog wie bisher (openMealModal), als Blatt gekleidet: Titel links, X rechts,
  * Kopf mit Kontext ("Kolacja · czw 22 paź"), Felder 52 auf Fuellflaeche,
  * Mahlzeit als Segment, Tage als Chips, Zutaten als Chips ("· masz" fuer den
  * Vorrat), der Schalter "Dopisz brakujące do listy" und EIN Primaerknopf
@@ -2630,51 +2630,23 @@
   }
 }
 
+/* Kopf wie bei jedem Blatt (modal.js): Titel links, schlichtes X rechts,
+ * keine Scheibe hinter dem X. Nur der Abstand zum Rumpf ist enger. */
 .meal-sheet .modal-panel__header {
-  display: grid;
-  grid-template-columns: var(--target-base) minmax(0, 1fr) var(--target-base);
-  align-items: center;
-  gap: var(--space-2);
   min-height: 52px;
-  padding: var(--space-3) var(--space-3) var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
   border-bottom: 0;
 }
 
 .meal-sheet .modal-panel__title {
-  grid-column: 2;
-  grid-row: 1;
   margin: 0;
-  text-align: center;
+  min-width: 0;
   font-size: var(--type-body);
   line-height: var(--type-body-lh);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.meal-sheet .modal-panel__header-actions {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-/* Das X als 36er-Kreis auf der Fuellflaeche, 44 getroffen. */
-.meal-sheet .modal-panel__close {
-  background: none;
-  color: var(--color-text-primary);
-}
-
-.meal-sheet .modal-panel__close::before {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  border-radius: var(--radius-full);
-  background-color: var(--color-fill);
-  z-index: -1;
-}
-
-.meal-sheet .modal-panel__close {
-  isolation: isolate;
 }
 
 .meal-sheet .modal-panel__body {
