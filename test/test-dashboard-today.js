@@ -347,13 +347,6 @@ test('#1449: familyEvents traegt den Abendtermin, den der Deckel der Kachel absc
   assert.ok(family.includes('Leo 10'), 'die heute beendeten kommen mit - sonst hiesse es „frei" statt „fuer heute durch"');
 }));
 
-test('#1449: „nur meine" der Kachel gilt nicht fuer die Familienkarte', withClock(THU_14_BERLIN, 'Europe/Berlin', async () => {
-  seedBusyDay();
-  const body = await getJson('/?events_scope=mine');
-  assert.deepEqual([...new Set(titles(body.upcomingEvents).map((t) => t.split(' ')[0]))], ['Anna'], 'Vorbedingung: die Kachel zeigt nur Annas');
-  assert.ok(titles(body.familyEvents ?? []).includes('Leo Abend'), 'die Karte zeigt jedes Mitglied - Leo ist nicht „frei"');
-}));
-
 // --------------------------------------------------------------------------
 // 6. Kinder-Standards (R20): eigene Aufgaben zuerst, Punkte vor Budget
 // --------------------------------------------------------------------------

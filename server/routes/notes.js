@@ -16,7 +16,6 @@ import {
   hydrateNotesWithCategories,
   listVisibleCategories,
   NoteCategoryInputError,
-  pruneCategoryFromDashboardConfigs,
   replaceEditableAssignments,
   validateCategoryName,
 } from '../services/note-categories.js';
@@ -182,12 +181,7 @@ router.delete('/categories/:id', (req, res) => {
     const id = Number(req.params.id);
     const verdict = editableCategory(req, id);
     if (!verdict.category) return res.status(verdict.status).json({ error: verdict.error, code: verdict.status });
-    const database = db.get();
-    const remove = database.transaction(() => {
-      database.prepare('DELETE FROM note_categories WHERE id = ?').run(id);
-      pruneCategoryFromDashboardConfigs(database, id);
-    });
-    remove();
+    db.get().prepare('DELETE FROM note_categories WHERE id = ?').run(id);
     res.status(204).end();
   } catch (err) {
     log.error('Category delete:', err);

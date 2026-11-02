@@ -1,29 +1,22 @@
 /**
- * Modul: Dashboard-Widget-Konfiguration
- * Zweck: Der Standard-Satz der Dashboard-Widgets und die reine Logik darauf -
- *        Normalisieren eines gespeicherten Layouts, Vergleich zweier
- *        Konfigurationen, Nachrechnen des dicht gepackten Rasters.
- * Abhängigkeiten: nur utils/dashboard-event-limit.js (rein, ohne eigene Importe)
+ * Modul: Dashboard-Abruf und Widget-Restbestand
+ * Zweck: Der Abruf der Uebersicht und der Erinnerungen fuer die Flaeche, die
+ *        ihn zeichnet (`dashboardRequest`), der geteilte Erinnerungs-Abruf
+ *        (`fetchPendingReminders`, `forgetPendingReminders`) und die Frage, ob
+ *        eine Abfrage die Zahlen der Antwort veraendert
+ *        (`dashboardQueryFiltersCounts`).
+ * Abhängigkeiten: keine
  *
- * WARUM ALS UTIL UND NICHT IN dashboard.js: `normalizeDashboardConfig` traegt
- * eine Zusicherung (siehe unten an WIDGET_IDS) und war bis 2026-08-13 durch
- * keinen einzigen Test gedeckt.
- * NICHT der Grund ist Unerreichbarkeit - `dashboard.js` ist über den
- * Browser-Loader importierbar, `test-dashboard.js` tut das für den Wand-Modus.
- * Der Grund ist, dass diese Zusicherung dann am `__test`-Export hinge: einer
- * Tür, die für Ansichts-Renderer gebaut ist und deren Inhalt sich nach dem
- * Bedarf der Tests richtet. Eine Regel, an der ein Bestandslayout hängt, gehört
- * hinter eine echte Modulgrenze.
- * Diese Datei hat deshalb bewusst keine Importe ausser einer reinen Schwester
- * (die Stufen der Kalender-Kachel, #1680, die auch die Route liest): sie ist
- * die Teilmenge, die ohne DOM, ohne `window.yuvomi` und ohne Haushaltskontext
- * entscheidbar ist.
- * Was an `isSoloHousehold()` oder den Modul-Schaltern hängt
- * (`isWidgetModuleEnabled`), bleibt drüben in der Seite.
- * Guards: test/test-dashboard.js, Abschnitt „Widget-Konfiguration".
+ * HEUTE IST FUER ALLE DASSELBE (One-Today-Runde, 2026-11-02): kein Layout je
+ * Person, keine Haushaltsvorgabe, keine Widget-Optionen. Die Normalisierung
+ * eines gespeicherten Layouts und die Uebersetzung von Optionen in
+ * Abfrage-Parameter sind mit ihnen gegangen.
+ *
+ * NOCH DA, WEIL `utils/extension-widgets.js` SIE IMPORTIERT (Aufgabe 2 der
+ * Runde entfernt beide Seiten): `WIDGET_IDS`, `WIDGET_SIZE_OPTIONS`,
+ * `nearestPreset`, `defaultWidgetSize`, `defaultWidgetVisible`,
+ * `DEFAULT_HIDDEN_WIDGETS` samt dem, was sie brauchen.
  */
-
-import { EVENT_LIMIT_DEFAULT, clampEventLimit } from './dashboard-event-limit.js';
 
 // Reihenfolge = Standard-Layout. Die primären Inhalte (tasks, calendar) führen,
 // damit sie beim Wieder-Einblenden oben stehen; das einzige passive Widget
@@ -179,129 +172,6 @@ export function defaultWidgetVisible(id) {
   return !DEFAULT_HIDDEN_WIDGETS.has(id);
 }
 
-export const DEFAULT_WIDGET_CONFIG = WIDGET_IDS.map((id, i) => ({ id, visible: defaultWidgetVisible(id), order: i, size: defaultWidgetSize(id) }));
-
-/**
- * Wo eine fehlende Id in ein gespeichertes Layout gehört: direkt hinter den
- * nächsten in WIDGET_IDS VORANGEHENDEN Eintrag, der dort schon vorkommt.
- *
- * ANHÄNGEN WAR DIE BEQUEMERE ANTWORT UND DIE TEURERE. Eine ans Ende gehängte
- * Id ist nur dann an ihrer Default-Position, wenn sie auch in WIDGET_IDS ganz
- * hinten steht. Aus einer Datenoperation wurde so eine Reihenfolgen-Vorschrift
- * für eine Liste zwei Bildschirme weiter oben. Hier kostet die richtige
- * Antwort eine Rückwärtssuche.
- *
- * SIE FOLGT IHREM VORGÄNGER, AUCH WENN DER UMGEZOGEN IST, und das ist eine
- * Entscheidung, keine Nebenwirkung. In einem Layout, das der Nutzer selbst
- * umsortiert hat, gibt es keine „Default-Position" mehr - es gibt nur noch
- * Nachbarn. Gemessen am Demo-Haushalt (Stand 2026-08-13): dort steht `weather`
- * ganz vorn, und `metrics` rückt deshalb von hinten auf Platz zwei, weil sein
- * Vorgänger `clock` an `weather` hängt. Die Alternative wäre, in umsortierten
- * Layouts weiter anzuhängen - dann stünde ein Widget am Ende, weil dort Platz
- * ist, und nicht, weil es dorthin gehört. Festgehalten im Guard
- * „ein umsortiertes Layout laesst den Neuzugang seinem Vorgaenger folgen".
- */
-function defaultInsertIndex(ordered, missingId) {
-  for (let i = WIDGET_IDS.indexOf(missingId) - 1; i >= 0; i--) {
-    const at = ordered.findIndex((w) => w.id === WIDGET_IDS[i]);
-    if (at !== -1) return at + 1;
-  }
-  return 0;
-}
-
-export function normalizeDashboardConfig(input) {
-  const valid = Array.isArray(input)
-    ? input
-      .filter((w) => w && typeof w === 'object' && WIDGET_IDS.includes(w.id))
-      .map((w, i) => ({
-        id: w.id,
-        visible: w.visible !== false,
-        order: Number.isFinite(Number(w.order)) ? Number(w.order) : i,
-        // Gültige (inkl. Legacy-)Größen auf das nächste Preset ziehen; Unbekanntes
-        // fällt auf den Domänen-Default. So sieht niemand eine 5. Größen-Option.
-        size: WIDGET_SIZE_OPTIONS.includes(w.size) ? nearestPreset(w.size) : defaultWidgetSize(w.id),
-        // OPTIONEN GEHEN DURCH, OHNE DASS DIESE DATEI SIE KENNT (#814). Sie
-        // gehören dem Widget, das sie stellt; hier hätten sie nur eine zweite
-        // Liste ergeben, die bei jedem neuen Widget nachgezogen werden müsste -
-        // dieselbe Entscheidung wie im Backend, das sie als Form prüft und
-        // nicht als Bedeutung. Ein leeres Objekt wird nicht mitgeschleppt.
-        ...(w.options && typeof w.options === 'object' && !Array.isArray(w.options) && Object.keys(w.options).length
-          ? { options: { ...w.options } }
-          : {}),
-      }))
-    : [];
-  // Erst sortieren, dann einsortieren: `order` und Array-Position können in
-  // einem gespeicherten Layout auseinanderlaufen, und eingefügt wird an einer
-  // Position, nicht an einer Zahl.
-  const ordered = valid.sort((a, b) => a.order - b.order);
-  const presentIds = new Set(ordered.map((w) => w.id));
-  for (const id of WIDGET_IDS) {
-    if (presentIds.has(id)) continue;
-    // Neu hinzugekommene Widget-IDs (bei bestehenden, gespeicherten Layouts) erben den
-    // Standard-Sichtbarkeitswert ihrer Domäne — Opt-in-Module (health/housekeeping)
-    // erscheinen also nicht ungefragt, sondern bleiben im „Anpassen"-Panel angeboten.
-    ordered.splice(defaultInsertIndex(ordered, id), 0, { id, visible: defaultWidgetVisible(id), order: 0, size: defaultWidgetSize(id) });
-    // Zwei neue Ids nacheinander: die erste zählt für die zweite bereits als
-    // vorhanden, deshalb bleiben sie in ihrer WIDGET_IDS-Reihenfolge stehen.
-    presentIds.add(id);
-  }
-  return ordered.map((w, i) => ({ ...w, order: i }));
-}
-
-/**
- * Die Optionen der Widgets als Pfad der Uebersichts-Abfrage (#814).
- *
- * SIE MUESSEN MIT DER ANFRAGE REISEN, nicht im Browser nachfiltern: die Route
- * deckelt die Liste bei fuenf und zaehlt die Kacheln unbegrenzt. Wer hier
- * nachtraeglich siebte, stellte zwei Zeilen unter eine Kachel, die sieben sagt
- * (dieselbe Lehre wie #647).
- *
- * WELCHE OPTION WELCHEN PARAMETER ERGIBT, WEISS NUR DER BROWSER. Der Server
- * speichert `options` als Form und kennt weder Widget noch Bedeutung - eine
- * Registry dort waere der billige Anfang und danach der Preis jedes weiteren
- * Widgets. Diese Funktion ist die Uebersetzung, und sie steht hier, weil sie
- * rein ist und ihre Zusicherung sonst am `__test`-Export der Seite haenge.
- *
- * @param {object[]} config normalisierte Widget-Konfiguration
- * @returns {string} '/dashboard' oder '/dashboard?…'
- */
-/**
- * Die gespeicherte Listen-Auswahl der Einkaufs-Kachel als Ids (#1818):
- * positive ganze Zahlen, ohne Doppelte. Was sonst im Layout steht (ein
- * Fremdwert, ein String aus aelterem Stand), faellt weg - dieselbe Form, die
- * die Route aus `?shopping_list=` liest.
- *
- * @param {unknown} value `options.lists`
- * @returns {number[]}
- */
-export function normalizeShoppingListSelection(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
-}
-
-export function dashboardQuery(config) {
-  const params = new URLSearchParams();
-  const optionsOf = (id) => (Array.isArray(config) ? config.find((w) => w.id === id)?.options : null) ?? {};
-  if (optionsOf('calendar').scope === 'mine') params.set('events_scope', 'mine');
-  // Nur die Abwahl reist mit (#927): „mit Geburtstagen" ist der Auslieferungs-
-  // zustand der Route, und ein Parameter, der ihn wiederholt, stuende in jeder
-  // Anfrage - dieselbe Regel, nach der `scope: 'all'` nicht gespeichert wird.
-  if (optionsOf('calendar').birthdays === 'hide') params.set('events_birthdays', 'hide');
-  // Die Stufe reist geklemmt und nur, wenn sie nicht die Vorgabe ist (#1680):
-  // ein gespeicherter Fremdwert ergibt hier dieselbe Anfrage wie gar keiner.
-  const eventLimit = clampEventLimit(optionsOf('calendar').limit);
-  if (eventLimit !== EVENT_LIMIT_DEFAULT) params.set('events_limit', String(eventLimit));
-  for (const key of optionsOf('tasks').categories ?? []) params.append('tasks_category', key);
-  for (const id of optionsOf('notes').categories ?? []) params.append('notes_category', String(id));
-  // Die Listen-Auswahl der Einkaufs-Kachel (#1818). Sie reist wie jede andere
-  // Option, ob die Kachel sichtbar ist oder nicht: die Route legt die Auswahl
-  // in ein eigenes Feld (`shoppingTile`) und laesst alles andere unberuehrt,
-  // also haengt keine Zahl ausserhalb der Kachel an ihr.
-  for (const id of normalizeShoppingListSelection(optionsOf('shopping').lists)) params.append('shopping_list', String(id));
-  const query = params.toString();
-  return query ? `/dashboard?${query}` : '/dashboard';
-}
-
 /**
  * Der Abruf der Uebersicht fuer die Flaeche, die ihn zeichnet (#1817).
  *
@@ -316,7 +186,7 @@ export function dashboardQuery(config) {
  * zweite Antwort der Seite, die davon abhaengt, wer fragt: die Wand haengt den
  * Parameter auch dort an und bekommt keine.
  *
- * @param {string} query '/dashboard' oder '/dashboard?…' (dashboardQuery, layoutHintQuery), oder '/reminders/pending'
+ * @param {string} query '/dashboard' oder '/reminders/pending'
  * @param {{ wall?: boolean }} [surface]
  * @returns {string}
  */
@@ -369,27 +239,12 @@ export function forgetPendingReminders() {
   sharedPending = null;
 }
 
-/* WELCHE PARAMETER DIE ZAHLEN DER ANTWORT UNBERUEHRT LASSEN (#1680).
- *
- * Die Navigations-Badges und Modulkacheln nehmen die `/dashboard`-Antwort der
- * Seite nur an, wenn sie ungefiltert ist (router.js, `primeModuleCountsFrom`):
- * `tasks_category` aendert `openTaskCount`, und eine eingeschraenkte Zahl ist
- * eine andere Zahl. `events_limit` schraenkt nichts ein - es verlaengert eine
- * Liste, die in keine Zahl eingeht. Ohne diese Ausnahme galt jede Antwort mit
- * gewaehlter Stufe als gefiltert, und der Router holte anderthalb Sekunden
- * spaeter dieselbe Aggregation ein zweites Mal, bei jedem Kaltstart.
- *
- * `shopping_list` (#1818) steht aus demselben Grund hier: die Auswahl fuellt
- * ein eigenes Feld der Antwort (`shoppingTile`) und laesst `shoppingOpenCount`
- * unberuehrt - die Zahl, die Navigation und Kuechen-Kachel lesen.
- *
- * ALLOWLIST: was hier nicht steht, gilt als Filter. Ein neuer Parameter kostet
- * so hoechstens den zweiten Abruf, nie eine falsche Zahl. `events_scope` und
- * `events_birthdays` stehen bewusst nicht hier - sie waren vor #1680 schon
- * „gefiltert", und ob sie es bleiben, ist nicht Sache dieser Aenderung. */
-const COUNT_NEUTRAL_PARAMS = new Set(['events_limit', 'shopping_list']);
-
 /**
+ * Die Navigations-Badges und Modulkacheln nehmen die `/dashboard`-Antwort der
+ * Seite nur an, wenn sie ungefiltert ist (router.js, `primeModuleCountsFrom`).
+ * Seit es keine Optionen mehr gibt, ist der einzige Parameter `audience`
+ * (die Haushaltsfassung der Wand): jeder Parameter gilt als Filter.
+ *
  * @param {string} query Pfad der Uebersichts-Abfrage ('/dashboard' oder '/dashboard?…')
  * @returns {boolean} true, wenn die Antwort darauf andere Zahlen tragen kann als die ungefilterte
  */
@@ -397,5 +252,5 @@ export function dashboardQueryFiltersCounts(query) {
   const text = String(query ?? '');
   const at = text.indexOf('?');
   if (at === -1) return false;
-  return [...new URLSearchParams(text.slice(at + 1)).keys()].some((key) => !COUNT_NEUTRAL_PARAMS.has(key));
+  return [...new URLSearchParams(text.slice(at + 1)).keys()].length > 0;
 }

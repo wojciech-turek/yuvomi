@@ -57,26 +57,10 @@ const src = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 test('Registrierung: pantry steht in WIDGET_IDS, ab Werk ausgeblendet, als hohe Liste', () => {
   assert.ok(widgets.WIDGET_IDS.includes('pantry'), 'WIDGET_IDS fehlt pantry');
   // Eine Id, die in DEFAULT_HIDDEN_WIDGETS FEHLT, ist nach dem Update in jedem
-  // bestehenden Haushalt eingeblendet (normalizeDashboardConfig ergänzt sie mit
+  // bestehenden Haushalt eingeblendet (eine neu bekannte Id erbt
   // defaultWidgetVisible) - die Anti-Referenz ist das überladene Dashboard.
   assert.ok(widgets.DEFAULT_HIDDEN_WIDGETS.has('pantry'), 'pantry muss ein Opt-in im Anpassen-Tray sein');
-  assert.equal(widgets.DEFAULT_WIDGET_CONFIG.find((w) => w.id === 'pantry')?.visible, false,
-    'das Standard-Layout zeigt die Kachel nicht');
   assert.equal(widgets.defaultWidgetSize('pantry'), '1x2', 'eine Liste braucht Höhe, nicht Breite (wie waste/birthdays)');
-});
-
-test('Registrierung: ein Bestandslayout ohne pantry bekommt die Kachel ausgeblendet dazu', () => {
-  const bestand = widgets.DEFAULT_WIDGET_CONFIG
-    .filter((w) => w.id !== 'pantry')
-    .map((w, i) => ({ ...w, order: i }));
-  const merged = widgets.normalizeDashboardConfig(bestand);
-  const pantry = merged.find((w) => w.id === 'pantry');
-  assert.ok(pantry, 'die neue Id wird ergänzt');
-  assert.equal(pantry.visible, false, 'und zwar AUSgeblendet');
-  // `isUserOrderedConfig` gibt es seit dem dichten Raster nicht mehr (a1); was
-  // bleibt, ist die Default-Position des Neuzugangs: hinter dem Einkauf.
-  const ids = merged.map((w) => w.id);
-  assert.equal(ids.indexOf('pantry'), ids.indexOf('shopping') + 1, 'die Ergänzung steht an ihrer Default-Position');
 });
 
 test('Registrierung: Rechte hängen am Modul pantry', () => {

@@ -8,7 +8,6 @@ import { clearApiCache } from '/sw-register.js';
 import { setPermissions, clearPermissions } from '/permissions.js';
 import { setHouseholdSize, setOtherReaders, clearHouseholdSize } from '/utils/household.js';
 import { setInitialsRoster, clearInitialsRoster } from '/utils/initials.js';
-import { forgetLayoutHint } from '/utils/dashboard-layout-hint.js';
 import { t } from '/i18n.js';
 import { REFUSAL_MESSAGES } from '/utils/friendly-error.js';
 
@@ -382,10 +381,6 @@ const auth = {
       // seinem finally trotzdem zu /login, daher darf hier kein offline gecachter
       // Stand des vorigen Nutzers am selben Gerät zurückbleiben.
       clearApiCache();
-      // Aus demselben Grund der Layout-Hinweis der Übersicht: seit die
-      // Anordnung jeder Person gehört (#585), sagt er am geteilten Tablett
-      // sonst das Raster des vorigen Nutzers voraus.
-      forgetLayoutHint();
     }
   },
   // opts nur fuer den Start des Routers (`quietExpiry`, siehe apiFetch).

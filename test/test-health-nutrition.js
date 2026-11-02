@@ -676,14 +676,4 @@ test('nutrition steht in DEFAULT_HIDDEN_WIDGETS - sonst ist es nach dem Update u
   assert.ok(widgets.DEFAULT_HIDDEN_WIDGETS.has('nutrition'),
     'eine Id, die hier fehlt, ist bei JEDEM Bestandshaushalt nach dem Update eingeblendet');
   assert.equal(widgets.defaultWidgetVisible('nutrition'), false);
-
-  // Und die Probe an einem BESTANDSLAYOUT, das die Id noch nicht kennt: es
-  // bekommt sie ausgeblendet dazu, nicht sichtbar.
-  const altesLayout = widgets.DEFAULT_WIDGET_CONFIG
-    .filter((w) => w.id !== 'nutrition')
-    .map((w, i) => ({ ...w, order: i }));
-  const merged = widgets.normalizeDashboardConfig(altesLayout);
-  const eintrag = merged.find((w) => w.id === 'nutrition');
-  assert.ok(eintrag, 'die neue Id muss in ein Bestandslayout einsortiert werden');
-  assert.equal(eintrag.visible, false, 'sie muss AUSGEBLENDET ankommen');
 });

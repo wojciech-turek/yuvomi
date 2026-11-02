@@ -11113,6 +11113,23 @@ const MIGRATIONS = [
     // earlier would stay closed to everyone but its creator with no switch left.
     up: `UPDATE tasks SET locked = 0 WHERE locked <> 0;`,
   },
+  {
+    version: 254,
+    description: 'remove per-person home layout preferences',
+    // Today is the same for everyone (One Today round, 2026-11-02): nothing
+    // stored per person or per household default arranges it any more. The
+    // keys are dead weight; the per-user forms are '<key>:user:<id>'.
+    // Modell: Migration 144 (sync_config-Schluessel loeschen).
+    up: `
+      DELETE FROM sync_config
+       WHERE key IN (
+         'dashboard_widgets', 'dashboard_today_glance',
+         'dashboard_widgets_default', 'dashboard_today_glance_default'
+       )
+          OR key LIKE 'dashboard_widgets:user:%'
+          OR key LIKE 'dashboard_today_glance:user:%';
+    `,
+  },
 ];
 
 /**

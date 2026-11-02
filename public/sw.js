@@ -132,8 +132,6 @@ const APP_SHELL = [
   '/utils/contrast.js',
   '/utils/cook-steps.js',
   '/utils/countdown.js',
-  '/utils/dashboard-event-limit.js',
-  '/utils/dashboard-layout-hint.js',
   '/utils/dashboard-widgets.js',
   '/utils/date-status.js',
   '/utils/date.js',

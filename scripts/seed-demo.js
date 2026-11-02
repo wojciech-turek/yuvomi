@@ -238,60 +238,6 @@ cfgSet.run('weather_lon', '7.4653');
 cfgSet.run('weather_city', 'Dortmund');
 cfgSet.run('weather_units', 'metric');
 
-// Dashboard-Kacheln: kuratiert statt Vorgabe, aber entlang der Autor-Defaults
-// des Seele-Pakets. Das Wetter wohnt seit dem Umbau als Zeile im Masthead -
-// die Karte ist Wandtablet-Opt-in und bleibt hier ausgeblendet, sonst zeigte
-// jede Demo und jeder Screenshot den Legacy-Pfad OHNE Masthead-Zeile (kein
-// Echo: sichtbare Karte schaltet die Zeile stumm). family ist die „Heute
-// dran"-Karte und stapelt Mitglieder-Zeilen -> 1x2 wie im Autor-Default.
-//
-// DIE FUENF KACHELN MUESSEN AUFGEHEN, und sie taten es nicht: budget stand hier
-// auf 1x1, waehrend der Autor-Default es (wie jede stapelnde Karte) auf 1x2
-// fuehrt. Damit belegten die fuenf zusammen sieben Rasterzellen - bei den vier
-// Spalten, die der Desktop-Screenshot (1376px) aufmacht, eine volle Zeile plus
-// drei Viertel, und rechts unten blieb genau eine Zelle leer, die `dense` nicht
-// mehr schliessen konnte, weil kein Widget mehr uebrig war. Mit budget auf 1x2
-// sind es acht Zellen: zwei volle Zeilen, kein Loch. Gemessen am gerenderten
-// Raster, nicht am Reissbrett - die Kachelbreiten stehen im CSS, die
-// Spaltenzahl aber erst im Fenster.
-const dashboardWidgets = [
-  { id: 'family',    visible: true,  size: '1x2' },
-  { id: 'budget',    visible: true,  size: '1x2' },
-  // 1x2 wie der Autor-Default (defaultWidgetSize in public/pages/dashboard.js).
-  // Auf 1x1 war die Geburtstagskachel die KURZE Karte einer Rasterzeile - und
-  // damit bestimmte SIE die Zeilenhoehe, waehrend Familie und Budget daneben
-  // ueber zwei Zeilen spannten und je ~200px leer auslaufen mussten. Gemessen
-  // bei 1440px: 535px Kachelhoehe fuer 377px Inhalt. Mit drei gleich hohen
-  // 1x2-Karten deckt die Zeile sich mit ihrem Inhalt.
-  { id: 'birthdays', visible: true,  size: '1x2' },
-  // Das Wetter ist per Autor-Default AUS, weil es als Masthead-Zeile unter dem
-  // Gruss schon spricht (Seele-Paket, „kein Echo": ist die Karte da, entfaellt
-  // die Zeile). Die Demo zeigt trotzdem die Karte - sie ist der Wandtablet-Fall
-  // und traegt Ort und Vorhersage, die die Zeile nicht hat.
-  //
-  // SIE STEHT VOR DEN BEIDEN FLACHEN KARTEN, und das ist eine Anforderung an den
-  // SCREENSHOT, nicht ans Layout: der Bildausschnitt ist 1032 logische Pixel
-  // hoch, und als letztes Widget lag die Karte darunter - im Bild also gar
-  // nicht. Hier faellt sie in die dritte Rasterzeile und damit ins Bild.
-  //
-  // 2x1, weil breiter nicht geht: `normalizeDashboardConfig` bildet jede Groesse
-  // auf eines der vier kuratierten Presets ab (1x1, 1x2, 2x1, 2x2), ein `3x1`
-  // im Seed kaeme als `2x1` an.
-  { id: 'weather',   visible: true,  size: '2x1' },
-  { id: 'notes',     visible: true,  size: '2x1' },
-  // Ausgeblendet, aber in der Liste: die Reihenfolge bleibt stabil, wenn ein
-  // Haushalt sie im Anpassen-Modus wieder einblendet. tasks/calendar/shopping/
-  // meals deckt das „Heute"-Cockpit oben bereits ab - doppelt gezeigt wäre Echo.
-  { id: 'tasks',        visible: false, size: '1x2' },
-  { id: 'calendar',     visible: false, size: '1x2' },
-  { id: 'shopping',     visible: false, size: '2x1' },
-  { id: 'meals',        visible: false, size: '2x1' },
-  { id: 'housekeeping', visible: false, size: '1x1' },
-  { id: 'health',       visible: false, size: '2x1' },
-  { id: 'cycle',        visible: false, size: '2x1' },
-].map((w, order) => ({ ...w, order }));
-cfgSet.run('dashboard_widgets', JSON.stringify(dashboardWidgets));
-
 // Einkaufskategorien sind freie Namen (kein label_key) - im Deutschen stehen die
 // Migrationsvorgaben schon richtig, für Englisch werden sie an Ort und Stelle
 // umbenannt. CAT ist danach die EINZIGE Quelle für diese Namen: Einkaufszettel,

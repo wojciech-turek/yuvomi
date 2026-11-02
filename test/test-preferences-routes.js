@@ -346,107 +346,38 @@ test('PUT app_name: gültig -> persist, leer -> Rückfall auf Default', async ()
 });
 
 // --------------------------------------------------------
-// dashboard_widgets (normalizeWidgetConfig)
+// Heute ist fuer alle dasselbe (One Today): die Anordnung gibt es nicht mehr
 // --------------------------------------------------------
-test('PUT dashboard_widgets: Nicht-Array -> 400', async () => {
-  assert.equal((await put({ dashboard_widgets: {} })).status, 400);
+const REMOVED_LAYOUT_KEYS = ['dashboard_widgets', 'dashboard_today_glance', 'dashboard_widgets_default',
+  'dashboard_today_glance_default', 'dashboard_follows_default'];
+test('GET / traegt keinen Schluessel der alten Heute-Anordnung mehr', async () => {
+  const data = (await get()).body.data;
+  for (const key of REMOVED_LAYOUT_KEYS) assert.equal(key in data, false, `${key} steht noch in GET /preferences`);
 });
-test('PUT dashboard_widgets: ungültige Struktur, doppelte IDs oder zu viele Einträge -> 400', async () => {
-  assert.equal((await put({ dashboard_widgets: [{ id: '../weather', visible: true, order: 0, size: '1x1' }] })).status, 400);
-  assert.equal((await put({ dashboard_widgets: [{ id: 'weather', visible: 'yes', order: 0, size: '1x1' }] })).status, 400);
-  assert.equal((await put({ dashboard_widgets: [{ id: 'weather', visible: true, order: 'first', size: '1x1' }] })).status, 400);
-  assert.equal((await put({ dashboard_widgets: [{ id: 'weather', visible: true, order: 0, size: '5x5' }] })).status, 400);
-  assert.equal((await put({ dashboard_widgets: [
-    { id: 'weather', visible: true, order: 0, size: '1x1' },
-    { id: 'weather', visible: false, order: 1, size: '1x1' },
-  ] })).status, 400);
-  const tooMany = Array.from({ length: 65 }, (_, order) => ({
-    id: `widget-${order}`,
-    visible: true,
-    order,
-    size: '1x1',
-  }));
-  assert.equal((await put({ dashboard_widgets: tooMany })).status, 400);
+test('GET / ignoriert gespeicherte Reste der alten Anordnung', async () => {
+  cfgSet('dashboard_widgets', JSON.stringify([{ id: 'weather', visible: true, order: 0, size: '1x1' }]));
+  cfgSet('dashboard_widgets:user:1', '{ kaputt');
+  cfgSet('dashboard_today_glance', '0');
+  const data = (await get()).body.data;
+  for (const key of REMOVED_LAYOUT_KEYS) assert.equal(key in data, false, `${key} steht noch in GET /preferences`);
+  cfgDelete('dashboard_widgets'); cfgDelete('dashboard_widgets:user:1'); cfgDelete('dashboard_today_glance');
 });
-// --------------------------------------------------------
-// dashboard_today_glance (#740)
-// --------------------------------------------------------
-test('dashboard_today_glance ist standardmäßig an - der Bestand kennt den Schlüssel nicht', async () => {
-  const res = await get();
-  assert.equal(res.body.data.dashboard_today_glance, true);
-});
-test('PUT dashboard_today_glance: alles ausser Boolean und null -> 400', async () => {
-  // '0'/'1' waeren die DB-Schreibweise, nicht die der API - wer sie schickt,
-  // meint etwas anderes als er bekaeme.
-  assert.equal((await put({ dashboard_today_glance: '0' })).status, 400);
-  assert.equal((await put({ dashboard_today_glance: 0 })).status, 400);
-});
-test('null ist kein ungueltiger Boolean, sondern der Rueckweg zur Vorgabe (#827)', async () => {
-  // Dieselbe Schreibweise wie bei `timezone` und `language` nebenan: null heisst
-  // nicht "aus", sondern "ich habe hier nichts Eigenes". Bis v2.34.0 war es ein
-  // 400 - es gab schlicht keinen Weg zurueck.
-  assert.equal((await put({ dashboard_today_glance: false })).status, 200);
-  assert.equal((await get()).body.data.dashboard_follows_default, false);
-  assert.equal((await put({ dashboard_today_glance: null })).status, 200);
-  const back = await get();
-  assert.equal(back.body.data.dashboard_today_glance, true, 'die Vorgabe greift nicht wieder');
-  assert.equal(back.body.data.dashboard_follows_default, true);
-});
-test('dashboard_today_glance haelt beide Richtungen ueber den GET', async () => {
-  assert.equal((await put({ dashboard_today_glance: false })).status, 200);
-  assert.equal((await get()).body.data.dashboard_today_glance, false);
-  assert.equal((await put({ dashboard_today_glance: true })).status, 200);
-  assert.equal((await get()).body.data.dashboard_today_glance, true);
-});
-test('dashboard_today_glance braucht keine Adminrechte - wie die Widgets daneben', async () => {
-  // Die Uebersicht ist eine gemeinsame Seite; wer ihre Kacheln umstellen darf,
-  // darf auch ihr Kopfband abstellen. Waere das eine Admin-Entscheidung, muesste
-  // es dashboard_widgets auch sein.
-  const res = await put({ dashboard_today_glance: false }, { role: 'member', userId: 2 });
-  assert.equal(res.status, 200);
-  assert.equal((await get({ role: 'member', userId: 2 })).body.data.dashboard_today_glance, false);
-  await put({ dashboard_today_glance: true });
-});
-
-test('PUT dashboard_widgets: Teilmenge bleibt beim GET eine Teilmenge', async () => {
-  const requested = [{ id: 'notes', visible: false, order: 0, size: '2x1' }];
-  const saved = await put({ dashboard_widgets: requested });
-  assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.data.dashboard_widgets, requested);
-  assert.deepEqual((await get()).body.data.dashboard_widgets, requested);
-});
-test('PUT dashboard_widgets: zukünftige sichere Widget-ID wird unverändert persistiert', async () => {
-  const requested = [
-    { id: 'weather', visible: true, order: 0, size: '2x1' },
-    { id: 'solar-production', visible: true, order: 1, size: '2x1' },
-  ];
-
-  const saved = await put({ dashboard_widgets: requested });
-  assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.data.dashboard_widgets, requested);
-  assert.deepEqual((await get()).body.data.dashboard_widgets, requested);
-});
-test('PUT dashboard_widgets: aktuelle 13-Widget-Konfiguration bleibt beim GET erhalten', async () => {
-  const requested = [
-    { id: 'weather', visible: true, order: 0, size: '2x1' },
-    { id: 'tasks', visible: true, order: 1, size: '2x2' },
-    { id: 'calendar', visible: true, order: 2, size: '2x2' },
-    { id: 'notes', visible: true, order: 3, size: '2x1' },
-    { id: 'shopping', visible: true, order: 4, size: '2x1' },
-    { id: 'birthdays', visible: true, order: 5, size: '1x1' },
-    { id: 'family', visible: true, order: 6, size: '1x1' },
-    { id: 'meals', visible: true, order: 7, size: '1x1' },
-    { id: 'budget', visible: true, order: 8, size: '1x1' },
-    { id: 'waste', visible: true, order: 9, size: '1x2' },
-    { id: 'health', visible: true, order: 10, size: '2x1' },
-    { id: 'cycle', visible: false, order: 11, size: '2x1' },
-    { id: 'housekeeping', visible: true, order: 12, size: '1x1' },
-  ];
-
-  const saved = await put({ dashboard_widgets: requested });
-  assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.data.dashboard_widgets, requested);
-  assert.deepEqual((await get()).body.data.dashboard_widgets, requested);
+test('PUT: die entfernten Schluessel verhalten sich wie jeder unbekannte - ignoriert, nichts gespeichert (R2)', async () => {
+  const unknown = await put({ not_a_preference: [{ id: 'weather' }] });
+  assert.equal(unknown.status, 200);
+  const res = await put({
+    dashboard_widgets: [{ id: 'weather', visible: true, order: 0, size: '1x1' }],
+    dashboard_today_glance: false,
+    dashboard_widgets_default: [{ id: 'tasks', visible: true, order: 0, size: '1x1' }],
+    dashboard_today_glance_default: false,
+  });
+  assert.equal(res.status, unknown.status);
+  for (const key of REMOVED_LAYOUT_KEYS) assert.equal(key in res.body.data, false, `${key} steht in der PUT-Antwort`);
+  const stored = db.prepare("SELECT key FROM sync_config WHERE key LIKE 'dashboard_widgets%' OR key LIKE 'dashboard_today_glance%'").all();
+  assert.deepEqual(stored, [], 'es wurde nichts abgelegt');
+  // Auch ein ungueltiger Wert ist kein Fehler mehr: der Schluessel wird gar nicht gelesen.
+  assert.equal((await put({ dashboard_widgets: {} })).status, 200);
+  assert.equal((await put({ dashboard_today_glance: 'ja' })).status, 200);
 });
 
 // --------------------------------------------------------
@@ -899,20 +830,6 @@ test('POST /holidays/sync: Admin ohne konfiguriertes Land -> 200 (netz-freier Ea
 // --------------------------------------------------------
 // Defensive Parse-Fallbacks der Lese-Helfer (korrupte sync_config-Werte)
 // --------------------------------------------------------
-test('GET / verkraftet korrupte dashboard_widgets (Fallback auf Default)', async () => {
-  // BEIDE Ablagen, seit die Anordnung persönlich ist (#585): der Haushaltswert
-  // ist nur noch Fallback, und ein persönlicher Wert verdeckt ihn. Wer hier nur
-  // den Haushaltswert korrumpiert, prüft nach dem ersten PUT dieser Datei gar
-  // nichts mehr - die Antwort käme dann aus `dashboard_widgets:user:1`.
-  cfgDelete('dashboard_widgets:user:1');
-  cfgSet('dashboard_widgets', '{ kaputt');
-  assert.deepEqual((await get()).body.data.dashboard_widgets, []); // Client erweitert leer auf seine Defaults
-  cfgDelete('dashboard_widgets');
-
-  cfgSet('dashboard_widgets:user:1', '{ auch kaputt');
-  assert.deepEqual((await get()).body.data.dashboard_widgets, []);
-  cfgDelete('dashboard_widgets:user:1');
-});
 test('GET / verkraftet korrupte per-user calendar_default_reminders', async () => {
   cfgSet('calendar_default_reminders:user:1', 'nicht-json');
   assert.deepEqual((await get()).body.data.calendar_default_reminders, []);
@@ -1031,33 +948,4 @@ test('eine gueltige gemischte Patch wird weiterhin ganz geschrieben, und danach 
   await put({ week_start: 'sunday', holiday_school_color: 'kein-hex' });
   assert.equal(db.inTransaction, false);
   cfgDelete('week_start'); cfgDelete('hidden_modules:user:1'); cfgDelete('budget_mode');
-});
-
-test('wirft die Berechnung der Erfolgsantwort, ist die Patch nicht geschrieben (#1622, Review zu #1627)', async () => {
-  // Die Antwort liest aus der Datenbank zurueck, und ein Notiz-Widget mit
-  // Kategorie-Filter fragt dafuer den Kategorien-Katalog ab. Eine TEMP-Tabelle
-  // gleichen Namens verdeckt ihn: die Feldfolge laeuft sauber durch, erst der
-  // Bau der Antwort wirft. Stand das COMMIT davor, sagte die Antwort 500 und
-  // die Patch war trotzdem gespeichert.
-  cfgSet('week_start', 'monday');
-  cfgDelete('dashboard_widgets:user:1');
-  const before = (await get()).body.data;
-  db.exec('CREATE TEMP TABLE note_categories (verdeckt INTEGER)');
-  let res;
-  try {
-    res = await put({
-      week_start: 'sunday',
-      dashboard_widgets: [{ id: 'notes', options: { categories: [1] } }],
-    });
-  } finally {
-    db.exec('DROP TABLE temp.note_categories');
-  }
-  assert.equal(res.status, 500);
-  assert.deepEqual(res.body, { error: 'Interner Fehler', code: 500 });
-  assert.equal(db.inTransaction, false);
-  const after = (await get()).body.data;
-  assert.equal(after.week_start, 'monday', 'week_start wurde trotz 500 geschrieben');
-  assert.deepEqual(after, before);
-  assert.equal(db.prepare("SELECT value FROM sync_config WHERE key = 'dashboard_widgets:user:1'").get(), undefined);
-  cfgDelete('week_start');
 });

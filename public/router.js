@@ -9,7 +9,6 @@ import { canAccessNavModule, navModuleAccess, setExtensionNavMap } from '/permis
 import { setExtensionModules, selectThirdPartyModuleList } from '/utils/extension-widgets.js';
 import { initExtensionI18n, moduleDisplayLabel, reloadExtensionLocales } from '/utils/extension-i18n.js';
 import { clearApiCache, onServiceWorkerUpdate, UPDATE_RELOAD_DELAY_MS } from '/sw-register.js';
-import { forgetLayoutHint } from '/utils/dashboard-layout-hint.js';
 import { initI18n, getLocale, t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
@@ -1229,12 +1228,9 @@ function invalidateModuleCounts() {
  * dieselbe teure Aggregation: der Shell-Aufbau fuer die Zahlen und die Seite
  * fuer ihre Kacheln. Der Server rechnet dabei ein Dutzend Abfragen doppelt.
  *
- * Die Seite fragt gefiltert (`layoutHintQuery`), die Zahlen brauchen das nicht
- * - sie zaehlen, was wartet, nicht was die Kachel zeigt. Fuer `openTaskCount`
- * und `overdueTaskCount` macht die Widget-Einschraenkung sehr wohl einen
- * Unterschied (`test:task-scope` haelt genau das fest), und deshalb gilt: nur
- * eine UNGEFILTERTE Antwort darf den Speicher fuellen. Kommt sie gefiltert,
- * bleibt es beim eigenen Abruf.
+ * Nur eine UNGEFILTERTE Antwort darf den Speicher fuellen: die Zahlen zaehlen,
+ * was wartet. Die Haushaltsfassung der Wand (`audience=household`) zaehlt
+ * anders. Kommt sie gefiltert, bleibt es beim eigenen Abruf.
  */
 function primeModuleCountsFrom(data, { filtered = false } = {}) {
   if (filtered || !data) return;
@@ -4442,9 +4438,6 @@ function forgetSessionState() {
   // Offline-API-Cache leeren: Session-Ende → keine gecachten Daten zurücklassen,
   // die der nächste Nutzer am selben Gerät offline sehen könnte.
   clearApiCache();
-  // Der Layout-Hinweis des Dashboards gehoert derselben Sitzung: ohne ihn sagt
-  // das Skelett am geteilten Tablett das Raster des Vorgaengers voraus.
-  forgetLayoutHint();
   // Gemerkte Scrollstände gehören zur Sitzung: der nächste Nutzer am selben
   // Gerät soll nicht auf den Positionen des vorigen landen.
   forgetScrollPositions();

@@ -59,7 +59,6 @@ const SHARED_ISOMORPHIC = new Set([
   // bei einem Randfall auseinander, sondern bei der naechsten Stufe: der Server
   // lieferte sie, und der Browser zeigte weiter fuenf. Rein: eine eingefrorene
   // Liste und ein Vergleich, kein DOM und kein Node.
-  'public/utils/dashboard-event-limit.js',
   // #1074: Ziffern fremder Systeme nach ASCII. Client und Server lesen dieselben
   // Mengentexte („۲۵۰ g") - der Client, um eine Zutat zu skalieren, der Server,
   // um sie beim Uebertrag in die Einkaufsliste zusammenzuzaehlen. Zwei Fassungen

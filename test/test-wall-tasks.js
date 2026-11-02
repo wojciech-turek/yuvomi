@@ -219,20 +219,6 @@ test('Server: Begonnenes ist offen', withClock(NOON_BERLIN, 'Europe/Berlin', asy
   assert.equal(by[BEN].done_count, 0);
 }));
 
-test('Server: die Kategorie-Auswahl der Uebersicht gilt auch fuer die Wand', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
-  const school = addTask('Schule', BEN);
-  const home = addTask('Haushalt', BEN);
-  const doneHome = addTask('Haushalt erledigt', BEN, { status: 'done' });
-  db.prepare("UPDATE tasks SET category = 'school' WHERE id = ?").run(school);
-  db.prepare("UPDATE tasks SET category = 'household' WHERE id IN (?, ?)").run(home, doneHome);
-  viewer = ANNA;
-  const all = Object.fromEntries((await (await fetch(`${base}/?audience=household`)).json()).wallTasks.map((e) => [e.user_id, e]));
-  assert.equal(all[BEN].open_count, 2, 'Vorbedingung: ohne Auswahl beide');
-  const filtered = Object.fromEntries((await (await fetch(`${base}/?audience=household&tasks_category=school`)).json()).wallTasks.map((e) => [e.user_id, e]));
-  assert.deepEqual(titles(filtered[BEN].open), ['Schule']);
-  assert.equal(filtered[BEN].done_count, 0, 'auch das Erledigte folgt der Auswahl');
-}));
-
 test('Server: heute faellig und erledigt behaelt den Haken auch OHNE Abschlusszeile', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   // Zwei Schreiber setzen `status = 'done'`, ohne `task_completions` zu fuellen
   // (der Abgleich mit CalDAV-Erinnerungen, die Haushaltshilfe). Der Tag der
@@ -454,14 +440,6 @@ test('Geteilte Flaeche: beide Fassungen sagen jedem Mitglied dasselbe', withCloc
   assert.deepEqual(pick(await overview(BEN, '?audience=household')), pick(await overview(CLEO, '?audience=household')));
 }));
 
-test('Geteilte Flaeche: „nur meine" gilt an der Wand nicht - sie ist niemandes', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
-  seedSharedSurface();
-  const personal = await overview(BEN, '?events_scope=mine');
-  assert.deepEqual(eventTitles(personal.upcomingEvents), ['Termin nur Zugewiesene'], 'Vorbedingung: persoenlich greift die Auswahl');
-  const wall = await overview(BEN, '?events_scope=mine&audience=household');
-  assert.deepEqual(eventTitles(wall.upcomingEvents), ['Aus dem geteilten Abo', 'Termin fuer alle']);
-}));
-
 test('Geteilte Flaeche: die gebaute Wand zeigt nichts davon, und wer nur darueber dran waere, traegt keine Scheibe', async () => {
   let wall;
   let personal;
@@ -498,13 +476,12 @@ test('Geteilte Flaeche: die gebaute Wand zeigt nichts davon, und wer nur daruebe
 
 test('Geteilte Flaeche: die Wand fragt die Haushaltsfassung ab, die Uebersicht nicht', async () => {
   assert.equal(dashboardRequest('/dashboard', { wall: true }), '/dashboard?audience=household');
-  assert.equal(dashboardRequest('/dashboard?tasks_category=school', { wall: true }), '/dashboard?tasks_category=school&audience=household');
-  assert.equal(dashboardRequest('/dashboard?events_scope=mine', { wall: false }), '/dashboard?events_scope=mine');
+  assert.equal(dashboardRequest('/dashboard?x=1', { wall: true }), '/dashboard?x=1&audience=household');
+  assert.equal(dashboardRequest('/dashboard?x=1', { wall: false }), '/dashboard?x=1');
   assert.equal(dashboardRequest('/dashboard'), '/dashboard');
   // Die Zahlen der Haushaltsfassung sind nicht die der Person: sie gelten dem
   // Speicher der Navigations-Badges als gefiltert und werden dort nie angenommen.
   assert.equal(dashboardQueryFiltersCounts(dashboardRequest('/dashboard', { wall: true })), true);
-  assert.equal(dashboardQueryFiltersCounts(dashboardRequest('/dashboard?events_limit=8', { wall: true })), true);
   assert.equal(dashboardQueryFiltersCounts(dashboardRequest('/dashboard', { wall: false })), false);
   // JEDER Abruf der Seite geht durch diese eine Stelle - auch der stille
   // Refresh, sonst stuende nach einer Viertelstunde wieder die persoenliche
@@ -918,11 +895,11 @@ function seedWallSources() {
 }
 /** Woerter und Zahlen, die an keiner Wand etwas verloren haben - als Text gesucht. */
 const OFF_WALL_WORDS = ['Sparbuch', 'DE00 1234', '4321', '98765', 'Bankportal', 'bank.example', '87.5'];
-const householdQuery = () => `?audience=household&shopping_list=${SHOPPING_LIST}`;
+const householdQuery = () => '?audience=household';
 
 test('Allowlist: ohne den Parameter traegt die Antwort all das weiter (Reichweite der Saat)', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
-  const anna = await overview(ANNA, `?shopping_list=${SHOPPING_LIST}`);
+  const anna = await overview(ANNA, '');
   assert.deepEqual(titles(anna.pinnedNotes), ['Kontonummer Sparbuch']);
   assert.equal(anna.pinnedNotesCount, 1);
   assert.equal(anna.notesTotal, 1);
@@ -935,7 +912,6 @@ test('Allowlist: ohne den Parameter traegt die Antwort all das weiter (Reichweit
   assert.equal(anna.housekeeping.unpaidAmount, 87.5);
   assert.equal(anna.housekeeping.visitsThisMonth, 1);
   assert.ok(anna.housekeeping.lastVisit);
-  assert.ok(anna.shoppingTile, 'die Auswahl der Einkaufs-Kachel');
   assert.ok(anna.openTaskCount > 0);
   assert.ok(anna.weekEvents.length > 0);
   assert.ok(anna.familyEvents.length > 0);
@@ -951,7 +927,7 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
   // Fassung eines Kontos ohne das Modulrecht.
   const denied = await asCoupledDisplay(() => overview(DISPLAY));
   for (const who of [ANNA, BEN, CLEO]) {
-    const personal = await overview(who, `?shopping_list=${SHOPPING_LIST}`);
+    const personal = await overview(who, '');
     const wall = await overview(who, householdQuery());
     const text = JSON.stringify(wall);
     for (const word of OFF_WALL_WORDS) assert.ok(!text.includes(word), `Sitzung ${who}: „${word}" reist nicht mit`);
@@ -967,7 +943,6 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     assert.deepEqual(wall.countdowns, []);
     assert.equal(wall.countdownTotal, 0);
     assert.deepEqual(wall.quicklinks, []);
-    assert.ok(!('shoppingTile' in wall), 'die Kachel-Auswahl fehlt, wie bei einem Konto ohne den Einkauf');
     // Scheiben erlaubter Module, die die Wand nicht zeichnet.
     assert.deepEqual(wall.familyEvents, []);
     assert.deepEqual(wall.weekEvents, []);
@@ -997,7 +972,7 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     assert.deepEqual(wall.pantryExpiring.todayItems.map((item) => item.name), ['Joghurt']);
 
     // KEIN FEHLENDER SCHLUESSEL: die Form der Antwort bleibt.
-    assert.deepEqual(Object.keys(wall).sort(), Object.keys(personal).filter((key) => key !== 'shoppingTile').sort());
+    assert.deepEqual(Object.keys(wall).sort(), Object.keys(personal).sort());
     for (const key of ['housekeeping', 'pantryExpiring', 'budget', 'health']) {
       const own = Object.keys(personal[key]).sort();
       assert.deepEqual(Object.keys(wall[key]).sort(), own, `„${key}" behaelt seine Felder`);
@@ -1017,8 +992,8 @@ const DELIBERATELY_EMPTY_ON_THE_WALL = Object.freeze({
   // Aufgaben: Kennzahlen der Kacheln und der Navigation.
   openTaskCount: 'tasks', overdueTaskCount: 'tasks', memberTodayTasks: 'tasks',
   // Einkauf: die Wand nennt die Zahl und die ersten Artikel (shoppingLists),
-  // nicht die Zahl der Listen und nicht die Auswahl der Kachel.
-  shoppingOpenLists: 'shopping', shoppingTile: 'shopping',
+  // nicht die Zahl der Listen.
+  shoppingOpenLists: 'shopping',
   pinnedNotes: 'notes', pinnedNotesCount: 'notes', notesTotal: 'notes',
   // Geld steht an keiner Wand.
   budget: 'budget', splitBalance: 'budget',
@@ -1040,9 +1015,8 @@ test('Drift: jeder Schluessel, den die Route liefert, ist entschieden - gezeichn
   seedWallSources();
   const shows = visibility.HOUSEHOLD_AUDIENCE_SHOWS;
   assert.ok(shows && typeof shows === 'object', 'die Allowlist der Wand-Quellen ist benannt und exportiert');
-  // Die volle Antwort: Admin, jedes Modul an, jede Quelle belegt, mit der Auswahl
-  // der Einkaufs-Kachel (ihr Feld gibt es nur dann).
-  const real = await overview(ANNA, `?shopping_list=${SHOPPING_LIST}`);
+  // Die volle Antwort: Admin, jedes Modul an, jede Quelle belegt.
+  const real = await overview(ANNA, '');
   const delivered = Object.keys(real).sort();
   assert.ok(delivered.length >= 30, `Reichweite: die Route liefert ihre Schluessel (${delivered.length})`);
 
@@ -1065,7 +1039,7 @@ test('Drift: jeder Schluessel, den die Route liefert, ist entschieden - gezeichn
 
 test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der echten Antwort abgelesen', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
-  const personal = await overview(ANNA, `?shopping_list=${SHOPPING_LIST}`);
+  const personal = await overview(ANNA, '');
   const wall = await overview(ANNA, householdQuery());
   // OHNE DIE KONSTANTE DES SERVERS: ein Schluessel „traegt", wenn er sich von
   // der Antwort desselben Haushalts ohne jede Zeile unterscheidet.
@@ -1134,7 +1108,7 @@ test('Allowlist: die gebaute Wand ist dieselbe wie zuvor - nichts, was sie zeich
   let wall;
   await withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
     seedWallSources();
-    personal = await overview(ANNA, `?shopping_list=${SHOPPING_LIST}`);
+    personal = await overview(ANNA, '');
     wall = await overview(ANNA, householdQuery());
   })();
   await onWallAt(NOON_BERLIN, () => {

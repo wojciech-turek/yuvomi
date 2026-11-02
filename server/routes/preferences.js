@@ -16,8 +16,6 @@ import { householdTimeZone, isValidTimeZone } from '../utils/timezone.js';
 import { retitleBirthdayEvents } from '../services/birthdays.js';
 import { resolveWeatherSource } from '../services/weather-source.js';
 import { DEFAULT_OVERDUE_GRACE_DAYS } from '../services/countdowns.js';
-import { isWidgetId } from '../services/module-capabilities.js';
-import { listVisibleCategories } from '../services/note-categories.js';
 import { syncPreventionRemindersForSubject } from '../services/prevention-reminders.js';
 import { syncAllFastingReminders } from '../services/fasting-reminders.js';
 import { isScreensaverEnabled } from './screensaver.js';
@@ -198,21 +196,6 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const COUNTRY_ISO_RE = /^[A-Z]{2}$/;
 const SUBDIVISION_RE = /^[A-Z]{2}-[A-Z0-9-]{1,10}$/;
 
-// Widget identifiers are client-owned. The server validates only a safe storage shape,
-// so adding or removing dashboard widgets never requires a matching backend registry
-// change. Die Schreibweise selbst steht in services/module-capabilities.js - dort, wo
-// `fullWidgetId()` sie zusammensetzt. Eine zweite Fassung hier hat #1013 verursacht:
-// sie kannte den Doppelpunkt der Fremdmodul-Ids nicht.
-const MAX_DASHBOARD_WIDGETS = 64;
-const VALID_WIDGET_SIZES = ['1x1', '1x2', '1x3', '1x4', '2x1', '2x2', '2x3', '2x4', '3x1', '3x2', '3x3', '3x4', '4x1', '4x2', '4x3', '4x4'];
-const DEFAULT_WIDGET_CONFIG = '[]';
-// Grenzen der Widget-Optionen (#814). Sie beschreiben die SPEICHERFORM, nicht
-// die Bedeutung: welche Optionen ein Widget kennt, weiss allein das Frontend.
-const WIDGET_OPTION_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
-const MAX_WIDGET_OPTION_KEYS = 8;
-const MAX_WIDGET_OPTION_VALUES = 50;
-const MAX_WIDGET_OPTION_LENGTH = 64;
-
 // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart anbietet
 // (public/pages/schedule.js#PRESET_TEMPLATES) - haushaltweit und admin-only
 // wie disabled_modules, nicht pro Nutzer wie hidden_modules: die Vorlagen
@@ -297,77 +280,6 @@ export function healthCycleViews(userId) {
   };
 }
 
-// Die persönliche Übersicht (#585): eigene Anordnung, sonst die des Haushalts.
-//
-// EINE Funktion, weil es drei Leser gibt - GET, die PUT-Antwort und künftige.
-// Der Fallback stand beim Umbau erst nur im GET; die PUT-Antwort las weiter den
-// Haushaltswert und meldete damit nach dem Speichern den Stand zurück, den man
-// gerade ersetzt hatte. Zwei Ausdrücke für dieselbe Regel sind einer zu viel.
-/**
- * Drei Fragen, drei Sichten - dasselbe Muster wie bei Sprache und Zeitzone:
- * was gilt fuer mich, was hat der Haushalt als Vorgabe hinterlegt, und folge
- * ich ihr ueberhaupt noch.
- *
- * DIE VORGABE HAT EINEN EIGENEN SCHLUESSEL (#827). Der alte haushaltweite
- * `dashboard_widgets` ist ein Fossil aus der Zeit vor #585: er traegt, was
- * zuletzt irgendjemand gespeichert hat, nicht das, was ein Admin als Vorgabe
- * gewaehlt haette. Ihn zu ueberschreiben hiesse, einen Zufallsstand zur
- * bewussten Entscheidung zu erklaeren - und die Oberflaeche koennte "noch keine
- * Vorgabe gesetzt" nicht mehr von "so soll es sein" unterscheiden. Er bleibt
- * deshalb stehen und wirkt als letzte Stufe der Kette, damit Bestandshaushalte
- * ihre gewohnte Anordnung behalten.
- *
- * Ein ZWEITER Grund fuer den eigenen Schluessel steht in test-settings-admin-gate.js:
- * ein Schluessel, der sowohl per `cfgSet` als auch per `cfgUserSet` geschrieben
- * wird, ist fuer diesen Guard nicht mehr entscheidbar (`ambiguous`), und dessen
- * Grenze ist mit Wetter und Zyklus-Schalter bereits ausgeschoepft.
- */
-function dashboardDefaults() {
-  return {
-    widgets: cfgGet('dashboard_widgets_default') ?? cfgGet('dashboard_widgets'),
-    glance: cfgGet('dashboard_today_glance_default') ?? cfgGet('dashboard_today_glance'),
-  };
-}
-
-function sanitizeNoteCategoryOptions(config, visibleCategories) {
-  return config.map((widget) => {
-    if (widget.id !== 'notes' || !Array.isArray(widget.options?.categories)) return widget;
-    const categories = widget.options.categories.filter((id) => visibleCategories().has(String(id)));
-    const options = { ...widget.options };
-    if (categories.length) options.categories = categories;
-    else delete options.categories;
-    const next = { ...widget };
-    if (Object.keys(options).length) next.options = options;
-    else delete next.options;
-    return next;
-  });
-}
-
-function dashboardPersonalViews(userId) {
-  const ownWidgets = cfgUserGet('dashboard_widgets', userId);
-  const ownGlance = cfgUserGet('dashboard_today_glance', userId);
-  const fallback = dashboardDefaults();
-  // Request-local and lazy: no catalog query for absent/empty filters, and one
-  // shared visibility snapshot for the personal view and household defaults.
-  let visible;
-  const visibleCategories = () => (visible ??= new Set(
-    listVisibleCategories(db.get(), userId).map((category) => String(category.id)),
-  ));
-  return {
-    dashboard_widgets: sanitizeNoteCategoryOptions(parseWidgetConfig(ownWidgets ?? fallback.widgets), visibleCategories),
-    dashboard_today_glance: (ownGlance ?? fallback.glance) !== '0',
-    // Die Vorgabe des Haushalts, damit die Oberflaeche zeigen kann, wohin ein
-    // Zuruecksetzen fuehrt. `null` heisst: es gibt keine.
-    dashboard_widgets_default: cfgGet('dashboard_widgets_default') === null
-      ? null
-      : sanitizeNoteCategoryOptions(parseWidgetConfig(cfgGet('dashboard_widgets_default')), visibleCategories),
-    dashboard_today_glance_default: (cfgGet('dashboard_today_glance_default') ?? '1') !== '0',
-    // Folge ich der Vorgabe? Nur wer NICHTS Eigenes hinterlegt hat, tut das -
-    // und nur fuer den hat "zuruecksetzen" nichts zu tun.
-    dashboard_follows_default: ownWidgets === null && ownGlance === null,
-  };
-}
-
 // Per-User-Wetter-Override lesen (null je Feld = erbt Haushalt).
 function weatherUserOverride(userId) {
   const autoRaw = cfgUserGet('weather_auto_locate', userId);
@@ -394,19 +306,6 @@ function householdWeatherSource() {
     city:     cfgGet('weather_city'),
     units:    cfgGet('weather_units'),
   });
-}
-
-// --------------------------------------------------------
-// Widget-Hilfsfunktionen
-// --------------------------------------------------------
-
-function parseWidgetConfig(raw) {
-  try {
-    const parsed = JSON.parse(raw ?? DEFAULT_WIDGET_CONFIG);
-    return normalizeWidgetConfig(parsed) ?? [];
-  } catch {
-    return JSON.parse(DEFAULT_WIDGET_CONFIG);
-  }
 }
 
 function parseDisabledModules(raw) {
@@ -505,89 +404,6 @@ function parseMobileNavOrder(raw) {
   }
 }
 
-/**
- * Die Optionen eines Widgets - der Server prüft ihre FORM und sonst nichts (#814).
- *
- * Widget-Ids gehören seit jeher dem Frontend: ein neues Widget kostet keine
- * Backend-Änderung, weil hier keine Registry steht, die es kennen müsste. Für
- * die Optionen gilt dasselbe, und aus demselben Grund - eine serverseitige
- * Liste „welches Widget kennt welche Option" wäre der billige Anfang und
- * danach der Preis jedes weiteren Widgets. Was der Server verhindern muss, ist
- * nur, dass hier unbegrenzt viel Fremdinhalt in `sync_config` landet.
- *
- * Erlaubt sind Boolean, endliche Zahlen, kurze Strings und Listen kurzer
- * Strings ODER ganzer Zahlen (#1063 Phase 10: die Waste-Kachel filtert
- * nach Typ-Ids, keine Kategorie-Schlüsseln - eine Liste darf deshalb nicht
- * mehr nur Strings tragen; Ids sind Integer, also lässt die Liste auch nur
- * Integer durch statt beliebiger endlicher Zahlen wie 1e308 oder Brüche).
- * Verschachtelte Objekte nicht: sie hätten keine Tiefengrenze, und kein
- * Widget braucht sie.
- *
- * @returns {object|null} normalisierte Optionen, oder null wenn die Form nicht stimmt
- */
-function normalizeWidgetOptions(input) {
-  if (input === undefined) return {};
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const keys = Object.keys(input);
-  if (keys.length > MAX_WIDGET_OPTION_KEYS) return null;
-
-  const out = {};
-  for (const key of keys) {
-    if (!WIDGET_OPTION_KEY_RE.test(key)) return null;
-    const value = input[key];
-    if (typeof value === 'boolean') { out[key] = value; continue; }
-    if (typeof value === 'number') {
-      if (!Number.isFinite(value)) return null;
-      out[key] = value; continue;
-    }
-    if (typeof value === 'string') {
-      if (value.length > MAX_WIDGET_OPTION_LENGTH) return null;
-      out[key] = value; continue;
-    }
-    if (Array.isArray(value)) {
-      if (value.length > MAX_WIDGET_OPTION_VALUES) return null;
-      if (!value.every((v) => (typeof v === 'string' && v.length <= MAX_WIDGET_OPTION_LENGTH)
-        || (typeof v === 'number' && Number.isInteger(v)))) return null;
-      out[key] = [...value];
-      continue;
-    }
-    return null;
-  }
-  return out;
-}
-
-function normalizeWidgetConfig(input) {
-  if (!Array.isArray(input) || input.length > MAX_DASHBOARD_WIDGETS) return null;
-
-  const seenIds = new Set();
-  const normalized = [];
-  for (const [index, widget] of input.entries()) {
-    if (!widget || typeof widget !== 'object' || Array.isArray(widget)) return null;
-    if (!isWidgetId(widget.id) || seenIds.has(widget.id)) return null;
-    if (widget.visible !== undefined && typeof widget.visible !== 'boolean') return null;
-    if (widget.order !== undefined && !Number.isFinite(Number(widget.order))) return null;
-    if (widget.size !== undefined && !VALID_WIDGET_SIZES.includes(widget.size)) return null;
-    const options = normalizeWidgetOptions(widget.options);
-    if (options === null) return null;
-
-    seenIds.add(widget.id);
-    normalized.push({
-      id: widget.id,
-      visible: widget.visible !== false,
-      order: widget.order === undefined ? index : Number(widget.order),
-      size: widget.size ?? '1x1',
-      // Ein leeres Optionsobjekt wird nicht mitgeschleppt: es wäre in jedem
-      // gespeicherten Layout dieselbe leere Klammer und in jeder Antwort ein
-      // Feld, das nichts sagt.
-      ...(Object.keys(options).length ? { options } : {}),
-    });
-  }
-
-  return normalized
-    .sort((a, b) => a.order - b.order)
-    .map((widget, order) => ({ ...widget, order }));
-}
-
 // --------------------------------------------------------
 // GET /api/v1/preferences
 // Alle Haushalt-Praeferenzen lesen.
@@ -635,8 +451,6 @@ router.get('/', (req, res) => {
         language_effective: resolveHouseholdLocale(db.get()),
         language_auto: resolveHouseholdLocale(db.get(), { ignoreExplicit: true }),
         app_name: appName,
-        // Anordnung und Kopfband der Übersicht - persönlich, mit Haushalts-Fallback (#585).
-        ...dashboardPersonalViews(req.authUserId),
         disabled_modules: disabledModules,
         hidden_modules: hiddenModules,
         module_order: moduleOrder,
@@ -729,7 +543,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, dashboard_widgets, dashboard_today_glance, dashboard_widgets_default, dashboard_today_glance_default, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, tasks_subtasks_expanded, wall_allow_ticking, wall_sections, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -911,94 +725,6 @@ router.put('/', (req, res) => {
       if (vAppName.error) return res.status(400).json({ error: vAppName.error, code: 400 });
       if (vAppName.value) cfgSet('app_name', vAppName.value);
       else cfgDelete('app_name');
-    }
-
-    // DIE ÜBERSICHT GEHÖRT DER PERSON, NICHT DEM HAUSHALT (#585).
-    //
-    // Auswahl, Reihenfolge und Größe der Kacheln lagen haushaltweit: wer das
-    // Zyklus-Widget für sich abwählte, nahm es allen weg, und wer sich die
-    // Aufgaben nach oben zog, verschob sie auch für die Kinder. Genau daran
-    // hing der Wunsch - eine Familie hat auf derselben Seite verschiedene
-    // Bedürfnisse. Das Muster dafür steht schon nebenan: `module_order` liest
-    // per-user MIT Haushalts-Fallback und schreibt ausschliesslich per-user.
-    //
-    // KEIN DUAL-WRITE, und das ist eine bewusste Entscheidung, keine Bequemlichkeit.
-    // Ein Schlüssel, der beide Wege kennt, ist für test-settings-admin-gate.js
-    // nicht mehr entscheidbar (`ambiguous`) - dort kostet jeder solche Schlüssel
-    // Reichweite, und die Grenze ist mit Wetter und Zyklus bereits ausgeschöpft.
-    // Der alte Haushaltswert bleibt deshalb liegen und wirkt nur noch als
-    // Fallback: bestehende Haushalte sehen ihre gewohnte Anordnung weiter, jeder
-    // bekommt seine eigene erst in dem Moment, in dem er selbst etwas ändert.
-    // Deshalb braucht dieser Schritt auch keine Migration.
-    //
-    // Das Kopfband „Heute auf einen Blick" (#740) fährt mit, weil es im selben
-    // PUT gespeichert wird: bliebe es haushaltweit, schaltete ein persönliches
-    // Ausblenden es weiterhin für alle ab - genau der Bruch, den #585 meldet.
-    // `null` ist hier kein leeres Layout, sondern der Rueckweg: mein eigener
-    // Stand wird geloescht, und damit gilt wieder die Vorgabe des Haushalts -
-    // heute und nach jeder spaeteren Aenderung daran (#827).
-    if (dashboard_widgets !== undefined) {
-      if (dashboard_widgets === null) {
-        cfgUserDelete('dashboard_widgets', req.authUserId);
-      } else if (!Array.isArray(dashboard_widgets)) {
-        return res.status(400).json({ error: 'dashboard_widgets muss ein Array sein', code: 400 });
-      } else {
-        const normalized = normalizeWidgetConfig(dashboard_widgets);
-        if (normalized === null) {
-          return res.status(400).json({ error: 'dashboard_widgets enthält ungültige Einträge', code: 400 });
-        }
-        cfgUserSet('dashboard_widgets', req.authUserId, JSON.stringify(normalized));
-      }
-    }
-
-    if (dashboard_today_glance !== undefined) {
-      if (dashboard_today_glance === null) {
-        cfgUserDelete('dashboard_today_glance', req.authUserId);
-      } else if (typeof dashboard_today_glance !== 'boolean') {
-        return res.status(400).json({ error: 'dashboard_today_glance muss ein Boolean sein', code: 400 });
-      } else {
-        cfgUserSet('dashboard_today_glance', req.authUserId, dashboard_today_glance ? '1' : '0');
-      }
-    }
-
-    // DIE VORGABE DES HAUSHALTS (#827). Sie gilt fuer alle, die sich noch keine
-    // eigene Uebersicht eingerichtet haben - typischerweise die Mitglieder, die
-    // nie in den Anpassen-Modus gehen. Deshalb Admin-Gate wie bei Region,
-    // Datensprache und Zeitzone.
-    //
-    // SIE UEBERSCHREIBT NIEMANDEN. Wer eine eigene Anordnung hat, behaelt sie;
-    // ein Haushaltswert, der persoenliche Arrangements plattmacht, ist die
-    // Sorte Schalter, die man einmal benutzt und danach bereut. Der Preis dafuer
-    // ist der Rueckweg oben - ohne ihn waere die Vorgabe fuer jeden unsichtbar,
-    // der je eine Kachel verschoben hat.
-    if (dashboard_widgets_default !== undefined) {
-      if (!isAdminRequest(req)) {
-        return res.status(403).json({ error: 'Admin access required.', code: 403 });
-      }
-      if (dashboard_widgets_default === null) {
-        cfgDelete('dashboard_widgets_default');
-      } else if (!Array.isArray(dashboard_widgets_default)) {
-        return res.status(400).json({ error: 'dashboard_widgets_default muss ein Array sein', code: 400 });
-      } else {
-        const normalized = normalizeWidgetConfig(dashboard_widgets_default);
-        if (normalized === null) {
-          return res.status(400).json({ error: 'dashboard_widgets_default enthält ungültige Einträge', code: 400 });
-        }
-        cfgSet('dashboard_widgets_default', JSON.stringify(normalized));
-      }
-    }
-
-    if (dashboard_today_glance_default !== undefined) {
-      if (!isAdminRequest(req)) {
-        return res.status(403).json({ error: 'Admin access required.', code: 403 });
-      }
-      if (dashboard_today_glance_default === null) {
-        cfgDelete('dashboard_today_glance_default');
-      } else if (typeof dashboard_today_glance_default !== 'boolean') {
-        return res.status(400).json({ error: 'dashboard_today_glance_default muss ein Boolean sein', code: 400 });
-      } else {
-        cfgSet('dashboard_today_glance_default', dashboard_today_glance_default ? '1' : '0');
-      }
     }
 
     if (disabled_modules !== undefined) {
@@ -1423,7 +1149,7 @@ router.put('/', (req, res) => {
 
     // DIE ANTWORT WIRD NOCH IN DER TRANSAKTION GEBAUT (#1622, Review zu #1627).
     // Sie liest aus der Datenbank zurueck, und manche dieser Lesewege fragen
-    // weitere Tabellen ab (dashboardPersonalViews den Kategorien-Katalog). Wirft
+    // weitere Tabellen ab. Wirft
     // einer davon NACH dem COMMIT, sagt die Antwort 500 und die Patch steht
     // trotzdem. Hier oben sieht das Lesen dieselben Werte - dieselbe Verbindung
     // liest ihre eigenen, noch nicht committeten Schreibungen -, und ein Wurf
@@ -1461,7 +1187,6 @@ router.put('/', (req, res) => {
         language_effective: resolveHouseholdLocale(db.get()),
         language_auto: resolveHouseholdLocale(db.get(), { ignoreExplicit: true }),
         app_name: savedAppName,
-        ...dashboardPersonalViews(req.authUserId),
         disabled_modules: savedDisabledModules,
         hidden_modules: savedHiddenModules,
         module_order: savedModuleOrder,
