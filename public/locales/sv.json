@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Om {{minutes}} min · {{time}}",
+        "nowRunning": "Nu",
+        "thenShort": "Sedan {{time}} {{title}}",
+        "tomorrowAt": "I morgon {{time}}",
+        "groupLate": "Försenad",
+        "groupToday": "I dag",
+        "groupTomorrow": "I morgon",
+        "groupLater": "Senare",
+        "groupNone": "Inget datum",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Allt klart för i dag",

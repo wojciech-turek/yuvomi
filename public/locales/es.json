@@ -6539,7 +6539,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "En {{minutes}} min · {{time}}",
+        "nowRunning": "Ahora",
+        "thenShort": "Luego {{time}} {{title}}",
+        "tomorrowAt": "Mañana {{time}}",
+        "groupLate": "Vencidas",
+        "groupToday": "Hoy",
+        "groupTomorrow": "Mañana",
+        "groupLater": "Más tarde",
+        "groupNone": "Sin fecha",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Todo listo por hoy",

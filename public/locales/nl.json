@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Over {{minutes}} min · {{time}}",
+        "nowRunning": "Nu",
+        "thenShort": "Daarna {{time}} {{title}}",
+        "tomorrowAt": "Morgen {{time}}",
+        "groupLate": "Verlopen",
+        "groupToday": "Vandaag",
+        "groupTomorrow": "Morgen",
+        "groupLater": "Later",
+        "groupNone": "Geen datum",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Alles voor vandaag gedaan",

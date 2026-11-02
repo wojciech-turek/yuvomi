@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}}分後 · {{time}}",
+        "nowRunning": "今",
+        "thenShort": "次 {{time}} {{title}}",
+        "tomorrowAt": "明日 {{time}}",
+        "groupLate": "期限切れ",
+        "groupToday": "今日",
+        "groupTomorrow": "明日",
+        "groupLater": "後で",
+        "groupNone": "日付なし",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "今日はすべて完了",

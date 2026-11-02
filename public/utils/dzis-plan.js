@@ -5,7 +5,10 @@
  *        at tomorrow), the pending tasks and the birthdays soon. Drawn by
  *        components/today-view.js, wired in pages/dashboard.js.
  * Abhängigkeiten: /i18n.js, /utils/today-plan.js, /utils/date.js,
- *                 /utils/day-label.js
+ *                 /utils/day-label.js, /utils/note-line.js
+ *
+ * ONE TODAY (2026-11-02) adds the data of the new page: weatherLine, nextUp,
+ * the task groups of pendingTasks, birthdaysNext and notesCard.
  *
  * THE OWNER'S ORDER (design v2, "Main" and "DzisFull"): the weather first,
  * because "will it rain today" is the question of the morning; then the
@@ -16,9 +19,10 @@
  */
 
 import { t, formatTime, getLocale, getTimeFormat, getNumberFormat } from '/i18n.js';
-import { buildPlan, buildTomorrow, firstName } from '/utils/today-plan.js';
+import { buildPlan, buildTomorrow, firstName, minutesOf, MEAL_TIMES } from '/utils/today-plan.js';
 import { addLocalDays } from '/utils/date.js';
 import { shortDayMonth, shortWeekdayDayMonth } from '/utils/day-label.js';
+import { firstLine, noteLines } from '/utils/note-line.js';
 
 /** A chance of rain from this many percent counts as rain (as the server). */
 export const RAIN_POP = 40;
@@ -133,6 +137,15 @@ export function weatherCard(weather, ctx) {
   };
 }
 
+/** "11° · bez deszczu do wieczora" for the head of the page, or null without weather. */
+export function weatherLine(weather, ctx) {
+  const card = weatherCard(weather, ctx);
+  if (!card) return null;
+  const phrase = card.rain?.label || card.dry?.label || '';
+  const lower = phrase ? phrase[0].toLocaleLowerCase(getLocale()) + phrase.slice(1) : '';
+  return { icon: card.icon, text: [card.temp, lower].filter(Boolean).join(' · ') };
+}
+
 // --------------------------------------------------------
 // Calendar
 // --------------------------------------------------------
@@ -165,7 +178,7 @@ function eventRoute(row, dayKey) {
  */
 export function calendarDay(data, ctx) {
   const plan = buildPlan({ planEvents: Array.isArray(data?.planEvents) ? data.planEvents : [] }, { ...ctx, moduleOff: (m) => m !== 'calendar' || Boolean(ctx.moduleOff?.(m)) });
-  const rows = plan.all.filter((row) => row.kind === 'event').map((row) => {
+  const rows = plan.all.filter((row) => row.kind === 'event' && !row.event?.birthday_name).map((row) => {
     const ends = Number.isFinite(row.endMin) && row.endMin < 24 * 60;
     const ongoing = !row.past && (row.running || (row.allDay && ends && row.endMin > ctx.nowMin));
     return {
@@ -189,7 +202,7 @@ export function calendarDay(data, ctx) {
     .sort((a, b) => (a.allDay === b.allDay ? a.startMin - b.startMin : (a.allDay ? -1 : 1)) || a.title.localeCompare(b.title));
   const last = earlier[earlier.length - 1];
   const tomorrowEvents = buildTomorrow({ planEvents: data?.planEvents ?? [] }, { ...ctx, moduleOff: (m) => m !== 'calendar' || Boolean(ctx.moduleOff?.(m)) })
-    .rows.filter((row) => row.kind === 'event');
+    .rows.filter((row) => row.kind === 'event' && !row.event?.birthday_name);
   const first = tomorrowEvents[0];
   return {
     earlier: {
@@ -207,6 +220,65 @@ export function calendarDay(data, ctx) {
       route: `/calendar?date=${encodeURIComponent(ctx.tomorrowKey)}`,
     } : null,
     empty: !earlier.length && !ahead.length,
+  };
+}
+
+// --------------------------------------------------------
+// Next up
+// --------------------------------------------------------
+
+/** The minute a row happens, meals by their slot (they carry no clock time). */
+function rowMinute(row) {
+  if (row.kind === 'meal') return minutesOf(MEAL_TIMES[row.meal?.meal_type] ?? MEAL_TIMES.dinner);
+  return row.sortMin;
+}
+
+/** Where a tap on the row goes: events by id and day, the rest by their own route. */
+const routeOf = (row, ctx) => (row.kind === 'event' ? eventRoute(row, row.dayKey ?? ctx.todayKey) : String(row.route ?? ''));
+
+const clockOf = (min) => formatTime(minutesToTime(min));
+
+/**
+ * The one thing that comes next: the first open row of today that is running
+ * or still ahead and has a time (household help counts, no cap), with its
+ * lead ("Za 25 min · 12:30") and the following timed row ("Potem ..."). With
+ * nothing left today, the first timed row of tomorrow ("Jutro 08:00"). Null
+ * when there is nothing at all.
+ */
+export function nextUp(data, ctx) {
+  const ahead = buildPlan(data ?? {}, ctx).open.filter((row) => {
+    const min = rowMinute(row);
+    return Number.isFinite(min) && !row.overdue && !row.done && (row.running || min > ctx.nowMin);
+  });
+  const row = ahead[0];
+  if (row) {
+    const min = rowMinute(row);
+    const time = clockOf(min);
+    const away = Math.ceil(min - ctx.nowMin);
+    let lead;
+    if (row.running) lead = t('today.nowRunning');
+    else if (away < 60) lead = t('today.inMinutesAt', { minutes: Math.max(1, away), time });
+    else lead = t('today.atTimeOnly', { time });
+    const following = ahead[1];
+    return {
+      lead,
+      title: row.title,
+      then: following ? t('today.thenShort', { time: clockOf(rowMinute(following)), title: following.title }) : null,
+      route: routeOf(row, ctx),
+      kind: row.kind,
+    };
+  }
+  const tomorrow = buildTomorrow(data ?? {}, ctx).rows
+    .map((r) => ({ r, min: rowMinute(r) }))
+    .filter(({ min }) => Number.isFinite(min) && min >= 0 && min < 24 * 60)
+    .sort((a, b) => a.min - b.min)[0];
+  if (!tomorrow) return null;
+  return {
+    lead: t('today.tomorrowAt', { time: clockOf(tomorrow.min) }),
+    title: tomorrow.r.title,
+    then: null,
+    route: routeOf(tomorrow.r, ctx),
+    kind: tomorrow.r.kind,
   };
 }
 
@@ -230,28 +302,55 @@ export function dueLabel(dueDate, ctx) {
   return shortDayMonth(due);
 }
 
+const TASK_GROUPS = [
+  ['late', 'today.groupLate'],
+  ['today', 'today.groupToday'],
+  ['tomorrow', 'today.groupTomorrow'],
+  ['later', 'today.groupLater'],
+  ['none', 'today.groupNone'],
+];
+
+function taskGroup(due, ctx) {
+  if (!due) return 'none';
+  if (due < ctx.todayKey) return 'late';
+  if (due === ctx.todayKey) return 'today';
+  if (due === ctx.tomorrowKey) return 'tomorrow';
+  return 'later';
+}
+
 /**
- * The tasks that wait, in the server's order (overdue, then by date, undated
- * last): title, due text, a flag for high/urgent, and whose it is.
+ * The tasks that wait, sorted into groups (late, today, tomorrow, later, no
+ * date; empty ones dropped). A group names the day, so a row says its date
+ * only when late ("wczoraj") or later ("czw 6 lis"). `rows` is the same list
+ * flat, in group order. Inside a group the server's order stays.
  */
 export function pendingTasks(data, ctx) {
   const open = (Array.isArray(data?.urgentTasks) ? data.urgentTasks : []).filter((task) => task && task.status !== 'done');
-  const rows = open.slice(0, TASK_ROWS).map((task) => {
+  const made = open.slice(0, TASK_ROWS).map((task) => {
     const due = String(task.due_date ?? '').slice(0, 10);
+    const group = taskGroup(due, ctx);
     const people = Array.isArray(task.assigned_users) ? task.assigned_users.filter((p) => p && p.id != null) : [];
+    let dueText = '';
+    if (group === 'late') dueText = dueLabel(due, ctx);
+    else if (group === 'later') dueText = shortWeekdayDayMonth(due, { year: false });
     return {
       key: `task:${task.id}`,
       id: task.id,
       title: String(task.title ?? ''),
-      due: dueLabel(due, ctx),
-      late: Boolean(due) && due < ctx.todayKey,
+      group,
+      due: dueText,
+      late: group === 'late',
       flag: task.priority === 'high' || task.priority === 'urgent',
       person: people[0] ?? null,
       task,
     };
   });
+  const groups = TASK_GROUPS
+    .map(([id, label]) => ({ id, label: t(label), rows: made.filter((row) => row.group === id) }))
+    .filter((group) => group.rows.length);
+  const rows = groups.flatMap((group) => group.rows);
   const total = Number(data?.openTaskCount);
-  return { rows, total: Number.isFinite(total) && total >= rows.length ? total : rows.length };
+  return { rows, groups, total: Number.isFinite(total) && total >= rows.length ? total : rows.length };
 }
 
 // --------------------------------------------------------
@@ -281,13 +380,66 @@ export function birthdaysSoon(data, ctx) {
     });
 }
 
+/**
+ * The next three birthdays or name days, however far away (the server sends
+ * five occurrences, sorted by days). "kończy 36 · sob 1 lis · za 5 dni".
+ */
+export function birthdaysNext(data, ctx) {
+  return (Array.isArray(data?.birthdays) ? data.birthdays : [])
+    .filter((b) => Number.isFinite(Number(b?.days_until)) && Number(b.days_until) >= 0)
+    .slice(0, 3)
+    .map((b) => {
+      const days = Number(b.days_until);
+      const age = Number(b.next_age);
+      let sub;
+      if (b.kind === 'name_day') sub = t('today.nameDayKind');
+      else if (Number.isFinite(age) && age > 0) sub = t('birthdays.turnsAge', { age });
+      else sub = firstLine(b.notes) || t('today.birthdayKind');
+      return {
+        key: `birthday:${b.id}:${b.kind}`,
+        id: b.id,
+        name: String(b.name ?? ''),
+        today: days === 0,
+        sub,
+        date: shortWeekdayDayMonth(addLocalDays(ctx.todayKey, days), { year: false }),
+        far: days === 0 ? '' : days === 1 ? t('calendar.relDay.tomorrow') : t('birthdays.inDays', { count: days }),
+        route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
+      };
+    });
+}
+
+// --------------------------------------------------------
+// Notes
+// --------------------------------------------------------
+
+/**
+ * Up to three notes in the server's order (pinned first, then recently
+ * changed): the title (else the first line of the text) and one line under
+ * it; null without notes.
+ */
+export function notesCard(data) {
+  const notes = (Array.isArray(data?.pinnedNotes) ? data.pinnedNotes : []).filter((n) => n && n.id != null).slice(0, 3);
+  if (!notes.length) return null;
+  return notes.map((note) => {
+    const title = String(note.title ?? '').trim();
+    const lines = noteLines(note.content);
+    return {
+      id: note.id,
+      title: title || lines[0] || '',
+      line: (title ? lines[0] : lines[1]) ?? '',
+      route: `/notes?open=${encodeURIComponent(String(note.id))}`,
+    };
+  });
+}
+
 /** What changes by the clock alone - the page rebuilds only when this does. */
-export function clockStamp(calendar, weather, ctx) {
+export function clockStamp(calendar, weather, ctx, next = null) {
   return JSON.stringify([
     ctx.todayKey,
     calendar?.earlier?.rows.map((row) => row.key),
     calendar?.rows.map((row) => `${row.key}:${row.ongoing}`),
     Math.floor(ctx.nowMin / 60),
     weather?.dry?.label ?? '',
+    next?.lead ?? '',
   ]);
 }

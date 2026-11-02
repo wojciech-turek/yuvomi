@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} dk sonra · {{time}}",
+        "nowRunning": "Şimdi",
+        "thenShort": "Sonra {{time}} {{title}}",
+        "tomorrowAt": "Yarın {{time}}",
+        "groupLate": "Gecikmiş",
+        "groupToday": "Bugün",
+        "groupTomorrow": "Yarın",
+        "groupLater": "Sonra",
+        "groupNone": "Tarih yok",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Bugünlük her şey tamam",

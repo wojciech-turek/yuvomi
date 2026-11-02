@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}}분 후 · {{time}}",
+        "nowRunning": "지금",
+        "thenShort": "다음 {{time}} {{title}}",
+        "tomorrowAt": "내일 {{time}}",
+        "groupLate": "기한 초과",
+        "groupToday": "오늘",
+        "groupTomorrow": "내일",
+        "groupLater": "나중에",
+        "groupNone": "날짜 없음",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "오늘 할 일 모두 완료",

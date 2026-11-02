@@ -6539,7 +6539,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Tra {{minutes}} min · {{time}}",
+        "nowRunning": "Adesso",
+        "thenShort": "Poi {{time}} {{title}}",
+        "tomorrowAt": "Domani {{time}}",
+        "groupLate": "Scaduti",
+        "groupToday": "Oggi",
+        "groupTomorrow": "Domani",
+        "groupLater": "Più avanti",
+        "groupNone": "Senza data",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Tutto fatto per oggi",

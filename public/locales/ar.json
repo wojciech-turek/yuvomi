@@ -6971,7 +6971,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "خلال {{minutes}} د · {{time}}",
+        "nowRunning": "الآن",
+        "thenShort": "ثم {{time}} {{title}}",
+        "tomorrowAt": "غداً {{time}}",
+        "groupLate": "متأخر",
+        "groupToday": "اليوم",
+        "groupTomorrow": "غداً",
+        "groupLater": "لاحقاً",
+        "groupNone": "بلا تاريخ",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "أُنجز كل شيء لليوم",

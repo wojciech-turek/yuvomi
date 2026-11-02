@@ -183,7 +183,8 @@ test('tasks: the server\'s order, five rows, the due word, late and flag where t
   const { rows, total } = at('10:15', (ctx) => dzis.pendingTasks(TASKS, ctx));
   assert.equal(rows.length, dzis.TASK_ROWS);
   assert.deepEqual(rows.map((row) => row.id), [1, 2, 3, 4, 5]);
-  assert.deepEqual(rows.map((row) => row.due), ['calendar.relDay.yesterday', 'calendar.relDay.today', 'calendar.relDay.tomorrow', 'Do', '']);
+  assert.deepEqual(rows.map((row) => row.due), ['calendar.relDay.yesterday', '', '', 'Do 29. Okt.', ''],
+    'late keeps its word, today and tomorrow say nothing (the group says it), later is a short date');
   assert.deepEqual(rows.map((row) => row.late), [true, false, false, false, false]);
   assert.deepEqual(rows.map((row) => row.flag), [true, false, true, false, false], 'only high and urgent');
   assert.deepEqual(rows.map((row) => row.person?.id ?? null), [1, 2, 1, 1, null]);
@@ -195,7 +196,7 @@ test('tasks: a done task never shows, and the due word reaches back and ahead', 
   const { rows, total } = at('10:15', (ctx) => dzis.pendingTasks(data, ctx));
   assert.deepEqual(rows.map((row) => [row.title, row.due]), [
     ['Stare', 'calendar.relDay.daysAgo{"count":7}'],
-    ['Daleko', '12. Nov.'],
+    ['Daleko', 'Do 12. Nov.'],
   ]);
   assert.equal(total, 2, 'without the server\'s count the rows are the count');
 });
@@ -221,7 +222,146 @@ test('Wkrótce: the next 30 days, three at most, with age or kind, the day and a
   assert.equal(rows[0].route, '/birthdays?open=1');
   const soon = at('10:15', (ctx) => dzis.birthdaysSoon({ birthdays: [{ id: 6, name: 'Dziś', kind: 'birthday', days_until: 0, next_age: 3 }] }, ctx));
   assert.match(soon[0].when, / · calendar\.relDay\.today$/);
-  assert.deepEqual(at('10:15', (ctx) => dzis.birthdaysSoon({ birthdays: [data.birthdays[4]] }, ctx)), []);
+});
+
+// --------------------------------------------------------------------------
+// 5. One Today (2026-11-02): next up, task groups, birthdays, notes, weather line
+// --------------------------------------------------------------------------
+
+const MEALS = {
+  todayMeals: [
+    { id: 1, meal_type: 'lunch', title: 'Zupa' },
+    { id: 2, meal_type: 'dinner', title: 'Spaghetti' },
+  ],
+};
+
+test('next up: the next timed row with its lead, and the one after as "Potem"', () => {
+  const up = at('12:05', (ctx) => dzis.nextUp(MEALS, ctx));
+  assert.equal(up.lead, 'today.inMinutesAt{"minutes":25,"time":"12:30"}');
+  assert.match(up.title, /^today\.mealRow\{.*"title":"Zupa"\}$/);
+  assert.equal(up.kind, 'meal');
+  assert.equal(up.route, '/meals');
+  assert.match(up.then, /^today\.thenShort\{"time":"18:30","title":".*Spaghetti.*"\}$/);
+  const far = at('09:00', (ctx) => dzis.nextUp(MEALS, ctx));
+  assert.equal(far.lead, 'today.atTimeOnly{"time":"12:30"}', 'an hour or more away is the time alone');
+});
+
+test('next up: a running event says "Teraz"; the row after is "Potem"', () => {
+  const up = at('10:15', (ctx) => dzis.nextUp({ ...DAY, ...MEALS }, ctx));
+  assert.equal(up.lead, 'today.nowRunning');
+  assert.equal(up.title, 'Spotkanie zespołu');
+  assert.equal(up.kind, 'event');
+  assert.match(up.then, /^today\.thenShort\{"time":"12:30"/);
+  assert.match(up.route, /^\/calendar\?open=2/);
+});
+
+test('next up: a household help visit at 14:00 counts, overdue and past rows do not', () => {
+  const data = { housekeeping: { present: true, presentSince: '2026-10-27T14:00:00+01:00', workerName: 'Pani Ania' } };
+  const up = at('12:05', (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up.title, 'Pani Ania');
+  assert.equal(up.lead, 'today.atTimeOnly{"time":"14:00"}');
+  assert.equal(up.then, null);
+  const over = { planTasks: [task(20, 'Stare', '2026-10-20', { due_time: '09:00' })] };
+  assert.equal(at('12:05', (ctx) => dzis.nextUp(over, ctx)), null, 'overdue is not next up');
+});
+
+test('next up: nothing left today falls back to the first timed row of tomorrow; empty is null', () => {
+  const data = { planEvents: DAY.planEvents };
+  const up = at('20:00', (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up.lead, 'today.tomorrowAt{"time":"08:00"}');
+  assert.equal(up.title, 'Przedszkole');
+  assert.equal(up.then, null);
+  assert.equal(at('12:05', (ctx) => dzis.nextUp({}, ctx)), null);
+  assert.equal(at('12:05', (ctx) => dzis.nextUp(undefined, ctx)), null);
+});
+
+test('next up: the clock stamp changes when the lead does', () => {
+  const stamp = (hhmm) => at(hhmm, (ctx) => dzis.clockStamp(null, null, ctx, dzis.nextUp(MEALS, ctx)));
+  assert.notEqual(stamp('12:05'), stamp('12:06'));
+  assert.equal(stamp('12:05'), stamp('12:05'));
+});
+
+test('task groups: five rows in five groups, in order, empty ones dropped', () => {
+  const data = {
+    urgentTasks: [
+      task(5, 'Bez terminu', null),
+      task(4, 'Później', '2026-11-12'),
+      task(3, 'Jutro', '2026-10-28'),
+      task(2, 'Dziś', '2026-10-27'),
+      task(1, 'Zaległe', '2026-10-20'),
+    ],
+  };
+  const res = at('10:15', (ctx) => dzis.pendingTasks(data, ctx));
+  assert.deepEqual(res.groups.map((g) => g.id), ['late', 'today', 'tomorrow', 'later', 'none']);
+  assert.deepEqual(res.groups.map((g) => g.label), ['today.groupLate', 'today.groupToday', 'today.groupTomorrow', 'today.groupLater', 'today.groupNone']);
+  assert.deepEqual(res.groups.map((g) => g.rows.map((r) => r.id)), [[1], [2], [3], [4], [5]]);
+  assert.deepEqual(res.rows.map((r) => r.group), ['late', 'today', 'tomorrow', 'later', 'none'], 'rows stay flat too, in group order');
+  assert.deepEqual(res.groups.map((g) => g.rows[0].due), ['calendar.relDay.daysAgo{"count":7}', '', '', 'Do 12. Nov.', '']);
+  const only = at('10:15', (ctx) => dzis.pendingTasks({ urgentTasks: [task(7, 'A', '2026-10-27')] }, ctx));
+  assert.deepEqual(only.groups.map((g) => g.id), ['today']);
+  assert.deepEqual(at('10:15', (ctx) => dzis.pendingTasks({}, ctx)).groups, []);
+});
+
+test('birthdays next: three, however far; name day; today is flagged; the age, the note', () => {
+  const data = {
+    birthdays: [
+      { id: 1, name: 'Dziś', kind: 'birthday', days_until: 0, next_age: 3 },
+      { id: 2, name: 'Ania', kind: 'name_day', days_until: 1 },
+      { id: 3, name: 'Babcia', kind: 'birthday', days_until: 200, next_age: null, notes: '**Tort** z malinami\nreszta' },
+      { id: 4, name: 'Czwarty', kind: 'birthday', days_until: 201, next_age: 40 },
+    ],
+  };
+  const rows = at('10:15', (ctx) => dzis.birthdaysNext(data, ctx));
+  assert.deepEqual(rows.map((r) => r.name), ['Dziś', 'Ania', 'Babcia'], 'day 200 is in, the fourth is not');
+  assert.deepEqual(rows.map((r) => r.today), [true, false, false]);
+  assert.deepEqual(rows.map((r) => r.sub), ['birthdays.turnsAge{"age":3}', 'today.nameDayKind', 'Tort z malinami']);
+  assert.deepEqual(rows.map((r) => r.far), ['', 'calendar.relDay.tomorrow', 'birthdays.inDays{"count":200}']);
+  assert.equal(rows[2].date, 'Sa 15. Mai', 'weekday, day, month, no year');
+  assert.equal(rows[0].route, '/birthdays?open=1');
+  assert.equal(rows[1].key, 'birthday:2:name_day');
+  assert.deepEqual(at('10:15', (ctx) => dzis.birthdaysNext({}, ctx)), []);
+});
+
+test('notes card: three of the server\'s order, title or first line, markdown stripped', () => {
+  const data = {
+    pinnedNotes: [
+      { id: 1, title: 'Święta', content: '# Plan\n- [ ] Kraków' },
+      { id: 2, title: '', content: '## **Wifi**\nhasło: `kuchnia`' },
+      { id: 3, title: null, content: 'Samo\n' },
+      { id: 4, title: 'Czwarta', content: 'x' },
+    ],
+  };
+  const card = dzis.notesCard(data);
+  assert.deepEqual(card.map((n) => n.id), [1, 2, 3]);
+  assert.deepEqual(card.map((n) => n.title), ['Święta', 'Wifi', 'Samo']);
+  assert.deepEqual(card.map((n) => n.line), ['Plan', 'hasło: kuchnia', ''], 'the title\'s line is the first line; a title taken from the text moves to the second');
+  assert.equal(card[0].route, '/notes?open=1');
+  assert.equal(dzis.notesCard({ pinnedNotes: [] }), null);
+  assert.equal(dzis.notesCard({}), null);
+});
+
+test('weather line: temperature and the rain or dry phrase, lower case; no weather, null', () => {
+  const rainy = at('09:30', (ctx) => dzis.weatherLine(weather(), ctx));
+  assert.equal(rainy.icon, 'cloud-drizzle');
+  assert.equal(rainy.text, '11° · today.rainWindow{"from":"13:00","to":"17:00"}');
+  const dry = at('09:30', (ctx) => dzis.weatherLine(weather(POPS.map((p) => Math.min(p, 10))), ctx));
+  assert.equal(dry.text, '11° · today.dryEvening');
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine(null, ctx)), null);
+});
+
+test('calendar: birthday events are not in the rows, earlier or the tomorrow peek', () => {
+  const data = {
+    planEvents: [
+      ev(30, 'Urodziny Tomka', '2026-10-27', '2026-10-28', [], { all_day: 1, birthday_name: 'Tomek' }),
+      ev(31, 'Urodziny Ani', '2026-10-28', '2026-10-29', [], { all_day: 1, birthday_name: 'Ania' }),
+      ev(32, 'Pediatra', '2026-10-27T15:00', '2026-10-27T16:00', [M]),
+    ],
+  };
+  const cal = at('10:15', (ctx) => dzis.calendarDay(data, ctx));
+  assert.deepEqual(cal.rows.map((r) => r.title), ['Pediatra']);
+  assert.equal(cal.tomorrow, null, 'a tomorrow with only a birthday has no peek');
+  const late = at('23:00', (ctx) => dzis.calendarDay(data, ctx));
+  assert.equal(late.earlier.rows.some((r) => r.title.startsWith('Urodziny')), false);
 });
 
 test('the header: the long date with a capital, the greeting by the hour', () => {

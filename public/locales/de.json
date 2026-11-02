@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "In {{minutes}} Min. · {{time}}",
+        "nowRunning": "Jetzt",
+        "thenShort": "Dann {{time}} {{title}}",
+        "tomorrowAt": "Morgen {{time}}",
+        "groupLate": "Überfällig",
+        "groupToday": "Heute",
+        "groupTomorrow": "Morgen",
+        "groupLater": "Später",
+        "groupNone": "Kein Datum",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Für heute alles erledigt",

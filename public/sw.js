@@ -208,6 +208,7 @@ const APP_SHELL = [
   '/utils/note-category-filter.js',
   '/utils/note-category-name.js',
   '/utils/note-category-picker.js',
+  '/utils/note-line.js',
   '/utils/focus-quiet.js',
   '/utils/overlay-history.js',
   '/utils/overlay-host.js',

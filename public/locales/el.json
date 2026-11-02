@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Σε {{minutes}} λεπ. · {{time}}",
+        "nowRunning": "Τώρα",
+        "thenShort": "Μετά {{time}} {{title}}",
+        "tomorrowAt": "Αύριο {{time}}",
+        "groupLate": "Εκπρόθεσμο",
+        "groupToday": "Σήμερα",
+        "groupTomorrow": "Αύριο",
+        "groupLater": "Αργότερα",
+        "groupNone": "Χωρίς ημερομηνία",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Όλα έτοιμα για σήμερα",

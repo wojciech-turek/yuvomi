@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} perc múlva · {{time}}",
+        "nowRunning": "Most",
+        "thenShort": "Utána {{time}} {{title}}",
+        "tomorrowAt": "Holnap {{time}}",
+        "groupLate": "Lejárt",
+        "groupToday": "Ma",
+        "groupTomorrow": "Holnap",
+        "groupLater": "Később",
+        "groupNone": "Nincs dátum",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Mára minden kész",

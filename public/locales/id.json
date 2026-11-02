@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} menit lagi · {{time}}",
+        "nowRunning": "Sekarang",
+        "thenShort": "Lalu {{time}} {{title}}",
+        "tomorrowAt": "Besok {{time}}",
+        "groupLate": "Terlambat",
+        "groupToday": "Hari ini",
+        "groupTomorrow": "Besok",
+        "groupLater": "Nanti",
+        "groupNone": "Tanpa tanggal",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Semua beres untuk hari ini",

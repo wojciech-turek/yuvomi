@@ -6819,7 +6819,17 @@
         "nameDayKind": "imieniny",
         "birthdayKind": "urodziny",
         "calendarEmpty": "Dziś nic w kalendarzu",
-        "priorityFlag": "Wysoki priorytet"
+        "priorityFlag": "Wysoki priorytet",
+        "inMinutesAt": "Za {{minutes}} min · {{time}}",
+        "nowRunning": "Teraz",
+        "thenShort": "Potem {{time}} {{title}}",
+        "tomorrowAt": "Jutro {{time}}",
+        "groupLate": "Zaległe",
+        "groupToday": "Dziś",
+        "groupTomorrow": "Jutro",
+        "groupLater": "Później",
+        "groupNone": "Bez terminu",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Na dziś wszystko",

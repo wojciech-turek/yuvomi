@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} 分钟后 · {{time}}",
+        "nowRunning": "现在",
+        "thenShort": "然后 {{time}} {{title}}",
+        "tomorrowAt": "明天 {{time}}",
+        "groupLate": "已逾期",
+        "groupToday": "今天",
+        "groupTomorrow": "明天",
+        "groupLater": "以后",
+        "groupNone": "无日期",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "今天的事都完成了",

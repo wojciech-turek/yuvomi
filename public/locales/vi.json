@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Sau {{minutes}} phút · {{time}}",
+        "nowRunning": "Bây giờ",
+        "thenShort": "Sau đó {{time}} {{title}}",
+        "tomorrowAt": "Ngày mai {{time}}",
+        "groupLate": "Quá hạn",
+        "groupToday": "Hôm nay",
+        "groupTomorrow": "Ngày mai",
+        "groupLater": "Sau này",
+        "groupNone": "Không có ngày",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Hôm nay đã xong hết",

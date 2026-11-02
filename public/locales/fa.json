@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} دقیقه دیگر · {{time}}",
+        "nowRunning": "اکنون",
+        "thenShort": "سپس {{time}} {{title}}",
+        "tomorrowAt": "فردا {{time}}",
+        "groupLate": "معوق",
+        "groupToday": "امروز",
+        "groupTomorrow": "فردا",
+        "groupLater": "بعداً",
+        "groupNone": "بدون تاریخ",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "همهٔ کارهای امروز انجام شد",

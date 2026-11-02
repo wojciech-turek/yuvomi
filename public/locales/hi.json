@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "{{minutes}} मिनट में · {{time}}",
+        "nowRunning": "अभी",
+        "thenShort": "फिर {{time}} {{title}}",
+        "tomorrowAt": "कल {{time}}",
+        "groupLate": "अतिदेय",
+        "groupToday": "आज",
+        "groupTomorrow": "कल",
+        "groupLater": "बाद में",
+        "groupNone": "कोई तारीख नहीं",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "आज के सारे काम पूरे",

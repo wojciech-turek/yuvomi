@@ -6537,7 +6537,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Sa loob ng {{minutes}} min · {{time}}",
+        "nowRunning": "Ngayon",
+        "thenShort": "Susunod {{time}} {{title}}",
+        "tomorrowAt": "Bukas {{time}}",
+        "groupLate": "Lampas na sa takdang araw",
+        "groupToday": "Ngayon",
+        "groupTomorrow": "Bukas",
+        "groupLater": "Mamaya",
+        "groupNone": "Walang petsa",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Tapos na lahat para ngayon",

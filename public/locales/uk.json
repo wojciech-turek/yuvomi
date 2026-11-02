@@ -6819,7 +6819,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Через {{minutes}} хв · {{time}}",
+        "nowRunning": "Зараз",
+        "thenShort": "Потім {{time}} {{title}}",
+        "tomorrowAt": "Завтра {{time}}",
+        "groupLate": "Прострочено",
+        "groupToday": "Сьогодні",
+        "groupTomorrow": "Завтра",
+        "groupLater": "Пізніше",
+        "groupNone": "Без дати",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "На сьогодні все",

@@ -6691,7 +6691,17 @@
         "nameDayKind": "name day",
         "birthdayKind": "birthday",
         "calendarEmpty": "Nothing in the calendar today",
-        "priorityFlag": "High priority"
+        "priorityFlag": "High priority",
+        "inMinutesAt": "Za {{minutes}} min · {{time}}",
+        "nowRunning": "Teď",
+        "thenShort": "Potom {{time}} {{title}}",
+        "tomorrowAt": "Zítra {{time}}",
+        "groupLate": "Po termínu",
+        "groupToday": "Dnes",
+        "groupTomorrow": "Zítra",
+        "groupLater": "Později",
+        "groupNone": "Bez termínu",
+        "atTimeOnly": "{{time}}"
     },
     "wall": {
         "allDone": "Pro dnešek hotovo",
