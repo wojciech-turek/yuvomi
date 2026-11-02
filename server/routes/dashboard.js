@@ -73,7 +73,7 @@ const DENIED_PAYLOAD = Object.freeze({
     memberTodayTasks: [], tasksDoneToday: 0, wallTasks: [], planTasks: [],
   }),
   meals: () => ({ todayMeals: [], tomorrowMeals: [], dinnerPlan: null }),
-  notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0 }),
+  notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0, wallNotes: [] }),
   shopping: () => ({ shoppingLists: [], shoppingOpenCount: 0, shoppingOpenLists: 0 }),
   // Der Monat bleibt stehen: er ist keine Budgetzahl, sondern der Zeitraum, auf
   // den die Kachel beschriftet ist — und er steht ohnehin im Kalender.
@@ -759,7 +759,8 @@ router.get('/', (req, res) => {
   }
 
   // Neueste Notizen (gepinnte zuerst, dann aktuellste)
-  if (allows('notes')) try {
+  if (allows('notes') && !householdAudience) try {
+    result.wallNotes = [];
     result.pinnedNotes = d.prepare(`
       SELECT n.*, u.display_name AS author_name, u.avatar_color AS author_color
       FROM notes n
@@ -802,6 +803,25 @@ router.get('/', (req, res) => {
     result.pinnedNotes = [];
     result.pinnedNotesCount = 0;
     result.notesTotal = 0;
+  }
+
+
+  // The wall's notes: the household audience reads ONLY the titles of pinned
+  // notes (no content, no author, none of the counts) - `pinnedNotes` stays
+  // empty for it. A note without a title is left out, the wall has no first
+  // line to fall back on. Notes have no visibility of their own, so every
+  // pinned, titled note qualifies. A member's answer keeps `wallNotes: []`;
+  // the member's Today reads `pinnedNotes`.
+  if (allows('notes') && householdAudience) try {
+    result.wallNotes = d.prepare(`
+      SELECT n.id, TRIM(n.title) AS title FROM notes n
+      WHERE n.pinned = 1 AND TRIM(COALESCE(n.title, '')) <> ''
+      ORDER BY n.updated_at DESC, n.id DESC
+      LIMIT 3
+    `).all();
+  } catch (err) {
+    log.error('wallNotes error:', err.message);
+    result.wallNotes = [];
   }
 
   // Einkaufslisten mit offenen Artikeln (max. 3 Listen, je bis zu 6 offene Items).

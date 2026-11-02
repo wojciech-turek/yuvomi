@@ -229,6 +229,31 @@ function renderShopping(shop, { canTick }) {
     </section>`;
 }
 
+/** The titles of the pinned notes: plain lines, nothing to tap. */
+function renderNotes(notes) {
+  return `
+    <section class="wall-card wall-list" data-wall-card="notes" aria-labelledby="wall-notes-title">
+      <h2 class="wall-card__label" id="wall-notes-title">${esc(t('nav.notes'))}</h2>
+      <ul class="wall-list__rows">
+        ${notes.map((note) => `<li class="wall-list__row"><span class="wall-list__main">${esc(note.title)}</span></li>`).join('')}
+      </ul>
+    </section>`;
+}
+
+/** The next three birthdays and name days; today's stands in the attention colour. */
+function renderBirthdays(rows) {
+  return `
+    <section class="wall-card wall-list" data-wall-card="birthdays" aria-labelledby="wall-birthdays-title">
+      <h2 class="wall-card__label" id="wall-birthdays-title">${esc(t('nav.birthdays'))}</h2>
+      <ul class="wall-list__rows">
+        ${rows.map((row) => `<li class="wall-list__row${row.today ? ' wall-list__row--today' : ''}">
+          <span class="wall-list__main">${esc(row.name)}</span>
+          <span class="wall-list__side">${esc(row.today ? t('today.groupToday') : row.far)}</span>
+        </li>`).join('')}
+      </ul>
+    </section>`;
+}
+
 function renderQuestion(question, settled) {
   if (settled) {
     return `
@@ -255,6 +280,8 @@ function renderStage(model, ui) {
   if (model.dinner) aside.push(renderDinnerCard(model.dinner, household));
   if (model.tomorrow && model.scene === 'wieczor') aside.push(renderTomorrow(model.tomorrow, household));
   if (model.shopping) aside.push(renderShopping(model.shopping, model));
+  if (model.notes) aside.push(renderNotes(model.notes));
+  if (model.birthdays) aside.push(renderBirthdays(model.birthdays));
 
   if (model.hero) {
     const right = [model.plan ? renderPlan(model.plan, household) : '', ...aside].filter(Boolean);
@@ -359,6 +386,25 @@ export function renderWhoChooser(title, people, household = []) {
 // --------------------------------------------------------
 
 /**
+ * Card-level fit: while the aside spills over its column, the optional cards
+ * go whole, Birthdays first, then Notes. They come back on every fit, so a
+ * resize or a rebuild can show them again.
+ */
+function fitWallCards(root) {
+  for (const aside of root?.querySelectorAll?.('.wall__aside') ?? []) {
+    const cards = ['birthdays', 'notes']
+      .map((id) => aside.querySelector(`[data-wall-card="${id}"]`))
+      .filter(Boolean);
+    for (const card of cards) card.hidden = false;
+    const overflows = () => aside.scrollHeight > aside.clientHeight + 1;
+    for (const card of cards) {
+      if (!overflows()) break;
+      card.hidden = true;
+    }
+  }
+}
+
+/**
  * Fits every Dziś list on the wall to the room its card has: rows that do not
  * fit are hidden and the last line says "+N więcej" (planWallRows). Measured,
  * not computed - row height follows the fluid wall type. On a phone the card
@@ -367,6 +413,7 @@ export function renderWhoChooser(title, people, household = []) {
  */
 export function fitWallLists(root) {
   let hiddenTotal = 0;
+  fitWallCards(root);
   for (const list of root?.querySelectorAll?.('[data-wall-fit]') ?? []) {
     const rows = [...list.querySelectorAll('[data-wall-row]')];
     const more = list.querySelector('[data-wall-more]');

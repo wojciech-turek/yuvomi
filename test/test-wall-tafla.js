@@ -275,6 +275,64 @@ test('the wall draws its fixed set: dinner, plan, shopping, timers and weather, 
   assert.match(html, /wall__weather/, 'the weather');
 });
 
+test('Notes and Birthdays: read-only cards after shopping, today\'s birthday in the attention row, absent when empty', () => {
+  const data = {
+    ...household(),
+    wallNotes: [{ id: 1, title: 'Hasło do wifi' }, { id: 2, title: '  ' }, { id: 3, title: 'Lista na weekend' }],
+    birthdays: [
+      { id: 7, name: 'Halina', kind: 'birthday', days_until: 0, next_age: 70 },
+      { id: 8, name: 'Tomek', kind: 'name_day', days_until: 5 },
+    ],
+  };
+  const m = build('18:11', {}, data);
+  assert.deepEqual(m.notes, [{ id: 1, title: 'Hasło do wifi' }, { id: 3, title: 'Lista na weekend' }], 'titles only, blank ones dropped');
+  assert.equal(m.birthdays.length, 2);
+  const html = view.renderWall(m, { clock: { time: '18:11', machine: '18:11' } });
+  const shop = html.indexOf('wall-shop');
+  const notes = html.indexOf('data-wall-card="notes"');
+  const birthdays = html.indexOf('data-wall-card="birthdays"');
+  assert.ok(shop > -1 && notes > shop && birthdays > notes, 'shopping, then Notes, then Birthdays');
+  const card = (id) => html.slice(html.indexOf(`data-wall-card="${id}"`), html.indexOf('</section>', html.indexOf(`data-wall-card="${id}"`)));
+  for (const id of ['notes', 'birthdays']) {
+    assert.ok(!/<button|<a\s|data-route|data-wall-/.test(card(id).replace(`data-wall-card="${id}"`, '')), `${id} is read-only`);
+  }
+  assert.match(card('notes'), /Hasło do wifi/);
+  assert.match(card('birthdays'), /wall-list__row wall-list__row--today[\s\S]*Halina/, 'today\'s birthday is highlighted');
+  assert.ok(!/wall-list__row--today[^]*Tomek/.test(card('birthdays').split('Tomek')[0].split('Halina')[1] ?? ''), 'only the first row is today');
+
+  const bare = build('18:11');
+  assert.equal(bare.notes, null);
+  assert.equal(bare.birthdays, null);
+  const bareHtml = view.renderWall(bare, { clock: { time: '18:11', machine: '18:11' } });
+  assert.ok(!bareHtml.includes('data-wall-card'), 'no cards without notes or birthdays');
+  const off = build('18:11', { moduleOff: (module) => module === 'notes' || module === 'birthdays' }, data);
+  assert.equal(off.notes, null);
+  assert.equal(off.birthdays, null);
+});
+
+test('the card fit hides Birthdays first, then Notes, while the aside spills', () => {
+  const mk = () => ({ hidden: false });
+  const birthdays = mk();
+  const notes = mk();
+  let spill = 2;
+  const aside = {
+    get scrollHeight() { return 100 + (birthdays.hidden ? 0 : 1) * (spill > 0 ? 50 : 0) + (notes.hidden ? 0 : 1) * (spill > 1 ? 50 : 0); },
+    clientHeight: 100,
+    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : notes),
+  };
+  const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true);
+  assert.equal(notes.hidden, true, 'still spilling, so Notes goes too');
+  spill = 1;
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true, 'Birthdays goes first');
+  assert.equal(notes.hidden, false, 'Notes stays when that is enough');
+  spill = 0;
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, false);
+});
+
 test('a leftover sections option changes nothing: the wall has no switches any more', () => {
   const plain = build('18:11', { predictions: ['masło'] });
   const switched = build('18:11', {

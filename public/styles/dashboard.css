@@ -963,6 +963,50 @@
   color: var(--color-accent);
 }
 
+/* ── Notizen und Geburtstage (nur lesen) ── */
+.wall-card[hidden] {
+  display: none;
+}
+
+.wall-list__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wall-list__row {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--wall-body);
+  line-height: var(--wall-text-lh);
+}
+
+.wall-list__main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wall-list__side {
+  flex: none;
+  font-size: var(--wall-label);
+  line-height: var(--wall-label-lh);
+  color: var(--color-text-secondary);
+}
+
+.wall-list__row--today .wall-list__main,
+.wall-list__row--today .wall-list__side {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Einkauf ── */
 .wall-shop {
   justify-content: center;

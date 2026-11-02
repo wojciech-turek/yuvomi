@@ -894,7 +894,7 @@ function seedWallSources() {
   addEvent('Elternabend', { assignees: [ANNA] });
 }
 /** Woerter und Zahlen, die an keiner Wand etwas verloren haben - als Text gesucht. */
-const OFF_WALL_WORDS = ['Sparbuch', 'DE00 1234', '4321', '98765', 'Bankportal', 'bank.example', '87.5'];
+const OFF_WALL_WORDS = ['DE00 1234', '4321', '98765', 'Bankportal', 'bank.example', '87.5'];
 const householdQuery = () => '?audience=household';
 
 test('Allowlist: ohne den Parameter traegt die Antwort all das weiter (Reichweite der Saat)', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
@@ -931,6 +931,8 @@ test('Allowlist: die Haushaltsfassung traegt nichts, was die Wand nicht zeichnet
     const wall = await overview(who, householdQuery());
     const text = JSON.stringify(wall);
     for (const word of OFF_WALL_WORDS) assert.ok(!text.includes(word), `Sitzung ${who}: „${word}" reist nicht mit`);
+    // Notes: the TITLE of a pinned note rides along (the wall's Notes card), its content never.
+    assert.deepEqual(wall.wallNotes.map((note) => note.title), ['Kontonummer Sparbuch'], `Sitzung ${who}: der Titel`);
 
     for (const key of ['pinnedNotes', 'pinnedNotesCount', 'notesTotal', 'budget', 'splitBalance',
       'health', 'fasting', 'nutrition', 'myShiftsToday']) {
@@ -1052,10 +1054,10 @@ test('Drift: was die Haushaltsfassung traegt, ist genau das Gezeichnete - an der
   const differs = (a, b) => { try { assert.deepEqual(a, b); return false; } catch { return true; } };
   const carried = Object.keys(wall).filter((key) => differs(wall[key], blank[key])).sort();
   assert.deepEqual(carried, ['birthdays', 'housekeeping', 'pantryExpiring', 'planEvents', 'planTasks', 'shoppingLists',
-    'shoppingOpenCount', 'todayMeals', 'upcomingEvents', 'wallTasks', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
+    'shoppingOpenCount', 'todayMeals', 'upcomingEvents', 'wallNotes', 'wallTasks', 'wastePickups'], 'belegt in der Saat UND an der Wand gezeichnet');
   // `wallTasks` rechnet nur die geteilte Flaeche - persoenlich steht es leer.
   assert.deepEqual(personal.wallTasks, []);
-  for (const key of carried.filter((name) => !['housekeeping', 'pantryExpiring', 'wallTasks'].includes(name))) {
+  for (const key of carried.filter((name) => !['housekeeping', 'pantryExpiring', 'wallTasks', 'wallNotes'].includes(name))) {
     assert.deepEqual(wall[key], personal[key], `„${key}" kommt unveraendert`);
   }
   assert.deepEqual(wall.users, personal.users, 'die Gesichter kommen unveraendert');
@@ -1086,18 +1088,21 @@ test('Allowlist: ein unbekannter Schluessel bekommt NEIN - auch einer, den es he
 
 test('Allowlist: was die Wand nicht zeigt, wird auch nicht gelesen', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
-  const OFF_WALL_TABLES = /\b(notes|budget_entries|expense_ledger_entries|quick_links|medications|schedule_extra_shifts)\b/;
+  const OFF_WALL_TABLES = /\b(budget_entries|expense_ledger_entries|quick_links|medications|schedule_extra_shifts)\b/;
   const original = db.prepare;
   let seen = [];
   db.prepare = function prepare(sql) { seen.push(String(sql)); return original.call(this, sql); };
   try {
     await overview(ANNA);
     const personalReads = seen.filter((sql) => OFF_WALL_TABLES.test(sql)).length;
-    assert.ok(personalReads >= 5, `Reichweite: die persoenliche Fassung liest diese Tabellen (${personalReads})`);
+    assert.ok(personalReads >= 3, `Reichweite: die persoenliche Fassung liest diese Tabellen (${personalReads})`);
     seen = [];
     await overview(ANNA, householdQuery());
     assert.ok(seen.length > 5, 'Reichweite: die Haushaltsfassung liest');
     assert.deepEqual(seen.filter((sql) => OFF_WALL_TABLES.test(sql)).map((sql) => sql.trim().slice(0, 60)), []);
+    // The one read of notes is the titles of pinned notes (wallNotes).
+    const noteReads = seen.filter((sql) => /\bnotes\b/.test(sql)).map((sql) => sql.trim().slice(0, 40));
+    assert.deepEqual(noteReads, ['SELECT n.id, TRIM(n.title) AS title FROM']);
   } finally {
     db.prepare = original;
   }
@@ -1117,7 +1122,7 @@ test('Allowlist: die gebaute Wand ist dieselbe wie zuvor - nichts, was sie zeich
     // nicht hat.
     const beforeData = {
       ...personal,
-      health: wall.health, fasting: wall.fasting, nutrition: wall.nutrition, myShiftsToday: [],
+      health: wall.health, fasting: wall.fasting, nutrition: wall.nutrition, myShiftsToday: [], wallNotes: wall.wallNotes,
       pendingReminders: [],
     };
     const afterData = { ...wall, pendingReminders: [] };

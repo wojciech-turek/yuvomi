@@ -29,6 +29,7 @@ import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import {
   planContext, buildPlan, pickNow, buildTomorrow, dayClosed, minutesOf, firstName, MEAL_TIMES, DINNER_FROM, DINNER_LINGER_MIN,
 } from '/utils/today-plan.js';
+import { birthdaysNext } from '/utils/dzis-plan.js';
 
 /** Until when it is morning on the wall. */
 export const MORNING_UNTIL = '10:00';
@@ -236,6 +237,8 @@ export function buildWall(data, {
     plan: null,
     tomorrow: null,
     shopping: null,
+    notes: null,
+    birthdays: null,
     question: null,
     canTick: false,
     household: data?.users ?? [],
@@ -312,6 +315,20 @@ export function buildWall(data, {
     }
   }
 
+  // Notes: the titles of the pinned notes the household answer carries
+  // (`wallNotes`, never content). Birthdays: the same next three as Today.
+  if (!moduleOff('notes')) {
+    const notes = (Array.isArray(data?.wallNotes) ? data.wallNotes : [])
+      .map((note) => ({ id: note?.id, title: String(note?.title ?? '').trim() }))
+      .filter((note) => note.id != null && note.title)
+      .slice(0, 3);
+    if (notes.length) model.notes = notes;
+  }
+  if (!moduleOff('birthdays')) {
+    const rows = birthdaysNext(data, ctx);
+    if (rows.length) model.birthdays = rows;
+  }
+
   // The weekly question: Sunday evening, while the AI has one open and the
   // wall may answer (a person's own wall, or a display the household lets write).
   if (question && isSunday(ctx.todayKey) && ctx.nowMin >= minutesOf(QUESTION_FROM)
@@ -332,7 +349,8 @@ export function wallFingerprint(model) {
     model.scene, model.teraz, model.stale, model.timer?.state ?? null,
     model.hero?.minutes > 0 && model.hero?.minutes < 60 ? model.hero.minutes : null,
     model.plan?.rows.map((row) => [row.key, row.time, Boolean(row.pill)]), model.plan?.closed,
-    model.tomorrow?.rows.map((row) => row.key), model.shopping, Boolean(model.question), model.dinner?.title ?? null,
+    model.tomorrow?.rows.map((row) => row.key), model.shopping,
+    model.notes, model.birthdays?.map((row) => [row.key, row.today, row.far]), Boolean(model.question), model.dinner?.title ?? null,
   ]);
 }
 

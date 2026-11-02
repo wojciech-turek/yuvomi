@@ -210,6 +210,29 @@ test('the wall\'s household answer carries the plan - only what everybody may se
   assert.deepEqual(answer.health.doses, [], 'doses never reach a shared surface');
 }));
 
+test('the wall\'s household answer carries the titles of up to three pinned notes - no content, no author, no unpinned or untitled note', atNow(async () => {
+  const addNote = (title, { pinned = 1, at = '2026-10-19 10:00:00' } = {}) => db.prepare(`
+    INSERT INTO notes (title, content, pinned, created_by, updated_at) VALUES (?, 'sekretna treść', ?, ?, ?)
+  `).run(title, pinned, WOJTEK, at).lastInsertRowid;
+  addNote('Hasło do wifi', { at: '2026-10-19 09:00:00' });
+  addNote('Lista na weekend', { at: '2026-10-19 12:00:00' });
+  addNote('Nieprzypięta', { pinned: 0, at: '2026-10-19 13:00:00' });
+  addNote('   ', { at: '2026-10-19 14:00:00' });
+  addNote(null, { at: '2026-10-19 14:30:00' });
+  addNote('Numer do hydraulika', { at: '2026-10-19 11:00:00' });
+  addNote('Czwarta przypięta', { at: '2026-10-18 08:00:00' });
+  viewer = MARIOLA;
+  const answer = await getJson('/?audience=household');
+  assert.deepEqual(answer.wallNotes.map((note) => note.title), ['Lista na weekend', 'Numer do hydraulika', 'Hasło do wifi'], 'pinned, titled, newest change first, three');
+  assert.ok(answer.wallNotes.every((note) => Object.keys(note).sort().join() === 'id,title'), 'id and title only');
+  assert.ok(!JSON.stringify(answer).includes('sekretna'), 'no content anywhere in the answer');
+  assert.deepEqual(answer.pinnedNotes, [], 'pinnedNotes (with content) stays empty for the household audience');
+  const personal = await getJson('/');
+  assert.deepEqual(personal.wallNotes, [], 'a member\'s answer does not carry the wall key');
+  assert.ok(personal.pinnedNotes.length > 0, 'and keeps its pinnedNotes');
+  db.prepare('DELETE FROM notes').run();
+}));
+
 test('users carry family_role, so Dziś can count the adults', atNow(async () => {
   const { users } = await getJson('/');
   assert.ok(users.every((user) => typeof user.family_role === 'string'));
