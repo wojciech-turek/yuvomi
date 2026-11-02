@@ -1,7 +1,7 @@
 import express from 'express';
 import * as db from '../db.js';
 import { createLogger } from '../logger.js';
-import { color, collectErrors, date, num, oneOf, str, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
+import { collectErrors, date, num, oneOf, str, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import {
   BILLING_CYCLES,
   CURRENCY_RE,
@@ -113,7 +113,7 @@ function syncReminder(subscription) {
 
 function loadSubscription(id) {
   return db.get().prepare(`
-    SELECT s.*, c.name AS category_name, c.color AS category_color,
+    SELECT s.*, c.name AS category_name,
            c.label_key AS category_label_key, c.budget_subcategory_key,
            p.name AS payment_method_name, p.label_key AS payment_method_label_key,
            u.display_name AS creator_name
@@ -426,7 +426,6 @@ function validatePayload(body, { partial = false } = {}) {
   if (required('amount')) checks.push(num(body.amount, 'Amount', { required: true }));
   if (required('billing_cycle')) checks.push(oneOf(body.billing_cycle, BILLING_CYCLES, 'Billing cycle'));
   if (required('next_payment_date')) checks.push(date(body.next_payment_date, 'Next payment date', true));
-  if (body.brand_color !== undefined) checks.push(color(body.brand_color, 'Brand color'));
   if (body.notes !== undefined) checks.push(str(body.notes, 'Notes', { max: MAX_TEXT, required: false }));
   const errors = collectErrors(checks);
 
@@ -550,15 +549,14 @@ router.put('/settings', (req, res) => {
 
 router.post('/categories', (req, res) => {
   const name = str(req.body.name, 'Name', { max: MAX_SHORT });
-  const categoryColor = color(req.body.color || '#0F766E', 'Color');
-  const errors = collectErrors([name, categoryColor]);
+  const errors = collectErrors([name]);
   if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
   try {
     const database = db.get();
     const category = database.transaction(() => {
       const order = database.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM subscription_categories').get().n;
-      const result = database.prepare('INSERT INTO subscription_categories (name, color, sort_order) VALUES (?, ?, ?)')
-        .run(name.value, categoryColor.value, order);
+      const result = database.prepare('INSERT INTO subscription_categories (name, sort_order) VALUES (?, ?)')
+        .run(name.value, order);
       const budgetKey = `subscription_category_${result.lastInsertRowid}`;
       database.prepare('UPDATE subscription_categories SET budget_subcategory_key = ? WHERE id = ?')
         .run(budgetKey, result.lastInsertRowid);
@@ -621,8 +619,7 @@ router.put('/categories/:id', (req, res) => {
     const existing = db.get().prepare('SELECT * FROM subscription_categories WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Category not found.', code: 404, reason: 'subscriptions_category_not_found' });
     const name = str(req.body.name, 'Name', { max: MAX_SHORT });
-    const categoryColor = color(req.body.color ?? existing.color, 'Color');
-    const errors = collectErrors([name, categoryColor]);
+    const errors = collectErrors([name]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     const database = db.get();
     database.transaction(() => {
@@ -631,18 +628,17 @@ router.put('/categories/:id', (req, res) => {
       // werden. Dasselbe tun tasks.js, contacts.js und inventory/categories.js.
       //
       // NUR UMBENENNEN, UND DAS IST DER PUNKT. Der Verwalten-Dialog schickt
-      // Name und Farbe zusammen, auch wenn nur die Farbe angefasst wurde -
-      // ein `label_key = NULL` bei JEDEM Speichern haette die sechs
-      // Seed-Kategorien beim ersten Farbwechsel stillschweigend auf die
+      // den Namen auch unveraendert zurueck - ein `label_key = NULL` bei JEDEM
+      // Speichern haette die sechs Seed-Kategorien stillschweigend auf die
       // Sprache dieses Klienten festgenagelt. Genau der Verlust, den
       // Migration 143 beim Inventar behoben hat und den der Kommentar in
       // routes/contacts.js beschreibt. Der Vergleich ist der Kanon-Name, den
       // der Klient unveraendert zurueckschickt (data-original-name).
       const categoryRenamed = name.value !== existing.name;
       database.prepare(`UPDATE subscription_categories
-                        SET name = ?, color = ?${categoryRenamed ? ', label_key = NULL' : ''}
+                        SET name = ?${categoryRenamed ? ', label_key = NULL' : ''}
                         WHERE id = ?`)
-        .run(name.value, categoryColor.value, id);
+        .run(name.value, id);
       // Die verknüpfte Budget-Subkategorie führt denselben Namen (POST-Invariante).
       if (existing.budget_subcategory_key) {
         database.prepare('UPDATE budget_subcategories SET name = ? WHERE key = ?')
@@ -795,7 +791,7 @@ router.get('/', refuseWhileRestoring, async (req, res) => {
       params.push(actorId(req));
     }
     const rows = db.get().prepare(`
-      SELECT s.*, c.name AS category_name, c.color AS category_color,
+      SELECT s.*, c.name AS category_name,
              c.label_key AS category_label_key, c.budget_subcategory_key,
              p.name AS payment_method_name, p.label_key AS payment_method_label_key,
              u.display_name AS creator_name
@@ -877,16 +873,16 @@ router.post('/', async (req, res) => {
       INSERT INTO budget_subscriptions
         (name, description, amount, currency, billing_cycle, cycle_interval, next_payment_date,
          category_id, payment_method_id, reminder_days, reminder_enabled, enabled, website_url, logo_data,
-         brand_color, notes, account_username, created_by, owner_id, visibility,
+         notes, account_username, created_by, owner_id, visibility,
          end_type, end_date, occurrence_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       req.body.name.trim(), req.body.description?.trim() || null, Number(req.body.amount), validated.currency,
       req.body.billing_cycle, validated.cycleInterval, req.body.next_payment_date,
       req.body.category_id || null, req.body.payment_method_id || null, validated.reminderDays,
       req.body.reminder_enabled === false ? 0 : 1,
       req.body.enabled === false ? 0 : 1, req.body.website_url?.trim() || null, req.body.logo_data || null,
-      req.body.brand_color || null, req.body.notes?.trim() || null,
+      req.body.notes?.trim() || null,
       req.body.account_username?.trim() || null, me, me, visibility,
       endType, endDate, occurrenceCount,
     );
@@ -937,7 +933,7 @@ router.put('/:id', async (req, res) => {
       UPDATE budget_subscriptions SET
         name = ?, description = ?, amount = ?, currency = ?, billing_cycle = ?, cycle_interval = ?,
         next_payment_date = ?, category_id = ?, payment_method_id = ?, reminder_days = ?, reminder_enabled = ?, enabled = ?,
-        website_url = ?, logo_data = ?, brand_color = ?, notes = ?, account_username = ?, visibility = ?,
+        website_url = ?, logo_data = ?, notes = ?, account_username = ?, visibility = ?,
         end_type = ?, end_date = ?, occurrence_count = ?, completed_at = ?
       WHERE id = ?
     `).run(
@@ -949,7 +945,7 @@ router.put('/:id', async (req, res) => {
       validated.reminderDays ?? current.reminder_days,
       value('reminder_enabled', Boolean(current.reminder_enabled)) ? 1 : 0, nextEnabled,
       value('website_url', current.website_url)?.trim() || null, value('logo_data', current.logo_data) || null,
-      value('brand_color', current.brand_color) || null, value('notes', current.notes)?.trim() || null,
+      value('notes', current.notes)?.trim() || null,
       value('account_username', current.account_username)?.trim() || null, nextVisibility,
       endType, endDate, occurrenceCount, completedAt, id,
     );

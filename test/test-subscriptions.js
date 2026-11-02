@@ -216,6 +216,7 @@ try {
     });
     assert.equal(categoryResponse.status, 201);
     const category = (await categoryResponse.json()).data;
+    assert.equal(category.color, '#0F766E', 'die gesendete Kategoriefarbe wurde nicht gespeichert');
     assert.equal(category.budget_subcategory_key, `subscription_category_${category.id}`);
     assert.equal(
       database.prepare('SELECT name FROM budget_subcategories WHERE key = ?').get(category.budget_subcategory_key).name,
@@ -340,10 +341,23 @@ try {
     // und entfernbar; verknüpfte Budget-Subkategorie + Abos ziehen korrekt mit.
     // ------------------------------------------------------------------
     // Kategorie umbenennen + neu färben -> Budget-Subkategorie erbt den Namen.
+    const brandProbe = await jsonReq('POST', '', {
+      name: 'Marke', amount: 3, currency: 'EUR', billing_cycle: 'monthly',
+      next_payment_date: '2026-10-05', reminder_days: 3, brand_color: '#FF0000',
+    });
+    assert.equal(brandProbe.status, 201, 'eine gesendete Markenfarbe wird ignoriert, nicht abgelehnt');
+    assert.equal(database.prepare('SELECT brand_color FROM budget_subscriptions WHERE id = ?').get(brandProbe.body.data.id).brand_color, null);
+    assert.equal((await jsonReq('PUT', `/${brandProbe.body.data.id}`, { brand_color: '#00FF00' })).status, 200);
+    assert.equal(database.prepare('SELECT brand_color FROM budget_subscriptions WHERE id = ?').get(brandProbe.body.data.id).brand_color, null, 'auch ein PUT aendert sie nicht');
+    await jsonReq('DELETE', `/${brandProbe.body.data.id}`);
     const catEdit = await jsonReq('PUT', `/categories/${category.id}`, { name: 'Dev tooling', color: '#111827' });
     assert.equal(catEdit.status, 200);
     assert.equal(catEdit.body.data.name, 'Dev tooling');
-    assert.equal(catEdit.body.data.color, '#111827');
+    // Keine Kategoriefarbe (One Today): die Spalte bleibt auf ihrem Vorgabewert,
+    // eine gesendete Farbe wird ignoriert und trotzdem mit 200/201 beantwortet.
+    assert.equal(catEdit.body.data.color, '#0F766E');
+    assert.equal(database.prepare('SELECT color FROM subscription_categories WHERE id = ?').get(category.id).color, '#0F766E');
+    assert.equal((await jsonReq('PUT', `/categories/${category.id}`, { name: 'Dev tooling' })).status, 200, 'ohne Farbe geht es genauso');
     assert.equal(
       database.prepare('SELECT name FROM budget_subcategories WHERE key = ?').get(category.budget_subcategory_key).name,
       'Dev tooling',
@@ -536,7 +550,7 @@ try {
         billing_cycle: row.billing_cycle, cycle_interval: row.cycle_interval,
         next_payment_date: row.next_payment_date, reminder_days: row.reminder_days,
         reminder_enabled: row.reminder_enabled, category_id: row.category_id, payment_method_id: row.payment_method_id,
-        website_url: row.website_url, brand_color: row.brand_color || '#0F766E', logo_data: row.logo_data,
+        website_url: row.website_url, logo_data: row.logo_data,
         notes: 'nur die Notiz', account_username: row.account_username, enabled: false,
         end_type: row.end_type, end_date: row.end_date, occurrence_count: row.occurrence_count,
       };

@@ -4,7 +4,7 @@ import { esc } from '/utils/html.js';
 import { periodStepperHtml, swapPeriod } from '/utils/period-stepper.js';
 import { swapContent } from '/utils/content-swap.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
-import { personDisc } from '/utils/person-color.js';
+import { personDisc, personInk } from '/utils/person-color.js';
 import { todayKey, addLocalDays, parseLocalDateKey, weekStartIndex, startOfLocalWeekKey } from '/utils/date.js';
 import { openModal, closeModal, confirmModal, confirmOverModal, advancedSection, refocusAfterRender, reportFieldError } from '/components/modal.js';
 import { makeSortable } from '/utils/sortable.js';
@@ -19,7 +19,6 @@ import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import { toggleRowHtml } from '/settings/components.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect } from '/components/user-multi-select.js';
 import { isNavModuleReadOnly } from '/permissions.js';
-import { USER_COLOR_DEFAULT } from '/utils/color.js';
 import { reminderOffsetOptions } from '/utils/schedule-reminder-offset.js';
 import { scheduleViewFromPath, scheduleRouteForView } from '/utils/schedule-tabs.js';
 
@@ -123,19 +122,9 @@ function initialOverviewSelection({ saved, hasSaved, eligibleIds, ownId }) {
 function saveOverviewSelection(ids) {
   try { localStorage.setItem(OVERVIEW_SELECTION_KEY, JSON.stringify(ids)); } catch {}
 }
-// Schichtfarben sind NUTZERFARBEN (freier Waehler im Formular); die Presets
-// sind nur Startwerte. Eine Grenze gilt trotzdem: keine davon darf die STIMME
-// imitieren. „Spaet" trug #7C3AED - eine Ziffer neben der Marke #6C3AED - und
-// der Waehler-Default war die Marke selbst: eine Schicht im Quasi-Markenviolett
-// liest sich im Kalender als Systemzustand statt als Inhalt (Eine-Stimme-Regel;
-// Critique 2026-08-27 + Detektor design-system-color). Jetzt Magenta fuer die
-// Abendschicht, und neue Typen starten auf dem Fruehschicht-Cyan.
-// SEIT R14 (Re-Critique 2026-09-28, P9) stammt JEDER Preset-Ton aus der EINEN
-// Startpalette `USER_COLORS` (utils/color.js), die in Light UND Dark >= 3:1 auf
-// der Kartenflaeche haelt - die alten 700-900er Toene waren nur gegen Weiss
-// gewaehlt und fielen im Dark unter 2:1 (Nacht, Pruefung, Urlaub und Labor
-// sahen gleich aus). Nur Startwerte: angelegte Schichtarten behalten ihre Farbe.
-// test-schedule.js prueft jedes Farbliteral dieser Datei gegen die Palette.
+// Schichtarten haben keine Farbe: eine Schicht zeigt die Tinte ihrer Person
+// (person-color.js), ohne Person den neutralen Ton. Die Presets sind nur Namen,
+// Kurzcodes, Zeiten und Symbole.
 // `vacation`/`sick` tragen bewusst KEINE Uhrzeiten (start_time/end_time bleiben
 // beide NULL - der CHECK der Tabelle verlangt genau das paarweise): sie sind
 // keine Arbeitsschicht, sondern ein Tages-ETIKETT ohne Dauer. Das Datenmodell
@@ -149,8 +138,8 @@ function saveOverviewSelection(ids) {
 // einen Weg, einen Tag als "nicht da" zu kennzeichnen. Deshalb an jede
 // Vorlage angehaengt statt dreifach dupliziert.
 const SHARED_PRESETS = Object.freeze([
-  { key: 'vacation', shortCode: 'V', startTime: null, endTime: null, color: '#78808C', icon: 'tree-palm' },
-  { key: 'sick', shortCode: 'S', startTime: null, endTime: null, color: '#EF4444', icon: 'thermometer' },
+  { key: 'vacation', shortCode: 'V', startTime: null, endTime: null, icon: 'tree-palm' },
+  { key: 'sick', shortCode: 'S', startTime: null, endTime: null, icon: 'thermometer' },
 ]);
 // Drei Vorlagen statt einer einzigen festen Liste - derselbe Quickstart-Weg
 // (vormals nur Arbeitsschichten) deckt jetzt auch Schule und Universitaet ab.
@@ -159,26 +148,26 @@ const SHARED_PRESETS = Object.freeze([
 // immer hatten ("Fruehschicht" 06-14 Uhr passt auch nicht jedem Betrieb).
 const PRESET_TEMPLATES = Object.freeze({
   work: Object.freeze([
-    { key: 'early', shortCode: 'E', startTime: '06:00', endTime: '14:00', color: '#0891B2', icon: 'sunrise' },
-    { key: 'late', shortCode: 'L', startTime: '14:00', endTime: '22:00', color: '#D946EF', icon: 'sunset' },
-    { key: 'night', shortCode: 'N', startTime: '22:00', endTime: '06:00', color: '#3B82F6', icon: 'moon' },
-    { key: 'day', shortCode: 'D', startTime: '08:00', endTime: '16:00', color: '#16A34A', icon: 'sun' },
-    { key: 'fullDay', shortCode: '24', startTime: '10:00', endTime: '10:00', color: '#D97706', icon: 'clock' },
+    { key: 'early', shortCode: 'E', startTime: '06:00', endTime: '14:00', icon: 'sunrise' },
+    { key: 'late', shortCode: 'L', startTime: '14:00', endTime: '22:00', icon: 'sunset' },
+    { key: 'night', shortCode: 'N', startTime: '22:00', endTime: '06:00', icon: 'moon' },
+    { key: 'day', shortCode: 'D', startTime: '08:00', endTime: '16:00', icon: 'sun' },
+    { key: 'fullDay', shortCode: '24', startTime: '10:00', endTime: '10:00', icon: 'clock' },
     ...SHARED_PRESETS,
   ]),
   school: Object.freeze([
-    { key: 'period1', shortCode: 'P1', startTime: '08:00', endTime: '08:45', color: '#3B82F6', icon: 'book-open' },
-    { key: 'period2', shortCode: 'P2', startTime: '08:55', endTime: '09:40', color: '#059669', icon: 'book-open' },
-    { key: 'period3', shortCode: 'P3', startTime: '09:55', endTime: '10:40', color: '#EA580C', icon: 'book-open' },
-    { key: 'period4', shortCode: 'P4', startTime: '10:50', endTime: '11:35', color: '#EC4899', icon: 'book-open' },
-    { key: 'exam', shortCode: 'EX', startTime: '09:00', endTime: '11:00', color: '#D97706', icon: 'file-text' },
+    { key: 'period1', shortCode: 'P1', startTime: '08:00', endTime: '08:45', icon: 'book-open' },
+    { key: 'period2', shortCode: 'P2', startTime: '08:55', endTime: '09:40', icon: 'book-open' },
+    { key: 'period3', shortCode: 'P3', startTime: '09:55', endTime: '10:40', icon: 'book-open' },
+    { key: 'period4', shortCode: 'P4', startTime: '10:50', endTime: '11:35', icon: 'book-open' },
+    { key: 'exam', shortCode: 'EX', startTime: '09:00', endTime: '11:00', icon: 'file-text' },
     ...SHARED_PRESETS,
   ]),
   university: Object.freeze([
-    { key: 'lecture', shortCode: 'VL', startTime: '09:00', endTime: '10:30', color: '#3B82F6', icon: 'presentation' },
-    { key: 'seminar', shortCode: 'SE', startTime: '10:45', endTime: '12:15', color: '#059669', icon: 'users' },
-    { key: 'lab', shortCode: 'LAB', startTime: '13:00', endTime: '15:00', color: '#16A34A', icon: 'flask-conical' },
-    { key: 'exam', shortCode: 'EX', startTime: '09:00', endTime: '11:00', color: '#D97706', icon: 'file-text' },
+    { key: 'lecture', shortCode: 'VL', startTime: '09:00', endTime: '10:30', icon: 'presentation' },
+    { key: 'seminar', shortCode: 'SE', startTime: '10:45', endTime: '12:15', icon: 'users' },
+    { key: 'lab', shortCode: 'LAB', startTime: '13:00', endTime: '15:00', icon: 'flask-conical' },
+    { key: 'exam', shortCode: 'EX', startTime: '09:00', endTime: '11:00', icon: 'file-text' },
     ...SHARED_PRESETS,
   ]),
 });
@@ -190,7 +179,6 @@ const PRESET_TEMPLATES = Object.freeze({
 const ALL_PRESETS = Object.freeze([...new Map(
   [...PRESET_TEMPLATES.work, ...PRESET_TEMPLATES.school, ...PRESET_TEMPLATES.university].map((preset) => [preset.key, preset]),
 ).values()]);
-const SHIFT_COLOR_FALLBACK = USER_COLOR_DEFAULT;
 
 // DER KURZCODE SPRICHT DIE SPRACHE DES HAUSHALTS (R20, Re-Critique 2026-10-17
 // a3 P2-3). `shortCode` oben ist der englische Stand ("E", "L", "S"), und er
@@ -221,10 +209,10 @@ function presetShortCode(preset) {
 function presetAlreadyThere(preset, types = state.types) {
   const codes = new Set(types.map((type) => type.short_code));
   const names = new Set(types.map((type) => String(type.name ?? '').trim().toLowerCase()));
-  const looks = new Set(types.map((type) => `${type.icon ?? ''}|${String(type.color ?? '').toUpperCase()}`));
+  const looks = new Set(types.map((type) => `${type.icon ?? ''}|${type.start_time ?? ''}|${type.end_time ?? ''}`));
   return codes.has(presetShortCode(preset)) || codes.has(preset.shortCode)
     || names.has(shiftPresetLabel(preset.key).trim().toLowerCase())
-    || looks.has(`${preset.icon}|${preset.color.toUpperCase()}`);
+    || looks.has(`${preset.icon}|${preset.startTime ?? ''}|${preset.endTime ?? ''}`);
 }
 
 // Welche Vorlagen ueberhaupt als Knopf angeboten werden, ist selbst haushalt-
@@ -667,12 +655,12 @@ function statisticsSummary() {
  * scales relative to the largest item in THIS list, not a fixed axis - a
  * floor keeps the smallest bar visible instead of collapsing to a hairline.
  */
-function statisticsRows(items, valueFor, magnitudeOf, emptyLabel) {
+function statisticsRows(items, valueFor, magnitudeOf, emptyLabel, ink) {
   if (!items.length) return '<p class="schedule-stat-empty">' + esc(emptyLabel) + '</p>';
   const max = Math.max(...items.map(magnitudeOf), 1);
   return '<div class="schedule-stat-list">' + items.map((item) => {
     const scale = Math.max(0.03, magnitudeOf(item) / max).toFixed(3);
-    const color = esc(item.type.color);
+    const color = esc(ink);
     const name = esc(item.type.short_code ? item.type.short_code + ' · ' + item.type.name : item.type.name);
     return '<div class="schedule-stat-row">'
       + '<div class="schedule-stat-row__head">'
@@ -897,7 +885,6 @@ function applyShiftPreset(form) {
   form.elements.short_code.value = presetShortCode(selected);
   form.elements.start_time.value = selected.startTime;
   form.elements.end_time.value = selected.endTime;
-  form.elements.color.value = selected.color;
   form.elements.icon.value = selected.icon ?? '';
   const iconButton = form.querySelector('[data-action="pick-shift-icon"]');
   if (iconButton) setShiftIconButtonIcon(iconButton, selected.icon);
@@ -959,7 +946,6 @@ function shiftFields(type = {}) {
   return [
     formField(t('schedule.name'), '<input class="form-input" required name="name" maxlength="200" value="' + esc(type.name ?? '') + '">'),
     formField(t('schedule.shortCode'), '<input class="form-input" name="short_code" maxlength="12" value="' + esc(type.short_code ?? '') + '">'),
-    formField(t('schedule.color'), '<input class="form-input form-input--color" required name="color" type="color" value="' + esc(type.color ?? SHIFT_COLOR_FALLBACK) + '">', 'schedule-color-field'),
     formField(t('schedule.icon'), '<button type="button" class="btn btn--secondary schedule-icon-picker" data-action="pick-shift-icon">'
       + (type.icon ? '<i data-lucide="' + esc(type.icon) + '" aria-hidden="true"></i>' : '<i data-lucide="image-off" aria-hidden="true"></i>')
       + '<span>' + esc(t('schedule.chooseIcon')) + '</span></button>'
@@ -1075,7 +1061,7 @@ function shiftTypeRow(type) {
   const actions = editable
     ? editDeleteMenu({ key: `type-${type.id}`, name, edit: { action: 'edit-shift-type', id: type.id }, remove: { action: 'delete-shift', id: type.id } })
     : '';
-  return `<div class="list-row schedule-type-row" data-shift-type="${type.id}"><span class="schedule-swatch" style="--schedule-color:${esc(type.color)}"></span>${icon}<div class="list-row__main"><span class="list-row__name">${esc(name)}</span><span class="list-row__meta">${esc(meta)}</span></div>${actions}</div>`;
+  return `<div class="list-row schedule-type-row" data-shift-type="${type.id}">${icon}<div class="list-row__main"><span class="list-row__name">${esc(name)}</span><span class="list-row__meta">${esc(meta)}</span></div>${actions}</div>`;
 }
 
 function shiftTypeFieldRow(field) {
@@ -1375,7 +1361,7 @@ function overrideRows() {
   if (!groups.length) return emptyOverrideState();
   return '<div class="row-carrier">' + groups.map((group) => {
     const type = state.types.find((item) => Number(item.id) === Number(group.shift_type_id));
-    const swatchColor = type ? type.color : 'var(--color-border)';
+    const swatchColor = type ? personInk(group.user_id) : 'var(--color-border)';
     const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : t('schedule.freeDay');
     const meta = [userName(group.user_id), typeLabel, group.note].filter(Boolean).join(' · ');
     const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)} - ${formatDate(group.to)}`;
@@ -1446,7 +1432,7 @@ function extraRows() {
   if (!groups.length) return emptyExtraShiftsState();
   return '<div class="row-carrier">' + groups.map((group) => {
     const type = state.types.find((item) => Number(item.id) === Number(group.shift_type_id));
-    const swatchColor = type ? type.color : 'var(--color-border)';
+    const swatchColor = type ? personInk(group.user_id) : 'var(--color-border)';
     const typeLabel = type ? (type.short_code ? `${type.short_code} · ${type.name}` : type.name) : '';
     const meta = [userName(group.user_id), typeLabel, group.note].filter(Boolean).join(' · ');
     const label = group.from === group.to ? formatDate(group.from) : `${formatDate(group.from)} - ${formatDate(group.to)}`;
@@ -1503,9 +1489,10 @@ function renderStatistics() {
   // auch schon tat.
   const overtime = state.overtimeEnabled ? overtimeInfo(statistics.entries, weeklyHours) : null;
   const selectedUser = statistics.userId || currentUserId;
+  const statsInk = personInk(selectedUser);
   const range = statistics.range;
   const countItems = [...summary.values];
-  if (summary.freeDays) countItems.push({ type: { name: t('schedule.freeDays'), short_code: '', color: 'var(--color-text-secondary)' }, count: summary.freeDays, minutes: 0, hasHours: false });
+  if (summary.freeDays) countItems.push({ type: { name: t('schedule.freeDays'), short_code: '' }, count: summary.freeDays, minutes: 0, hasHours: false });
   const hourItems = summary.values.filter((item) => item.hasHours);
   const controls = range === 'months'
     ? formField(t('schedule.monthFrom'), '<input class="form-input" required type="month" name="month_from" value="' + esc(statistics.monthFrom || monthKey()) + '">')
@@ -1550,8 +1537,8 @@ function renderStatistics() {
       + (overtime?.over ? '<article class="metric-card metric-card--warning"><div class="metric-card__label">' + esc(t('schedule.overtime')) + '</div><div class="metric-card__value">+' + esc(formatHours(overtime.excessMinutes)) + '</div><div class="metric-card__note">' + esc(t('schedule.overtimeNote', { hours: weeklyHours })) + '</div></article>' : '')
       + '</div>'
       + '<div class="schedule-stat-sections">'
-      + '<section class="card card--padded schedule-stat-card"><div><h2 class="u-section-title">' + esc(t('schedule.shiftCounts')) + '</h2><p class="u-meta">' + esc(t('schedule.shiftCountsDescription')) + '</p></div>' + statisticsRows(countItems, (item) => String(item.count), (item) => item.count, t('schedule.noStatistics')) + '</section>'
-      + '<section class="card card--padded schedule-stat-card"><div><h2 class="u-section-title">' + esc(t('schedule.workedHours')) + '</h2><p class="u-meta">' + esc(t('schedule.workedHoursDescription')) + '</p></div>' + statisticsRows(hourItems, (item) => formatHours(item.minutes), (item) => item.minutes, t('schedule.noStatistics')) + '</section>'
+      + '<section class="card card--padded schedule-stat-card"><div><h2 class="u-section-title">' + esc(t('schedule.shiftCounts')) + '</h2><p class="u-meta">' + esc(t('schedule.shiftCountsDescription')) + '</p></div>' + statisticsRows(countItems, (item) => String(item.count), (item) => item.count, t('schedule.noStatistics'), statsInk) + '</section>'
+      + '<section class="card card--padded schedule-stat-card"><div><h2 class="u-section-title">' + esc(t('schedule.workedHours')) + '</h2><p class="u-meta">' + esc(t('schedule.workedHoursDescription')) + '</p></div>' + statisticsRows(hourItems, (item) => formatHours(item.minutes), (item) => item.minutes, t('schedule.noStatistics'), statsInk) + '</section>'
       + '</div>';
   // DIE AUSWERTUNG OEFFNET MIT DEN ZAHLEN (Re-Critique 2026-09-27, A2 P1).
   // "Meine Einstellungen" stand als erste Karte ueber allem: mobil 525px hoch,
@@ -1726,7 +1713,7 @@ function scheduleEntryOriginLabel(entry) {
  */
 function renderScheduleEntryDetailContent(entry) {
   const type = entry.shift_type;
-  const swatchColor = type ? type.color : 'var(--color-border)';
+  const swatchColor = type ? personInk(entry.user_id) : 'var(--color-border)';
   const icon = type?.icon ? '<i data-lucide="' + esc(type.icon) + '" class="schedule-type-icon" aria-hidden="true"></i>' : '';
   const label = type ? esc(type.short_code ? `${type.short_code} · ${type.name}` : type.name) : esc(t('schedule.freeDay'));
   const time = type ? esc(clockLabel(type)) : '';
@@ -1760,7 +1747,7 @@ function renderToday() {
   if (!state.entries.length) return `<span class="schedule-today__empty">${esc(t('schedule.empty'))}</span>`;
   return state.entries.map((entry) => {
     const type = entry.shift_type;
-    const swatchColor = type ? type.color : 'var(--color-border)';
+    const swatchColor = type ? personInk(entry.user_id) : 'var(--color-border)';
     const name = type ? esc(type.short_code ? `${type.short_code} · ${type.name}` : type.name) : esc(t('schedule.freeDay'));
     const base = type ? `${esc(userName(entry.user_id))} · ${esc(clockLabel(type))}` : esc(userName(entry.user_id));
     const overlay = overlayMeta(entry);
@@ -1954,7 +1941,7 @@ function overviewEntryBlock(entry, activeHours) {
   // dieser Block eine Fortsetzungszeile (`__continuation`) ist oder nicht.
   const detailAttrs = ` role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}" aria-label="${esc(scheduleOverviewEntryTitle(entry))}"`;
   if (!type?.start_time || !type?.end_time) {
-    return `<div class="schedule-overview__block schedule-overview__block--allday" title="${esc(scheduleOverviewEntryTitle(entry))}"${detailAttrs}><span>${esc(overlay ? `${label} · ${overlay}` : label)}</span></div>`;
+    return `<div class="schedule-overview__block schedule-overview__block--allday" style="--schedule-color:${esc(personInk(entry.user_id))}" title="${esc(scheduleOverviewEntryTitle(entry))}"${detailAttrs}><span>${esc(overlay ? `${label} · ${overlay}` : label)}</span></div>`;
   }
   const [startH, startM] = type.start_time.split(':').map(Number);
   const [endH, endM] = type.end_time.split(':').map(Number);
@@ -1974,7 +1961,7 @@ function overviewEntryBlock(entry, activeHours) {
   const timeLine = entry.__continuation
     ? t('schedule.continuesUntil', { time: type.end_time })
     : overlay ? `${clockLabel(type)} · ${overlay}` : clockLabel(type);
-  return `<div class="schedule-overview__block" style="top:${top}px;height:${height}px;--schedule-color:${esc(type.color)}" title="${esc(scheduleOverviewEntryTitle(entry))}"${detailAttrs}><span class="schedule-overview__block-title">${esc(label)}</span><small class="schedule-overview__block-time">${esc(timeLine)}</small></div>`;
+  return `<div class="schedule-overview__block" style="top:${top}px;height:${height}px;--schedule-color:${esc(personInk(entry.user_id))}" title="${esc(scheduleOverviewEntryTitle(entry))}"${detailAttrs}><span class="schedule-overview__block-title">${esc(label)}</span><small class="schedule-overview__block-time">${esc(timeLine)}</small></div>`;
 }
 
 function scheduleOverviewEntryTitle(entry) {
@@ -3241,7 +3228,6 @@ async function action(event) {
             short_code: code,
             start_time: preset.startTime,
             end_time: preset.endTime,
-            color: preset.color,
             icon: preset.icon,
           });
           createdCount += 1;

@@ -540,24 +540,27 @@ test('a shift type may be added by anyone but only changed by its creator or an 
 // has to come from THAT and not from any error at all - the branch used to
 // catch everything and blame the same cause, so a broken statement would have
 // told the caller the type was still in use.
-// `color()` in validate.js answers a falsy input with {value: null, error: null},
-// so an empty string passes validation and reaches the UPDATE - where the column
-// is NOT NULL. The default does not apply to an explicitly bound NULL, so this
-// used to surface as an unhandled constraint error and a bare 500. The POST
-// handler sidesteps it with a default; PUT had no equivalent.
-test('an empty color on PUT keeps the stored one instead of writing NULL', async () => {
-  const created = await call('POST', '/shift-types', { as: ALICE, body: { name: 'Late', color: '#123456' } });
-  const shiftId = created.body.data.id;
+// Shift types carry no colour (One Today): the column stays (NOT NULL, table
+// default), the API neither reads nor returns it, and a colour that is sent
+// is ignored on create and on update.
+const storedShiftColor = (id) => database.prepare('SELECT color FROM schedule_shift_types WHERE id = ?').get(id).color;
 
-  for (const value of ['', null]) {
-    const res = await call('PUT', `/shift-types/${shiftId}`, { as: ALICE, body: { color: value } });
-    assert.equal(res.status, 200, `color: ${JSON.stringify(value)} must not blow up`);
-    assert.equal(res.body.data.color, '#123456', 'the stored colour survives');
+test('a colour sent on POST or PUT is ignored: 2xx as normal, stored value is the table default and never changes', async () => {
+  const created = await call('POST', '/shift-types', { as: ALICE, body: { name: 'Late', color: '#123456' } });
+  assert.equal(created.status, 201);
+  assert.ok(!('color' in created.body.data), 'the answer carries no colour');
+  const shiftId = created.body.data.id;
+  assert.equal(storedShiftColor(shiftId), '#6C3AED', 'the posted colour was not stored');
+
+  for (const value of ['#abcdef', '', null, 'rebeccapurple']) {
+    const res = await call('PUT', `/shift-types/${shiftId}`, { as: ALICE, body: { color: value, name: 'Late' } });
+    assert.equal(res.status, 200, `color: ${JSON.stringify(value)} must not blow up or be refused`);
+    assert.ok(!('color' in res.body.data), 'the answer carries no colour');
+    assert.equal(storedShiftColor(shiftId), '#6C3AED', 'the stored colour is untouched');
   }
 
-  const bad = await call('PUT', `/shift-types/${shiftId}`, { as: ALICE, body: { color: 'rebeccapurple' } });
-  assert.equal(bad.status, 400, 'a malformed colour is still rejected');
-
+  const list = await call('GET', '/shift-types', { as: ALICE });
+  assert.ok(list.body.data.every((type) => !('color' in type)), 'the list carries no colour');
   await call('DELETE', `/shift-types/${shiftId}`, { as: ADMIN });
 });
 
@@ -2808,35 +2811,45 @@ test('jedes Feld der Schichtplan-Dialoge hat einen zugaenglichen Namen (A2 P1-1)
   }
 });
 
-// P9 (Re-Critique 2026-09-28, Detektor-Bericht B): die Schicht-Presets waren
-// 700-900er Toene, nur gegen Weiss gewaehlt - im Dark lagen 14 von 15 unter
-// 3:1 (Nacht, Pruefung, Urlaub, Labor sahen gleich aus). Jetzt ziehen sie aus
-// der EINEN, in beiden Themes gemessenen Startpalette (public/utils/color.js).
-// Die Regel, nicht die Schreibweise: JEDES Farbliteral der Seite muss in der
-// Palette stehen - ein neues Preset mit eigenem Hex faellt hier auf.
-test('P9: every shift preset colour comes from the shared user palette, none in the brand voice', async () => {
-  const { USER_COLORS, USER_COLOR_DEFAULT } = await import('../public/utils/color.js');
-  const palette = new Set(USER_COLORS.map((hex) => hex.toUpperCase()));
+// One Today: no shift preset and no shift form carries a colour. A shift
+// shows the ink of its person; without a person it is neutral.
+test('shift presets and the shift form carry no colour', async () => {
   const schedulePage = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
-  const literals = [...schedulePage.matchAll(/color:\s*'(#[0-9A-Fa-f]{6})'/g)].map((m) => m[1].toUpperCase());
-  assert.ok(literals.length >= 10, 'die Presets tragen weiter ihre Startfarben');
-  for (const hex of literals) {
-    assert.ok(palette.has(hex), `${hex} steht nicht in USER_COLORS`);
-    assert.ok(!['#6C3AED', '#7C3AED'].includes(hex), `${hex} ist die Stimme`);
-  }
+  assert.doesNotMatch(schedulePage, /color:\s*'#[0-9A-Fa-f]{6}'/, 'no colour literal on a preset');
+  assert.doesNotMatch(schedulePage, /USER_COLOR|type="color"|name="color"/);
   const { __test } = await import('../public/pages/schedule.js');
-  const fresh = /name="color" type="color" value="(#[0-9A-Fa-f]{6})"/.exec(__test.shiftFields({}))?.[1];
-  assert.equal(fresh?.toUpperCase(), USER_COLOR_DEFAULT.toUpperCase(), 'eine neue Schichtart startet auf der Palettenvorgabe');
+  assert.doesNotMatch(__test.shiftFields({}), /color/i, 'the form has no colour field');
+  for (const preset of Object.values(__test.PRESET_TEMPLATES).flat()) {
+    assert.ok(!('color' in preset), `${preset.key} has no colour`);
+  }
 });
 
-// Server-Seite derselben Regel: POST ohne Farbe schrieb bisher '#6C3AED' -
-// die Marke selbst - in einen NEUEN Datensatz. Bestand bleibt unberuehrt.
-test('P9: a shift type created without a colour starts on the palette default, not the brand', async () => {
-  const { USER_COLOR_DEFAULT } = await import('../public/utils/color.js');
-  const created = await call('POST', '/shift-types', { as: ALICE, body: { name: 'Ohne Farbe' } });
-  assert.equal(created.status, 201);
-  assert.equal(created.body.data.color.toUpperCase(), USER_COLOR_DEFAULT.toUpperCase());
-  await call('DELETE', `/shift-types/${created.body.data.id}`, { as: ADMIN });
+test('shift rows draw the ink of their person, never a stored colour', async () => {
+  const { __test } = await import('../public/pages/schedule.js');
+  const { setHouseholdOrder } = await import('../public/utils/person-color.js');
+  setHouseholdOrder([{ id: 7 }, { id: 8 }]);
+  __test.setOwnerContext({ users: [{ id: 7, display_name: 'Ada' }, { id: 8, display_name: 'Bo' }], me: 7 });
+  const st = __test.scheduleState();
+  const before = { entries: st.entries, types: st.types };
+  try {
+    const type = { id: 3, name: 'Frueh', short_code: 'F', color: '#0891b2', start_time: '06:00', end_time: '14:00', fields: [] };
+    st.types = [type];
+    st.entries = [
+      { user_id: 7, date_key: '2026-10-07', source: 'pattern', shift_type: type },
+      { user_id: 8, date_key: '2026-10-07', source: 'pattern', shift_type: type },
+      { user_id: 99, date_key: '2026-10-07', source: 'pattern', shift_type: type },
+    ];
+    const html = __test.renderToday();
+    assert.match(html, /--schedule-color:var\(--person-1\)/, 'the first member');
+    assert.match(html, /--schedule-color:var\(--person-2\)/, 'the second member');
+    assert.equal((html.match(/--schedule-color:var\(--person-/g) || []).length, 2, 'someone outside the household is neutral');
+    assert.doesNotMatch(html, /#0891b2/i, 'the stored colour is not drawn');
+    assert.doesNotMatch(__test.shiftTypeRow(type), /schedule-swatch|#0891b2/i, 'a shift type row is a name only');
+  } finally {
+    Object.assign(st, before);
+    __test.setOwnerContext({});
+    setHouseholdOrder([]);
+  }
 });
 
 // Swatches im Dark mit Kante (P9): ein Farbpunkt von 0,7rem bekam im Dark eine
@@ -3351,20 +3364,20 @@ test('schedule.css traegt keine Regeln fuer das Einstellungsblatt, das sie nie l
 // Codex-Review PR #2053, zweite Runde (P2): eine Vorlage, die in einer anderen
 // Sprache angelegt wurde ("Frühschicht", Code F), traf weder den Code noch den
 // Namen der eigenen Sprache - "Arbeit" legte sie ein zweites Mal an.
-test('R20: eine Vorlage aus einer anderen Sprache gilt als vorhanden (Symbol und Farbe)', async () => {
+test('R20: eine Vorlage aus einer anderen Sprache gilt als vorhanden (Symbol und Zeiten)', async () => {
   const { __test } = await import('../public/pages/schedule.js');
   const early = __test.PRESET_TEMPLATES.work.find((p) => p.key === 'early');
-  const german = { name: 'Frühschicht', short_code: 'F', icon: 'sunrise', color: early.color.toLowerCase() };
+  const german = { name: 'Frühschicht', short_code: 'F', icon: 'sunrise', start_time: early.startTime, end_time: early.endTime };
   assert.equal(__test.presetShortCode(early) === 'F', false, 'Reichweite: der Code der Sprache hier ist nicht F');
   assert.equal(__test.presetAlreadyThere(early, [german]), true, 'die deutsche Frühschicht ist die Vorlage');
   // Gegenprobe: eine eigene Art mit anderem Symbol und Code ist keine Vorlage.
   assert.equal(__test.presetAlreadyThere(early, [{ ...german, icon: 'briefcase' }]), false);
   assert.equal(__test.presetAlreadyThere(early, [{ name: 'x', short_code: early.shortCode }]), true, 'der alte englische Code zaehlt weiter');
-  // Kein Paar aus Symbol und Farbe gehoert zwei verschiedenen Vorlagen.
+  // Kein Paar aus Symbol und Zeiten gehoert zwei verschiedenen Vorlagen.
   const all = Object.values(__test.PRESET_TEMPLATES).flat();
   const byLook = new Map();
   for (const preset of all) {
-    const look = `${preset.icon}|${preset.color.toUpperCase()}`;
+    const look = `${preset.icon}|${preset.startTime}|${preset.endTime}`;
     assert.ok(!byLook.has(look) || byLook.get(look) === preset.key, `${preset.key} und ${byLook.get(look)} sehen gleich aus`);
     byLook.set(look, preset.key);
   }

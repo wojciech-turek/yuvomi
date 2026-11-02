@@ -387,22 +387,16 @@
   color: var(--color-text-receded);
 }
 
-/* Monogramm: die Marke trägt Fläche und Rahmen, die Schrift kommt aus dem
- * Text-Token. Vorher kamen Vorder- und Hintergrund aus DERSELBEN Markenfarbe
- * (Vollton auf aufgehelltem Ton desselben Tons) — damit hing das Kontrast-
- * verhältnis vollständig an der Datenlage: gemessen 10 AA-Verstöße über 7 Marken
- * im Seed, bis hinunter auf 1.83:1 (Critique 2026-07-30, P1). Jede helle oder
- * gesättigte Marke (Amazon-Orange, Spotify-Grün) fiel automatisch durch, und
- * kein Nutzer konnte das umgehen, außer indem er die Markenfarbe änderte. */
+/* Monogramm: neutrale Flaeche, Schrift aus dem Text-Token. Das Abo hat keine
+ * Marken- oder Kategoriefarbe (One Today). */
 .subscription-card__brand {
   display: grid;
   width: 40px;
   height: 40px;
   place-items: center;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--subscription-color) var(--tint-hint), transparent);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--subscription-color) var(--tint-surface), var(--color-surface));
+  background: var(--color-fill);
   color: var(--color-text-primary);
   font-weight: var(--font-weight-bold);
 }
@@ -777,13 +771,9 @@
 
 .subscription-form__organization-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 90px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-3);
   align-items: end;
-}
-
-.subscription-form__color .form-input--color {
-  width: 100%;
 }
 
 .subscriptions-combobox {
@@ -1034,12 +1024,6 @@
   min-width: 0;
 }
 
-.subscriptions-metadata-row__edit .form-input--color {
-  width: 44px;
-  flex: 0 0 44px;
-  padding: 2px;
-}
-
 .subscriptions-metadata-row__view > i {
   width: 16px;
   height: 16px;
@@ -1048,11 +1032,6 @@
 
 .subscriptions-metadata-add {
   align-items: stretch;
-}
-
-.subscriptions-metadata-add .form-input--color {
-  width: 52px;
-  flex: 0 0 52px;
 }
 
 .subscriptions-metadata > .subscriptions-modal-footer {

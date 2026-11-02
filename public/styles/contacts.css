@@ -196,10 +196,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-full);
-  /* Haut aus .vivid-mark (layout.css), aber nur mit kuratiertem Ton - sonst
-   * neutral. */
-  --seal-accent: var(--cat, var(--color-fill));
-  color: var(--cat-ink, var(--color-text-secondary));
+  --seal-accent: var(--color-fill);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -359,8 +357,8 @@
   height: var(--target-md);
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  --seal-accent: var(--cat, var(--color-fill-well));
-  color: var(--cat-ink, var(--color-text-secondary));
+  --seal-accent: var(--color-fill-well);
+  color: var(--color-text-secondary);
 }
 
 .contacts-cat-select .form-input {

@@ -66,7 +66,7 @@ const PAYMENT_SCHEDULES = ['daily', 'twice_monthly', 'monthly'];
 // Lese-Rueckfall fuer eine Zeile ohne Farbe - Bestand, deshalb unveraendert.
 const DEFAULT_CALENDAR_COLOR = '#7C3AED';
 // Startfarbe eines NEUEN Profils ohne eigene Wahl: die Vorgabe der geteilten
-// Nutzerfarben-Palette (public/utils/color.js USER_COLOR_DEFAULT, Cyan),
+// Nutzerfarben-Palette (Cyan),
 // nicht mehr #7C3AED - das ist im Dark exakt die Flaeche des Primaerknopfs
 // (Re-Critique 2026-09-28, P9). Ein bestehendes Profil behaelt beim
 // Speichern ohne Farbfeld seine gespeicherte Farbe; keine Migration.

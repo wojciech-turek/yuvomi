@@ -1542,14 +1542,12 @@ test('#1668: jede Absage von Buchung, Serie, Konto, Kategorie und Rate nennt ihr
     'a-name': { status: 400, reason: 'account_name_invalid', error: 'Name is required.' },
     'a-type': { status: 400, reason: 'account_type_invalid', error: 'Account type must be one of: checking, savings, cash, credit, investment, other.' },
     'a-balance': { status: 400, reason: 'account_balance_invalid', error: 'Starting balance must be a valid number.' },
-    'a-color': { status: 400, reason: 'account_color_invalid', error: 'Color must be a valid HEX color (#RRGGBB).' },
     'a-bank': { status: 400, reason: 'account_credit_bank_invalid', error: 'Bank may be at most 100 characters long.' },
     'a-limit': { status: 400, reason: 'account_credit_limit_invalid', error: 'Credit limit must be a valid number.' },
     'a-limit-neg': { status: 400, reason: 'account_credit_limit_invalid', error: 'Credit limit must not be negative.' },
     'ap-name': { status: 400, reason: 'account_name_invalid', error: 'Name is required.' },
     'ap-type': { status: 400, reason: 'account_type_invalid', error: 'Account type must be one of: checking, savings, cash, credit, investment, other.' },
     'ap-balance': { status: 400, reason: 'account_balance_invalid', error: 'Starting balance must be a valid number.' },
-    'ap-color': { status: 400, reason: 'account_color_invalid', error: 'Color must be a valid HEX color (#RRGGBB).' },
     'ap-bank': { status: 400, reason: 'account_credit_bank_invalid', error: 'Bank may be at most 100 characters long.' },
     'ap-limit': { status: 400, reason: 'account_credit_limit_invalid', error: 'Credit limit must be a valid number.' },
     'ap-limit-neg': { status: 400, reason: 'account_credit_limit_invalid', error: 'Credit limit must not be negative.' },
@@ -1627,7 +1625,6 @@ test('#1668: jede Absage von Buchung, Serie, Konto, Kategorie und Rate nennt ihr
   await run('a-name', 'POST', '/accounts', {});
   await run('a-type', 'POST', '/accounts', { name: 'N', type: 'nope' });
   await run('a-balance', 'POST', '/accounts', { name: 'N', starting_balance: 'abc' });
-  await run('a-color', 'POST', '/accounts', { name: 'N', color: 'nope' });
   await run('a-bank', 'POST', '/accounts', { name: 'N', credit_bank: long });
   await run('a-limit', 'POST', '/accounts', { name: 'N', credit_limit: 'abc' });
   await run('a-limit-neg', 'POST', '/accounts', { name: 'N', credit_limit: -1 });
@@ -1635,7 +1632,6 @@ test('#1668: jede Absage von Buchung, Serie, Konto, Kategorie und Rate nennt ihr
   await run('ap-name', 'PUT', `/accounts/${aid}`, { name: '' });
   await run('ap-type', 'PUT', `/accounts/${aid}`, { type: 'nope' });
   await run('ap-balance', 'PUT', `/accounts/${aid}`, { starting_balance: 'abc' });
-  await run('ap-color', 'PUT', `/accounts/${aid}`, { color: 'nope' });
   await run('ap-bank', 'PUT', `/accounts/${aid}`, { credit_bank: long });
   await run('ap-limit', 'PUT', `/accounts/${aid}`, { credit_limit: 'abc' });
   await run('ap-limit-neg', 'PUT', `/accounts/${aid}`, { credit_limit: -1 });

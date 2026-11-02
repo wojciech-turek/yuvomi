@@ -9557,9 +9557,9 @@ test('Housekeeping: Bezahlen laeuft durch EINE Funktion, die vorher bestaetigt (
 });
 
 // One Today: Feiertage tragen keine Farbe aus den Einstellungen mehr - EIN
-// ruhiger Ton (.cal-holiday). Die Basisregeln mit `--holi-ink` bleiben fuer die
-// Schicht- und Abfall-Chips, die dieselben Klassen tragen.
-test('holiday chips are one quiet neutral chip, schedule and waste chips keep readable ink', () => {
+// ruhiger Ton (.cal-holiday), Abfall-Chips ebenso. Die Basisregeln bleiben fuer
+// die Schicht-Chips, die dieselben Klassen tragen.
+test('holiday chips are one quiet neutral chip, and so are waste chips; the base rule keeps its ink', () => {
   const calendarPage = read('../public/pages/calendar.js');
   const calendarCss = read('../public/styles/calendar.css');
 
@@ -9570,7 +9570,7 @@ test('holiday chips are one quiet neutral chip, schedule and waste chips keep re
   assert.match(quiet, /color:\s*var\(--color-text-secondary\)/);
   for (const selector of ['.month-day__holiday', '.allday-holiday']) {
     const body = cssRuleBody(calendarCss, selector);
-    assert.match(body, /color:\s*var\(--holi-ink,\s*var\(--color-text-on-accent\)\)/);
+    assert.match(body, /color:\s*var\(--color-text-on-accent\)/);
     assert.doesNotMatch(body, /color:\s*#fff/);
   }
 });
@@ -9606,6 +9606,33 @@ test('no avatar_color is read in public/ - every disc takes its colour from pers
   for (const rel of ['settings/pages/personal-account.js', 'settings/pages/admin-family.js', 'pages/housekeeping.js']) {
     assert.doesNotMatch(read(`../public/${rel}`), /type="color"|type=color/, `${rel}: ein Farbwaehler an einer Person`);
   }
+});
+
+// One Today (Aufgabe 6): nirgends in public/ gibt es noch ein Farbfeld. Kontakt-
+// kategorien, Schichtarten, Abfallarten, Konten und Abos sind nur Namen; die
+// Farbe einer Person kommt aus personToken(). Die EINE Ausnahme ist kein Feld:
+// settings/shell.js schliesst `[type="color"]` nur aus einem Tastatur-Selektor
+// aus (Eingaben, in denen getippt wird).
+test('kein Farbfeld mehr in public/: weder type="color" noch die Klasse form-input--color', async () => {
+  const { stripJsComments } = await import('../server/utils/strip-comments.js');
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (['locales', 'vendor', 'fonts', 'icons'].includes(entry.name)) continue;
+        walk(`${dir}${entry.name}/`);
+      } else if (/\.(js|html|css)$/.test(entry.name) && !/\.min\.js$/.test(entry.name)) {
+        const raw = readFileSync(new URL(`${dir}${entry.name}`, import.meta.url), 'utf8');
+        const code = entry.name.endsWith('.js') ? stripJsComments(raw) : raw;
+        for (const m of code.matchAll(/type=["']?color\b|form-input--color|input\[type=["']?color/g)) {
+          offenders.push(`${dir}${entry.name}: ${m[0]}`);
+        }
+      }
+    }
+  };
+  walk('../public/');
+  assert.deepEqual(offenders.filter((o) => !o.startsWith('../public/settings/shell.js')), [], 'ein Farbfeld ist zurueck');
+  assert.deepEqual(offenders.filter((o) => o.startsWith('../public/settings/shell.js')).length, 1, 'die eine Ausnahme: der Tastatur-Selektor in shell.js');
 });
 
 test('one disc renderer: no page builds its own person avatar from a colour', () => {
@@ -11560,7 +11587,7 @@ test('.btn--sm haelt die Zielgroesse der Geraetewelt, auch am Zeiger', () => {
 // Startpalette in schedule.js, Flaeche und Tinte aus tokens.css je Theme, das
 // Rezept aus der Regel in calendar.css. Aendert sich eine der drei Seiten,
 // rechnet der Guard mit dem neuen Wert.
-test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fuer die Startpalette', async () => {
+test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fuer die Personentinten', async () => {
   const { contrastRatio } = await import('../public/utils/contrast.js');
   const calendarCss = read('../public/styles/calendar.css');
   const scheduleCss = read('../public/styles/schedule.css');
@@ -11568,11 +11595,15 @@ test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fu
   const scheduleJs = read('../public/pages/schedule.js');
   const calendarJs = read('../public/pages/calendar.js');
 
-  // --- Die Startpalette: jede Farbe der Schicht-Vorlagen ---------------------
+  // --- Die Farben: eine Schicht traegt die Tinte ihrer Person (One Today) -----
+  // Schichtarten haben keine Farbe mehr; die Chips ziehen --holi-color aus
+  // personInk(), also aus den sechs Personentinten in tokens.css.
   const presets = scheduleJs.slice(scheduleJs.indexOf('const SHARED_PRESETS'), scheduleJs.indexOf('});', scheduleJs.indexOf('const PRESET_TEMPLATES')));
-  const palette = [...new Set([...presets.matchAll(/color:\s*'(#[0-9A-Fa-f]{6})'/g)].map((m) => m[1].toUpperCase()))];
-  assert.ok(palette.length >= 8, `Startpalette aus schedule.js gelesen (${palette.length} Farben)`);
-  assert.ok(palette.includes('#0891B2'), 'die Befund-Farbe (Fruehschicht) ist dabei');
+  assert.doesNotMatch(presets, /color:\s*'#/, 'kein Preset traegt eine Farbe');
+  const palette = [...new Set([...tokensCss.matchAll(/--_person-[1-6]:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase()))];
+  assert.equal(palette.length, 6, `die sechs Personentinten aus tokens.css gelesen (${palette.length} Farben)`);
+  assert.doesNotMatch(calendarJs, /(?:shift_)?type\.color/, 'calendar.js liest keine Schichtfarbe');
+  assert.match(calendarJs, /--holi-color:\$\{esc\(personInk\(entry\.user_id, state\.users\)\)\}/, 'der Schicht-Chip nimmt die Tinte seiner Person');
 
   // --- Das Rezept: eine Regel fuer alle drei Ansichten -----------------------
   const SELEKTOREN = ['.month-day__holiday.schedule-entry', '.allday-holiday.schedule-entry', '.agenda-holiday.schedule-entry'];

@@ -7,7 +7,7 @@
 import { createLogger } from '../logger.js';
 import express from 'express';
 import * as db from '../db.js';
-import { str, color, collectErrors, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
+import { str, collectErrors, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { toggleChecklistLine } from '../../public/utils/markdown-checklist.js';
 import { resolvePermissions } from '../permissions.js';
@@ -212,7 +212,7 @@ router.get('/', (req, res) => {
 /**
  * POST /api/v1/notes
  * Neue Notiz anlegen.
- * Body: { content, title?, color?, pinned? }
+ * Body: { content, title?, pinned? }
  * Response: { data: Note }
  */
 router.post('/', (req, res) => {
@@ -220,16 +220,15 @@ router.post('/', (req, res) => {
     const { pinned = 0 } = req.body;
     const vContent = str(req.body.content, 'Inhalt', { max: MAX_TEXT });
     const vTitle   = str(req.body.title,   'Titel',  { max: MAX_TITLE, required: false });
-    const vColor   = color(req.body.color || '#FFEB3B', 'Farbe');
-    const errors   = collectErrors([vContent, vTitle, vColor]);
+    const errors   = collectErrors([vContent, vTitle]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
     const database = db.get();
     const create = database.transaction(() => {
       const result = database.prepare(`
-        INSERT INTO notes (content, title, color, pinned, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(vContent.value, vTitle.value, vColor.value, pinned ? 1 : 0, actorId(req));
+        INSERT INTO notes (content, title, pinned, created_by)
+        VALUES (?, ?, ?, ?)
+      `).run(vContent.value, vTitle.value, pinned ? 1 : 0, actorId(req));
       if (req.body.category_ids !== undefined) {
         replaceEditableAssignments(database, {
           noteId: result.lastInsertRowid,
@@ -261,7 +260,7 @@ router.post('/', (req, res) => {
 /**
  * PUT /api/v1/notes/:id
  * Notiz bearbeiten.
- * Body: { content?, title?, color?, pinned? }
+ * Body: { content?, title?, pinned? }
  * Response: { data: Note }
  */
 router.put('/:id', (req, res) => {
@@ -274,7 +273,6 @@ router.put('/:id', (req, res) => {
     const checks = [];
     if (req.body.content !== undefined) checks.push(str(req.body.content, 'Inhalt', { max: MAX_TEXT, required: false }));
     if (req.body.title !== undefined)   checks.push(str(req.body.title,   'Titel',  { max: MAX_TITLE, required: false }));
-    if (req.body.color !== undefined)   checks.push(color(req.body.color, 'Farbe'));
     const errors = collectErrors(checks);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
 
@@ -284,13 +282,11 @@ router.put('/:id', (req, res) => {
       UPDATE notes
       SET content = COALESCE(?, content),
           title   = ?,
-          color   = COALESCE(?, color),
           pinned  = COALESCE(?, pinned)
       WHERE id = ?
       `).run(
       req.body.content?.trim() ?? null,
       req.body.title !== undefined ? (req.body.title?.trim() || null) : note.title,
-      req.body.color ?? null,
       pinned !== undefined ? (pinned ? 1 : 0) : null,
         id
       );

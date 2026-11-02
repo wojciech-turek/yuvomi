@@ -38,8 +38,7 @@ const {
   findScheduleOrigin, parseDeepLinkParams, deepLinkSelectors, recurrenceSummary, originBadges,
   defaultLabelDecision, unresolvedBlockingDiagnostics, buildMappingDecisions, sourceHealthBadgeInfo,
   splitUpcomingByType, deepLinkNeedsExpand, nearestOrdinalAnchorDateKey,
-  typeCardHtml, scheduleRowHtml, sourceRowHtml, TYPE_PRESETS, WASTE_TYPE_COLORS,
-  activeSwatchColor, resolveSwatchColors,
+  typeCardHtml, scheduleRowHtml, sourceRowHtml, TYPE_PRESETS,
   isOnboarding, onboardingHtml, sectionVisibility, fabIntent,
 } = __test;
 
@@ -481,185 +480,23 @@ test('der Zeilenkoerper traegt IMMER die Basisklasse, --interactive nur zusaetzl
 });
 
 // -------------------------------------------------------------------------
-// Farbpalette der Abfallart (Audit UX, 2026-09-12)
+// Keine Abfallartfarbe (One Today): Namen und Symbole, keine Palette.
 // -------------------------------------------------------------------------
 
-test('WASTE_TYPE_COLORS: jede Preset-Farbe liegt im Raster', () => {
-  // Sonst setzt die Vorlagen-Auswahl im Dialog eine Farbe, zu der es keinen
-  // Swatch gibt - das Raster stuende dann ohne Markierung da.
+test('Vorlagen sind Name und Symbol, ohne Farbe', () => {
   for (const preset of TYPE_PRESETS) {
-    assert.ok(WASTE_TYPE_COLORS.includes(preset.color),
-      `Preset ${preset.key} (${preset.color}) fehlt in WASTE_TYPE_COLORS`);
+    assert.ok(!('color' in preset), `Preset ${preset.key} traegt keine Farbe`);
+    assert.ok(preset.icon, `Preset ${preset.key} hat ein Symbol`);
   }
+  assert.equal(__test.WASTE_TYPE_COLORS, undefined, 'die Palette ist weg');
+  assert.equal(__test.activeSwatchColor, undefined);
+  assert.equal(__test.resolveSwatchColors, undefined);
 });
 
-/**
- * DER FARBNAME NENNT DEN FARBTON (#1507).
- *
- * Die Swatches tragen ihren Namen als `aria-label` und `title` - wer die Farbe
- * nicht sieht, hat nur ihn. Nach dem Wechsel auf die geteilte Palette hiess
- * #D946EF (Fuchsia, Farbton 292) weiter "Violett" und #059669 (Smaragd, 161)
- * weiter "Tuerkis": die Hex-Werte waren gewandert, die Namen nicht.
- *
- * Gemessen wird der Farbton des Hex-Werts gegen den Sektor, den der
- * Schluesselname behauptet. Die Sektoren sind grob und ueberlappen nicht; sie
- * sollen einen vertauschten Namen fangen, keine Nuance.
- *
- * Eine Ausnahme vom Nicht-Ueberlappen (#1723): Magenta und Fuchsia teilen
- * sich einen Sektor, weil sie derselbe Farbton sind (300 Grad, in CSS sogar
- * derselbe Wert). #EC4899 liegt bei 330 und hiess trotzdem "Magenta" - der
- * Sektor stand hier zu weit und hat den Namen gedeckt, statt ihn zu pruefen.
- * 310 bis 345 ist Pink.
- */
-const HUE_SECTORS = {
-  colorRed: [345, 15],
-  colorOrange: [15, 28],
-  colorOcher: [28, 50],
-  colorGreen: [90, 150],
-  colorEmerald: [150, 170],
-  colorTeal: [170, 185],
-  colorCyan: [185, 200],
-  colorBlue: [200, 250],
-  colorViolet: [250, 280],
-  colorFuchsia: [280, 310],
-  colorMagenta: [280, 310],
-  colorPink: [310, 345],
-};
-
-function hueAndSaturation(hex) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  let hue = 0;
-  if (delta > 0) {
-    if (max === r) hue = ((g - b) / delta) % 6;
-    else if (max === g) hue = (b - r) / delta + 2;
-    else hue = (r - g) / delta + 4;
-    hue = (hue * 60 + 360) % 360;
-  }
-  return { hue, saturation: max === 0 ? 0 : delta / max };
-}
-
-test('WASTE_TYPE_COLOR_NAMES: jeder Farbname liegt im Farbton seines Hex-Werts (#1507)', () => {
-  const pairs = [...WASTE_CODE.matchAll(/'(#[0-9A-F]{6})':\s*t\('waste\.(color\w+)'\)/g)].map((m) => [m[1], m[2]]);
-  assert.equal(pairs.length, WASTE_TYPE_COLORS.length, 'nicht jede Palettenfarbe hat einen Namen');
-  assert.deepEqual(pairs.map(([hex]) => hex).sort(), [...WASTE_TYPE_COLORS].sort());
-  const failures = [];
-  for (const [hex, key] of pairs) {
-    const { hue, saturation } = hueAndSaturation(hex);
-    if (key === 'colorGray') {
-      if (saturation > 0.2) failures.push(`${hex} heisst ${key}, ist aber bunt (Saettigung ${saturation.toFixed(2)})`);
-      continue;
-    }
-    const sector = HUE_SECTORS[key];
-    assert.ok(sector, `${key}: kein Farbton-Sektor hinterlegt`);
-    const [from, to] = sector;
-    const inside = from < to ? hue >= from && hue < to : hue >= from || hue < to;
-    if (!inside) failures.push(`${hex} heisst ${key}, liegt aber bei Farbton ${Math.round(hue)}`);
-  }
-  assert.deepEqual(failures, []);
-});
-
-test('#EC4899 heisst in jeder Sprache Pink, und der alte Name ist kein zweiter (#1723)', async () => {
-  const { readFileSync, readdirSync } = await import('node:fs');
-  // Das Etikett ist neu, der gespeicherte Wert nicht: eine Abfallart traegt den
-  // Hex-Wert, und der bleibt in der Palette.
-  assert.ok(WASTE_TYPE_COLORS.includes('#EC4899'), '#EC4899 ist nicht mehr waehlbar - Bestandsdaten zeigten dann auf nichts');
-  const name = WASTE_CODE.match(/'#EC4899':\s*t\('waste\.(color\w+)'\)/);
-  assert.ok(name, '#EC4899 hat keinen Namen mehr');
-  assert.equal(name[1], 'colorPink');
-  const dir = new URL('../public/locales/', import.meta.url);
-  const files = readdirSync(dir).filter((file) => file.endsWith('.json'));
-  assert.ok(files.length >= 20, 'zu wenige Locale-Dateien gelesen');
-  const seen = new Map();
-  for (const file of files) {
-    const { waste } = JSON.parse(readFileSync(new URL(file, dir), 'utf8'));
-    assert.equal(typeof waste.colorPink, 'string', `${file}: waste.colorPink fehlt`);
-    assert.equal(waste.colorMagenta, undefined, `${file}: waste.colorMagenta ist ein toter zweiter Name`);
-    // Kein Name darf doppelt in der Palette stehen - ein Screenreader koennte
-    // die zwei Swatches sonst nicht unterscheiden.
-    const names = Object.entries(waste).filter(([key]) => /^color[A-Z]/.test(key) && key !== 'colorCurrent').map(([, value]) => value);
-    assert.equal(new Set(names).size, names.length, `${file}: zwei Farben heissen gleich (${names.join(', ')})`);
-    seen.set(file, waste.colorPink);
-  }
-  assert.equal(seen.get('de.json'), 'Pink');
-  assert.equal(seen.get('en.json'), 'Pink');
-});
-
-test('WASTE_TYPE_COLORS: eine kuratierte Auswahl ohne Dubletten und ohne Extremwerte', () => {
-  assert.equal(new Set(WASTE_TYPE_COLORS).size, WASTE_TYPE_COLORS.length, 'keine doppelten Farben');
-  assert.ok(WASTE_TYPE_COLORS.length >= 8, 'zu wenig Auswahl ist auch keine');
-  for (const hex of WASTE_TYPE_COLORS) {
-    assert.match(hex, /^#[0-9A-F]{6}$/, `${hex} ist kein normalisierter Hex-Wert`);
-    // Der eigentliche Zweck der Palette: kein Weiss und kein Schwarz mehr.
-    // Genau die liessen sich im freien `<input type="color">` waehlen und
-    // machten das Symbol der Abfallart auf hellem bzw. dunklem Grund unsichtbar.
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    assert.ok(luminance > 0.08 && luminance < 0.72,
-      `${hex} liegt ausserhalb des Helligkeitsbands der Palette (${luminance.toFixed(3)})`);
-  }
-});
-
-// -------------------------------------------------------------------------
-// EINE Startpalette fuer Nutzerfarben (Re-Critique 2026-09-28, P9)
-// -------------------------------------------------------------------------
-
-// Die Flaechen, auf denen ein Farbsymbol oder Swatch landet, gerechnet aus
-// tokens.css selbst - Grundflaeche UND gehobene Karte. Kein abgeschriebener
-// Hex hier: aendert sich ein Flaechenton, misst der Test mit.
-// 2026-10-27, v2: light only - die Dark-Flaechen sind gegangen.
-const TOKENS_CSS = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
-const SURFACES = [...new Set([...TOKENS_CSS.matchAll(/--_color-surface(?:-raised)?:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase()))];
-function relLum(hex) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-function contrast(a, b) {
-  const [x, y] = [relLum(a), relLum(b)];
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-function hueOf(hex) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const mx = Math.max(r, g, b); const d = mx - Math.min(r, g, b);
-  if (!d) return null;
-  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return (h * 60 + 360) % 360;
-}
-
-test('USER_COLORS: eine Startpalette, die auf jeder Flaeche >= 3:1 haelt', async () => {
-  const { USER_COLORS } = await import('../public/utils/color.js');
-  assert.ok(Array.isArray(USER_COLORS) && USER_COLORS.length >= 8, 'geteilte Palette fehlt in utils/color.js');
-  assert.equal(SURFACES.length, 2, `Flaechen aus tokens.css nicht gefunden: ${SURFACES}`);
-  for (const hex of USER_COLORS) {
-    for (const surface of SURFACES) {
-      assert.ok(contrast(hex, surface) >= 3, `${hex} auf ${surface}: ${contrast(hex, surface).toFixed(2)}:1 < 3:1`);
-    }
-  }
-});
-
-test('USER_COLORS: kein Ton im Markenband (#6C3AED/#7C3AED), der Primaerknopf bleibt die eine Stimme', async () => {
-  const { USER_COLORS, USER_COLOR_DEFAULT } = await import('../public/utils/color.js');
-  for (const hex of USER_COLORS) {
-    const hue = hueOf(hex);
-    assert.ok(hue === null || hue < 245 || hue > 275, `${hex} (Hue ${hue?.toFixed(0)}) liegt im Markenband`);
-  }
-  assert.ok(USER_COLORS.includes(USER_COLOR_DEFAULT), 'die Vorgabe fuer neue Datensaetze ist ein Palettenmitglied');
-});
-
-test('Farb-Swatch traegt eine Innenkante, damit er im Dark nicht in den Kartengrund laeuft', () => {
-  const css = readFileSync(new URL('../public/styles/waste.css', import.meta.url), 'utf8');
-  const base = [...eachRule(css)].find((r) => r.selector.trim() === '.waste-color-swatch' && !r.at.length);
-  assert.ok(base, '.waste-color-swatch fehlt');
-  assert.match(base.body, /box-shadow:\s*inset 0 0 0 1px var\(--color-border[a-z-]*\)/);
-});
-
-test('WASTE_TYPE_COLORS ist die geteilte Palette, und Sperrmuell traegt nicht mehr die Stimme', async () => {
-  const { USER_COLORS } = await import('../public/utils/color.js');
-  assert.deepEqual(WASTE_TYPE_COLORS, USER_COLORS);
-  assert.ok(!TYPE_PRESETS.some((p) => /^#7C3AED$/i.test(p.color)), 'kein Preset in #7C3AED');
+test('Zeilen und Chips zeichnen keine gespeicherte Farbe', () => {
+  const html = typeCardHtml({ ...TYPE, color: '#64748B' }, 0, 2);
+  assert.doesNotMatch(html, /#64748B|style="color:/i, 'die Abfallart-Karte ist ein Name mit Symbol');
+  assert.doesNotMatch(WASTE_CODE, /type_color|type\.color|preset\.color/, 'der Quelltext liest keine Abfallartfarbe');
 });
 
 // -------------------------------------------------------------------------
@@ -753,76 +590,11 @@ test('jeder Schreib-Weg im Kopf bleibt hinter dem Nur-lesen-Riegel', () => {
   assert.match(WASTE_SRC, /\$\{readOnly\(\) \? '' : `\n\s*<div class="row-actions">/, 'die Quellenzeile ebenso');
 });
 
-test('der freie Farbwaehler ist aus dem Abfallart-Dialog verschwunden', () => {
-  // 16,7 Millionen Farben ohne Untergrenze: Weiss oder Schwarz liessen das
-  // Symbol der Abfallart auf hellem bzw. dunklem Grund verschwinden.
-  assert.doesNotMatch(WASTE_CODE, /type="color"/);
-  assert.doesNotMatch(WASTE_CODE, /form-input--color/);
-  assert.match(WASTE_SRC, /class="waste-color-picker" role="radiogroup" aria-labelledby="wtm-color-label"/);
-  // Die gespeicherte Farbe gewinnt ihren eigenen Swatch, statt still ersetzt
-  // zu werden - Abfallarten aus der Zeit des freien Waehlers tragen beliebige
-  // Hex-Werte.
-  assert.match(WASTE_SRC, /WASTE_TYPE_COLORS\.includes\(selColorUpper\) \? WASTE_TYPE_COLORS : \[\.\.\.WASTE_TYPE_COLORS, selColor\]/);
-});
-
-// -------------------------------------------------------------------------
-// resolveSwatchColors - Gross-/Kleinschreibung des gespeicherten Hex-Werts
-// (Review PR #1146, "should fix" 1). `<input type="color">` liefert seinen
-// Wert laut HTML-Spec IMMER kleingeschrieben - jede Abfallart von vor diesem
-// Umbau (und jede ueber ein Preset angelegte) traegt deshalb z.B. `#16a34a`,
-// waehrend `WASTE_TYPE_COLORS` grossgeschrieben ist. Ein case-sensitiver
-// Vergleich fand da nie eine Uebereinstimmung: keiner der zehn Swatches
-// zeigte sich aktiv, und ein optisch identischer elfter "Aktuelle Farbe"-
-// Swatch haengte sich an - bei JEDER bestehenden Abfallart.
-// -------------------------------------------------------------------------
-
-test('resolveSwatchColors: ein kleingeschriebener gespeicherter Wert trifft seinen Palette-Swatch statt einen elften anzuhaengen', () => {
-  const { swatchColors, selColorUpper } = resolveSwatchColors('#16a34a');
-  assert.equal(selColorUpper, '#16A34A');
-  assert.deepEqual(swatchColors, WASTE_TYPE_COLORS, 'kein elfter "Aktuelle Farbe"-Swatch fuer eine Palettenfarbe, nur anders geschrieben');
-  assert.ok(swatchColors.some((c) => c.toUpperCase() === selColorUpper), 'ein Swatch des Rasters muss auf den Wert passen');
-});
-
-test('resolveSwatchColors: eine Farbe ausserhalb der Palette bekommt weiterhin genau einen zusaetzlichen Swatch', () => {
-  const { swatchColors, selColorUpper } = resolveSwatchColors('#123456');
-  assert.equal(selColorUpper, '#123456');
-  assert.equal(swatchColors.length, WASTE_TYPE_COLORS.length + 1);
-  assert.equal(swatchColors.at(-1), '#123456', 'der Altwert bleibt in seiner eigenen Schreibweise erhalten');
-});
-
-test('resolveSwatchColors: bereits grossgeschriebene Palettenfarben verhalten sich unveraendert', () => {
-  const { swatchColors } = resolveSwatchColors('#3B82F6');
-  assert.deepEqual(swatchColors, WASTE_TYPE_COLORS);
-});
-
-// -------------------------------------------------------------------------
-// activeSwatchColor - Speichern liest den TATSAECHLICH aktiven Swatch
-// (Review PR #1146, "nice to have"). Der Gegenbeweis am PR-Kopf zeigte: ein
-// Speichern, das immer die Oeffnungsfarbe schickt, liess test:waste-ui grün.
-// Die Funktion ist die kleinste testbare Einheit dieses Lese-Schritts - mit
-// einem gestellten Panel-Stub statt einem echten Dialog (siehe Kommentar am
-// Dateikopf: Full modal open/save braucht einen echten DOM).
-// -------------------------------------------------------------------------
-
-function stubSwatchPanel(activeColor) {
-  return {
-    querySelector(selector) {
-      if (selector === '.waste-color-swatch--active') {
-        return activeColor === null ? null : { dataset: { color: activeColor } };
-      }
-      return null;
-    },
-  };
-}
-
-test('activeSwatchColor: liest die Farbe des aktiven Swatch, nicht die Oeffnungsfarbe', () => {
-  const panel = stubSwatchPanel('#DC2626');
-  assert.equal(activeSwatchColor(panel, '#16A34A'), '#DC2626', 'ein neu angeklickter Swatch muss gewinnen, nicht der Stand beim Oeffnen');
-});
-
-test('activeSwatchColor: faellt ohne aktiven Swatch auf die uebergebene Oeffnungsfarbe zurueck', () => {
-  const panel = stubSwatchPanel(null);
-  assert.equal(activeSwatchColor(panel, '#16A34A'), '#16A34A');
+test('der Abfallart-Dialog hat keine Farbwahl mehr', () => {
+  assert.doesNotMatch(WASTE_SRC, /type="color"|form-input--color|waste-color-|wtm-color|USER_COLORS/);
+  assert.doesNotMatch(WASTE_CODE, /color:\s*(?:activeSwatchColor|selColor)/, 'Speichern schickt keine Farbe');
+  const css = readFileSync(new URL('../public/styles/waste.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /waste-color-/, 'kein Swatch-CSS mehr');
 });
 
 // -------------------------------------------------------------------------
@@ -976,13 +748,13 @@ test('R20: ohne Termin steht der Weg daneben, die uebrigen Vorlagen bleiben, sie
   assert.equal(__test.remainingTypePresets([]).length, __test.TYPE_PRESETS.length);
   // Codex-Review PR #2053: die Vorlage legt den Namen in der Sprache dessen
   // an, der tippt. "Bioabfall" eines deutschen Mitglieds ist fuer ein
-  // englisches dieselbe Vorlage - Symbol und Farbe tragen sie ueber Sprachen.
+  // englisches dieselbe Vorlage - das Symbol traegt sie ueber Sprachen.
   const organic = __test.TYPE_PRESETS.find((p) => p.key === 'organic');
-  const foreign = __test.remainingTypePresets([{ name: 'Bioabfall', icon: organic.icon, color: organic.color.toLowerCase() }]).map((p) => p.key);
+  const foreign = __test.remainingTypePresets([{ name: 'Bioabfall', icon: organic.icon }]).map((p) => p.key);
   assert.ok(!foreign.includes('organic'), 'eine in einer anderen Sprache angelegte Vorlage wird erneut angeboten');
   assert.equal(foreign.length, __test.TYPE_PRESETS.length - 1);
-  // Eine eigene Art mit Standardfarbe verdeckt keine Vorlage.
-  assert.equal(__test.remainingTypePresets([{ name: 'Gelber Sack', icon: 'trash-2', color: '#22C55E' }]).length, __test.TYPE_PRESETS.length);
+  // Eine eigene Art mit dem Standardsymbol verdeckt keine Vorlage.
+  assert.equal(__test.remainingTypePresets([{ name: 'Gelber Sack', icon: 'trash-2' }]).length, __test.TYPE_PRESETS.length);
   const css = readFileSync(new URL('../public/styles/waste.css', import.meta.url), 'utf8');
   assert.match(css, /\.waste-weekday-picker \{\s*display: grid;\s*grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/, 'sieben gleiche Spalten');
   const stepper = __test.intervalStepperHtml(1);

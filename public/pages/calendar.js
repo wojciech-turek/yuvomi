@@ -33,8 +33,8 @@ import {
   shiftEndForStart,
   shiftSeriesStart,
 } from '/utils/recurrence-scope.js';
-import { getReadableTextColor } from '/utils/color.js';
 import { eventTone as eventToneOf } from '/utils/event-color.js';
+import { personInk } from '/utils/person-color.js';
 import { EVENT_ICON_CATEGORIES, CUSTOM_EVENT_ICON_PATHS, eventIconName, hasEventIcon, eventIconHtml } from '/utils/event-icon.js';
 import { packLanes } from '/utils/week-strip.js';
 import { assignLanes, assignLanesByPerson, memberRank } from '/utils/overlap-lanes.js';
@@ -3720,7 +3720,7 @@ function renderMonthDay(date, inMonth, { selected = false, selWeek = false, spli
 
   const holHtml = holShown.map((h) => holidayChipHtml(h, 'month-day__holiday')).join('');
 
-  const scheduleHtml = daySchedule.map((entry) => `<div class="month-day__holiday schedule-entry" style="--holi-color:${esc(entry.shift_type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(scheduleEntryLabel(entry))}</span></div>`).join("");
+  const scheduleHtml = daySchedule.map((entry) => `<div class="month-day__holiday schedule-entry" style="--holi-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(scheduleEntryLabel(entry))}</span></div>`).join("");
 
   const wasteHtml = dayWaste.map((occ) => renderWasteChip(occ, { className: 'month-day__holiday', icon: false })).join('');
 
@@ -3835,7 +3835,7 @@ function passesWasteTypeFilter(occ) {
 /**
  * Die Typen, die es je Sub-Zeile unter der Waste-Ebene ueberhaupt zu waehlen
  * gibt - aus den geladenen Vorkommen selbst abgeleitet (type_id/type_name/
- * type_color liefert coalesceOccurrences bereits mit, waste-domain.js), statt
+ * type_name liefert coalesceOccurrences bereits mit, waste-domain.js), statt
  * einer zweiten eigenen Typenliste vom Server. Ein Typ ohne Vorkommen im
  * geladenen Fenster hat hier keine Zeile - seine Termine bleiben trotzdem
  * sichtbar (leeres Set = alle), nur abwaehlbar wird er erst, sobald er einmal
@@ -3845,7 +3845,7 @@ function wasteTypeOptions() {
   const seen = new Map();
   for (const occ of state.wasteOccurrences) {
     if (!seen.has(occ.type_id)) {
-      seen.set(occ.type_id, { id: occ.type_id, name: occ.type_name, color: occ.type_color });
+      seen.set(occ.type_id, { id: occ.type_id, name: occ.type_name });
     }
   }
   return [...seen.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
@@ -3962,7 +3962,7 @@ function renderScheduleChip(entry, className = 'allday-holiday', { showFullRange
   const detailAttrs = clickable
     ? ` role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"`
     : '';
-  return `<div class="${className} schedule-entry" style="--holi-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}"${detailAttrs}><span>${esc(label)}</span>${scheduleEntryExtraBadge(entry)}${start}</div>`;
+  return `<div class="${className} schedule-entry" style="--holi-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}"${detailAttrs}><span>${esc(label)}</span>${scheduleEntryExtraBadge(entry)}${start}</div>`;
 }
 
 /**
@@ -3991,7 +3991,7 @@ function renderScheduleEntryDetailContent(entry) {
     .map((field) => '<div class="schedule-entry-detail__row"><dt>' + esc(field.name) + '</dt><dd>' + esc(entry.field_values[field.id]) + '</dd></div>')
     .join('');
   return '<div class="schedule-entry-detail">'
-    + '<div class="schedule-entry-detail__head"><span class="agenda-holiday__dot" style="--holi-color:' + esc(type.color) + '"></span><span class="u-card-title u-compact">' + label + '</span>' + (time ? '<small>' + time + '</small>' : '') + '</div>'
+    + '<div class="schedule-entry-detail__head"><span class="agenda-holiday__dot" style="--holi-color:' + esc(personInk(entry.user_id, state.users)) + '"></span><span class="u-card-title u-compact">' + label + '</span>' + (time ? '<small>' + time + '</small>' : '') + '</div>'
     + '<dl class="schedule-entry-detail__rows">'
     + (owner ? '<div class="schedule-entry-detail__row"><dt>' + esc(t('schedule.owner')) + '</dt><dd>' + esc(owner) + '</dd></div>' : '')
     + (entry.note ? '<div class="schedule-entry-detail__row"><dt>' + esc(t('schedule.note')) + '</dt><dd>' + esc(entry.note) + '</dd></div>' : '')
@@ -4019,7 +4019,6 @@ function openScheduleEntryDetailModal(entry) {
  * Herkunft ueberall gleich aussieht.
  */
 function renderWasteChip(occurrence, { className = 'allday-holiday', icon = true, interactive = false } = {}) {
-  const color = occurrence.type_color || '';
   const movedOriginal = occurrence.moved
     ? occurrence.origins?.find((o) => o.kind === 'schedule' && o.original_date)?.original_date
     : null;
@@ -4036,7 +4035,7 @@ function renderWasteChip(occurrence, { className = 'allday-holiday', icon = true
   const button = interactive
     ? ` role="button" tabindex="0" aria-label="${esc(occurrence.type_name)}, ${esc(formatPreferredDate(occurrence.date_key))}"`
     : '';
-  return `<div class="${className} waste-occurrence-chip" style="--holi-color:${esc(color)};--holi-ink:${esc(getReadableTextColor(color))}"
+  return `<div class="${className} cal-holiday waste-occurrence-chip"
        data-deep-link="${esc(occurrence.deep_link)}"${button}
        title="${esc(occurrence.type_name)}">
     ${icon ? `<i data-lucide="${esc(occurrence.type_icon || 'trash-2')}" class="icon-sm" aria-hidden="true"></i>` : ''}
@@ -4109,7 +4108,7 @@ function renderScheduleTimeBlock(entry, className, layout = null) {
   // Detailansicht oeffnet, waehrend der Rest der Spalte unveraendert bleibt.
   // role="button"/tabindex traegt trotzdem der AEUSSERE Block: pointer-events
   // wirkt nur auf Zeiger-Eingabe, Tastaturfokus/Enter/Space bleiben unberuehrt.
-  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);left:${left};width:${width};--ev-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}" role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
+  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);left:${left};width:${width};--ev-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}" role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
 }
 
 /**
@@ -6141,7 +6140,6 @@ function buildLayerRowsHtml(layers) {
     const typeRows = wasteTypeOptions().map((wt) => toggleRowHtml({
       label: wt.name ?? '',
       checked: state.wasteVisibleTypeIds.size === 0 || state.wasteVisibleTypeIds.has(wt.id),
-      swatchColor: wt.color,
       control: 'switch',
       attrs: { 'data-filter-waste-type': String(wt.id) },
     })).join('');

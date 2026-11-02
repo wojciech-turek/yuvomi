@@ -482,7 +482,7 @@ test('es gibt genau eine Umschalter-Optik im Modul', () => {
       const [, classes] = bar;
       // Die Haupt-Tabs und der Scope-Umschalter tragen die app-weite Pillen-
       // Grammatik (sub-tabs.css) - sie sitzen in der Toolbar, nicht im Panel.
-      if (/budget-tabs|budget-scope|budget-color-picker/.test(classes)) continue;
+      if (/budget-tabs|budget-scope/.test(classes)) continue;
       assert.match(
         classes,
         /segmented/,
@@ -1731,13 +1731,13 @@ test('Trendpfeile sind Icons, keine Textglyphen', () => {
   assert.match(budget, /trendMarkup\(/);
 });
 
-test('Konto-Farben kommen aus Tokens und tragen sprechende Labels', () => {
-  const palette = budget.match(/const ACCOUNT_COLORS = \[[\s\S]*?\];/);
-  assert.ok(palette, 'ACCOUNT_COLORS fehlt');
-  assert.doesNotMatch(palette[0], /#[0-9a-fA-F]{6}/, 'Hex-Literale gehören in tokens.css');
-  assert.match(palette[0], /nameKey: 'budget\.color/);
-  // Screenreader lasen vorher den Hexcode vor.
-  assert.match(budget, /t\(c\.nameKey\)/);
+test('Konten haben keine Farbwahl: kein Swatch, kein Akzent je Konto, nichts wird gesendet', () => {
+  assert.doesNotMatch(budget, /ACCOUNT_COLORS|accountAccent|budget-color-|am-color|account-accent|selectedColor/);
+  assert.doesNotMatch(budget, /account_color_invalid/);
+  const accountBody = budget.slice(budget.indexOf("const body = { name, type, starting_balance"), budget.indexOf("const body = { name, type, starting_balance") + 120);
+  assert.doesNotMatch(accountBody, /color/, 'das Konto-Formular sendet keine Farbe');
+  const css = read('../public/styles/budget.css');
+  assert.doesNotMatch(css, /budget-color-/, 'kein Swatch-CSS');
 });
 
 test('kein toter Toast-Typ: nur gestylte Varianten werden verwendet', () => {
@@ -2333,8 +2333,6 @@ test('alle neuen Keys existieren in jeder Locale', () => {
   const keys = [
     'budget.trendDelta', 'budget.statsRangeLabel', 'budget.statsOtherCategories',
     'budget.statsTrendSummary', 'budget.statsDonutSummary',
-    'budget.colorTeal', 'budget.colorBlue', 'budget.colorViolet', 'budget.colorMagenta',
-    'budget.colorOrange', 'budget.colorGreen', 'budget.colorOcher',
     'budget.statsPointLabel', 'budget.statsPointsLabel',
     'budget.expensesOnly', 'budget.expensesOnlyHint',
     'subscriptions.resetFilters', 'subscriptions.noMatchesTitle', 'subscriptions.noMatchesDescription',

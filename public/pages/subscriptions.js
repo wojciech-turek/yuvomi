@@ -1040,7 +1040,6 @@ function endInfoLabel(subscription) {
 // Beschreibung `<span>` statt `<h3>`/`<p>`: Content-Model eines `<button>` ist
 // Phrasing Content. Was der Knopf TUT, kommt als sr-only Zusatz ans Ende.
 function renderCard(subscription) {
-  const brandColor = subscription.brand_color || subscription.category_color || '#0F766E';
   const status = statusMeta(subscription);
   const endInfo = endInfoLabel(subscription);
   // BEI `budget: read` OEFFNET DER ZEILENKOERPER DIE LESEANSICHT statt des
@@ -1092,7 +1091,7 @@ function renderCard(subscription) {
         <span>${t('common.delete')}</span>
       </div>`}
     <article class="subscription-card ${status.cardClass}"
-             data-id="${subscription.id}" style="--subscription-color:${esc(brandColor)}">
+             data-id="${subscription.id}">
       <button type="button" class="subscription-card__main list-row__main--interactive"
               data-action="${ro ? 'view' : 'edit'}">
         <span class="subscription-card__brand">
@@ -1410,7 +1409,6 @@ function subscriptionReadSections(subscription) {
 function openSubscriptionReadView(subscription) {
   return openDetailView({
     title: subscription.name,
-    accentColor: subscription.brand_color || subscription.category_color || 'var(--module-budget)',
     size: 'sm',
     sections: subscriptionReadSections(subscription),
   });
@@ -1492,7 +1490,6 @@ export function openSubscriptionModal(subscription = null) {
   const advancedOpen = edit && (
     !!subscription.category_id
     || !!subscription.payment_method_id
-    || (!!subscription.brand_color && subscription.brand_color !== '#0F766E')
     || !!subscription.notes
     || subscription.enabled === false
   );
@@ -1503,10 +1500,6 @@ export function openSubscriptionModal(subscription = null) {
         <div class="subscription-form__organization-grid">
           ${metaComboboxMarkup('subscription-category', subscription?.category_id || '')}
           ${metaComboboxMarkup('subscription-method', subscription?.payment_method_id || '')}
-          <div class="form-group subscription-form__color">
-            <label class="form-label" for="subscription-color">${t('subscriptions.brandColorLabel')}</label>
-            <input class="form-input form-input--color" id="subscription-color" type="color" value="${esc(subscription?.brand_color || '#0F766E')}">
-          </div>
         </div>
       </section>
 
@@ -1828,7 +1821,6 @@ async function saveSubscription(panel, existing, searchedLogoData = null) {
       category_id: Number(panel.querySelector('#subscription-category').value) || null,
       payment_method_id: Number(panel.querySelector('#subscription-method').value) || null,
       website_url: existing?.website_url || null,
-      brand_color: panel.querySelector('#subscription-color').value,
       logo_data: logoData,
       notes: panel.querySelector('#subscription-notes').value.trim() || null,
       // Konto/Benutzername des Dienstes (#1004) - unverschluesselt und
@@ -2090,7 +2082,7 @@ function metadataRows(items, kind) {
     return `
     <li data-id="${item.id}" data-kind="${kind}">
       <div class="subscriptions-metadata-row__view">
-        ${isCat ? `<i style="background:${esc(item.color)}"></i>` : '<i data-lucide="credit-card" aria-hidden="true"></i>'}
+        ${isCat ? '' : '<i data-lucide="credit-card" aria-hidden="true"></i>'}
         <span>${esc(name)}</span>
         <div class="row-actions subscriptions-metadata-row__actions">
           ${rowActionHtml({ icon: 'chevron-up', label: t('subscriptions.moveUpNamed', { name }), attrs: { 'data-move': '-1', 'aria-disabled': index === 0 ? 'true' : null } })}
@@ -2101,7 +2093,6 @@ function metadataRows(items, kind) {
       </div>
       <div class="subscriptions-metadata-row__edit" hidden>
         <input class="form-input subscriptions-metadata-edit-name" value="${esc(isCat ? categoryLabel(item) : paymentMethodLabel(item))}" data-original-name="${esc(item.name ?? '')}" maxlength="100" aria-label="${editLabel}">
-        ${isCat ? `<input class="form-input form-input--color subscriptions-metadata-edit-color" type="color" value="${esc(item.color)}" aria-label="${t('subscriptions.brandColorLabel')}">` : ''}
         <div class="subscriptions-metadata-row__actions">
           <button class="btn btn--icon" data-act="save" aria-label="${t('common.save')}">
             <i data-lucide="check" aria-hidden="true"></i>
@@ -2159,7 +2150,6 @@ function openMetadataModal() {
         <ul id="subscription-category-list">${metadataRows(state.meta.categories, 'categories')}</ul>
         <div class="subscriptions-metadata-add">
           <input class="form-input" id="subscription-new-category" placeholder="${t('subscriptions.newCategoryPlaceholder')}">
-          <input class="form-input form-input--color" id="subscription-new-category-color" type="color" value="#0F766E">
           <button class="btn btn--primary" id="subscription-add-category">${t('common.add')}</button>
         </div>
       </section>
@@ -2188,10 +2178,7 @@ function openMetadataModal() {
         if (!name) return;
         // Bis #1909 ohne catch: eine vergebene Kategorie lief als unbehandelte
         // Ablehnung bis in den Router und zeigte dort den Text des Servers.
-        await saveMetadata(() => api.post('/budget/subscriptions/categories', {
-          name,
-          color: panel.querySelector('#subscription-new-category-color').value,
-        }));
+        await saveMetadata(() => api.post('/budget/subscriptions/categories', { name }));
       });
       panel.querySelector('#subscription-add-method').addEventListener('click', async () => {
         if (readOnly()) return;
@@ -2231,8 +2218,6 @@ function openMetadataModal() {
           const editRow = li.querySelector('.subscriptions-metadata-row__edit');
           const nameInput = editRow.querySelector('.subscriptions-metadata-edit-name');
           nameInput.value = nameInput.defaultValue;
-          const colorInput = editRow.querySelector('.subscriptions-metadata-edit-color');
-          if (colorInput) colorInput.value = colorInput.defaultValue;
           editRow.hidden = true;
           li.querySelector('.subscriptions-metadata-row__view').hidden = false;
           // Fokus zurück auf den Auslöser, statt ins Leere (der Cancel-Button
@@ -2262,15 +2247,14 @@ function openMetadataModal() {
           const typed = nameInput.value.trim();
           if (!typed) { nameInput.focus(); return; }
           // Das Feld zeigt bei Default-Kategorien den lokalisierten Namen ("Bildung").
-          // Bleibt er unverändert (z. B. nur Farbe geändert), den gespeicherten Kanon-
+          // Bleibt er unverändert (z. B. unverändert gespeichert), den gespeicherten Kanon-
           // Namen ("Education") behalten, damit die Lokalisierung nicht verloren geht.
           const name = nameInput.value === nameInput.defaultValue
             ? (nameInput.dataset.originalName ?? typed)
             : typed;
-          const colorInput = editRow.querySelector('.subscriptions-metadata-edit-color');
           const isCat = li.dataset.kind === 'categories';
           const saved = await saveMetadata(() => (isCat
-            ? api.put(`/budget/subscriptions/categories/${id}`, { name, color: colorInput.value })
+            ? api.put(`/budget/subscriptions/categories/${id}`, { name })
             : api.put(`/budget/subscriptions/payment-methods/${id}`, { name })), id);
           if (saved) window.yuvomi?.showToast(t('subscriptions.metaSavedToast'), 'success');
         });

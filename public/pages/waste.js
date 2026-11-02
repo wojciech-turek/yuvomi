@@ -26,7 +26,6 @@ import { findPageFab, setPageFabAction } from '/utils/fab.js';
 import { popoverMenuHtml, installPopoverMenus } from '/utils/popover-menu.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { createPageController } from '/utils/page-lifecycle.js';
-import { USER_COLORS } from '/utils/color.js';
 import { redrawList } from '/utils/list-motion.js';
 import { daysBetweenDateKeys, countdownPhrase } from '/utils/countdown.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
@@ -84,61 +83,15 @@ function nearestOrdinalAnchorDateKey(ordinal, weekdayCode, todayKeyValue = today
     : nthWeekdayOfMonthLocal(today.getFullYear(), today.getMonth() + 1, weekday, ordinal);
   return toLocalDateKey(target);
 }
-// Die Vorlagen ziehen ihre Farbe aus der geteilten Startpalette
-// (utils/color.js, Re-Critique 2026-09-28): Sperrmuell trug vorher #7C3AED -
-// im Dark exakt die Flaeche des Primaerknopfs -, Restmuell und Wertstoff
-// lagen auf der gehobenen Dark-Karte unter 3:1. Bestehende Abfallarten
-// behalten ihre Farbe; das Raster zeigt sie dann als „Aktuelle Farbe".
+// Abfallarten haben keine Farbe: Vorlagen sind Name und Symbol.
 const TYPE_PRESETS = [
-  { key: 'general', icon: 'trash-2', color: '#78808C' },
-  { key: 'recycling', icon: 'recycle', color: '#3B82F6' },
-  { key: 'organic', icon: 'leaf', color: '#16A34A' },
-  { key: 'paper', icon: 'newspaper', color: '#D97706' },
-  { key: 'glass', icon: 'wine', color: '#059669' },
-  { key: 'bulky', icon: 'armchair', color: '#D946EF' },
+  { key: 'general', icon: 'trash-2' },
+  { key: 'recycling', icon: 'recycle' },
+  { key: 'organic', icon: 'leaf' },
+  { key: 'paper', icon: 'newspaper' },
+  { key: 'glass', icon: 'wine' },
+  { key: 'bulky', icon: 'armchair' },
 ];
-
-/**
- * DIE KURATIERTE PALETTE ERSETZT DEN FREIEN FARBWAEHLER (Audit UX,
- * 2026-09-12). Der Dialog bot vorher ein nacktes `<input type="color">` an -
- * also 16,7 Millionen Farben ohne jede Untergrenze. Wer dort Weiss, Hellgelb
- * oder Schwarz waehlte, bekam ein Abfallart-Symbol, das auf der Karte
- * praktisch verschwand (hell auf hellem Grund) bzw. im dunklen Thema
- * unsichtbar wurde - und nichts im Dialog hielt ihn davon ab.
- *
- * Dieselbe Antwort, die Notizen, Kalender, Budget und der
- * Kategorie-Verwalter auf dieselbe Frage schon geben: eine kleine feste
- * Auswahl statt eines Regenbogens. Seit der Re-Critique 2026-09-28 ist es die
- * geteilte Startpalette `USER_COLORS` (utils/color.js): jede Farbe dort haelt
- * >= 3:1 auf `--color-surface` und `--color-surface-raised` in BEIDEN Themes
- * - der fruehere Kommentar versprach das, #7C3AED (2.57) und #2563EB (2.84)
- * hielten es auf dem dunklen Kartengrund nicht.
- *
- * Jede Preset-Farbe steht im Raster: nur so kann die Preset-Auswahl im
- * Dialog ihre Farbe als aktiven Swatch zeigen, statt einen Wert zu setzen,
- * den das Raster gar nicht kennt.
- *
- * KEIN `getReadableTextColor()`. Diese Farbe wird nirgends als TEXTfarbe auf
- * einem freien Grund gesetzt - waste.js faerbt damit ausschliesslich das
- * `aria-hidden` SVG-Symbol der Zeile (Typkarte und Abholzeile). Sie ist damit
- * eine Schmuckfarbe im Sinne der User-Farben-Regel, kein Schriftzug, und
- * braucht keine gerechnete Tinte - wohl aber die Untergrenze, die diese
- * Palette ist.
- */
-const WASTE_TYPE_COLORS = USER_COLORS;
-
-const WASTE_TYPE_COLOR_NAMES = () => ({
-  '#78808C': t('waste.colorGray'),
-  '#3B82F6': t('waste.colorBlue'),
-  '#16A34A': t('waste.colorGreen'),
-  '#D97706': t('waste.colorOcher'),
-  '#059669': t('waste.colorEmerald'),
-  '#D946EF': t('waste.colorFuchsia'),
-  '#EF4444': t('waste.colorRed'),
-  '#0891B2': t('waste.colorCyan'),
-  '#EA580C': t('waste.colorOrange'),
-  '#EC4899': t('waste.colorPink'),
-});
 
 let _container = null;
 let state = { types: [], schedules: [], occurrences: [], sources: [], loading: true, error: null, upcomingExpanded: false };
@@ -318,7 +271,7 @@ function occurrenceRowHtml(occurrence) {
   return `
     <div class="list-row waste-row waste-occurrence-row" data-key="${esc(occurrence.key)}" data-type-id="${occurrence.type_id}" data-date="${esc(occurrence.date_key)}">
       <div class="list-row__main">
-        <i data-lucide="${esc(occurrence.type_icon || 'trash-2')}" style="color:${esc(occurrence.type_color || '')}" aria-hidden="true"></i>
+        <i data-lucide="${esc(occurrence.type_icon || 'trash-2')}" aria-hidden="true"></i>
         <span class="list-row__body">
           <span class="list-row__name">${esc(occurrence.type_name ?? '')}</span>
           <span class="list-row__meta">${esc(pickupWhenLabel(occurrence.date_key))} ${originBadges(occurrence)}</span>
@@ -513,21 +466,19 @@ function typeWithoutScheduleHtml(type, ro = readOnly()) {
  * Zeile unter den Karten.
  *
  * VORHANDEN HEISST: gleicher Name in der eigenen Sprache (ohne Gross/klein)
- * ODER Symbol und Farbe der Vorlage. Der Name allein reicht nicht, weil die
+ * ODER Symbol der Vorlage. Der Name allein reicht nicht, weil die
  * Vorlage ihn in der Sprache dessen anlegt, der getippt hat: legt ein
  * Mitglied auf Deutsch "Bioabfall" an, bot die Zeile einem englischen
  * Mitglied "Organic" erneut an, und ein Tipp legte die Dublette an
- * (Codex-Review PR #2053). Symbol und Farbe schreibt die Vorlage in jeder
- * Sprache gleich, und jede Vorlage traegt ein eigenes Symbol. Eine eigene
- * Art trifft das Paar nur, wenn sie Symbol UND Farbe der Vorlage waehlt - dann
- * ist sie diese Vorlage; ein Import landet auf `DEFAULT_TYPE_COLOR` (#22C55E),
- * keiner Vorlagenfarbe. Ohne Schemaaenderung, ohne alle Sprachdateien zu laden.
+ * (Codex-Review PR #2053). Das Symbol schreibt die Vorlage in jeder
+ * Sprache gleich, und jede Vorlage traegt ein eigenes. Ohne Schemaaenderung, ohne alle Sprachdateien zu laden.
  */
 function remainingTypePresets(types = state.types) {
   const names = new Set(types.map((type) => String(type.name ?? '').trim().toLowerCase()));
-  const looks = new Set(types.map((type) => `${type.icon ?? ''}|${String(type.color ?? '').toUpperCase()}`));
+  // Das Standardsymbol (trash-2) tragen auch eigene Arten, es zaehlt deshalb nicht.
+  const icons = new Set(types.map((type) => type.icon).filter((icon) => icon && icon !== 'trash-2'));
   return TYPE_PRESETS.filter((preset) => !names.has(presetLabel(preset).trim().toLowerCase())
-    && !looks.has(`${preset.icon}|${preset.color.toUpperCase()}`));
+    && !icons.has(preset.icon));
 }
 
 function remainingPresetsHtml() {
@@ -536,7 +487,7 @@ function remainingPresetsHtml() {
   if (!presets.length) return '';
   return `<div class="waste-type-presets-more" role="group" aria-label="${esc(t('waste.typePresetLabel'))}">`
     + presets.map((preset) => `<button type="button" class="filter-chip waste-onboarding__preset" data-action="create-preset-type" data-preset="${preset.key}">`
-      + `<i data-lucide="${esc(preset.icon)}" style="color:${esc(preset.color)}" aria-hidden="true"></i><span>${esc(presetLabel(preset))}</span></button>`).join('')
+      + `<i data-lucide="${esc(preset.icon)}" aria-hidden="true"></i><span>${esc(presetLabel(preset))}</span></button>`).join('')
     + '</div>';
 }
 
@@ -564,7 +515,7 @@ function typeCardHtml(type, index, total) {
     <div class="waste-type-card${type.archived ? ' waste-type-card--archived' : ''}" data-type-id="${type.id}">
       <div class="list-row waste-row waste-type-row">
         <div class="list-row__main${ro ? '' : ' list-row__main--interactive'}"${ro ? '' : ` data-action="edit-type" data-id="${type.id}" role="button" tabindex="0"`}>
-          <i data-lucide="${esc(type.icon || 'trash-2')}" style="color:${esc(type.color)}" aria-hidden="true"></i>
+          <i data-lucide="${esc(type.icon || 'trash-2')}" aria-hidden="true"></i>
           <span class="list-row__body">
             <span class="list-row__name">${esc(type.name)}${type.archived ? ` <span class="waste-badge">${esc(t('waste.archived'))}</span>` : ''}</span>
           </span>
@@ -663,7 +614,7 @@ function onboardingHtml({ readOnly: ro, emptyHtml = null }) {
   if (ro) return `<div class="waste-onboarding">${empty}</div>`;
   const chips = TYPE_PRESETS.map((preset) => `
       <button type="button" class="filter-chip waste-onboarding__preset" data-action="create-preset-type" data-preset="${preset.key}">
-        <i data-lucide="${esc(preset.icon)}" style="color:${esc(preset.color)}" aria-hidden="true"></i>
+        <i data-lucide="${esc(preset.icon)}" aria-hidden="true"></i>
         <span>${esc(presetLabel(preset))}</span>
       </button>`).join('');
   return `
@@ -684,7 +635,7 @@ async function createPresetType(key, button) {
   if (!preset) return;
   if (button) button.disabled = true;
   try {
-    await api.post('/waste/types', { name: presetLabel(preset), icon: preset.icon, color: preset.color });
+    await api.post('/waste/types', { name: presetLabel(preset), icon: preset.icon });
     await reloadAndRender();
     window.yuvomi?.showToast(t('waste.typeSavedToast'), 'success');
   } catch (err) {
@@ -1063,63 +1014,9 @@ async function pickTypeIcon(button) {
   setTypeIconButtonIcon(button, chosen);
 }
 
-/**
- * Pure: liest die Farbe des aktuell aktiven Swatch aus einem Dialog-Panel,
- * mit Rueckfall auf die Farbe, mit der der Dialog geoeffnet wurde (kein
- * Swatch aktiv waere ein Zustand, den die Tastatur-/Klick-Verdrahtung oben
- * eigentlich nie zulaesst - der Rueckfall ist trotzdem kein leerer Wert).
- *
- * Eigens herausgezogen (Review-Nice-to-have), weil die Speicherlogik sonst
- * nirgends bindend testbar war: ein Gegenbeweis am PR-Kopf zeigte, dass das
- * Speichern immer die Oeffnungsfarbe schicken konnte, ohne dass
- * `test:waste-ui` das bemerkt haette.
- *
- * @param {ParentNode} panel
- * @param {string} fallback
- * @returns {string}
- */
-function activeSwatchColor(panel, fallback) {
-  return panel.querySelector('.waste-color-swatch--active')?.dataset.color ?? fallback;
-}
-
-/**
- * Pure: welche Swatches der Farb-Dialog zeigt, und mit welchem (gross-
- * geschriebenen) Wert der aktive Swatch verglichen wird.
- *
- * GROSS-/KLEINSCHREIBUNG: `<input type="color">` liefert seinen Wert laut
- * HTML-Spec IMMER klein geschrieben zurueck - auch fuer eine Preset-Farbe,
- * die selbst genau diesen Weg gesetzt hat. Abfallarten aus der Zeit vor
- * diesem Umbau (und jede ueber ein Preset angelegte) tragen deshalb z.B.
- * `#16a34a`, waehrend `WASTE_TYPE_COLORS` grossgeschrieben ist. Ein
- * case-sensitiver Vergleich faende hier nie eine Uebereinstimmung und haengte
- * einen elften, optisch identischen "Aktuelle Farbe"-Swatch an. Der Vergleich
- * normalisiert deshalb auf Grossschreibung; das Raster selbst bleibt in
- * seiner eigenen Schreibweise, die im `data-color`/`style` unveraendert bleibt.
- *
- * EINE BESTEHENDE FARBE AUSSERHALB DER PALETTE WIRD NICHT STILL UEBERSCHRIEBEN.
- * Abfallarten aus der Zeit des freien Waehlers tragen beliebige Hex-Werte;
- * stuenden sie nicht im Raster, waere beim ersten Speichern die Farbe des
- * Nutzers weg, ohne dass er es angefasst hat. Derselbe Weg, den Notizen und
- * Kalender fuer ihren Altbestand gehen: der Wert bekommt einen eigenen
- * Swatch am Ende und heisst dort „Aktuelle Farbe".
- *
- * @param {string} selColor
- * @returns {{ swatchColors: string[], selColorUpper: string }}
- */
-function resolveSwatchColors(selColor) {
-  const selColorUpper = selColor.toUpperCase();
-  const swatchColors = WASTE_TYPE_COLORS.includes(selColorUpper) ? WASTE_TYPE_COLORS : [...WASTE_TYPE_COLORS, selColor];
-  return { swatchColors, selColorUpper };
-}
-
 function openTypeModal(type = null) {
   const isEdit = !!type;
   const presetOptions = TYPE_PRESETS.map((p) => `<option value="${p.key}">${esc(t(`waste.preset${p.key.charAt(0).toUpperCase()}${p.key.slice(1)}`))}</option>`).join('');
-  // Die Vorgabe fuer eine NEUE Abfallart ist jetzt ein Mitglied der Palette
-  // (vorher `#22C55E`, das in keinem Raster auftauchte und den Dialog damit
-  // ohne aktiven Swatch geoeffnet haette).
-  const selColor = isEdit ? (type.color || WASTE_TYPE_COLORS[0]) : WASTE_TYPE_COLORS[2];
-  const { swatchColors, selColorUpper } = resolveSwatchColors(selColor);
 
   const content = `
     ${isEdit ? '' : `
@@ -1137,30 +1034,6 @@ function openTypeModal(type = null) {
     <div class="form-group">
       <label class="form-label">${t('waste.typeIconLabel')}</label>
       <div id="wtm-icon-wrap">${iconButtonHtml(isEdit ? type.icon : 'trash-2')}</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label" id="wtm-color-label">${t('waste.typeColorLabel')}</label>
-      <div class="waste-color-picker" role="radiogroup" aria-labelledby="wtm-color-label">
-        ${(() => {
-          // Ein Kartenaufbau je Renderdurchlauf statt je Swatch (Nice-to-have,
-          // Review): `WASTE_TYPE_COLOR_NAMES()` ruft `t()` fuer alle zehn
-          // Farben auf, egal welcher Swatch gerade dran ist - das gehoert vor
-          // die Schleife, nicht in sie hinein.
-          const colorNames = WASTE_TYPE_COLOR_NAMES();
-          return swatchColors.map((c) => {
-            const active = c.toUpperCase() === selColorUpper;
-            return `
-          <div class="waste-color-swatch${active ? ' waste-color-swatch--active' : ''}"
-               data-color="${esc(c)}"
-               style="background-color:${esc(c)}"
-               role="radio"
-               tabindex="${active ? '0' : '-1'}"
-               aria-checked="${active ? 'true' : 'false'}"
-               aria-label="${esc(colorNames[c.toUpperCase()] ?? t('waste.colorCurrent'))}"></div>
-        `;
-          }).join('');
-        })()}
-      </div>
     </div>
     <div class="modal-panel__footer modal-panel__footer--plain">
       ${isEdit ? `
@@ -1184,49 +1057,10 @@ function openTypeModal(type = null) {
       panel.querySelector('#wtm-cancel').addEventListener('click', () => closeModal());
       panel.querySelector('[data-action="pick-type-icon"]').addEventListener('click', (e) => pickTypeIcon(e.currentTarget));
 
-      // Farb-Swatch: Auswahl + ARIA + Keyboard (Roving Tabindex) - dieselbe
-      // Mechanik wie in notes.js/calendar.js, nur auf `waste-` getauft.
-      function selectSwatch(target) {
-        if (!target) return;
-        panel.querySelectorAll('.waste-color-swatch').forEach((s) => {
-          s.classList.remove('waste-color-swatch--active');
-          s.setAttribute('aria-checked', 'false');
-          s.setAttribute('tabindex', '-1');
-        });
-        target.classList.add('waste-color-swatch--active');
-        target.setAttribute('aria-checked', 'true');
-        target.setAttribute('tabindex', '0');
-      }
-      panel.querySelectorAll('.waste-color-swatch').forEach((sw) => {
-        sw.addEventListener('click', () => { selectSwatch(sw); sw.focus(); });
-        sw.addEventListener('keydown', (e) => {
-          const swatches = [...panel.querySelectorAll('.waste-color-swatch')];
-          const idx = swatches.indexOf(sw);
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            const next = swatches[(idx + 1) % swatches.length];
-            selectSwatch(next); next.focus();
-          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            const prev = swatches[(idx - 1 + swatches.length) % swatches.length];
-            selectSwatch(prev); prev.focus();
-          } else if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            selectSwatch(sw);
-          }
-        });
-      });
-
       panel.querySelector('#wtm-preset')?.addEventListener('change', (e) => {
         const preset = TYPE_PRESETS.find((p) => p.key === e.target.value);
         if (!preset) return;
         panel.querySelector('#wtm-name').value = t(`waste.preset${preset.key.charAt(0).toUpperCase()}${preset.key.slice(1)}`);
-        // Die Preset-Farbe steht garantiert im Raster (die ersten sechs
-        // Eintraege von WASTE_TYPE_COLORS SIND die Preset-Farben), also
-        // markiert die Vorlage jetzt einen Swatch, statt ein Eingabefeld zu
-        // fuellen. Das Raster bleibt danach frei bedienbar - eine Vorlage ist
-        // ein Startpunkt, keine Festlegung.
-        selectSwatch(panel.querySelector(`.waste-color-swatch[data-color="${preset.color}"]`));
         const hidden = panel.querySelector('input[name="icon"]');
         hidden.value = preset.icon;
         setTypeIconButtonIcon(panel.querySelector('[data-action="pick-type-icon"]'), preset.icon);
@@ -1264,10 +1098,6 @@ function openTypeModal(type = null) {
         const body = {
           name,
           icon: panel.querySelector('input[name="icon"]').value || 'trash-2',
-          // Der Rueckfall greift nur, wenn gar kein Swatch aktiv ist - dann
-          // gilt der Stand, mit dem der Dialog geoeffnet wurde, nicht etwa
-          // eine leere Farbe.
-          color: activeSwatchColor(panel, selColor),
         };
         try {
           if (isEdit) await api.put(`/waste/types/${type.id}`, body);
@@ -2806,8 +2636,7 @@ export const __test = {
   // Zeilengrammatik (Audit UX 2026-09-12) tragen sie Bedingungen, die man
   // nicht mehr am Markup ablesen kann - welcher Eintrag bei welcher Position
   // im Menue steht, und dass die Preset-Farben allesamt im Raster liegen.
-  typeCardHtml, scheduleRowHtml, sourceRowHtml, TYPE_PRESETS, typeWithoutScheduleHtml, remainingTypePresets, remainingPresetsHtml, WASTE_TYPE_COLORS,
-  activeSwatchColor, resolveSwatchColors,
+  typeCardHtml, scheduleRowHtml, sourceRowHtml, TYPE_PRESETS, typeWithoutScheduleHtml, remainingTypePresets, remainingPresetsHtml,
   isOnboarding, onboardingHtml, sectionVisibility, fabIntent, pageModeClasses,
   importErrorText,
   // #1909: die echten Aufrufer hinter den Fehler-Toasts, fuer test:waste-errors.

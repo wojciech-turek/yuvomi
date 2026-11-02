@@ -1206,7 +1206,6 @@ router.get('/', (req, res) => {
         type_id: o.type_id,
         type_name: o.type_name,
         type_icon: o.type_icon,
-        type_color: o.type_color,
         deep_link: o.deep_link,
       }));
   } catch (err) {
@@ -1230,7 +1229,6 @@ router.get('/', (req, res) => {
           short_code: entry.shift_type.short_code ?? null,
           start_time: entry.shift_type.start_time ?? null,
           end_time: entry.shift_type.end_time ?? null,
-          color: entry.shift_type.color ?? null,
           icon: entry.shift_type.icon ?? null,
         },
       }));

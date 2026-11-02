@@ -60,7 +60,7 @@ export function resolveEntries({ from, to, userId, patterns, patternDays, overri
 }
 
 
-export const typeColumns = 'id, name, short_code, start_time, end_time, color, icon, created_by, created_at, updated_at';
+export const typeColumns = 'id, name, short_code, start_time, end_time, icon, created_by, created_at, updated_at';
 
 // Liefert je Schichttyp-Id die an ihm haengenden Felder (Migration 189), sortiert nach ihrer
 // gespeicherten Anzeige-Reihenfolge. Eine Map statt einer flachen Liste, weil der Aufrufer sie

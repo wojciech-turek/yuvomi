@@ -1855,12 +1855,6 @@
   max-width: 50ch;
 }
 
-.form-input--color {
-  padding: var(--space-1) var(--space-2);
-  height: 44px;
-  cursor: pointer;
-}
-
 /* --------------------------------------------------------
    Sync-Karten
    -------------------------------------------------------- */

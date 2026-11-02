@@ -42,15 +42,6 @@ import { pastDateLabel } from '/utils/day-label.js';
 // Konstanten
 // --------------------------------------------------------
 
-// Die Sticker-Palette. Seit Tafla (2026-10-20) faerbt sie keine Karte mehr -
-// eine Notiz behaelt ihre gespeicherte Farbe (Alt-Daten, andere Clients), eine
-// neue bekommt die erste. Farbe hat in Tafla drei Aufgaben (Handeln, Person,
-// Zustand), ein Zettelton ist keine davon.
-const NOTE_COLORS = [
-  '#EFE3BE', '#E7D2A9', '#D2DEC6', '#C7DED9',
-  '#CAD8E4', '#D8D0E2', '#EBD1C2', '#FBFAF7',
-];
-
 // --------------------------------------------------------
 // State
 // --------------------------------------------------------
@@ -910,9 +901,6 @@ function openNoteModal({ mode, note = null }) {
     return;
   }
   const isEdit      = mode === 'edit';
-  const selColor    = (isEdit ? note.color : null) || NOTE_COLORS[0];
-  // Tafla (2026-10-20): no colour picker any more - a note keeps the colour
-  // it has (old data, other clients), a new one gets the first of the palette.
   // Bestehende Notizen öffnen im Lese-Modus (#507); neue direkt im Editor.
   const initialView = isEdit ? 'read' : 'edit';
   let editorClosed = false;
@@ -1378,7 +1366,6 @@ function openNoteModal({ mode, note = null }) {
         const saveBtn = saveButton;
         const title   = panel.querySelector('#note-title').value.trim() || null;
         const cnt     = panel.querySelector('#note-content').value.trim();
-        const color   = selColor;
         const pinned  = panel.querySelector('#note-pinned').checked ? 1 : 0;
         const category_ids = [...panel.querySelectorAll('input[name="note-category"]:checked')]
           .map((input) => Number(input.value));
@@ -1396,10 +1383,10 @@ function openNoteModal({ mode, note = null }) {
 
         try {
           if (mode === 'create') {
-            const res = await api.post('/notes', { title, content: cnt, color, pinned, category_ids });
+            const res = await api.post('/notes', { title, content: cnt, pinned, category_ids });
             state.notes.unshift(res.data);
           } else {
-            const res = await api.put(`/notes/${note.id}`, { title, content: cnt, color, pinned, category_ids });
+            const res = await api.put(`/notes/${note.id}`, { title, content: cnt, pinned, category_ids });
             const idx = state.notes.findIndex((n) => n.id === note.id);
             if (idx !== -1) state.notes[idx] = res.data;
             state.notes.sort((a, b) => b.pinned - a.pinned);

@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { todayKey, shiftDateKey, householdTimeZone } from '../utils/timezone.js';
 import { str } from '../middleware/validate.js';
 import {
-  validateType, validateOneOff, scheduleRecurrenceProblems, overrideProblems, validateRange,
+  DEFAULT_TYPE_COLOR, validateType, validateOneOff, scheduleRecurrenceProblems, overrideProblems, validateRange,
   resolveOccurrences, nextPerType, expandSchedule, WEEKDAY_CODES, OCCURRENCE_RANGE_MAX_DAYS,
 } from './waste-domain.js';
 import { buildImportPreview, computeDigest, WasteImportError } from './waste-import.js';
@@ -110,7 +110,7 @@ export function createType(d, input, userId) {
   const result = d.prepare(`
     INSERT INTO waste_types (name, icon, color, sort_order, created_by)
     VALUES (?, ?, ?, ?, ?)
-  `).run(value.name, value.icon, value.color, nextTypeSortOrder(d), userId ?? null);
+  `).run(value.name, value.icon, DEFAULT_TYPE_COLOR, nextTypeSortOrder(d), userId ?? null);
   return getType(d, Number(result.lastInsertRowid));
 }
 
@@ -122,8 +122,8 @@ export function updateType(d, id, input) {
 
   const merged = { ...existing, ...value };
   d.prepare(`
-    UPDATE waste_types SET name = ?, icon = ?, color = ?, archived = ?, sort_order = ? WHERE id = ?
-  `).run(merged.name, merged.icon, merged.color, merged.archived ? 1 : 0, merged.sort_order, id);
+    UPDATE waste_types SET name = ?, icon = ?, archived = ?, sort_order = ? WHERE id = ?
+  `).run(merged.name, merged.icon, merged.archived ? 1 : 0, merged.sort_order, id);
   return getType(d, id);
 }
 

@@ -227,10 +227,12 @@ test('POST /: fehlender Inhalt → 400', async () => {
   assert.equal(r.status, 400);
 });
 
-test('POST /: ungültige Farbe → 400', async () => {
-  const r = await call('POST', '/', { content: 'Hallo', color: 'rot' });
-  assert.equal(r.status, 400);
-  assert.match(r.body.error, /HEX/);
+test('POST /: eine gesendete Farbe wird ignoriert (auch eine ungültige), die Spalte behält ihren festen Vorgabewert', async () => {
+  for (const color of ['rot', '#00FF00']) {
+    const r = await call('POST', '/', { content: 'Hallo', color });
+    assert.equal(r.status, 201, `Farbe ${color}`);
+    assert.equal(r.body.data.color, '#FFEB3B');
+  }
 });
 
 test('POST /: legt Notiz an (Default-Farbe, created_by, creator_name-Join)', async () => {
@@ -265,19 +267,22 @@ test('PUT /:id: unbekannt → 404', async () => {
   assert.equal(r.status, 404);
 });
 
-test('PUT /:id: ungültige Farbe → 400', async () => {
+test('PUT /:id: eine gesendete Farbe wird ignoriert, 200 und der gespeicherte Wert bleibt', async () => {
   const note = (await call('POST', '/', { content: 'Edit' })).body.data;
-  const r = await call('PUT', `/${note.id}`, { color: 'blau' });
-  assert.equal(r.status, 400);
+  for (const color of ['blau', '#00FF00', null]) {
+    const r = await call('PUT', `/${note.id}`, { color });
+    assert.equal(r.status, 200, `Farbe ${color}`);
+    assert.equal(r.body.data.color, '#FFEB3B');
+  }
 });
 
-test('PUT /:id: aktualisiert Inhalt/Titel/Farbe/pinned', async () => {
+test('PUT /:id: aktualisiert Inhalt/Titel/pinned, nicht die Farbe', async () => {
   const note = (await call('POST', '/', { content: 'Alt', title: 'T' })).body.data;
   const r = await call('PUT', `/${note.id}`, { content: 'Neu', title: 'T2', color: '#00FF00', pinned: true });
   assert.equal(r.status, 200);
   assert.equal(r.body.data.content, 'Neu');
   assert.equal(r.body.data.title, 'T2');
-  assert.equal(r.body.data.color, '#00FF00');
+  assert.equal(r.body.data.color, '#FFEB3B', 'die Farbe bleibt');
   assert.equal(r.body.data.pinned, 1);
 });
 

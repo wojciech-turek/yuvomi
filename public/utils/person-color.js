@@ -110,6 +110,18 @@ export function personToken(user, household = []) {
   return { slot, ink: `var(--person-${slot})`, tint: `var(--person-${slot}-tint)` };
 }
 
+/**
+ * Die Tinte einer Person nach ihrer Id - fuer alles, was einer Person gehoert,
+ * aber nur die Id kennt (eine Schicht traegt `user_id`, keine Person). Wer
+ * nicht im Haushalt steht oder keine Id hat, bekommt den neutralen Ton.
+ * @param {number|string|null|undefined} userId
+ * @param {object[]} [household]
+ * @returns {string}
+ */
+export function personInk(userId, household = []) {
+  return personToken(userId == null ? null : { id: userId }, household).ink;
+}
+
 /** Die drei Groessen mit eigener Klasse (layout.css): Zeile, Kopf, Wand. */
 const NAMED_SIZES = { sm: 20, md: 36, lg: 40 };
 const SIZE_CLASS = { 20: 'sm', 36: 'md', 40: 'lg' };
