@@ -432,6 +432,13 @@ function updateBirthdayBadge() {
   setNavBadge('/birthdays', countBirthdaysSoon(state.birthdays), undefined, 'accent');
 }
 
+/** The cake travels with the last word of the name, never alone on a line. */
+function nameWithCake(name) {
+  const text = String(name ?? '');
+  const cut = text.lastIndexOf(' ') + 1;
+  return `${esc(text.slice(0, cut))}<span class="birthday-item__name-tail">${esc(text.slice(cut))}${CAKE_SVG}</span>`;
+}
+
 /** Countdown as a row word ("za 8 dni", "dzisiaj") or an eyebrow ("Za 8 dni"). */
 function countdownWord(days, { capital = false } = {}) {
   const text = countdownLabel(days);
@@ -462,7 +469,8 @@ export function birthdayItemHtml(birthday, { next = false } = {}) {
       + `${esc(formatDate(birthday.next_name_day))} · ${esc(t('birthdays.celebratesNameDay'))}`
       + '</span>'
     : '';
-  const when = shortWeekdayDayMonth(birthday.next_birthday);
+  // The month heading above names the year ("June 2027"); the row does not repeat it.
+  const when = shortWeekdayDayMonth(birthday.next_birthday, { year: false });
   const age = Number.isInteger(birthday.next_age) && birthday.next_age > 0 ? t('birthdays.turnsAge', { age: birthday.next_age }) : '';
   // The meta line: what the person is to us (the entry's note), then the age.
   // The nearest row carries the date here, because its end holds the pill.
@@ -470,7 +478,7 @@ export function birthdayItemHtml(birthday, { next = false } = {}) {
   const ro = readOnly();
   const hauptspalte = `
         <strong class="list-row__name birthday-item__name">
-          ${esc(birthday.name)}${isToday ? CAKE_SVG : ''}
+          ${isToday ? nameWithCake(birthday.name) : esc(birthday.name)}
         </strong>
         <span class="list-row__meta birthday-item__meta${hasNameDay ? ' birthday-item__meta--with-name-day' : ''}">
           <span class="birthday-item__when">${esc(metaParts.join(' · '))}</span>

@@ -999,12 +999,18 @@ function sheetSectionHtml(name, { open, attrs = '', labelledBy = '', row = null 
       </div>`;
 }
 
+/** The widest of the row names in this language: every label is sized to it,
+ *  so "Jutro" and "Jutro, 07:30" start in one line under each other. */
+function longestRowLabel() {
+  return Object.values(ROW_LABELS).map((key) => t(key)).sort((a, b) => b.length - a.length)[0] ?? '';
+}
+
 function sheetRowHtml(name, value) {
   return `
         <div class="task-sheet__row" data-row="${name}">
           <button type="button" class="task-sheet__row-main" data-expand="${name}" aria-expanded="false" aria-controls="task-${name}-body">
             <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>
-            <span class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
+            <span data-fit="${esc(longestRowLabel())}" class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
             <span class="task-sheet__row-value">${esc(value)}</span>
           </button>
           <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(ROW_REMOVE_LABELS[name]))}">
