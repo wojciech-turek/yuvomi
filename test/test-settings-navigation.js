@@ -2651,7 +2651,7 @@ test('Standard-Erinnerungsliste: eine gescheiterte Abfrage ist ein Fehler mit Au
  * ======================================================================== */
 
 const PRE_R10_LEAVES = Object.freeze({
-  '/settings/personal/account': { id: 'personal-account', adminOnly: false, labelKey: 'settings.pageAccount', options: ['settings.displayNameLabel', 'settings.colorLabel', 'settings.contactDetailsLegend', 'settings.changePassword', 'settings.twoFactorTitle', 'settings.otherSessionsTitle', 'settings.oidcLinkTitle'] },
+  '/settings/personal/account': { id: 'personal-account', adminOnly: false, labelKey: 'settings.pageAccount', options: ['settings.displayNameLabel', 'settings.contactDetailsLegend', 'settings.changePassword', 'settings.twoFactorTitle', 'settings.otherSessionsTitle', 'settings.oidcLinkTitle'] },
   '/settings/personal/appearance': { id: 'personal-appearance', adminOnly: false, labelKey: 'settings.pageAppearance', options: ['settings.sectionDesign', 'settings.wallModeLabel', 'settings.screensaverIdleLabel', 'settings.screensaverClockLabel', 'settings.screensaverCoverLabel', 'settings.localeLabel', 'settings.dataLanguageLabel', 'settings.regionLabel', 'settings.currencyLabel', 'settings.timezoneLabel', 'settings.dateFormatLabel', 'settings.timeFormatLabel'] },
   '/settings/personal/device': { id: 'personal-device', adminOnly: false, labelKey: 'settings.pageDevice', options: ['settings.pwaInstallTitle'] },
   '/settings/personal/notifications': { id: 'personal-notifications', adminOnly: false, labelKey: 'settings.pageNotifications', options: ['settings.pushToggleTitle', 'settings.notificationChannelsTitle'] },
@@ -3945,7 +3945,7 @@ test('R19: umgestellte Blaetter sprechen den Zeilen-Dialekt', async () => {
   const account = await readFile(new URL('../public/settings/pages/personal-account.js', import.meta.url), 'utf8');
   // Re-Kritik 2026-10-17: auch Anzeigename und Farbe neben dem Bild (vorher
   // Felder unter Etiketten, zwei Dialekte in einer Karte).
-  for (const id of ['profile-display-name', 'profile-avatar-color', 'profile-phone', 'profile-email', 'profile-birth-date', 'current-password', 'new-password', 'confirm-password']) {
+  for (const id of ['profile-display-name', 'profile-phone', 'profile-email', 'profile-birth-date', 'current-password', 'new-password', 'confirm-password']) {
     assert.match(account, new RegExp(`settingRowHtml\\(\\{\\s*label: t\\('settings\\.[a-zA-Z]+'\\), labelFor: '${id}'`), `Konto: ${id} als Zeile`);
   }
   const profile = account.slice(account.indexOf('<div class="settings-profile-editor">'), account.indexOf('id="profile-error"'));
@@ -4378,22 +4378,19 @@ test('R19: das Kuechenblatt spricht den Zeilen-Dialekt der Einstellungen', async
   assert.match(meals, /settings-group__footer">\$\{t\('settings\.mealTypesHint'\)\}/, 'der Hinweis als Gruppenfuss');
 });
 
-// ONE TODAY (2026-11-02): die Personenfarbe der Uebersicht ("Kolor") ist der
-// Platz in der Haushaltsreihenfolge, nicht die gespeicherte Avatarfarbe; und
-// die Ausweiskarte zeichnet die eine Personenscheibe mit den Initialen aus dem
-// vollen Namen (hier stand ein selbstgebauter Ein-Buchstaben-Avatar).
-test('One Today: die Farbe der Uebersicht folgt der Haushaltsreihenfolge, die Ausweiskarte traegt die Personenscheibe', async (t) => {
-  const { colorValue } = await import('/settings/overview-values.js');
-  const { setHouseholdOrder } = await import('/utils/person-color.js');
-  t.after(() => setHouseholdOrder([]));
-  const household = [
-    { id: 3, display_name: 'Wojtek', sort_order: 1, avatar_color: '#FF2D55' },
-    { id: 7, display_name: 'Mariola', sort_order: 0, avatar_color: '#007AFF' },
-  ];
-  setHouseholdOrder(household);
-  assert.deepEqual(colorValue(household[0], household), { text: 'settings.colorName.rose', ink: 'var(--person-2)' }, 'Platz 2, nicht die gewaehlte Farbe');
-  assert.deepEqual(colorValue(household[1]), { text: 'settings.colorName.blue', ink: 'var(--person-1)' }, 'ohne Liste dieselbe Antwort');
-  assert.equal(colorValue({ id: 12, display_name: 'Hilfe' }, household), null, 'wer nicht im Haushalt steht, hat keine Personenfarbe');
+// ONE TODAY (2026-11-02): die Uebersicht hat keine Farbzeile mehr (niemand
+// waehlt eine Personenfarbe), und die Ausweiskarte zeichnet die eine
+// Personenscheibe mit den Initialen aus dem vollen Namen (hier stand ein
+// selbstgebauter Ein-Buchstaben-Avatar).
+test('One Today: keine Farbzeile in der Uebersicht und kein Farbfeld im Konto, die Ausweiskarte traegt die Personenscheibe', async () => {
+  const overviewValues = await import('/settings/overview-values.js');
+  assert.equal(overviewValues.colorValue, undefined, 'keine Personenfarbe als Wert');
+  const shellSource = await readFile(new URL('../public/settings/shell.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(shellSource, /personal-color|settings\.rowColor|settings\.colorLabel/, 'die Zeile \"Deine Farbe\" ist weg');
+  for (const rel of ['personal-account', 'admin-family']) {
+    const page = await readFile(new URL(`../public/settings/pages/${rel}.js`, import.meta.url), 'utf8');
+    assert.doesNotMatch(page, /type="color"|avatar_color|avatar-color/, `${rel}: kein Farbfeld an der Person`);
+  }
 
   const shell = await readFile(new URL('../public/settings/shell.js', import.meta.url), 'utf8');
   const card = shell.slice(shell.indexOf('function createIdentityCard('), shell.indexOf('function renderOverview('));

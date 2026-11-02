@@ -1634,14 +1634,6 @@
   overflow: hidden;
 }
 
-/* Initialen auf einer frei gewählten Hintergrundfarbe: weiß war fix, und auf
-   hellen Tönen ergab das gemessene 3,5:1 und 2,8:1 (Critique 2026-07-27).
-   `prefersInkText()` in `/utils/contrast.js` entscheidet je Farbe; das Token
-   ist laut tokens.css:104 genau dafür da. */
-.settings-avatar--ink {
-  color: var(--color-ink-on-bright);
-}
-
 .settings-avatar--sm {
   width: 32px;
   height: 32px;
@@ -1753,21 +1745,6 @@
 
 .settings-profile-editor__fields {
   min-width: 0;
-}
-
-.settings-name-color-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: end;
-}
-
-.settings-name-color-row__name {
-  min-width: 0;
-}
-
-.settings-color-field {
-  align-items: center;
 }
 
 /* Die Zielgröße kommt aus dem Token, nicht aus einer Zahl. Hier standen 44px

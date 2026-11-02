@@ -442,14 +442,13 @@ function overviewSectionId(domainId) {
  * jedes Blatt bleibt erreichbar, auch ein neues.
  */
 const OVERVIEW_GROUPS = [
-  { id: 'personal', labelKey: 'settings.groupYou', leaves: ['personal-appearance', 'personal-color', 'personal-notifications', 'personal-device', 'personal-weather'] },
+  { id: 'personal', labelKey: 'settings.groupYou', leaves: ['personal-appearance', 'personal-notifications', 'personal-device', 'personal-weather'] },
   { id: 'admin', labelKey: 'settings.groupHome', leaves: ['admin-family', 'admin-displays', 'admin-ai', 'admin-integrations'], footerKey: 'settings.groupHomeFooter', footerWhen: 'admin-ai' },
   { id: 'modules', labelKey: 'settings.domainModules', leaves: ['modules-active', 'modules-navigation'], rest: true },
   { id: 'advanced', labelKey: 'settings.groupAdvanced', leaves: ['admin-email', 'admin-api', 'admin-backup', 'admin-system', 'admin-permissions', 'modules-install'], collapsed: true },
 ];
 
 const OVERVIEW_VALUE_KEYS = {
-  'personal-color': 'color',
   'personal-notifications': 'push',
   'personal-weather': 'weather-personal',
   'admin-family': 'members',
@@ -566,16 +565,6 @@ function renderOverview(content, domains, user) {
   for (const domain of OVERVIEW_GROUPS) {
     const rows = [];
     for (const id of domain.leaves) {
-      if (id === 'personal-color') {
-        if (!accountLeaf) continue;
-        rows.push(createOverviewRow(accountLeaf, {
-          valueKey: OVERVIEW_VALUE_KEYS[id],
-          label: t('settings.rowColor'),
-          href: settingsOptionUrl(accountLeaf, 'settings.colorLabel'),
-          icon: 'palette',
-        }));
-        continue;
-      }
       const entry = visible.get(id);
       if (entry) rows.push(createOverviewRow(entry, { valueKey: OVERVIEW_VALUE_KEYS[id] ?? null }));
     }

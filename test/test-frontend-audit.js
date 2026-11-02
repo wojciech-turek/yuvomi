@@ -9580,14 +9580,9 @@ test('holiday chips derive readable ink from each configured color', () => {
 // Gegenteil hielt: die Mehrfachauswahl malte `u.avatar_color` mit einer
 // gerechneten Schrift darauf.
 //
-// AUSGENOMMEN bis Task 4 (No person colour pickers): die Farbwaehler und ihre
-// Vorschauen in den Einstellungen (Konto, Familie) und die Farbwaehler der
-// Haushaltshilfe. Task 4 nimmt sie heraus - dann faellt die Ausnahme hier.
-const AVATAR_COLOR_PICKERS_UNTIL_TASK_4 = new Set([
-  'settings/pages/personal-account.js',
-  'settings/pages/admin-family.js',
-  'pages/housekeeping.js',
-]);
+// Keine Ausnahme: auch die Einstellungen (Konto, Familie) und die
+// Haushaltshilfe lesen die gespeicherte Farbe nicht mehr - es gibt keinen
+// Farbwaehler (No person colour pickers).
 
 test('no avatar_color is read in public/ - every disc takes its colour from personToken', async () => {
   const { stripJsComments } = await import('../server/utils/strip-comments.js');
@@ -9597,7 +9592,6 @@ test('no avatar_color is read in public/ - every disc takes its colour from pers
   assert.ok(files.includes('router.js') && files.includes('components/user-multi-select.js'), 'der Lauf sieht den Baum');
   const offenders = [];
   for (const rel of files) {
-    if (AVATAR_COLOR_PICKERS_UNTIL_TASK_4.has(rel)) continue;
     const code = stripJsComments(readFileSync(new URL(rel, root), 'utf8'));
     // Jede Schreibweise derselben gespeicherten Farbe: die Spalte und ihre
     // Aliasse aus den Lese-Joins (Urheber, Koch, verknuepftes Mitglied).
@@ -9606,8 +9600,9 @@ test('no avatar_color is read in public/ - every disc takes its colour from pers
     }
   }
   assert.deepEqual(offenders, [], 'eine gespeicherte Personenfarbe wird wieder gelesen - personToken() aus /utils/person-color.js nehmen');
-  for (const rel of AVATAR_COLOR_PICKERS_UNTIL_TASK_4) {
-    assert.match(read(`../public/${rel}`), /avatar_color/, `${rel}: die Ausnahme hat keinen Grund mehr - aus der Liste nehmen`);
+  // Und kein Farbfeld an einer Person: weder Konto noch Familie noch Haushaltshilfe.
+  for (const rel of ['settings/pages/personal-account.js', 'settings/pages/admin-family.js', 'pages/housekeeping.js']) {
+    assert.doesNotMatch(read(`../public/${rel}`), /type="color"|type=color/, `${rel}: ein Farbwaehler an einer Person`);
   }
 });
 
@@ -11673,15 +11668,14 @@ test('Avatar-Initialen waehlen die lesbare Textfarbe', async () => {
   // Kurzform-Hex muss dasselbe ergeben wie die Langform.
   assert.equal(contrastRatio('#fff', '#000000'), contrastRatio('#ffffff', '#000000'));
 
-  // Und die Blaetter muessen die Utility auch benutzen - bis Task 4 die
-  // Vorschauen der Farbwaehler herausnimmt; die Rechte-Chips tragen seit One
-  // Today die Personenscheibe.
+  // Die Blaetter der Einstellungen rechnen keine Schrift mehr auf eine gewaehlte
+  // Farbe: sie nehmen die Personentokens (Tinte auf Toenung).
   for (const leaf of ['admin-family', 'personal-account']) {
     const source = read(`../public/settings/pages/${leaf}.js`);
-    assert.match(source, /import \{ prefersInkText \} from '\/utils\/contrast\.js'/, `${leaf} importiert sie nicht`);
-    assert.match(source, /prefersInkText\(/, `${leaf} ruft sie nicht auf`);
+    assert.doesNotMatch(source, /prefersInkText/, `${leaf} rechnet noch eine Schrift`);
+    assert.match(source, /personToken\(user\)/, `${leaf} nimmt die Personentokens nicht`);
   }
-  assert.match(read('../public/styles/settings.css'), /\.settings-avatar--ink \{\s*color: var\(--color-ink-on-bright\);/);
+  assert.doesNotMatch(read('../public/styles/settings.css'), /settings-avatar--ink/);
 });
 
 

@@ -8,16 +8,15 @@ import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
 import { confirmModal, reportFieldError, reportFieldErrors } from '/components/modal.js';
 import { errorSentence } from '/utils/friendly-error.js';
-import { prefersInkText } from '/utils/contrast.js';
+import { personToken } from '/utils/person-color.js';
 import { settingRowHtml } from '/settings/components.js';
 
 function avatarHtml(user, className = 'settings-avatar') {
   const safeName = esc(user?.display_name || '');
   const fallback = esc(initials(user?.display_name, '?'));
-  const background = esc(user?.avatar_color) || 'var(--color-accent)';
-  const inkClass = prefersInkText(user?.avatar_color) ? ' settings-avatar--ink' : '';
+  const { ink, tint } = personToken(user);
   return `
-    <div class="${className}${inkClass}" style="background:${background}" title="${safeName}">
+    <div class="${className}" style="background:${tint};color:${ink}" title="${safeName}">
       ${user?.avatar_data ? `<img src="${esc(user.avatar_data)}" alt="${safeName}" loading="lazy">` : fallback}
     </div>
   `;
@@ -644,7 +643,7 @@ function renderPage(container, user, refreshFailed, accessNotice, oidcState, oid
         <form id="profile-form" class="settings-form" novalidate>
           <div class="settings-profile-editor">
             ${avatarEditorHtml(user, { gravatarAvailable })}
-            ${/* NAME, FARBE UND BENUTZERNAME ALS ZEILEN (Re-Kritik 2026-10-17):
+            ${/* NAME UND BENUTZERNAME ALS ZEILEN (Re-Kritik 2026-10-17):
                  sie standen als Felder unter Etiketten neben dem Bild, die
                  Kontaktdaten darunter schon als Zeilen - zwei Dialekte in einer
                  Karte. Der Kopf mit Bild bleibt; daneben dieselbe Zeilengruppe.
@@ -654,10 +653,6 @@ function renderPage(container, user, refreshFailed, accessNotice, oidcState, oid
               ${settingRowHtml({
                 label: t('settings.displayNameLabel'), labelFor: 'profile-display-name', field: true,
                 control: `<input class="form-input" type="text" id="profile-display-name" maxlength="128" value="${esc(user?.display_name || '')}" autocomplete="name" aria-describedby="profile-error" required>`,
-              })}
-              ${settingRowHtml({
-                label: t('settings.colorLabel'), labelFor: 'profile-avatar-color',
-                control: `<input class="settings-color-button" type="color" id="profile-avatar-color" value="${esc(user?.avatar_color || '')}" aria-describedby="profile-error">`,
               })}
               ${settingRowHtml({
                 label: t('settings.usernameLabel'), labelId: 'profile-username-label',
@@ -777,12 +772,11 @@ function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
   const profileError = container.querySelector('#profile-error');
   const avatarFile = container.querySelector('#profile-avatar-file');
   const displayName = container.querySelector('#profile-display-name');
-  const avatarColor = container.querySelector('#profile-avatar-color');
 
   const updatePreview = () => {
     setAvatarPreview(container, {
+      id: user?.id,
       display_name: displayName?.value || user?.display_name,
-      avatar_color: avatarColor?.value || user?.avatar_color,
       avatar_data: profileState.avatarData,
     });
   };
@@ -790,7 +784,6 @@ function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
   container.querySelector('#profile-avatar-preview')?.addEventListener('click', () => avatarFile?.click());
   container.querySelector('#profile-avatar-edit')?.addEventListener('click', () => avatarFile?.click());
   displayName?.addEventListener('input', updatePreview);
-  avatarColor?.addEventListener('input', updatePreview);
 
   avatarFile?.addEventListener('change', async () => {
     clearError(profileError);
@@ -855,7 +848,6 @@ function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
         updatePreview();
         window.dispatchEvent(new CustomEvent('yuvomi:profile-changed', { detail: {
           display_name: data.display_name,
-          avatar_color: data.avatar_color,
           avatar_data: data.avatar_data ?? null,
         } }));
       }
@@ -899,7 +891,6 @@ function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
     try {
       const response = await auth.updateProfile({
         display_name: displayName.value.trim(),
-        avatar_color: avatarColor.value,
         avatar_data: profileState.avatarData,
         phone: container.querySelector('#profile-phone')?.value.trim() || null,
         email: container.querySelector('#profile-email')?.value.trim() || null,
@@ -916,7 +907,6 @@ function bindEvents(container, user, profileState, { gravatarHost = '' } = {}) {
         // syncSidebarAccount) und zieht mit, ohne dass die Shell neu baut.
         window.dispatchEvent(new CustomEvent('yuvomi:profile-changed', { detail: {
           display_name: response.user.display_name,
-          avatar_color: response.user.avatar_color,
           avatar_data: response.user.avatar_data ?? null,
         } }));
       }

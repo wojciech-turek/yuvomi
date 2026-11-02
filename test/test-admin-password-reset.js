@@ -191,3 +191,48 @@ test('PATCH /auth/users/:id rolls a role change back when fasting cleanup fails'
     database.exec('DROP TRIGGER IF EXISTS test_fail_auth_fasting_delete');
   }
 });
+
+// ONE TODAY (2026-11-02), No person colour pickers: niemand waehlt eine
+// Personenfarbe. Die Spalte `users.avatar_color` ist NOT NULL und bleibt; ein
+// mitgeschicktes Feld wird ignoriert (200 wie gewohnt), der gespeicherte Wert
+// aendert sich nicht.
+const storedColor = (userId) => database.prepare('SELECT avatar_color FROM users WHERE id = ?').get(userId).avatar_color;
+
+test('POST /auth/users: ein mitgeschickter avatar_color wird nicht gespeichert, die Spalte bekommt trotzdem einen Wert', async () => {
+  const res = await fetch(`${BASE}/api/v1/auth/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: adminSession.cookie, 'X-CSRF-Token': adminSession.csrfToken },
+    body: JSON.stringify({ username: 'farblos', display_name: 'Farblos', password: 'initialPass1', avatar_color: '#ABCDEF' }),
+  });
+  assert.equal(res.status, 201);
+  const { user } = await res.json();
+  assert.ok(storedColor(user.id), 'die NOT-NULL-Spalte hat einen Wert');
+  assert.notEqual(storedColor(user.id).toUpperCase(), '#ABCDEF', 'die gesendete Farbe steht nicht darin');
+
+  const without = await fetch(`${BASE}/api/v1/auth/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: adminSession.cookie, 'X-CSRF-Token': adminSession.csrfToken },
+    body: JSON.stringify({ username: 'farblos2', display_name: 'Farblos Zwei', password: 'initialPass1' }),
+  });
+  assert.equal(without.status, 201, 'ohne Farbe geht das Anlegen');
+});
+
+test('PATCH /auth/users/:id: ein mitgeschickter avatar_color ist wirkungslos, 200', async () => {
+  const before = storedColor(kid.id);
+  const res = await patchUser(kid.id, { username: 'kid', display_name: 'Kid', family_role: 'other', avatar_color: '#ABCDEF' });
+  assert.equal(res.status, 200);
+  assert.equal(storedColor(kid.id), before, 'gespeicherte Farbe unveraendert');
+});
+
+test('PATCH /auth/me/profile: ein mitgeschickter avatar_color ist wirkungslos, 200, der Name wird gespeichert', async () => {
+  const adminId = database.prepare("SELECT id FROM users WHERE username = 'admin'").get().id;
+  const before = storedColor(adminId);
+  const res = await fetch(`${BASE}/api/v1/auth/me/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminSession.cookie, 'X-CSRF-Token': adminSession.csrfToken },
+    body: JSON.stringify({ display_name: 'Admin Neu', avatar_color: '#ABCDEF' }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(storedColor(adminId), before, 'gespeicherte Farbe unveraendert');
+  assert.equal(database.prepare('SELECT display_name FROM users WHERE id = ?').get(adminId).display_name, 'Admin Neu');
+});

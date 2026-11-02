@@ -10,7 +10,7 @@ import { createLogger } from '../logger.js';
 import { hashPassword } from '../utils/password.js';
 import * as db from '../db.js';
 import { normalizeAvatarData, syncFamilyMemberArtifacts } from '../auth.js';
-import { collectErrors, color, date, datetime, month, num, oneOf, str, id as validateId, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
+import { collectErrors, date, datetime, month, num, oneOf, str, id as validateId, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { minutesBetween, computeHourlyAmount } from '../services/housekeeping-billing.js';
 import { assertDocumentsNotDeleting, sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
@@ -953,11 +953,12 @@ router.post('/worker', async (req, res) => {
     const vBirthDate = date(req.body.birth_date, 'birth_date');
     const vDailyRate = num(req.body.daily_rate, 'daily_rate', { required: true });
     const vSchedule = oneOf(req.body.payment_schedule || 'monthly', PAYMENT_SCHEDULES, 'payment_schedule');
-    const vCalendarColor = color(req.body.calendar_color || existing?.calendar_color || NEW_WORKER_COLOR, 'calendar_color');
+    // Eine mitgeschickte `calendar_color`/`avatar_color` wird ignoriert: niemand waehlt eine Farbe.
+    const calendarColor = existing?.calendar_color || NEW_WORKER_COLOR;
     const vNotes = str(req.body.notes, 'notes', { max: MAX_TEXT, required: false });
     const vRateType = oneOf(req.body.rate_type || 'daily', ['daily', 'hourly'], 'rate_type');
     const vHourlyRate = num(req.body.hourly_rate, 'hourly_rate');
-    const errors = collectErrors([vDisplayName, vUsername, vPhone, vEmail, vBirthDate, vDailyRate, vSchedule, vCalendarColor, vNotes, vRateType, vHourlyRate]);
+    const errors = collectErrors([vDisplayName, vUsername, vPhone, vEmail, vBirthDate, vDailyRate, vSchedule, vNotes, vRateType, vHourlyRate]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (vUsername.value && !/^[a-zA-Z0-9._-]{3,64}$/.test(vUsername.value)) {
       return res.status(400).json({ error: 'Username must be 3-64 characters long and may only contain letters, numbers, dots, hyphens, and underscores.', code: 400 });
@@ -968,7 +969,7 @@ router.post('/worker', async (req, res) => {
     if ((vHourlyRate.value ?? 0) < 0) {
       return res.status(400).json({ error: 'hourly_rate must be greater than or equal to zero.', code: 400 });
     }
-    const avatarColor = String(req.body.avatar_color || existing?.avatar_color || NEW_WORKER_COLOR).trim();
+    const avatarColor = existing?.avatar_color || NEW_WORKER_COLOR;
     const avatarData = req.body.avatar_data !== undefined
       ? normalizeAvatarData(req.body.avatar_data)
       : existing?.avatar_data ?? null;
@@ -993,7 +994,7 @@ router.post('/worker', async (req, res) => {
       `).run(
         vUsername.value || existing?.username || `housekeeper_${targetUserId}`,
         vDisplayName.value,
-        avatarColor || NEW_WORKER_COLOR,
+        avatarColor,
         avatarData ?? null,
         targetUserId,
       );
@@ -1007,7 +1008,7 @@ router.post('/worker', async (req, res) => {
           notes = excluded.notes,
           rate_type = excluded.rate_type,
           hourly_rate = excluded.hourly_rate
-      `).run(targetUserId, vDailyRate.value, vSchedule.value, vCalendarColor.value, vNotes.value, vRateType.value, vHourlyRate.value ?? 0);
+      `).run(targetUserId, vDailyRate.value, vSchedule.value, calendarColor, vNotes.value, vRateType.value, vHourlyRate.value ?? 0);
       syncFamilyMemberArtifacts(db.get(), targetUserId, {
         displayName: vDisplayName.value,
         phone: vPhone.value,

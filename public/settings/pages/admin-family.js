@@ -8,8 +8,7 @@ import {
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
 import { personDisc, setHouseholdOrder } from '/utils/person-color.js';
-import { prefersInkText } from '/utils/contrast.js';
-import { AVATAR_COLORS } from '/utils/color.js';
+import { personToken } from '/utils/person-color.js';
 import { sortMembers } from '/utils/member-order.js';
 import { makeSortable } from '/utils/sortable.js';
 import { vibrate } from '/utils/ux.js';
@@ -24,7 +23,6 @@ import {
 
 const FAMILY_ROLES = ['dad', 'mom', 'parent', 'child', 'grandparent', 'relative', 'other'];
 
-const randomAvatarColor = () => AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
 /**
  * Ist auf diesem Server SSO konfiguriert? (#847)
@@ -102,12 +100,9 @@ function clearError(element) {
 function avatarHtml(user, className = 'settings-avatar') {
   const safeName = esc(user?.display_name || '');
   const fallback = esc(initials(user?.display_name, '?'));
-  const background = esc(user?.avatar_color) || 'var(--color-accent)';
-  // Die Farbe waehlt das Mitglied selbst; auf hellen Toenen lagen die weissen
-  // Initialen bei 3,5:1 und 2,8:1 (Critique 2026-07-27).
-  const inkClass = prefersInkText(user?.avatar_color) ? ' settings-avatar--ink' : '';
+  const { ink, tint } = personToken(user);
   return `
-    <div class="${className}${inkClass}" style="background:${background}" title="${safeName}">
+    <div class="${className}" style="background:${tint};color:${ink}" title="${safeName}">
       ${user?.avatar_data ? `<img src="${esc(user.avatar_data)}" alt="${safeName}" loading="lazy">` : fallback}
     </div>
   `;
@@ -278,10 +273,6 @@ function addMemberFormHtml() {
             formRowHtml({
               label: t('settings.displayNameLabel'), labelFor: 'new-display-name', field: true,
               control: '<input class="form-input" type="text" id="new-display-name" required />',
-            }),
-            formRowHtml({
-              label: t('settings.colorLabel'), labelFor: 'new-avatar-color',
-              control: `<input class="settings-color-button" type="color" id="new-avatar-color" value="${randomAvatarColor()}" />`,
             }),
             ssoAvailable ? switchRowHtml({
               id: 'new-member-sso-only', label: t('settings.memberSsoOnlyLabel'), hint: t('settings.memberSsoOnlyHint'),
@@ -1049,15 +1040,9 @@ async function openEditMemberModal(member, currentUser, users, container) {
               <label class="form-label" for="edit-member-username">${t('settings.usernameLabel')}</label>
               <input class="form-input" type="text" id="edit-member-username" value="${esc(member.username)}" required autocomplete="off" />
             </div>
-            <div class="settings-name-color-row">
-              <div class="form-group settings-name-color-row__name">
-                <label class="form-label" for="edit-member-display-name">${t('settings.displayNameLabel')}</label>
-                <input class="form-input" type="text" id="edit-member-display-name" value="${esc(member.display_name)}" required maxlength="128" />
-              </div>
-              <div class="form-group settings-color-field">
-                <label class="form-label" for="edit-member-avatar-color">${t('settings.colorLabel')}</label>
-                <input class="settings-color-button" type="color" id="edit-member-avatar-color" value="${esc(member.avatar_color || '#007AFF')}" />
-              </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-member-display-name">${t('settings.displayNameLabel')}</label>
+              <input class="form-input" type="text" id="edit-member-display-name" value="${esc(member.display_name)}" required maxlength="128" />
             </div>
           </div>
         </div>
@@ -1130,7 +1115,7 @@ async function openEditMemberModal(member, currentUser, users, container) {
           state.avatarData = avatarData;
           setAvatarPreview(panel, '#edit-member-avatar-preview', {
             display_name: panel.querySelector('#edit-member-display-name')?.value || member.display_name,
-            avatar_color: panel.querySelector('#edit-member-avatar-color')?.value || member.avatar_color,
+            id: member.id,
             avatar_data: avatarData,
           });
         } catch (err) {
@@ -1143,7 +1128,7 @@ async function openEditMemberModal(member, currentUser, users, container) {
         if (fileInput) fileInput.value = '';
         setAvatarPreview(panel, '#edit-member-avatar-preview', {
           display_name: panel.querySelector('#edit-member-display-name')?.value || member.display_name,
-          avatar_color: panel.querySelector('#edit-member-avatar-color')?.value || member.avatar_color,
+          id: member.id,
           avatar_data: null,
         });
       });
@@ -1185,7 +1170,6 @@ async function openEditMemberModal(member, currentUser, users, container) {
           const res = await auth.updateUser(member.id, {
             username: panel.querySelector('#edit-member-username').value.trim(),
             display_name: panel.querySelector('#edit-member-display-name').value.trim(),
-            avatar_color: panel.querySelector('#edit-member-avatar-color').value,
             avatar_data: state.avatarData,
             family_role: panel.querySelector('#edit-member-family-role').value,
             system_admin: panel.querySelector('#edit-member-system-admin').checked,
@@ -1281,7 +1265,6 @@ function openAddMemberModal(container, currentUser, users, { presetRole = null }
           // Beides zugleich weist der Server ab - er kann nicht raten, welches
           // von beidem gemeint war.
           ...(ssoOnly ? { sso_only: true } : { password: panel.querySelector('#new-member-password').value }),
-          avatar_color: panel.querySelector('#new-avatar-color').value,
           family_role: panel.querySelector('#new-family-role').value,
           system_admin: panel.querySelector('#new-system-admin')?.checked === true,
           phone: panel.querySelector('#new-member-phone')?.value.trim() || null,

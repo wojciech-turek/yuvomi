@@ -3403,7 +3403,8 @@ export function assertSsoOnlyAllowed(ssoOnly, password, { linked = false, email 
 /**
  * POST /api/v1/auth/users
  * Admin only. Erstellt neues Familienmitglied.
- * Body: { username, display_name, password?, sso_only?, avatar_color?, family_role?, system_admin? }
+ * Body: { username, display_name, password?, sso_only?, family_role?, system_admin? }
+ * (Eine mitgeschickte `avatar_color` wird ignoriert: niemand waehlt eine Personenfarbe.)
  * Response: { user: { id, username, display_name, avatar_color, role } }
  *
  * `sso_only: true` legt ein Konto ohne Passwort an (#847). Bis dahin musste ein
@@ -3419,7 +3420,6 @@ router.post('/users', requireAuth, requireAdmin, csrfMiddleware, async (req, res
       display_name,
       password,
       sso_only,
-      avatar_color = avatarColors[crypto.randomInt(avatarColors.length)],
       avatar_data,
       family_role = 'other',
       system_admin = req.body.role === 'admin',
@@ -3469,7 +3469,7 @@ router.post('/users', requireAuth, requireAdmin, csrfMiddleware, async (req, res
           INSERT INTO users (username, display_name, password_hash, avatar_color, avatar_data, role, family_role)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `)
-        .run(username, display_name, hash, avatar_color, normalizedAvatarData ?? null, role, family_role);
+        .run(username, display_name, hash, avatarColors[crypto.randomInt(avatarColors.length)], normalizedAvatarData ?? null, role, family_role);
       // Kinder-Startrechte (R20): in derselben Transaktion wie das Konto, damit
       // es nie einen Moment mit Budget und Haushaltshilfe-Loehnen gibt.
       applyChildStartPermissions(db.get(), {
@@ -3534,7 +3534,8 @@ router.patch('/users/:id', requireAuth, requireAdmin, csrfMiddleware, async (req
 
     const username = req.body.username !== undefined ? String(req.body.username || '').trim() : existing.username;
     const displayName = req.body.display_name !== undefined ? String(req.body.display_name || '').trim() : existing.display_name;
-    const avatarColor = req.body.avatar_color !== undefined ? String(req.body.avatar_color || '').trim() : existing.avatar_color;
+    // `avatar_color` aus dem Body wird ignoriert: die Spalte ist NOT NULL und bleibt, wie sie ist.
+    const avatarColor = existing.avatar_color;
     const familyRole = req.body.family_role !== undefined ? String(req.body.family_role || '').trim() : existing.family_role;
     const nextRole = req.body.system_admin !== undefined
       ? (req.body.system_admin === true || req.body.system_admin === 'true' ? 'admin' : 'member')
@@ -3677,7 +3678,8 @@ router.patch('/me/profile', requireAuth, csrfMiddleware, (req, res) => {
     if (!existing) return res.status(404).json({ error: 'User not found.', code: 404 });
 
     const displayName = req.body.display_name !== undefined ? String(req.body.display_name || '').trim() : existing.display_name;
-    const avatarColor = req.body.avatar_color !== undefined ? String(req.body.avatar_color || '').trim() : existing.avatar_color;
+    // `avatar_color` aus dem Body wird ignoriert: die Spalte ist NOT NULL und bleibt, wie sie ist.
+    const avatarColor = existing.avatar_color;
     const avatarData = req.body.avatar_data !== undefined
       ? normalizeAvatarData(req.body.avatar_data)
       : existing.avatar_data;

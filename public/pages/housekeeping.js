@@ -28,7 +28,6 @@ import { pathAccess, mayWritePath } from '/utils/module-access.js';
 import { todayKey, addLocalDays } from '/utils/date.js';
 import { shortDayMonth, shortWeekdayDayMonth } from '/utils/day-label.js';
 import { displayTimeZone, zonedDateKey } from '/utils/timezone.js';
-import { USER_COLOR_DEFAULT } from '/utils/color.js';
 import { renderPageColumns } from '/utils/page-layout.js';
 import { rowMenuHtml } from '/utils/row-action.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
@@ -612,7 +611,7 @@ function renderWorkerSummary(workers = state.workers) {
     const session = worker.current_session ?? worker.today_session;
     return `
     <section class="housekeeping-worker-strip">
-      <div class="housekeeping-avatar" style="background:${esc(worker.avatar_color) || 'var(--module-housekeeping)'}">
+      <div class="housekeeping-avatar">
         ${worker.avatar_data ? `<img src="${esc(worker.avatar_data)}" alt="${esc(worker.display_name)}">` : esc(initials(worker.display_name))}
       </div>
       <div class="housekeeping-worker-strip__identity">
@@ -1985,7 +1984,7 @@ function openVisitReportModal(visit, content = null, { onRefresh = null } = {}) 
     content: `
       <div class="housekeeping-report-modal">
         <div class="housekeeping-staff-row">
-          <div class="housekeeping-avatar" style="background:${esc(visit.worker_avatar_color) || 'var(--module-housekeeping)'}">
+          <div class="housekeeping-avatar">
             ${visit.worker_avatar_data ? `<img src="${esc(visit.worker_avatar_data)}" alt="${esc(visit.worker_name || '')}">` : esc(initials(visit.worker_name || 'HK'))}
           </div>
           <div>
@@ -2039,7 +2038,7 @@ function renderStaff(content) {
          Maus-Klickflaeche ueber data-select-worker + Delegation. -->
     <article class="housekeeping-staff-row ${String(state.selectedStaffId || '') === String(item.id) ? 'housekeeping-staff-row--active' : ''}"
              data-select-worker="${item.id}">
-      <div class="housekeeping-avatar" style="background:${esc(item.avatar_color) || 'var(--module-housekeeping)'}">
+      <div class="housekeeping-avatar">
         ${item.avatar_data ? `<img src="${esc(item.avatar_data)}" alt="${esc(item.display_name)}">` : esc(initials(item.display_name))}
       </div>
       <button class="housekeeping-staff-row__select" type="button">
@@ -2470,21 +2469,19 @@ function openVisitEditModal(visit, content, { onDone } = {}) {
  *
  * Die Antwort folgt dem DATENSATZ: ein leeres Feld (kein Benutzername, keine
  * E-Mail, keine Notiz) bekommt keine Zeile - ein Strich waere ein Wert, den es
- * nicht gibt. Die beiden Farben stehen als Farbfeld MIT ihrem Wert, damit die
- * Auskunft nicht allein an der Farbe haengt.
+ * nicht gibt.
  */
 function openStaffReadModal(worker) {
   const hourly = worker.rate_type === 'hourly';
   const row = (labelKey, valueHtml) => `
           <div><dt>${esc(t(labelKey))}</dt><dd>${valueHtml}</dd></div>`;
-  const swatch = (color) => `<span class="housekeeping-swatch" style="--swatch:${esc(color)}" aria-hidden="true"></span>${esc(color)}`;
   openModal({
     title: t('housekeeping.profileTitle'),
     size: 'md',
     content: `
       <div class="housekeeping-report-modal" data-view="read">
         <div class="housekeeping-staff-row">
-          <div class="housekeeping-avatar" style="background:${esc(worker.avatar_color) || 'var(--module-housekeeping)'}">
+          <div class="housekeeping-avatar">
             ${worker.avatar_data ? `<img src="${esc(worker.avatar_data)}" alt="${esc(worker.display_name)}">` : esc(initials(worker.display_name))}
           </div>
           <div>
@@ -2501,8 +2498,6 @@ function openStaffReadModal(worker) {
     ? row('housekeeping.hourlyRate', esc(money(worker.hourly_rate)))
     : row('housekeeping.dailyRate', esc(money(worker.daily_rate)))}
           ${row('housekeeping.paymentSchedule', esc(scheduleLabel(worker.payment_schedule)))}`}
-          ${worker.calendar_color ? row('housekeeping.calendarColor', swatch(worker.calendar_color)) : ''}
-          ${worker.avatar_color ? row('housekeeping.profileColor', swatch(worker.avatar_color)) : ''}
           ${worker.notes ? `
           <div class="housekeeping-report-details__block"><dt>${esc(t('housekeeping.workerNotes'))}</dt><dd>${esc(worker.notes)}</dd></div>` : ''}
         </dl>
@@ -2528,7 +2523,7 @@ function openStaffModal(worker, content, options = {}) {
         <input type="hidden" name="id" value="${esc(item.id || '')}">
         <div class="housekeeping-profile-editor">
           <button class="housekeeping-avatar housekeeping-avatar--lg" type="button" id="housekeeping-avatar-btn"
-                  style="background:${esc(item.avatar_color) || 'var(--module-housekeeping)'}" aria-label="${esc(t('housekeeping.profilePicture'))}">
+                  aria-label="${esc(t('housekeeping.profilePicture'))}">
             ${item.avatar_data ? `<img src="${esc(item.avatar_data)}" alt="${esc(item.display_name || '')}">` : esc(initials(item.display_name || 'HK'))}
           </button>
           <input class="sr-only" type="file" id="housekeeping-avatar-file" accept="image/png,image/jpeg,image/webp"
@@ -2574,10 +2569,6 @@ function openStaffModal(worker, content, options = {}) {
             <input name="hourly_rate" type="number" min="0" step="${amountStep(state.currency, item.hourly_rate ?? 0)}"
                    placeholder="${amountPlaceholder(state.currency)}" inputmode="decimal" value="${esc(item.hourly_rate ?? 0)}">
           </label>
-          <label class="housekeeping-field housekeeping-field--color">
-            <span>${esc(t('housekeeping.calendarColor'))}</span>
-            <input name="calendar_color" type="color" value="${esc(item.calendar_color || USER_COLOR_DEFAULT)}">
-          </label>
           <label class="housekeeping-field">
             <span>${esc(t('housekeeping.paymentSchedule'))}</span>
             <select name="payment_schedule">
@@ -2585,10 +2576,6 @@ function openStaffModal(worker, content, options = {}) {
               <option value="twice_monthly"${item.payment_schedule === 'twice_monthly' ? ' selected' : ''}>${esc(t('housekeeping.scheduleTwiceMonthly'))}</option>
               <option value="monthly"${!item.payment_schedule || item.payment_schedule === 'monthly' ? ' selected' : ''}>${esc(t('housekeeping.scheduleMonthly'))}</option>
             </select>
-          </label>
-          <label class="housekeeping-field housekeeping-field--color">
-            <span>${esc(t('housekeeping.profileColor'))}</span>
-            <input name="avatar_color" type="color" value="${esc(item.avatar_color || USER_COLOR_DEFAULT)}">
           </label>
         </div>
         <label class="housekeeping-field">
@@ -2643,8 +2630,6 @@ function openStaffModal(worker, content, options = {}) {
             rate_type: fields.rate_type.value,
             hourly_rate: Number(fields.hourly_rate?.value || 0),
             payment_schedule: fields.payment_schedule.value,
-            calendar_color: fields.calendar_color.value,
-            avatar_color: fields.avatar_color.value,
             avatar_data: state.workerAvatar,
             notes: fields.notes.value.trim() || null,
           });

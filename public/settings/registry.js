@@ -112,7 +112,6 @@ export const SETTINGS_SECTIONS = freezeEntries([
     descriptionKey: 'settings.pageAccountDescription',
     options: [
       'settings.displayNameLabel',
-      'settings.colorLabel',
       { key: 'settings.contactDetailsLegend', also: ['settings.memberPhoneLabel', 'settings.memberEmailLabel', 'settings.memberBirthDateLabel'] },
       'settings.changePassword',
       { key: 'settings.twoFactorTitle', terms: ['2FA', 'TOTP'] },
