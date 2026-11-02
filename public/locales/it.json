@@ -844,6 +844,10 @@
         "newEvent": "Nuovo evento",
         "editEvent": "Modifica evento",
         "addEvent": "Aggiungi evento",
+        "whenLabel": "Quando",
+        "whereLabel": "Dove",
+        "removeLocation": "Rimuovi luogo",
+        "whenAllDay": "tutto il giorno",
         "deleteEvent": "Elimina evento",
         "noEvents": "Nessun evento nel periodo selezionato.",
         "today": "Oggi",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Promemoria",
-        "enableLabel": "Imposta promemoria",
         "addReminder": "Aggiungi promemoria",
         "removeReminder": "Rimuovi promemoria",
         "offsetLabel": "Ricordami",

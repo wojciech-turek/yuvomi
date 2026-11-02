@@ -1989,15 +1989,15 @@
 }
 
 .cal-event-form > .form-group,
+.cal-event-form .task-sheet__body > .form-group,
 .cal-event-form .rrule-fields > .form-group,
 .cal-event-form .form-advanced__body > .form-group {
   margin-bottom: 0;
 }
 
-/* Wiederholung und Erinnerung sind hier Felder in der Reihe, keine eigenen
- * Abschnitte: ihre Trennlinien (layout.css, reminders.css) fallen weg. Die
- * einzige Linie im Formular bleibt die ueber „Weitere Einstellungen" - sie
- * trennt, was jeder Termin braucht, von dem, was wenige brauchen. */
+/* Wiederholung und Erinnerung stehen im Blatt (One Today) in „Więcej" und im
+ * Abschnitt „Przypomnienie" - eigene Trennlinien (layout.css, reminders.css)
+ * brauchen sie dort nicht. */
 .cal-event-form .rrule-fields,
 .cal-event-form .reminder-section {
   margin-top: 0;
@@ -2011,8 +2011,21 @@
   gap: var(--space-3);
 }
 
-.cal-event-form .reminder-section__header {
-  margin-bottom: 0;
+/* Die Zeilen des Termin-Blatts: „Przypomnienie" ist der laengste Name, und an
+ * ihm misst sich die Namensspalte (sheet-parts.js, `data-fit`). Auf 390px
+ * blieb fuer den Wert zu wenig - „1 godzinę wcześniej" stand abgeschnitten
+ * da. Hier bricht der Wert um, hoechstens auf zwei Zeilen, statt die
+ * Auskunft zu kappen; die Zeile waechst mit, ihre Mindesthoehe bleibt. */
+.cal-event-form .task-sheet__row-main {
+  padding-block: var(--space-1);
+}
+
+.cal-event-form .task-sheet__row-value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
 }
 
 /* Von und Bis: je eine Zeile, Beschriftung vorn, Datum und Uhrzeit dahinter.

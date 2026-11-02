@@ -844,6 +844,10 @@
         "newEvent": "新建日程",
         "editEvent": "编辑日程",
         "addEvent": "添加日程",
+        "whenLabel": "时间",
+        "whereLabel": "地点",
+        "removeLocation": "移除地点",
+        "whenAllDay": "全天",
         "deleteEvent": "删除日程",
         "noEvents": "所选时间段内暂无日程。",
         "today": "今天",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "提醒",
-        "enableLabel": "设置提醒",
         "addReminder": "添加提醒",
         "removeReminder": "移除提醒",
         "offsetLabel": "提醒时间",

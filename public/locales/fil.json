@@ -860,6 +860,10 @@
         "newEvent": "Bagong Kaganapan",
         "editEvent": "I-edit ang Kaganapan",
         "addEvent": "Magdagdag ng kaganapan",
+        "whenLabel": "Kailan",
+        "whereLabel": "Saan",
+        "removeLocation": "Alisin ang lokasyon",
+        "whenAllDay": "buong araw",
         "deleteEvent": "Tanggalin ang kaganapan",
         "noEvents": "Walang kaganapan sa napiling panahon.",
         "today": "Ngayon",
@@ -3365,7 +3369,6 @@
     },
     "reminders": {
         "sectionTitle": "Paalala",
-        "enableLabel": "Magtakda ng paalala",
         "addReminder": "Magdagdag ng paalala",
         "removeReminder": "Alisin ang paalala",
         "dateLabel": "Petsa",

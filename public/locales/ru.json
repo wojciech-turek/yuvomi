@@ -926,6 +926,10 @@
         "newEvent": "Новое событие",
         "editEvent": "Редактировать событие",
         "addEvent": "Добавить событие",
+        "whenLabel": "Когда",
+        "whereLabel": "Где",
+        "removeLocation": "Удалить место",
+        "whenAllDay": "весь день",
         "deleteEvent": "Удалить событие",
         "noEvents": "Нет событий в выбранном периоде.",
         "today": "Сегодня",
@@ -3692,7 +3696,6 @@
     },
     "reminders": {
         "sectionTitle": "Напоминание",
-        "enableLabel": "Установить напоминание",
         "addReminder": "Добавить напоминание",
         "removeReminder": "Удалить напоминание",
         "offsetLabel": "Напомнить",

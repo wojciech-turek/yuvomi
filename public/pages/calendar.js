@@ -12,7 +12,7 @@ import { openDetailView, visibilityRow, assignedRow } from '/components/detail-v
 import { mountMasterDetail, splitViewDetailHtml } from '/utils/master-detail.js';
 import { stagger, wireScrollFade, scheduleUndoableDelete, vibrate, durationToken } from '/utils/ux.js';
 import { t, getLocale, formatDate as formatPreferredDate, formatDayMonth, formatMonthYear, formatTime, timeSuffix, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
-import { esc, fmtLocation, REQUIRED_MARK } from '/utils/html.js';
+import { esc, fmtLocation } from '/utils/html.js';
 import { periodStepperHtml, syncPeriodReset, swapPeriod } from '/utils/period-stepper.js';
 import { swapRegion } from '/utils/content-swap.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
@@ -64,7 +64,8 @@ import { ensureStyleApplied } from '/utils/page-style.js';
 import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday } from '/utils/day-label.js';
+import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday, relativeDateLabel } from '/utils/day-label.js';
+import { sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml } from '/utils/sheet-parts.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import { seriesDoneText } from '/utils/task-fields.js';
 import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
@@ -7924,14 +7925,36 @@ function reminderRowHtml({ offset = '0', amount = 1, unit = 'days', storedAt = n
     </div>`;
 }
 
-function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = []) {
-  const list = reminderList(reminders);
-  let rows = list.map((rem) => reminderRowFromReminder(event, rem));
-  // Neue Termine ohne bestehende Erinnerung: Standard-Erinnerungen vorbelegen (#497).
-  // Die Default-Offsets decken sich mit den Preset-Werten des Offset-Selects.
+/**
+ * Die Erinnerungszeilen, mit denen der Dialog aufgeht: die gespeicherten, und
+ * fuer einen neuen Termin ohne welche die Standard-Erinnerungen (#497) - die
+ * Default-Offsets decken sich mit den Preset-Werten des Offset-Selects.
+ */
+function calendarReminderRows(reminders = [], event = null, defaultOffsets = []) {
+  const rows = reminderList(reminders).map((rem) => reminderRowFromReminder(event, rem));
   if (rows.length === 0 && Array.isArray(defaultOffsets) && defaultOffsets.length) {
-    rows = defaultOffsets.map((min) => ({ offset: String(min), amount: 1, unit: 'days' }));
+    return defaultOffsets.map((min) => ({ offset: String(min), amount: 1, unit: 'days' }));
   }
+  return rows;
+}
+
+/**
+ * Was die Zeile "Przypomnienie" des Blatts nennt: gespeicherte Erinnerungen wie
+ * die Leseansicht (reminderSummary), die Standard-Erinnerungen eines neuen
+ * Termins mit dem Namen ihres Vorlaufs.
+ */
+function eventReminderRowText(event, reminders, rows) {
+  const stored = reminderList(reminders);
+  if (stored.length) return reminderSummary(event, stored);
+  const labels = REMINDER_OFFSETS();
+  return rows
+    .map((row) => labels.find((o) => o.value === row.offset && o.value !== '')?.label ?? '')
+    .filter(Boolean)
+    .join(', ');
+}
+
+function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = []) {
+  const rows = calendarReminderRows(reminders, event, defaultOffsets);
   const enabled = rows.length > 0;
   const rowsHtml = (enabled ? rows : [{ offset: '0', amount: 1, unit: 'days' }])
     .map((r) => reminderRowHtml(r)).join('');
@@ -7941,19 +7964,14 @@ function renderCalendarReminderSection(reminders = [], event = null, defaultOffs
    * der halbe Haushalt eine Meldung bekommt, weil ein Einzelner sich etwas
    * notiert hat. Ein neuer Termin gehoert dem, der ihn gerade anlegt. */
   const sharesReminder = !event || event.created_by === state.currentUserId;
-  // Der Schalter spricht wie „Ganztägig" ueber ihm, nicht wie eine
-  // Abschnittsueberschrift: seit der Critique 2026-09-24 ist die Erinnerung
-  // ein Feld in der Reihe des Termin-Dialogs, kein eigener Abschnitt mehr
-  // (die Aufgaben behalten `.reminder-section__title`).
+  // AN ODER AUS SAGT DER ABSCHNITT DES BLATTS (One Today): der Chip
+  // „Przypomnienie" schaltet ein, „Usuń" und das x der Zeile schalten aus.
+  // Das Kaestchen bleibt als Traeger dieses Zustands im DOM - das Speichern
+  // liest es (reminderRowsFromForm), und ein zweiter Schalter neben dem Chip
+  // waere ein zweiter Weg zu derselben Frage.
   return `
     <div class="reminder-section">
-      <div class="reminder-section__header">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="modal-reminder-toggle" ${enabled ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('reminders.enableLabel')}</span>
-        </label>
-      </div>
+      <input type="checkbox" id="modal-reminder-toggle" ${enabled ? 'checked' : ''} hidden>
       <div id="modal-reminder-fields" class="reminder-fields" ${enabled ? '' : 'style="display:none"'}>
         <div class="reminder-rows" id="modal-reminder-rows">
           ${rowsHtml}
@@ -8318,6 +8336,158 @@ function openEventModal({ mode, event = null, date = null, reminder = null, time
 }
 
 /**
+ * Die Felder eines Abschnitts statt seiner Zeile. Die Zeile ist ein
+ * Aufklapper (`aria-expanded`, `aria-controls` auf die Felder) - ihr Zustand
+ * sagt, was sie getan hat, auch wenn sie danach den Feldern Platz macht.
+ */
+function showEventSectionBody(section) {
+  section.querySelector?.('[data-expand]')?.setAttribute?.('aria-expanded', 'true');
+  const row = section.querySelector?.('[data-row]');
+  if (row) row.hidden = true;
+  const body = section.querySelector?.('.task-sheet__body');
+  if (body) body.hidden = false;
+}
+
+/**
+ * Der Fokus geht in einen eben geoeffneten Abschnitt: „Gdzie" in sein Feld
+ * (Tippen ist die Absicht), „Kiedy" auf den gewaehlten Tag, „Przypomnienie"
+ * auf den ersten Vorlauf. Ein Datumsfeld zu fokussieren hiesse auf dem
+ * Telefon, die Tastatur ueber das Blatt zu legen.
+ */
+function focusIntoEventSection(panel, section, name) {
+  if (name === 'where') { panel.querySelector('#modal-location')?.focus?.(); return; }
+  const body = section.querySelector?.('.task-sheet__body') ?? section;
+  const target = name === 'when'
+    ? (body.querySelector?.('[data-day-pick][aria-pressed="true"]') ?? body.querySelector?.('[data-day-pick]'))
+    : (body.querySelector?.('.js-reminder-offset') ?? body.querySelector?.('[data-remove]'));
+  target?.focus?.();
+}
+
+/** Schaltet die Erinnerung ueber ihr Kaestchen - dessen Listener (wireReminderRows) zeigt die Zeilen. */
+function setEventReminderOn(panel, on) {
+  const toggle = panel.querySelector('#modal-reminder-toggle');
+  if (!toggle || toggle.checked === on) return;
+  toggle.checked = on;
+  toggle.dispatchEvent?.(new Event('change', { bubbles: true }));
+}
+
+/** Ein „+"-Chip: sein Abschnitt geht mit den Feldern auf, der Chip tritt zurueck. */
+function openEventSection(panel, name, button = null) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = false;
+  showEventSectionBody(section);
+  const chip = button ?? panel.querySelector(`[data-reveal="${name}"]`);
+  if (chip) chip.hidden = true;
+  if (name === 'reminder') setEventReminderOn(panel, true);
+  focusIntoEventSection(panel, section, name);
+}
+
+/**
+ * „Usuń" oder das x der Zeile: klappt den Abschnitt zu UND leert ihn - ein
+ * zugeklappter Abschnitt mit Wert waere ein versteckt gesetzter Wert. Der
+ * Fokus geht an den Chip, der ihn wieder oeffnet. „Kiedy" hat keinen: ein
+ * Termin hat immer ein Wann.
+ */
+function closeEventSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  const chip = panel.querySelector(`[data-reveal="${name}"]`);
+  if (!section || !chip) return;
+  section.hidden = true;
+  chip.hidden = false;
+  if (name === 'where') {
+    const location = panel.querySelector('#modal-location');
+    if (location) location.value = '';
+  } else if (name === 'reminder') {
+    setEventReminderOn(panel, false);
+  }
+  chip.focus?.();
+}
+
+/** Ein Tipp auf eine kompakte Zeile: ihre Felder klappen auf, der Fokus geht hinein. */
+function expandEventSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  showEventSectionBody(section);
+  focusIntoEventSection(panel, section, name);
+}
+
+/** Gedrueckte Tageswahl nach dem Beginn, den das Blatt gerade traegt (bei „ganztaegig" aus dessen Feld). */
+function syncEventDayPills(panel) {
+  const pills = panel.querySelectorAll('[data-day-pick]');
+  if (!pills.length) return;
+  const section = panel.querySelector('[data-section="when"]');
+  const allDay = panel.querySelector('#modal-allday')?.checked === true;
+  const day = readDateInput(panel, allDay ? '#modal-allday-start' : '#modal-start-date');
+  const pick = eventDayPickOf(day, todayKey(), section?.dataset?.pick ?? '');
+  for (const pill of pills) pill.setAttribute('aria-pressed', String(pill.dataset.dayPick === pick));
+}
+
+/**
+ * „Dzisiaj" und „Jutro" schreiben den Beginn - in beide Startfelder, damit der
+ * Tag den Ganztags-Schalter ueberlebt; das Ende folgt ueber deren
+ * `change` (wireDateFollow), die Uhrzeit bleibt. „Wybierz datę" oeffnet den
+ * Kalender des Startfelds, das gerade gilt.
+ */
+function pickEventDay(panel, key) {
+  const section = panel.querySelector('[data-section="when"]');
+  if (key === 'pick') {
+    if (section?.dataset) section.dataset.pick = 'pick';
+    syncEventDayPills(panel);
+    const allDay = panel.querySelector('#modal-allday')?.checked === true;
+    const field = panel.querySelector(allDay ? '#modal-allday-start' : '#modal-start-date');
+    // Der Kalender-Ausloeser des Datepickers (sein Knopf mit `aria-haspopup`).
+    const trigger = field?.querySelector?.('[aria-haspopup="dialog"]');
+    if (trigger) trigger.click(); else field?.focus?.();
+    return;
+  }
+  const today = todayKey();
+  const day = key === 'tomorrow' ? addLocalDays(today, 1) : today;
+  if (section?.dataset) section.dataset.pick = key;
+  for (const sel of ['#modal-start-date', '#modal-allday-start']) {
+    const field = panel.querySelector(sel);
+    if (!field) continue;
+    field.value = day;
+    field.dispatchEvent?.(new Event('change', { bubbles: true }));
+  }
+  syncEventDayPills(panel);
+}
+
+/** Zeilen, Chips, „Usuń" und die Tageswahl des Termin-Blatts. */
+function wireEventSheet(panel) {
+  const sheet = panel.querySelector('.cal-event-form');
+  if (!sheet) return;
+  sheet.addEventListener('click', (e) => {
+    const target = e.target;
+    const remove = target?.closest?.('[data-remove]');
+    if (remove) { e.preventDefault(); closeEventSection(panel, remove.dataset.remove); return; }
+    const reveal = target?.closest?.('[data-reveal]');
+    if (reveal) { e.preventDefault(); openEventSection(panel, reveal.dataset.reveal, reveal); return; }
+    const expand = target?.closest?.('[data-expand]');
+    if (expand) { e.preventDefault(); expandEventSection(panel, expand.dataset.expand); return; }
+    const dayPick = target?.closest?.('[data-day-pick]');
+    if (dayPick) { e.preventDefault(); pickEventDay(panel, dayPick.dataset.dayPick); }
+  });
+  for (const sel of ['#modal-start-date', '#modal-allday-start', '#modal-allday']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncEventDayPills(panel));
+  }
+}
+
+/**
+ * Ein Feld mit Fehler muss zu sehen sein: steht es hinter einer kompakten
+ * Zeile oder im zugeklappten „Więcej", geht beides auf, bevor die Meldung
+ * kommt (wie das Aufgabenblatt bei einer Erinnerung in der Vergangenheit).
+ */
+function revealEventField(field) {
+  const section = field?.closest?.('[data-section]');
+  if (section) {
+    section.hidden = false;
+    showEventSectionBody(section);
+  }
+  field?.closest?.('details')?.setAttribute?.('open', '');
+}
+
+/**
  * Verdrahtet das Termin-Formular. Eigene Funktion, weil das Formular an zwei
  * Orten entsteht: als eigenes Modal (neuer Termin, Desktop-Bearbeiten) und als
  * zweites Pane der Detailansicht, das erst beim Wechsel gemountet wird.
@@ -8592,13 +8762,15 @@ function wireEventForm(panel, { mode, event = null, reminder = null, onChanged =
   // der nächsten Start-Änderung angewendet. Nur für Zeit-Termine.
   wireDurationMemory(panel);
 
-  panel.querySelector('#modal-cancel').addEventListener('click', closeModal);
-
   panel.querySelector('#modal-delete')?.addEventListener('click', async () => {
     closeModal({ force: true });
     await requestDeleteEvent(event);
     refocusAfterRender();
   });
+
+  // Zeilen, Chips und Tageswahl des Blatts - nach den Feld-Listenern oben:
+  // die Tageswahl schreibt den Beginn, und das Ende folgt ueber deren `change`.
+  wireEventSheet(panel);
 
   panel.querySelector('#modal-save').addEventListener('click', () => saveEvent(panel, mode, event, reminder, attachmentState, onChanged));
   // Pflichtfelder melden sich beim Verlassen inline statt erst beim
@@ -8793,14 +8965,16 @@ function eventAttachmentFieldHtml(event) {
 }
 
 /**
- * Was hinter „Weitere Einstellungen" im Termin-Dialog liegt, als eine Zeile
- * („Sichtbarkeit, Stichtage, Icon, Sync-Ziel und Anhang"). Aus den
- * Beschriftungen der Felder selbst, und nur die, die der Dialog wirklich
- * zeigt: die Sichtbarkeit fehlt, wo niemand sonst den Kalender liest, der
+ * Was hinter „Więcej" im Termin-Blatt liegt, als eine Zeile („Powtarzanie,
+ * Opis, Widoczność ... i Załącznik"). Aus den Beschriftungen der Felder
+ * selbst, und nur die, die das Blatt wirklich zeigt: der Kalender fehlt, wo es
+ * nur einen gibt, die Sichtbarkeit, wo niemand sonst den Kalender liest, der
  * Anhang, wo das Dokumente-Modul zu ist.
  */
-function eventAdvancedTopics({ visibilityOffered = true, attachment = true } = {}) {
+function eventAdvancedTopics({ visibilityOffered = true, attachment = true, localCalendar = false } = {}) {
   const topics = [
+    t('rrule.labelRepeat'),
+    localCalendar ? t('calendar.localCalendarLabel') : null,
     t('calendar.descriptionLabel'),
     visibilityOffered ? t('common.visibility.label') : null,
     t('dashboard.countdownTitle'),
@@ -8813,6 +8987,65 @@ function eventAdvancedTopics({ visibilityOffered = true, attachment = true } = {
   } catch {
     return topics.join(', ');
   }
+}
+
+// --------------------------------------------------------
+// Das Termin-Blatt im geteilten Aufbau (One Today, Task 10)
+//
+// Wie das Blatt „Nowe zadanie" (utils/sheet-parts.js): Titel mit Mikrofon
+// (nur beim Anlegen, R10), die Personen, dann die kompakten Zeilen Kiedy,
+// Gdzie, Przypomnienie - Zeichen, Name, Wert, x; ein Tipp klappt die Felder
+// auf. Was leer ist, wartet als „+"-Chip. „Więcej" haelt den Rest, und EIN
+// Knopf nennt die Sache („Dodaj wydarzenie"). Kein Abbrechen: x und Wischen
+// schliessen das Blatt. Die Feld-ids bleiben, was sie waren - das Speichern
+// liest dieselben Felder wie vorher (test:event-sheet haelt den Koerper fest).
+// --------------------------------------------------------
+
+/** Zeichen, Namen und x-Beschriftung der Zeilen (sheet-parts.js). „Kiedy" hat kein x. */
+const EVENT_ROW_OPTIONS = Object.freeze({
+  icons: Object.freeze({ when: 'calendar', where: 'map-pin', reminder: 'bell' }),
+  labels: Object.freeze({ when: 'calendar.whenLabel', where: 'calendar.whereLabel', reminder: 'reminders.sectionTitle' }),
+  removeLabels: Object.freeze({ where: 'calendar.removeLocation', reminder: 'reminders.removeReminder' }),
+});
+
+/** Die Schnellwahl des Tages unter „Kiedy", in der Reihenfolge des Blatts (wie im Aufgabenblatt). */
+const EVENT_DAY_PICKS = Object.freeze({ today: 'common.today', tomorrow: 'common.tomorrow', pick: 'tasks.duePick' });
+
+/**
+ * Welche Tages-Schnellwahl ein Beginn ist. Wer „Wybierz datę" getippt hat,
+ * bleibt dort, auch wenn er danach heute waehlt - sonst sprange der Knopf
+ * unter dem Finger weg (wie duePickOf im Aufgabenblatt).
+ */
+function eventDayPickOf(day, today = todayKey(), chosen = '') {
+  if (chosen === 'pick') return 'pick';
+  if (day && day === today) return 'today';
+  if (day && day === addLocalDays(today, 1)) return 'tomorrow';
+  return 'pick';
+}
+
+/**
+ * Der Wert der Zeile „Kiedy": „Jutro, 17:00-18:30", „Jutro, cały dzień",
+ * ueber mehrere Tage „Dzisiaj-pt., cały dzień" oder „Jutro, 22:00-czw., 09:00".
+ * Spannen mit einem Bindestrich ohne Leerzeichen (Ruling R3). Ein Ende um
+ * 00:00 am Folgetag gehoert noch zum Abend davor (wie eventEndDate, #804).
+ */
+function eventWhenRowText({ allDay, startDate, startTime, endDate, endTime }) {
+  const startDay = relativeDateLabel(startDate);
+  const endsLater = Boolean(endDate) && endDate > startDate;
+  if (allDay) {
+    return `${endsLater ? `${startDay}-${relativeDateLabel(endDate)}` : startDay}, ${t('calendar.whenAllDay')}`;
+  }
+  const from = formatTime(startTime);
+  if (!endTime) return `${startDay}, ${from}`;
+  const sameDay = !endsLater || (endTime === '00:00' && endDate === addLocalDays(startDate, 1));
+  return sameDay
+    ? `${startDay}, ${from}-${formatTime(endTime)}`
+    : `${startDay}, ${from}-${relativeDateLabel(endDate)}, ${formatTime(endTime)}`;
+}
+
+/** Was der Speichern-Knopf sagt - auch nach einem gescheiterten Versuch. */
+function eventSaveLabel(mode) {
+  return mode === 'edit' ? t('common.save') : t('calendar.addEvent');
 }
 
 function buildEventModalContent({ mode, event, date, reminder = null, time = null }) {
@@ -8830,7 +9063,9 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
   const endTime   = isEdit && event.end_datetime && event.end_datetime.length > 10
     ? localTime(event.end_datetime)
     : derivedEnd.time;
+  const allDay = Boolean(isEdit && event.all_day);
   const selectedIcon = eventIconName(isEdit ? event.icon : 'calendar');
+  const location = isEdit && event.location ? event.location : '';
 
   // Neue Termine: optional den aktuellen Nutzer vorbelegen (#498).
   const selectedUserIds = isEdit
@@ -8838,21 +9073,16 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     : (state.defaultAssignMe && state.currentUserId != null ? [state.currentUserId] : []);
   const visibility = (isEdit ? event.visibility : null) || 'all';
 
-  // WAS OFT GEBRAUCHT WIRD, STEHT OBEN (Critique 2026-09-24, P2). Die
-  // Reihenfolge folgt der Haeufigkeit: Titel, Wann, Wer, Wiederholung,
-  // Erinnerung, Ort, Beschreibung. Sichtbarkeit, Stichtag, Farbe, Icon,
-  // Sync-Ziel und Anhang sind Entscheidungen fuer wenige Termine - sie standen
-  // vorher VOR Wiederholung und Erinnerung, und der Dialog war mobil drei
-  // Bildschirme lang (1559px bei 523 sichtbar, 23 sichtbare Eingaben).
-  //
-  // Beim Bearbeiten geht „Weitere Einstellungen" auf, sobald darin etwas steht,
-  // das der Termin sonst nirgends zeigt: eine eingeschraenkte Sichtbarkeit,
-  // der Stichtag, ein Anhang. Farbe und Icon traegt der Termin im Raster
-  // selbst, dafuer muss niemand aufklappen.
+  // „WIĘCEJ" GEHT BEIM BEARBEITEN AUF, sobald darin etwas steht, das der
+  // Termin sonst nirgends zeigt (R8): eine Wiederholung, eine Beschreibung,
+  // eine eingeschraenkte Sichtbarkeit, der Stichtag, ein Anhang. Das Icon
+  // traegt der Termin im Raster selbst, dafuer muss niemand aufklappen.
   const visibilityOffered = state.users.length > 1 || othersCanRead('calendar');
   const attachmentHtml = eventAttachmentFieldHtml(isEdit ? event : null);
+  const localCalendarOffered = state.localCalendars.length > 1 && (!isEdit || Boolean(event.local_calendar_id));
   const advancedFieldsOpen = isEdit && (
-    Boolean(event.description?.trim())
+    Boolean(event.recurrence_rule)
+    || Boolean(event.description?.trim())
     || (visibilityOffered && visibility !== 'all')
     || !!event.countdown
     || hasAttachment(event)
@@ -8861,13 +9091,31 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
   // Der Aufklapper nennt, was hinter ihm liegt - sonst faende den Stichtag
   // nur, wer schon weiss, dass es ihn gibt (#647). Aus denselben Beschriftungen
   // wie die Felder, damit Liste und Inhalt nicht auseinanderlaufen.
-  const advancedTopics = eventAdvancedTopics({ visibilityOffered, attachment: Boolean(attachmentHtml) });
+  const advancedTopics = eventAdvancedTopics({
+    visibilityOffered, attachment: Boolean(attachmentHtml), localCalendar: localCalendarOffered,
+  });
 
-  // DIE BESCHREIBUNG STEHT HINTER DEM AUFKLAPPER (R19, Critique 2026-10-16:
-  // der Dialog war mobil 1,6 Bildschirme lang). Notizen sind am Termin das
-  // Seltenste der sichtbaren Felder - Apple Kalender stellt sie ans Ende. Ein
-  // Termin MIT Beschreibung oeffnet den Aufklapper (advancedFieldsOpen).
+  // HINTER „WIĘCEJ" in der Folge des Entwurfs: Wiederholung, Kalender,
+  // Beschreibung, dann was wenige Termine brauchen - Sichtbarkeit, Stichtag,
+  // Icon, Sync-Ziel, Anhang.
   const advancedFieldsHtml = `
+    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, {
+      allowCount: true,
+      expandsFromStart: true,
+      // Kanonischer Datums-Key aus dem Kalenderzustand. Das Widget formatiert
+      // ihn nur; es kennt weder die Zeit- noch die Ganztags-Feldnamen.
+      startDate,
+      // Ein UNTIL mit Uhrzeit endet am Ortstag der Serie, so wie der Server es
+      // liest (#1974) - dafuer braucht das Formular ihre Zone und ihren Start.
+      seriesZone: isEdit ? event.tzid : null,
+      seriesStart: isEdit ? event.start_datetime : null,
+    })}
+
+    ${localCalendarOffered ? `<div class="form-group">
+      <label class="form-label" for="event-local-calendar">${t('calendar.localCalendarLabel')}</label>
+      <select class="form-input" id="event-local-calendar"></select>
+    </div>` : ''}
+
     <div class="form-group">
       <label class="form-label" for="modal-description">${t('calendar.descriptionLabel')}</label>
       <textarea class="form-input" id="modal-description" rows="2"
@@ -8895,11 +9143,9 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     </div>
 
     <!-- #647: der Schalter, den @Kyrodan beschrieben hat - „einen Termin als
-         Countdown markieren" statt eines zweiten Systems daneben. Er steht
-         seit der Critique 2026-09-24 hier und nicht mehr im Hauptbereich: der
+         Countdown markieren" statt eines zweiten Systems daneben. Der
          Aufklapper nennt ihn in seiner Zeile (eventAdvancedTopics), damit er
-         trotzdem gefunden wird, ohne dass jeder Termin ihn vor Wiederholung
-         und Erinnerung vorgelegt bekommt. -->
+         gefunden wird, ohne dass jeder Termin ihn vorgelegt bekommt. -->
     <div class="form-group">
       <label class="toggle">
         <input type="checkbox" id="modal-countdown" aria-describedby="modal-countdown-hint"
@@ -8937,64 +9183,92 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 
     ${attachmentHtml}`;
 
-  // Von und Bis sind je EINE Zeile: Datum und Uhrzeit nebeneinander unter
-  // einer Beschriftung. Vorher trug jedes der vier Felder ein eigenes Label
-  // (Startdatum, Startzeit, Enddatum, Endzeit), und mobil stand jedes auf
-  // einer eigenen Zeile - vier Zeilen fuer zwei Zeitpunkte. Das Datumsfeld
-  // heisst wie seine Zeile („Von"), damit der sichtbare Name im zugaenglichen
-  // steckt; das Zeitfeld bringt seinen eigenen Namen mit (`label`).
+  // KIEDY: die Zeile nennt Tag und Stunden; aufgeklappt stehen die
+  // Tageswahl, Von und Bis (je eine Zeile: Datum und Uhrzeit nebeneinander
+  // unter einer Beschriftung) und der Ganztags-Schalter. Das Datumsfeld heisst
+  // wie seine Zeile („Von"), damit der sichtbare Name im zugaenglichen steckt;
+  // das Zeitfeld bringt seinen eigenen Namen mit (`label`).
+  const dayPick = eventDayPickOf(startDate);
+  const dayPills = Object.entries(EVENT_DAY_PICKS).map(([key, label]) => `
+            <button type="button" class="task-sheet__pill" data-day-pick="${key}" aria-pressed="${dayPick === key}">${t(label)}</button>`).join('');
+  const whenHtml = sheetSectionHtml('when', {
+    open: true,
+    labelledBy: 'event-when-heading',
+    idPrefix: 'event',
+    row: eventWhenRowText({ allDay, startDate, startTime, endDate, endTime }),
+    rowOptions: { ...EVENT_ROW_OPTIONS, removable: false },
+  }, `${sheetSectionHead('when', `<span class="task-sheet__section-title" id="event-when-heading">${t('calendar.whenLabel')}</span>`, { removable: false })}
+          <div class="task-sheet__pills">${dayPills}
+          </div>
+          <div class="cal-when" id="time-fields">
+            <label class="form-label cal-when__label" for="modal-start-date">${t('calendar.fromLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-start-date" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
+            <yuvomi-datepicker type="time" id="modal-start-time" value="${esc(formatTimeInput(startTime))}" label="${esc(t('calendar.startTimeLabel'))}"></yuvomi-datepicker>
+            <label class="form-label cal-when__label" for="modal-end-date">${t('calendar.toLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-end-date" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
+            <yuvomi-datepicker type="time" id="modal-end-time" value="${esc(formatTimeInput(endTime))}" label="${esc(t('calendar.endTimeLabel'))}"></yuvomi-datepicker>
+          </div>
+          <div class="cal-when cal-when--dates" id="allday-fields" style="display:none;">
+            <label class="form-label cal-when__label" for="modal-allday-start">${t('calendar.fromLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-allday-start" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
+            <label class="form-label cal-when__label" for="modal-allday-end">${t('calendar.toLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
+          </div>
+          <div class="form-group">
+            <label class="toggle">
+              <input type="checkbox" id="modal-allday" ${allDay ? 'checked' : ''}>
+              <span class="toggle__track"></span>
+              <span>${t('calendar.allDayToggle')}</span>
+            </label>
+          </div>`);
+
+  const whereHtml = sheetSectionHtml('where', {
+    open: Boolean(location),
+    labelledBy: 'event-where-heading',
+    idPrefix: 'event',
+    row: location,
+    rowOptions: EVENT_ROW_OPTIONS,
+  }, `${sheetSectionHead('where', `<label class="task-sheet__section-title" id="event-where-heading" for="modal-location">${t('calendar.whereLabel')}</label>`)}
+          <input type="text" class="form-input" id="modal-location"
+                 placeholder="${t('calendar.locationPlaceholder')}" value="${esc(location)}">`);
+
+  const defaultOffsets = isEdit ? [] : state.defaultReminders;
+  const reminderRows = calendarReminderRows(reminder, event, defaultOffsets);
+  const reminderOn = reminderRows.length > 0;
+  const reminderHtml = sheetSectionHtml('reminder', {
+    open: reminderOn,
+    labelledBy: 'event-reminder-heading',
+    idPrefix: 'event',
+    row: reminderOn ? eventReminderRowText(event, reminder, reminderRows) : '',
+    rowOptions: EVENT_ROW_OPTIONS,
+  }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="event-reminder-heading">${t('reminders.sectionTitle')}</span>`)}
+          ${renderCalendarReminderSection(reminder, event, defaultOffsets)}`);
+
   return `
-    <div class="cal-event-form">
+    <div class="cal-event-form task-sheet">
     <div class="form-group">
-      <label class="form-label" for="modal-title">${t('calendar.titleLabel')}${REQUIRED_MARK}</label>
-      <input type="text" class="form-input" id="modal-title" required
-             placeholder="${t('calendar.titlePlaceholder')}" value="${esc(isEdit ? event.title : '')}">
+      ${titleFieldHtml({
+    id: 'modal-title',
+    name: 'title',
+    value: isEdit ? (event.title ?? '') : '',
+    placeholder: t('calendar.titlePlaceholder'),
+    labelKey: 'calendar.titleLabel',
+    // Task 11 verdrahtet das Mikrofon (ein Satz fuellt dieses Blatt).
+    mic: isEdit ? null : { labelKey: 'tasks.sayIt' },
+  })}
     </div>
 
-    ${state.localCalendars.length > 1 && (!isEdit || event.local_calendar_id) ? `<div class="form-group">
-      <label class="form-label" for="event-local-calendar">${t('calendar.localCalendarLabel')}</label>
-      <select class="form-input" id="event-local-calendar"></select>
-    </div>` : ''}
-
-    <div class="form-group">
-      <label class="toggle">
-        <input type="checkbox" id="modal-allday" ${isEdit && event.all_day ? 'checked' : ''}>
-        <span class="toggle__track"></span>
-        <span>${t('calendar.allDayToggle')}</span>
-      </label>
+    <div class="form-group task-sheet__who">
+      ${renderUserMultiSelect(withChosenPeople(state.users, isEdit ? event.assigned_users : []), selectedUserIds, 'cal_assigned', 'tasks.whoLabel')}
     </div>
+${whenHtml}
+${whereHtml}
+${reminderHtml}
 
-    <div class="cal-when" id="time-fields">
-      <label class="form-label cal-when__label" for="modal-start-date">${t('calendar.fromLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-start-date" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
-      <yuvomi-datepicker type="time" id="modal-start-time" value="${esc(formatTimeInput(startTime))}" label="${esc(t('calendar.startTimeLabel'))}"></yuvomi-datepicker>
-      <label class="form-label cal-when__label" for="modal-end-date">${t('calendar.toLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-end-date" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
-      <yuvomi-datepicker type="time" id="modal-end-time" value="${esc(formatTimeInput(endTime))}" label="${esc(t('calendar.endTimeLabel'))}"></yuvomi-datepicker>
+    <div class="task-sheet__reveals">
+      ${revealButtonHtml('where', 'calendar.whereLabel', Boolean(location), EVENT_ROW_OPTIONS.icons)}
+      ${revealButtonHtml('reminder', 'reminders.sectionTitle', reminderOn, EVENT_ROW_OPTIONS.icons)}
     </div>
-
-    <div class="cal-when cal-when--dates" id="allday-fields" style="display:none;">
-      <label class="form-label cal-when__label" for="modal-allday-start">${t('calendar.fromLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-allday-start" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
-      <label class="form-label cal-when__label" for="modal-allday-end">${t('calendar.toLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
-    </div>
-
-    <div class="form-group">
-      ${renderUserMultiSelect(withChosenPeople(state.users, isEdit ? event.assigned_users : []), selectedUserIds, 'cal_assigned', 'calendar.assignedLabel')}
-    </div>
-
-    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, {
-      allowCount: true,
-      expandsFromStart: true,
-      // Kanonischer Datums-Key aus dem Kalenderzustand. Das Widget formatiert
-      // ihn nur; es kennt weder die Zeit- noch die Ganztags-Feldnamen.
-      startDate,
-      // Ein UNTIL mit Uhrzeit endet am Ortstag der Serie, so wie der Server es
-      // liest (#1974) - dafuer braucht das Formular ihre Zone und ihren Start.
-      seriesZone: isEdit ? event.tzid : null,
-      seriesStart: isEdit ? event.start_datetime : null,
-    })}
 
     ${isEdit && requiresWholeSeriesConfirmation(event) ? `
       <p class="form-hint field-hint--warn" id="modal-whole-series-only" role="status">
@@ -9002,26 +9276,19 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
         <span>${t('calendar.wholeSeriesOnlyNotice')}</span>
       </p>` : ''}
 
-    ${renderCalendarReminderSection(reminder, event, isEdit ? [] : state.defaultReminders)}
-
-    <div class="form-group">
-      <label class="form-label" for="modal-location">${t('calendar.locationLabel')}</label>
-      <input type="text" class="form-input" id="modal-location"
-             placeholder="${t('calendar.locationPlaceholder')}" value="${esc(isEdit && event.location ? event.location : '')}">
+    ${advancedSection(advancedFieldsHtml, { label: t('tasks.more'), open: advancedFieldsOpen, hint: advancedTopics })}
     </div>
 
-    ${advancedSection(advancedFieldsHtml, { open: advancedFieldsOpen, hint: advancedTopics })}
-    </div>
-
+    ${isEdit ? `
     <div class="modal-panel__footer modal-panel__footer--plain">
-      ${isEdit ? `<button class="btn btn--danger-outline" id="modal-delete">
+      <button type="button" class="btn btn--danger-outline" id="modal-delete">
         <i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>${t('common.delete')}
-      </button>` : '<div></div>'}
-      <div style="display:flex;gap:var(--space-3)">
-        <button type="button" class="btn btn--secondary" id="modal-cancel">${t('common.cancel')}</button>
-        <button class="btn btn--primary" id="modal-save">${isEdit ? t('common.save') : t('common.add')}</button>
-      </div>
-    </div>`;
+      </button>
+      <button type="button" class="btn btn--primary" id="modal-save">${eventSaveLabel(mode)}</button>
+    </div>` : `
+    <div class="modal-panel__footer modal-panel__footer--plain">
+      <button type="button" class="btn btn--primary task-sheet__submit" id="modal-save">${eventSaveLabel(mode)}</button>
+    </div>`}`;
 }
 
 function confirmCalendarOverrideOrphans(count) {
@@ -9163,6 +9430,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   if (datesValid && seriesEndConflict(mode, event, getRRuleValues(overlay, 'event').recurrence_rule, start_datetime)) {
     fieldErrors.push([overlay.querySelector('#event-rrule-until'), t('calendar.recurrenceEndBeforeStart')]);
   }
+  for (const [field] of fieldErrors) revealEventField(field);
   if (reportFieldErrors(fieldErrors)) return;
 
   if (mode === 'edit'
@@ -9198,9 +9466,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   try {
     const rrule = getRRuleValues(overlay, 'event');
     if (!rrule.valid_until) {
+      revealEventField(overlay.querySelector('#event-rrule-until'));
       reportFieldError(overlay.querySelector('#event-rrule-until'), t('calendar.invalidDate'));
       saveBtn.disabled    = false;
-      saveBtn.textContent = mode === 'edit' ? t('common.save') : t('common.add');
+      saveBtn.textContent = eventSaveLabel(mode);
       return;
     }
     const attachmentFile = overlay.querySelector('#modal-attachment')?.files?.[0];
@@ -9321,6 +9590,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
             && !reminderRowsUnchanged(reminderForm, reminderList(existingReminder)
               .map((rem) => reminderRowFromReminder(event, rem)))) {
           const blocked = reminderForm.rows.find(keepsStoredInstant);
+          revealEventField(blocked?.select);
           reportFieldError(blocked?.select, t('reminders.afterStartNeedsLeadTime'));
           saveBtn.disabled = false;
           saveBtn.textContent = t('common.save');
@@ -9426,7 +9696,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     // und der Button reaktiviert - die Eingaben des Nutzers bleiben erhalten.
     window.yuvomi?.showToast(calendarSaveErrorMessage(err), 'danger');
     saveBtn.disabled    = false;
-    saveBtn.textContent = mode === 'edit' ? t('common.save') : t('common.add');
+    saveBtn.textContent = eventSaveLabel(mode);
   }
 }
 

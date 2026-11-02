@@ -926,6 +926,10 @@
         "newEvent": "Нова подія",
         "editEvent": "Редагувати подію",
         "addEvent": "Додати подію",
+        "whenLabel": "Коли",
+        "whereLabel": "Де",
+        "removeLocation": "Видалити місце",
+        "whenAllDay": "весь день",
         "deleteEvent": "Видалити подію",
         "noEvents": "Немає подій у вибраному періоді.",
         "today": "Сьогодні",
@@ -3509,7 +3513,6 @@
     },
     "reminders": {
         "sectionTitle": "Нагадування",
-        "enableLabel": "Встановити нагадування",
         "addReminder": "Додати нагадування",
         "removeReminder": "Видалити нагадування",
         "dateLabel": "Дата",

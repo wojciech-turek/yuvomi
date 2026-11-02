@@ -844,6 +844,10 @@
         "newEvent": "Új esemény",
         "editEvent": "Esemény szerkesztése",
         "addEvent": "Esemény hozzáadása",
+        "whenLabel": "Mikor",
+        "whereLabel": "Hol",
+        "removeLocation": "Helyszín eltávolítása",
+        "whenAllDay": "egész nap",
         "deleteEvent": "Esemény törlése",
         "noEvents": "Nincs esemény a kiválasztott időszakban.",
         "today": "Ma",
@@ -3349,7 +3353,6 @@
     },
     "reminders": {
         "sectionTitle": "Emlékeztetők",
-        "enableLabel": "Emlékeztető beállítása",
         "addReminder": "Emlékeztető hozzáadása",
         "removeReminder": "Emlékeztető eltávolítása",
         "dateLabel": "Dátum",

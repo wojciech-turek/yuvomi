@@ -973,6 +973,10 @@
         "newEvent": "حدث جديد",
         "editEvent": "تعديل الحدث",
         "addEvent": "إضافة حدث",
+        "whenLabel": "متى",
+        "whereLabel": "أين",
+        "removeLocation": "إزالة الموقع",
+        "whenAllDay": "طوال اليوم",
         "deleteEvent": "حذف الحدث",
         "noEvents": "لا توجد أحداث في الفترة المحددة.",
         "today": "اليوم",
@@ -3782,7 +3786,6 @@
     },
     "reminders": {
         "sectionTitle": "تذكير",
-        "enableLabel": "تعيين تذكير",
         "addReminder": "إضافة تذكير",
         "removeReminder": "إزالة التذكير",
         "offsetLabel": "تذكير",

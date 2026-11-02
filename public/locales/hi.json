@@ -844,6 +844,10 @@
         "newEvent": "नया कार्यक्रम",
         "editEvent": "कार्यक्रम संपादित करें",
         "addEvent": "कार्यक्रम जोड़ें",
+        "whenLabel": "कब",
+        "whereLabel": "कहाँ",
+        "removeLocation": "स्थान हटाएँ",
+        "whenAllDay": "पूरा दिन",
         "deleteEvent": "कार्यक्रम हटाएं",
         "noEvents": "चुनी गई अवधि में कोई कार्यक्रम नहीं।",
         "today": "आज",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "अनुस्मारक",
-        "enableLabel": "अनुस्मारक सेट करें",
         "addReminder": "अनुस्मारक जोड़ें",
         "removeReminder": "अनुस्मारक हटाएँ",
         "offsetLabel": "याद दिलाएं",

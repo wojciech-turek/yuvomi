@@ -860,6 +860,10 @@
         "newEvent": "Acara baru",
         "editEvent": "Ubah acara",
         "addEvent": "Tambah acara",
+        "whenLabel": "Kapan",
+        "whereLabel": "Di mana",
+        "removeLocation": "Hapus lokasi",
+        "whenAllDay": "sepanjang hari",
         "deleteEvent": "Hapus acara",
         "noEvents": "Tidak ada acara pada periode yang dipilih.",
         "today": "Hari ini",
@@ -3365,7 +3369,6 @@
     },
     "reminders": {
         "sectionTitle": "Pengingat",
-        "enableLabel": "Atur pengingat",
         "addReminder": "Tambah pengingat",
         "removeReminder": "Hapus pengingat",
         "dateLabel": "Tanggal",

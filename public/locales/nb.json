@@ -844,6 +844,10 @@
         "newEvent": "Nytt arrangement",
         "editEvent": "Rediger arrangement",
         "addEvent": "Legg til hendelse",
+        "whenLabel": "Når",
+        "whereLabel": "Hvor",
+        "removeLocation": "Fjern sted",
+        "whenAllDay": "hele dagen",
         "deleteEvent": "Slett arrangement",
         "noEvents": "Ingen arrangementer i den valgte perioden.",
         "today": "I dag",
@@ -3349,7 +3353,6 @@
     },
     "reminders": {
         "sectionTitle": "Påminnelse",
-        "enableLabel": "Sett påminnelse",
         "addReminder": "Legg til påminnelse",
         "removeReminder": "Fjern påminnelse",
         "dateLabel": "Dato",

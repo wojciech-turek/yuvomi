@@ -860,6 +860,10 @@
         "newEvent": "새 일정",
         "editEvent": "일정 편집",
         "addEvent": "일정 추가",
+        "whenLabel": "언제",
+        "whereLabel": "장소",
+        "removeLocation": "장소 삭제",
+        "whenAllDay": "종일",
         "deleteEvent": "일정 삭제",
         "noEvents": "선택한 기간에 일정이 없습니다.",
         "today": "오늘",
@@ -3365,7 +3369,6 @@
     },
     "reminders": {
         "sectionTitle": "알림",
-        "enableLabel": "알림 설정",
         "addReminder": "알림 추가",
         "removeReminder": "알림 제거",
         "dateLabel": "날짜",

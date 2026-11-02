@@ -844,6 +844,10 @@
         "newEvent": "Sự kiện mới",
         "editEvent": "Sửa sự kiện",
         "addEvent": "Thêm sự kiện",
+        "whenLabel": "Khi nào",
+        "whereLabel": "Ở đâu",
+        "removeLocation": "Xóa địa điểm",
+        "whenAllDay": "cả ngày",
         "deleteEvent": "Xóa sự kiện",
         "noEvents": "Không có sự kiện trong khoảng thời gian đã chọn.",
         "today": "Hôm nay",
@@ -3349,7 +3353,6 @@
     },
     "reminders": {
         "sectionTitle": "Nhắc nhở",
-        "enableLabel": "Đặt nhắc nhở",
         "addReminder": "Thêm nhắc nhở",
         "removeReminder": "Xóa nhắc nhở",
         "dateLabel": "Ngày",

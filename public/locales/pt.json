@@ -844,6 +844,10 @@
         "newEvent": "Novo evento",
         "editEvent": "Editar evento",
         "addEvent": "Adicionar evento",
+        "whenLabel": "Quando",
+        "whereLabel": "Onde",
+        "removeLocation": "Remover local",
+        "whenAllDay": "todo o dia",
         "deleteEvent": "Excluir evento",
         "noEvents": "Nenhum evento no período selecionado.",
         "today": "Hoje",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Lembrete",
-        "enableLabel": "Definir lembrete",
         "addReminder": "Adicionar lembrete",
         "removeReminder": "Remover lembrete",
         "offsetLabel": "Lembrar",

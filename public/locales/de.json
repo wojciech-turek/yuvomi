@@ -860,6 +860,10 @@
         "newEvent": "Neuer Termin",
         "editEvent": "Termin bearbeiten",
         "addEvent": "Termin hinzufügen",
+        "whenLabel": "Wann",
+        "whereLabel": "Wo",
+        "removeLocation": "Ort entfernen",
+        "whenAllDay": "ganztägig",
         "deleteEvent": "Termin löschen",
         "noEvents": "Keine Termine im gewählten Zeitraum.",
         "today": "Heute",
@@ -3365,7 +3369,6 @@
     },
     "reminders": {
         "sectionTitle": "Erinnerung",
-        "enableLabel": "Erinnerung setzen",
         "addReminder": "Erinnerung hinzufügen",
         "removeReminder": "Erinnerung entfernen",
         "dateLabel": "Datum",

@@ -52,10 +52,11 @@ export function longestLabel(labels) {
 /**
  * Die kompakte Zeile eines Abschnitts: Zeichen, Name, Wert, x.
  * `icons`, `labels`, `removeLabels` sind je Abschnittsname das Lucide-Zeichen
- * und die Schluessel fuer Name und x-Beschriftung.
+ * und die Schluessel fuer Name und x-Beschriftung. `removable: false` laesst
+ * das x weg - fuer einen Wert, den es immer gibt (das "Kiedy" eines Termins).
  */
 export function sheetRowHtml(name, value, {
-  icons = SHEET_ICONS, labels = {}, removeLabels = {}, idPrefix = 'task',
+  icons = SHEET_ICONS, labels = {}, removeLabels = {}, idPrefix = 'task', removable = true,
 } = {}) {
   return `
         <div class="task-sheet__row" data-row="${name}">
@@ -63,10 +64,10 @@ export function sheetRowHtml(name, value, {
             <i data-lucide="${icons[name]}" class="icon-md" aria-hidden="true"></i>
             <span data-fit="${esc(longestLabel(labels))}" class="task-sheet__row-label">${t(labels[name])}</span>
             <span class="task-sheet__row-value">${esc(value)}</span>
-          </button>
+          </button>${removable ? `
           <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(removeLabels[name]))}">
             <i data-lucide="x" class="icon-md" aria-hidden="true"></i>
-          </button>
+          </button>` : ''}
         </div>`;
 }
 

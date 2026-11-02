@@ -844,6 +844,10 @@
         "newEvent": "新しい予定",
         "editEvent": "予定を編集",
         "addEvent": "予定を追加",
+        "whenLabel": "日時",
+        "whereLabel": "場所",
+        "removeLocation": "場所を削除",
+        "whenAllDay": "終日",
         "deleteEvent": "予定を削除",
         "noEvents": "選択した期間に予定はありません。",
         "today": "今日",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "リマインダー",
-        "enableLabel": "リマインダーを設定",
         "addReminder": "リマインダーを追加",
         "removeReminder": "リマインダーを削除",
         "offsetLabel": "リマインド",

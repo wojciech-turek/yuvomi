@@ -844,6 +844,10 @@
         "newEvent": "Ny händelse",
         "editEvent": "Redigera händelse",
         "addEvent": "Lägg till händelse",
+        "whenLabel": "När",
+        "whereLabel": "Var",
+        "removeLocation": "Ta bort plats",
+        "whenAllDay": "heldag",
         "deleteEvent": "Ta bort händelse",
         "noEvents": "Inga händelser under den valda perioden.",
         "today": "I dag",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Påminnelse",
-        "enableLabel": "Ange påminnelse",
         "addReminder": "Lägg till påminnelse",
         "removeReminder": "Ta bort påminnelse",
         "offsetLabel": "Påminn",

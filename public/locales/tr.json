@@ -844,6 +844,10 @@
         "newEvent": "Yeni Etkinlik",
         "editEvent": "Etkinliği Düzenle",
         "addEvent": "Etkinlik ekle",
+        "whenLabel": "Ne zaman",
+        "whereLabel": "Nerede",
+        "removeLocation": "Konumu kaldır",
+        "whenAllDay": "tüm gün",
         "deleteEvent": "Etkinliği sil",
         "noEvents": "Seçilen dönemde etkinlik yok.",
         "today": "Bugün",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Hatırlatıcı",
-        "enableLabel": "Hatırlatıcı ayarla",
         "addReminder": "Hatırlatıcı ekle",
         "removeReminder": "Hatırlatıcıyı kaldır",
         "offsetLabel": "Hatırlat",

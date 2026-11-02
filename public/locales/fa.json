@@ -860,6 +860,10 @@
         "newEvent": "رویداد جدید",
         "editEvent": "ویرایش رویداد",
         "addEvent": "افزودن رویداد",
+        "whenLabel": "چه زمانی",
+        "whereLabel": "کجا",
+        "removeLocation": "حذف مکان",
+        "whenAllDay": "تمام روز",
         "deleteEvent": "حذف رویداد",
         "noEvents": "در بازه انتخاب‌شده رویدادی نیست.",
         "today": "امروز",
@@ -3365,7 +3369,6 @@
     },
     "reminders": {
         "sectionTitle": "یادآور",
-        "enableLabel": "تنظیم یادآور",
         "addReminder": "افزودن یادآوری",
         "removeReminder": "حذف یادآوری",
         "dateLabel": "تاریخ",

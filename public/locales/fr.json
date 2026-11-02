@@ -844,6 +844,10 @@
         "newEvent": "Nouvel événement",
         "editEvent": "Modifier l'événement",
         "addEvent": "Ajouter un événement",
+        "whenLabel": "Quand",
+        "whereLabel": "Où",
+        "removeLocation": "Retirer le lieu",
+        "whenAllDay": "toute la journée",
         "deleteEvent": "Supprimer l'événement",
         "noEvents": "Aucun événement dans la période sélectionnée.",
         "today": "Aujourd'hui",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Rappel",
-        "enableLabel": "Définir un rappel",
         "addReminder": "Ajouter un rappel",
         "removeReminder": "Supprimer le rappel",
         "offsetLabel": "Rappeler",

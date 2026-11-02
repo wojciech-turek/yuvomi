@@ -844,6 +844,10 @@
         "newEvent": "Νέα εκδήλωση",
         "editEvent": "Επεξεργασία εκδήλωσης",
         "addEvent": "Προσθήκη εκδήλωσης",
+        "whenLabel": "Πότε",
+        "whereLabel": "Πού",
+        "removeLocation": "Αφαίρεση τοποθεσίας",
+        "whenAllDay": "ολοήμερο",
         "deleteEvent": "Διαγραφή εκδήλωσης",
         "noEvents": "Δεν υπάρχουν εκδηλώσεις στην επιλεγμένη περίοδο.",
         "today": "Σήμερα",
@@ -3526,7 +3530,6 @@
     },
     "reminders": {
         "sectionTitle": "Υπενθύμιση",
-        "enableLabel": "Ορισμός υπενθύμισης",
         "addReminder": "Προσθήκη υπενθύμισης",
         "removeReminder": "Αφαίρεση υπενθύμισης",
         "offsetLabel": "Υπενθύμιση",

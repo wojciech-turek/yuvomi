@@ -891,6 +891,10 @@
         "newEvent": "Nová událost",
         "editEvent": "Upravit událost",
         "addEvent": "Přidat událost",
+        "whenLabel": "Kdy",
+        "whereLabel": "Kde",
+        "removeLocation": "Odebrat místo",
+        "whenAllDay": "celý den",
         "deleteEvent": "Smazat událost",
         "noEvents": "V vybraném období nejsou žádné události.",
         "today": "Dnes",
@@ -4130,7 +4134,6 @@
     },
     "reminders": {
         "sectionTitle": "Připomínka",
-        "enableLabel": "Nastavit připomínku",
         "addReminder": "Přidat připomenutí",
         "removeReminder": "Odebrat připomenutí",
         "dateLabel": "Datum",

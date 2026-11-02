@@ -240,7 +240,6 @@ function openForm(event, { syncTargets = null, attachment = false } = {}) {
   const fields = add('div', 'modal-reminder-fields');
   add('div', 'modal-reminder-rows', {}, fields);
 
-  add('button', 'modal-cancel');
   add('button', 'modal-save');
 
   globalThis.__apiStub = syncTargets

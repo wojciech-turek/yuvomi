@@ -4538,15 +4538,18 @@ const EDIT_BASE = {
   visibility: 'all', created_by: 1,
 };
 
-test('Termin-Dialog: die Felder stehen nach Haeufigkeit, Seltenes hinter „Weitere Einstellungen"', () => {
-  const { html, advanced } = renderEventDialog();
-  assert(advanced, 'der Dialog baut „Weitere Einstellungen" nicht mehr ueber advancedSection()');
-  // Titel, Wann, Wer, Wiederholung, Erinnerung, Ort - dann der Aufklapper.
-  // R19 (Critique 2026-10-16, mobil 1,6 Bildschirme): die Beschreibung steht
-  // seither als erstes Feld HINTER dem Aufklapper, wie die Notizen in Apple
-  // Kalender am Ende.
-  const main = ['id="modal-title"', 'id="modal-allday"', 'id="modal-start-date"', 'data-ms-name="cal_assigned"',
-    'id="modal-reminder-toggle"', 'id="modal-location"',
+test('Termin-Dialog: das Blatt im geteilten Aufbau - Titel, Personen, Kiedy/Gdzie/Przypomnienie, der Rest hinter „Więcej"', () => {
+  // One Today (Task 10): das Termin-Blatt steht wie das Aufgabenblatt da. Die
+  // kompakten Zeilen tragen, was jeder Termin braucht; Wiederholung, Kalender
+  // und Beschreibung stehen seither mit dem Selteneren hinter „Więcej". Die
+  // Wiederholung rendert der Loader als Stub - hier mit erkennbarem Markup.
+  globalThis.__renderRRuleFields = (prefix) => `<select id="${prefix}-rrule-freq"></select>`;
+  let dialog;
+  try { dialog = renderEventDialog(); } finally { delete globalThis.__renderRRuleFields; }
+  const { html, advanced } = dialog;
+  assert(advanced, 'der Dialog baut „Więcej" nicht mehr ueber advancedSection()');
+  const main = ['id="modal-title"', 'data-ms-name="cal_assigned"', 'data-row="when"', 'id="modal-start-date"', 'id="modal-allday"',
+    'data-row="where"', 'id="modal-location"', 'data-row="reminder"', 'id="modal-reminder-toggle"',
     '<details class="form-advanced"'];
   const at = main.map((m) => html.indexOf(m));
   assert(at.every((i) => i >= 0), `nicht gerendert: ${main.filter((_, i) => at[i] < 0).join(', ')}`);
@@ -4555,27 +4558,21 @@ test('Termin-Dialog: die Felder stehen nach Haeufigkeit, Seltenes hinter „Weit
   for (const m of main.slice(0, -1)) {
     assert(!advanced.inner.includes(m), `${m} steht hinter dem Aufklapper - es gehoert in den Hauptteil`);
   }
-  // Die Wiederholung rendert der Loader als Stub (''), ihre Stelle steht im
-  // Aufruf: zwischen der Personenwahl und der Erinnerung, ausserhalb des
-  // Aufklappers.
-  const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
-  const body = src.slice(src.indexOf('function buildEventModalContent('), src.indexOf('\nfunction confirmCalendarOverrideOrphans('));
-  const ret = body.slice(body.indexOf('return `'));
-  const [who, rrule, remind] = ["renderUserMultiSelect(", "renderRRuleFields('event'", 'renderCalendarReminderSection('].map((m) => ret.indexOf(m));
-  assert(who > 0 && who < rrule && rrule < remind, `Wiederholung steht nicht zwischen Wer und Erinnerung (${who}/${rrule}/${remind})`);
-  // Beschreibung, Sichtbarkeit, Stichtag, Icon, Sync-Ziel, Anhang - in dieser Folge.
-  const rare = ['id="modal-description"', 'id="modal-visibility"', 'id="modal-countdown"', 'id="modal-icon-trigger"',
+  // Wiederholung, Beschreibung, Sichtbarkeit, Stichtag, Icon, Sync-Ziel, Anhang - in dieser Folge.
+  const rare = ['id="event-rrule-freq"', 'id="modal-description"', 'id="modal-visibility"', 'id="modal-countdown"', 'id="modal-icon-trigger"',
     'id="event-sync-target"', 'id="modal-attachment"'];
   const inner = rare.map((m) => advanced.inner.indexOf(m));
   assert(inner.every((i) => i >= 0), `nicht hinter dem Aufklapper: ${rare.filter((_, i) => inner[i] < 0).join(', ')}`);
   assert(inner.every((i, k) => k === 0 || inner[k - 1] < i), 'die seltenen Felder stehen in anderer Folge');
-  // Der Aufklapper nennt, was hinter ihm liegt - aus den Beschriftungen der Felder.
+  // Der Aufklapper heisst „Więcej" und nennt, was hinter ihm liegt - aus den Beschriftungen der Felder.
+  assert(advanced.opts?.label === 'tasks.more', `der Aufklapper heisst nicht „Więcej": ${JSON.stringify(advanced.opts)}`);
   assert(advanced.opts?.hint === calendarHelpers.eventAdvancedTopics({ visibilityOffered: true, attachment: true }),
     `der Aufklapper nennt seinen Inhalt nicht: ${JSON.stringify(advanced.opts)}`);
   for (const key of ['calendar.descriptionLabel', 'common.visibility.label', 'calendar.iconLabel', 'calendar.syncTargetLabel', 'calendar.attachmentLabel']) {
     assert(advanced.inner.includes(key), `${key} steht in der Zeile des Aufklappers, aber kein Feld dahinter traegt es`);
   }
-  assert(advanced.opts.open === false, 'ein neuer Termin oeffnet „Weitere Einstellungen"');
+  assert(advanced.opts.hint.includes('rrule.labelRepeat'), 'die Wiederholung steht hinter „Więcej" - die Zeile nennt sie');
+  assert(advanced.opts.open === false, 'ein neuer Termin oeffnet „Więcej"');
 });
 
 test('One Today: der Termin-Dialog hat keine Farbwahl - neu und beim Bearbeiten', () => {

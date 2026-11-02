@@ -942,6 +942,10 @@
         "newEvent": "Nowe wydarzenie",
         "editEvent": "Edytuj wydarzenie",
         "addEvent": "Dodaj wydarzenie",
+        "whenLabel": "Kiedy",
+        "whereLabel": "Gdzie",
+        "removeLocation": "Usuń miejsce",
+        "whenAllDay": "cały dzień",
         "deleteEvent": "Usuń wydarzenie",
         "noEvents": "Brak wydarzeń w wybranym okresie.",
         "today": "Dziś",
@@ -3525,7 +3529,6 @@
     },
     "reminders": {
         "sectionTitle": "Przypomnienie",
-        "enableLabel": "Ustaw przypomnienie",
         "addReminder": "Dodaj przypomnienie",
         "removeReminder": "Usuń przypomnienie",
         "dateLabel": "Data",

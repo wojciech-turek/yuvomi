@@ -273,7 +273,6 @@ function openDialog({
   field('modal-allday-end', end.slice(0, 10));
   field('modal-location');
   field('modal-description');
-  field('modal-cancel', '', 'button');
   field('modal-save', '', 'button');
 
   const toggle = field('modal-reminder-toggle');

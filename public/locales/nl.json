@@ -844,6 +844,10 @@
         "newEvent": "Nieuw evenement",
         "editEvent": "Evenement bewerken",
         "addEvent": "Evenement toevoegen",
+        "whenLabel": "Wanneer",
+        "whereLabel": "Waar",
+        "removeLocation": "Locatie verwijderen",
+        "whenAllDay": "hele dag",
         "deleteEvent": "Evenement verwijderen",
         "noEvents": "Geen evenementen in de geselecteerde periode.",
         "today": "Vandaag",
@@ -3349,7 +3353,6 @@
     },
     "reminders": {
         "sectionTitle": "Herinnering",
-        "enableLabel": "Herinnering instellen",
         "addReminder": "Herinnering toevoegen",
         "removeReminder": "Herinnering verwijderen",
         "dateLabel": "Datum",
