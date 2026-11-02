@@ -554,6 +554,7 @@ test('the title mic opens the listening sheet at once; the heard items join the 
     mic.listeners.click[0]({ preventDefault() {} });
     assert.equal(asked.length, 1);
     assert.equal(s.opened.length, before + 1, 'the listening sheet is opened synchronously in the tap');
+    assert.equal(s.opened[before].title, 'quickAdd.title', 'neutral words: the sheet hears items, not a task');
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
     await new Promise((r) => setTimeout(r, 20));
     const next = s.opened.at(-1);

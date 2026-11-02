@@ -271,7 +271,7 @@
         "wallScreensaverStart": "Bildschirmschoner",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Milch und Brot kaufen · Leos Training Donnerstag um 17",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Überspringen",
         "step2BodyDesktop": "Die Seitenleiste links führt direkt zu den wichtigsten Bereichen. Alle weiteren Module findest du unter „Mehr“.",
         "stepProgress": "Schritt {{current}} von {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - Verbindung wird wiederhergestellt…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "vom Server",
         "keyRemove": "Schlüssel entfernen",
         "capChange": "Limit ändern",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Diktat"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Sag es",
+        "listening": "Ich höre zu… sag, was dazukommt",
+        "textLabel": "Was dazukommt, in einem Satz",
+        "noAccess": "Das kannst du hier nicht hinzufügen."
     }
 }

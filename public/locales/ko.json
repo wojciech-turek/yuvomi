@@ -271,7 +271,7 @@
         "wallScreensaverStart": "화면 보호기",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "우유와 빵 사기 · 목요일 5시 레오 훈련",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "건너뛰기",
         "step2BodyDesktop": "왼쪽 사이드바에서 가장 중요한 영역으로 바로 이동할 수 있습니다. 나머지 모듈은 ‘더보기’에 있습니다.",
         "stepProgress": "{{total}}단계 중 {{current}}단계",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "오프라인 - 연결을 복구하는 중…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "서버에서 제공",
         "keyRemove": "키 삭제",
         "capChange": "한도 변경",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "받아쓰기"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "말하기",
+        "listening": "듣고 있어요… 추가할 내용을 말하세요",
+        "textLabel": "추가할 내용 (한 문장으로)",
+        "noAccess": "여기서는 추가할 수 없습니다."
     }
 }

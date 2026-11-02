@@ -278,6 +278,9 @@ test('Quick-Add (2026-10-29): Dziś has exactly one +, fab-add, and none of the 
   for (const gone of [/fab-main/, /capture-plus/, /openCapture/, /capture-sheet/, /FAB_ACTIONS/, /function wireNewMenu/]) {
     assert.doesNotMatch(src, gone, `${gone} stays gone`);
   }
+  // One Today (Task 14): the + asks for tasks, calendar and shopping only -
+  // Meal left the menu, so meals write alone no longer brings a +.
+  assert.match(src, /const ADD_MENU_MODULES = Object\.freeze\(\['tasks', 'calendar', 'shopping'\]\);/);
   // The bottom bar still has no + (spec non-goal): the shell builds none.
   const router = readFileSync(new URL('../public/router.js', import.meta.url), 'utf8');
   assert.doesNotMatch(router, /capture-plus|createCapturePlus|nav-bottom__add|nav-sidebar__add/);

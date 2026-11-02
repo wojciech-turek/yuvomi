@@ -255,7 +255,7 @@
         "wallScreensaverStart": "屏幕保护",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "买牛奶和面包 · 周四17点 Leo 训练",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "跳过",
         "step2BodyDesktop": "左侧边栏可直接进入最重要的区域。其他模块都在“更多”中。",
         "stepProgress": "第{{current}}步，共{{total}}步",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "离线 - 正在重新连接…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "来自服务器",
         "keyRemove": "删除密钥",
         "capChange": "更改上限",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "语音输入"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "说出来",
+        "listening": "正在聆听… 说出要添加的内容",
+        "textLabel": "要添加的内容 (一句话)",
+        "noAccess": "你无法在此添加。"
     }
 }

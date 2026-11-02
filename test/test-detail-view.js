@@ -475,8 +475,9 @@ test('jeder Weg zu einer bestehenden Aufgabe führt in die Detailansicht', async
   assert.ok(modalCalls.every((m) => !/\btask\b/.test(m[0])), 'keiner mit einer Aufgabe');
   assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'der FAB ohne task');
   // Das Diktat: ein neues, gefülltes Blatt - vom Mikrofon im Titelfeld aus mit
-  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`).
-  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true \}, container\)/,
+  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`), und mit dem eben
+  // gehörten Satz (One Today, Task 14).
+  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true, heard: answer\.heard \}, container\)/,
     'das Diktat: ein neues, gefülltes Blatt');
 });
 

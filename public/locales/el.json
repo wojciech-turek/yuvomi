@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Προφύλαξη οθόνης",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Αγορά γάλακτος και ψωμιού · Προπόνηση του Λέο την Πέμπτη στις 5",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Παράλειψη",
         "step2BodyDesktop": "Η πλαϊνή στήλη αριστερά οδηγεί απευθείας στις σημαντικότερες ενότητες. Όλες τις υπόλοιπες θα τις βρεις στο «Περισσότερα».",
         "stepProgress": "Βήμα {{current}} από {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Εκτός σύνδεσης - γίνεται επανασύνδεση…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "από τον διακομιστή",
         "keyRemove": "Αφαίρεση κλειδιού",
         "capChange": "Αλλαγή ορίου",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Υπαγόρευση"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Πείτε το",
+        "listening": "Ακούω… πείτε τι να προστεθεί",
+        "textLabel": "Τι να προστεθεί, σε μία πρόταση",
+        "noAccess": "Δεν μπορείτε να το προσθέσετε εδώ."
     }
 }

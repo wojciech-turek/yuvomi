@@ -1027,7 +1027,8 @@ test('the title mic: one parse call as an event; Done replaces the sheet with a 
     sheet.querySelector('#modal-title').value = 'Trening';
     sheet.querySelector('.task-sheet__mic').click();
     const listening = opened[1];
-    assert.equal(listening?.title, 'tasks.dictation.title', 'the mic opened the listening sheet');
+    assert.equal(listening?.title, 'quickAdd.title', 'the mic opened the listening sheet - in neutral words, not "Say a task"');
+    assert.match(listening.content, /quickAdd\.textLabel/, 'the text box is named neutrally too');
     assert.match(listening.content, />Trening<\/textarea>/, 'the current title goes along');
     await say(listening, 'Trening Leo w czwartek o 17 na hali');
     assert.deepEqual(posts.map(({ path, body }) => ({ path, body })),
@@ -1119,7 +1120,7 @@ test('"Powtórz" replaces the sheet: nothing chosen is carried, and the new sent
     assert.equal(sheet.querySelector('.modal-panel__action').getAttribute('data-action'), 'dictate');
     opened[0].headerAction.onClick();
     const listening = opened[1];
-    assert.equal(listening?.title, 'tasks.dictation.title');
+    assert.equal(listening?.title, 'quickAdd.title');
     assert.match(listening.content, />Trening Leo<\/textarea>/, 'the current title goes along');
     await say(listening, 'Basen w niedzielę o 10');
     assert.equal(posts[0].body.kind, 'event');

@@ -378,8 +378,9 @@ const PAGE_MODULES = [
   // Schnellwahl des Blatts „Neue Aufgabe" - nur pages/tasks.js laedt sie.
   '/utils/task-quick-dates.js',
   // Das Diktat (Hoerblatt, Spracherkennung, Satz -> Entwurf) - ueber
-  // pages/tasks.js und ueber das Menue hinter dem + auf Dziś (add-menu.js,
-  // dort statisch, damit "Say a task" im Tipp startet).
+  // pages/tasks.js, die Mikrofone von Termin- und Einkaufsblatt und das Menue
+  // hinter dem + auf Dziś (add-menu.js, dort statisch, damit "Say it" im Tipp
+  // startet; es zieht utils/quick-draft.js mit, das den Satz routet).
   '/components/task-dictation.js',
   // Das Einkaufsblatt von Dziś - per import() aus add-menu.js.
   '/components/shopping-add-sheet.js',

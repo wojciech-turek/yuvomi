@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Skärmsläckare",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Köp mjölk och bröd · Leos träning torsdag kl. 17",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Skippa",
         "step2BodyDesktop": "Sidofältet till vänster tar dig direkt till de viktigaste områdena. Alla andra moduler hittar du under ”Mer”.",
         "stepProgress": "Steg {{current}} av {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - återansluter…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "från servern",
         "keyRemove": "Ta bort nyckeln",
         "capChange": "Ändra gränsen",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Diktering"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Säg det",
+        "listening": "Lyssnar… säg vad som ska läggas till",
+        "textLabel": "Vad som ska läggas till, i en mening",
+        "noAccess": "Du kan inte lägga till det här."
     }
 }

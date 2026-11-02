@@ -20,7 +20,6 @@ import { normalizeRecipeMealTypes, recipeSupportsMealType, recipeAllowsMealType 
 import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-state.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
-import { ensureStyleApplied } from '/utils/page-style.js';
 import { pageToolsMenuHtml, popoverMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
 import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
@@ -719,55 +718,12 @@ function mealsLayoutHtml() {
 /**
  * Alles, was der Plan und der Mahlzeit-Dialog lesen: die Woche, Listen,
  * Einstellungen, Kategorien, Rezepte, Mitglieder, Vorrat und - nach den Listen -
- * was schon auf einer steht. Eine Stelle fuer render() und openNewMealFrom().
+ * was schon auf einer steht.
  */
 async function loadMealsData(monday) {
   await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
   // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
   await loadListedNames();
-}
-
-/**
- * Der naechste Platz des Tages, der noch leer ist - nach der Uhr: ab der
- * Mahlzeit, die jetzt dran ist (`startType`), die erste ohne Mahlzeit. Der
- * Zwischensnack ist nie die Vermutung (wie mealTypeForHour); gibt es dahinter
- * nichts Freies, bleibt es bei `startType`. Ohne `startType` beginnt die Suche
- * vorn und endet beim letzten Platz.
- * @param {string[]} types sichtbare Mahlzeitarten, in Planreihenfolge
- * @param {Array<{meal_type: string}>} meals Mahlzeiten dieses Tages
- * @param {string} [startType]
- * @returns {string}
- */
-export function firstEmptyMealSlot(types, meals, startType = null) {
-  const taken = new Set((meals ?? []).map((meal) => meal.meal_type));
-  const guessable = types.filter((type) => type !== 'snack');
-  const pool = guessable.length ? guessable : types;
-  const rank = (type) => MEAL_TYPE_KEYS.indexOf(type);
-  const fromHere = pool.filter((type) => rank(type) >= rank(startType));
-  const fallback = pool.includes(startType) ? startType : (pool[pool.length - 1] ?? 'lunch');
-  return (fromHere.length ? fromHere : pool).find((type) => !taken.has(type)) ?? fallback;
-}
-
-/**
- * Das Formular „Mahlzeit hinzufuegen" von ausserhalb der Seite oeffnen
- * (Uebersicht): heute, der naechste noch leere Platz. Laedt, was der Dialog
- * liest, wie render() es tut; gezeichnet wird nichts, solange die Seite nicht
- * steht, und ihr naechstes render() holt alles frisch.
- *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
- * @returns {Promise<boolean>} false bei nur lesendem Zugriff
- */
-export async function openNewMealFrom({ user = null, onChanged = () => {} } = {}) {
-  if (readOnly()) return false;
-  const today = todayKey();
-  const [, release] = await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
-  state.userId = user?.id ?? state.userId;
-  const types = MEAL_TYPE_KEYS.filter((key) => state.visibleMealTypes.includes(key));
-  const startType = mealTypeForHour(nowFields().hour);
-  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today), startType);
-  // Das Blatt gilt nur, solange der Dialog offen ist (generische Selektoren).
-  openMealModal({ mode: 'create', date: today, mealType, onChanged, onClose: release });
-  return true;
 }
 
 export async function render(container, { user }) {

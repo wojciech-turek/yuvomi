@@ -14,8 +14,13 @@
  *            das nach dem Schliessen weiterlaeuft;
  *          - pages/tasks.js: Mikrofon nur beim Anlegen (R10), Mikrofon und
  *            "Noch einmal sagen" oeffnen das Hoerblatt, "Fertig" ersetzt das Blatt
- *            durch ein gefuelltes, ein diktiertes Blatt fragt beim Wegwischen
- *            "Verwerfen?" - gefragt wird der ECHTE Dirty-Waechter aus modal.js.
+ *            durch ein gefuelltes (mit dem eben gehoerten Satz), ein diktiertes
+ *            Blatt fragt beim Wegwischen "Verwerfen?" - gefragt wird der ECHTE
+ *            Dirty-Waechter aus modal.js;
+ *          - "Say it" (startQuickAdd, One Today Task 14): neutrale Worte im
+ *            Hoerblatt, der Satz wird Aufgabe, Termin oder Einkauf (gesprochen,
+ *            mit dem gehoerten Satz); wo die Art nicht beschreibbar ist, die
+ *            Aufgabe mit dem Satz als Titel, sonst eine Meldung.
  * Zone: Haushalt Europe/Warsaw.
  * Ausfuehren: npm run test:task-dictation-ui
  */
@@ -45,7 +50,7 @@ const { setDisplayTimeZone } = await import('../public/utils/timezone.js');
 const { setHouseholdSize } = await import('../public/utils/household.js');
 const { speechSupported, startListening } = await import('../public/utils/speech.js');
 const { draftFromSentence, DICTATION_TIMEOUT_MS } = await import('../public/utils/task-draft.js');
-const { openDictationSheet, startTaskDictation } = await import('../public/components/task-dictation.js');
+const { openDictationSheet, startTaskDictation, startQuickAdd, quickAddCopy } = await import('../public/components/task-dictation.js');
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
 const { __test: tasks, openNewTaskFrom } = await import('../public/pages/tasks.js');
 // Der Loader stubt '/components/modal.js' fuer die Seiten; hier steht das ECHTE
@@ -487,6 +492,34 @@ test('sheet with speech: status, live transcript (aria-live="polite"), the mic r
   }
 });
 
+test('sheet words: Say it and the event and shopping mics pass neutral words - title, status and text label never say "task"', () => {
+  const { win, instances } = fakeWindow();
+  const listening = openSheet({ win, copy: quickAddCopy() });
+  assert.equal(listening.title, 'quickAdd.title');
+  assert.match(listening.content, /quickAdd\.listening/);
+  assert.doesNotMatch(listening.content, /tasks\.dictation\.(title|listening|textLabel)/);
+  const typed = openSheet({ win: {}, copy: quickAddCopy() });
+  assert.match(typed.content, />quickAdd\.textLabel</, 'the text box is named neutrally too');
+  assert.doesNotMatch(typed.content, /tasks\.dictation\.textLabel/);
+  // Neu zuhoeren und ins Textfeld wechseln behalten die Worte.
+  const { panel } = mountSheet({ win, copy: quickAddCopy() });
+  instances.at(-1).fail('no-speech');
+  instances.at(-1).end();
+  panel.click('[data-dictation-mic]');
+  assert.equal(panel.querySelector('[data-dictation-status]').textContent, 'quickAdd.listening', 'listening again: still neutral');
+  instances.at(-1).fail('network');
+  assert.match(panel.host.innerHTML, />quickAdd\.textLabel</, 'the text box after an error: still neutral');
+  assert.equal(quickAddCopy().title, 'quickAdd.title');
+});
+
+test('sheet words: without words of its own the sheet says a task (the task sheet\'s mic and "Powtórz")', () => {
+  const typed = openSheet({ win: {} });
+  assert.equal(typed.title, 'tasks.dictation.title');
+  assert.match(typed.content, />tasks\.dictation\.textLabel</);
+  const { win } = fakeWindow();
+  assert.match(openSheet({ win }).content, /tasks\.dictation\.listening/);
+});
+
 test('sheet: starts listening at once, in Polish whatever the UI language is', () => {
   const { win, instances } = fakeWindow();
   globalThis.__locale = 'en';
@@ -717,6 +750,7 @@ test('the mic in the New Task sheet opens dictation with the title; Done replace
     assert.equal(filled.title, 'tasks.newTask');
     assert.equal(filled.headerAction?.label, 'tasks.sayAgain', 'spoken: "Say again" in the header');
     assert.match(filled.content, /value="Kupić mleko"/);
+    assert.ok(filled.content.includes('sheet.heardQuote{&quot;text&quot;:&quot;Kupić mleko jutro&quot;}'), 'the heard sentence above the fields');
     assert.match(filled.content, /data-row/, 'set values stand as rows');
     assert.equal(modals.opened.length, 3, 'nothing else opened - and nothing saved');
   } finally {
@@ -850,16 +884,19 @@ test('"Say again" in the header opens dictation with the current title; nothing 
     },
   };
   try {
-    tasks.openTaskModal({ users: MEMBERS, draft: { title: 'Wyrzuć smieci' }, spoken: true }, null);
+    tasks.openTaskModal({ users: MEMBERS, draft: { title: 'Wyrzuć smieci' }, spoken: true, heard: 'Wyrzuć smieci' }, null);
     const [sheet] = modals.opened;
     assert.equal(typeof sheet.headerAction?.onClick, 'function', '"Say again" is wired');
     const panel = taskPanel('Wyrzuć smieci');
     sheet.onSave(panel);
     sheet.headerAction.onClick();
     const dictation = modals.opened[1];
-    assert.equal(dictation?.title, 'tasks.dictation.title');
-    await finishDictation(dictation, 'Wyrzuć śmieci');
-    assert.match(modals.opened[2]?.content ?? '', /value="Wyrzuć śmieci"/);
+    assert.equal(dictation?.title, 'tasks.dictation.title', 'the task sheet keeps the task words');
+    await finishDictation(dictation, 'Wyrzuć śmieci w piątek');
+    const filled = modals.opened[2]?.content ?? '';
+    assert.match(filled, /value="Wyrzuć śmieci"/);
+    assert.ok(filled.includes('sheet.heardQuote{&quot;text&quot;:&quot;Wyrzuć śmieci w piątek&quot;}'), 'the NEW sentence is the one heard');
+    assert.doesNotMatch(filled, /Wyrzuć smieci/, 'not the old one');
     assert.deepEqual(posted, ['/tasks/parse'], 'only the parse - the task waits for "Add task"');
   } finally {
     modals.restore();
@@ -1154,6 +1191,298 @@ test('startTaskDictation: read-only tasks open nothing', () => {
     clearPermissions();
     modals.restore();
   }
+});
+
+// --------------------------------------------------------------------------
+// "Say it" (One Today, Task 14): ein Satz wird Aufgabe, Termin oder Einkauf
+// --------------------------------------------------------------------------
+
+const ALL_WRITE = { tasks: 'write', calendar: 'write', shopping: 'write' };
+const aiAnswer = (kind, fields) => ({ data: { source: 'ai', kind, fields } });
+const EVENT_FIELDS = {
+  title: 'Trening Leo', date: '2026-11-05', start_time: '17:00', end_time: null, all_day: false,
+  location: null, assigned_to: [], reminder_minutes: null,
+};
+
+/** Ersatz fuer pages/calendar.js und components/shopping-add-sheet.js: merkt Ladevorgaenge und Oeffnungen. */
+function fakeSheetModules({ opened = true } = {}) {
+  const loads = [];
+  const events = [];
+  const shopping = [];
+  const calendar = { openNewEventFrom: async (opts) => { events.push(opts); return opened; } };
+  const sheet = { openShoppingAddFrom: async (opts) => { shopping.push(opts); return opened; } };
+  return {
+    loads, events, shopping,
+    loadCalendar: async () => { loads.push('calendar'); return calendar; },
+    loadShopping: async () => { loads.push('shopping'); return sheet; },
+  };
+}
+
+/** "Say it" starten, den Satz sagen, "Done" tippen und warten, bis geroutet ist. */
+async function sayIt(sentence, { access = ALL_WRITE, answer = DISABLED, user = WOJTEK, onChanged = () => {}, sheets = fakeSheetModules(), prep = MEMBERS } = {}) {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const tasksModule = fakeTasksModule();
+  const loadedTasks = [];
+  const { calls, post } = recordingPost(answer);
+  try {
+    const opened = startQuickAdd({ user, onChanged, access }, {
+      win, post,
+      loadTasks: async () => { loadedTasks.push('tasks'); return tasksModule.mod; },
+      loadCalendar: sheets.loadCalendar,
+      loadShopping: sheets.loadShopping,
+    });
+    assert.equal(opened, true, 'the listening sheet opened');
+    if (prep instanceof Error) tasksModule.rejectPrep(prep);
+    else tasksModule.resolvePrep(prep);
+    instances[0].say([sentence, true]);
+    modals.opened[0].panel.click('[data-dictation-done]');
+    for (let i = 0; i < 10; i += 1) await flush();
+  } finally {
+    modals.restore();
+  }
+  return { calls, tasks: tasksModule.sheets, loadedTasks, sheets, modals };
+}
+
+test('startQuickAdd: the listening sheet opens with neutral words and rec.start() runs inside the call - before any await', () => {
+  const { win, instances, probe } = syncProbe();
+  const modals = syncModals();
+  try {
+    const opened = startQuickAdd({ access: ALL_WRITE }, { win, loadTasks: () => new Promise(() => {}) });
+    assert.equal(opened, true);
+    assert.equal(modals.opened.length, 1, 'openModal ran in the call');
+    assert.equal(modals.opened[0].options.title, 'quickAdd.title', '"Powiedz" - not "Powiedz zadanie"');
+    assert.match(modals.opened[0].options.content, /quickAdd\.listening/);
+    assert.equal(instances.length, 1);
+    assert.equal(instances[0].lang, 'pl-PL');
+    assert.equal(probe.startedInCall, true, 'start() ran before the first microtask - still inside the tap');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startQuickAdd: nothing it could add (or no rights given) opens nothing - no sheet, no mic', () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  try {
+    const never = () => { throw new Error('not loaded'); };
+    assert.equal(startQuickAdd({ access: { tasks: 'read', calendar: 'none', shopping: 'read' } }, { win, loadTasks: never }), false);
+    assert.equal(startQuickAdd({ access: { meals: 'write' } }, { win, loadTasks: never }), false);
+    assert.equal(startQuickAdd({}, { win, loadTasks: never }), false);
+    assert.equal(modals.opened.length, 0);
+    assert.equal(instances.length, 0, 'no mic');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startQuickAdd: an event sentence opens the event sheet - spoken, with the heard sentence; one parse call, nothing saved', async () => {
+  const user = WOJTEK;
+  const onChanged = () => {};
+  const sentence = 'Trening Leo w czwartek o 17';
+  const { calls, tasks: taskSheets, sheets } = await sayIt(sentence, { answer: aiAnswer('event', EVENT_FIELDS), user, onChanged });
+  assert.deepEqual(calls, [{ path: '/quick-add/parse', body: { text: sentence } }], 'once, the kind left to the router');
+  assert.deepEqual(sheets.events, [{ user, onChanged, draft: EVENT_FIELDS, spoken: true, heard: sentence }]);
+  assert.deepEqual(sheets.shopping, []);
+  assert.deepEqual(taskSheets, [], 'no task sheet');
+});
+
+test('startQuickAdd: a shopping sentence opens the shopping sheet with the spoken items and the heard sentence', async () => {
+  const user = WOJTEK;
+  const onChanged = () => {};
+  const fields = { items: [{ name: 'mleko', quantity: null }, { name: 'chleb', quantity: null }] };
+  const { sheets, tasks: taskSheets } = await sayIt('Kup mleko i chleb', { answer: aiAnswer('shopping', fields), user, onChanged });
+  assert.deepEqual(sheets.shopping, [{ user, onChanged, draft: fields, heard: 'Kup mleko i chleb' }]);
+  assert.deepEqual(sheets.events, []);
+  assert.deepEqual(taskSheets, []);
+});
+
+test('startQuickAdd: without AI a buying sentence is still shopping (the local rule), never an event', async () => {
+  const { sheets, calls } = await sayIt('Kup mleko, chleb');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(sheets.shopping[0].draft, { items: [{ name: 'mleko', quantity: null }, { name: 'chleb', quantity: null }] });
+  assert.equal(sheets.shopping[0].heard, 'Kup mleko, chleb');
+});
+
+test('startQuickAdd: a task sentence opens the New Task sheet - spoken, heard; the members reached the local parser', async () => {
+  const onChanged = () => {};
+  const { tasks: taskSheets, sheets } = await sayIt('Wojtek odbierze paczkę jutro', { onChanged });
+  assert.equal(taskSheets.length, 1);
+  assert.equal(taskSheets[0].onChanged, onChanged);
+  assert.equal(taskSheets[0].spoken, true);
+  assert.equal(taskSheets[0].heard, 'Wojtek odbierze paczkę jutro');
+  assert.deepEqual(taskSheets[0].draft.assigned_to, [WOJTEK.id], 'the members arrived before the local parser ran');
+  assert.deepEqual(sheets.loads, [], 'no other sheet loaded');
+});
+
+test('startQuickAdd: calendar read only + an event sentence -> the task sheet with the sentence as its title, no calendar', async () => {
+  const sentence = 'Trening Leo w czwartek o 17';
+  const { tasks: taskSheets, sheets } = await sayIt(sentence, {
+    access: { tasks: 'write', calendar: 'read', shopping: 'write' }, answer: aiAnswer('event', EVENT_FIELDS),
+  });
+  assert.deepEqual(taskSheets.map(({ draft, spoken, heard }) => ({ draft, spoken, heard })),
+    [{ draft: { title: sentence }, spoken: true, heard: sentence }]);
+  assert.deepEqual(sheets.loads, [], 'the calendar is never loaded - nothing is written there');
+  assert.deepEqual(sheets.events, []);
+});
+
+test('startQuickAdd: shopping read only + a buying sentence -> the task sheet with the sentence as its title', async () => {
+  const { tasks: taskSheets, sheets } = await sayIt('Kup mleko, chleb', { access: { tasks: 'write', calendar: 'write', shopping: 'read' } });
+  assert.deepEqual(taskSheets.map(({ draft }) => draft), [{ title: 'Kup mleko, chleb' }]);
+  assert.deepEqual(sheets.shopping, []);
+});
+
+test('startQuickAdd: a sentence as title is clipped where the server stops (200); the heard line keeps it whole', async () => {
+  const sentence = `Kup ${'mleko, chleb, '.repeat(20)}masło`;
+  assert.ok(sentence.length > 200);
+  const { tasks: taskSheets } = await sayIt(sentence, { access: { tasks: 'write', calendar: 'write', shopping: 'read' } });
+  assert.equal(taskSheets[0].draft.title, sentence.slice(0, 200));
+  assert.equal(taskSheets[0].heard, sentence);
+});
+
+test('startQuickAdd: a kind nobody here may write, and no tasks either -> a short message, the listening sheet goes, nothing opens', async () => {
+  const toasts = [];
+  const closes = [];
+  const previousToast = globalThis.window.yuvomi.showToast;
+  globalThis.window.yuvomi.showToast = (...args) => toasts.push(args);
+  globalThis.__closeModal = (opts) => { closes.push(opts); };
+  try {
+    const { tasks: taskSheets, sheets, loadedTasks } = await sayIt('Zadzwonić do mamy', {
+      access: { tasks: 'read', calendar: 'none', shopping: 'write' },
+    });
+    assert.deepEqual(toasts, [['quickAdd.noAccess', 'info']]);
+    assert.deepEqual(closes, [{ force: true, context: 'test-modal-context' }], 'only the listening sheet it opened (#1997)');
+    assert.deepEqual(taskSheets, []);
+    assert.deepEqual(sheets.loads, []);
+    assert.deepEqual(loadedTasks, [], 'tasks are not even loaded without write access');
+  } finally {
+    delete globalThis.__closeModal;
+    globalThis.window.yuvomi.showToast = previousToast;
+  }
+});
+
+test('startQuickAdd: a sheet that opens nothing (no shopping list) lets the listening sheet go', async () => {
+  const closes = [];
+  globalThis.__closeModal = (opts) => { closes.push(opts); };
+  try {
+    const sheets = fakeSheetModules({ opened: false });
+    await sayIt('Kup mleko', { answer: aiAnswer('shopping', { items: [{ name: 'mleko', quantity: null }] }), sheets });
+    assert.equal(sheets.shopping.length, 1, 'the opener was asked');
+    assert.deepEqual(closes, [{ force: true, context: 'test-modal-context' }], 'it said why itself; the listening sheet goes');
+  } finally {
+    delete globalThis.__closeModal;
+  }
+});
+
+test('startQuickAdd: a shopping sentence still opens its sheet when the task page cannot load', async () => {
+  const { sheets, tasks: taskSheets } = await sayIt('Kup mleko', {
+    answer: aiAnswer('shopping', { items: [{ name: 'mleko', quantity: null }] }), prep: new Error('tasks.loadError'),
+  });
+  assert.equal(sheets.shopping.length, 1);
+  assert.deepEqual(taskSheets, []);
+});
+
+test('startQuickAdd: the listening sheet was closed while the sheet loaded - nothing opens', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const sheets = fakeSheetModules();
+  let open = true;
+  globalThis.__isOwnModalOpen = () => open;
+  const { post } = recordingPost(aiAnswer('event', EVENT_FIELDS));
+  const tasksModule = fakeTasksModule();
+  tasksModule.resolvePrep(MEMBERS);
+  try {
+    startQuickAdd({ access: ALL_WRITE }, {
+      win, post, loadTasks: async () => tasksModule.mod,
+      loadCalendar: async () => { open = false; return sheets.loadCalendar(); },
+      loadShopping: sheets.loadShopping,
+    });
+    instances[0].say(['Trening Leo w czwartek o 17', true]);
+    modals.opened[0].panel.click('[data-dictation-done]');
+    for (let i = 0; i < 10; i += 1) await flush();
+    assert.deepEqual(sheets.loads, ['calendar'], 'precondition: the draft was routed to the calendar');
+    assert.deepEqual(sheets.events, [], 'swiped away: no sheet afterwards');
+  } finally {
+    delete globalThis.__isOwnModalOpen;
+    modals.restore();
+  }
+});
+
+test('startQuickAdd: Type instead opens the New Task sheet to type in, with what was said as its title', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const { mod, sheets: taskSheets, resolvePrep } = fakeTasksModule();
+  try {
+    startQuickAdd({ access: ALL_WRITE }, { win, loadTasks: async () => mod });
+    instances[0].say(['Zadzwonić do mamy', false]);
+    modals.opened[0].panel.click('[data-dictation-type]');
+    assert.equal(instances[0].aborted, 1, 'the mic stops at once');
+    resolvePrep(MEMBERS);
+    for (let i = 0; i < 4; i += 1) await flush();
+    assert.deepEqual(taskSheets, [{ onChanged: taskSheets[0].onChanged, draft: { title: 'Zadzwonić do mamy' } }], 'typed, not spoken');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startQuickAdd: Type instead without tasks opens the first sheet that may be written, with what was said', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const sheets = fakeSheetModules();
+  const user = WOJTEK;
+  try {
+    startQuickAdd({ user, access: { tasks: 'read', calendar: 'write', shopping: 'write' } }, {
+      win, loadTasks: () => { throw new Error('not loaded'); }, loadCalendar: sheets.loadCalendar, loadShopping: sheets.loadShopping,
+    });
+    instances[0].say(['Basen w niedzielę', false]);
+    modals.opened[0].panel.click('[data-dictation-type]');
+    for (let i = 0; i < 6; i += 1) await flush();
+    assert.equal(sheets.events.length, 1);
+    assert.equal(sheets.events[0].user, user);
+    assert.deepEqual(sheets.events[0].draft, { title: 'Basen w niedzielę' });
+    assert.equal(sheets.events[0].spoken, undefined, 'typed, not spoken');
+  } finally {
+    modals.restore();
+  }
+});
+
+test('startQuickAdd: Done keeps turning until the next sheet stands (it loads only now)', async () => {
+  const { win, instances } = fakeWindow();
+  const modals = syncModals();
+  const steps = [];
+  globalThis.__btnLoading = () => { steps.push('busy'); return () => steps.push('idle'); };
+  let release;
+  const calendar = { openNewEventFrom: async () => { steps.push('opened'); return true; } };
+  const { post } = recordingPost(aiAnswer('event', EVENT_FIELDS));
+  const tasksModule = fakeTasksModule();
+  tasksModule.resolvePrep(MEMBERS);
+  try {
+    startQuickAdd({ access: ALL_WRITE }, {
+      win, post, loadTasks: async () => tasksModule.mod,
+      loadCalendar: () => new Promise((resolve) => { release = () => resolve(calendar); }),
+    });
+    instances[0].say(['Trening Leo w czwartek o 17', true]);
+    modals.opened[0].panel.click('[data-dictation-done]');
+    for (let i = 0; i < 6; i += 1) await flush();
+    assert.deepEqual(steps, ['busy'], 'the answer is in, the calendar still loads: Done still turns');
+    release();
+    for (let i = 0; i < 6; i += 1) await flush();
+    assert.deepEqual(steps, ['busy', 'opened', 'idle']);
+  } finally {
+    delete globalThis.__btnLoading;
+    modals.restore();
+  }
+});
+
+test('source: the event and shopping mics pass the neutral words; the task sheet keeps its own', () => {
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  for (const file of ['../public/pages/calendar.js', '../public/components/shopping-add-sheet.js']) {
+    const src = read(file);
+    assert.match(src, /openDictationSheet\(\{[\s\S]{0,400}?copy: quickAddCopy\(\),/, `${file}: neutral words`);
+  }
+  const tasksSrc = read('../public/pages/tasks.js');
+  const over = tasksSrc.slice(tasksSrc.indexOf('async function dictateOverSheet('));
+  assert.doesNotMatch(over.slice(0, over.indexOf('\n}\n')), /copy:/, 'the task sheet says a task');
 });
 
 // --------------------------------------------------------------------------

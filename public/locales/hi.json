@@ -255,7 +255,7 @@
         "wallScreensaverStart": "स्क्रीनसेवर",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "दूध और ब्रेड ख़रीदें · गुरुवार 5 बजे लियो की ट्रेनिंग",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "छोड़ें",
         "step2BodyDesktop": "बाईं ओर का साइडबार आपको सीधे सबसे ज़रूरी हिस्सों तक ले जाता है। बाकी सभी मॉड्यूल “और” के अंतर्गत मिलेंगे।",
         "stepProgress": "चरण {{current}} / {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "ऑफ़लाइन - फिर से कनेक्ट किया जा रहा है…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "सर्वर से",
         "keyRemove": "कुंजी हटाएँ",
         "capChange": "सीमा बदलें",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "डिक्टेशन"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "बोलें",
+        "listening": "सुन रहे हैं… बताएँ क्या जोड़ना है",
+        "textLabel": "क्या जोड़ना है, एक वाक्य में",
+        "noAccess": "आप इसे यहाँ नहीं जोड़ सकते।"
     }
 }

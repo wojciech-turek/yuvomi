@@ -270,7 +270,7 @@
         "wallScreensaverStart": "Spořič obrazovky",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Koupit mléko a chléb · Leův trénink ve čtvrtek v 17",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3463,7 +3463,7 @@
         "skip": "Přeskočit",
         "step2BodyDesktop": "Postranní panel vlevo tě zavede přímo k nejdůležitějším částem. Všechny ostatní moduly najdeš pod „Více“.",
         "stepProgress": "Krok {{current}} z {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "userMultiSelect": {
         "nobody": "Nikdo",
@@ -6620,7 +6620,7 @@
         "keyRemove": "Odebrat klíč",
         "capChange": "Změnit limit",
         "memoryCount_few": "{{count}} věty",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Diktování"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6767,5 +6767,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Řekněte to",
+        "listening": "Poslouchám… řekněte, co přidat",
+        "textLabel": "Co přidat, jednou větou",
+        "noAccess": "Tohle tady přidat nemůžete."
     }
 }

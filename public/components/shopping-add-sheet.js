@@ -33,7 +33,7 @@ import { api } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { openModal, closeModal, askOverModal, advancedSection, captureModalContext } from '/components/modal.js';
-import { openDictationSheet } from '/components/task-dictation.js';
+import { openDictationSheet, quickAddCopy } from '/components/task-dictation.js';
 import { quickDraftFromSentence } from '/utils/quick-draft.js';
 import { titleFieldHtml, heardLineHtml } from '/utils/sheet-parts.js';
 import { mayWritePath } from '/utils/module-access.js';
@@ -106,8 +106,9 @@ async function shoppingDraftFromSentence(sentence, { members = [], post } = {}) 
  *          draft?: {items: Array<{name: string, quantity?: string|null}>}|null, heard?: string,
  *          typed?: string, listId?: number|string|null}} [opts]
  *        `draft`/`heard`: gesprochene Posten und der gehoerte Satz (Say it, Mikrofon).
- *        `typed`/`listId` nimmt nur das Blatt selbst mit, wenn das Mikrofon es
- *        durch ein neues ersetzt: der getippte Text und die gewaehlte Liste bleiben.
+ *        `typed` steht im Feld: der getippte Text, wenn das Mikrofon das Blatt
+ *        durch ein neues ersetzt, oder das Gesagte nach "Type instead" in Say it.
+ *        `listId` nimmt nur das Blatt selbst mit (die gewaehlte Liste bleibt).
  * @returns {Promise<boolean>} false bei nur lesendem Zugriff oder ohne Liste
  */
 export async function openShoppingAddFrom({
@@ -325,6 +326,8 @@ export async function openShoppingAddFrom({
           openDictationSheet({
             initialText: input.value,
             members: [],
+            // Neutrale Worte: das Blatt hoert Posten, keine Aufgabe.
+            copy: quickAddCopy(),
             toDraft: shoppingDraftFromSentence,
             onDraft: (spokenDraft, { text = '' } = {}) => { resolve({ draft: spokenDraft, heard: text }); closeModal({ force: true }); },
             onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },

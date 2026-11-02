@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Salvapantallas",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Comprar leche y pan · Entrenamiento de Leo el jueves a las 5",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Omitir",
         "step2BodyDesktop": "La barra lateral izquierda te lleva directamente a las áreas más importantes. Encontrarás el resto de módulos en «Más».",
         "stepProgress": "Paso {{current}} de {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Sin conexión - reconectando…",
@@ -6468,7 +6468,7 @@
         "keyFromServer": "del servidor",
         "keyRemove": "Eliminar la clave",
         "capChange": "Cambiar el límite",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Dictado"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6611,5 +6611,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Dilo",
+        "listening": "Escuchando… di qué añadir",
+        "textLabel": "Qué añadir, en una frase",
+        "noAccess": "No puedes añadir eso aquí."
     }
 }

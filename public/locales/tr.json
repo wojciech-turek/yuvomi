@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Ekran koruyucu",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Süt ve ekmek al · Leo'nun antrenmanı perşembe 17'de",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Atla",
         "step2BodyDesktop": "Soldaki kenar çubuğu seni doğrudan en önemli alanlara götürür. Diğer tüm modülleri “Daha Fazla” altında bulursun.",
         "stepProgress": "Adım {{current}}/{{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Çevrimdışı - yeniden bağlanılıyor…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "sunucudan",
         "keyRemove": "Anahtarı kaldır",
         "capChange": "Limiti değiştir",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Dikte"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Söyleyin",
+        "listening": "Dinliyorum… ne ekleneceğini söyleyin",
+        "textLabel": "Ne eklenecek, tek cümleyle",
+        "noAccess": "Bunu buraya ekleyemezsiniz."
     }
 }

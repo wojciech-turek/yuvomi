@@ -285,7 +285,7 @@
         "wallScreensaverStart": "Заставка",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Купить молоко и хлеб · Тренировка Лео в четверг в 17",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3746,7 +3746,7 @@
         "skip": "Пропустить",
         "step2BodyDesktop": "Боковая панель слева ведёт прямо к самым важным разделам. Остальные модули находятся в разделе «Ещё».",
         "stepProgress": "Шаг {{current}} из {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Офлайн - переподключение…",
@@ -6748,7 +6748,7 @@
         "capChange": "Изменить лимит",
         "memoryCount_few": "{{count}} фразы",
         "memoryCount_many": "{{count}} фраз",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Диктовка"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6899,5 +6899,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Скажите",
+        "listening": "Слушаю… скажите, что добавить",
+        "textLabel": "Что добавить, одним предложением",
+        "noAccess": "Это нельзя добавить здесь."
     }
 }

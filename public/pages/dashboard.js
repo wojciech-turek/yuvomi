@@ -851,17 +851,20 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
  *
  * DAS MENUE LAEDT BEIM TIPP, nicht mit dem Start (Review Task 12): es zieht
  * das Hoerblatt samt Erkennung und Parser mit, und die gehoeren nicht in den
- * Start der Startseite. Die Geste braucht erst "Say a task" - und deren Tipp
+ * Start der Startseite. Die Geste braucht erst "Say it" - und deren Tipp
  * kommt, wenn das Menue (und mit ihm task-dictation.js, statisch in
  * add-menu.js) laengst steht. */
 
-/** Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js, ROWS). */
-const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping', 'meals']);
+/**
+ * Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js,
+ * ROWS). Ohne Mahlzeiten: Meal ist seit One Today (Task 14) nicht im Menue.
+ */
+const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping']);
 
 /**
  * Das Recht je Modul, das das Menue fragt - aus derselben Quelle wie der Rest
  * von Dziś (moduleAccess); ein abgeschaltetes Modul zaehlt als 'none'.
- * @returns {{ tasks: string, calendar: string, shopping: string, meals: string }}
+ * @returns {{ tasks: string, calendar: string, shopping: string }}
  */
 function todayAddAccess() {
   const level = (module) => (globalThis.window?.yuvomi?.isModuleDisabled?.(module) ? 'none' : moduleAccess(module));
@@ -871,7 +874,7 @@ function todayAddAccess() {
 /**
  * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an,
  * wie bei Haken und „Dodaj zadanie") und wenn es nichts hinzuzufuegen gibt.
- * „Nichts" heisst: kein Schreibrecht auf eines der vier Module - dieselbe
+ * „Nichts" heisst: kein Schreibrecht auf eines der drei Module - dieselbe
  * Regel wie `addMenuItems()` (jede Zeile braucht es auf ihrem Modul), hier
  * ohne das Menue zu laden; test:add-menu haelt beide gleich.
  * @returns {HTMLButtonElement|null}

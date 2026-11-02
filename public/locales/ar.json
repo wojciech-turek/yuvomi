@@ -300,7 +300,7 @@
         "wallScreensaverStart": "شاشة التوقف",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "اشترِ حليبًا وخبزًا · تدريب ليو يوم الخميس الساعة 5",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3836,7 +3836,7 @@
         "skip": "تخطي",
         "step2BodyDesktop": "الشريط الجانبي يأخذك مباشرة إلى أهم الأقسام. تجد بقية الوحدات تحت «المزيد».",
         "stepProgress": "الخطوة {{current}} من {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "غير متصل - تتم إعادة الاتصال…",
@@ -6900,7 +6900,7 @@
         "memoryCount_two": "الجمل: {{count}}",
         "memoryCount_few": "الجمل: {{count}}",
         "memoryCount_many": "الجمل: {{count}}",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "الإملاء"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -7055,5 +7055,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "قلها",
+        "listening": "أستمع… قل ما تريد إضافته",
+        "textLabel": "ما تريد إضافته، في جملة واحدة",
+        "noAccess": "لا يمكنك إضافة ذلك هنا."
     }
 }

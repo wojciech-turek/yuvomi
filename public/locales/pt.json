@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Proteção de ecrã",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Comprar leite e pão · Treino do Leo na quinta às 17h",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Pular",
         "step2BodyDesktop": "A barra lateral à esquerda leva-te diretamente às áreas mais importantes. Os restantes módulos estão em «Mais».",
         "stepProgress": "Etapa {{current}} de {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - reconectando…",
@@ -6468,7 +6468,7 @@
         "keyFromServer": "do servidor",
         "keyRemove": "Remover a chave",
         "capChange": "Alterar o limite",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Ditado"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6611,5 +6611,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Diga",
+        "listening": "A ouvir… diga o que adicionar",
+        "textLabel": "O que adicionar, numa frase",
+        "noAccess": "Não pode adicionar isso aqui."
     }
 }

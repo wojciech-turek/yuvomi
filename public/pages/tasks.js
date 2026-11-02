@@ -2118,10 +2118,11 @@ function keepChosen(draft, chosen) {
  *
  * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
  * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
- * gefuelltes (`spoken`). Vom Mikrofon im Titelfeld aus (`keep`) traegt es mit,
- * was schon gewaehlt war und der Satz nicht setzt (Wer, Faelligkeit,
- * Erinnerung, Notiz, „Mehr" - F9); „Noch einmal sagen" ersetzt, was vorher
- * drin stand.
+ * gefuelltes (`spoken`, mit dem eben gesagten Satz als `heard`); das
+ * Hoerblatt sagt hier eine Aufgabe (seine Worte ohne `copy`). Vom Mikrofon im
+ * Titelfeld aus (`keep`) traegt es mit, was schon gewaehlt war und der Satz
+ * nicht setzt (Wer, Faelligkeit, Erinnerung, Notiz, „Mehr" - F9); „Noch einmal
+ * sagen" ersetzt, was vorher drin stand.
  * Schliessen bringt das Blatt zurueck, wie es war: wer aus Versehen aufs
  * Mikrofon tippt, verliert nichts. „Type instead" ebenso, nur steht dann, was
  * schon gesagt oder getippt war, als Titel darin.
@@ -2139,14 +2140,14 @@ async function dictateOverSheet(panel, { users = [], onChanged = null, container
       members: users,
       // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
       // das gefuellte Blatt es.
-      onDraft: (draft) => { resolve({ draft }); closeModal({ force: true }); },
+      onDraft: (draft, { text = '' } = {}) => { resolve({ draft, heard: text }); closeModal({ force: true }); },
       onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
       onCancel: () => resolve(null),
     });
   }));
   if (answer?.draft) {
     const draft = chosen ? keepChosen(answer.draft, chosen) : answer.draft;
-    openTaskModal({ users, onChanged, draft, spoken: true }, container);
+    openTaskModal({ users, onChanged, draft, spoken: true, heard: answer.heard }, container);
   } else if (answer?.type) {
     // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
     const field = panel.querySelector('#task-title');

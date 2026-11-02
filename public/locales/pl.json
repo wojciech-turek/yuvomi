@@ -301,7 +301,7 @@
         "wallScreensaverStart": "Wygaszacz ekranu",
         "addMenuLabel": "Dodaj",
         "addMenuTitle": "Co dodać?",
-        "addMenuSayHint": "„Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Kup mleko i chleb · Trening Leo w czwartek o 17",
         "addMenuShopping": "Do kupienia"
     },
     "tasks": {
@@ -3746,7 +3746,7 @@
         "skip": "Pomiń",
         "step2BodyDesktop": "Pasek boczny po lewej prowadzi bezpośrednio do najważniejszych obszarów. Pozostałe moduły znajdziesz pod „Więcej”.",
         "stepProgress": "Krok {{current}} z {{total}}",
-        "step3BodyDesktopPlus": "Na ekranie Dziś przycisk + w prawym dolnym rogu dodaje zadanie, wydarzenie, rzecz do kupienia albo posiłek. W każdym module jego własny + znajduje się w prawym górnym rogu nagłówka."
+        "step3BodyDesktopPlus": "Na ekranie Dziś przycisk + w prawym dolnym rogu dodaje zadanie, wydarzenie albo rzecz do kupienia. W każdym module jego własny + znajduje się w prawym górnym rogu nagłówka."
     },
     "offline": {
         "banner": "Offline - przywracanie połączenia…",
@@ -6748,7 +6748,7 @@
         "keyFromServer": "z serwera",
         "keyRemove": "Usuń klucz",
         "capChange": "Zmień limit",
-        "featureTaskDictation": "Zadania dyktowane"
+        "featureTaskDictation": "Dyktowanie"
     },
     "today": {
         "addedToast": "Dopisane do Zakupów: {{n}}",
@@ -6899,5 +6899,11 @@
     },
     "sheet": {
         "heardQuote": "„{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Powiedz",
+        "listening": "Słucham… powiedz, co dodać",
+        "textLabel": "Co dodać, jednym zdaniem",
+        "noAccess": "Nie możesz tego tutaj dodać."
     }
 }

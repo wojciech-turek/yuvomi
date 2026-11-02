@@ -255,7 +255,7 @@
         "wallScreensaverStart": "スクリーンセーバー",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "牛乳とパンを買う · 木曜17時にレオのトレーニング",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "スキップ",
         "step2BodyDesktop": "左のサイドバーから主要なエリアに直接移動できます。その他のモジュールは「もっと見る」にあります。",
         "stepProgress": "ステップ {{current}}/{{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "オフライン - 再接続しています…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "サーバーから",
         "keyRemove": "キーを削除",
         "capChange": "上限を変更",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "音声入力"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "話して追加",
+        "listening": "聞いています… 追加するものを話してください",
+        "textLabel": "追加するもの (1文で)",
+        "noAccess": "ここではそれを追加できません。"
     }
 }

@@ -271,7 +271,7 @@
         "wallScreensaverStart": "Screensaver",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Beli susu dan roti · Latihan Leo Kamis jam 5",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Lewati",
         "step2BodyDesktop": "Bilah samping di kiri membawamu langsung ke area terpenting. Semua modul lainnya ada di bawah “Lainnya”.",
         "stepProgress": "Langkah {{current}} dari {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - memulihkan koneksi…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "dari server",
         "keyRemove": "Hapus kunci",
         "capChange": "Ubah batas",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Dikte"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Ucapkan",
+        "listening": "Mendengarkan… ucapkan apa yang ingin ditambahkan",
+        "textLabel": "Yang ingin ditambahkan, dalam satu kalimat",
+        "noAccess": "Anda tidak dapat menambahkan itu di sini."
     }
 }

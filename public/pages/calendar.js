@@ -69,7 +69,7 @@ import { sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml, h
 // Das Mikrofon im Titel des Termin-Blatts: STATISCH, weil das Hoerblatt im Tipp
 // aufgehen muss - Safari startet die Erkennung nur innerhalb der Nutzergeste,
 // ein `await import()` davor liesse nur das Textfeld (wie pages/tasks.js).
-import { openDictationSheet } from '/components/task-dictation.js';
+import { openDictationSheet, quickAddCopy } from '/components/task-dictation.js';
 import { quickDraftFromSentence } from '/utils/quick-draft.js';
 import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import { seriesDoneText } from '/utils/task-fields.js';
@@ -8498,6 +8498,8 @@ async function dictateOverEventSheet(panel, { onChanged = null, handOverClose = 
     openDictationSheet({
       initialText,
       members: state.users,
+      // Neutrale Worte: das Blatt hoert einen Termin, keine Aufgabe.
+      copy: quickAddCopy(),
       toDraft: eventDraftFromSentence,
       // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
       // das gefuellte Blatt es.

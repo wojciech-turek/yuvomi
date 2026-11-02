@@ -255,7 +255,7 @@
         "wallScreensaverStart": "Schermbeveiliging",
         "addMenuLabel": "Add",
         "addMenuTitle": "What to add?",
-        "addMenuSayHint": "“Wyrzuć śmieci jutro wieczorem”",
+        "addMenuSayHint": "Melk en brood kopen · Training van Leo donderdag om 17 uur",
         "addMenuShopping": "Shopping item"
     },
     "tasks": {
@@ -3580,7 +3580,7 @@
         "skip": "Overslaan",
         "step2BodyDesktop": "De zijbalk links brengt je direct naar de belangrijkste onderdelen. Alle andere modules vind je onder ‘Meer’.",
         "stepProgress": "Stap {{current}} van {{total}}",
-        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event, a shopping item or a meal. In each module, its own + sits at the top right of the header."
+        "step3BodyDesktopPlus": "On Today, the + at the bottom right adds a task, an event or a shopping item. In each module, its own + sits at the top right of the header."
     },
     "offline": {
         "banner": "Offline - opnieuw verbinden…",
@@ -6466,7 +6466,7 @@
         "keyFromServer": "van de server",
         "keyRemove": "Sleutel verwijderen",
         "capChange": "Limiet wijzigen",
-        "featureTaskDictation": "Dictated tasks"
+        "featureTaskDictation": "Dicteren"
     },
     "today": {
         "addedToast": "Added to Shopping: {{n}}",
@@ -6609,5 +6609,11 @@
     },
     "sheet": {
         "heardQuote": "\"{{text}}\""
+    },
+    "quickAdd": {
+        "title": "Zeg het",
+        "listening": "Ik luister… zeg wat je wilt toevoegen",
+        "textLabel": "Wat toevoegen, in één zin",
+        "noAccess": "Dat kun je hier niet toevoegen."
     }
 }
