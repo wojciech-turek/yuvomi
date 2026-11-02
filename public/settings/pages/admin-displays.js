@@ -4,7 +4,7 @@
  *
  * Das Blatt nach dem Artboard „TabletKuchnia": oben je Tablett eine
  * Statuskarte (gekoppelt, zuletzt gesehen, „Podgląd ściany"), darunter die
- * Wahl des Haushalts, was die Wand zeigt („Na ścianie"), ob man auf ihr
+ * Bilder des Bildschirmschoners („Na ścianie"), ob man auf ihr
  * abhaken darf („Dotyk", Standard aus), die Nachtszene und das Geraet selbst:
  * koppeln, einen neuen Code ausstellen, entkoppeln, das Konto entfernen.
  *
@@ -26,15 +26,6 @@ import { settingRowHtml, settingSwitchRowHtml } from '/settings/components.js';
 import { getPreferences, savePreferences } from '/settings/preferences-cache.js';
 import { enterWallMode } from '/utils/wall-mode.js';
 import { zonedDateKey } from '/utils/timezone.js';
-
-/** The wall sections the household switches, in the order of the artboard. */
-const WALL_SECTIONS = Object.freeze([
-  { id: 'dinner', icon: 'utensils', key: 'settings.tabletSectionDinner' },
-  { id: 'plan', icon: 'list-checks', key: 'settings.tabletSectionPlan' },
-  { id: 'shopping', icon: 'shopping-basket', key: 'settings.tabletSectionShopping' },
-  { id: 'timers', icon: 'timer', key: 'settings.tabletSectionTimers' },
-  { id: 'weather', icon: 'cloud-sun', key: 'settings.tabletSectionWeather' },
-]);
 
 function icon(name, cls = '') {
   return `<i data-lucide="${esc(name)}"${cls ? ` class="${esc(cls)}"` : ''} aria-hidden="true"></i>`;
@@ -172,7 +163,6 @@ function sectionTitle(id, key) {
 
 function renderBody(state) {
   const { displays, prefs } = state;
-  const sections = prefs?.wall_sections ?? {};
   const ticking = prefs?.wall_allow_ticking === true;
   const named = displays.length > 1;
 
@@ -189,12 +179,6 @@ function renderBody(state) {
       </div>
     </section>`;
 
-  const sectionRows = WALL_SECTIONS.map((section) => settingSwitchRowHtml({
-    label: t(section.key),
-    checked: sections[section.id] !== false,
-    icon: section.icon,
-    attrs: { 'data-wall-section': section.id },
-  }));
   const photoRows = displays.map((display) => renderPhotoSwitch(display, { named }));
 
   const deviceRows = [];
@@ -224,12 +208,12 @@ function renderBody(state) {
 
   return `
     ${cards}
-    <section class="tablet-group" aria-labelledby="tablet-wall-title">
+    ${photoRows.length ? `<section class="tablet-group" aria-labelledby="tablet-wall-title">
       ${sectionTitle('tablet-wall-title', 'settings.tabletOnWall')}
       <div class="row-carrier settings-group">
-        ${[...sectionRows, ...photoRows].join('')}
+        ${photoRows.join('')}
       </div>
-    </section>
+    </section>` : ''}
     <section class="tablet-group" aria-labelledby="tablet-touch-title">
       ${sectionTitle('tablet-touch-title', 'settings.tabletTouch')}
       <div class="row-carrier settings-group">
@@ -366,35 +350,26 @@ export function bindDisplayScreensaverSwitches(list, errorEl) {
 }
 
 /**
- * Die Wahl des Haushalts fuer die Wand: welche Bereiche sie zeigt und ob man
- * auf ihr abhaken darf. Beides sofort gespeichert, beides springt bei einem
- * Fehler zurueck. Der Server setzt den Abhak-Schalter fuer das Tablett durch
+ * Die eine Wahl des Haushalts fuer die Wand: ob man auf ihr abhaken darf.
+ * Sofort gespeichert, springt bei einem Fehler zurueck. Was die Wand zeigt, ist
+ * fest und hier nicht einstellbar. Der Server setzt den Abhak-Schalter fuer das Tablett durch
  * (services/wall-settings.js) - hier ist es nur die Wahl.
  */
 function bindWallSwitches(list, errorEl) {
   list.addEventListener('change', async (event) => {
-    const section = event.target.closest?.('[data-wall-section]');
-    const ticking = event.target.closest?.('[data-wall-ticking]');
-    if (!section && !ticking) return;
-    const toggle = section || ticking;
+    const toggle = event.target.closest?.('[data-wall-ticking]');
+    if (!toggle) return;
     clearError(errorEl);
     const on = toggle.checked;
     toggle.disabled = true;
     try {
-      const patch = section
-        ? { wall_sections: { [toggle.dataset.wallSection]: on } }
-        : { wall_allow_ticking: on };
-      const fresh = (await savePreferences(patch))?.data ?? {};
-      // Der Server antwortet mit der ganzen Wahl (alle Bereiche) - sie gilt.
+      const fresh = (await savePreferences({ wall_allow_ticking: on }))?.data ?? {};
       pageState.prefs = {
         ...(pageState.prefs ?? {}),
-        wall_sections: fresh.wall_sections ?? pageState.prefs?.wall_sections,
         wall_allow_ticking: typeof fresh.wall_allow_ticking === 'boolean' ? fresh.wall_allow_ticking : pageState.prefs?.wall_allow_ticking,
       };
-      if (ticking) {
-        const hint = list.querySelector('#tablet-ticking-hint');
-        if (hint) hint.textContent = on ? t('settings.tabletTickingOn') : t('settings.tabletTickingOff');
-      }
+      const hint = list.querySelector('#tablet-ticking-hint');
+      if (hint) hint.textContent = on ? t('settings.tabletTickingOn') : t('settings.tabletTickingOff');
       window.yuvomi?.showToast(t('settings.tabletSaved'), 'success');
     } catch (err) {
       toggle.checked = !on;
@@ -578,4 +553,4 @@ export async function render(container) {
   }
 }
 
-export const __test = { displayAreasText, renderBody, WALL_SECTIONS };
+export const __test = { displayAreasText, renderBody };

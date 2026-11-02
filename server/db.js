@@ -11130,6 +11130,18 @@ const MIGRATIONS = [
           OR key LIKE 'dashboard_today_glance:user:%';
     `,
   },
+  {
+    version: 255,
+    description: 'remove tablet section switches and widget permissions',
+    // The wall draws one fixed set and nobody's rights are kept per tile any
+    // more (One Today round, 2026-11-02). Module access rows stay; only the
+    // 'widget' rows go. The access_permissions CHECK that still names 'widget'
+    // is left alone (append-only).
+    up: `
+      DELETE FROM sync_config WHERE key = 'wall_sections';
+      DELETE FROM access_permissions WHERE resource_type = 'widget';
+    `,
+  },
 ];
 
 /**

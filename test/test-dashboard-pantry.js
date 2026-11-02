@@ -42,42 +42,12 @@ register('./test-browser-loader.mjs', import.meta.url);
 process.env.DB_PATH = ':memory:';
 process.env.SESSION_SECRET = 'dashboard-pantry-test-secret';
 
-const widgets = await import('../public/utils/dashboard-widgets.js');
-const { PERMISSION_WIDGETS, resolvePermissions, buildSessionModuleAccess } = await import('../server/permissions.js');
+const { resolvePermissions, buildSessionModuleAccess } = await import('../server/permissions.js');
 const { EXPIRY_SOON_DAYS, pantryFilterFromSearch } = await import('../public/utils/pantry-status.js');
 const { PANTRY_EXPIRING_ROW_CAP } = await import('../server/services/pantry-expiring.js');
 const { planContext, buildPlan } = await import('../public/utils/today-plan.js');
 
 const src = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-
-// --------------------------------------------------------------------------
-// 1. Registrierung
-// --------------------------------------------------------------------------
-
-test('Registrierung: pantry steht in WIDGET_IDS, ab Werk ausgeblendet, als hohe Liste', () => {
-  assert.ok(widgets.WIDGET_IDS.includes('pantry'), 'WIDGET_IDS fehlt pantry');
-  // Eine Id, die in DEFAULT_HIDDEN_WIDGETS FEHLT, ist nach dem Update in jedem
-  // bestehenden Haushalt eingeblendet (eine neu bekannte Id erbt
-  // defaultWidgetVisible) - die Anti-Referenz ist das überladene Dashboard.
-  assert.ok(widgets.DEFAULT_HIDDEN_WIDGETS.has('pantry'), 'pantry muss ein Opt-in im Anpassen-Tray sein');
-  assert.equal(widgets.defaultWidgetSize('pantry'), '1x2', 'eine Liste braucht Höhe, nicht Breite (wie waste/birthdays)');
-});
-
-test('Registrierung: Rechte hängen am Modul pantry', () => {
-  assert.deepEqual(PERMISSION_WIDGETS.find((w) => w.id === 'pantry'), { id: 'pantry', module: 'pantry' },
-    'ein gesperrter Vorrat muss auch die Kachel sperren (#467)');
-});
-
-test('Registrierung: die Rechteverwaltung nennt die Kachel; Dziś v2 zeigt keine Vorschaukachel', () => {
-  // 2026-10-27, v2: Dziś zeichnet nur noch Wetter, Kalender, Aufgaben und
-  // Wkrótce (Entwurf „Main"). Die Vorschaukachel des Vorrats, ihr Modulschalter
-  // (MODULE_FOR_WIDGET) und ihre Beschriftung (widgetLabel) sind mit ihr
-  // gegangen; die Felder der Route bleiben (Abschnitt unten), das Recht auch.
-  const page = src('../public/pages/dashboard.js');
-  assert.doesNotMatch(page, /MODULE_FOR_WIDGET|today\.pantryExpiring|\/pantry\?filter=soon/);
-  const admin = src('../public/settings/pages/admin-permissions.js');
-  assert.match(admin, /pantry: 'dashboard\.pantryExpiringTitle'/, 'die Rechteverwaltung nennt die Kachel beim selben Namen');
-});
 
 // --------------------------------------------------------------------------
 // Server: echter Router gegen eine migrierte In-Memory-DB
@@ -361,7 +331,7 @@ test('Vorratsseite: ?filter= öffnet den passenden Chip, Unbekanntes bleibt bei 
 /* Was HEUTE abläuft, ist eine Sache von heute. Dziś baut seinen Plan
  * (utils/today-plan.js) und nimmt die Zeilen der übrigen Module über den
  * Beitrags-Vertrag von utils/today-sheet.js: die Quelle spricht nach denselben
- * Riegeln wie jede andere (Modul an, Modulrecht, Widget-Recht). Das Kein-Echo
+ * Riegeln wie jede andere (Modul an, Modulrecht). Das Kein-Echo
  * gegen die Vorrats-Kachel gibt es nicht mehr - Dziś hat keine Modulkacheln
  * (TAFLA, 2026-10-19), der Plan fragt ohne Anordnung. */
 const { setPermissions, clearPermissions } = await import('../public/permissions.js');
@@ -369,7 +339,7 @@ const { setPermissions, clearPermissions } = await import('../public/permissions
 function withSheet(perms, fn) {
   const prevWindow = global.window;
   global.window = { yuvomi: { isModuleDisabled: () => false } };
-  setPermissions({ admin: false, modules: {}, widgets: {}, capabilities: {}, ...perms });
+  setPermissions({ admin: false, modules: {}, capabilities: {}, ...perms });
   try {
     return fn();
   } finally {
@@ -407,16 +377,13 @@ test('Tagesplan: mehr als die gelieferten Chargen - der Rest steht als Zahl da',
   assert.match(pantryRows(p)[0].title, /pantryExpiringMore.*"count":2/, 'todayCount ist ungedeckelt, die Liste nicht');
 }));
 
-test('Tagesplan: Rechte, Widget-Recht und Modulschalter halten die Zeile zurück', () => {
+test('Tagesplan: Rechte und Modulschalter halten die Zeile zurück', () => {
   const data = { pantryExpiring: expiringToday(['Milch']) };
   withSheet({}, () => {
     assert.equal(pantryRows(plan(data)).length, 1, 'Vorbedingung: ohne Riegel spricht die Quelle');
   });
   withSheet({ modules: { pantry: 'none' } }, () => {
     assert.equal(pantryRows(plan(data)).length, 0, 'ohne Vorratsrecht keine Zeile');
-  });
-  withSheet({ widgets: { pantry: 'none' } }, () => {
-    assert.equal(pantryRows(plan(data)).length, 0, 'gesperrtes Widget heisst auch: keine Zeile (#467)');
   });
   withSheet({}, () => {
     global.window = { yuvomi: { isModuleDisabled: (m) => m === 'pantry' } };

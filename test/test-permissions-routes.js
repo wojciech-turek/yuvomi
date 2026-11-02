@@ -57,8 +57,8 @@ const ADM = { id: ADMIN, role: 'admin' };
 const MEM = { id: MEMBER, role: 'member' };
 
 // Katalog-abgeleitete gültige Werte (robust gegen künftige Katalog-Änderungen).
-let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, WIDGET_ID, WIDGET_LEVEL, CAPABILITY_KEY;
-test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
+let CATALOG, ROLE, MODULE_KEY, MODULE_LEVEL, CAPABILITY_KEY;
+test('setup: Katalog liefert Module/Faehigkeiten/Rollen/Mitglieder', async () => {
   const r = await call('GET', '/catalog', { actor: ADM });
   assert.equal(r.status, 200);
   CATALOG = r.body.data;
@@ -70,10 +70,7 @@ test('setup: Katalog liefert Module/Widgets/Rollen/Mitglieder', async () => {
   // ein Nicht-Standard-Access-Level, damit es sparse gespeichert wird
   MODULE_LEVEL = CATALOG.moduleAccessLevels.find((l) => l !== CATALOG.defaults.module);
   assert.ok(MODULE_LEVEL, 'nicht-standard Modul-Level vorhanden');
-  if (CATALOG.widgets.length > 0) {
-    WIDGET_ID = CATALOG.widgets[0].id;
-    WIDGET_LEVEL = CATALOG.widgetAccessLevels.find((l) => l !== CATALOG.defaults.widget);
-  }
+  assert.ok(!('widgets' in CATALOG) && !('widgetAccessLevels' in CATALOG), 'der Katalog fuehrt keine Widgets');
   CAPABILITY_KEY = CATALOG.capabilities[0]?.key;
   assert.equal(CAPABILITY_KEY, 'notes_manage_household_categories');
 });
@@ -155,7 +152,6 @@ test('PUT /user: leere Maps ersetzen ihre Achse, ausgelassene Capabilities bleib
   const initialBody = {
     modules: { [MODULE_KEY]: MODULE_LEVEL },
     capabilities: { [CAPABILITY_KEY]: 'allow' },
-    ...(WIDGET_ID && WIDGET_LEVEL ? { widgets: { [WIDGET_ID]: WIDGET_LEVEL } } : {}),
   };
   const put = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: initialBody });
   assert.equal(put.status, 200);
@@ -163,27 +159,25 @@ test('PUT /user: leere Maps ersetzen ihre Achse, ausgelassene Capabilities bleib
   assert.equal(put.body.data.capabilities[CAPABILITY_KEY], 'allow');
 
   // Starší klient posílá jen původní dvě osy: capability musí přežít.
-  const cleared = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { modules: {}, widgets: {} } });
+  const cleared = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { modules: {} } });
   assert.equal(cleared.status, 200);
   assert.deepEqual(cleared.body.data.modules, {});
-  assert.deepEqual(cleared.body.data.widgets, {});
   assert.equal(cleared.body.data.capabilities[CAPABILITY_KEY], 'allow');
 
   // Explicitní prázdná mapa vyčistí i třetí osu a teprve tím odstraní vše.
   const fullyCleared = await call('PUT', `/user/${MEMBER}`, {
     actor: ADM,
-    body: { modules: {}, widgets: {}, capabilities: {} },
+    body: { modules: {}, capabilities: {} },
   });
-  assert.deepEqual(fullyCleared.body.data, { modules: {}, widgets: {}, capabilities: {} });
+  assert.deepEqual(fullyCleared.body.data, { modules: {}, capabilities: {} });
   const get = await call('GET', `/user/${MEMBER}`, { actor: ADM });
-  assert.deepEqual(get.body.data, { modules: {}, widgets: {}, capabilities: {} }, 'alle Achsen sind entfernt');
+  assert.deepEqual(get.body.data, { modules: {}, capabilities: {} }, 'alle Achsen sind entfernt');
 });
 
-test('PUT /user: Widget-Override round-trip (falls Katalog Widgets führt)', async (t) => {
-  if (!WIDGET_ID || !WIDGET_LEVEL) return t.skip('kein Widget im Katalog');
-  const put = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { widgets: { [WIDGET_ID]: WIDGET_LEVEL } } });
+test('PUT /user: ein altes widgets-Feld wird ignoriert, nicht abgewiesen, und nichts wird gespeichert', async () => {
+  const put = await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: { widgets: { cycle: 'none', unbekannt: 'x' } } });
   assert.equal(put.status, 200);
-  assert.equal(put.body.data.widgets[WIDGET_ID], WIDGET_LEVEL);
+  assert.deepEqual(put.body.data, { modules: {}, capabilities: {} });
   await call('PUT', `/user/${MEMBER}`, { actor: ADM, body: {} }); // aufräumen
 });
 

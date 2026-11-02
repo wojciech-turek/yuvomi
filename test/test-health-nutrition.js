@@ -669,11 +669,3 @@ test('die Zeilen des Tabs werden wirklich gerendert und lassen einen nicht angeg
   assert.ok(!ohneZiel.includes('nutrition-scale'), 'ohne Ziel darf kein Balken gezeichnet werden');
   assert.match(ohneZiel, /12/, 'der erreichte Wert steht auch ohne Ziel da');
 });
-
-test('nutrition steht in DEFAULT_HIDDEN_WIDGETS - sonst ist es nach dem Update ueberall an', async () => {
-  const widgets = await import('../public/utils/dashboard-widgets.js');
-  assert.ok(widgets.WIDGET_IDS.includes('nutrition'), 'die Id fehlt in WIDGET_IDS');
-  assert.ok(widgets.DEFAULT_HIDDEN_WIDGETS.has('nutrition'),
-    'eine Id, die hier fehlt, ist bei JEDEM Bestandshaushalt nach dem Update eingeblendet');
-  assert.equal(widgets.defaultWidgetVisible('nutrition'), false);
-});

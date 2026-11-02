@@ -1824,49 +1824,6 @@ test('Wand-Modus: nach einem Reload in der Nacht bleibt die Wand hell (#1453, v2
 });
 
 // --------------------------------------------------------
-// Schedule-Widget: Verdrahtung (Schedule v2)
-// ANLASS: der Zyklus-Slice hat zwei Stellen, an denen `data` bei einem
-// Refresh ersetzt wird (reloadIfQueryChanged, refreshDashboardData), und BEIDE
-// muessen den eigenen Slice mitnehmen - sonst blitzt die Kachel bei jedem
-// stillen 15-Minuten-Refresh kurz auf ihren Leerzustand zurueck. Der
-// Schedule-Slice teilt sich denselben Mechanismus (ein eigener Slice, den
-// /dashboard nie mitliefert, weil er - anders als bei cycle - keine
-// Owner-Beschraenkung braucht) und denselben Zweiteiler.
-// --------------------------------------------------------
-
-test('das Schedule-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen', async () => {
-  const widgets = await import('../public/utils/dashboard-widgets.js');
-  assert(widgets.WIDGET_IDS.includes('schedule'), 'WIDGET_IDS fehlt schedule');
-  assert(widgets.DEFAULT_HIDDEN_WIDGETS.has('schedule'),
-    'schedule muss wie health/housekeeping erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
-});
-
-// --------------------------------------------------------
-// Schedule-Widget: Groessenklasse und Zeilendeckel (PR #930 review)
-// ANLASS: `schedule` fiel durch defaultWidgetSize() auf 1x1, obwohl die
-// Kachel eine Mitglieder-Liste ist (Avatar, Name, Schicht) wie `family` -
-// gemessen rendert 1x1 218px, die Kachel selbst 318px, und zieht eine
-// benachbarte Kachel in derselben Rasterzeile mit hoch. Zweiter Teil: der
-// Renderer kannte gar keinen Zeilendeckel, `listRowCap` war die einzige
-// Listenkachel ohne ihn - dieselbe Luecke, die #928 bei den Notizen schon
-// hatte (renderPinnedNotes ist hier das Vorbild).
-// --------------------------------------------------------
-
-test('die Schedule-Kachel defaultet auf 1x2 wie family, nicht auf 1x1', async () => {
-  const widgets = await import('../public/utils/dashboard-widgets.js');
-  nodeAssert.equal(widgets.defaultWidgetSize('schedule'), '1x2',
-    'eine Mitglieder-Liste braucht Hoehe, nicht Breite (PR #930 review)');
-});
-
-test('Kennzahlreihe ist eine Zeile, kein Block', async () => {
-  const widgets = await import('../public/utils/dashboard-widgets.js');
-  // 671px hoch fuer vier Zahlen war der Anlass; die Mitteilung zum Bau sagte
-  // „in der Hoehe, die ein Widget-Kopf kostet".
-  assert(widgets.defaultWidgetSize('metrics') === '2x1',
-    'die Reihe startet als Zeile - 2x2 war der Block, der 671px fuer 80px Inhalt nahm');
-});
-
-// --------------------------------------------------------
 // Wetterlage, Gangart und Temperaturband (#Wetter-Kur 2026-08-17)
 // --------------------------------------------------------
 

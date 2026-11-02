@@ -56,7 +56,7 @@ function navPermissionKey(navModule) {
   return NAV_TO_MODULE[navModule] || _extensionNavMap[navModule] || null;
 }
 
-let _perms = { admin: false, modules: {}, widgets: {}, capabilities: {} };
+let _perms = { admin: false, modules: {}, capabilities: {} };
 
 /** Übernimmt die Rechte-Payload aus einer Auth-Antwort (/me, /login). */
 export function setPermissions(payload) {
@@ -64,7 +64,6 @@ export function setPermissions(payload) {
     _perms = {
       admin: payload.admin === true,
       modules: payload.modules && typeof payload.modules === 'object' ? payload.modules : {},
-      widgets: payload.widgets && typeof payload.widgets === 'object' ? payload.widgets : {},
       capabilities: payload.capabilities && typeof payload.capabilities === 'object' ? payload.capabilities : {},
     };
   }
@@ -72,7 +71,7 @@ export function setPermissions(payload) {
 
 /** Setzt den Store zurück (Logout). */
 export function clearPermissions() {
-  _perms = { admin: false, modules: {}, widgets: {}, capabilities: {} };
+  _perms = { admin: false, modules: {}, capabilities: {} };
 }
 
 export function getPermissions() {
@@ -107,12 +106,6 @@ export function navModuleAccess(navModule) {
 /** Ist ein Nav-Modul nur lesend? (steuert z. B. FAB/Anlege-Aktionen) */
 export function isNavModuleReadOnly(navModule) {
   return navModuleAccess(navModule) === 'read';
-}
-
-/** Darf ein Dashboard-Widget angezeigt werden? */
-export function canSeeWidget(widgetId) {
-  if (_perms.admin) return true;
-  return (_perms.widgets?.[widgetId] ?? 'allow') !== 'none';
 }
 
 /** Fasting is an explicit Health capability, not an implicit module grant. */

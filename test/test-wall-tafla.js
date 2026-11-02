@@ -69,9 +69,8 @@ function household() {
   };
 }
 
-const sections = { dinner: true, plan: true, shopping: true, timers: true, weather: true };
 const build = (hhmm, extra = {}, data = household(), day = '2026-10-19') => wall.buildWall(data, {
-  now: at(hhmm, day), sections, ...extra,
+  now: at(hhmm, day), ...extra,
 });
 
 // --------------------------------------------------------------------------
@@ -93,7 +92,6 @@ test('the scene follows the clock - Kolacja only with a planned dinner, from 15:
   const noDinner = { ...household(), todayMeals: [], dinnerPlan: null };
   assert.equal(build('18:11', {}, noDinner).scene, 'wieczor', 'no dinner, no Kolacja scene');
   assert.equal(build('16:00', {}, noDinner).scene, 'dzien');
-  assert.equal(build('18:11', { sections: { ...sections, dinner: false } }).scene, 'wieczor', 'the household switched the dinner off');
 });
 
 test('Kolacja: the dinner is the hero (cook, meter) and not a row as well; before 15:00 it is a quiet card', () => {
@@ -260,13 +258,30 @@ test('a running timer takes the clock slot; the clock drops into the date line',
   assert.ok(!/class="wall__clock u-rounded"/.test(html), 'the poster clock gave way');
 });
 
-test('the switches of the household hide their sections', () => {
-  const off = build('18:11', { sections: { dinner: true, plan: false, shopping: false, timers: false, weather: false } });
-  assert.equal(off.plan, null);
-  assert.equal(off.shopping, null);
-  const html = markup(off);
-  assert.ok(!/data-wall-timer-start/.test(html), 'no discs with the timers off');
+test('the wall draws its fixed set: dinner, plan, shopping, timers and weather, with no options', () => {
+  const m = build('18:11', { predictions: ['masło'] });
+  assert.ok(m.hero, 'tonight\'s dinner');
+  assert.ok(m.plan, 'the day plan');
+  assert.ok(m.shopping, 'shopping');
+  assert.ok(!('sections' in m) && !('timers' in m), 'the model carries no section switches');
+  const weather = { current: { temp: 12, desc: 'Cloudy', icon: 'cloud' }, today: { temp_max: 14, temp_min: 8 }, provider: 'x' };
+  const html = view.renderWall(m, {
+    clock: { time: '18:11', machine: '18:11' }, weather, weatherIcon: () => '<i data-weather></i>',
+  });
   assert.match(html, /wall-hero/);
+  assert.match(html, /wall-plan/);
+  assert.match(html, /wall-shop/);
+  assert.match(html, /data-wall-timer-start/, 'the timer discs');
+  assert.match(html, /wall__weather/, 'the weather');
+});
+
+test('a leftover sections option changes nothing: the wall has no switches any more', () => {
+  const plain = build('18:11', { predictions: ['masło'] });
+  const switched = build('18:11', {
+    predictions: ['masło'],
+    sections: { dinner: false, plan: false, shopping: false, timers: false, weather: false },
+  });
+  assert.deepEqual(switched, plain);
 });
 
 test('nothing on the wall is set below the 24px floor: every font-size in the wall rules is a wall step', () => {

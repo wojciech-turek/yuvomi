@@ -443,63 +443,6 @@ test('relativeDateLabel: ueber den Jahreswechsel zaehlt der Abstand, nicht das J
 // 2026-10-19). Dziś zeigt Erwachsene erst ab drei als Karte mit offenen
 // Aufgaben (test-dashboard-a11y.js), ohne Termine.
 
-// --------------------------------------------------------
-// Groessennamen sagen, was passiert (Re-Critique 2026-09-27, W2)
-// --------------------------------------------------------
-// „Schmal (2×1)" hiess die Groesse, die eine Kachel ZWEI Spalten breit macht -
-// wer woertlich liest, bekam das Gegenteil. Im Japanischen hiessen 2×1 und 1×2
-// beide „縦長". Die Regel: 2×1 heisst in de/en „breit", und in keiner Sprache
-// tragen zwei waehlbare Groessen denselben Namen.
-test('die Groessennamen der Uebersicht sagen die Form, in jeder Sprache verschieden', async () => {
-  const { readFileSync, readdirSync } = await import('node:fs');
-  const { WIDGET_SIZE_PRESETS } = await import('../public/utils/dashboard-widgets.js');
-  const dir = new URL('../public/locales/', import.meta.url);
-  // Umbenannt ist nur der Name, nie der gespeicherte Wert: Nutzer- und
-  // Haushalts-Layouts (DB, Layout-Hinweis im Geraet) tragen '2x1' - wanderte der
-  // Wert mit, verloeren Bestandsinstallationen ihre Kachelgroessen.
-  assert.deepEqual(WIDGET_SIZE_PRESETS.map((p) => p.value), ['1x1', '2x1', '1x2', '2x2'],
-    'die gespeicherten Groessenwerte bleiben, wie sie sind');
-  const wide = WIDGET_SIZE_PRESETS.find((p) => p.value === '2x1');
-  assert.ok(wide, '2x1 ist keine waehlbare Groesse mehr - der Test prueft dann nichts');
-  assert.doesNotMatch(wide.labelKey, /narrow/i, '2 Spalten x 1 Zeile ist breit, nicht schmal');
-  const label = (locale, key) => key.split('.').reduce((o, k) => o?.[k],
-    JSON.parse(readFileSync(new URL(`${locale}.json`, dir), 'utf8')));
-  assert.match(label('de', wide.labelKey), /^Breit\b/);
-  assert.match(label('en', wide.labelKey), /^Wide\b/);
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
-    const locale = file.slice(0, -5);
-    const names = WIDGET_SIZE_PRESETS.map((p) => label(locale, p.labelKey).replace(/\s*\(.*\)$/, ''));
-    assert.equal(new Set(names).size, names.length, `${locale}: zwei Groessen heissen gleich (${names.join(', ')})`);
-  }
-});
-
-// „Standard (2×2)" hiess die groesste der vier Formen - aber keine Kachel
-// beginnt in ihr (#1723). Ein Name, der einen Ausgangswert behauptet, den es
-// nicht gibt, ist dieselbe Sorte Fehler wie „Schmal" fuer zwei Spalten.
-test('2×2 heisst nach seiner Form, nicht „Standard" - keine Kachel beginnt in dieser Groesse', async () => {
-  const { readFileSync, readdirSync } = await import('node:fs');
-  const { WIDGET_SIZE_PRESETS, WIDGET_IDS, defaultWidgetSize } = await import('../public/utils/dashboard-widgets.js');
-  const square = WIDGET_SIZE_PRESETS.find((p) => p.value === '2x2');
-  assert.ok(square, '2x2 ist keine waehlbare Groesse mehr - der Test prueft dann nichts');
-  // Die Voraussetzung des Namens, gemessen statt behauptet: sobald ein Widget
-  // wieder in 2x2 beginnt, ist diese Zeile rot und der Name neu zu entscheiden.
-  assert.ok(WIDGET_IDS.length > 5, 'zu wenige Widgets gelesen');
-  assert.deepEqual(WIDGET_IDS.filter((id) => defaultWidgetSize(id) === '2x2'), [],
-    'ein Widget beginnt in 2x2');
-  assert.doesNotMatch(square.labelKey, /standard|default/i, 'der Schluessel nennt 2x2 den Ausgangswert');
-  const dir = new URL('../public/locales/', import.meta.url);
-  const label = (file) => square.labelKey.split('.').reduce((o, k) => o?.[k],
-    JSON.parse(readFileSync(new URL(file, dir), 'utf8')));
-  assert.equal(label('de.json'), 'Quadrat (2×2)');
-  assert.equal(label('en.json'), 'Square (2×2)');
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
-    const { dashboard } = JSON.parse(readFileSync(new URL(file, dir), 'utf8'));
-    assert.equal(dashboard.widgetSizeStandard, undefined, `${file}: der alte Name ist als toter Schluessel geblieben`);
-    // Das Malzeichen und die Ziffern der Sprache bleiben, wie die Nachbarn sie fuehren.
-    assert.match(label(file), /\s\((2×2|۲×۲)\)$/u, `${file}: die Massangabe fehlt (${label(file)})`);
-  }
-});
-
 // Faelligkeit (formatDueDate), leerer Mahlzeiten-Slot, Budget-Sparquote (#1455)
 // und die Zeilen der Geburtstags- und Countdown-Kachel (#1454) sind mit ihren
 // Widgets gegangen; der letzte Besuch der Haushaltshilfe mit der Vorschau-

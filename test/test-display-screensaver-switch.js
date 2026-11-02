@@ -158,18 +158,16 @@ test('a failed request puts the switch back and says why', async () => {
 // Tafla: the household's wall switches on "Tablet w kuchni"
 // --------------------------------------------------------
 
-test('"Na ścianie" offers exactly the sections the wall draws, "Dotyk" the ticking switch (off by default)', () => {
-  const { renderBody, WALL_SECTIONS } = page.__test;
-  assert.deepEqual(WALL_SECTIONS.map((s) => s.id), ['dinner', 'plan', 'shopping', 'timers', 'weather'],
-    'the same ids as utils/wall-plan.js and services/wall-settings.js');
+test('the tablet page has no section switches, but keeps the ticking switch (off by default) and the screensaver photos', () => {
+  const { renderBody } = page.__test;
+  assert.equal(page.__test.WALL_SECTIONS, undefined, 'the section list is gone');
   const html = renderBody({
     displays: [{ id: 7, display_name: 'Kuchnia', show_screensaver: false, devices: [{ id: 1, last_seen_at: null }] }],
-    prefs: { wall_sections: { dinner: true, plan: true, shopping: false, timers: true, weather: true }, wall_allow_ticking: false },
+    prefs: { wall_allow_ticking: false },
   });
-  const sectionInputs = [...html.matchAll(/<input[^>]*data-wall-section="([a-z]+)"[^>]*>/g)];
-  assert.deepEqual(sectionInputs.map((m) => m[1]), ['dinner', 'plan', 'shopping', 'timers', 'weather']);
-  assert.ok(!/\schecked\b/.test(sectionInputs[2][0]), 'shopping off as stored');
-  assert.ok(/\schecked\b/.test(sectionInputs[0][0]), 'dinner on as stored');
+  assert.ok(!/data-wall-section/.test(html), 'no section switch');
+  assert.ok(!/settings\.tabletSection/.test(html), 'no section label');
+  assert.match(html, /data-display-screensaver="7"/, 'the screensaver photos switch stays');
   const ticking = html.match(/<input[^>]*data-wall-ticking[^>]*>/)?.[0] ?? '';
   assert.ok(ticking, 'the ticking switch is there');
   assert.ok(!/\schecked\b/.test(ticking), 'and off - the wall only shows');
@@ -179,9 +177,15 @@ test('"Na ścianie" offers exactly the sections the wall draws, "Dotyk" the tick
   assert.match(html, /data-display-pair="7"/, 'and a new code issued');
 });
 
-test('a wall switch writes the household choice and nothing else', async () => {
+test('with no display paired the page shows no empty "Na ścianie" group', () => {
+  const html = page.__test.renderBody({ displays: [], prefs: { wall_allow_ticking: false } });
+  assert.ok(!/tablet-wall-title/.test(html));
+  assert.match(html, /data-wall-ticking/);
+});
+
+test('the ticking switch writes the household choice and nothing else', async () => {
   const puts = [];
-  globalThis.__apiStub.put = async (path, body) => { puts.push({ path, body }); return { data: { wall_sections: { dinner: true, plan: true, shopping: false, timers: true, weather: true }, wall_allow_ticking: false } }; };
+  globalThis.__apiStub.put = async (path, body) => { puts.push({ path, body }); return { data: { wall_allow_ticking: false } }; };
   const list = makeList();
   const container = {
     replaceChildren() {},
@@ -189,14 +193,13 @@ test('a wall switch writes the household choice and nothing else', async () => {
     querySelector: (selector) => ({ '#display-list': list, '#display-error': errorEl() })[selector] ?? null,
   };
   await page.render(container);
-  const section = { checked: false, disabled: false, dataset: { wallSection: 'shopping' } };
   const fire2 = (toggle, attr) => Promise.all((list.handlers.change || []).map((handler) => handler({
     target: { closest: (selector) => (selector === attr ? toggle : null) },
   })));
-  await fire2(section, '[data-wall-section]');
-  assert.deepEqual(puts, [{ path: '/preferences', body: { wall_sections: { shopping: false } } }]);
+  await fire2({ checked: false, disabled: false, dataset: { wallSection: 'shopping' } }, '[data-wall-section]');
+  assert.deepEqual(puts, [], 'a leftover section toggle writes nothing');
   const ticking = { checked: true, disabled: false, dataset: {} };
   await fire2(ticking, '[data-wall-ticking]');
-  assert.deepEqual(puts.at(-1), { path: '/preferences', body: { wall_allow_ticking: true } });
+  assert.deepEqual(puts, [{ path: '/preferences', body: { wall_allow_ticking: true } }]);
   delete globalThis.__apiStub.put;
 });

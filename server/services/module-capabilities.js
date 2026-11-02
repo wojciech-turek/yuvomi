@@ -239,10 +239,14 @@ export async function normalizeCapabilities(raw, moduleId, basePath, publicUrl, 
   };
 }
 
-/** Build permission/scope catalog entries from normalized module list. */
+/**
+ * Build permission/scope catalog entries from normalized module list.
+ * Widgets a manifest declares are still validated and listed in the module's
+ * capabilities, but they are not permission resources: there are no widget
+ * permissions, only module access.
+ */
 export function buildExtensionCatalog(modules) {
   const permissionModules = [];
-  const permissionWidgets = [];
   const scopeModules = [];
 
   for (const mod of modules) {
@@ -258,19 +262,11 @@ export function buildExtensionCatalog(modules) {
         extensionModuleId: mod.id,
       });
     }
-    for (const w of caps.widgets || []) {
-      permissionWidgets.push({
-        id: w.id,
-        module: caps.permissionModuleKey || null,
-        label: w.label,
-        labelKey: w.labelKey || null,
-      });
-    }
     if (caps.apiPrefix && caps.scopeKey) {
       const segment = caps.apiPrefix.replace(/^\/api\//, '').replace(/\/+$/, '');
       scopeModules.push({ key: caps.scopeKey, prefixes: [segment] });
     }
   }
 
-  return { permissionModules, permissionWidgets, scopeModules };
+  return { permissionModules, scopeModules };
 }

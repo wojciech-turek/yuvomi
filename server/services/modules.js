@@ -31,7 +31,6 @@ const EXTENSION_DEFAULT_LOCALE = 'en';
 /** Sync cache for permissions/scopes — refreshed on each listModules(). */
 let _extensionCatalog = {
   permissionModules: [],
-  permissionWidgets: [],
   scopeModules: [],
 };
 

@@ -95,9 +95,10 @@ test('GET / liefert die dokumentierten Defaults', async () => {
   // Feature-Schalter default an (fehlender Wert => aktiv).
   assert.equal(body.data.health_cycle_enabled, true);
   assert.equal(body.data.tasks_subtasks_expanded, false);
-  // The kitchen wall (Tafla): read-only and every section on until an admin decides.
+  // The kitchen wall: read-only until an admin decides; it draws one fixed set, so
+  // there is no section map to read.
   assert.equal(body.data.wall_allow_ticking, false);
-  assert.deepEqual(body.data.wall_sections, { dinner: true, plan: true, shopping: true, timers: true, weather: true });
+  assert.ok(!('wall_sections' in body.data), 'the tablet section switches are gone');
 });
 
 // --------------------------------------------------------
@@ -552,17 +553,20 @@ test('PUT wall_allow_ticking: Mitglied -> 403, Admin non-boolean 400, true persi
   assert.equal((await get({ role: 'member' })).body.data.wall_allow_ticking, true, 'every member reads the household choice');
   assert.equal((await put({ wall_allow_ticking: false }, { role: 'admin' })).body.data.wall_allow_ticking, false);
 });
-test('PUT wall_sections: admin only, known ids with booleans, a partial write keeps the rest (Tafla)', async () => {
-  assert.equal((await put({ wall_sections: { shopping: false } }, { role: 'member' })).status, 403);
-  for (const bad of [['shopping'], { shopping: 'no' }, { budget: false }, 'shopping']) {
-    assert.equal((await put({ wall_sections: bad }, { role: 'admin' })).status, 400, JSON.stringify(bad));
+test('PUT wall_sections is an unknown key now: 200, nothing stored, not echoed (R2)', async () => {
+  for (const role of ['member', 'admin']) {
+    for (const value of [{ shopping: false }, ['shopping'], 'shopping', { budget: false }]) {
+      const res = await put({ wall_sections: value }, { role });
+      assert.equal(res.status, 200, `${role} ${JSON.stringify(value)}`);
+      assert.ok(!('wall_sections' in res.body.data));
+    }
   }
-  const res = await put({ wall_sections: { shopping: false } }, { role: 'admin' });
-  assert.deepEqual(res.body.data.wall_sections, { dinner: true, plan: true, shopping: false, timers: true, weather: true });
-  const next = await put({ wall_sections: { weather: false } }, { role: 'admin' });
-  assert.deepEqual(next.body.data.wall_sections, { dinner: true, plan: true, shopping: false, timers: true, weather: false },
-    'the earlier choice stays');
-  await put({ wall_sections: { shopping: true, weather: true } }, { role: 'admin' });
+  const stored = db.prepare("SELECT 1 FROM sync_config WHERE key = 'wall_sections'").get();
+  assert.equal(stored, undefined, 'nothing was stored');
+  assert.ok(!('wall_sections' in (await get({ role: 'member' })).body.data));
+  assert.equal((await put({ wall_allow_ticking: true, wall_sections: { plan: false } }, { role: 'admin' })).body.data.wall_allow_ticking, true,
+    'the ticking switch keeps working next to it');
+  await put({ wall_allow_ticking: false }, { role: 'admin' });
 });
 
 // --------------------------------------------------------

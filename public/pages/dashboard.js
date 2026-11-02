@@ -424,7 +424,7 @@ function setWeatherAvailability(res, prefs) {
 
 // Aus welchem Modul ein Countdown stammt, entscheidet über ihn: wer den
 // Kalender abgeschaltet hat, soll dessen Einträge auch hier nicht sehen. Die
-// Kachel als Ganzes gehört keinem Modul (siehe PERMISSION_WIDGETS), ihre
+// Kachel als Ganzes gehört keinem Modul, ihre
 // einzelnen Zeilen schon - dieselbe Aufteilung wie bei der Kennzahlreihe.
 //
 // SEIT DEM REVIEW ZU PR #793 IST DAS DIE ZWEITE INSTANZ, NICHT DIE ERSTE:
@@ -648,11 +648,11 @@ function wallModuleOff(module) {
  */
 function renderWallSurface(data, weather, {
   failed = false, loading = false, updatedAt = null, now = new Date(), screensaverEnabled = false,
-  sections = null, mayWrite = false, isDisplay = false, predictions = [], question = null, tickers = null,
+  mayWrite = false, isDisplay = false, predictions = [], question = null, tickers = null,
   questionSettled = null,
 } = {}) {
   const model = buildWall(failed || loading ? null : data, {
-    now, sections, mayWrite, isDisplay, timer: readWallTimer(), lastLoadedAt: updatedAt,
+    now, mayWrite, isDisplay, timer: readWallTimer(), lastLoadedAt: updatedAt,
     predictions, question, tickers, moduleOff: wallModuleOff, mealLabel: mealTypeLabel,
   });
   return renderWall(model, {
@@ -1056,7 +1056,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
    * the week, who the display may tick for) and the answer line that stands
    * for three seconds. */
   const wallUi = {
-    sections: null,
     mayWrite: false,
     isDisplay: user?.access_scope === 'display',
     predictions: [],
@@ -1105,10 +1104,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     weatherAutoLocate = Boolean(prefsRes.data?.weather_user?.auto_locate ?? prefsRes.data?.weather_auto_locate);
     data.pendingReminders = remindersRes;
     screensaverEnabled = Boolean(prefsRes.data?.screensaver_enabled);
-    // The household's choices for the wall (Tafla): its sections and whether
-    // it may tick things off. Read on every build - an admin's switch reaches
-    // the tablet with its next refresh.
-    wallUi.sections = prefsRes.data?.wall_sections ?? null;
+    // Whether the wall may tick things off (the household's one choice for
+    // it). Read on every build - an admin's switch reaches the tablet with its
+    // next refresh.
     wallUi.mayWrite = prefsRes.data?.wall_allow_ticking === true;
     lastLoadedAt = new Date();
   } catch (err) {
@@ -1293,7 +1291,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   function wallOptions() {
     return {
-      sections: wallUi.sections,
       mayWrite: wallUi.mayWrite,
       isDisplay: wallUi.isDisplay,
       predictions: wallUi.predictions,
@@ -1316,9 +1313,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
    * the people it may tick for - an empty list means no rings. */
   async function loadWallExtras() {
     if (!wallMode || loadFailed) return;
-    const sections = wallUi.sections ?? {};
     const jobs = [];
-    if (sections.shopping !== false && !wallModuleOff('shopping')) {
+    if (!wallModuleOff('shopping')) {
       jobs.push(api.get('/shopping/predictions')
         .then((res) => { wallUi.predictions = (Array.isArray(res?.data) ? res.data : []).map((p) => p.name).filter(Boolean); })
         .catch(() => {}));

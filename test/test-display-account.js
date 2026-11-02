@@ -387,14 +387,13 @@ test('die Rechte-Nutzlast traegt die Scope-Liste als Modulrechte', async () => {
   assert.ok(!Object.values(modules).includes('write'), 'ein Display schreibt in keinem Modul');
 });
 
-test('gesperrte Module nehmen ihre Kacheln mit', async () => {
-  // Die Vererbung stand schon da ("Widgets erben die Modulsperre") - sie greift
-  // nur, weil die Verengung VOR ihr laeuft. Steht sie danach, sind die Module
-  // gesperrt und die Kacheln trotzdem sichtbar.
+test('gesperrte Module bleiben gesperrt, und es gibt keine Kachel-Rechte mehr', async () => {
+  // Die Verengung laeuft nach den apply()-Durchgaengen; Today und die Wand
+  // folgen allein dem Modulzugriff.
   const me = await asDisplay(displayToken)('GET', '/auth/me');
-  const widgets = me.body.permissions.widgets;
+  assert.equal(me.body.permissions.widgets, undefined);
   for (const id of ['budget', 'notes', 'health']) {
-    assert.equal(widgets[id], 'none', `Kachel ${id} muss gesperrt sein`);
+    assert.equal(me.body.permissions.modules[id], 'none', `Modul ${id} muss gesperrt sein`);
   }
 });
 

@@ -96,7 +96,7 @@ function renderHead(model, { clock, weather, weatherIcon, timer }) {
           ${teraz}
         </div>
       </div>
-      ${model.sections.weather ? renderWeather(weather, weatherIcon) : ''}
+      ${renderWeather(weather, weatherIcon)}
     </header>`;
 }
 
@@ -297,7 +297,7 @@ function renderDock(model, { timer, screensaverEnabled }) {
         ${saver}
         ${stale}
       </div>
-      ${model.timers || model.timer ? `<div class="wall__dock-end">${timer.controls}</div>` : ''}
+      <div class="wall__dock-end">${timer.controls}</div>
     </footer>`;
 }
 

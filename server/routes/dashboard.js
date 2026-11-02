@@ -44,7 +44,7 @@ const log = createLogger('Dashboard');
  * Modulrechte pro Rolle und Mitglied (#467). Ein Kind, dem der Kalender auf
  * `none` steht, bekam über /dashboard weiterhin Termintitel, Beschreibung, Ort
  * und Anhangsnamen geliefert — die App fiel nicht auf, weil der Browser die
- * Kachel über `canSeeWidget` ausblendet, aber die Daten lagen auf der Leitung,
+ * Kachel im Browser ausblendet, aber die Daten lagen auf der Leitung,
  * im Netzwerk-Tab und im Service-Worker-Cache. Die SPEC sagt zu #467
  * „Enforcement is server-side"; für diesen Endpoint stimmte das nicht.
  *
@@ -961,7 +961,7 @@ router.get('/', (req, res) => {
   // kurze Liste, die genau hier gebraucht wird.
   //
   // KEINE ZEILE IN DENIED_PAYLOAD, und das ist kein Vergessen: ein Schnellzugriff
-  // gehoert keinem Modul (siehe PERMISSION_WIDGETS). Die Achse, die er hat, ist
+  // gehoert keinem Modul. Die Achse, die er hat, ist
   // geteilt gegen privat, und die setzt `listQuickLinksFor` ueber die anfragende
   // Person durch - eine fremde private Kachel liegt also auch dann nicht auf der
   // Leitung, wenn der Browser sie nie zeichnen wuerde.

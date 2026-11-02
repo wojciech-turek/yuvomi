@@ -1,11 +1,11 @@
 /**
  * Settings-Blatt: Rollen & Rechte (#467)
  * Admin konfiguriert pro Familienrolle (Standard) und pro Mitglied (Override),
- * welche Module sichtbar/lesbar/voll nutzbar sind und welche Dashboard-Widgets
- * verfügbar sind. Die verbindliche Durchsetzung liegt im Server; diese Seite
+ * welche Module sichtbar/lesbar/voll nutzbar sind (es gibt keine Rechte pro
+ * Kachel von Today oder der Wand; sie folgen dem Modulzugriff). Die verbindliche Durchsetzung liegt im Server; diese Seite
  * pflegt nur die Konfiguration über /api/v1/permissions.
  *
- * Craft-Rework: fokussierte schmale Spalte, Widgets sitzen unter ihrem Modul,
+ * Craft-Rework: fokussierte schmale Spalte, Fähigkeiten sitzen unter ihrem Modul,
  * ein Abweichungs-Überblick zeigt die Form einer Rolle auf einen Blick, und die
  * Zugriffsstufe wird über Icon-Segmente mit gleitender Aktiv-Pille gesetzt.
  */
@@ -19,7 +19,6 @@ import { confirmModal } from '/components/modal.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import { createRetryState } from '/settings/components.js';
 import { syncLeafEdits, trackLeafEdits } from '/settings/dirty-guard.js';
-import { resolveExtensionLabel } from '/utils/extension-i18n.js';
 import {
   effectiveCapabilityAccess as resolveCapabilityAccess,
   isPermissionDeviation,
@@ -45,57 +44,10 @@ const MODULE_ACCENT = {
   health: 'var(--module-health)',
 };
 
-const WIDGET_LABEL_KEYS = {
-  'today-weather': 'today.customizeWeather',
-  'today-shopping': 'today.shoppingTitle',
-  'today-tomorrow': 'today.tomorrow',
-  'today-question': 'today.questionTitle',
-  'today-soon': 'today.soonTitle',
-  tasks: 'nav.tasks',
-  calendar: 'nav.calendar',
-  meals: 'nav.meals',
-  shopping: 'nav.shopping',
-  birthdays: 'nav.birthdays',
-  budget: 'nav.budget',
-  health: 'nav.health',
-  fasting: 'health.fasting.title',
-  // Wie das Fasten aus dem Wort des Tabs selbst: die Kachel heisst im
-  // Anpassen-Panel schon "Naehrwerte", ein eigener settings.*-Schluessel
-  // waere ein zweiter Name fuer dieselbe Sache.
-  nutrition: 'health.nutrition.title',
-  cycle: 'settings.permWidgetCycle',
-  housekeeping: 'nav.housekeeping',
-  schedule: 'nav.schedule',
-  waste: 'nav.waste',
-  // Der Name der Kachel selbst, wie beim Countdown: „Vorrat" hiesse hier das
-  // Modul, gesperrt wird aber nur die eine Kachel darueber.
-  pantry: 'dashboard.pantryExpiringTitle',
-  notes: 'nav.notes',
-  family: 'settings.permWidgetFamily',
-  weather: 'settings.permWidgetWeather',
-  clock: 'dashboard.clock',
-  // Wie die Uhr aus dem Wort des Widgets selbst, nicht aus einem eigenen
-  // settings.*-Schluessel: die Kennzahlreihe heisst im Anpassen-Panel schon
-  // „Kennzahlen", und zwei Woerter fuer dieselbe Kachel waeren zwei Namen.
-  metrics: 'dashboard.metrics',
-  countdown: 'dashboard.countdownTitle',
-  quicklinks: 'dashboard.quickLinksTitle',
-};
-
 // Icon je Zugriffsstufe (Icon-Segmente statt langer Textlabels). Tooltip/aria
 // tragen weiterhin den Klartext, damit Bedienung UND a11y stimmen.
 const MODULE_OPT_ICONS = { none: 'eye-off', read: 'eye', write: 'pencil', inherit: 'corner-down-right' };
-const WIDGET_OPT_ICONS = { none: 'eye-off', allow: 'eye', inherit: 'corner-down-right' };
-
-const widgetLabel = (id) => {
-  const w = state.catalog?.widgets.find((x) => x.id === id);
-  if (w?.labelKey && id.includes(':')) {
-    const moduleId = id.split(':')[0];
-    return resolveExtensionLabel(moduleId, { labelKey: w.labelKey, label: w.label, fallback: id });
-  }
-  if (w?.label) return w.label;
-  return t(WIDGET_LABEL_KEYS[id] || id);
-};
+const CAPABILITY_OPT_ICONS = { none: 'eye-off', allow: 'eye', inherit: 'corner-down-right' };
 
 const familyRoleLabel = (role) =>
   t(`settings.familyRole${String(role || 'other').replace(/(^|_)([a-z])/g, (_, __, c) => c.toUpperCase())}`);
@@ -103,11 +55,11 @@ const familyRoleLabel = (role) =>
 // ── Modul-State ──────────────────────────────────────────────────────────────
 
 const state = {
-  catalog: null,       // { modules, widgets, roles, members, defaults }
+  catalog: null,       // { modules, capabilities, roles, members, defaults }
   mode: 'role',        // 'role' | 'user'
   subjectId: null,     // familyRole (role) | userId (user)
-  draft: { modules: {}, widgets: {}, capabilities: {} },
-  inherited: { modules: {}, widgets: {}, capabilities: {} },
+  draft: { modules: {}, capabilities: {} },
+  inherited: { modules: {}, capabilities: {} },
   dirty: false,
   loadedFor: null,     // subjectKey(), dessen Rechte in draft/inherited stehen
   loadFailed: false,   // das Laden der Rechte fuer das aktuelle Subjekt scheiterte
@@ -133,8 +85,6 @@ const moduleLabel = (key) => {
   return key;
 };
 
-const widgetsForModule = (moduleKey) => state.catalog.widgets.filter((w) => w.module === moduleKey);
-const generalWidgets = () => state.catalog.widgets.filter((w) => !w.module);
 const capabilitiesForModule = (moduleKey) => (state.catalog.capabilities || []).filter((item) => item.module === moduleKey);
 const capabilityLabel = (item) => t(item.labelKey);
 
@@ -144,15 +94,6 @@ function effectiveModuleAccess(moduleKey) {
   if (d && d !== 'inherit') return d;
   if (state.mode === 'user') return state.inherited.modules[moduleKey] ?? 'write';
   return 'write';
-}
-
-// Effektiver Widget-Zustand ('none' | 'allow'); Modulsperre schlägt durch.
-function effectiveWidgetAccess(w) {
-  if (w.module && effectiveModuleAccess(w.module) === 'none') return 'none';
-  const d = state.draft.widgets[w.id];
-  if (d && d !== 'inherit') return d;
-  if (state.mode === 'user') return state.inherited.widgets[w.id] ?? 'allow';
-  return 'allow';
 }
 
 function effectiveCapabilityAccess(item, view = {}) {
@@ -178,21 +119,12 @@ function moduleOptions(mode = state.mode) {
   return base;
 }
 
-function widgetOptions(mode = state.mode) {
-  const base = [
-    { value: 'none', label: t('settings.permWidgetBlocked'), icon: WIDGET_OPT_ICONS.none },
-    { value: 'allow', label: t('settings.permWidgetAllowed'), icon: WIDGET_OPT_ICONS.allow },
-  ];
-  if (mode === 'user') return [{ value: 'inherit', label: t('settings.permInherit'), icon: WIDGET_OPT_ICONS.inherit }, ...base];
-  return base;
-}
-
 function capabilityOptions(mode = state.mode) {
   const base = [
-    { value: 'none', label: t('settings.permCapabilityBlocked'), icon: WIDGET_OPT_ICONS.none },
-    { value: 'allow', label: t('settings.permCapabilityAllowed'), icon: WIDGET_OPT_ICONS.allow },
+    { value: 'none', label: t('settings.permCapabilityBlocked'), icon: CAPABILITY_OPT_ICONS.none },
+    { value: 'allow', label: t('settings.permCapabilityAllowed'), icon: CAPABILITY_OPT_ICONS.allow },
   ];
-  if (mode === 'user') return [{ value: 'inherit', label: t('settings.permInherit'), icon: WIDGET_OPT_ICONS.inherit }, ...base];
+  if (mode === 'user') return [{ value: 'inherit', label: t('settings.permInherit'), icon: CAPABILITY_OPT_ICONS.inherit }, ...base];
   return base;
 }
 
@@ -200,7 +132,7 @@ function accessShort(value) {
   switch (value) {
     case 'none': return t('settings.permAccessNone');
     case 'read': return t('settings.permAccessRead');
-    case 'allow': return t('settings.permWidgetAllowed');
+    case 'allow': return t('settings.permCapabilityAllowed');
     default: return t('settings.permAccessWrite');
   }
 }
@@ -267,24 +199,6 @@ function moduleRowHtml(mod) {
   `;
 }
 
-function widgetRowHtml(w) {
-  const current = state.draft.widgets[w.id] ?? (state.mode === 'user' ? 'inherit' : 'allow');
-  const moduleLocked = w.module && effectiveModuleAccess(w.module) === 'none';
-  const meta = moduleLocked
-    ? `<span class="perm-row__hint perm-row__hint--warn">${esc(t('settings.permModuleLockedHint'))}</span>`
-    : '';
-  return `
-    <div class="perm-row perm-row--widget${moduleLocked ? ' is-locked' : ''}" data-widget="${esc(w.id)}">
-      <div class="perm-row__label">
-        <i data-lucide="layout-dashboard" class="perm-row__wicon" aria-hidden="true"></i>
-        <span class="perm-row__name">${esc(widgetLabel(w.id))}</span>
-        ${meta}
-      </div>
-      ${segControl({ group: `widget:${w.id}`, label: widgetLabel(w.id), current, options: widgetOptions(), disabled: moduleLocked })}
-    </div>
-  `;
-}
-
 export function capabilityRowHtml(item, view = {}) {
   const mode = view.mode ?? state.mode;
   const draft = view.draft ?? state.draft.capabilities;
@@ -305,13 +219,9 @@ export function capabilityRowHtml(item, view = {}) {
   `;
 }
 
-// Ein Modul mit seinen Widgets (genestet) — die Beziehung wird strukturell sichtbar.
+// Ein Modul mit seinen Fähigkeiten (genestet), die Beziehung wird strukturell sichtbar.
 function moduleGroupHtml(mod) {
-  const widgets = widgetsForModule(mod.key);
   const capabilities = capabilitiesForModule(mod.key);
-  const widgetsHtml = widgets.length
-    ? `<div class="perm-modgroup__widgets">${widgets.map(widgetRowHtml).join('')}</div>`
-    : '';
   const capabilitiesHtml = capabilities.length
     ? `<div class="perm-modgroup__capabilities">
         <div class="perm-modgroup__capabilities-title">
@@ -320,7 +230,7 @@ function moduleGroupHtml(mod) {
         ${capabilities.map(capabilityRowHtml).join('')}
       </div>`
     : '';
-  return `<div class="perm-modgroup" data-module="${esc(mod.key)}">${moduleRowHtml(mod)}${widgetsHtml}${capabilitiesHtml}</div>`;
+  return `<div class="perm-modgroup" data-module="${esc(mod.key)}">${moduleRowHtml(mod)}${capabilitiesHtml}</div>`;
 }
 
 // ── Abweichungs-Überblick (auf einen Blick) ────────────────────────────────────
@@ -331,13 +241,6 @@ function deviationChips() {
     const acc = effectiveModuleAccess(m.key);
     if (acc !== 'write') {
       chips.push(`<span class="perm-summary__chip"><span class="perm-summary__dot" style="background:${MODULE_ACCENT[m.key] || 'var(--color-accent)'}"></span>${esc(moduleLabel(m.key))} · ${esc(accessShort(acc))}</span>`);
-    }
-  }
-  for (const w of state.catalog.widgets) {
-    // Nur eigenständige Widget-Sperren zählen (Modulsperre ist schon oben abgebildet).
-    if (w.module && effectiveModuleAccess(w.module) === 'none') continue;
-    if (effectiveWidgetAccess(w) === 'none') {
-      chips.push(`<span class="perm-summary__chip perm-summary__chip--widget"><i data-lucide="eye-off" aria-hidden="true"></i>${esc(widgetLabel(w.id))}</span>`);
     }
   }
   for (const item of state.catalog.capabilities || []) {
@@ -386,12 +289,12 @@ function renderSummary(container) {
 // (`aria-label`), ein Screenreader hoerte die Liste sonst ein zweites Mal.
 //
 // DIESELBEN ICONS HEISSEN JE ABSCHNITT ETWAS ANDERES (Codex an #1485): das
-// Auge ist am Modul „Lesen", am Widget „Verfuegbar", an einer Faehigkeit
-// „Erlaubt". Eine Legende nur aus den Modul-Optionen stand auch ueber Widget-
-// und Faehigkeits-Zeilen und nannte dort die falsche Bedeutung. Jeder Abschnitt
+// Auge ist am Modul „Lesen", an einer Faehigkeit „Erlaubt". Eine Legende nur
+// aus den Modul-Optionen stand auch ueber Faehigkeits-Zeilen und nannte dort
+// die falsche Bedeutung. Jeder Abschnitt
 // traegt deshalb seine eigenen Woerter unter seiner Ueberschrift; „Erben"
 // bedeutet ueberall dasselbe und steht einmal vorn.
-export function permLegendHtml(mode = state.mode, { widgets = true, capabilities = true } = {}) {
+export function permLegendHtml(mode = state.mode, { capabilities = true } = {}) {
   const item = (o) => `
       <span class="perm-legend__item"><i data-lucide="${esc(o.icon)}" aria-hidden="true"></i>${esc(o.label)}</span>`;
   const own = (options) => options.filter((o) => o.value !== 'inherit');
@@ -401,7 +304,6 @@ export function permLegendHtml(mode = state.mode, { widgets = true, capabilities
   const parts = [
     inherit ? `<span class="perm-legend__group">${item(inherit)}</span>` : '',
     group(t('settings.permModulesHeading'), moduleOptions(mode)),
-    widgets ? group(t('settings.permWidgetsHeading'), widgetOptions(mode)) : '',
     capabilities ? group(t('settings.permCapabilitiesHeading'), capabilityOptions(mode)) : '',
   ];
   return `<p class="perm-legend" aria-hidden="true">${parts.join('')}</p>`;
@@ -458,14 +360,6 @@ function renderMatrix(container) {
   }
 
   const groupsHtml = state.catalog.modules.map(moduleGroupHtml).join('');
-  const general = generalWidgets();
-  const generalHtml = general.length
-    ? `<div class="perm-modgroup perm-modgroup--general">
-        <div class="perm-modgroup__general-title">${esc(t('settings.permWidgetsHeading'))}</div>
-        <div class="perm-modgroup__widgets">${general.map(widgetRowHtml).join('')}</div>
-      </div>`
-    : '';
-
   panel.replaceChildren();
   // Die Matrix-Ueberschrift ist die erste unter dem h1 des Blatts, also h2 -
   // als h3 stand sie seit dem Blatt je Modul (R10) ohne sichtbares h2 davor.
@@ -476,12 +370,11 @@ function renderMatrix(container) {
         state.mode === 'role' ? t('settings.permRoleLegend') : t('settings.permMemberLegend'),
       )}</p>
       ${permLegendHtml(state.mode, {
-        widgets: state.catalog.widgets.length > 0,
         capabilities: (state.catalog.capabilities || []).length > 0,
       })}
     </div>
     <div id="perm-summary"></div>
-    <div class="perm-list">${groupsHtml}${generalHtml}</div>
+    <div class="perm-list">${groupsHtml}</div>
     <div class="perm-actions">
       <span class="perm-actions__status" id="perm-dirty" hidden>
         <i data-lucide="circle-dot" aria-hidden="true"></i>${esc(t('settings.permUnsaved'))}
@@ -507,17 +400,11 @@ function updateSaveState(panel) {
   syncLeafEdits();
 }
 
-// Widgets eines Moduls neu rendern (nach Modul-Änderung: Sperr-Zustände hängen daran).
-function rebuildModuleWidgets(container, moduleKey) {
+// Fähigkeiten eines Moduls neu rendern (nach Modul-Änderung).
+function rebuildModuleCapabilities(container, moduleKey) {
   const moduleGroup = container.querySelector(`.perm-modgroup[data-module="${moduleKey}"]`);
   if (!moduleGroup) return;
-  const widgets = widgetsForModule(moduleKey);
   const capabilities = capabilitiesForModule(moduleKey);
-  const widgetsGroup = moduleGroup.querySelector('.perm-modgroup__widgets');
-  if (widgetsGroup) {
-    widgetsGroup.replaceChildren();
-    widgetsGroup.insertAdjacentHTML('beforeend', widgets.map(widgetRowHtml).join(''));
-  }
   const capabilityGroup = moduleGroup.querySelector('.perm-modgroup__capabilities');
   if (capabilityGroup) {
     capabilityGroup.replaceChildren();
@@ -603,8 +490,8 @@ async function selectSubject(container, mode, id) {
   state.dirty = false;
   state.loadedFor = null;
   state.loadFailed = false;
-  state.draft = { modules: {}, widgets: {}, capabilities: {} };
-  state.inherited = { modules: {}, widgets: {}, capabilities: {} };
+  state.draft = { modules: {}, capabilities: {} };
+  state.inherited = { modules: {}, capabilities: {} };
   // Bis die Rechte da sind, ist die stehende Matrix nicht bedienbar: sie zeigt
   // noch das vorige Subjekt, und ein Klick liefe ins Leere.
   lockMatrix(container);
@@ -614,18 +501,18 @@ async function selectSubject(container, mode, id) {
       if (mode === 'role') {
         const res = await api.get(`/permissions/role/${encodeURIComponent(id)}`);
         if (generation !== loadGeneration) return;
-        state.draft = { modules: { ...res.data.modules }, widgets: { ...res.data.widgets }, capabilities: { ...res.data.capabilities } };
+        state.draft = { modules: { ...res.data.modules }, capabilities: { ...res.data.capabilities } };
       } else {
         const member = state.catalog.members.find((m) => String(m.id) === String(id));
         const [ov, roleRes] = await Promise.all([
           api.get(`/permissions/user/${encodeURIComponent(id)}`),
           member && member.role !== 'admin'
             ? api.get(`/permissions/role/${encodeURIComponent(member.family_role)}`)
-            : Promise.resolve({ data: { modules: {}, widgets: {}, capabilities: {} } }),
+            : Promise.resolve({ data: { modules: {}, capabilities: {} } }),
         ]);
         if (generation !== loadGeneration) return;
-        state.draft = { modules: { ...ov.data.modules }, widgets: { ...ov.data.widgets }, capabilities: { ...ov.data.capabilities } };
-        state.inherited = { modules: { ...roleRes.data.modules }, widgets: { ...roleRes.data.widgets }, capabilities: { ...roleRes.data.capabilities } };
+        state.draft = { modules: { ...ov.data.modules }, capabilities: { ...ov.data.capabilities } };
+        state.inherited = { modules: { ...roleRes.data.modules }, capabilities: { ...roleRes.data.capabilities } };
       }
       state.loadedFor = subjectKey();
       state.dirty = false;
@@ -651,9 +538,8 @@ async function save(container) {
   if (!draftIsCurrent()) return;
   const generation = loadGeneration;
   const title = subjectTitle();
-  const payload = { modules: {}, widgets: {}, capabilities: {} };
+  const payload = { modules: {}, capabilities: {} };
   for (const [k, v] of Object.entries(state.draft.modules)) if (v && v !== 'inherit') payload.modules[k] = v;
-  for (const [k, v] of Object.entries(state.draft.widgets)) if (v && v !== 'inherit') payload.widgets[k] = v;
   for (const [k, v] of Object.entries(state.draft.capabilities)) if (v && v !== 'inherit') payload.capabilities[k] = v;
 
   const url = state.mode === 'role'
@@ -670,7 +556,7 @@ async function save(container) {
     // Inzwischen ein anderes Subjekt gewaehlt: die Antwort gehoert nicht in
     // dessen Entwurf.
     if (generation === loadGeneration) {
-      state.draft = { modules: { ...res.data.modules }, widgets: { ...res.data.widgets }, capabilities: { ...res.data.capabilities } };
+      state.draft = { modules: { ...res.data.modules }, capabilities: { ...res.data.capabilities } };
       state.dirty = false;
       renderMatrix(container);
     }
@@ -749,15 +635,14 @@ function applySegment(container, opt) {
   if (!key || !draftIsCurrent()) return;
   const value = opt.dataset.value;
   if (type === 'module') state.draft.modules[key] = value;
-  else if (type === 'widget') state.draft.widgets[key] = value;
   else state.draft.capabilities[key] = value;
   state.dirty = true;
 
   // Segment in-place aktualisieren (Slide bleibt erhalten).
   updateSegActive(opt.closest('.perm-seg'), opt);
 
-  // Modul-Änderung: nur die Widgets DIESES Moduls neu (Sperr-Zustände).
-  if (type === 'module') rebuildModuleWidgets(container, key);
+  // Modul-Änderung: die Fähigkeiten DIESES Moduls neu.
+  if (type === 'module') rebuildModuleCapabilities(container, key);
 
   renderSummary(container);
   updateSaveState(container.querySelector('#perm-matrix'));
@@ -774,7 +659,7 @@ async function resetSubject(container) {
     detail: t('settings.permResetConfirmDetail'),
   });
   if (!ok || !draftIsCurrent()) return;
-  state.draft = { modules: {}, widgets: {}, capabilities: {} };
+  state.draft = { modules: {}, capabilities: {} };
   state.dirty = true;
   renderMatrix(container);
 }
@@ -824,8 +709,8 @@ export async function render(container, { user } = {}) {
   state.catalog = catalog;
   state.mode = 'role';
   state.subjectId = null;
-  state.draft = { modules: {}, widgets: {}, capabilities: {} };
-  state.inherited = { modules: {}, widgets: {}, capabilities: {} };
+  state.draft = { modules: {}, capabilities: {} };
+  state.inherited = { modules: {}, capabilities: {} };
   state.dirty = false;
   // Die Matrix hat keinen <form>: sie meldet ihren Entwurf selbst beim
   // Verlassen-Schutz der Einstellungen an (settings/dirty-guard.js).

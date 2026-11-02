@@ -438,13 +438,11 @@ export function buildPlan(data, ctx, { featuredDinner = null } = {}) {
   }
 
   // The other modules (reminders, birthdays, pantry, shift, help, approvals)
-  // through the shared contract - with no widget configuration, so no
-  // "no echo" bolt applies: Dziś has no module widgets any more.
+  // through the shared contract.
   const sheetCtx = todaySheetContext({
     todayKey: ctx.todayKey,
     tomorrowKey: ctx.tomorrowKey,
     nowTime: ctx.nowTime,
-    cfg: [],
     viewer: ctx.viewer,
     isModuleDisabled: off,
     existing: rows.map((row) => ({ kind: row.kind, objectId: row.id })),

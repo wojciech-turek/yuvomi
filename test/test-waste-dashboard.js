@@ -17,8 +17,6 @@ import { register } from 'node:module';
 
 register('./test-browser-loader.mjs', import.meta.url);
 
-const widgetsUtil = await import('../public/utils/dashboard-widgets.js');
-const permissions = await import('../server/permissions.js');
 
 const src = () => readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
 
@@ -61,19 +59,3 @@ test('Dziś fragt die Abfuhr nur bei eingeschaltetem Modul (frueher ensureWasteS
 // Heute-Blatt, das die Option nie las). Die beiden Guards zum Filtern und
 // Verwerfen des Kachel-Slices sind deshalb mit dem Slice gegangen.
 
-test('das Waste-Widget ist in der Anpassen-Standardliste als Opt-in eingetragen, wie schedule/housekeeping', () => {
-  assert(widgetsUtil.WIDGET_IDS.includes('waste'), 'WIDGET_IDS fehlt waste');
-  assert(widgetsUtil.DEFAULT_HIDDEN_WIDGETS.has('waste'),
-    'waste muss wie rewards/health/housekeeping/schedule erst im Anpassen-Tray auftauchen, nicht ab Werk sichtbar sein');
-});
-
-test('die Waste-Kachel defaultet auf 1x2 wie schedule/family, nicht auf 1x1', () => {
-  assert.equal(widgetsUtil.defaultWidgetSize('waste'), '1x2',
-    'eine Liste "naechste Abholung je Typ" braucht Hoehe, nicht Breite');
-});
-
-test('PERMISSION_WIDGETS kennt das Waste-Widget und bindet es an das waste-Modul', () => {
-  const entry = permissions.PERMISSION_WIDGETS.find((w) => w.id === 'waste');
-  assert(entry, 'PERMISSION_WIDGETS fehlt ein Eintrag fuer waste');
-  assert.equal(entry.module, 'waste', 'ein gesperrtes waste-Modul muss auch das Widget sperren (#467)');
-});

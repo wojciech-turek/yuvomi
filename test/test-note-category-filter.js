@@ -207,7 +207,7 @@ test('category hints say that notes in a personal category stay visible to the h
 
 test('permission module rerender keeps capability controls in the editor', () => {
   const source = readFileSync(new URL('../public/settings/pages/admin-permissions.js', import.meta.url), 'utf8');
-  const rebuild = source.match(/function rebuildModuleWidgets\([\s\S]*?\n\}/)?.[0] || '';
+  const rebuild = source.match(/function rebuildModuleCapabilities\([\s\S]*?\n\}/)?.[0] || '';
   assert.match(rebuild, /capabilitiesForModule/);
   assert.match(rebuild, /capabilityRowHtml/);
   assert.match(source, /permCapabilitiesHeading/);

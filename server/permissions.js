@@ -1,13 +1,13 @@
 /**
  * Modul: Zugriffsrechte (Rollen & Rechte)
  * Zweck: Geteiltes Berechtigungsmodell für interaktive Nutzer. Legt fest, welche
- *        Module ein Familienmitglied sehen/bearbeiten darf und welche Dashboard-
- *        Widgets ihm zur Verfügung stehen — konfigurierbar pro Familienrolle
+ *        Module ein Familienmitglied sehen/bearbeiten darf (es gibt keine Rechte
+ *        pro Kachel; Today und die Wand folgen dem Modulzugriff), konfigurierbar pro Familienrolle
  *        (Standard) und pro einzelnem Mitglied (Override). Siehe Discussion #467.
  *
  * Vertrag / Invarianten:
  *   - SPARSE-Speicherung: nur Abweichungen vom Standard landen in
- *     `access_permissions`. Fehlt eine Zeile → Modul 'write', Widget 'allow'.
+ *     `access_permissions`. Fehlt eine Zeile → Modul 'write'.
  *     Dadurch verhalten sich Bestands-Installationen nach Migration v74
  *     unverändert (kein Zwangs-Lockout).
  *   - Dieser Standard ist für die MIGRATION entschieden, nicht für die
@@ -23,7 +23,6 @@
  *     Vollzugriff, kein Scoping. So kann sich niemand selbst aussperren.
  *   - Auflösungsreihenfolge für ein Mitglied: Mitglied-Override ?? Rollen-Profil
  *     ?? Standard.
- *   - Widgets erben die Modulsperre: Modul 'none' → zugehörige Widgets gesperrt.
  *
  * Die Modulschlüssel sind IDENTISCH mit den Scope-Modulschlüsseln aus scopes.js,
  * damit die Backend-Durchsetzung dieselbe Prüf-Infrastruktur nutzt (ein
@@ -68,64 +67,6 @@ export const PERMISSION_MODULES = Object.freeze([
   { key: 'schedule',     labelKey: 'nav.schedule',     icon: 'calendar-clock', navIds: ['schedule'] },
 ]);
 
-// Dashboard-Widgets mit ihrem Trägermodul (aus dashboard.js MODULE_FOR_WIDGET).
-// `module: null` → kein Modul-Gate (family/weather sind infrastrukturell).
-// Das cycle-Widget hängt am Modul health, ist aber separat sperrbar — so lässt
-// es sich z. B. für einzelne Mitglieder ausblenden, ohne Gesundheit ganz zu
-// sperren (#467).
-export const PERMISSION_WIDGETS = Object.freeze([
-  // Tafla Dziś (2026-10-20): the start page's own sections are lockable like
-  // any tile. Zakupy belongs to its module; Jutro, Wkrótce, the weekly question
-  // and the weather line gather from several sources, so they carry no module
-  // (each row inside still checks its own module).
-  { id: 'today-weather',  module: null },
-  { id: 'today-shopping', module: 'shopping' },
-  { id: 'today-tomorrow', module: null },
-  { id: 'today-question', module: null },
-  { id: 'today-soon',     module: null },
-  { id: 'tasks',        module: 'tasks' },
-  { id: 'calendar',     module: 'calendar' },
-  { id: 'meals',        module: 'meals' },
-  { id: 'shopping',     module: 'shopping' },
-  { id: 'birthdays',    module: 'calendar' },
-  { id: 'budget',       module: 'budget' },
-  { id: 'health',       module: 'health' },
-  { id: 'cycle',        module: 'health' },
-  { id: 'fasting',      module: 'health' },
-  // Wie Zyklus und Fasten am Modul health und trotzdem einzeln sperrbar:
-  // wer sein Essen protokolliert, teilt damit nicht zwangslaeufig die
-  // Medikamentenkachel - und umgekehrt (#467, derselbe Grund wie bei cycle).
-  { id: 'nutrition',    module: 'health' },
-  { id: 'housekeeping', module: 'housekeeping' },
-  { id: 'schedule',     module: 'schedule' },
-  { id: 'waste',        module: 'waste' },
-  // „Läuft bald ab" (Critique 2026-09-23): Chargen aus dem Vorrat.
-  { id: 'pantry',       module: 'pantry' },
-  { id: 'notes',        module: 'notes' },
-  { id: 'family',       module: null },
-  { id: 'weather',      module: null },
-  { id: 'clock',        module: null },
-  // `module: null` wie Familie, Wetter und Uhr, und hier aus einem eigenen
-  // Grund: die Kennzahlreihe gehoert keinem Modul, sie zeigt vier davon. Eine
-  // Zuordnung zu einem einzelnen waere falsch, und sie wird auch nicht
-  // gebraucht - jede EINZELNE Kachel prueft ihr Modul schon selbst
-  // (`renderMetricTiles` filtert ueber `isWidgetModuleEnabled`), ein gesperrtes
-  // Budget hat also nie eine Budget-Kachel. Was hier fehlte, ist die Sperre auf
-  // die REIHE als solche.
-  { id: 'metrics',      module: null },
-  // `module: null` aus demselben Grund wie die Kennzahlreihe: der Countdown
-  // (#647) sammelt aus Kalender UND Aufgaben ein, gehört also keinem der
-  // beiden. Was aus einem gesperrten Modul stammt, filtert die Kachel schon
-  // selbst - hier steht die Sperre auf das Widget als solches.
-  { id: 'countdown',    module: null },
-  // `module: null` wie Familie, Wetter und Uhr: eine Reihe Haushaltslinks
-  // (#469) gehoert keinem Modul. Die private Achse setzt die Route selbst
-  // durch; hier steht die Sperre auf die REIHE - ein Haushalt, der seinen
-  // Kindern die Startseite nicht zur Startrampe machen will, hat damit einen
-  // Schalter.
-  { id: 'quicklinks',    module: null },
-]);
-
 // Feinere Schreibrechte, die kein ganzes Modul sperren sollen. Persoenliche
 // Notiz-Kategorien bleiben immer Sache ihres Besitzers; dieser Schalter
 // betrifft ausschliesslich den gemeinsamen Haushaltskatalog.
@@ -158,10 +99,8 @@ export const PERMISSION_CAPABILITIES = Object.freeze([
 ]);
 
 export const MODULE_ACCESS_LEVELS = Object.freeze(['none', 'read', 'write']);
-export const WIDGET_ACCESS_LEVELS = Object.freeze(['none', 'allow']);
 export const CAPABILITY_ACCESS_LEVELS = Object.freeze(['none', 'allow']);
 const MODULE_DEFAULT = 'write';
-const WIDGET_DEFAULT = 'allow';
 const CAPABILITY_DEFAULT = 'none';
 
 // Startrechte einer Einladung (#869). Drei Vorlagen, keine Rechteverwaltung im
@@ -187,8 +126,6 @@ export const INVITE_PRESET_DEFAULT = 'restricted';
 // Haushalt - Gesundheitswerte, Finanzen und Ausweise/Vertraege. Kalender,
 // Aufgaben, Einkauf und der Rest sind das, wofuer jemand eingeladen wird; sie
 // zu sperren erzeugt eine leere App und einen Anruf, keine Privatsphaere.
-// Widgets brauchen hier nichts: `resolvePermissions()` sperrt sie mit ihrem
-// Modul mit, das cycle-Widget also ueber `health`.
 export const INVITE_RESTRICTED_MODULES = Object.freeze(['health', 'budget', 'documents']);
 
 // Startrechte eines NEUEN Kinderkontos (R20, entschieden 2026-10-17): kein
@@ -216,14 +153,10 @@ const CAPABILITY_ACCESS_RANK = Object.freeze({ none: 0, allow: 1 });
 
 /** Extension catalog injected at runtime by the module registry — keeps this file off db.js. */
 let _extensionPermissionModules = [];
-let _extensionPermissionWidgets = [];
 
 export function setExtensionPermissionCatalog(catalog) {
   _extensionPermissionModules = Array.isArray(catalog?.permissionModules)
     ? catalog.permissionModules.filter((m) => m && typeof m.key === 'string')
-    : [];
-  _extensionPermissionWidgets = Array.isArray(catalog?.permissionWidgets)
-    ? catalog.permissionWidgets.filter((w) => w && typeof w.id === 'string')
     : [];
 }
 
@@ -231,29 +164,16 @@ function extensionPermissionModules() {
   return _extensionPermissionModules;
 }
 
-function extensionPermissionWidgets() {
-  return _extensionPermissionWidgets;
-}
-
 function allPermissionModules() {
   return [...PERMISSION_MODULES, ...extensionPermissionModules()];
-}
-
-function allPermissionWidgets() {
-  return [...PERMISSION_WIDGETS, ...extensionPermissionWidgets()];
 }
 
 function moduleKeySet() {
   return new Set(allPermissionModules().map((m) => m.key));
 }
 
-function widgetIdSet() {
-  return new Set(allPermissionWidgets().map((w) => w.id));
-}
-
 const CAPABILITY_KEY_SET = new Set(PERMISSION_CAPABILITIES.map((item) => item.key));
 const MODULE_ACCESS_SET = new Set(MODULE_ACCESS_LEVELS);
-const WIDGET_ACCESS_SET = new Set(WIDGET_ACCESS_LEVELS);
 const CAPABILITY_ACCESS_SET = new Set(CAPABILITY_ACCESS_LEVELS);
 const FAMILY_ROLE_SET = new Set(FAMILY_ROLES);
 
@@ -276,27 +196,22 @@ function loadSubjectRows(database, subjectType, subjectId) {
  * Löst die effektiven Rechte eines konkreten Nutzers auf.
  * @param {import('better-sqlite3-multiple-ciphers').Database} database
  * @param {{ id: number, role: string, family_role?: string }} user
- * @returns {{ admin: boolean, modules: Record<string,'none'|'read'|'write'>, widgets: Record<string,'none'|'allow'>, capabilities: Record<string,'none'|'allow'> }}
+ * @returns {{ admin: boolean, modules: Record<string,'none'|'read'|'write'>, capabilities: Record<string,'none'|'allow'> }}
  */
 export function resolvePermissions(database, user, { isDisplay = false } = {}) {
   const isAdmin = user?.role === 'admin';
   const modules = {};
-  const widgets = {};
   const capabilities = {};
   for (const m of allPermissionModules()) modules[m.key] = isAdmin ? 'write' : MODULE_DEFAULT;
-  for (const w of allPermissionWidgets()) widgets[w.id] = isAdmin ? 'allow' : WIDGET_DEFAULT;
   for (const item of PERMISSION_CAPABILITIES) capabilities[item.key] = isAdmin ? 'allow' : (item.default ?? CAPABILITY_DEFAULT);
-  if (isAdmin) return { admin: true, modules, widgets, capabilities };
+  if (isAdmin) return { admin: true, modules, capabilities };
 
   const MODULE_KEY_SET = moduleKeySet();
-  const WIDGET_ID_SET = widgetIdSet();
 
   const apply = (rows) => {
     for (const r of rows) {
       if (r.resource_type === 'module' && MODULE_KEY_SET.has(r.resource_key) && MODULE_ACCESS_SET.has(r.access)) {
         modules[r.resource_key] = r.access;
-      } else if (r.resource_type === 'widget' && WIDGET_ID_SET.has(r.resource_key) && WIDGET_ACCESS_SET.has(r.access)) {
-        widgets[r.resource_key] = r.access;
       } else if (r.resource_type === 'capability' && CAPABILITY_KEY_SET.has(r.resource_key) && CAPABILITY_ACCESS_SET.has(r.access)) {
         capabilities[r.resource_key] = r.access;
       }
@@ -328,12 +243,8 @@ export function resolvePermissions(database, user, { isDisplay = false } = {}) {
   // Administrator aufbohren kann - eine gespeicherte Zeile fuer dieses Konto
   // wird hier bewusst ueberschrieben.
   //
-  // UND ES STEHT VOR DER WIDGET-VERERBUNG DARUNTER, weil genau die den Rest
-  // erledigt: die Uebersicht bot dem Tablett Kacheln fuer Geburtstage, Budget
-  // und Notizen an, die der Server dann leer liess (im Browser gesehen). Eine
-  // zweite Liste im Frontend haette das auch behoben - und waere die zweite
-  // Wahrheit darueber gewesen, was ein Display sieht. So folgt alles derselben
-  // Quelle: Navigation, Kacheln und der Anlege-Knopf, der bei `read` verschwindet.
+  // Navigation, Today, die Wand und der Anlege-Knopf, der bei `read`
+  // verschwindet, folgen alle derselben Quelle - keine zweite Liste im Frontend.
   //
   // `read` und nicht `write`: in diesem Schritt schaut ein Display nur zu. Die
   // beiden Aktionen kommen mit #1209, und dann aendert sich DISPLAY_SCOPES,
@@ -345,11 +256,7 @@ export function resolvePermissions(database, user, { isDisplay = false } = {}) {
     }
   }
 
-  // Widgets erben die Modulsperre.
-  for (const w of allPermissionWidgets()) {
-    if (w.module && modules[w.module] === 'none') widgets[w.id] = 'none';
-  }
-  return { admin: false, modules, widgets, capabilities };
+  return { admin: false, modules, capabilities };
 }
 
 /**
@@ -502,14 +409,14 @@ export function moduleAccessVerdict(sessionModuleAccess, moduleKey, access) {
 /**
  * Nur-Lese-Payload für Clients (/auth/me, /login): die aufgelösten Maps plus
  * Admin-Flag. Der Client blendet damit Nav-Einträge, Settings-Ziele und
- * Dashboard-Widgets aus — die verbindliche Durchsetzung bleibt serverseitig.
+ * Abschnitte von Today und der Wand aus; die verbindliche Durchsetzung bleibt serverseitig.
  */
 export function clientPermissions(database, user, { isDisplay = false } = {}) {
-  const { admin, modules, widgets, capabilities } = resolvePermissions(database, user, { isDisplay });
-  return { admin, modules, widgets, capabilities };
+  const { admin, modules, capabilities } = resolvePermissions(database, user, { isDisplay });
+  return { admin, modules, capabilities };
 }
 
-/** Voller Katalog für die Admin-UI (Module, Widgets, Rollen). */
+/** Voller Katalog für die Admin-UI (Module, Fähigkeiten, Rollen). */
 export function permissionCatalog() {
   return {
     modules: allPermissionModules().map((m) => ({
@@ -519,18 +426,11 @@ export function permissionCatalog() {
       icon: m.icon,
       extensionModuleId: m.extensionModuleId || null,
     })),
-    widgets: allPermissionWidgets().map((w) => ({
-      id: w.id,
-      module: w.module,
-      label: w.label || null,
-      labelKey: w.labelKey || null,
-    })),
     capabilities: PERMISSION_CAPABILITIES.map((item) => ({ ...item })),
     roles: [...FAMILY_ROLES],
     moduleAccessLevels: [...MODULE_ACCESS_LEVELS],
-    widgetAccessLevels: [...WIDGET_ACCESS_LEVELS],
     capabilityAccessLevels: [...CAPABILITY_ACCESS_LEVELS],
-    defaults: { module: MODULE_DEFAULT, widget: WIDGET_DEFAULT, capability: CAPABILITY_DEFAULT },
+    defaults: { module: MODULE_DEFAULT, capability: CAPABILITY_DEFAULT },
     // Startrechte-Vorlagen fuer das Einladungsformular (#869). Der Server
     // sagt, WELCHE Module die enge Vorlage sperrt - das Formular soll sie
     // benennen koennen, ohne die Liste ein zweites Mal zu fuehren.
@@ -559,16 +459,13 @@ export function permissionCatalog() {
 export function getSubjectPermissions(database, subjectType, subjectId) {
   const rows = loadSubjectRows(database, subjectType, subjectId);
   const modules = {};
-  const widgets = {};
   const capabilities = {};
   const MODULE_KEY_SET = moduleKeySet();
-  const WIDGET_ID_SET = widgetIdSet();
   for (const r of rows) {
     if (r.resource_type === 'module' && MODULE_KEY_SET.has(r.resource_key)) modules[r.resource_key] = r.access;
-    else if (r.resource_type === 'widget' && WIDGET_ID_SET.has(r.resource_key)) widgets[r.resource_key] = r.access;
     else if (r.resource_type === 'capability' && CAPABILITY_KEY_SET.has(r.resource_key)) capabilities[r.resource_key] = r.access;
   }
-  return { modules, widgets, capabilities };
+  return { modules, capabilities };
 }
 
 /**
@@ -579,23 +476,16 @@ export function getSubjectPermissions(database, subjectType, subjectId) {
  * @returns {{ resource_type: string, resource_key: string, access: string }[]}
  */
 export function normalizePermissionInput(
-  { modules = {}, widgets = {}, capabilities = {} } = {},
+  { modules = {}, capabilities = {} } = {},
   { subjectType = 'role' } = {},
 ) {
   const rows = [];
   const MODULE_KEY_SET = moduleKeySet();
-  const WIDGET_ID_SET = widgetIdSet();
   for (const [key, access] of Object.entries(modules || {})) {
     if (!MODULE_KEY_SET.has(key)) throw new Error(`Unknown module: ${key}`);
     if (!MODULE_ACCESS_SET.has(access)) throw new Error(`Invalid module access: ${access}`);
     if (access === MODULE_DEFAULT) continue; // Standard nicht speichern
     rows.push({ resource_type: 'module', resource_key: key, access });
-  }
-  for (const [id, access] of Object.entries(widgets || {})) {
-    if (!WIDGET_ID_SET.has(id)) throw new Error(`Unknown widget: ${id}`);
-    if (!WIDGET_ACCESS_SET.has(access)) throw new Error(`Invalid widget access: ${access}`);
-    if (access === WIDGET_DEFAULT) continue;
-    rows.push({ resource_type: 'widget', resource_key: id, access });
   }
   for (const [key, access] of Object.entries(capabilities || {})) {
     if (!CAPABILITY_KEY_SET.has(key)) throw new Error(`Unknown capability: ${key}`);
@@ -611,7 +501,7 @@ export function normalizePermissionInput(
 }
 
 /**
- * Ersetzt die gespeicherten Modul- und Widget-Rechte eines Subjekts atomar
+ * Ersetzt die gespeicherten Modulrechte eines Subjekts atomar
  * (delete + insert der abweichenden Einträge). Capabilities bleiben
  * unverändert, wenn das Feld fehlt; ein ausdrücklich mitgegebenes
  * `capabilities` ersetzt dagegen auch diese Achse. Transaktion vom Aufrufer
@@ -635,7 +525,7 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
 
 /**
  * Wie `replaceSubjectPermissions()`, aber OHNE eigene Transaktionsklammer -
- * fuer Aufrufer, die schon in einer stecken. Ersetzt Modul- und Widget-Zeilen;
+ * fuer Aufrufer, die schon in einer stecken. Ersetzt Modulzeilen;
  * Capability-Zeilen nur dann, wenn `input.capabilities` ausdrücklich vorliegt.
  *
  * Es gibt sie, weil das Annehmen einer Einladung Nutzer, Kontakt-Artefakte und
@@ -646,10 +536,10 @@ export function replaceSubjectPermissions(database, subjectType, subjectId, inpu
  */
 export function writeSubjectPermissions(database, subjectType, subjectId, input) {
   const rows = normalizePermissionInput(input, { subjectType });
-  const deleteModulesAndWidgets = database.prepare(`
+  const deleteModules = database.prepare(`
     DELETE FROM access_permissions
     WHERE subject_type = ? AND subject_id = ?
-      AND resource_type IN ('module', 'widget')
+      AND resource_type = 'module'
   `);
   const deleteCapabilities = database.prepare(`
     DELETE FROM access_permissions
@@ -659,7 +549,7 @@ export function writeSubjectPermissions(database, subjectType, subjectId, input)
     INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)
     VALUES (?, ?, ?, ?, ?)
   `);
-  deleteModulesAndWidgets.run(subjectType, String(subjectId));
+  deleteModules.run(subjectType, String(subjectId));
   if (Object.prototype.hasOwnProperty.call(input || {}, 'capabilities')) {
     deleteCapabilities.run(subjectType, String(subjectId));
   }
@@ -683,13 +573,13 @@ export function writeSubjectPermissions(database, subjectType, subjectId, input)
  * gewinnen danach. Eine Rolle, die ohnehin mehr sperrt, bleibt also strenger.
  *
  * @param {'restricted'|'role'} preset
- * @returns {{ modules: Record<string,string>, widgets: Record<string,string> }|null}
+ * @returns {{ modules: Record<string,string> }|null}
  */
 export function invitePresetPermissions(preset) {
   if (preset !== 'restricted') return null;
   const modules = {};
   for (const key of INVITE_RESTRICTED_MODULES) modules[key] = 'none';
-  return { modules, widgets: {} };
+  return { modules };
 }
 
 /**
