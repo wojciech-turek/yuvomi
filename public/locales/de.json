@@ -181,7 +181,6 @@
         "eventsChipPlural": "{{count}} Termine heute",
         "todayMealChip": "Heute: {{title}}",
         "loadError": "Die Seite „Heute“ konnte nicht vollständig geladen werden.",
-        "fabTaskLabel": "Aufgabe hinzufügen",
         "fabCalendarLabel": "Termin hinzufügen",
         "fabShoppingLabel": "Einkauf hinzufügen",
         "fabNoteLabel": "Notiz hinzufügen",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Später",
         "groupNone": "Kein Datum",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Notiz ohne Titel"
+        "noteUntitled": "Notiz ohne Titel",
+        "nextUpTitle": "Als Nächstes"
     },
     "wall": {
         "allDone": "Für heute alles erledigt",

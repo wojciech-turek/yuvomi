@@ -165,7 +165,6 @@
         "eventsChipPlural": "今日の予定 {{count}} 件",
         "todayMealChip": "今日：{{title}}",
         "loadError": "ダッシュボードの読み込みに失敗しました。",
-        "fabTaskLabel": "タスクを追加",
         "fabCalendarLabel": "予定を追加",
         "fabShoppingLabel": "買い物を追加",
         "fabNoteLabel": "メモを追加",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "後で",
         "groupNone": "日付なし",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "無題のメモ"
+        "noteUntitled": "無題のメモ",
+        "nextUpTitle": "次の予定"
     },
     "wall": {
         "allDone": "今日はすべて完了",

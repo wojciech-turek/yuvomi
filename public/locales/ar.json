@@ -174,7 +174,6 @@
         "eventsChipPlural": "{{count}} أحداث اليوم",
         "todayMealChip": "اليوم: {{title}}",
         "loadError": "فشل تحميل لوحة التحكم.",
-        "fabTaskLabel": "إضافة مهمة",
         "fabCalendarLabel": "إضافة حدث",
         "fabShoppingLabel": "إضافة تسوق",
         "fabNoteLabel": "إضافة ملاحظة",
@@ -6940,7 +6939,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6982,7 +6980,8 @@
         "groupLater": "لاحقاً",
         "groupNone": "بلا تاريخ",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "ملاحظة بلا عنوان"
+        "noteUntitled": "ملاحظة بلا عنوان",
+        "nextUpTitle": "التالي"
     },
     "wall": {
         "allDone": "أُنجز كل شيء لليوم",

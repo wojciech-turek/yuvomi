@@ -438,6 +438,7 @@ test('source: dictation is a static import in the menu, the sheets and the menu 
   const firstAwait = render.indexOf('await ');
   const mount = render.indexOf('mountTodayAdd(');
   assert.ok(mount > 0 && mount < firstAwait, 'the + stands with the skeleton, before the data (the router adopts it right after render starts)');
-  // The "Add task" row in the Tasks card stays (spec).
-  assert.match(read('../public/components/today-view.js'), /data-day-action="add-task"/);
+  // One Today (2026-11-02): the "Add task" row in the Tasks card is gone - the
+  // + is the one way to add on Today (spec section 3).
+  assert.doesNotMatch(read('../public/components/today-view.js'), /data-day-action="add-task"|dz-tasks__add/);
 });

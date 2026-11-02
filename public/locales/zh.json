@@ -165,7 +165,6 @@
         "eventsChipPlural": "今天 {{count}} 个日程",
         "todayMealChip": "今天：{{title}}",
         "loadError": "仪表板加载失败。",
-        "fabTaskLabel": "添加任务",
         "fabCalendarLabel": "添加日程",
         "fabShoppingLabel": "添加购物",
         "fabNoteLabel": "添加便签",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "以后",
         "groupNone": "无日期",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "无标题笔记"
+        "noteUntitled": "无标题笔记",
+        "nextUpTitle": "接下来"
     },
     "wall": {
         "allDone": "今天的事都完成了",

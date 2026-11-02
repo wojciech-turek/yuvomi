@@ -171,7 +171,6 @@
         "eventsChipPlural": "{{count}} подій сьогодні",
         "todayMealChip": "Сьогодні: {{title}}",
         "loadError": "Огляд не вдалося повністю завантажити.",
-        "fabTaskLabel": "Додати завдання",
         "fabCalendarLabel": "Додати подію",
         "fabShoppingLabel": "Додати покупку",
         "fabNoteLabel": "Додати нотатку",
@@ -6788,7 +6787,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6830,7 +6828,8 @@
         "groupLater": "Пізніше",
         "groupNone": "Без дати",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Нотатка без назви"
+        "noteUntitled": "Нотатка без назви",
+        "nextUpTitle": "Далі"
     },
     "wall": {
         "allDone": "На сьогодні все",

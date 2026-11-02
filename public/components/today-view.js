@@ -1,11 +1,13 @@
 /**
- * Modul: Dziś - the view (design v2, 2026-10-27)
+ * Modul: Dziś - the view (design v2, 2026-10-27; One Today, 2026-11-02)
  * Zweck: Draws the home screen from the model in /utils/dzis-plan.js, top to
- *        bottom as the owner's design has it: the header (date, greeting, the
- *        viewer's avatar), the weather card with the rain of the day, the
- *        compact calendar of today, the pending tasks (tickable), and the
- *        birthdays soon. Wiring is one delegated listener on the page root
- *        (pages/dashboard.js); a tap's meaning comes from `data-day-action`.
+ *        bottom as spec section 3 has it: the header (the date with the
+ *        weather in one line, the greeting and the viewer's disc), Next up
+ *        (the one heavy card), the compact calendar of today, the pending
+ *        tasks in their groups (tickable), the notes and the next birthdays.
+ *        Wiring is one delegated listener on the page root
+ *        (pages/dashboard.js); a tap's meaning comes from `data-day-action`,
+ *        else from the link's `data-route`.
  * Abhängigkeiten: /i18n.js, /utils/html.js, /utils/person-color.js,
  *                 /utils/today-plan.js
  *
@@ -17,6 +19,12 @@
  * (it repeated the ongoing event), Zakupy, Jutro, the question of the week,
  * the preview tiles, extension widgets and "Dostosuj Dziś". The wall keeps its
  * own view (components/wall-view.js).
+ * ONE TODAY (2026-11-02): the weather card and its rain chart (the weather is
+ * one line in the header now), "Wkrótce" (the Birthdays card replaces it) and
+ * "Dodaj zadanie" at the foot of the tasks (the + adds).
+ *
+ * DOM ORDER IS THE READING ORDER: head, Next up, Kalendarz, Zadania,
+ * Notatki, Urodziny. A wide screen places them in columns by CSS alone.
  */
 
 import { t, getTimeFormat } from '/i18n.js';
@@ -65,55 +73,46 @@ function sectionHead(id, title, link, count = '') {
 // Header
 // --------------------------------------------------------
 
+/**
+ * The date and, on the same line, the weather ("10° · bez deszczu do
+ * wieczora") - one link to the weather detail the old card opened. Below: the
+ * greeting (the page's h2) and the viewer's disc, the way to the profile.
+ */
 function renderHeader(state) {
   const me = state.user ?? {};
   const name = firstName(me.display_name);
   const avatar = personDisc(me, { size: 'md', household: state.household });
+  const weather = state.weatherLine;
   return `
     <header class="dz-head">
-      <div class="dz-head__text">
-        <p class="dz-head__date">${esc(state.dateLabel)}</p>
-        <h2 class="dz-head__greeting">${esc(t(state.greetingKey, { name }))}</h2>
+      <div class="dz-head__line">
+        <p class="dz-head__date">${esc(state.dateLabel)}</p>${weather ? `
+        <a class="dz-head__weather" href="/settings/personal/weather" data-route="/settings/personal/weather">${icon(weather.icon, 'dz-head__weather-icon')}<span class="dz-head__weather-text">${esc(weather.text)}</span></a>` : ''}
       </div>
+      <h2 class="dz-head__greeting">${esc(t(state.greetingKey, { name }))}</h2>
       <a class="dz-head__me" href="/settings" data-route="/settings" aria-label="${esc(t('today.profileLink', { name }))}">${avatar}</a>
     </header>`;
 }
 
 // --------------------------------------------------------
-// Weather
+// Next up
 // --------------------------------------------------------
 
-function renderChart(bars) {
-  const cols = bars.map((bar) => `<span class="dz-chart__bar${bar.now ? ' dz-chart__bar--now' : bar.wet ? ' dz-chart__bar--wet' : ''}" style="--bar: ${bar.height}px"></span>`).join('');
-  const labels = bars.map((bar) => `<span${bar.now ? ' class="dz-chart__now"' : ''}>${esc(bar.label)}</span>`).join('');
+/**
+ * The one heavy card: when (violet), what (large), what after (grey). The
+ * whole card is one link to that thing; its h3 is for the ear only - the eye
+ * reads the card itself.
+ */
+function renderNextUp(next) {
   return `
-        <span class="dz-chart" aria-hidden="true">
-          <span class="dz-chart__bars">${cols}</span>
-          <span class="dz-chart__labels">${labels}</span>
-        </span>`;
-}
-
-function renderWeather(w) {
-  const line = w.rain ?? w.dry;
-  return `
-    <a class="dz-card dz-weather" href="/settings/personal/weather" data-route="/settings/personal/weather">
-      <span class="dz-weather__now">
-        ${icon(w.icon, 'dz-weather__icon')}
-        <span class="dz-weather__temp">${esc(w.temp)}</span>
-        <span class="dz-weather__text">
-          <span class="dz-weather__desc">${esc(w.desc)}</span>
-          ${w.meta ? `<span class="dz-weather__meta">${esc(w.meta)}</span>` : ''}
-        </span>
-        ${icon('chevron-right', 'dz-chevron')}
-      </span>
-      ${line ? `
-      <span class="dz-weather__rain${w.rain ? '' : ' dz-weather__rain--dry'}">
-        ${icon(w.rain ? 'umbrella' : 'sun', 'dz-weather__rain-icon')}
-        <span class="dz-weather__rain-label">${esc(line.label)}</span>
-        <span class="dz-weather__chance">${esc(line.chance)}</span>
-      </span>` : ''}
-      ${w.rain?.bars?.length ? renderChart(w.rain.bars) : ''}
-    </a>`;
+    <section class="dz-next" aria-labelledby="dz-next-h">
+      <h3 class="sr-only" id="dz-next-h">${esc(t('today.nextUpTitle'))}</h3>
+      <a class="dz-next__card" href="${esc(next.route)}" data-route="${esc(next.route)}">
+        <span class="dz-next__lead">${esc(next.lead)}</span>
+        <span class="dz-next__title">${esc(next.title)}</span>${next.then ? `
+        <span class="dz-next__then">${esc(next.then)}</span>` : ''}
+      </a>
+    </section>`;
 }
 
 // --------------------------------------------------------
@@ -179,38 +178,75 @@ function taskRow(row, state) {
           </li>`;
 }
 
+/**
+ * The tasks under their small labels ("Zaległe" in the attention tone, then
+ * "Dziś", "Jutro", "Później", "Bez terminu"); each group is a list named by
+ * its label. Nothing here adds a task - the + of the page does.
+ */
 function renderTasks(state) {
-  const { rows, total } = state.tasks;
-  const list = rows.length
-    ? `<ul class="dz-tasks__list">${rows.map((row) => taskRow(row, state)).join('')}
-        </ul>`
+  const { groups, rows, total } = state.tasks;
+  const body = rows.length
+    ? groups.map((group) => `
+        <p class="dz-group${group.id === 'late' ? ' dz-group--late' : ''}" id="dz-group-${esc(group.id)}">${esc(group.label)}</p>
+        <ul class="dz-tasks__list" aria-labelledby="dz-group-${esc(group.id)}">${group.rows.map((row) => taskRow(row, state)).join('')}
+        </ul>`).join('')
     : `<p class="dz-tasks__empty">${esc(t('tasks.allDoneText'))}</p>`;
-  const add = state.canAddTask
-    ? `<button type="button" class="dz-tasks__add" data-day-action="add-task">${icon('plus')}<span>${esc(t('dashboard.fabTaskLabel'))}</span></button>`
-    : '';
   return `
     <section class="dz-sec dz-sec--tasks" aria-labelledby="dz-tasks-h">
       ${sectionHead('dz-tasks-h', t('nav.tasks'), { route: '/tasks', label: t('common.all') }, total > 0 ? String(total) : '')}
-      <div class="dz-card dz-tasks">
-        ${list}${add}
+      <div class="dz-card dz-tasks">${body}
       </div>
     </section>`;
 }
 
 // --------------------------------------------------------
-// Wkrótce
+// Notes
 // --------------------------------------------------------
 
-function renderSoon(rows) {
+/** Up to three notes: the title and one plain line under it, no icon. */
+function renderNotes(notes) {
   return `
-    <section class="dz-soon" aria-labelledby="dz-soon-h">
-      <h3 class="dz-soon__title" id="dz-soon-h">${esc(t('today.soonTitle'))}</h3>
-      <ul class="dz-soon__list">${rows.map((row) => `
-        <li><a class="dz-soon__row" href="${esc(row.route)}" data-route="${esc(row.route)}">
-          ${icon('cake', 'dz-soon__icon')}
-          <span class="dz-soon__name">${esc(row.name)} <span class="dz-soon__kind">· ${esc(row.kind)}</span></span>
-          <span class="dz-soon__when">${esc(row.when)}</span>
+    <section class="dz-sec dz-sec--notes" aria-labelledby="dz-notes-h">
+      ${sectionHead('dz-notes-h', t('nav.notes'), { route: '/notes', label: t('common.all') })}
+      <ul class="dz-card dz-list">${notes.map((note) => `
+        <li class="dz-list__row"><a class="dz-note" href="${esc(note.route)}" data-route="${esc(note.route)}">
+          <span class="dz-note__title">${esc(note.title)}</span>${note.line ? `
+          <span class="dz-note__line">${esc(note.line)}</span>` : ''}
         </a></li>`).join('')}
+      </ul>
+    </section>`;
+}
+
+// --------------------------------------------------------
+// Birthdays
+// --------------------------------------------------------
+
+/**
+ * The next three birthdays or name days. Today's stands in the attention
+ * wash with the cake and "Dziś"; the others say the day and how far it is.
+ */
+function birthdayRow(row) {
+  const when = row.today
+    ? `<span class="dz-bday__pill">${icon('cake', 'dz-bday__cake')}<span>${esc(t('today.groupToday'))}</span></span>`
+    : `<span class="dz-bday__when">
+            <span class="dz-bday__date">${esc(row.date)}</span>
+            <span class="dz-bday__far">${esc(row.far)}</span>
+          </span>`;
+  return `
+        <li class="dz-list__row"><a class="dz-bday${row.today ? ' dz-bday--today' : ''}" href="${esc(row.route)}" data-route="${esc(row.route)}">
+          <span class="dz-bday__text">
+            <span class="dz-bday__name">${esc(row.name)}</span>
+            <span class="dz-bday__sub">${esc(row.sub)}</span>
+          </span>
+          ${when}
+        </a></li>`;
+}
+
+function renderBirthdays(rows) {
+  return `
+    <section class="dz-sec dz-sec--birthdays" aria-labelledby="dz-birthdays-h">
+      ${sectionHead('dz-birthdays-h', t('nav.birthdays'), { route: '/birthdays', label: t('common.all') })}
+      <ul class="dz-card dz-list">${rows.map(birthdayRow).join('')}
       </ul>
     </section>`;
 }
@@ -221,18 +257,20 @@ function renderSoon(rows) {
 
 /**
  * The whole page body. `state` is assembled by the page (pages/dashboard.js):
- * { user, household, dateLabel, greetingKey, weather, calendar, tasks,
- *   birthdays, earlierOpen, canCheck, canAddTask } - a section whose module is
- * off comes as null and is not drawn.
+ * { user, household, dateLabel, greetingKey, weatherLine, nextUp, calendar,
+ *   tasks, notes, birthdays, earlierOpen, canCheck } - a section whose module
+ * is off comes as null (birthdays as []) and is not drawn; so are Next up,
+ * the notes and the birthdays when there is nothing to show.
  */
 export function renderTodayPage(state) {
   return `
     <div class="dz" data-today>
       ${renderHeader(state)}
-      ${state.weather ? renderWeather(state.weather) : ''}
+      ${state.nextUp ? renderNextUp(state.nextUp) : ''}
       ${state.calendar ? renderCalendar(state) : ''}
       ${state.tasks ? renderTasks(state) : ''}
-      ${state.birthdays?.length ? renderSoon(state.birthdays) : ''}
+      ${state.notes?.length ? renderNotes(state.notes) : ''}
+      ${state.birthdays?.length ? renderBirthdays(state.birthdays) : ''}
     </div>`;
 }
 

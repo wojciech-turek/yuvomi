@@ -181,7 +181,6 @@
         "eventsChipPlural": "{{count}} رویداد امروز",
         "todayMealChip": "امروز: {{title}}",
         "loadError": "داشبورد به‌طور کامل بارگذاری نشد.",
-        "fabTaskLabel": "افزودن کار",
         "fabCalendarLabel": "افزودن رویداد",
         "fabShoppingLabel": "افزودن خرید",
         "fabNoteLabel": "افزودن یادداشت",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "بعداً",
         "groupNone": "بدون تاریخ",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "یادداشت بدون عنوان"
+        "noteUntitled": "یادداشت بدون عنوان",
+        "nextUpTitle": "بعدی"
     },
     "wall": {
         "allDone": "همهٔ کارهای امروز انجام شد",

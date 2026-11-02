@@ -10,7 +10,7 @@ import { openCookForMeal } from '/components/cook-mode.js';
 import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-question.js';
 import { planContext } from '/utils/today-plan.js';
 import { setHouseholdOrder } from '/utils/person-color.js';
-import { headerDate, greetingKey, weatherCard, calendarDay, pendingTasks, birthdaysSoon, clockStamp } from '/utils/dzis-plan.js';
+import { headerDate, greetingKey, weatherLine, nextUp, calendarDay, pendingTasks, notesCard, birthdaysNext, clockStamp } from '/utils/dzis-plan.js';
 import { renderTodayPage, renderTodaySkeleton } from '/components/today-view.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { moduleAccess } from '/permissions.js';
@@ -132,9 +132,10 @@ function getOnboardingSteps() {
     // rechts im Kopf. Neuer Schluessel, weil sich die Aussage geaendert hat.
     { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktopPlus' : 'onboarding.step3Body'),
       // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins
-      // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add), sonst
-      // (Display, nur lesend) „Dodaj zadanie" in der Karte der Aufgaben.
-      target: () => [findPageFab('fab-add'), document.querySelector('[data-today] .dz-tasks__add')].find(isShownOnScreen) ?? null },
+      // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add).
+      // One Today (2026-11-02): „Dodaj zadanie" in der Karte ist gegangen -
+      // ohne + (Display, nur lesend) steht der Schritt ohne Ring.
+      target: () => { const fab = findPageFab('fab-add'); return isShownOnScreen(fab) ? fab : null; } },
   ];
 }
 
@@ -847,7 +848,8 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
  * Fabrik (utils/fab.js); der Router hebt ihn in die Shell-Ebene, und weil Dziś
  * keinen Kopf mit Aktions-Slot hat, schwebt er dort - am Telefon ueber der
  * Leiste, am Desktop in derselben Ecke. Die Leiste selbst bekommt kein +.
- * Er oeffnet components/add-menu.js; "Dodaj zadanie" in der Karte bleibt.
+ * Er oeffnet components/add-menu.js. One Today (2026-11-02): er ist der eine
+ * Weg zum Hinzufuegen - "Dodaj zadanie" in der Karte ist gegangen.
  *
  * DAS MENUE LAEDT BEIM TIPP, nicht mit dem Start (Review Task 12): es zieht
  * das Hoerblatt samt Erkennung und Parser mit, und die gehoeren nicht in den
@@ -872,8 +874,8 @@ function todayAddAccess() {
 }
 
 /**
- * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an,
- * wie bei Haken und „Dodaj zadanie") und wenn es nichts hinzuzufuegen gibt.
+ * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an
+ * und hakt nichts ab) und wenn es nichts hinzuzufuegen gibt.
  * „Nichts" heisst: kein Schreibrecht auf eines der drei Module - dieselbe
  * Regel wie `addMenuItems()` (jede Zeile braucht es auf ihrem Modul), hier
  * ohne das Menue zu laden; test:add-menu haelt beide gleich.
@@ -1143,30 +1145,34 @@ export async function render(container, { user, signal: routeSignal = null } = {
   const onDisplay = user?.access_scope === 'display';
   const moduleOff = (module) => Boolean(window.yuvomi?.isModuleDisabled(module)) || moduleAccess(module) === 'none';
 
+  /* ONE TODAY (2026-11-02): the same sections for everyone, in this order -
+   * the weather line, Next up, Kalendarz, Zadania, Notatki, Urodziny. Only a
+   * module that is off (household) or not visible to the viewer removes its
+   * section; Next up draws from the modules ctx.moduleOff leaves on. */
   function buildDzisState() {
     const ctx = planContext({ now: new Date(), viewer: user, users: data?.users ?? [], moduleOff, mealLabel: mealTypeLabel });
-    const calendar = moduleOff('calendar') ? null : calendarDay(data, ctx);
     return {
       user,
       household: data?.users ?? [],
       ctx,
       dateLabel: headerDate(ctx.todayKey),
       greetingKey: greetingKey(ctx.nowMin),
-      weather: weatherAvailable ? weatherCard(weather, ctx) : null,
-      calendar,
+      weatherLine: weatherAvailable ? weatherLine(weather, ctx) : null,
+      nextUp: nextUp(data, ctx),
+      calendar: moduleOff('calendar') ? null : calendarDay(data, ctx),
       tasks: moduleOff('tasks') ? null : pendingTasks(data, ctx),
-      birthdays: moduleOff('birthdays') ? [] : birthdaysSoon(data, ctx),
+      notes: moduleOff('notes') ? null : notesCard(data),
+      birthdays: moduleOff('birthdays') ? [] : birthdaysNext(data, ctx),
       earlierOpen: dzisUi.earlierOpen,
       // Read-only and display accounts see the tasks, not the circles.
       canCheck: !onDisplay && moduleAccess('tasks') === 'write',
-      canAddTask: !onDisplay && moduleAccess('tasks') === 'write',
     };
   }
 
-  /** What changes by the clock alone: past and ongoing events, the hour of the chart. */
+  /** What changes by the clock alone: past and ongoing events, the hour, the weather line, the lead of Next up. */
   function dzisClockStamp() {
     const state = buildDzisState();
-    return clockStamp(state.calendar, state.weather, state.ctx);
+    return clockStamp(state.calendar, state.weatherLine, state.ctx, state.nextUp);
   }
 
   function renderToday(shell) {
@@ -1204,11 +1210,12 @@ export async function render(container, { user, signal: routeSignal = null } = {
   async function tickTask(row, button) {
     if (!row || dzisUi.busy.has(row.key) || !dzisState?.canCheck) return;
     dzisUi.busy.add(row.key);
-    // Keyboard users go on to the next row's circle once this one has left.
+    // Keyboard users go on to the next row's circle once this one has left;
+    // after the last one, to "Wszystkie" in the head of Zadania.
     if (document.activeElement === button) {
       const circles = [...container.querySelectorAll('[data-today] .day-check')];
       const next = circles[circles.indexOf(button) + 1];
-      dzisFocus = next ? [`[data-day-action="check"][data-row-key="${CSS.escape(next.dataset.rowKey)}"]`] : ['[data-day-action="add-task"]'];
+      dzisFocus = next ? [`[data-day-action="check"][data-row-key="${CSS.escape(next.dataset.rowKey)}"]`] : ['[data-today] .dz-sec--tasks .dz-sec__link'];
     }
     markTaskRow(button, true);
     const hold = prefersReducedMotion() ? null : new Promise((resolve) => { setTimeout(resolve, 820); });
@@ -1257,19 +1264,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
     }
     if (action === 'open') {
       openTaskFromOverview(el.dataset.taskId, container, () => refreshDashboardData(), user);
-      return;
-    }
-    if (action === 'add-task') {
-      // The SAME form as "Nowe zadanie" in the head of Zadania
-      // (pages/tasks.js, openNewTaskFrom), loaded on demand like the task view
-      // (#918); after the save the card refreshes.
-      try {
-        const { openNewTaskFrom } = await import('/pages/tasks.js');
-        await openNewTaskFrom({ user, onChanged: () => refreshDashboardData() });
-      } catch (err) {
-        console.error('[Dashboard] Neue Aufgabe konnte nicht geöffnet werden:', err);
-        window.yuvomi?.showToast(err?.message ?? t('tasks.loadError'), 'danger');
-      }
     }
   }
 

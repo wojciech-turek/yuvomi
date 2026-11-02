@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} εκδηλώσεις σήμερα",
         "todayMealChip": "Σήμερα: {{title}}",
         "loadError": "Η επισκόπηση δεν φορτώθηκε πλήρως.",
-        "fabTaskLabel": "Προσθήκη εργασίας",
         "fabCalendarLabel": "Προσθήκη εκδήλωσης",
         "fabShoppingLabel": "Προσθήκη αγοράς",
         "fabNoteLabel": "Προσθήκη σημείωσης",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Αργότερα",
         "groupNone": "Χωρίς ημερομηνία",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Σημείωση χωρίς τίτλο"
+        "noteUntitled": "Σημείωση χωρίς τίτλο",
+        "nextUpTitle": "Επόμενο"
     },
     "wall": {
         "allDone": "Όλα έτοιμα για σήμερα",

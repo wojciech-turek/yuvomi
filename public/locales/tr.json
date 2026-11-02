@@ -165,7 +165,6 @@
         "eventsChipPlural": "Bugün {{count}} etkinlik",
         "todayMealChip": "Bugün: {{title}}",
         "loadError": "Gösterge paneli tam olarak yüklenemedi.",
-        "fabTaskLabel": "Görev ekle",
         "fabCalendarLabel": "Etkinlik ekle",
         "fabShoppingLabel": "Alışveriş ekle",
         "fabNoteLabel": "Not ekle",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Sonra",
         "groupNone": "Tarih yok",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Başlıksız not"
+        "noteUntitled": "Başlıksız not",
+        "nextUpTitle": "Sıradaki"
     },
     "wall": {
         "allDone": "Bugünlük her şey tamam",

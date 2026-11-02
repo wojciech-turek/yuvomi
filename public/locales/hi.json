@@ -165,7 +165,6 @@
         "eventsChipPlural": "आज {{count}} कार्यक्रम",
         "todayMealChip": "आज: {{title}}",
         "loadError": "डैशबोर्ड लोड नहीं हो सका।",
-        "fabTaskLabel": "कार्य जोड़ें",
         "fabCalendarLabel": "कार्यक्रम जोड़ें",
         "fabShoppingLabel": "खरीदारी जोड़ें",
         "fabNoteLabel": "नोट जोड़ें",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "बाद में",
         "groupNone": "कोई तारीख नहीं",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "बिना शीर्षक का नोट"
+        "noteUntitled": "बिना शीर्षक का नोट",
+        "nextUpTitle": "आगे"
     },
     "wall": {
         "allDone": "आज के सारे काम पूरे",

@@ -181,7 +181,6 @@
         "eventsChipPlural": "{{count}} ang mga kaganapan ngayon",
         "todayMealChip": "Ngayon: {{title}}",
         "loadError": "Hindi lubusang ma-load ang dashboard.",
-        "fabTaskLabel": "Magdagdag ng gawain",
         "fabCalendarLabel": "Magdagdag ng kaganapan",
         "fabShoppingLabel": "Magdagdag ng pamimili",
         "fabNoteLabel": "Magdagdag ng tala",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Mamaya",
         "groupNone": "Walang petsa",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Tala na walang pamagat"
+        "noteUntitled": "Tala na walang pamagat",
+        "nextUpTitle": "Susunod"
     },
     "wall": {
         "allDone": "Tapos na lahat para ngayon",

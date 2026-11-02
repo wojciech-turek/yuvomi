@@ -623,12 +623,13 @@ test('Onboarding: Bildmarke im ersten Schritt, Lichtring auf Leiste und Plus-Kno
   // 2026-10-27, v2: das globale + ist weg - Schritt 3 zeigt auf das „Neu" der
   // Seite, wo eines sichtbar steht (auf Dziś keins: dann ohne Ring).
   // 2026-10-27, v2: auf Dziś ist das „Neu" der Seite „Dodaj zadanie".
-  // Quick-Add (2026-10-29): Dziś hat sein + (fab-add) - der Ring zeigt zuerst
-  // darauf, „Dodaj zadanie" bleibt der Rueckfall (Display, nur lesend). Das +
-  // haengt in der Shell-Ebene HINTER #main-content; in einer gemeinsamen
-  // Dokumentreihenfolge kaeme die Zeile zuerst.
-  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*target: \(\) => \[findPageFab\('fab-add'\), document\.querySelector\('\[data-today\] \.dz-tasks__add'\)\]\.find\(isShownOnScreen\)/,
-    'Schritt 3 zeigt auf das + von Dziś, sonst auf „Dodaj zadanie"');
+  // Quick-Add (2026-10-29): Dziś hat sein + (fab-add) - der Ring zeigt
+  // darauf. One Today (2026-11-02): „Dodaj zadanie", der Rueckfall, ist mit
+  // der Zeile gegangen; ohne + (Display, nur lesend) steht der Schritt ohne
+  // Ring.
+  assert.match(steps, /step3Title[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*target: \(\) => \{ const fab = findPageFab\('fab-add'\); return isShownOnScreen\(fab\) \? fab : null; \} \},/,
+    'Schritt 3 zeigt auf das + von Dziś');
+  assert.doesNotMatch(steps, /dz-tasks__add/);
   assert.doesNotMatch(steps, /capture-plus/);
   assert.match(show, /function placeSpotlight\(\)/);
   assert.match(show, /classList\.toggle\('onboarding-overlay--spot', shown\)/, 'ohne sichtbares Ziel bleibt die Unschaerfe');
@@ -666,16 +667,20 @@ test('die Uebersicht polstert am Desktop mit --page-inline-pad und kennt kein ei
 /* R19 (Entscheidung Ulas 2026-10-16, Critique P2 mobil): DIE UEBERSICHT AUF DEM
  * TELEFON. Das Wetter begann bei y 1438, ueber dem Gruss standen drei
  * Icon-Knoepfe. TAFLA: die Wetterzeile stand im Kopf von Dziś, der Wand-Modus
- * in „Dostosuj Dziś". 2026-10-27, v2: das Wetter ist die erste Karte unter dem
- * Kopf (die Frage des Morgens: regnet es heute?), der Wand-Modus steht in
- * „Więcej". (Die Avatar-Reihe der Familienkarte ging mit dem Raster.) */
-test('R19 mobil: die Wetterkarte steht gleich unter dem Kopf von Dziś', async () => {
+ * in „Dostosuj Dziś". 2026-10-27, v2: das Wetter war die erste Karte unter dem
+ * Kopf, der Wand-Modus steht in „Więcej". One Today (2026-11-02): das Wetter
+ * ist wieder eine Zeile im Kopf, auf der Zeile des Datums - die Frage des
+ * Morgens steht ganz oben, ohne eine Karte. (Die Avatar-Reihe der
+ * Familienkarte ging mit dem Raster.) */
+test('R19 mobil: das Wetter steht im Kopf von Dziś, auf der Zeile des Datums', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
   const view = readFileSync(new URL('../public/components/today-view.js', import.meta.url), 'utf8');
-  assert.match(view, /\$\{renderHeader\(state\)\}\s*\$\{state\.weather \? renderWeather\(state\.weather\) : ''\}/,
-    'das Wetter ist das Erste nach dem Kopf');
-  assert.match(src, /weather: weatherAvailable \? weatherCard\(weather, ctx\) : null,/);
+  const header = view.slice(view.indexOf('function renderHeader('), view.indexOf('function renderNextUp('));
+  assert.match(header, /<div class="dz-head__line">\s*<p class="dz-head__date">[^\n]*\n\s*<a class="dz-head__weather" href="\/settings\/personal\/weather"/,
+    'das Wetter steht neben dem Datum, als Link zu seinen Einstellungen');
+  assert.match(src, /weatherLine: weatherAvailable \? weatherLine\(weather, ctx\) : null,/);
+  assert.doesNotMatch(view, /renderWeather|dz-weather/);
 });
 
 test('R19 mobil: der Wand-Modus steht in „Więcej", nie am Display und nicht im Kopf von Dziś', async () => {

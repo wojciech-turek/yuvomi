@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} evenemang idag",
         "todayMealChip": "Idag: {{title}}",
         "loadError": "Instrumentpanelen kunde inte laddas helt.",
-        "fabTaskLabel": "Lägg till uppgift",
         "fabCalendarLabel": "Lägg till händelse",
         "fabShoppingLabel": "Lägg till shopping",
         "fabNoteLabel": "Lägg till anteckning",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Senare",
         "groupNone": "Inget datum",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Anteckning utan titel"
+        "noteUntitled": "Anteckning utan titel",
+        "nextUpTitle": "Härnäst"
     },
     "wall": {
         "allDone": "Allt klart för i dag",

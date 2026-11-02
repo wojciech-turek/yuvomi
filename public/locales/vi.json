@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} sự kiện hôm nay",
         "todayMealChip": "Hôm nay: {{title}}",
         "loadError": "Không thể tải đầy đủ Bảng điều khiển.",
-        "fabTaskLabel": "Thêm nhiệm vụ",
         "fabCalendarLabel": "Thêm sự kiện",
         "fabShoppingLabel": "Thêm mua sắm",
         "fabNoteLabel": "Thêm ghi chú",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Sau này",
         "groupNone": "Không có ngày",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Ghi chú không có tiêu đề"
+        "noteUntitled": "Ghi chú không có tiêu đề",
+        "nextUpTitle": "Tiếp theo"
     },
     "wall": {
         "allDone": "Hôm nay đã xong hết",

@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} eventos hoje",
         "todayMealChip": "Hoje: {{title}}",
         "loadError": "Falha ao carregar o painel.",
-        "fabTaskLabel": "Adicionar tarefa",
         "fabCalendarLabel": "Adicionar evento",
         "fabShoppingLabel": "Adicionar compra",
         "fabNoteLabel": "Adicionar nota",
@@ -6508,7 +6507,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6550,7 +6548,8 @@
         "groupLater": "Depois",
         "groupNone": "Sem data",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Nota sem título"
+        "noteUntitled": "Nota sem título",
+        "nextUpTitle": "A seguir"
     },
     "wall": {
         "allDone": "Tudo feito por hoje",

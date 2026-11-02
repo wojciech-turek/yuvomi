@@ -44,7 +44,7 @@ const { renderTodayPage } = await import('../public/components/today-view.js');
 const { __test: tasksPage } = await import('../public/pages/tasks.js');
 const todayState = (patch) => ({
   user: { id: 99, display_name: 'Ich' }, household: [], dateLabel: '', greetingKey: 'today.greetingMorning',
-  weather: null, calendar: null, tasks: null, birthdays: [], earlierOpen: false, canCheck: false, canAddTask: false, ...patch,
+  weatherLine: null, nextUp: null, calendar: null, tasks: null, notes: null, birthdays: [], earlierOpen: false, canCheck: false, ...patch,
 });
 /** Der eigene Avatar im Kopf von Today (36). */
 function todayHead(user) {
@@ -53,7 +53,8 @@ function todayHead(user) {
 }
 /** Die Scheibe an einer Aufgabenzeile von Today (20). */
 function todayTaskRow(person) {
-  const html = renderTodayPage(todayState({ tasks: { rows: [{ key: 'task:1', id: 1, title: 'Zadanie', person }], total: 1 } }));
+  const rows = [{ key: 'task:1', id: 1, title: 'Zadanie', person }];
+  const html = renderTodayPage(todayState({ tasks: { rows, groups: [{ id: 'none', label: 'today.groupNone', rows }], total: 1 } }));
   return html.slice(html.indexOf('dz-task__aside'));
 }
 /** Die Scheibe an einer Zeile der Aufgabenliste, aus Sicht einer anderen Person (20). */

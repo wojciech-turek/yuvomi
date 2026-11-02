@@ -171,7 +171,6 @@
         "eventsChipPlural": "{{count}} событий сегодня",
         "todayMealChip": "Сегодня: {{title}}",
         "loadError": "Не удалось полностью загрузить панель управления.",
-        "fabTaskLabel": "Добавить задачу",
         "fabCalendarLabel": "Добавить событие",
         "fabShoppingLabel": "Добавить покупку",
         "fabNoteLabel": "Добавить заметку",
@@ -6788,7 +6787,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6830,7 +6828,8 @@
         "groupLater": "Позже",
         "groupNone": "Без даты",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Заметка без названия"
+        "noteUntitled": "Заметка без названия",
+        "nextUpTitle": "Далее"
     },
     "wall": {
         "allDone": "На сегодня всё",

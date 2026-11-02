@@ -2,20 +2,22 @@
  * Modul: Dashboard - Bedienung und Barrierefreiheit im gerenderten Dokument
  * Zweck: Was die Critique vom 2026-09-23 am lebenden Dashboard gemessen hat,
  *        hier als Programm gefahren statt als Textguard. Seit Tafla
- *        (2026-10-19) ist die Uebersicht „Dziś"; seit v2 (2026-10-27) zeigt
- *        sie, was der Entwurf „Main" zeigt - Kopf, Wetter, Kalender, Aufgaben,
- *        Wkrótce - und hat nichts mehr anzupassen. Die Fragen sind dieselben
- *        geblieben, gemessen wird an dem, was jetzt dasteht:
- *          (1) die Ziele von Dziś (Profil im Kopf, die Wetterkarte, der Kreis
- *              einer Aufgabe, „Tydzień", „Dodaj zadanie") sind an ihrem Zentrum
- *              das oberste Element und tragen 44/48px - Sonde 4
+ *        (2026-10-19) ist die Uebersicht „Dziś"; seit v2 (2026-10-27) hat sie
+ *        nichts mehr anzupassen, seit One Today (2026-11-02) zeigt sie Kopf
+ *        (mit der Wetterzeile), Następne, Kalender, Aufgaben, Notizen und
+ *        Geburtstage. Die Fragen sind dieselben geblieben, gemessen wird an
+ *        dem, was jetzt dasteht:
+ *          (1) die Ziele von Dziś (Profil im Kopf, die Wetterzeile, der Kreis
+ *              einer Aufgabe, „Tydzień") sind an ihrem Zentrum das oberste
+ *              Element und tragen 44/48px - Sonde 4
  *              (test-document-guards.js) ueberspringt verdeckte Ziele still,
  *          (2) jeder Abschnitt nennt sich nach einer eigenen h3 unter der h2
  *              des Kopfs, und keine Ueberschrift traegt eine Zahl im Namen
  *              (die Zahl der Aufgaben steht daneben, nicht darin),
  *          (3) Abhaken per Tastatur: der Kreis meldet seinen Zustand, die Zeile
- *              geht, der Fokus steht danach auf dem naechsten Kreis, und die
- *              Meldung bietet „Cofnij" an; „wcześniej" klappt per Tastatur auf,
+ *              geht, der Fokus steht danach auf dem naechsten Kreis (nach dem
+ *              letzten auf „Wszystkie" im Kopf der Aufgaben), und die Meldung
+ *              bietet „Cofnij" an; „wcześniej" klappt per Tastatur auf,
  *          (4) die Startknoepfe des Wand-Timers ruhen sichtbar, und der erste
  *              Tipp startet,
  *          (5) die Knoepfe von Dziś halten am Touch-Tablet (1180px) die
@@ -33,8 +35,8 @@ let harness;
 before(async () => { harness = await startHarness(); });
 after(async () => { await harness?.close(); });
 
-/* Ein nasser Nachmittag in jeder Stunde: die Regenzeile und das Diagramm
- * stehen, ganz gleich, wann die Sonde laeuft. */
+/* Ein nasser Tag in jeder Stunde: die Wetterzeile sagt den Regen, ganz
+ * gleich, wann die Sonde laeuft. */
 const WEATHER = {
   data: {
     provider: 'open-meteo', city: 'Dortmund', units: 'metric',
@@ -84,16 +86,16 @@ async function hitArea(page, selector) {
 }
 
 const ME = '[data-today] .dz-head__me';
-const WEATHER_CARD = '[data-today] .dz-weather';
+const WEATHER_LINE = '[data-today] .dz-head__weather';
 const CHECK = '[data-today] .dz-task .day-check';
 const WEEK = '[data-today] .dz-sec--calendar .dz-sec__link';
-const ADD = '[data-today] .dz-tasks__add';
+const ALL_TASKS = '[data-today] .dz-sec--tasks .dz-sec__link';
 
 test('(1) die Ziele von Dziś liegen frei und tragen die Zielgroesse', async () => {
   for (const device of ['desktop', 'mobile']) {
     const page = await dashboardPage({ device });
     const min = device === 'mobile' ? 48 : 44;
-    const targets = [ME, WEATHER_CARD, CHECK, WEEK, ADD];
+    const targets = [ME, WEATHER_LINE, CHECK, WEEK, ALL_TASKS];
     const present = [];
     for (const sel of targets) if (await page.$(sel)) present.push(sel);
     assert.deepEqual(present, targets, `${device}: Reichweite - es fehlt ${targets.filter((s) => !present.includes(s)).join(', ')}`);
@@ -129,8 +131,8 @@ test('(2) jeder Abschnitt nennt sich nach seiner h3, keine Ueberschrift traegt e
       }),
       h3: [...root.querySelectorAll('h3')].map(name),
       h3BeforeH2: [...root.querySelectorAll('h3')].some((h) => h2 && (h.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING)),
-      chartHidden: root.querySelector('.dz-chart')?.getAttribute('aria-hidden'),
-      weatherName: root.querySelector('.dz-weather')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      weatherName: root.querySelector('.dz-head__weather')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      gone: ['.dz-weather', '.dz-chart', '.dz-soon', '.dz-tasks__add'].filter((sel) => root.querySelector(sel)),
     };
   });
   assert.ok(tree.h2, 'der Kopf traegt eine h2 (die Begruessung)');
@@ -141,9 +143,10 @@ test('(2) jeder Abschnitt nennt sich nach seiner h3, keine Ueberschrift traegt e
   assert.deepEqual(unnamed, [], 'Abschnitte ohne eigene h3 und ohne Namen');
   const withDigits = tree.h3.filter((n) => /\d/.test(n));
   assert.deepEqual(withDigits, [], 'Ueberschriften mit einer Zahl im zugaenglichen Namen');
-  // Das Diagramm wiederholt fuer das Auge, was die Regenzeile in Worten sagt.
-  assert.equal(tree.chartHidden, 'true');
-  assert.match(tree.weatherName, /Regen|Deszcz|today\.rain/, `die Wetterkarte sagt den Regen in Worten: ${tree.weatherName}`);
+  // One Today: das Wetter ist eine Zeile im Kopf, die den Regen in Worten
+  // sagt - Karte, Diagramm, Wkrótce und „Dodaj zadanie" sind gegangen.
+  assert.match(tree.weatherName, /rain|regen|deszcz|today\.rain/i, `die Wetterzeile sagt den Regen in Worten: ${tree.weatherName}`);
+  assert.deepEqual(tree.gone, []);
   await page.close();
 });
 
@@ -166,13 +169,29 @@ test('(3) Abhaken per Tastatur: Zustand, Fokus auf den naechsten Kreis, „Cofni
   }));
   assert.equal(after.body, false, 'der Fokus ist auf <body> gefallen');
   if (second) assert.equal(after.key, second, `der Fokus steht auf dem naechsten Kreis, nicht auf ${JSON.stringify(after)}`);
-  else assert.equal(after.action, 'add-task', 'ohne weiteren Kreis auf „Dodaj zadanie"');
+  else assert.ok(await page.evaluate((sel) => document.activeElement === document.querySelector(sel), ALL_TASKS),
+    `ohne weiteren Kreis auf „Wszystkie" der Aufgaben, nicht auf ${JSON.stringify(after)}`);
   // Die Meldung bietet den Rueckweg an.
   // (Eine faellige Erinnerung traegt auch einen `.toast__undo` - gemeint ist
   // der mit dem Wort fuer Rueckgaengig.)
   const undo = await page.waitForFunction(() => [...document.querySelectorAll('.toast__undo')]
     .some((b) => /Rückgängig/.test(b.textContent)), { timeout: 5000 }).catch(() => null);
   assert.ok(undo, 'die Meldung traegt „Cofnij" (de: Rückgängig)');
+
+  // Der letzte Kreis: danach gibt es keinen naechsten - der Fokus geht auf
+  // „Wszystkie" im Kopf der Aufgaben (One Today: „Dodaj zadanie" ist weg).
+  await settle(page);
+  const last = await page.$$eval(CHECK, (els) => els.at(-1)?.dataset.rowKey ?? '');
+  assert.ok(last, 'Reichweite: ein letzter Kreis');
+  await page.focus(`${CHECK}[data-row-key="${last}"]`);
+  await page.keyboard.press('Space');
+  await page.waitForFunction((key) => !document.querySelector(`[data-today] .dz-task[data-row-key="${key}"]`), { timeout: 8000 }, last);
+  await settle(page);
+  const onAll = await page.evaluate((sel) => ({
+    ok: document.activeElement === document.querySelector(sel),
+    at: `${document.activeElement?.tagName}.${document.activeElement?.className}`,
+  }), ALL_TASKS);
+  assert.ok(onAll.ok, `nach dem letzten Kreis steht der Fokus auf „Wszystkie", nicht auf ${onAll.at}`);
 
   // „wcześniej" (nur wenn der Seed heute schon Vergangenes hat).
   const toggle = '[data-today] .dz-cal__earlier';
@@ -233,7 +252,7 @@ test('(5) die Knoepfe von Dziś halten am Touch-Tablet die Fingergroesse', async
   });
   const touch = await page.evaluate(() => matchMedia('(hover: none)').matches && innerWidth >= 1024);
   assert.ok(touch, 'Reichweite: ein Touch-Geraet ueber 1024px Breite');
-  for (const sel of [ME, CHECK, WEEK, ADD]) {
+  for (const sel of [ME, WEATHER_LINE, CHECK, WEEK]) {
     const area = await hitArea(page, sel);
     assert.ok(area.w >= 48 && area.h >= 48, `${sel}: ${area.w}x${area.h} am Finger, verlangt 48`);
   }

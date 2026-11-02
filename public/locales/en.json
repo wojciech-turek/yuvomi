@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} events today",
         "todayMealChip": "Today: {{title}}",
         "loadError": "Today could not be fully loaded.",
-        "fabTaskLabel": "Add task",
         "fabCalendarLabel": "Add event",
         "fabShoppingLabel": "Add shopping",
         "fabNoteLabel": "Add note",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Later",
         "groupNone": "No date",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Untitled note"
+        "noteUntitled": "Untitled note",
+        "nextUpTitle": "Next up"
     },
     "wall": {
         "allDone": "All done for today",

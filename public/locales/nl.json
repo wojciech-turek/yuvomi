@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} evenementen vandaag",
         "todayMealChip": "Vandaag: {{title}}",
         "loadError": "Dashboard kon niet volledig worden geladen.",
-        "fabTaskLabel": "Taak toevoegen",
         "fabCalendarLabel": "Evenement toevoegen",
         "fabShoppingLabel": "Boodschap toevoegen",
         "fabNoteLabel": "Notitie toevoegen",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Later",
         "groupNone": "Geen datum",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Notitie zonder titel"
+        "noteUntitled": "Notitie zonder titel",
+        "nextUpTitle": "Hierna"
     },
     "wall": {
         "allDone": "Alles voor vandaag gedaan",

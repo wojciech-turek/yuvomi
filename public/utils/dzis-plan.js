@@ -1,21 +1,25 @@
 /**
  * Modul: Dziś v2 - the model (2026-10-27)
- * Zweck: What the home screen shows, as plain data: the weather card with the
- *        rain of the day, the calendar of today (earlier, now, ahead and a peek
- *        at tomorrow), the pending tasks and the birthdays soon. Drawn by
+ * Zweck: What the home screen shows, as plain data: the weather line with the
+ *        rain of the day, the next thing (Next up), the calendar of today
+ *        (earlier, now, ahead and a peek at tomorrow), the pending tasks in
+ *        their groups, three notes and the next three birthdays. Drawn by
  *        components/today-view.js, wired in pages/dashboard.js.
  * Abhängigkeiten: /i18n.js, /utils/today-plan.js, /utils/date.js,
  *                 /utils/day-label.js, /utils/note-line.js
  *
  * ONE TODAY (2026-11-02) adds the data of the new page: weatherLine, nextUp,
- * the task groups of pendingTasks, birthdaysNext and notesCard.
+ * the task groups of pendingTasks, birthdaysNext and notesCard. The weather
+ * card and its chart left the page (Task 16): `weatherCard` stays the one
+ * reading of the forecast, and the header line takes its words from it.
+ * "Wkrótce" (birthdaysSoon, the 30-day cut) went with the card it filled.
  *
- * THE OWNER'S ORDER (design v2, "Main" and "DzisFull"): the weather first,
- * because "will it rain today" is the question of the morning; then the
- * calendar, compact, with the ongoing event marked in place instead of
- * repeated in a second card; then the tasks that are waiting, tickable; the
- * birthdays last and quiet. There is no Teraz card, no dinner card and no day
- * plan any more - the wall keeps its own model (utils/wall-plan.js).
+ * THE OWNER'S ORDER (One Today, spec section 3): "will it rain today" stays
+ * the question of the morning, answered in one line beside the date; then the
+ * one thing that comes next; the calendar, compact, with the ongoing event
+ * marked in place; the tasks that are waiting, tickable, in their groups; the
+ * notes; the birthdays last. There is no Teraz card, no dinner card and no
+ * day plan - the wall keeps its own model (utils/wall-plan.js).
  */
 
 import { t, formatTime, getLocale, getTimeFormat, getNumberFormat } from '/i18n.js';
@@ -33,9 +37,8 @@ const BAR_MAX = 24;
 const BAR_MIN = 3;
 /** How many tasks the card lists (the server sends the five most pressing). */
 export const TASK_ROWS = 5;
-/** Birthdays: how far ahead and how many. */
-export const SOON_DAYS = 30;
-export const SOON_ROWS = 3;
+/** Birthdays: how many, however far away. */
+const BIRTHDAY_ROWS = 3;
 /** From this minute of the day "no rain until evening" would be a lie. */
 const EVENING_MIN = 17 * 60;
 
@@ -233,8 +236,12 @@ function rowMinute(row) {
   return row.sortMin;
 }
 
-/** Where a tap on the row goes: events by id and day, the rest by their own route. */
-const routeOf = (row, ctx) => (row.kind === 'event' ? eventRoute(row, row.dayKey ?? ctx.todayKey) : String(row.route ?? ''));
+/** Where a tap on the row goes: events by id and day, a task to its deep link, the rest by their own route. */
+function routeOf(row, ctx) {
+  if (row.kind === 'event') return eventRoute(row, row.dayKey ?? ctx.todayKey);
+  if (row.kind === 'task' && row.id != null) return `/tasks?open=${encodeURIComponent(String(row.id))}`;
+  return String(row.route ?? '');
+}
 
 /** Next up knows events, meals, timed tasks and a household help visit - no reminders, shifts, doses. */
 const NEXT_UP_ROWS = (row) => row.kind === 'event' || row.kind === 'meal' || row.kind === 'task'
@@ -362,29 +369,6 @@ export function pendingTasks(data, ctx) {
 // Birthdays
 // --------------------------------------------------------
 
-/** "Babcia Halina · 70. urodziny", "sob 1 lis · za 5 dni" - the next 30 days, three at most. */
-export function birthdaysSoon(data, ctx) {
-  return (Array.isArray(data?.birthdays) ? data.birthdays : [])
-    .filter((b) => Number.isFinite(Number(b?.days_until)) && Number(b.days_until) >= 0 && Number(b.days_until) <= SOON_DAYS)
-    .slice(0, SOON_ROWS)
-    .map((b) => {
-      const days = Number(b.days_until);
-      const age = Number(b.next_age);
-      const kind = b.kind === 'name_day'
-        ? t('today.nameDayKind')
-        : (Number.isFinite(age) && age > 0 ? t('birthdays.heroAge', { age }) : t('today.birthdayKind'));
-      const when = days === 0 ? t('calendar.relDay.today') : days === 1 ? t('calendar.relDay.tomorrow') : t('birthdays.inDays', { count: days });
-      return {
-        key: `birthday:${b.id}:${b.kind}`,
-        id: b.id,
-        name: String(b.name ?? ''),
-        kind,
-        when: `${shortWeekdayDayMonth(addLocalDays(ctx.todayKey, days))} · ${when}`,
-        route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
-      };
-    });
-}
-
 /**
  * The next three birthdays or name days, however far away (the server sends
  * five occurrences, sorted by days). "kończy 36 · sob 1 lis · za 5 dni".
@@ -392,7 +376,7 @@ export function birthdaysSoon(data, ctx) {
 export function birthdaysNext(data, ctx) {
   return (Array.isArray(data?.birthdays) ? data.birthdays : [])
     .filter((b) => Number.isFinite(Number(b?.days_until)) && Number(b.days_until) >= 0)
-    .slice(0, 3)
+    .slice(0, BIRTHDAY_ROWS)
     .map((b) => {
       const days = Number(b.days_until);
       const age = Number(b.next_age);
@@ -437,14 +421,18 @@ export function notesCard(data) {
   });
 }
 
-/** What changes by the clock alone - the page rebuilds only when this does. */
+/**
+ * What changes by the clock alone - the page rebuilds only when this does:
+ * past and ongoing events, the hour, the words of the weather line
+ * (`weatherLine`) and the lead of Next up ("Za 25 min" counts down).
+ */
 export function clockStamp(calendar, weather, ctx, next = null) {
   return JSON.stringify([
     ctx.todayKey,
     calendar?.earlier?.rows.map((row) => row.key),
     calendar?.rows.map((row) => `${row.key}:${row.ongoing}`),
     Math.floor(ctx.nowMin / 60),
-    weather?.dry?.label ?? '',
+    weather?.text ?? '',
     next?.lead ?? '',
   ]);
 }

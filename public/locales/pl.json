@@ -187,7 +187,6 @@
         "eventsChipPlural": "{{count}} wydarzenia dzisiaj",
         "todayMealChip": "Dzisiaj: {{title}}",
         "loadError": "Nie udało się w pełni załadować ekranu Dziś.",
-        "fabTaskLabel": "Dodaj zadanie",
         "fabCalendarLabel": "Dodaj wydarzenie",
         "fabShoppingLabel": "Dodaj zakupy",
         "fabNoteLabel": "Dodaj notatkę",
@@ -6788,7 +6787,6 @@
         "questionSkipAria": "Pomiń pytanie tygodnia",
         "questionTitle": "Pytanie tygodnia",
         "shoppingTitle": "Zakupy",
-        "soonTitle": "Wkrótce",
         "started": "w toku",
         "then": "Potem: {{what}}",
         "timer": "Minutnik",
@@ -6830,7 +6828,8 @@
         "groupLater": "Później",
         "groupNone": "Bez terminu",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Notatka bez tytułu"
+        "noteUntitled": "Notatka bez tytułu",
+        "nextUpTitle": "Następne"
     },
     "wall": {
         "allDone": "Na dziś wszystko",

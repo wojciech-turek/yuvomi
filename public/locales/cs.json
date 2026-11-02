@@ -168,7 +168,6 @@
         "eventsChipPlural": "Dnes je {{count}} událostí",
         "todayMealChip": "Dnes: {{title}}",
         "loadError": "Přehled se nepodařilo plně načíst.",
-        "fabTaskLabel": "Přidat úkol",
         "fabCalendarLabel": "Přidat událost",
         "fabShoppingLabel": "Přidat nákup",
         "fabNoteLabel": "Přidat poznámku",
@@ -6660,7 +6659,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6702,7 +6700,8 @@
         "groupLater": "Později",
         "groupNone": "Bez termínu",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Poznámka bez názvu"
+        "noteUntitled": "Poznámka bez názvu",
+        "nextUpTitle": "Následuje"
     },
     "wall": {
         "allDone": "Pro dnešek hotovo",

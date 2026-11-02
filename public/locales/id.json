@@ -181,7 +181,6 @@
         "eventsChipPlural": "{{count}} acara hari ini",
         "todayMealChip": "Hari ini: {{title}}",
         "loadError": "Dasbor tidak dapat dimuat sepenuhnya.",
-        "fabTaskLabel": "Tambah tugas",
         "fabCalendarLabel": "Tambah acara",
         "fabShoppingLabel": "Tambah belanja",
         "fabNoteLabel": "Tambah catatan",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Nanti",
         "groupNone": "Tanpa tanggal",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Catatan tanpa judul"
+        "noteUntitled": "Catatan tanpa judul",
+        "nextUpTitle": "Berikutnya"
     },
     "wall": {
         "allDone": "Semua beres untuk hari ini",

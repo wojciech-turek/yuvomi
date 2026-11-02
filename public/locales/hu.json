@@ -165,7 +165,6 @@
         "eventsChipPlural": "{{count}} esemény ma",
         "todayMealChip": "Ma: {{title}}",
         "loadError": "Az áttekintő nem tölthető be teljesen.",
-        "fabTaskLabel": "Feladat hozzáadása",
         "fabCalendarLabel": "Esemény hozzáadása",
         "fabShoppingLabel": "Bevásárlás hozzáadása",
         "fabNoteLabel": "Jegyzet hozzáadása",
@@ -6506,7 +6505,6 @@
         "questionSkipAria": "Skip the question of the week",
         "questionTitle": "Question of the week",
         "shoppingTitle": "Shopping",
-        "soonTitle": "Coming up",
         "started": "started",
         "then": "Then: {{what}}",
         "timer": "Timer",
@@ -6548,7 +6546,8 @@
         "groupLater": "Később",
         "groupNone": "Nincs dátum",
         "atTimeOnly": "{{time}}",
-        "noteUntitled": "Cím nélküli jegyzet"
+        "noteUntitled": "Cím nélküli jegyzet",
+        "nextUpTitle": "Következik"
     },
     "wall": {
         "allDone": "Mára minden kész",

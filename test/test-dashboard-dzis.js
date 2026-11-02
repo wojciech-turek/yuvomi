@@ -1,20 +1,22 @@
 /**
  * Modul: Dziś v2 (2026-10-27) - the model and the view of the home screen
- * Zweck: The owner's design ("Main", "DzisFull") as guards:
- *   1. the weather card: the rain window of the REST of the day, "do 85%",
- *      fourteen bars from the hour before now, blue from 40 %, "teraz" and
- *      every third hour named; dry: "Bez deszczu do wieczora";
+ * Zweck: The owner's design ("Main", "DzisFull"; One Today 2026-11-02) as guards:
+ *   1. the weather model: the rain window of the REST of the day, "do 85%",
+ *      dry: "Bez deszczu do wieczora" - drawn as one line in the header;
  *   2. the calendar: what is over folds into "1 wcześniej · 08:00 ...", the
  *      ongoing event stands in place ("teraz · do 11:00") instead of in a
  *      second card, "razem" has two dots, the last line peeks at tomorrow;
- *   3. the tasks: the server's order (overdue, dated, undated), five rows, the
- *      due word ("wczoraj", "dziś", "czw"), late in its own tone, the flag only
- *      for high and urgent, the total from the server;
- *   4. Wkrótce: the next 30 days, three at most, each a deep link;
- *   5. the view: one h2 greeting, the weather card links to the weather
- *      settings, every check circle has a name, read-only viewers get no
- *      circles and no "Dodaj zadanie", user text is escaped, and nothing of
- *      the Tafla page (Teraz, dinner, plan, customise) is left.
+ *   3. the tasks: the server's order (overdue, dated, undated), five rows in
+ *      groups, the due word only where the group does not say it, late in its
+ *      own tone, the flag only for high and urgent, the total from the server;
+ *   4. Next up, the task groups, the next three birthdays, three notes and the
+ *      weather line (One Today);
+ *   5. the view: header (date and weather on one line, one h2 greeting), Next
+ *      up, Kalendarz, Zadania, Notatki, Urodziny in that order, every section
+ *      named by its h3, every check circle named, read-only viewers get no
+ *      circles, nothing on the page adds (the + does), user text is escaped,
+ *      and nothing of the old pages (weather card, Wkrótce, Dodaj zadanie,
+ *      Teraz, dinner, plan, customise) is left.
  * Ausfuehren: npm run test:dashboard-dzis
  */
 
@@ -202,30 +204,7 @@ test('tasks: a done task never shows, and the due word reaches back and ahead', 
 });
 
 // --------------------------------------------------------------------------
-// 4. Wkrótce
-// --------------------------------------------------------------------------
-
-test('Wkrótce: the next 30 days, three at most, with age or kind, the day and a deep link', () => {
-  const data = {
-    birthdays: [
-      { id: 1, name: 'Babcia Halina', kind: 'birthday', days_until: 5, next_age: 70 },
-      { id: 2, name: 'Tomek', kind: 'birthday', days_until: 16, next_age: null },
-      { id: 3, name: 'Ania', kind: 'name_day', days_until: 24 },
-      { id: 4, name: 'Czwarty', kind: 'birthday', days_until: 28, next_age: 40 },
-      { id: 5, name: 'Daleko', kind: 'birthday', days_until: 31, next_age: 40 },
-    ],
-  };
-  const rows = at('10:15', (ctx) => dzis.birthdaysSoon(data, ctx));
-  assert.deepEqual(rows.map((row) => row.name), ['Babcia Halina', 'Tomek', 'Ania']);
-  assert.deepEqual(rows.map((row) => row.kind), ['birthdays.heroAge{"age":70}', 'today.birthdayKind', 'today.nameDayKind']);
-  assert.equal(rows[0].when, 'So 1. Nov. · birthdays.inDays{"count":5}');
-  assert.equal(rows[0].route, '/birthdays?open=1');
-  const soon = at('10:15', (ctx) => dzis.birthdaysSoon({ birthdays: [{ id: 6, name: 'Dziś', kind: 'birthday', days_until: 0, next_age: 3 }] }, ctx));
-  assert.match(soon[0].when, / · calendar\.relDay\.today$/);
-});
-
-// --------------------------------------------------------------------------
-// 5. One Today (2026-11-02): next up, task groups, birthdays, notes, weather line
+// 4. One Today (2026-11-02): next up, task groups, birthdays, notes, weather line
 // --------------------------------------------------------------------------
 
 const MEALS = {
@@ -410,6 +389,20 @@ test('next up: "Potem" is the next row that starts after now, not a second runni
   assert.equal(up.then, 'today.thenShort{"time":"13:00","title":"Obiad u babci"}');
 });
 
+test('next up: a timed task opens that task in Zadania', () => {
+  const data = { planTasks: [task(30, 'Odebrać paczkę', '2026-10-27', { due_time: '13:00' })] };
+  const up = at('12:05', (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up.kind, 'task');
+  assert.equal(up.title, 'Odebrać paczkę');
+  assert.equal(up.route, '/tasks?open=30', 'the deep link of the task, not an empty route');
+});
+
+test('Wkrótce is gone: the next three birthdays come from birthdaysNext alone', () => {
+  assert.equal('birthdaysSoon' in dzis, false);
+  assert.equal('SOON_DAYS' in dzis, false);
+  assert.equal('SOON_ROWS' in dzis, false);
+});
+
 test('notes card: a note with no title and no text still has a title', () => {
   for (const content of ['', '- [ ]', '---', '```\ncode\n```']) {
     const [n] = dzis.notesCard({ pinnedNotes: [{ id: 1, title: '', content }] });
@@ -438,38 +431,73 @@ test('the header: the long date with a capital, the greeting by the hour', () =>
 // 5. The view
 // --------------------------------------------------------------------------
 
-function pageAt(hhmm, extra = {}, data = { ...DAY, ...TASKS }) {
+const NOTES = {
+  pinnedNotes: [
+    { id: 1, title: 'Święta', content: '# Plan\n- [ ] Kraków' },
+    { id: 2, title: 'Wifi', content: 'hasło: `kuchnia`' },
+  ],
+};
+const BIRTHDAYS = {
+  birthdays: [
+    { id: 1, name: 'Babcia Halina', kind: 'birthday', days_until: 0, next_age: 70 },
+    { id: 2, name: 'Ania', kind: 'name_day', days_until: 1 },
+    { id: 3, name: 'Tomek', kind: 'birthday', days_until: 200, next_age: 36 },
+  ],
+};
+
+function pageAt(hhmm, extra = {}, data = { ...DAY, ...TASKS, ...MEALS, ...NOTES, ...BIRTHDAYS }) {
   return at(hhmm, (ctx) => view.renderTodayPage({
     user: W,
     household: [W, M],
     dateLabel: dzis.headerDate(ctx.todayKey),
     greetingKey: dzis.greetingKey(ctx.nowMin),
-    weather: dzis.weatherCard(weather(), ctx),
+    weatherLine: dzis.weatherLine(weather(), ctx),
+    nextUp: dzis.nextUp(data, ctx),
     calendar: dzis.calendarDay(data, ctx),
     tasks: dzis.pendingTasks(data, ctx),
-    birthdays: dzis.birthdaysSoon({ birthdays: [{ id: 1, name: 'Babcia Halina', kind: 'birthday', days_until: 5, next_age: 70 }] }, ctx),
+    notes: dzis.notesCard(data),
+    birthdays: dzis.birthdaysNext(data, ctx),
     earlierOpen: false,
     canCheck: true,
-    canAddTask: true,
     ...extra,
   }));
 }
 const count = (html, re) => (html.match(re) || []).length;
+/** The markup of one section of the page, by its class. */
+const sectionOf = (html, cls) => [...html.matchAll(/<section class="([^"]*)"[^>]*>[\s\S]*?<\/section>/g)]
+  .find((m) => m[1].split(' ').includes(cls))?.[0] ?? '';
 
-test('the page, top to bottom: header, weather, Kalendarz, Zadania, Wkrótce - and nothing of the Tafla page', () => {
-  const html = pageAt('10:15');
-  const order = ['class="dz-head"', 'class="dz-card dz-weather"', 'dz-sec--calendar', 'dz-sec--tasks', 'class="dz-soon"'].map((mark) => html.indexOf(mark));
+test('the page, top to bottom: header, Next up, Kalendarz, Zadania, Notatki, Urodziny - and nothing of the old pages', () => {
+  const html = pageAt('12:05');
+  const order = ['class="dz-head"', 'class="dz-next"', 'dz-sec--calendar', 'dz-sec--tasks', 'dz-sec--notes', 'dz-sec--birthdays'].map((mark) => html.indexOf(mark));
   assert.ok(order.every((pos) => pos > 0), `every part is drawn: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the design\'s order');
   assert.equal(count(html, /<h2 class="dz-head__greeting"/g), 1, 'one greeting, the page\'s h2');
   assert.equal(count(html, /<h2\b/g), 1, 'the sections are h3 under it');
-  assert.equal(count(html, /<h3 class="dz-(?:sec|soon)__title"/g), 3);
+  // Every section is named by its own h3 (Next up's is there for the ear only).
+  const sections = [...html.matchAll(/<section class="[^"]*" aria-labelledby="([^"]+)">[\s\S]*?<\/section>/g)];
+  assert.equal(count(html, /<section\b/g), 5);
+  assert.equal(sections.length, 5, 'every section has aria-labelledby');
+  for (const [markup, id] of sections) {
+    assert.match(markup, new RegExp(`<h3 class="[^"]*" id="${id}">`), `${id} names its section from inside`);
+  }
+  assert.equal(count(html, /<h3\b/g), 5);
   assert.match(html, /<a class="dz-head__me" href="\/settings"/);
   // `page-fab` stays out of the page markup: the + of Quick-Add (2026-10-29)
   // is built by dashboard.js and lives in the shell layer (next test).
-  for (const gone of [/day-now/, /day-plan/, /day-closed/, /data-day-action="cook"/, /data-day-action="customize"/, /page-fab/, /today\.planTitle/]) {
-    assert.doesNotMatch(html, gone, `${gone} is gone with v2`);
+  for (const gone of [/dz-weather/, /dz-chart/, /dz-soon/, /dz-tasks__add/, /data-day-action="add-task"/, /dashboard\.fabTaskLabel/, /today\.soonTitle/,
+    /day-now/, /day-plan/, /day-closed/, /data-day-action="cook"/, /data-day-action="customize"/, /page-fab/, /today\.planTitle/]) {
+    assert.doesNotMatch(html, gone, `${gone} is gone`);
   }
+});
+
+test('an empty household: the header, the quiet calendar and tasks - no Next up, Notatki or Urodziny, nothing broken', () => {
+  const html = pageAt('12:05', { weatherLine: null }, {});
+  assert.match(html, /class="dz-head"/);
+  assert.doesNotMatch(html, /dz-next|dz-sec--notes|dz-sec--birthdays|dz-head__weather/);
+  assert.match(html, /<p class="dz-cal__empty">today\.calendarEmpty<\/p>/);
+  assert.match(html, /<p class="dz-tasks__empty">tasks\.allDoneText<\/p>/);
+  assert.doesNotMatch(html, /undefined|null|NaN/);
 });
 
 test('Quick-Add (2026-10-29): Dziś has exactly one +, fab-add, and none of the old capture or speed-dial names', () => {
@@ -488,16 +516,35 @@ test('Quick-Add (2026-10-29): Dziś has exactly one +, fab-add, and none of the 
   assert.doesNotMatch(router, /capture-plus|createCapturePlus|nav-bottom__add|nav-sidebar__add/);
 });
 
-test('the weather card is one link to the weather settings; the chart is decoration for the eye only', () => {
+test('the header: the date and the weather on one line, the weather one link to its settings; the greeting and the disc below', () => {
   const html = pageAt('09:30');
-  assert.match(html, /<a class="dz-card dz-weather" href="\/settings\/personal\/weather" data-route="\/settings\/personal\/weather">/);
-  assert.match(html, /class="dz-chart" aria-hidden="true"/, 'the rain line says it in words; the bars repeat it');
-  assert.equal(count(html, /class="dz-chart__bar[ "]/g), 14);
-  assert.equal(count(html, /dz-chart__bar--now/g), 1);
-  assert.equal(count(html, /dz-chart__bar--wet/g), 5);
-  assert.match(html, /data-lucide="umbrella"/);
-  assert.match(html, /today\.rainWindow\{&quot;from&quot;:&quot;13:00&quot;,&quot;to&quot;:&quot;17:00&quot;\}/);
-  assert.doesNotMatch(pageAt('09:30', { weather: null }), /dz-weather/, 'no weather, no card');
+  const head = /<header class="dz-head">[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
+  const line = /<div class="dz-head__line">[\s\S]*?<\/div>/.exec(head)?.[0] ?? '';
+  assert.match(line, /<p class="dz-head__date">Dienstag, 27\. Oktober<\/p>/);
+  assert.match(line, /<a class="dz-head__weather" href="\/settings\/personal\/weather" data-route="\/settings\/personal\/weather">/,
+    'the weather opens what the weather card opened');
+  assert.match(line, /data-lucide="cloud-drizzle"[^>]*aria-hidden="true"/, 'the icon is for the eye; the words say it');
+  assert.match(line, /11° · today\.rainWindow\{&quot;from&quot;:&quot;13:00&quot;,&quot;to&quot;:&quot;17:00&quot;\}/);
+  const at = (mark) => head.indexOf(mark);
+  assert.ok(at('dz-head__line') < at('<h2 class="dz-head__greeting"') && at('<h2 class="dz-head__greeting"') < at('<a class="dz-head__me"'),
+    'date line first, then the greeting and the disc');
+  assert.doesNotMatch(pageAt('09:30', { weatherLine: null }), /dz-head__weather/, 'no weather, no line - the date stands alone');
+});
+
+test('Next up: one link to that thing - the lead, the title, Potem; a hidden h3 names it; no next thing, no card', () => {
+  const html = pageAt('12:05');
+  const next = sectionOf(html, 'dz-next');
+  assert.match(next, /^<section class="dz-next" aria-labelledby="dz-next-h">/);
+  assert.match(next, /<h3 class="sr-only" id="dz-next-h">today\.nextUpTitle<\/h3>/);
+  assert.equal(count(next, /<a\b/g), 1, 'the card is one link');
+  assert.match(next, /<a class="dz-next__card" href="\/meals" data-route="\/meals">/);
+  assert.match(next, /<span class="dz-next__lead">today\.inMinutesAt\{&quot;minutes&quot;:25,&quot;time&quot;:&quot;12:30&quot;\}<\/span>/);
+  assert.match(next, /<span class="dz-next__title">today\.mealRow\{[^<]*Zupa[^<]*\}<\/span>/);
+  assert.match(next, /<span class="dz-next__then">today\.thenShort\{&quot;time&quot;:&quot;15:00&quot;,&quot;title&quot;:&quot;Pediatra&quot;\}<\/span>/);
+  const tomorrow = sectionOf(pageAt('21:00', {}, { planEvents: DAY.planEvents }), 'dz-next');
+  assert.match(tomorrow, /<span class="dz-next__lead">today\.tomorrowAt\{&quot;time&quot;:&quot;08:00&quot;\}<\/span>/, 'nothing left today: tomorrow\'s first thing');
+  assert.doesNotMatch(tomorrow, /dz-next__then/, 'tomorrow\'s thing has no Potem line');
+  assert.doesNotMatch(pageAt('12:05', { nextUp: null }), /dz-next/);
 });
 
 test('Kalendarz: the fold is a real disclosure, the ongoing row is marked, Tydzień opens the week', () => {
@@ -514,38 +561,89 @@ test('Kalendarz: the fold is a real disclosure, the ongoing row is marked, Tydzi
   assert.match(quiet, /<p class="dz-cal__empty">today\.calendarEmpty<\/p>/);
 });
 
-test('Zadania: every circle has a name, the flag is read out, late is marked; Dodaj zadanie ends the card', () => {
+test('Zadania: grouped under small labels in order, every circle named, the flag read out, late marked - and no add row', () => {
   const html = pageAt('10:15');
+  const tasks = sectionOf(html, 'dz-sec--tasks');
+  const labels = [...tasks.matchAll(/<p class="(dz-group[^"]*)" id="([^"]+)">([^<]+)<\/p>/g)].map((m) => [m[1], m[2], m[3]]);
+  assert.deepEqual(labels.map(([, , text]) => text), ['today.groupLate', 'today.groupToday', 'today.groupTomorrow', 'today.groupLater', 'today.groupNone']);
+  assert.deepEqual(labels.map(([cls]) => cls), ['dz-group dz-group--late', 'dz-group', 'dz-group', 'dz-group', 'dz-group'], 'only "Zaległe" in the attention tone');
+  // Each group is a list named by its label.
+  const lists = [...tasks.matchAll(/<ul class="dz-tasks__list" aria-labelledby="([^"]+)">([\s\S]*?)<\/ul>/g)];
+  assert.deepEqual(lists.map((m) => m[1]), labels.map(([, id]) => id));
+  assert.deepEqual(lists.map((m) => count(m[2], /<li class="dz-task/g)), [1, 1, 1, 1, 1]);
   const circles = [...html.matchAll(/<button type="button" class="day-check check-ring"[^>]*aria-label="([^"]+)"/g)].map((m) => m[1]);
   assert.equal(circles.length, 5);
   assert.equal(circles[0], 'tasks.markDone{&quot;title&quot;:&quot;Zapłacić za prąd&quot;}');
   assert.equal(count(html, /data-lucide="flag" class="dz-task__flag" role="img" aria-label="today\.priorityFlag"/g), 2);
   assert.equal(count(html, /dz-task__due--late/g), 1);
+  // The group says the day: no due word in Dziś and Jutro, a short date in Później.
+  assert.deepEqual([...tasks.matchAll(/<span class="dz-task__due[^"]*">([^<]+)<\/span>/g)].map((m) => m[1]), ['calendar.relDay.yesterday', 'Do 29. Okt.']);
   assert.match(html, /<h3 class="dz-sec__title" id="dz-tasks-h">nav\.tasks<\/h3>\s*<span class="dz-sec__count">9<\/span>/,
     'the count stands beside the heading, not in its name');
   assert.match(html, /<a class="dz-sec__link" href="\/tasks"[^>]*>common\.all<\/a>/);
-  assert.match(html, /<button type="button" class="dz-tasks__add" data-day-action="add-task">/);
+  assert.doesNotMatch(html, /dz-tasks__add|data-day-action="add-task"/, 'no "Dodaj zadanie" row: the + adds');
 });
 
-test('read-only and display viewers see the tasks without circles and without Dodaj zadanie', () => {
-  const html = pageAt('10:15', { canCheck: false, canAddTask: false });
+test('read-only and display viewers see the tasks without circles; nobody gets an add row', () => {
+  const html = pageAt('10:15', { canCheck: false });
   assert.doesNotMatch(html, /data-day-action="check"/);
   assert.doesNotMatch(html, /data-day-action="add-task"/);
   assert.equal(count(html, /dz-task__spacer/g), 5);
   assert.equal(count(html, /data-day-action="open"/g), 5, 'the title still opens the task to read');
 });
 
+test('Notatki: up to three rows of title and one plain line, each opens its note, no icon; Wszystkie opens the notes', () => {
+  const notes = sectionOf(pageAt('10:15'), 'dz-sec--notes');
+  assert.match(notes, /^<section class="dz-sec dz-sec--notes" aria-labelledby="dz-notes-h">/);
+  assert.match(notes, /<h3 class="dz-sec__title" id="dz-notes-h">nav\.notes<\/h3>/);
+  assert.match(notes, /<a class="dz-sec__link" href="\/notes" data-route="\/notes">common\.all<\/a>/);
+  const rows = [...notes.matchAll(/<a class="dz-note" href="([^"]+)" data-route="([^"]+)">([\s\S]*?)<\/a>/g)];
+  assert.deepEqual(rows.map((m) => m[1]), ['/notes?open=1', '/notes?open=2']);
+  assert.deepEqual(rows.map((m) => m[2]), ['/notes?open=1', '/notes?open=2']);
+  assert.match(rows[0][3], /<span class="dz-note__title">Święta<\/span>\s*<span class="dz-note__line">Plan<\/span>/);
+  assert.match(rows[1][3], /<span class="dz-note__line">hasło: kuchnia<\/span>/, 'markdown as plain text');
+  assert.doesNotMatch(notes, /data-lucide/, 'no icon per row');
+  const bare = sectionOf(pageAt('10:15', { notes: [{ id: 9, title: 'Sam tytuł', line: '', route: '/notes?open=9' }] }), 'dz-sec--notes');
+  assert.doesNotMatch(bare, /dz-note__line/, 'no empty second line');
+  assert.doesNotMatch(pageAt('10:15', { notes: null }), /dz-sec--notes/, 'no notes, no card');
+});
+
+test('Urodziny: the next three; today\'s in the attention tone with the cake and "Dziś"; others with the date and how far; Wszystkie', () => {
+  const bdays = sectionOf(pageAt('10:15'), 'dz-sec--birthdays');
+  assert.match(bdays, /^<section class="dz-sec dz-sec--birthdays" aria-labelledby="dz-birthdays-h">/);
+  assert.match(bdays, /<h3 class="dz-sec__title" id="dz-birthdays-h">nav\.birthdays<\/h3>/);
+  assert.match(bdays, /<a class="dz-sec__link" href="\/birthdays" data-route="\/birthdays">common\.all<\/a>/);
+  const rows = [...bdays.matchAll(/<a class="(dz-bday[^"]*)" href="([^"]+)" data-route="[^"]+">([\s\S]*?)<\/a>/g)];
+  assert.deepEqual(rows.map((m) => m[1]), ['dz-bday dz-bday--today', 'dz-bday', 'dz-bday']);
+  assert.deepEqual(rows.map((m) => m[2]), ['/birthdays?open=1', '/birthdays?open=2', '/birthdays?open=3']);
+  const [today, tomorrow, far] = rows.map((m) => m[3]);
+  assert.match(today, /<span class="dz-bday__name">Babcia Halina<\/span>\s*<span class="dz-bday__sub">birthdays\.turnsAge\{&quot;age&quot;:70\}<\/span>/);
+  assert.match(today, /<span class="dz-bday__pill"><i data-lucide="cake"[^>]*aria-hidden="true"><\/i><span>today\.groupToday<\/span><\/span>/);
+  assert.doesNotMatch(today, /dz-bday__date/, 'today needs no date');
+  assert.match(tomorrow, /<span class="dz-bday__sub">today\.nameDayKind<\/span>/, 'a name day says so');
+  assert.match(tomorrow, /<span class="dz-bday__far">calendar\.relDay\.tomorrow<\/span>/);
+  assert.match(far, /<span class="dz-bday__date">Sa 15\. Mai<\/span>\s*<span class="dz-bday__far">birthdays\.inDays\{&quot;count&quot;:200\}<\/span>/);
+  assert.equal(count(bdays, /data-lucide="cake"/g), 1, 'the cake marks today alone');
+  assert.doesNotMatch(pageAt('10:15', { birthdays: [] }), /dz-sec--birthdays/, 'nothing saved, no card');
+});
+
 test('a module that is off draws no section; user text is escaped everywhere', () => {
-  const off = pageAt('10:15', { calendar: null, tasks: null, birthdays: [] });
-  assert.doesNotMatch(off, /dz-sec--calendar|dz-sec--tasks|dz-soon/);
+  const off = pageAt('10:15', { nextUp: null, calendar: null, tasks: null, notes: null, birthdays: [] });
+  assert.doesNotMatch(off, /dz-next|dz-sec--calendar|dz-sec--tasks|dz-sec--notes|dz-sec--birthdays/);
+  assert.match(off, /class="dz-head"/);
   const evil = '<img src=x onerror=alert(1)>';
   const data = {
     planEvents: [ev(20, evil, '2026-10-27T15:00', '2026-10-27T16:00', [], { cal_name: evil })],
     urgentTasks: [task(21, evil, '2026-10-27')],
+    pinnedNotes: [{ id: 22, title: evil, content: evil }],
+    birthdays: [{ id: 23, name: evil, kind: 'birthday', days_until: 3, next_age: null, notes: evil }],
   };
   const html = pageAt('10:15', {}, data);
   assert.ok(!html.includes('<img src=x'), 'no raw tag from user text');
   assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.match(sectionOf(html, 'dz-next'), /&lt;img src=x/, 'Next up escapes the title too');
+  assert.match(sectionOf(html, 'dz-sec--notes'), /&lt;img src=x/);
+  assert.match(sectionOf(html, 'dz-sec--birthdays'), /&lt;img src=x/);
   // #1698 (moved from test-dashboard-tafla.js): no span on Dziś - the start.
   const row = /<li class="dz-cal__row">[\s\S]*?<\/li>/.exec(html)?.[0] ?? '';
   assert.ok(row.includes('15:00') && !row.includes('16:00'), 'the start, not the end');
@@ -555,35 +653,51 @@ test('a module that is off draws no section; user text is escaped everywhere', (
 // 6. Wiring the page leans on
 // --------------------------------------------------------------------------
 
-test('the styles: v2 card, the ongoing row in the accent wash, overdue in its tone, 44 hits', async () => {
+test('the styles: v2 card, the one heavy Next up card, the ongoing row in the accent wash, attention tones, 44 hits', async () => {
   const { eachRule } = await import('./css-rules.js');
   const rules = [...eachRule(readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8'))];
   const body = (selector) => rules.filter((rule) => rule.at.length === 0 && rule.selector.split(',').map((s) => s.trim()).includes(selector)).map((rule) => rule.body).join(';');
   assert.match(body('.dz-card'), /border:\s*1px solid var\(--color-card-border\)/);
   assert.match(body('.dz-card'), /border-radius:\s*var\(--radius-card\)/);
   assert.doesNotMatch(body('.dz-card'), /box-shadow/, 'v2 cards carry no shadow');
+  // Next up is the one heavy object: white, no border, a soft shadow.
+  assert.match(body('.dz-next'), /box-shadow:\s*var\(--shadow-md\)/);
+  assert.match(body('.dz-next'), /background:\s*var\(--color-surface\)/);
+  assert.doesNotMatch(body('.dz-next'), /border(?!-radius)(?:-[a-z-]+)?:/, 'no border on Next up');
+  assert.match(body('.dz-next__lead'), /color:\s*var\(--color-accent\)/, 'the lead is violet: what comes next');
+  assert.match(body('.dz-next__then'), /color:\s*var\(--color-text-secondary\)/);
   assert.match(body('.dz-cal__row--now .dz-cal__link'), /color-mix\(in srgb, var\(--color-accent\) var\(--tint-wash\)/);
   assert.match(body('.dz-task__due--late'), /color:\s*var\(--color-overdue\)/);
-  assert.match(body('.dz-chart__bar--wet'), /background:\s*var\(--color-rain\)/);
-  assert.match(body('.dz-chart__bar'), /background:\s*var\(--color-rain-soft\)/);
+  assert.match(body('.dz-group--late'), /color:\s*var\(--color-overdue\)/, '"Zaległe" in the attention colour');
+  assert.match(body('.dz-bday--today'), /color-mix\(in srgb, var\(--color-warning\) var\(--tint-wash\)/, 'today\'s birthday in the attention wash');
+  assert.match(body('.dz-bday__pill'), /background:\s*var\(--color-warning-tint\)/);
+  assert.match(body('.dz-bday__pill'), /color:\s*var\(--color-warning-ink\)/);
   assert.match(body('.day-check'), /inline-size:\s*var\(--target-base\)/);
   assert.match(body('.day-check'), /block-size:\s*var\(--target-base\)/);
-  for (const sel of ['.dz-cal__earlier', '.dz-cal__tomorrow', '.dz-tasks__add', '.dz-soon__row']) {
+  for (const sel of ['.dz-cal__earlier', '.dz-cal__tomorrow', '.dz-note', '.dz-bday', '.dz-next__card']) {
     assert.match(body(sel), /min-block-size:\s*var\(--target-base\)/, `${sel} keeps a 44 hit`);
   }
+  // The weather line is one text line; its hit reaches into the lines around it.
+  assert.match(body('.dz-head__weather'), /padding-block:\s*calc\(\(var\(--target-base\) - var\(--type-row-lh\)\) \/ 2\)/);
+  assert.match(body('.dz-head__weather'), /margin-block:\s*calc\(\(var\(--target-base\) - var\(--type-row-lh\)\) \/ -2\)/);
   // The v2 type steps, not the Tafla ones (34/22/17/13).
   assert.match(body('.dz-head__greeting'), /font-size:\s*var\(--type-page\)/);
+  assert.match(body('.dz-head__weather'), /font-size:\s*var\(--type-row\)/);
   assert.match(body('.dz-sec__title'), /font-size:\s*var\(--type-section\)/);
   assert.match(body('.dz-cal__title'), /font-size:\s*var\(--type-row\)/);
   assert.match(body('.dz-cal__meta'), /font-size:\s*var\(--type-meta\)/);
-  // No hex on the page: the umbrella takes --color-rain-ink (tokens.css).
+  assert.match(body('.dz-next__title'), /font-size:\s*var\(--type-title\)/);
+  // The removed parts leave no rules behind.
+  for (const gone of ['.dz-weather', '.dz-chart', '.dz-soon', '.dz-tasks__add']) {
+    assert.equal(rules.filter((rule) => rule.selector.includes(gone)).length, 0, `${gone} has no rule left`);
+  }
+  // No hex on the page.
   const dzis = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').split(' * DZIŚ (design v2, 2026-10-27)')[1];
   // Checked in the declaration blocks: a selector like `#fab-add` (the Quick-Add
   // +) is an id, not a colour.
   const declarations = (dzis.replace(/\/\*[\s\S]*?\*\//g, '').match(/\{[^{}]*\}/g) ?? []).join('\n');
   assert.ok(declarations.length > 1000, 'reach: the Dziś section has its rules');
   assert.equal(declarations.match(/#[0-9a-f]{3,8}\b/gi), null);
-  assert.match(body('.dz-weather__rain-icon'), /color:\s*var\(--color-rain-ink\)/);
 });
 
 test('"Tydzień" lands in the week: the calendar takes ?view= for one visit, without saving it', () => {
@@ -601,13 +715,16 @@ test('the page ticks through the existing task API with an undo', () => {
   assert.match(src, /canCheck: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
 });
 
-// 2026-10-27, v2 (after the chrome): the capture sheet and the global + are
-// gone. "Dodaj zadanie" opens the SAME form as "Nowe zadanie" in the head of
-// Zadania, and the card refreshes after the save.
-test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after the save', () => {
+// 2026-10-27, v2 (after the chrome): "Dodaj zadanie" in the card opened the
+// SAME form as "Nowe zadanie" in the head of Zadania. One Today (2026-11-02):
+// the row is gone - the + of Today adds (add-menu.js opens openNewTaskFrom) -
+// and the one form of Zadania stays what the + opens.
+test('no "Dodaj zadanie" on Today: the + opens the one Zadania form; the page state is the One Today set', () => {
   const src = readFileSync(new URL('../public/pages/dashboard.js', import.meta.url), 'utf8');
-  assert.match(src, /const \{ openNewTaskFrom \} = await import\('\/pages\/tasks\.js'\);\s*await openNewTaskFrom\(\{ user, onChanged: \(\) => refreshDashboardData\(\) \}\);/);
-  assert.doesNotMatch(src, /openCapture|capture-sheet|capture-plus|yuvomi:captured/);
+  assert.equal(/add-task|openNewTaskFrom|canAddTask|dz-tasks__add/.exec(src)?.[0], undefined, 'the page itself adds nothing');
+  assert.equal(/openCapture|capture-sheet|capture-plus|yuvomi:captured/.exec(src)?.[0], undefined);
+  const menu = readFileSync(new URL('../public/components/add-menu.js', import.meta.url), 'utf8');
+  assert.match(menu, /open: \(mod, opts\) => mod\.openNewTaskFrom\(opts\)/, 'the + opens the Zadania form');
   const tasks = readFileSync(new URL('../public/pages/tasks.js', import.meta.url), 'utf8');
   const entry = tasks.slice(tasks.indexOf('export async function openNewTaskFrom('), tasks.indexOf('export async function openTaskById('));
   assert.match(entry, /if \(readOnly\(\)\) return false;/, 'read-only viewers get no form');
@@ -623,6 +740,14 @@ test('"Dodaj zadanie" opens the Zadania create form and refreshes the card after
   assert.match(header, /openTaskModal\(\{ users: state\.users \}, container\);/, 'the head of Zadania opens the same modal');
   assert.match(tasks, /onSave\(panel\) \{[^}]*?\n\s*wireTaskForm\(panel, onChanged \? \{ task, container, onChanged \} : \{ task, container \}\);\n\s*\}/,
     'from outside, the caller refreshes its own surface instead of a list that is not there');
+  // The state of the page: the One Today set, each part off with its module.
+  const build = src.slice(src.indexOf('function buildDzisState()'), src.indexOf('function renderToday('));
+  assert.match(build, /weatherLine: weatherAvailable \? weatherLine\(weather, ctx\) : null,/);
+  assert.match(build, /nextUp: nextUp\(data, ctx\),/);
+  assert.match(build, /notes: moduleOff\('notes'\) \? null : notesCard\(data\),/);
+  assert.match(build, /birthdays: moduleOff\('birthdays'\) \? \[\] : birthdaysNext\(data, ctx\),/);
+  assert.match(build, /return clockStamp\(state\.calendar, state\.weatherLine, state\.ctx, state\.nextUp\);/,
+    'Next up and the weather line rebuild the page when their words change');
 });
 
 test('the saved options of the old tiles no longer filter Dziś: one plain /dashboard, start and refresh', () => {
