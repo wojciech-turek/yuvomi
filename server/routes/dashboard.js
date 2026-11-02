@@ -814,7 +814,11 @@ router.get('/', (req, res) => {
   // the member's Today reads `pinnedNotes`.
   // Gated on the HOUSEHOLD switch, not on the credential: the coupled display
   // has no `notes:read` scope (and must not get one), yet the wall draws titles.
-  if (householdAudience && !modulesLeftOut(d, new Set()).has('notes')) try {
+  // Everybody else (a member whose access denies notes, a token without
+  // `notes:read`) keeps the empty fill: the audience flag is not a permission.
+  if (householdAudience && (req.authMethod === 'display'
+    ? !modulesLeftOut(d, new Set()).has('notes')
+    : allows('notes'))) try {
     result.wallNotes = d.prepare(`
       SELECT n.id, TRIM(n.title) AS title FROM notes n
       WHERE n.pinned = 1 AND TRIM(COALESCE(n.title, '')) <> ''

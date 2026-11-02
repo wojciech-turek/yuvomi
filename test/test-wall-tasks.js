@@ -92,6 +92,8 @@ const CLEO = addUser('Cleo');
 let viewer = ANNA;
 /** Ein gekoppeltes Display: Methode, Scopes und Rechte wie `requireAuth` sie setzt. */
 let asDisplay = false;
+/** Ein API-Token mit diesen Scopes (null = keiner). */
+let tokenScopes = null;
 const app = express();
 app.use((req, _res, next) => {
   const user = db.prepare('SELECT id, role, family_role FROM users WHERE id = ?').get(viewer);
@@ -99,6 +101,7 @@ app.use((req, _res, next) => {
   req.authRole = user.role;
   req.session = { userId: user.id, role: user.role };
   if (asDisplay) { req.authMethod = 'display'; req.authScopes = [...DISPLAY_SCOPES]; }
+  if (tokenScopes) { req.authMethod = 'api_token'; req.authScopes = [...tokenScopes]; }
   req.sessionModuleAccess = buildSessionModuleAccess(resolvePermissions(db, user, { isDisplay: asDisplay }));
   next();
 });
@@ -1156,6 +1159,30 @@ test('Allowlist: ist das Notizen-Modul im Haushalt abgeschaltet, bleibt wallNote
     assert.deepEqual(member.wallNotes, []);
   } finally {
     db.prepare("UPDATE sync_config SET value = '[]' WHERE key = 'disabled_modules'").run();
+  }
+}));
+
+test('Allowlist: der Parameter ist kein Recht - ohne Notizen-Zugriff bleiben die Titel zu, mit Zugriff kommen sie', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
+  seedWallSources();
+  // Ben, a member with access to notes: titles.
+  assert.deepEqual((await overview(BEN, householdQuery())).wallNotes.map((note) => note.title), ['Kontonummer Sparbuch']);
+  // A token without notes:read.
+  tokenScopes = ['dashboard:read', 'calendar:read', 'tasks:read'];
+  try {
+    const res = await fetch(`${base}/${householdQuery()}`);
+    if (res.status === 200) assert.deepEqual((await res.json()).wallNotes, [], 'token without notes:read: no titles');
+    else assert.ok([401, 403].includes(res.status), 'or refused');
+  } finally {
+    tokenScopes = null;
+  }
+  // A member whose access to notes is 'none'.
+  db.prepare("INSERT INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access) VALUES ('user', ?, 'module', 'notes', 'none')").run(String(CLEO));
+  try {
+    const body = await overview(CLEO, householdQuery());
+    assert.deepEqual(body.wallNotes, [], 'notes denied: no titles');
+    assert.ok(!JSON.stringify(body).includes('Sparbuch'));
+  } finally {
+    db.prepare("DELETE FROM access_permissions WHERE resource_key = 'notes'").run();
   }
 }));
 
