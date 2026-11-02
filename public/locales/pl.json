@@ -6829,7 +6829,8 @@
         "groupTomorrow": "Jutro",
         "groupLater": "Później",
         "groupNone": "Bez terminu",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Notatka bez tytułu"
     },
     "wall": {
         "allDone": "Na dziś wszystko",

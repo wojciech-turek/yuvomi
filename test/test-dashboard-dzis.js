@@ -364,6 +364,68 @@ test('calendar: birthday events are not in the rows, earlier or the tomorrow pee
   assert.equal(late.earlier.rows.some((r) => r.title.startsWith('Urodziny')), false);
 });
 
+test('next up: only events, meals, timed tasks and help visits - never a reminder, shift, dose or all-day event', () => {
+  const noise = {
+    health: { doses: [{ medication_id: 1, schedule_id: 1, name: 'Lek', time: '13:00', status: 'pending' }] },
+    shifts: [{ id: 1, start_time: '13:10', title: 'Zmiana' }],
+    pendingReminders: [{ id: 5, entity_title: 'Przypomnienie', entity_type: 'task', due_at: '2026-10-27T13:20:00+01:00' }],
+    planEvents: [ev(40, 'Cały dzień', '2026-10-27', '2026-10-28', [], { all_day: 1 })],
+  };
+  assert.equal(at('12:05', (ctx) => dzis.nextUp(noise, ctx)), null, 'none of these is Next up (tomorrow has nothing timed either)');
+  const help = { ...noise, housekeeping: { present: true, presentSince: '2026-10-27T14:00:00+01:00', workerName: 'Pani Ania' } };
+  assert.equal(at('12:05', (ctx) => dzis.nextUp(help, ctx)).title, 'Pani Ania');
+  const timedTask = { planTasks: [task(30, 'Zadzwonić', '2026-10-27', { due_time: '13:00' })] };
+  assert.equal(at('12:05', (ctx) => dzis.nextUp(timedTask, ctx)).title, 'Zadzwonić');
+});
+
+test('next up: a meal with an unknown slot uses the dinner time', () => {
+  const up = at('12:05', (ctx) => dzis.nextUp({ todayMeals: [{ id: 9, meal_type: 'brunch', title: 'Coś' }] }, ctx));
+  assert.equal(up.lead, 'today.atTimeOnly{"time":"18:30"}');
+});
+
+test('next up: tomorrow\'s timed row is found behind five untimed rows', () => {
+  const data = {
+    planEvents: [
+      ...[1, 2, 3, 4, 5].map((n) => ev(50 + n, `Urodziny ${n}`, '2026-10-28', '2026-10-29', [], { all_day: 1, birthday_name: `X${n}` })),
+      ev(60, 'Dentysta', '2026-10-28T09:30', '2026-10-28T10:00', [M]),
+    ],
+    wastePickups: [{ date_key: '2026-10-28', type_name: 'Papier' }],
+  };
+  const up = at('20:00', (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up.lead, 'today.tomorrowAt{"time":"09:30"}');
+  assert.equal(up.title, 'Dentysta');
+});
+
+test('next up: "Potem" is the next row that starts after now, not a second running event', () => {
+  const data = {
+    planEvents: [
+      ev(70, 'Spotkanie A', '2026-10-27T09:30', '2026-10-27T11:00', [W]),
+      ev(71, 'Spotkanie B', '2026-10-27T10:00', '2026-10-27T11:30', [W]),
+      ev(72, 'Obiad u babci', '2026-10-27T13:00', '2026-10-27T14:00', [W]),
+    ],
+  };
+  const up = at('10:15', (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up.lead, 'today.nowRunning');
+  assert.equal(up.title, 'Spotkanie A');
+  assert.equal(up.then, 'today.thenShort{"time":"13:00","title":"Obiad u babci"}');
+});
+
+test('notes card: a note with no title and no text still has a title', () => {
+  for (const content of ['', '- [ ]', '---', '```\ncode\n```']) {
+    const [n] = dzis.notesCard({ pinnedNotes: [{ id: 1, title: '', content }] });
+    assert.equal(n.title, 'today.noteUntitled', JSON.stringify(content));
+    assert.equal(n.line, '');
+  }
+});
+
+test('birthdays next: no age and no note says "birthday"; tomorrow says "jutro"', () => {
+  const rows = at('10:15', (ctx) => dzis.birthdaysNext({
+    birthdays: [{ id: 1, name: 'Tomek', kind: 'birthday', days_until: 1, next_age: null }],
+  }, ctx));
+  assert.equal(rows[0].sub, 'today.birthdayKind');
+  assert.equal(rows[0].far, 'calendar.relDay.tomorrow');
+});
+
 test('the header: the long date with a capital, the greeting by the hour', () => {
   assert.equal(dzis.headerDate('2026-10-27'), 'Dienstag, 27. Oktober');
   assert.equal(dzis.greetingKey(7 * 60), 'dashboard.greetingMorning');

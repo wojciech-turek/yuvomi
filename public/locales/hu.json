@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Holnap",
         "groupLater": "Később",
         "groupNone": "Nincs dátum",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Cím nélküli jegyzet"
     },
     "wall": {
         "allDone": "Mára minden kész",

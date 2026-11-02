@@ -6549,7 +6549,8 @@
         "groupTomorrow": "Demain",
         "groupLater": "Plus tard",
         "groupNone": "Sans date",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Note sans titre"
     },
     "wall": {
         "allDone": "Tout est fait pour aujourd’hui",

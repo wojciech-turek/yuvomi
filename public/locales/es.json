@@ -6549,7 +6549,8 @@
         "groupTomorrow": "Mañana",
         "groupLater": "Más tarde",
         "groupNone": "Sin fecha",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Nota sin título"
     },
     "wall": {
         "allDone": "Todo listo por hoy",

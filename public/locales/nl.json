@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Morgen",
         "groupLater": "Later",
         "groupNone": "Geen datum",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Notitie zonder titel"
     },
     "wall": {
         "allDone": "Alles voor vandaag gedaan",

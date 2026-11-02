@@ -236,6 +236,10 @@ function rowMinute(row) {
 /** Where a tap on the row goes: events by id and day, the rest by their own route. */
 const routeOf = (row, ctx) => (row.kind === 'event' ? eventRoute(row, row.dayKey ?? ctx.todayKey) : String(row.route ?? ''));
 
+/** Next up knows events, meals, timed tasks and a household help visit - no reminders, shifts, doses. */
+const NEXT_UP_ROWS = (row) => row.kind === 'event' || row.kind === 'meal' || row.kind === 'task'
+  || (row.kind === 'info' && row.sourceKind === 'housekeeping');
+
 const clockOf = (min) => formatTime(minutesToTime(min));
 
 /**
@@ -248,7 +252,7 @@ const clockOf = (min) => formatTime(minutesToTime(min));
 export function nextUp(data, ctx) {
   const ahead = buildPlan(data ?? {}, ctx).open.filter((row) => {
     const min = rowMinute(row);
-    return Number.isFinite(min) && !row.overdue && !row.done && (row.running || min > ctx.nowMin);
+    return NEXT_UP_ROWS(row) && Number.isFinite(min) && !row.overdue && !row.done && (row.running || min > ctx.nowMin);
   });
   const row = ahead[0];
   if (row) {
@@ -259,7 +263,7 @@ export function nextUp(data, ctx) {
     if (row.running) lead = t('today.nowRunning');
     else if (away < 60) lead = t('today.inMinutesAt', { minutes: Math.max(1, away), time });
     else lead = t('today.atTimeOnly', { time });
-    const following = ahead[1];
+    const following = ahead.slice(1).find((r) => rowMinute(r) > ctx.nowMin);
     return {
       lead,
       title: row.title,
@@ -268,7 +272,8 @@ export function nextUp(data, ctx) {
       kind: row.kind,
     };
   }
-  const tomorrow = buildTomorrow(data ?? {}, ctx).rows
+  const tomorrow = buildTomorrow(data ?? {}, ctx, { limit: Infinity }).rows
+    .filter(NEXT_UP_ROWS)
     .map((r) => ({ r, min: rowMinute(r) }))
     .filter(({ min }) => Number.isFinite(min) && min >= 0 && min < 24 * 60)
     .sort((a, b) => a.min - b.min)[0];
@@ -422,10 +427,10 @@ export function notesCard(data) {
   if (!notes.length) return null;
   return notes.map((note) => {
     const title = String(note.title ?? '').trim();
-    const lines = noteLines(note.content);
+    const lines = noteLines(note.content, 2);
     return {
       id: note.id,
-      title: title || lines[0] || '',
+      title: title || lines[0] || t('today.noteUntitled'),
       line: (title ? lines[0] : lines[1]) ?? '',
       route: `/notes?open=${encodeURIComponent(String(note.id))}`,
     };

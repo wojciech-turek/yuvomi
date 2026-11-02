@@ -6981,7 +6981,8 @@
         "groupTomorrow": "غداً",
         "groupLater": "لاحقاً",
         "groupNone": "بلا تاريخ",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "ملاحظة بلا عنوان"
     },
     "wall": {
         "allDone": "أُنجز كل شيء لليوم",

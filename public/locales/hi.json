@@ -6547,7 +6547,8 @@
         "groupTomorrow": "कल",
         "groupLater": "बाद में",
         "groupNone": "कोई तारीख नहीं",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "बिना शीर्षक का नोट"
     },
     "wall": {
         "allDone": "आज के सारे काम पूरे",

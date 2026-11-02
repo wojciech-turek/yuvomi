@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Ngày mai",
         "groupLater": "Sau này",
         "groupNone": "Không có ngày",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Ghi chú không có tiêu đề"
     },
     "wall": {
         "allDone": "Hôm nay đã xong hết",

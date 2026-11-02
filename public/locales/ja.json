@@ -6547,7 +6547,8 @@
         "groupTomorrow": "明日",
         "groupLater": "後で",
         "groupNone": "日付なし",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "無題のメモ"
     },
     "wall": {
         "allDone": "今日はすべて完了",

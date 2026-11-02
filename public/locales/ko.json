@@ -6547,7 +6547,8 @@
         "groupTomorrow": "내일",
         "groupLater": "나중에",
         "groupNone": "날짜 없음",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "제목 없는 메모"
     },
     "wall": {
         "allDone": "오늘 할 일 모두 완료",

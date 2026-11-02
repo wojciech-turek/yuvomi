@@ -6547,7 +6547,8 @@
         "groupTomorrow": "فردا",
         "groupLater": "بعداً",
         "groupNone": "بدون تاریخ",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "یادداشت بدون عنوان"
     },
     "wall": {
         "allDone": "همهٔ کارهای امروز انجام شد",

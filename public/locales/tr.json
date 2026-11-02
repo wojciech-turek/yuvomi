@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Yarın",
         "groupLater": "Sonra",
         "groupNone": "Tarih yok",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Başlıksız not"
     },
     "wall": {
         "allDone": "Bugünlük her şey tamam",

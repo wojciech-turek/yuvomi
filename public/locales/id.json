@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Besok",
         "groupLater": "Nanti",
         "groupNone": "Tanpa tanggal",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Catatan tanpa judul"
     },
     "wall": {
         "allDone": "Semua beres untuk hari ini",

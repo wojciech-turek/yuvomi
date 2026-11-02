@@ -6549,7 +6549,8 @@
         "groupTomorrow": "Amanhã",
         "groupLater": "Depois",
         "groupNone": "Sem data",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Nota sem título"
     },
     "wall": {
         "allDone": "Tudo feito por hoje",

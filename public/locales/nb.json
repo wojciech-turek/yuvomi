@@ -6547,7 +6547,8 @@
         "groupTomorrow": "I morgen",
         "groupLater": "Senere",
         "groupNone": "Ingen dato",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Notat uten tittel"
     },
     "wall": {
         "allDone": "Ferdig for i dag",

@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Bukas",
         "groupLater": "Mamaya",
         "groupNone": "Walang petsa",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Tala na walang pamagat"
     },
     "wall": {
         "allDone": "Tapos na lahat para ngayon",

@@ -6547,7 +6547,8 @@
         "groupTomorrow": "I morgon",
         "groupLater": "Senare",
         "groupNone": "Inget datum",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Anteckning utan titel"
     },
     "wall": {
         "allDone": "Allt klart för i dag",

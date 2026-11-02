@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Tomorrow",
         "groupLater": "Later",
         "groupNone": "No date",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Untitled note"
     },
     "wall": {
         "allDone": "All done for today",

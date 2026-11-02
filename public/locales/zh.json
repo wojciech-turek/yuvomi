@@ -6547,7 +6547,8 @@
         "groupTomorrow": "明天",
         "groupLater": "以后",
         "groupNone": "无日期",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "无标题笔记"
     },
     "wall": {
         "allDone": "今天的事都完成了",

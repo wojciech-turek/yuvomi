@@ -6829,7 +6829,8 @@
         "groupTomorrow": "Завтра",
         "groupLater": "Пізніше",
         "groupNone": "Без дати",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Нотатка без назви"
     },
     "wall": {
         "allDone": "На сьогодні все",

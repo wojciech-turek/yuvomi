@@ -6701,7 +6701,8 @@
         "groupTomorrow": "Zítra",
         "groupLater": "Později",
         "groupNone": "Bez termínu",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Poznámka bez názvu"
     },
     "wall": {
         "allDone": "Pro dnešek hotovo",

@@ -584,7 +584,7 @@ export function dayClosed(plan) {
  * tomorrow's pickup, the events, the tasks due, dinner. Replaces the old
  * family card - the discs already say who does what.
  */
-export function buildTomorrow(data, ctx) {
+export function buildTomorrow(data, ctx, { limit = TOMORROW_ROWS } = {}) {
   const rows = [];
   const off = (module) => Boolean(ctx.moduleOff?.(module));
   if (!off('waste')) {
@@ -625,5 +625,5 @@ export function buildTomorrow(data, ctx) {
     }
   }
   const timedFirst = rows.sort((a, b) => a.sortMin - b.sortMin);
-  return { rows: timedFirst.slice(0, TOMORROW_ROWS), total: timedFirst.length };
+  return { rows: timedFirst.slice(0, limit), total: timedFirst.length };
 }

@@ -6547,7 +6547,8 @@
         "groupTomorrow": "Αύριο",
         "groupLater": "Αργότερα",
         "groupNone": "Χωρίς ημερομηνία",
-        "atTimeOnly": "{{time}}"
+        "atTimeOnly": "{{time}}",
+        "noteUntitled": "Σημείωση χωρίς τίτλο"
     },
     "wall": {
         "allDone": "Όλα έτοιμα για σήμερα",
