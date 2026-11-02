@@ -2719,7 +2719,7 @@ test('ein Anlege-Verb im Schichtplan: jedes Anlegen heisst "hinzufuegen"', () =>
   }
 });
 
-test('Feiertag und Planblock tragen einen Farbpunkt statt eines Randstreifens', async () => {
+test('Feiertag und Planblock tragen keinen Randstreifen, der Planblock einen Farbpunkt', async () => {
   const { eachRule } = await import('./css-rules.js');
   const scheduleCss = readFileSync(new URL('../public/styles/schedule.css', import.meta.url), 'utf8');
   const rules = [...eachRule(scheduleCss)];
@@ -2732,8 +2732,14 @@ test('Feiertag und Planblock tragen einen Farbpunkt statt eines Randstreifens', 
   }
   assert.ok(rules.some((r) => /\.schedule-overview__block-title::before/.test(r.selector) && /background\s*:\s*var\(--dot-color\)/.test(r.body)),
     'der Planblock zeigt seine Farbe als Punkt vor dem Titel');
-  assert.ok(rules.some((r) => /\.schedule-overview__holiday > span::before/.test(r.selector)),
-    'der Feiertag ebenso');
+  // One Today: der Feiertag ist ein ruhiger neutraler Chip ohne Farbe und ohne Punkt.
+  assert.ok(!rules.some((r) => /\.schedule-overview__holiday > span::before/.test(r.selector)), 'der Feiertag traegt keinen Farbpunkt');
+  const holiday = rules.find((r) => r.selector.trim() === '.schedule-overview__holiday' && !r.at.length);
+  assert.match(holiday.body, /background:\s*var\(--color-fill\)/);
+  assert.match(holiday.body, /(?:^|;)\s*color:\s*var\(--color-text-secondary\)/);
+  assert.doesNotMatch(holiday.body, /--holi-color/);
+  const src = readFileSync(new URL('../public/pages/schedule.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /\bh\.color\b/, 'schedule.js liest keine Feiertagsfarbe');
 });
 
 test('das Gueltigkeitsfenster eines Musters steht hinter "Weitere Einstellungen", offen sobald gesetzt (W2/A2)', async () => {

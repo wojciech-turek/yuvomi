@@ -2082,7 +2082,8 @@ function renderOverview() {
 
   const days = lanesByDay.map(({ dateKey, lanes }) => {
     const holidays = overviewHolidaysOnDay(dateKey);
-    const holidayHtml = holidays.map((h) => `<div class="schedule-overview__holiday" style="--holi-color:${esc(h.color)}" title="${esc(h.name)}"><span>${esc(h.name)}</span></div>`).join('');
+    // Ein ruhiger Ton fuer jeden Feiertag (One Today): ohne Farbe aus den Einstellungen.
+    const holidayHtml = holidays.map((h) => `<div class="schedule-overview__holiday" title="${esc(h.name)}"><span>${esc(h.name)}</span></div>`).join('');
     const laneHtml = lanes.map((lane) => `<div class="schedule-overview__lane" data-user="${lane.userId}">
       ${overviewLaneHeader(lane.userId)}
       <div class="schedule-overview__lane-body" style="height:${gridHeight}px">${hourLines}${lane.entries.map((entry) => overviewEntryBlock(entry, activeHours)).join('')}</div>

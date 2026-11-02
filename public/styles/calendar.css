@@ -924,6 +924,7 @@
    * Balken selbst zum Punkt - dort gibt es keinen Titel, neben dem eine Kante
    * stehen koennte. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
+  border-image: var(--ev-edge, none) 1;
   transition: background-color var(--transition-fast);
 }
 
@@ -1242,6 +1243,7 @@
    * gemessenen 16-%-Rezept, die Tinte beim 35-%-Mix (siehe oben) - die Kante
    * traegt die Farbe. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
+  border-image: var(--ev-edge, none) 1;
   /* `clip` STATT `hidden`, DAMIT DER TITEL KLEBEN KANN.
    *
    * `overflow: hidden` macht aus jedem Element einen Scroll-Container - und
@@ -1610,6 +1612,7 @@
    * gedrueckt hatte. Seit 2026-09-24 ist sie die EINZIGE Kante: das Element
    * `.day-event__spine` daneben zog einen zweiten Farbstrich. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
+  border-image: var(--ev-edge, none) 1;
   /* `clip` statt `hidden` - dieselbe Begruendung wie an `.week-event`: nur so
      kann der Text darin kleben. Die Tagesansicht zeichnet DENSELBEN Block,
      und eine Regel, die nur in einer der beiden Ansichten gilt, laesst
@@ -1948,7 +1951,8 @@
  * am Block, und sie steht neben dem Inhalt statt darunter (Vollton-Regel). */
 /* TAFLA: die Kante steht an der KARTENKANTE (Artboard: 3pt an der linken
  * Seite der Zeile), danach die Zeitschiene (56) und der Text bei x=84. Die
- * Farbe ist die Person (eventEdgeColor in calendar.js), gemeinsam violett. */
+ * Farbe sind die Leute (eventSurfaceStyle in calendar.js): eine Person ihre
+ * Tinte, zwei geteilt, mehr violett, niemand neutral. */
 .agenda-event__body {
   flex: 1;
   min-width: 0;
@@ -1956,6 +1960,7 @@
   align-items: center;
   gap: var(--space-3);
   border-inline-start: var(--cal-event-edge) solid var(--ev-color, var(--color-accent));
+  border-image: var(--ev-edge, none) 1;
   padding-block: var(--space-2);
   padding-inline: calc(var(--space-4) - var(--cal-event-edge)) var(--space-4);
 }
@@ -2189,64 +2194,6 @@
  * Calendar-Modal Content-Styles (Overlay/Panel via shared modal.js)
  * -------------------------------------------------------- */
 
-/* Farbauswahl */
-.color-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.color-swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-  position: relative;
-}
-
-.color-swatch::before {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: var(--radius-full);
-}
-
-.color-swatch:hover {
-  transform: scale(1.15);
-}
-
-.color-swatch--active {
-  border-color: var(--color-text-primary);
-  transform: scale(1.1);
-}
-
-/* "Keine eigene Farbe" - der Termin leiht sich die der zugewiesenen Person
-   (#891). Er traegt bewusst keinen Farbwert, sondern zeigt als einziger Swatch
-   ein Symbol: eine Farbflaeche waere von einer Wahl nicht zu unterscheiden, und
-   die Farbe, die er tatsaechlich ergibt, steht erst fest, wenn die Zuweisung
-   feststeht - im offenen Dialog kann sie sich noch aendern. */
-.color-swatch--inherit {
-  background: var(--color-surface-2);
-  border-color: var(--color-border);
-  display: grid;
-  place-items: center;
-}
-
-.color-swatch--inherit::after {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background: conic-gradient(
-    var(--color-accent) 0turn 0.25turn,
-    var(--color-surface-2) 0.25turn 0.5turn,
-    var(--color-accent) 0.5turn 0.75turn,
-    var(--color-surface-2) 0.75turn 1turn
-  );
-}
-
 .reminder-section__group {
   margin: 0;
 }
@@ -2350,6 +2297,7 @@
    * Ganztages-Balken ist derselbe Block, nur ohne Zeitachse - und wie dort
    * ohne den 1px-Rahmen, den der Monatsbalken nie trug. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
+  border-image: var(--ev-edge, none) 1;
   background: color-mix(in srgb, var(--ev-color) var(--tint-surface), var(--color-surface-work));
   color: color-mix(in srgb, var(--ev-color) 35%, var(--color-text-primary));
   white-space: nowrap;
@@ -2692,17 +2640,6 @@
   color: var(--color-text-secondary);
 }
 
-.event-cal-label::before {
-  content: '';
-  display: inline-block;
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--cal-color, currentColor);
-  flex-shrink: 0;
-  opacity: 0.65;
-}
-
 /* --------------------------------------------------------
  * Task-Chips im Kalender (read-only)
  * -------------------------------------------------------- */
@@ -2989,7 +2926,9 @@
    * feine Linien gebaut und misst gegen Weiss 1,65:1 - er haette genau den
    * Fehler wiederholt, den er beheben soll. */
   .month-view:not(.month-view--titles) .month-day__event {
-    background: var(--ev-color);
+    /* Zwei Personen: der Punkt ist die geteilte Scheibe (--ev-dot, calendar.js
+     * eventSurfaceStyle), sonst die Farbe der Leute. */
+    background: var(--ev-dot, var(--ev-color));
     box-shadow: inset 0 0 0 var(--space-px) var(--color-text-tertiary);
   }
 
@@ -3366,6 +3305,23 @@
   flex-shrink: 0;
 }
 
+/* EIN RUHIGER TON FUER JEDEN FEIERTAG (One Today, spec 7). Gesetzliche
+ * Feiertage und Schulferien stehen gleich da: ein neutraler Chip in der
+ * Fuellung mit der Sekundaertinte, ohne Farbe aus den Einstellungen (die gibt
+ * es nicht mehr) und ohne Punkt. Die Basisregeln oben bleiben fuer die
+ * Schicht- und Abfall-Chips, die dieselben Klassen tragen; der Punkt des
+ * mobilen Monats faellt ohne --holi-color auf die Sekundaertinte. */
+.month-day__holiday.cal-holiday,
+.allday-holiday.cal-holiday,
+.agenda-holiday.cal-holiday {
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
+}
+
+.agenda-holiday.cal-holiday {
+  border-color: transparent;
+}
+
 /* --------------------------------------------------------
  * Waste-Ebene (#1063 Phase 5)
  *
@@ -3449,7 +3405,7 @@
 
 .cal-calendar-create {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--space-12) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
   align-items: center;
 }
@@ -3462,16 +3418,9 @@
 
 .cal-calendar-row {
   display: grid;
-  grid-template-columns: var(--space-4) minmax(8rem, 1fr) var(--space-12) auto auto;
+  grid-template-columns: minmax(8rem, 1fr) auto auto;
   gap: var(--space-2);
   align-items: center;
-}
-
-.cal-calendar-row__swatch {
-  width: var(--space-4);
-  height: var(--space-4);
-  border-radius: var(--radius-full);
-  box-shadow: 0 0 0 1px var(--color-border) inset;
 }
 
 .cal-calendar-row__count {
@@ -3488,26 +3437,15 @@
 }
 
 @media (max-width: 639px) {
+  /* Ein Kalender ist ein Name (One Today: keine Farbe mehr): der Name ueber
+   * die volle Breite, Zahl und Aktionen darunter; im Formular das Namensfeld
+   * und „Erstellen" darunter ueber die volle Breite. */
   .cal-calendar-row {
-    grid-template-columns: var(--space-4) minmax(0, 1fr) var(--space-12);
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  /* Das Formular hat KEINE Farbscheibe vorn: mit der Zeilenvorlage fiel sein
-   * Namensfeld in die 16px der Scheibenspalte und das Farbfeld in die freie
-   * Breite - ein blauer Balken neben einem Feld ohne lesbaren Platzhalter.
-   * Name und Farbe stehen deshalb in eigener Vorlage, „Erstellen" darunter
-   * ueber die volle Breite. */
   .cal-calendar-create {
-    grid-template-columns: minmax(0, 1fr) var(--space-12);
-  }
-
-  .cal-calendar-create .btn {
-    grid-column: 1 / -1;
-  }
-
-  .cal-calendar-row__count,
-  .cal-calendar-row__actions {
-    grid-column: 2 / -1;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .cal-calendar-create .btn,
@@ -3516,10 +3454,6 @@
   }
 }
 
-/* Die Feiertags- und Schul-Layer tragen eine NUTZERFARBE und bekommen sie
-   deshalb als Inline-Style aus den Einstellungen. Der Schichtplan hat keine -
-   seine Farbe ist eine Designentscheidung und gehoert damit hierher und nicht
-   ins Markup. */
 /* Der Schichtblock ist HINTERGRUND, kein Termin. Er erbt Groesse und Lage von
    .week-event/.day-event, faellt aber in beiden Sichten vor die Termine ins
    Markup, damit die darueber malen. `pointer-events: none` haelt die Spalte

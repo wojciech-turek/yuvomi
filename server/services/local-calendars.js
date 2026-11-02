@@ -1,8 +1,8 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const DEFAULT_CALENDAR_NAME = 'Yuvomi';
+/** Fuer die NOT-NULL-Spalte `local_calendars.color`; niemand waehlt oder sieht sie (One Today). */
 const DEFAULT_CALENDAR_COLOR = '#007AFF';
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 function serializeCalendar(req, row, feedUrl, { includeFeedToken = false } = {}) {
   if (!row) return null;
@@ -66,13 +66,6 @@ function validateCalendarName(value) {
   return { value: name, error: null };
 }
 
-function validateCalendarColor(value) {
-  if (typeof value !== 'string' || !HEX_COLOR_RE.test(value.trim())) {
-    return { value: null, error: 'Farbe: Gib eine gültige Hex-Farbe an.' };
-  }
-  return { value: value.trim().toUpperCase(), error: null };
-}
-
 function findCalendarByFeedToken(conn, token) {
   if (!token) return null;
   const candidate = Buffer.from(token, 'utf8');
@@ -103,7 +96,6 @@ export {
   localCalendarById,
   validateCalendarId,
   validateCalendarName,
-  validateCalendarColor,
   serializeCalendar,
   findCalendarByFeedToken,
   regenerateCalendarFeedToken,

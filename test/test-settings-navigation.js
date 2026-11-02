@@ -1084,26 +1084,22 @@ test('Feiertage: die Ebenen-Schalter speichern sofort, ein Fehler legt zurueck (
   try {
     const showPublic = schalter(false);
     const showSchool = schalter(true);
-    const publicColorGroup = { hidden: true };
-    const schoolColorGroup = { hidden: false };
     const gespeichert = [];
     let fehler = null;
     cal.bindHolidayLayerSwitches({
-      showPublic, showSchool, publicColorGroup, schoolColorGroup,
+      showPublic, showSchool,
       save: async (patch) => { if (fehler) throw fehler; gespeichert.push(patch); },
     });
     showPublic.checked = true;
     await showPublic.fire();
-    assert.deepEqual(gespeichert, [{ holiday_show_public: true }], 'nur der eigene Wert, ohne Land und Farben');
+    assert.deepEqual(gespeichert, [{ holiday_show_public: true }], 'nur der eigene Wert, ohne Land');
     assert.equal(toasts.at(-1)?.[1], 'success');
     assert.equal(showPublic.disabled, false, 'nach dem Speichern wieder bedienbar');
 
     fehler = new Error('offline');
     showSchool.checked = false;
-    schoolColorGroup.hidden = true;
     await showSchool.fire();
     assert.equal(showSchool.checked, true, 'Fehler: der Schalter legt sich zurueck');
-    assert.equal(schoolColorGroup.hidden, false, 'und die Farbe folgt ihm');
     assert.equal(toasts.at(-1)?.[1], 'danger');
   } finally {
     globalThis.window = prevWindow;
@@ -1164,7 +1160,7 @@ test('Einstellungen: jeder Schalter in einem Formular mit Speichern speichert so
   for (const id of ['holiday-show-public', 'holiday-show-school']) {
     assert.match(cal, new RegExp(`attrs: \\{ id: '${id}', 'data-instant-save': true \\}`), `${id} ist ein Sofort-Schalter`);
   }
-  assert.match(cal, /bindHolidayLayerSwitches\(\{ showPublic, showSchool, publicColorGroup, schoolColorGroup \}\);/,
+  assert.match(cal, /bindHolidayLayerSwitches\(\{ showPublic, showSchool \}\);/,
     'die Seite verdrahtet die Sofort-Speicherung wirklich');
 });
 
@@ -1801,7 +1797,6 @@ const HOLIDAY_TEST_COUNTRIES = [
 function schoolControls({ checked }) {
   return {
     showSchool: { checked, disabled: false },
-    schoolColorGroup: { hidden: !checked },
     schoolUnavailableHint: { hidden: true },
   };
 }
@@ -1819,13 +1814,11 @@ test('#965 Review: DE -> US -> DE gibt den Schulferien-Haken zurueck', () => {
   // wuerde holiday_show_school=1 fuer ein Land ohne Datenquelle gespeichert.
   assert.equal(c.showSchool.disabled, true);
   assert.equal(c.showSchool.checked, false);
-  assert.equal(c.schoolColorGroup.hidden, true);
   assert.equal(c.schoolUnavailableHint.hidden, false);
 
   apply(HOLIDAY_TEST_COUNTRIES, 'DE'); // zurueck: der gemerkte Haken kommt wieder
   assert.equal(c.showSchool.disabled, false);
   assert.equal(c.showSchool.checked, true, 'der Umweg ueber die USA darf die Ebene nicht kosten');
-  assert.equal(c.schoolColorGroup.hidden, false);
   assert.equal(c.schoolUnavailableHint.hidden, true);
 });
 
@@ -1838,7 +1831,6 @@ test('#965 Review: ein nie gesetzter Haken kommt nach dem Umweg auch nicht zurue
 
   apply(HOLIDAY_TEST_COUNTRIES, 'DE');
   assert.equal(c.showSchool.checked, false, 'wiederhergestellt wird nur, was vorher da war');
-  assert.equal(c.schoolColorGroup.hidden, true);
 });
 
 test('#965 Review: US -> DE -> US merkt sich den Stand nur einmal, nicht den gesperrten', () => {
@@ -3669,6 +3661,22 @@ function probeSheets() {
   })();
   return sheetProbe;
 }
+
+test('One Today: die Kalender-Blaetter haben keine Farbfelder - Feiertage, Abos, Import, Kalenderauswahl', async () => {
+  const rendered = await probeSheets();
+  for (const id of ['modules-calendar', 'personal-calendar-subscriptions', 'sync-calendar']) {
+    const html = rendered.get(id) ?? '';
+    assert.ok(html.length > 200, `${id} wurde gezeichnet`);
+    assert.doesNotMatch(html, /type="color"|id="[a-z-]*-color"|holiday_(?:public|school)_color/, `${id}: ein Farbfeld`);
+  }
+  assert.match(rendered.get('modules-calendar'), /id="holiday-show-public"/, 'die Feiertags-Schalter stehen weiter da');
+  // Die Kalenderauswahl der Anbieter (CalDAV, Google, Outlook) baut ihre Zeilen
+  // per DOM: dort darf keine Kalenderfarbe des Anbieters mehr gemalt werden.
+  const sync = await readFile(new URL('../public/settings/pages/sync-calendar.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(sync, /calendarColor|backgroundColor|caldav-calendar-color/, 'sync-calendar.js malt eine Kalenderfarbe');
+  const subs = await readFile(new URL('../public/settings/pages/personal-calendar-subscriptions.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(subs, /sub\.color|\bcolor:/, 'die Abo-Seite liest oder sendet eine Farbe');
+});
 
 test('R17: kein Einstellungsblatt rendert eine Karte mit genau einem Bedienelement', async () => {
   const rendered = await probeSheets();

@@ -441,7 +441,7 @@ test('calendar occurrence endpoints expose route-specific requests and occurrenc
 
   const sharedFields = [
     'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
-    'location', 'color', 'icon', 'assigned_to', 'visibility', 'countdown',
+    'location', 'icon', 'assigned_to', 'visibility', 'countdown',
     'attachment_name', 'attachment_data', 'remove_attachment',
     'document_folder_name', 'document_name', 'document_description',
     'reminder_offsets',

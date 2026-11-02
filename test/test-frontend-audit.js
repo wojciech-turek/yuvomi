@@ -1599,8 +1599,6 @@ test('module-specific settings leaves only reference their owned preferences and
         'holiday_group',
         'holiday_show_public',
         'holiday_show_school',
-        'holiday_public_color',
-        'holiday_school_color',
         'holiday_last_sync',
       ],
     },
@@ -1699,9 +1697,7 @@ test('module-specific settings leaves preserve their required controls and behav
     'holiday-country',
     'holiday-subdivision',
     'holiday-show-public',
-    'holiday-public-color',
     'holiday-show-school',
-    'holiday-school-color',
     'holiday-sync-btn',
   ]) {
     assert.match(calendar, controlIdPattern(id));
@@ -9560,12 +9556,18 @@ test('Housekeeping: Bezahlen laeuft durch EINE Funktion, die vorher bestaetigt (
   assert.doesNotMatch(page, /authRole|role\s*===\s*'admin'/, 'housekeeping.js entscheidet keine Rolle selbst');
 });
 
-test('holiday chips derive readable ink from each configured color', () => {
+// One Today: Feiertage tragen keine Farbe aus den Einstellungen mehr - EIN
+// ruhiger Ton (.cal-holiday). Die Basisregeln mit `--holi-ink` bleiben fuer die
+// Schicht- und Abfall-Chips, die dieselben Klassen tragen.
+test('holiday chips are one quiet neutral chip, schedule and waste chips keep readable ink', () => {
   const calendarPage = read('../public/pages/calendar.js');
   const calendarCss = read('../public/styles/calendar.css');
 
-  assert.match(calendarPage, /import \{ getReadableTextColor \} from '\/utils\/color\.js'/);
-  assert.match(calendarPage, /--holi-ink:\$\{esc\(getReadableTextColor\(h\.color\)\)\}/);
+  assert.doesNotMatch(calendarPage, /getReadableTextColor\(h\.color\)|--holi-color:\$\{esc\(h\.color\)\}/);
+  assert.match(calendarPage, /function holidayChipHtml\(holiday, className\) \{\s*return `<div class="\$\{className\} cal-holiday" title=/);
+  const quiet = cssRuleBody(calendarCss, '.month-day__holiday.cal-holiday,\n.allday-holiday.cal-holiday,\n.agenda-holiday.cal-holiday');
+  assert.match(quiet, /background:\s*var\(--color-fill\)/);
+  assert.match(quiet, /color:\s*var\(--color-text-secondary\)/);
   for (const selector of ['.month-day__holiday', '.allday-holiday']) {
     const body = cssRuleBody(calendarCss, selector);
     assert.match(body, /color:\s*var\(--holi-ink,\s*var\(--color-text-on-accent\)\)/);

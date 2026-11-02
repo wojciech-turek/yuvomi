@@ -1747,45 +1747,6 @@
   min-width: 0;
 }
 
-/* Die Zielgröße kommt aus dem Token, nicht aus einer Zahl. Hier standen 44px
- * fest verdrahtet - das ist exakt der ZEIGER-Wert von --target-base, eingefroren
- * bevor er den Finger kannte: das Token wächst unter `@media (hover: none)` auf
- * --target-lg, die Kopie hier nicht. Gemessen 44x45 am Finger gegen ein Minimum
- * von 48, und zwar freistehend (nächstes Zielzentrum 161px, die Spacing-Ausnahme
- * greift also nicht).
- *
- * Warum nicht die Trefferfläche per ::before dehnen wie .weather-widget__refresh:
- * das geht hier technisch nicht. `<input type="color">` ist ein replaced element
- * und rendert keine Pseudo-Elemente. Die Wahl bestand also gar nicht - und sie
- * wäre auch inhaltlich falsch gewesen: bei einem Farbfeld IST die sichtbare
- * Fläche die Funktion, anders als bei einem Icon in einem dichten Widget.
- *
- * Der Platz kostet nichts Nennenswertes: die Zeile ist
- * `minmax(0, 1fr) auto`, die 4px gehen bei 375px zu ~1,4 % vom Namensfeld ab. */
-.settings-color-button {
-  width: var(--target-base);
-  height: var(--target-base);
-  padding: var(--space-0h);
-  border: var(--space-px) solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  cursor: pointer;
-}
-
-.settings-color-button::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.settings-color-button::-webkit-color-swatch {
-  border: none;
-  border-radius: var(--radius-full);
-}
-
-.settings-color-button::-moz-color-swatch {
-  border: none;
-  border-radius: var(--radius-full);
-}
-
 @media (max-width: 639px) {
   .settings-profile-editor {
     grid-template-columns: 1fr;
@@ -2827,13 +2788,6 @@
 .caldav-reminder-module {
   flex: 1;
   min-width: 0;
-}
-
-.caldav-calendar-color {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
 }
 
 /* Zwei Zeilen statt Ellipse: der Name entscheidet, welche Kontakte im Haushalt

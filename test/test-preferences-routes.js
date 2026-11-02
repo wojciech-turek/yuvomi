@@ -628,20 +628,26 @@ test('PUT holiday: Validierungspfade -> 400', async () => {
   assert.equal((await put({ holiday_subdivision: 'bayern' })).status, 400);
   assert.equal((await put({ holiday_group: 'x' })).status, 400);
   assert.equal((await put({ holiday_show_public: 'x' })).status, 400);
-  assert.equal((await put({ holiday_public_color: 'red' })).status, 400);
-  assert.equal((await put({ holiday_school_color: '#12' })).status, 400);
+});
+test('One Today: die Feiertagsfarben sind keine Einstellung mehr - ignoriert, nie gespeichert, nicht gelesen', async () => {
+  const before = db.prepare("SELECT key FROM sync_config WHERE key IN ('holiday_public_color', 'holiday_school_color')").all();
+  const res = await put({ holiday_public_color: 'red', holiday_school_color: '#00FF00' });
+  assert.equal(res.status, 200, 'wie jeder unbekannte Schluessel (R2)');
+  assert.deepEqual(db.prepare("SELECT key FROM sync_config WHERE key IN ('holiday_public_color', 'holiday_school_color')").all(), before,
+    'nichts gespeichert');
+  const { body } = await get();
+  assert.equal(Object.hasOwn(body.data, 'holiday_public_color'), false);
+  assert.equal(Object.hasOwn(body.data, 'holiday_school_color'), false);
 });
 test('PUT holiday: gültige Vollkonfiguration persistiert', async () => {
   const { status, body } = await put({
     holiday_country: 'DE', holiday_subdivision: 'DE-BY', holiday_group: 'DE-BY',
     holiday_show_public: true, holiday_show_school: false,
-    holiday_public_color: '#FF0000', holiday_school_color: '#00FF00',
   });
   assert.equal(status, 200);
   assert.equal(body.data.holiday_country, 'DE');
   assert.equal(body.data.holiday_subdivision, 'DE-BY');
   assert.equal(body.data.holiday_show_public, true);
-  assert.equal(body.data.holiday_public_color, '#FF0000');
 });
 test('PUT holiday_country=null räumt subdivision + group mit auf (Kaskade)', async () => {
   await put({ holiday_country: 'DE', holiday_subdivision: 'DE-BY', holiday_group: 'DE-BY' });
@@ -886,8 +892,8 @@ async function assertPatchAppliesNothing(patch, expected, actorOpts = {}) {
 test('abgelehnte Patch: ein HAUSHALTSFELD vor dem ungueltigen Feld bleibt unveraendert (#1622)', async () => {
   cfgSet('week_start', 'monday');
   await assertPatchAppliesNothing(
-    { week_start: 'sunday', holiday_school_color: 'kein-hex' },
-    { status: 400, error: 'holiday_school_color muss ein gültiger Hex-Farbwert sein (z. B. #34C759).', untouched: ['week_start'] },
+    { week_start: 'sunday', holiday_show_school: 'kein-bool' },
+    { status: 400, error: 'holiday_show_school must be a boolean.', untouched: ['week_start'] },
   );
   assert.equal(db.prepare("SELECT value FROM sync_config WHERE key = 'week_start'").get().value, 'monday');
   cfgDelete('week_start');
@@ -896,8 +902,8 @@ test('abgelehnte Patch: ein HAUSHALTSFELD vor dem ungueltigen Feld bleibt unvera
 test('abgelehnte Patch: ein NUTZERFELD vor dem ungueltigen Feld bleibt unveraendert (#1622)', async () => {
   cfgSet('hidden_modules:user:1', '["budget"]');
   await assertPatchAppliesNothing(
-    { hidden_modules: ['tasks'], holiday_school_color: 'kein-hex' },
-    { status: 400, error: 'holiday_school_color muss ein gültiger Hex-Farbwert sein (z. B. #34C759).', untouched: ['hidden_modules'] },
+    { hidden_modules: ['tasks'], holiday_show_school: 'kein-bool' },
+    { status: 400, error: 'holiday_show_school must be a boolean.', untouched: ['hidden_modules'] },
   );
   assert.equal(db.prepare("SELECT value FROM sync_config WHERE key = 'hidden_modules:user:1'").get().value, '["budget"]');
   cfgDelete('hidden_modules:user:1');
@@ -908,8 +914,8 @@ test('abgelehnte Patch: ein ADMIN-FELD vor dem ungueltigen Feld bleibt unveraend
   cfgDelete('household_timezone_hint_dismissed');
   cfgSet('budget_mode', 'shared');
   await assertPatchAppliesNothing(
-    { timezone_hint_dismissed: true, budget_mode: 'personal', holiday_school_color: 'kein-hex' },
-    { status: 400, error: 'holiday_school_color muss ein gültiger Hex-Farbwert sein (z. B. #34C759).', untouched: ['timezone_hint_dismissed', 'budget_mode'] },
+    { timezone_hint_dismissed: true, budget_mode: 'personal', holiday_show_school: 'kein-bool' },
+    { status: 400, error: 'holiday_show_school must be a boolean.', untouched: ['timezone_hint_dismissed', 'budget_mode'] },
   );
   assert.equal(db.prepare("SELECT value FROM sync_config WHERE key = 'household_timezone_hint_dismissed'").get(), undefined);
   assert.equal(db.prepare("SELECT value FROM sync_config WHERE key = 'budget_mode'").get().value, 'shared');
@@ -935,8 +941,8 @@ test('abgelehnte Patch: ein Sync, den ein frueheres Feld anstoesst, bleibt nicht
   // Transaktion. Sie darf nicht fuer sich committen, wenn danach ein Feld faellt.
   cfgSet('disabled_modules', '[]');
   await assertPatchAppliesNothing(
-    { disabled_modules: ['health'], holiday_school_color: 'kein-hex' },
-    { status: 400, error: 'holiday_school_color muss ein gültiger Hex-Farbwert sein (z. B. #34C759).', untouched: ['disabled_modules'] },
+    { disabled_modules: ['health'], holiday_show_school: 'kein-bool' },
+    { status: 400, error: 'holiday_show_school must be a boolean.', untouched: ['disabled_modules'] },
   );
   cfgDelete('disabled_modules');
 });
@@ -949,7 +955,7 @@ test('eine gueltige gemischte Patch wird weiterhin ganz geschrieben, und danach 
   assert.equal(d.week_start, 'sunday');
   assert.deepEqual(d.hidden_modules, ['tasks']);
   assert.equal(d.budget_mode, 'personal');
-  await put({ week_start: 'sunday', holiday_school_color: 'kein-hex' });
+  await put({ week_start: 'sunday', holiday_show_school: 'kein-bool' });
   assert.equal(db.inTransaction, false);
   cfgDelete('week_start'); cfgDelete('hidden_modules:user:1'); cfgDelete('budget_mode');
 });

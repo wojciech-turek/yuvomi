@@ -56,7 +56,7 @@ function renderPage(container) {
         <div id="ics-add-form-wrapper" hidden>
           <form id="ics-add-form" class="settings-form settings-form--compact" novalidate autocomplete="off">
             ${/* EIN FORMULAR-DIALEKT (R19, Einstellungen B7): Adresse, Name,
-                 Farbe, Zuweisung und Teilen als Zeilen der Gruppe. */ ''}
+                 Zuweisung und Teilen als Zeilen der Gruppe. */ ''}
             <div class="row-carrier settings-group">
               ${settingRowHtml({
                 label: t('settings.ics.form.url'), labelFor: 'ics-url',
@@ -65,10 +65,6 @@ function renderPage(container) {
               ${settingRowHtml({
                 label: t('settings.ics.form.name'), labelFor: 'ics-name',
                 control: '<input class="form-input" type="text" id="ics-name" required maxlength="100" />',
-              })}
-              ${settingRowHtml({
-                label: t('settings.ics.form.color'), labelFor: 'ics-color',
-                control: '<input class="form-input form-input--color" type="color" id="ics-color" value="#6366f1" />',
               })}
               ${settingRowHtml({
                 label: t('settings.sync.defaultAssignee'), labelFor: 'ics-assignee',
@@ -111,10 +107,6 @@ function renderPage(container) {
               label: t('settings.calendarImport.urlLabel'), labelFor: 'cal-import-url',
               description: t('settings.calendarImport.urlHint'), descriptionId: 'cal-import-url-hint',
               control: '<input class="form-input" type="url" id="cal-import-url" aria-describedby="cal-import-url-hint" placeholder="https://..." />',
-            })}
-            ${settingRowHtml({
-              label: t('settings.calendarImport.colorLabel'), labelFor: 'cal-import-color',
-              control: '<input class="form-input form-input--color" type="color" id="cal-import-color" value="#007AFF" />',
             })}
             ${settingRowHtml({
               label: t('settings.calendarImport.targetCalendarLabel'), labelFor: 'cal-import-calendar',
@@ -163,12 +155,6 @@ function renderIcsList(container, subs, user) {
     // Aufgabe, gleiche Zeile. Die Regel steht in settings.css, hier wird sie nur
     // angefordert.
     li.className = 'settings-member settings-member--sync-row';
-
-    const dot = document.createElement('span');
-    dot.className = 'settings-avatar settings-avatar--sm';
-    dot.style.background = sub.color;
-    dot.style.flexShrink = '0';
-    li.appendChild(dot);
 
     const info = document.createElement('div');
     info.className = 'settings-member__info';
@@ -263,17 +249,12 @@ function openIcsEditModal(container, sub, subs, user) {
     size: 'sm',
     content: `
       <form id="ics-edit-form" class="settings-form">
-        ${/* DER DIALOG SPRICHT DENSELBEN DIALEKT (R19, B7): Name, Farbe,
-             Teilen und Zuweisung als Zeilen im Traeger - vorher Felder unter
-             ihren Etiketten und ein Schalter, der neben der Farbe klemmte. */ ''}
+        ${/* DER DIALOG SPRICHT DENSELBEN DIALEKT (R19, B7): Name, Teilen
+             und Zuweisung als Zeilen im Traeger. */ ''}
         ${formRowsHtml([
           formRowHtml({
             label: t('settings.ics.form.name'), labelFor: 'ics-edit-name', field: true,
             control: `<input class="form-input" type="text" id="ics-edit-name" value="${esc(sub.name)}" required maxlength="100" />`,
-          }),
-          formRowHtml({
-            label: t('settings.ics.form.color'), labelFor: 'ics-edit-color',
-            control: `<input class="settings-color-button" type="color" id="ics-edit-color" value="${esc(sub.color) || '#3b82f6'}" />`,
           }),
           toggleRowHtml({
             control: 'switch',
@@ -318,13 +299,12 @@ function openIcsEditModal(container, sub, subs, user) {
         const submitBtn = panel.querySelector('[type=submit]');
         const errEl = panel.querySelector('#ics-edit-error');
         const name = panel.querySelector('#ics-edit-name').value.trim();
-        const color = panel.querySelector('#ics-edit-color').value;
         const shared = panel.querySelector('#ics-edit-shared').checked ? 1 : 0;
         const assignee = assigneePatch(panel.querySelector('#ics-edit-assignee'), sub.default_assignee_user_id);
         errEl.hidden = true;
         submitBtn.disabled = true;
         try {
-          const res = await api.patch(`/calendar/subscriptions/${sub.id}`, { name, color, shared, ...assignee });
+          const res = await api.patch(`/calendar/subscriptions/${sub.id}`, { name, shared, ...assignee });
           const idx = subs.findIndex((s) => s.id === sub.id);
           if (idx >= 0) subs[idx] = res.data;
           renderIcsList(container, subs, user);
@@ -386,7 +366,6 @@ function bindIcsEvents(container, subs, user) {
     errorEl.hidden = true;
     const url = container.querySelector('#ics-url').value.trim();
     const name = container.querySelector('#ics-name').value.trim();
-    const color = container.querySelector('#ics-color').value;
     const shared = container.querySelector('#ics-shared').checked ? 1 : 0;
     const assigneeVal = assigneeSel?.value || '';
     const default_assignee_user_id = assigneeVal ? Number(assigneeVal) : null;
@@ -394,7 +373,7 @@ function bindIcsEvents(container, subs, user) {
     submitBtn.disabled = true;
     try {
       const res = await api.post('/calendar/subscriptions', {
-        url, name, color, shared, default_assignee_user_id,
+        url, name, shared, default_assignee_user_id,
       });
       subs.push(res.data);
       renderIcsList(container, subs, user);
@@ -442,7 +421,6 @@ function bindCalendarImport(container, calendars = []) {
   if (!form) return;
   const fileInput = container.querySelector('#cal-import-file');
   const urlInput = container.querySelector('#cal-import-url');
-  const colorInput = container.querySelector('#cal-import-color');
   const calendarSelect = container.querySelector('#cal-import-calendar');
   const newCalendarGroup = container.querySelector('#cal-import-new-calendar-group');
   const newCalendarNameInput = container.querySelector('#cal-import-new-calendar-name');
@@ -471,7 +449,7 @@ function bindCalendarImport(container, calendars = []) {
     submitBtn.disabled = true;
     let createdCalendarId = null;
     try {
-      const payload = { color: colorInput.value };
+      const payload = {};
       if (file) payload.ics = await file.text();
       else payload.url = url;
       if (calendarSelect?.value === '__new') {
@@ -481,7 +459,7 @@ function bindCalendarImport(container, calendars = []) {
           errorEl.hidden = false;
           return;
         }
-        const created = await api.post('/calendar/calendars', { name, color: colorInput.value });
+        const created = await api.post('/calendar/calendars', { name });
         createdCalendarId = created.data.id;
         payload.local_calendar_id = created.data.id;
       } else if (calendarSelect?.value) {

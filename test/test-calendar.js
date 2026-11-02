@@ -1266,183 +1266,134 @@ test('Der Marker ist birthday_name, nicht der Titel', () => {
 });
 
 // --------------------------------------------------------
-// Farbhierarchie (#815)
+// Die Farbe eines Termins sind seine Leute (One Today, spec 7)
 // --------------------------------------------------------
 
-test('die eigene Terminfarbe schlaegt die Farbe der zugewiesenen Person', () => {
-  // Der belegte Fall aus #815: ein CalDAV-Termin bringt seine RFC-7986-`COLOR`
-  // mit, wird jemandem zugewiesen - und war bis v2.35.0 unsichtbar, weil die
-  // Personenfarbe alles schlug. Die Sync war nie das Problem.
-  const { resolveEventColor } = calendarHelpers;
-  const assignee = [{ id: 1, color: '#FF0000' }];
+const eventColor = await import('../public/utils/event-color.js');
+const personColor = await import('../public/utils/person-color.js');
+/** Die Farbe, die der Kalender einem Termin gibt: `--ev-color` aus seinem Flaechenstil. */
+const edgeOf = (ev) => calendarHelpers.eventSurfaceStyle(ev).match(/--ev-color:([^;]+);/)?.[1];
 
-  assert(resolveEventColor({ color: '#00FF00', assigned_users: assignee, cal_color: '#0000FF' }) === '#00FF00',
-    'die ausdrueckliche Terminfarbe muss die Zuweisung schlagen');
-  // Gegenprobe: OHNE eigene Farbe gewinnt die Person weiter - gegen die
-  // Kalenderfarbe, die jeder Termin des Kalenders traegt und die deshalb nichts
-  // ueber diesen einen aussagt. Ohne diese Haelfte waere der Test auch dann
-  // gruen, wenn die Zuweisung gar nicht mehr faerbte.
-  //
-  // DIESE HAELFTE WAR BIS v2.48.0 BLIND, und das ist der Grund, warum sie hier
-  // so ausfuehrlich steht. `calendar_events.color` war NOT NULL und lehnte auch
-  // den Leerstring ab - ein Termin AUS DER DATENBANK konnte die beiden unteren
-  // Zweige nie erreichen, der Test war also gruen ueber totem Code und sagte
-  // nichts darueber, was ein Nutzer zu sehen bekommt (#856).
-  //
-  // Seit Migration 166 darf die Spalte NULL sein, und erst damit traegt diese
-  // Haelfte eine Zusicherung. Dass ein NULL auch wirklich aus der Route und aus
-  // dem Sync herauskommt, kann dieser Frontend-Test aber nicht zeigen - das
-  // pruefen `test:calendar-routes` (Route) und `test:calendar-inherited-color`
-  // (Migration + Importpfade). Ohne die beiden waere er wieder blind.
-  assert(resolveEventColor({ assigned_users: assignee, cal_color: '#0000FF' }) === '#FF0000',
-    'ohne eigene Farbe muss die Zuweisung faerben');
-  assert(resolveEventColor({ cal_color: '#0000FF' }) === '#0000FF',
-    'ohne Zuweisung bleibt die Kalenderfarbe');
-  assert(resolveEventColor({}) === '#8E8E93',
-    'ohne alles bleibt das neutrale Grau');
+// Wojtek, Mariola, ein drittes Mitglied - in der Haushaltsreihenfolge.
+const COLOUR_HOUSEHOLD = [
+  { id: 1, display_name: 'Wojtek', sort_order: 0 },
+  { id: 2, display_name: 'Mariola', sort_order: 1 },
+  { id: 3, display_name: 'Ola', sort_order: 2 },
+];
+
+test('One Today: eine zugewiesene Person faerbt den Termin, eine gespeicherte Farbe nie', () => {
+  const household = COLOUR_HOUSEHOLD;
+  const ink = personColor.personToken({ id: 1 }, household).ink;
+  assert(ink === 'var(--person-1)', `Vorbedingung: Wojtek steht auf Platz 1: ${ink}`);
+  const ev = { color: '#ff0000', assigned_to: 1, assigned_users: [{ id: 1, display_name: 'Wojtek', color: '#00FF00' }], cal_color: '#0000FF', local_calendar_color: '#00FFFF' };
+  assert(eventColor.resolveEventColor(ev, { household }) === ink,
+    `eine Person: ihre Tinte, nicht #ff0000, nicht die Kalenderfarbe: ${eventColor.resolveEventColor(ev, { household })}`);
+  assert(eventColor.resolveEventColorOrNull(ev, { household }) === ink, 'dieselbe Antwort ohne letzte Instanz');
+  const tone = eventColor.eventTone(ev, { household });
+  assert(tone.kind === 'person' && tone.color === ink && tone.fill === ink && tone.edge === null, JSON.stringify(tone));
 });
 
-test('die geerbte Farbe gehoert der PRIMAEREN Zuweisung, nicht der ersten Zeile', () => {
-  // `assigned_users` kommt aus einem `json_group_array` OHNE `ORDER BY`: seine
-  // Reihenfolge ist die der `event_assignments`-Zeilen, nicht die des Formulars.
-  // Die primaere Zuweisung steht ausdruecklich in `assigned_to`. Ohne die
-  // Unterscheidung traegt ein Termin mit mehreren Zugewiesenen die Farbe eines
-  // ANDEREN Mitglieds - und kann sie beim Neuladen wechseln, ohne dass jemand
-  // etwas geaendert hat. Solange die Spalte NOT NULL war, war der Zweig tot und
-  // der Fehler unsichtbar (#891).
-  const { resolveEventColor } = calendarHelpers;
-  const ev = {
-    color: null,
-    assigned_to: 7,
-    assigned_users: [{ id: 3, color: '#3CA368' }, { id: 7, color: '#CE5053' }],
-  };
-  assert(resolveEventColor(ev) === '#CE5053',
-    'die Farbe muss der in assigned_to genannten Person gehoeren');
-
-  // Gegenprobe: die naive Fassung greift daneben - ohne diese Zeile waere der
-  // Test auch dann gruen, wenn beide Personen dieselbe Farbe traegen.
-  assert(ev.assigned_users[0].color === '#3CA368',
-    'die erste Zeile traegt eine ANDERE Farbe - sonst prueft der Test nichts');
-
-  // Faellt assigned_to aus (Altbestand, geloeschtes Mitglied), bleibt die erste
-  // Zeile die beste verfuegbare Auskunft.
-  assert(resolveEventColor({ color: null, assigned_to: null, assigned_users: [{ id: 3, color: '#3CA368' }] }) === '#3CA368',
-    'ohne assigned_to gilt die erste Zeile');
-  assert(resolveEventColor({ color: null, assigned_to: 99, assigned_users: [{ id: 3, color: '#3CA368' }] }) === '#3CA368',
-    'zeigt assigned_to auf niemanden in der Liste, ebenso');
+test('One Today: niemand zugewiesen - neutral, auch mit eigener, Kalender- oder Abofarbe', () => {
+  const household = COLOUR_HOUSEHOLD;
+  const ev = { color: '#ff0000', assigned_users: [], cal_color: '#0000FF', local_calendar_color: '#00FFFF', source_calendar_color: '#123456' };
+  assert(eventColor.resolveEventColor(ev, { household }) === eventColor.EVENT_FALLBACK_COLOR,
+    `ohne Person der neutrale Ton: ${eventColor.resolveEventColor(ev, { household })}`);
+  assert(eventColor.EVENT_FALLBACK_COLOR === personColor.personToken({ id: 99 }, household).ink,
+    'der neutrale Ton ist derselbe wie der einer Scheibe ausserhalb des Haushalts');
+  assert(eventColor.resolveEventColorOrNull(ev, { household }) === null, 'ohne Person: null fuer Aufrufer mit eigenem Notnagel');
+  assert(eventColor.eventTone({}, { household }).kind === 'none', 'ein leerer Termin ist niemandes');
+  assert(eventColor.resolveEventColor(null) === eventColor.EVENT_FALLBACK_COLOR, 'kein Termin: neutral');
 });
 
-test('eine Zuweisung ohne eigene Farbe faellt nicht auf die Kalenderfarbe durch', () => {
-  // Ein Mitglied ohne gesetzte Avatar-Farbe bekommt das neutrale Grau, nicht die
-  // Kalenderfarbe: sonst saehe ein zugewiesener Termin aus wie ein nicht
-  // zugewiesener, und die Zuweisung waere unsichtbar statt nur farblos.
-  assert(calendarHelpers.resolveEventColor({ assigned_users: [{ id: 1 }], cal_color: '#0000FF' }) === '#8E8E93',
-    'ein Mitglied ohne Farbe darf nicht auf die Kalenderfarbe durchfallen');
+test('One Today: zwei Personen teilen den Termin (zwei Tinten), ab drei der gemeinsame Ton', () => {
+  const household = COLOUR_HOUSEHOLD;
+  const [a, b] = [1, 2].map((id) => personColor.personToken({ id }, household).ink);
+  const split = eventColor.eventTone({ color: '#ff0000', assigned_users: [{ id: 1 }, { id: 2 }] }, { household });
+  assert(split.kind === 'split', JSON.stringify(split));
+  assert(split.color === eventColor.EVENT_SHARED_COLOR, `die Flaeche im gemeinsamen Ton: ${split.color}`);
+  assert(split.edge === `linear-gradient(${a} 0 50%, ${b} 50% 100%)`, `die Kante in beiden Tinten, hart geschnitten: ${split.edge}`);
+  assert(split.fill === personColor.razemBackground({ id: 1 }, { id: 2 }, household),
+    `der Punkt ist die geteilte Scheibe: ${split.fill}`);
+  // Dieselbe Person zweimal ist eine Person.
+  assert(eventColor.eventTone({ assigned_users: [{ id: 1 }, { id: 1 }] }, { household }).kind === 'person', 'doppelt zaehlt einfach');
+  const all = eventColor.eventTone({ assigned_users: [{ id: 1 }, { id: 2 }, { id: 3 }] }, { household });
+  assert(all.kind === 'shared' && all.color === 'var(--color-accent)' && all.fill === 'var(--color-accent)' && all.edge === null,
+    `drei und mehr: der gemeinsame Ton wie die Razem-Scheibe: ${JSON.stringify(all)}`);
+  assert(eventColor.EVENT_SHARED_COLOR === 'var(--color-accent)', 'der gemeinsame Ton ist der Akzent');
 });
 
-// --------------------------------------------------------
-// Der Farbwaehler zeigt, was gilt (#856)
-// --------------------------------------------------------
-
-test('der Farbwaehler zeigt eine Farbe, die nicht aus seiner Palette stammt', () => {
-  // #856: Die Avatar-Palette (iOS-Systemfarben) und EVENT_COLORS (OKLCH) teilen
-  // KEINEN einzigen Wert - das ist der Kern des Bugs, also wird es hier zuerst
-  // festgehalten. Traegt ein Termin eine Avatar-Farbe, eine RFC-7986-Farbe vom
-  // CalDAV-Server oder das alte '#007AFF', stand der Waehler leer da; der
-  // Speicherpfad schrieb daraufhin die erste Palettenfarbe darueber.
-  const { pickerColors, EVENT_COLORS } = calendarHelpers;
-  const AVATAR_COLORS = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#FF2D55'];
-  const shared = AVATAR_COLORS.filter((a) => EVENT_COLORS.some((e) => e.toLowerCase() === a.toLowerCase()));
-  assert(shared.length === 0,
-    'die beiden Paletten duerfen sich nicht ueberschneiden - sonst prueft dieser Test nichts');
-
-  const own = pickerColors({ color: '#34C759' });
-  assert(own.length === EVENT_COLORS.length + 1, 'die fremde Farbe kommt als zusaetzlicher Swatch dazu');
-  assert(own[0] === '#34C759', 'und steht vorn, damit sie den aktiven Swatch bekommt');
-
-  assert(pickerColors({ color: EVENT_COLORS[3] }).length === EVENT_COLORS.length,
-    'eine Farbe AUS der Palette bekommt keinen zweiten Swatch');
-  assert(pickerColors({ color: EVENT_COLORS[3].toLowerCase() }).length === EVENT_COLORS.length,
-    'auch dann nicht, wenn der Server sie klein schreibt - CalDAV tut das');
-  assert(pickerColors(null).length === EVENT_COLORS.length,
-    'ein neuer Termin zeigt genau die Palette');
-  assert(pickerColors({ color: null }).length === EVENT_COLORS.length,
-    'ohne Farbe ebenso');
+test('One Today: ein Besuch der Haushaltshilfe mit alter Kalenderfarbe ist neutral', () => {
+  // Task 4 schreibt keine Besuchsfarbe mehr; alte Besuchstermine tragen sie
+  // aber noch (`calendar_events.color` = die frueher gewaehlte Kalenderfarbe
+  // der Hilfe). Die Hilfe ist kein Haushaltsmitglied: neutral, wie ihre Scheibe.
+  const household = COLOUR_HOUSEHOLD;
+  const visit = { title: 'Sprzątanie', color: '#7C3AED', assigned_to: 9, assigned_users: [{ id: 9, display_name: 'Pani Ania', color: '#0891B2' }] };
+  const tone = eventColor.eventTone(visit, { household });
+  assert(tone.kind === 'person', 'die Hilfe ist zugewiesen');
+  assert(tone.color === personColor.personToken({ id: 9 }, household).ink && tone.color === eventColor.EVENT_FALLBACK_COLOR,
+    `neutral, nicht die gespeicherte Farbe: ${tone.color}`);
+  withOvernightState({ users: COLOUR_HOUSEHOLD }, () => {
+    assert(edgeOf(visit) === eventColor.EVENT_FALLBACK_COLOR, 'der Kalender zeichnet die Kante neutral');
+    assert(!/7C3AED|0891B2/i.test(calendarHelpers.eventSurfaceStyle(visit)), `keine gespeicherte Farbe im Stil: ${calendarHelpers.eventSurfaceStyle(visit)}`);
+  });
 });
 
-test('der Farbwaehler nimmt nur an, was wie eine Farbe aussieht', () => {
-  // Der Wert landet in einem style-Attribut. esc() verhindert das Ausbrechen,
-  // nicht aber eine zweite CSS-Deklaration dahinter - und die Sync-Dienste
-  // schreiben direkt in die Tabelle, an COLOR_RE aus validate.js vorbei.
-  const { pickerColors, EVENT_COLORS } = calendarHelpers;
-  for (const bad of ['red; background-image:url(x)', 'rgb(1,2,3)', '#FFF', '#12345', '#GGGGGG', '', 'javascript:x']) {
-    assert(pickerColors({ color: bad }).length === EVENT_COLORS.length,
-      `'${bad}' darf keinen Swatch bekommen`);
+test('One Today: die Kante eines geteilten Termins traegt beide Tinten, ein einzelner nur seine', () => {
+  withOvernightState({ users: COLOUR_HOUSEHOLD }, () => {
+    const one = calendarHelpers.eventSurfaceStyle({ color: '#ff0000', assigned_users: [{ id: 2 }] });
+    assert(one === '--ev-color:var(--person-2);', `eine Person: nur die Farbe, keine Kantenfarbe: ${one}`);
+    const two = calendarHelpers.eventSurfaceStyle({ assigned_users: [{ id: 1 }, { id: 2 }] });
+    assert(/^--ev-color:var\(--color-accent\);--ev-edge:linear-gradient\(var\(--person-1\) 0 50%, var\(--person-2\) 50% 100%\);--ev-dot:linear-gradient\(135deg, var\(--person-1\) 0 50%, var\(--person-2\) 50% 100%\);$/.test(two),
+      `zwei Personen: gemeinsame Flaeche, geteilte Kante, der Punkt als geteilte Scheibe: ${two}`);
+    const none = calendarHelpers.eventSurfaceStyle({ color: '#ff0000', cal_color: '#0000FF' });
+    assert(none === `--ev-color:${eventColor.EVENT_FALLBACK_COLOR};`, `niemand: neutral: ${none}`);
+  });
+  // Jede Flaeche, die eine Termin-Kante zeichnet, liest die geteilte Kante.
+  const edged = [...eachRule(calendarCss)].filter((r) => /border-inline-start:\s*var\(--cal-event-edge\) solid var\(--ev-color/.test(r.body));
+  assert(edged.length > 0, 'Vorbedingung: es gibt Termin-Kanten');
+  for (const rule of edged) {
+    assert(/border-image:\s*var\(--ev-edge, none\) 1/.test(rule.body), `${rule.selector} zeichnet die geteilte Kante nicht`);
   }
-  assert(pickerColors({ color: '#abc123' })[0] === '#abc123',
-    'ein gueltiger Hex in Kleinschreibung dagegen schon');
+  const dot = [...eachRule(calendarCss)].find((r) => /\.month-view:not\(\.month-view--titles\) \.month-day__event$/.test(r.selector.trim()) && /background:/.test(r.body));
+  assert(dot && /background:\s*var\(--ev-dot, var\(--ev-color\)\)/.test(dot.body), 'der mobile Monatspunkt zeigt die geteilte Scheibe nicht');
 });
 
-test('ein Speichern, das die Farbe nicht anfasst, veraendert sie nicht', () => {
-  // Die Invariante, um die es in #856 geht. Sie steht hier bewusst NEBEN der
-  // alten Formel: die zeigt, dass der Test etwas misst, und nicht bloss die
-  // Implementierung nachspricht, die gerade danebensteht.
-  const { colorToSave, EVENT_COLORS } = calendarHelpers;
-  const alteFormel = (aktiv) => aktiv || EVENT_COLORS[0];
-
-  // Ein Termin mit der Avatar-Farbe einer Person. Kein Swatch der Palette passt,
-  // also ist beim Oeffnen keiner aktiv - und der Nutzer fasst die Farbe nicht an.
-  const termin = { color: '#34C759' };
-  assert(colorToSave(undefined, termin) === '#34C759',
-    'die Farbe des Termins bleibt stehen');
-  assert(alteFormel(undefined) === EVENT_COLORS[0],
-    'die alte Formel schrieb hier die erste Palettenfarbe darueber - das war der Bug');
-
-  // Wer eine Farbe waehlt, bekommt sie auch.
-  assert(colorToSave('#8156C0', termin) === '#8156C0',
-    'ein aktiver Swatch schlaegt die bisherige Farbe');
+test('One Today: der Kalender zeichnet keine gespeicherte Farbe - weder Termin noch Kalender noch Abo', () => {
+  const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
+  for (const field of ['cal_color', 'local_calendar_color', 'source_calendar_color']) {
+    assert(!new RegExp(`\\b${field}\\b`).test(src), `calendar.js liest noch ${field}`);
+  }
+  assert(!/ev(?:ent)?\??\.color\b/.test(src), 'calendar.js liest noch die gespeicherte Terminfarbe');
+  assert(!/calendar\??\.color\b/.test(src), 'calendar.js liest noch die Farbe eines lokalen Kalenders');
+  // Die Kalender und Abos im Filterblatt stehen ohne Farbscheibe da.
+  mitFilterzustand({ events: [{ id: 1, start_datetime: '2026-06-16T10:00', calendar_ref_id: 5, cal_name: 'Arbeit', cal_color: '#3366cc', source_calendar_color: '#3366cc' }],
+    localCalendars: [{ id: 3, name: 'Familie', color: '#C2185B' }, { id: 4, name: 'Praca', color: '#00AA00' }] }, () => {
+    const quellen = calendarHelpers.calendarSources();
+    assert(quellen.length === 3 && quellen.every((q) => !Object.hasOwn(q, 'color')), `Quellen ohne Farbe: ${JSON.stringify(quellen)}`);
+  });
 });
 
-test('ein neuer Termin faengt OHNE eigene Farbe an, damit die Zuweisung faerben kann', () => {
-  // Die Verhaltensaenderung aus #891, und die zweite Haelfte desselben Bugs wie
-  // oben: #856 hat verhindert, dass BEARBEITEN eine Farbe umschreibt. Beim
-  // ANLEGEN schrieb dieselbe Formel den Palettenersten weiterhin fest, und weil
-  // er von einer bewussten Wahl nicht zu unterscheiden war, hat er die Farbe der
-  // zugewiesenen Person auf Dauer verdraengt - fuer JEDEN neuen Termin.
-  const { colorToSave, EVENT_COLORS } = calendarHelpers;
-  const alteFormel = (aktiv, ev) => aktiv || ev?.color || EVENT_COLORS[0];
-
-  assert(colorToSave(undefined, null) === null,
-    'ohne Termin und ohne Auswahl wird KEINE Farbe geschrieben');
-  assert(alteFormel(undefined, null) === EVENT_COLORS[0],
-    'die alte Formel legte hier den Palettenersten fest - genau der verdraengte die Person');
-  assert(colorToSave(undefined, { color: null }) === null,
-    'ein Termin ohne Farbe behaelt keine');
-});
-
-test('der Erben-Swatch ist eine ausdrueckliche Wahl, kein fehlender Wert', () => {
-  // Der Kern der Umsetzung von #891: das Speichern muss "der Nutzer hat
-  // ausdruecklich KEINE eigene Farbe gewaehlt" von "der Nutzer hat die Farbe gar
-  // nicht angefasst" unterscheiden koennen. Beide sind falsy - haetten sie
-  // denselben Wert, wuerde das Abwaehlen einer Farbe entweder verschluckt (bei
-  // COALESCE im Backend) oder es wuerde jedes Speichern die Farbe loeschen.
-  const { colorToSave } = calendarHelpers;
-  const termin = { color: '#8156C0' };
-
-  assert(colorToSave('', termin) === null,
-    'der Erben-Swatch loescht die eigene Farbe des Termins');
-  assert(colorToSave(undefined, termin) === '#8156C0',
-    'kein aktiver Swatch laesst sie dagegen stehen - derselbe falsy-Wert, andere Bedeutung');
-  assert(colorToSave('', termin) !== colorToSave(undefined, termin),
-    'die beiden Faelle duerfen nie dasselbe Ergebnis liefern');
-});
-
-test('sameColor vergleicht Hex-Werte ohne Ruecksicht auf Schreibweise', () => {
-  const { sameColor } = calendarHelpers;
-  assert(sameColor('#587DCE', '#587dce') === true, 'derselbe Wert, andere Schreibweise');
-  assert(sameColor('#587DCE', '#3CA368') === false, 'verschiedene Werte bleiben verschieden');
-  assert(sameColor(null, '#587DCE') === false, 'null ist keine Farbe');
-  assert(sameColor(undefined, undefined) === false, 'undefined auch nicht');
+test('One Today: Feiertage und Schulferien stehen in EINEM ruhigen Ton, ohne Farbe aus den Einstellungen', () => {
+  const hols = [
+    { id: 1, type: 'public', name: 'Boże Ciało', start_date: '2026-06-16', end_date: '2026-06-16', color: '#FF3B30' },
+    { id: 2, type: 'school', name: 'Ferie letnie', start_date: '2026-06-16', end_date: '2026-06-16', color: '#34C759' },
+  ];
+  const prefs = { holiday_show_public: true, holiday_show_school: true, holiday_public_color: '#FF3B30', holiday_school_color: '#34C759' };
+  withOvernightState({ users: COLOUR_HOUSEHOLD, holidays: hols, layerHolidays: true, layerSchool: true, holidayPrefs: prefs }, () => {
+    const html = calendarHelpers.dayGroupHtml({ date: '2026-06-16', events: [], tasks: [], holidays: hols, schedule: [], waste: [] });
+    const chips = html.match(/<div class="agenda-holiday\b[^>]*>/g) ?? [];
+    assert(chips.length === 2, `beide Feiertage stehen da: ${html}`);
+    assert(chips.every((c) => /\bcal-holiday\b/.test(c) && !/style=/.test(c)), `ein fester Ton, kein Inline-Stil: ${chips.join(' ')}`);
+    assert(!/#FF3B30|#34C759|--holi-color/i.test(html), 'keine Feiertagsfarbe im Markup');
+    const layers = calendarHelpers.availableLayers().filter((row) => row.key === 'holidays' || row.key === 'school');
+    assert(layers.length === 2 && layers.every((row) => row.color === null), `die Ebenen im Filterblatt ohne Farbscheibe: ${JSON.stringify(layers)}`);
+  });
+  const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
+  assert(!/holiday_(?:public|school)_color|HOLIDAY_(?:PUBLIC|SCHOOL)_FALLBACK|\bh\.color\b/.test(src), 'calendar.js liest noch eine Feiertagsfarbe');
+  const quiet = [...eachRule(calendarCss)].filter((r) => /\.cal-holiday\b/.test(r.selector));
+  assert(quiet.length > 0 && quiet.every((r) => !/--holi-color/.test(r.body)), 'der ruhige Ton haengt an keiner Feiertagsfarbe');
+  assert(quiet.some((r) => /background(?:-color)?:\s*var\(--color-fill\)/.test(r.body) && /color:\s*var\(--color-text-secondary\)/.test(r.body)),
+    'der Feiertag ist ein neutraler Chip: Fuellung und Sekundaertinte');
 });
 
 // Additiv zu Muster/Override, nie ein Ersatz (server/routes/schedule-extras.js)
@@ -2220,7 +2171,7 @@ test('Kalender verwalten: unter 640px steht das Namensfeld des Anlegen-Formulars
   const at = calSrc.indexOf(open) + open.length;
   const form = calSrc.slice(at, calSrc.indexOf('</form>', at));
   const fields = [...form.matchAll(/id="(local-calendar-[a-z]+)"/g)].map((m) => m[1]);
-  assert(JSON.stringify(fields) === JSON.stringify(['local-calendar-name', 'local-calendar-color']), 'das Formular traegt Name, dann Farbe - keine Scheibe davor');
+  assert(JSON.stringify(fields) === JSON.stringify(['local-calendar-name']), `das Formular traegt nur den Namen - keine Farbe, keine Scheibe: ${fields.join(', ')}`);
   const phone = [...eachRule(calendarCss)].filter((r) =>
     r.at.some((a) => /max-width:\s*639px/.test(a))
     && r.selector.split(',').some((sel) => sel.trim() === '.cal-calendar-create')
@@ -3610,8 +3561,8 @@ test('#1064: ein Termin fuer einen ausgeblendeten Kalender fehlt schon vor dem H
   });
   mitFilterzustand({ ...basis, hiddenSources: new Map() }, () => {
     const arbeit = calendarSources().find((q) => q.key === 'cal:5');
-    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
-      `Name und Farbe kommen vom synchronisierten Termin derselben Quelle, auch wenn der neue zuerst steht, war ${JSON.stringify(arbeit)}`);
+    assert(arbeit.name === 'Arbeit',
+      `der Name kommt vom synchronisierten Termin derselben Quelle, auch wenn der neue zuerst steht, war ${JSON.stringify(arbeit)}`);
   });
   mitFilterzustand({ ...basis, events: [unterwegs], hiddenSources: new Map([['cal:5', { name: 'Arbeit', color: '#3366cc' }]]) }, () => {
     const arbeit = calendarSources().find((q) => q.key === 'cal:5');
@@ -3619,11 +3570,11 @@ test('#1064: ein Termin fuer einen ausgeblendeten Kalender fehlt schon vor dem H
   });
   // Codex-Review zu PR #1124: ohne Merker und ohne synchronisierten Nachbarn
   // stand der Kalender als namenloses „Kalender" im Blatt. Der Server liefert
-  // Name und Farbe der aufgeloesten Quelle mit.
+  // den Namen der aufgeloesten Quelle mit.
   const mitQuelle = { ...unterwegs, source_calendar_name: 'Arbeit', source_calendar_color: '#3366cc' };
   mitFilterzustand({ ...basis, events: [mitQuelle], hiddenSources: new Map() }, () => {
     const arbeit = calendarSources().find((q) => q.key === 'cal:5');
-    assert(arbeit.name === 'Arbeit' && arbeit.color === '#3366cc',
+    assert(arbeit.name === 'Arbeit' && !Object.hasOwn(arbeit, 'color'),
       `ein neuer Termin allein nennt seinen Kalender, war ${JSON.stringify(arbeit)}`);
   });
 });
@@ -3634,7 +3585,7 @@ test('#1064: das Blatt kennt jede Quelle aus den Terminen und jede ausgeblendete
     const quellen = calendarSources();
     assert(quellen.map((q) => q.key).join(',') === 'sub:7,cal:5,cal:9',
       `nach Namen sortiert, die ausgeblendete ohne Termin dabei, war ${quellen.map((q) => q.key)}`);
-    assert(quellen.find((q) => q.key === 'cal:5').color === '#3366cc', 'die Farbe kommt vom Termin');
+    assert(quellen.every((q) => !Object.hasOwn(q, 'color')), 'eine Quelle hat keine Farbe');
     assert(quellen.find((q) => q.key === 'cal:9').name === 'Urlaub', 'der Name der ausgeblendeten aus dem Merker');
   });
 });
@@ -3663,14 +3614,14 @@ test('#1064: beide Filter kommen gegen den Speicher geprueft zurueck', () => {
   }, () => {
     const quellen = restoreHiddenSources(1);
     assert(quellen.size === 2 && quellen.has('sub:7') && quellen.has('cal:5'), 'nur gueltige Schluessel');
-    assert(quellen.get('cal:5').color === null, 'aus dem Speicher nur, was eine Farbe ist');
+    assert([...quellen.values()].every((q) => !Object.hasOwn(q, 'color')), 'aus dem Speicher nur der Name, keine Farbe');
   });
   mitSpeicher({ 'yuvomi:calendar:sources-hidden:1': '{kaputt' }, () => {
     assert(restoreHiddenSources(1).size === 0, 'ein kaputter Eintrag ist kein Filter');
   });
 });
 
-// Codex-Review zu PR #1124: der Merker traegt Namen und Farben. Ein privates Abo
+// Codex-Review zu PR #1124: der Merker traegt Namen. Ein privates Abo
 // sieht nur, wer es angelegt hat - auf einem geteilten Browser stand sein Name
 // sonst im Filterblatt des naechsten Kontos.
 test('#1064: die ausgeblendeten Quellen gehoeren dem Nutzer, nicht dem Geraet', () => {
@@ -4582,8 +4533,8 @@ test('Termin-Dialog: die Felder stehen nach Haeufigkeit, Seltenes hinter „Weit
   const ret = body.slice(body.indexOf('return `'));
   const [who, rrule, remind] = ["renderUserMultiSelect(", "renderRRuleFields('event'", 'renderCalendarReminderSection('].map((m) => ret.indexOf(m));
   assert(who > 0 && who < rrule && rrule < remind, `Wiederholung steht nicht zwischen Wer und Erinnerung (${who}/${rrule}/${remind})`);
-  // Beschreibung, Sichtbarkeit, Stichtag, Farbe, Icon, Sync-Ziel, Anhang - in dieser Folge.
-  const rare = ['id="modal-description"', 'id="modal-visibility"', 'id="modal-countdown"', 'id="event-color-picker"', 'id="modal-icon-trigger"',
+  // Beschreibung, Sichtbarkeit, Stichtag, Icon, Sync-Ziel, Anhang - in dieser Folge.
+  const rare = ['id="modal-description"', 'id="modal-visibility"', 'id="modal-countdown"', 'id="modal-icon-trigger"',
     'id="event-sync-target"', 'id="modal-attachment"'];
   const inner = rare.map((m) => advanced.inner.indexOf(m));
   assert(inner.every((i) => i >= 0), `nicht hinter dem Aufklapper: ${rare.filter((_, i) => inner[i] < 0).join(', ')}`);
@@ -4591,10 +4542,18 @@ test('Termin-Dialog: die Felder stehen nach Haeufigkeit, Seltenes hinter „Weit
   // Der Aufklapper nennt, was hinter ihm liegt - aus den Beschriftungen der Felder.
   assert(advanced.opts?.hint === calendarHelpers.eventAdvancedTopics({ visibilityOffered: true, attachment: true }),
     `der Aufklapper nennt seinen Inhalt nicht: ${JSON.stringify(advanced.opts)}`);
-  for (const key of ['calendar.descriptionLabel', 'common.visibility.label', 'calendar.colorLabel', 'calendar.iconLabel', 'calendar.syncTargetLabel', 'calendar.attachmentLabel']) {
+  for (const key of ['calendar.descriptionLabel', 'common.visibility.label', 'calendar.iconLabel', 'calendar.syncTargetLabel', 'calendar.attachmentLabel']) {
     assert(advanced.inner.includes(key), `${key} steht in der Zeile des Aufklappers, aber kein Feld dahinter traegt es`);
   }
   assert(advanced.opts.open === false, 'ein neuer Termin oeffnet „Weitere Einstellungen"');
+});
+
+test('One Today: der Termin-Dialog hat keine Farbwahl - neu und beim Bearbeiten', () => {
+  for (const dialog of [renderEventDialog(), renderEventDialog({ mode: 'edit', event: { ...EDIT_BASE, color: '#FF9500' } })]) {
+    assert(!/color-swatch|color-picker|event-color|type="color"/.test(dialog.html), `eine Farbwahl im Dialog: ${dialog.html.match(/.{0,80}(?:color-swatch|color-picker|event-color|type="color").{0,80}/)?.[0]}`);
+    assert(!/#FF9500/i.test(dialog.html), 'die gespeicherte Farbe steht nirgends im Dialog');
+    assert(!/calendar\.color/.test(dialog.html) && !/calendar\.color/.test(dialog.advanced.opts.hint), 'keine Farbe in den Beschriftungen und in der Zeile des Aufklappers');
+  }
 });
 
 test('Termin-Dialog: der Aufklapper nennt nur, was er zeigt', () => {
@@ -4613,7 +4572,7 @@ test('Termin-Dialog: der Aufklapper nennt nur, was er zeigt', () => {
 test('Termin-Dialog: beim Bearbeiten geht der Aufklapper nur fuer Unsichtbares auf', () => {
   const open = (event) => renderEventDialog({ mode: 'edit', event: { ...EDIT_BASE, ...event } }).advanced.opts.open;
   assert(open({}) === false, 'ein schlichter Termin oeffnet „Weitere Einstellungen"');
-  assert(open({ color: '#3B82F6', icon: 'star' }) === false, 'Farbe und Icon zeigt der Termin selbst - kein Grund aufzuklappen');
+  assert(open({ icon: 'star' }) === false, 'das Icon zeigt der Termin selbst - kein Grund aufzuklappen');
   // R19: die Beschreibung steht hinter dem Aufklapper - gesetzt haelt sie ihn offen.
   assert(open({ description: 'Mitbringen: Stifte' }) === true, 'eine Beschreibung bleibt zugeklappt versteckt');
   assert(open({ description: '   ' }) === false, 'Leerzeichen sind keine Beschreibung');
@@ -6326,14 +6285,14 @@ test('Tafla: EIN relativer Tag - dziś, jutro, pojutrze, Wochentag, za N dni, zu
   assert(!later.relative && !/relDay/.test(later.lead + later.rest), `Kopf: sonst der Wochentag vorn: ${JSON.stringify(later)}`);
 });
 
-test('Tafla: die Terminfarbe ist die Person - gemeinsam violett, ohne Person die Terminfarbe', () => {
+test('Tafla: die Terminfarbe ist die Person - gemeinsam violett, ohne Person neutral', () => {
   withOvernightState({ users: [{ id: 1, display_name: 'Wojtek', avatar_color: '#2563EB' }, { id: 2, display_name: 'Mariola', avatar_color: '#DB2777' }] }, () => {
-    const w = calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 1, avatar_color: '#2563EB' }], color: '#3CA368' });
+    const w = edgeOf({ assigned_users: [{ id: 1, avatar_color: '#2563EB' }], color: '#3CA368' });
     assert(/^var\(--person-\d\)$/.test(w), `eine Person: ihre Personenfarbe, auch ueber eine eigene Terminfarbe: ${w}`);
-    const m = calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 2, avatar_color: '#DB2777' }] });
+    const m = edgeOf({ assigned_users: [{ id: 2, avatar_color: '#DB2777' }] });
     assert(/^var\(--person-\d\)$/.test(m) && m !== w, `zwei Menschen, zwei Farben: ${w} / ${m}`);
-    assert(calendarHelpers.eventEdgeColor({ assigned_users: [{ id: 1 }, { id: 2 }] }) === 'var(--color-accent)', 'gemeinsam: violett');
-    assert(calendarHelpers.eventEdgeColor({ color: '#3CA368', assigned_users: [] }) === '#3CA368', 'ohne Person: die Terminfarbe');
+    assert(edgeOf({ assigned_users: [{ id: 1 }, { id: 2 }] }) === 'var(--color-accent)', 'gemeinsam: violett');
+    assert(edgeOf({ color: '#3CA368', assigned_users: [] }) === eventColor.EVENT_FALLBACK_COLOR, 'ohne Person: neutral, nie die Terminfarbe');
   });
 });
 

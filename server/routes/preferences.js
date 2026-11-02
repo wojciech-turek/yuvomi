@@ -191,7 +191,6 @@ function parseCountdownGraceDays(raw) {
 const VALID_WEATHER_PROVIDERS = ['open-meteo', 'openweathermap'];
 const VALID_WEATHER_UNITS = ['metric', 'imperial'];
 
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const COUNTRY_ISO_RE = /^[A-Z]{2}$/;
 const SUBDIVISION_RE = /^[A-Z]{2}-[A-Z0-9-]{1,10}$/;
 
@@ -493,8 +492,6 @@ router.get('/', (req, res) => {
         holiday_group:         cfgGet('holiday_group')         ?? null,
         holiday_show_public:   cfgGet('holiday_show_public')   === '1',
         holiday_show_school:   cfgGet('holiday_show_school')   === '1',
-        holiday_public_color:  cfgGet('holiday_public_color')  ?? '#FF3B30',
-        holiday_school_color:  cfgGet('holiday_school_color')  ?? '#34C759',
         holiday_last_sync:     cfgGet('holiday_last_sync')     ?? null,
         // A derived flag (#1766): true when Immich is configured and, for a
         // paired display, when an admin has switched the screensaver on for it.
@@ -541,7 +538,7 @@ router.put('/', (req, res) => {
   try {
     database = db.get();
     database.exec('BEGIN');
-    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, tasks_subtasks_expanded, wall_allow_ticking, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school, holiday_public_color, holiday_school_color } = req.body;
+    const { visible_meal_types, meal_type_names, currency, date_format, time_format, week_start, region, timezone, timezone_hint_dismissed, language, app_name, disabled_modules, hidden_modules, module_order, mobile_nav_order, more_pins, housekeeping_payment_tasks, budget_mode, calendar_default_duration, calendar_default_reminders, calendar_default_assign_me, calendar_default_target, health_cycle_enabled, health_cycle_enabled_user, health_prevention_notify_caregivers, tasks_subtasks_expanded, wall_allow_ticking, tasks_default_target, schedule_hidden_templates, countdown_grace_days, weather_provider, weather_lat, weather_lon, weather_city, weather_units, weather_auto_locate, weather_user, holiday_country, holiday_subdivision, holiday_group, holiday_show_public, holiday_show_school } = req.body;
 
     // Welche Quickstart-Vorlagen der Schichtplan-Schnellstart zeigt - wie
     // disabled_modules haushaltweit und admin-only, nicht wie hidden_modules
@@ -1060,9 +1057,7 @@ router.put('/', (req, res) => {
       holiday_subdivision  !== undefined ||
       holiday_group        !== undefined ||
       holiday_show_public  !== undefined ||
-      holiday_show_school  !== undefined ||
-      holiday_public_color !== undefined ||
-      holiday_school_color !== undefined
+      holiday_show_school  !== undefined
     ) {
       if (!isAdminRequest(req)) {
         return res.status(403).json({ error: 'Admin access required.', code: 403 });
@@ -1119,18 +1114,6 @@ router.put('/', (req, res) => {
           return res.status(400).json({ error: 'holiday_show_school must be a boolean.', code: 400 });
         }
         cfgSet('holiday_show_school', holiday_show_school ? '1' : '0');
-      }
-      if (holiday_public_color !== undefined) {
-        if (!HEX_COLOR_RE.test(holiday_public_color)) {
-          return res.status(400).json({ error: 'holiday_public_color muss ein gültiger Hex-Farbwert sein (z. B. #FF3B30).', code: 400 });
-        }
-        cfgSet('holiday_public_color', holiday_public_color);
-      }
-      if (holiday_school_color !== undefined) {
-        if (!HEX_COLOR_RE.test(holiday_school_color)) {
-          return res.status(400).json({ error: 'holiday_school_color muss ein gültiger Hex-Farbwert sein (z. B. #34C759).', code: 400 });
-        }
-        cfgSet('holiday_school_color', holiday_school_color);
       }
     }
 
@@ -1213,8 +1196,6 @@ router.put('/', (req, res) => {
         holiday_group:         cfgGet('holiday_group')         ?? null,
         holiday_show_public:   cfgGet('holiday_show_public')   === '1',
         holiday_show_school:   cfgGet('holiday_show_school')   === '1',
-        holiday_public_color:  cfgGet('holiday_public_color')  ?? '#FF3B30',
-        holiday_school_color:  cfgGet('holiday_school_color')  ?? '#34C759',
         holiday_last_sync:     cfgGet('holiday_last_sync')     ?? null,
       },
     };

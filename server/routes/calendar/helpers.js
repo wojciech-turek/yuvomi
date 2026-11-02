@@ -41,7 +41,6 @@ export const ATTACHMENT_MIME = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
-export const ICS_COLOR_RE   = /^#[0-9a-fA-F]{6}$/;
 export const VALID_EVENT_ICONS = new Set([
   'calendar', 'tooth', 'drill', 'alarm-clock', 'clock', 'bell', 'map-pin', 'home',
   'house', 'building', 'hospital', 'stethoscope', 'syringe', 'pill',

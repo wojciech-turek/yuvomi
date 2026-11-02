@@ -6,8 +6,7 @@ import { createLogger } from '../../logger.js';
 import express from 'express';
 import * as db from '../../db.js';
 import * as icsSubscription from '../../services/ics-subscription.js';
-import { color } from '../../middleware/validate.js';
-import { ICS_COLOR_RE, getUserId, isAdminUser } from './helpers.js';
+import { getUserId, isAdminUser } from './helpers.js';
 import { newNonMembers, nonMemberMessage } from '../../services/household-members.js';
 import { validateCalendarId } from '../../services/local-calendars.js';
 
@@ -43,7 +42,9 @@ router.get('/subscriptions', (req, res) => {
 
 router.post('/subscriptions', async (req, res) => {
   try {
-    const { name, url, color: colorVal, shared } = req.body;
+    // Ein `color` im Body wird ignoriert (One Today): ein Abo hat keine Farbe,
+    // seine Termine faerben ihre Leute.
+    const { name, url, shared } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length === 0 || name.length > 100)
       return res.status(400).json({ error: 'name: Pflichtfeld, max. 100 Zeichen.', code: 400 });
     if (!url || typeof url !== 'string')
@@ -52,8 +53,6 @@ router.post('/subscriptions', async (req, res) => {
     const allowedProtocols = allowPrivate ? ['https:', 'http:'] : ['https:'];
     try { const u = new URL(url.replace(/^webcal:\/\//i, 'https://')); if (!allowedProtocols.includes(u.protocol)) throw new Error(); }
     catch { return res.status(400).json({ error: allowPrivate ? 'url: Nur http://, https:// und webcal:// sind erlaubt.' : 'url: Nur https:// und webcal:// sind erlaubt.', code: 400 }); }
-    if (!colorVal || !ICS_COLOR_RE.test(colorVal))
-      return res.status(400).json({ error: 'color: Pflichtfeld, muss #RRGGBB sein.', code: 400 });
     // Die Standard-Zuweisung schon beim Anlegen: create() synchronisiert
     // unmittelbar, und bisher ließ sie sich erst danach im Bearbeiten-Dialog
     // setzen - die erste, oft größte Ladung Termine kam also grundsätzlich ohne
@@ -73,7 +72,7 @@ router.post('/subscriptions', async (req, res) => {
     }
 
     const { sub, syncError } = await icsSubscription.create(getUserId(req), {
-      name: name.trim(), url, color: colorVal, shared: shared ? 1 : 0,
+      name: name.trim(), url, shared: shared ? 1 : 0,
       default_assignee_user_id: defaultAssignee,
     });
     res.status(201).json({ data: sub, syncError: syncError || null });
@@ -95,11 +94,6 @@ router.patch('/subscriptions/:id', (req, res) => {
       if (typeof req.body.name !== 'string' || req.body.name.trim().length === 0 || req.body.name.length > 100)
         return res.status(400).json({ error: 'name: max. 100 Zeichen, darf nicht leer sein.', code: 400 });
       fields.name = req.body.name.trim();
-    }
-    if (req.body.color !== undefined) {
-      if (!ICS_COLOR_RE.test(req.body.color))
-        return res.status(400).json({ error: 'color: muss #RRGGBB sein.', code: 400 });
-      fields.color = req.body.color;
     }
     if (req.body.shared !== undefined) fields.shared = req.body.shared;
     if (req.body.default_assignee_user_id !== undefined) {
@@ -173,17 +167,12 @@ router.post('/import', async (req, res) => {
       return res.status(400).json({ error: 'Either an ICS file or a URL is required.', code: 400 });
     }
 
-    let vColorValue = null;
-    if (req.body.color) {
-      const vColor = color(req.body.color, 'Farbe');
-      if (vColor.error) return res.status(400).json({ error: vColor.error, code: 400 });
-      vColorValue = vColor.value;
-    }
+    // Keine Importfarbe mehr (One Today): ein gesendetes `color` wird ignoriert.
     const vLocalCalendar = validateCalendarId(db.get(), req.body.local_calendar_id);
     if (vLocalCalendar.error) return res.status(400).json({ error: vLocalCalendar.error, code: 400 });
 
     const result = await icsSubscription.importToLocal(userId, {
-      ics, url, color: vColorValue, localCalendarId: vLocalCalendar.value,
+      ics, url, localCalendarId: vLocalCalendar.value,
     });
     res.status(201).json({ data: result });
   } catch (err) {

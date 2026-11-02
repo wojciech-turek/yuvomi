@@ -34,7 +34,7 @@ import {
   shiftSeriesStart,
 } from '/utils/recurrence-scope.js';
 import { getReadableTextColor } from '/utils/color.js';
-import { resolveEventColor } from '/utils/event-color.js';
+import { eventTone as eventToneOf } from '/utils/event-color.js';
 import { EVENT_ICON_CATEGORIES, CUSTOM_EVENT_ICON_PATHS, eventIconName, hasEventIcon, eventIconHtml } from '/utils/event-icon.js';
 import { packLanes } from '/utils/week-strip.js';
 import { assignLanes, assignLanesByPerson, memberRank } from '/utils/overlap-lanes.js';
@@ -65,7 +65,7 @@ import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday } from '/utils/day-label.js';
-import { whoOf, whoDiscHtml, includesViewer, firstName, edgeColorOf } from '/utils/row-person.js';
+import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import { seriesDoneText } from '/utils/task-fields.js';
 import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
 import { holdDocumentAttachStyle } from '/components/document-attach.js';
@@ -111,99 +111,6 @@ const MONTH_NAMES     = () => [
   t('calendar.monthOctober'), t('calendar.monthNovember'), t('calendar.monthDecember'),
 ];
 
-// Kuratierte OKLCH-Palette (gedämpfte Jewel-Töne, verankert auf dem Violett der
-// App-Identität statt der geliehenen iOS-System-Farben). Gleichmäßiger Chroma-/
-// Hue-Abstand; jede Farbe ergibt sowohl eine ruhige getönte Fläche als auch eine
-// WCAG-AA-lesbare dunkle Tinte (siehe eventSurfaceStyle + calendar.css). Konkreter
-// Hex, weil Events die Farbe als Hex in der DB speichern und color.js Luminanz rechnet.
-const EVENT_COLORS = [
-  '#587DCE', '#3CA368', '#E0843E', '#CE5053',
-  '#8156C0', '#DB684C', '#3E9DCA', '#D8B349',
-  '#85868B', '#279EA4',
-];
-
-const EVENT_COLOR_NAMES = () => ({
-  '#587DCE': t('calendar.colorBlue'),
-  '#3CA368': t('calendar.colorGreen'),
-  '#E0843E': t('calendar.colorOrange'),
-  '#CE5053': t('calendar.colorRed'),
-  '#8156C0': t('calendar.colorPurple'),
-  '#DB684C': t('calendar.colorCoral'),
-  '#3E9DCA': t('calendar.colorSkyBlue'),
-  '#D8B349': t('calendar.colorYellow'),
-  '#85868B': t('calendar.colorGray'),
-  '#279EA4': t('calendar.colorCyan'),
-});
-
-/**
- * Hex-Vergleich ohne Ruecksicht auf Gross-/Kleinschreibung. Die Palette steht
- * hier in Grossbuchstaben, ein CalDAV-Server schickt `#34c759` genauso gern -
- * derselbe Farbwert, und ein `===` haelt die beiden fuer verschieden.
- */
-const sameColor = (a, b) =>
-  typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
-
-/**
- * Die Farben, die der Picker eines Termins zeigt.
- *
- * Ein Termin traegt nicht zwangslaeufig eine Farbe AUS DIESER PALETTE. Sie kann
- * als RFC-7986-`COLOR` von einem CalDAV-Server kommen, sie kann die Avatar-Farbe
- * einer Person sein (deren Palette teilt mit dieser hier keinen einzigen Wert)
- * oder schlicht das alte `#007AFF` aus der Zeit vor der OKLCH-Palette.
- *
- * Ohne einen eigenen Swatch dafuer stand der Picker leer da, obwohl der Termin
- * eine Farbe trug - und weil der Speicherpfad auf die erste Palettenfarbe
- * zurueckfiel, schrieb der naechste Klick auf "Speichern" sie darueber. Die
- * Farbe wechselte also genau beim Bearbeiten, ohne dass jemand sie angefasst
- * hatte (#856).
- */
-// Spiegelt COLOR_RE aus server/middleware/validate.js. Die Route prueft das
-// bereits, aber die Sync-Dienste schreiben ihre Farben direkt in die Tabelle -
-// was von dort kommt, hat diese Pruefung nie gesehen. Und der Wert landet gleich
-// in einem style-Attribut, wo esc() zwar das Ausbrechen verhindert, nicht aber
-// eine zweite CSS-Deklaration dahinter.
-const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
-
-function pickerColors(event) {
-  const own = event?.color;
-  if (!own || !HEX_COLOR_RE.test(own)) return EVENT_COLORS;
-  if (EVENT_COLORS.some((c) => sameColor(c, own))) return EVENT_COLORS;
-  return [own, ...EVENT_COLORS];
-}
-
-/**
- * Der Wert des Erben-Swatch: "dieser Termin hat keine eigene Farbe".
- *
- * Der Leerstring, nicht `null`, weil er aus `dataset.color` kommt - ein
- * data-Attribut kennt keinen Nullwert, und ein fehlendes Attribut waere
- * `undefined` und damit nicht mehr von "gar kein Swatch aktiv" zu
- * unterscheiden. Genau diese Unterscheidung traegt die Regel unten.
- */
-const COLOR_INHERIT = '';
-
-/**
- * Welche Farbe ein Speichern schreibt.
- *
- * Zwei Regeln, und die Reihenfolge ist der ganze Punkt:
- *
- * 1. Steht der Erben-Swatch auf aktiv, schreibt das Speichern `null` - der
- *    Termin bekommt KEINE eigene Farbe und leiht sich die der zugewiesenen
- *    Person (#891). Das ist eine ausdrueckliche Wahl und deshalb ein Wert, den
- *    das Backend annehmen muss; `crud.js` unterscheidet sie am mitgeschickten
- *    Feld von "nicht angefasst".
- * 2. Steht gar kein Swatch auf aktiv, darf ein Speichern die Farbe nicht
- *    veraendern - es gilt, was der Termin schon traegt. Fehlt auch die, bleibt
- *    es bei `null`: ein neuer Termin faengt ohne eigene Farbe an. Bis v2.48.0
- *    stand hier `EVENT_COLORS[0]`, und weil dieser Palettenerste ununterscheidbar
- *    von einer bewussten Wahl war, hat er die Personenfarbe verdraengt, ohne dass
- *    sie je jemand abgewaehlt haette.
- */
-function colorToSave(activeSwatchColor, event) {
-  if (activeSwatchColor === COLOR_INHERIT) return null;
-  if (activeSwatchColor) return activeSwatchColor;
-  return event?.color ?? null;
-}
-
 const ATTACHMENT_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const CALENDAR_VIEW_STORAGE_KEY = 'yuvomi:calendar:view';
 const LEGACY_CALENDAR_VIEW_STORAGE_KEY = 'yuvomi-calendar-view';
@@ -226,8 +133,8 @@ const SCHEDULE_DISPLAY_KEY = 'yuvomi:calendar:schedule-display';
 const MONTH_TITLES_KEY = 'yuvomi:calendar:month-titles';
 const ASSIGNED_TO_ME_KEY  = 'yuvomi:calendar:assignedToMe';
 const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
-// Ausgeblendete Kalender und Abos (#1064), auf dem Geraet und je Nutzer. Mit Name
-// und Farbe gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
+// Ausgeblendete Kalender und Abos (#1064), auf dem Geraet und je Nutzer. Mit dem
+// Namen gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
 // einzuschalten sein, wenn im geladenen Zeitraum kein Termin von ihr liegt. Genau
 // deshalb nicht geraeteweit wie die Ebenen: ein privates Abo sieht nur, wer es
 // angelegt hat, und ein geteilter Browser zeigte seinen Namen sonst dem naechsten
@@ -237,20 +144,6 @@ const HIDDEN_SOURCES_KEY  = 'yuvomi:calendar:sources-hidden';
 // damit er mit keiner Nutzer-ID zusammenfallen kann.
 const UNASSIGNED = 'none';
 
-/* DIE FEIERTAGSFARBEN, WENN DER HAUSHALT KEINE GEWAEHLT HAT.
- *
- * Sie standen zweimal als nacktes Hex im Markup dieser Datei und viermal im
- * Server (routes/preferences.js, services/holidays.js). Hier stehen sie
- * einmal - der Client erfindet keinen eigenen Wert, er nennt denselben wie
- * die Quelle.
- *
- * DIE WERTE SELBST SIND EIN OFFENER PUNKT, kein Versehen: `#FF3B30` und
- * `#34C759` sind iOS System Red und System Green, also genau die
- * Apple-Rohpalette, die der Direction Contract am 2026-08-10 ausdruecklich
- * verlassen hat. Sie zu aendern faerbt jeden Haushalt um, der nie eine Farbe
- * gewaehlt hat - das ist eine Entscheidung des Betreibers, keine Reparatur,
- * und sie muesste den Server mitnehmen. Bis dahin steht der Wert wenigstens
- * an einer Stelle statt an dreien. */
 /* DIE MOBIL-GRENZE STEHT EINMAL, UND SIE FOLGT DEM CSS.
  *
  * Sie stand viermal als `(max-width: 639px)` im JS, waehrend calendar.css an
@@ -275,9 +168,6 @@ const UNASSIGNED = 'none';
 const MOBILE_MEDIA_QUERY = '(max-width: 639px)';
 // Ansichten, zwischen deren Zeitraeumen gewischt wird (wirePeriodSwipe).
 const PERIOD_SWIPE_VIEWS = new Set(['month', 'week', 'day', 'agenda']);
-
-const HOLIDAY_PUBLIC_FALLBACK = '#FF3B30';
-const HOLIDAY_SCHOOL_FALLBACK = '#34C759';
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -432,47 +322,32 @@ function openIconPickerDialog(selectedIcon, onSelect, onClose = () => {}) {
 }
 
 // --------------------------------------------------------
-// Farbberechnung: die spezifischste Angabe gewinnt
-// Hierarchie: eigene Terminfarbe → erster Assignee → Kalenderfarbe → Grau
+// Farbberechnung: die Farbe eines Termins sind seine Leute
 // --------------------------------------------------------
 
-/** Neutrale Fallback-Farbe wenn weder Assignee noch manuelle Farbe gesetzt. */
-// Die Rangfolge selbst steht in utils/event-color.js, weil das Dashboard
-// dieselbe Frage stellt und vor #891 eine eigene, kuerzere Antwort hatte.
-
 /**
- * Gibt eine einzelne CSS-Füllfarbe zurück (nie ein Gradient).
- * Eine Farbachse: 1. eigene Terminfarbe, 2. erster Assignee, 3. Kalenderfarbe, 4. Grau.
- * Mehrere Zugewiesene werden über den Avatar-Stack kommuniziert, nicht über eine
- * diagonal geteilte Füllung - die wirkte wie ein Render-Artefakt und blieb bei der
- * zweiten Farbe ungeprüft im Kontrast.
+ * DIE FARBE EINES TERMINS SIND SEINE LEUTE (One Today, spec 7; utils/event-color.js).
+ * Eine Person: ihre Tinte (--person-N in der Haushaltsreihenfolge); zwei: die
+ * Flaeche im gemeinsamen Ton, die Kante geteilt; drei und mehr: der gemeinsame
+ * Ton; niemand: neutral. Eine gespeicherte Farbe (Termin, Kalender, Abo,
+ * Anbieter) zeichnet der Kalender nicht. Kante und Toenung in Liste, Woche und
+ * Monat lesen alle diesen einen Wert (`--ev-color`).
  */
-function resolveEventBackground(ev) {
-  return resolveEventColor(ev);
+function eventTone(ev) {
+  return eventToneOf(ev, { household: state.users });
 }
 
 /**
- * Inline-Style für eine getönte Event-Fläche (Monat/Woche/Tag/Ganztägig).
- * Setzt nur `--ev-color`; Tönung, lesbare Tinte und Kante leitet calendar.css per
- * color-mix ab (theme-korrekt in Light & Dark, WCAG-AA für die gesamte Palette).
- * Ersetzt die frühere vollgesättigte Füllung + getContrastColor-Textfarbe.
+ * Inline-Style für eine getönte Event-Fläche (Monat/Woche/Tag/Ganztägig, Liste).
+ * Setzt `--ev-color`; Tönung, lesbare Tinte und Kante leitet calendar.css per
+ * color-mix ab. Bei zwei Personen dazu `--ev-edge` (die Kante in beiden Tinten,
+ * calendar.css legt sie als `border-image` ueber die Kante) und `--ev-dot` (der
+ * Punkt des mobilen Monats als geteilte Scheibe).
  */
 function eventSurfaceStyle(ev) {
-  return `--ev-color:${esc(eventEdgeColor(ev))};`;
-}
-
-/**
- * DIE FARBE EINES TERMINS IST DIE PERSON (Tafla, 2026-10-20; DESIGN.md
- * "The person-colour rule"). Ein Termin einer Person traegt ihre Personenfarbe
- * (--person-N, AA-gemessen in beiden Themes), ein gemeinsamer das Violett -
- * blau und rosa mischen sich zu violett, "razem" braucht keinen dritten Ton.
- * Erst ein Termin OHNE Person faellt auf die bisherige Achse zurueck (eigene
- * Farbe, Kalenderfarbe, Grau; utils/event-color.js) - dort ist die Farbe
- * Inhalt, kein "wer". Kante und Toenung in Liste, Woche und Monat lesen alle
- * diesen einen Wert (`--ev-color`).
- */
-function eventEdgeColor(ev) {
-  return edgeColorOf(ev?.assigned_users, state.users) || resolveEventColor(ev);
+  const tone = eventTone(ev);
+  const split = tone.edge ? `--ev-edge:${esc(tone.edge)};--ev-dot:${esc(tone.fill)};` : '';
+  return `--ev-color:${esc(tone.color)};${split}`;
 }
 
 /**
@@ -562,17 +437,14 @@ let state = {
   //
   // DIE ACHSE IST DIE PERSON, NICHT DER KALENDER - und das ist eine gemessene
   // Entscheidung, keine Auslegung. Die Critique vom 2026-08-28 verlangte einen
-  // „Kalenderfilter mit Legende" nach Apples Muster. Eine FARBLEGENDE ist hier
-  // aber nicht konstruierbar: `resolveEventColor()` (utils/event-color.js)
-  // beantwortet die Farbe aus DREI Quellen in Rangfolge - eigene Terminfarbe,
-  // Farbe der primaeren zugewiesenen Person, Kalenderfarbe. Eine Legende, die
-  // „diese Farbe = jener Kalender" behauptet, waere bei jedem Termin falsch,
-  // der eine eigene Farbe traegt oder von einer Person erbt - also bei der
-  // Mehrheit. Die Person dagegen ist eindeutig: sie steht in
-  // `assigned_users`, ihre Farbe gehoert ihr, und in einem FAMILIENplaner ist
-  // „wessen Termin ist das" die Frage, die der Filter beantworten soll.
+  // „Kalenderfilter mit Legende" nach Apples Muster. Eine FARBLEGENDE nach
+  // Kalender gibt es hier nicht: seit One Today ist die Farbe eines Termins
+  // seine Leute (utils/event-color.js), kein Kalender traegt eine Farbe. Die
+  // Person steht in `assigned_users`, ihre Farbe gehoert ihr, und in einem
+  // FAMILIENplaner ist „wessen Termin ist das" die Frage, die der Filter
+  // beantworten soll.
   people:        new Set(),
-  hiddenSources: new Map(), // Quellschluessel -> { name, color }, siehe calendarSources()
+  hiddenSources: new Map(), // Quellschluessel -> { name }, siehe calendarSources()
 };
 let _container = null;
 // Liste + Detail der Agenda (R10 L5): am Desktop steht rechts der gewaehlte
@@ -1210,33 +1082,30 @@ function calendarSources() {
     quellen.set(`local:${calendar.id}`, {
       key: `local:${calendar.id}`,
       name: localCalendarDisplayName(calendar),
-      color: calendar.color,
     });
   }
   for (const ev of state.events ?? []) {
     const key = eventSourceKey(ev);
     if (!key) continue;
     const bekannt = quellen.get(key);
-    // Name und Farbe der QUELLE: `source_calendar_*` loest der Server auch fuer
-    // einen noch nicht hochgeladenen Termin ueber sein Ziel auf, `cal_name` und
-    // `cal_color` folgen nur `calendar_ref_id` - und tragen bei Abos die Werte
-    // des Abos. Fehlt beides, fuellt ein anderer Termin oder der Merker nach.
+    // Der Name der QUELLE: `source_calendar_name` loest der Server auch fuer
+    // einen noch nicht hochgeladenen Termin ueber sein Ziel auf, `cal_name`
+    // folgt nur `calendar_ref_id` - und traegt bei Abos den Namen des Abos.
+    // Fehlt er, fuellt ein anderer Termin oder der Merker nach. Eine Farbe hat
+    // die Quelle hier nicht (One Today: Termine faerben ihre Leute).
     const name = ev.source_calendar_name || eventLocalCalendarDisplayName(ev);
-    const color = ev.source_calendar_color || ev.cal_color || ev.local_calendar_color || null;
     if (bekannt) {
       bekannt.name ||= name;
-      bekannt.color ||= color;
       continue;
     }
-    quellen.set(key, { key, name, color });
+    quellen.set(key, { key, name });
   }
   for (const [key, merk] of state.hiddenSources ?? []) {
     const bekannt = quellen.get(key);
     if (!bekannt) {
-      quellen.set(key, { key, name: merk.name || '', color: merk.color || null });
+      quellen.set(key, { key, name: merk.name || '' });
     } else {
       bekannt.name ||= merk.name || '';
-      bekannt.color ||= merk.color || null;
     }
   }
   return [...quellen.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -3840,11 +3709,7 @@ function renderMonthDay(date, inMonth, { selected = false, selWeek = false, spli
   const evShown   = chipEvs.slice(0, Math.max(0, MONTH_DAY_MAX_CHIPS - holShown.length));
   const taskShown = dayTasks.slice(0, Math.max(0, MONTH_DAY_MAX_CHIPS - holShown.length - evShown.length));
 
-  const holHtml = holShown.map((h) => `
-    <div class="month-day__holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-      <span>${esc(h.name)}</span>
-    </div>
-  `).join('');
+  const holHtml = holShown.map((h) => holidayChipHtml(h, 'month-day__holiday')).join('');
 
   const scheduleHtml = daySchedule.map((entry) => `<div class="month-day__holiday schedule-entry" style="--holi-color:${esc(entry.shift_type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(scheduleEntryLabel(entry))}</span></div>`).join("");
 
@@ -4060,6 +3925,17 @@ function scheduleEntryMatchKey(entry) {
   const sourceId = entry.source === 'pattern' ? (entry.pattern_day_id ?? `p${entry.pattern_id}`)
     : entry.source === 'override' ? entry.override_id : entry.extra_id;
   return [entry.date_key, entry.user_id, entry.source, sourceId].join(':');
+}
+
+/**
+ * Ein Feiertag oder ein Ferientag als Chip (Monat, Ganztagszeile, Liste). EIN
+ * ruhiger Ton fuer alle, gesetzliche wie Schulferien (One Today, spec 7): die
+ * Farbe kommt aus calendar.css (`.cal-holiday`), keine aus den Einstellungen.
+ * @param {{ name: string }} holiday
+ * @param {'month-day__holiday'|'allday-holiday'|'agenda-holiday'} className
+ */
+function holidayChipHtml(holiday, className) {
+  return `<div class="${className} cal-holiday" title="${esc(holiday.name)}"><span>${esc(holiday.name)}</span></div>`;
 }
 
 // S-16: `showFullRange` zeigt die volle Spanne ("06:00-14:00") statt nur des
@@ -4345,11 +4221,7 @@ function renderWeekView(container) {
         ${bandsFolded ? '' : band.bands.map(renderWeekBand).join('')}
         ${days.map((d, i) => `
           <div class="allday-cell" style="grid-column:${i + 2};grid-row:${laneCount + 1}">
-            ${holidaysOnDay(d).map((h) => `
-              <div class="allday-holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-                <span>${esc(h.name)}</span>
-              </div>
-            `).join('')}
+            ${holidaysOnDay(d).map((h) => holidayChipHtml(h, 'allday-holiday')).join('')}
             ${scheduleChips[i].map((entry) => renderScheduleChip(entry, 'allday-holiday', { showFullRange: true, clickable: true })).join('')}
             ${waste[i].map((occ) => renderWasteChip(occ)).join('')}
             ${bandsFolded ? bandEvs[i].map((ev) => renderAllDayEvent(ev, d)).join('') : ''}
@@ -5044,11 +4916,7 @@ function renderDayView(container) {
       <div class="allday-row" style="display:grid;grid-template-columns:var(--cal-gutter-width) 1fr;">
         <div class="calendar-all-day-label">${t('calendar.allDayShort')}</div>
         <div class="allday-cell">
-          ${holidaysOnDay(state.cursor).map((h) => `
-            <div class="allday-holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-              <span>${esc(h.name)}</span>
-            </div>
-          `).join('')}
+          ${holidaysOnDay(state.cursor).map((h) => holidayChipHtml(h, 'allday-holiday')).join('')}
           ${scheduleChips.map((entry) => renderScheduleChip(entry, 'allday-holiday', { showFullRange: true, clickable: true })).join('')}
           ${dayWaste.map((occ) => renderWasteChip(occ)).join('')}
           ${allday.map((ev) => renderAllDayEvent(ev, state.cursor)).join('')}
@@ -5465,7 +5333,7 @@ function renderDayRail() {
  * DIE GRAMMATIK GILT FUER JEDEN TERMIN ODER FUER KEINEN. Im Mockup trug genau
  * ein Event weder Kante noch Toenung (Screenshot 05) - hier kann das nicht
  * passieren, weil beide aus derselben `--ev-color` fallen, die
- * `resolveEventColor()` immer beantwortet (Ebene, Kalender oder App-Akzent).
+ * `eventTone()` immer beantwortet (Person, gemeinsam oder neutral).
  *
  * Hier stand bis 2026-09-24 eine eigene Kante als Element
  * (ein eigenes Spine-Span) NEBEN der `border-inline-start`, die der Block
@@ -5757,11 +5625,7 @@ function dayGroupHtml({ date, events, tasks, holidays, schedule, waste }, { nowL
   if (!lineDrawn) rows.push(nowLineHtml(nowMin));
 
   const top = [
-    holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => `
-      <div class="agenda-holiday" style="--holi-color:${esc(h.color)}">
-        <span class="agenda-holiday__dot"></span>
-        <span>${esc(h.name)}</span>
-      </div>`).join('')}</div>` : '',
+    holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => holidayChipHtml(h, 'agenda-holiday')).join('')}</div>` : '',
     schedule.length ? `<div class="agenda-holidays">${schedule.map((entry) => renderScheduleChip(entry, 'agenda-holiday')).join('')}</div>` : '',
     waste.length ? `<div class="agenda-holidays">${waste.map((occ) => renderWasteChip(occ, { className: 'agenda-holiday', interactive: true })).join('')}</div>` : '',
     banners.map((ev) => renderAgendaBanner(ev, date)).join(''),
@@ -5988,8 +5852,8 @@ function agendaDayHeadHtml(dayKey) {
  * Wochentag 13 in Tinte-2, die Ziffer 17/600 in einem 32er-Kreis - heute
  * violett gefuellt, der gewaehlte Tag in der violetten Toenung, Vergangenes in
  * Tinte-2 -, darunter bis zu drei 6pt-Punkte in den Personenfarben des Tages
- * (Violett fuer Gemeinsames). Ein Tipp springt zum Tag; ein Tag vor dem Beginn
- * der Liste setzt ihren Anfang dorthin.
+ * (geteilt fuer zwei, Violett ab drei, neutral ohne Person). Ein Tipp springt
+ * zum Tag; ein Tag vor dem Beginn der Liste setzt ihren Anfang dorthin.
  */
 function agendaStripHtml() {
   const start = startOfWeekOf(state.cursor);
@@ -5997,7 +5861,7 @@ function agendaStripHtml() {
   const dotColors = (events) => {
     const colors = [];
     for (const ev of events) {
-      const color = eventEdgeColor(ev);
+      const color = eventTone(ev).fill;
       if (!colors.includes(color)) colors.push(color);
       if (colors.length === 3) break;
     }
@@ -6167,12 +6031,10 @@ function renderAgendaView(container) {
 // ihre Beschriftung zurueck, ihr Zustand ist eine echte Checkbox statt einer
 // Waschung, und der Kopf gibt eine Zeile her.
 //
-// WAS ES NICHT IST: eine FARBLEGENDE. Die Farbe eines Termins kommt aus drei
-// Quellen in Rangfolge (`resolveEventColor`, utils/event-color.js) - eigene
-// Farbe, primaere zugewiesene Person, Kalender. Eine Legende „diese Farbe =
-// jener Kalender" waere bei jedem Termin falsch, der eine der ersten beiden
-// Quellen nutzt. Die Person ist die einzige Achse, die eindeutig ist, und in
-// einem Familienplaner ist sie auch die gefragte.
+// WAS ES NICHT IST: eine FARBLEGENDE. Die Farbe eines Termins sind seine
+// Leute (utils/event-color.js); Kalender, Abos und Ebenen tragen keine Farbe.
+// Die Person ist die einzige Achse, die eindeutig ist, und in einem
+// Familienplaner ist sie auch die gefragte.
 // --------------------------------------------------------
 
 /** Die Ebenen, die es im aktuellen Zustand ueberhaupt gibt. */
@@ -6182,13 +6044,13 @@ function availableLayers() {
   if (hp.holiday_show_public) {
     rows.push({
       key: 'holidays', label: t('calendar.toggleHolidays'),
-      checked: state.layerHolidays, color: hp.holiday_public_color ?? HOLIDAY_PUBLIC_FALLBACK,
+      checked: state.layerHolidays, color: null,
     });
   }
   if (hp.holiday_show_school) {
     rows.push({
       key: 'school', label: t('calendar.toggleSchool'),
-      checked: state.layerSchool, color: hp.holiday_school_color ?? HOLIDAY_SCHOOL_FALLBACK,
+      checked: state.layerSchool, color: null,
     });
   }
   if (scheduleEnabled()) {
@@ -6307,9 +6169,9 @@ function renderLocalCalendarRow(calendar) {
   });
   return `
     <div class="cal-calendar-row" data-calendar-id="${calendar.id}">
-      <span class="cal-calendar-row__swatch" style="background-color:${esc(calendar.color)}" aria-hidden="true"></span>
-      ${writable ? `<input class="form-input cal-calendar-row__name" value="${esc(calendar.name)}" aria-label="${esc(t('calendar.localCalendarName'))}">
-      <input class="form-input cal-calendar-row__color" type="color" value="${esc(calendar.color)}" aria-label="${esc(t('calendar.localCalendarColor'))}">` : ''}
+      ${writable
+    ? `<input class="form-input cal-calendar-row__name" value="${esc(calendar.name)}" aria-label="${esc(t('calendar.localCalendarName'))}">`
+    : `<span class="cal-calendar-row__label">${esc(calendar.name)}</span>`}
       <span class="cal-calendar-row__count">${t('calendar.localCalendarEventCount', { count: calendar.event_count ?? 0 })}</span>
       <div class="cal-calendar-row__actions">
         ${writable ? rowActionHtml({ icon: 'save', label: `${t('common.save')} · ${calendar.name}`, className: 'js-calendar-save' }) : ''}
@@ -6332,7 +6194,6 @@ function renderLocalCalendarsContent() {
     <div class="cal-calendar-manager">
       ${moduleAccess('calendar') === 'write' ? `<form class="cal-calendar-create" id="local-calendar-create">
         <input class="form-input" id="local-calendar-name" maxlength="80" placeholder="${esc(t('calendar.localCalendarName'))}" aria-label="${esc(t('calendar.localCalendarName'))}">
-        <input class="form-input" id="local-calendar-color" type="color" value="#007AFF" aria-label="${esc(t('calendar.localCalendarColor'))}">
         <button class="btn btn--primary" type="submit">
           <i data-lucide="plus" class="icon-md" aria-hidden="true"></i>${t('calendar.localCalendarCreate')}
         </button>
@@ -6429,10 +6290,9 @@ async function openLocalCalendarsModal() {
     if (!e.target.closest('#local-calendar-create')) return;
     e.preventDefault();
     const name = panel.querySelector('#local-calendar-name')?.value.trim();
-    const color = panel.querySelector('#local-calendar-color')?.value || '#007AFF';
     if (!name) return;
     try {
-      await api.post('/calendar/calendars', { name, color });
+      await api.post('/calendar/calendars', { name });
       window.yuvomi?.showToast(t('calendar.localCalendarCreated'), 'success');
       await refreshLocalCalendarsPanel(panel);
       refocusAfterRender();
@@ -6459,8 +6319,7 @@ async function openLocalCalendarsModal() {
         panel.querySelector(`.cal-calendar-row[data-calendar-id="${id}"] .popover-menu__trigger`)?.focus();
       } else if (e.target.closest('.js-calendar-save')) {
         const name = row.querySelector('.cal-calendar-row__name')?.value.trim();
-        const changes = { color: row.querySelector('.cal-calendar-row__color')?.value };
-        if (name !== calendar.name) changes.name = name;
+        const changes = name !== calendar.name ? { name } : {};
         await api.put(`/calendar/calendars/${id}`, changes);
         window.yuvomi?.showToast(t('calendar.localCalendarSaved'), 'success');
         await refreshLocalCalendarsPanel(panel);
@@ -6536,20 +6395,20 @@ function calendarFilterParts({ people = state.users ?? [], sources = calendarSou
       attrs: { 'data-filter-mine': 'true' },
     })
     : '';
-  // Je Kalender und Abo ein Schalter (#1064), mit der Farbe, die seine Termine
-  // tragen. Neben den Ebenen, nicht in ihnen: eine Ebene ist eine Sorte Eintrag,
-  // eine Quelle ist, woher ein gewoehnlicher Termin kommt.
+  // Je Kalender und Abo ein Schalter (#1064), nur mit seinem Namen: eine
+  // Farbe hat eine Quelle seit One Today nicht mehr. Neben den Ebenen, nicht
+  // in ihnen: eine Ebene ist eine Sorte Eintrag, eine Quelle ist, woher ein
+  // gewoehnlicher Termin kommt.
   const sourceRows = sources.map((s) => toggleRowHtml({
     label: s.name || t('calendar.detailCalendar'),
     checked: !state.hiddenSources.has(s.key),
-    swatchColor: s.color,
     control: 'switch',
     attrs: { 'data-filter-source': s.key },
   })).join('');
   // „KALENDER VERWALTEN" STEHT UNTER DER LISTE, die es verwaltet (Re-Critique
   // 2026-10-16, A2). Der Kopfknopf #cal-calendars wohnt im Aktions-Slot, und
   // den blendet calendar.css unter 1024px aus - Tablet und Telefon kamen an
-  // Anlegen, Umfaerben und Sortieren nicht heran. Der Eintrag steht auf jeder
+  // Anlegen, Umbenennen und Sortieren nicht heran. Der Eintrag steht auf jeder
   // Breite, damit das Blatt ueberall gleich ist, und auch ohne Quelle: dann
   // legt man hier den ersten Kalender an.
   const manageRow = moduleAccess('calendar') === 'write'
@@ -6620,7 +6479,7 @@ function applyCalendarFilterInput(input, panel, sources = calendarSources()) {
       state.hiddenSources.delete(key);
     } else {
       const quelle = sources.find((s) => s.key === key);
-      state.hiddenSources.set(key, { name: quelle?.name ?? '', color: quelle?.color ?? null });
+      state.hiddenSources.set(key, { name: quelle?.name ?? '' });
     }
     persistHiddenSources();
   } else {
@@ -6823,9 +6682,8 @@ function restoreHiddenSources(userId) {
   if (!Array.isArray(stored)) return quellen;
   for (const eintrag of stored) {
     if (!eintrag || !/^(?:cal|sub|local):\d+$/.test(String(eintrag.key))) continue;
-    // Die Farbe landet als Scheibe im Blatt; aus dem Speicher nur, was eine Farbe ist.
-    const color = /^#[0-9a-f]{3,8}$/i.test(String(eintrag.color ?? '')) ? eintrag.color : null;
-    quellen.set(eintrag.key, { name: String(eintrag.name ?? ''), color });
+    // Ein Merker von vor One Today traegt noch eine Farbe; gelesen wird nur der Name.
+    quellen.set(eintrag.key, { name: String(eintrag.name ?? '') });
   }
   return quellen;
 }
@@ -7078,7 +6936,7 @@ export const __test = {
   alignedHourScroll,
   // Tafla (2026-10-20): die Liste - Personenkante, "Oboje zajęci", "Wolny
   // wieczór", die Tageskarte und der Wochenstreifen.
-  eventEdgeColor, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
+  eventSurfaceStyle, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
   // R19: die Seitenleiste ab ca. 1600px - Mini-Monat, Filter aus EINER Quelle, Als Naechstes.
   miniMonthHtml, sidebarFiltersHtml, calendarFilterParts, upNextEvents,
   // Review #2049: ein gescheiterter Abruf ist ein Fehler, kein leerer Tag.
@@ -7112,7 +6970,6 @@ export const __test = {
   fetchWindow,
   getWeekRange,
   getRangeForView,
-  resolveEventColor,
   isVisibleLayer,
   normalizeCalendarView,
   defaultCalendarViewFromState,
@@ -7163,11 +7020,8 @@ export const __test = {
   monthCollapseStep,
   monthListHtml,
   newEventDate,
-  pickerColors,
-  colorToSave,
   eventIconName,
   eventIconHtml,
-  sameColor,
   canonicalReminderOffsets,
   reminderOffsetFromEvent,
   reminderOwnerId,
@@ -7181,7 +7035,6 @@ export const __test = {
   // Die Frage nach der Reichweite eines Serientermins (#1284) - dieselbe fuer
   // Speichern und Loeschen, gemessen an beiden Aufrufern.
   requestDeleteEvent,
-  EVENT_COLORS,
   renderScheduleChip,
   scheduleEntryTitle,
   scheduleEntriesOnDay,
@@ -7352,17 +7205,14 @@ function attachmentNode(ev) {
   return link;
 }
 
-/* Kalendername als farbiger Chip - in der DETAILFLÄCHE, seit die Agendazeile
- * ihn abgegeben hat: dort sagte er dasselbe wie die Farbspur an ihrer linken
- * Kante, und er tat es als drittes Element einer Metazeile, die deswegen
- * umbrach. Hier ist er die einzige Stelle, an der der Kalendername ausdrücklich
- * steht. */
+/* Der Kalendername in der DETAILFLÄCHE, seit die Agendazeile ihn abgegeben
+ * hat: hier ist er die einzige Stelle, an der der Kalendername ausdrücklich
+ * steht. Ohne Farbpunkt - ein Kalender trägt seit One Today keine Farbe. */
 function calendarChipNode(ev) {
   const name = eventLocalCalendarDisplayName(ev);
   if (!name) return null;
   const chip = document.createElement('span');
   chip.className = 'event-cal-label';
-  chip.style.setProperty('--cal-color', ev.cal_color || ev.local_calendar_color || ev.color || resolveEventColor(ev));
   chip.textContent = name;
   return chip;
 }
@@ -7461,13 +7311,14 @@ function unbreakable(text) {
 
 /**
  * Der Kopf der Termin-Leseansicht (components/detail-view.js `detailHeadEl`):
- * Farbpunkt des Kalenders, die Zeit in Worten, die Personen als Avatare. Ein
+ * der Punkt in der Farbe der Leute (bei zwei Personen geteilt), die Zeit in
+ * Worten, die Personen als Avatare. Ein
  * frei eingetragener Name ohne Konto (`assigned_name`) hat kein Bild und
  * bleibt deshalb eine Zeile (`renderEventDetail`).
  */
 function eventDetailHead(ev) {
   return {
-    dot: resolveEventBackground(ev),
+    dot: eventTone(ev).fill,
     subtitle: eventWhenRelative(ev),
     subtitleLabel: t('calendar.detailWhen'),
     people: ev.assigned_users ?? [],
@@ -8385,7 +8236,7 @@ function populateLocalCalendarSelect(selectElement, currentEvent = null) {
   const calendars = state.localCalendars.length
     ? state.localCalendars
     : [{ id: currentEvent?.local_calendar_id || defaultLocalCalendar()?.id || null,
-      name: t('calendar.defaultLocalCalendar'), color: '#007AFF', is_default: true }];
+      name: t('calendar.defaultLocalCalendar'), is_default: true }];
   const selectedId = currentEvent?.local_calendar_id ?? defaultLocalCalendar()?.id ?? calendars[0]?.id;
   selectElement.replaceChildren();
   for (const calendar of calendars) {
@@ -8490,53 +8341,6 @@ function wireEventForm(panel, { mode, event = null, reminder = null, onChanged =
   bindUserMultiSelect(panel, 'cal_assigned');
   wireVisibilityWarning(panel, '#modal-visibility', 'cal_assigned', '#modal-visibility-warning', '#modal-visibility-private-warning',
     event?.created_by ?? state.currentUserId);
-
-  // Der Farbwaehler war bis v2.35.0 ausgegraut, sobald jemand zugewiesen war,
-  // mit dem Hinweis, die Farbe der Person schlage sie ohnehin. Seit #815 steht
-  // die Terminfarbe in resolveEventColor VORN, womit der Hinweis unwahr wurde -
-  // die Sperre nahm dem Nutzer eine Wahl ab, um ein Versprechen zu halten, das
-  // der Code nicht mehr gab (#856). Sie ist deshalb weg und bleibt weg.
-  //
-  // Seit #891 ist die Aussage von damals wieder erreichbar, nur als WAHL statt
-  // als Sperre: der Erben-Swatch traegt sie, und wer stattdessen eine Farbe
-  // waehlt, behaelt sie. Wer der Termin ist, sagt weiterhin der Avatar-Stack.
-
-  // Leerstring = der Erben-Swatch. Ein neuer Termin startet dort, und ein
-  // bestehender ohne eigene Farbe steht dort ebenfalls - beides ist seit #891
-  // ein ausdrueckbarer Zustand und nicht mehr der Palettenerste als Notloesung.
-  const selectedColor = isEdit ? (event?.color || COLOR_INHERIT) : COLOR_INHERIT;
-
-  // Farb-Auswahl: Auswahl + ARIA + Keyboard (Roving Tabindex)
-  function selectSwatch(target) {
-    panel.querySelectorAll('.color-swatch').forEach((s) => {
-      s.classList.remove('color-swatch--active');
-      s.setAttribute('aria-checked', 'false');
-      s.setAttribute('tabindex', '-1');
-    });
-    target.classList.add('color-swatch--active');
-    target.setAttribute('aria-checked', 'true');
-    target.setAttribute('tabindex', '0');
-  }
-  panel.querySelectorAll('.color-swatch').forEach((sw) => {
-    if (sameColor(sw.dataset.color, selectedColor)) selectSwatch(sw);
-    sw.addEventListener('click', () => { selectSwatch(sw); sw.focus(); });
-    sw.addEventListener('keydown', (e) => {
-      const swatches = [...panel.querySelectorAll('.color-swatch')];
-      const idx = swatches.indexOf(sw);
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        const next = swatches[(idx + 1) % swatches.length];
-        selectSwatch(next); next.focus();
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const prev = swatches[(idx - 1 + swatches.length) % swatches.length];
-        selectSwatch(prev); prev.focus();
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectSwatch(sw);
-      }
-    });
-  });
 
   // Ganztägig-Toggle
   const alldayCheck = panel.querySelector('#modal-allday');
@@ -8983,7 +8787,7 @@ function eventAttachmentFieldHtml(event) {
 
 /**
  * Was hinter „Weitere Einstellungen" im Termin-Dialog liegt, als eine Zeile
- * („Sichtbarkeit, Stichtage, Farbe, Icon, Sync-Ziel und Anhang"). Aus den
+ * („Sichtbarkeit, Stichtage, Icon, Sync-Ziel und Anhang"). Aus den
  * Beschriftungen der Felder selbst, und nur die, die der Dialog wirklich
  * zeigt: die Sichtbarkeit fehlt, wo niemand sonst den Kalender liest, der
  * Anhang, wo das Dokumente-Modul zu ist.
@@ -8993,7 +8797,6 @@ function eventAdvancedTopics({ visibilityOffered = true, attachment = true } = {
     t('calendar.descriptionLabel'),
     visibilityOffered ? t('common.visibility.label') : null,
     t('dashboard.countdownTitle'),
-    t('calendar.colorLabel'),
     t('calendar.iconLabel'),
     t('calendar.syncTargetLabel'),
     attachment ? t('calendar.attachmentLabel') : null,
@@ -9098,30 +8901,6 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
         <span>${t('calendar.countdownToggle')}</span>
       </label>
       <p class="form-hint" id="modal-countdown-hint">${t('calendar.countdownHint')}</p>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" id="event-color-label">${t('calendar.colorLabel')}</label>
-      <div class="color-picker" id="event-color-picker" role="radiogroup" aria-labelledby="event-color-label">
-        <!-- Steht vorn, weil er der Standard ist: ein Termin, fuer den niemand
-             eine Farbe gewaehlt hat, traegt die der zugewiesenen Person (#891).
-             Traegt bewusst KEIN Inline-background - seine Optik kommt aus
-             calendar.css, weil sie eine Designentscheidung ist und keine
-             Nutzereinstellung. -->
-        <div class="color-swatch color-swatch--inherit" data-color=""
-             role="radio"
-             tabindex="0"
-             aria-checked="false"
-             aria-label="${esc(t('calendar.colorInherit'))}"
-             title="${esc(t('calendar.colorInheritHint'))}"></div>
-        ${pickerColors(isEdit ? event : null).map((c) => `
-          <div class="color-swatch" data-color="${esc(c)}" style="background-color:${esc(c)};"
-               role="radio"
-               tabindex="-1"
-               aria-checked="false"
-               aria-label="${esc(EVENT_COLOR_NAMES()[c] ?? t('calendar.colorCurrent'))}"></div>
-        `).join('')}
-      </div>
     </div>
 
     <div class="form-group event-icon-picker">
@@ -9322,7 +9101,6 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   }
 
   const allday  = overlay.querySelector('#modal-allday').checked;
-  const color   = colorToSave(overlay.querySelector('.color-swatch--active')?.dataset.color, event);
   const icon    = eventIconName(overlay.querySelector('#modal-icon')?.value);
   const location    = overlay.querySelector('#modal-location').value.trim() || null;
   const assigned_to = getSelectedUserIds(overlay, 'cal_assigned');
@@ -9457,7 +9235,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     const body = {
       title, description, start_datetime, end_datetime,
       all_day: !!allday,
-      location, color, icon, assigned_to,
+      location, icon, assigned_to,
       local_calendar_id: (target_google_calendar_id || target_caldav_account_id) ? undefined
         : Number(overlay.querySelector('#event-local-calendar')?.value) || undefined,
       visibility: overlay.querySelector('#modal-visibility')?.value || 'all',

@@ -32,7 +32,6 @@ import { eventDateTimeFields, rruleForDtstart } from '../utils/ics-datetime.js';
 import { vtimezoneFor } from '../utils/vtimezone.js';
 import { householdTimeZone } from '../utils/timezone.js';
 import { createCalDAVClient, createUploadGate } from '../utils/caldav-client.js';
-import { nearestIcalColorName } from '../utils/ical-color.js';
 import { authoredAfterInbound, outboundEvent } from './outbound-dtstart.js';
 import { icsReading, icsSnapshot, isEcho } from './outbound-echo.js';
 import { followInboundStartChange } from './calendar-occurrence-overrides.js';
@@ -246,10 +245,7 @@ function buildICS(event, householdZone = null) {
 
   if (event.description) lines.push(`DESCRIPTION:${escapeICS(event.description)}`);
   if (event.location)    lines.push(`LOCATION:${escapeICS(event.location)}`);
-  // Eigenfarbe als CSS3-Name (RFC 7986, #897). Ein Termin ohne eigene Farbe
-  // bekommt keine Zeile und erbt beim Anbieter die des Kalenders.
-  const colorName = nearestIcalColorName(event.color);
-  if (colorName) lines.push(`COLOR:${colorName}`);
+  // Keine COLOR-Zeile (One Today): Yuvomi waehlt keine Terminfarben mehr.
 
   // Beide Schreibweisen kommen vor: eingelesene Serien tragen die volle
   // ICS-Zeile, lokal angelegte nur den Regelkörper (#756). Roh übernommen ergab

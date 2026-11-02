@@ -205,7 +205,8 @@ export function assignedRow(users, label, fallbackName = '') {
  * Der TITEL bleibt, wo er ist (Kopfzeile des Blatts, des Popovers, der
  * Spalte) - der Kopf wiederholt ihn nicht. Er traegt, jeweils optional:
  *   - `media`    ein grosses Bild oder Monogramm (Geburtstag)
- *   - `dot`      einen Farbpunkt vor der Unterzeile (Kalenderfarbe); er loest
+ *   - `dot`      einen Farbpunkt vor der Unterzeile (beim Termin die Farbe
+ *                seiner Leute, auch als Verlauf der geteilten Scheibe); er loest
  *                den Farbstreifen ab, der ohne Bezug ueber dem Blatt hing
  *   - `subtitle` die eine Angabe, nach der man die Ansicht oeffnet, in Worten
  *                ("Heute, 20:00 - 22:00", "Heute faellig"); `subtitleLabel`

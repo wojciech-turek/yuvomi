@@ -1,14 +1,12 @@
 // --------------------------------------------------------
-// Schnappschuss der Farb-Heilung (#1270), geteilt von CalDAV-Sync und
-// Kalender-Route.
+// Schnappschuss der Farb-Heilung (#1270) fuer den CalDAV-Sync.
 //
 // Die Heilung nimmt eine eingebrannte Kalenderfarbe nur, solange ein Termin
 // genau die Farbe traegt, die er bei Fristbeginn trug (Schnappschuss je Konto
-// in sync_config). Waehlt jemand in Yuvomi eine Farbe, ist der Termin von da
-// an keine Altlast mehr - auch wenn er spaeter wieder die alte Farbe bekommt.
-// Deshalb faellt er bei jeder lokalen Umfaerbung aus dem Schnappschuss, und
-// zwar an der Route selbst: dort kommt jede lokale Farbwahl an, auch eine,
-// die nie hinausgeht (etwa ohne erreichbaren Ausgang).
+// in sync_config). Bis One Today fiel ein Termin bei jeder lokalen Umfaerbung
+// aus dem Schnappschuss (`recordLocalColorChoice`, an der Kalender-Route);
+// seitdem waehlt niemand mehr eine Terminfarbe, und die Route faerbt nichts
+// um. Die schon gemerkten Wahlen (`CHOSEN_KEY`) gelten weiter.
 // --------------------------------------------------------
 
 const SNAPSHOT_PREFIX = 'caldav_legacy_color_heal_snapshot_';
@@ -119,51 +117,4 @@ export function legacyColorChosenIds(conn) {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? new Set(parsed.map(Number)) : null;
   } catch { return null; }
-}
-
-/**
- * Die IDs unter `ids`, die ein Schnappschuss ueberhaupt aufnehmen koennte: es
- * gibt sie noch, sie sind gespiegelt und aelter als der Fix. Dieselbe
- * Altersgrenze wie in `legacyCandidateRows` (caldav-sync.js).
- */
-function legacyRowIds(conn, ids) {
-  const cutoff = legacyColorCutoff(conn);
-  return new Set(conn.prepare(`
-    SELECT id FROM calendar_events
-    WHERE id IN (SELECT value FROM json_each(?)) AND external_source = 'caldav'
-      AND (? IS NULL OR datetime(created_at) <= datetime(?))
-  `).all(JSON.stringify([...ids]), cutoff, cutoff).map((r) => r.id));
-}
-
-/**
- * Eine lokale Farbwahl an einem gespiegelten CalDAV-Termin: raus aus jedem
- * bestehenden Schnappschuss, und vorgemerkt fuer jeden, der noch entsteht.
- *
- * VORGEMERKT WERDEN NUR ALTZEILEN (#1442). Ein Schnappschuss nimmt nur Zeilen
- * von vor dem Fix auf; eine juengere auf der Liste liess sie nur wachsen, und
- * jede Umfaerbung laese und schriebe sie ganz neu. So bleibt die Liste durch
- * die Zeilen von vor dem Fix begrenzt, und eine Umfaerbung an einer juengeren
- * Zeile fasst sie gar nicht an.
- *
- * Geleert wird sie nicht, auch wenn gerade keine Frist laeuft oder aussteht:
- * ein spaeter angelegtes oder umgehaengtes Konto kann noch eine Frist beginnen
- * (`decideLegacyHeal`, solange verwaiste Altzeilen da sind), und eine Wahl
- * davor stuende sonst als Altlast in seinem Schnappschuss.
- *
- * Die Liste behaelt nur Altzeilen, die es noch gibt; das raeumt auch
- * Eintraege von vor #1442 ab.
- *
- * @param {object} conn
- * @param {Iterable<number>} eventIds
- */
-export function recordLocalColorChoice(conn, eventIds) {
-  const ids = [...eventIds].map(Number);
-  if (!ids.length) return;
-  forgetLegacyColorSnapshot(conn, ids);
-  if (!legacyRowIds(conn, ids).size) return;
-  const known = legacyColorChosenIds(conn) ?? new Set();
-  for (const id of ids) known.add(id);
-  const keep = legacyRowIds(conn, known);
-  conn.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(CHOSEN_KEY, JSON.stringify([...known].filter((id) => keep.has(id))));
 }

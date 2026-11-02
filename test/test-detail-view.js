@@ -373,7 +373,7 @@ test('die Termin-Detailansicht zeigt, was das alte Popup verschwieg', async () =
     'ein freier Name ohne Konto bleibt eine Zeile');
   assert.doesNotMatch(fn, /calendar\.detailWhen/, 'die Wann-Zeile ist in den Kopf gewandert');
   const head = src.slice(src.indexOf('function eventDetailHead'), src.indexOf('function eventMapUrl'));
-  assert.match(head, /dot: resolveEventBackground\(ev\)/, 'Farbpunkt statt Farbstreifen');
+  assert.match(head, /dot: eventTone\(ev\)\.fill/, 'Farbpunkt statt Farbstreifen - in der Farbe der Leute (One Today)');
   assert.match(head, /subtitle: eventWhenRelative\(ev\)/, 'die Zeit in Worten');
   assert.match(head, /subtitleLabel: t\('calendar\.detailWhen'\)/, 'Screenreader hoeren weiter "Wann"');
   assert.match(head, /people: ev\.assigned_users \?\? \[\]/, 'Personen als Avatare');

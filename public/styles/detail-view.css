@@ -70,7 +70,7 @@
   overflow-wrap: anywhere;
 }
 
-/* Der Farbpunkt: die Kalenderfarbe als Zeichen am Text statt als Streifen ueber
+/* Der Farbpunkt: die Farbe des Eintrags als Zeichen am Text statt als Streifen ueber
  * dem Blatt. Er sitzt auf der Mittellinie der ersten Zeile (die Unterzeile
  * richtet an der Grundlinie aus, der Punkt hebt sich um seine halbe Hoehe). */
 .detail-head__dot {
@@ -78,7 +78,9 @@
   inline-size: var(--space-2h);
   block-size: var(--space-2h);
   border-radius: var(--radius-full);
-  background-color: var(--detail-accent, var(--active-module-accent, var(--color-accent)));
+  /* `background`, nicht `-color`: ein Termin zweier Personen traegt die
+   * geteilte Scheibe (ein Verlauf, calendar.js eventDetailHead). */
+  background: var(--detail-accent, var(--active-module-accent, var(--color-accent)));
   transform: translateY(var(--space-px));
 }
 

@@ -6,7 +6,7 @@
 import { createLogger } from '../../logger.js';
 import express from 'express';
 import * as db from '../../db.js';
-import { str, color, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
+import { str, datetime, rrule, collectErrors, MAX_TITLE, MAX_TEXT, DATE_RE } from '../../middleware/validate.js';
 import { icsSubscriptionVisibleWhere, normalizeVisibility, visibilityWhere } from '../../services/visibility.js';
 import { hasAnyOccurrence, endsBeforeStart } from '../../services/recurrence.js';
 import { startOrRuleChanged } from '../../services/outbound-dtstart.js';
@@ -28,7 +28,6 @@ import {
   ATTACHMENT_NARROW_ONLY, documentClonePredicate, documentWidenPredicate,
 } from '../../services/document-access.js';
 import { mayWriteModule } from '../../permissions.js';
-import { recordLocalColorChoice } from '../../services/legacy-color-snapshot.js';
 import { localCalendarColorSql, localCalendarIdSql, localCalendarProjection, resolveLocalCalendarId, validateCalendarId } from '../../services/local-calendars.js';
 import {
   assertSuccessorHasOccurrence,
@@ -380,15 +379,6 @@ function validateOccurrenceMutationBody(database, body, { following = false, mas
   validateDateTime('end_datetime', 'Enddatum', { nullable: true });
   validateString('location', 'Ort', { max: MAX_TITLE, required: false, nullable: true });
 
-  if (Object.hasOwn(body, 'color')) {
-    if (body.color !== null && typeof body.color !== 'string') {
-      errors.push('Farbe muss als Text angegeben werden oder leer bleiben.');
-    } else {
-      const result = color(body.color, 'Farbe');
-      if (result.error) errors.push('Farbe: Wähle eine gültige Farbe im Format #RRGGBB aus.');
-      else values.color = result.value;
-    }
-  }
   if (following && Object.hasOwn(body, 'recurrence_rule')) {
     if (body.recurrence_rule !== null && typeof body.recurrence_rule !== 'string') {
       errors.push('Die Wiederholungsregel muss als Text angegeben werden oder leer bleiben.');
@@ -485,8 +475,10 @@ const SERIES_ENDS_BEFORE_START = 'recurrence_rule: the series ends before the st
 // POST /api/v1/calendar
 // Neuen Termin anlegen.
 // Body: { title, description?, start_datetime, end_datetime?,
-//         all_day?, location?, color?, icon?, assigned_to?,
+//         all_day?, location?, icon?, assigned_to?,
 //         recurrence_rule?, countdown? }
+// Ein `color` im Body wird ignoriert (One Today): ein Termin faerbt sich
+// durch seine Leute, die Spalte bleibt fuer den Eingang der Anbieter.
 // Response: { data: Event }
 // --------------------------------------------------------
 router.post('/', async (req, res) => {
@@ -514,10 +506,6 @@ router.post('/', async (req, res) => {
     const zoneOpts = { to: 'wall', zone: householdTimeZone(db.get()), allDay: !!req.body.all_day };
     const vStart = datetime(req.body.start_datetime, 'Startdatum', true, zoneOpts);
     const vEnd   = datetime(req.body.end_datetime, 'Enddatum', false, zoneOpts);
-    // Kein Fallback auf eine Palettenfarbe: fehlt die Angabe, bekommt der Termin
-    // KEINE eigene Farbe (NULL) und leiht sich die der zugewiesenen Person
-    // (#891). `color()` liefert fuer undefined/null/'' bereits value: null.
-    const vColor = color(req.body.color, 'Farbe');
     const vIcon  = eventIcon(req.body.icon);
     const vLoc   = str(req.body.location, 'Ort', { max: MAX_TITLE, required: false });
     const vRrule = rrule(req.body.recurrence_rule, 'Wiederholung');
@@ -527,7 +515,7 @@ router.post('/', async (req, res) => {
     const vGoogle = googleTarget(req.body);
     const vOutlook = outlookTarget(req.body);
     const vLocalCalendar = validateCalendarId(db.get(), req.body.local_calendar_id);
-    const errors = collectErrors([vTitle, vDesc, vStart, vEnd, vColor, vLoc, vRrule, vCaldav, vGoogle, vOutlook, vLocalCalendar]);
+    const errors = collectErrors([vTitle, vDesc, vStart, vEnd, vLoc, vRrule, vCaldav, vGoogle, vOutlook, vLocalCalendar]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (req.body.local_calendar_id !== undefined
         && ((req.body.external_source && req.body.external_source !== 'local')
@@ -597,19 +585,20 @@ router.post('/', async (req, res) => {
       const result = db.get().prepare(`
         INSERT INTO calendar_events
           (title, description, start_datetime, end_datetime, all_day,
-           location, color, icon, assigned_to, created_by, recurrence_rule,
+           location, icon, assigned_to, created_by, recurrence_rule,
            attachment_name, attachment_mime, attachment_size, attachment_data, attachment_document_id,
            target_caldav_account_id, target_caldav_calendar_url, target_google_calendar_id,
            target_outlook_account_id, target_outlook_calendar_id, visibility,
            countdown, local_calendar_id, series_authored)
         -- series_authored = 1: Start und Regel stammen aus Yuvomi und bleiben
         -- es, auch wenn der Upload die Zeile zum Spiegel macht (#1935).
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        -- Keine Farbe: die Spalte bleibt NULL (One Today).
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         vTitle.value, vDesc.value,
         vStart.value, vEnd.value,
         all_day ? 1 : 0, vLoc.value,
-        vColor.value, vIcon, firstUid,
+        vIcon, firstUid,
         userId, vRrule.value,
         req.body.attachment_name || null,
         attachment.mime,
@@ -808,7 +797,6 @@ router.put('/:id', async (req, res) => {
     if (req.body.description    !== undefined) checks.push(str(req.body.description, 'Beschreibung', { max: MAX_TEXT, required: false }));
     if (vStart) checks.push(vStart);
     if (vEnd)   checks.push(vEnd);
-    if (req.body.color          !== undefined) checks.push(color(req.body.color, 'Farbe'));
     if (req.body.location       !== undefined) checks.push(str(req.body.location, 'Ort', { max: MAX_TITLE, required: false }));
     // Der unveränderte Bestandswert kommt ohne Prüfung durch: Die Regel steht
     // bereits so in der Datenbank, und der Validator kennt nur das Vokabular der
@@ -869,7 +857,7 @@ router.put('/:id', async (req, res) => {
     }
     const {
       title, description,
-      all_day, location, color: colorVal, recurrence_rule,
+      all_day, location, recurrence_rule,
     } = req.body;
     // `undefined` = nicht mitgeschickt. Ein Start ist danach nie leer (siehe
     // oben), ein Ende mit '' oder `null` kommt als null an und leert es.
@@ -988,10 +976,6 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    // `color` ueberhaupt mitgeschickt? Nur dann wird die Spalte angefasst - der
-    // Wert selbst darf dann auch null sein und heisst "keine eigene Farbe" (#891).
-    const colorTouched = Object.hasOwn(req.body, 'color');
-
     const assignedTouched = req.body.assigned_to !== undefined;
     const userIds  = assignedTouched
       ? parseAssignedTo(req.body.assigned_to)
@@ -1005,35 +989,16 @@ router.put('/:id', async (req, res) => {
     // PUT, das `assigned_to` gar nicht mitschickt (der Serien-Split etwa sendet
     // nur `recurrence_rule`), wuerde die primaere Zuweisung sonst auf gut Glueck
     // neu bestimmen und dabei still auf ein anderes Mitglied umlegen.
-    //
-    // Seit #891 ist das sichtbar: `resolveEventColor()` nimmt die Farbe der in
-    // `assigned_to` genannten Person, ein Termin ohne eigene Farbe wechselt also
-    // die Farbe, ohne dass jemand die Zuweisung angefasst hat. Dieselbe Regel wie
-    // bei `color`: nicht mitgeschickt heisst nicht angefasst.
+    // Nicht mitgeschickt heisst nicht angefasst.
     const firstUid = assignedTouched
       ? (userIds[0] ?? null)
       : (userIds.includes(event.assigned_to) ? event.assigned_to : (userIds[0] ?? null));
 
     const userModified = event.external_source !== 'local' ? 1 : event.user_modified;
 
-    // Die Farbe führt ihren eigenen Zustand (#899). `user_modified` bedeutet
-    // "an diesem Termin wurde etwas bearbeitet" und wird oben bei JEDEM Feld
-    // gesetzt; der Inbound der Anbieter las es trotzdem als "die Farbe wird ab
-    // jetzt lokal geführt". Eine Titeländerung fror damit die Farbspalte
-    // dauerhaft ein - eine Umfärbung auf dem Server kam nie mehr an.
-    //
-    // Gesetzt wird deshalb nur bei einer ECHTEN Umfärbung: `color` mitgeschickt
-    // UND ein anderer Wert als bisher. Ein Formular, das die unveränderte Farbe
-    // brav mitschickt, ist keine. Einmal gesetzt bleibt das Flag stehen, auch
-    // wenn die Farbe später wieder geleert wird - genau dieser Zustand
-    // (`color IS NULL AND color_modified = 1`) ist das ausdrückliche Leeren, das
-    // der Ausgang spiegeln darf.
-    //
-    // Verglichen wird ohne Rücksicht auf die Schreibweise: `#ff6347` und
-    // `#FF6347` sind dieselbe Farbe, und die beiden treffen wirklich
-    // aufeinander - der Sync legt seinen Hex in Großbuchstaben ab
-    // (`utils/ical-color.js`). Der Farbwähler im Client vergleicht aus
-    // demselben Grund über `sameColor()`.
+    // Die Farbe fasst eine Bearbeitung nicht an (One Today): `color` im Body
+    // wird ignoriert, `color_modified` bleibt, wie es ist. Die Spalten gehoeren
+    // dem Eingang der Anbieter (gespeichert, nicht gezeigt).
     // WER START ODER REGEL IN YUVOMI AENDERT, HAT SIE VERFASST (#1935) - auch
     // an einer eingelesenen Serie. Die Marke entscheidet, ob der ausgehende
     // Weg den Start auf die eigene Regel ausrichtet (services/outbound-dtstart.js).
@@ -1046,10 +1011,6 @@ router.put('/:id', async (req, res) => {
       all_day: all_day !== undefined ? all_day : event.all_day,
       recurrence_rule: regelDanach,
     }, zoneOpts.zone);
-
-    const asColorKey = (c) => (c == null ? null : String(c).toLowerCase());
-    const colorChanged = colorTouched && asColorKey(colorVal) !== asColorKey(event.color);
-    const colorModified = colorChanged ? 1 : event.color_modified;
 
     const caldavAccountId = vCaldav ? vCaldav.value.accountId : event.target_caldav_account_id;
     const caldavCalendarUrl = vCaldav ? vCaldav.value.calendarUrl : event.target_caldav_calendar_url;
@@ -1108,15 +1069,6 @@ router.put('/:id', async (req, res) => {
             end_datetime    = ?,
             all_day         = COALESCE(?, all_day),
             location        = ?,
-            -- Nicht COALESCE: der Wert NULL ist hier eine AUSSAGE ("dieser Termin
-            -- hat keine eigene Farbe", #891) und kein fehlender Parameter.
-            -- COALESCE kann beides nicht auseinanderhalten und wuerde die
-            -- Loeschung schlucken. Der Schalter traegt die Unterscheidung, die
-            -- der Body macht: color fehlt = nicht angefasst, color: null =
-            -- ausdruecklich geleert. Damit bleibt die Regel der Nachbarfelder
-            -- erhalten - das PUT eines Clients, der das Feld nicht kennt, darf
-            -- eine gesetzte Farbe nicht stillschweigend loeschen.
-            color           = CASE WHEN ? THEN ? ELSE color END,
             icon            = COALESCE(?, icon),
             assigned_to     = ?,
             recurrence_rule = ?,
@@ -1139,7 +1091,6 @@ router.put('/:id', async (req, res) => {
             -- App), darf eine gesetzte Markierung nicht stillschweigend löschen.
             countdown       = ?,
             user_modified   = ?,
-            color_modified  = ?,
             -- Wer Start oder Regel hier aendert, hat sie ab jetzt verfasst
             -- (#1935); jede andere Bearbeitung laesst die Marke, wie sie ist.
             series_authored = CASE WHEN ? THEN 1 ELSE series_authored END
@@ -1151,7 +1102,6 @@ router.put('/:id', async (req, res) => {
         end_datetime !== undefined ? (end_datetime || null) : event.end_datetime,
         all_day !== undefined ? (all_day ? 1 : 0) : null,
         location !== undefined ? (location || null) : event.location,
-        colorTouched ? 1 : 0, colorVal ?? null,
         req.body.icon !== undefined ? vIcon : null,
         firstUid !== undefined ? firstUid : event.assigned_to,
         recurrence_rule !== undefined ? (recurrence_rule || null) : event.recurrence_rule,
@@ -1171,14 +1121,9 @@ router.put('/:id', async (req, res) => {
           : event.visibility,
         req.body.countdown !== undefined ? (req.body.countdown ? 1 : 0) : event.countdown,
         userModified,
-        colorModified,
         seriesAuthoredHere ? 1 : 0,
         id
       );
-      // Eine lokale Farbwahl macht einen gespiegelten Termin dauerhaft zu
-      // keiner Altlast der Farb-Heilung mehr (#1270), auch wenn er spaeter
-      // wieder die alte Farbe bekommt oder die Wahl den Server nie erreicht.
-      if (colorChanged && event.external_source === 'caldav') recordLocalColorChoice(db.get(), [id]);
       setEventAssignments(db.get(), id, userIds, {
         mayWidenAttachment: rights.mayWidenAttachment,
         previous: { visibility: stored?.visibility },
@@ -1214,7 +1159,6 @@ router.put('/:id', async (req, res) => {
       if (end_datetime !== undefined) seriesChanges.end_datetime = end_datetime || null;
       if (all_day !== undefined) seriesChanges.all_day = all_day ? 1 : 0;
       if (location !== undefined) seriesChanges.location = location || null;
-      if (colorTouched) seriesChanges.color = colorVal ?? null;
       if (req.body.icon !== undefined) seriesChanges.icon = vIcon;
       if (recurrence_rule !== undefined) seriesChanges.recurrence_rule = recurrence_rule || null;
       if (caldavProvided) {
@@ -1422,7 +1366,7 @@ router.put('/:seriesId/occurrences/:recurrenceId', async (req, res) => {
     const changes = {};
     for (const field of [
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
-      'location', 'color', 'visibility', 'countdown',
+      'location', 'visibility', 'countdown',
     ]) {
       if (Object.hasOwn(req.body, field)) {
         changes[field] = validated[field];
@@ -1611,7 +1555,7 @@ router.put('/:seriesId/occurrences/:recurrenceId/following', async (req, res) =>
     const changes = {};
     for (const field of [
       'title', 'description', 'start_datetime', 'end_datetime', 'all_day',
-      'location', 'color', 'visibility', 'countdown', 'recurrence_rule',
+      'location', 'visibility', 'countdown', 'recurrence_rule',
       'local_calendar_id',
     ]) {
       if (Object.hasOwn(req.body, field)) {

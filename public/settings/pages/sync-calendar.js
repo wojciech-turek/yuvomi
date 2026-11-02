@@ -412,15 +412,13 @@ function buildCalendarList(account, calendars) {
     checkbox.className = 'caldav-calendar-checkbox';
     checkbox.checked = Boolean(cal.enabled);
 
-    const color = document.createElement('span');
-    color.className = 'caldav-calendar-color';
-    color.style.backgroundColor = cal.calendarColor || 'var(--color-accent)';
-
+    // Ohne Farbpunkt: die Farbe eines Anbieter-Kalenders zeigt Yuvomi nicht
+    // (One Today), der Name sagt, welcher es ist.
     const name = document.createElement('span');
     name.className = 'caldav-calendar-name';
     name.textContent = cal.calendarName || cal.calendarUrl;
 
-    label.append(checkbox, color, name);
+    label.append(checkbox, name);
     // VOR DEM HAKEN, NICHT NACH DEM SYNC: Das Feld stand früher erst da, wenn
     // der Kalender aktiv UND einmal synchronisiert war - also frühestens, als
     // der erste Schwung Termine bereits ohne Zuweisung hereingekommen war, bei
@@ -1093,15 +1091,11 @@ function buildGoogleCalendarPicker(googleCall) {
         checkbox.className = 'google-calendar-checkbox';
         checkbox.checked = Boolean(cal.enabled);
 
-        const dot = document.createElement('span');
-        dot.className = 'caldav-calendar-color';
-        dot.style.backgroundColor = cal.backgroundColor || 'var(--color-accent)';
-
         const name = document.createElement('span');
         name.className = 'caldav-calendar-name';
         name.textContent = cal.summary || cal.id;
 
-        item.append(checkbox, dot, name);
+        item.append(checkbox, name);
         // Wie bei CalDAV vor dem Haken setzbar (#730) - hier zählt es doppelt:
         // Das Aktivieren startet den Sync unmittelbar (PATCH /google/calendars),
         // eine Zuweisung danach käme für die erste Ladung immer zu spät.
@@ -1184,15 +1178,11 @@ function buildOutlookCalendarList(account, calendars, user) {
     checkbox.checked = Boolean(cal.enabled);
     checkbox.disabled = user?.role !== 'admin';
 
-    const color = document.createElement('span');
-    color.className = 'caldav-calendar-color';
-    color.style.backgroundColor = cal.calendarColor || 'var(--color-accent)';
-
     const name = document.createElement('span');
     name.className = 'caldav-calendar-name';
     name.textContent = cal.calendarName || cal.calendarId;
 
-    label.append(checkbox, color, name);
+    label.append(checkbox, name);
     list.appendChild(label);
 
     checkbox.addEventListener('change', async () => {
