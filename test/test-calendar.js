@@ -1348,12 +1348,42 @@ test('One Today: die Kante eines geteilten Termins traegt beide Tinten, ein einz
     const none = calendarHelpers.eventSurfaceStyle({ color: '#ff0000', cal_color: '#0000FF' });
     assert(none === `--ev-color:${eventColor.EVENT_FALLBACK_COLOR};`, `niemand: neutral: ${none}`);
   });
-  // Jede Flaeche, die eine Termin-Kante zeichnet, liest die geteilte Kante.
-  const edged = [...eachRule(calendarCss)].filter((r) => /border-inline-start:\s*var\(--cal-event-edge\) solid var\(--ev-color/.test(r.body));
-  assert(edged.length > 0, 'Vorbedingung: es gibt Termin-Kanten');
+  // Die geteilte Kante ist eine Hintergrund-Schicht unter einer durchsichtigen
+  // Kante - sie folgt dem Radius des Blocks. Kein border-image (eckige Enden).
+  const rules = [...eachRule(calendarCss)].filter((r) => !r.at.length);
+  assert(![...eachRule(calendarCss)].some((r) => /border-image/.test(r.body)), 'eine Kante als border-image steht mit eckigen Enden ueber den runden Ecken');
+  const splitAt = rules.findIndex((r) => /\.cal-ev--split/.test(r.selector) && /background-image:\s*var\(--ev-edge, none\), var\(--band-bg, none\)/.test(r.body));
+  assert(splitAt >= 0, 'die geteilte Kante hat keine Regel');
+  const split = rules[splitAt];
+  assert(/border-inline-start-color:\s*transparent/.test(split.body)
+    && /background-size:\s*var\(--cal-event-edge\) 100%/.test(split.body)
+    && /background-repeat:\s*no-repeat/.test(split.body)
+    && /background-origin:\s*border-box/.test(split.body), `die Schicht liegt nicht unter der Kante: ${split.body}`);
+  assert(/background-position:\s*var\(--ev-edge-x, 0%\) 0/.test(split.body)
+    && rules.some((r) => /^\[dir="rtl"\]/.test(r.selector.trim()) && /\.cal-ev--split/.test(r.selector) && /--ev-edge-x:\s*100%/.test(r.body)),
+    'von rechts nach links steht die Kante rechts');
+  // Jede Flaeche mit Termin-Kante ist in der Regel genannt, und keine ihrer
+  // :hover-Regeln (die mit `background` alle Schichten zuruecksetzen) steht danach.
+  const edged = rules.filter((r) => /border-inline-start:\s*var\(--cal-event-edge\) solid var\(--ev-color/.test(r.body));
+  assert(edged.length >= 5, `Vorbedingung: es gibt Termin-Kanten (${edged.length})`);
   for (const rule of edged) {
-    assert(/border-image:\s*var\(--ev-edge, none\) 1/.test(rule.body), `${rule.selector} zeichnet die geteilte Kante nicht`);
+    const surface = rule.selector.trim();
+    assert(split.selector.includes(surface), `${surface} zeichnet die geteilte Kante nicht`);
+    const later = rules.slice(splitAt + 1).find((r) => r.selector.split(',').some((part) => part.trim().startsWith(surface)) && /(?:^|;)\s*background\s*:/.test(r.body));
+    assert(!later, `${later?.selector} setzt die Schichten nach der geteilten Kante zurueck`);
   }
+  // Die Klasse haengt nur an Terminen zweier Personen.
+  withOvernightState({ users: COLOUR_HOUSEHOLD }, () => {
+    assert(calendarHelpers.eventSplitClass({ assigned_users: [{ id: 1 }, { id: 2 }] }) === ' cal-ev--split', 'zwei Personen: geteilt');
+    for (const ev of [{ assigned_users: [{ id: 1 }] }, { assigned_users: [] }, { assigned_users: [{ id: 1 }, { id: 2 }, { id: 3 }] }]) {
+      assert(calendarHelpers.eventSplitClass(ev) === '', `nicht geteilt: ${JSON.stringify(ev)}`);
+    }
+    const two = { id: 81, title: 'Kino', start_datetime: '2026-06-16T19:00', end_datetime: '2026-06-16T21:00', all_day: 0, assigned_users: [{ id: 1 }, { id: 2 }] };
+    const one = { id: 82, title: 'Joga', start_datetime: '2026-06-16T17:00', end_datetime: '2026-06-16T18:00', all_day: 0, assigned_users: [{ id: 2 }] };
+    const html = calendarHelpers.dayGroupHtml({ date: '2026-06-16', events: [one, two], tasks: [], holidays: [], schedule: [], waste: [] });
+    assert(/class="[^"]*\bagenda-event\b[^"]*\bcal-ev--split\b[^"]*" data-id="81"/.test(html), `die Zeile zweier Personen traegt die Klasse: ${html}`);
+    assert(!/cal-ev--split[^"]*" data-id="82"/.test(html), 'eine Person: keine geteilte Kante');
+  });
   const dot = [...eachRule(calendarCss)].find((r) => /\.month-view:not\(\.month-view--titles\) \.month-day__event$/.test(r.selector.trim()) && /background:/.test(r.body));
   assert(dot && /background:\s*var\(--ev-dot, var\(--ev-color\)\)/.test(dot.body), 'der mobile Monatspunkt zeigt die geteilte Scheibe nicht');
 });
@@ -4787,7 +4817,9 @@ test('Baender: im Nachbarmonat toent das Band zurueck wie der Chip der Zelle, ni
   assert(chip && /var\(--tint-wash\)/.test(chip.body), 'der Chip im Nachbarmonat toent ueber --tint-wash');
   assert(band && /--band-out:\s*color-mix\(in srgb, var\(--ev-color\) var\(--tint-wash\), var\(--color-surface-work\)\)/.test(band.body),
     'das Band im Nachbarmonat nimmt dieselbe Stufe');
-  assert(/background:\s*linear-gradient\(/.test(band.body) && /var\(--band-out-start\)/.test(band.body) && /var\(--band-out-end\)/.test(band.body),
+  // Der Verlauf steht in --band-bg, damit die geteilte Kante (.cal-ev--split) ihn behaelt.
+  assert(/--band-bg:\s*linear-gradient\(/.test(band.body) && /background:\s*var\(--band-bg\)/.test(band.body)
+    && /var\(--band-out-start\)/.test(band.body) && /var\(--band-out-end\)/.test(band.body),
     'der Verlauf setzt die Stopps an die Spaltengrenzen');
   assert(!/opacity|filter/.test(band.body), 'nie ueber Opacity auf Text');
 });

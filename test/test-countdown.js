@@ -11,6 +11,7 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import test from 'node:test';
 import Database from 'better-sqlite3-multiple-ciphers';
 
@@ -798,6 +799,47 @@ test('One Today: zwei Zugewiesene geben den gemeinsamen Ton, niemand null - auch
   } finally {
     get().prepare('DELETE FROM local_calendars WHERE id = ?').run(second);
   }
+});
+
+test('One Today: die Countdown-Farbe ist ein CSS-Wert oder null, nie Hex - und kein Client rechnet mit ihr', () => {
+  // Seit One Today liefert die Kachel `var(--person-N)`, `var(--color-accent)`
+  // oder null statt eines Hex-Werts. Wer sie als Hex laese (Luminanz, Kontrast,
+  // Kanaele), bekaeme Unsinn - deshalb beide Haelften: der Wert und die Leser.
+  reset();
+  const heute = '2026-08-27';
+  const eins = seedEvent({ title: 'Eins', start: '2026-09-10', color: '#3CA368', assignedTo: BOB });
+  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(eins, BOB);
+  const zwei = seedEvent({ title: 'Zwei', start: '2026-09-11', color: '#3CA368', assignedTo: ALICE });
+  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?), (?, ?)').run(zwei, ALICE, zwei, BOB);
+  seedEvent({ title: 'Keiner', start: '2026-09-12', color: '#3CA368' });
+  seedTask({ title: 'Aufgabe', due: '2026-09-13' });
+  const items = getCountdowns(get(), { userId: ALICE, todayKey: heute }).items;
+  assert.ok(items.length >= 4, 'Vorbedingung: Termine und eine Aufgabe');
+  for (const item of items) {
+    assert.ok(item.color == null || /^var\(--[a-z0-9-]+\)$/.test(item.color), `${item.title}: ${item.color}`);
+    assert.doesNotMatch(String(item.color ?? ''), /#[0-9a-f]{3,8}/i, `${item.title}: kein Hex`);
+  }
+
+  // Die Leser: jede Datei in public/, die die Countdowns der Uebersicht liest.
+  const root = new URL('../public/', import.meta.url);
+  const files = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = new URL(name, dir);
+      if (statSync(full).isDirectory()) {
+        if (name !== 'vendor' && name !== 'locales') walk(new URL(`${name}/`, dir));
+      } else if (name.endsWith('.js')) files.push(full);
+    }
+  };
+  walk(root);
+  const readers = files.filter((file) => /\.countdowns\b|countdowns:/.test(readFileSync(file, 'utf8')));
+  assert.deepEqual(readers.map((file) => file.pathname.split('/public/')[1]), ['pages/dashboard.js'],
+    'ein neuer Leser der Countdowns: hier pruefen, dass er die Farbe nicht als Hex liest');
+  const dashboard = readFileSync(readers[0], 'utf8');
+  const fn = dashboard.slice(dashboard.indexOf('function visibleCountdowns('), dashboard.indexOf('function setHtml('));
+  assert.match(fn, /c\.source === 'task'/, 'Vorbedingung: der Filter liest die Herkunft');
+  assert.doesNotMatch(fn, /\.color\b/, 'die Uebersicht liest die Countdown-Farbe nicht');
+  assert.doesNotMatch(dashboard, /countdown[\s\S]{0,80}getReadableTextColor|getReadableTextColor[\s\S]{0,80}countdown/i);
 });
 
 test('ein geloeschtes primaeres Mitglied laesst die Kachel nicht farblos zurueck', () => {

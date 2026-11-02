@@ -301,7 +301,8 @@
   block-size: var(--space-2);
   margin-block-start: var(--space-1h);
   border-radius: var(--radius-full);
-  background-color: var(--ev-color, var(--module-accent));
+  /* Zwei Personen: die geteilte Scheibe (--ev-dot), sonst die Farbe der Leute. */
+  background: var(--ev-dot, var(--ev-color, var(--module-accent)));
 }
 
 .cal-upnext__text {
@@ -924,7 +925,6 @@
    * Balken selbst zum Punkt - dort gibt es keinen Titel, neben dem eine Kante
    * stehen koennte. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
-  border-image: var(--ev-edge, none) 1;
   transition: background-color var(--transition-fast);
 }
 
@@ -1243,7 +1243,6 @@
    * gemessenen 16-%-Rezept, die Tinte beim 35-%-Mix (siehe oben) - die Kante
    * traegt die Farbe. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
-  border-image: var(--ev-edge, none) 1;
   /* `clip` STATT `hidden`, DAMIT DER TITEL KLEBEN KANN.
    *
    * `overflow: hidden` macht aus jedem Element einen Scroll-Container - und
@@ -1612,7 +1611,6 @@
    * gedrueckt hatte. Seit 2026-09-24 ist sie die EINZIGE Kante: das Element
    * `.day-event__spine` daneben zog einen zweiten Farbstrich. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
-  border-image: var(--ev-edge, none) 1;
   /* `clip` statt `hidden` - dieselbe Begruendung wie an `.week-event`: nur so
      kann der Text darin kleben. Die Tagesansicht zeichnet DENSELBEN Block,
      und eine Regel, die nur in einer der beiden Ansichten gilt, laesst
@@ -1960,7 +1958,6 @@
   align-items: center;
   gap: var(--space-3);
   border-inline-start: var(--cal-event-edge) solid var(--ev-color, var(--color-accent));
-  border-image: var(--ev-edge, none) 1;
   padding-block: var(--space-2);
   padding-inline: calc(var(--space-4) - var(--cal-event-edge)) var(--space-4);
 }
@@ -2297,7 +2294,6 @@
    * Ganztages-Balken ist derselbe Block, nur ohne Zeitachse - und wie dort
    * ohne den 1px-Rahmen, den der Monatsbalken nie trug. */
   border-inline-start: var(--cal-event-edge) solid var(--ev-color);
-  border-image: var(--ev-edge, none) 1;
   background: color-mix(in srgb, var(--ev-color) var(--tint-surface), var(--color-surface-work));
   color: color-mix(in srgb, var(--ev-color) 35%, var(--color-text-primary));
   white-space: nowrap;
@@ -2606,9 +2602,12 @@
   --band-col: calc((100% + var(--band-ms) + var(--band-me) + var(--space-px)) / var(--band-span));
   --band-a: calc(var(--band-out-start) * var(--band-col) - var(--space-px) / 2 - var(--band-ms));
   --band-b: calc((var(--band-span) - var(--band-out-end)) * var(--band-col) - var(--space-px) / 2 - var(--band-ms));
-  background: linear-gradient(to var(--band-to, right),
+  /* Als Variable, damit die geteilte Kante (.cal-ev--split, unten) ihre
+   * Schicht darueberlegen kann, ohne den Verlauf zu verlieren. */
+  --band-bg: linear-gradient(to var(--band-to, right),
     var(--band-out) var(--band-a), var(--band-in) var(--band-a),
     var(--band-in) var(--band-b), var(--band-out) var(--band-b));
+  background: var(--band-bg);
   background-origin: border-box;
 }
 
@@ -2619,6 +2618,36 @@
 
 [dir="rtl"] .month-bands > .cal-band--outside {
   --band-to: left;
+}
+
+/* DIE GETEILTE KANTE ZWEIER PERSONEN (One Today, spec 7). Die Kante bleibt
+ * so breit wie jede Termin-Kante, wird aber durchsichtig; darunter liegt als
+ * oberste Hintergrund-Schicht ein Streifen in beiden Tinten (--ev-edge,
+ * calendar.js eventSurfaceStyle, oben die erste Person). Ein Hintergrund
+ * folgt dem Radius des Blocks - ein `border-image` taete das nicht und stuende
+ * mit eckigen Enden ueber den runden Ecken. Steht NACH den :hover-Regeln der
+ * Flaechen, die mit `background` alle Schichten zuruecksetzen; deren Farbe
+ * bleibt. Die zweite Schicht ist der Verlauf eines Nachbarmonat-Bands, sonst
+ * nichts. Die Agenda-Zeile traegt die Klasse am Termin, die Kante am Koerper. */
+:is(.month-day__event, .week-event, .day-event, .allday-event).cal-ev--split,
+.cal-ev--split > .agenda-event__body {
+  border-inline-start-color: transparent;
+  background-image: var(--ev-edge, none), var(--band-bg, none);
+  background-size: var(--cal-event-edge) 100%, 100% 100%;
+  /* An der Startkante: 0 % von links, unter dir="rtl" 100 % (rechts). */
+  background-position: var(--ev-edge-x, 0%) 0, 0 0;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+}
+
+[dir="rtl"] :is(.month-day__event, .week-event, .day-event, .allday-event).cal-ev--split,
+[dir="rtl"] .cal-ev--split > .agenda-event__body {
+  --ev-edge-x: 100%;
+}
+
+/* Ein Band, das vor diesem Zeitraum beginnt, hat keine Startkante (.cal-band--before). */
+.cal-band--before.cal-ev--split {
+  background-size: 0 100%, 100% 100%;
 }
 
 .month-bands > .cal-band.is-clipped {

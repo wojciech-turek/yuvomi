@@ -340,14 +340,23 @@ function eventTone(ev) {
 /**
  * Inline-Style für eine getönte Event-Fläche (Monat/Woche/Tag/Ganztägig, Liste).
  * Setzt `--ev-color`; Tönung, lesbare Tinte und Kante leitet calendar.css per
- * color-mix ab. Bei zwei Personen dazu `--ev-edge` (die Kante in beiden Tinten,
- * calendar.css legt sie als `border-image` ueber die Kante) und `--ev-dot` (der
- * Punkt des mobilen Monats als geteilte Scheibe).
+ * color-mix ab. Bei zwei Personen dazu `--ev-edge` (die Kante in beiden Tinten)
+ * und `--ev-dot` (der Punkt des mobilen Monats als geteilte Scheibe).
  */
 function eventSurfaceStyle(ev) {
   const tone = eventTone(ev);
   const split = tone.edge ? `--ev-edge:${esc(tone.edge)};--ev-dot:${esc(tone.fill)};` : '';
   return `--ev-color:${esc(tone.color)};${split}`;
+}
+
+/**
+ * Die Klasse eines Termins zweier Personen (' cal-ev--split'), sonst ''. An
+ * ihr zeichnet calendar.css die geteilte Kante als Hintergrund unter einer
+ * durchsichtigen Kante - so folgt sie dem Radius des Blocks wie die
+ * einfarbige Kante (ein `border-image` taete das nicht).
+ */
+function eventSplitClass(ev) {
+  return eventTone(ev).edge ? ' cal-ev--split' : '';
 }
 
 /**
@@ -3675,7 +3684,7 @@ function monthBandsHtml({ bands }, inMonth = []) {
     let outEnd = 0;
     while (outEnd < span - outStart && outside(last - outEnd)) outEnd++;
     const out = outStart > 0 || outEnd > 0;
-    const classes = bandClasses('month-day__event', band) + (out ? ' cal-band--outside' : '');
+    const classes = bandClasses('month-day__event', band) + (out ? ' cal-band--outside' : '') + eventSplitClass(ev);
     return `<div class="${classes}" data-id="${ev.id}" data-start="${esc(band.startKey)}" data-end="${esc(band.endKey)}"
          data-lane="${lane}" data-first="${first}" data-last="${last}"${occurrenceAttr(ev)}
          style="grid-column:${first + 1} / span ${span};grid-row:${lane + 1};${out ? `--band-span:${span};--band-out-start:${outStart};--band-out-end:${outEnd};` : ''}${eventSurfaceStyle(ev)}"
@@ -3721,7 +3730,7 @@ function renderMonthDay(date, inMonth, { selected = false, selWeek = false, spli
   // Tooltip/Screenreader im title-Attribut erhalten. Der Titel bleibt das
   // LETZTE Kind (document-guards liest ihn als `span:last-child`).
   const evHtml = evShown.map((ev) => `
-    <div class="month-day__event"
+    <div class="month-day__event${eventSplitClass(ev)}"
          data-id="${ev.id}"
          style="${eventSurfaceStyle(ev)}"${occurrenceAttr(ev)}
          title="${esc(ev.title)}${eventLocalCalendarDisplayName(ev) ? ' · ' + esc(eventLocalCalendarDisplayName(ev)) : ''}${chipAssigneeTitleSuffix(ev)}"
@@ -4715,7 +4724,7 @@ function renderAllDayEvent(ev, dayStr) {
   // abgeschnittene zweite Zeile (calendar.css, `.allday-event__line`). Name im
   // title-Attribut und im gesprochenen Namen bleibt.
   return `
-    <div class="${segment ? bandClasses('allday-event', segment) : 'allday-event'}" data-id="${ev.id}"
+    <div class="${segment ? bandClasses('allday-event', segment) : 'allday-event'}${eventSplitClass(ev)}" data-id="${ev.id}"
          style="${eventSurfaceStyle(ev)}"${eventBlockAttrs(ev, spoken || t('calendar.allDay'), dayStr)}${occurrenceAttr(ev)}
          title="${allDayChipTitle(ev, allDayChipTimeText(ev, dayStr, { suffix: true }))}">${segment?.continuesBefore ? bandContinuationHtml('before') : ''}${eventGlyphsHtml(ev)}<span class="allday-event__line"><span class="allday-event__label"><span>${esc(ev.title)}</span>${allDayChipTimeHtml(timeText)}</span>${chipAssigneeStack(ev, { size: 14, maxVisible: 2 })}</span>${segment?.continuesAfter ? bandContinuationHtml('after') : ''}</div>`;
 }
@@ -4750,7 +4759,7 @@ function renderWeekBand(band) {
   const until = continuesAfter ? '' : allDayChipTimeText(ev, endKey);
   const spoken = bandSpokenWhen(ev, { continued: continuesBefore });
   return `
-    <div class="${bandClasses('allday-event', band)}" data-id="${ev.id}" data-start="${esc(startKey)}" data-end="${esc(endKey)}"
+    <div class="${bandClasses('allday-event', band)}${eventSplitClass(ev)}" data-id="${ev.id}" data-start="${esc(startKey)}" data-end="${esc(endKey)}"
          style="grid-column:${first + 2} / span ${last - first + 1};grid-row:${lane + 1};${eventSurfaceStyle(ev)}"${eventBlockAttrs(ev, spoken)}${occurrenceAttr(ev)}
          title="${[ev.title, bandSpokenWhen(ev), eventLocalCalendarDisplayName(ev)].filter(Boolean).map((part) => esc(part)).join(' · ')}${chipAssigneeTitleSuffix(ev)}">${continuesBefore ? bandContinuationHtml('before') : ''}${eventGlyphsHtml(ev)}<span class="allday-event__line"><span class="allday-event__label"><span>${esc(ev.title)}</span>${allDayChipTimeHtml(from)}</span>${until ? `<small class="allday-event__time cal-band__until">${esc(until)}</small>` : ''}${chipAssigneeStack(ev, { size: 14, maxVisible: 2 })}</span>${continuesAfter ? bandContinuationHtml('after') : ''}</div>`;
 }
@@ -4767,7 +4776,7 @@ function renderWeekEvent(ev, layout = null, dayStr = null) {
   const width = layout ? `calc(${100 / layout.totalCols}% - 4px)` : 'calc(100% - 4px)';
 
   return `
-    <div class="week-event" data-id="${ev.id}"
+    <div class="week-event${eventSplitClass(ev)}" data-id="${ev.id}"
          style="top:${top};height:${height};left:${left};width:${width};${eventSurfaceStyle(ev)}"
          title="${esc(ev.title)}${chipAssigneeTitleSuffix(ev)}"${eventBlockAttrs(ev, eventTimeText(ev, dayStr), dayStr)}${occurrenceAttr(ev)}>
       <div class="week-event__title">${eventGlyphsHtml(ev)}<span>${esc(ev.title)}</span></div>
@@ -5364,7 +5373,7 @@ function renderDayEvent(ev, layout = null, dayStr = null) {
   const timeText = gridTimeText(ev, dayStr);
 
   return `
-    <div class="day-event${roomy ? '' : ' day-event--tight'}" data-id="${ev.id}"
+    <div class="day-event${roomy ? '' : ' day-event--tight'}${eventSplitClass(ev)}" data-id="${ev.id}"
          style="top:${top};height:${height};left:${left};width:${width};${eventSurfaceStyle(ev)}"
          title="${esc(ev.title)}${ev.location ? ' · ' + esc(fmtLocation(ev.location)) : ''}${chipAssigneeTitleSuffix(ev)}"${eventBlockAttrs(ev, eventTimeText(ev, dayStr), dayStr)}${occurrenceAttr(ev)}>
       <span class="day-event__text">
@@ -5540,7 +5549,7 @@ function renderAgendaBanner(ev, day) {
   const meta = [time, eventMetaText(ev, day)].filter(Boolean).join(' · ');
   const label = agendaEventAriaLabel(ev, [time || t('calendar.allDay'), multiDayPositionText(ev, day)].filter(Boolean).join(', '));
   return `
-    <div class="agenda-event agenda-event--banner" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+    <div class="agenda-event agenda-event--banner${eventSplitClass(ev)}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
          style="${eventSurfaceStyle(ev)}" aria-label="${esc(label)}">
       <div class="agenda-event__body">
         <span class="agenda-banner__title">${eventGlyphsHtml(ev, { compact: true })}<span>${esc(ev.title)}</span></span>
@@ -6936,7 +6945,7 @@ export const __test = {
   alignedHourScroll,
   // Tafla (2026-10-20): die Liste - Personenkante, "Oboje zajęci", "Wolny
   // wieczór", die Tageskarte und der Wochenstreifen.
-  eventSurfaceStyle, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
+  eventSurfaceStyle, eventSplitClass, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
   // R19: die Seitenleiste ab ca. 1600px - Mini-Monat, Filter aus EINER Quelle, Als Naechstes.
   miniMonthHtml, sidebarFiltersHtml, calendarFilterParts, upNextEvents,
   // Review #2049: ein gescheiterter Abruf ist ein Fehler, kein leerer Tag.
@@ -7117,7 +7126,7 @@ function renderAgendaEvent(ev, dayStr, { past = false } = {}) {
   // `renderKeepingFocus()` nach dem Neuaufbau mehrere Kandidaten und weicht auf
   // die Seitenwurzel aus, statt auf der Zeile zu bleiben (#1083).
   return `
-    <div class="list-row agenda-event${past ? ' agenda-event--past' : ''}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+    <div class="list-row agenda-event${past ? ' agenda-event--past' : ''}${eventSplitClass(ev)}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
          style="${eventSurfaceStyle(ev)}" aria-label="${esc(agendaEventAriaLabel(ev, [timeStr, position].filter(Boolean).join(', ')))}">
       <div class="agenda-event__body">
         <span class="agenda-event__rail" aria-hidden="true">

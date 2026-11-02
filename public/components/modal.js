@@ -343,11 +343,16 @@ function trapFocus(container, initialFocus = 'first-field') {
   };
   container.addEventListener('keydown', focusTrapHandler);
 
-  // Virtual Keyboard: Focused Input in sichtbaren Bereich scrollen
+  // Virtual Keyboard: Focused Input in sichtbaren Bereich scrollen.
+  // NUR, WENN DER FOKUS NOCH DORT IST (WCAG 2.4.11). Wer schneller als 300 ms
+  // weitertabbt, bekam sonst vom Timer des VORIGEN Felds den Rumpf zurueck-
+  // gescrollt: das gerade fokussierte Feld (gemessen: der letzte Schalter in
+  // "Mitglied bearbeiten" bei 375px) lag danach unter der Fusszeile.
   function onInputFocus(e) {
     const tag = e.target.tagName;
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
     setTimeout(() => {
+      if (document.activeElement !== e.target) return;
       e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
   }

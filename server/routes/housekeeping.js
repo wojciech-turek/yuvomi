@@ -487,7 +487,7 @@ function householdWallOf(checkIn, tz) {
 // Hier stand `checkIn.slice(0, 10)`, der UTC-Tag des Besuchs (#1540).
 function updateVisitLinks(database, session, worker, visitDate, dailyRate, extras, eventTitle = null, paymentTitle = null, paymentDescription = null) {
   if (session.calendar_event_id) {
-    // Datum, Titel und Farbe des Termins stehen in MIRRORED_FIELDS. Ein Besuch,
+    // Datum und Titel des Termins stehen in MIRRORED_FIELDS. Ein Besuch,
     // den der Apple-Sync bereits hochgeladen hat, trägt external_source='apple'
     // und erreicht den Provider nur noch über outbound_dirty - ohne die
     // Vormerkung bliebe die Verschiebung eines Besuchs lokal (dieselbe Lücke wie
