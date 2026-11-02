@@ -448,26 +448,8 @@
   }
 }
 
-.settings-identity__avatar {
-  flex: none;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: var(--identity-tint);
-  color: var(--identity-ink);
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.settings-identity__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+/* Der Avatar der Ausweiskarte ist die eine Personenscheibe (layout.css,
+ * `.person-disc`, 56 aus shell.js). */
 
 .settings-identity__copy {
   flex: 1;
@@ -1656,8 +1638,7 @@
    hellen Tönen ergab das gemessene 3,5:1 und 2,8:1 (Critique 2026-07-27).
    `prefersInkText()` in `/utils/contrast.js` entscheidet je Farbe; das Token
    ist laut tokens.css:104 genau dafür da. */
-.settings-avatar--ink,
-.perm-chip__avatar--ink {
+.settings-avatar--ink {
   color: var(--color-ink-on-bright);
 }
 
@@ -3609,22 +3590,6 @@
   color: var(--color-accent);
 }
 
-.perm-chip__avatar {
-  display: inline-grid;
-  place-items: center;
-  /* 24px, nicht 22px (#1607): zwei Hangul- oder Han-Zeichen sind bei 12px
-   * Schrift zusammen 24px breit und liefen in der 22px-Scheibe ueber den Rand. */
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  color: var(--color-text-on-accent);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.perm-chip__avatar img { width: 100%; height: 100%; object-fit: cover; }
-
 .perm-chip__badge {
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
@@ -4597,28 +4562,6 @@
   color: var(--color-text-quaternary);
 }
 
-/* Personenscheibe im Leitplatz (Domownicy): 40 bei Personen, 20 im Hinweis. */
-.settings-page .tafla-disc {
-  flex: none;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  background: var(--disc-tint);
-  color: var(--disc-ink);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.settings-page .tafla-disc img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .settings-page .tafla-row--person .tafla-row__lead {
   width: 40px;
 }
@@ -5185,19 +5128,6 @@
 
 .family-page .settings-add-btn {
   width: 100%;
-}
-
-.family-page .settings-avatar--sm {
-  width: 40px;
-  height: 40px;
-  font-size: var(--type-body);
-  font-weight: var(--font-weight-semibold);
-}
-
-/* Die Personenscheibe: Initial in der Tinte auf der Toenung (person-color.js). */
-.settings-avatar--person {
-  background: var(--disc-tint);
-  color: var(--disc-ink);
 }
 
 .family-page .settings-member__name {

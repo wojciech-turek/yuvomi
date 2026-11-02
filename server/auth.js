@@ -21,7 +21,7 @@ import { memberEmail } from './services/member-email.js';
 import { GravatarError, fetchGravatar, gravatarEnabled, gravatarHost } from './services/gravatar.js';
 import {
   accessScopeSql, activeAccountSql, deactivatedAtColumnSql, householdMemberSql, isActiveAccount,
-  isHouseholdMember, memberOrderSql, memberPositionSql,
+  isHouseholdMember, listMemberOrder, memberOrderSql, memberPositionSql,
 } from './services/household-members.js';
 import { RemovalRefused, removeUser } from './services/user-removal.js';
 import {
@@ -134,6 +134,26 @@ function initialsRoster(database, userId) {
   const guest = database.prepare('SELECT 1 FROM split_expense_guest_users WHERE user_id = ?').get(userId);
   if (guest) return [];
   return database.prepare(INITIALS_ROSTER_SQL).all().map((row) => row.display_name);
+}
+
+/**
+ * Die Haushaltsreihenfolge, aus der jede Personenscheibe ihre Farbe nimmt
+ * (One Today, public/utils/person-color.js `setHouseholdOrder`): die
+ * Mitglieder mit ihrer Position, wie `/family/members` sie ordnet. Sie reist
+ * aus demselben Grund wie `initialsRoster` an jeder Auth-Antwort mit: eine
+ * Seite, die nur eine Person in der Hand hat (Seitenleiste, Kontakte,
+ * Geburtstage), zeichnet sie sonst in einer anderen Farbe als Today.
+ *
+ * Nur Mitglieder: Hauspersonal, Gaeste, Wandtabletts und Ehemalige tragen die
+ * neutrale Scheibe. Ein Gast geteilter Ausgaben bekommt die Liste nicht, aus
+ * dem Grund, aus dem er die Namen nicht bekommt.
+ *
+ * @returns {Array<{ id: number, sort_order: number|null }>}
+ */
+function householdOrder(database, userId) {
+  const guest = database.prepare('SELECT 1 FROM split_expense_guest_users WHERE user_id = ?').get(userId);
+  if (guest) return [];
+  return listMemberOrder({ db: database });
 }
 
 /**
@@ -1254,6 +1274,7 @@ function loginPayload(req, user) {
     // Familienfelder.
     householdSize: householdSize(db.get()),
     initialsRoster: initialsRoster(db.get(), user.id),
+    householdOrder: householdOrder(db.get(), user.id),
     othersCanRead: othersCanRead(db.get(), user.id),
     csrfToken: req.session.csrfToken,
   };
@@ -2700,6 +2721,7 @@ router.get('/me', requireAuth, (req, res) => {
         permissions: clientPermissions(db.get(), user),
         householdSize: householdSize(db.get()),
         initialsRoster: initialsRoster(db.get(), user.id),
+        householdOrder: householdOrder(db.get(), user.id),
         othersCanRead: othersCanRead(db.get(), user.id),
         ...gravatarClientState(user.id),
       });
@@ -2743,6 +2765,7 @@ router.get('/me', requireAuth, (req, res) => {
       permissions: clientPermissions(db.get(), user, { isDisplay: req.authMethod === 'display' }),
       householdSize: householdSize(db.get()),
       initialsRoster: initialsRoster(db.get(), user.id),
+      householdOrder: householdOrder(db.get(), user.id),
       othersCanRead: othersCanRead(db.get(), user.id),
       ...gravatarClientState(user.id),
       csrfToken: req.session.csrfToken,

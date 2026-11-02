@@ -5309,13 +5309,10 @@ p.field-hint--warn[hidden] {
     height: var(--sidebar-icon-well);
     border-radius: var(--radius-full);
     overflow: hidden;
-    /* Ohne eigene Farbe steht die Scheibe auf dem Violett der Fuell-Rolle mit
-     * weissem Initial (2026-10-24, Tafla; vorher die Text-Rolle --color-accent,
-     * die dunkel hell wird und schwarze Schrift brauchte). Eine Nutzerfarbe
-     * setzt syncSidebarAccount() inline und waehlt die Schrift per
-     * Kontrastrechnung (--on-color / --ink). */
-    background-color: var(--color-btn-primary);
-    color: var(--color-on-accent);
+    /* Die Personenscheibe (person-color.js): Tinte auf Toenung aus dem Platz
+     * im Haushalt, gesetzt von syncSidebarAccount(); ohne ihn neutral. */
+    background-color: var(--person-disc-tint, var(--color-fill));
+    color: var(--person-disc-ink, var(--color-text-secondary));
     font-size: var(--text-xs);
     font-weight: var(--font-weight-semibold);
     line-height: 1;
@@ -5326,14 +5323,6 @@ p.field-hint--warn[hidden] {
    * Textknoten, also kein Teil des sichtbaren Etiketts des Kontoknopfs. */
   .nav-sidebar__avatar[data-initials]::before {
     content: attr(data-initials);
-  }
-
-  .nav-sidebar__avatar--on-color {
-    color: var(--color-text-on-accent);
-  }
-
-  .nav-sidebar__avatar--ink {
-    color: var(--color-ink-on-bright);
   }
 
   .nav-sidebar__avatar img {
@@ -10416,38 +10405,59 @@ p.field-hint--warn svg {
   display: block;
 }
 
-/* ── TAFLA: DIE PERSONENSCHEIBE (utils/person-color.js) ──
- * Das Initial einer Person in ihrer Tinte auf ihrer Toenung (--person-N /
+/* ── DIE PERSONENSCHEIBE (utils/person-color.js, personDisc) ──
+ * EINE Scheibe fuer jede Stelle (One Today, 2026-11-02): das Bild der Person,
+ * sonst ihr Initial in ihrer Tinte auf ihrer Toenung (--person-N /
  * --person-N-tint, tokens.css 4c); die Werte setzt personDisc() als
- * --person-disc-ink / --person-disc-tint. Drei Groessen: 20 in Zeilen, 36 im
- * Kopf, 40 auf der Wand. Die geteilte Scheibe ("razem", razemDisc()) traegt
- * statt der Toenung den harten 135-Grad-Schnitt beider Tinten und keinen
- * Buchstaben. Eigene Eintraege zeigen keine Scheibe (DESIGN.md, Colors). */
+ * --person-disc-ink / --person-disc-tint, neutral fuer jemanden ausserhalb des
+ * Haushalts. Drei Groessen haben eine Klasse: 20 in Zeilen, 36 im Kopf, 40 auf
+ * der Wand; jede andere setzt personDisc() als --person-disc-size und
+ * --person-disc-font. Die geteilte Scheibe ("razem", razemDisc()) traegt statt
+ * der Toenung den harten 135-Grad-Schnitt beider Tinten (ab drei Personen das
+ * Violett) und keinen Buchstaben. Eigene Eintraege zeigen keine Scheibe
+ * (DESIGN.md, Colors). */
 .person-disc {
   --person-disc-size: var(--space-5);
+  box-sizing: border-box;
   display: inline-grid;
   place-items: center;
   flex: none;
   inline-size: var(--person-disc-size);
   block-size: var(--person-disc-size);
+  overflow: hidden;
   border-radius: var(--radius-full);
   background: var(--person-disc-tint, var(--color-fill));
   color: var(--person-disc-ink, var(--color-text-secondary));
-  font-size: var(--type-footnote);
+  font-size: var(--person-disc-font, var(--type-meta));
   font-weight: var(--font-weight-semibold);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   user-select: none;
 }
 
 .person-disc--md {
   --person-disc-size: calc(var(--space-8) + var(--space-1));
-  font-size: var(--type-body);
+  font-size: var(--type-row);
 }
 
 .person-disc--lg {
   --person-disc-size: var(--space-10);
   font-size: var(--type-body);
+}
+
+/* Der Rand in der Kartenfarbe haelt Scheiben auseinander, die nebeneinander
+ * stehen (der Avatar-Stapel); er zaehlt in die Groesse (border-box), damit
+ * die Passrechnung der Initialen in person-color.js stimmt. */
+.person-disc--ring {
+  border: 2px solid var(--color-surface);
+}
+
+.person-disc--photo img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
 }
 
 /* ---- Einkaufsblatt (Quick-Add): die Zakupy-Leiste als Blatt ueber der Uebersicht.

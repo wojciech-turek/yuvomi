@@ -21,8 +21,7 @@ import { openDetailView } from '/components/detail-view.js';
 // mit den Geburtstags-Texten fuellt. Zwei Namen, die sich nur in der
 // Gross-Schreibung unterscheiden, waeren im Modul nicht auseinanderzuhalten.
 import { emptyStateHTML as sharedEmptyStateHTML, emptyHintHTML, searchEmptyHTML } from '/utils/empty-state.js';
-import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc } from '/utils/person-color.js';
 import { shortWeekdayDayMonth, relativeDayWord } from '/utils/day-label.js';
 import {
   renderAppPage,
@@ -319,25 +318,22 @@ function countdownChip(birthday) {
  * 28er-Scheibe in der Zeile.
  *
  * Reihenfolge: ein Bild, das FUER DIESEN EINTRAG hinterlegt wurde, gewinnt;
- * danach das Profilbild des Mitglieds, danach sein Initial in seiner
- * PERSONENFARBE (person-color.js: Tinte auf Toenung, AA-gemessen statt einer
- * zur Laufzeit gerechneten Textfarbe). Wer zu niemandem im Haushalt gehoert,
- * bleibt NEUTRAL (`.initial-disc`, Fill + Tinte-2): nur Haushaltsmitglieder
- * tragen eine Personenfarbe.
+ * danach die Personenscheibe des Mitglieds (person-color.js: sein Profilbild,
+ * sonst sein Initial in seiner Personenfarbe). Wer zu niemandem im Haushalt
+ * gehoert, bleibt NEUTRAL (`.initial-disc`, Fill + Tinte-2): nur
+ * Haushaltsmitglieder tragen eine Personenfarbe.
  */
 function photoAvatar(birthday, extraClass = '') {
   const label = esc(birthday.name);
   if (birthday.photo_data) {
     return `<img class="birthday-avatar initial-disc ${extraClass}" src="${birthday.photo_data}" alt="${label}">`;
   }
-  if (birthday.family_user_id && birthday.family_avatar_data) {
-    return `<img class="birthday-avatar initial-disc ${extraClass}" src="${esc(birthday.family_avatar_data)}" alt="${label}">`;
-  }
   if (birthday.family_user_id) {
-    const name = birthday.family_display_name || birthday.name;
-    const { ink, tint } = personToken({ id: birthday.family_user_id, avatar_color: birthday.family_avatar_color || AVATAR_FALLBACK_COLOR });
-    return `<span class="birthday-avatar birthday-avatar--fallback birthday-avatar--member initial-disc ${extraClass}"
-      style="background-color:${tint};color:${ink}">${esc(initials(name, '?'))}</span>`;
+    return personDisc({
+      id: birthday.family_user_id,
+      display_name: birthday.family_display_name || birthday.name,
+      avatar_data: birthday.family_avatar_data,
+    }, { size: 28, label: birthday.name ?? '', className: `birthday-avatar birthday-avatar--member ${extraClass}`.trim() });
   }
   return `<span class="birthday-avatar birthday-avatar--fallback initial-disc ${extraClass}">${esc(initials(birthday.name, '?'))}</span>`;
 }

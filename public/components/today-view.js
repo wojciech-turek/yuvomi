@@ -7,7 +7,7 @@
  *        birthdays soon. Wiring is one delegated listener on the page root
  *        (pages/dashboard.js); a tap's meaning comes from `data-day-action`.
  * Abhängigkeiten: /i18n.js, /utils/html.js, /utils/person-color.js,
- *                 /utils/initials.js, /utils/today-plan.js
+ *                 /utils/today-plan.js
  *
  * Markup is built as strings with esc() on every value and goes in through
  * insertAdjacentHTML (house rule: no innerHTML writes). Icons are Lucide
@@ -22,8 +22,7 @@
 import { t, getTimeFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { loadingSpinnerHtml } from '/utils/skeleton.js';
-import { personToken } from '/utils/person-color.js';
-import { initials, compactInitials } from '/utils/initials.js';
+import { personToken, personDisc } from '/utils/person-color.js';
 import { firstName } from '/utils/today-plan.js';
 
 // --------------------------------------------------------
@@ -35,33 +34,6 @@ function icon(name, cls = '') {
 }
 
 /**
- * The characters on a person disc - the ONE initials rule (utils/initials.js,
- * with the household's "LI"/"LE" where two people share a letter). The 20 and
- * 24 discs carry small type: two Latin letters fit, two Hangul/Han glyphs do
- * not, so they take the compact form, as the avatar stack does.
- */
-function discText(name, size) {
-  return size >= 36 ? initials(name, '?') : compactInitials(name, '?');
-}
-
-/**
- * A person disc: photo when there is one, else the initial on the person tint.
- * `size` is 20 (rows) or 36 (header). With the household list the colour is
- * the person's place in it, so two people never share one (person-color.js).
- */
-export function personDisc(person, { size = 20, label = true, household = [] } = {}) {
-  if (!person) return '';
-  const name = person.display_name ?? '';
-  const token = personToken(person, household);
-  const a11y = label ? ` role="img" aria-label="${esc(name)}" title="${esc(name)}"` : ' aria-hidden="true"';
-  const style = `--disc-ink: ${token.ink}; --disc-tint: ${token.tint}`;
-  if (person.avatar_data) {
-    return `<span class="day-disc day-disc--${size} day-disc--photo"${a11y} style="${style}"><img src="${esc(person.avatar_data)}" alt="" loading="lazy"></span>`;
-  }
-  return `<span class="day-disc day-disc--${size}"${a11y} style="${style}">${esc(discText(name, size))}</span>`;
-}
-
-/**
  * The person dot of a calendar row: one colour, two for "razem", grey for
  * nobody. The dot is the brighter dot shade of the v2 tokens
  * (`--person-N-dot`, tokens.css), not the disc ink.
@@ -69,8 +41,9 @@ export function personDisc(person, { size = 20, label = true, household = [] } =
 function dots(people, household) {
   if (!people?.length) return '<span class="dz-dots" aria-hidden="true"><span class="dz-dot dz-dot--none"></span></span>';
   const dot = (person, cls = '') => {
-    const { slot } = personToken(person, household);
-    return `<span class="dz-dot${cls}" style="--dot: var(--person-${slot}-dot)"></span>`;
+    // Someone outside the household has no dot shade: the neutral ink.
+    const { slot, ink } = personToken(person, household);
+    return `<span class="dz-dot${cls}" style="--dot: ${slot ? `var(--person-${slot}-dot)` : ink}"></span>`;
   };
   return `<span class="dz-dots${people.length > 1 ? ' dz-dots--pair' : ''}" aria-hidden="true">${dot(people[0])}${people[1] ? dot(people[1], ' dz-dot--second') : ''}</span>`;
 }
@@ -95,7 +68,7 @@ function sectionHead(id, title, link, count = '') {
 function renderHeader(state) {
   const me = state.user ?? {};
   const name = firstName(me.display_name);
-  const avatar = personDisc({ ...me, avatar_color: me.avatar_color ?? me.color }, { size: 36, label: false, household: state.household });
+  const avatar = personDisc(me, { size: 'md', household: state.household });
   return `
     <header class="dz-head">
       <div class="dz-head__text">
@@ -201,7 +174,7 @@ function taskRow(row, state) {
             <span class="dz-task__aside">
               ${row.flag ? `<i data-lucide="flag" class="dz-task__flag" role="img" aria-label="${esc(t('today.priorityFlag'))}"></i>` : ''}
               ${row.due ? `<span class="dz-task__due${row.late ? ' dz-task__due--late' : ''}">${esc(row.due)}</span>` : ''}
-              ${row.person ? personDisc(row.person, { household: state.household }) : ''}
+              ${row.person ? personDisc(row.person, { label: true, household: state.household }) : ''}
             </span>
           </li>`;
 }

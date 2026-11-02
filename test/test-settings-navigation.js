@@ -4377,3 +4377,26 @@ test('R19: das Kuechenblatt spricht den Zeilen-Dialekt der Einstellungen', async
   assert.doesNotMatch(meals, /class="settings-card"|class="form-field"|class="form-label"/, 'keine Karte und kein gestapeltes Feld mehr');
   assert.match(meals, /settings-group__footer">\$\{t\('settings\.mealTypesHint'\)\}/, 'der Hinweis als Gruppenfuss');
 });
+
+// ONE TODAY (2026-11-02): die Personenfarbe der Uebersicht ("Kolor") ist der
+// Platz in der Haushaltsreihenfolge, nicht die gespeicherte Avatarfarbe; und
+// die Ausweiskarte zeichnet die eine Personenscheibe mit den Initialen aus dem
+// vollen Namen (hier stand ein selbstgebauter Ein-Buchstaben-Avatar).
+test('One Today: die Farbe der Uebersicht folgt der Haushaltsreihenfolge, die Ausweiskarte traegt die Personenscheibe', async (t) => {
+  const { colorValue } = await import('/settings/overview-values.js');
+  const { setHouseholdOrder } = await import('/utils/person-color.js');
+  t.after(() => setHouseholdOrder([]));
+  const household = [
+    { id: 3, display_name: 'Wojtek', sort_order: 1, avatar_color: '#FF2D55' },
+    { id: 7, display_name: 'Mariola', sort_order: 0, avatar_color: '#007AFF' },
+  ];
+  setHouseholdOrder(household);
+  assert.deepEqual(colorValue(household[0], household), { text: 'settings.colorName.rose', ink: 'var(--person-2)' }, 'Platz 2, nicht die gewaehlte Farbe');
+  assert.deepEqual(colorValue(household[1]), { text: 'settings.colorName.blue', ink: 'var(--person-1)' }, 'ohne Liste dieselbe Antwort');
+  assert.equal(colorValue({ id: 12, display_name: 'Hilfe' }, household), null, 'wer nicht im Haushalt steht, hat keine Personenfarbe');
+
+  const shell = await readFile(new URL('../public/settings/shell.js', import.meta.url), 'utf8');
+  const card = shell.slice(shell.indexOf('function createIdentityCard('), shell.indexOf('function renderOverview('));
+  assert.match(card, /personDiscEl\(user \?\? \{\}, \{ size: 56, className: 'settings-identity__avatar' \}\)/);
+  assert.doesNotMatch(card, /toLocaleUpperCase|textContent = \(\[/, 'kein eigener Ein-Buchstaben-Avatar');
+});

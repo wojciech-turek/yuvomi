@@ -30,7 +30,6 @@ import { isNavModuleReadOnly } from '/permissions.js';
 import { isSoloHousehold, hidesPrivacyControls } from '/utils/household.js';
 import { popoverMenuHtml, installPopoverMenus, pageToolsMenuHtml, pageToolsActionEl, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { filterButtonHtml, syncFilterButton, openFilterSheet, filterChipsHtml } from '/utils/filter-sheet.js';
-import { initials } from '/utils/initials.js';
 import { toggleRowHtml } from '/settings/components.js';
 import { wireTablist } from '/utils/tablist.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
@@ -3517,7 +3516,7 @@ function renderHistoryEntry(entry) {
     ? (entry.user_name || t('tasks.historyUnknownMember'))
     : null;
   const avatar = renderAvatarStack(
-    [{ display_name: name, color: entry.person_color, avatar_data: entry.person_avatar }],
+    [{ id: entry.person_user_id, display_name: name, avatar_data: entry.person_avatar }],
     { size: 32, maxVisible: 1 },
   );
   // Der Avatar traegt hier NICHTS bei, was nicht daneben stuende: der Name
@@ -3580,24 +3579,14 @@ function renderHistoryPeople() {
   };
   /* Die Marke ist Schmuck fuer die Vorlesehilfe: den Namen traegt der Knopf.
    * Ohne `aria-hidden` kaeme er zweimal - einmal als `aria-label`, einmal aus
-   * dem `alt` des Avatarbildes.
+   * dem Label der Scheibe.
    *
-   * ZWEI RENDERER, ZWEI FELDNAMEN FUER DIESELBE FARBE. `state.users` kommt aus
-   * `/tasks/meta/options` und heisst dort `avatar_color`, so wie es in der
-   * Tabelle steht; `renderAvatarStack` liest `color`, weil es sonst aus
-   * `ASSIGNED_USERS_SQL` gefuettert wird, das genau dafuer umbenennt
-   * (`'color', u.avatar_color`). Beide Seiten sind fuer sich richtig - wer sie
-   * ungefiltert zusammensteckt, bekommt lautlos die Fallback-Farbe fuer JEDEN,
-   * und damit sind zwei Mitglieder mit gleichen Initialen auf dem Telefon nicht
-   * mehr zu unterscheiden. Deshalb hier die Uebersetzung.
-   *
-   * Ein Foto traegt `/meta/options` nicht, also bleiben es Initialen auf der
-   * Nutzerfarbe. Das ist kein Verlust gegenueber dem Nachbarn: `renderUserMulti
-   * Select` wird aus derselben Liste bedient und zeigt aus demselben Grund
-   * ebenfalls keins. Die Farbe ist ohnehin das Identitaetssignal (User-Farben-
-   * Regel), das Bild die Zugabe. */
+   * Die Farbe ist der Platz der Person im Haushalt (person-color.js), keine
+   * gespeicherte Farbe. Ein Foto traegt `/meta/options` nicht, also bleiben es
+   * Initialen - wie im Nachbarn `renderUserMultiSelect`, der aus derselben
+   * Liste bedient wird. */
   const personMark = (u) => `<span class="history-people__mark" aria-hidden="true">${
-    renderAvatarStack([{ ...u, color: u.avatar_color }], { size: 22, maxVisible: 1 })}</span>`;
+    renderAvatarStack([u], { size: 22, maxVisible: 1 })}</span>`;
   // Nur wer wirklich etwas beisteuern kann: die Housekeeping-Konten sind aus
   // /meta/options schon heraus, und ein Haushalt aus einer Person braucht die
   // Auswahl gar nicht.
@@ -4042,8 +4031,8 @@ function filterSheetGroups() {
     groups.push({ heading: t('tasks.filterGroupPerson'),
       html: mine + chipsHtml('assigned_to', t('tasks.filterGroupPerson'), state.users.map((u) => ({
         value: String(u.id), label: u.display_name,
-        // Die Scheibe der Person wie im Kalenderblatt (utils/filter-sheet.js).
-        swatchColor: u.avatar_color ?? null, swatchLabel: initials(u.display_name),
+        // Die Personenscheibe wie im Kalenderblatt (utils/filter-sheet.js).
+        person: u,
       }))) });
   }
   // KATEGORIE UND TAG SIND EINGEKLAPPT, SOLANGE NICHTS GEWAEHLT IST (Critique

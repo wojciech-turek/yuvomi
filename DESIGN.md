@@ -505,13 +505,17 @@ sections); the approved artboards and spec live with the design brief (BUILD.md)
   pairs (`--person-1..6` with `--person-N-tint`: 1 blue `#2A64A8` on `#E1E9F3`, 2 rose
   `#AD3568` on `#F4E3EA`, then green, terracotta, plum, teal; dark variants per token).
   `public/utils/person-color.js` does the mapping: `personToken(user, household)` returns
-  `{ slot, ink: 'var(--person-N)', tint: 'var(--person-N-tint)' }`, taking the nearest hue
-  of the user's avatar colour, starting grey avatars at (id - 1) mod 6, and never giving
-  two members of one household the same slot. Person colour appears ONLY as the initial on
-  a disc (20 rows / 36 header / 40 wall, `personDisc()`), the 3pt calendar edge and the 6pt
-  dot. Your own items show no avatar. **Shared ("razem")** items use `razemDisc(a, b,
-  { label })`: a letterless disc split at 135 degrees, `linear-gradient(135deg, A 0 50%,
-  B 50% 100%)` of the two people's inks (the only gradient besides the scroll-edge fade);
+  `{ slot, ink: 'var(--person-N)', tint: 'var(--person-N-tint)' }`, where the slot is the
+  member's place in the household order (`sort_order`, then id; mod 6) held by
+  `setHouseholdOrder()` from every auth answer (One Today, 2026-11-02: nobody picks a
+  colour, a stored avatar colour is ignored); someone outside the household (guest, staff,
+  former member) is neutral. Person colour appears ONLY on the one person disc
+  (`personDisc()`: the photo, else the initials on the tint; 20 rows / 36 header / 40
+  wall, any other size for chips and stacks), the 3pt calendar edge and the 6pt dot. Your
+  own items show no avatar. **Shared ("razem")** items use `razemDisc(people, { label })`:
+  a letterless disc split at 135 degrees, `linear-gradient(135deg, A 0 50%, B 50% 100%)`
+  of two people's inks (three or more: the violet accent; the only gradient besides the
+  scroll-edge fade);
   shared calendar events use the violet accent as their edge - blue and rose mix to
   violet, so "together" needs no third hue. Both helpers return escaped markup for
   `insertAdjacentHTML`; the label comes translated from the caller, without a label the

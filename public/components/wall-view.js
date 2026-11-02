@@ -17,7 +17,6 @@
 import { t, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { personDisc, razemDisc, personToken } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 import { recipeThumbHtml } from '/utils/recipe-thumb.js';
 import { planWallRows } from '/utils/wall-plan.js';
 import { renderWallTimer } from '/components/wall-timer.js';
@@ -33,22 +32,21 @@ export function wallDateLabel(dayKey) {
 }
 
 /**
- * A person's 40pt wall disc: their initials from the ONE initials rule
- * (utils/initials.js - "W", and "LI"/"LE" where two people share a letter),
- * in their person colour. `label` names it for a screen reader.
+ * A person's 40pt wall disc: the one person disc (utils/person-color.js) -
+ * their photo, else their initials from the ONE initials rule ("W", and
+ * "LI"/"LE" where two people share a letter) in their person colour. `label`
+ * names it for a screen reader.
  */
 export function wallPersonDisc(person, household = [], { label = true } = {}) {
-  const name = person?.display_name ?? '';
-  return personDisc(person, { text: initials(name, '?'), label: label ? name : '', household, size: 'lg', className: 'wall-disc' });
+  return personDisc(person, { label, household, size: 'lg', className: 'wall-disc' });
 }
 
-/** The 40pt disc of a row: an initial, or the split disc of two people. */
+/** The 40pt disc of a row: a person, or the split disc of two or more. */
 function whoDisc(who, household) {
   if (!who || who.kind === 'none') return '';
   if (who.kind === 'person') return wallPersonDisc(who.person, household);
-  const [a, b] = who.people;
   const names = who.people.map((p) => p.display_name ?? '').filter(Boolean).join(', ');
-  return razemDisc(a, b ?? a, { label: t('today.togetherWith', { names }), household, size: 'lg', className: 'wall-disc' });
+  return razemDisc(who.people, { label: t('today.togetherWith', { names }), household, size: 'lg', className: 'wall-disc' });
 }
 
 // --------------------------------------------------------

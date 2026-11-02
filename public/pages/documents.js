@@ -32,7 +32,6 @@ import { expiryChipSpec, expiryViewerSpec } from '/utils/document-expiry.js';
 import { shortDayMonth, pastDateLabel } from '/utils/day-label.js';
 import { addLocalDays, todayKey } from '/utils/date.js';
 import { personDisc } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import { setBulkPill, clearBulkPill } from '/utils/bulk-pill.js';
 import { createPageController } from '/utils/page-lifecycle.js';
@@ -2501,10 +2500,7 @@ function rowWhenHtml(doc) {
 function creatorDiscHtml(doc) {
   if (state.currentUserId == null || !doc.creator_name) return '';
   if (Number(doc.created_by) === Number(state.currentUserId)) return '';
-  return personDisc(
-    { id: doc.created_by, avatar_color: doc.creator_color },
-    { text: initials(doc.creator_name), label: doc.creator_name, className: 'document-row__who' },
-  );
+  return personDisc({ id: doc.created_by, display_name: doc.creator_name }, { label: true, className: 'document-row__who' });
 }
 
 function renderListItem(doc) {

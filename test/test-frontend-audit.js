@@ -9573,23 +9573,78 @@ test('holiday chips derive readable ink from each configured color', () => {
   }
 });
 
-test('user-selected avatar colors derive readable text ink', () => {
+// ONE TODAY (2026-11-02): EINE PERSONENSCHEIBE, EINE FARBQUELLE. Die
+// Personenfarbe ist der Platz in der Haushaltsreihenfolge
+// (utils/person-color.js `personToken`); die gespeicherte, einst frei gewaehlte
+// `avatar_color` malt nirgends mehr. Hier stand der Guard, der genau das
+// Gegenteil hielt: die Mehrfachauswahl malte `u.avatar_color` mit einer
+// gerechneten Schrift darauf.
+//
+// AUSGENOMMEN bis Task 4 (No person colour pickers): die Farbwaehler und ihre
+// Vorschauen in den Einstellungen (Konto, Familie) und die Farbwaehler der
+// Haushaltshilfe. Task 4 nimmt sie heraus - dann faellt die Ausnahme hier.
+const AVATAR_COLOR_PICKERS_UNTIL_TASK_4 = new Set([
+  'settings/pages/personal-account.js',
+  'settings/pages/admin-family.js',
+  'pages/housekeeping.js',
+]);
+
+test('no avatar_color is read in public/ - every disc takes its colour from personToken', async () => {
+  const { stripJsComments } = await import('../server/utils/strip-comments.js');
+  const root = new URL('../public/', import.meta.url);
+  const files = walkJsFiles('../public/').map((path) => path.slice('../public/'.length))
+    .filter((rel) => !rel.startsWith('vendor/'));
+  assert.ok(files.includes('router.js') && files.includes('components/user-multi-select.js'), 'der Lauf sieht den Baum');
+  const offenders = [];
+  for (const rel of files) {
+    if (AVATAR_COLOR_PICKERS_UNTIL_TASK_4.has(rel)) continue;
+    const code = stripJsComments(readFileSync(new URL(rel, root), 'utf8'));
+    // Jede Schreibweise derselben gespeicherten Farbe: die Spalte und ihre
+    // Aliasse aus den Lese-Joins (Urheber, Koch, verknuepftes Mitglied).
+    for (const match of code.matchAll(/\b\w*(?:avatar_color|creator_color|cook_color|person_color)\b/g)) {
+      offenders.push(`${rel}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(offenders, [], 'eine gespeicherte Personenfarbe wird wieder gelesen - personToken() aus /utils/person-color.js nehmen');
+  for (const rel of AVATAR_COLOR_PICKERS_UNTIL_TASK_4) {
+    assert.match(read(`../public/${rel}`), /avatar_color/, `${rel}: die Ausnahme hat keinen Grund mehr - aus der Liste nehmen`);
+  }
+});
+
+test('one disc renderer: no page builds its own person avatar from a colour', () => {
+  // Die Mehrfachauswahl (Chip und Stapel) zeichnet die Personenscheibe und
+  // rechnet keine Schrift auf eine Farbe.
   const multiSelect = read('../public/components/user-multi-select.js');
-  const color = read('../public/utils/color.js');
+  assert.match(multiSelect, /^import \{ personDisc \} from '\/utils\/person-color\.js';$/m);
+  assert.doesNotMatch(multiSelect, /getReadableTextColor|background-color|\bu\.color\b/);
+  // Today hat keinen eigenen Renderer mehr (`.day-disc` ist gegangen).
+  const today = read('../public/components/today-view.js');
+  assert.doesNotMatch(today, /export function personDisc|day-disc|from '\/utils\/initials\.js'/);
+  assert.doesNotMatch(read('../public/styles/dashboard.css'), /\.day-disc/);
+  // Die bespoke Scheiben nehmen die eine (Markup oder DOM-Fassung).
+  for (const [rel, call] of [
+    ['components/detail-view.js', 'personDiscEl('], ['settings/shell.js', 'personDiscEl('],
+    ['pages/more.js', 'personDisc('], ['pages/schedule.js', 'personDisc('], ['pages/contacts.js', 'personDisc('],
+    ['pages/birthdays.js', 'personDisc('], ['settings/pages/admin-permissions.js', 'personDisc('],
+    ['settings/pages/admin-family.js', 'personDisc('], ['utils/filter-sheet.js', 'personDisc('],
+  ]) {
+    assert.ok(read(`../public/${rel}`).includes(call), `${rel} zeichnet die eine Scheibe (${call})`);
+  }
+  // Einen eigenen Ein-Buchstaben-Avatar baut niemand mehr ("L" statt "LI").
+  assert.doesNotMatch(read('../public/settings/shell.js'), /toLocaleUpperCase/);
+  assert.doesNotMatch(read('../public/pages/more.js'), /initial\.toLocaleUpperCase/);
+  // Die Seitenleiste: Tinte auf Toenung aus personToken, keine Kontrastrechnung.
+  const router = read('../public/router.js');
+  assert.match(router, /const \{ ink, tint \} = personToken\(routerState\.currentUser \?\? \{\}\);/);
+  assert.doesNotMatch(router, /prefersInkText|nav-sidebar__avatar--(?:ink|on-color)/);
+});
 
-  // Single source of truth for the neutral avatar fallback (concrete hex —
-  // getReadableTextColor needs a value it can measure luminance on).
-  assert.match(color, /export const AVATAR_FALLBACK_COLOR = '#[0-9a-fA-F]{6}';/);
-
-  assert.match(multiSelect, /import \{ getReadableTextColor, AVATAR_FALLBACK_COLOR \} from '\/utils\/color\.js'/);
-  assert.match(
-    multiSelect,
-    /color:\$\{getReadableTextColor\(u\.color \?\? AVATAR_FALLBACK_COLOR\)\}/,
-  );
-  assert.match(
-    multiSelect,
-    /color:\$\{getReadableTextColor\(u\.avatar_color \?\? AVATAR_FALLBACK_COLOR\)\}/,
-  );
+test('a selected person chip is violet: --color-accent border on --color-accent-tint, never the module accent', () => {
+  const css = read('../public/styles/user-multi-select.css');
+  const body = cssRuleBody(css, '.user-ms__option:has(.user-ms__checkbox:checked)');
+  assert.match(body, /border-color:\s*var\(--color-accent\);/);
+  assert.match(body, /background:\s*var\(--color-accent-tint\);/);
+  assert.doesNotMatch(css, /--active-module-accent|--module-accent/, 'die Wahl einer Person sieht in jedem Modul gleich aus');
 });
 
 test('mobile meal actions remain visible and touch-safe after the full cascade', () => {
@@ -11594,13 +11649,15 @@ test('Avatar-Initialen waehlen die lesbare Textfarbe', async () => {
   // Kurzform-Hex muss dasselbe ergeben wie die Langform.
   assert.equal(contrastRatio('#fff', '#000000'), contrastRatio('#ffffff', '#000000'));
 
-  // Und die Blaetter muessen die Utility auch benutzen.
-  for (const leaf of ['admin-family', 'personal-account', 'admin-permissions']) {
+  // Und die Blaetter muessen die Utility auch benutzen - bis Task 4 die
+  // Vorschauen der Farbwaehler herausnimmt; die Rechte-Chips tragen seit One
+  // Today die Personenscheibe.
+  for (const leaf of ['admin-family', 'personal-account']) {
     const source = read(`../public/settings/pages/${leaf}.js`);
     assert.match(source, /import \{ prefersInkText \} from '\/utils\/contrast\.js'/, `${leaf} importiert sie nicht`);
     assert.match(source, /prefersInkText\(/, `${leaf} ruft sie nicht auf`);
   }
-  assert.match(read('../public/styles/settings.css'), /\.settings-avatar--ink,\s*\.perm-chip__avatar--ink \{\s*color: var\(--color-ink-on-bright\);/);
+  assert.match(read('../public/styles/settings.css'), /\.settings-avatar--ink \{\s*color: var\(--color-ink-on-bright\);/);
 });
 
 

@@ -254,7 +254,7 @@ async function measureHead(page) {
       date: box('.dz-head__date'),
       title: box('.dz-head__greeting'),
       tools: box('.dz-head__me'),
-      disc: box('.dz-head__me .day-disc'),
+      disc: box('.dz-head__me .person-disc'),
       overview: box('.dz-head'),
       updated: box('.wall__updated'),
       firstContent: first ? Math.round(first.getBoundingClientRect().top) : null,

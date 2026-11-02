@@ -37,6 +37,36 @@ const {
 const PUBLIC = new URL('../public/', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, PUBLIC), 'utf8');
 
+// Die Scheiben, wie Today, Aufgaben und die Personenauswahl sie zeichnen -
+// gemessen am echten Renderer jeder Seite, nicht an der Scheibe allein.
+const { personToken } = await import('../public/utils/person-color.js');
+const { renderTodayPage } = await import('../public/components/today-view.js');
+const { __test: tasksPage } = await import('../public/pages/tasks.js');
+const todayState = (patch) => ({
+  user: { id: 99, display_name: 'Ich' }, household: [], dateLabel: '', greetingKey: 'today.greetingMorning',
+  weather: null, calendar: null, tasks: null, birthdays: [], earlierOpen: false, canCheck: false, canAddTask: false, ...patch,
+});
+/** Der eigene Avatar im Kopf von Today (36). */
+function todayHead(user) {
+  const html = renderTodayPage(todayState({ user }));
+  return html.slice(html.indexOf('dz-head__me'), html.indexOf('</header>'));
+}
+/** Die Scheibe an einer Aufgabenzeile von Today (20). */
+function todayTaskRow(person) {
+  const html = renderTodayPage(todayState({ tasks: { rows: [{ key: 'task:1', id: 1, title: 'Zadanie', person }], total: 1 } }));
+  return html.slice(html.indexOf('dz-task__aside'));
+}
+/** Die Scheibe an einer Zeile der Aufgabenliste, aus Sicht einer anderen Person (20). */
+function tasksRow(person) {
+  const before = tasksPage.state.currentUserId;
+  tasksPage.state.currentUserId = 99;
+  try {
+    return tasksPage.taskTrailHtml({ id: 1, title: 'Zadanie', priority: 'low', assigned_users: [person] });
+  } finally {
+    tasksPage.state.currentUserId = before;
+  }
+}
+
 // --------------------------------------------------------
 // 1. Die Regel
 // --------------------------------------------------------
@@ -350,17 +380,20 @@ test('Avatar-Stapel und Personenauswahl (components/user-multi-select.js)', asyn
   assert.ok(SHOWS(ums.renderAvatarStack([{ ...user, display_name: '김 Smith' }], { size: 22 }), '김S'), 'Stapel gemischt: beide Zeichen bleiben');
   assertShows(ums.renderAvatarStack([{ ...user, display_name: '김 민수' }], { size: 28 }), '민수', 'Stapel: mit Leerraum wie ohne');
 
-  // Die Passrechnung: der Rand (2px je Seite) zaehlt in die Scheibe.
-  const css = read('styles/user-multi-select.css');
-  assert.match(css, /\.avatar-stack__item \{[^}]*border: 2px solid/, 'der Rand, mit dem der Stapel rechnet');
+  // Die Passrechnung: der Rand (2px je Seite) zaehlt in die Scheibe. Der
+  // Stapel ist die Personenscheibe mit Rand (person-color.js, layout.css).
+  const css = read('styles/layout.css');
+  assert.match(css, /\n\.person-disc--ring \{[^}]*border: 2px solid/, 'der Rand, mit dem der Stapel rechnet');
+  assert.match(css, /\n\.person-disc \{[^}]*box-sizing: border-box/, 'er zaehlt in die Groesse');
+  // Ohne eigene Schrift (die 20er-Klasse) gilt die der Zeile: 12px (--type-meta).
+  const fontOf = (html) => Number(/--person-disc-font: (\d+)px/.exec(html)?.[1] ?? 12);
   for (const size of [20, 22, 24]) {
     const html = ums.renderAvatarStack([user], { size });
     assertShows(html, '수', `Stapel ${size}px: ein Zeichen, zwei passen nicht`);
-    const font = Number(/font-size:(\d+)px/.exec(html)[1]);
-    assert.ok(2 * font > size - 4, `Stapel ${size}px: zwei Geviert-Zeichen (${2 * font}px) passten wirklich nicht`);
+    assert.ok(2 * fontOf(html) > size - 4, `Stapel ${size}px: zwei Geviert-Zeichen (${2 * fontOf(html)}px) passten wirklich nicht`);
   }
   const wide = ums.renderAvatarStack([user], { size: 28 });
-  assert.ok(2 * Number(/font-size:(\d+)px/.exec(wide)[1]) <= 28 - 4, 'Stapel 28px: zwei Geviert-Zeichen passen');
+  assert.ok(2 * fontOf(wide) <= 28 - 4, 'Stapel 28px: zwei Geviert-Zeichen passen');
   assert.ok(!SHOWS(ums.renderAvatarStack([user], { size: 16 }), '수'), 'unter 20px bleibt die Scheibe ohne Text');
 });
 
@@ -380,7 +413,7 @@ test('Kontozeile der Seitenleiste (router.js)', () => {
   const source = router.slice(start, end + 2);
 
   const node = () => ({
-    textContent: '', style: {}, dataset: {},
+    textContent: '', style: { setProperty() {} }, dataset: {},
     classList: { toggle() {} }, setAttribute() {}, replaceChildren() {},
     querySelector() { return null; }, querySelectorAll() { return []; },
   });
@@ -391,9 +424,9 @@ test('Kontozeile der Seitenleiste (router.js)', () => {
   const root = { querySelector: (sel) => parts[sel], querySelectorAll: () => [] };
   // Der Nutzer steht im geteilten Zustand des Routers (`routerState`, #1657).
   const run = (currentUser) => new Function(
-    'routerState', 'initials', 'prefersInkText', 't', 'withUpdateHint', 'pendingUpdateVersion', 'document',
+    'routerState', 'initials', 'personToken', 't', 'withUpdateHint', 'pendingUpdateVersion', 'document',
     `${source}\nreturn syncSidebarAccount;`,
-  )({ currentUser }, initials, () => false, (key) => key, (label) => label, () => null, { querySelector: () => null })(root);
+  )({ currentUser }, initials, personToken, (key) => key, (label) => label, () => null, { querySelector: () => null })(root);
 
   // Seit R20 als `data-initials` (Zeichnung per ::before), nicht als Text.
   run({ display_name: MINSU });
@@ -416,10 +449,12 @@ test('Einstellungen: Familie, Konto und Rechte', async () => {
   assert.ok(SHOWS(permissions.memberChipHtml({ id: 2, display_name: '' }), '\\?'), 'Rechte ohne Namen: ?');
 });
 
+// Seit One Today ist die Scheibe im Filterblatt die Personenscheibe in 20,
+// wie an einer Zeile: zwei Geviert-Zeichen passen nicht, das kompakte eine steht.
 test('Kalender: die Scheibe im Filterblatt', async () => {
   const { __test: calendar } = await import('../public/pages/calendar.js');
   const html = calendar.personFilterChipsHtml([{ id: 1, display_name: MINSU, avatar_color: '#34C759' }]);
-  assertShows(html, '민수', 'Filterblatt');
+  assertShows(html, '수', 'Filterblatt');
 });
 
 test('Dienstplan: die Kopfzeile einer Spur', async () => {
@@ -428,7 +463,8 @@ test('Dienstplan: die Kopfzeile einer Spur', async () => {
   const before = state.users;
   state.users = [{ id: 5, display_name: MINSU }];
   try {
-    assertShows(schedule.overviewLaneHeader(5), '민수', 'Spur');
+    // Die Spur traegt die 20er-Personenscheibe: das kompakte eine Zeichen.
+    assertShows(schedule.overviewLaneHeader(5), '수', 'Spur');
   } finally {
     state.users = before;
   }
@@ -494,12 +530,14 @@ test('Uebersicht: Wandansicht', async () => {
 
 test('Uebersicht: Dziś', async () => {
   const user = { id: 1, display_name: MINSU, avatar_color: '#34C759' };
-  // Die Scheiben von Dziś (components/today-view.js): 36 im Kopf traegt zwei
-  // Geviert-Zeichen, 20 und 24 an Zeilen und Meta nur das kompakte eine.
-  const { personDisc } = await import('../public/components/today-view.js');
-  assertShows(personDisc(user, { size: 36 }), '민수', 'Dziś Kopf');
-  assertShows(personDisc(user), '수', 'Dziś Zeile');
-  assertShows(personDisc(user, { size: 24 }), '수', 'Dziś Meta');
+  // Die Scheiben von Dziś sind die eine Personenscheibe (person-color.js): 36
+  // im Kopf traegt zwei Geviert-Zeichen, 20 an Zeilen nur das kompakte eine.
+  assertShows(todayHead(user), '민수', 'Dziś Kopf');
+  assertShows(todayTaskRow(user), '수', 'Dziś Zeile');
+  // Die Scheibe selbst: zwei Zeichen, sobald sie hineinpassen (24 mit 12px).
+  const { personDisc } = await import('../public/utils/person-color.js');
+  assertShows(personDisc(user, { size: 24 }), '민수', 'Scheibe 24');
+  assertShows(personDisc(user, { size: 22 }), '수', 'Scheibe 22');
 });
 
 // --------------------------------------------------------
@@ -615,7 +653,6 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const { __test: birthdays } = await import('../public/pages/birthdays.js');
   const { __test: hk } = await import('../public/pages/housekeeping.js');
   const wallView = await import('../public/components/wall-view.js');
-  const todayView = await import('../public/components/today-view.js');
 
   const withState = (state, patch, run) => {
     const before = Object.fromEntries(Object.keys(patch).map((key) => [key, state[key]]));
@@ -647,8 +684,9 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
       workers: [{ id: 7, display_name: name, current_session: null, today_session: null }],
     }, () => hk.renderWorkerSummary()),
     'Uebersicht Wandansicht': (name) => wallView.wallPersonDisc(person(name), [person(name)]),
-    'Dziś Zeile': (name) => todayView.personDisc(person(name)),
-    'Dziś Kopf': (name) => todayView.personDisc(person(name), { size: 36 }),
+    'Dziś Zeile': (name) => todayTaskRow(person(name)),
+    'Dziś Kopf': (name) => todayHead(person(name)),
+    'Aufgaben Zeile': (name) => tasksRow(person(name)),
   };
 
   // Die Kontozeile der Seitenleiste: derselbe Weg wie im Test weiter oben.
@@ -656,7 +694,7 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
   const start = router.indexOf('function syncSidebarAccount(');
   const source = router.slice(start, router.indexOf('\n}\n', start) + 2);
   const node = () => ({
-    textContent: '', style: {}, dataset: {}, classList: { toggle() {} }, setAttribute() {}, replaceChildren() {},
+    textContent: '', style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, setAttribute() {}, replaceChildren() {},
     querySelector() { return null; }, querySelectorAll() { return []; },
   });
   CALLERS['Seitenleiste Kontozeile'] = (name) => {
@@ -664,9 +702,9 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
     const parts = { '.nav-sidebar__account-trigger': node(), '.nav-sidebar__avatar': avatar, '.nav-sidebar__account-name': node() };
     // Der Nutzer steht im geteilten Zustand des Routers (`routerState`, #1657).
     new Function(
-      'routerState', 'initials', 'prefersInkText', 't', 'withUpdateHint', 'pendingUpdateVersion', 'document',
+      'routerState', 'initials', 'personToken', 't', 'withUpdateHint', 'pendingUpdateVersion', 'document',
       `${source}\nreturn syncSidebarAccount;`,
-    )({ currentUser: { display_name: name } }, initials, () => false, (key) => key, (label) => label, () => null, { querySelector: () => null })(
+    )({ currentUser: { display_name: name } }, initials, personToken, (key) => key, (label) => label, () => null, { querySelector: () => null })(
       { querySelector: (sel) => parts[sel], querySelectorAll: () => [] },
     );
     return `<span>${avatar.dataset.initials ?? avatar.textContent}</span>`;
@@ -686,6 +724,28 @@ test('mit Haushalt: JEDER Aufrufer zeigt fuer Linda LI und fuer Leo LE', async (
         assert.ok(SHOWS(html, text), `${where}: ${name} zeigt ${text}\n${String(html).slice(0, 400)}`);
         assert.ok(!SHOWS(html, 'LJ'), `${where}: ${name} zeigt nicht mehr LJ`);
       }
+    }
+  } finally {
+    clearInitialsRoster();
+  }
+});
+
+// ONE TODAY (2026-11-02): Today zeigte fuer Linda Johnson "LI", die
+// Aufgabenliste "L" - sie nahm die Initialen aus dem Vornamen allein
+// (utils/row-person.js). Dieselbe Person traegt jetzt an Today-Zeile,
+// Aufgabenzeile und Chip dieselben Zeichen, auch mit einem Namen aus einem Wort.
+test('One Today: Today-Zeile, Aufgabenzeile und Chip zeigen dieselben Initialen', async () => {
+  const ums = await import('../public/components/user-multi-select.js');
+  const discText = (html) => /class="person-disc[^"]*"[^>]*>([^<]*)<\/span>/.exec(html)?.[1];
+  try {
+    setInitialsRoster([LINDA, LEO, 'Wojtek']);
+    for (const [name, text] of [[LINDA, 'LI'], ['Wojtek', 'W']]) {
+      const person = { id: 7, display_name: name };
+      assert.deepEqual({
+        today: discText(todayTaskRow(person)),
+        tasks: discText(tasksRow(person)),
+        chip: discText(ums.renderUserMultiSelect([person], [], 'assignees', 'tasks.assignedTo')),
+      }, { today: text, tasks: text, chip: text }, name);
     }
   } finally {
     clearInitialsRoster();

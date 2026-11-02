@@ -4,7 +4,7 @@ import { esc } from '/utils/html.js';
 import { periodStepperHtml, swapPeriod } from '/utils/period-stepper.js';
 import { swapContent } from '/utils/content-swap.js';
 import { renderSkeletonList } from '/utils/skeleton.js';
-import { initials } from '/utils/initials.js';
+import { personDisc } from '/utils/person-color.js';
 import { todayKey, addLocalDays, parseLocalDateKey, weekStartIndex, startOfLocalWeekKey } from '/utils/date.js';
 import { openModal, closeModal, confirmModal, confirmOverModal, advancedSection, refocusAfterRender, reportFieldError } from '/components/modal.js';
 import { makeSortable } from '/utils/sortable.js';
@@ -1871,8 +1871,9 @@ function overviewHolidaysOnDay(dateKey) {
 function overviewLaneHeader(userId) {
   const person = overview.people.find((p) => Number(p.id) === Number(userId));
   const name = person?.display_name ?? userName(userId);
-  const inner = person?.avatar_data ? `<img src="${esc(person.avatar_data)}" alt="${esc(name)}" loading="lazy">` : esc(initials(name));
-  return `<div class="schedule-overview__lane-head"><span class="schedule-overview__lane-avatar" style="background-color:${esc(person?.avatar_color ?? 'var(--color-border)')}">${inner}</span><span class="schedule-overview__lane-name">${esc(name)}</span></div>`;
+  // Die eine Personenscheibe (person-color.js), Schmuck neben dem Namen.
+  const disc = personDisc({ ...person, id: userId, display_name: name });
+  return `<div class="schedule-overview__lane-head">${disc}<span class="schedule-overview__lane-name">${esc(name)}</span></div>`;
 }
 
 const OVERVIEW_HOUR_PX = 56;

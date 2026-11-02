@@ -13,8 +13,7 @@
 import { api, auth } from '/api.js';
 import { t } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { initials } from '/utils/initials.js';
-import { prefersInkText } from '/utils/contrast.js';
+import { personDisc } from '/utils/person-color.js';
 import { confirmModal } from '/components/modal.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import { createRetryState } from '/settings/components.js';
@@ -460,10 +459,7 @@ export function memberChipHtml(m, active = false) {
   return `
         <button type="button" class="perm-chip${active ? ' is-active' : ''}" aria-pressed="${active ? 'true' : 'false'}"
           data-user="${esc(m.id)}">
-          <span class="perm-chip__avatar${prefersInkText(m.avatar_color) ? ' perm-chip__avatar--ink' : ''}"
-            style="background:${esc(m.avatar_color) || 'var(--color-accent)'}">${
-            m.avatar_data ? `<img src="${esc(m.avatar_data)}" alt="">` : esc(initials(m.display_name, '?'))
-          }</span>
+          ${personDisc(m, { size: 24 })}
           <span class="perm-chip__name">${esc(m.display_name)}</span>${badge}
         </button>
       `;

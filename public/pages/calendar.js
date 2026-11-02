@@ -15,7 +15,6 @@ import { t, getLocale, formatDate as formatPreferredDate, formatDayMonth, format
 import { esc, fmtLocation, REQUIRED_MARK } from '/utils/html.js';
 import { periodStepperHtml, syncPeriodReset, swapPeriod } from '/utils/period-stepper.js';
 import { swapRegion } from '/utils/content-swap.js';
-import { initials } from '/utils/initials.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
          monthPeriodKeys, startOfLocalWeekKey, addLocalDays, defaultDateInPeriod,
          isWeekendKey, parseLocalDateKey } from '/utils/date.js';
@@ -6239,11 +6238,9 @@ function personFilterChipsHtml(people) {
       label: short ? full.slice(0, -(surname.length + 1)) : full,
       srSuffix: short ? surname : '',
       active: state.people.has(u.id),
-      // ZWEI NAMEN FUER DIESELBE FARBE: `/family/members` liefert sie roh als
-      // `avatar_color`, `assigned_users` benennt sie auf `color` um
-      // (services/calendar-events.js:17).
-      swatchColor: u.avatar_color ?? u.color ?? null,
-      swatchLabel: initials(u.display_name),
+      // Die Personenscheibe (person-color.js): Bild, sonst Initialen in der
+      // Farbe der Haushaltsreihenfolge.
+      person: u,
     };
   });
   if (people.length) {

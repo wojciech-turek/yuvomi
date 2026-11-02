@@ -331,27 +331,8 @@ button.more-row {
   text-decoration: none;
 }
 
-.more-avatar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  inline-size: 40px;
-  block-size: 40px;
-  border-radius: var(--radius-full);
-  background: var(--avatar-tint, var(--color-fill));
-  color: var(--avatar-ink, var(--color-text-primary));
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.more-avatar img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
+/* The avatar of the profile row is the one person disc (layout.css,
+ * `.person-disc--lg`, person-color.js). */
 
 .more-profile__name {
   overflow: hidden;

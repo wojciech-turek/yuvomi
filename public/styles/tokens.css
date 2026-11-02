@@ -947,14 +947,17 @@
   /* --------------------------------------------------------
    * 4c. Personenfarben (Tafla, 2026-10-19)
    *
-   * The only hue that means WHO. Six curated pairs; each user is mapped to one
-   * of them from their avatar colour (nearest hue, collisions inside the
-   * household resolved by user id) - utils/person-color.js, personToken().
-   * Roles: the initial on a 20/36/40 disc (ink on tint), the 3pt calendar edge,
-   * the 6pt dot. Shared items ("razem") use the split disc of both people
-   * (razemDisc()) and the violet accent as their edge - blue and rose mix to
-   * violet, so "together" needs no third hue. Nothing else uses hue for
-   * identity. Your own items carry no avatar.
+   * The only hue that means WHO. Six curated pairs; each household member
+   * takes the pair of their place in the household order (sort_order, then
+   * id; mod 6), nobody picks one and a stored avatar colour is ignored -
+   * utils/person-color.js, personToken() (One Today, 2026-11-02). Someone
+   * outside the household is neutral (--color-text-secondary on --color-fill).
+   * Roles: the initial on the person disc (ink on tint, personDisc()), the 3pt
+   * calendar edge, the 6pt dot. Shared items ("razem") use the split disc of
+   * two people (razemDisc(); three or more: the violet accent) and the violet
+   * accent as their edge - blue and rose mix to violet, so "together" needs no
+   * third hue. Nothing else uses hue for identity. Your own items carry no
+   * avatar.
    *
    * Every ink holds AA as text on white, --color-bg, --color-fill, hearth and
    * its own tint, white on it >= 6.0 (v2, light only; the dark pairs went with

@@ -608,3 +608,20 @@ test('R19: tragen alle denselben Nachnamen, zeigt der Chip den Vornamen - der vo
   assert.match(renderUserMultiSelect([{ id: 1, display_name: 'A <b> Johnson' }, { id: 2, display_name: 'B Johnson' }], [], 'x', 'l'),
     /<span class="user-ms__name">A &lt;b&gt;<span class="sr-only"> Johnson<\/span>/, 'escaped');
 });
+
+// ONE TODAY (2026-11-02): der Chip traegt die eine Personenscheibe - Bild,
+// sonst die Initialen in der Farbe des Platzes im Haushalt. Die gespeicherte
+// Avatarfarbe malt nichts mehr (hier stand Weiss oder Schwarz auf `avatar_color`),
+// und wer nicht im Haushalt steht (Hauspersonal an einem Datensatz), ist neutral.
+test('One Today: der Chip traegt die Personenscheibe in der Farbe der Haushaltsreihenfolge', async (t) => {
+  const { setHouseholdOrder } = await import('../public/utils/person-color.js');
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder([{ ...ANNA, sort_order: 1 }, { ...BEA, sort_order: 0 }]);
+  const html = renderUserMultiSelect([ANNA, BEA, CLARA, { id: 5, display_name: 'Dora', avatar_data: 'data:image/png;base64,RA==' }], [2], 'x', 'l');
+  const chip = (id) => html.slice(html.indexOf(`value="${id}"`), html.indexOf('</label>', html.indexOf(`value="${id}"`)));
+  assert.match(chip(1), /class="person-disc user-ms__avatar" aria-hidden="true" style="--person-disc-ink: var\(--person-2\); --person-disc-tint: var\(--person-2-tint\)[^"]*">A</);
+  assert.match(chip(2), /--person-disc-ink: var\(--person-1\)/, 'Bea steht vorn in der Reihenfolge');
+  assert.match(chip(3), /--person-disc-ink: var\(--color-text-secondary\); --person-disc-tint: var\(--color-fill\)/, 'Clara ist kein Mitglied: neutral');
+  assert.match(chip(5), /person-disc--photo[^>]*><img src="data:image\/png;base64,RA==" alt="" loading="lazy">/, 'ein Bild statt der Initialen');
+  assert.doesNotMatch(html, /#111111|#222222|#333333|background-color/, 'keine gespeicherte Farbe im Markup');
+});

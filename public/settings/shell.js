@@ -1,7 +1,7 @@
-import { t, getLocale } from '/i18n.js';
+import { t } from '/i18n.js';
 import { moduleAccentVar } from '/utils/module-accent.js';
 import { getHouseholdSize } from '/utils/household.js';
-import { personToken } from '/utils/person-color.js';
+import { personDiscEl } from '/utils/person-color.js';
 import { loadOverviewValues } from './overview-values.js';
 import { renderSkeletonList, placeSkeletonUntilContent } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
@@ -519,20 +519,9 @@ function createIdentityCard(user, accountLeaf) {
   const meta = size ? `${role} · ${t('more.peopleAtHome', { count: size })}` : role;
   card.setAttribute('aria-label', t('settings.identityLabel', { name, meta }));
 
-  const avatar = document.createElement('span');
-  avatar.className = 'settings-identity__avatar';
-  avatar.setAttribute('aria-hidden', 'true');
-  const token = personToken(user ?? {});
-  avatar.style.setProperty('--identity-ink', token.ink);
-  avatar.style.setProperty('--identity-tint', token.tint);
-  if (user?.avatar_data) {
-    const img = document.createElement('img');
-    img.src = user.avatar_data;
-    img.alt = '';
-    avatar.appendChild(img);
-  } else {
-    avatar.textContent = ([...String(name).trim()][0] ?? '?').toLocaleUpperCase(getLocale());
-  }
+  // Die eine Personenscheibe (person-color.js): Bild, sonst die Initialen
+  // aus dem vollen Namen in der Farbe der Haushaltsreihenfolge.
+  const avatar = personDiscEl(user ?? {}, { size: 56, className: 'settings-identity__avatar' });
 
   const copy = document.createElement('span');
   copy.className = 'settings-identity__copy';

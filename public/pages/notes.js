@@ -20,7 +20,6 @@ import { pageToolsMenuHtml, pageToolsActionEl, installPopoverMenus } from '/util
 import { findPageFab } from '/utils/fab.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
 import { emptyStateHTML, searchEmptyHTML } from '/utils/empty-state.js';
-import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
 import {
   noteMatchesCategories,
   occupiedNoteCategoryIds,
@@ -37,7 +36,6 @@ import {
 import { NOTE_CATEGORY_NAME_MAX_LENGTH } from '/utils/note-category-name.js';
 import { isNavModuleReadOnly } from '/permissions.js';
 import { personDisc } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 import { pastDateLabel } from '/utils/day-label.js';
 
 // --------------------------------------------------------
@@ -662,10 +660,7 @@ export function notePreviewLines(note, max = 2) {
 function creatorDisc(note) {
   const own = state.user && Number(note.created_by) === Number(state.user.id);
   if (own || !note.creator_name) return '';
-  return personDisc(
-    { id: note.created_by, avatar_color: note.creator_color || AVATAR_FALLBACK_COLOR },
-    { text: initials(note.creator_name), label: note.creator_name },
-  );
+  return personDisc({ id: note.created_by, display_name: note.creator_name }, { label: true });
 }
 
 /**

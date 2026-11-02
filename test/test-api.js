@@ -366,6 +366,39 @@ test('auth.me, login und verifyTwoFactor reichen initialsRoster an den Initialen
   assert.equal(initials('Linda Johnson'), 'LJ', 'nach dem Abmelden kennt der Helfer den Haushalt nicht mehr');
 });
 
+// ─── Personenfarben folgen der Haushaltsreihenfolge (One Today) ──────────────
+// Dieselbe Reise wie initialsRoster: jede Scheibe ohne eigene Liste liest die
+// Reihenfolge, die die Auth-Antwort mitbringt.
+
+test('auth.me, login und verifyTwoFactor reichen householdOrder an die Personenfarben; logout nimmt sie zurueck', async () => {
+  const { personSlot, setHouseholdOrder } = await import('../public/utils/person-color.js');
+  for (const [name, run] of [
+    ['me', () => auth.me()],
+    ['login', () => auth.login('linda', 'pw')],
+    ['verifyTwoFactor', () => auth.verifyTwoFactor('123456')],
+  ]) {
+    setup();
+    setHouseholdOrder([]);
+    assert.equal(personSlot({ id: 7 }), null, `${name}: Vorbedingung`);
+    _mockFetch = () => mockResponse(200, { user: {}, householdOrder: [{ id: 7, sort_order: 1 }, { id: 3, sort_order: 0 }] });
+    await run();
+    assert.equal(personSlot({ id: 3 }), 1, `${name}: die Reihenfolge ist angekommen`);
+    assert.equal(personSlot({ id: 7 }), 2, name);
+  }
+
+  const hadRoot = Object.hasOwn(globalThis.document, 'documentElement');
+  const root = globalThis.document.documentElement;
+  if (!root) globalThis.document.documentElement = { classList: { remove() {}, toggle() {} } };
+  try {
+    _mockFetch = () => mockResponse(200, {});
+    await auth.logout();
+  } finally {
+    if (!hadRoot) delete globalThis.document.documentElement;
+    else globalThis.document.documentElement = root;
+  }
+  assert.equal(personSlot({ id: 3 }), null, 'nach dem Abmelden traegt niemand mehr eine Haushaltsfarbe');
+});
+
 test('auth.updateProfile holt danach /auth/me: der eigene neue Name steht sofort im Haushalt', async () => {
   const { initials, clearInitialsRoster } = await import('../public/utils/initials.js');
   setup();

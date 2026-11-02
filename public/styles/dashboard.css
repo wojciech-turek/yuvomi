@@ -1490,29 +1490,6 @@
   }
 }
 
-/* ── Person discs ───────────────────────────────────────── */
-
-.day-disc {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--disc-tint, var(--color-fill));
-  color: var(--disc-ink, var(--color-text-secondary));
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-meta); line-height: 20px; }
-.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-row); line-height: 36px; }
-
-.day-disc--photo img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
-
 /* ── Cards and section heads ────────────────────────────── */
 
 /* The v2 card: white, a hairline, radius 12, no shadow. Rows inside it carry

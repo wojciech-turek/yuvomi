@@ -9,6 +9,7 @@ import { api, auth } from '/api.js';
 import { openCookForMeal } from '/components/cook-mode.js';
 import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-question.js';
 import { planContext } from '/utils/today-plan.js';
+import { setHouseholdOrder } from '/utils/person-color.js';
 import { headerDate, greetingKey, weatherCard, calendarDay, pendingTasks, birthdaysSoon, clockStamp } from '/utils/dzis-plan.js';
 import { renderTodayPage, renderTodaySkeleton } from '/components/today-view.js';
 import { createPageController } from '/utils/page-lifecycle.js';
@@ -1085,6 +1086,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     if (signal.aborted) return;
     primeMealTypeNames(prefsRes?.data);
     data         = dashRes;
+    // Die Personenfarben folgen der Haushaltsreihenfolge (person-color.js):
+    // die frische Mitgliederliste gilt fuer jede Scheibe, nicht nur hier.
+    if (data?.users?.length) setHouseholdOrder(data.users);
     /* Die Zahlen an den Nav-Zielen und Modulkacheln kommen aus derselben
      * Antwort (#868). Sie hier hereinzureichen spart die zweite Aggregation,
      * die der Shell-Aufbau sonst beim Anmelden anstiess. Der Speicher nimmt
@@ -1536,6 +1540,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
       // dem Haken abgeschickt worden sein.
       if (dzisUi.busy.size || wallUi.busy.size) return;
       data = fresh;
+      if (data?.users?.length) setHouseholdOrder(data.users);
       setCountdownAvailability(data?.countdowns);
       lastLoadedAt = new Date();
       rebuildDashboard();

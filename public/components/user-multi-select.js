@@ -6,65 +6,38 @@
 
 import { esc } from '/utils/html.js';
 import { t } from '/i18n.js';
-import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { initials, compactInitials } from '/utils/initials.js';
-
-// Der Rand von `.avatar-stack__item` (user-multi-select.css). Er steht hier
-// als Zahl, weil die Scheibe ihre Groesse und Schrift ohnehin inline in px
-// bekommt und die Passrechnung beides braucht.
-const STACK_BORDER_PX = 2;
+import { personDisc } from '/utils/person-color.js';
 
 /**
- * Rendert einen Avatar-Stack für mehrere zugewiesene Benutzer.
- * @param {Array<{id, display_name, color}>} users
+ * Rendert einen Avatar-Stack für mehrere zugewiesene Benutzer: je Person die
+ * eine Personenscheibe (utils/person-color.js) mit Rand, damit Nachbarn
+ * getrennt stehen.
+ *
+ * WAS AUF DER SCHEIBE STEHT, ENTSCHEIDET personDisc(): unter 20px nur die
+ * Farbe (Etappe 3, 2026-08-17: eine 9px-Schrift sagt weniger als ein sauberer
+ * Punkt), darueber die Initialen aus dem einen Helfer - zwei Geviert-Zeichen
+ * nur, wo sie innerhalb des Rands Platz haben (#1607), sonst das kompakte
+ * eine. Der Name steht als Label an der Scheibe.
+ * @param {Array<{id, display_name, avatar_data?}>} users
  * @param {object} opts
  * @param {number} [opts.size=28]      Avatar-Größe in px
  * @param {number} [opts.maxVisible=3] Maximale Avatare vor "+N"-Anzeige
- * @param {number} [opts.minFont=11]   Untergrenze der Initialen in px
  * @returns {string} HTML-String
  */
-export function renderAvatarStack(users, { size = 28, maxVisible = 3, minFont = 11 } = {}) {
+export function renderAvatarStack(users, { size = 28, maxVisible = 3 } = {}) {
   if (!users?.length) return '';
   const visible = users.slice(0, maxVisible);
   const overflow = users.length - visible.length;
-  // UNTER DER LESBARKEIT GIBT ES KEINE INITIALEN, NUR DIE FARBE (Etappe 3,
-  // 2026-08-17). Hier stand eine 9px-Untergrenze - unter jeder Schwelle, die
-  // die App sonst kennt (Caption 2 ist mit 11px die kleinste Textrolle), und
-  // die Kalender-Gitter riefen mit size 14-16 genau hinein (Sonde
-  // undersized-ui-text, 13 Fundstellen). Ab 20px Scheibe tragen 11px-Initialen
-  // (Verhaeltnis <= 0.55); darunter ist die Scheibe der Kanal - die Nutzerfarbe
-  // ist per User-Farben-Regel ohnehin das Identitaetssignal, und der Name
-  // steht weiter im title. Ein 9px-Text sagt weniger als ein sauberer Punkt.
-  // `minFont` hebt die Untergrenze dort, wo der Stapel neben Fliesstext steht
-  // (Agenda-Zeile: 12px neben 14px-Metazeile, Critique 2026-09-24). Wer sie
-  // hebt, gibt die Scheibe mit: 12px brauchen 22px, damit das Verhaeltnis
-  // <= 0.55 bleibt.
-  const fs = Math.max(minFont, Math.round(size * 0.4));
-  const showText = size >= 20;
-  // ZWEI GEVIERT-ZEICHEN BRAUCHEN BIS ZU 2em (#1607; gemessen: Noto Sans CJK
-  // 1em je Zeichen, die Apple-Systemschrift rund 0.9em). Der Rand der Scheibe (2px je
-  // Seite, user-multi-select.css) zaehlt bei `border-box` in ihre Breite, und
-  // `overflow: hidden` schneidet an seiner Innenkante. In eine 24px-Scheibe
-  // mit 11px Schrift passen deshalb 20px Text: zwei lateinische Buchstaben,
-  // aber keine zwei Hangul- oder Han-Zeichen (22px). Wo sie nicht passen,
-  // steht eines - die Schrift zu verkleinern hiesse unter die Untergrenze
-  // oben zu gehen.
-  const fitsTwoWide = size - 2 * STACK_BORDER_PX >= 2 * fs;
-  const avatars = visible.map((u) => {
-    const text = fitsTwoWide ? initials(u.display_name) : compactInitials(u.display_name);
-    const inner = u.avatar_data
-      ? `<img src="${esc(u.avatar_data)}" alt="${esc(u.display_name ?? '')}" loading="lazy">`
-      : (showText ? esc(text) : '');
-    return `<span class="avatar-stack__item"
-      style="width:${size}px;height:${size}px;font-size:${fs}px;background-color:${esc(u.color ?? AVATAR_FALLBACK_COLOR)};color:${getReadableTextColor(u.color ?? AVATAR_FALLBACK_COLOR)}"
-      title="${esc(u.display_name ?? '')}">
-      ${inner}
-    </span>`;
-  });
+  const avatars = visible.map((u) => personDisc(u, {
+    size, ring: true, label: String(u?.display_name ?? ''), className: 'avatar-stack__item',
+  }));
   if (overflow > 0) {
-    avatars.push(`<span class="avatar-stack__item avatar-stack__overflow"
-      style="width:${size}px;height:${size}px;font-size:${fs}px"
-      title="${overflow} ${t('userMultiSelect.moreUsers')}">${showText ? `+${overflow}` : ''}</span>`);
+    // "+N" ist keine Person: dieselbe Scheibe in ruhigen Toenen
+    // (user-multi-select.css), in der Groesse der Nachbarn.
+    const px = Math.round(Number(size)) || 28;
+    avatars.push(`<span class="person-disc person-disc--ring avatar-stack__item avatar-stack__overflow"
+      style="--person-disc-size: ${px}px"
+      title="${overflow} ${t('userMultiSelect.moreUsers')}">${px >= 20 ? `+${overflow}` : ''}</span>`);
   }
   return `<span class="avatar-stack">${avatars.join('')}</span>`;
 }
@@ -97,7 +70,7 @@ function userChipName(displayName, surname) {
 
 /**
  * Rendert das Multi-Select-Widget als Dropdown-Checkbox-Liste.
- * @param {Array<{id, display_name, avatar_color}>} allUsers  Alle verfügbaren Benutzer
+ * @param {Array<{id, display_name, avatar_data?}>} allUsers  Alle verfügbaren Benutzer
  * @param {number[]} selectedIds                               Bereits ausgewählte IDs
  * @param {string}   inputName                                 Name-Attribut des Widgets
  * @param {string}   labelKey                                  i18n-Schlüssel für das Label
@@ -112,16 +85,13 @@ export function renderUserMultiSelect(allUsers, selectedIds, inputName, labelKey
   const surname = sharedSurname(allUsers);
   const items = allUsers.map((u) => {
     const checked = selectedSet.has(u.id) ? 'checked' : '';
-    const inner = u.avatar_data
-      ? `<img src="${esc(u.avatar_data)}" alt="${esc(u.display_name ?? '')}" loading="lazy">`
-      : esc(initials(u.display_name));
+    // Die Personenscheibe (Bild, sonst Initialen in der Personenfarbe) ist
+    // Schmuck: den Namen sagt der Chip daneben.
     return `
       <label class="user-ms__option">
         <input type="checkbox" class="user-ms__checkbox" value="${u.id}" ${checked}
                data-ms-input="${esc(inputName)}">
-        <span class="user-ms__avatar" style="background-color:${esc(u.avatar_color ?? AVATAR_FALLBACK_COLOR)};color:${getReadableTextColor(u.avatar_color ?? AVATAR_FALLBACK_COLOR)}">
-          ${inner}
-        </span>
+        ${personDisc(u, { size: 26, className: 'user-ms__avatar' })}
         <span class="user-ms__name">${userChipName(u.display_name, surname)}</span>
       </label>`;
   });

@@ -15,8 +15,7 @@ import { renderSkeletonList } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { pageToolsMenuHtml, pageToolsActionEl, popoverMenuHtml, installPopoverMenus } from '/utils/popover-menu.js';
 import { parseVCards } from '/utils/vcard.js';
-import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc } from '/utils/person-color.js';
 import { composeDisplayName, contactSortKey, splitDisplayName } from '/utils/contact-name.js';
 import { getPhoneFormatter, createAsYouType, countryFromRegion } from '/utils/phone.js';
 import { emptyStateHTML, searchEmptyHTML } from '/utils/empty-state.js';
@@ -87,16 +86,12 @@ function contactAvatar(c) {
   if (!c.family_user_id) {
     return `<span class="contact-item__icon contact-item__icon--initials" aria-hidden="true">${esc(initials(c.name, '?'))}</span>`;
   }
-  // Tafla: the member's PERSON colour (person-color.js, AA-measured ink on
-  // its tint) instead of the free avatar colour with a computed text colour.
-  const { ink, tint } = personToken({ id: c.family_user_id, avatar_color: c.family_avatar_color || AVATAR_FALLBACK_COLOR });
-  const name  = c.family_display_name || c.name;
-  const inner = c.family_avatar_data
-    ? `<img src="${esc(c.family_avatar_data)}" alt="" loading="lazy">`
-    : esc(initials(name, '?'));
-  return `<span class="contact-item__icon contact-item__icon--member"
-    style="background-color:${tint};color:${ink}"
-    aria-hidden="true">${inner}</span>`;
+  // The member's person disc (person-color.js): their photo, else their
+  // initials in the colour of their place in the household.
+  return personDisc(
+    { id: c.family_user_id, display_name: c.family_display_name || c.name, avatar_data: c.family_avatar_data },
+    { size: 28, className: 'contact-item__icon contact-item__icon--member' },
+  );
 }
 
 // --------------------------------------------------------

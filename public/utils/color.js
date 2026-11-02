@@ -1,12 +1,4 @@
 /**
- * Neutraler Ersatz-Avatarhintergrund, wenn ein Benutzer keine eigene Farbe hat.
- * Als konkreter Hex nötig, weil getReadableTextColor die Luminanz berechnet —
- * eine CSS-Variable ließe sich hier nicht auswerten. Einzige Quelle der Wahrheit
- * für alle Avatar-Renderer (neutrales Systemgrau, farbtonlos).
- */
-export const AVATAR_FALLBACK_COLOR = '#8E8E93';
-
-/**
  * Die Farben, die ein Objekt ohne Bild bekommt - Mitglieder seit jeher, und
  * seit #469 auch die Kacheln der Schnellzugriffe.
  *

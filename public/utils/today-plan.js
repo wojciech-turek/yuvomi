@@ -317,9 +317,9 @@ function mealRow(meal, ctx, dayKey = ctx.todayKey) {
   const time = MEAL_TIMES[meal.meal_type] ?? MEAL_TIMES.dinner;
   const cook = meal.cook_user_id
     ? (ctx.users.find((u) => u.id === meal.cook_user_id)
-      ?? { id: meal.cook_user_id, display_name: meal.cook_name ?? '', avatar_color: meal.cook_color ?? null })
+      ?? { id: meal.cook_user_id, display_name: meal.cook_name ?? '' })
     : null;
-  const people = cook ? [{ ...cook, color: cook.color ?? cook.avatar_color }] : [];
+  const people = cook ? [cook] : [];
   return {
     key: `meal:${meal.id}`,
     kind: 'meal',
@@ -520,7 +520,7 @@ export function pickNow(data, plan, ctx, { timer = null } = {}) {
     if (ctx.nowMin >= minutesOf(DINNER_FROM) && ctx.nowMin < dinnerMin + DINNER_LINGER_MIN) {
       const cook = dinner.cook_user_id
         ? (ctx.users.find((u) => u.id === dinner.cook_user_id)
-          ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '', avatar_color: dinner.cook_color ?? null })
+          ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '' })
         : null;
       const plan2 = data?.dinnerPlan && data.dinnerPlan.meal_id === dinner.id ? data.dinnerPlan : null;
       return {

@@ -7,7 +7,7 @@ import {
 } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc, setHouseholdOrder } from '/utils/person-color.js';
 import { prefersInkText } from '/utils/contrast.js';
 import { AVATAR_COLORS } from '/utils/color.js';
 import { sortMembers } from '/utils/member-order.js';
@@ -152,18 +152,13 @@ function bindAvatarPicker(container, prefix) {
 }
 
 /**
- * Die Scheibe einer Zeile (Tafla): das Bild, sonst das Initial in der
- * kuratierten Personenfarbe (utils/person-color.js) - Tinte auf Toenung, in
- * beiden Themes AA. Die frei gewaehlte Avatarfarbe ist die Richtung, die
- * Palette liefert die lesbare Fassung; der Bearbeiten-Dialog zeigt weiter die
- * gewaehlte Farbe selbst.
+ * Die Scheibe einer Zeile: die eine Personenscheibe (utils/person-color.js) -
+ * das Bild, sonst das Initial in der Farbe der Haushaltsreihenfolge. Konten
+ * ausserhalb des Haushalts (Hauspersonal, Gaeste, Ehemalige) stehen neutral.
+ * Schmuck: der Name steht daneben.
  */
 function memberDiscHtml(u, household = []) {
-  if (u?.avatar_data) return avatarHtml(u, 'settings-avatar settings-avatar--sm');
-  const token = personToken(u ?? {}, household.filter((m) => m.is_household_member !== false));
-  return `
-    <div class="settings-avatar settings-avatar--sm settings-avatar--person" title="${esc(u?.display_name || '')}"
-      style="--disc-ink: ${token.ink}; --disc-tint: ${token.tint}">${esc(initials(u?.display_name, '?'))}</div>`;
+  return personDisc(u ?? {}, { size: 'lg', household: household.filter((m) => m.is_household_member !== false) });
 }
 
 function memberHtml(u, currentUserId, { orderable = false, aligned = false, household = [] } = {}) {
@@ -623,6 +618,9 @@ async function sendMemberOrder(container, currentUser, users) {
     users.forEach((u, idx) => {
       if (positions.has(u.id)) users[idx] = { ...u, sort_order: positions.get(u.id) };
     });
+    // Die Personenfarben folgen der Reihenfolge (person-color.js): jede
+    // Scheibe der App nimmt ab jetzt die neue, nicht erst nach dem Neuladen.
+    if (Array.isArray(res?.data)) setHouseholdOrder(res.data);
     return true;
   } catch {
     // Der Satz der App und nicht der englische der API: was nicht geklappt

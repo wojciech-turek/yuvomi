@@ -122,29 +122,9 @@
   color: var(--color-text-primary);
 }
 
-/* 24px-Scheibe mit 11px-Initialen (Caption 2, die kleinste Textrolle): das
- * Verhaeltnis von 0,46 liegt unter der Lesbarkeitsgrenze des Avatar-Stapels
- * (<= 0,55, user-multi-select.js). Farbe und Tinte setzt die Komponente aus
- * der Identitaetsfarbe der Person. */
-.detail-head__avatar {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--space-6);
-  block-size: var(--space-6);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  font-size: var(--type-micro);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
-}
-
-.detail-head__avatar img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
+/* Die Scheibe einer Person ist die eine Personenscheibe (layout.css,
+ * `.person-disc`, 24 aus detail-view.js): Bild, sonst die Initialen in der
+ * Tinte auf der Toenung der Person. */
 
 .detail-head__name {
   min-width: 0;

@@ -3,10 +3,10 @@
  * Zweck: Die Regel aus DESIGN.md (Direction Contract, "The person-colour
  *        rule") fuer jede Zeile, die Personen traegt - Aufgaben, Termine,
  *        Aufgaben im Kalender: die eigene Zeile zeigt keine Scheibe, die einer
- *        anderen Person deren Initial in ihrer Personenfarbe, eine geteilte die
- *        Razem-Scheibe. Dazu die 3pt-Kante eines Termins (Person, violett fuer
- *        gemeinsam).
- * Abhaengigkeiten: utils/person-color.js (Farben, Markup), utils/initials.js
+ *        anderen Person ihre Personenscheibe, eine geteilte die
+ *        Razem-Scheibe. Dazu die 3pt-Kante eines Termins (Person, violett
+ *        fuer gemeinsam).
+ * Abhaengigkeiten: utils/person-color.js (Farben, Markup)
  *
  * Die Farben und das Markup stehen in person-color.js (Foundation); hier steht
  * nur die Entscheidung, WELCHE Scheibe eine Zeile bekommt. Die Startseite
@@ -14,7 +14,6 @@
  */
 
 import { personDisc, razemDisc, personToken } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 
 /** Das erste Wort eines Anzeigenamens ("Mariola Kowalska" -> "Mariola"). */
 export function firstName(displayName) {
@@ -61,12 +60,10 @@ export function includesViewer(people, viewerId) {
  */
 export function whoDiscHtml(who, { household = [], razemLabel = () => '' } = {}) {
   if (!who || who.kind === 'none') return '';
-  if (who.kind === 'person') {
-    const name = String(who.person.display_name ?? '');
-    return personDisc(who.person, { text: initials(firstName(name), '?'), label: name, household });
-  }
-  const [a, b] = who.people;
-  return razemDisc(a, b ?? a, { label: razemLabel(who.people), household });
+  // Die Initialen aus dem VOLLEN Namen, wie auf Today und in den Chips: aus
+  // dem Vornamen allein ("Linda") wurde hier "L", wo der Haushalt "LI" sagt.
+  if (who.kind === 'person') return personDisc(who.person, { label: true, household });
+  return razemDisc(who.people, { label: razemLabel(who.people), household });
 }
 
 /**

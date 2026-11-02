@@ -68,7 +68,7 @@ import {
 import { openModal, confirmModal } from '/components/modal.js';
 import { armScreensaver, disarmScreensaver } from '/components/photo-screensaver.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
-import { prefersInkText } from '/utils/contrast.js';
+import { personToken } from '/utils/person-color.js';
 import { handleMasterDetailPopstate } from '/utils/master-detail.js';
 import '/components/datepicker.js';
 import { NAV_ICONS, MODULE_ICON, moduleIconEl } from '/nav-icons.js';
@@ -1047,8 +1047,8 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
 }
 
 /**
- * Name, Farbe und Bild der Kontozeile aus dem angemeldeten Nutzer. Laeuft beim
- * Aufbau, beim Sprachwechsel und nach einer Profil-Aenderung
+ * Name, Personenfarbe und Bild der Kontozeile aus dem angemeldeten Nutzer.
+ * Laeuft beim Aufbau, beim Sprachwechsel und nach einer Profil-Aenderung
  * (`yuvomi:profile-changed`, personal-account.js).
  */
 function syncSidebarAccount(root = document.querySelector('.nav-sidebar__account')) {
@@ -1058,11 +1058,11 @@ function syncSidebarAccount(root = document.querySelector('.nav-sidebar__account
   const nameEl = root.querySelector('.nav-sidebar__account-name');
   const displayName = routerState.currentUser?.display_name || routerState.currentUser?.username || '';
   nameEl.textContent = displayName;
-  const color = routerState.currentUser?.avatar_color || '';
-  avatar.style.backgroundColor = color;
-  const ink = Boolean(color) && prefersInkText(color);
-  avatar.classList.toggle('nav-sidebar__avatar--ink', ink);
-  avatar.classList.toggle('nav-sidebar__avatar--on-color', Boolean(color) && !ink);
+  // Die Farbe der Personenscheibe (person-color.js): der Platz im Haushalt,
+  // Tinte auf Toenung wie jede andere Scheibe der App.
+  const { ink, tint } = personToken(routerState.currentUser ?? {});
+  avatar.style.setProperty('--person-disc-ink', ink);
+  avatar.style.setProperty('--person-disc-tint', tint);
   // DIE INITIALEN SIND BILD, NICHT TEXT (R20, axe label-content-name-mismatch
   // auf allen 60 Ansichten). Als Textknoten zaehlten „LI" zum sichtbaren
   // Etikett des Knopfs, und sein Name „Konto-Menue, Linda Johnson" enthielt

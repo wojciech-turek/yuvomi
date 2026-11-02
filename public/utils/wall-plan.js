@@ -267,7 +267,7 @@ export function buildWall(data, {
         meal: dinner,
         cook: dinner.cook_user_id
           ? (ctx.users.find((u) => u.id === dinner.cook_user_id)
-            ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '', avatar_color: dinner.cook_color ?? null })
+            ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '' })
           : null,
         minutes: dinnerMin - ctx.nowMin,
         ingredients: data?.dinnerPlan && data.dinnerPlan.meal_id === dinner.id ? data.dinnerPlan : null,

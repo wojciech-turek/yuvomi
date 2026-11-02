@@ -28,8 +28,7 @@ import {
 import { pushOverlay, dropOverlay } from '/utils/overlay-history.js';
 import { durationToken } from '/utils/ux.js';
 import { detailPaneHeaderEl } from '/utils/master-detail.js';
-import { getReadableTextColor, AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { initials } from '/utils/initials.js';
+import { personDiscEl } from '/utils/person-color.js';
 
 // Ab dieser Breite ist ein Popover am Auslöser die bessere Präsentation: Der
 // Auslöser bleibt sichtbar, der Weg ist kurz. Darunter deckt ein 320px-Kärtchen
@@ -295,28 +294,13 @@ export function detailHeadEl(head) {
 }
 
 /**
- * Die Scheibe einer Person: ihr Bild, sonst ihre Initialen auf ihrer
- * Identitaetsfarbe (dieselbe wie im Avatar-Stapel der Listen,
- * user-multi-select.js). Schmuck neben dem Namen, der daneben steht - deshalb
- * `aria-hidden` und ein leeres `alt`.
+ * Die Scheibe einer Person: die eine Personenscheibe (utils/person-color.js) -
+ * ihr Bild, sonst ihre Initialen in der Farbe der Haushaltsreihenfolge.
+ * Schmuck neben dem Namen, der daneben steht - deshalb `aria-hidden` und ein
+ * leeres `alt`.
  */
 function personAvatarEl(person) {
-  const avatar = document.createElement('span');
-  avatar.className = 'detail-head__avatar';
-  avatar.setAttribute('aria-hidden', 'true');
-  if (person.avatar_data) {
-    const img = document.createElement('img');
-    img.src = person.avatar_data;
-    img.alt = '';
-    img.loading = 'lazy';
-    avatar.appendChild(img);
-    return avatar;
-  }
-  const color = person.color ?? AVATAR_FALLBACK_COLOR;
-  avatar.style.setProperty('background-color', color);
-  avatar.style.setProperty('color', getReadableTextColor(color));
-  avatar.textContent = initials(person.display_name);
-  return avatar;
+  return personDiscEl(person, { size: 24, className: 'detail-head__avatar' });
 }
 
 /**

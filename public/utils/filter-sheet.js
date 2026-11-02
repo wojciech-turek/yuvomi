@@ -28,6 +28,7 @@
  */
 
 import { esc } from '/utils/html.js';
+import { personDisc } from '/utils/person-color.js';
 import { t } from '/i18n.js';
 import { openModal, closeModal } from '/components/modal.js';
 import { durationToken } from '/utils/ux.js';
@@ -135,21 +136,24 @@ export function syncFilterButton(button, count, labels = defaultFilterLabels()) 
 /**
  * Ein Filter-Chip: Button mit `aria-pressed`, Achse und Wert am Knoten.
  *
- * Eine Person traegt ihre Scheibe (Farbe + Initialen) VOR dem Namen - die
- * Vollton-Regel fuer freie Nutzerfarben (DESIGN.md): die Farbe steht als
- * Scheibe neben dem Text, nie als Flaeche darunter; die Tinte darin wird
+ * Eine Person (`person`) traegt ihre Personenscheibe VOR dem Namen - dieselbe
+ * Scheibe wie an jeder Zeile (utils/person-color.js), Schmuck neben dem Namen.
+ * Ein farbiger Wert ohne Person (Ebene, Quelle) traegt seine Farbe als
+ * Scheibe (`swatchColor`), nie als Flaeche darunter; die Tinte darin wird
  * gerechnet wie in `toggleRowHtml()`.
  *
  * @param {{filter: string, value: string|number, label: string, active: boolean,
- *          swatchColor?: string|null, swatchLabel?: string}} chip
+ *          person?: object|null, swatchColor?: string|null, swatchLabel?: string}} chip
  * @returns {string}
  */
-export function filterChipHtml({ filter, value, label, active, swatchColor = null, swatchLabel = '', srSuffix = '' }) {
-  const swatch = swatchColor
-    ? `<span class="filter-chip__swatch" aria-hidden="true"`
-      + ` style="--swatch-color:${esc(String(swatchColor))};color:${getReadableTextColor(String(swatchColor))}">`
-      + `${esc(String(swatchLabel ?? ''))}</span>`
-    : '';
+export function filterChipHtml({ filter, value, label, active, person = null, swatchColor = null, swatchLabel = '', srSuffix = '' }) {
+  const swatch = person
+    ? personDisc(person, { className: 'filter-chip__swatch filter-chip__swatch--person' })
+    : swatchColor
+      ? `<span class="filter-chip__swatch" aria-hidden="true"`
+        + ` style="--swatch-color:${esc(String(swatchColor))};color:${getReadableTextColor(String(swatchColor))}">`
+        + `${esc(String(swatchLabel ?? ''))}</span>`
+      : '';
   return `<button type="button" class="filter-chip filter-chip--sm${active ? ' filter-chip--active' : ''}"
     data-filter="${esc(filter)}" data-value="${esc(String(value))}" aria-pressed="${active}">${swatch}<span>${esc(label)}${srSuffix ? `<span class="sr-only"> ${esc(String(srSuffix))}</span>` : ''}</span></button>`;
 }
