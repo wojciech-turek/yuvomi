@@ -386,8 +386,8 @@ export function renderWhoChooser(title, people, household = []) {
 // --------------------------------------------------------
 
 /**
- * Card-level fit: while the aside spills over its column, the optional cards
- * go whole, Birthdays first, then Notes. They come back on every fit, so a
+ * Card-level fit: while the aside spills over its column, or the day plan
+ * beside them would have to hide rows, the optional cards go whole, Birthdays first, then Notes. They come back on every fit, so a
  * resize or a rebuild can show them again.
  */
 function fitWallCards(root) {
@@ -396,7 +396,19 @@ function fitWallCards(root) {
       .map((id) => aside.querySelector(`[data-wall-card="${id}"]`))
       .filter(Boolean);
     for (const card of cards) card.hidden = false;
-    const overflows = () => aside.scrollHeight > aside.clientHeight + 1;
+    // The day plan keeps priority: it shares this column with flex:1 and gives
+    // way first, so the aside itself never spills. Measure the plan's own list
+    // at full length - when it would have to hide rows, a card goes instead.
+    const planList = aside.querySelector('.wall-plan [data-wall-fit]');
+    if (planList) {
+      for (const row of planList.querySelectorAll('[data-wall-row]')) row.hidden = false;
+      const more = planList.querySelector('[data-wall-more]');
+      if (more) more.hidden = true;
+    }
+    const planSqueezed = () => Boolean(planList)
+      && planList.querySelector('[data-wall-row]') !== null
+      && planList.scrollHeight > planList.clientHeight + 1;
+    const overflows = () => aside.scrollHeight > aside.clientHeight + 1 || planSqueezed();
     for (const card of cards) {
       if (!overflows()) break;
       card.hidden = true;

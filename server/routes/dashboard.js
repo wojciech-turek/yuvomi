@@ -812,7 +812,9 @@ router.get('/', (req, res) => {
   // line to fall back on. Notes have no visibility of their own, so every
   // pinned, titled note qualifies. A member's answer keeps `wallNotes: []`;
   // the member's Today reads `pinnedNotes`.
-  if (allows('notes') && householdAudience) try {
+  // Gated on the HOUSEHOLD switch, not on the credential: the coupled display
+  // has no `notes:read` scope (and must not get one), yet the wall draws titles.
+  if (householdAudience && !modulesLeftOut(d, new Set()).has('notes')) try {
     result.wallNotes = d.prepare(`
       SELECT n.id, TRIM(n.title) AS title FROM notes n
       WHERE n.pinned = 1 AND TRIM(COALESCE(n.title, '')) <> ''

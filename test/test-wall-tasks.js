@@ -1138,6 +1138,27 @@ test('Allowlist: die gebaute Wand ist dieselbe wie zuvor - nichts, was sie zeich
   })();
 });
 
+test('Allowlist: das gekoppelte Display (ohne notes:read) bekommt die Titel angepinnter Notizen - und nichts vom Inhalt', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
+  seedWallSources();
+  const wall = await asCoupledDisplay(() => overview(DISPLAY, '?audience=household'));
+  assert.deepEqual(wall.wallNotes.map((note) => note.title), ['Kontonummer Sparbuch']);
+  assert.ok(!JSON.stringify(wall).includes('DE00 1234'), 'kein Inhalt');
+  assert.deepEqual(wall.pinnedNotes, []);
+}));
+
+test('Allowlist: ist das Notizen-Modul im Haushalt abgeschaltet, bleibt wallNotes leer', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
+  seedWallSources();
+  db.prepare("UPDATE sync_config SET value = '[\"notes\"]' WHERE key = 'disabled_modules'").run();
+  try {
+    const wall = await asCoupledDisplay(() => overview(DISPLAY, '?audience=household'));
+    assert.deepEqual(wall.wallNotes, []);
+    const member = await overview(ANNA, householdQuery());
+    assert.deepEqual(member.wallNotes, []);
+  } finally {
+    db.prepare("UPDATE sync_config SET value = '[]' WHERE key = 'disabled_modules'").run();
+  }
+}));
+
 test('Allowlist: das Display ohne den Parameter bekommt, was es bekam', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
   const display = await asCoupledDisplay(() => overview(DISPLAY));

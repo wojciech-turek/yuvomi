@@ -318,7 +318,7 @@ test('the card fit hides Birthdays first, then Notes, while the aside spills', (
   const aside = {
     get scrollHeight() { return 100 + (birthdays.hidden ? 0 : 1) * (spill > 0 ? 50 : 0) + (notes.hidden ? 0 : 1) * (spill > 1 ? 50 : 0); },
     clientHeight: 100,
-    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : notes),
+    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : sel.includes('notes') ? notes : null),
   };
   const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
   view.fitWallLists(root);
@@ -331,6 +331,36 @@ test('the card fit hides Birthdays first, then Notes, while the aside spills', (
   spill = 0;
   view.fitWallLists(root);
   assert.equal(birthdays.hidden, false);
+});
+
+test('hero layout: a squeezed plan costs the cards first (Birthdays, then Notes), and only then rows', () => {
+  const birthdays = { hidden: false };
+  const notes = { hidden: false };
+  const rows = [{ hidden: false }, { hidden: false }, { hidden: false }, { hidden: false }];
+  const more = { hidden: true, querySelector: () => null };
+  // The aside never spills (the plan absorbs it); the plan list is 4 rows tall
+  // and has room for 4 minus one per visible card.
+  const room = () => 4 - (birthdays.hidden ? 0 : 1) - (notes.hidden ? 0 : 1);
+  const list = {
+    get scrollHeight() { return rows.filter((row) => !row.hidden).length * 100; },
+    get clientHeight() { return room() * 100; },
+    querySelectorAll: (sel) => (sel === '[data-wall-row]' ? rows : []),
+    querySelector: (sel) => (sel === '[data-wall-more]' ? more : sel === '[data-wall-row]' ? rows[0] : null),
+  };
+  const aside = {
+    scrollHeight: 100, clientHeight: 100,
+    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : sel.includes('notes') ? notes : sel.includes('wall-plan') ? list : null),
+  };
+  const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true);
+  assert.equal(notes.hidden, true);
+  assert.ok(rows.every((row) => !row.hidden), 'every plan row is still shown');
+  // With one card's worth of room missing, only Birthdays goes.
+  rows.pop();
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true, 'Birthdays goes first');
+  assert.equal(notes.hidden, false, 'Notes stays while that is enough');
 });
 
 test('a leftover sections option changes nothing: the wall has no switches any more', () => {
