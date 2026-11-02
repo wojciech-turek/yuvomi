@@ -7666,11 +7666,6 @@ textarea::placeholder {
   border-color: var(--color-danger);
 }
 
-.form-field--valid .input,
-.form-field--valid .form-input {
-  border-color: var(--color-success);
-}
-
 .form-field__error {
   display: none;
   font-size: var(--text-sm);

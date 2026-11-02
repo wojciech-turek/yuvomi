@@ -1019,7 +1019,7 @@
    *                            the card edge and section rules are
    *                            --color-separator / --color-border (#EAE9E5)
    *   --color-overdue          "Po terminie": overdue dates, high priority
-   *                            flag; 5.18 on white, 4.78 on the ground
+   *                            flag; an alias of --color-warning (attention)
    *   --color-rain             hourly rain bars (#5B8DEF, a shape: 3.23 on
    *                            the card), --color-rain-soft the dry hours
    *   --color-rain-ink         the umbrella of a wet day on Dziś (#2F6FDB,
@@ -1027,7 +1027,7 @@
    *   --color-card-border      the 1px edge of a card (no shadow in v2)
    * -------------------------------------------------------- */
   --color-separator-inner: #EFEEEA;
-  --color-overdue:         #C2410C;
+  --color-overdue:         var(--color-warning);
   --color-rain:            #5B8DEF;
   --color-rain-soft:       #DCE5F6;
   --color-rain-ink:        #2F6FDB;
@@ -1375,8 +1375,7 @@
    *      E2  chrome (capsule, +, add bar, collapsed top bar, toast) with its
    *          0.5px inner highlight
    *      E3  sheets, cast upwards over the scrim
-   *      --shadow-accent-glow  ONLY on the + and the one primary per screen;
-   *          halve it when pressed.
+   *      no accent glow on any button (one meaning per colour).
    *    The inner highlights hang on --glass-inset-strength, so
    *    prefers-reduced-transparency and prefers-contrast switch them off with
    *    every other specular. Dark values: both dark blocks.
@@ -1401,9 +1400,6 @@
   --shadow-e3:  var(--_shadow-e3);
   /* v2: a card has no shadow - its edge is --color-card-border. */
   --shadow-card: none;
-  --_shadow-accent-glow: 0 6px 20px rgba(108, 58, 237, 0.30),
-                         inset 0 1px 0 rgba(255, 255, 255, calc(0.22 * var(--glass-inset-strength)));
-  --shadow-accent-glow:  var(--_shadow-accent-glow);
 
   /* --------------------------------------------------------
    * 9. Border-Radien

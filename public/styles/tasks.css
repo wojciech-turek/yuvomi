@@ -1293,7 +1293,7 @@ textarea.task-sheet__note {
 
 .task-card__flag {
   display: flex;
-  color: var(--color-text-primary);
+  color: var(--color-warning);
 }
 
 .task-card__flag svg {
@@ -1335,7 +1335,7 @@ textarea.task-sheet__note {
 }
 
 .tasks-page .task-group--overdue > .list-group__title .list-group__toggle {
-  color: var(--color-danger);
+  color: var(--color-warning);
 }
 
 /* Offen ohne Winkel (das Artboard zeigt keinen); zugeklappt zeigt er, dass
@@ -1663,8 +1663,8 @@ textarea.task-sheet__note {
   gap: var(--space-1);
 }
 
-.due-date--overdue { color: var(--color-danger); font-weight: var(--font-weight-semibold); }
-.due-date--today   { color: var(--color-warning); font-weight: var(--font-weight-semibold); }
+.due-date--overdue,
+.due-date--today { color: var(--color-warning); font-weight: var(--font-weight-semibold); }
 
 /* Auf der ausgewaehlten Zeile der Spaltenform (layout.css: Akzent
  * --tint-state ueber der Flaeche, light #EDE7FD) traegt die Vollfarbe keine
@@ -1672,8 +1672,8 @@ textarea.task-sheet__note {
  * Sonde 2, sobald die Demo-Saat eine heute faellige Aufgabe als erste Zeile
  * hatte. Die -ink-Stufe ist die Antwort aus tokens.css fuer Text auf einer
  * getoenten Flaeche: 5,31 / 5,73 (gerechnet gegen #EDE7FD). */
-.split-view [data-md-id].is-selected .due-date--overdue { color: var(--color-danger-ink); }
-.split-view [data-md-id].is-selected .due-date--today   { color: var(--color-warning-ink); }
+.split-view [data-md-id].is-selected .due-date--overdue,
+.split-view [data-md-id].is-selected .due-date--today { color: var(--color-warning-ink); }
 
 /* Avatar */
 .task-avatar {

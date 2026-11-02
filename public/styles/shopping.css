@@ -1121,7 +1121,6 @@
   border-radius: var(--radius-full);
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 .shopping-done__plain {

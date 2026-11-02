@@ -561,7 +561,7 @@ test('Tafla: die Zeitkoerbe in ihrer Reihenfolge, Erledigtes am Ende', () => {
 
 test('Tafla: das Wann der Zeile haengt am Korb, ueberfaellig ist eine Pille', () => {
   const overdue = tasks.taskWhen(task({ due_date: plusTage(-3) }), 'overdue');
-  assert.equal(overdue.pill?.tone, 'danger');
+  assert.equal(overdue.pill?.tone, 'warning', 'overdue is attention, not danger');
   assert.equal(overdue.pill?.text, 'tasks.overduePill');
   assert.match(overdue.text, /^tasks\.overdueSince/, '"od pt 16 paź" - seit wann');
   assert.equal(tasks.taskWhen(task({ due_date: plusTage(-1) }), 'overdue').text, 'tasks.overdueSinceYesterday');
@@ -577,9 +577,10 @@ test('Tafla: das Wann der Zeile haengt am Korb, ueberfaellig ist eine Pille', ()
   assert.equal(tasks.taskWhen(task({ due_date: plusTage(-3), status: 'done' }), 'done').pill, null);
 });
 
-test('Tafla: die Zeile zeigt die Kategorie als #tag, keine Prioritaetsworte, die Fahne nur bei Hoch/Dringend', () => {
+test('Tafla: die Zeile zeigt die Kategorie als schlichten Namen, keine Prioritaetsworte, die Fahne nur bei Hoch/Dringend', () => {
   const meta = tasks.taskMetaHtml(task({ category: 'household', due_date: plusTage(3) }), { bucket: 'thisWeek' });
-  assert.match(meta, /#/, 'die Kategorie steht als #tag im Text');
+  assert.match(meta, /household/, 'die Kategorie steht als Name im Text');
+  assert.doesNotMatch(meta, /#household/, 'ohne Raute');
   assert.doesNotMatch(meta, /priority/);
   assert.equal(tasks.taskTrailHtml(task({ priority: 'medium' })), '', 'mittel und niedrig: keine Fahne');
   assert.match(tasks.taskTrailHtml(task({ priority: 'urgent' })), /data-lucide="flag"/);

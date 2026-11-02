@@ -1055,7 +1055,6 @@ button.recipe-detail__ingredient-match:hover {
   border-radius: var(--radius-full);
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 @media (max-width: 767px) {

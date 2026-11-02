@@ -600,7 +600,6 @@ button.inset-row__title:focus-visible {
 .pill-btn--primary {
   background: var(--color-btn-primary);
   color: var(--color-on-accent);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 .pill-btn--secondary {

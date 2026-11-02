@@ -500,7 +500,6 @@
   color: var(--color-on-accent);
   font-size: var(--cook-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 .cook__back svg,

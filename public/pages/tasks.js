@@ -363,7 +363,7 @@ function taskWhen(task, bucket) {
   const days = daysFromToday(due);
   if (!finished && days < 0) {
     return {
-      pill: { tone: 'danger', text: t('tasks.overduePill') },
+      pill: { tone: 'warning', text: t('tasks.overduePill') },
       text: days === -1 ? t('tasks.overdueSinceYesterday') : t('tasks.overdueSince', { date: shortDayLabel(due) }),
     };
   }
@@ -375,21 +375,21 @@ function taskWhen(task, bucket) {
   return { pill: null, text: [date, by].filter(Boolean).join(' · ') };
 }
 
-/** "#dom" - die Kategorie als schlichtes Etikett, wie ein Tag geschrieben. */
-function hashTag(label) {
+/** "dom" - die Kategorie als schlichter Name, ohne Raute. */
+function categoryName(label) {
   const text = String(label ?? '').trim();
-  return text ? `#${text.toLocaleLowerCase(getLocale())}` : '';
+  return text ? text.toLocaleLowerCase(getLocale()) : '';
 }
 
 /**
  * Die Metazeile: Pille, Wiederholungszeichen und EIN Text, der mit Ellipse
- * endet - Wann · Rhythmus · #Kategorie · razem · Beschreibung. Dahinter
+ * endet - Wann · Rhythmus · Kategorie · razem · Beschreibung. Dahinter
  * leise Zeichen fuer Anhang und eingeschraenkte Sichtbarkeit.
  */
 function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const when = taskWhen(task, bucket);
   const parts = [when.text, rhythmText(task)];
-  if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(hashTag(catLabel(task.category)));
+  if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(categoryName(catLabel(task.category)));
   if (whoOf(task.assigned_users).kind === 'razem' && includesViewer(task.assigned_users, rowViewerId())) parts.push(t('tasks.together'));
   parts.push(descriptionLead(task.description));
   const text = parts.filter(Boolean).join(' · ');

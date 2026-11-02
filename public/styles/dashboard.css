@@ -755,7 +755,6 @@
   font: inherit;
   font-size: var(--wall-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
   cursor: pointer;
 }
 
@@ -1973,7 +1972,7 @@
 .dz-task__flag {
   inline-size: 14px;
   block-size: 14px;
-  color: var(--color-overdue);
+  color: var(--color-warning);
   stroke-width: 2;
 }
 

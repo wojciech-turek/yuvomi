@@ -2204,7 +2204,6 @@
   border-radius: var(--radius-full);
   background-color: var(--color-btn-primary);
   color: var(--color-text-on-accent);
-  box-shadow: var(--shadow-accent-glow);
   font: inherit;
   font-size: var(--type-body);
   line-height: var(--type-body-lh);
@@ -3181,7 +3180,6 @@
   border-radius: var(--radius-full);
   background-color: var(--color-btn-primary);
   color: var(--color-text-on-accent);
-  box-shadow: var(--shadow-accent-glow);
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
 }

@@ -7744,7 +7744,7 @@ test('text/surface token pairs meet WCAG AA 4.5:1', () => {
 // TAFLA (Rollout-Schritt 0): EIN Violett, und es kommt nur ueber die Tokens.
 // Die Stimme hat in tokens.css ihre Rollen (--color-accent als Text,
 // --color-btn-primary / --color-accent-fill als Flaeche, --color-accent-tint,
-// --color-accent-pressed, --shadow-accent-glow, --cook-accent, --toast-action).
+// --color-accent-pressed, --cook-accent, --toast-action).
 // Ein Violett-Literal in einem Stylesheet waere eine zweite Quelle, die beim
 // naechsten Theme- oder Rollenwechsel nicht mitzieht - genau so stand die
 // Flieder-Pille im Dark. Geprueft werden die Deklarationen (Kommentare duerfen
@@ -21691,4 +21691,35 @@ test('Nagrody ist ausgebaut: kein Import der Seite, kein Navigationspunkt', () =
   const hits = files.filter((f) => read(f).includes('/pages/rewards.js'));
   assert.deepStrictEqual(hits, [], 'jemand laedt /pages/rewards.js noch');
   assert.ok(!/module:\s*'rewards'/.test(read('../public/router.js')), "Navigationspunkt mit module: 'rewards'");
+});
+
+// One meaning per colour (One today, Task 7): violet is tap/chosen, the warning
+// family is attention, danger is destructive/errors. No green field, no glow.
+test('One meaning per colour: attention is warning, no valid-green, no glow, categories without #', () => {
+  const stripped = (file) => read(`../public/styles/${file}`).replace(/\/\*[\s\S]*?\*\//g, '');
+  const ruleBody = (css, selector) => {
+    const out = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (m[1].split(',').map((s) => s.trim()).includes(selector)) out.push(m[2]);
+    }
+    return out.join(';');
+  };
+  // No glow token and no user of it, in any stylesheet.
+  for (const file of readdirSync(new URL('../public/styles/', import.meta.url)).filter((n) => n.endsWith('.css'))) {
+    assert.doesNotMatch(stripped(file), /accent-glow/, `${file} still uses the accent glow`);
+  }
+  // A valid field is not green.
+  const layout = stripped('layout.css');
+  assert.doesNotMatch(ruleBody(layout, '.form-field--valid .input'), /success|green|border-color/);
+  // The flag, on Today and on Tasks, is the warning colour; overdue is warning.
+  const tokens = stripped('tokens.css');
+  assert.match(tokens, /--color-overdue:\s*var\(--color-warning\)/);
+  assert.match(ruleBody(stripped('dashboard.css'), '.dz-task__flag'), /color:\s*var\(--color-warning\)/);
+  assert.match(ruleBody(stripped('tasks.css'), '.task-card__flag'), /color:\s*var\(--color-warning\)/);
+  const tasksCss = stripped('tasks.css');
+  assert.match(ruleBody(tasksCss, '.due-date--overdue'), /var\(--color-warning\)/);
+  assert.match(ruleBody(tasksCss, '.tasks-page .task-group--overdue > .list-group__title .list-group__toggle'), /var\(--color-warning\)/);
+  const tasksJs = read('../public/pages/tasks.js');
+  assert.match(tasksJs, /tone: 'warning', text: t\('tasks\.overduePill'\)/);
+  assert.doesNotMatch(tasksJs, /`#\$\{text/, 'the category is its plain name, no "#"');
 });
