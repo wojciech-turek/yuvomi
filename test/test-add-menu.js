@@ -40,7 +40,8 @@ const toasts = [];
 globalThis.window.yuvomi = { showToast: (...args) => { toasts.push(args); } };
 
 const { addMenuItems, openAddMenu, __test: menu } = await import('../public/components/add-menu.js');
-const { startQuickAdd, startTaskDictation } = await import('../public/components/task-dictation.js');
+const dictation = await import('../public/components/task-dictation.js');
+const { startQuickAdd } = dictation;
 const { __test: dash } = await import('../public/pages/dashboard.js');
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -380,7 +381,7 @@ test('loadAddMenu: one import for the pointerdown and the tap; a failed one is t
 
 test('the say row is startQuickAdd itself; each other row has its own opener; no Meal opener', () => {
   assert.equal(menu.OPENERS.say, startQuickAdd, '"Say it" maps to startQuickAdd, not a wrapper with a promise');
-  assert.notEqual(menu.OPENERS.say, startTaskDictation, 'Say it routes; it no longer only says a task');
+  assert.equal('startTaskDictation' in dictation, false, 'Say it routes; the task-only entry is gone');
   assert.deepEqual(Object.keys(menu.OPENERS), ['say', 'task', 'event', 'shopping']);
   for (const id of ['task', 'event', 'shopping']) {
     assert.notEqual(menu.OPENERS[id], startQuickAdd, `${id} opens its own sheet`);

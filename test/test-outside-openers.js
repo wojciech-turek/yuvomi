@@ -147,6 +147,40 @@ test('openNewEventFrom, cold: loads the form state, applies a resting sheet, ope
   }
 });
 
+// Say it on a slow network (final review M6): the person closes the
+// listening sheet while the event sheet still fetches its data. The caller's
+// `stillWanted` says so; the opener bails out after its fetch, opens nothing
+// and lets go of the stylesheet it took.
+test('openNewEventFrom: no longer wanted when the slow data arrives - nothing opens, the sheet is released', async () => {
+  const modals = captureModals();
+  const previousSheets = globalThis.document.styleSheets;
+  globalThis.document.styleSheets = [{ href: 'http://localhost/styles/calendar.css', disabled: false, media: { mediaText: 'not all' } }];
+  const appended = [];
+  const previousHead = globalThis.document.head;
+  globalThis.document.head = { appendChild(link) { appended.push(link); queueMicrotask(() => link.onload?.()); return link; } };
+  let arrive;
+  const slow = new Promise((resolve) => { arrive = resolve; });
+  const api = recordingApi({ 'get /preferences': async () => { await slow; return { data: {} }; } });
+  const previous = globalThis.__apiStub;
+  globalThis.__apiStub = api.stub;
+  let wanted = true;
+  try {
+    const pending = calendar.openNewEventFrom({ user: { id: 7 }, stillWanted: () => wanted });
+    wanted = false; // the listening sheet was closed while the data loaded
+    arrive();
+    assert.equal(await pending, false);
+    assert.equal(modals.opened.length, 0, 'no sheet after the person closed the listening sheet');
+    assert.equal(appended[0]?.dataset.users, '0', 'the stylesheet it took is let go');
+    assert.equal(await calendar.openNewEventFrom({ user: { id: 7 }, stillWanted: () => true }), true, 'still wanted: it opens');
+    assert.equal(modals.opened.length, 1);
+  } finally {
+    globalThis.document.head = previousHead;
+    globalThis.document.styleSheets = previousSheets;
+    globalThis.__apiStub = previous;
+    modals.restore();
+  }
+});
+
 test('openNewEventFrom with a spoken draft: the sheet opens filled, with the heard sentence and "Powtórz"', async () => {
   const modals = captureModals();
   const previousSheets = globalThis.document.styleSheets;

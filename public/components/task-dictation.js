@@ -38,11 +38,9 @@
  * EINSTIEG: Safari startet die Erkennung nur innerhalb des Tipps. Das Blatt
  * und `start()` laufen deshalb im Aufruf selbst; was danach gebraucht wird,
  * laedt daneben (pages/tasks.js) oder nach dem Satz (Termin, Einkauf).
- * `startTaskDictation` (nur eine Aufgabe) bleibt fuer openNewTaskFrom({ dictate }).
  */
 import { t } from '/i18n.js';
 import { openModal, closeModal, swapFieldsKeepingDirtyBase, btnLoading, captureModalContext, isOwnModalOpen } from '/components/modal.js';
-import { isNavModuleReadOnly } from '/permissions.js';
 import { esc } from '/utils/html.js';
 import { errorSentence } from '/utils/friendly-error.js';
 import { speechSupported, startListening } from '/utils/speech.js';
@@ -195,7 +193,7 @@ function wireDictationSheet(panel, {
     const release = button ? btnLoading(button) : null;
     let result;
     try {
-      // Die Mitglieder duerfen nachkommen (startTaskDictation) - der lokale
+      // Die Mitglieder duerfen nachkommen (startQuickAdd) - der lokale
       // Parser braucht sie, also erst sie, dann der Satz.
       const people = typeof members === 'function' ? await members() : members;
       result = await toDraft(sentence, { members: people, post });
@@ -301,61 +299,6 @@ export function openDictationSheet({
   });
 }
 
-/**
- * "Say a task" von aussen: nur eine Aufgabe (openNewTaskFrom({ dictate })).
- * Das "+" auf Heute nimmt startQuickAdd (unten), das den Satz routet.
- *
- * STATISCH IMPORTIEREN UND IM TIPP-HANDLER OHNE VORHERIGES `await` RUFEN:
- * das Hoerblatt geht in diesem Aufruf auf, und `start()` der Erkennung laeuft
- * darin - Safari startet sie nur innerhalb der Nutzergeste, sonst meldet sie
- * `not-allowed`, und es bliebe nur das Textfeld. pages/tasks.js samt Stilen,
- * Mitgliedern und Kategorien laedt daneben (`prepareNewTask`); "Done" wartet
- * darauf und oeffnet dann das gefuellte Blatt "Neue Aufgabe" (`spoken`),
- * "Type instead" das Blatt zum Tippen mit dem schon Gesagten als Titel. Kann
- * die Seite nicht laden (offline ohne Cache, keine Kategorien), geht das
- * Hoerblatt zu, und eine Meldung sagt es - gespeichert wird nie etwas.
- *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
- *        `user` ist der angemeldete Mensch der aufrufenden Seite, `onChanged`
- *        frischt deren Flaeche nach dem Speichern auf.
- * @param {{win?: object, post?: Function, loadTasks?: () => Promise<object>}} [testing]
- * @returns {boolean} false, wenn nichts aufging (Aufgaben nur lesbar)
- */
-export function startTaskDictation({ user = null, onChanged = () => {} } = {}, {
-  win = globalThis.window, post, loadTasks = () => import('/pages/tasks.js'),
-} = {}) {
-  if (isNavModuleReadOnly('tasks')) return false;
-  // DANEBEN, NICHT DAVOR - kein await vor openDictationSheet.
-  const ready = Promise.resolve()
-    .then(loadTasks)
-    .then(async (tasks) => ({ tasks, members: await tasks.prepareNewTask({ user }) }));
-  ready.catch(() => {}); // gemeldet wird, wo es gebraucht wird
-  // DAS HOERBLATT, DAS HIER AUFGEHT (#1997). Das Blatt "Neue Aufgabe" wartet
-  // auf pages/tasks.js; wer das Hoerblatt inzwischen zumacht (x, Wischen),
-  // bekommt es nicht hinterher, und ein spaetes Schliessen trifft nur dieses.
-  let context = null;
-  const fail = (err) => {
-    console.error('[Dictation] Neue Aufgabe konnte nicht geoeffnet werden:', err);
-    closeModal({ force: true, context });
-    globalThis.window?.yuvomi?.showToast?.(err?.message || t('tasks.loadError'), 'danger');
-  };
-  const openSheet = (opts) => ready.then(({ tasks }) => {
-    if (!isOwnModalOpen(context)) return;
-    tasks.openPreparedNewTask({ onChanged, ...opts });
-  }).catch(fail);
-  openDictationSheet({
-    win,
-    post,
-    members: () => ready.then((r) => r.members),
-    onDraft: (draft) => { openSheet({ draft, spoken: true }); },
-    onTypeInstead: (text) => { openSheet({ draft: text ? { title: text } : null }); },
-    onFail: fail,
-  });
-  // Gleich nach dem Oeffnen: das Hoerblatt ist jetzt der offene Dialog.
-  context = captureModalContext();
-  return true;
-}
-
 /** Welche Art in welches Modul schreibt: "Say it" oeffnet nur, was beschrieben werden darf. */
 const KIND_MODULE = Object.freeze({ task: 'tasks', event: 'calendar', shopping: 'shopping' });
 /** Laenger nimmt der Server keinen Titel (validate.js MAX_TITLE) - wie utils/quick-draft.js. */
@@ -369,10 +312,12 @@ const TITLE_MAX = 200;
  * "Powtórz") und mit dem gehoerten Satz ueber den Feldern. Gespeichert wird
  * nichts - erst der Tipp im Blatt speichert.
  *
- * STATISCH IMPORTIEREN UND IM TIPP-HANDLER OHNE VORHERIGES `await` RUFEN (wie
- * startTaskDictation): das Hoerblatt geht in diesem Aufruf auf, `start()` der
- * Erkennung laeuft darin. Daneben laedt pages/tasks.js (Mitglieder fuer die
- * lokale Regel, das Blatt "Neue Aufgabe"), nur mit Schreibrecht auf Aufgaben.
+ * STATISCH IMPORTIEREN UND IM TIPP-HANDLER OHNE VORHERIGES `await` RUFEN:
+ * das Hoerblatt geht in diesem Aufruf auf, und `start()` der Erkennung laeuft
+ * darin - Safari startet sie nur innerhalb der Nutzergeste, sonst meldet sie
+ * `not-allowed`, und es bliebe nur das Textfeld. Daneben laedt pages/tasks.js
+ * (Mitglieder fuer die lokale Regel, das Blatt "Neue Aufgabe"), nur mit
+ * Schreibrecht auf Aufgaben.
  * Termin- und Einkaufsblatt laden erst nach dem Satz; "Done" dreht so lange.
  *
  * NUR WAS BESCHRIEBEN WERDEN DARF (`access`, wie das Menue es kennt): ist die
@@ -418,6 +363,11 @@ export function startQuickAdd({ user = null, onChanged = () => {}, access = {} }
     if (!isOwnModalOpen(context)) return;
     tasks.openPreparedNewTask({ onChanged, ...opts });
   }).catch(fail('tasks.loadError'));
+  /**
+   * Ob das Hoerblatt noch steht. Die Oeffner fragen es NACH ihrem eigenen
+   * Laden (`stillWanted`): auf langsamem Netz kann es waehrenddessen zugehen.
+   */
+  const stillWanted = () => isOwnModalOpen(context);
   /** Termin- oder Einkaufsblatt: laden, dann oeffnen - wenn das Hoerblatt noch steht. */
   const openFrom = (load, open) => Promise.resolve()
     .then(load)
@@ -430,10 +380,10 @@ export function startQuickAdd({ user = null, onChanged = () => {}, access = {} }
   /** Der Entwurf in sein Blatt; ist seine Art hier nur lesbar, die Aufgabe mit dem Satz als Titel. */
   const route = (kind, draft, heard) => {
     if (kind === 'event' && may('event')) {
-      return openFrom(loadCalendar, (calendar) => calendar.openNewEventFrom({ user, onChanged, draft, spoken: true, heard }));
+      return openFrom(loadCalendar, (calendar) => calendar.openNewEventFrom({ user, onChanged, draft, spoken: true, heard, stillWanted }));
     }
     if (kind === 'shopping' && may('shopping')) {
-      return openFrom(loadShopping, (sheet) => sheet.openShoppingAddFrom({ user, onChanged, draft, heard }));
+      return openFrom(loadShopping, (sheet) => sheet.openShoppingAddFrom({ user, onChanged, draft, heard, stillWanted }));
     }
     if (may('task')) return openTask({ draft: kind === 'task' ? draft : { title: heard.slice(0, TITLE_MAX) }, spoken: true, heard });
     // Nichts hier darf diesen Satz aufnehmen: das sagt eine kurze Meldung.
@@ -445,8 +395,8 @@ export function startQuickAdd({ user = null, onChanged = () => {}, access = {} }
   const typeInstead = (text) => {
     const draft = text ? { title: text } : null;
     if (may('task')) return openTask({ draft });
-    if (may('event')) return openFrom(loadCalendar, (calendar) => calendar.openNewEventFrom({ user, onChanged, draft }));
-    return openFrom(loadShopping, (sheet) => sheet.openShoppingAddFrom({ user, onChanged, typed: text }));
+    if (may('event')) return openFrom(loadCalendar, (calendar) => calendar.openNewEventFrom({ user, onChanged, draft, stillWanted }));
+    return openFrom(loadShopping, (sheet) => sheet.openShoppingAddFrom({ user, onChanged, typed: text, stillWanted }));
   };
   openDictationSheet({
     win,

@@ -1872,11 +1872,18 @@ export function nextFullHour(now = new Date()) {
  * der gesagte Satz ueber dem Titel. Gespeichert wird erst mit „Dodaj
  * wydarzenie"; bis dahin gilt das Blatt als geaendert (R11).
  *
+ * `stillWanted` fragt nach dem Laden, ob das Blatt noch gewollt ist: wer
+ * "Powiedz" auf langsamem Netz zumacht, waehrend hier noch geladen wird,
+ * bekommt es nicht hinterher (dann false, nichts geoeffnet).
+ *
  * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
- *          draft?: object|null, spoken?: boolean, heard?: string}} [opts]
- * @returns {Promise<boolean>} false bei nur lesendem Zugriff
+ *          draft?: object|null, spoken?: boolean, heard?: string,
+ *          stillWanted?: () => boolean}} [opts]
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff oder wenn es nicht mehr gewollt ist
  */
-export async function openNewEventFrom({ user = null, onChanged = () => {}, draft = null, spoken = false, heard = '' } = {}) {
+export async function openNewEventFrom({
+  user = null, onChanged = () => {}, draft = null, spoken = false, heard = '', stillWanted = () => true,
+} = {}) {
   if (readOnly()) return false;
   const [prefsRes, documentOptionsRes, , , release] = await Promise.all([
     api.get('/preferences').catch(() => ({ data: {} })),
@@ -1885,6 +1892,10 @@ export async function openNewEventFrom({ user = null, onChanged = () => {}, draf
     loadLocalCalendars(),
     ensureStyleApplied('/styles/calendar.css'),
   ]);
+  if (!stillWanted()) {
+    release?.();
+    return false;
+  }
   applyEventFormState(prefsRes, documentOptionsRes);
   state.currentUserId = user?.id ?? state.currentUserId;
   state.user = user ?? state.user;

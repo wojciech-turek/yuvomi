@@ -10,8 +10,8 @@
  *
  * ONE TODAY (2026-11-02) adds the data of the new page: weatherLine, nextUp,
  * the task groups of pendingTasks, birthdaysNext and notesCard. The weather
- * card and its chart left the page (Task 16): `weatherCard` stays the one
- * reading of the forecast, and the header line takes its words from it.
+ * card and its chart left the page (Task 16): `weatherLine` is the one
+ * reading of the forecast left, a line in the header.
  * "Wkrótce" (birthdaysSoon, the 30-day cut) went with the card it filled.
  *
  * THE OWNER'S ORDER (One Today, spec section 3): "will it rain today" stays
@@ -22,7 +22,7 @@
  * day plan - the wall keeps its own model (utils/wall-plan.js).
  */
 
-import { t, formatTime, getLocale, getTimeFormat, getNumberFormat } from '/i18n.js';
+import { t, formatTime, getLocale } from '/i18n.js';
 import { buildPlan, buildTomorrow, firstName, minutesOf, MEAL_TIMES } from '/utils/today-plan.js';
 import { addLocalDays } from '/utils/date.js';
 import { shortDayMonth, shortWeekdayDayMonth } from '/utils/day-label.js';
@@ -30,11 +30,6 @@ import { firstLine, noteLines } from '/utils/note-line.js';
 
 /** A chance of rain from this many percent counts as rain (as the server). */
 export const RAIN_POP = 40;
-/** The bars of the hourly chart: the hour before, now and twelve ahead. */
-export const CHART_BARS = 14;
-/** Tallest bar of the chart, in px (the chart is 24 high). */
-const BAR_MAX = 24;
-const BAR_MIN = 3;
 /** How many tasks the card lists (the server sends the five most pressing). */
 export const TASK_ROWS = 5;
 /** Birthdays: how many, however far away. */
@@ -44,14 +39,6 @@ const EVENING_MIN = 17 * 60;
 
 const hhmm = (hour) => `${String(hour).padStart(2, '0')}:00`;
 
-/**
- * The hour under a bar of the chart: "15" (in the region's digits), "3PM" for
- * a 12-hour clock - a full "15:00" is wider than three bars.
- */
-export function chartHourLabel(hour) {
-  if (getTimeFormat() === '12h') return `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
-  return getNumberFormat({ useGrouping: false }).format(hour);
-}
 const minutesToTime = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 /** "Wtorek, 27 października" in the household zone. */
@@ -71,82 +58,35 @@ export function greetingKey(nowMin) {
 // --------------------------------------------------------
 
 /**
- * The weather card, or null without weather. The rain line and the chart look
- * at the REST of the day (from the current hour); the server's day summary
- * covers the whole day and stays true for its cached half hour.
+ * "11° · bez deszczu do wieczora" for the head of the page, or null without
+ * weather. The rain phrase looks at the REST of the day (from the current
+ * hour); the server's day summary covers the whole day and stays true for its
+ * cached half hour. Without hourly data the line says only the temperature.
  */
-export function weatherCard(weather, ctx) {
+export function weatherLine(weather, ctx) {
   if (!weather?.current) return null;
-  const openMeteo = weather.provider === 'open-meteo';
-  const describe = (desc) => (openMeteo ? t(desc) : String(desc ?? ''));
   const nowHour = Math.floor((Number.isFinite(ctx.nowMin) ? ctx.nowMin : 0) / 60);
-  const hours = (Array.isArray(weather.today_hours) ? weather.today_hours : [])
-    .filter((h) => Number.isInteger(h?.hour));
-  const byHour = new Map(hours.map((h) => [h.hour, h]));
-  const ahead = hours.filter((h) => h.hour >= nowHour && Number.isFinite(h.pop));
+  const ahead = (Array.isArray(weather.today_hours) ? weather.today_hours : [])
+    .filter((h) => Number.isInteger(h?.hour) && h.hour >= nowHour && Number.isFinite(h.pop));
   const wet = ahead.filter((h) => h.pop >= RAIN_POP);
 
-  let rain = null;
+  let phrase = '';
   if (wet.length) {
     const from = wet[0].hour;
     const to = wet[wet.length - 1].hour;
-    const popMax = Math.max(...wet.map((h) => h.pop));
-    let label;
-    if (from <= nowHour) label = t('today.rainUntil', { time: formatTime(hhmm(to)) });
-    else if (from === to) label = t('today.rainAt', { time: formatTime(hhmm(from)) });
-    else label = t('today.rainWindow', { from: formatTime(hhmm(from)), to: formatTime(hhmm(to)) });
-    const bars = [];
-    for (let hour = nowHour - 1; hour < nowHour - 1 + CHART_BARS; hour += 1) {
-      if (hour < 0 || hour > 23) continue;
-      const pop = byHour.get(hour)?.pop;
-      const known = Number.isFinite(pop);
-      bars.push({
-        hour,
-        now: hour === nowHour,
-        wet: known && pop >= RAIN_POP,
-        height: known ? Math.max(BAR_MIN, Math.round((BAR_MAX * pop) / 100)) : BAR_MIN,
-        // Every third hour is named; the two after "teraz" stay empty, so the
-        // word has three bars of room in every language.
-        label: hour === nowHour
-          ? t('today.chartNow')
-          : (hour % 3 === 0 && (hour < nowHour || hour > nowHour + 2) ? chartHourLabel(hour) : ''),
-      });
-    }
-    rain = { label, chance: t('today.rainChance', { pop: popMax }), bars };
+    if (from <= nowHour) phrase = t('today.rainUntil', { time: formatTime(hhmm(to)) });
+    else if (from === to) phrase = t('today.rainAt', { time: formatTime(hhmm(from)) });
+    else phrase = t('today.rainWindow', { from: formatTime(hhmm(from)), to: formatTime(hhmm(to)) });
+  } else if (ahead.length) {
+    phrase = t(ctx.nowMin >= EVENING_MIN ? 'today.dryRestOfDay' : 'today.dryEvening');
   }
-  const dry = !rain && ahead.length
-    ? {
-      label: t(ctx.nowMin >= EVENING_MIN ? 'today.dryRestOfDay' : 'today.dryEvening'),
-      chance: t('today.rainChance', { pop: Math.max(...ahead.map((h) => h.pop)) }),
-    }
-    : null;
 
   const temp = Number(weather.current.temp);
-  const hi = Number(weather.today?.temp_max);
-  const lo = Number(weather.today?.temp_min);
-  const feels = Number(weather.current.feels_like);
-  const deg = (n) => `${Math.round(n)}°`;
-  const meta = [
-    Number.isFinite(hi) && Number.isFinite(lo) && weather.today?.temp_max != null ? `${deg(hi)} / ${deg(lo)}` : '',
-    Number.isFinite(feels) ? t('today.feelsLike', { temp: deg(feels) }) : '',
-  ].filter(Boolean).join(' · ');
-  return {
-    icon: openMeteo ? String(weather.current.icon || 'cloud') : 'cloud',
-    temp: Number.isFinite(temp) ? deg(temp) : '',
-    desc: describe(weather.current.desc),
-    meta,
-    rain,
-    dry,
-  };
-}
-
-/** "11° · bez deszczu do wieczora" for the head of the page, or null without weather. */
-export function weatherLine(weather, ctx) {
-  const card = weatherCard(weather, ctx);
-  if (!card) return null;
-  const phrase = card.rain?.label || card.dry?.label || '';
   const lower = phrase ? phrase[0].toLocaleLowerCase(getLocale()) + phrase.slice(1) : '';
-  return { icon: card.icon, text: [card.temp, lower].filter(Boolean).join(' · ') };
+  return {
+    icon: weather.provider === 'open-meteo' ? String(weather.current.icon || 'cloud') : 'cloud',
+    text: [Number.isFinite(temp) ? `${Math.round(temp)}°` : '', lower].filter(Boolean).join(' · '),
+  };
 }
 
 // --------------------------------------------------------
@@ -405,12 +345,15 @@ export function birthdaysNext(data, ctx) {
 // --------------------------------------------------------
 
 /**
- * Up to three notes in the server's order (pinned first, then recently
- * changed): the title (else the first line of the text) and one line under
- * it; null without notes.
+ * Pinned notes, at most three; with none pinned, the three most recently
+ * changed (spec 3.5). The server sends pinned first, then by last change, so
+ * its order holds for both. Each: the title (else the first line of the text)
+ * and one line under it; null without notes.
  */
 export function notesCard(data) {
-  const notes = (Array.isArray(data?.pinnedNotes) ? data.pinnedNotes : []).filter((n) => n && n.id != null).slice(0, 3);
+  const all = (Array.isArray(data?.pinnedNotes) ? data.pinnedNotes : []).filter((n) => n && n.id != null);
+  const pinned = all.filter((n) => Boolean(Number(n.pinned)));
+  const notes = (pinned.length ? pinned : all).slice(0, 3);
   if (!notes.length) return null;
   return notes.map((note) => {
     const title = String(note.title ?? '').trim();
@@ -427,7 +370,9 @@ export function notesCard(data) {
 /**
  * What changes by the clock alone - the page rebuilds only when this does:
  * past and ongoing events, the hour, the words of the weather line
- * (`weatherLine`) and the lead of Next up ("Za 25 min" counts down).
+ * (`weatherLine`) and Next up: its lead ("Za 25 min" counts down), its title
+ * (another thing can come up with the same lead, "Teraz" after "Teraz") and
+ * its "Potem" line.
  */
 export function clockStamp(calendar, weather, ctx, next = null) {
   return JSON.stringify([
@@ -437,5 +382,7 @@ export function clockStamp(calendar, weather, ctx, next = null) {
     Math.floor(ctx.nowMin / 60),
     weather?.text ?? '',
     next?.lead ?? '',
+    next?.title ?? '',
+    next?.then ?? '',
   ]);
 }

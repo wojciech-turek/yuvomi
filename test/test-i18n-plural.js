@@ -656,6 +656,31 @@ test('t() waehlt in cs, pl, ru, uk und ar die Form fuer 2, 5 und 11 (#1473)', as
   await setLocale('de');
 });
 
+// T12 (One Today final review): the shopping sheet's summary after "Dodaj"
+// with several items. Polish takes few for 2-4 and 22-24, many for 5-21.
+test('Einkaufsblatt: „Dodano 3 produkty", „Dodano 5 produktów", „Added 3 items" (T12)', async () => {
+  const faelle = [
+    ['pl', 2, 'Dodano 2 produkty'],
+    ['pl', 3, 'Dodano 3 produkty'],
+    ['pl', 5, 'Dodano 5 produktów'],
+    ['pl', 12, 'Dodano 12 produktów'],
+    ['pl', 22, 'Dodano 22 produkty'],
+    ['en', 3, 'Added 3 items'],
+    ['de', 3, '3 Artikel hinzugefügt'],
+    ['ru', 3, 'Добавлено 3 товара'],
+    ['ru', 5, 'Добавлено 5 товаров'],
+  ];
+  for (const [locale, count, erwartet] of faelle) {
+    await setLocale(locale);
+    assert.equal(t('shopping.itemsAddedToast', { count }), erwartet, `${locale} bei ${count}`);
+  }
+  await setLocale('pl');
+  assert.equal(t('shopping.itemsBackToast', { names: 'Masło, Jajka' }), 'Znowu na liście: Masło, Jajka');
+  await setLocale('en');
+  assert.equal(t('shopping.itemsBackToast', { names: 'Butter, Eggs' }), 'Back on the list: Butter, Eggs');
+  await setLocale('de');
+});
+
 // Arabisch hat fuer ganze Zahlen die Kategorien zero, one, two, few, many, other:
 // der Basisschluessel traegt dort die few-Form (3-10, "أيام"), die fuer 2 (Dual)
 // und 11-99 ("يومًا") falsch ist. Die zwei Tageszaehler aus #1472 waren das Muster

@@ -4883,6 +4883,26 @@ test('R16: der Budgetkopf fuehrt den Zeitraum mobil in der Titelzeile', () => {
   assert.ok(label.some((r) => /inline-size:/.test(r.body)), 'feste Labelbreite - sonst wandern die Pfeile beim Blaettern');
 });
 
+/* ONE TODAY, Abschlussrunde (Visual QA 2026-11-02): AM TELEFON STAND
+ * „Budg…". Seit v2 dockt die Shell den Seiten-FAB am Telefon als
+ * Geisterkreis in den Aktions-Slot des Kopfs (router.js dockFabAsGhost), und
+ * hier teilt sich der Slot die Zeile mit Titel und Monatsstepper: 44px Kreis
+ * plus Gap gingen dem Titel ab, gemessen 122px fuer „Budget" bei 390px, ohne
+ * einen Pixel Luft, bei 375px abgeschnitten. Dieselbe Loesung wie im Kalender
+ * („Kalenda…", calendar.css): unter 768px traegt der Kopf keinen Slot, das
+ * Plus schwebt ueber der Leiste (dockFabIntoToolbar misst den Slot und laesst
+ * den Knopf dann in der fab-layer). Gemessen: test:ko-layout-browser. */
+test('Telefon: der Budgetkopf traegt keinen Plus-Kreis neben Titel und Monat, „Budget" bleibt ganz', () => {
+  const phone = [...eachRule(budgetCss)].filter((r) => r.at.some((a) => /max-width:\s*767px/.test(a)));
+  const hides = phone.filter((r) => /\.budget-nav\s*>\s*\.page-toolbar__actions/.test(r.selector) && /display:\s*none/.test(r.body));
+  assert.equal(hides.length, 1, 'unter 768px blendet budget.css den Aktions-Slot des Budgetkopfs aus');
+  const tablet = [...eachRule(budgetCss)].filter((r) => !r.at.some((a) => /max-width:\s*767px/.test(a))
+    && /\.budget-nav\s*>\s*\.page-toolbar__actions/.test(r.selector) && /display:\s*none/.test(r.body));
+  assert.deepEqual(tablet, [], 'ab 768px hat die Zeile Platz: der Kreis bleibt im Kopf');
+  assert.match(read('../public/router.js'), /if \(slot\.getClientRects\(\)\.length\) return true;/,
+    'die Shell misst den Slot nach dem Andocken und laesst den Knopf sonst schweben');
+});
+
 /* R19 (Critique 2026-10-16 P2): EINGEKLAPPT IST DER BUDGETKOPF EINE ZEILE.
  * Bis R19 mass er in jedem Scrollstand 117px (390px): der Titel blieb
  * eingeklappt stehen und hielt Zeile 1 mit dem Stepper offen, die sieben

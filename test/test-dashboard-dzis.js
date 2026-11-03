@@ -1,8 +1,8 @@
 /**
  * Modul: Dziś v2 (2026-10-27) - the model and the view of the home screen
  * Zweck: The owner's design ("Main", "DzisFull"; One Today 2026-11-02) as guards:
- *   1. the weather model: the rain window of the REST of the day, "do 85%",
- *      dry: "Bez deszczu do wieczora" - drawn as one line in the header;
+ *   1. the weather line: the rain window of the REST of the day, dry: "Bez
+ *      deszczu do wieczora" - one line in the header (no card, no chart);
  *   2. the calendar: what is over folds into "1 wcześniej · 08:00 ...", the
  *      ongoing event stands in place ("teraz · do 11:00") instead of in a
  *      second card, "razem" has two dots, the last line peeks at tomorrow;
@@ -22,7 +22,7 @@
 
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { register } from 'node:module';
 
 register('./test-browser-loader.mjs', import.meta.url);
@@ -60,57 +60,50 @@ const weather = (pops = POPS, extra = {}) => ({
   ...extra,
 });
 
-test('weather: the rain window of the rest of the day, its chance, and the head of the card', () => {
-  const card = at('09:30', (ctx) => dzis.weatherCard(weather(), ctx));
-  assert.equal(card.temp, '11°');
-  assert.equal(card.desc, 'weather.cloudy', 'Open-Meteo sends a key, the card translates it');
-  assert.equal(card.icon, 'cloud-drizzle');
-  assert.equal(card.meta, '14° / 8° · today.feelsLike{"temp":"9°"}');
-  assert.equal(card.rain.label, 'today.rainWindow{"from":"13:00","to":"17:00"}', 'first to last hour from 40 %');
-  assert.equal(card.rain.chance, 'today.rainChance{"pop":85}');
-  assert.equal(card.dry, null);
+test('weather line: the rain window of the rest of the day, the temperature and the icon', () => {
+  const line = at('09:30', (ctx) => dzis.weatherLine(weather(), ctx));
+  assert.deepEqual(line, { icon: 'cloud-drizzle', text: '11° · today.rainWindow{"from":"13:00","to":"17:00"}' },
+    'first to last hour from 40 %');
 });
 
-test('weather: fourteen bars from the hour before now - blue from 40 %, "teraz", every third hour named', () => {
-  const { bars } = at('09:30', (ctx) => dzis.weatherCard(weather(), ctx)).rain;
-  assert.equal(bars.length, dzis.CHART_BARS);
-  assert.deepEqual(bars.map((bar) => bar.hour), [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
-  assert.deepEqual(bars.map((bar) => bar.label), ['', 'today.chartNow', '', '', '12', '', '', '15', '', '', '18', '', '', '21'],
-    'as the design: "teraz" in the second column, 12, 15, 18, 21');
-  assert.deepEqual(bars.filter((bar) => bar.wet).map((bar) => bar.hour), [13, 14, 15, 16, 17]);
-  assert.deepEqual(bars.filter((bar) => bar.now).map((bar) => bar.hour), [9]);
-  assert.equal(bars.find((bar) => bar.hour === 15).height, 20, '85 % of 24');
-  assert.equal(bars.find((bar) => bar.hour === 8).height, 3, 'a dry hour keeps the 3px stub');
-  // The two hours after "teraz" stay unnamed, whatever the clock: 11:00 would
-  // put "12" right after the word.
-  const late = at('11:10', (ctx) => dzis.weatherCard(weather(), ctx)).rain.bars;
-  assert.deepEqual(late.slice(0, 6).map((bar) => bar.label), ['', 'today.chartNow', '', '', '', '15'],
-    'no "12" next to "teraz"');
-  // The day ends at 23: in the evening the chart is shorter, not wrapped.
-  const evening = at('16:20', (ctx) => dzis.weatherCard(weather(), ctx)).rain.bars;
-  assert.deepEqual(evening.map((bar) => bar.hour), [15, 16, 17, 18, 19, 20, 21, 22, 23]);
-});
-
-test('weather: raining now says until when, one wet hour says around when', () => {
-  assert.equal(at('14:05', (ctx) => dzis.weatherCard(weather(), ctx)).rain.label, 'today.rainUntil{"time":"17:00"}');
+test('weather line: raining now says until when, one wet hour says around when, rain that is over is not news', () => {
+  assert.equal(at('14:05', (ctx) => dzis.weatherLine(weather(), ctx)).text, '11° · today.rainUntil{"time":"17:00"}');
   const one = POPS.map((pop, hour) => (hour === 16 ? 60 : Math.min(pop, 30)));
-  assert.equal(at('09:30', (ctx) => dzis.weatherCard(weather(one), ctx)).rain.label, 'today.rainAt{"time":"16:00"}');
-  // Rain that is over is not today's news any more.
-  const card = at('18:30', (ctx) => dzis.weatherCard(weather(), ctx));
-  assert.equal(card.rain, null);
-  assert.equal(card.dry.label, 'today.dryRestOfDay', 'after five "until evening" would be a lie');
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine(weather(one), ctx)).text, '11° · today.rainAt{"time":"16:00"}');
+  assert.equal(at('18:30', (ctx) => dzis.weatherLine(weather(), ctx)).text, '11° · today.dryRestOfDay',
+    'after five "until evening" would be a lie');
 });
 
-test('weather: a dry day says so with its highest chance; no hours, no line; no weather, no card', () => {
+test('weather line: a dry day says so; no hours, only the temperature; no weather, null', () => {
   const dry = POPS.map((pop) => Math.min(pop, 10));
-  const card = at('09:30', (ctx) => dzis.weatherCard(weather(dry), ctx));
-  assert.equal(card.rain, null);
-  assert.deepEqual(card.dry, { label: 'today.dryEvening', chance: 'today.rainChance{"pop":10}' });
-  const legacy = at('09:30', (ctx) => dzis.weatherCard(weather(POPS, { today_hours: undefined }), ctx));
-  assert.equal(legacy.rain, null);
-  assert.equal(legacy.dry, null, 'without hourly data the card makes no promise');
-  assert.equal(at('09:30', (ctx) => dzis.weatherCard(null, ctx)), null);
-  assert.equal(at('09:30', (ctx) => dzis.weatherCard({ provider: 'owm' }, ctx)), null);
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine(weather(dry), ctx)).text, '11° · today.dryEvening');
+  const legacy = at('09:30', (ctx) => dzis.weatherLine(weather(POPS, { today_hours: undefined }), ctx));
+  assert.equal(legacy.text, '11°', 'without hourly data the line makes no promise');
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine({ provider: 'owm', current: { temp: 5 } }, ctx)).icon, 'cloud');
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine(null, ctx)), null);
+  assert.equal(at('09:30', (ctx) => dzis.weatherLine({ provider: 'owm' }, ctx)), null);
+});
+
+// The weather card and its chart left Today (One Today, Task 16); the line is
+// all that reads the forecast now. What only the card and the old widget grid
+// said is gone from the code and from every locale (final review M5).
+test('weather: no card, no chart, no chance, no "feels like" left; their words gone from every locale', () => {
+  for (const name of ['weatherCard', 'CHART_BARS', 'chartHourLabel']) assert.equal(name in dzis, false, name);
+  const src = readFileSync(new URL('../public/utils/dzis-plan.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /BAR_MAX|BAR_MIN|feels_like|rainChance|chartNow|feelsLike/);
+  const gone = ['today.chartNow', 'today.rainChance', 'today.feelsLike', 'today.customizeWeather', 'dashboard.clock',
+    'dashboard.quickLinksTitle', 'dashboard.pantryExpiringTitle', 'dashboard.metrics', 'dashboard.widgetSizeTiny',
+    'dashboard.widgetSizeWide', 'dashboard.widgetSizeTall', 'dashboard.widgetSizeSquare'];
+  const dir = new URL('../public/locales/', import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  assert.equal(files.length, 26, 'every locale');
+  for (const file of files) {
+    const locale = JSON.parse(readFileSync(new URL(file, dir), 'utf8'));
+    for (const key of gone) {
+      const [section, leaf] = key.split('.');
+      assert.equal(Object.keys(locale[section] ?? {}).some((k) => k === leaf || k.startsWith(`${leaf}_`)), false, `${file}: ${key}`);
+    }
+  }
 });
 
 // --------------------------------------------------------------------------
@@ -260,6 +253,36 @@ test('next up: the clock stamp changes when the lead does', () => {
   assert.equal(stamp('12:05'), stamp('12:05'));
 });
 
+// T16 (final review): "Teraz" at 10:15 and "Teraz" at 10:45, in the same hour,
+// are two different things; the page must rebuild for the second.
+test('next up: the clock stamp changes when another thing comes up with the same lead', () => {
+  const data = {
+    planEvents: [
+      ev(41, 'Spotkanie zespołu', '2026-10-27T10:00', '2026-10-27T10:30', [W]),
+      ev(42, 'Telefon do banku', '2026-10-27T10:30', '2026-10-27T11:00', [W]),
+    ],
+  };
+  const up = (hhmm) => at(hhmm, (ctx) => dzis.nextUp(data, ctx));
+  assert.equal(up('10:15').lead, up('10:45').lead, 'precondition: the same lead ("Teraz")');
+  assert.notEqual(up('10:15').title, up('10:45').title, 'precondition: another thing');
+  const stamp = (hhmm) => at(hhmm, (ctx) => dzis.clockStamp(null, null, ctx, dzis.nextUp(data, ctx)));
+  assert.notEqual(stamp('10:15'), stamp('10:45'));
+  assert.equal(stamp('10:15'), stamp('10:20'), 'the same thing, the same lead: no rebuild');
+  // The same thing and lead, but its "Potem" line moved on.
+  const long = {
+    planEvents: [
+      ev(43, 'Warsztaty', '2026-10-27T10:00', '2026-10-27T12:00', [W]),
+      ev(44, 'Kawa', '2026-10-27T10:30', '2026-10-27T10:45', [W]),
+      ev(45, 'Telefon', '2026-10-27T11:30', '2026-10-27T11:45', [W]),
+    ],
+  };
+  const [a, b] = ['10:15', '10:35'].map((hhmm) => at(hhmm, (ctx) => dzis.nextUp(long, ctx)));
+  assert.deepEqual([a.lead, a.title], [b.lead, b.title], 'precondition: same lead, same title');
+  assert.notEqual(a.then, b.then, 'precondition: "Potem" moved on');
+  const longStamp = (hhmm) => at(hhmm, (ctx) => dzis.clockStamp(null, null, ctx, dzis.nextUp(long, ctx)));
+  assert.notEqual(longStamp('10:15'), longStamp('10:35'));
+});
+
 test('task groups: five rows in five groups, in order, empty ones dropped', () => {
   const data = {
     urgentTasks: [
@@ -319,13 +342,17 @@ test('notes card: three of the server\'s order, title or first line, markdown st
   assert.equal(dzis.notesCard({}), null);
 });
 
-test('weather line: temperature and the rain or dry phrase, lower case; no weather, null', () => {
-  const rainy = at('09:30', (ctx) => dzis.weatherLine(weather(), ctx));
-  assert.equal(rainy.icon, 'cloud-drizzle');
-  assert.equal(rainy.text, '11° · today.rainWindow{"from":"13:00","to":"17:00"}');
-  const dry = at('09:30', (ctx) => dzis.weatherLine(weather(POPS.map((p) => Math.min(p, 10))), ctx));
-  assert.equal(dry.text, '11° · today.dryEvening');
-  assert.equal(at('09:30', (ctx) => dzis.weatherLine(null, ctx)), null);
+// Spec 3.5: pinned notes, at most three; with none pinned, the three most
+// recently changed. One or two pins are not topped up with unpinned notes.
+test('notes card: any pin shows only pinned notes (up to three); none pinned, the three newest', () => {
+  const rows = (pins) => ({
+    pinnedNotes: [1, 2, 3, 4, 5].map((id) => ({ id, title: `N${id}`, content: '', pinned: pins.includes(id) ? 1 : 0 })),
+  });
+  assert.deepEqual(dzis.notesCard(rows([1])).map((n) => n.id), [1], 'one pin: that note alone');
+  assert.deepEqual(dzis.notesCard(rows([1, 2])).map((n) => n.id), [1, 2], 'two pins: those two');
+  assert.deepEqual(dzis.notesCard(rows([1, 2, 3, 4])).map((n) => n.id), [1, 2, 3], 'four pins: the first three');
+  assert.deepEqual(dzis.notesCard(rows([])).map((n) => n.id), [1, 2, 3], 'no pin: the three newest in the server\'s order');
+  assert.deepEqual(dzis.notesCard({ pinnedNotes: [{ id: 9, title: 'P', content: '', pinned: true }, { id: 8, title: 'U', content: '', pinned: false }] }).map((n) => n.id), [9]);
 });
 
 test('calendar: birthday events are not in the rows, earlier or the tomorrow peek', () => {
@@ -728,12 +755,12 @@ test('no "Dodaj zadanie" on Today: the + opens the one Zadania form; the page st
   const tasks = readFileSync(new URL('../public/pages/tasks.js', import.meta.url), 'utf8');
   const entry = tasks.slice(tasks.indexOf('export async function openNewTaskFrom('), tasks.indexOf('export async function openTaskById('));
   assert.match(entry, /if \(readOnly\(\)\) return false;/, 'read-only viewers get no form');
-  // Quick-Add (2026-10-29): a draft can come along, and "Say a task" (`dictate`)
-  // hands over to startTaskDictation BEFORE any await (Safari starts speech
-  // only inside the tap); it ends in the same form (openPreparedNewTask).
+  // Quick-Add (2026-10-29): a draft can come along; it ends in the same form
+  // (openPreparedNewTask). "Say a task" (`dictate`, startTaskDictation) went
+  // with One Today: Say it on the + routes the sentence (startQuickAdd).
   assert.match(entry, /openTaskModal\(\{ users: state\.users, onChanged, draft \}, null\);/, 'the one form of the page, not a second one');
-  assert.match(entry, /if \(readOnly\(\)\) return false;\n\s*if \(dictate\) return startTaskDictation\(\{ user, onChanged \}\);/,
-    'dictation starts before the first await');
+  assert.doesNotMatch(entry, /dictate|startTaskDictation/, 'no "Say a task" option any more');
+  assert.doesNotMatch(tasks, /startTaskDictation/, 'nor its import');
   assert.match(tasks, /export function openPreparedNewTask\(\{[^\n]*\} = \{\}\) \{\n\s*openTaskModal\(\{ users: state\.users, onChanged, draft, spoken, heard \}, null\);/,
     'dictation fills that same form');
   const header = tasks.slice(tasks.indexOf('function openNewTaskForm('), tasks.indexOf('function wireNewTaskBtn('));

@@ -190,6 +190,17 @@
     line-height: var(--line-height-tight);
     text-wrap: balance;
   }
+
+  /* KEIN PLUS-KREIS IN DIESER ZEILE (Visual QA 2026-11-02: „Budg…" bei
+   * 390px). Am Telefon dockt die Shell den Seiten-FAB als Geisterkreis in den
+   * Aktions-Slot (router.js dockFabAsGhost); neben Titel und Stepper nahm er
+   * dem Titel 48px, „Budget" stand ohne einen Pixel Luft und bei 375px
+   * abgeschnitten. Wie im Kalender („Kalenda…", calendar.css): ein Slot ohne
+   * Geometrie laesst den Knopf in der fab-layer, er schwebt ueber der Leiste.
+   * Ab 768px hat die Zeile Platz, dort bleibt er im Kopf. */
+  .budget-nav > .page-toolbar__actions {
+    display: none;
+  }
 }
 
 /* Bis 1023px (R19, Tablet): Titel und Zeitraum teilen die Zeile auch bei

@@ -19,7 +19,7 @@ import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderA
 import { withChosenPeople } from '/utils/people-picker.js';
 import { remindAtFromWallTime, wallTimeFromRemindAt, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
 import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
-import { openDictationSheet, startTaskDictation } from '/components/task-dictation.js';
+import { openDictationSheet } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
@@ -6028,23 +6028,16 @@ export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken
  * „Dodaj zadanie" auf Dziś oeffnet DASSELBE Formular wie das „Nowe zadanie"
  * im Kopf dieser Seite (`openTaskModal`) - kein zweites, kleineres. Geladen
  * wird hier, was das Formular braucht (Blatt, Mitglieder, Kategorien); nach
- * dem Speichern frischt `onChanged` die aufrufende Flaeche auf.
- *
- * Mit `dictate` („Say a task", Quick-Add) gibt es VOR dem Hoerblatt kein
- * await: startTaskDictation (components/task-dictation.js) oeffnet es und
- * startet die Erkennung noch in diesem Aufruf und laedt daneben. Wer aus
- * einem Tipp heraus erst diese Seite importieren muss, ruft
- * startTaskDictation direkt - ein `await import()` davor kostet in Safari
- * die Nutzergeste.
+ * dem Speichern frischt `onChanged` die aufrufende Flaeche auf. Gesprochen
+ * wird ueber "Powiedz" im "+" (startQuickAdd, components/task-dictation.js).
  *
  * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
- *          draft?: object|null, dictate?: boolean}} opts
+ *          draft?: object|null}} opts
  * @returns {Promise<boolean>} false, wenn nichts geoeffnet wurde (nur lesend,
  *          oder ohne Kategorien - ein Speichern liefe in die Ablehnung).
  */
-export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null, dictate = false } = {}) {
+export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null } = {}) {
   if (readOnly()) return false;
-  if (dictate) return startTaskDictation({ user, onChanged });
   await prepareNewTask({ user });
   openTaskModal({ users: state.users, onChanged, draft }, null);
   return true;

@@ -133,6 +133,43 @@ test('no list yet: a toast and false, no empty sheet', async () => {
   } finally { s.done(); }
 });
 
+// Say it on a slow network (final review M6): closed while the lists load,
+// the sheet does not open afterwards, and no toast speaks for it.
+test('no longer wanted when the slow lists arrive (stillWanted): false, no sheet, no toast', async () => {
+  for (const lists of [LISTS, []]) {
+    const s = setup({ lists });
+    const realGet = globalThis.__apiStub.get;
+    let arrive;
+    const slow = new Promise((resolve) => { arrive = resolve; });
+    globalThis.__apiStub.get = async (path) => { await slow; return realGet(path); };
+    let wanted = true;
+    try {
+      const pending = openShoppingAddFrom({ user: { id: 7 }, stillWanted: () => wanted });
+      wanted = false;
+      arrive();
+      assert.equal(await pending, false);
+      assert.equal(s.opened.length, 0, 'no sheet');
+      assert.equal(toasts.length, 0, 'nothing said about a sheet nobody waits for');
+    } finally { s.done(); }
+  }
+  // Closed while the open items of the list load: the same.
+  const s = setup();
+  let wanted = true;
+  const realGet = globalThis.__apiStub.get;
+  globalThis.__apiStub.get = async (path) => {
+    if (/\/items$/.test(path)) wanted = false;
+    return realGet(path);
+  };
+  try {
+    assert.equal(await openShoppingAddFrom({ user: { id: 7 }, stillWanted: () => wanted }), false);
+    assert.equal(s.opened.length, 0);
+  } finally { s.done(); }
+  const ok = setup();
+  try {
+    assert.equal(await openShoppingAddFrom({ user: { id: 7 }, stillWanted: () => true }), true, 'still wanted: it opens');
+  } finally { ok.done(); }
+});
+
 test('the sheet is titled with the remembered list; the switcher only with several lists', async () => {
   rememberShoppingList(7, 2);
   const s = setup();
@@ -501,6 +538,38 @@ test('"Dodaj" posts every spoken chip once, then the typed text, then closes', a
     s.opened[0].onClose();
     assert.equal(changed.length, 1);
   } finally { delete globalThis.__closeModal; s.done(); }
+});
+
+// T12 (final review): one item saved says so as before; two or more say how
+// many in one toast ("Dodano 3 produkty", plural by the locale), and a row
+// that came back from ticked still says so: its own sentence for one, the
+// names for several.
+test('"Dodaj" with several items: one summary toast, and the revived ones are still named', async () => {
+  const saveAll = async (items, draft, typed = '') => {
+    rememberShoppingList(7, 2);
+    const s = setup({ items: { 2: items } });
+    globalThis.__closeModal = () => {};
+    try {
+      await openShoppingAddFrom({ user: { id: 7 }, draft: { items: draft } });
+      const panel = fakePanel();
+      await s.opened[0].onSave(panel);
+      panel.querySelector('#shopping-sheet-input').value = typed;
+      for (const fn of panel.querySelector('.task-sheet__submit').listeners.click) await fn({ preventDefault() {} });
+      return toasts.map((args) => args.slice(0, 2));
+    } finally { delete globalThis.__closeModal; s.done(); }
+  };
+  const three = [{ name: 'mleko', quantity: null }, { name: 'masło', quantity: null }, { name: 'jajka', quantity: '10' }];
+  assert.deepEqual(await saveAll([], three), [['shopping.itemsAddedToast{"count":3}', 'success']], 'none revived: the count alone');
+  assert.deepEqual(await saveAll([row(8, 'Masło', { is_checked: 1 })], three), [
+    ['shopping.itemsAddedToast{"count":3}', 'success'],
+    ['shopping.itemBackToast{"name":"Masło"}', 'info'],
+  ], 'one revived: its sentence, as for a single item');
+  assert.deepEqual(await saveAll([row(8, 'Masło', { is_checked: 1 }), row(9, 'Jajka', { is_checked: 1 })], three, 'chleb'), [
+    ['shopping.itemsAddedToast{"count":4}', 'success'],
+    ['shopping.itemsBackToast{"names":"Masło, Jajka"}', 'info'],
+  ], 'several revived: their names in one sentence; the typed item counts too');
+  assert.deepEqual(await saveAll([row(8, 'Masło', { is_checked: 1 })], [{ name: 'masło', quantity: null }]),
+    [['shopping.itemBackToast{"name":"Masło"}', 'info']], 'one item: as before');
 });
 
 test('"Dodaj" with nothing typed and nothing spoken keeps the sheet open on the field', async () => {

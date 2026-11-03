@@ -88,6 +88,22 @@ function sheetHtml(lists, list, frequent, { spoken = [], heard = '', typed = '' 
 }
 
 /**
+ * Was "Dodaj" sagt, nachdem es gespeichert hat (`done`: was add() je Posten
+ * lieferte). Ein Posten: sein Satz wie bisher. Mehrere: EIN Satz mit der Zahl
+ * ("Dodano 3 produkty", Pluralform der Sprache), und was von abgehakt
+ * zurueckkam, sagt es weiter: eine Zeile mit ihrem Satz, mehrere mit ihren
+ * Namen - sonst sucht niemand die Zeile, die schon auf der Liste stand.
+ */
+function showSavedToasts(done) {
+  const show = (...args) => window.yuvomi?.showToast(...args);
+  if (done.length === 1) { show(...done[0].toast); return; }
+  show(t('shopping.itemsAddedToast', { count: done.length }), 'success');
+  const revived = done.filter((d) => d.revived);
+  if (revived.length === 1) show(...revived[0].toast);
+  else if (revived.length > 1) show(t('shopping.itemsBackToast', { names: revived.map((d) => d.revived).join(', ') }), 'info');
+}
+
+/**
  * Der Entwurf aus dem Satz fuer das Mikrofon dieses Blatts: Posten (`kind:
  * 'shopping'`, ein Haiku-Aufruf). Kam eine andere Art zurueck, zaehlt der Satz
  * als Liste von Posten, wie die lokale Regel ihn teilt.
@@ -109,10 +125,12 @@ async function shoppingDraftFromSentence(sentence, { members = [], post } = {}) 
  *        `typed` steht im Feld: der getippte Text, wenn das Mikrofon das Blatt
  *        durch ein neues ersetzt, oder das Gesagte nach "Type instead" in Say it.
  *        `listId` nimmt nur das Blatt selbst mit (die gewaehlte Liste bleibt).
- * @returns {Promise<boolean>} false bei nur lesendem Zugriff oder ohne Liste
+ *        `stillWanted` fragt nach jedem Laden, ob das Blatt noch gewollt ist:
+ *        wer "Powiedz" auf langsamem Netz zumacht, bekommt es nicht hinterher.
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff, ohne Liste oder wenn es nicht mehr gewollt ist
  */
 export async function openShoppingAddFrom({
-  user, onChanged = () => {}, draft = null, heard = '', typed = '', listId = null,
+  user, onChanged = () => {}, draft = null, heard = '', typed = '', listId = null, stillWanted = () => true,
 } = {}) {
   if (!mayWritePath('/shopping')) return false;
   let lists = [];
@@ -125,9 +143,11 @@ export async function openShoppingAddFrom({
     lists = listsRes?.data ?? [];
     frequent = frequentRes?.data ?? [];
   } catch (err) {
+    if (!stillWanted()) return false;
     window.yuvomi?.showToast(errorSentence(err), 'danger');
     return false;
   }
+  if (!stillWanted()) return false;
   if (user?.id == null) console.warn('openShoppingAddFrom: `user` fehlt, die gemerkte Liste geht verloren');
   const first = lists.find((l) => String(l.id) === String(listId)) ?? pickShoppingList(lists, user?.id);
   if (!first) {
@@ -148,6 +168,7 @@ export async function openShoppingAddFrom({
   };
   // Vor dem Oeffnen: die ersten Chips sollen schon ohne das Offene dastehen.
   const firstItems = await itemsOf(first.id);
+  if (!stillWanted()) return false;
   let list = first;
   let added = 0;
   let chips = visibleFrequent(frequent, firstItems, { limit: FREQUENT_CHIPS });
@@ -212,26 +233,27 @@ export async function openShoppingAddFrom({
        * Legt an oder holt zurueck - wie `addQuickItem` auf Zakupy. Eine
        * getippte Menge ersetzt die der abgehakten Zeile, ein Name ohne Menge
        * laesst sie stehen; die Kategorie bleibt die der Zeile (gewaehlt hat
-       * hier niemand eine). Liefert den Satz fuer den Toast.
+       * hier niemand eine). Liefert den Toast (`[Satz, Art]`) und, wenn die
+       * Zeile von abgehakt zurueckkam, ihren Namen (`revived`).
        */
       const add = async ({ name, quantity = null, category = null, source = 'default' }) => {
         const target = list;
         const items = await itemsOf(target.id);
         const ticked = tickedItemNamed(items, name);
-        let toast;
+        let result;
         if (ticked) {
           const changes = quantity && quantity !== (ticked.quantity ?? null) ? { quantity } : {};
           await api.patch(`/shopping/items/${ticked.id}`, { ...changes, is_checked: 0 });
           Object.assign(ticked, changes, { is_checked: 0 });
-          toast = [t('shopping.itemBackToast', { name: ticked.name }), 'info'];
+          result = { toast: [t('shopping.itemBackToast', { name: ticked.name }), 'info'], revived: ticked.name };
         } else {
           const res = await api.post(`/shopping/${target.id}/items`, quickItemBody({ name, quantity, category, source }));
           items.push(res?.data && typeof res.data === 'object' ? res.data : { name, quantity, is_checked: 0 });
-          toast = [`${name} · ${t('shopping.itemAdded')}`, 'success'];
+          result = { toast: [`${name} · ${t('shopping.itemAdded')}`, 'success'], revived: null };
         }
         added += 1;
         if (target === list) renderChips(items);
-        return toast;
+        return result;
       };
 
       let busy = false;
@@ -244,7 +266,7 @@ export async function openShoppingAddFrom({
         clearTimeout(timer);
         const category = guess.name === name ? guess.category : null;
         try {
-          const toast = await add({ name, quantity, category, source: 'suggestion' });
+          const { toast } = await add({ name, quantity, category, source: 'suggestion' });
           input.value = '';
           guess = { name: '', category: null };
           window.yuvomi?.showToast(...toast);
@@ -262,10 +284,10 @@ export async function openShoppingAddFrom({
         if (!item || chip.disabled) return;
         chip.disabled = true;
         try {
-          const toast = await add({ name: item.name, quantity: item.quantity ?? null, category: item.category, source: 'suggestion' });
+          const { toast, revived } = await add({ name: item.name, quantity: item.quantity ?? null, category: item.category, source: 'suggestion' });
           // Angelegt nimmt das Neuzeichnen den Chip mit; zurueckgeholt sagt es
           // ein Satz (die Zeile steht irgendwo auf der Liste).
-          if (toast[1] === 'info') window.yuvomi?.showToast(...toast);
+          if (revived) window.yuvomi?.showToast(...toast);
         } catch (err) {
           chip.disabled = false;
           window.yuvomi?.showToast(errorSentence(err), 'danger');
@@ -290,22 +312,21 @@ export async function openShoppingAddFrom({
         clearTimeout(timer);
         // Der Kontext VOR den Anfragen: ein spaetes Schliessen trifft nur dieses Blatt (#1997).
         const context = captureModalContext();
-        let saved = 0;
+        // Was gespeichert wurde: der Satz des Toasts je Posten, und welche
+        // Zeile von abgehakt zurueckkam (ihr Name).
+        const done = [];
         let failed = false;
-        let last = null;
         try {
           for (const item of [...spoken]) {
-            last = await add({ name: item.name, quantity: item.quantity, source: 'suggestion' });
+            done.push(await add({ name: item.name, quantity: item.quantity, source: 'suggestion' }));
             spoken = spoken.filter((i) => i.id !== item.id);
-            saved += 1;
             renderSpoken();
           }
           const { name, quantity } = parseQuickEntry(input.value);
           if (name) {
             const category = guess.name === name ? guess.category : null;
-            last = await add({ name, quantity, category, source: 'suggestion' });
+            done.push(await add({ name, quantity, category, source: 'suggestion' }));
             input.value = '';
-            saved += 1;
           }
         } catch (err) {
           failed = true;
@@ -313,8 +334,8 @@ export async function openShoppingAddFrom({
         } finally {
           busy = false;
         }
-        if (failed || !saved) { input.focus(); return; }
-        if (saved === 1 && last) window.yuvomi?.showToast(...last);
+        if (failed || !done.length) { input.focus(); return; }
+        showSavedToasts(done);
         closeModal({ force: true, context });
       });
 
