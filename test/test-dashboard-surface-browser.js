@@ -238,6 +238,70 @@ test('Dziś 1280x800: zwei Spalten (Aufgaben rechts vom Kalender), das + an der 
   assert.deepEqual(m.hits, [], `Am Seitenende liegt das + auf: ${m.hits.join(', ')}`);
 });
 
+// Wide screens (2026-11-02), Sichtdurchgang (2026-11-03): die Woche bei
+// 1280x800 zeigt sieben Tage ohne Scrollen und ohne Blende, und kein
+// Gerichtename verliert Buchstaben, solange sein laengstes Wort in die Box
+// passt. Gemessen fehlten bei 17px Titel in 84px Text "Homemade" (93px) und im
+// deutschen Seed zwoelf von 27 Namen; die Zweizeilen-Klammer kuerzt nur ihre
+// letzte Zeile ("…"). Woerter bleiben ganz (kein Trennstrich, kein Bruch ohne
+// Strich, W1): nur ein einzelnes Wort, breiter als die ganze Box (ein langes
+// deutsches Kompositum), darf noch abgeschnitten sein.
+test('Essen 1280x800: die Woche zeigt sieben Tage ohne Blende, kein Gerichtename ist abgeschnitten, dessen Woerter passen', async () => {
+  const page = await openPage(harness, { device: 'desktop' });
+  await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+  await gotoRoute(page, '/meals');
+  await page.waitForSelector('.week-grid .meal-card__title');
+  await freeze(page);
+  const m = await page.evaluate(() => {
+    const grid = document.querySelector('.week-grid');
+    const cs = getComputedStyle(grid);
+    const heads = [...grid.querySelectorAll('.day-header')].filter((h) => h.getClientRects().length);
+    const last = heads.at(-1)?.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    return {
+      days: heads.length,
+      scrolls: grid.scrollWidth > grid.clientWidth + 1,
+      mask: [cs.maskImage, cs.webkitMaskImage].filter((v) => v && v !== 'none'),
+      sundayInside: !!last && last.right <= g.right + 1 && last.right <= window.innerWidth,
+      // Der Titel und sein Text: geschnitten wurde am Text (`overflow: hidden`
+      // der Basisregel), sein Elternteil merkt davon nichts. Abgeschnitten
+      // zaehlt, wenn das laengste Wort des Namens in die Box gepasst haette.
+      cut: (() => {
+        const ctx = document.createElement('canvas').getContext('2d');
+        return [...grid.querySelectorAll('.meal-card__title, .meal-card__title-text')]
+          .filter((el) => el.getClientRects().length && el.scrollWidth > el.clientWidth + 1)
+          .filter((el) => {
+            const type = getComputedStyle(el);
+            ctx.font = `${type.fontWeight} ${type.fontSize} ${type.fontFamily}`;
+            const name = el.querySelector('.meal-card__title-text')?.textContent ?? el.textContent;
+            const longest = Math.max(...name.trim().split(/\s+/).map((w) => ctx.measureText(w).width));
+            return longest <= el.clientWidth;
+          })
+          .map((el) => `${el.textContent.trim()} (${el.scrollWidth}/${el.clientWidth})`);
+      })(),
+      hyphens: [...grid.querySelectorAll('.meal-card__title')].map((el) => getComputedStyle(el).hyphens)
+        .filter((h) => h !== 'manual'),
+      // Platz fuer ganze Woerter: die schmalste Titelbox, und der Name laeuft
+      // mit dem Wiederholungszeichen in EINEM Fluss (keine eigene Spalte).
+      minBox: Math.min(...[...grid.querySelectorAll('.meal-card__title')]
+        .filter((el) => el.getClientRects().length).map((el) => el.clientWidth)),
+      ownColumn: [...grid.querySelectorAll('.meal-card__title-text')]
+        .filter((el) => getComputedStyle(el).display !== 'inline').length,
+    };
+  });
+  await page.close();
+  assert.equal(m.days, 7, `sieben Tagesspalten erwartet, ${m.days} gefunden`);
+  assert.ok(!m.scrolls, 'die Woche scrollt bei 1280 waagerecht');
+  assert.deepEqual(m.mask, [], 'keine Blende ueber dem Sonntag');
+  assert.ok(m.sundayInside, 'der Sonntag steht ganz im Bild');
+  assert.deepEqual(m.cut, [], `abgeschnittene Gerichtenamen: ${m.cut.join(', ')}`);
+  assert.deepEqual(m.hyphens, [], 'kein Gerichtename bekommt einen Trennstrich');
+  // 15px-Titel mit 8px Einzug: 101px bei 1280 - vorher 84 (17px, 16px Einzug),
+  // neben dem Wiederholungszeichen 68.
+  assert.ok(m.minBox >= 96, `die schmalste Titelbox hat nur ${m.minBox}px - ganze Woerter brauchen Platz`);
+  assert.equal(m.ownColumn, 0, 'der Name laeuft mit dem Wiederholungszeichen in einem Fluss');
+});
+
 test('Nachlauf: eine Seite mit eigenem Scrollport behaelt ihre Hoehe (desktop)', async () => {
   // Gegenrichtung: der Nachlauf der Seitenscroller darf die Seiten, deren Root
   // `height: 100%` traegt, nicht aus dem Fenster schieben - dort scrollt
@@ -620,11 +684,12 @@ test('Dziś: von oben nach unten Kopf, Następne, Kalender, Aufgaben, Notizen, G
   assert.ok(!m.overflow, 'Dziś scrollt waagerecht');
 });
 
-/* Das Wetter steht rechts auf der Zeile des Datums, solange beide passen.
- * Ein langes Datum mit einer langen Regenzeile ("Poniedziałek, 2 listopada",
- * "bez deszczu do końca dnia") passt am Telefon nicht in eine Zeile: dann
- * steht das Wetter in einer eigenen Zeile unter dem Datum, buendig mit ihm,
- * ganz im Kopf - nie abgeschnitten, nie breiter als die Seite. */
+/* Das Wetter steht am Desktop rechts auf der Zeile des Datums. Am Telefon
+ * steht es IMMER in einer eigenen Zeile unter dem Datum, buendig mit ihm
+ * (Sichtdurchgang 2026-11-03): bei 390px passten Datum und Wetter in keiner
+ * der beiden Sprachen in eine Zeile, und eine kurze Regenzeile sprang wieder
+ * nach rechts - das Wetter wechselte zwischen zwei Besuchen den Platz. Ganz
+ * im Kopf, nie abgeschnitten, nie breiter als die Seite. */
 for (const device of ['desktop', 'mobile']) {
   test(`Dziś: das Wetter ist eine Zeile beim Datum - ein Link zu seinen Einstellungen, ohne Karte und Diagramm (${device})`, async () => {
     const page = await openPage(harness, { device });
@@ -664,8 +729,8 @@ for (const device of ['desktop', 'mobile']) {
       assert.ok(w.sameLine, 'am Desktop auf der Zeile des Datums');
       assert.ok(Math.abs(w.rightGap) <= 1, `rechtsbuendig im Kopf (${w.rightGap}px Abstand)`);
     } else {
-      assert.ok((w.sameLine && Math.abs(w.rightGap) <= 1) || (w.under && Math.abs(w.leftGap) <= 1),
-        `rechts auf der Zeile des Datums oder darunter, buendig mit ihm: ${JSON.stringify(w)}`);
+      assert.ok(w.under && !w.sameLine, `am Telefon in einer eigenen Zeile unter dem Datum: ${JSON.stringify(w)}`);
+      assert.ok(Math.abs(w.leftGap) <= 1, `buendig mit dem Datum (${w.leftGap}px)`);
     }
     assert.ok(w.inside, 'ganz im Kopf');
     assert.ok(!w.cut, `die Wetterzeile ist abgeschnitten: ${w.words}`);
@@ -673,6 +738,28 @@ for (const device of ['desktop', 'mobile']) {
     assert.deepEqual(w.gone, [], 'keine Wetterkarte, kein Diagramm');
   });
 }
+
+// Die kurze Fassung: ohne Stundenwerte steht nur die Temperatur ("11°"), und
+// die passte am Telefon neben das Datum - vor dem Sichtdurchgang sprang sie
+// dorthin. Jetzt steht auch sie in der eigenen Zeile unter dem Datum.
+test('Dziś mobil: auch eine kurze Wetterzeile steht unter dem Datum, nicht rechts daneben', async () => {
+  const page = await openPage(harness, { device: 'mobile' });
+  answerWeather(page, { data: { ...RAINY.data, today_hours: [] } });
+  await gotoRoute(page, '/');
+  await page.waitForSelector('[data-today] .dz-head__weather');
+  await freeze(page);
+  const w = await page.evaluate(() => {
+    const date = document.querySelector('[data-today] .dz-head__date').getBoundingClientRect();
+    const link = document.querySelector('[data-today] .dz-head__weather');
+    const text = link.querySelector('.dz-head__weather-text').getBoundingClientRect();
+    const icon = link.querySelector('svg').getBoundingClientRect();
+    return { words: link.textContent.trim(), under: text.top >= date.bottom - 1, leftGap: Math.round(icon.left - date.left) };
+  });
+  await page.close();
+  assert.match(w.words, /^11°$/, `nur die Temperatur: ${w.words}`);
+  assert.ok(w.under, `die kurze Wetterzeile steht neben dem Datum statt darunter: ${JSON.stringify(w)}`);
+  assert.ok(Math.abs(w.leftGap) <= 1, `buendig mit dem Datum (${w.leftGap}px)`);
+});
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Wetter: eingerichtet, aber gescheitert, verschwindet nicht (v2.70.0)

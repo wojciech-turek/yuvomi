@@ -472,11 +472,17 @@
    * und war damit leiser als „Kalender" (22px/700) daneben - in Apple Kalender
    * und Fantastical ist „Oktober 2026" der Titel. Jetzt 18px fett - eine Stufe
    * unter dem Modultitel, aber kein Fliesstext mehr. Die feste Breite waechst
-   * mit (11.75rem: „KW 42 · Oktober 2026" misst 186px), damit die Pfeile
-   * weiter stillstehen; Title 3 (20px) haette den Kopf bei 1440 zweizeilig
-   * gemacht (113 statt 69px, gemessen). */
+   * mit, damit die Pfeile weiter stillstehen; Title 3 (20px) haette den Kopf
+   * bei 1440 zweizeilig gemacht (113 statt 69px, gemessen).
+   * 15.5rem STATT 11.75rem (Sichtdurchgang One Today, 2026-11-03): die 188px
+   * waren an „KW 42 · Oktober 2026" (186) gemessen, und die Woche stand bei
+   * 1280 als „W45 · November 2…" (199px) und „Tydz. 45 · Listopad 2…" (217)
+   * da. Das laengste Label der Haushaltssprachen, „Tydz. 52 · Październik
+   * 2026", misst 240px in 18px Inter fett, der laengste Tag („Wednesday,
+   * 30.09.2026") 215. Der Kopf bleibt bei 1024 einzeilig (Titel, Stepper 328,
+   * Aktionen: rund 620 von 740px). */
   .cal-toolbar__label {
-    flex: 0 0 11.75rem;
+    flex: 0 0 15.5rem;
     font-size: var(--text-lg);
     font-weight: var(--font-weight-bold);
     letter-spacing: var(--tracking-tight);

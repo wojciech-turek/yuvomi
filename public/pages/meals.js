@@ -1109,7 +1109,7 @@ function renderBoardGrid() {
   // darum ist die Gutter-Spalte fürs Accessibility-Tree ein reines Duplikat
   // und wird mit aria-hidden ausgeblendet.
   const gutterHTML = visibleTypes.map((type, ti) => `
-    <div class="week-gutter-label" data-type="${type.key}" style="--type-row: ${ti + 2}" aria-hidden="true">
+    <div class="week-gutter-label" data-type="${type.key}" style="--meal-type-row: ${ti + 2}" aria-hidden="true">
       <span class="week-gutter-label__text">${type.label}</span>
     </div>
   `).join('');
@@ -1328,7 +1328,9 @@ function renderSlot(date, type, mealsForDay, dayCol, typeRow) {
   const meals = mealsForDay.filter((m) => m.meal_type === type.key);
   // Explizite Grid-Platzierung fürs Desktop-Board (day-column/day-slots werden
   // dort zu display:contents); mobil ohne Wirkung, da die Slots im Fluss liegen.
-  const gridPos = `--day-col: ${dayCol}; --type-row: ${typeRow}`;
+  // `--meal-type-row`, nicht `--type-row`: das ist das Schrift-Token (15px,
+  // tokens.css), und der gleiche Name machte es in jeder Karte zur Zeilenzahl.
+  const gridPos = `--day-col: ${dayCol}; --meal-type-row: ${typeRow}`;
   // Bei `read` bleibt vom Platz der ZUSTAND - leer oder belegt -, jede Handlung
   // daran geht (Regel 2): die Plus-Knoepfe, der Ziehgriff und das Loeschen.
   const ro = readOnly();

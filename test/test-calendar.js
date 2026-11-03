@@ -6201,6 +6201,11 @@ test('Seitenleiste: erst ab 86.25rem Kalenderflaeche, nur mit Leiste rueckt die 
   const label = rules.find((r) => r.selector.trim() === '.cal-toolbar__label' && r.at.some((a) => /min-width:\s*1024px/.test(a)));
   assert(/font-weight:\s*var\(--font-weight-bold\)/.test(label?.body ?? '') && /font-size:\s*var\(--text-lg\)/.test(label?.body ?? ''),
     'der Desktop-Zeitraum steht fett in 18px, nicht mehr leiser als Fliesstext-Gewicht');
+  // Sichtdurchgang One Today (2026-11-03): die feste Breite traegt das laengste
+  // Label der Haushaltssprachen - „Tydz. 52 · Październik 2026" misst 240px in
+  // 18px Inter fett. Bei 11.75rem (188) stand die Woche als „W45 · November 2…".
+  const basis = Number(label?.body.match(/flex:\s*0 0 ([\d.]+)rem/)?.[1]);
+  assert(basis * 16 >= 240, `das Zeitraum-Label ist ${basis * 16}px breit - „Tydz. 52 · Październik 2026" braucht 240`);
   const src = readFileSync(new URL('../public/pages/calendar.js', import.meta.url), 'utf8');
   // R20: nur die Suche steht ohne Leiste. Die Agenda behaelt sie - ohne „Als
   // Naechstes" (das IST die Agenda); vorher sprang der Inhalt beim

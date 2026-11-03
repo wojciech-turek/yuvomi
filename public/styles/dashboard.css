@@ -1535,6 +1535,21 @@
   min-width: 0;
 }
 
+/* ON A PHONE THE WEATHER HAS ITS OWN LINE, ALWAYS (visual pass 2026-11-03).
+ * At 390px the date and the weather fit on one line in neither language
+ * ("Wtorek, 3 listopada" 137px + "9° · bez deszczu do wieczora" 248px; the
+ * English pair is as long), so the weather wrapped under the date - but only
+ * while the phrase was long: a short one ("10° · deszcz 14-16") jumped back
+ * to the right, and the weather changed places between two visits. Now it
+ * stands under the date by design, flush with it, on every phone; from 768px
+ * it keeps the right end of the date line. */
+@media (max-width: 767px) {
+  .dz-head__line {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .dz-head__date {
   margin: 0;
   font-size: var(--type-row);

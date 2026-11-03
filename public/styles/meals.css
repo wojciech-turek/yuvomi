@@ -1242,7 +1242,7 @@
    * die Gutter-Spalte, die jedes Mahlzeit-Typ-Label EINMAL pro Zeile trägt
    * (statt in jedem der bis zu 28 Slots); Zeile 1 sind die Tagesköpfe.
    * day-column/day-slots lösen sich via display:contents auf, Köpfe und Slots
-   * platzieren sich über --day-col/--type-row aus dem Renderer — so liegen
+   * platzieren sich über --day-col/--meal-type-row aus dem Renderer - so liegen
    * alle Frühstücke/Abendessen der Woche auf einer Höhe. Die Mindest-
    * Spaltenbreite erzwingt ein horizontales Scroll-Fenster mit Scroll-Snap
    * (≈5 Tage sichtbar) statt der 7-Spalten-Quetsche, die Labels und
@@ -1504,7 +1504,7 @@
   /* Slots in Grid-Zellen heben: Zeile = Mahlzeit-Typ, Spalte = Wochentag. */
   .meal-slot {
     grid-column: var(--day-col);
-    grid-row: var(--type-row);
+    grid-row: var(--meal-type-row);
   }
 
   /* DER LEERE SLOT IST EINE RUHIGE MULDE (A4 P1-2). 27 weisse Karten mit
@@ -1550,7 +1550,7 @@
     align-items: center;
     gap: var(--space-1);
     grid-column: 1;
-    grid-row: var(--type-row);
+    grid-row: var(--meal-type-row);
     align-self: stretch;
     /* Bleibt beim horizontalen Scrollen stehen; der Hintergrund deckt die
      * darunter durchlaufenden Tagesspalten ab. */
@@ -1633,19 +1633,57 @@
  * pages/meals.js; the "Show recipes" entry of the tools menu still opens it).
  * With the rail gone the board has 996px at 1280 (1060 minus 2 x 32 gutter):
  * 116 gutter + 7 x 117.7 + 7 x 8 gap. So the columns may shrink below the 140px
- * of the base rule down to 112px, and the dish names wrap at spaces only
- * (`hyphens: manual`, no word breaking): "Tomatensuppe" is not cut into
- * "Tomaten- / suppe" in a 83px title. A word wider than the title stays whole
- * and is clipped by the two-line clamp, not chopped. With the rail open the
- * 140px columns and the scroll window stay as they were. */
+ * of the base rule down to 112px, and the dish names wrap at spaces, never
+ * with a hyphen (`hyphens: manual`): "BLT sandwich" is not set as
+ * "BLT sand- / wich".
+ *
+ * ROOM FOR WHOLE WORDS (visual pass 2026-11-03). With 16px card padding and
+ * the 17px title the text box was 84px, and "Homemade" (93px), "Scrambled",
+ * "Bolognese" lost letters at the column edge: a whole word wider than its
+ * box is cut, not ellipsized (the two-line clamp only ellipsizes its last
+ * line). Words stay whole here on purpose - no hyphen (the spec), and no
+ * break without one (W1, test:typography: "Tomatensupp / e") - so the box
+ * has to hold them: the text stands 8px in from the card's edges, the title
+ * is the 15px row type, and the repeat mark flows after the name (one text
+ * flow, as in the phone row) instead of taking a column of its own beside
+ * it. That is 101px of text at 1280 (89 at the 112px minimum column): the
+ * English and Polish dish words measured fit ("Homemade" 83px, "makaronowa"
+ * 93, "ziemniaczane" 100 in 600 15px Inter). Only a single word wider than
+ * the whole text box (a long German compound such as "Tomatensuppe", 108) is
+ * still clipped. With the rail open the 140px columns and the scroll window
+ * stay as they were. */
 @media (min-width: 1024px) and (max-width: 1439px) {
   .meals-layout--rail-hidden .week-grid {
     grid-template-columns: var(--meal-gutter-width) repeat(7, minmax(112px, 1fr));
   }
 
-  .meals-layout--rail-hidden .meal-card__title-text {
+  .meals-layout--rail-hidden .meal-card__open,
+  .meals-layout--rail-hidden .meal-card__actions {
+    padding-inline: var(--space-2);
+  }
+
+  .meals-layout--rail-hidden .meal-card__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    font-size: var(--type-row);
+    line-height: var(--type-row-lh);
     hyphens: manual;
     overflow-wrap: normal;
+  }
+
+  .meals-layout--rail-hidden .meal-card__title-text {
+    display: inline;
+    hyphens: manual;
+    overflow-wrap: normal;
+  }
+
+  .meals-layout--rail-hidden .meal-card__title .meal-card__recurrence {
+    display: inline-flex;
+    margin-inline-start: var(--space-1);
+    vertical-align: middle;
   }
 }
 
@@ -2650,20 +2688,16 @@
   }
 }
 
-/* Kopf wie bei jedem Blatt (modal.js): Titel links, schlichtes X rechts,
- * keine Scheibe hinter dem X. Nur der Abstand zum Rumpf ist enger. */
-.meal-sheet .modal-panel__header {
-  min-height: 52px;
-  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
-  border-bottom: 0;
-}
-
+/* Kopf wie bei jedem Blatt (modal.js, layout.css `.modal-panel__header`):
+ * Titel links in der Groesse der anderen Blaetter, schlichtes X rechts, keine
+ * Scheibe hinter dem X, die Haarlinie darunter und dasselbe Polster. Bis zum
+ * Sichtdurchgang von One Today (2026-11-03) stand hier ein engerer Kopf
+ * (12/12/8/16, 17px, ohne Haarlinie) - das Blatt sah neben "Nowe zadanie"
+ * wie ein anderes aus. Der Titel bricht nicht um: "Kolacja · czw 22 paź"
+ * ist kurz, und ein Datum gehoert auf eine Zeile. */
 .meal-sheet .modal-panel__title {
   margin: 0;
   min-width: 0;
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2671,7 +2705,6 @@
 
 .meal-sheet .modal-panel__body {
   gap: var(--space-6);
-  padding-top: var(--space-2);
 }
 
 .meal-sheet .form-group {
