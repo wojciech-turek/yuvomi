@@ -963,46 +963,67 @@
   color: var(--color-accent);
 }
 
-/* ── Notizen und Geburtstage (nur lesen) ── */
-.wall-card[hidden] {
+/* ── Notizen und Geburtstage (nur lesen) ──
+ * Zwei einzeilige Streifen in EINER Karte (Sichtdurchgang One Today,
+ * 2026-11-03): „Notatki  Hasło do wifi · Lista na weekend" und
+ * „Urodziny  Halina dziś · Tomek 8 lis". Als zwei volle Karten passten sie bei
+ * 1280x800 an einem Tag mit Abendessen nie unter Abendessen und Einkauf (87px
+ * frei, eine dreizeilige Karte braucht rund 205). Hier: 12px Polster oben und
+ * unten, zwei Zeilen in der Label-Stufe (24/30, der Boden der Wand) - 84px.
+ * Jede Zeile wird als Ganzes mit „…" gekuerzt; nichts nimmt einen Tipp. */
+.wall-card[hidden],
+.wall-strip[hidden] {
   display: none;
 }
 
-.wall-list__rows {
+/* Ein Raster mit zwei Spalten: die Labels links, die Zeilen rechts beginnen an
+ * EINER Kante („Notatki"/„Urodziny" sind verschieden breit). Der Streifen
+ * selbst loest sich darin auf (`display: contents`); ein verborgener nimmt
+ * beide Zellen mit. */
+.wall-strips {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-4);
+  row-gap: 0;
+  padding-block: var(--space-3);
+}
+
+.wall-strip {
+  display: contents;
+}
+
+.wall-strip__items {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.wall-list__row {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  font-size: var(--wall-body);
-  line-height: var(--wall-text-lh);
-}
-
-.wall-list__main {
-  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.wall-list__side {
-  flex: none;
+  text-overflow: ellipsis;
   font-size: var(--wall-label);
   line-height: var(--wall-label-lh);
+  color: var(--color-text-primary);
+}
+
+.wall-strip__item {
+  display: inline;
+}
+
+.wall-strip__dot {
+  padding-inline: var(--space-2);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.wall-strip__when {
   color: var(--color-text-secondary);
 }
 
-.wall-list__row--today .wall-list__main,
-.wall-list__row--today .wall-list__side {
+/* Der heutige Geburtstag im Aufmerksamkeitston, Name und „dziś". */
+.wall-strip__item--today,
+.wall-strip__item--today .wall-strip__when {
   color: var(--color-warning);
   font-weight: var(--font-weight-semibold);
 }

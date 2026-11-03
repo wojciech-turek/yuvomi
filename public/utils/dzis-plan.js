@@ -389,8 +389,11 @@ export function birthdaysNext(data, ctx) {
         id: b.id,
         name: String(b.name ?? ''),
         today: days === 0,
+        days,
         sub,
         date: shortWeekdayDayMonth(addLocalDays(ctx.todayKey, days), { year: false }),
+        // Without the weekday ("8 lut"): the wall's one-line strip (wall-plan.js).
+        day: shortDayMonth(addLocalDays(ctx.todayKey, days), { year: false }),
         far: days === 0 ? '' : days === 1 ? t('calendar.relDay.tomorrow') : t('birthdays.inDays', { count: days }),
         route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
       };

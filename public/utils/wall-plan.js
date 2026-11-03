@@ -325,7 +325,12 @@ export function buildWall(data, {
     if (notes.length) model.notes = notes;
   }
   if (!moduleOff('birthdays')) {
-    const rows = birthdaysNext(data, ctx);
+    // On the wall a birthday is one item of a one-line strip: the name and
+    // when ("dziś", "jutro", else "8 lut" - no weekday, no "za 97 dni").
+    const rows = birthdaysNext(data, ctx).map((row) => ({
+      ...row,
+      when: row.days === 0 ? t('calendar.relDay.today') : row.days === 1 ? t('calendar.relDay.tomorrow') : row.day,
+    }));
     if (rows.length) model.birthdays = rows;
   }
 

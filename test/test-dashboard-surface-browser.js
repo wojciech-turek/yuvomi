@@ -465,6 +465,74 @@ test('Wand-Modus: ein frischer Datenstand steht nicht auf der Wand', async () =>
   assert.ok(!m.updated && !m.stale, 'frisch geladen: kein Stand, keine Warnung');
 });
 
+// One Today, Sichtdurchgang (2026-11-03): Notizen und Geburtstage stehen auf
+// der Wand als zwei einzeilige Streifen in EINER Karte. Als zwei volle Karten
+// passten sie bei 1280x800 an einem Tag mit Abendessen nie (87px frei unter
+// Abendessen und Einkauf, eine Karte brauchte rund 205). Gemessen um 12:00
+// (Szene „Dzień": das Abendessen als Karte rechts, der Plan links) - die Uhr
+// der Seite wird dafuer auf 12:00 des Tages gestellt, die Daten bleiben die
+// des Seeds (Abendessen heute, angeheftete Notizen, Geburtstage).
+test('Wand-Modus 1280x800 an einem Tag mit Abendessen: Notizen und Geburtstage stehen als zwei Zeilen unter Abendessen und Einkauf', async () => {
+  const page = await openPage(harness, { device: 'desktop' });
+  await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+  await page.evaluateOnNewDocument(() => {
+    const RealDate = Date;
+    const real = new RealDate();
+    const offset = new RealDate(real.getFullYear(), real.getMonth(), real.getDate(), 12, 0, 0).getTime() - real.getTime();
+    class NoonDate extends RealDate {
+      constructor(...args) { if (args.length) super(...args); else super(RealDate.now() + offset); }
+      static now() { return RealDate.now() + offset; }
+    }
+    globalThis.Date = NoonDate;
+  });
+  await page.evaluate(() => localStorage.setItem('yuvomi-wall-mode', '1'));
+  await gotoRoute(page, '/');
+  await page.waitForSelector('.wall-dinner', { timeout: 10000 }).catch(() => {});
+  await page.waitForSelector('[data-wall-strips]', { timeout: 10000 }).catch(() => {});
+  await freeze(page);
+  await wait(600);
+  const m = await page.evaluate(() => {
+    const box = (el) => el && (({ top, bottom, left, right, height }) => ({ top, bottom, left, right, height }))(el.getBoundingClientRect());
+    const shown = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
+    const aside = document.querySelector('.wall__aside');
+    // Der Streifen selbst ist `display: contents` (seine Zellen stehen im
+    // Raster der Karte): gemessen werden sein Label und seine Zeile.
+    const strip = (id) => {
+      const el = document.querySelector(`[data-wall-card="${id}"]`);
+      const items = el?.querySelector('.wall-strip__items');
+      return {
+        shown: !!el && !el.hidden && shown(items) && shown(el.querySelector('.wall-strip__label')),
+        box: box(items),
+        lines: items ? Math.round(items.getBoundingClientRect().height / parseFloat(getComputedStyle(items).lineHeight)) : 0,
+        px: items ? parseFloat(getComputedStyle(items).fontSize) : 0,
+        labelPx: el ? parseFloat(getComputedStyle(el.querySelector('.wall-strip__label')).fontSize) : 0,
+        text: items?.textContent.replace(/\s+/g, ' ').trim(),
+      };
+    };
+    return {
+      layout: document.querySelector('.wall__stage')?.dataset.layout,
+      dinner: shown(document.querySelector('.wall-dinner')),
+      shop: shown(document.querySelector('.wall-shop')),
+      card: box(document.querySelector('[data-wall-strips]')),
+      aside: box(aside),
+      viewport: innerHeight,
+      notes: strip('notes'),
+      birthdays: strip('birthdays'),
+    };
+  });
+  await page.evaluate(() => localStorage.removeItem('yuvomi-wall-mode'));
+  await page.close();
+  assert.equal(m.layout, 'split', `um 12:00 steht der Plan links und das Abendessen rechts: ${m.layout}`);
+  assert.ok(m.dinner && m.shop, 'Reichweite: Abendessen und Einkauf stehen (Seed: Abendessen heute, offene Posten)');
+  for (const [name, s] of [['Notizen', m.notes], ['Geburtstage', m.birthdays]]) {
+    assert.ok(s.shown, `${name}: der Streifen steht nicht da (${JSON.stringify(m)})`);
+    assert.equal(s.lines, 1, `${name}: eine Zeile, nicht ${s.lines}`);
+    assert.ok(s.px >= 24 && s.labelPx >= 24, `${name}: nichts unter dem Boden der Wand (${s.px}/${s.labelPx}px)`);
+    assert.ok(s.box.bottom <= m.aside.bottom + 1 && s.box.bottom <= m.viewport, `${name}: ganz in der Spalte und im Bild`);
+  }
+  assert.ok(m.card.height <= 90, `die Karte der Streifen ist ${m.card.height}px hoch`);
+});
+
 test('Wand-Modus 1280x800: nichts unter 24px, und das Dock liegt im Bild', async () => {
   const page = await openPage(harness, { device: 'desktop' });
   await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });

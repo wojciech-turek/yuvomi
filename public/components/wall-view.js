@@ -229,29 +229,38 @@ function renderShopping(shop, { canTick }) {
     </section>`;
 }
 
-/** The titles of the pinned notes: plain lines, nothing to tap. */
-function renderNotes(notes) {
+/**
+ * Notes and Birthdays as two one-line strips in ONE card (visual pass of One
+ * Today, 2026-11-03): "Notatki  Hasło do wifi · Lista na weekend" and
+ * "Urodziny  Halina dziś · Tomek 8 lis". As two full cards they never fitted
+ * a 1280x800 tablet on a day with a dinner (87px left under dinner and
+ * shopping, a three-line card needs about 205); one card with two lines in the
+ * label step is 84. Each line is cut as a whole with "…" when it is too long.
+ * Read-only: nothing to tap. Each strip keeps `data-wall-card`, so the fit
+ * still hides Birthdays first, then Notes (fitWallCards).
+ */
+function renderStrip(id, label, items) {
   return `
-    <section class="wall-card wall-list" data-wall-card="notes" aria-labelledby="wall-notes-title">
-      <h2 class="wall-card__label" id="wall-notes-title">${esc(t('nav.notes'))}</h2>
-      <ul class="wall-list__rows">
-        ${notes.map((note) => `<li class="wall-list__row"><span class="wall-list__main">${esc(note.title)}</span></li>`).join('')}
-      </ul>
-    </section>`;
+      <div class="wall-strip" data-wall-card="${id}">
+        <h2 class="wall-card__label wall-strip__label" id="wall-${id}-title">${esc(label)}</h2>
+        <ul class="wall-strip__items" aria-labelledby="wall-${id}-title">${items.map((item, index) => `<li class="wall-strip__item${item.today ? ' wall-strip__item--today' : ''}">${index ? '<span class="wall-strip__dot" aria-hidden="true">·</span>' : ''}${item.html}</li>`).join('')}</ul>
+      </div>`;
 }
 
-/** The next three birthdays and name days; today's stands in the attention colour. */
-function renderBirthdays(rows) {
-  return `
-    <section class="wall-card wall-list" data-wall-card="birthdays" aria-labelledby="wall-birthdays-title">
-      <h2 class="wall-card__label" id="wall-birthdays-title">${esc(t('nav.birthdays'))}</h2>
-      <ul class="wall-list__rows">
-        ${rows.map((row) => `<li class="wall-list__row${row.today ? ' wall-list__row--today' : ''}">
-          <span class="wall-list__main">${esc(row.name)}</span>
-          <span class="wall-list__side">${esc(row.today ? t('today.groupToday') : row.far)}</span>
-        </li>`).join('')}
-      </ul>
-    </section>`;
+function renderStrips(notes, birthdays) {
+  const strips = [];
+  if (notes) {
+    strips.push(renderStrip('notes', t('nav.notes'), notes.map((note) => ({ html: esc(note.title) }))));
+  }
+  if (birthdays) {
+    strips.push(renderStrip('birthdays', t('nav.birthdays'), birthdays.map((row) => ({
+      today: row.today,
+      html: `${esc(row.name)} <span class="wall-strip__when">${esc(row.when ?? '')}</span>`,
+    }))));
+  }
+  return strips.length ? `
+    <section class="wall-card wall-strips" data-wall-strips>${strips.join('')}
+    </section>` : '';
 }
 
 function renderQuestion(question, settled) {
@@ -280,8 +289,7 @@ function renderStage(model, ui) {
   if (model.dinner) aside.push(renderDinnerCard(model.dinner, household));
   if (model.tomorrow && model.scene === 'wieczor') aside.push(renderTomorrow(model.tomorrow, household));
   if (model.shopping) aside.push(renderShopping(model.shopping, model));
-  if (model.notes) aside.push(renderNotes(model.notes));
-  if (model.birthdays) aside.push(renderBirthdays(model.birthdays));
+  if (model.notes || model.birthdays) aside.push(renderStrips(model.notes, model.birthdays));
 
   if (model.hero) {
     const right = [model.plan ? renderPlan(model.plan, household) : '', ...aside].filter(Boolean);
@@ -386,15 +394,18 @@ export function renderWhoChooser(title, people, household = []) {
 // --------------------------------------------------------
 
 /**
- * Card-level fit: while the aside spills over its column, or the day plan
- * beside them would have to hide rows, the optional cards go whole, Birthdays first, then Notes. They come back on every fit, so a
- * resize or a rebuild can show them again.
+ * Strip-level fit: while the aside spills over its column, or the day plan
+ * beside them would have to hide rows, the optional strips go whole, Birthdays
+ * first, then Notes; with both gone their card goes too. They come back on
+ * every fit, so a resize or a rebuild can show them again.
  */
 function fitWallCards(root) {
   for (const aside of root?.querySelectorAll?.('.wall__aside') ?? []) {
     const cards = ['birthdays', 'notes']
       .map((id) => aside.querySelector(`[data-wall-card="${id}"]`))
       .filter(Boolean);
+    const box = aside.querySelector('[data-wall-strips]');
+    if (box) box.hidden = false;
     for (const card of cards) card.hidden = false;
     // The day plan keeps priority: it shares this column with flex:1 and gives
     // way first, so the aside itself never spills. Measure the plan's own list
@@ -413,6 +424,7 @@ function fitWallCards(root) {
       if (!overflows()) break;
       card.hidden = true;
     }
+    if (box) box.hidden = cards.length > 0 && cards.every((card) => card.hidden);
   }
 }
 

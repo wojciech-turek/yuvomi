@@ -4730,20 +4730,24 @@ Zeile des Aufklappers nennt sie.
 
 ### Der Wand-Modus (Signature Component)
 
-> **One Today (2026-11-02, checked on the wall 2026-11-03): one fixed set, two new cards.**
-> The wall always draws the same set: clock and date, the next line, weather, the day plan,
-> tonight's dinner, shopping, the kitchen timers, the Sunday question, and in the right-hand
-> column under dinner and shopping two read-only cards (no taps): **Notatki** (pinned notes
-> only, titles only, three at most, one line each; only notes every member can see; the
-> display gets a titles-only answer, `wallNotes`, and no general read access to notes) and
-> **Urodziny** (the same next three birthdays and name days as Dziś, today's in the attention
-> colour). No per-tablet or per-household section switches any more: `wall_sections` and its
-> settings UI are gone (migration 255), `wall_allow_ticking` stays. **The plan keeps
-> priority:** `fitWallCards` hides whole cards, Birthdays first, then Notes, while the column
-> spills or the plan would have to hide rows. Measured at 1280x800 with tonight's dinner and a
-> shopping card, the column has 87px left and a three-line card needs about 205, so both stay
-> hidden; on a day without a dinner hero Notes shows, and Birthdays shows when its card has the
-> room (for instance with no pinned note). At 1920x1080 Notes shows beside the dinner.
+> **One Today (2026-11-02, checked on the wall 2026-11-03): one fixed set, Notes and Birthdays
+> as two strips.** The wall always draws the same set: clock and date, the next line, weather,
+> the day plan, tonight's dinner, shopping, the kitchen timers, the Sunday question, and in the
+> right-hand column under dinner and shopping ONE read-only card with two one-line strips (no
+> taps): **Notatki** (pinned notes only, titles only, three at most; only notes every member can
+> see; the display gets a titles-only answer, `wallNotes`, and no general read access to notes)
+> and **Urodziny** (the same next three birthdays and name days as Dziś, each "name when":
+> "dziś", "jutro", else "8 lut"; today's in the attention colour). Each strip is its label and
+> its items on one line in the label step (24/30, the wall's floor), cut as a whole with "…";
+> the card has 12px padding top and bottom: 84px at 1280x800. As two full cards they never fit
+> there on a day with a dinner (87px left under dinner 292 and shopping 85; a three-line card
+> needs about 205), so the strips are what the owner's "Notes and Birthdays on the tablet" can
+> be. Measured (test:dashboard-surface-browser, the page clock at 12:00): both strips stand on a
+> dinner day at 1280x800. No per-tablet or per-household section switches any more:
+> `wall_sections` and its settings UI are gone (migration 255), `wall_allow_ticking` stays.
+> **The plan keeps priority:** `fitWallCards` hides whole strips, Birthdays first, then Notes
+> (and their card with the last one), while the column spills or the plan would have to hide
+> rows - in the Kolacja scene the plan shares the column with them and wins.
 >
 > **Tafla (2026-10-19, artboards „Ściana", „Gotowanie", „TabletKuchnia"): the wall as it
 > is now.** Model `public/utils/wall-plan.js`, markup `public/components/wall-view.js`,

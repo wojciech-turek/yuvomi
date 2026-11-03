@@ -2821,15 +2821,18 @@ display either way, `money_not_on_display`). Two
 writes joined the route list for the wall, both behind that switch: `POST /shopping/{listId}/items`
 (a name only - any other field is refused with `display_action`) and
 `POST /ai/questions/{id}/answer|dismiss`. `GET /ai/questions/open` is readable. The wall draws one fixed set (clock and date, the next line, weather, the day plan, tonight's dinner,
-shopping, the kitchen timers, the Sunday weekly question, and two read-only cards under dinner and shopping: Notes and Birthdays); there are no section switches (migration 255
+shopping, the kitchen timers, the Sunday weekly question, and under dinner and shopping one read-only card with two one-line strips: Notes and Birthdays); there are no section switches (migration 255
 removed `wall_sections`; a `wall_sections` key sent to `PUT /preferences` is an unknown key and ignored).
 **Notes on the wall are pinned titles only:** `GET /dashboard?audience=household` returns `wallNotes`
 (`id` and trimmed `title` of at most three pinned notes with a title, newest first) and nothing else
 about notes (no content, author or counts; `pinnedNotes` stays empty for that audience). The paired
 display gets them through the household's notes switch, not a `notes:read` scope; a member or token
 without notes access keeps the empty list. **Birthdays** on the wall are the same next three as on Today,
-through the calendar access the display already has. The wall fits whole cards: Birthdays go first,
-then Notes, while the right-hand column spills or the day plan would have to hide rows.
+through the calendar access the display already has; each reads "name when" ("today", "tomorrow", else the day
+without a weekday). Each strip is its label and its items on one line at the wall's floor size (24px), cut as a
+whole with "…"; the card is 84px tall at 1280x800, so both fit under dinner and shopping on a dinner day. The wall
+hides whole strips, Birthdays first, then Notes (and the card with the last one), while the right-hand column
+spills or the day plan would have to hide rows.
 
 **What a display does, not only what it sees (#1209, decided in #913).** A paired display may act,
 on behalf of a person chosen on the device, for exactly two things: tick a task off, and request a
