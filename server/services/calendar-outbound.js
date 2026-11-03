@@ -48,11 +48,12 @@ export const MAX_OUTBOUND_ATTEMPTS = 5;
 export const OUTBOUND_SOURCES = ['google', 'caldav', 'apple'];
 
 // Felder, die zum Provider gespiegelt werden. Alles andere (Zuweisung, Sichtbarkeit,
-// Icon, Anhang) ist Yuvomi-intern und löst keinen Push aus.
+// Icon, Anhang, Farbe) ist Yuvomi-intern und löst keinen Push aus; eine Farbe
+// geht seit One Today gar nicht mehr hinaus.
 // local_calendar_id is intentionally absent: moving local calendars never pushes outward.
 // A sync target and a local calendar are mutually exclusive.
 export const MIRRORED_FIELDS = [
-  'title', 'description', 'location', 'color',
+  'title', 'description', 'location',
   'all_day', 'start_datetime', 'end_datetime', 'recurrence_rule',
 ];
 
@@ -971,10 +972,8 @@ export async function uploadNewEvent(client, calendar, uid, ics, { source, event
  * spätere Änderungen und Löschungen unerreichbar, bis ihn der nächste Abruf
  * wiederfindet (#593).
  *
- * `color_modified` geht mit hoch: die Farbe, die als CSS3-Name hinausging, ist
- * unsere. Der Name ist eine verlustbehaftete Abbildung des Hex-Werts, und ohne
- * das Flag holte der nächste Abruf genau ihn zurück (#899). Ein Termin ohne
- * eigene Farbe behält seinen Zustand.
+ * `color_modified` bleibt, wie es ist: seit One Today geht keine Farbe hinaus,
+ * es gibt also keine hinausgeschickte Farbe festzuhalten (vorher #899).
  *
  * `adopted`: das Objekt lag schon dort (siehe `uploadNewEvent`); dann geht der
  * lokale Stand als Änderung hinterher.
@@ -1000,7 +999,6 @@ export function markEventUploaded(eventId, { source, uid, objectUrl, calRefId, a
     UPDATE calendar_events
     SET external_source = ?, external_calendar_id = ?, local_calendar_id = NULL,
         external_object_url = ?, calendar_ref_id = ?,${forCaldav ? '\n        caldav_account_id = ?,' : ''}
-        color_modified = CASE WHEN color IS NOT NULL THEN 1 ELSE color_modified END,
         outbound_dirty = CASE WHEN ? = 1 THEN 1 ELSE outbound_dirty END,
         outbound_move_to = COALESCE(?, outbound_move_to),
         outbound_attempts = CASE WHEN ? = 1 THEN 0 ELSE outbound_attempts END,

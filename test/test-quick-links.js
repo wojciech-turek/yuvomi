@@ -148,11 +148,13 @@ test('POST weist eine javascript:-Adresse ab, auch wenn der Browser sie durchlie
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM quick_links').get().n, 0);
 });
 
-test('POST weist einen fehlenden Namen und eine kaputte Farbe ab', async () => {
+test('POST weist einen fehlenden Namen ab und ignoriert eine gesendete Farbe', async () => {
   reset();
   as(ALICE);
   assert.equal((await call('POST', '/', { name: '', url: 'a.example' })).status, 400);
-  assert.equal((await call('POST', '/', { name: 'X', url: 'a.example', color: 'rot' })).status, 400);
+  const withColor = await call('POST', '/', { name: 'X', url: 'a.example', color: 'rot' });
+  assert.equal(withColor.status, 201, 'eine Farbe, auch eine kaputte, wird nicht beachtet');
+  assert.ok(!('color' in withColor.body.data), 'und nicht ausgeliefert');
 });
 
 test('ein Bild muss eine Bild-Data-URL sein', async () => {
@@ -286,13 +288,15 @@ test('PUT ändert nur, was mitgeschickt wurde', async () => {
   reset();
   as(ALICE);
   const created = (await call('POST', '/', {
-    name: 'Alt', url: 'alt.example', color: '#007AFF', visibility: 'all',
+    name: 'Alt', url: 'alt.example', visibility: 'all',
   })).body.data;
 
   const updated = (await call('PUT', `/${created.id}`, { name: 'Neu' })).body.data;
   assert.equal(updated.name, 'Neu');
   assert.equal(updated.url, 'https://alt.example/');
-  assert.equal(updated.color, '#007AFF');
+  const recolored = (await call('PUT', `/${created.id}`, { color: '#FF0000' }));
+  assert.equal(recolored.status, 200);
+  assert.ok(!('color' in recolored.body.data));
   assert.equal(updated.visibility, 'all');
 });
 

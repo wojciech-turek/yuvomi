@@ -236,7 +236,6 @@ async function openForm({ mode = 'create', event = null, targets = TARGETS, defa
     warn.textContent = key;
   }
 
-  add('button', 'modal-cancel');
   add('button', 'modal-save');
 
   globalThis.__apiStub = {

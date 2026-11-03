@@ -52,7 +52,6 @@ import { api } from '/api.js';
 import { t, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { makeSortable, isDragActive } from '/utils/sortable.js';
-import { wireTablist } from '/utils/tablist.js';
 import { rowMenuHtml } from '/utils/row-action.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
 import { errorSentence, isGone, isAlreadyDeleted } from '/utils/friendly-error.js';
@@ -62,25 +61,6 @@ import { holdUntilStyled, warmStyle } from '/utils/component-style.js';
 // Modul importiert, und der Verwalter zeigt sich erst mit seinem Blatt.
 const CATEGORY_MANAGER_STYLE = '/styles/category-manager.css';
 warmStyle(CATEGORY_MANAGER_STYLE);
-
-/** Platzhalter-Id fuer den Eintrag ohne Ton: eine leere `data-tab-id` waere kein Knopf. */
-const NO_COLOR_ID = '__none__';
-
-/**
- * Die Beschriftungen der Palette, in der Reihenfolge der Toene, die der Server
- * unter `categoryColors` ausliefert. Eine Farbe ohne Namen ist fuer einen
- * Screenreader ein Knopf ohne Aussage - und `aria-label` ist hier der EINZIGE
- * Traeger, weil ein Farbfeld keinen Text hat.
- */
-const COLOR_LABEL_KEYS = [
-  'category.colorGreen',
-  'category.colorOcher',
-  'category.colorViolet',
-  'category.colorTeal',
-  'category.colorOrange',
-  'category.colorRed',
-  'category.colorGrey',
-];
 
 /** Shared by the manager and the Notes editor; listeners belong to their root. */
 export function wireCategoryScopeHelp(root) {
@@ -160,10 +140,6 @@ class CategoryManagerElement extends HTMLElement {
     // Zeile gibt es nicht mehr". Ohne ihn bleibt jedes gescheiterte Loeschen
     // ein Fehler.
     this._alreadyDeletedReason = null;
-    // OPT-IN: nur wer eine Palette mitgibt, bekommt die Farbwahl. Fuenf der
-    // sechs Aufrufer zeigen ihre Kategorien nirgends als farbige Marke - dort
-    // waere ein Farbknopf eine Einstellung ohne Wirkung.
-    this._colors = [];
     // Optional note-category presentation: one shared name+scope form instead
     // of one add form per group, plus a caller-provided row glyph.
     this._unifiedAdd = false;
@@ -187,7 +163,6 @@ class CategoryManagerElement extends HTMLElement {
     if (opts.titleKey) this._titleKey = opts.titleKey;
     if (opts.hintKey) this._hintKey = opts.hintKey;
     if (opts.addPlaceholderKey) this._addPlaceholderKey = opts.addPlaceholderKey;
-    if (Array.isArray(opts.colors)) this._colors = opts.colors;
     this._unifiedAdd = !!opts.unifiedAdd;
     this._rowIconResolver = typeof opts.rowIconResolver === 'function' ? opts.rowIconResolver : null;
     if (opts.addScopeLabelKey) this._addScopeLabelKey = opts.addScopeLabelKey;
@@ -557,7 +532,6 @@ class CategoryManagerElement extends HTMLElement {
         <div class="cat-row__actions row-actions">
           ${this._rowActionsHtml(this._labelResolver(cat), { isFirst, isLast })}
         </div>
-        ${this._colorStripHtml(cat)}
         ${this._subListHtml(cat, group)}
       </li>`;
   }
@@ -599,63 +573,12 @@ class CategoryManagerElement extends HTMLElement {
     });
   }
 
-  /**
-   * Das Zeichen der Zeile - als Vollton-Marke, wo eine Palette konfiguriert ist.
-   *
-   * Die Marke IST die Vorschau: sie zeigt Ton und Glyph genau so, wie die
-   * Kategorie danach in der Liste steht (Vollton-Regel, DESIGN.md). Ohne
-   * kuratierten Ton bleibt sie neutral - auch das ist die Vorschau, nicht ein
-   * Fehlen.
-   */
+  /** Das Zeichen der Zeile: nur das nackte Glyph, keine Farbe. */
   _markHtml(cat) {
     const icon = this._rowIconResolver?.(cat) || cat.icon;
-    // Ohne Palette bleibt es beim nackten Zeichen - fuenf der sechs Aufrufer
-    // zeigen ihre Kategorien nirgends als farbige Marke.
-    if (!this._colors.length) {
-      return icon
-        ? `<i data-lucide="${esc(icon)}" class="cat-row__icon icon-md" aria-hidden="true"></i>`
-        : '';
-    }
-    const glyph = icon
-      ? `<i data-lucide="${esc(icon)}" class="icon-md" aria-hidden="true"></i>`
+    return icon
+      ? `<i data-lucide="${esc(icon)}" class="cat-row__icon icon-md" aria-hidden="true"></i>`
       : '';
-    const vivid = cat.color ? ' vivid-mark' : '';
-    const style = cat.color ? ` style="--seal-accent:${esc(cat.color)}"` : '';
-    return `
-      <button type="button" class="cat-row__mark${vivid}" data-action="color"
-              aria-expanded="false" aria-label="${esc(t('category.colorPick'))}"
-              title="${esc(t('category.colorPick'))}"${style}>${glyph}</button>`;
-  }
-
-  /**
-   * Die Palette einer Zeile, eingeklappt bis jemand die Marke drueckt.
-   *
-   * Immer sichtbar waeren es acht Punkte MAL sieben Zeilen in einem kleinen
-   * Dialog; als Aufklapper zeigt die Zeile ihren Ton und die Wahl erscheint
-   * dort, wo sie gebraucht wird. `radiogroup`, weil genau einer gilt.
-   */
-  _colorStripHtml(cat) {
-    if (!this._colors.length) return '';
-    // `data-tab-id` statt eines eigenen Attributs: den Streifen bedient
-    // `wireTablist(mode: 'select')`, und der liefert Pfeiltasten,
-    // Roving-Tabindex und aria-checked - das vorgeschriebene Muster fuer eine
-    // radiogroup. Eine handgeschriebene Tastaturschleife waere hier die zweite
-    // Fassung derselben zwanzig Zeilen (der Kalender hat eine aeltere).
-    const swatch = (value, labelKey) => {
-      const on = (cat.color ?? '') === value;
-      return `<button type="button" role="radio" aria-checked="${on}"
-        class="cat-color-swatch${on ? ' cat-color-swatch--active' : ''}${value ? ' vivid-mark' : ''}"
-        data-tab-id="${esc(value || NO_COLOR_ID)}"
-        tabindex="${on ? '0' : '-1'}"
-        aria-label="${esc(t(labelKey))}" title="${esc(t(labelKey))}"
-        ${value ? `style="--seal-accent:${esc(value)}"` : ''}></button>`;
-    };
-    return `
-      <div class="cat-row__colors" role="radiogroup"
-           aria-label="${esc(t('category.colorPick'))}" hidden>
-        ${swatch('', 'category.colorNone')}
-        ${this._colors.map((c, i) => swatch(c, COLOR_LABEL_KEYS[i] ?? 'category.colorPick')).join('')}
-      </div>`;
   }
 
   _subListHtml(cat, group) {
@@ -794,69 +717,10 @@ class CategoryManagerElement extends HTMLElement {
     const row = target.closest('[data-key]');
     if (!row) return;
     const key = row.dataset.key;
-    if (action === 'color') { this._toggleColors(row); return; }
     if (action === 'rename') await this._rename(key);
     else if (action === 'up') await this._move(key, -1);
     else if (action === 'down') await this._move(key, 1);
     else if (action === 'delete') await this._delete(key);
-  }
-
-  _toggleColors(row) {
-    const strip = row.querySelector('.cat-row__colors');
-    const btn = row.querySelector('.cat-row__mark');
-    if (!strip || !btn) return;
-    const open = strip.hidden;
-    // Erst beim Aufklappen verdrahten: der Streifen wird bei jedem
-    // Gruppen-Render neu gebaut, und eine Verdrahtung im Voraus waere N
-    // Listener fuer eine Palette, die meistens niemand oeffnet.
-    if (open && !strip.dataset.wired) {
-      strip.dataset.wired = '1';
-      const cat = this._cats.find((c) => this._keyOf(c) === row.dataset.key);
-      wireTablist(strip, {
-        activeId: cat?.color || NO_COLOR_ID,
-        activeClass: 'cat-color-swatch--active',
-        mode: 'select',
-        onChange: (id) => this._setColor(row.dataset.key, id === NO_COLOR_ID ? '' : id),
-      });
-    }
-    // Nur eine Palette gleichzeitig: zwei offene Streifen in einer kurzen
-    // Liste lesen sich als Mehrfachauswahl.
-    for (const other of this.querySelectorAll('.cat-row__colors')) other.hidden = true;
-    for (const other of this.querySelectorAll('.cat-row__mark')) other.setAttribute('aria-expanded', 'false');
-    strip.hidden = !open;
-    btn.setAttribute('aria-expanded', String(open));
-    if (open) strip.querySelector('[aria-checked="true"], .cat-color-swatch')?.focus();
-  }
-
-  async _setColor(key, color) {
-    const cat = this._cats.find((c) => this._keyOf(c) === key);
-    if (!cat || (cat.color ?? '') === color) return;
-    try {
-      // NUR die Farbe schicken: der Name der sieben Seed-Kategorien lebt als
-      // `label_key` und wuerde beim Mitschicken auf die Sprache dieses
-      // Klienten festgenagelt (siehe die Route).
-      const res = await api.put(`${this._basePath}/${encodeURIComponent(key)}`, { color: color || null });
-      const idx = this._cats.findIndex((c) => this._keyOf(c) === key);
-      if (idx >= 0) this._cats[idx] = res.data;
-      // KEIN Re-Render der Gruppe, und das ist keine Optimierung: eine
-      // radiogroup wechselt bei JEDER Pfeiltaste ihren Wert. Ein Neubau der
-      // Zeilen nimmt dabei den Fokus mit und schliesst den Streifen - nach
-      // genau einem Schritt waere die Tastaturbedienung zu Ende. Geaendert hat
-      // sich ohnehin nur die Marke.
-      this._paintMark(key, res.data.color);
-      this._notifyChanged();
-    } catch (err) {
-      this._fail(err);
-    }
-  }
-
-  /** Die Marke einer Zeile auf einen neuen Ton setzen, ohne die Zeile neu zu bauen. */
-  _paintMark(key, color) {
-    const mark = this.querySelector(`[data-key="${CSS.escape(String(key))}"] .cat-row__mark`);
-    if (!mark) return;
-    mark.classList.toggle('vivid-mark', !!color);
-    if (color) mark.style.setProperty('--seal-accent', color);
-    else mark.style.removeProperty('--seal-accent');
   }
 
   async _rename(key) {

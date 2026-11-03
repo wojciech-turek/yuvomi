@@ -161,18 +161,6 @@
   grid-column: 1 / -1;
 }
 
-/* Ein fester Balken statt `width: 100%`: dieselbe Regel stretchte den nativen
- * Farbwaehler ueber die volle Breite seiner Rasterzelle - auf dem Desktop eine
- * hohe Flaeche neben dem Kurzcode-Feld, unterhalb des Mobil-Breakpoints (wo
- * .schedule-form auf eine Spalte faellt) ein Balken ueber die volle
- * Formularbreite. Feste Breite, statt an der Breite der umgebenden Zelle zu
- * haengen - 64px, ein eigener Wert fuer dieses Feld statt der 44-52px der
- * anderen Farbwaehler (subscriptions.css), die eine andere Feldgroesse haben. */
-.schedule-color-field .form-input--color {
-  width: 64px;
-  flex: 0 0 auto;
-}
-
 .schedule-active-field .toggle {
   align-self: start;
 }
@@ -907,7 +895,7 @@
 }
 
 /* PUNKT STATT RANDSTREIFEN (Re-Critique 2026-09-27, Detektor side-tab).
- * Feiertag und Planblock trugen eine 3px-Vollton-Kante an der Startseite -
+ * Der Planblock trug eine 3px-Vollton-Kante an der Startseite -
  * das Muster, das der Detektor als Kartenstreifen meldet. Die Farbe steckt
  * schon in der Toenung der Flaeche; das Vollton-Signal traegt jetzt ein Punkt
  * vor dem Namen, wie in Apples Kalender die Farbe eines Termins im Monat.
@@ -916,7 +904,6 @@
  * NEUTRAL (DESIGN.md, Skalen-Regel "Rangmarke -> Vollton-Punkt, Schrift
  * neutral"): getoente Flaeche plus gemischte Schrift derselben Farbe hiesse
  * den Ton zweimal blass nennen, und die Kante, die das vorher auffing, ist weg. */
-.schedule-overview__holiday > span::before,
 .schedule-overview__block-title::before {
   content: '';
   display: inline-block;
@@ -928,10 +915,11 @@
   vertical-align: middle;
 }
 
+/* Der Feiertag ist EIN ruhiger Chip wie im Kalender (One Today, spec 7):
+ * Fuellung und Sekundaertinte, ohne Farbe und ohne Punkt. */
 .schedule-overview__holiday {
-  --dot-color: var(--holi-color);
-  background: color-mix(in srgb, var(--holi-color) var(--tint-surface), var(--color-surface-work));
-  color: var(--color-text-primary);
+  background: var(--color-fill);
+  color: var(--color-text-secondary);
   border-radius: var(--radius-xs);
   padding: var(--space-0h) var(--space-1);
   font-size: var(--text-xs);
@@ -955,26 +943,6 @@
   align-items: center;
   gap: var(--space-1);
   margin-bottom: var(--space-1);
-}
-
-.schedule-overview__lane-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: var(--text-2xs);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-ink-on-vivid);
-  flex: 0 0 auto;
-  overflow: hidden;
-}
-
-.schedule-overview__lane-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .schedule-overview__lane-name {

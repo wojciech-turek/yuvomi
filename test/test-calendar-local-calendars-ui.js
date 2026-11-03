@@ -53,6 +53,8 @@ test('calendar manager rows keep save and more visible, with labelled feed and d
           const visible = buttons.filter(button => !button.includes('role="menuitem"'));
           assert.ok(visible.length <= 2, 'at most two icon actions remain outside the menu');
           assert.ok(visible.some(button => button.includes('js-calendar-save')));
+          assert.doesNotMatch(html, /type="color"|__swatch|__color|#336699/, 'One Today: no colour swatch or colour field in the row');
+          assert.match(html, /value="Family"/, 'the name stays editable');
           const expected = [];
           if (admin) {
             if (hasFeed) expected.push('calendar-copy-feed', 'calendar-disable-feed');

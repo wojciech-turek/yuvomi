@@ -1248,12 +1248,34 @@ test('GET /subscriptions — Liste (leer, dann mit Eintrag)', async () => {
   assert.equal(withOne.body.data[0].name, 'Feed');
 });
 
-test('POST /subscriptions — Validierungs-400s (name/url/protokoll/color)', async () => {
-  assert.equal((await call('POST', '/subscriptions', { body: { name: '', url: 'https://x/f.ics', color: '#FF0000' } })).status, 400);
-  assert.equal((await call('POST', '/subscriptions', { body: { name: 'F', color: '#FF0000' } })).status, 400);
-  const badProto = await call('POST', '/subscriptions', { body: { name: 'F', url: 'http://x/f.ics', color: '#FF0000' } });
+test('POST /subscriptions - Validierungs-400s (name/url/protokoll)', async () => {
+  assert.equal((await call('POST', '/subscriptions', { body: { name: '', url: 'https://x/f.ics' } })).status, 400);
+  assert.equal((await call('POST', '/subscriptions', { body: { name: 'F' } })).status, 400);
+  const badProto = await call('POST', '/subscriptions', { body: { name: 'F', url: 'http://x/f.ics' } });
   assert.equal(badProto.status, 400, 'http:// ohne Private-Network-Opt-in abgelehnt');
-  assert.equal((await call('POST', '/subscriptions', { body: { name: 'F', url: 'https://x/f.ics', color: 'red' } })).status, 400);
+});
+
+test('One Today: POST /subscriptions braucht keine Farbe und nimmt keine an (201)', async () => {
+  // Das Abo synchronisiert beim Anlegen; mit dem Opt-in fuer private Netze geht
+  // der Abruf an einen geschlossenen lokalen Port und scheitert sofort - das
+  // Anlegen selbst gelingt trotzdem (syncError), und darum geht es hier.
+  const flag = 'ICS_SUBSCRIPTION_ALLOW_PRIVATE_NETWORK';
+  const before = process.env[flag];
+  process.env[flag] = '1';
+  try {
+    const plain = await call('POST', '/subscriptions', { actor: ADMIN, body: { name: 'Bez koloru', url: 'http://127.0.0.1:9/a.ics' } });
+    assert.equal(plain.status, 201, JSON.stringify(plain.body));
+    const colored = await call('POST', '/subscriptions', { actor: ADMIN, body: { name: 'Z kolorem', url: 'http://127.0.0.1:9/b.ics', color: 'red' } });
+    assert.equal(colored.status, 201, 'eine mitgeschickte Farbe ist kein Fehler mehr, sie wird ignoriert');
+    const rows = db.prepare("SELECT name, color FROM ics_subscriptions WHERE name IN ('Bez koloru', 'Z kolorem') ORDER BY id").all();
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((row) => row.color === rows[0].color && /^#[0-9a-f]{6}$/i.test(row.color)),
+      `die Spalte bekommt den festen Vorgabewert, nicht die gesendete Farbe: ${JSON.stringify(rows)}`);
+  } finally {
+    if (before === undefined) delete process.env[flag];
+    else process.env[flag] = before;
+    db.prepare("DELETE FROM ics_subscriptions WHERE name IN ('Bez koloru', 'Z kolorem')").run();
+  }
 });
 
 test('POST /subscriptions — prüft die Standard-Zuweisung schon beim Anlegen (#730)', async () => {
@@ -1276,7 +1298,10 @@ test('PATCH /subscriptions/:id — 400/404/403/Happy', async () => {
   assert.equal((await call('PATCH', '/subscriptions/abc')).status, 400);
   assert.equal((await call('PATCH', `/subscriptions/999999`, { body: { name: 'X' } })).status, 404);
   assert.equal((await call('PATCH', `/subscriptions/${subId}`, { body: { name: '' } })).status, 400);
-  assert.equal((await call('PATCH', `/subscriptions/${subId}`, { body: { color: 'nope' } })).status, 400);
+  // Eine Farbe ist kein Feld mehr: weder ein Fehler noch eine Aenderung.
+  const colorOnly = await call('PATCH', `/subscriptions/${subId}`, { body: { color: '#ABCDEF' } });
+  assert.equal(colorOnly.status, 200);
+  assert.equal(colorOnly.body.data.color, '#00FF00', 'die gespeicherte Farbe bleibt, wie sie ist');
   // Maria (Owner, non-admin) darf eigenen Sub ändern
   const ok = await call('PATCH', `/subscriptions/${subId}`, { actor: MARIA, body: { name: 'Renamed', shared: 1 } });
   assert.equal(ok.status, 200);
@@ -1324,18 +1349,13 @@ test('POST /import — 400 ohne ics und url', async () => {
   assert.equal((await call('POST', '/import', { actor: ADMIN, body: {} })).status, 400);
 });
 
-test('POST /import — 400 bei ungültiger Farbe', async () => {
+test('POST /import - importiert ICS-String als echte lokale Termine, eine gesendete Farbe wird ignoriert', async () => {
   const res = await call('POST', '/import', { actor: ADMIN, body: { ics: SAMPLE_ICS, color: 'notacolor' } });
-  assert.equal(res.status, 400);
-});
-
-test('POST /import — importiert ICS-String als echte lokale Termine', async () => {
-  const res = await call('POST', '/import', { actor: ADMIN, body: { ics: SAMPLE_ICS, color: '#123456' } });
-  assert.equal(res.status, 201);
+  assert.equal(res.status, 201, 'eine Farbe ist kein Feld mehr - auch keine ungueltige');
   assert.equal(res.body.data.imported, 1);
   const row = db.prepare("SELECT external_source, color FROM calendar_events WHERE title='Importierter Termin'").get();
   assert.equal(row.external_source, 'local', 'Import erzeugt bearbeitbare lokale Termine');
-  assert.equal(row.color, '#123456');
+  assert.equal(row.color, null, 'ohne COLOR in der Datei keine eigene Farbe');
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -1412,7 +1432,6 @@ test('POST / — Validierungs-400s', async () => {
   assert.equal((await call('POST', '/', { body: { ...base, title: '' } })).status, 400);
   assert.equal((await call('POST', '/', { body: { title: 'T', start_datetime: 'not-a-date' } })).status, 400);
   assert.equal((await call('POST', '/', { body: { ...base, title: 'T', icon: 'no-such-icon' } })).status, 400);
-  assert.equal((await call('POST', '/', { body: { ...base, title: 'T', color: 'red' } })).status, 400);
   // CalDAV-Ziel: account_id gesetzt, aber Kalender-URL fehlt
   assert.equal((await call('POST', '/', { body: { ...base, title: 'T', target_caldav_account_id: 5 } })).status, 400);
   // Google-Ziel zu lang
@@ -1423,54 +1442,33 @@ test('POST / — legt minimalen Termin an (Defaults)', async () => {
   const res = await call('POST', '/', { actor: ADMIN, body: { title: 'Neuer Termin', start_datetime: '2040-02-01T09:00' } });
   assert.equal(res.status, 201);
   assert.equal(res.body.data.title, 'Neuer Termin');
-  assert.equal(res.body.data.color, null,
-    'ohne Angabe KEINE eigene Farbe - der Termin leiht sich die der zugewiesenen Person (#891)');
+  assert.equal(res.body.data.color, null, 'ein neuer Termin hat keine eigene Farbe - ihn faerben seine Leute');
   assert.equal(res.body.data.icon, 'calendar');
   assert.equal(res.body.data.created_by, ADMIN.id);
   assert.equal(res.body.data.visibility, 'all');
 });
 
-test('Farbe: die Route unterscheidet "nicht angefasst" von "ausdruecklich keine" (#891)', async () => {
-  // Der Kern von #891 auf der Serverseite. Beide Faelle schicken einen falsy
-  // Wert; das Feld MUSS trotzdem zwei verschiedene Dinge bewirken koennen, sonst
-  // ist "keine eigene Farbe" nicht ausdrueckbar - genau die Luecke, die die
-  // Farbe der zugewiesenen Person zu totem Code gemacht hat.
+test('One Today: die Route nimmt keine Farbe an - weder beim Anlegen noch beim Bearbeiten', async () => {
   const created = await call('POST', '/', { actor: ADMIN, body: {
     title: 'Faerbbar', start_datetime: '2040-04-01T09:00', color: '#8156C0',
   } });
   assert.equal(created.status, 201);
   const id = created.body.data.id;
-  assert.equal(created.body.data.color, '#8156C0', 'eine gewaehlte Farbe wird uebernommen');
+  assert.equal(created.body.data.color, null, 'eine gesendete Farbe wird beim Anlegen nicht gespeichert');
+  // Auch ein Unsinnswert ist kein Fehler mehr: das Feld gibt es nicht.
+  const junk = await call('POST', '/', { actor: ADMIN, body: { title: 'T', start_datetime: '2040-04-02T09:00', color: 'red' } });
+  assert.equal(junk.status, 201);
+  assert.equal(junk.body.data.color, null);
 
-  // 1. Feld GAR NICHT mitgeschickt: die Farbe bleibt stehen. Das ist die Regel,
-  //    die ein aelterer Client oder ein Modul-PUT braucht, das color nicht kennt.
-  const untouched = await call('PUT', `/${id}`, { actor: ADMIN, body: {
-    title: 'Faerbbar, umbenannt', start_datetime: '2040-04-01T09:00',
-  } });
-  assert.equal(untouched.status, 200);
-  assert.equal(untouched.body.data.color, '#8156C0',
-    'ein PUT ohne color-Feld darf eine gesetzte Farbe nicht stillschweigend loeschen');
-
-  // 2. Feld AUSDRUECKLICH auf null: die Farbe geht weg. Vorher hat COALESCE im
-  //    UPDATE genau das geschluckt, weil es beide Faelle gleich sieht.
-  const cleared = await call('PUT', `/${id}`, { actor: ADMIN, body: {
-    title: 'Faerbbar, umbenannt', start_datetime: '2040-04-01T09:00', color: null,
-  } });
-  assert.equal(cleared.status, 200);
-  assert.equal(cleared.body.data.color, null,
-    'ein PUT mit color: null nimmt dem Termin seine eigene Farbe ab');
-
-  // 3. Und zurueck: die Wahl ist in beide Richtungen moeglich.
-  const again = await call('PUT', `/${id}`, { actor: ADMIN, body: {
-    title: 'Faerbbar, umbenannt', start_datetime: '2040-04-01T09:00', color: '#3CA368',
-  } });
-  assert.equal(again.body.data.color, '#3CA368', 'und laesst sich wieder setzen');
-
-  // Ein Unsinnswert bleibt ein Fehler - "keine Farbe" heisst nicht "alles erlaubt".
-  const bad = await call('PUT', `/${id}`, { actor: ADMIN, body: {
-    title: 'Faerbbar', start_datetime: '2040-04-01T09:00', color: 'red; background:url(x)',
-  } });
-  assert.equal(bad.status, 400, 'ein ungueltiger Farbwert wird weiterhin abgewiesen');
+  // Eine Farbe, die schon in der Zeile steht (Altbestand, Eingang vom Anbieter),
+  // bleibt beim Bearbeiten unangetastet - und color_modified mit ihr.
+  db.prepare("UPDATE calendar_events SET color = '#4A90E2', color_modified = 0 WHERE id = ?").run(id);
+  for (const color of ['#3CA368', null, 'red; background:url(x)']) {
+    const res = await call('PUT', `/${id}`, { actor: ADMIN, body: { title: 'Faerbbar, umbenannt', start_datetime: '2040-04-01T09:00', color } });
+    assert.equal(res.status, 200, `color ${color}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.data.color, '#4A90E2', `color ${color}: die gespeicherte Farbe bleibt`);
+    assert.equal(res.body.data.color_modified, 0, `color ${color}: color_modified bleibt`);
+  }
 });
 
 test('ein PUT ohne assigned_to laesst die primaere Zuweisung stehen (#891)', async () => {
@@ -1745,7 +1743,6 @@ test('PUT /:id — 404 für unbekannten Termin', async () => {
 
 test('PUT /:id — Validierungs-400s', async () => {
   const id = insertEvent({ title: 'PUT-VALID', start_datetime: '2041-01-01T09:00' });
-  assert.equal((await call('PUT', `/${id}`, { body: { color: 'red' } })).status, 400);
   assert.equal((await call('PUT', `/${id}`, { body: { start_datetime: 'nope' } })).status, 400);
   assert.equal((await call('PUT', `/${id}`, { body: { icon: 'no-such-icon' } })).status, 400);
   assert.equal((await call('PUT', `/${id}`, { body: { remove_attachment: 'yes' } })).status, 400);
@@ -1852,11 +1849,12 @@ test('PUT /:id — externes Event wird als user_modified markiert', async () => 
   assert.equal(res.body.data.user_modified, 1, 'Bearbeitung eines externen Events setzt user_modified');
 });
 
-// ── color_modified: die Farbe fuehrt ihren eigenen Zustand (#899) ──────────────
+// ── color_modified: eine Bearbeitung fasst es nicht an (#899) ──────────────────
 //
 // `user_modified` heisst "an diesem Termin wurde etwas bearbeitet". Der Inbound
 // aller drei Anbieter las es als "die Farbe wird lokal gefuehrt" und fror sie
-// damit bei jeder Titelaenderung ein. Diese vier Faelle halten die Trennung.
+// damit bei jeder Titelaenderung ein. Seit One Today waehlt niemand mehr eine
+// Farbe: keine Bearbeitung setzt color_modified (siehe den Test oben).
 
 test('PUT /:id — eine Titeländerung fasst color_modified nicht an (#899)', async () => {
   const id = insertEvent({ title: 'COLMOD-TITEL', start_datetime: '2041-05-02T09:00', external_source: 'caldav' });
@@ -1864,44 +1862,6 @@ test('PUT /:id — eine Titeländerung fasst color_modified nicht an (#899)', as
   assert.equal(res.status, 200);
   assert.equal(res.body.data.user_modified, 1, 'bearbeitet wurde ja etwas');
   assert.equal(res.body.data.color_modified, 0, 'aber nicht die Farbe - sonst friert sie ein');
-});
-
-test('PUT /:id — eine echte Umfärbung setzt color_modified (#899)', async () => {
-  const id = insertEvent({ title: 'COLMOD-FARBE', start_datetime: '2041-05-03T09:00', external_source: 'caldav' });
-  const res = await call('PUT', `/${id}`, { body: { color: '#7C3AED' } });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.data.color, '#7C3AED');
-  assert.equal(res.body.data.color_modified, 1);
-});
-
-test('PUT /:id — dieselbe Farbe noch einmal ist keine Umfärbung (#899)', async () => {
-  // Das Formular schickt den Bestandswert brav mit. Wuerde schon das Mitschicken
-  // zaehlen, waere jede Bearbeitung wieder eine Umfaerbung - und der Unterschied
-  // zu user_modified damit gerade wieder eingerissen.
-  const id = insertEvent({ title: 'COLMOD-GLEICH', start_datetime: '2041-05-04T09:00', external_source: 'caldav', color: '#007AFF' });
-  const res = await call('PUT', `/${id}`, { body: { title: 'Neuer Titel', color: '#007AFF' } });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.data.color_modified, 0);
-});
-
-test('PUT /:id — dieselbe Farbe in anderer Schreibweise ist keine Umfärbung (#899)', async () => {
-  // Die beiden Schreibweisen treffen wirklich aufeinander: der Sync legt seinen
-  // Hex in Grossbuchstaben ab (`COLOR:tomato` wird zu `#FF6347`).
-  const id = insertEvent({ title: 'COLMOD-CASE', start_datetime: '2041-05-06T09:00', external_source: 'caldav', color: '#FF6347' });
-  const res = await call('PUT', `/${id}`, { body: { color: '#ff6347' } });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.data.color_modified, 0);
-});
-
-test('PUT /:id — eine geleerte Farbe ist eine Aussage und wird vermerkt (#899)', async () => {
-  // Der Zustand, den der Ausgang braucht: `color IS NULL AND color_modified = 1`
-  // heisst "geleert" und darf beim Anbieter die COLOR-Zeile entfernen. Ohne das
-  // Flag waere er von "wir haben nie eine Farbe gelernt" nicht zu unterscheiden.
-  const id = insertEvent({ title: 'COLMOD-LEER', start_datetime: '2041-05-05T09:00', external_source: 'caldav', color: '#7C3AED' });
-  const res = await call('PUT', `/${id}`, { body: { color: null } });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.data.color, null);
-  assert.equal(res.body.data.color_modified, 1);
 });
 
 test('PUT /:id — Anhang entfernen', async () => {
@@ -4815,165 +4775,6 @@ test('Anhang ersetzen: ein Vorkommen prueft das Recht nach dem Hochladen erneut 
 test('Anhang ersetzen: dieses und folgende Vorkommen pruefen das Recht nach dem Hochladen erneut (#1358)', async () => {
   assert.deepEqual(await raceEachCase((id, y) => `/${id}/occurrences/${y}-01-03/following`,
     { recurrence_rule: 'FREQ=DAILY;COUNT=5', year: 2089 }), []);
-});
-
-// ════════════════════════════════════════════════════════════════════════════════
-// Farb-Heilung (#1270): eine lokale Farbwahl nimmt den Termin aus dem Schnappschuss
-// ════════════════════════════════════════════════════════════════════════════════
-
-test('Farb-Heilung: umgefaerbt und exakt zurueckgefaerbt bleibt die Farbe, auch wenn der Server COLOR verwirft (#1270)', async () => {
-  const { sync } = await import('../server/services/caldav-sync.js');
-  const CAL = 'https://dav.example/heal-legacy/';
-  const LEGACY = '#4A90E2';
-  const UID_LEGACY = 'legacy-heal-1@test';
-  const account = () => {
-    db.prepare("INSERT INTO caldav_accounts (id, name, caldav_url, username, password) VALUES (70, 'Heal', 'https://dav.example/', 'heal', 'p')").run();
-    db.prepare(`INSERT INTO caldav_calendar_selection (account_id, calendar_url, calendar_name, calendar_color, enabled)
-                VALUES (70, ?, 'Alt', ?, 1)`).run(CAL, LEGACY);
-  };
-  const vevent = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', `UID:${UID_LEGACY}`, 'SUMMARY:Alt',
-    'DTSTART:20350310T090000Z', 'DTEND:20350310T100000Z', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-  const client = (objects) => async () => ({
-    fetchCalendars: async () => [{ url: CAL, displayName: 'Alt', components: ['VEVENT'] }],
-    fetchCalendarObjects: async () => objects,
-    createCalendarObject: async () => ({}),
-  });
-
-  account();
-  const refId = db.prepare(`INSERT INTO external_calendars (source, external_id, name, color)
-                            VALUES ('caldav', ?, 'Alt', ?) RETURNING id`).get(CAL, LEGACY).id;
-  const id = insertEvent({ title: 'Altlast', external_source: 'caldav', calendar_ref_id: refId, color: LEGACY, user_modified: 1 });
-  db.prepare(`UPDATE calendar_events SET external_calendar_id = ?, color_modified = 1, created_at = '2020-01-01T00:00:00Z'
-              WHERE id = ?`).run(UID_LEGACY, id);
-  try {
-    // Erster Lauf: die Frist beginnt, der Kalender antwortet leer - die Zeile
-    // steht im Schnappschuss, ungeheilt.
-    await sync({ createClient: client([]) });
-    assert.ok(Object.hasOwn(JSON.parse(db.prepare("SELECT value FROM sync_config WHERE key = 'caldav_legacy_color_heal_snapshot_70'").get().value), String(id)),
-      'Vorbedingung: die Zeile steht im Schnappschuss');
-
-    // Ohne Konto gibt es keinen Ausgang: die Wahl erreicht den Server nie.
-    db.prepare('DELETE FROM caldav_accounts WHERE id = 70').run();
-    assert.equal((await call('PUT', `/${id}`, { body: { color: '#3CA368' } })).status, 200);
-    assert.equal((await call('PUT', `/${id}`, { body: { color: LEGACY } })).status, 200);
-    account();
-
-    await sync({ createClient: client([{ url: `${CAL}legacy.ics`, data: vevent }]) });
-    assert.equal(db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color, LEGACY);
-  } finally {
-    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
-    db.prepare('DELETE FROM caldav_accounts WHERE id = 70').run();
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
-});
-
-test('Farb-Heilung: eine Bearbeitung ohne Farbwechsel laesst den Schnappschuss stehen (#1270)', async () => {
-  const id = insertEvent({ title: 'Nur Titel', external_source: 'caldav', color: '#4A90E2', user_modified: 1 });
-  db.prepare("UPDATE calendar_events SET external_calendar_id = 'legacy-heal-2@test' WHERE id = ?").run(id);
-  db.prepare("INSERT INTO sync_config (key, value) VALUES ('caldav_legacy_color_heal_snapshot_71', ?)")
-    .run(JSON.stringify({ [id]: '#4a90e2' }));
-  try {
-    assert.equal((await call('PUT', `/${id}`, { body: { title: 'Nur Titel neu', color: '#4a90e2' } })).status, 200);
-    assert.deepEqual(JSON.parse(db.prepare("SELECT value FROM sync_config WHERE key = 'caldav_legacy_color_heal_snapshot_71'").get().value),
-      { [id]: '#4a90e2' });
-  } finally {
-    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
-});
-
-test('Farb-Heilung: die Vormerkliste nimmt nur Termine von vor dem Fix auf (#1442)', async () => {
-  // Ein Schnappschuss nimmt ohnehin nur Zeilen von vor Migration 166 auf. Eine
-  // juengere Zeile auf der Vormerkliste liesse sie nur wachsen, und jede
-  // Umfaerbung laese und schriebe die ganze Liste neu.
-  const cutoff = db.prepare('SELECT applied_at FROM schema_migrations WHERE version = 166').get().applied_at;
-  const fresh = insertEvent({ title: 'Neu', external_source: 'caldav', color: '#4A90E2', user_modified: 1 });
-  const old = insertEvent({ title: 'Alt', external_source: 'caldav', color: '#4A90E2', user_modified: 1 });
-  db.prepare("UPDATE calendar_events SET created_at = datetime(?, '+1 day') WHERE id = ?").run(cutoff, fresh);
-  db.prepare("UPDATE calendar_events SET created_at = '2020-01-01 00:00:00' WHERE id = ?").run(old);
-  const chosen = () => db.prepare("SELECT value FROM sync_config WHERE key = 'caldav_legacy_color_heal_chosen'").get()?.value;
-  try {
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-    assert.equal((await call('PUT', `/${fresh}`, { body: { color: '#3CA368' } })).status, 200);
-    assert.equal(chosen(), undefined, 'eine Zeile nach dem Fix kommt nicht auf die Liste');
-
-    assert.equal((await call('PUT', `/${old}`, { body: { color: '#3CA368' } })).status, 200);
-    assert.deepEqual(JSON.parse(chosen()), [old], 'eine Altzeile schon');
-
-    // Stand von vor #1442: die Liste traegt auch juengere Zeilen. Die naechste
-    // Wahl an einer Altzeile raeumt sie mit ab.
-    db.prepare("UPDATE sync_config SET value = ? WHERE key = 'caldav_legacy_color_heal_chosen'")
-      .run(JSON.stringify([old, fresh]));
-    assert.equal((await call('PUT', `/${old}`, { body: { color: '#E24A4A' } })).status, 200);
-    assert.deepEqual(JSON.parse(chosen()), [old]);
-  } finally {
-    db.prepare('DELETE FROM calendar_events WHERE id IN (?, ?)').run(fresh, old);
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
-});
-
-test('Farb-Heilung: der Schnappschuss eines Kontos faellt mit dem Ende seiner Frist, der Fristbeginn bleibt (#1442)', async () => {
-  const id = insertEvent({ title: 'Frist vorbei', external_source: 'caldav', color: '#4A90E2', user_modified: 1 });
-  const ended = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
-  const running = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-  const value = (key) => db.prepare('SELECT value FROM sync_config WHERE key = ?').get(key)?.value;
-  db.prepare(`INSERT INTO sync_config (key, value) VALUES
-      ('caldav_legacy_color_heal_since_72', ?), ('caldav_legacy_color_heal_snapshot_72', ?),
-      ('caldav_legacy_color_heal_since_73', 'never'), ('caldav_legacy_color_heal_snapshot_73', ?),
-      ('caldav_legacy_color_heal_since_74', ?), ('caldav_legacy_color_heal_snapshot_74', ?)`)
-    .run(ended, JSON.stringify({ [id]: '#4a90e2', 1: '#4a90e2' }), JSON.stringify({ 1: '#4a90e2' }),
-      running, JSON.stringify({ [id]: '#4a90e2', 1: '#4a90e2' }));
-  try {
-    assert.equal((await call('PUT', `/${id}`, { body: { color: '#3CA368' } })).status, 200);
-    assert.equal(value('caldav_legacy_color_heal_snapshot_72'), undefined, 'Frist abgelaufen');
-    assert.equal(value('caldav_legacy_color_heal_snapshot_73'), undefined, 'Heilung aus');
-    assert.deepEqual(JSON.parse(value('caldav_legacy_color_heal_snapshot_74')), { 1: '#4a90e2' }, 'laufende Frist');
-    // Ohne den Fristbeginn finge die Frist mit dem naechsten Lauf neu an.
-    assert.equal(value('caldav_legacy_color_heal_since_72'), ended);
-    assert.equal(value('caldav_legacy_color_heal_since_73'), 'never');
-    assert.equal(value('caldav_legacy_color_heal_since_74'), running);
-  } finally {
-    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
-});
-
-test('Farb-Heilung: eine Farbwahl vor dem ersten Heil-Lauf kommt nicht in den Schnappschuss (#1270)', async () => {
-  // Ein Konto legt den Schnappschuss erst bei seinem ersten Heil-Lauf an -
-  // fuer ein neu angelegtes oder umgehaengtes Konto erst beim naechsten Takt.
-  // Eine Wahl davor darf dort nicht als Altlast landen.
-  const { sync } = await import('../server/services/caldav-sync.js');
-  const CAL = 'https://dav.example/heal-early/';
-  const CAL2 = 'https://dav.example/heal-early-2/';
-  const LEGACY = '#4A90E2';
-  const CHOSEN = '#3CA368';
-  const UID_EARLY = 'legacy-heal-early@test';
-  const refId = db.prepare(`INSERT INTO external_calendars (source, external_id, name, color)
-                            VALUES ('caldav', ?, 'Frueh', ?) RETURNING id`).get(CAL, LEGACY).id;
-  const id = insertEvent({ title: 'Frueh', external_source: 'caldav', calendar_ref_id: refId, color: LEGACY, user_modified: 1 });
-  db.prepare(`UPDATE calendar_events SET external_calendar_id = ?, color_modified = 1, created_at = '2020-01-01T00:00:00Z'
-              WHERE id = ?`).run(UID_EARLY, id);
-  try {
-    // Noch kein Konto, also weder Schnappschuss noch Ausgang: gewaehlt wird
-    // die Farbe des anderen Kalenders.
-    assert.equal((await call('PUT', `/${id}`, { body: { color: CHOSEN } })).status, 200);
-
-    db.prepare("INSERT INTO caldav_accounts (id, name, caldav_url, username, password) VALUES (71, 'Frueh', 'https://dav.example/', 'early', 'p')").run();
-    db.prepare(`INSERT INTO caldav_calendar_selection (account_id, calendar_url, calendar_name, calendar_color, enabled)
-                VALUES (71, ?, 'Frueh', ?, 1), (71, ?, 'Frueh 2', ?, 0)`).run(CAL, LEGACY, CAL2, CHOSEN);
-    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', `UID:${UID_EARLY}`, 'SUMMARY:Frueh',
-      'DTSTART:20350310T090000Z', 'DTEND:20350310T100000Z', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-    await sync({ createClient: async () => ({
-      fetchCalendars: async () => [CAL, CAL2].map((url) => ({ url, displayName: url, components: ['VEVENT'] })),
-      fetchCalendarObjects: async ({ calendar }) => (calendar.url === CAL ? [{ url: `${CAL}early.ics`, data: ics }] : []),
-      createCalendarObject: async () => ({}),
-    }) });
-    assert.equal(db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color, CHOSEN);
-  } finally {
-    db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
-    db.prepare('DELETE FROM caldav_accounts WHERE id = 71').run();
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -376,72 +376,27 @@ test('jedes Farb-Gatter des Inbound haengt an color_modified (#899)', async () =
     'user_modified wird bei JEDER Bearbeitung gesetzt; ein Titel-Edit fror die Farbe damit ein (#899)');
 });
 
-test('der Upload merkt sich, dass die hinausgeschickte Farbe unsere ist (#899)', async () => {
-  // Der dritte Befund aus #899: beide Abbildungen sind verlustbehaftet (CSS3-
-  // Name bzw. eine von elf colorIds). Ohne das Flag holt der naechste
-  // Inbound-Lauf den gerundeten Wert zurueck und ersetzt die gewaehlte Farbe.
-  //
-  // Die Regel haengt an der Stelle, an der ein LOKALER Termin zu einem
-  // gespiegelten wird - das ist genau der Moment, in dem die Farbe erstmals
-  // hinausgeht, und er ist in jedem Dienst als `external_source = '<anbieter>'`
-  // in einer UPDATE-SET-Liste erkennbar.
-  //
-  // Seit #1837 teilen sich CalDAV und Apple diese Stelle: beide rufen
-  // `markEventUploaded` in calendar-outbound.js, das die Quelle als Parameter
-  // bindet (`external_source = ?`). Gezaehlt werden deshalb ANBIETER, nicht
-  // UPDATEs: jeder der drei muss auf einem der beiden Wege ankommen, und jedes
-  // UPDATE, das einen Termin zum Spiegel macht, muss das Flag tragen - das
-  // geteilte genauso wie ein woertliches.
+test('One Today: kein Upload haelt color_modified fest - es geht keine Farbe mehr hinaus', async () => {
+  // Bis One Today merkte sich der Upload, dass die hinausgeschickte Farbe
+  // "unsere" war (#899): die Abbildung auf CSS3-Namen und Googles elf colorIds
+  // ist verlustbehaftet, und ohne das Flag haette der naechste Abruf die
+  // gerundete Farbe zurueckgeholt. Seit keine Farbe mehr hinausgeht, gibt es
+  // nichts festzuhalten - eine Farbe, die der Anbieter traegt, kommt herein
+  // wie bei jedem anderen gespiegelten Termin (gespeichert, nicht gezeigt).
   const { readFile } = await import('node:fs/promises');
   const lies = async (datei) => ohneKommentare(await readFile(new URL(`../${datei}`, import.meta.url), 'utf8'));
   const UPDATE_RE = /UPDATE calendar_events\s+SET([\s\S]*?)WHERE/g;
-  const HELFER_DATEI = 'server/services/calendar-outbound.js';
-
-  const ohneFlag = [];
-  const angekommen = new Set();
-
-  // Der geteilte Helfer: genau das UPDATE, das die Quelle gebunden setzt.
-  const helferQuelle = await lies(HELFER_DATEI);
-  const helferStart = helferQuelle.indexOf('export function markEventUploaded(');
-  assert.ok(helferStart >= 0, 'markEventUploaded fehlt in calendar-outbound.js - stimmt der Guard noch?');
-  const helferRumpf = helferQuelle.slice(helferStart, helferQuelle.indexOf('\nexport ', helferStart + 1));
-  const helferUpdates = [...helferRumpf.matchAll(UPDATE_RE)]
-    .filter((treffer) => /external_source\s*=\s*\?/.test(treffer[1]));
-  assert.equal(helferUpdates.length, 1,
-    'markEventUploaded setzt external_source nicht mehr in genau einem UPDATE - stimmt der Guard noch?');
-  const helferHatFlag = /color_modified/.test(helferUpdates[0][1]);
-  if (!helferHatFlag) ohneFlag.push(HELFER_DATEI);
-
-  for (const datei of SYNC_DIENSTE) {
-    const quelle = await lies(datei);
-    for (const treffer of quelle.matchAll(UPDATE_RE)) {
-      const setListe = treffer[1];
-      const woertlich = setListe.match(/external_source\s*=\s*'(caldav|apple|google)'/);
-      if (!woertlich) continue;
-      angekommen.add(woertlich[1]);
-      if (!/color_modified/.test(setListe)) ohneFlag.push(datei);
-    }
-    // Der Aufruf muss die Quelle woertlich nennen: nur so ist belegt, WELCHER
-    // Anbieter ueber den Helfer laeuft. Seit #1862 rufen die Upload-Schleifen
-    // `bookEventUpload`, das gegen den Stand nach dem await bucht und dafuer
-    // `markEventUploaded` ruft (unten geprueft) - beide Namen zaehlen.
-    for (const treffer of quelle.matchAll(/(?:markEventUploaded|bookEventUpload)\(\s*[^,]+,\s*\{[^}]*?source:\s*'(caldav|apple|google)'/g)) {
-      angekommen.add(treffer[1]);
+  const gepinnt = [];
+  let gesehen = 0;
+  for (const datei of ['server/services/calendar-outbound.js', ...SYNC_DIENSTE]) {
+    for (const treffer of (await lies(datei)).matchAll(UPDATE_RE)) {
+      if (!/external_source\s*=\s*(?:\?|'(?:caldav|apple|google)')/.test(treffer[1])) continue;
+      gesehen++;
+      if (/color_modified\s*=\s*CASE WHEN color IS NOT NULL/.test(treffer[1])) gepinnt.push(datei);
     }
   }
-
-  // `bookEventUpload` zaehlt nur, solange es wirklich bei `markEventUploaded`
-  // ankommt und die Quelle durchreicht.
-  const buchStart = helferQuelle.indexOf('export function bookEventUpload(');
-  assert.ok(buchStart >= 0, 'bookEventUpload fehlt in calendar-outbound.js - stimmt der Guard noch?');
-  const buchRumpf = helferQuelle.slice(buchStart, helferQuelle.indexOf('\nexport ', buchStart + 1));
-  assert.match(buchRumpf, /markEventUploaded\(\s*sent\.id,\s*\{\s*source,/,
-    'bookEventUpload reicht die Quelle nicht mehr an markEventUploaded weiter');
-
-  assert.deepEqual([...angekommen].sort(), ['apple', 'caldav', 'google'],
-    'jeder der drei Anbieter braucht eine Upload-Stelle, die den Termin zum Spiegel macht');
-  assert.deepEqual(ohneFlag, [],
-    'der Upload muss color_modified setzen, sonst verliert der Termin seine exakte Farbe an die gemappte');
+  assert.ok(gesehen >= 2, `nur ${gesehen} Upload-Buchungen gefunden - stimmt das Muster noch?`);
+  assert.deepEqual(gepinnt, [], 'ein Upload setzt noch color_modified');
 });
 
 // --------------------------------------------------------
@@ -465,14 +420,11 @@ test('kein Importpfad schreibt die geerbte Kalenderfarbe in die Eigenfarb-Spalte
 
   for (const datei of DIENSTE) {
     const quelle = await readFile(new URL(`../${datei}`, import.meta.url), 'utf8');
+    // Auch `importToLocal` nicht mehr: die Farbe, die der Nutzer fuer einen
+    // Import waehlen konnte, gibt es seit One Today nicht mehr.
     const treffer = [...quelle.matchAll(FALLBACK_RE)].map((m) => m[0]);
-    // `importToLocal` ist die eine begruendete Ausnahme: dort werden aus
-    // Abo-Terminen LOKALE Termine ohne Quelle, sie haben danach keinen Kalender
-    // mehr, von dem sie erben koennten - und der Wert ist der, den der Nutzer
-    // fuer genau diesen Import angegeben hat.
-    const echte = treffer.filter((t) => !/fallbackColor/.test(t));
-    assert.deepEqual(echte, [],
-      `${datei}: die geerbte Farbe gehoert nicht in calendar_events.color (#891), gefunden: ${echte.join(', ')}`);
+    assert.deepEqual(treffer, [],
+      `${datei}: die geerbte Farbe gehoert nicht in calendar_events.color (#891), gefunden: ${treffer.join(', ')}`);
   }
 });
 

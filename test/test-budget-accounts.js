@@ -251,29 +251,22 @@ test('POST /accounts validiert Name und Typ', async () => {
   } finally { await h.close(); }
 });
 
-test('color: gültiger HEX wird gespeichert, ungültiger abgelehnt', async () => {
+test('color: Konten haben keine Farbe - eine gesendete wird ignoriert, nichts wird gespeichert oder abgelehnt', async () => {
   cleanup();
   const h = createHarness();
   try {
-    const ok = await h.call('POST', '/accounts', { name: 'Farbig', color: '#2563EB' });
-    assert.equal(ok.status, 201);
-    assert.equal(ok.body.data.color, '#2563EB');
-    // #542: Der Konto-Farbpicker speichert theme-aware Serien-Tokens statt Hex -
-    // die müssen akzeptiert werden, sonst schlägt "Konto anlegen" mit Farbwahl fehl.
-    const token = await h.call('POST', '/accounts', { name: 'Token', color: 'var(--chart-series-2)' });
-    assert.equal(token.status, 201);
-    assert.equal(token.body.data.color, 'var(--chart-series-2)');
-    // PUT akzeptiert das Token ebenfalls
-    const tokenPut = await h.call('PUT', `/accounts/${ok.body.data.id}`, { color: 'var(--chart-series-5)' });
-    assert.equal(tokenPut.body.data.color, 'var(--chart-series-5)');
-    // Ungültige Farbe (kein #RRGGBB) → 400
-    assert.equal((await h.call('POST', '/accounts', { name: 'X', color: 'blau' })).status, 400);
-    // Beliebiger CSS-Ausdruck bleibt abgelehnt (Allowlist ist eng, kein style-Injection)
-    assert.equal((await h.call('POST', '/accounts', { name: 'Y', color: 'var(--x); background:url(evil)' })).status, 400);
-    assert.equal((await h.call('POST', '/accounts', { name: 'Z', color: 'var(--module-accent)' })).status, 400);
-    // Farbe entfernen (leerer Wert → NULL)
-    const cleared = await h.call('PUT', `/accounts/${ok.body.data.id}`, { color: '' });
-    assert.equal(cleared.body.data.color, null);
+    for (const color of ['#2563EB', 'var(--chart-series-2)', 'blau', 'var(--x); background:url(evil)']) {
+      const res = await h.call('POST', '/accounts', { name: 'Farbig', color });
+      assert.equal(res.status, 201, `POST mit ${color} antwortet wie ohne Farbe`);
+      assert.equal(res.body.data.color ?? null, null, 'die gesendete Farbe wurde nicht gespeichert');
+    }
+    const acc = (await h.call('POST', '/accounts', { name: 'Ohne' })).body.data;
+    assert.equal(acc.color ?? null, null);
+    for (const color of ['#2563EB', '', null, 'blau']) {
+      const put = await h.call('PUT', `/accounts/${acc.id}`, { color, name: 'Ohne' });
+      assert.equal(put.status, 200, `PUT mit ${JSON.stringify(color)} antwortet 200`);
+      assert.equal(put.body.data.color ?? null, null, 'der gespeicherte Wert bleibt unveraendert');
+    }
   } finally { await h.close(); }
 });
 

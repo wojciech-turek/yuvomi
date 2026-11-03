@@ -1599,8 +1599,6 @@ test('module-specific settings leaves only reference their owned preferences and
         'holiday_group',
         'holiday_show_public',
         'holiday_show_school',
-        'holiday_public_color',
-        'holiday_school_color',
         'holiday_last_sync',
       ],
     },
@@ -1699,9 +1697,7 @@ test('module-specific settings leaves preserve their required controls and behav
     'holiday-country',
     'holiday-subdivision',
     'holiday-show-public',
-    'holiday-public-color',
     'holiday-show-school',
-    'holiday-school-color',
     'holiday-sync-btn',
   ]) {
     assert.match(calendar, controlIdPattern(id));
@@ -7748,7 +7744,7 @@ test('text/surface token pairs meet WCAG AA 4.5:1', () => {
 // TAFLA (Rollout-Schritt 0): EIN Violett, und es kommt nur ueber die Tokens.
 // Die Stimme hat in tokens.css ihre Rollen (--color-accent als Text,
 // --color-btn-primary / --color-accent-fill als Flaeche, --color-accent-tint,
-// --color-accent-pressed, --shadow-accent-glow, --cook-accent, --toast-action).
+// --color-accent-pressed, --cook-accent, --toast-action).
 // Ein Violett-Literal in einem Stylesheet waere eine zweite Quelle, die beim
 // naechsten Theme- oder Rollenwechsel nicht mitzieht - genau so stand die
 // Flieder-Pille im Dark. Geprueft werden die Deklarationen (Kommentare duerfen
@@ -9560,36 +9556,143 @@ test('Housekeeping: Bezahlen laeuft durch EINE Funktion, die vorher bestaetigt (
   assert.doesNotMatch(page, /authRole|role\s*===\s*'admin'/, 'housekeeping.js entscheidet keine Rolle selbst');
 });
 
-test('holiday chips derive readable ink from each configured color', () => {
+// One Today: Feiertage tragen keine Farbe aus den Einstellungen mehr - EIN
+// ruhiger Ton (.cal-holiday), Abfall-Chips ebenso. Die Basisregeln bleiben fuer
+// die Schicht-Chips, die dieselben Klassen tragen.
+test('holiday chips are one quiet neutral chip, and so are waste chips; the base rule keeps its ink', () => {
   const calendarPage = read('../public/pages/calendar.js');
   const calendarCss = read('../public/styles/calendar.css');
 
-  assert.match(calendarPage, /import \{ getReadableTextColor \} from '\/utils\/color\.js'/);
-  assert.match(calendarPage, /--holi-ink:\$\{esc\(getReadableTextColor\(h\.color\)\)\}/);
+  assert.doesNotMatch(calendarPage, /getReadableTextColor\(h\.color\)|--holi-color:\$\{esc\(h\.color\)\}/);
+  assert.match(calendarPage, /function holidayChipHtml\(holiday, className\) \{\s*return `<div class="\$\{className\} cal-holiday" title=/);
+  const quiet = cssRuleBody(calendarCss, '.month-day__holiday.cal-holiday,\n.allday-holiday.cal-holiday,\n.agenda-holiday.cal-holiday');
+  assert.match(quiet, /background:\s*var\(--color-fill\)/);
+  assert.match(quiet, /color:\s*var\(--color-text-secondary\)/);
   for (const selector of ['.month-day__holiday', '.allday-holiday']) {
     const body = cssRuleBody(calendarCss, selector);
-    assert.match(body, /color:\s*var\(--holi-ink,\s*var\(--color-text-on-accent\)\)/);
+    assert.match(body, /color:\s*var\(--color-text-on-accent\)/);
     assert.doesNotMatch(body, /color:\s*#fff/);
   }
 });
 
-test('user-selected avatar colors derive readable text ink', () => {
+// ONE TODAY (2026-11-02): EINE PERSONENSCHEIBE, EINE FARBQUELLE. Die
+// Personenfarbe ist der Platz in der Haushaltsreihenfolge
+// (utils/person-color.js `personToken`); die gespeicherte, einst frei gewaehlte
+// `avatar_color` malt nirgends mehr. Hier stand der Guard, der genau das
+// Gegenteil hielt: die Mehrfachauswahl malte `u.avatar_color` mit einer
+// gerechneten Schrift darauf.
+//
+// Keine Ausnahme: auch die Einstellungen (Konto, Familie) und die
+// Haushaltshilfe lesen die gespeicherte Farbe nicht mehr - es gibt keinen
+// Farbwaehler (No person colour pickers).
+
+test('no avatar_color is read in public/ - every disc takes its colour from personToken', async () => {
+  const { stripJsComments } = await import('../server/utils/strip-comments.js');
+  const root = new URL('../public/', import.meta.url);
+  const files = walkJsFiles('../public/').map((path) => path.slice('../public/'.length))
+    .filter((rel) => !rel.startsWith('vendor/'));
+  assert.ok(files.includes('router.js') && files.includes('components/user-multi-select.js'), 'der Lauf sieht den Baum');
+  const offenders = [];
+  for (const rel of files) {
+    const code = stripJsComments(readFileSync(new URL(rel, root), 'utf8'));
+    // Jede Schreibweise derselben gespeicherten Farbe: die Spalte und ihre
+    // Aliasse aus den Lese-Joins (Urheber, Koch, verknuepftes Mitglied).
+    for (const match of code.matchAll(/\b\w*(?:avatar_color|creator_color|cook_color|person_color)\b/g)) {
+      offenders.push(`${rel}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(offenders, [], 'eine gespeicherte Personenfarbe wird wieder gelesen - personToken() aus /utils/person-color.js nehmen');
+  // Und kein Farbfeld an einer Person: weder Konto noch Familie noch Haushaltshilfe.
+  for (const rel of ['settings/pages/personal-account.js', 'settings/pages/admin-family.js', 'pages/housekeeping.js']) {
+    assert.doesNotMatch(read(`../public/${rel}`), /type="color"|type=color/, `${rel}: ein Farbwaehler an einer Person`);
+  }
+});
+
+// One Today (Aufgabe 6): nirgends in public/ gibt es noch ein Farbfeld. Kontakt-
+// kategorien, Schichtarten, Abfallarten, Konten und Abos sind nur Namen; die
+// Farbe einer Person kommt aus personToken(). Die EINE Ausnahme ist kein Feld:
+// settings/shell.js schliesst `[type="color"]` nur aus einem Tastatur-Selektor
+// aus (Eingaben, in denen getippt wird).
+test('kein Farbfeld mehr in public/: weder type="color" noch die Klasse form-input--color', async () => {
+  const { stripJsComments } = await import('../server/utils/strip-comments.js');
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (['locales', 'vendor', 'fonts', 'icons'].includes(entry.name)) continue;
+        walk(`${dir}${entry.name}/`);
+      } else if (/\.(js|html|css)$/.test(entry.name) && !/\.min\.js$/.test(entry.name)) {
+        const raw = readFileSync(new URL(`${dir}${entry.name}`, import.meta.url), 'utf8');
+        const code = entry.name.endsWith('.js') ? stripJsComments(raw) : raw;
+        for (const m of code.matchAll(/type=["']?color\b|form-input--color|input\[type=["']?color/g)) {
+          offenders.push(`${dir}${entry.name}: ${m[0]}`);
+        }
+      }
+    }
+  };
+  walk('../public/');
+  assert.deepEqual(offenders.filter((o) => !o.startsWith('../public/settings/shell.js')), [], 'ein Farbfeld ist zurueck');
+  assert.deepEqual(offenders.filter((o) => o.startsWith('../public/settings/shell.js')).length, 1, 'die eine Ausnahme: der Tastatur-Selektor in shell.js');
+});
+
+test('one disc renderer: no page builds its own person avatar from a colour', () => {
+  // Die Mehrfachauswahl (Chip und Stapel) zeichnet die Personenscheibe und
+  // rechnet keine Schrift auf eine Farbe.
   const multiSelect = read('../public/components/user-multi-select.js');
-  const color = read('../public/utils/color.js');
+  assert.match(multiSelect, /^import \{ personDisc \} from '\/utils\/person-color\.js';$/m);
+  assert.doesNotMatch(multiSelect, /getReadableTextColor|background-color|\bu\.color\b/);
+  // Today hat keinen eigenen Renderer mehr (`.day-disc` ist gegangen).
+  const today = read('../public/components/today-view.js');
+  assert.doesNotMatch(today, /export function personDisc|day-disc|from '\/utils\/initials\.js'/);
+  assert.doesNotMatch(read('../public/styles/dashboard.css'), /\.day-disc/);
+  // Die bespoke Scheiben nehmen die eine (Markup oder DOM-Fassung).
+  for (const [rel, call] of [
+    ['components/detail-view.js', 'personDiscEl('], ['settings/shell.js', 'personDiscEl('],
+    ['pages/more.js', 'personDisc('], ['pages/schedule.js', 'personDisc('], ['pages/contacts.js', 'personDisc('],
+    ['pages/birthdays.js', 'personDisc('], ['settings/pages/admin-permissions.js', 'personDisc('],
+    ['settings/pages/admin-family.js', 'personDisc('], ['utils/filter-sheet.js', 'personDisc('],
+  ]) {
+    assert.ok(read(`../public/${rel}`).includes(call), `${rel} zeichnet die eine Scheibe (${call})`);
+  }
+  // Einen eigenen Ein-Buchstaben-Avatar baut niemand mehr ("L" statt "LI").
+  assert.doesNotMatch(read('../public/settings/shell.js'), /toLocaleUpperCase/);
+  assert.doesNotMatch(read('../public/pages/more.js'), /initial\.toLocaleUpperCase/);
+  // Die Seitenleiste: Tinte auf Toenung aus personToken, keine Kontrastrechnung.
+  const router = read('../public/router.js');
+  assert.match(router, /const \{ ink, tint \} = personToken\(routerState\.currentUser \?\? \{\}\);/);
+  assert.doesNotMatch(router, /prefersInkText|nav-sidebar__avatar--(?:ink|on-color)/);
+});
 
-  // Single source of truth for the neutral avatar fallback (concrete hex —
-  // getReadableTextColor needs a value it can measure luminance on).
-  assert.match(color, /export const AVATAR_FALLBACK_COLOR = '#[0-9a-fA-F]{6}';/);
+test('a selected person chip is violet: --color-accent border on --color-accent-tint, never the module accent', () => {
+  const css = read('../public/styles/user-multi-select.css');
+  const body = cssRuleBody(css, '.user-ms__option:has(.user-ms__checkbox:checked)');
+  assert.match(body, /border-color:\s*var\(--color-accent\);/);
+  assert.match(body, /background:\s*var\(--color-accent-tint\);/);
+  assert.doesNotMatch(css, /--active-module-accent|--module-accent/, 'die Wahl einer Person sieht in jedem Modul gleich aus');
 
-  assert.match(multiSelect, /import \{ getReadableTextColor, AVATAR_FALLBACK_COLOR \} from '\/utils\/color\.js'/);
-  assert.match(
-    multiSelect,
-    /color:\$\{getReadableTextColor\(u\.color \?\? AVATAR_FALLBACK_COLOR\)\}/,
-  );
-  assert.match(
-    multiSelect,
-    /color:\$\{getReadableTextColor\(u\.avatar_color \?\? AVATAR_FALLBACK_COLOR\)\}/,
-  );
+  // Jedes Blatt, das den gewaehlten Chip neu faerbt (das Essensblatt fuellt
+  // seine Chips und nahm ihnen den Rand), traegt dieselbe Stimme: violetter
+  // Rand auf violetter Toenung. Und keine Grundregel eines Chips nimmt den
+  // Rand weg - sonst bliebe fuer die Wahl keiner.
+  const styleDir = new URL('../public/styles/', import.meta.url);
+  const restyled = [];
+  for (const file of readdirSync(styleDir).filter((f) => f.endsWith('.css'))) {
+    for (const { selector, body: decl } of eachRule(read(`../public/styles/${file}`))) {
+      for (const part of selector.split(',').map((s) => s.trim())) {
+        if (/\.user-ms__option:has\(\.user-ms__checkbox:checked\)$/.test(part)) {
+          restyled.push(`${file}: ${part}`);
+          if (/(?:^|;|\s)(?:background(?:-color)?)\s*:/.test(decl)) {
+            assert.match(decl, /background(?:-color)?:\s*var\(--color-accent-tint\)/, `${file}: ${part} - die Toenung ist violett`);
+          }
+          assert.match(decl, /border-color:\s*var\(--color-accent\)/, `${file}: ${part} - der gewaehlte Chip traegt den violetten Rand`);
+        }
+        if (/\.user-ms__option$/.test(part)) {
+          assert.doesNotMatch(decl, /(?:^|;|\s)border(?:-width)?\s*:\s*(?:0|none)\b/, `${file}: ${part} nimmt dem Chip den Rand`);
+        }
+      }
+    }
+  }
+  assert.ok(restyled.some((r) => r.startsWith('meals.css')), `Vorbedingung: das Essensblatt wird geprueft (${restyled.join(', ')})`);
 });
 
 test('mobile meal actions remain visible and touch-safe after the full cascade', () => {
@@ -11484,7 +11587,7 @@ test('.btn--sm haelt die Zielgroesse der Geraetewelt, auch am Zeiger', () => {
 // Startpalette in schedule.js, Flaeche und Tinte aus tokens.css je Theme, das
 // Rezept aus der Regel in calendar.css. Aendert sich eine der drei Seiten,
 // rechnet der Guard mit dem neuen Wert.
-test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fuer die Startpalette', async () => {
+test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fuer die Personentinten', async () => {
   const { contrastRatio } = await import('../public/utils/contrast.js');
   const calendarCss = read('../public/styles/calendar.css');
   const scheduleCss = read('../public/styles/schedule.css');
@@ -11492,11 +11595,15 @@ test('Schicht-Chips im Kalender: getoent wie im Schichtplan, Schrift >= 4,5:1 fu
   const scheduleJs = read('../public/pages/schedule.js');
   const calendarJs = read('../public/pages/calendar.js');
 
-  // --- Die Startpalette: jede Farbe der Schicht-Vorlagen ---------------------
+  // --- Die Farben: eine Schicht traegt die Tinte ihrer Person (One Today) -----
+  // Schichtarten haben keine Farbe mehr; die Chips ziehen --holi-color aus
+  // personInk(), also aus den sechs Personentinten in tokens.css.
   const presets = scheduleJs.slice(scheduleJs.indexOf('const SHARED_PRESETS'), scheduleJs.indexOf('});', scheduleJs.indexOf('const PRESET_TEMPLATES')));
-  const palette = [...new Set([...presets.matchAll(/color:\s*'(#[0-9A-Fa-f]{6})'/g)].map((m) => m[1].toUpperCase()))];
-  assert.ok(palette.length >= 8, `Startpalette aus schedule.js gelesen (${palette.length} Farben)`);
-  assert.ok(palette.includes('#0891B2'), 'die Befund-Farbe (Fruehschicht) ist dabei');
+  assert.doesNotMatch(presets, /color:\s*'#/, 'kein Preset traegt eine Farbe');
+  const palette = [...new Set([...tokensCss.matchAll(/--_person-[1-6]:\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase()))];
+  assert.equal(palette.length, 6, `die sechs Personentinten aus tokens.css gelesen (${palette.length} Farben)`);
+  assert.doesNotMatch(calendarJs, /(?:shift_)?type\.color/, 'calendar.js liest keine Schichtfarbe');
+  assert.match(calendarJs, /--holi-color:\$\{esc\(personInk\(entry\.user_id, state\.users\)\)\}/, 'der Schicht-Chip nimmt die Tinte seiner Person');
 
   // --- Das Rezept: eine Regel fuer alle drei Ansichten -----------------------
   const SELEKTOREN = ['.month-day__holiday.schedule-entry', '.allday-holiday.schedule-entry', '.agenda-holiday.schedule-entry'];
@@ -11594,13 +11701,14 @@ test('Avatar-Initialen waehlen die lesbare Textfarbe', async () => {
   // Kurzform-Hex muss dasselbe ergeben wie die Langform.
   assert.equal(contrastRatio('#fff', '#000000'), contrastRatio('#ffffff', '#000000'));
 
-  // Und die Blaetter muessen die Utility auch benutzen.
-  for (const leaf of ['admin-family', 'personal-account', 'admin-permissions']) {
+  // Die Blaetter der Einstellungen rechnen keine Schrift mehr auf eine gewaehlte
+  // Farbe: sie nehmen die Personentokens (Tinte auf Toenung).
+  for (const leaf of ['admin-family', 'personal-account']) {
     const source = read(`../public/settings/pages/${leaf}.js`);
-    assert.match(source, /import \{ prefersInkText \} from '\/utils\/contrast\.js'/, `${leaf} importiert sie nicht`);
-    assert.match(source, /prefersInkText\(/, `${leaf} ruft sie nicht auf`);
+    assert.doesNotMatch(source, /prefersInkText/, `${leaf} rechnet noch eine Schrift`);
+    assert.match(source, /personToken\(user\)/, `${leaf} nimmt die Personentokens nicht`);
   }
-  assert.match(read('../public/styles/settings.css'), /\.settings-avatar--ink,\s*\.perm-chip__avatar--ink \{\s*color: var\(--color-ink-on-bright\);/);
+  assert.doesNotMatch(read('../public/styles/settings.css'), /settings-avatar--ink/);
 });
 
 
@@ -20156,8 +20264,10 @@ const deValueOf = (() => {
 // Dazu "Aufgabe hinzufuegen" (Quick-Add 2026-10-29): dasselbe Verb wie
 // `common.add`, mit seinem Gegenstand - das Blatt "Neue Aufgabe" hat sonst
 // keinen Kopf-Text im Fuss, und so steht es im Entwurf, den der Haushalt
-// abgenommen hat (Spec "Simpler New Task sheet", Ziel 4).
-const NAMED_DIALOG_ACTIONS = ['documents.uploadAction', 'tasks.addTask'];
+// abgenommen hat (Spec "Simpler New Task sheet", Ziel 4). Ebenso "Termin
+// hinzufuegen" im Termin-Blatt (One Today, Task 10: "one full-width primary
+// button that names the thing").
+const NAMED_DIALOG_ACTIONS = ['documents.uploadAction', 'tasks.addTask', 'calendar.addEvent'];
 // "Erstellen und hinzufuegen": legt einen Gast an UND nimmt ihn in die Gruppe -
 // zwei Schritte, die das Verb beide nennen muss.
 const COMPOUND_CREATE = ['splitExpenses.createAndAddGuest'];
@@ -21325,7 +21435,7 @@ test('D8: ein Listen-Gruppenkopf - Versal-Mikro-Label ohne Icon in Kontakten und
   // Gruppenkopf wie jeder andere: Body 17, "Dziś · wtorek 20 paź".
   const agenda = [...eachRule(read('../public/styles/calendar.css'))]
     .find(({ selector, at }) => selector.trim() === '.agenda-day__header' && at.length === 0);
-  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-body\)/);
+  assert.match(agenda?.body ?? '', /font-size\s*:\s*var\(--type-section-head\)/);
 });
 
 test('D3: die Reiter der Haushaltshilfe sind Text-Reiter ohne Icon', () => {
@@ -21583,4 +21693,35 @@ test('Nagrody ist ausgebaut: kein Import der Seite, kein Navigationspunkt', () =
   const hits = files.filter((f) => read(f).includes('/pages/rewards.js'));
   assert.deepStrictEqual(hits, [], 'jemand laedt /pages/rewards.js noch');
   assert.ok(!/module:\s*'rewards'/.test(read('../public/router.js')), "Navigationspunkt mit module: 'rewards'");
+});
+
+// One meaning per colour (One today, Task 7): violet is tap/chosen, the warning
+// family is attention, danger is destructive/errors. No green field, no glow.
+test('One meaning per colour: attention is warning, no valid-green, no glow, categories without #', () => {
+  const stripped = (file) => read(`../public/styles/${file}`).replace(/\/\*[\s\S]*?\*\//g, '');
+  const ruleBody = (css, selector) => {
+    const out = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (m[1].split(',').map((s) => s.trim()).includes(selector)) out.push(m[2]);
+    }
+    return out.join(';');
+  };
+  // No glow token and no user of it, in any stylesheet.
+  for (const file of readdirSync(new URL('../public/styles/', import.meta.url)).filter((n) => n.endsWith('.css'))) {
+    assert.doesNotMatch(stripped(file), /accent-glow/, `${file} still uses the accent glow`);
+  }
+  // A valid field is not green.
+  const layout = stripped('layout.css');
+  assert.doesNotMatch(ruleBody(layout, '.form-field--valid .input'), /success|green|border-color/);
+  // The flag, on Today and on Tasks, is the warning colour; overdue is warning.
+  const tokens = stripped('tokens.css');
+  assert.match(tokens, /--color-overdue:\s*var\(--color-warning\)/);
+  assert.match(ruleBody(stripped('dashboard.css'), '.dz-task__flag'), /color:\s*var\(--color-warning\)/);
+  assert.match(ruleBody(stripped('tasks.css'), '.task-card__flag'), /color:\s*var\(--color-warning\)/);
+  const tasksCss = stripped('tasks.css');
+  assert.match(ruleBody(tasksCss, '.due-date--overdue'), /var\(--color-warning\)/);
+  assert.match(ruleBody(tasksCss, '.tasks-page .task-group--overdue > .list-group__title .list-group__toggle'), /var\(--color-warning\)/);
+  const tasksJs = read('../public/pages/tasks.js');
+  assert.match(tasksJs, /tone: 'warning', text: t\('tasks\.overduePill'\)/);
+  assert.doesNotMatch(tasksJs, /`#\$\{text/, 'the category is its plain name, no "#"');
 });

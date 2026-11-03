@@ -15,15 +15,8 @@ const { __test } = await import('../server/services/google-calendar.js');
 const { localEventToGoogle, googleAllDayEndToInclusive, localAllDayEndToExclusive,
         upsertGoogleEvents, upsertExternalCalendar,
         setReadonly, isReadonly, fetchEventColorMap, householdTimeZone } = __test;
-const { nearestColorId } = await import('../server/utils/ical-color.js');
 const { expandRecurringEvents } = await import('../server/services/calendar-events.js');
 
-// Reale Google-Event-Palette (colors.get → event), Basis für Nearest-Match.
-const GOOGLE_EVENT_PALETTE = {
-  '1': '#A4BDFC', '2': '#7AE7BF', '3': '#DBADFF', '4': '#FF887C',
-  '5': '#FBD75B', '6': '#FFB878', '7': '#46D6DB', '8': '#E1E1E1',
-  '9': '#5484ED', '10': '#51B749', '11': '#DC2127',
-};
 
 let passed = 0;
 let failed = 0;
@@ -235,7 +228,7 @@ test('localEventToGoogle: getimtes UNTIL ohne Zeitteil wird zu UTC date-time', (
     end_datetime:   '2026-06-03T15:00',
     recurrence_rule: 'FREQ=WEEKLY;UNTIL=20260831',
   };
-  const g = localEventToGoogle(event, {}, 'UTC');
+  const g = localEventToGoogle(event, 'UTC');
   assertEqual(g.recurrence[0], 'RRULE:FREQ=WEEKLY;UNTIL=20260831T235959Z');
 });
 
@@ -253,7 +246,7 @@ test('localEventToGoogle: Zielkalender-Zone wird übernommen, Wanduhrzeit bleibt
     end_datetime:   '2026-06-03T15:00',
     recurrence_rule: null,
   };
-  const g = localEventToGoogle(event, {}, 'Australia/Adelaide');
+  const g = localEventToGoogle(event, 'Australia/Adelaide');
   assertEqual(g.start.timeZone, 'Australia/Adelaide');
   assertEqual(g.end.timeZone,   'Australia/Adelaide');
   assertEqual(g.start.dateTime, '2026-06-03T14:00:00', 'Uhrzeit wird nicht umgerechnet');
@@ -313,88 +306,20 @@ test('householdTimeZone(null): TZ-Env hat Vorrang, sonst gültige IANA-Zone', ()
 });
 
 // --------------------------------------------------------
-// Outbound-Farbe: Hex → nächste Google-colorId (#427, Schritt 2)
+// Outbound-Farbe: keine (One Today, spec 7)
 // --------------------------------------------------------
-test('nearestColorId: exakter Palettentreffer', () => {
-  assertEqual(nearestColorId('#DC2127', GOOGLE_EVENT_PALETTE), '11');
-});
-
-test('nearestColorId: minimal verschobene Farbe trifft dieselbe ID', () => {
-  assertEqual(nearestColorId('#DD2228', GOOGLE_EVENT_PALETTE), '11');
-});
-
-test('nearestColorId: Yuvomi-Preset-Blau → Blueberry (9)', () => {
-  assertEqual(nearestColorId('#007AFF', GOOGLE_EVENT_PALETTE), '9');
-});
-
-test('nearestColorId: leere Palette → null', () => {
-  assertEqual(nearestColorId('#007AFF', {}), null);
-});
-
-test('nearestColorId: ungültiges Ziel-Hex → null', () => {
-  assertEqual(nearestColorId('nicht-hex', GOOGLE_EVENT_PALETTE), null);
-});
-
-test('localEventToGoogle: event.color wird zur nächsten colorId', () => {
-  const g = localEventToGoogle(
-    { title: 'Rot', all_day: 1, start_datetime: '2026-06-03', color: '#DC2127' },
-    GOOGLE_EVENT_PALETTE
-  );
-  assertEqual(g.colorId, '11');
-});
-
-test('localEventToGoogle: ohne Palette bleibt colorId ungesetzt', () => {
-  const g = localEventToGoogle(
-    { title: 'Rot', all_day: 1, start_datetime: '2026-06-03', color: '#DC2127' },
-    {}
-  );
-  assertEqual(g.colorId, undefined);
-});
-
-test('localEventToGoogle: eine GELEERTE Farbe wird ausdruecklich geleert (#891/#899)', () => {
-  // NICHT weggelassen, sondern null - und der Unterschied ist der ganze Punkt.
-  // Der Update-Push ist ein `events.patch`, und ein PATCH fasst nur die Felder
-  // an, die im Body STEHEN. Ein fehlendes colorId hiesse "nicht anfassen":
-  // Google behielte seine alte Farbe, waehrend Yuvomi die der zugewiesenen
-  // Person zeigt, und die beiden blieben dauerhaft verschieden.
-  //
-  // Bis v2.48.0 war das folgenlos, weil `color` NOT NULL war und dieser Zweig
-  // fuer Updates nie erreicht wurde. Der Test stand hier trotzdem - er hat die
-  // damals wahre Beobachtung festgehalten statt der Regel dahinter, und waere
-  // deshalb gruen geblieben, wenn der Fall real wird.
-  const g = localEventToGoogle(
-    { title: 'Farblos', all_day: 1, start_datetime: '2026-06-03', color_modified: 1 },
-    GOOGLE_EVENT_PALETTE
-  );
-  assertEqual(g.colorId, null);
-  assertEqual('colorId' in g, true, 'das Feld MUSS im Body stehen, sonst loescht der PATCH nichts');
-});
-
-test('localEventToGoogle: eine NIE gelernte Farbe loescht Googles Farbe NICHT (#899)', () => {
-  // Die Gegenprobe zum Test darueber und der Grund fuer #899: bis dahin ging das
-  // null bei JEDEM farblosen Termin hinaus, auch bei einem, der nie eine Farbe
-  // hatte. Ein Termin kommt ohne colorId herein (lokal NULL), jemand faerbt ihn
-  // spaeter in Google, und die naechste beliebige Bearbeitung in Yuvomi raeumte
-  // dessen Farbe ab - ohne dass sie hier je jemand angefasst haette.
-  const g = localEventToGoogle(
-    { title: 'Nie gefaerbt', all_day: 1, start_datetime: '2026-06-03', color_modified: 0 },
-    GOOGLE_EVENT_PALETTE
-  );
-  assertEqual('colorId' in g, false, 'nie gelernt heisst "nicht anfassen", nicht "loeschen"');
-});
-
-test('localEventToGoogle: eine unabbildbare Farbe loescht Googles Farbe NICHT', () => {
-  // Die Gegenprobe zum Test darueber, und die Grenze der Regel: eine fehlende
-  // PALETTE ist etwas anderes als eine fehlende FARBE. Faellt `colors.get` aus,
-  // traegt der Termin sehr wohl eine Farbe - sie laesst sich nur nicht auf eine
-  // der 11 colorIds abbilden. Ein Nullwert wuerde hier eine in Google gesetzte
-  // Farbe wegwerfen, obwohl niemand das wollte; "nicht anfassen" ist richtig.
-  const g = localEventToGoogle(
-    { title: 'Rot', all_day: 1, start_datetime: '2026-06-03', color: '#FF0000' },
-    {}
-  );
-  assertEqual(g.colorId, undefined);
-  assertEqual('colorId' in g, false, 'ohne Palette darf das Feld gar nicht erst im Body stehen');
+test('localEventToGoogle: keine colorId - weder eine gespeicherte Farbe noch ein Leeren', () => {
+  // Der Push ist ein `events.patch`: ein fehlendes Feld heisst "nicht anfassen".
+  // Yuvomi waehlt keine Terminfarben mehr; eine Farbe, die Google traegt, bleibt
+  // dort stehen, und keine geht hinaus.
+  for (const event of [
+    { title: 'Rot', all_day: 1, start_datetime: '2026-06-03', color: '#DC2127', color_modified: 1 },
+    { title: 'Geleert', all_day: 1, start_datetime: '2026-06-03', color: null, color_modified: 1 },
+    { title: 'Nie gefaerbt', all_day: 1, start_datetime: '2026-06-03', color: null, color_modified: 0 },
+  ]) {
+    const g = localEventToGoogle(event);
+    assertEqual('colorId' in g, false, `${event.title}: ${JSON.stringify(g)}`);
+  }
 });
 
 // --------------------------------------------------------

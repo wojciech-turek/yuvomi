@@ -190,6 +190,17 @@
     line-height: var(--line-height-tight);
     text-wrap: balance;
   }
+
+  /* KEIN PLUS-KREIS IN DIESER ZEILE (Visual QA 2026-11-02: „Budg…" bei
+   * 390px). Am Telefon dockt die Shell den Seiten-FAB als Geisterkreis in den
+   * Aktions-Slot (router.js dockFabAsGhost); neben Titel und Stepper nahm er
+   * dem Titel 48px, „Budget" stand ohne einen Pixel Luft und bei 375px
+   * abgeschnitten. Wie im Kalender („Kalenda…", calendar.css): ein Slot ohne
+   * Geometrie laesst den Knopf in der fab-layer, er schwebt ueber der Leiste.
+   * Ab 768px hat die Zeile Platz, dort bleibt er im Kopf. */
+  .budget-nav > .page-toolbar__actions {
+    display: none;
+  }
 }
 
 /* Bis 1023px (R19, Tablet): Titel und Zeitraum teilen die Zeile auch bei
@@ -636,8 +647,7 @@
 }
 
 /* Zeile mit primärem Drilldown-Button + separatem Bearbeiten-Icon.
- * --account-accent kommt inline je Konto (Fallback: Modul-Akzent) und faerbt
- * Kachel und Fokusring; die Zeile selbst ist flaechenlos. */
+ * --account-accent ist der Modul-Akzent und faerbt Kachel und Fokusring; die Zeile selbst ist flaechenlos. */
 .budget-account {
   --account-accent: var(--module-accent);
   display: flex;
@@ -951,34 +961,6 @@
 
 .budget-account-chip:hover { background: color-mix(in srgb, var(--module-accent) var(--tint-raised), transparent); }
 .budget-account-chip:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
-
-/* Farbwahl im Konto-Modal */
-.budget-color-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.budget-color-swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--swatch);
-  border: 2px solid var(--color-border);
-  cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-
-.budget-color-swatch:hover { transform: scale(1.1); }
-/* AUSNAHME vom Fokusring-Token: die Swatch IST eine beliebige Farbe, auch der
- * Modulakzent selbst. Ein Ring im Akzent wäre auf genau der Swatch unsichtbar,
- * die gerade gewählt werden soll - deshalb der Textkontrast, der gegen jeden
- * Untergrund steht. */
-.budget-color-swatch:focus-visible { --focus-ring-color: var(--color-text-primary); outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-ring-offset); }
-.budget-color-swatch.is-active {
-  border-color: var(--color-text-primary);
-  box-shadow: 0 0 0 2px var(--color-surface-elevated), 0 0 0 4px var(--swatch);
-}
 
 /* --------------------------------------------------------
  * Kompaktstufen der geteilten Kennzahl-Bauteile

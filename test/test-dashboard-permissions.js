@@ -275,7 +275,7 @@ test('Heute-Blatt: Abfuhr nur fuer heute und morgen, die Schicht nur die eigene'
     const kid = await dashboardAs(KID);
     assert.deepEqual(kid.wastePickups.map((p) => p.date_key), [todayLocal],
       'eine Abholung in drei Tagen gehoert nicht ins Heute-Blatt');
-    assert.equal(kid.wastePickups[0].type_color, '#6B7280');
+    assert.ok(!('type_color' in kid.wastePickups[0]), 'die Abfuhr traegt keine Farbe');
 
     const parent = await dashboardAs(PARENT);
     assert.deepEqual(parent.myShiftsToday, [], 'die Schicht des Kindes ist nicht die Schicht der Eltern');

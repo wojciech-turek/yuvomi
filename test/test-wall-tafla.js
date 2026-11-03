@@ -69,9 +69,8 @@ function household() {
   };
 }
 
-const sections = { dinner: true, plan: true, shopping: true, timers: true, weather: true };
 const build = (hhmm, extra = {}, data = household(), day = '2026-10-19') => wall.buildWall(data, {
-  now: at(hhmm, day), sections, ...extra,
+  now: at(hhmm, day), ...extra,
 });
 
 // --------------------------------------------------------------------------
@@ -93,7 +92,6 @@ test('the scene follows the clock - Kolacja only with a planned dinner, from 15:
   const noDinner = { ...household(), todayMeals: [], dinnerPlan: null };
   assert.equal(build('18:11', {}, noDinner).scene, 'wieczor', 'no dinner, no Kolacja scene');
   assert.equal(build('16:00', {}, noDinner).scene, 'dzien');
-  assert.equal(build('18:11', { sections: { ...sections, dinner: false } }).scene, 'wieczor', 'the household switched the dinner off');
 });
 
 test('Kolacja: the dinner is the hero (cook, meter) and not a row as well; before 15:00 it is a quiet card', () => {
@@ -260,13 +258,167 @@ test('a running timer takes the clock slot; the clock drops into the date line',
   assert.ok(!/class="wall__clock u-rounded"/.test(html), 'the poster clock gave way');
 });
 
-test('the switches of the household hide their sections', () => {
-  const off = build('18:11', { sections: { dinner: true, plan: false, shopping: false, timers: false, weather: false } });
-  assert.equal(off.plan, null);
-  assert.equal(off.shopping, null);
-  const html = markup(off);
-  assert.ok(!/data-wall-timer-start/.test(html), 'no discs with the timers off');
+test('the wall draws its fixed set: dinner, plan, shopping, timers and weather, with no options', () => {
+  const m = build('18:11', { predictions: ['masło'] });
+  assert.ok(m.hero, 'tonight\'s dinner');
+  assert.ok(m.plan, 'the day plan');
+  assert.ok(m.shopping, 'shopping');
+  assert.ok(!('sections' in m) && !('timers' in m), 'the model carries no section switches');
+  const weather = { current: { temp: 12, desc: 'Cloudy', icon: 'cloud' }, today: { temp_max: 14, temp_min: 8 }, provider: 'x' };
+  const html = view.renderWall(m, {
+    clock: { time: '18:11', machine: '18:11' }, weather, weatherIcon: () => '<i data-weather></i>',
+  });
   assert.match(html, /wall-hero/);
+  assert.match(html, /wall-plan/);
+  assert.match(html, /wall-shop/);
+  assert.match(html, /data-wall-timer-start/, 'the timer discs');
+  assert.match(html, /wall__weather/, 'the weather');
+});
+
+test('Notes and Birthdays: two read-only one-line strips in one card after shopping, today\'s birthday in the attention colour, absent when empty', () => {
+  const data = {
+    ...household(),
+    wallNotes: [{ id: 1, title: 'Hasło do wifi' }, { id: 2, title: '  ' }, { id: 3, title: 'Lista na weekend' }],
+    birthdays: [
+      { id: 7, name: 'Halina', kind: 'birthday', days_until: 0, next_age: 70 },
+      { id: 9, name: 'Ola', kind: 'birthday', days_until: 1, next_age: 8 },
+      { id: 8, name: 'Tomek', kind: 'name_day', days_until: 5 },
+    ],
+  };
+  const m = build('18:11', {}, data);
+  assert.deepEqual(m.notes, [{ id: 1, title: 'Hasło do wifi' }, { id: 3, title: 'Lista na weekend' }], 'titles only, blank ones dropped');
+  assert.equal(m.birthdays.length, 3);
+  // The strip says when: today, tomorrow, else the day without a weekday.
+  assert.deepEqual(m.birthdays.map((row) => row.when), ['calendar.relDay.today', 'calendar.relDay.tomorrow', m.birthdays[2].day]);
+  assert.ok(m.birthdays[2].day && m.birthdays[2].date.endsWith(m.birthdays[2].day) && m.birthdays[2].day !== m.birthdays[2].date,
+    `the day without the weekday: ${m.birthdays[2].day} / ${m.birthdays[2].date}`);
+  const html = view.renderWall(m, { clock: { time: '18:11', machine: '18:11' } });
+  const shop = html.indexOf('wall-shop');
+  const box = html.indexOf('data-wall-strips');
+  const notes = html.indexOf('data-wall-card="notes"');
+  const birthdays = html.indexOf('data-wall-card="birthdays"');
+  assert.ok(shop > -1 && box > shop && notes > box && birthdays > notes, 'shopping, then one card: Notes, then Birthdays');
+  assert.equal((html.match(/data-wall-strips/g) ?? []).length, 1, 'ONE card for both strips');
+  const card = html.slice(box, html.indexOf('</section>', box));
+  assert.ok(!/<button|<a\s|data-route|data-wall-(?!card|strips)/.test(card), 'the strips are read-only');
+  const strip = (id) => card.slice(card.indexOf(`data-wall-card="${id}"`), card.indexOf('</ul>', card.indexOf(`data-wall-card="${id}"`)));
+  for (const id of ['notes', 'birthdays']) {
+    assert.match(strip(id), /class="wall-card__label wall-strip__label"/, `${id}: its label`);
+    assert.equal((strip(id).match(/<ul class="wall-strip__items"/g) ?? []).length, 1, `${id}: one line of items`);
+  }
+  assert.match(strip('notes'), /Hasło do wifi[\s\S]*wall-strip__dot[\s\S]*Lista na weekend/, 'the titles on one line, a dot between them');
+  assert.match(strip('birthdays'), /wall-strip__item wall-strip__item--today">Halina <span class="wall-strip__when">calendar\.relDay\.today</, 'today\'s birthday in the attention item');
+  assert.equal((strip('birthdays').match(/wall-strip__item--today/g) ?? []).length, 1, 'only today\'s birthday is highlighted');
+
+  const bare = build('18:11');
+  assert.equal(bare.notes, null);
+  assert.equal(bare.birthdays, null);
+  const bareHtml = view.renderWall(bare, { clock: { time: '18:11', machine: '18:11' } });
+  assert.ok(!bareHtml.includes('data-wall-card') && !bareHtml.includes('data-wall-strips'), 'no card without notes or birthdays');
+  const off = build('18:11', { moduleOff: (module) => module === 'notes' || module === 'birthdays' }, data);
+  assert.equal(off.notes, null);
+  assert.equal(off.birthdays, null);
+  const onlyNotes = view.renderWall(build('18:11', { moduleOff: (module) => module === 'birthdays' }, data), { clock: { time: '18:11', machine: '18:11' } });
+  assert.ok(onlyNotes.includes('data-wall-card="notes"') && !onlyNotes.includes('data-wall-card="birthdays"'), 'one strip alone keeps its card');
+});
+
+test('the strips are the wall\'s floor type and cut their line as a whole', () => {
+  const css = readFileSync(new URL('../public/styles/dashboard.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = (sel) => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find((m) => m[1].trim() === sel)?.[2] ?? '';
+  const items = rule('.wall-strip__items');
+  assert.match(items, /white-space:\s*nowrap/);
+  assert.match(items, /overflow:\s*hidden/);
+  assert.match(items, /text-overflow:\s*ellipsis/);
+  assert.match(items, /font-size:\s*var\(--wall-label\)/, 'the label step, the floor of the wall');
+  assert.match(rule('.wall-strips'), /padding-block:\s*var\(--space-3\)/, 'a compact card: 12 + 30 + 30 + 12 = 84px at 1280x800');
+  assert.match(rule('.wall-strip__item--today,\n.wall-strip__item--today .wall-strip__when'), /color:\s*var\(--color-warning\)/, 'today in the attention colour');
+});
+
+test('with both strips gone their card goes too, and comes back on the next fit', () => {
+  const birthdays = { hidden: false };
+  const notes = { hidden: false };
+  const box = { hidden: false };
+  let spill = 2;
+  const aside = {
+    get scrollHeight() { return 100 + (birthdays.hidden ? 0 : 30) * (spill > 0 ? 1 : 0) + (notes.hidden ? 0 : 30) * (spill > 1 ? 1 : 0); },
+    clientHeight: 100,
+    querySelector: (sel) => (sel.includes('data-wall-strips') ? box : sel.includes('birthdays') ? birthdays : sel.includes('notes') ? notes : null),
+  };
+  const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true);
+  assert.equal(notes.hidden, true);
+  assert.equal(box.hidden, true, 'an empty card does not stand there');
+  spill = 1;
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true, 'Birthdays goes first');
+  assert.equal(notes.hidden, false);
+  assert.equal(box.hidden, false, 'the card stays with one strip');
+  spill = 0;
+  view.fitWallLists(root);
+  assert.ok(!birthdays.hidden && !notes.hidden && !box.hidden);
+});
+
+test('the card fit hides Birthdays first, then Notes, while the aside spills', () => {
+  const mk = () => ({ hidden: false });
+  const birthdays = mk();
+  const notes = mk();
+  let spill = 2;
+  const aside = {
+    get scrollHeight() { return 100 + (birthdays.hidden ? 0 : 1) * (spill > 0 ? 50 : 0) + (notes.hidden ? 0 : 1) * (spill > 1 ? 50 : 0); },
+    clientHeight: 100,
+    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : sel.includes('notes') ? notes : null),
+  };
+  const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true);
+  assert.equal(notes.hidden, true, 'still spilling, so Notes goes too');
+  spill = 1;
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true, 'Birthdays goes first');
+  assert.equal(notes.hidden, false, 'Notes stays when that is enough');
+  spill = 0;
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, false);
+});
+
+test('hero layout: a squeezed plan costs the cards first (Birthdays, then Notes), and only then rows', () => {
+  const birthdays = { hidden: false };
+  const notes = { hidden: false };
+  const rows = [{ hidden: false }, { hidden: false }, { hidden: false }, { hidden: false }];
+  const more = { hidden: true, querySelector: () => null };
+  // The aside never spills (the plan absorbs it); the plan list is 4 rows tall
+  // and has room for 4 minus one per visible card.
+  const room = () => 4 - (birthdays.hidden ? 0 : 1) - (notes.hidden ? 0 : 1);
+  const list = {
+    get scrollHeight() { return rows.filter((row) => !row.hidden).length * 100; },
+    get clientHeight() { return room() * 100; },
+    querySelectorAll: (sel) => (sel === '[data-wall-row]' ? rows : []),
+    querySelector: (sel) => (sel === '[data-wall-more]' ? more : sel === '[data-wall-row]' ? rows[0] : null),
+  };
+  const aside = {
+    scrollHeight: 100, clientHeight: 100,
+    querySelector: (sel) => (sel.includes('birthdays') ? birthdays : sel.includes('notes') ? notes : sel.includes('wall-plan') ? list : null),
+  };
+  const root = { querySelectorAll: (sel) => (sel === '.wall__aside' ? [aside] : []) };
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true);
+  assert.equal(notes.hidden, true);
+  assert.ok(rows.every((row) => !row.hidden), 'every plan row is still shown');
+  // With one card's worth of room missing, only Birthdays goes.
+  rows.pop();
+  view.fitWallLists(root);
+  assert.equal(birthdays.hidden, true, 'Birthdays goes first');
+  assert.equal(notes.hidden, false, 'Notes stays while that is enough');
+});
+
+test('a leftover sections option changes nothing: the wall has no switches any more', () => {
+  const plain = build('18:11', { predictions: ['masło'] });
+  const switched = build('18:11', {
+    predictions: ['masło'],
+    sections: { dinner: false, plan: false, shopping: false, timers: false, weather: false },
+  });
+  assert.deepEqual(switched, plain);
 });
 
 test('nothing on the wall is set below the 24px floor: every font-size in the wall rules is a wall step', () => {

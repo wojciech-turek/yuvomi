@@ -176,12 +176,14 @@ test('validateRange: rejects to before from', () => {
   assert.ok(validateRange('2026-06-01', '2026-01-01').length > 0);
 });
 
-test('validateType: requires a name and defaults icon/color', () => {
+test('validateType: requires a name, defaults the icon and takes no colour', () => {
   const { value, errors } = validateType({ name: 'Recycling' });
   assert.deepEqual(errors, []);
   assert.equal(value.name, 'Recycling');
   assert.equal(value.icon, 'trash-2');
-  assert.match(value.color, /^#[0-9A-Fa-f]{6}$/);
+  assert.ok(!('color' in value), 'Abfallarten haben keine Farbe');
+  assert.ok(!('color' in validateType({ name: 'X', color: 'nope' }).value), 'eine gesendete Farbe wird ignoriert, nicht abgelehnt');
+  assert.deepEqual(validateType({ name: 'X', color: 'nope' }).errors, []);
 });
 
 test('validateType: rejects a missing name', () => {

@@ -373,6 +373,46 @@ test('initialsRoster: /auth/me and the login answer name every account, also a d
 });
 
 // --------------------------------------------------------------------------
+// householdOrder: die Reihenfolge, aus der jede Personenscheibe ihre Farbe
+// nimmt (One Today, public/utils/person-color.js setHouseholdOrder)
+// --------------------------------------------------------------------------
+
+test('householdOrder: /auth/me and the login answer carry the members in member order - no staff, guest or display; nothing to a guest', async () => {
+  const me = await call('GET', '/auth/me', { as: ANNA });
+  assert.equal(me.status, 200);
+  const members = await call('GET', '/family/members', { as: ANNA });
+  assert.deepEqual(me.body.householdOrder.map((row) => row.id), members.body.data.map((row) => row.id),
+    'the order /family/members shows');
+  assert.deepEqual(byId(me.body.householdOrder.map((row) => row.id)), byId([ANNA, BEN]), 'members only');
+  assert.ok(me.body.householdOrder.every((row) => Object.keys(row).sort().join() === 'id,sort_order'), 'ids and positions, nothing else');
+  const staff = await call('GET', '/auth/me', { as: CLARA });
+  assert.deepEqual(staff.body.householdOrder, me.body.householdOrder, 'staff sees the same colours as a member');
+  const guest = await call('GET', '/auth/me', { as: DORA });
+  assert.deepEqual(guest.body.householdOrder, [], 'a split guest gets no household');
+
+  // Eine gesetzte Position zaehlt vor der id.
+  db.prepare('UPDATE users SET sort_order = ? WHERE id = ?').run(0, BEN);
+  db.prepare('UPDATE users SET sort_order = ? WHERE id = ?').run(1, ANNA);
+  try {
+    const placed = await call('GET', '/auth/me', { as: ANNA });
+    assert.deepEqual(placed.body.householdOrder, [{ id: BEN, sort_order: 0 }, { id: ANNA, sort_order: 1 }]);
+  } finally {
+    db.prepare('UPDATE users SET sort_order = NULL WHERE id IN (?, ?)').run(BEN, ANNA);
+  }
+
+  actor = null;
+  const anonymous = await fetch(`${base}/auth/me`);
+  const cookies = anonymous.headers.getSetCookie().map((raw) => raw.split(';')[0]).join('; ');
+  const res = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({ username: 'ben', password: PASSWORD }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).householdOrder, me.body.householdOrder, 'the login answer carries it too');
+});
+
+// --------------------------------------------------------------------------
 // Schreibseite: neu nur Mitglieder, Gespeichertes bleibt speicherbar
 // --------------------------------------------------------------------------
 
@@ -504,7 +544,8 @@ test('picker: members, then whoever is already chosen on the record, once', asyn
   ];
   const list = withChosenPeople(members, chosen);
   assert.deepEqual(list.map((person) => person.id), [ANNA, BEN, CLARA]);
-  assert.equal(list[2].avatar_color, '#333333', 'the record calls the colour `color`, the picker reads `avatar_color`');
+  assert.equal(list[2].display_name, 'Clara', 'the stored person comes as the record names her');
+  assert.equal('avatar_color' in list[2], false, 'no colour is carried over - the disc takes its colour from the household order');
   assert.deepEqual(withChosenPeople(members, null).map((person) => person.id), [ANNA, BEN], 'a new record offers members only');
 });
 

@@ -9,7 +9,8 @@ import { api, auth } from '/api.js';
 import { openCookForMeal } from '/components/cook-mode.js';
 import { fetchOpenQuestion, answerQuestion, skipQuestion } from '/components/ai-question.js';
 import { planContext } from '/utils/today-plan.js';
-import { headerDate, greetingKey, weatherCard, calendarDay, pendingTasks, birthdaysSoon, clockStamp } from '/utils/dzis-plan.js';
+import { setHouseholdOrder } from '/utils/person-color.js';
+import { headerDate, greetingKey, weatherLine, nextUp, calendarDay, pendingTasks, notesCard, birthdaysNext, clockStamp } from '/utils/dzis-plan.js';
 import { renderTodayPage, renderTodaySkeleton } from '/components/today-view.js';
 import { createPageController } from '/utils/page-lifecycle.js';
 import { moduleAccess } from '/permissions.js';
@@ -131,9 +132,10 @@ function getOnboardingSteps() {
     // rechts im Kopf. Neuer Schluessel, weil sich die Aussage geaendert hat.
     { icon: 'plus-circle',  title: t('onboarding.step3Title'), body: t(desktop ? 'onboarding.step3BodyDesktopPlus' : 'onboarding.step3Body'),
       // v2: kein globales + mehr - gezeigt wird das „Neu" der Seite, wo eins
-      // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add), sonst
-      // (Display, nur lesend) „Dodaj zadanie" in der Karte der Aufgaben.
-      target: () => [findPageFab('fab-add'), document.querySelector('[data-today] .dz-tasks__add')].find(isShownOnScreen) ?? null },
+      // steht. Quick-Add (2026-10-29): auf Dziś ist das sein + (fab-add).
+      // One Today (2026-11-02): „Dodaj zadanie" in der Karte ist gegangen -
+      // ohne + (Display, nur lesend) steht der Schritt ohne Ring.
+      target: () => { const fab = findPageFab('fab-add'); return isShownOnScreen(fab) ? fab : null; } },
   ];
 }
 
@@ -424,7 +426,7 @@ function setWeatherAvailability(res, prefs) {
 
 // Aus welchem Modul ein Countdown stammt, entscheidet über ihn: wer den
 // Kalender abgeschaltet hat, soll dessen Einträge auch hier nicht sehen. Die
-// Kachel als Ganzes gehört keinem Modul (siehe PERMISSION_WIDGETS), ihre
+// Kachel als Ganzes gehört keinem Modul, ihre
 // einzelnen Zeilen schon - dieselbe Aufteilung wie bei der Kennzahlreihe.
 //
 // SEIT DEM REVIEW ZU PR #793 IST DAS DIE ZWEITE INSTANZ, NICHT DIE ERSTE:
@@ -637,9 +639,18 @@ function startClockTicker(container, signal, onTick = null) {
 /** Nach diesem Takt versucht die Wand einen Ladefehler von selbst zu heilen. */
 const WALL_HEAL_MS = 60_000;
 
-/** Module, die an der Wand fehlen: abgeschaltet oder ohne Leserecht. */
+/**
+ * Module, die an der Wand fehlen: abgeschaltet oder ohne Leserecht.
+ *
+ * Notizen sind die Ausnahme: die Wand zeichnet nur die Titel angepinnter
+ * Notizen, die der Server je Credential schickt (`wallNotes`, leer fuer jeden,
+ * der Notizen nicht sehen darf). Das gekoppelte Display hat kein Leserecht auf
+ * Notizen und bekommt die Titel trotzdem; hier zaehlt nur der Haushaltsschalter.
+ */
 function wallModuleOff(module) {
-  return Boolean(globalThis.window?.yuvomi?.isModuleDisabled?.(module)) || moduleAccess(module) === 'none';
+  if (globalThis.window?.yuvomi?.isModuleDisabled?.(module)) return true;
+  if (module === 'notes') return false;
+  return moduleAccess(module) === 'none';
 }
 
 /**
@@ -648,11 +659,11 @@ function wallModuleOff(module) {
  */
 function renderWallSurface(data, weather, {
   failed = false, loading = false, updatedAt = null, now = new Date(), screensaverEnabled = false,
-  sections = null, mayWrite = false, isDisplay = false, predictions = [], question = null, tickers = null,
+  mayWrite = false, isDisplay = false, predictions = [], question = null, tickers = null,
   questionSettled = null,
 } = {}) {
   const model = buildWall(failed || loading ? null : data, {
-    now, sections, mayWrite, isDisplay, timer: readWallTimer(), lastLoadedAt: updatedAt,
+    now, mayWrite, isDisplay, timer: readWallTimer(), lastLoadedAt: updatedAt,
     predictions, question, tickers, moduleOff: wallModuleOff, mealLabel: mealTypeLabel,
   });
   return renderWall(model, {
@@ -846,21 +857,25 @@ async function openTaskFromOverview(taskId, container, rerender, user) {
  * Fabrik (utils/fab.js); der Router hebt ihn in die Shell-Ebene, und weil Dziś
  * keinen Kopf mit Aktions-Slot hat, schwebt er dort - am Telefon ueber der
  * Leiste, am Desktop in derselben Ecke. Die Leiste selbst bekommt kein +.
- * Er oeffnet components/add-menu.js; "Dodaj zadanie" in der Karte bleibt.
+ * Er oeffnet components/add-menu.js. One Today (2026-11-02): er ist der eine
+ * Weg zum Hinzufuegen - "Dodaj zadanie" in der Karte ist gegangen.
  *
  * DAS MENUE LAEDT BEIM TIPP, nicht mit dem Start (Review Task 12): es zieht
  * das Hoerblatt samt Erkennung und Parser mit, und die gehoeren nicht in den
- * Start der Startseite. Die Geste braucht erst "Say a task" - und deren Tipp
+ * Start der Startseite. Die Geste braucht erst "Say it" - und deren Tipp
  * kommt, wenn das Menue (und mit ihm task-dictation.js, statisch in
  * add-menu.js) laengst steht. */
 
-/** Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js, ROWS). */
-const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping', 'meals']);
+/**
+ * Die Module, deren Schreibrecht eine Zeile des Menues traegt (add-menu.js,
+ * ROWS). Ohne Mahlzeiten: Meal ist seit One Today (Task 14) nicht im Menue.
+ */
+const ADD_MENU_MODULES = Object.freeze(['tasks', 'calendar', 'shopping']);
 
 /**
  * Das Recht je Modul, das das Menue fragt - aus derselben Quelle wie der Rest
  * von Dziś (moduleAccess); ein abgeschaltetes Modul zaehlt als 'none'.
- * @returns {{ tasks: string, calendar: string, shopping: string, meals: string }}
+ * @returns {{ tasks: string, calendar: string, shopping: string }}
  */
 function todayAddAccess() {
   const level = (module) => (globalThis.window?.yuvomi?.isModuleDisabled?.(module) ? 'none' : moduleAccess(module));
@@ -868,9 +883,9 @@ function todayAddAccess() {
 }
 
 /**
- * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an,
- * wie bei Haken und „Dodaj zadanie") und wenn es nichts hinzuzufuegen gibt.
- * „Nichts" heisst: kein Schreibrecht auf eines der vier Module - dieselbe
+ * Das + selbst - oder `null`: am Display (das Kuechentablett legt nichts an
+ * und hakt nichts ab) und wenn es nichts hinzuzufuegen gibt.
+ * „Nichts" heisst: kein Schreibrecht auf eines der drei Module - dieselbe
  * Regel wie `addMenuItems()` (jede Zeile braucht es auf ihrem Modul), hier
  * ohne das Menue zu laden; test:add-menu haelt beide gleich.
  * @returns {HTMLButtonElement|null}
@@ -1056,7 +1071,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
    * the week, who the display may tick for) and the answer line that stands
    * for three seconds. */
   const wallUi = {
-    sections: null,
     mayWrite: false,
     isDisplay: user?.access_scope === 'display',
     predictions: [],
@@ -1086,6 +1100,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     if (signal.aborted) return;
     primeMealTypeNames(prefsRes?.data);
     data         = dashRes;
+    // Die Personenfarben folgen der Haushaltsreihenfolge (person-color.js):
+    // die frische Mitgliederliste gilt fuer jede Scheibe, nicht nur hier.
+    if (data?.users?.length) setHouseholdOrder(data.users);
     /* Die Zahlen an den Nav-Zielen und Modulkacheln kommen aus derselben
      * Antwort (#868). Sie hier hereinzureichen spart die zweite Aggregation,
      * die der Shell-Aufbau sonst beim Anmelden anstiess. Der Speicher nimmt
@@ -1105,10 +1122,9 @@ export async function render(container, { user, signal: routeSignal = null } = {
     weatherAutoLocate = Boolean(prefsRes.data?.weather_user?.auto_locate ?? prefsRes.data?.weather_auto_locate);
     data.pendingReminders = remindersRes;
     screensaverEnabled = Boolean(prefsRes.data?.screensaver_enabled);
-    // The household's choices for the wall (Tafla): its sections and whether
-    // it may tick things off. Read on every build - an admin's switch reaches
-    // the tablet with its next refresh.
-    wallUi.sections = prefsRes.data?.wall_sections ?? null;
+    // Whether the wall may tick things off (the household's one choice for
+    // it). Read on every build - an admin's switch reaches the tablet with its
+    // next refresh.
     wallUi.mayWrite = prefsRes.data?.wall_allow_ticking === true;
     lastLoadedAt = new Date();
   } catch (err) {
@@ -1138,30 +1154,34 @@ export async function render(container, { user, signal: routeSignal = null } = {
   const onDisplay = user?.access_scope === 'display';
   const moduleOff = (module) => Boolean(window.yuvomi?.isModuleDisabled(module)) || moduleAccess(module) === 'none';
 
+  /* ONE TODAY (2026-11-02): the same sections for everyone, in this order -
+   * the weather line, Next up, Kalendarz, Zadania, Notatki, Urodziny. Only a
+   * module that is off (household) or not visible to the viewer removes its
+   * section; Next up draws from the modules ctx.moduleOff leaves on. */
   function buildDzisState() {
     const ctx = planContext({ now: new Date(), viewer: user, users: data?.users ?? [], moduleOff, mealLabel: mealTypeLabel });
-    const calendar = moduleOff('calendar') ? null : calendarDay(data, ctx);
     return {
       user,
       household: data?.users ?? [],
       ctx,
       dateLabel: headerDate(ctx.todayKey),
       greetingKey: greetingKey(ctx.nowMin),
-      weather: weatherAvailable ? weatherCard(weather, ctx) : null,
-      calendar,
+      weatherLine: weatherAvailable ? weatherLine(weather, ctx) : null,
+      nextUp: nextUp(data, ctx),
+      calendar: moduleOff('calendar') ? null : calendarDay(data, ctx),
       tasks: moduleOff('tasks') ? null : pendingTasks(data, ctx),
-      birthdays: moduleOff('birthdays') ? [] : birthdaysSoon(data, ctx),
+      notes: moduleOff('notes') ? null : notesCard(data),
+      birthdays: moduleOff('birthdays') ? [] : birthdaysNext(data, ctx),
       earlierOpen: dzisUi.earlierOpen,
       // Read-only and display accounts see the tasks, not the circles.
       canCheck: !onDisplay && moduleAccess('tasks') === 'write',
-      canAddTask: !onDisplay && moduleAccess('tasks') === 'write',
     };
   }
 
-  /** What changes by the clock alone: past and ongoing events, the hour of the chart. */
+  /** What changes by the clock alone: past and ongoing events, the hour, the weather line, the lead of Next up. */
   function dzisClockStamp() {
     const state = buildDzisState();
-    return clockStamp(state.calendar, state.weather, state.ctx);
+    return clockStamp(state.calendar, state.weatherLine, state.ctx, state.nextUp);
   }
 
   function renderToday(shell) {
@@ -1199,11 +1219,12 @@ export async function render(container, { user, signal: routeSignal = null } = {
   async function tickTask(row, button) {
     if (!row || dzisUi.busy.has(row.key) || !dzisState?.canCheck) return;
     dzisUi.busy.add(row.key);
-    // Keyboard users go on to the next row's circle once this one has left.
+    // Keyboard users go on to the next row's circle once this one has left;
+    // after the last one, to "Wszystkie" in the head of Zadania.
     if (document.activeElement === button) {
       const circles = [...container.querySelectorAll('[data-today] .day-check')];
       const next = circles[circles.indexOf(button) + 1];
-      dzisFocus = next ? [`[data-day-action="check"][data-row-key="${CSS.escape(next.dataset.rowKey)}"]`] : ['[data-day-action="add-task"]'];
+      dzisFocus = next ? [`[data-day-action="check"][data-row-key="${CSS.escape(next.dataset.rowKey)}"]`] : ['[data-today] .dz-sec--tasks .dz-sec__link'];
     }
     markTaskRow(button, true);
     const hold = prefersReducedMotion() ? null : new Promise((resolve) => { setTimeout(resolve, 820); });
@@ -1252,19 +1273,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
     }
     if (action === 'open') {
       openTaskFromOverview(el.dataset.taskId, container, () => refreshDashboardData(), user);
-      return;
-    }
-    if (action === 'add-task') {
-      // The SAME form as "Nowe zadanie" in the head of Zadania
-      // (pages/tasks.js, openNewTaskFrom), loaded on demand like the task view
-      // (#918); after the save the card refreshes.
-      try {
-        const { openNewTaskFrom } = await import('/pages/tasks.js');
-        await openNewTaskFrom({ user, onChanged: () => refreshDashboardData() });
-      } catch (err) {
-        console.error('[Dashboard] Neue Aufgabe konnte nicht geöffnet werden:', err);
-        window.yuvomi?.showToast(err?.message ?? t('tasks.loadError'), 'danger');
-      }
     }
   }
 
@@ -1293,7 +1301,6 @@ export async function render(container, { user, signal: routeSignal = null } = {
 
   function wallOptions() {
     return {
-      sections: wallUi.sections,
       mayWrite: wallUi.mayWrite,
       isDisplay: wallUi.isDisplay,
       predictions: wallUi.predictions,
@@ -1316,9 +1323,8 @@ export async function render(container, { user, signal: routeSignal = null } = {
    * the people it may tick for - an empty list means no rings. */
   async function loadWallExtras() {
     if (!wallMode || loadFailed) return;
-    const sections = wallUi.sections ?? {};
     const jobs = [];
-    if (sections.shopping !== false && !wallModuleOff('shopping')) {
+    if (!wallModuleOff('shopping')) {
       jobs.push(api.get('/shopping/predictions')
         .then((res) => { wallUi.predictions = (Array.isArray(res?.data) ? res.data : []).map((p) => p.name).filter(Boolean); })
         .catch(() => {}));
@@ -1540,6 +1546,7 @@ export async function render(container, { user, signal: routeSignal = null } = {
       // dem Haken abgeschickt worden sein.
       if (dzisUi.busy.size || wallUi.busy.size) return;
       data = fresh;
+      if (data?.users?.length) setHouseholdOrder(data.users);
       setCountdownAvailability(data?.countdowns);
       lastLoadedAt = new Date();
       rebuildDashboard();

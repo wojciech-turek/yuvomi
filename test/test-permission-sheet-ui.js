@@ -64,7 +64,6 @@ const CATALOG = {
   roles: ['parent', 'child'],
   members: [],
   modules: [{ key: 'tasks', icon: 'check-square', labelKey: 'nav.tasks' }],
-  widgets: [],
   capabilities: [],
 };
 
@@ -77,7 +76,7 @@ test('die Rollen-Chips sagen ihren Zustand, und die erste Rolle steht gewaehlt d
       asked.push(url);
       return url === '/permissions/catalog'
         ? { data: CATALOG }
-        : { data: { modules: {}, widgets: {}, capabilities: {} } };
+        : { data: { modules: {}, capabilities: {} } };
     },
   };
   try {
@@ -104,7 +103,7 @@ test('die Rollen-Chips sagen ihren Zustand, und die erste Rolle steht gewaehlt d
 test('die Legende nennt jedes Segment-Icon mit seinem Wort, im Mitglieds-Modus auch „Erben" (H7)', async () => {
   const { permLegendHtml, initialSubject } = await import('../public/settings/pages/admin-permissions.js');
   const items = (html) => [...html.matchAll(/data-lucide="([^"]+)"[^>]*><\/i>([^<]+)</g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(items(permLegendHtml('role', { widgets: false, capabilities: false })), [
+  assert.deepEqual(items(permLegendHtml('role', { capabilities: false })), [
     ['eye-off', 'settings.permAccessNone'],
     ['eye', 'settings.permAccessRead'],
     ['pencil', 'settings.permAccessWrite'],
@@ -119,24 +118,22 @@ test('die Legende nennt jedes Segment-Icon mit seinem Wort, im Mitglieds-Modus a
 test('Codex an #1485: die Legende nennt je Abschnitt dessen eigene Bedeutung der Icons', async () => {
   const { permLegendHtml } = await import('../public/settings/pages/admin-permissions.js');
   // Je Gruppe: Ueberschrift und ihre Icon-Woerter. Das Auge ist am Modul
-  // „Lesen", am Widget „Verfuegbar", an einer Faehigkeit „Erlaubt" - eine
-  // Legende nur aus den Modul-Optionen nannte ueber Widget- und
-  // Faehigkeits-Zeilen die falsche Bedeutung.
+  // „Lesen", an einer Faehigkeit „Erlaubt" - eine Legende nur aus den
+  // Modul-Optionen nannte ueber Faehigkeits-Zeilen die falsche Bedeutung.
   const groups = (html) => html.split('class="perm-legend__group"').slice(1).map((g) => ({
     scope: /class="perm-legend__scope">([^<]+)</.exec(g)?.[1] ?? null,
     items: [...g.matchAll(/data-lucide="([^"]+)"[^>]*><\/i>([^<]+)</g)].map((m) => [m[1], m[2]]),
   }));
   assert.deepEqual(groups(permLegendHtml('role')), [
     { scope: 'settings.permModulesHeading', items: [['eye-off', 'settings.permAccessNone'], ['eye', 'settings.permAccessRead'], ['pencil', 'settings.permAccessWrite']] },
-    { scope: 'settings.permWidgetsHeading', items: [['eye-off', 'settings.permWidgetBlocked'], ['eye', 'settings.permWidgetAllowed']] },
     { scope: 'settings.permCapabilitiesHeading', items: [['eye-off', 'settings.permCapabilityBlocked'], ['eye', 'settings.permCapabilityAllowed']] },
   ]);
   const user = groups(permLegendHtml('user'));
   assert.deepEqual(user[0], { scope: null, items: [['corner-down-right', 'settings.permInherit']] });
   assert.deepEqual(user.slice(1).map((g) => g.scope),
-    ['settings.permModulesHeading', 'settings.permWidgetsHeading', 'settings.permCapabilitiesHeading']);
+    ['settings.permModulesHeading', 'settings.permCapabilitiesHeading']);
   // Ein Abschnitt, den die Matrix nicht zeigt, steht auch nicht in der Legende.
-  assert.deepEqual(groups(permLegendHtml('role', { widgets: false, capabilities: false })).map((g) => g.scope),
+  assert.deepEqual(groups(permLegendHtml('role', { capabilities: false })).map((g) => g.scope),
     ['settings.permModulesHeading']);
 });
 
@@ -167,7 +164,7 @@ test('Codex an #1485: scheitert das Laden der Rechte, zeigt das Blatt Meldung un
     get: async (url) => {
       if (url === '/permissions/catalog') return { data: CATALOG };
       if (url === '/permissions/role/parent' && fail) throw new Error('offline');
-      return { data: { modules: { tasks: 'read' }, widgets: {}, capabilities: {} } };
+      return { data: { modules: { tasks: 'read' }, capabilities: {} } };
     },
   };
   const origErr = console.error;
@@ -217,9 +214,9 @@ test('Codex an #1485: waehrend die Rechte eines Subjekts laden, sind die stehend
     get: async (url) => {
       if (url === '/permissions/catalog') return { data: CATALOG };
       if (url === '/permissions/role/child' && slow) {
-        return new Promise((resolve) => { release = () => resolve({ data: { modules: {}, widgets: {}, capabilities: {} } }); });
+        return new Promise((resolve) => { release = () => resolve({ data: { modules: {}, capabilities: {} } }); });
       }
-      return { data: { modules: {}, widgets: {}, capabilities: {} } };
+      return { data: { modules: {}, capabilities: {} } };
     },
   };
   try {
@@ -295,13 +292,13 @@ test('eine spaet eintreffende Rollen-Antwort landet nicht in den Overrides des i
   globalThis.__apiStub = {
     get: async (url) => {
       if (url === '/permissions/catalog') return { data: catalog };
-      if (url === '/permissions/user/7') return { data: { modules: { tasks: 'read' }, widgets: {}, capabilities: {} } };
+      if (url === '/permissions/user/7') return { data: { modules: { tasks: 'read' }, capabilities: {} } };
       if (url === '/permissions/role/parent' && slowRole) {
         return new Promise((resolve) => {
-          releaseRole = () => resolve({ data: { modules: { tasks: 'none' }, widgets: { secret: 'none' }, capabilities: {} } });
+          releaseRole = () => resolve({ data: { modules: { tasks: 'none' }, capabilities: {} } });
         });
       }
-      return { data: { modules: {}, widgets: {}, capabilities: {} } };
+      return { data: { modules: {}, capabilities: {} } };
     },
     put: async (url, payload) => {
       puts.push({ url, payload });
@@ -330,7 +327,7 @@ test('eine spaet eintreffende Rollen-Antwort landet nicht in den Overrides des i
     await tick();
     for (const put of puts) {
       if (put.url === '/permissions/user/7') {
-        assert.deepEqual(put.payload, { modules: { tasks: 'read' }, widgets: {}, capabilities: {} },
+        assert.deepEqual(put.payload, { modules: { tasks: 'read' }, capabilities: {} },
           'gespeichert werden die Overrides des Mitglieds, nicht die Rechte der Rolle');
       }
     }
@@ -356,10 +353,10 @@ test('solange die Rechte des Subjekts laden, speichert der Knopf nichts', async 
       if (url === '/permissions/catalog') return { data: CATALOG };
       if (url === '/permissions/role/parent' && slowRole) {
         return new Promise((resolve) => {
-          releaseRole = () => resolve({ data: { modules: { tasks: 'read' }, widgets: {}, capabilities: {} } });
+          releaseRole = () => resolve({ data: { modules: { tasks: 'read' }, capabilities: {} } });
         });
       }
-      return { data: { modules: {}, widgets: {}, capabilities: {} } };
+      return { data: { modules: {}, capabilities: {} } };
     },
     put: async (url, payload) => {
       puts.push({ url, payload });
@@ -385,7 +382,7 @@ test('solange die Rechte des Subjekts laden, speichert der Knopf nichts', async 
     await tick();
     await ui.clickSave();
     await tick();
-    assert.deepEqual(puts, [{ url: '/permissions/role/parent', payload: { modules: { tasks: 'read' }, widgets: {}, capabilities: {} } }]);
+    assert.deepEqual(puts, [{ url: '/permissions/role/parent', payload: { modules: { tasks: 'read' }, capabilities: {} } }]);
   } finally {
     delete globalThis.__apiStub;
     if (hadWindow) globalThis.window = prevWindow;
@@ -460,7 +457,7 @@ test('Rechte-Matrix: der Fuss klebt am Telefon nur, solange etwas ungespeichert 
   globalThis.__apiStub = {
     get: async (url) => (url === '/permissions/catalog'
       ? { data: CATALOG }
-      : { data: { modules: {}, widgets: {}, capabilities: {} } }),
+      : { data: { modules: {}, capabilities: {} } }),
   };
   try {
     const sheet = fakeSheet();

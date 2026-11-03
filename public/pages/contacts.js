@@ -15,8 +15,7 @@ import { renderSkeletonList } from '/utils/skeleton.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { pageToolsMenuHtml, pageToolsActionEl, popoverMenuHtml, installPopoverMenus } from '/utils/popover-menu.js';
 import { parseVCards } from '/utils/vcard.js';
-import { AVATAR_FALLBACK_COLOR } from '/utils/color.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc } from '/utils/person-color.js';
 import { composeDisplayName, contactSortKey, splitDisplayName } from '/utils/contact-name.js';
 import { getPhoneFormatter, createAsYouType, countryFromRegion } from '/utils/phone.js';
 import { emptyStateHTML, searchEmptyHTML } from '/utils/empty-state.js';
@@ -87,16 +86,12 @@ function contactAvatar(c) {
   if (!c.family_user_id) {
     return `<span class="contact-item__icon contact-item__icon--initials" aria-hidden="true">${esc(initials(c.name, '?'))}</span>`;
   }
-  // Tafla: the member's PERSON colour (person-color.js, AA-measured ink on
-  // its tint) instead of the free avatar colour with a computed text colour.
-  const { ink, tint } = personToken({ id: c.family_user_id, avatar_color: c.family_avatar_color || AVATAR_FALLBACK_COLOR });
-  const name  = c.family_display_name || c.name;
-  const inner = c.family_avatar_data
-    ? `<img src="${esc(c.family_avatar_data)}" alt="" loading="lazy">`
-    : esc(initials(name, '?'));
-  return `<span class="contact-item__icon contact-item__icon--member"
-    style="background-color:${tint};color:${ink}"
-    aria-hidden="true">${inner}</span>`;
+  // The member's person disc (person-color.js): their photo, else their
+  // initials in the colour of their place in the household.
+  return personDisc(
+    { id: c.family_user_id, display_name: c.family_display_name || c.name, avatar_data: c.family_avatar_data },
+    { size: 28, className: 'contact-item__icon contact-item__icon--member' },
+  );
 }
 
 // --------------------------------------------------------
@@ -182,8 +177,6 @@ function toolbarActionsHtml() {
 let state = {
   contacts:       [],
   categories:     [],
-  // Die waehlbaren Kategorie-Toene, wie der Server sie ausliefert.
-  categoryColors: [],
   activeCategory: null,
   searchQuery:    '',
   selectMode:     false,
@@ -315,19 +308,15 @@ export async function render(container, { user, signal } = {}) {
     if (row) toggleContactSelection(row.querySelector('[data-select]'));
   });
 
-  const [res, catRes, metaRes, prefsRes] = await Promise.all([
+  const [res, catRes, prefsRes] = await Promise.all([
     api.get('/contacts'),
     api.get('/contacts/categories'),
-    // Die waehlbaren Kategorie-Toene kommen vom Server, damit Auswahl und
-    // Annahme dieselbe Liste sind (Begruendung am Endpoint).
-    api.get('/contacts/meta').catch(() => null),
     // Region → Default-Land für die Telefon-Anzeige. Fehlschlag ist unkritisch:
     // ohne Default-Land werden nur +-Vorwahl-Nummern formatiert, Rest bleibt roh.
     api.get('/preferences').catch(() => null),
   ]);
   state.defaultCountry = countryFromRegion(prefsRes?.data?.region);
   state.categories = catRes.data ?? [];
-  state.categoryColors = metaRes?.data?.categoryColors ?? [];
   // Der Server sortiert mit SQLite-NOCASE (ASCII-only); nach jeder lokalen
   // Änderung sortiert die Seite dagegen mit localeCompare. Damit die Reihenfolge
   // nicht zwischen Reload und Bearbeiten springt (Umlaut-Nachnamen), gilt hier
@@ -563,7 +552,6 @@ function openContactCategoryManager() {
         titleKey: 'contacts.manageCategories',
         hintKey: 'category.manageHint',
         deleteDetailKey: 'category.deleteConfirmDetail',
-        colors: state.categoryColors,
       });
     },
     // Bewusst KEIN onClose, das den Listener abmeldet - es liefe vor dem
@@ -1266,13 +1254,6 @@ function mountContactCard(contact, inPane, root = document) {
 function contactCardEl(c) {
   const card = document.createElement('div');
   card.className = 'contact-card';
-  // Der Kategorie-Ton der Karte (die Liste gruppiert seit Tafla nach Buchstaben): die Karte
-  // steht ausserhalb jeder Gruppe und setzt ihn deshalb selbst.
-  const color = catByKey(c.category)?.color;
-  if (color) {
-    card.style.setProperty('--cat', color);
-    card.style.setProperty('--cat-ink', 'var(--color-ink-on-vivid)');
-  }
   card.insertAdjacentHTML('beforeend', contactAvatar(c));
 
   // Nur die Organisation - die Kategorie steht als eigene Zeile darunter.

@@ -167,7 +167,6 @@ function wasteFeedTypeRowsHtml(types, selectedIds) {
     control: 'switch',
     label: type.name,
     checked: selectedIds === null || selectedIds.includes(type.id),
-    swatchColor: type.color,
     attrs: { 'data-waste-feed-type': String(type.id) },
   })).join('');
 }

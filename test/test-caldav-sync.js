@@ -1196,12 +1196,12 @@ describe('CalDAV: eine Bearbeitung friert die Farbe nicht mehr ein (#899)', () =
     }
   });
 
-  it('ein hochgeladener Termin behaelt danach seine exakte Farbe', async () => {
-    // Der dritte Befund aus #899: der Upload schreibt die Farbe als CSS3-NAMEN
-    // hinaus (#7C3AED wird zu blueviolet, #8A2BE2). Ohne das Flag holte der
-    // naechste Inbound-Lauf genau den zurueck und ersetzte den gewaehlten Wert
-    // durch den gerundeten. Geprueft wird das Flag, nicht die Runde danach -
-    // es ist die Ursache, und der Lauf danach ist schon oben abgedeckt.
+  it('One Today: der Upload haelt keine Farbe fest - es geht keine hinaus', async () => {
+    // Bis One Today schrieb der Upload die Farbe als CSS3-NAMEN hinaus und
+    // setzte color_modified, damit der naechste Abruf den gerundeten Namen
+    // nicht zurueckholte (#899). Seit keine Farbe mehr hinausgeht, gibt es
+    // nichts festzuhalten: beide Termine lernen danach die Farbe des Servers
+    // (gespeichert, nicht gezeigt).
     const d = buildDb();
     d.prepare(`
       INSERT INTO calendar_events
@@ -1220,12 +1220,11 @@ describe('CalDAV: eine Bearbeitung friert die Farbe nicht mehr ein (#899)', () =
       await sync({ createClient: clientWith() });
 
       const uploaded = d.prepare(
-        `SELECT color_modified FROM calendar_events WHERE title = 'Eigener Termin'`
+        `SELECT external_source, color_modified FROM calendar_events WHERE title = 'Eigener Termin'`
       ).get();
-      assert.strictEqual(uploaded.color_modified, 1, 'die hinausgeschickte Farbe gehoert uns');
+      assert.strictEqual(uploaded.external_source, 'caldav', 'Vorbedingung: hochgeladen');
+      assert.strictEqual(uploaded.color_modified, 0, 'eine gespeicherte Farbe wird beim Upload nicht festgehalten');
 
-      // Ohne Eigenfarbe ist nichts hinausgegangen, was zu verteidigen waere:
-      // der Termin darf die Farbe des Servers weiterhin lernen.
       const colourless = d.prepare(
         `SELECT color_modified FROM calendar_events WHERE title = 'Farbloser Termin'`
       ).get();
@@ -1762,11 +1761,11 @@ describe('CalDAV: die eingebrannte Kalenderfarbe loest sich (#1270)', () => {
 
   it('ein in diesem Lauf hochgeladener alter lokaler Termin ist kein Heilungskandidat', () => withDb(async (d) => {
     // Thread zu :932. Ein lokaler Termin von vor #891 mit Palettenfarbe gleich
-    // der Kalenderfarbe wird jetzt nach A hochgeladen. Der Upload setzt
-    // color_modified = 1, created_at bleibt alt. Liefert der Server die
-    // COLOR-Zeile nicht zurueck, darf die Heilung die Farbe nicht nehmen:
-    // eingebrannt wurde nur an Zeilen, die schon vor #899 bearbeitet waren
-    // (user_modified = 1), ein nur hochgeladener Termin ist das nicht.
+    // der Kalenderfarbe wird jetzt nach A hochgeladen; created_at bleibt alt.
+    // Seit One Today geht seine Farbe nicht mit hinaus, und der Upload setzt
+    // color_modified nicht: er ist kein Heilungskandidat (der braucht
+    // color_modified = 1), sondern folgt dem Server wie jeder gespiegelte
+    // Termin - kommt er ohne COLOR-Zeile zurueck, hat er keine Eigenfarbe.
     d.exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, description TEXT, applied_at TEXT NOT NULL);
             INSERT INTO schema_migrations VALUES (166, '#891', '2026-08-27T08:00:00Z');`);
     const localId = d.prepare(`
@@ -1777,13 +1776,14 @@ describe('CalDAV: die eingebrannte Kalenderfarbe loest sich (#1270)', () => {
     await sync({ createClient: rawClient({ objects: { [CAL_A]: [icsOf(otherEvent)] } }) });
     const uploaded = d.prepare('SELECT external_source, external_calendar_id, color_modified FROM calendar_events WHERE id = ?').get(localId);
     assert.strictEqual(uploaded.external_source, 'caldav', 'Vorbedingung: hochgeladen');
-    assert.strictEqual(uploaded.color_modified, 1);
+    assert.strictEqual(uploaded.color_modified, 0);
 
     const back = icsOf(['BEGIN:VEVENT', `UID:${uploaded.external_calendar_id}`, 'SUMMARY:Lokal',
       'DTSTART:20260107T170000Z', 'DTEND:20260107T180000Z', 'END:VEVENT']);
     await sync({ createClient: rawClient({ objects: { [CAL_A]: [back, icsOf(otherEvent)] } }) });
     assert.match(healState(d), ISO, 'Vorbedingung: die Heilung laeuft');
-    assert.strictEqual(d.prepare('SELECT color FROM calendar_events WHERE id = ?').get(localId).color, COLOR_A);
+    assert.strictEqual(d.prepare('SELECT color FROM calendar_events WHERE id = ?').get(localId).color, null,
+      'der Server traegt keine Farbe, der gespiegelte Termin also auch nicht');
   }));
 
   it('eine COLOR-Zeile mit unlesbarem Wert gehoert trotzdem dem Termin', () => withDb(async (d) => {

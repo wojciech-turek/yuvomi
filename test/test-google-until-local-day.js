@@ -131,7 +131,7 @@ for (const zone of ZONES) {
   for (const time of TIMES) {
     test(`${zone}, taeglich ${time}, UNTIL=20351010: Google endet am selben Vorkommen wie Yuvomi`, () => {
       const event = timed(time, '20351010');
-      const body = localEventToGoogle(event, {}, zone);
+      const body = localEventToGoogle(event, zone);
       assert.equal(body.start.timeZone, zone);
       const yuvomi = yuvomiDays(event);
       assert.equal(yuvomi.at(-1), '2035-10-10', 'Vorbedingung: Yuvomi endet am UNTIL-Tag');
@@ -143,11 +143,11 @@ for (const zone of ZONES) {
 test('die beiden Faelle aus dem Ticket sind andere Vorkommen als in UTC', () => {
   // Ohne diese Zusicherung koennte die Matrix oben gruen sein, weil sie die
   // Grenze nie trifft.
-  const berlin = localEventToGoogle(timed('00:30', '20351010'), {}, 'Europe/Berlin');
+  const berlin = localEventToGoogle(timed('00:30', '20351010'), 'Europe/Berlin');
   assert.equal(berlin.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T215959Z');
-  const la = localEventToGoogle(timed('23:30', '20351010'), {}, 'America/Los_Angeles');
+  const la = localEventToGoogle(timed('23:30', '20351010'), 'America/Los_Angeles');
   assert.equal(la.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351011T065959Z');
-  const utc = localEventToGoogle(timed('00:30', '20351010'), {}, 'UTC');
+  const utc = localEventToGoogle(timed('00:30', '20351010'), 'UTC');
   assert.equal(utc.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T235959Z');
 });
 
@@ -156,14 +156,14 @@ test('Tagesgrenze am Tag der Zeitumstellung: der Versatz des UNTIL-Tags zaehlt',
   // Sommerzeit (21:59:59Z), am 28. in Winterzeit (22:59:59Z).
   for (const [until, expected] of [['20351027', '20351027T215959Z'], ['20351028', '20351028T225959Z']]) {
     const event = timed('23:30', until, '2035-10-20');
-    const body = localEventToGoogle(event, {}, 'Europe/Berlin');
+    const body = localEventToGoogle(event, 'Europe/Berlin');
     assert.equal(body.recurrence[0], `RRULE:FREQ=DAILY;UNTIL=${expected}`);
     assert.deepEqual(googleDays(body), yuvomiDays(event));
   }
   // Los Angeles stellt 2035 am 4. November zurueck: PDT bis dahin, danach PST.
   for (const [until, expected] of [['20351103', '20351104T065959Z'], ['20351104', '20351105T075959Z']]) {
     const event = timed('00:30', until, '2035-10-28');
-    const body = localEventToGoogle(event, {}, 'America/Los_Angeles');
+    const body = localEventToGoogle(event, 'America/Los_Angeles');
     assert.equal(body.recurrence[0], `RRULE:FREQ=DAILY;UNTIL=${expected}`);
     assert.deepEqual(googleDays(body), yuvomiDays(event));
   }
@@ -175,7 +175,7 @@ test('die erste Stunde des Folgetags gibt es zweimal: die Grenze liegt vor der e
   // 21:00Z - und das Vorkommen um 00:30 im ersten Durchgang (21:30Z) gehoert
   // schon zum 29. (Review-Befund an #1975).
   const event = timed('00:30', '20211028', '2021-10-20');
-  const body = localEventToGoogle(event, {}, 'Asia/Amman');
+  const body = localEventToGoogle(event, 'Asia/Amman');
   assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20211028T205959Z');
   assert.deepEqual(googleDays(body), yuvomiDays(event));
   assert.equal(googleDays(body).at(-1), '2021-10-28');
@@ -187,7 +187,7 @@ test('UNTIL folgt der gesendeten Zone, nicht der Zone des Prozesses', () => {
   try {
     const zone = outboundTimeZone('America/Los_Angeles');
     assert.equal(zone, 'Europe/Berlin');
-    const body = localEventToGoogle(timed('00:30', '20351010'), {}, zone);
+    const body = localEventToGoogle(timed('00:30', '20351010'), zone);
     assert.equal(body.start.timeZone, 'Europe/Berlin');
     assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T215959Z');
     // Ohne dritten Parameter gilt dieselbe Zone (Standardwert).
@@ -198,7 +198,7 @@ test('UNTIL folgt der gesendeten Zone, nicht der Zone des Prozesses', () => {
   // Ohne Haushaltszone: die Zone des Zielkalenders.
   const zone = outboundTimeZone('America/Los_Angeles');
   assert.equal(zone, 'America/Los_Angeles');
-  const body = localEventToGoogle(timed('23:30', '20351010'), {}, zone);
+  const body = localEventToGoogle(timed('23:30', '20351010'), zone);
   assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351011T065959Z');
 });
 
@@ -209,7 +209,7 @@ test('ganztaegig: UNTIL bleibt ein Datum und endet am selben Tag wie in Yuvomi',
         title: 'Ganztags', all_day: 1, start_datetime: '2035-10-01', end_datetime: '2035-10-01',
         recurrence_rule: `FREQ=DAILY;UNTIL=${until}`,
       };
-      const body = localEventToGoogle(event, {}, zone);
+      const body = localEventToGoogle(event, zone);
       assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010', `${zone} ${until}`);
       assert.deepEqual(googleDays(body), yuvomiDays(event), `${zone} ${until}`);
     }
@@ -218,7 +218,7 @@ test('ganztaegig: UNTIL bleibt ein Datum und endet am selben Tag wie in Yuvomi',
 
 test('ein UNTIL mit Uhrzeit bleibt unangetastet', () => {
   for (const zone of ZONES) {
-    const body = localEventToGoogle(timed('00:30', '20351010T120000Z'), {}, zone);
+    const body = localEventToGoogle(timed('00:30', '20351010T120000Z'), zone);
     assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T120000Z');
   }
 });

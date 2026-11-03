@@ -56,40 +56,8 @@ function namePartChecks(parts) {
 /** Verwaltbare Kontakt-Kategorien aus der DB (nach sort_order). */
 function loadContactCategories() {
   return db.get().prepare(
-    'SELECT key, name, label_key, icon, sort_order, color FROM contact_categories ORDER BY sort_order ASC, key ASC'
+    'SELECT key, name, label_key, icon, sort_order FROM contact_categories ORDER BY sort_order ASC, key ASC'
   ).all();
-}
-
-/**
- * Die kuratierten Toene, aus denen eine Kategorie waehlen darf.
- *
- * EINE ALLOWLIST, KEIN FREIER FARBWAEHLER, und der Grund ist gemessen: die
- * Kategoriescheibe ist eine VOLLTON-Marke, ihre Tinte ist die feste
- * `--color-ink-on-vivid` (Vollton-Regel, DESIGN.md). Das haelt nur ueber
- * kuratierten Toenen - eine frei gewaehlte Farbe hat unbestimmte Helligkeit und
- * muesste als Kante statt als Flaeche erscheinen, also als zweites Gesicht
- * derselben Marke. Sieben Toene sind fuer ein Kategorie-Vokabular reichlich,
- * und es sind exakt die sieben, die vorher in contacts.css standen: bestehende
- * Haushalte sehen nach der Migration genau dasselbe wie davor.
- *
- * Der leere Wert gehoert dazu und heisst NEUTRAL - siehe Migration 152.
- */
-const CONTACT_CATEGORY_COLORS = Object.freeze([
-  'var(--color-success)',
-  'var(--color-warning)',
-  'var(--color-accent)',
-  'var(--module-budget)',
-  'var(--module-meals)',
-  'var(--color-danger)',
-  'var(--color-text-secondary)',
-]);
-
-/** '' und null bedeuten beide "kein Ton"; alles ausserhalb der Liste wird abgewiesen. */
-function normalizeCategoryColor(value) {
-  if (value === undefined) return { skip: true };
-  if (value === null || value === '') return { value: null };
-  if (!CONTACT_CATEGORY_COLORS.includes(value)) return { error: 'Unknown category colour.' };
-  return { value };
 }
 
 /** Nur die Keys — für die dynamische Kategorie-Validierung. */
@@ -262,16 +230,13 @@ router.post('/categories', (req, res) => {
     `).get(vName.value);
     if (conflict) return res.status(409).json({ error: 'Category already exists.', code: 409, reason: 'category_exists' });
 
-    const vColor = normalizeCategoryColor(req.body.color);
-    if (vColor.error) return res.status(400).json({ error: vColor.error, code: 400 });
-
     const maxOrder = db.get().prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM contact_categories').get().m;
     const key = uniqueKey(db.get(), 'contact_categories', vName.value);
     db.get().prepare(
-      "INSERT INTO contact_categories (key, name, label_key, icon, sort_order, color) VALUES (?, ?, NULL, 'tag', ?, ?)"
-    ).run(key, vName.value, maxOrder + 1, vColor.skip ? null : vColor.value);
+      "INSERT INTO contact_categories (key, name, label_key, icon, sort_order) VALUES (?, ?, NULL, 'tag', ?)"
+    ).run(key, vName.value, maxOrder + 1);
 
-    const cat = db.get().prepare('SELECT key, name, label_key, icon, sort_order, color FROM contact_categories WHERE key = ?').get(key);
+    const cat = db.get().prepare('SELECT key, name, label_key, icon, sort_order FROM contact_categories WHERE key = ?').get(key);
     res.status(201).json({ data: cat });
   } catch (err) {
     log.error('POST /categories error:', err);
@@ -292,23 +257,16 @@ router.patch('/categories/reorder', (req, res) => {
   }
 });
 
-// PUT /api/v1/contacts/categories/:key  Body: { name } → umbenennen (Key bleibt stabil).
+// PUT /api/v1/contacts/categories/:key  Body: { name } → umbenennen (Key bleibt stabil). Eine mitgeschickte `color` wird ignoriert.
 router.put('/categories/:key', (req, res) => {
   try {
     const cat = db.get().prepare('SELECT * FROM contact_categories WHERE key = ?').get(req.params.key);
     if (!cat) return res.status(404).json({ error: 'Category not found.', code: 404 });
 
-    const vColor = normalizeCategoryColor(req.body.color);
-    if (vColor.error) return res.status(400).json({ error: vColor.error, code: 400 });
-
-    // NUR die Farbe aendern, ohne den Namen mitzuschicken: die sieben
-    // Seed-Kategorien tragen ihren Namen als `label_key` (uebersetzt), und ein
-    // Umweg ueber `name` wuerde sie beim Farbwechsel stillschweigend auf die
-    // Sprache des Klienten festnageln - genau der Verlust, den Migration 143
-    // beim Inventar behoben hat.
-    if (req.body.name === undefined && !vColor.skip) {
-      db.get().prepare('UPDATE contact_categories SET color = ? WHERE key = ?').run(vColor.value, cat.key);
-      return res.json({ data: db.get().prepare('SELECT key, name, label_key, icon, sort_order, color FROM contact_categories WHERE key = ?').get(cat.key) });
+    // Ohne Namen gibt es nichts zu aendern (auch eine alte Farb-only-Anfrage):
+    // die Kategorie kommt unveraendert zurueck.
+    if (req.body.name === undefined) {
+      return res.json({ data: db.get().prepare('SELECT key, name, label_key, icon, sort_order FROM contact_categories WHERE key = ?').get(cat.key) });
     }
 
     const vName = str(req.body.name, 'Name', { max: MAX_SHORT });
@@ -320,8 +278,7 @@ router.put('/categories/:key', (req, res) => {
     if (conflict) return res.status(409).json({ error: 'Category already exists.', code: 409, reason: 'category_exists' });
 
     db.get().prepare('UPDATE contact_categories SET name = ?, label_key = NULL WHERE key = ?').run(vName.value, cat.key);
-    if (!vColor.skip) db.get().prepare('UPDATE contact_categories SET color = ? WHERE key = ?').run(vColor.value, cat.key);
-    const updated = db.get().prepare('SELECT key, name, label_key, icon, sort_order, color FROM contact_categories WHERE key = ?').get(cat.key);
+    const updated = db.get().prepare('SELECT key, name, label_key, icon, sort_order FROM contact_categories WHERE key = ?').get(cat.key);
     res.json({ data: updated });
   } catch (err) {
     log.error('PUT /categories/:key error:', err);
@@ -764,17 +721,13 @@ router.delete('/:id', (req, res) => {
 
 /**
  * GET /api/v1/contacts/meta
- * Kategorien-Liste für Dropdowns, dazu die waehlbaren Kategorie-Toene.
+ * Kategorien-Liste für Dropdowns.
  *
- * `categoryColors` steht hier und nicht im Klienten, damit die Auswahl und die
- * Annahme dieselbe Liste sind: eine zweite Aufzaehlung im Frontend waere beim
- * naechsten Ton stumm veraltet und der Server wiese sie mit 400 ab.
- *
- * Response: { data: { categories, categoryColors } }
+ * Response: { data: { categories } }
  */
 router.get('/meta', (_req, res) => {
   try {
-    res.json({ data: { categories: loadContactCategories(), categoryColors: CONTACT_CATEGORY_COLORS } });
+    res.json({ data: { categories: loadContactCategories() } });
   } catch (err) {
     log.error('', err);
     res.status(500).json({ error: 'Interner Fehler', code: 500 });

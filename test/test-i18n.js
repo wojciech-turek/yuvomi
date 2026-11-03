@@ -599,6 +599,104 @@ test('kein String im Frontend-JS traegt einen Gedankenstrich', async () => {
   assert.deepEqual(hits, []);
 });
 
+// Copy-Durchgang (One Today, Abschnitt 8, 2026-11-02): Englisch und Polnisch
+// schreibt der Haushalt von Hand, und dort gelten die Satzzeichen des Hauses,
+// nicht nur "kein Gedankenstrich". Die uebrigen Locales bekommen das Englische
+// ueber scripts/i18n-add.mjs und bleiben, wie sie sind.
+//  - Eine Spanne ist ein Bindestrich ohne Leerzeichen ("2-8 lis", "17:00-18:30").
+//  - Ein Bindestrich mit Leerzeichen im Satz war ein Ersatz-Gedankenstrich; er
+//    wird Komma, Doppelpunkt oder Punkt (R3: kein Halbgeviert, also auch kein
+//    Ersatz dafuer).
+//  - "…" statt drei Punkten.
+//  - Englische Titel und Knoepfe in Satzschreibung ("New task", nicht "New Task").
+//  - Zwischen Zahl und MB/KB ein geschuetztes Leerzeichen (U+00A0): die Zahl
+//    bricht nicht von ihrer Einheit weg.
+//  - Polnische Anfuehrungszeichen unten auf, oben zu (U+201E ... U+201D).
+const HAND_WRITTEN = ['en', 'pl'];
+const handWritten = new Map(HAND_WRITTEN.map((locale) => [locale, flatten(JSON.parse(readLocale(locale)))]));
+
+function handWrittenHits(predicate, locales = HAND_WRITTEN) {
+  const hits = [];
+  for (const locale of locales) {
+    for (const [key, value] of handWritten.get(locale)) {
+      if (typeof value === 'string' && predicate(value)) hits.push(`${locale}: ${key} = ${JSON.stringify(value)}`);
+    }
+  }
+  return hits;
+}
+
+test('en und pl: eine Auslassung ist "…", nie drei Punkte', () => {
+  assert.deepEqual(handWrittenHits((value) => value.includes('...')), []);
+});
+
+test('en und pl: kein Bindestrich mit Leerzeichen, weder im Satz noch in einer Spanne', () => {
+  assert.deepEqual(handWrittenHits((value) => /\S - \S/u.test(value)), []);
+  for (const locale of HAND_WRITTEN) {
+    assert.equal(handWritten.get(locale).get('calendar.dayRangeLabel'), '{{from}}-{{to}}', `${locale}: die Spanne`);
+  }
+});
+
+// Titel, Ueberschriften und Knoepfe, die in Title Case standen. Eigennamen
+// (Google Calendar, Apple Pay), Modulnamen (Today, Split Expenses) und
+// Abkuerzungen (CalDAV, API, URL) bleiben gross; die Pruefung sieht nur Woerter
+// aus einem Grossbuchstaben und sonst Kleinbuchstaben.
+const SENTENCE_CASE_TITLES = [
+  'tasks.newTask', 'tasks.editTask', 'tasks.statusInProgress', 'tasks.kanbanInProgress',
+  'calendar.newEvent', 'calendar.editEvent', 'calendar.toggleHolidays', 'calendar.toggleSchool',
+  'calendar.iconCategoryHealth', 'calendar.iconCategoryTransport', 'calendar.iconCategoryWork',
+  'calendar.iconCategoryFood', 'calendar.iconCategoryShopping', 'calendar.iconCategoryLeisure',
+  'calendar.iconCategoryFamily', 'calendar.iconCategoryHome', 'calendar.iconCategoryNature',
+  'notes.newNote', 'notes.editNote', 'notes.addNoteLabel',
+  'contacts.newContact', 'contacts.editContact', 'contacts.newContactLabel',
+  'shopping.catFruitVeg', 'shopping.catMeatFish',
+  'budget.newEntry', 'budget.editEntry', 'budget.newEntryFabLabel',
+  'budget.catLeisure', 'budget.catEarnedIncome', 'budget.catInvestmentIncome', 'budget.catTransferGiftIncome',
+  'budget.catGovernmentBenefits', 'budget.catOtherIncome', 'budget.catHousing', 'budget.catPersonalHealth',
+  'budget.catShoppingClothing', 'budget.catFinancialOther', 'budget.categoryHousing', 'budget.categoryUtilities',
+  'budget.subcatRentMortgage', 'budget.subcatUtilities', 'budget.subcatInternetTvPhone',
+  'budget.subcatRenovationMaintenance', 'budget.subcatRestaurantsBars', 'budget.subcatSnacksFastFood',
+  'budget.subcatParkingTolls', 'budget.subcatAppsTaxi', 'budget.subcatMaintenanceInsurance',
+  'budget.subcatGymSports', 'budget.subcatBeautyCosmetics', 'budget.subcatClothesShoes',
+  'budget.subcatCoursesCollege', 'budget.subcatLoansInterest',
+  'settings.tabFamily', 'settings.tabApiTokens', 'settings.sectionContactSync', 'settings.shoppingCategoriesLabel',
+  'settings.sectionAccount', 'settings.sectionCalendarSync', 'settings.sectionFamily', 'settings.newMemberTitle',
+  'settings.sectionMeals', 'settings.recipeProvidersTitle', 'settings.recipeProviderAddAccount',
+  'settings.apiTokensTitle', 'settings.apiTokensCardTitle', 'settings.ics.title', 'settings.tabBackup',
+  'settings.sectionBackup', 'settings.backupSchedulerTitle', 'settings.backupWebdavTitle', 'settings.caldavTitle',
+  'settings.caldavAddAccount', 'settings.caldavNameLabel', 'settings.caldavUrlLabel', 'settings.cardavTitle',
+  'settings.cardavAddAccount', 'settings.cardavUrlLabel', 'settings.sectionWeather', 'settings.sectionHolidays',
+  'settings.holidaySubdivisionLabel', 'settings.regionTitle',
+  'onboarding.step2Title',
+];
+
+test('en: Titel und Knoepfe stehen in Satzschreibung', () => {
+  const en = handWritten.get('en');
+  const capitalisedWord = (word) => /^\p{Lu}\p{Ll}+$/u.test(word);
+  const hits = SENTENCE_CASE_TITLES
+    .filter((key) => !en.has(key) || en.get(key).split(/\s+/).slice(1).some(capitalisedWord))
+    .map((key) => `${key} = ${JSON.stringify(en.get(key))}`);
+  assert.deepEqual(hits, []);
+});
+
+test('en und pl: zwischen Zahl und MB/KB steht ein geschuetztes Leerzeichen', () => {
+  assert.deepEqual(handWrittenHits((value) => /(\}\}|\d) (MB|KB|GB)\b/.test(value)), []);
+  for (const locale of HAND_WRITTEN) {
+    assert.match(handWritten.get(locale).get('documentAttach.hint'), /\{\{size\}\} MB/, `${locale}: documentAttach.hint`);
+  }
+});
+
+test('pl: Anfuehrungszeichen unten auf, oben zu', () => {
+  // Markup (href="...") und die JSON-Vorlage des Webhooks tragen gerade
+  // Anfuehrungszeichen als Syntax, nicht als Satzzeichen.
+  const prose = (value) => value.replace(/<[^>]*>/g, '');
+  const wrong = (value) => {
+    if (value.startsWith('{"')) return false;
+    const text = prose(value);
+    return /["“]/.test(text) || (text.match(/„/g) || []).length !== (text.match(/”/g) || []).length;
+  };
+  assert.deepEqual(handWrittenHits(wrong, ['pl']), []);
+});
+
 // Re-Critique 2026-09-28 (A2 P3, R14 P12): das Datumsfeld zeigte im deutschen
 // UI "DD.MM.YYYY" - englische Buchstaben fuer Tag/Monat/Jahr. Die REIHENFOLGE
 // und die Trenner folgen weiter der Datumsformat-Einstellung (Region), die

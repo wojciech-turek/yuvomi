@@ -92,6 +92,18 @@ test('tasks: a solo household still shows the assignee picker when a stored staf
   assert.deepEqual(group.ids.slice(0, 2), [ANNA.id, CLARA.id]);
 });
 
+// ONE TODAY (2026-11-02): die Zuweisung der Aufgaben wird aus
+// `/tasks/meta/options` bedient; ein Mitglied mit Profilbild zeigt es dort wie
+// ueberall (test:tasks-routes haelt das Feld an der Route).
+test('tasks: an assignee with a profile photo shows it in the assignee chip', () => {
+  setHouseholdSize(2);
+  const html = tasks.renderModalContent({ task: null, users: [ANNA, { ...BEA, avatar_data: 'data:image/png;base64,QkVB' }] });
+  const chip = html.slice(html.indexOf('value="2"'), html.indexOf('</label>', html.indexOf('value="2"')));
+  assert.match(chip, /class="person-disc person-disc--photo user-ms__avatar"[^>]*><img src="data:image\/png;base64,QkVB" alt=""/);
+  const anna = html.slice(html.indexOf('value="1"'), html.indexOf('</label>', html.indexOf('value="1"')));
+  assert.match(anna, /class="person-disc user-ms__avatar"[^>]*>A<\/span>/, 'without a photo: the initial');
+});
+
 test('tasks: a solo household keeps hiding the assignee picker when only one person is in question', () => {
   setHouseholdSize(1);
   assert.equal(assigneeGroup(tasks.renderModalContent({ task: null, users: [ANNA] })).hidden, true);
@@ -607,4 +619,21 @@ test('R19: tragen alle denselben Nachnamen, zeigt der Chip den Vornamen - der vo
   assert.match(mixed, /<span class="user-ms__name">Alex Johnson<\/span>/);
   assert.match(renderUserMultiSelect([{ id: 1, display_name: 'A <b> Johnson' }, { id: 2, display_name: 'B Johnson' }], [], 'x', 'l'),
     /<span class="user-ms__name">A &lt;b&gt;<span class="sr-only"> Johnson<\/span>/, 'escaped');
+});
+
+// ONE TODAY (2026-11-02): der Chip traegt die eine Personenscheibe - Bild,
+// sonst die Initialen in der Farbe des Platzes im Haushalt. Die gespeicherte
+// Avatarfarbe malt nichts mehr (hier stand Weiss oder Schwarz auf `avatar_color`),
+// und wer nicht im Haushalt steht (Hauspersonal an einem Datensatz), ist neutral.
+test('One Today: der Chip traegt die Personenscheibe in der Farbe der Haushaltsreihenfolge', async (t) => {
+  const { setHouseholdOrder } = await import('../public/utils/person-color.js');
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder([{ ...ANNA, sort_order: 1 }, { ...BEA, sort_order: 0 }]);
+  const html = renderUserMultiSelect([ANNA, BEA, CLARA, { id: 5, display_name: 'Dora', avatar_data: 'data:image/png;base64,RA==' }], [2], 'x', 'l');
+  const chip = (id) => html.slice(html.indexOf(`value="${id}"`), html.indexOf('</label>', html.indexOf(`value="${id}"`)));
+  assert.match(chip(1), /class="person-disc user-ms__avatar" aria-hidden="true" style="--person-disc-ink: var\(--person-2\); --person-disc-tint: var\(--person-2-tint\)[^"]*">A</);
+  assert.match(chip(2), /--person-disc-ink: var\(--person-1\)/, 'Bea steht vorn in der Reihenfolge');
+  assert.match(chip(3), /--person-disc-ink: var\(--color-text-secondary\); --person-disc-tint: var\(--color-fill\)/, 'Clara ist kein Mitglied: neutral');
+  assert.match(chip(5), /person-disc--photo[^>]*><img src="data:image\/png;base64,RA==" alt="" loading="lazy">/, 'ein Bild statt der Initialen');
+  assert.doesNotMatch(html, /#111111|#222222|#333333|background-color/, 'keine gespeicherte Farbe im Markup');
 });

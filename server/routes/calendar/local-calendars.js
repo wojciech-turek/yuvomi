@@ -4,13 +4,13 @@ import * as db from '../../db.js';
 import { requireAdmin } from '../../middleware/require-admin.js';
 import { mayWriteModule } from '../../permissions.js';
 import {
+  DEFAULT_CALENDAR_COLOR,
   clearCalendarFeedToken,
   ensureDefaultCalendar,
   localCalendarById,
   localCalendarIdSql,
   regenerateCalendarFeedToken,
   serializeCalendar,
-  validateCalendarColor,
   validateCalendarName,
 } from '../../services/local-calendars.js';
 import { uploadsLocalEvents } from '../../services/apple-calendar.js';
@@ -54,16 +54,16 @@ router.post('/calendars', (req, res) => {
   }
   try {
     const vName = validateCalendarName(req.body?.name);
-    const vColor = validateCalendarColor(req.body?.color ?? '#007AFF');
-    const errors = [vName.error, vColor.error].filter(Boolean);
-    if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
+    if (vName.error) return res.status(400).json({ error: vName.error, code: 400 });
 
+    // Ein Kalender hat keine Farbe mehr (One Today): ein gesendetes `color`
+    // wird ignoriert, die NOT-NULL-Spalte bekommt den festen Vorgabewert.
     const database = db.get();
     const sortOrder = database.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM local_calendars').get().next;
     const id = database.prepare(`
       INSERT INTO local_calendars (name, color, is_default, sort_order, created_by)
       VALUES (?, ?, 0, ?, ?)
-    `).run(vName.value, vColor.value, sortOrder, getUserId(req)).lastInsertRowid;
+    `).run(vName.value, DEFAULT_CALENDAR_COLOR, sortOrder, getUserId(req)).lastInsertRowid;
     const row = localCalendarById(database, id);
     res.status(201).json({ data: serializeCalendar(req, row, feedUrl) });
   } catch (err) {
@@ -112,11 +112,6 @@ router.put('/calendars/:id', (req, res) => {
       if (vName.error) errors.push(vName.error);
       else changes.name = vName.value;
     }
-    if (Object.hasOwn(req.body ?? {}, 'color')) {
-      const vColor = validateCalendarColor(req.body.color);
-      if (vColor.error) errors.push(vColor.error);
-      else changes.color = vColor.value;
-    }
     if (Object.hasOwn(req.body ?? {}, 'sort_order')) {
       const order = Number(req.body.sort_order);
       if (!Number.isInteger(order) || order < 0) errors.push('Reihenfolge: Gib eine ganze Zahl ab 0 an.');
@@ -127,13 +122,11 @@ router.put('/calendars/:id', (req, res) => {
       database.prepare(`
         UPDATE local_calendars
         SET name = COALESCE(@name, name),
-            color = COALESCE(@color, color),
             sort_order = COALESCE(@sort_order, sort_order)
         WHERE id = @id
       `).run({
         id,
         name: changes.name ?? null,
-        color: changes.color ?? null,
         sort_order: changes.sort_order ?? null,
       });
     }

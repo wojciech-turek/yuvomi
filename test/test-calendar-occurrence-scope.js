@@ -219,14 +219,6 @@ function openForm(event, { syncTargets = null, attachment = false } = {}) {
   add('select', 'modal-visibility', { value: 'all' });
   add('input', 'modal-countdown', { type: 'checkbox' });
 
-  // Farbwahl: der Erben-Swatch und eine eigene Farbe, als role="radio" mit
-  // aria-checked wie im Dialog.
-  const picker = add('div', 'event-color-picker');
-  for (const color of ['', '#FF9500']) {
-    const swatch = add('button', null, { classes: ['color-swatch'], attrs: { role: 'radio', 'aria-checked': 'false' } }, picker);
-    swatch.dataset.color = color;
-  }
-
   // Personenauswahl: je Person ein Kaestchen, wie components/user-multi-select.js.
   const ms = add('div', null, { classes: ['user-ms'], attrs: { 'data-ms-name': 'cal_assigned' } });
   const assigned = new Set((event.assigned_users ?? []).map((u) => u.id));
@@ -248,7 +240,6 @@ function openForm(event, { syncTargets = null, attachment = false } = {}) {
   const fields = add('div', 'modal-reminder-fields');
   add('div', 'modal-reminder-rows', {}, fields);
 
-  add('button', 'modal-cancel');
   add('button', 'modal-save');
 
   globalThis.__apiStub = syncTargets
@@ -363,6 +354,18 @@ test('Wahl „Ganze Serie": die Person geht an die Serie, nicht an einen Einzelt
   assert.ok(formClosed(log), 'danach schliesst das Formular');
 });
 
+test('One Today: das Speichern schickt keine Farbe mit - auch nicht die gespeicherte', async () => {
+  const colored = { ...OCCURRENCE, color: '#FF9500' };
+  for (const answer of ['series', 'this']) {
+    const panel = openForm(colored);
+    userTypes(panel.querySelector('#modal-title'), 'Training (Halle 2)');
+    const { writes } = await clickSave(panel, colored, { answer });
+    const put = writes.find((c) => c.method === 'put');
+    assert.ok(put, `${answer}: gespeichert`);
+    assert.equal(Object.hasOwn(put.body, 'color'), false, `${answer}: der Body traegt eine Farbe: ${JSON.stringify(put.body)}`);
+  }
+});
+
 test('Wahl „Nur diesen Termin": genau dieser Termin, mit der Person', async () => {
   const panel = openForm(OCCURRENCE);
   userChecks(personBox(panel, 2));
@@ -469,14 +472,10 @@ test('geaendert und zurueckgestellt ist nicht geaendert', async () => {
   assert.deepEqual(calls, []);
 });
 
-test('jedes Bedienelement zaehlt: Text, Farbe (aria-checked), Anhang', async () => {
+test('jedes Bedienelement zaehlt: Text, Anhang', async () => {
   const title = openForm(OCCURRENCE);
   userTypes(title.querySelector('#modal-title'), 'Training (Halle 2)');
   assert.equal((await clickSave(title, OCCURRENCE, { answer: 'cancel' })).dialogs.length, 1, 'Titel');
-
-  const color = openForm(OCCURRENCE);
-  color.querySelectorAll('.color-swatch')[1].dispatch('click');
-  assert.equal((await clickSave(color, OCCURRENCE, { answer: 'cancel' })).dialogs.length, 1, 'Farbe');
 
   const file = openForm(OCCURRENCE, { attachment: true });
   file.querySelector('#modal-remove-attachment').dispatch('click');

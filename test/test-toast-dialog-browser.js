@@ -672,11 +672,12 @@ test('#1160 375x812 - Mitglied bearbeiten: jedes Feld, auf dem der Tab-Fokus lan
     const underStack = await page.evaluate((fields) => {
       const stack = document.querySelector('.shell-bottom-stack').getBoundingClientRect();
       const panel = [...document.querySelectorAll('.modal-overlay:not([inert]) .modal-panel')].at(-1);
-      return [...panel.querySelectorAll(fields)].filter((el) => {
+      const all = [...panel.querySelectorAll(fields)];
+      return all.filter((el) => {
         const r = el.getBoundingClientRect();
         return r.width > 0 && r.height > 0
           && r.left < stack.right && r.right > stack.left && r.top < stack.bottom && r.bottom > stack.top;
-      }).map((el) => el.id || el.name || el.type);
+      }).map((el) => el.id || el.name || `${el.type}#${all.indexOf(el)}`);
     }, FIELDS);
     assert.ok(underStack.length >= 1, 'beim Oeffnen liegt kein Feld unter dem Stapel - so misst die Sonde nichts');
 
@@ -688,6 +689,7 @@ test('#1160 375x812 - Mitglied bearbeiten: jedes Feld, auf dem der Tab-Fokus lan
 
     const covered = [];
     const seen = new Set();
+    const names = [];
     for (let i = 0; i < 40; i += 1) {
       await page.keyboard.press('Tab');
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -699,18 +701,30 @@ test('#1160 375x812 - Mitglied bearbeiten: jedes Feld, auf dem der Tab-Fokus lan
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) return null;
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        // Erkannt wird das Feld an seiner Stelle im Dialog, nicht an id/name:
+        // die Haken der Betreuer-Auswahl tragen keins von beiden, und als
+        // "checkbox" brach der Gang am zweiten Haken ab, bevor er die Felder
+        // unter dem Stapel erreichte (seit das Farbfeld fehlt, One Today).
+        const index = [...panel.querySelectorAll(fields)].indexOf(el);
         return {
-          field: el.id || el.name || el.type,
+          key: index,
+          field: el.id || el.name || `${el.type}#${index}`,
           free: Boolean(hit) && (el === hit || el.contains(hit) || Boolean(el.labels?.[0]?.contains(hit))),
           hit: hit?.closest('.toast')?.className || hit?.className || String(hit),
         };
       }, FIELDS);
       if (!probe) continue;
-      if (seen.has(probe.field)) break;
-      seen.add(probe.field);
+      if (seen.has(probe.key)) break;
+      seen.add(probe.key);
+      names.push(probe.field);
       if (!probe.free) covered.push(probe);
     }
-    assert.ok(seen.size >= 3, `zu wenige Felder per Tab erreicht (${[...seen].join(', ')})`);
+    assert.ok(seen.size >= 3, `zu wenige Felder per Tab erreicht (${names.join(', ')})`);
+    // Der Gang muss die Felder erreichen, die beim Oeffnen unter dem Stapel lagen -
+    // sonst misst er nichts.
+    for (const field of underStack) {
+      assert.ok(names.includes(field), `${field} lag unter dem Stapel, der Tab-Gang kam nicht hin (${names.join(', ')})`);
+    }
     const measured = await measureDialog(page, { controlSelector: `${MODAL_CONTROLS}, .settings-form-actions button`, toastSelector: PROBE_TOAST });
     assert.equal(measured.toast, true, 'die Toasts sind verschwunden - so misst die Sonde nichts');
     assert.deepEqual(covered, [], `ein fokussiertes Feld liegt unter dem Stapel (beim Oeffnen darunter: ${underStack.join(', ')})`);

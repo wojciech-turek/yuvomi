@@ -72,7 +72,6 @@ const calendarOccurrenceMutationProperties = {
   },
   all_day: { type: 'boolean' },
   location: { type: ['string', 'null'], maxLength: 200 },
-  color: { type: ['string', 'null'], pattern: '^#[0-9A-Fa-f]{6}$' },
   icon: { type: 'string' },
   assigned_to: {
     oneOf: [
@@ -119,7 +118,6 @@ export const schemas = {
           properties: {
             ics: { type: 'string', description: 'Raw ICS file text. Required when url is omitted.' },
             url: { type: 'string', format: 'uri', description: 'Shared calendar URL. Required when ics is omitted.' },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$', description: 'Fallback event color for imported events without their own color.' },
             local_calendar_id: { type: 'integer', minimum: 1, description: 'Target local calendar. Omit to use the default calendar.' },
           },
           oneOf: [{ required: ['ics'] }, { required: ['url'] }],
@@ -128,7 +126,6 @@ export const schemas = {
           type: 'object', required: ['name'],
           properties: {
             name: { type: 'string', minLength: 1, maxLength: 80 },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
           },
         },
         LocalCalendarReorderInput: {
@@ -141,7 +138,6 @@ export const schemas = {
           minProperties: 1,
           properties: {
             name: { type: 'string', minLength: 1, maxLength: 80 },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
             sort_order: { type: 'integer', minimum: 0 },
           },
         },
@@ -197,7 +193,7 @@ export const schemas = {
             id: { type: 'integer' },
             title: { type: ['string', 'null'] },
             content: { type: 'string' },
-            color: { type: 'string' },
+            color: { type: 'string', description: 'Stored data only, never shown. POST/PUT ignore a `color` they are sent.' },
             pinned: { type: 'integer', enum: [0, 1] },
             created_by: { type: ['integer', 'null'] },
             creator_name: { type: ['string', 'null'] },
@@ -675,11 +671,11 @@ export const schemas = {
             title: { type: 'string' },
             color: {
               type: ['string', 'null'],
-              description: 'The event\'s own colour as #RRGGBB, or null when it has none. Null is the normal state for an event nobody picked a colour for: it then borrows the colour of the first assigned member, and failing that cal_color. On PUT the field distinguishes two cases - omit it to leave the colour untouched, send null to deliberately clear it.',
+              description: 'Stored data only: a colour that arrived from a provider or an older version, as #RRGGBB, or null. It is never shown - an event is coloured by its assigned people - and POST/PUT ignore a `color` they are sent.',
             },
             cal_color: {
               type: ['string', 'null'],
-              description: 'Inherited colour of the source calendar or ICS subscription, read-only. Applies to every event of that source and therefore says nothing about this one; it is the fallback below color and the assignee.',
+              description: 'Stored colour of the source calendar or ICS subscription, read-only. Not used for display: an event is coloured by its assigned people.',
             },
             local_calendar_id: {
               type: ['integer', 'null'],
@@ -691,7 +687,7 @@ export const schemas = {
             },
             local_calendar_color: {
               type: ['string', 'null'],
-              description: 'Colour of the local Yuvomi calendar, read-only. Used after event, assignee, and external source colours.',
+              description: 'Stored colour of the local Yuvomi calendar, read-only. Not used for display: an event is coloured by its assigned people.',
             },
             attachment_name: { type: ['string', 'null'], description: 'Null when the event has no attachment or the caller may not read its document (see attachment_document_id).' },
             attachment_mime: { type: ['string', 'null'], description: 'Null when the event has no attachment or the caller may not read its document (see attachment_document_id).' },
@@ -1500,7 +1496,7 @@ export const schemas = {
             id: { type: 'integer' },
             name: { type: 'string' },
             icon: { type: 'string' },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
+            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$', description: 'Stored data only, never shown: a waste type is a name and an icon. POST/PUT ignore a `color` they are sent.' },
             archived: { type: 'integer', enum: [0, 1] },
             sort_order: { type: 'integer' },
             created_by: { type: ['integer', 'null'] },
@@ -1513,7 +1509,6 @@ export const schemas = {
           properties: {
             name: { type: 'string', maxLength: 100 },
             icon: { type: 'string', maxLength: 60 },
-            color: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' },
             archived: { type: 'boolean' },
             sort_order: { type: 'integer' },
           },
@@ -1628,7 +1623,6 @@ export const schemas = {
             type_id: { type: 'integer' },
             type_name: { type: ['string', 'null'] },
             type_icon: { type: ['string', 'null'] },
-            type_color: { type: ['string', 'null'] },
             type_sort_order: { type: 'integer' },
             moved: { type: 'boolean' },
             coalesced: { type: 'boolean', description: 'true when more than one origin (e.g. a schedule and a one-off) supplies this same date.' },

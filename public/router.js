@@ -9,7 +9,6 @@ import { canAccessNavModule, navModuleAccess, setExtensionNavMap } from '/permis
 import { setExtensionModules, selectThirdPartyModuleList } from '/utils/extension-widgets.js';
 import { initExtensionI18n, moduleDisplayLabel, reloadExtensionLocales } from '/utils/extension-i18n.js';
 import { clearApiCache, onServiceWorkerUpdate, UPDATE_RELOAD_DELAY_MS } from '/sw-register.js';
-import { forgetLayoutHint } from '/utils/dashboard-layout-hint.js';
 import { initI18n, getLocale, t, formatDate, formatTime } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { initials } from '/utils/initials.js';
@@ -69,7 +68,7 @@ import {
 import { openModal, confirmModal } from '/components/modal.js';
 import { armScreensaver, disarmScreensaver } from '/components/photo-screensaver.js';
 import { installPopoverMenus } from '/utils/popover-menu.js';
-import { prefersInkText } from '/utils/contrast.js';
+import { personToken } from '/utils/person-color.js';
 import { handleMasterDetailPopstate } from '/utils/master-detail.js';
 import '/components/datepicker.js';
 import { NAV_ICONS, MODULE_ICON, moduleIconEl } from '/nav-icons.js';
@@ -1048,8 +1047,8 @@ function sidebarAccountEl({ isDisplayShell = false } = {}) {
 }
 
 /**
- * Name, Farbe und Bild der Kontozeile aus dem angemeldeten Nutzer. Laeuft beim
- * Aufbau, beim Sprachwechsel und nach einer Profil-Aenderung
+ * Name, Personenfarbe und Bild der Kontozeile aus dem angemeldeten Nutzer.
+ * Laeuft beim Aufbau, beim Sprachwechsel und nach einer Profil-Aenderung
  * (`yuvomi:profile-changed`, personal-account.js).
  */
 function syncSidebarAccount(root = document.querySelector('.nav-sidebar__account')) {
@@ -1059,11 +1058,11 @@ function syncSidebarAccount(root = document.querySelector('.nav-sidebar__account
   const nameEl = root.querySelector('.nav-sidebar__account-name');
   const displayName = routerState.currentUser?.display_name || routerState.currentUser?.username || '';
   nameEl.textContent = displayName;
-  const color = routerState.currentUser?.avatar_color || '';
-  avatar.style.backgroundColor = color;
-  const ink = Boolean(color) && prefersInkText(color);
-  avatar.classList.toggle('nav-sidebar__avatar--ink', ink);
-  avatar.classList.toggle('nav-sidebar__avatar--on-color', Boolean(color) && !ink);
+  // Die Farbe der Personenscheibe (person-color.js): der Platz im Haushalt,
+  // Tinte auf Toenung wie jede andere Scheibe der App.
+  const { ink, tint } = personToken(routerState.currentUser ?? {});
+  avatar.style.setProperty('--person-disc-ink', ink);
+  avatar.style.setProperty('--person-disc-tint', tint);
   // DIE INITIALEN SIND BILD, NICHT TEXT (R20, axe label-content-name-mismatch
   // auf allen 60 Ansichten). Als Textknoten zaehlten „LI" zum sichtbaren
   // Etikett des Knopfs, und sein Name „Konto-Menue, Linda Johnson" enthielt
@@ -1229,12 +1228,9 @@ function invalidateModuleCounts() {
  * dieselbe teure Aggregation: der Shell-Aufbau fuer die Zahlen und die Seite
  * fuer ihre Kacheln. Der Server rechnet dabei ein Dutzend Abfragen doppelt.
  *
- * Die Seite fragt gefiltert (`layoutHintQuery`), die Zahlen brauchen das nicht
- * - sie zaehlen, was wartet, nicht was die Kachel zeigt. Fuer `openTaskCount`
- * und `overdueTaskCount` macht die Widget-Einschraenkung sehr wohl einen
- * Unterschied (`test:task-scope` haelt genau das fest), und deshalb gilt: nur
- * eine UNGEFILTERTE Antwort darf den Speicher fuellen. Kommt sie gefiltert,
- * bleibt es beim eigenen Abruf.
+ * Nur eine UNGEFILTERTE Antwort darf den Speicher fuellen: die Zahlen zaehlen,
+ * was wartet. Die Haushaltsfassung der Wand (`audience=household`) zaehlt
+ * anders. Kommt sie gefiltert, bleibt es beim eigenen Abruf.
  */
 function primeModuleCountsFrom(data, { filtered = false } = {}) {
   if (filtered || !data) return;
@@ -4442,9 +4438,6 @@ function forgetSessionState() {
   // Offline-API-Cache leeren: Session-Ende → keine gecachten Daten zurücklassen,
   // die der nächste Nutzer am selben Gerät offline sehen könnte.
   clearApiCache();
-  // Der Layout-Hinweis des Dashboards gehoert derselben Sitzung: ohne ihn sagt
-  // das Skelett am geteilten Tablett das Raster des Vorgaengers voraus.
-  forgetLayoutHint();
   // Gemerkte Scrollstände gehören zur Sitzung: der nächste Nutzer am selben
   // Gerät soll nicht auf den Positionen des vorigen landen.
   forgetScrollPositions();

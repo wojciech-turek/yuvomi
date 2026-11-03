@@ -1,7 +1,7 @@
 /** Schedule API: patterns are computed into entries, never calendar events. */
 import express from 'express';
 import * as db from '../db.js';
-import { bool, color, collectErrors, date, id, num, str, time } from '../middleware/validate.js';
+import { bool, collectErrors, date, id, num, str, time } from '../middleware/validate.js';
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { createLogger } from '../logger.js';
 import { dateKeysInRange, scheduleData, fieldsForShiftTypes, fieldValuesFor, typeColumns } from '../services/schedule.js';
@@ -17,11 +17,6 @@ import { syncScheduleRemindersForUser } from '../services/schedule-reminders.js'
 
 const router = express.Router();
 const log = createLogger('Schedule');
-// Startfarbe einer Schichtart ohne eigene Wahl (nur NEUE Datensaetze; keine
-// Migration). Vorher '#6C3AED' - die Marke selbst. Wert aus der EINEN
-// Startpalette `USER_COLOR_DEFAULT` in public/utils/color.js (der Server kann
-// das Frontend-Modul nicht importieren; test-schedule.js haelt beide gleich).
-const SHIFT_COLOR_DEFAULT = '#0891B2';
 const actorId = (req) => req.authUserId || req.session?.userId;
 // "Von liegt nach Bis" traegt neben dem Satz einen `reason` (#1777): die
 // Oberflaeche uebersetzt ueber ihn, nicht ueber den Wortlaut. Der Satz bleibt
@@ -225,12 +220,14 @@ router.get('/shift-types', (_req, res) => {
 });
 router.post('/shift-types', (req, res) => {
   const name = str(req.body?.name, 'name'); const shortCode = str(req.body?.short_code, 'short_code', { required: false, max: 12 });
-  const start = time(req.body?.start_time, 'start_time'); const end = time(req.body?.end_time, 'end_time'); const shade = color(req.body?.color || SHIFT_COLOR_DEFAULT, 'color');
+  const start = time(req.body?.start_time, 'start_time'); const end = time(req.body?.end_time, 'end_time');
   const icon = shiftIcon(req.body?.icon);
-  const errors = collectErrors([name, shortCode, start, end, shade, icon]);
+  const errors = collectErrors([name, shortCode, start, end, icon]);
   if ((start.value == null) !== (end.value == null)) errors.push('start_time and end_time must be provided together.');
   if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
-  const result = db.get().prepare('INSERT INTO schedule_shift_types (name, short_code, start_time, end_time, color, icon, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)').run(name.value, shortCode.value, start.value, end.value, shade.value, icon.value, actorId(req));
+  // Keine Schichtfarbe: die Spalte (NOT NULL) bekommt ihren festen Vorgabewert
+  // aus der Tabelle, eine mitgeschickte `color` wird ignoriert.
+  const result = db.get().prepare('INSERT INTO schedule_shift_types (name, short_code, start_time, end_time, icon, created_by) VALUES (?, ?, ?, ?, ?, ?)').run(name.value, shortCode.value, start.value, end.value, icon.value, actorId(req));
   res.status(201).json({ data: withFields(db.get().prepare(`SELECT ${typeColumns} FROM schedule_shift_types WHERE id = ?`).get(result.lastInsertRowid)) });
 });
 router.delete('/shift-types/:id', (req, res) => {
@@ -334,18 +331,11 @@ router.put('/shift-types/:id', (req, res) => {
   const shortCode = req.body?.short_code === undefined ? { value: old.short_code } : str(req.body.short_code, 'short_code', { required: false, max: 12 });
   const start = req.body?.start_time === undefined ? { value: old.start_time } : time(req.body.start_time, 'start_time');
   const end = req.body?.end_time === undefined ? { value: old.end_time } : time(req.body.end_time, 'end_time');
-  // `color()` antwortet auf jeden falsy Wert mit {value: null, error: null}, und
-  // die Spalte ist NOT NULL - ein `{"color": ""}` schriebe also NULL und flöge als
-  // roher 500er zurueck. Der Ruecksetzer ist die bestehende Farbe und nicht der
-  // Palettenerste: die Anfrage sagt "nicht anfassen", nicht "auf Anfang".
-  const shade = req.body?.color === undefined || !req.body.color
-    ? { value: old.color, error: null }
-    : color(req.body.color, 'color');
   const icon = req.body?.icon === undefined ? { value: old.icon, error: null } : shiftIcon(req.body.icon);
-  const errors = collectErrors([name, shortCode, start, end, shade, icon]);
+  const errors = collectErrors([name, shortCode, start, end, icon]);
   if ((start.value == null) !== (end.value == null)) errors.push('start_time and end_time must be provided together.');
   if (errors.length) return fail(res, 400, errors.join(' '));
-  db.get().prepare('UPDATE schedule_shift_types SET name=?, short_code=?, start_time=?, end_time=?, color=?, icon=? WHERE id=?').run(name.value, shortCode.value, start.value, end.value, shade.value, icon.value, key.value);
+  db.get().prepare('UPDATE schedule_shift_types SET name=?, short_code=?, start_time=?, end_time=?, icon=? WHERE id=?').run(name.value, shortCode.value, start.value, end.value, icon.value, key.value);
   return res.json({ data: withFields(db.get().prepare(`SELECT ${typeColumns} FROM schedule_shift_types WHERE id = ?`).get(key.value)) });
 });
 // Ersetzt IMMER die gesamte Feldzuordnung eines Schichttyps in einem Rutsch (loeschen, neu

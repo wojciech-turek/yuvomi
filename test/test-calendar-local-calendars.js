@@ -88,8 +88,24 @@ test('local calendars: default exists and calendars can be created', async () =>
   const projected = await call('GET', `/${original.id}`);
   assert.equal(projected.body.data.local_calendar_color, before.body.data.find(c => c.is_default).color);
   assert.equal(work.name, 'Work');
-  assert.equal(work.color, '#3366AA');
   assert.equal(work.is_default, false);
+});
+
+test('One Today: a local calendar takes no colour - created without one, a sent one is ignored', async () => {
+  const plain = await call('POST', '/calendars', { body: { name: 'Bez koloru' } });
+  assert.equal(plain.status, 201);
+  const colored = await call('POST', '/calendars', { body: { name: 'Z kolorem', color: 'not-a-colour' } });
+  assert.equal(colored.status, 201, 'a colour is no field any more, not even an invalid one');
+  assert.equal(colored.body.data.color, plain.body.data.color, 'both get the fixed default for the NOT NULL column');
+  const put = await call('PUT', `/calendars/${colored.body.data.id}`, { body: { name: 'Z kolorem 2', color: '#CC3355' } });
+  assert.equal(put.status, 200);
+  assert.equal(put.body.data.name, 'Z kolorem 2');
+  assert.equal(put.body.data.color, plain.body.data.color, 'a PUT does not recolour');
+  const colorOnly = await call('PUT', `/calendars/${colored.body.data.id}`, { body: { color: 'junk' } });
+  assert.equal(colorOnly.status, 200, 'a colour-only PUT changes nothing and is no error');
+  for (const row of [plain.body.data, colored.body.data]) {
+    assert.equal((await call('DELETE', `/calendars/${row.id}`)).status, 204);
+  }
 });
 
 test('calendar reordering persists ties and gaps, rejects invalid lists without changes, and requires write access', async () => {
@@ -140,7 +156,6 @@ test('event create assigns selected calendar and older clients fall back to defa
   const event = await createEvent('Family appointment', family.id);
   assert.equal(event.local_calendar_id, family.id);
   assert.equal(event.local_calendar_name, 'Family');
-  assert.equal(event.local_calendar_color, '#CC3355');
 
   const fallback = await createEvent('Default appointment');
   assert.ok(fallback.local_calendar_id > 0, 'missing local_calendar_id falls back');

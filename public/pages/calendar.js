@@ -12,10 +12,9 @@ import { openDetailView, visibilityRow, assignedRow } from '/components/detail-v
 import { mountMasterDetail, splitViewDetailHtml } from '/utils/master-detail.js';
 import { stagger, wireScrollFade, scheduleUndoableDelete, vibrate, durationToken } from '/utils/ux.js';
 import { t, getLocale, formatDate as formatPreferredDate, formatDayMonth, formatMonthYear, formatTime, timeSuffix, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
-import { esc, fmtLocation, REQUIRED_MARK } from '/utils/html.js';
+import { esc, fmtLocation } from '/utils/html.js';
 import { periodStepperHtml, syncPeriodReset, swapPeriod } from '/utils/period-stepper.js';
 import { swapRegion } from '/utils/content-swap.js';
-import { initials } from '/utils/initials.js';
 import { shiftEndDateKey, isEndBeforeStart, weekStartIndex, weekdayOrder,
          monthPeriodKeys, startOfLocalWeekKey, addLocalDays, defaultDateInPeriod,
          isWeekendKey, parseLocalDateKey } from '/utils/date.js';
@@ -34,8 +33,8 @@ import {
   shiftEndForStart,
   shiftSeriesStart,
 } from '/utils/recurrence-scope.js';
-import { getReadableTextColor } from '/utils/color.js';
-import { resolveEventColor } from '/utils/event-color.js';
+import { eventTone as eventToneOf } from '/utils/event-color.js';
+import { personInk } from '/utils/person-color.js';
 import { EVENT_ICON_CATEGORIES, CUSTOM_EVENT_ICON_PATHS, eventIconName, hasEventIcon, eventIconHtml } from '/utils/event-icon.js';
 import { packLanes } from '/utils/week-strip.js';
 import { assignLanes, assignLanesByPerson, memberRank } from '/utils/overlap-lanes.js';
@@ -65,8 +64,14 @@ import { ensureStyleApplied } from '/utils/page-style.js';
 import { findPageFab } from '/utils/fab.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { nowFields, todayKey, wallTimeToInstantMs, zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
-import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday } from '/utils/day-label.js';
-import { whoOf, whoDiscHtml, includesViewer, firstName, edgeColorOf } from '/utils/row-person.js';
+import { dayHeading, dayHeadingLabel, listDayHeading, daysFromToday, relativeDateLabel } from '/utils/day-label.js';
+import { sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml, heardLineHtml } from '/utils/sheet-parts.js';
+// Das Mikrofon im Titel des Termin-Blatts: STATISCH, weil das Hoerblatt im Tipp
+// aufgehen muss - Safari startet die Erkennung nur innerhalb der Nutzergeste,
+// ein `await import()` davor liesse nur das Textfeld (wie pages/tasks.js).
+import { openDictationSheet, quickAddCopy } from '/components/task-dictation.js';
+import { quickDraftFromSentence } from '/utils/quick-draft.js';
+import { whoOf, whoDiscHtml, includesViewer, firstName } from '/utils/row-person.js';
 import { seriesDoneText } from '/utils/task-fields.js';
 import { maxUploadBytes, maxUploadMb } from '/utils/upload-limit.js';
 import { holdDocumentAttachStyle } from '/components/document-attach.js';
@@ -112,99 +117,6 @@ const MONTH_NAMES     = () => [
   t('calendar.monthOctober'), t('calendar.monthNovember'), t('calendar.monthDecember'),
 ];
 
-// Kuratierte OKLCH-Palette (gedämpfte Jewel-Töne, verankert auf dem Violett der
-// App-Identität statt der geliehenen iOS-System-Farben). Gleichmäßiger Chroma-/
-// Hue-Abstand; jede Farbe ergibt sowohl eine ruhige getönte Fläche als auch eine
-// WCAG-AA-lesbare dunkle Tinte (siehe eventSurfaceStyle + calendar.css). Konkreter
-// Hex, weil Events die Farbe als Hex in der DB speichern und color.js Luminanz rechnet.
-const EVENT_COLORS = [
-  '#587DCE', '#3CA368', '#E0843E', '#CE5053',
-  '#8156C0', '#DB684C', '#3E9DCA', '#D8B349',
-  '#85868B', '#279EA4',
-];
-
-const EVENT_COLOR_NAMES = () => ({
-  '#587DCE': t('calendar.colorBlue'),
-  '#3CA368': t('calendar.colorGreen'),
-  '#E0843E': t('calendar.colorOrange'),
-  '#CE5053': t('calendar.colorRed'),
-  '#8156C0': t('calendar.colorPurple'),
-  '#DB684C': t('calendar.colorCoral'),
-  '#3E9DCA': t('calendar.colorSkyBlue'),
-  '#D8B349': t('calendar.colorYellow'),
-  '#85868B': t('calendar.colorGray'),
-  '#279EA4': t('calendar.colorCyan'),
-});
-
-/**
- * Hex-Vergleich ohne Ruecksicht auf Gross-/Kleinschreibung. Die Palette steht
- * hier in Grossbuchstaben, ein CalDAV-Server schickt `#34c759` genauso gern -
- * derselbe Farbwert, und ein `===` haelt die beiden fuer verschieden.
- */
-const sameColor = (a, b) =>
-  typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
-
-/**
- * Die Farben, die der Picker eines Termins zeigt.
- *
- * Ein Termin traegt nicht zwangslaeufig eine Farbe AUS DIESER PALETTE. Sie kann
- * als RFC-7986-`COLOR` von einem CalDAV-Server kommen, sie kann die Avatar-Farbe
- * einer Person sein (deren Palette teilt mit dieser hier keinen einzigen Wert)
- * oder schlicht das alte `#007AFF` aus der Zeit vor der OKLCH-Palette.
- *
- * Ohne einen eigenen Swatch dafuer stand der Picker leer da, obwohl der Termin
- * eine Farbe trug - und weil der Speicherpfad auf die erste Palettenfarbe
- * zurueckfiel, schrieb der naechste Klick auf "Speichern" sie darueber. Die
- * Farbe wechselte also genau beim Bearbeiten, ohne dass jemand sie angefasst
- * hatte (#856).
- */
-// Spiegelt COLOR_RE aus server/middleware/validate.js. Die Route prueft das
-// bereits, aber die Sync-Dienste schreiben ihre Farben direkt in die Tabelle -
-// was von dort kommt, hat diese Pruefung nie gesehen. Und der Wert landet gleich
-// in einem style-Attribut, wo esc() zwar das Ausbrechen verhindert, nicht aber
-// eine zweite CSS-Deklaration dahinter.
-const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
-
-function pickerColors(event) {
-  const own = event?.color;
-  if (!own || !HEX_COLOR_RE.test(own)) return EVENT_COLORS;
-  if (EVENT_COLORS.some((c) => sameColor(c, own))) return EVENT_COLORS;
-  return [own, ...EVENT_COLORS];
-}
-
-/**
- * Der Wert des Erben-Swatch: "dieser Termin hat keine eigene Farbe".
- *
- * Der Leerstring, nicht `null`, weil er aus `dataset.color` kommt - ein
- * data-Attribut kennt keinen Nullwert, und ein fehlendes Attribut waere
- * `undefined` und damit nicht mehr von "gar kein Swatch aktiv" zu
- * unterscheiden. Genau diese Unterscheidung traegt die Regel unten.
- */
-const COLOR_INHERIT = '';
-
-/**
- * Welche Farbe ein Speichern schreibt.
- *
- * Zwei Regeln, und die Reihenfolge ist der ganze Punkt:
- *
- * 1. Steht der Erben-Swatch auf aktiv, schreibt das Speichern `null` - der
- *    Termin bekommt KEINE eigene Farbe und leiht sich die der zugewiesenen
- *    Person (#891). Das ist eine ausdrueckliche Wahl und deshalb ein Wert, den
- *    das Backend annehmen muss; `crud.js` unterscheidet sie am mitgeschickten
- *    Feld von "nicht angefasst".
- * 2. Steht gar kein Swatch auf aktiv, darf ein Speichern die Farbe nicht
- *    veraendern - es gilt, was der Termin schon traegt. Fehlt auch die, bleibt
- *    es bei `null`: ein neuer Termin faengt ohne eigene Farbe an. Bis v2.48.0
- *    stand hier `EVENT_COLORS[0]`, und weil dieser Palettenerste ununterscheidbar
- *    von einer bewussten Wahl war, hat er die Personenfarbe verdraengt, ohne dass
- *    sie je jemand abgewaehlt haette.
- */
-function colorToSave(activeSwatchColor, event) {
-  if (activeSwatchColor === COLOR_INHERIT) return null;
-  if (activeSwatchColor) return activeSwatchColor;
-  return event?.color ?? null;
-}
-
 const ATTACHMENT_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const CALENDAR_VIEW_STORAGE_KEY = 'yuvomi:calendar:view';
 const LEGACY_CALENDAR_VIEW_STORAGE_KEY = 'yuvomi-calendar-view';
@@ -227,8 +139,8 @@ const SCHEDULE_DISPLAY_KEY = 'yuvomi:calendar:schedule-display';
 const MONTH_TITLES_KEY = 'yuvomi:calendar:month-titles';
 const ASSIGNED_TO_ME_KEY  = 'yuvomi:calendar:assignedToMe';
 const PEOPLE_FILTER_KEY   = 'yuvomi:calendar:people';
-// Ausgeblendete Kalender und Abos (#1064), auf dem Geraet und je Nutzer. Mit Name
-// und Farbe gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
+// Ausgeblendete Kalender und Abos (#1064), auf dem Geraet und je Nutzer. Mit dem
+// Namen gemerkt: eine ausgeblendete Quelle muss im Blatt auch dann wieder
 // einzuschalten sein, wenn im geladenen Zeitraum kein Termin von ihr liegt. Genau
 // deshalb nicht geraeteweit wie die Ebenen: ein privates Abo sieht nur, wer es
 // angelegt hat, und ein geteilter Browser zeigte seinen Namen sonst dem naechsten
@@ -238,20 +150,6 @@ const HIDDEN_SOURCES_KEY  = 'yuvomi:calendar:sources-hidden';
 // damit er mit keiner Nutzer-ID zusammenfallen kann.
 const UNASSIGNED = 'none';
 
-/* DIE FEIERTAGSFARBEN, WENN DER HAUSHALT KEINE GEWAEHLT HAT.
- *
- * Sie standen zweimal als nacktes Hex im Markup dieser Datei und viermal im
- * Server (routes/preferences.js, services/holidays.js). Hier stehen sie
- * einmal - der Client erfindet keinen eigenen Wert, er nennt denselben wie
- * die Quelle.
- *
- * DIE WERTE SELBST SIND EIN OFFENER PUNKT, kein Versehen: `#FF3B30` und
- * `#34C759` sind iOS System Red und System Green, also genau die
- * Apple-Rohpalette, die der Direction Contract am 2026-08-10 ausdruecklich
- * verlassen hat. Sie zu aendern faerbt jeden Haushalt um, der nie eine Farbe
- * gewaehlt hat - das ist eine Entscheidung des Betreibers, keine Reparatur,
- * und sie muesste den Server mitnehmen. Bis dahin steht der Wert wenigstens
- * an einer Stelle statt an dreien. */
 /* DIE MOBIL-GRENZE STEHT EINMAL, UND SIE FOLGT DEM CSS.
  *
  * Sie stand viermal als `(max-width: 639px)` im JS, waehrend calendar.css an
@@ -276,9 +174,6 @@ const UNASSIGNED = 'none';
 const MOBILE_MEDIA_QUERY = '(max-width: 639px)';
 // Ansichten, zwischen deren Zeitraeumen gewischt wird (wirePeriodSwipe).
 const PERIOD_SWIPE_VIEWS = new Set(['month', 'week', 'day', 'agenda']);
-
-const HOLIDAY_PUBLIC_FALLBACK = '#FF3B30';
-const HOLIDAY_SCHOOL_FALLBACK = '#34C759';
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -433,47 +328,41 @@ function openIconPickerDialog(selectedIcon, onSelect, onClose = () => {}) {
 }
 
 // --------------------------------------------------------
-// Farbberechnung: die spezifischste Angabe gewinnt
-// Hierarchie: eigene Terminfarbe → erster Assignee → Kalenderfarbe → Grau
+// Farbberechnung: die Farbe eines Termins sind seine Leute
 // --------------------------------------------------------
 
-/** Neutrale Fallback-Farbe wenn weder Assignee noch manuelle Farbe gesetzt. */
-// Die Rangfolge selbst steht in utils/event-color.js, weil das Dashboard
-// dieselbe Frage stellt und vor #891 eine eigene, kuerzere Antwort hatte.
-
 /**
- * Gibt eine einzelne CSS-Füllfarbe zurück (nie ein Gradient).
- * Eine Farbachse: 1. eigene Terminfarbe, 2. erster Assignee, 3. Kalenderfarbe, 4. Grau.
- * Mehrere Zugewiesene werden über den Avatar-Stack kommuniziert, nicht über eine
- * diagonal geteilte Füllung - die wirkte wie ein Render-Artefakt und blieb bei der
- * zweiten Farbe ungeprüft im Kontrast.
+ * DIE FARBE EINES TERMINS SIND SEINE LEUTE (One Today, spec 7; utils/event-color.js).
+ * Eine Person: ihre Tinte (--person-N in der Haushaltsreihenfolge); zwei: die
+ * Flaeche im gemeinsamen Ton, die Kante geteilt; drei und mehr: der gemeinsame
+ * Ton; niemand: neutral. Eine gespeicherte Farbe (Termin, Kalender, Abo,
+ * Anbieter) zeichnet der Kalender nicht. Kante und Toenung in Liste, Woche und
+ * Monat lesen alle diesen einen Wert (`--ev-color`).
  */
-function resolveEventBackground(ev) {
-  return resolveEventColor(ev);
+function eventTone(ev) {
+  return eventToneOf(ev, { household: state.users });
 }
 
 /**
- * Inline-Style für eine getönte Event-Fläche (Monat/Woche/Tag/Ganztägig).
- * Setzt nur `--ev-color`; Tönung, lesbare Tinte und Kante leitet calendar.css per
- * color-mix ab (theme-korrekt in Light & Dark, WCAG-AA für die gesamte Palette).
- * Ersetzt die frühere vollgesättigte Füllung + getContrastColor-Textfarbe.
+ * Inline-Style für eine getönte Event-Fläche (Monat/Woche/Tag/Ganztägig, Liste).
+ * Setzt `--ev-color`; Tönung, lesbare Tinte und Kante leitet calendar.css per
+ * color-mix ab. Bei zwei Personen dazu `--ev-edge` (die Kante in beiden Tinten)
+ * und `--ev-dot` (der Punkt des mobilen Monats als geteilte Scheibe).
  */
 function eventSurfaceStyle(ev) {
-  return `--ev-color:${esc(eventEdgeColor(ev))};`;
+  const tone = eventTone(ev);
+  const split = tone.edge ? `--ev-edge:${esc(tone.edge)};--ev-dot:${esc(tone.fill)};` : '';
+  return `--ev-color:${esc(tone.color)};${split}`;
 }
 
 /**
- * DIE FARBE EINES TERMINS IST DIE PERSON (Tafla, 2026-10-20; DESIGN.md
- * "The person-colour rule"). Ein Termin einer Person traegt ihre Personenfarbe
- * (--person-N, AA-gemessen in beiden Themes), ein gemeinsamer das Violett -
- * blau und rosa mischen sich zu violett, "razem" braucht keinen dritten Ton.
- * Erst ein Termin OHNE Person faellt auf die bisherige Achse zurueck (eigene
- * Farbe, Kalenderfarbe, Grau; utils/event-color.js) - dort ist die Farbe
- * Inhalt, kein "wer". Kante und Toenung in Liste, Woche und Monat lesen alle
- * diesen einen Wert (`--ev-color`).
+ * Die Klasse eines Termins zweier Personen (' cal-ev--split'), sonst ''. An
+ * ihr zeichnet calendar.css die geteilte Kante als Hintergrund unter einer
+ * durchsichtigen Kante - so folgt sie dem Radius des Blocks wie die
+ * einfarbige Kante (ein `border-image` taete das nicht).
  */
-function eventEdgeColor(ev) {
-  return edgeColorOf(ev?.assigned_users, state.users) || resolveEventColor(ev);
+function eventSplitClass(ev) {
+  return eventTone(ev).edge ? ' cal-ev--split' : '';
 }
 
 /**
@@ -563,17 +452,14 @@ let state = {
   //
   // DIE ACHSE IST DIE PERSON, NICHT DER KALENDER - und das ist eine gemessene
   // Entscheidung, keine Auslegung. Die Critique vom 2026-08-28 verlangte einen
-  // „Kalenderfilter mit Legende" nach Apples Muster. Eine FARBLEGENDE ist hier
-  // aber nicht konstruierbar: `resolveEventColor()` (utils/event-color.js)
-  // beantwortet die Farbe aus DREI Quellen in Rangfolge - eigene Terminfarbe,
-  // Farbe der primaeren zugewiesenen Person, Kalenderfarbe. Eine Legende, die
-  // „diese Farbe = jener Kalender" behauptet, waere bei jedem Termin falsch,
-  // der eine eigene Farbe traegt oder von einer Person erbt - also bei der
-  // Mehrheit. Die Person dagegen ist eindeutig: sie steht in
-  // `assigned_users`, ihre Farbe gehoert ihr, und in einem FAMILIENplaner ist
-  // „wessen Termin ist das" die Frage, die der Filter beantworten soll.
+  // „Kalenderfilter mit Legende" nach Apples Muster. Eine FARBLEGENDE nach
+  // Kalender gibt es hier nicht: seit One Today ist die Farbe eines Termins
+  // seine Leute (utils/event-color.js), kein Kalender traegt eine Farbe. Die
+  // Person steht in `assigned_users`, ihre Farbe gehoert ihr, und in einem
+  // FAMILIENplaner ist „wessen Termin ist das" die Frage, die der Filter
+  // beantworten soll.
   people:        new Set(),
-  hiddenSources: new Map(), // Quellschluessel -> { name, color }, siehe calendarSources()
+  hiddenSources: new Map(), // Quellschluessel -> { name }, siehe calendarSources()
 };
 let _container = null;
 // Liste + Detail der Agenda (R10 L5): am Desktop steht rechts der gewaehlte
@@ -1211,33 +1097,30 @@ function calendarSources() {
     quellen.set(`local:${calendar.id}`, {
       key: `local:${calendar.id}`,
       name: localCalendarDisplayName(calendar),
-      color: calendar.color,
     });
   }
   for (const ev of state.events ?? []) {
     const key = eventSourceKey(ev);
     if (!key) continue;
     const bekannt = quellen.get(key);
-    // Name und Farbe der QUELLE: `source_calendar_*` loest der Server auch fuer
-    // einen noch nicht hochgeladenen Termin ueber sein Ziel auf, `cal_name` und
-    // `cal_color` folgen nur `calendar_ref_id` - und tragen bei Abos die Werte
-    // des Abos. Fehlt beides, fuellt ein anderer Termin oder der Merker nach.
+    // Der Name der QUELLE: `source_calendar_name` loest der Server auch fuer
+    // einen noch nicht hochgeladenen Termin ueber sein Ziel auf, `cal_name`
+    // folgt nur `calendar_ref_id` - und traegt bei Abos den Namen des Abos.
+    // Fehlt er, fuellt ein anderer Termin oder der Merker nach. Eine Farbe hat
+    // die Quelle hier nicht (One Today: Termine faerben ihre Leute).
     const name = ev.source_calendar_name || eventLocalCalendarDisplayName(ev);
-    const color = ev.source_calendar_color || ev.cal_color || ev.local_calendar_color || null;
     if (bekannt) {
       bekannt.name ||= name;
-      bekannt.color ||= color;
       continue;
     }
-    quellen.set(key, { key, name, color });
+    quellen.set(key, { key, name });
   }
   for (const [key, merk] of state.hiddenSources ?? []) {
     const bekannt = quellen.get(key);
     if (!bekannt) {
-      quellen.set(key, { key, name: merk.name || '', color: merk.color || null });
+      quellen.set(key, { key, name: merk.name || '' });
     } else {
       bekannt.name ||= merk.name || '';
-      bekannt.color ||= merk.color || null;
     }
   }
   return [...quellen.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -1981,10 +1864,26 @@ export function nextFullHour(now = new Date()) {
  * Formular liest (Mitglieder, Kalender, Einstellungen), und fasst sonst nichts
  * an; `onChanged` frischt den Aufrufer nach dem Speichern auf.
  *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
- * @returns {Promise<boolean>} false bei nur lesendem Zugriff
+ * Aus einem Satz („Powiedz", One Today): `draft` sind die Termin-Felder von
+ * POST /quick-add/parse - `{ title, date, start_time, end_time, all_day,
+ * location, assigned_to, reminder_minutes }` - und fuellen das Blatt (siehe
+ * buildEventModalContent). Ohne gesagten Tag bleibt es bei heute und der
+ * naechsten vollen Stunde. `spoken` setzt „Powtórz" in den Kopf, `heard` ist
+ * der gesagte Satz ueber dem Titel. Gespeichert wird erst mit „Dodaj
+ * wydarzenie"; bis dahin gilt das Blatt als geaendert (R11).
+ *
+ * `stillWanted` fragt nach dem Laden, ob das Blatt noch gewollt ist: wer
+ * "Powiedz" auf langsamem Netz zumacht, waehrend hier noch geladen wird,
+ * bekommt es nicht hinterher (dann false, nichts geoeffnet).
+ *
+ * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
+ *          draft?: object|null, spoken?: boolean, heard?: string,
+ *          stillWanted?: () => boolean}} [opts]
+ * @returns {Promise<boolean>} false bei nur lesendem Zugriff oder wenn es nicht mehr gewollt ist
  */
-export async function openNewEventFrom({ user = null, onChanged = () => {} } = {}) {
+export async function openNewEventFrom({
+  user = null, onChanged = () => {}, draft = null, spoken = false, heard = '', stillWanted = () => true,
+} = {}) {
   if (readOnly()) return false;
   const [prefsRes, documentOptionsRes, , , release] = await Promise.all([
     api.get('/preferences').catch(() => ({ data: {} })),
@@ -1993,13 +1892,17 @@ export async function openNewEventFrom({ user = null, onChanged = () => {} } = {
     loadLocalCalendars(),
     ensureStyleApplied('/styles/calendar.css'),
   ]);
+  if (!stillWanted()) {
+    release?.();
+    return false;
+  }
   applyEventFormState(prefsRes, documentOptionsRes);
   state.currentUserId = user?.id ?? state.currentUserId;
   state.user = user ?? state.user;
   const today = todayKey();
   state.today = today;
   // Das Blatt gilt nur, solange das Formular offen ist (generische Selektoren).
-  openEventModal({ mode: 'create', date: today, time: nextFullHour(), onChanged, onClose: release });
+  openEventModal({ mode: 'create', date: today, time: nextFullHour(), draft, spoken, heard, onChanged, onClose: release });
   return true;
 }
 
@@ -3807,7 +3710,7 @@ function monthBandsHtml({ bands }, inMonth = []) {
     let outEnd = 0;
     while (outEnd < span - outStart && outside(last - outEnd)) outEnd++;
     const out = outStart > 0 || outEnd > 0;
-    const classes = bandClasses('month-day__event', band) + (out ? ' cal-band--outside' : '');
+    const classes = bandClasses('month-day__event', band) + (out ? ' cal-band--outside' : '') + eventSplitClass(ev);
     return `<div class="${classes}" data-id="${ev.id}" data-start="${esc(band.startKey)}" data-end="${esc(band.endKey)}"
          data-lane="${lane}" data-first="${first}" data-last="${last}"${occurrenceAttr(ev)}
          style="grid-column:${first + 1} / span ${span};grid-row:${lane + 1};${out ? `--band-span:${span};--band-out-start:${outStart};--band-out-end:${outEnd};` : ''}${eventSurfaceStyle(ev)}"
@@ -3841,13 +3744,9 @@ function renderMonthDay(date, inMonth, { selected = false, selWeek = false, spli
   const evShown   = chipEvs.slice(0, Math.max(0, MONTH_DAY_MAX_CHIPS - holShown.length));
   const taskShown = dayTasks.slice(0, Math.max(0, MONTH_DAY_MAX_CHIPS - holShown.length - evShown.length));
 
-  const holHtml = holShown.map((h) => `
-    <div class="month-day__holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-      <span>${esc(h.name)}</span>
-    </div>
-  `).join('');
+  const holHtml = holShown.map((h) => holidayChipHtml(h, 'month-day__holiday')).join('');
 
-  const scheduleHtml = daySchedule.map((entry) => `<div class="month-day__holiday schedule-entry" style="--holi-color:${esc(entry.shift_type.color)}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(scheduleEntryLabel(entry))}</span></div>`).join("");
+  const scheduleHtml = daySchedule.map((entry) => `<div class="month-day__holiday schedule-entry" style="--holi-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}"><span>${esc(scheduleEntryLabel(entry))}</span></div>`).join("");
 
   const wasteHtml = dayWaste.map((occ) => renderWasteChip(occ, { className: 'month-day__holiday', icon: false })).join('');
 
@@ -3857,7 +3756,7 @@ function renderMonthDay(date, inMonth, { selected = false, selWeek = false, spli
   // Tooltip/Screenreader im title-Attribut erhalten. Der Titel bleibt das
   // LETZTE Kind (document-guards liest ihn als `span:last-child`).
   const evHtml = evShown.map((ev) => `
-    <div class="month-day__event"
+    <div class="month-day__event${eventSplitClass(ev)}"
          data-id="${ev.id}"
          style="${eventSurfaceStyle(ev)}"${occurrenceAttr(ev)}
          title="${esc(ev.title)}${eventLocalCalendarDisplayName(ev) ? ' · ' + esc(eventLocalCalendarDisplayName(ev)) : ''}${chipAssigneeTitleSuffix(ev)}"
@@ -3962,7 +3861,7 @@ function passesWasteTypeFilter(occ) {
 /**
  * Die Typen, die es je Sub-Zeile unter der Waste-Ebene ueberhaupt zu waehlen
  * gibt - aus den geladenen Vorkommen selbst abgeleitet (type_id/type_name/
- * type_color liefert coalesceOccurrences bereits mit, waste-domain.js), statt
+ * type_name liefert coalesceOccurrences bereits mit, waste-domain.js), statt
  * einer zweiten eigenen Typenliste vom Server. Ein Typ ohne Vorkommen im
  * geladenen Fenster hat hier keine Zeile - seine Termine bleiben trotzdem
  * sichtbar (leeres Set = alle), nur abwaehlbar wird er erst, sobald er einmal
@@ -3972,7 +3871,7 @@ function wasteTypeOptions() {
   const seen = new Map();
   for (const occ of state.wasteOccurrences) {
     if (!seen.has(occ.type_id)) {
-      seen.set(occ.type_id, { id: occ.type_id, name: occ.type_name, color: occ.type_color });
+      seen.set(occ.type_id, { id: occ.type_id, name: occ.type_name });
     }
   }
   return [...seen.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
@@ -4063,6 +3962,17 @@ function scheduleEntryMatchKey(entry) {
   return [entry.date_key, entry.user_id, entry.source, sourceId].join(':');
 }
 
+/**
+ * Ein Feiertag oder ein Ferientag als Chip (Monat, Ganztagszeile, Liste). EIN
+ * ruhiger Ton fuer alle, gesetzliche wie Schulferien (One Today, spec 7): die
+ * Farbe kommt aus calendar.css (`.cal-holiday`), keine aus den Einstellungen.
+ * @param {{ name: string }} holiday
+ * @param {'month-day__holiday'|'allday-holiday'|'agenda-holiday'} className
+ */
+function holidayChipHtml(holiday, className) {
+  return `<div class="${className} cal-holiday" title="${esc(holiday.name)}"><span>${esc(holiday.name)}</span></div>`;
+}
+
 // S-16: `showFullRange` zeigt die volle Spanne ("06:00-14:00") statt nur des
 // Starts - nur Woche/Tag haben dafuer Platz (renderWeekView()/renderDayView()
 // setzen es explizit); Monat und Agenda bleiben bei der kurzen Form. S-17:
@@ -4078,7 +3988,7 @@ function renderScheduleChip(entry, className = 'allday-holiday', { showFullRange
   const detailAttrs = clickable
     ? ` role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"`
     : '';
-  return `<div class="${className} schedule-entry" style="--holi-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}"${detailAttrs}><span>${esc(label)}</span>${scheduleEntryExtraBadge(entry)}${start}</div>`;
+  return `<div class="${className} schedule-entry" style="--holi-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}"${detailAttrs}><span>${esc(label)}</span>${scheduleEntryExtraBadge(entry)}${start}</div>`;
 }
 
 /**
@@ -4107,7 +4017,7 @@ function renderScheduleEntryDetailContent(entry) {
     .map((field) => '<div class="schedule-entry-detail__row"><dt>' + esc(field.name) + '</dt><dd>' + esc(entry.field_values[field.id]) + '</dd></div>')
     .join('');
   return '<div class="schedule-entry-detail">'
-    + '<div class="schedule-entry-detail__head"><span class="agenda-holiday__dot" style="--holi-color:' + esc(type.color) + '"></span><span class="u-card-title u-compact">' + label + '</span>' + (time ? '<small>' + time + '</small>' : '') + '</div>'
+    + '<div class="schedule-entry-detail__head"><span class="agenda-holiday__dot" style="--holi-color:' + esc(personInk(entry.user_id, state.users)) + '"></span><span class="u-card-title u-compact">' + label + '</span>' + (time ? '<small>' + time + '</small>' : '') + '</div>'
     + '<dl class="schedule-entry-detail__rows">'
     + (owner ? '<div class="schedule-entry-detail__row"><dt>' + esc(t('schedule.owner')) + '</dt><dd>' + esc(owner) + '</dd></div>' : '')
     + (entry.note ? '<div class="schedule-entry-detail__row"><dt>' + esc(t('schedule.note')) + '</dt><dd>' + esc(entry.note) + '</dd></div>' : '')
@@ -4135,7 +4045,6 @@ function openScheduleEntryDetailModal(entry) {
  * Herkunft ueberall gleich aussieht.
  */
 function renderWasteChip(occurrence, { className = 'allday-holiday', icon = true, interactive = false } = {}) {
-  const color = occurrence.type_color || '';
   const movedOriginal = occurrence.moved
     ? occurrence.origins?.find((o) => o.kind === 'schedule' && o.original_date)?.original_date
     : null;
@@ -4152,7 +4061,7 @@ function renderWasteChip(occurrence, { className = 'allday-holiday', icon = true
   const button = interactive
     ? ` role="button" tabindex="0" aria-label="${esc(occurrence.type_name)}, ${esc(formatPreferredDate(occurrence.date_key))}"`
     : '';
-  return `<div class="${className} waste-occurrence-chip" style="--holi-color:${esc(color)};--holi-ink:${esc(getReadableTextColor(color))}"
+  return `<div class="${className} cal-holiday waste-occurrence-chip"
        data-deep-link="${esc(occurrence.deep_link)}"${button}
        title="${esc(occurrence.type_name)}">
     ${icon ? `<i data-lucide="${esc(occurrence.type_icon || 'trash-2')}" class="icon-sm" aria-hidden="true"></i>` : ''}
@@ -4225,7 +4134,7 @@ function renderScheduleTimeBlock(entry, className, layout = null) {
   // Detailansicht oeffnet, waehrend der Rest der Spalte unveraendert bleibt.
   // role="button"/tabindex traegt trotzdem der AEUSSERE Block: pointer-events
   // wirkt nur auf Zeiger-Eingabe, Tastaturfokus/Enter/Space bleiben unberuehrt.
-  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);left:${left};width:${width};--ev-color:${esc(type.color)}" title="${esc(scheduleEntryTitle(entry))}" role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
+  return `<div class="${className} schedule-time-block" style="top:${hourOffset(start)};height:calc(${hourOffset(duration)} - 4px);left:${left};width:${width};--ev-color:${esc(personInk(entry.user_id, state.users))}" title="${esc(scheduleEntryTitle(entry))}" role="button" tabindex="0" data-action="view-schedule-entry" data-schedule-key="${esc(scheduleEntryMatchKey(entry))}"><span class="schedule-time-block__title">${esc(scheduleEntryLabel(entry))}${scheduleEntryExtraBadge(entry)}</span><small class="schedule-time-block__time">${timeLine}</small></div>`;
 }
 
 /**
@@ -4346,11 +4255,7 @@ function renderWeekView(container) {
         ${bandsFolded ? '' : band.bands.map(renderWeekBand).join('')}
         ${days.map((d, i) => `
           <div class="allday-cell" style="grid-column:${i + 2};grid-row:${laneCount + 1}">
-            ${holidaysOnDay(d).map((h) => `
-              <div class="allday-holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-                <span>${esc(h.name)}</span>
-              </div>
-            `).join('')}
+            ${holidaysOnDay(d).map((h) => holidayChipHtml(h, 'allday-holiday')).join('')}
             ${scheduleChips[i].map((entry) => renderScheduleChip(entry, 'allday-holiday', { showFullRange: true, clickable: true })).join('')}
             ${waste[i].map((occ) => renderWasteChip(occ)).join('')}
             ${bandsFolded ? bandEvs[i].map((ev) => renderAllDayEvent(ev, d)).join('') : ''}
@@ -4844,7 +4749,7 @@ function renderAllDayEvent(ev, dayStr) {
   // abgeschnittene zweite Zeile (calendar.css, `.allday-event__line`). Name im
   // title-Attribut und im gesprochenen Namen bleibt.
   return `
-    <div class="${segment ? bandClasses('allday-event', segment) : 'allday-event'}" data-id="${ev.id}"
+    <div class="${segment ? bandClasses('allday-event', segment) : 'allday-event'}${eventSplitClass(ev)}" data-id="${ev.id}"
          style="${eventSurfaceStyle(ev)}"${eventBlockAttrs(ev, spoken || t('calendar.allDay'), dayStr)}${occurrenceAttr(ev)}
          title="${allDayChipTitle(ev, allDayChipTimeText(ev, dayStr, { suffix: true }))}">${segment?.continuesBefore ? bandContinuationHtml('before') : ''}${eventGlyphsHtml(ev)}<span class="allday-event__line"><span class="allday-event__label"><span>${esc(ev.title)}</span>${allDayChipTimeHtml(timeText)}</span>${chipAssigneeStack(ev, { size: 14, maxVisible: 2 })}</span>${segment?.continuesAfter ? bandContinuationHtml('after') : ''}</div>`;
 }
@@ -4879,7 +4784,7 @@ function renderWeekBand(band) {
   const until = continuesAfter ? '' : allDayChipTimeText(ev, endKey);
   const spoken = bandSpokenWhen(ev, { continued: continuesBefore });
   return `
-    <div class="${bandClasses('allday-event', band)}" data-id="${ev.id}" data-start="${esc(startKey)}" data-end="${esc(endKey)}"
+    <div class="${bandClasses('allday-event', band)}${eventSplitClass(ev)}" data-id="${ev.id}" data-start="${esc(startKey)}" data-end="${esc(endKey)}"
          style="grid-column:${first + 2} / span ${last - first + 1};grid-row:${lane + 1};${eventSurfaceStyle(ev)}"${eventBlockAttrs(ev, spoken)}${occurrenceAttr(ev)}
          title="${[ev.title, bandSpokenWhen(ev), eventLocalCalendarDisplayName(ev)].filter(Boolean).map((part) => esc(part)).join(' · ')}${chipAssigneeTitleSuffix(ev)}">${continuesBefore ? bandContinuationHtml('before') : ''}${eventGlyphsHtml(ev)}<span class="allday-event__line"><span class="allday-event__label"><span>${esc(ev.title)}</span>${allDayChipTimeHtml(from)}</span>${until ? `<small class="allday-event__time cal-band__until">${esc(until)}</small>` : ''}${chipAssigneeStack(ev, { size: 14, maxVisible: 2 })}</span>${continuesAfter ? bandContinuationHtml('after') : ''}</div>`;
 }
@@ -4896,7 +4801,7 @@ function renderWeekEvent(ev, layout = null, dayStr = null) {
   const width = layout ? `calc(${100 / layout.totalCols}% - 4px)` : 'calc(100% - 4px)';
 
   return `
-    <div class="week-event" data-id="${ev.id}"
+    <div class="week-event${eventSplitClass(ev)}" data-id="${ev.id}"
          style="top:${top};height:${height};left:${left};width:${width};${eventSurfaceStyle(ev)}"
          title="${esc(ev.title)}${chipAssigneeTitleSuffix(ev)}"${eventBlockAttrs(ev, eventTimeText(ev, dayStr), dayStr)}${occurrenceAttr(ev)}>
       <div class="week-event__title">${eventGlyphsHtml(ev)}<span>${esc(ev.title)}</span></div>
@@ -5045,11 +4950,7 @@ function renderDayView(container) {
       <div class="allday-row" style="display:grid;grid-template-columns:var(--cal-gutter-width) 1fr;">
         <div class="calendar-all-day-label">${t('calendar.allDayShort')}</div>
         <div class="allday-cell">
-          ${holidaysOnDay(state.cursor).map((h) => `
-            <div class="allday-holiday" style="--holi-color:${esc(h.color)};--holi-ink:${esc(getReadableTextColor(h.color))}" title="${esc(h.name)}">
-              <span>${esc(h.name)}</span>
-            </div>
-          `).join('')}
+          ${holidaysOnDay(state.cursor).map((h) => holidayChipHtml(h, 'allday-holiday')).join('')}
           ${scheduleChips.map((entry) => renderScheduleChip(entry, 'allday-holiday', { showFullRange: true, clickable: true })).join('')}
           ${dayWaste.map((occ) => renderWasteChip(occ)).join('')}
           ${allday.map((ev) => renderAllDayEvent(ev, state.cursor)).join('')}
@@ -5466,7 +5367,7 @@ function renderDayRail() {
  * DIE GRAMMATIK GILT FUER JEDEN TERMIN ODER FUER KEINEN. Im Mockup trug genau
  * ein Event weder Kante noch Toenung (Screenshot 05) - hier kann das nicht
  * passieren, weil beide aus derselben `--ev-color` fallen, die
- * `resolveEventColor()` immer beantwortet (Ebene, Kalender oder App-Akzent).
+ * `eventTone()` immer beantwortet (Person, gemeinsam oder neutral).
  *
  * Hier stand bis 2026-09-24 eine eigene Kante als Element
  * (ein eigenes Spine-Span) NEBEN der `border-inline-start`, die der Block
@@ -5497,7 +5398,7 @@ function renderDayEvent(ev, layout = null, dayStr = null) {
   const timeText = gridTimeText(ev, dayStr);
 
   return `
-    <div class="day-event${roomy ? '' : ' day-event--tight'}" data-id="${ev.id}"
+    <div class="day-event${roomy ? '' : ' day-event--tight'}${eventSplitClass(ev)}" data-id="${ev.id}"
          style="top:${top};height:${height};left:${left};width:${width};${eventSurfaceStyle(ev)}"
          title="${esc(ev.title)}${ev.location ? ' · ' + esc(fmtLocation(ev.location)) : ''}${chipAssigneeTitleSuffix(ev)}"${eventBlockAttrs(ev, eventTimeText(ev, dayStr), dayStr)}${occurrenceAttr(ev)}>
       <span class="day-event__text">
@@ -5673,7 +5574,7 @@ function renderAgendaBanner(ev, day) {
   const meta = [time, eventMetaText(ev, day)].filter(Boolean).join(' · ');
   const label = agendaEventAriaLabel(ev, [time || t('calendar.allDay'), multiDayPositionText(ev, day)].filter(Boolean).join(', '));
   return `
-    <div class="agenda-event agenda-event--banner" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+    <div class="agenda-event agenda-event--banner${eventSplitClass(ev)}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
          style="${eventSurfaceStyle(ev)}" aria-label="${esc(label)}">
       <div class="agenda-event__body">
         <span class="agenda-banner__title">${eventGlyphsHtml(ev, { compact: true })}<span>${esc(ev.title)}</span></span>
@@ -5758,11 +5659,7 @@ function dayGroupHtml({ date, events, tasks, holidays, schedule, waste }, { nowL
   if (!lineDrawn) rows.push(nowLineHtml(nowMin));
 
   const top = [
-    holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => `
-      <div class="agenda-holiday" style="--holi-color:${esc(h.color)}">
-        <span class="agenda-holiday__dot"></span>
-        <span>${esc(h.name)}</span>
-      </div>`).join('')}</div>` : '',
+    holidays.length ? `<div class="agenda-holidays">${holidays.map((h) => holidayChipHtml(h, 'agenda-holiday')).join('')}</div>` : '',
     schedule.length ? `<div class="agenda-holidays">${schedule.map((entry) => renderScheduleChip(entry, 'agenda-holiday')).join('')}</div>` : '',
     waste.length ? `<div class="agenda-holidays">${waste.map((occ) => renderWasteChip(occ, { className: 'agenda-holiday', interactive: true })).join('')}</div>` : '',
     banners.map((ev) => renderAgendaBanner(ev, date)).join(''),
@@ -5989,8 +5886,8 @@ function agendaDayHeadHtml(dayKey) {
  * Wochentag 13 in Tinte-2, die Ziffer 17/600 in einem 32er-Kreis - heute
  * violett gefuellt, der gewaehlte Tag in der violetten Toenung, Vergangenes in
  * Tinte-2 -, darunter bis zu drei 6pt-Punkte in den Personenfarben des Tages
- * (Violett fuer Gemeinsames). Ein Tipp springt zum Tag; ein Tag vor dem Beginn
- * der Liste setzt ihren Anfang dorthin.
+ * (geteilt fuer zwei, Violett ab drei, neutral ohne Person). Ein Tipp springt
+ * zum Tag; ein Tag vor dem Beginn der Liste setzt ihren Anfang dorthin.
  */
 function agendaStripHtml() {
   const start = startOfWeekOf(state.cursor);
@@ -5998,7 +5895,7 @@ function agendaStripHtml() {
   const dotColors = (events) => {
     const colors = [];
     for (const ev of events) {
-      const color = eventEdgeColor(ev);
+      const color = eventTone(ev).fill;
       if (!colors.includes(color)) colors.push(color);
       if (colors.length === 3) break;
     }
@@ -6168,12 +6065,10 @@ function renderAgendaView(container) {
 // ihre Beschriftung zurueck, ihr Zustand ist eine echte Checkbox statt einer
 // Waschung, und der Kopf gibt eine Zeile her.
 //
-// WAS ES NICHT IST: eine FARBLEGENDE. Die Farbe eines Termins kommt aus drei
-// Quellen in Rangfolge (`resolveEventColor`, utils/event-color.js) - eigene
-// Farbe, primaere zugewiesene Person, Kalender. Eine Legende „diese Farbe =
-// jener Kalender" waere bei jedem Termin falsch, der eine der ersten beiden
-// Quellen nutzt. Die Person ist die einzige Achse, die eindeutig ist, und in
-// einem Familienplaner ist sie auch die gefragte.
+// WAS ES NICHT IST: eine FARBLEGENDE. Die Farbe eines Termins sind seine
+// Leute (utils/event-color.js); Kalender, Abos und Ebenen tragen keine Farbe.
+// Die Person ist die einzige Achse, die eindeutig ist, und in einem
+// Familienplaner ist sie auch die gefragte.
 // --------------------------------------------------------
 
 /** Die Ebenen, die es im aktuellen Zustand ueberhaupt gibt. */
@@ -6183,13 +6078,13 @@ function availableLayers() {
   if (hp.holiday_show_public) {
     rows.push({
       key: 'holidays', label: t('calendar.toggleHolidays'),
-      checked: state.layerHolidays, color: hp.holiday_public_color ?? HOLIDAY_PUBLIC_FALLBACK,
+      checked: state.layerHolidays, color: null,
     });
   }
   if (hp.holiday_show_school) {
     rows.push({
       key: 'school', label: t('calendar.toggleSchool'),
-      checked: state.layerSchool, color: hp.holiday_school_color ?? HOLIDAY_SCHOOL_FALLBACK,
+      checked: state.layerSchool, color: null,
     });
   }
   if (scheduleEnabled()) {
@@ -6239,11 +6134,9 @@ function personFilterChipsHtml(people) {
       label: short ? full.slice(0, -(surname.length + 1)) : full,
       srSuffix: short ? surname : '',
       active: state.people.has(u.id),
-      // ZWEI NAMEN FUER DIESELBE FARBE: `/family/members` liefert sie roh als
-      // `avatar_color`, `assigned_users` benennt sie auf `color` um
-      // (services/calendar-events.js:17).
-      swatchColor: u.avatar_color ?? u.color ?? null,
-      swatchLabel: initials(u.display_name),
+      // Die Personenscheibe (person-color.js): Bild, sonst Initialen in der
+      // Farbe der Haushaltsreihenfolge.
+      person: u,
     };
   });
   if (people.length) {
@@ -6273,7 +6166,6 @@ function buildLayerRowsHtml(layers) {
     const typeRows = wasteTypeOptions().map((wt) => toggleRowHtml({
       label: wt.name ?? '',
       checked: state.wasteVisibleTypeIds.size === 0 || state.wasteVisibleTypeIds.has(wt.id),
-      swatchColor: wt.color,
       control: 'switch',
       attrs: { 'data-filter-waste-type': String(wt.id) },
     })).join('');
@@ -6310,9 +6202,9 @@ function renderLocalCalendarRow(calendar) {
   });
   return `
     <div class="cal-calendar-row" data-calendar-id="${calendar.id}">
-      <span class="cal-calendar-row__swatch" style="background-color:${esc(calendar.color)}" aria-hidden="true"></span>
-      ${writable ? `<input class="form-input cal-calendar-row__name" value="${esc(calendar.name)}" aria-label="${esc(t('calendar.localCalendarName'))}">
-      <input class="form-input cal-calendar-row__color" type="color" value="${esc(calendar.color)}" aria-label="${esc(t('calendar.localCalendarColor'))}">` : ''}
+      ${writable
+    ? `<input class="form-input cal-calendar-row__name" value="${esc(calendar.name)}" aria-label="${esc(t('calendar.localCalendarName'))}">`
+    : `<span class="cal-calendar-row__label">${esc(calendar.name)}</span>`}
       <span class="cal-calendar-row__count">${t('calendar.localCalendarEventCount', { count: calendar.event_count ?? 0 })}</span>
       <div class="cal-calendar-row__actions">
         ${writable ? rowActionHtml({ icon: 'save', label: `${t('common.save')} · ${calendar.name}`, className: 'js-calendar-save' }) : ''}
@@ -6335,7 +6227,6 @@ function renderLocalCalendarsContent() {
     <div class="cal-calendar-manager">
       ${moduleAccess('calendar') === 'write' ? `<form class="cal-calendar-create" id="local-calendar-create">
         <input class="form-input" id="local-calendar-name" maxlength="80" placeholder="${esc(t('calendar.localCalendarName'))}" aria-label="${esc(t('calendar.localCalendarName'))}">
-        <input class="form-input" id="local-calendar-color" type="color" value="#007AFF" aria-label="${esc(t('calendar.localCalendarColor'))}">
         <button class="btn btn--primary" type="submit">
           <i data-lucide="plus" class="icon-md" aria-hidden="true"></i>${t('calendar.localCalendarCreate')}
         </button>
@@ -6432,10 +6323,9 @@ async function openLocalCalendarsModal() {
     if (!e.target.closest('#local-calendar-create')) return;
     e.preventDefault();
     const name = panel.querySelector('#local-calendar-name')?.value.trim();
-    const color = panel.querySelector('#local-calendar-color')?.value || '#007AFF';
     if (!name) return;
     try {
-      await api.post('/calendar/calendars', { name, color });
+      await api.post('/calendar/calendars', { name });
       window.yuvomi?.showToast(t('calendar.localCalendarCreated'), 'success');
       await refreshLocalCalendarsPanel(panel);
       refocusAfterRender();
@@ -6462,8 +6352,7 @@ async function openLocalCalendarsModal() {
         panel.querySelector(`.cal-calendar-row[data-calendar-id="${id}"] .popover-menu__trigger`)?.focus();
       } else if (e.target.closest('.js-calendar-save')) {
         const name = row.querySelector('.cal-calendar-row__name')?.value.trim();
-        const changes = { color: row.querySelector('.cal-calendar-row__color')?.value };
-        if (name !== calendar.name) changes.name = name;
+        const changes = name !== calendar.name ? { name } : {};
         await api.put(`/calendar/calendars/${id}`, changes);
         window.yuvomi?.showToast(t('calendar.localCalendarSaved'), 'success');
         await refreshLocalCalendarsPanel(panel);
@@ -6539,20 +6428,20 @@ function calendarFilterParts({ people = state.users ?? [], sources = calendarSou
       attrs: { 'data-filter-mine': 'true' },
     })
     : '';
-  // Je Kalender und Abo ein Schalter (#1064), mit der Farbe, die seine Termine
-  // tragen. Neben den Ebenen, nicht in ihnen: eine Ebene ist eine Sorte Eintrag,
-  // eine Quelle ist, woher ein gewoehnlicher Termin kommt.
+  // Je Kalender und Abo ein Schalter (#1064), nur mit seinem Namen: eine
+  // Farbe hat eine Quelle seit One Today nicht mehr. Neben den Ebenen, nicht
+  // in ihnen: eine Ebene ist eine Sorte Eintrag, eine Quelle ist, woher ein
+  // gewoehnlicher Termin kommt.
   const sourceRows = sources.map((s) => toggleRowHtml({
     label: s.name || t('calendar.detailCalendar'),
     checked: !state.hiddenSources.has(s.key),
-    swatchColor: s.color,
     control: 'switch',
     attrs: { 'data-filter-source': s.key },
   })).join('');
   // „KALENDER VERWALTEN" STEHT UNTER DER LISTE, die es verwaltet (Re-Critique
   // 2026-10-16, A2). Der Kopfknopf #cal-calendars wohnt im Aktions-Slot, und
   // den blendet calendar.css unter 1024px aus - Tablet und Telefon kamen an
-  // Anlegen, Umfaerben und Sortieren nicht heran. Der Eintrag steht auf jeder
+  // Anlegen, Umbenennen und Sortieren nicht heran. Der Eintrag steht auf jeder
   // Breite, damit das Blatt ueberall gleich ist, und auch ohne Quelle: dann
   // legt man hier den ersten Kalender an.
   const manageRow = moduleAccess('calendar') === 'write'
@@ -6623,7 +6512,7 @@ function applyCalendarFilterInput(input, panel, sources = calendarSources()) {
       state.hiddenSources.delete(key);
     } else {
       const quelle = sources.find((s) => s.key === key);
-      state.hiddenSources.set(key, { name: quelle?.name ?? '', color: quelle?.color ?? null });
+      state.hiddenSources.set(key, { name: quelle?.name ?? '' });
     }
     persistHiddenSources();
   } else {
@@ -6826,9 +6715,8 @@ function restoreHiddenSources(userId) {
   if (!Array.isArray(stored)) return quellen;
   for (const eintrag of stored) {
     if (!eintrag || !/^(?:cal|sub|local):\d+$/.test(String(eintrag.key))) continue;
-    // Die Farbe landet als Scheibe im Blatt; aus dem Speicher nur, was eine Farbe ist.
-    const color = /^#[0-9a-f]{3,8}$/i.test(String(eintrag.color ?? '')) ? eintrag.color : null;
-    quellen.set(eintrag.key, { name: String(eintrag.name ?? ''), color });
+    // Ein Merker von vor One Today traegt noch eine Farbe; gelesen wird nur der Name.
+    quellen.set(eintrag.key, { name: String(eintrag.name ?? '') });
   }
   return quellen;
 }
@@ -7081,7 +6969,7 @@ export const __test = {
   alignedHourScroll,
   // Tafla (2026-10-20): die Liste - Personenkante, "Oboje zajęci", "Wolny
   // wieczór", die Tageskarte und der Wochenstreifen.
-  eventEdgeColor, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
+  eventSurfaceStyle, eventSplitClass, busyTogetherWindow, eveningIsFree, showsFreeEvening, dayGroupHtml, agendaStripHtml, renderAgendaBanner,
   // R19: die Seitenleiste ab ca. 1600px - Mini-Monat, Filter aus EINER Quelle, Als Naechstes.
   miniMonthHtml, sidebarFiltersHtml, calendarFilterParts, upNextEvents,
   // Review #2049: ein gescheiterter Abruf ist ein Fehler, kein leerer Tag.
@@ -7115,7 +7003,6 @@ export const __test = {
   fetchWindow,
   getWeekRange,
   getRangeForView,
-  resolveEventColor,
   isVisibleLayer,
   normalizeCalendarView,
   defaultCalendarViewFromState,
@@ -7166,11 +7053,8 @@ export const __test = {
   monthCollapseStep,
   monthListHtml,
   newEventDate,
-  pickerColors,
-  colorToSave,
   eventIconName,
   eventIconHtml,
-  sameColor,
   canonicalReminderOffsets,
   reminderOffsetFromEvent,
   reminderOwnerId,
@@ -7184,7 +7068,6 @@ export const __test = {
   // Die Frage nach der Reichweite eines Serientermins (#1284) - dieselbe fuer
   // Speichern und Loeschen, gemessen an beiden Aufrufern.
   requestDeleteEvent,
-  EVENT_COLORS,
   renderScheduleChip,
   scheduleEntryTitle,
   scheduleEntriesOnDay,
@@ -7267,7 +7150,7 @@ function renderAgendaEvent(ev, dayStr, { past = false } = {}) {
   // `renderKeepingFocus()` nach dem Neuaufbau mehrere Kandidaten und weicht auf
   // die Seitenwurzel aus, statt auf der Zeile zu bleiben (#1083).
   return `
-    <div class="list-row agenda-event${past ? ' agenda-event--past' : ''}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
+    <div class="list-row agenda-event${past ? ' agenda-event--past' : ''}${eventSplitClass(ev)}" data-id="${ev.id}" data-date="${esc(day)}"${agendaMdIdAttr(ev, day)}${occurrenceAttr(ev)} role="button" tabindex="0"
          style="${eventSurfaceStyle(ev)}" aria-label="${esc(agendaEventAriaLabel(ev, [timeStr, position].filter(Boolean).join(', ')))}">
       <div class="agenda-event__body">
         <span class="agenda-event__rail" aria-hidden="true">
@@ -7355,17 +7238,14 @@ function attachmentNode(ev) {
   return link;
 }
 
-/* Kalendername als farbiger Chip - in der DETAILFLÄCHE, seit die Agendazeile
- * ihn abgegeben hat: dort sagte er dasselbe wie die Farbspur an ihrer linken
- * Kante, und er tat es als drittes Element einer Metazeile, die deswegen
- * umbrach. Hier ist er die einzige Stelle, an der der Kalendername ausdrücklich
- * steht. */
+/* Der Kalendername in der DETAILFLÄCHE, seit die Agendazeile ihn abgegeben
+ * hat: hier ist er die einzige Stelle, an der der Kalendername ausdrücklich
+ * steht. Ohne Farbpunkt - ein Kalender trägt seit One Today keine Farbe. */
 function calendarChipNode(ev) {
   const name = eventLocalCalendarDisplayName(ev);
   if (!name) return null;
   const chip = document.createElement('span');
   chip.className = 'event-cal-label';
-  chip.style.setProperty('--cal-color', ev.cal_color || ev.local_calendar_color || ev.color || resolveEventColor(ev));
   chip.textContent = name;
   return chip;
 }
@@ -7464,13 +7344,14 @@ function unbreakable(text) {
 
 /**
  * Der Kopf der Termin-Leseansicht (components/detail-view.js `detailHeadEl`):
- * Farbpunkt des Kalenders, die Zeit in Worten, die Personen als Avatare. Ein
+ * der Punkt in der Farbe der Leute (bei zwei Personen geteilt), die Zeit in
+ * Worten, die Personen als Avatare. Ein
  * frei eingetragener Name ohne Konto (`assigned_name`) hat kein Bild und
  * bleibt deshalb eine Zeile (`renderEventDetail`).
  */
 function eventDetailHead(ev) {
   return {
-    dot: resolveEventBackground(ev),
+    dot: eventTone(ev).fill,
     subtitle: eventWhenRelative(ev),
     subtitleLabel: t('calendar.detailWhen'),
     people: ev.assigned_users ?? [],
@@ -8069,14 +7950,44 @@ function reminderRowHtml({ offset = '0', amount = 1, unit = 'days', storedAt = n
     </div>`;
 }
 
-function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = []) {
-  const list = reminderList(reminders);
-  let rows = list.map((rem) => reminderRowFromReminder(event, rem));
-  // Neue Termine ohne bestehende Erinnerung: Standard-Erinnerungen vorbelegen (#497).
-  // Die Default-Offsets decken sich mit den Preset-Werten des Offset-Selects.
+/**
+ * Die Erinnerungszeilen, mit denen der Dialog aufgeht: die gespeicherten, und
+ * fuer einen neuen Termin ohne welche die Standard-Erinnerungen (#497) - die
+ * Default-Offsets decken sich mit den Preset-Werten des Offset-Selects.
+ */
+function calendarReminderRows(reminders = [], event = null, defaultOffsets = []) {
+  const rows = reminderList(reminders).map((rem) => reminderRowFromReminder(event, rem));
   if (rows.length === 0 && Array.isArray(defaultOffsets) && defaultOffsets.length) {
-    rows = defaultOffsets.map((min) => ({ offset: String(min), amount: 1, unit: 'days' }));
+    return defaultOffsets.map((min) => ({ offset: String(min), amount: 1, unit: 'days' }));
   }
+  return rows;
+}
+
+/**
+ * Was die Zeile "Przypomnienie" des Blatts nennt: gespeicherte Erinnerungen wie
+ * die Leseansicht (reminderSummary), die Zeilen eines neuen Termins mit dem
+ * Namen ihres Vorlaufs. Ein eigener Vorlauf („pół godziny wcześniej" aus einem
+ * Satz) hat keinen Namen, der etwas sagt - er nennt wie die Leseansicht seinen
+ * Zeitpunkt, gerechnet vom Beginn `start`.
+ */
+function eventReminderRowText(event, reminders, rows, start = '') {
+  const stored = reminderList(reminders);
+  if (stored.length) return reminderSummary(event, stored);
+  const labels = REMINDER_OFFSETS();
+  const momentOf = (row) => {
+    const at = start ? reminderStartMs(start) - customReminderMinutes(row.amount, row.unit) * 60000 : NaN;
+    return Number.isFinite(at) ? reminderWhenText({ remind_at: new Date(at).toISOString().slice(0, 19) }) : '';
+  };
+  return rows
+    .map((row) => (row.offset === 'custom'
+      ? momentOf(row)
+      : labels.find((o) => o.value === row.offset && o.value !== '')?.label ?? ''))
+    .filter(Boolean)
+    .join(', ');
+}
+
+/** `rows`: die Zeilen, mit denen der Abschnitt aufgeht - ohne Angabe die gespeicherten bzw. die Vorgaben. */
+function renderCalendarReminderSection(reminders = [], event = null, defaultOffsets = [], rows = calendarReminderRows(reminders, event, defaultOffsets)) {
   const enabled = rows.length > 0;
   const rowsHtml = (enabled ? rows : [{ offset: '0', amount: 1, unit: 'days' }])
     .map((r) => reminderRowHtml(r)).join('');
@@ -8086,19 +7997,14 @@ function renderCalendarReminderSection(reminders = [], event = null, defaultOffs
    * der halbe Haushalt eine Meldung bekommt, weil ein Einzelner sich etwas
    * notiert hat. Ein neuer Termin gehoert dem, der ihn gerade anlegt. */
   const sharesReminder = !event || event.created_by === state.currentUserId;
-  // Der Schalter spricht wie „Ganztägig" ueber ihm, nicht wie eine
-  // Abschnittsueberschrift: seit der Critique 2026-09-24 ist die Erinnerung
-  // ein Feld in der Reihe des Termin-Dialogs, kein eigener Abschnitt mehr
-  // (die Aufgaben behalten `.reminder-section__title`).
+  // AN ODER AUS SAGT DER ABSCHNITT DES BLATTS (One Today): der Chip
+  // „Przypomnienie" schaltet ein, „Usuń" und das x der Zeile schalten aus.
+  // Das Kaestchen bleibt als Traeger dieses Zustands im DOM - das Speichern
+  // liest es (reminderRowsFromForm), und ein zweiter Schalter neben dem Chip
+  // waere ein zweiter Weg zu derselben Frage.
   return `
     <div class="reminder-section">
-      <div class="reminder-section__header">
-        <label class="toggle" style="margin:0">
-          <input type="checkbox" id="modal-reminder-toggle" ${enabled ? 'checked' : ''}>
-          <span class="toggle__track"></span>
-          <span>${t('reminders.enableLabel')}</span>
-        </label>
-      </div>
+      <input type="checkbox" id="modal-reminder-toggle" ${enabled ? 'checked' : ''} hidden>
       <div id="modal-reminder-fields" class="reminder-fields" ${enabled ? '' : 'style="display:none"'}>
         <div class="reminder-rows" id="modal-reminder-rows">
           ${rowsHtml}
@@ -8388,7 +8294,7 @@ function populateLocalCalendarSelect(selectElement, currentEvent = null) {
   const calendars = state.localCalendars.length
     ? state.localCalendars
     : [{ id: currentEvent?.local_calendar_id || defaultLocalCalendar()?.id || null,
-      name: t('calendar.defaultLocalCalendar'), color: '#007AFF', is_default: true }];
+      name: t('calendar.defaultLocalCalendar'), is_default: true }];
   const selectedId = currentEvent?.local_calendar_id ?? defaultLocalCalendar()?.id ?? calendars[0]?.id;
   selectElement.replaceChildren();
   for (const calendar of calendars) {
@@ -8436,7 +8342,17 @@ function wireVisibilityWarning(panel, selectSel, msName, warnSel, privateWarnSel
   update();
 }
 
-function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null, onClose = undefined }) {
+/**
+ * @param {{mode: 'create'|'edit', event?: object|null, date?: string|null, reminder?: object|object[]|null,
+ *          time?: string|null, onChanged?: Function|null, onClose?: Function,
+ *          draft?: object|null, spoken?: boolean, heard?: string}} opts
+ *        `draft`, `spoken` und `heard` gelten nur beim Anlegen (Diktat, siehe
+ *        buildEventModalContent): `spoken` bringt „Powtórz" in den Kopf.
+ *        `onClose` geht an ein Blatt weiter, das dieses aus einem Diktat
+ *        ersetzt (dictateOverEventSheet) - es gibt frei, was das Blatt braucht
+ *        (das Seitenblatt von aussen), und das neue Blatt braucht es noch.
+ */
+function openEventModal({ mode, event = null, date = null, reminder = null, time = null, onChanged = null, onClose = undefined, draft = null, spoken = false, heard = '' }) {
   // DER LETZTE RIEGEL VOR DEM FORMULAR. Es gibt sieben Wege hierher - Kopfknopf,
   // FAB, Doppelklick oder langer Druck in eine leere Stunde der Wochen- und der
   // Tagesansicht (wireTimeGridCreate), zwei Leerzustands-CTAs und der
@@ -8449,17 +8365,342 @@ function openEventModal({ mode, event = null, date = null, reminder = null, time
     return;
   }
   const isEdit = mode === 'edit';
-  const content = buildEventModalContent({ mode, event, date, reminder, time });
+  const fromVoice = spoken && !isEdit;
+  const content = buildEventModalContent({
+    mode, event, date, reminder, time, draft: isEdit ? null : draft, spoken: fromVoice, heard,
+  });
+  // Was beim Schliessen frei wird, gehoert dem Blatt, das gerade steht. Ersetzt
+  // ein Diktat das Blatt, nimmt das neue es mit (`handOverClose`): sonst gaebe
+  // das alte, das dabei zugeht, das Seitenblatt unter dem neuen frei.
+  let closing = onClose;
+  const handOverClose = () => {
+    const handed = closing;
+    closing = undefined;
+    return handed;
+  };
+  // Das Panel kennt erst onSave; der Kopfknopf ruft ueber diesen Griff.
+  let sayAgain = () => {};
+  const dictateWith = { onChanged, handOverClose };
 
   openSharedModal({
     title: isEdit ? t('calendar.editEvent') : t('calendar.newEvent'),
     content,
     size: 'md',
-    onClose,
+    onClose: () => closing?.(),
+    // `type="button"` liefert openModal.
+    headerAction: fromVoice
+      ? { id: 'event-say-again', label: t('tasks.sayAgain'), onClick: () => sayAgain() }
+      : null,
     // Ein neuer Termin startet weiterhin mit dem Fokus im Titelfeld: Hier ist
-    // Tippen die Absicht, hier ist der Autofokus richtig.
-    onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); },
+    // Tippen die Absicht, hier ist der Autofokus richtig. Mikrofon und
+    // „Powtórz" gibt es nur beim Anlegen (R10).
+    onSave(panel) { wireEventForm(panel, { mode, event, reminder, onChanged }); if (!isEdit) sayAgain = wireEventDictation(panel, fromVoice, dictateWith); },
   });
+}
+
+/**
+ * Das Mikrofon des Termin-Blatts sagt einen TERMIN: der Satz geht mit
+ * `kind: 'event'` an POST /quick-add/parse (Haiku, ein Aufruf). Ohne KI (aus,
+ * am Limit, Fehler, Zeitueberschreitung) gibt es keinen Termin aus dem Satz -
+ * dann bleibt nur der Titel, das Blatt behaelt den Rest. Auch eine Antwort
+ * anderer Art (der Server gibt eine Aufgabe, wo der Kalender nicht
+ * beschreibbar ist) traegt hier nur ihren Titel bei.
+ *
+ * @returns {Promise<{draft: object, source: 'ai'|'local'}>}
+ */
+async function eventDraftFromSentence(sentence, { members = [], post } = {}) {
+  const { kind, draft, source } = await quickDraftFromSentence(sentence, { members, post, kind: 'event' });
+  return { source, draft: kind === 'event' ? draft : { title: draft?.title ?? sentence } };
+}
+
+/**
+ * Was im Blatt steht, als Entwurf: das Wann (auch ein mehrtaegiges), Titel,
+ * Personen, Ort und Erinnerungszeilen (nur offene Abschnitte - ein
+ * zugeklappter traegt nichts), die Beschreibung und was hinter „Więcej" als
+ * Wert im Blatt steht. Kalender, Sync-Ziel und Anhang reisen nicht mit: die
+ * ersten beiden laedt das neue Blatt selbst nach, eine Datei lebt im Feld.
+ */
+function eventSheetValues(panel) {
+  const q = (sel) => panel.querySelector(sel);
+  const open = (name) => {
+    const section = q(`[data-section="${name}"]`);
+    return !!section && !section.hidden;
+  };
+  const allDay = q('#modal-allday')?.checked === true;
+  const reminders = reminderRowsFromForm(panel);
+  return {
+    title: String(q('#modal-title')?.value ?? '').trim(),
+    assigned_to: getSelectedUserIds(panel, 'cal_assigned'),
+    when: {
+      all_day: allDay,
+      date: readDateInput(panel, allDay ? '#modal-allday-start' : '#modal-start-date') || null,
+      start_time: parseTimeInput(q('#modal-start-time')?.value || '') || null,
+      end_date: readDateInput(panel, allDay ? '#modal-allday-end' : '#modal-end-date') || null,
+      // Hinter „ganztaegig" ruhen die Stunden; das neue Blatt rechnet sie neu.
+      end_time: allDay ? null : (parseTimeInput(q('#modal-end-time')?.value || '') || null),
+    },
+    location: open('where') ? String(q('#modal-location')?.value ?? '').trim() : '',
+    reminder_rows: open('reminder') && reminders.enabled
+      ? reminders.rows.map(({ offset, amount, unit }) => ({ offset, amount, unit }))
+      : [],
+    description: String(q('#modal-description')?.value ?? ''),
+    more: {
+      recurrence_rule: getRRuleValues(panel, 'event')?.recurrence_rule ?? null,
+      visibility: q('#modal-visibility')?.value || 'all',
+      countdown: q('#modal-countdown')?.checked === true,
+      icon: q('#modal-icon')?.value || 'calendar',
+    },
+  };
+}
+
+/** Sagt der Satz weder Tag noch Stunde, bleibt das Wann des Blatts (Task 8: `date` ist dann null). */
+function keepSheetWhen(draft, sheet) {
+  if (draft?.date || draft?.start_time) return { ...draft };
+  return { ...draft, ...sheet.when };
+}
+
+/**
+ * Der Entwurf aus dem Satz, ergaenzt um das im Blatt Gewaehlte, das der Satz
+ * nicht setzt (das Mikrofon im Titel, wie F9 im Aufgabenblatt). Was der Satz
+ * sagt, gewinnt. `defaults: false`: die Vorgaben eines neuen Blatts („mich
+ * zuweisen", Standard-Erinnerungen) treten nicht wieder ein - wer sie im Blatt
+ * entfernt hat, hat entschieden.
+ */
+function keepChosenEvent(draft, sheet) {
+  const out = { ...keepSheetWhen(draft, sheet), description: sheet.description, more: sheet.more, defaults: false };
+  if (!String(draft.title ?? '').trim()) out.title = sheet.title;
+  if (!(Array.isArray(draft.assigned_to) && draft.assigned_to.length)) out.assigned_to = sheet.assigned_to;
+  if (!String(draft.location ?? '').trim()) out.location = sheet.location;
+  if (!Number.isInteger(draft.reminder_minutes)) out.reminder_rows = sheet.reminder_rows;
+  return out;
+}
+
+/**
+ * Mikrofon im Titelfeld und „Powtórz" eines neuen Termin-Blatts; liefert den
+ * Aufruf fuer den Kopfknopf. Das Mikrofon BEHAELT, was gewaehlt war und der
+ * Satz nicht sagt; „Powtórz" ersetzt - das ist seine Bedeutung.
+ */
+function wireEventDictation(panel, spoken, opts) {
+  if (spoken) panel.querySelector('.modal-panel__action')?.setAttribute('data-action', 'dictate');
+  panel.querySelector('.task-sheet__mic')?.addEventListener('click', (e) => {
+    e.preventDefault?.();
+    dictateOverEventSheet(panel, { ...opts, keep: true });
+  });
+  return () => dictateOverEventSheet(panel, opts);
+}
+
+/**
+ * Diktat aus dem offenen Blatt „Nowe wydarzenie" (Mikrofon, „Powtórz").
+ *
+ * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
+ * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
+ * gefuelltes (`spoken`, mit dem eben gesagten Satz als `heard`). Sagt der Satz
+ * weder Tag noch Stunde, bleibt das Wann des Blatts. Schliessen bringt das
+ * Blatt zurueck, wie es war; „Type instead" ebenso, mit dem Gesagten als Titel.
+ *
+ * Das Hoerblatt geht synchron im Tipp auf (askOverModal ruft `ask` sofort) -
+ * Safari startet die Erkennung nur aus einer Nutzergeste heraus.
+ */
+async function dictateOverEventSheet(panel, { onChanged = null, handOverClose = () => undefined, keep = false } = {}) {
+  const initialText = panel.querySelector('#modal-title')?.value ?? '';
+  // VOR dem Hoerblatt gelesen - das Blatt steht dann sicher.
+  const sheet = eventSheetValues(panel);
+  const answer = await askOverModal(() => new Promise((resolve) => {
+    openDictationSheet({
+      initialText,
+      members: state.users,
+      // Neutrale Worte: das Blatt hoert einen Termin, keine Aufgabe.
+      copy: quickAddCopy(),
+      toDraft: eventDraftFromSentence,
+      // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
+      // das gefuellte Blatt es.
+      onDraft: (draft, { text = '' } = {}) => { resolve({ draft, heard: text }); closeModal({ force: true }); },
+      onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
+      onCancel: () => resolve(null),
+    });
+  }));
+  if (answer?.draft) {
+    const draft = keep ? keepChosenEvent(answer.draft, sheet) : keepSheetWhen(answer.draft, sheet);
+    openEventModal({
+      mode: 'create', date: sheet.when.date, time: sheet.when.start_time,
+      draft, spoken: true, heard: answer.heard, onChanged, onClose: handOverClose(),
+    });
+  } else if (answer?.type) {
+    // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
+    const field = panel.querySelector('#modal-title');
+    if (field && answer.text && answer.text !== field.value.trim()) {
+      field.value = answer.text;
+      field.dispatchEvent?.(new Event('input', { bubbles: true }));
+    }
+    field?.focus?.();
+  }
+}
+
+/**
+ * Die Felder eines Abschnitts statt seiner Zeile. Die Zeile ist ein
+ * Aufklapper (`aria-expanded`, `aria-controls` auf die Felder) - ihr Zustand
+ * sagt, was sie getan hat, auch wenn sie danach den Feldern Platz macht.
+ */
+function showEventSectionBody(section) {
+  section.querySelector?.('[data-expand]')?.setAttribute?.('aria-expanded', 'true');
+  const row = section.querySelector?.('[data-row]');
+  if (row) row.hidden = true;
+  const body = section.querySelector?.('.task-sheet__body');
+  if (body) body.hidden = false;
+}
+
+/**
+ * Der Fokus geht in einen eben geoeffneten Abschnitt: „Gdzie" in sein Feld
+ * (Tippen ist die Absicht), „Kiedy" auf den gewaehlten Tag, „Przypomnienie"
+ * auf den ersten Vorlauf. Ein Datumsfeld zu fokussieren hiesse auf dem
+ * Telefon, die Tastatur ueber das Blatt zu legen.
+ */
+function focusIntoEventSection(panel, section, name) {
+  if (name === 'where') { panel.querySelector('#modal-location')?.focus?.(); return; }
+  const body = section.querySelector?.('.task-sheet__body') ?? section;
+  const target = name === 'when'
+    ? (body.querySelector?.('[data-day-pick][aria-pressed="true"]') ?? body.querySelector?.('[data-day-pick]'))
+    : (body.querySelector?.('.js-reminder-offset') ?? body.querySelector?.('[data-remove]'));
+  target?.focus?.();
+}
+
+/** Schaltet die Erinnerung ueber ihr Kaestchen - dessen Listener (wireReminderRows) zeigt die Zeilen. */
+function setEventReminderOn(panel, on) {
+  const toggle = panel.querySelector('#modal-reminder-toggle');
+  if (!toggle || toggle.checked === on) return;
+  toggle.checked = on;
+  toggle.dispatchEvent?.(new Event('change', { bubbles: true }));
+}
+
+/** Ein „+"-Chip: sein Abschnitt geht mit den Feldern auf, der Chip tritt zurueck. */
+function openEventSection(panel, name, button = null) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  section.hidden = false;
+  showEventSectionBody(section);
+  const chip = button ?? panel.querySelector(`[data-reveal="${name}"]`);
+  if (chip) chip.hidden = true;
+  if (name === 'reminder') setEventReminderOn(panel, true);
+  focusIntoEventSection(panel, section, name);
+}
+
+/**
+ * „Usuń" oder das x der Zeile: klappt den Abschnitt zu UND leert ihn - ein
+ * zugeklappter Abschnitt mit Wert waere ein versteckt gesetzter Wert. Der
+ * Fokus geht an den Chip, der ihn wieder oeffnet. „Kiedy" hat keinen: ein
+ * Termin hat immer ein Wann.
+ */
+function closeEventSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  const chip = panel.querySelector(`[data-reveal="${name}"]`);
+  if (!section || !chip) return;
+  section.hidden = true;
+  chip.hidden = false;
+  if (name === 'where') {
+    const location = panel.querySelector('#modal-location');
+    if (location) location.value = '';
+  } else if (name === 'reminder') {
+    setEventReminderOn(panel, false);
+  }
+  chip.focus?.();
+}
+
+/** Ein Tipp auf eine kompakte Zeile: ihre Felder klappen auf, der Fokus geht hinein. */
+function expandEventSection(panel, name) {
+  const section = panel.querySelector(`[data-section="${name}"]`);
+  if (!section) return;
+  showEventSectionBody(section);
+  focusIntoEventSection(panel, section, name);
+}
+
+/** Gedrueckte Tageswahl nach dem Beginn, den das Blatt gerade traegt (bei „ganztaegig" aus dessen Feld). */
+function syncEventDayPills(panel) {
+  const pills = panel.querySelectorAll('[data-day-pick]');
+  if (!pills.length) return;
+  const section = panel.querySelector('[data-section="when"]');
+  const allDay = panel.querySelector('#modal-allday')?.checked === true;
+  const day = readDateInput(panel, allDay ? '#modal-allday-start' : '#modal-start-date');
+  const pick = eventDayPickOf(day, todayKey(), section?.dataset?.pick ?? '');
+  for (const pill of pills) pill.setAttribute('aria-pressed', String(pill.dataset.dayPick === pick));
+}
+
+/**
+ * „Dzisiaj" und „Jutro" schreiben den Beginn - in beide Startfelder, damit der
+ * Tag den Ganztags-Schalter ueberlebt; das Ende folgt ueber deren
+ * `change` (wireDateFollow), die Uhrzeit bleibt. „Wybierz datę" oeffnet den
+ * Kalender des Startfelds, das gerade gilt.
+ */
+function pickEventDay(panel, key) {
+  const section = panel.querySelector('[data-section="when"]');
+  if (key === 'pick') {
+    if (section?.dataset) section.dataset.pick = 'pick';
+    syncEventDayPills(panel);
+    const allDay = panel.querySelector('#modal-allday')?.checked === true;
+    const field = panel.querySelector(allDay ? '#modal-allday-start' : '#modal-start-date');
+    // Der Kalender-Ausloeser des Datepickers (sein Knopf mit `aria-haspopup`).
+    const trigger = field?.querySelector?.('[aria-haspopup="dialog"]');
+    if (trigger) trigger.click(); else field?.focus?.();
+    return;
+  }
+  const today = todayKey();
+  const day = key === 'tomorrow' ? addLocalDays(today, 1) : today;
+  if (section?.dataset) section.dataset.pick = key;
+  for (const sel of ['#modal-start-date', '#modal-allday-start']) {
+    const field = panel.querySelector(sel);
+    if (!field) continue;
+    field.value = day;
+    field.dispatchEvent?.(new Event('change', { bubbles: true }));
+  }
+  syncEventDayPills(panel);
+}
+
+/**
+ * Der Ganztags-Schalter wechselt das Startfeld - der gewaehlte Tag geht mit.
+ * Die Tageswahl schreibt beide Felder, der Kalender des Datepickers nur das,
+ * das gerade gilt; ohne das stuende nach dem Umschalten der alte Tag da (und
+ * die Tageswahl zeigte ihn). Das Ende folgt ueber `change` (wireDateFollow).
+ */
+function carryStartDay(panel, toAllDay) {
+  const from = panel.querySelector(toAllDay ? '#modal-start-date' : '#modal-allday-start');
+  const to = panel.querySelector(toAllDay ? '#modal-allday-start' : '#modal-start-date');
+  const day = parseDateInput(from?.value || '');
+  if (!to || !day || !isDateInputValid(from.value) || day === parseDateInput(to.value || '')) return;
+  to.value = day;
+  to.dispatchEvent?.(new Event('change', { bubbles: true }));
+}
+
+/** Zeilen, Chips, „Usuń" und die Tageswahl des Termin-Blatts. */
+function wireEventSheet(panel) {
+  const sheet = panel.querySelector('.cal-event-form');
+  if (!sheet) return;
+  sheet.addEventListener('click', (e) => {
+    const target = e.target;
+    const remove = target?.closest?.('[data-remove]');
+    if (remove) { e.preventDefault(); closeEventSection(panel, remove.dataset.remove); return; }
+    const reveal = target?.closest?.('[data-reveal]');
+    if (reveal) { e.preventDefault(); openEventSection(panel, reveal.dataset.reveal, reveal); return; }
+    const expand = target?.closest?.('[data-expand]');
+    if (expand) { e.preventDefault(); expandEventSection(panel, expand.dataset.expand); return; }
+    const dayPick = target?.closest?.('[data-day-pick]');
+    if (dayPick) { e.preventDefault(); pickEventDay(panel, dayPick.dataset.dayPick); }
+  });
+  for (const sel of ['#modal-start-date', '#modal-allday-start', '#modal-allday']) {
+    panel.querySelector(sel)?.addEventListener('change', () => syncEventDayPills(panel));
+  }
+}
+
+/**
+ * Ein Feld mit Fehler muss zu sehen sein: steht es hinter einer kompakten
+ * Zeile oder im zugeklappten „Więcej", geht beides auf, bevor die Meldung
+ * kommt (wie das Aufgabenblatt bei einer Erinnerung in der Vergangenheit).
+ */
+function revealEventField(field) {
+  const section = field?.closest?.('[data-section]');
+  if (section) {
+    section.hidden = false;
+    showEventSectionBody(section);
+  }
+  field?.closest?.('details')?.setAttribute?.('open', '');
 }
 
 /**
@@ -8477,7 +8718,6 @@ function hasCurrentAttachment(attachmentState, event) {
 }
 
 function wireEventForm(panel, { mode, event = null, reminder = null, onChanged = null }) {
-  const isEdit = mode === 'edit';
   // Der Wiederholungsbaustein kennt absichtlich keine Feld-IDs des Kalenders.
   // Der Kalender liefert ihm das aktive Startdatum ausdrücklich: bei einem
   // Zeit-Termin aus dem Zeitbereich, bei „ganztägig" aus dessen eigenem Feld.
@@ -8494,63 +8734,18 @@ function wireEventForm(panel, { mode, event = null, reminder = null, onChanged =
   wireVisibilityWarning(panel, '#modal-visibility', 'cal_assigned', '#modal-visibility-warning', '#modal-visibility-private-warning',
     event?.created_by ?? state.currentUserId);
 
-  // Der Farbwaehler war bis v2.35.0 ausgegraut, sobald jemand zugewiesen war,
-  // mit dem Hinweis, die Farbe der Person schlage sie ohnehin. Seit #815 steht
-  // die Terminfarbe in resolveEventColor VORN, womit der Hinweis unwahr wurde -
-  // die Sperre nahm dem Nutzer eine Wahl ab, um ein Versprechen zu halten, das
-  // der Code nicht mehr gab (#856). Sie ist deshalb weg und bleibt weg.
-  //
-  // Seit #891 ist die Aussage von damals wieder erreichbar, nur als WAHL statt
-  // als Sperre: der Erben-Swatch traegt sie, und wer stattdessen eine Farbe
-  // waehlt, behaelt sie. Wer der Termin ist, sagt weiterhin der Avatar-Stack.
-
-  // Leerstring = der Erben-Swatch. Ein neuer Termin startet dort, und ein
-  // bestehender ohne eigene Farbe steht dort ebenfalls - beides ist seit #891
-  // ein ausdrueckbarer Zustand und nicht mehr der Palettenerste als Notloesung.
-  const selectedColor = isEdit ? (event?.color || COLOR_INHERIT) : COLOR_INHERIT;
-
-  // Farb-Auswahl: Auswahl + ARIA + Keyboard (Roving Tabindex)
-  function selectSwatch(target) {
-    panel.querySelectorAll('.color-swatch').forEach((s) => {
-      s.classList.remove('color-swatch--active');
-      s.setAttribute('aria-checked', 'false');
-      s.setAttribute('tabindex', '-1');
-    });
-    target.classList.add('color-swatch--active');
-    target.setAttribute('aria-checked', 'true');
-    target.setAttribute('tabindex', '0');
-  }
-  panel.querySelectorAll('.color-swatch').forEach((sw) => {
-    if (sameColor(sw.dataset.color, selectedColor)) selectSwatch(sw);
-    sw.addEventListener('click', () => { selectSwatch(sw); sw.focus(); });
-    sw.addEventListener('keydown', (e) => {
-      const swatches = [...panel.querySelectorAll('.color-swatch')];
-      const idx = swatches.indexOf(sw);
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        const next = swatches[(idx + 1) % swatches.length];
-        selectSwatch(next); next.focus();
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const prev = swatches[(idx - 1 + swatches.length) % swatches.length];
-        selectSwatch(prev); prev.focus();
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectSwatch(sw);
-      }
-    });
-  });
-
   // Ganztägig-Toggle
   const alldayCheck = panel.querySelector('#modal-allday');
   const timeFields  = panel.querySelector('#time-fields');
   const alldayFields = panel.querySelector('#allday-fields');
   alldayCheck.addEventListener('change', () => {
+    carryStartDay(panel, alldayCheck.checked);
     if (alldayCheck.checked) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
     else                      { timeFields.style.display = '';     alldayFields.style.display = 'none'; }
     recurrenceBinding.refreshStartDate();
   });
-  if (isEdit && event?.all_day) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
+  // Ganztaegig kann ein Termin schon aufgehen: beim Bearbeiten, und aus einem Satz mit Tag ohne Stunde.
+  if (alldayCheck.checked) { timeFields.style.display = 'none'; alldayFields.style.display = ''; }
 
   const iconInput = panel.querySelector('#modal-icon');
   const iconTrigger = panel.querySelector('#modal-icon-trigger');
@@ -8784,13 +8979,15 @@ function wireEventForm(panel, { mode, event = null, reminder = null, onChanged =
   // der nächsten Start-Änderung angewendet. Nur für Zeit-Termine.
   wireDurationMemory(panel);
 
-  panel.querySelector('#modal-cancel').addEventListener('click', closeModal);
-
   panel.querySelector('#modal-delete')?.addEventListener('click', async () => {
     closeModal({ force: true });
     await requestDeleteEvent(event);
     refocusAfterRender();
   });
+
+  // Zeilen, Chips und Tageswahl des Blatts - nach den Feld-Listenern oben:
+  // die Tageswahl schreibt den Beginn, und das Ende folgt ueber deren `change`.
+  wireEventSheet(panel);
 
   panel.querySelector('#modal-save').addEventListener('click', () => saveEvent(panel, mode, event, reminder, attachmentState, onChanged));
   // Pflichtfelder melden sich beim Verlassen inline statt erst beim
@@ -8985,18 +9182,19 @@ function eventAttachmentFieldHtml(event) {
 }
 
 /**
- * Was hinter „Weitere Einstellungen" im Termin-Dialog liegt, als eine Zeile
- * („Sichtbarkeit, Stichtage, Farbe, Icon, Sync-Ziel und Anhang"). Aus den
- * Beschriftungen der Felder selbst, und nur die, die der Dialog wirklich
- * zeigt: die Sichtbarkeit fehlt, wo niemand sonst den Kalender liest, der
+ * Was hinter „Więcej" im Termin-Blatt liegt, als eine Zeile („Powtarzanie,
+ * Opis, Widoczność ... i Załącznik"). Aus den Beschriftungen der Felder
+ * selbst, und nur die, die das Blatt wirklich zeigt: der Kalender fehlt, wo es
+ * nur einen gibt, die Sichtbarkeit, wo niemand sonst den Kalender liest, der
  * Anhang, wo das Dokumente-Modul zu ist.
  */
-function eventAdvancedTopics({ visibilityOffered = true, attachment = true } = {}) {
+function eventAdvancedTopics({ visibilityOffered = true, attachment = true, localCalendar = false } = {}) {
   const topics = [
+    t('rrule.labelRepeat'),
+    localCalendar ? t('calendar.localCalendarLabel') : null,
     t('calendar.descriptionLabel'),
     visibilityOffered ? t('common.visibility.label') : null,
     t('dashboard.countdownTitle'),
-    t('calendar.colorLabel'),
     t('calendar.iconLabel'),
     t('calendar.syncTargetLabel'),
     attachment ? t('calendar.attachmentLabel') : null,
@@ -9008,44 +9206,179 @@ function eventAdvancedTopics({ visibilityOffered = true, attachment = true } = {
   }
 }
 
-function buildEventModalContent({ mode, event, date, reminder = null, time = null }) {
+// --------------------------------------------------------
+// Das Termin-Blatt im geteilten Aufbau (One Today, Task 10)
+//
+// Wie das Blatt „Nowe zadanie" (utils/sheet-parts.js): Titel mit Mikrofon
+// (nur beim Anlegen, R10), die Personen, dann die kompakten Zeilen Kiedy,
+// Gdzie, Przypomnienie - Zeichen, Name, Wert, x; ein Tipp klappt die Felder
+// auf. Was leer ist, wartet als „+"-Chip. „Więcej" haelt den Rest, und EIN
+// Knopf nennt die Sache („Dodaj wydarzenie"). Kein Abbrechen: x und Wischen
+// schliessen das Blatt. Die Feld-ids bleiben, was sie waren - das Speichern
+// liest dieselben Felder wie vorher (test:event-sheet haelt den Koerper fest).
+// --------------------------------------------------------
+
+/** Zeichen, Namen und x-Beschriftung der Zeilen (sheet-parts.js). „Kiedy" hat kein x. */
+const EVENT_ROW_OPTIONS = Object.freeze({
+  icons: Object.freeze({ when: 'calendar', where: 'map-pin', reminder: 'bell' }),
+  labels: Object.freeze({ when: 'calendar.whenLabel', where: 'calendar.whereLabel', reminder: 'reminders.sectionTitle' }),
+  removeLabels: Object.freeze({ where: 'calendar.removeLocation', reminder: 'reminders.removeReminder' }),
+});
+
+/** Die Schnellwahl des Tages unter „Kiedy", in der Reihenfolge des Blatts (wie im Aufgabenblatt). */
+const EVENT_DAY_PICKS = Object.freeze({ today: 'common.today', tomorrow: 'common.tomorrow', pick: 'tasks.duePick' });
+
+/**
+ * Welche Tages-Schnellwahl ein Beginn ist. Wer „Wybierz datę" getippt hat,
+ * bleibt dort, auch wenn er danach heute waehlt - sonst sprange der Knopf
+ * unter dem Finger weg (wie duePickOf im Aufgabenblatt).
+ */
+function eventDayPickOf(day, today = todayKey(), chosen = '') {
+  if (chosen === 'pick') return 'pick';
+  if (day && day === today) return 'today';
+  if (day && day === addLocalDays(today, 1)) return 'tomorrow';
+  return 'pick';
+}
+
+/**
+ * Der Wert der Zeile „Kiedy": „Jutro, 17:00-18:30", „Jutro, cały dzień",
+ * ueber mehrere Tage „Dzisiaj-pt., cały dzień" oder „Jutro, 22:00-czw., 09:00".
+ * Spannen mit einem Bindestrich ohne Leerzeichen (Ruling R3). Ein Ende um
+ * 00:00 am Folgetag gehoert noch zum Abend davor (wie eventEndDate, #804).
+ */
+function eventWhenRowText({ allDay, startDate, startTime, endDate, endTime }) {
+  const startDay = relativeDateLabel(startDate);
+  const endsLater = Boolean(endDate) && endDate > startDate;
+  if (allDay) {
+    return `${endsLater ? `${startDay}-${relativeDateLabel(endDate)}` : startDay}, ${t('calendar.whenAllDay')}`;
+  }
+  const from = formatTime(startTime);
+  if (!endTime) return `${startDay}, ${from}`;
+  const sameDay = !endsLater || (endTime === '00:00' && endDate === addLocalDays(startDate, 1));
+  return sameDay
+    ? `${startDay}, ${from}-${formatTime(endTime)}`
+    : `${startDay}, ${from}-${relativeDateLabel(endDate)}, ${formatTime(endTime)}`;
+}
+
+/** Was der Speichern-Knopf sagt - auch nach einem gescheiterten Versuch. */
+function eventSaveLabel(mode) {
+  return mode === 'edit' ? t('common.save') : t('calendar.addEvent');
+}
+
+const DRAFT_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const DRAFT_HOUR = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Was ein Entwurf ueber das Wann sagt; null heisst „nicht gesagt", dann gilt
+ * das Blatt (Tag und Stunde, mit denen es aufgeht). Ein Ende zaehlt nur zu
+ * einem gesagten Beginn.
+ */
+function draftWhen(draft) {
+  const day = (value) => (typeof value === 'string' && DRAFT_DAY.test(value) ? value : null);
+  const hour = (value) => (typeof value === 'string' && DRAFT_HOUR.test(value) ? value : null);
+  const startTime = hour(draft?.start_time);
+  return {
+    date: day(draft?.date),
+    startTime,
+    allDay: draft?.all_day === true,
+    endDate: day(draft?.end_date),
+    endTime: startTime ? hour(draft?.end_time) : null,
+  };
+}
+
+/** Das gesagte Ende (oder das mitgenommene eines Blatts), wenn es nach dem Beginn liegt; sonst null. */
+function draftEnd(when, startDate, startTime) {
+  if (!when.endTime) return null;
+  const date = when.endDate ?? startDate;
+  return `${date}T${when.endTime}` > `${startDate}T${startTime}` ? { date, time: when.endTime } : null;
+}
+
+/**
+ * Die Erinnerungszeilen eines Entwurfs - oder null, wenn er nichts dazu sagt
+ * (dann gelten die Standard-Erinnerungen eines neuen Termins). Gesagte Minuten
+ * werden EINE Zeile mit diesem Vorlauf; laege sie schon in der Vergangenheit,
+ * keine (R15: keine neue Erinnerung in der Vergangenheit). Aus dem Blatt
+ * mitgenommene Zeilen (das Mikrofon) stehen, wie sie waren.
+ */
+function draftReminderRows(draft, start, now = Date.now()) {
+  const minutes = draft?.reminder_minutes;
+  if (Number.isInteger(minutes) && minutes >= 0) {
+    const at = reminderStartMs(start) - minutes * 60000;
+    return Number.isFinite(at) && at > now ? [reminderRowForLead(minutes)] : [];
+  }
+  if (Array.isArray(draft?.reminder_rows)) {
+    return draft.reminder_rows.slice(0, MAX_CALENDAR_REMINDERS)
+      .map(({ offset = '0', amount = 1, unit = 'days' } = {}) => ({ offset: String(offset), amount, unit }));
+  }
+  return null;
+}
+
+/**
+ * @param {{mode: 'create'|'edit', event?: object|null, date?: string|null, reminder?: object|object[]|null,
+ *          time?: string|null, draft?: object|null, spoken?: boolean, heard?: string}} opts
+ *        `draft` (nur beim Anlegen) fuellt das Blatt aus einem Satz (One Today):
+ *        `{ title, date, start_time, end_time, all_day, location, assigned_to,
+ *        reminder_minutes }` wie POST /quick-add/parse sie liefert. Mit Stunde
+ *        beginnt der Termin an `date` um `start_time` und endet um `end_time`
+ *        oder nach der ueblichen Dauer; `all_day` macht ihn ganztaegig an
+ *        `date`. Ohne Tag und Stunde bleiben `date`/`time` des Blatts. Genannte
+ *        Personen ersetzen „mich zuweisen", `reminder_minutes` wird eine
+ *        Erinnerungszeile (nicht in der Vergangenheit, R15). Ein Entwurf aus
+ *        dem Mikrofon traegt dazu, was im Blatt gewaehlt war (`end_date`,
+ *        `reminder_rows`, `description`, `more`, `defaults: false`, siehe
+ *        keepChosenEvent). Jedes Blatt aus einem Entwurf gilt als geaendert
+ *        (R11, `data-dirty-base`).
+ *        `spoken` + `heard`: der gesagte Satz steht klein ueber dem Titel.
+ */
+function buildEventModalContent({ mode, event, date, reminder = null, time = null, draft = null, spoken = false, heard = '' }) {
   const isEdit = mode === 'edit';
   const today  = date || state.today;
+  const fill = isEdit ? null : draft;
+  const said = draftWhen(fill);
 
-  const startDate = isEdit ? localDate(event.start_datetime) : today;
+  const startDate = isEdit ? localDate(event.start_datetime) : (said.date ?? today);
   const startTime = isEdit && event.start_datetime.length > 10
-    ? localTime(event.start_datetime) : (time ?? defaultNewEventTime(today));
+    ? localTime(event.start_datetime) : (said.startTime ?? time ?? defaultNewEventTime(startDate));
   // Standard-Termindauer aus den Präferenzen: neue Termine erhalten ein Ende,
   // das um die konfigurierte Dauer nach dem Start liegt (#441).
   const durationMin = state.defaultDuration || 60;
-  const derivedEnd  = addDurationToDateTime(startDate, startTime, durationMin);
+  const derivedEnd  = draftEnd(said, startDate, startTime) ?? addDurationToDateTime(startDate, startTime, durationMin);
   const endDate   = isEdit && event.end_datetime ? localDate(event.end_datetime) : derivedEnd.date;
   const endTime   = isEdit && event.end_datetime && event.end_datetime.length > 10
     ? localTime(event.end_datetime)
     : derivedEnd.time;
-  const selectedIcon = eventIconName(isEdit ? event.icon : 'calendar');
+  const allDay = isEdit ? Boolean(event.all_day) : said.allDay;
+  // Ein ganztaegiger Entwurf dauert seinen Tag (oder bis zum mitgenommenen
+  // Ende); die Zeitfelder dahinter behalten Beginn und uebliche Dauer.
+  const alldayEndDate = !isEdit && allDay
+    ? (said.endDate && said.endDate >= startDate ? said.endDate : startDate)
+    : endDate;
+  // Was ein Entwurf aus dem Blatt mitnahm, das ihn diktierte (keepChosenEvent).
+  const kept = fill?.more ?? null;
+  const selectedIcon = eventIconName(isEdit ? event.icon : (kept?.icon ?? 'calendar'));
+  const location = isEdit ? (event.location || '') : String(fill?.location ?? '').trim();
 
-  // Neue Termine: optional den aktuellen Nutzer vorbelegen (#498).
+  // Neue Termine: optional den aktuellen Nutzer vorbelegen (#498) - es sei
+  // denn, der Satz nennt Personen, oder das Blatt, aus dem diktiert wurde,
+  // hatte schon gewaehlt.
+  const draftPeople = Array.isArray(fill?.assigned_to) ? fill.assigned_to.map(Number).filter(Number.isInteger) : [];
   const selectedUserIds = isEdit
     ? (event.assigned_users?.map((u) => u.id) ?? (event.assigned_to ? [event.assigned_to] : []))
-    : (state.defaultAssignMe && state.currentUserId != null ? [state.currentUserId] : []);
-  const visibility = (isEdit ? event.visibility : null) || 'all';
+    : (draftPeople.length || fill?.defaults === false
+      ? draftPeople
+      : (state.defaultAssignMe && state.currentUserId != null ? [state.currentUserId] : []));
+  const visibility = (isEdit ? event.visibility : kept?.visibility) || 'all';
 
-  // WAS OFT GEBRAUCHT WIRD, STEHT OBEN (Critique 2026-09-24, P2). Die
-  // Reihenfolge folgt der Haeufigkeit: Titel, Wann, Wer, Wiederholung,
-  // Erinnerung, Ort, Beschreibung. Sichtbarkeit, Stichtag, Farbe, Icon,
-  // Sync-Ziel und Anhang sind Entscheidungen fuer wenige Termine - sie standen
-  // vorher VOR Wiederholung und Erinnerung, und der Dialog war mobil drei
-  // Bildschirme lang (1559px bei 523 sichtbar, 23 sichtbare Eingaben).
-  //
-  // Beim Bearbeiten geht „Weitere Einstellungen" auf, sobald darin etwas steht,
-  // das der Termin sonst nirgends zeigt: eine eingeschraenkte Sichtbarkeit,
-  // der Stichtag, ein Anhang. Farbe und Icon traegt der Termin im Raster
-  // selbst, dafuer muss niemand aufklappen.
+  // „WIĘCEJ" GEHT BEIM BEARBEITEN AUF, sobald darin etwas steht, das der
+  // Termin sonst nirgends zeigt (R8): eine Wiederholung, eine Beschreibung,
+  // eine eingeschraenkte Sichtbarkeit, der Stichtag, ein Anhang. Das Icon
+  // traegt der Termin im Raster selbst, dafuer muss niemand aufklappen.
   const visibilityOffered = state.users.length > 1 || othersCanRead('calendar');
   const attachmentHtml = eventAttachmentFieldHtml(isEdit ? event : null);
+  const localCalendarOffered = state.localCalendars.length > 1 && (!isEdit || Boolean(event.local_calendar_id));
   const advancedFieldsOpen = isEdit && (
-    Boolean(event.description?.trim())
+    Boolean(event.recurrence_rule)
+    || Boolean(event.description?.trim())
     || (visibilityOffered && visibility !== 'all')
     || !!event.countdown
     || hasAttachment(event)
@@ -9054,17 +9387,35 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
   // Der Aufklapper nennt, was hinter ihm liegt - sonst faende den Stichtag
   // nur, wer schon weiss, dass es ihn gibt (#647). Aus denselben Beschriftungen
   // wie die Felder, damit Liste und Inhalt nicht auseinanderlaufen.
-  const advancedTopics = eventAdvancedTopics({ visibilityOffered, attachment: Boolean(attachmentHtml) });
+  const advancedTopics = eventAdvancedTopics({
+    visibilityOffered, attachment: Boolean(attachmentHtml), localCalendar: localCalendarOffered,
+  });
 
-  // DIE BESCHREIBUNG STEHT HINTER DEM AUFKLAPPER (R19, Critique 2026-10-16:
-  // der Dialog war mobil 1,6 Bildschirme lang). Notizen sind am Termin das
-  // Seltenste der sichtbaren Felder - Apple Kalender stellt sie ans Ende. Ein
-  // Termin MIT Beschreibung oeffnet den Aufklapper (advancedFieldsOpen).
+  // HINTER „WIĘCEJ" in der Folge des Entwurfs: Wiederholung, Kalender,
+  // Beschreibung, dann was wenige Termine brauchen - Sichtbarkeit, Stichtag,
+  // Icon, Sync-Ziel, Anhang.
   const advancedFieldsHtml = `
+    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : (kept?.recurrence_rule ?? null), {
+      allowCount: true,
+      expandsFromStart: true,
+      // Kanonischer Datums-Key aus dem Kalenderzustand. Das Widget formatiert
+      // ihn nur; es kennt weder die Zeit- noch die Ganztags-Feldnamen.
+      startDate,
+      // Ein UNTIL mit Uhrzeit endet am Ortstag der Serie, so wie der Server es
+      // liest (#1974) - dafuer braucht das Formular ihre Zone und ihren Start.
+      seriesZone: isEdit ? event.tzid : null,
+      seriesStart: isEdit ? event.start_datetime : null,
+    })}
+
+    ${localCalendarOffered ? `<div class="form-group">
+      <label class="form-label" for="event-local-calendar">${t('calendar.localCalendarLabel')}</label>
+      <select class="form-input" id="event-local-calendar"></select>
+    </div>` : ''}
+
     <div class="form-group">
       <label class="form-label" for="modal-description">${t('calendar.descriptionLabel')}</label>
       <textarea class="form-input" id="modal-description" rows="2"
-                placeholder="${t('calendar.descriptionPlaceholder')}">${esc(isEdit && event.description ? event.description : '')}</textarea>
+                placeholder="${t('calendar.descriptionPlaceholder')}">${esc(isEdit ? (event.description || '') : String(fill?.description ?? ''))}</textarea>
     </div>
 
     <!-- Verborgen, nicht entfernt: der Speicherpfad liest
@@ -9088,43 +9439,17 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
     </div>
 
     <!-- #647: der Schalter, den @Kyrodan beschrieben hat - „einen Termin als
-         Countdown markieren" statt eines zweiten Systems daneben. Er steht
-         seit der Critique 2026-09-24 hier und nicht mehr im Hauptbereich: der
+         Countdown markieren" statt eines zweiten Systems daneben. Der
          Aufklapper nennt ihn in seiner Zeile (eventAdvancedTopics), damit er
-         trotzdem gefunden wird, ohne dass jeder Termin ihn vor Wiederholung
-         und Erinnerung vorgelegt bekommt. -->
+         gefunden wird, ohne dass jeder Termin ihn vorgelegt bekommt. -->
     <div class="form-group">
       <label class="toggle">
         <input type="checkbox" id="modal-countdown" aria-describedby="modal-countdown-hint"
-               ${isEdit && event.countdown ? 'checked' : ''}>
+               ${(isEdit ? event.countdown : kept?.countdown) ? 'checked' : ''}>
         <span class="toggle__track"></span>
         <span>${t('calendar.countdownToggle')}</span>
       </label>
       <p class="form-hint" id="modal-countdown-hint">${t('calendar.countdownHint')}</p>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" id="event-color-label">${t('calendar.colorLabel')}</label>
-      <div class="color-picker" id="event-color-picker" role="radiogroup" aria-labelledby="event-color-label">
-        <!-- Steht vorn, weil er der Standard ist: ein Termin, fuer den niemand
-             eine Farbe gewaehlt hat, traegt die der zugewiesenen Person (#891).
-             Traegt bewusst KEIN Inline-background - seine Optik kommt aus
-             calendar.css, weil sie eine Designentscheidung ist und keine
-             Nutzereinstellung. -->
-        <div class="color-swatch color-swatch--inherit" data-color=""
-             role="radio"
-             tabindex="0"
-             aria-checked="false"
-             aria-label="${esc(t('calendar.colorInherit'))}"
-             title="${esc(t('calendar.colorInheritHint'))}"></div>
-        ${pickerColors(isEdit ? event : null).map((c) => `
-          <div class="color-swatch" data-color="${esc(c)}" style="background-color:${esc(c)};"
-               role="radio"
-               tabindex="-1"
-               aria-checked="false"
-               aria-label="${esc(EVENT_COLOR_NAMES()[c] ?? t('calendar.colorCurrent'))}"></div>
-        `).join('')}
-      </div>
     </div>
 
     <div class="form-group event-icon-picker">
@@ -9154,64 +9479,98 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
 
     ${attachmentHtml}`;
 
-  // Von und Bis sind je EINE Zeile: Datum und Uhrzeit nebeneinander unter
-  // einer Beschriftung. Vorher trug jedes der vier Felder ein eigenes Label
-  // (Startdatum, Startzeit, Enddatum, Endzeit), und mobil stand jedes auf
-  // einer eigenen Zeile - vier Zeilen fuer zwei Zeitpunkte. Das Datumsfeld
-  // heisst wie seine Zeile („Von"), damit der sichtbare Name im zugaenglichen
-  // steckt; das Zeitfeld bringt seinen eigenen Namen mit (`label`).
+  // KIEDY: die Zeile nennt Tag und Stunden; aufgeklappt stehen die
+  // Tageswahl, Von und Bis (je eine Zeile: Datum und Uhrzeit nebeneinander
+  // unter einer Beschriftung) und der Ganztags-Schalter. Das Datumsfeld heisst
+  // wie seine Zeile („Von"), damit der sichtbare Name im zugaenglichen steckt;
+  // das Zeitfeld bringt seinen eigenen Namen mit (`label`).
+  const dayPick = eventDayPickOf(startDate);
+  const dayPills = Object.entries(EVENT_DAY_PICKS).map(([key, label]) => `
+            <button type="button" class="task-sheet__pill" data-day-pick="${key}" aria-pressed="${dayPick === key}">${t(label)}</button>`).join('');
+  const whenHtml = sheetSectionHtml('when', {
+    open: true,
+    labelledBy: 'event-when-heading',
+    idPrefix: 'event',
+    row: eventWhenRowText({ allDay, startDate, startTime, endDate: allDay ? alldayEndDate : endDate, endTime }),
+    rowOptions: { ...EVENT_ROW_OPTIONS, removable: false },
+  }, `${sheetSectionHead('when', `<span class="task-sheet__section-title" id="event-when-heading">${t('calendar.whenLabel')}</span>`, { removable: false })}
+          <div class="task-sheet__pills">${dayPills}
+          </div>
+          <div class="cal-when" id="time-fields">
+            <label class="form-label cal-when__label" for="modal-start-date">${t('calendar.fromLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-start-date" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
+            <yuvomi-datepicker type="time" id="modal-start-time" value="${esc(formatTimeInput(startTime))}" label="${esc(t('calendar.startTimeLabel'))}"></yuvomi-datepicker>
+            <label class="form-label cal-when__label" for="modal-end-date">${t('calendar.toLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-end-date" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
+            <yuvomi-datepicker type="time" id="modal-end-time" value="${esc(formatTimeInput(endTime))}" label="${esc(t('calendar.endTimeLabel'))}"></yuvomi-datepicker>
+          </div>
+          <div class="cal-when cal-when--dates" id="allday-fields" style="display:none;">
+            <label class="form-label cal-when__label" for="modal-allday-start">${t('calendar.fromLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-allday-start" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
+            <label class="form-label cal-when__label" for="modal-allday-end">${t('calendar.toLabel')}</label>
+            <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(alldayEndDate))}"></yuvomi-datepicker>
+          </div>
+          <div class="form-group">
+            <label class="toggle">
+              <input type="checkbox" id="modal-allday" ${allDay ? 'checked' : ''}>
+              <span class="toggle__track"></span>
+              <span>${t('calendar.allDayToggle')}</span>
+            </label>
+          </div>`);
+
+  const whereHtml = sheetSectionHtml('where', {
+    open: Boolean(location),
+    labelledBy: 'event-where-heading',
+    idPrefix: 'event',
+    row: location,
+    rowOptions: EVENT_ROW_OPTIONS,
+  }, `${sheetSectionHead('where', `<label class="task-sheet__section-title" id="event-where-heading" for="modal-location">${t('calendar.whereLabel')}</label>`)}
+          <input type="text" class="form-input" id="modal-location"
+                 placeholder="${t('calendar.locationPlaceholder')}" value="${esc(location)}">`);
+
+  const defaultOffsets = isEdit || fill?.defaults === false ? [] : state.defaultReminders;
+  const reminderStart = allDay ? startDate : `${startDate}T${startTime}`;
+  const reminderRows = (fill ? draftReminderRows(fill, reminderStart) : null)
+    ?? calendarReminderRows(reminder, event, defaultOffsets);
+  const reminderOn = reminderRows.length > 0;
+  const reminderHtml = sheetSectionHtml('reminder', {
+    open: reminderOn,
+    labelledBy: 'event-reminder-heading',
+    idPrefix: 'event',
+    row: reminderOn ? eventReminderRowText(event, reminder, reminderRows, reminderStart) : '',
+    rowOptions: EVENT_ROW_OPTIONS,
+  }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="event-reminder-heading">${t('reminders.sectionTitle')}</span>`)}
+          ${renderCalendarReminderSection(reminder, event, defaultOffsets, reminderRows)}`);
+
   return `
-    <div class="cal-event-form">
+    <div class="cal-event-form task-sheet">
+    ${fill ? `<!-- Ein Blatt aus einem Diktat ist schon eine Eingabe: das Schliessen
+         fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
+    <input type="hidden" id="event-from-draft" value="1" data-dirty-base="">` : ''}
+    ${spoken && !isEdit ? heardLineHtml(heard) : ''}
     <div class="form-group">
-      <label class="form-label" for="modal-title">${t('calendar.titleLabel')}${REQUIRED_MARK}</label>
-      <input type="text" class="form-input" id="modal-title" required
-             placeholder="${t('calendar.titlePlaceholder')}" value="${esc(isEdit ? event.title : '')}">
+      ${titleFieldHtml({
+    id: 'modal-title',
+    name: 'title',
+    value: isEdit ? (event.title ?? '') : String(fill?.title ?? ''),
+    placeholder: t('calendar.titlePlaceholder'),
+    labelKey: 'calendar.titleLabel',
+    // Ein Satz fuellt dieses Blatt (wireEventDictation) - nur beim Anlegen (R10).
+    mic: isEdit ? null : { labelKey: 'tasks.sayIt' },
+  })}
     </div>
 
-    ${state.localCalendars.length > 1 && (!isEdit || event.local_calendar_id) ? `<div class="form-group">
-      <label class="form-label" for="event-local-calendar">${t('calendar.localCalendarLabel')}</label>
-      <select class="form-input" id="event-local-calendar"></select>
-    </div>` : ''}
-
-    <div class="form-group">
-      <label class="toggle">
-        <input type="checkbox" id="modal-allday" ${isEdit && event.all_day ? 'checked' : ''}>
-        <span class="toggle__track"></span>
-        <span>${t('calendar.allDayToggle')}</span>
-      </label>
+    <div class="form-group task-sheet__who">
+      ${renderUserMultiSelect(withChosenPeople(state.users, isEdit ? event.assigned_users : []), selectedUserIds, 'cal_assigned', 'tasks.whoLabel')}
     </div>
+${whenHtml}
+${whereHtml}
+${reminderHtml}
 
-    <div class="cal-when" id="time-fields">
-      <label class="form-label cal-when__label" for="modal-start-date">${t('calendar.fromLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-start-date" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
-      <yuvomi-datepicker type="time" id="modal-start-time" value="${esc(formatTimeInput(startTime))}" label="${esc(t('calendar.startTimeLabel'))}"></yuvomi-datepicker>
-      <label class="form-label cal-when__label" for="modal-end-date">${t('calendar.toLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-end-date" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
-      <yuvomi-datepicker type="time" id="modal-end-time" value="${esc(formatTimeInput(endTime))}" label="${esc(t('calendar.endTimeLabel'))}"></yuvomi-datepicker>
+    <div class="task-sheet__reveals">
+      ${revealButtonHtml('where', 'calendar.whereLabel', Boolean(location), EVENT_ROW_OPTIONS.icons)}
+      ${revealButtonHtml('reminder', 'reminders.sectionTitle', reminderOn, EVENT_ROW_OPTIONS.icons)}
     </div>
-
-    <div class="cal-when cal-when--dates" id="allday-fields" style="display:none;">
-      <label class="form-label cal-when__label" for="modal-allday-start">${t('calendar.fromLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-allday-start" value="${esc(formatDateInput(startDate))}"></yuvomi-datepicker>
-      <label class="form-label cal-when__label" for="modal-allday-end">${t('calendar.toLabel')}</label>
-      <yuvomi-datepicker type="date" id="modal-allday-end" value="${esc(formatDateInput(endDate))}"></yuvomi-datepicker>
-    </div>
-
-    <div class="form-group">
-      ${renderUserMultiSelect(withChosenPeople(state.users, isEdit ? event.assigned_users : []), selectedUserIds, 'cal_assigned', 'calendar.assignedLabel')}
-    </div>
-
-    ${renderRRuleFields('event', isEdit ? event.recurrence_rule : null, {
-      allowCount: true,
-      expandsFromStart: true,
-      // Kanonischer Datums-Key aus dem Kalenderzustand. Das Widget formatiert
-      // ihn nur; es kennt weder die Zeit- noch die Ganztags-Feldnamen.
-      startDate,
-      // Ein UNTIL mit Uhrzeit endet am Ortstag der Serie, so wie der Server es
-      // liest (#1974) - dafuer braucht das Formular ihre Zone und ihren Start.
-      seriesZone: isEdit ? event.tzid : null,
-      seriesStart: isEdit ? event.start_datetime : null,
-    })}
 
     ${isEdit && requiresWholeSeriesConfirmation(event) ? `
       <p class="form-hint field-hint--warn" id="modal-whole-series-only" role="status">
@@ -9219,26 +9578,19 @@ function buildEventModalContent({ mode, event, date, reminder = null, time = nul
         <span>${t('calendar.wholeSeriesOnlyNotice')}</span>
       </p>` : ''}
 
-    ${renderCalendarReminderSection(reminder, event, isEdit ? [] : state.defaultReminders)}
-
-    <div class="form-group">
-      <label class="form-label" for="modal-location">${t('calendar.locationLabel')}</label>
-      <input type="text" class="form-input" id="modal-location"
-             placeholder="${t('calendar.locationPlaceholder')}" value="${esc(isEdit && event.location ? event.location : '')}">
+    ${advancedSection(advancedFieldsHtml, { label: t('tasks.more'), open: advancedFieldsOpen, hint: advancedTopics })}
     </div>
 
-    ${advancedSection(advancedFieldsHtml, { open: advancedFieldsOpen, hint: advancedTopics })}
-    </div>
-
+    ${isEdit ? `
     <div class="modal-panel__footer modal-panel__footer--plain">
-      ${isEdit ? `<button class="btn btn--danger-outline" id="modal-delete">
+      <button type="button" class="btn btn--danger-outline" id="modal-delete">
         <i data-lucide="trash-2" class="icon-md" aria-hidden="true"></i>${t('common.delete')}
-      </button>` : '<div></div>'}
-      <div style="display:flex;gap:var(--space-3)">
-        <button type="button" class="btn btn--secondary" id="modal-cancel">${t('common.cancel')}</button>
-        <button class="btn btn--primary" id="modal-save">${isEdit ? t('common.save') : t('common.add')}</button>
-      </div>
-    </div>`;
+      </button>
+      <button type="button" class="btn btn--primary" id="modal-save">${eventSaveLabel(mode)}</button>
+    </div>` : `
+    <div class="modal-panel__footer modal-panel__footer--plain">
+      <button type="button" class="btn btn--primary task-sheet__submit" id="modal-save">${eventSaveLabel(mode)}</button>
+    </div>`}`;
 }
 
 function confirmCalendarOverrideOrphans(count) {
@@ -9325,7 +9677,6 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   }
 
   const allday  = overlay.querySelector('#modal-allday').checked;
-  const color   = colorToSave(overlay.querySelector('.color-swatch--active')?.dataset.color, event);
   const icon    = eventIconName(overlay.querySelector('#modal-icon')?.value);
   const location    = overlay.querySelector('#modal-location').value.trim() || null;
   const assigned_to = getSelectedUserIds(overlay, 'cal_assigned');
@@ -9381,6 +9732,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   if (datesValid && seriesEndConflict(mode, event, getRRuleValues(overlay, 'event').recurrence_rule, start_datetime)) {
     fieldErrors.push([overlay.querySelector('#event-rrule-until'), t('calendar.recurrenceEndBeforeStart')]);
   }
+  for (const [field] of fieldErrors) revealEventField(field);
   if (reportFieldErrors(fieldErrors)) return;
 
   if (mode === 'edit'
@@ -9416,9 +9768,10 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
   try {
     const rrule = getRRuleValues(overlay, 'event');
     if (!rrule.valid_until) {
+      revealEventField(overlay.querySelector('#event-rrule-until'));
       reportFieldError(overlay.querySelector('#event-rrule-until'), t('calendar.invalidDate'));
       saveBtn.disabled    = false;
-      saveBtn.textContent = mode === 'edit' ? t('common.save') : t('common.add');
+      saveBtn.textContent = eventSaveLabel(mode);
       return;
     }
     const attachmentFile = overlay.querySelector('#modal-attachment')?.files?.[0];
@@ -9460,7 +9813,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     const body = {
       title, description, start_datetime, end_datetime,
       all_day: !!allday,
-      location, color, icon, assigned_to,
+      location, icon, assigned_to,
       local_calendar_id: (target_google_calendar_id || target_caldav_account_id) ? undefined
         : Number(overlay.querySelector('#event-local-calendar')?.value) || undefined,
       visibility: overlay.querySelector('#modal-visibility')?.value || 'all',
@@ -9539,6 +9892,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
             && !reminderRowsUnchanged(reminderForm, reminderList(existingReminder)
               .map((rem) => reminderRowFromReminder(event, rem)))) {
           const blocked = reminderForm.rows.find(keepsStoredInstant);
+          revealEventField(blocked?.select);
           reportFieldError(blocked?.select, t('reminders.afterStartNeedsLeadTime'));
           saveBtn.disabled = false;
           saveBtn.textContent = t('common.save');
@@ -9644,7 +9998,7 @@ async function saveEvent(overlay, mode, event, existingReminder = null, attachme
     // und der Button reaktiviert - die Eingaben des Nutzers bleiben erhalten.
     window.yuvomi?.showToast(calendarSaveErrorMessage(err), 'danger');
     saveBtn.disabled    = false;
-    saveBtn.textContent = mode === 'edit' ? t('common.save') : t('common.add');
+    saveBtn.textContent = eventSaveLabel(mode);
   }
 }
 

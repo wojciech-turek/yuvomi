@@ -133,31 +133,3 @@ export function validateCategoryName(value) {
   }
   return name;
 }
-
-export function pruneCategoryFromDashboardConfigs(database, categoryId) {
-  const rows = database.prepare(`
-    SELECT key, value FROM sync_config
-    WHERE key IN ('dashboard_widgets', 'dashboard_widgets_default')
-       OR key LIKE 'dashboard_widgets:user:%'
-  `).all();
-  const update = database.prepare('UPDATE sync_config SET value = ? WHERE key = ?');
-  const target = String(categoryId);
-  for (const row of rows) {
-    let config;
-    try { config = JSON.parse(row.value); } catch { continue; }
-    if (!Array.isArray(config)) continue;
-    let changed = false;
-    for (const widget of config) {
-      if (widget?.id !== 'notes' || !Array.isArray(widget.options?.categories)) continue;
-      const next = widget.options.categories.filter((id) => String(id) !== target);
-      if (next.length === widget.options.categories.length) continue;
-      changed = true;
-      if (next.length) widget.options.categories = next;
-      else {
-        delete widget.options.categories;
-        if (!Object.keys(widget.options).length) delete widget.options;
-      }
-    }
-    if (changed) update.run(JSON.stringify(config), row.key);
-  }
-}

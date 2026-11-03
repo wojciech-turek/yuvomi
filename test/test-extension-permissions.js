@@ -88,30 +88,28 @@ test('listModules exposes extension capabilities and catalog merge', async () =>
 
   const catalog = permissionCatalog();
   assert.ok(catalog.modules.some((m) => m.key === 'ext:demo-ext'));
-  assert.ok(catalog.widgets.some((w) => w.id === 'demo-ext:summary'));
+  assert.ok(!('widgets' in catalog), 'a declared widget is listed in the module, not a permission resource');
   assert.ok(catalog.scopeModuleKeys.includes('ext:demo-ext'));
 });
 
-test('resolvePermissions includes extension keys and widget inherit', async () => {
+test('resolvePermissions includes extension module keys and no widget axis', async () => {
   const user = { id: 2, role: 'member', family_role: 'child' };
   replaceSubjectPermissions(db, 'user', user.id, {
     modules: { 'ext:demo-ext': 'none' },
-    widgets: {},
   });
 
   const resolved = resolvePermissions(db, user);
   assert.equal(resolved.modules['ext:demo-ext'], 'none');
-  assert.equal(resolved.widgets['demo-ext:summary'], 'none');
+  assert.ok(!('widgets' in resolved));
 });
 
-test('normalizePermissionInput accepts extension widget id', async () => {
+test('normalizePermissionInput ignores a widget map (manifest widgets are not permission resources)', async () => {
   await svc.listModules({ admin: true });
   const rows = normalizePermissionInput({
     modules: { 'ext:demo-ext': 'read' },
     widgets: { 'demo-ext:summary': 'none' },
   });
-  assert.ok(rows.some((r) => r.resource_key === 'ext:demo-ext'));
-  assert.ok(rows.some((r) => r.resource_key === 'demo-ext:summary'));
+  assert.deepEqual(rows.map((r) => r.resource_key), ['ext:demo-ext']);
 });
 
 test('extensionPermissionKey helper', () => {
@@ -168,7 +166,7 @@ test('stored ext permission rows are dropped while the catalog is empty (deny-li
     VALUES (?, ?, ?, ?, ?)
   `).run('user', String(user.id), 'module', 'ext:demo-ext', 'none');
 
-  setExtensionPermissionCatalog({ permissionModules: [], permissionWidgets: [] });
+  setExtensionPermissionCatalog({ permissionModules: [] });
   setExtensionScopeModules([]);
 
   const emptyResolved = resolvePermissions(db, user);
@@ -283,8 +281,4 @@ test('die Rechtematrix zerlegt dataset.group nicht mehr selbst (#1009)', () => {
     /parsePermissionGroup\s*\(\s*opt\.dataset\.group\s*\)/,
     'und ihn auf dataset.group anwenden',
   );
-
-  // Die Widget-Id-Zerlegung an anderer Stelle ist KORREKT und bleibt: dort ist
-  // die erste Komponente gesucht (die Modul-Id), nicht die letzte.
-  assert.match(src, /id\.split\(':'\)\[0\]/, 'widgetLabel darf weiterhin die Modul-Id abschneiden');
 });

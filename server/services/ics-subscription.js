@@ -28,6 +28,8 @@ const MAX_RESPONSE_BYTES        = 10 * 1024 * 1024;
 const FETCH_TIMEOUT_MS          = 15_000;
 
 const ENV_ALLOW_PRIVATE_NETWORK = 'ICS_SUBSCRIPTION_ALLOW_PRIVATE_NETWORK';
+/** Fuer die NOT-NULL-Spalte `ics_subscriptions.color` (= ihr DB-Default). */
+const DEFAULT_SUBSCRIPTION_COLOR = '#6366f1';
 
 const syncingNow = new Set();
 
@@ -361,7 +363,7 @@ function toLocalRRule(raw) {
  *
  * @returns {Promise<{ imported:number, skipped:number, total:number }>}
  */
-async function importToLocal(userId, { ics, url, color, localCalendarId = null } = {}) {
+async function importToLocal(userId, { ics, url, localCalendarId = null } = {}) {
   let rawEvents;
   if (typeof ics === 'string' && ics.trim()) {
     rawEvents = parseICS(ics);
@@ -377,12 +379,8 @@ async function importToLocal(userId, { ics, url, color, localCalendarId = null }
   // Einzel-Vorkommen werden eigenständige Termine statt die Serie zu killen (#549).
   rawEvents = normalizeRecurrenceOverrides(rawEvents);
 
-  // HIER bleibt der Fallback bewusst stehen, anders als im Abo-Sync oben (#891).
-  // Ein einmaliger Import macht aus den Terminen LOKALE Termine ohne Quelle -
-  // sie haben danach keinen Kalender mehr, von dem sie eine Farbe erben koennten,
-  // und `color` ist der Wert, den der Nutzer fuer genau diesen Import angegeben
-  // hat. Das ist eine Wahl und gehoert deshalb in die Eigenfarb-Spalte.
-  const fallbackColor = color || '#007AFF';
+  // Eine Importfarbe gibt es nicht mehr (One Today): ein Termin traegt nur die
+  // Eigenfarbe seiner Datei (RFC 7986 COLOR), gespeichert, nicht gezeigt.
   // `series_authored = 1`: die Termine gehoeren nach dem Import dem Nutzer und
   // sind lokale Zeilen wie jede hier angelegte - so hat sie der ausgehende Weg
   // schon behandelt, als er noch `external_source` las (#1935).
@@ -417,7 +415,7 @@ async function importToLocal(userId, { ics, url, color, localCalendarId = null }
         const localRule = toLocalRRule(ev.rrule);
         const info = insert.run(
           ev.summary, ev.description, ev.dtstart, ev.dtend,
-          ev.allDay ? 1 : 0, ev.location, ev.color || fallbackColor,
+          ev.allDay ? 1 : 0, ev.location, ev.color ?? null,
           ev.uid || null, localRule, userId, localCalendarId,
         );
         // EXDATE nur übernehmen, wenn die Serie erhalten blieb (localRule != null).
@@ -437,15 +435,17 @@ async function importToLocal(userId, { ics, url, color, localCalendarId = null }
   return { imported, skipped, total };
 }
 
-async function create(userId, { name, url, color, shared, default_assignee_user_id = null }) {
+async function create(userId, { name, url, shared, default_assignee_user_id = null }) {
   const normalizedUrl = normalizeUrl(url);
   await checkSSRF(normalizedUrl);
   // Die Zuweisung steht VOR dem ersten syncOne() in der Zeile - danach gesetzt
   // hätte sie die eben eingelesenen Termine nicht mehr erreicht (#730).
+  // Die NOT-NULL-Spalte `color` bekommt den festen Vorgabewert; ein Abo hat
+  // keine Farbe mehr, die jemand waehlt oder sieht (One Today).
   const subId = db.get().prepare(
     `INSERT INTO ics_subscriptions (name,url,color,shared,created_by,default_assignee_user_id)
      VALUES (?,?,?,?,?,?)`
-  ).run(name, normalizedUrl, color, shared ? 1 : 0, userId, default_assignee_user_id).lastInsertRowid;
+  ).run(name, normalizedUrl, DEFAULT_SUBSCRIPTION_COLOR, shared ? 1 : 0, userId, default_assignee_user_id).lastInsertRowid;
   const newSub = db.get().prepare('SELECT * FROM ics_subscriptions WHERE id = ?').get(subId);
   let syncError = null;
   try { await syncOne(newSub); } catch (err) { syncError = err.message; }
@@ -457,13 +457,12 @@ function update(userId, subId, fields, isAdmin) {
   if (!sub) return null;
   if (!isAdmin && sub.created_by !== userId) throw new Error('Not authorized.');
   const name   = fields.name   !== undefined ? fields.name   : sub.name;
-  const color  = fields.color  !== undefined ? fields.color  : sub.color;
   const shared = fields.shared !== undefined ? (fields.shared ? 1 : 0) : sub.shared;
   const assignee = fields.default_assignee_user_id !== undefined
     ? fields.default_assignee_user_id
     : sub.default_assignee_user_id;
-  db.get().prepare(`UPDATE ics_subscriptions SET name = ?, color = ?, shared = ?, default_assignee_user_id = ? WHERE id = ?`)
-    .run(name, color, shared, assignee, subId);
+  db.get().prepare(`UPDATE ics_subscriptions SET name = ?, shared = ?, default_assignee_user_id = ? WHERE id = ?`)
+    .run(name, shared, assignee, subId);
   return db.get().prepare('SELECT * FROM ics_subscriptions WHERE id = ?').get(subId);
 }
 

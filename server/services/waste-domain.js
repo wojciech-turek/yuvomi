@@ -8,7 +8,7 @@
 
 import { nextOccurrence, matchesRRuleByday } from './recurrence.js';
 import { shiftDateKey } from '../utils/timezone.js';
-import { str, color as validateColorField, collectErrors } from '../middleware/validate.js';
+import { str, collectErrors } from '../middleware/validate.js';
 
 export const RECURRENCE_KINDS = Object.freeze(['weekly', 'monthly_fixed_day', 'monthly_ordinal_weekday']);
 export const WEEKDAY_CODES = Object.freeze(['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']);
@@ -54,6 +54,7 @@ export class WasteExpansionError extends Error {
 }
 
 export const DEFAULT_TYPE_ICON = 'trash-2';
+/** Abfallarten haben keine Farbe; die Spalte (NOT NULL) bekommt diesen festen Wert, eine gesendete `color` wird ignoriert. */
 export const DEFAULT_TYPE_COLOR = '#22C55E';
 export const TYPE_NAME_MAX = 100;
 export const NOTE_MAX = 500;
@@ -97,11 +98,6 @@ export function validateType(input, { partial = false } = {}) {
     const v = str(input.icon ?? DEFAULT_TYPE_ICON, 'icon', { max: 60 });
     checks.push(v);
     value.icon = v.value;
-  }
-  if (!partial || input.color !== undefined) {
-    const v = validateColorField(input.color ?? DEFAULT_TYPE_COLOR, 'color');
-    checks.push(v);
-    value.color = v.value;
   }
   if (input.archived !== undefined) value.archived = input.archived ? 1 : 0;
   if (input.sort_order !== undefined) {
@@ -471,7 +467,6 @@ export function coalesceOccurrences(rawOccurrences, typesById) {
       type_id: group.type_id,
       type_name: type?.name ?? null,
       type_icon: type?.icon ?? null,
-      type_color: type?.color ?? null,
       type_sort_order: type?.sort_order ?? 0,
       moved: origins.some((o) => o.moved),
       coalesced: origins.length > 1,

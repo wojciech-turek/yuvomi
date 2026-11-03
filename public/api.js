@@ -8,7 +8,7 @@ import { clearApiCache } from '/sw-register.js';
 import { setPermissions, clearPermissions } from '/permissions.js';
 import { setHouseholdSize, setOtherReaders, clearHouseholdSize } from '/utils/household.js';
 import { setInitialsRoster, clearInitialsRoster } from '/utils/initials.js';
-import { forgetLayoutHint } from '/utils/dashboard-layout-hint.js';
+import { setHouseholdOrder } from '/utils/person-color.js';
 import { t } from '/i18n.js';
 import { REFUSAL_MESSAGES } from '/utils/friendly-error.js';
 
@@ -350,6 +350,7 @@ const auth = {
     setHouseholdSize(res?.householdSize);
     setOtherReaders(res?.othersCanRead);
     setInitialsRoster(res?.initialsRoster);
+    setHouseholdOrder(res?.householdOrder);
     return res;
   },
   // Zweiter Schritt der Anmeldung (#672). Der Code darf ein TOTP-Code oder ein
@@ -360,6 +361,7 @@ const auth = {
     setHouseholdSize(res?.householdSize);
     setOtherReaders(res?.othersCanRead);
     setInitialsRoster(res?.initialsRoster);
+    setHouseholdOrder(res?.householdOrder);
     return res;
   },
   // Verwaltung des eigenen zweiten Faktors.
@@ -377,15 +379,12 @@ const auth = {
       clearPermissions();
       clearHouseholdSize();
       clearInitialsRoster();
+      setHouseholdOrder([]);
       // API-Cache IMMER leeren — auch wenn der Logout-Request offline oder bei
       // nicht erreichbarem Server fehlschlägt. Der Settings-Handler navigiert in
       // seinem finally trotzdem zu /login, daher darf hier kein offline gecachter
       // Stand des vorigen Nutzers am selben Gerät zurückbleiben.
       clearApiCache();
-      // Aus demselben Grund der Layout-Hinweis der Übersicht: seit die
-      // Anordnung jeder Person gehört (#585), sagt er am geteilten Tablett
-      // sonst das Raster des vorigen Nutzers voraus.
-      forgetLayoutHint();
     }
   },
   // opts nur fuer den Start des Routers (`quietExpiry`, siehe apiFetch).
@@ -397,6 +396,7 @@ const auth = {
     setHouseholdSize(res?.householdSize);
     setOtherReaders(res?.othersCanRead);
     setInitialsRoster(res?.initialsRoster);
+    setHouseholdOrder(res?.householdOrder);
     return res;
   },
   // `language` und `timezone` sind optional: fehlt eines, laesst JSON.stringify

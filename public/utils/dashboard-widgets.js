@@ -1,306 +1,20 @@
 /**
- * Modul: Dashboard-Widget-Konfiguration
- * Zweck: Der Standard-Satz der Dashboard-Widgets und die reine Logik darauf -
- *        Normalisieren eines gespeicherten Layouts, Vergleich zweier
- *        Konfigurationen, Nachrechnen des dicht gepackten Rasters.
- * Abhängigkeiten: nur utils/dashboard-event-limit.js (rein, ohne eigene Importe)
+ * Modul: Dashboard-Abruf
+ * Zweck: Der Abruf der Uebersicht und der Erinnerungen fuer die Flaeche, die
+ *        ihn zeichnet (`dashboardRequest`), der geteilte Erinnerungs-Abruf
+ *        (`fetchPendingReminders`, `forgetPendingReminders`) und die Frage, ob
+ *        eine Abfrage die Zahlen der Antwort veraendert
+ *        (`dashboardQueryFiltersCounts`).
+ * Abhängigkeiten: keine
  *
- * WARUM ALS UTIL UND NICHT IN dashboard.js: `normalizeDashboardConfig` traegt
- * eine Zusicherung (siehe unten an WIDGET_IDS) und war bis 2026-08-13 durch
- * keinen einzigen Test gedeckt.
- * NICHT der Grund ist Unerreichbarkeit - `dashboard.js` ist über den
- * Browser-Loader importierbar, `test-dashboard.js` tut das für den Wand-Modus.
- * Der Grund ist, dass diese Zusicherung dann am `__test`-Export hinge: einer
- * Tür, die für Ansichts-Renderer gebaut ist und deren Inhalt sich nach dem
- * Bedarf der Tests richtet. Eine Regel, an der ein Bestandslayout hängt, gehört
- * hinter eine echte Modulgrenze.
- * Diese Datei hat deshalb bewusst keine Importe ausser einer reinen Schwester
- * (die Stufen der Kalender-Kachel, #1680, die auch die Route liest): sie ist
- * die Teilmenge, die ohne DOM, ohne `window.yuvomi` und ohne Haushaltskontext
- * entscheidbar ist.
- * Was an `isSoloHousehold()` oder den Modul-Schaltern hängt
- * (`isWidgetModuleEnabled`), bleibt drüben in der Seite.
- * Guards: test/test-dashboard.js, Abschnitt „Widget-Konfiguration".
+ * HEUTE IST FUER ALLE DASSELBE (One-Today-Runde, 2026-11-02): kein Layout je
+ * Person, keine Haushaltsvorgabe, keine Widget-Optionen. Die Normalisierung
+ * eines gespeicherten Layouts und die Uebersetzung von Optionen in
+ * Abfrage-Parameter sind mit ihnen gegangen.
+ *
+ * Der Widget-Katalog (Ids, Groessen, Standard-Sichtbarkeit) ist ebenfalls
+ * gegangen, mit der Haelfte von `utils/extension-widgets.js`, die ihn nutzte.
  */
-
-import { EVENT_LIMIT_DEFAULT, clampEventLimit } from './dashboard-event-limit.js';
-
-// Reihenfolge = Standard-Layout. Die primären Inhalte (tasks, calendar) führen,
-// damit sie beim Wieder-Einblenden oben stehen; das einzige passive Widget
-// (weather) steht bewusst am Ende, statt die sichtbare Grid-Spitze zu belegen.
-/* DIE REIHENFOLGE DIESER LISTE IST SEIT 2026-08-13 FREI - sie war es vorher
- * nicht. Bis dahin hängte `normalizeDashboardConfig` eine neu bekannte Id an
- * bestehende Layouts HINTEN an, und ein Vergleich gegen genau diese Liste
- * (`isUserOrderedConfig`) las jedes Bestandslayout als „umsortiert", sobald
- * eine neue Id vor einer bestehenden stand - das Raster schaltete dann
- * stillschweigend von der dichten Packung auf die Quellordnung um (Audit A1-03).
- * Der Merge sortiert eine fehlende Id seitdem an ihrer Default-Position ein.
- *
- * SEIT 2026-09-23 GIBT ES DEN VERGLEICH NICHT MEHR, und die Einsortierung
- * bleibt trotzdem richtig. Das Raster packt jetzt IMMER dicht (siehe `packGrid`
- * unten), eine Umsortierung schaltet nichts mehr um. Die Default-Position ist
- * aber weiter der Ort, an dem ein Neuzugang erscheint, und der Guard
- * „eine fehlende Id landet an ihrer Default-Position" haelt das fest. */
-/* TAFLA (2026-10-19): Dziś is a day plan, not a widget board. Its sections are
- * entries of the SAME per-person layout, so the household default, "reset" and
- * every saved arrangement carry over: `today-weather` is the weather line in
- * the header, the other four are the sections below "Plan dnia". They lead the
- * list, so a saved layout that predates them gets them on top, in this order
- * (normalizeDashboardConfig inserts a missing id at its default position). */
-export const TODAY_SECTION_IDS = Object.freeze(['today-weather', 'today-shopping', 'today-tomorrow', 'today-question', 'today-soon']);
-export const WIDGET_IDS = [...TODAY_SECTION_IDS, 'tasks', 'calendar', 'meals', 'shopping', 'pantry', 'birthdays', 'countdown', 'budget', 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'family', 'notes', 'weather', 'clock', 'metrics', 'quicklinks'];
-
-// Vier kuratierte Formen statt sechs: über vier Auswahlmöglichkeiten pro Widget
-// (× bis zu 12 Widgets) kippt der Anpassen-Modus in Mikro-Entscheidungs-Overhead
-// für ein Familienpublikum (Critique P2, ≤4-Choices-Regel). Die früheren 3x2/4x2
-// bleiben als Legacy-Werte gültig (WIDGET_SIZE_OPTIONS) — bestehende Layouts werden
-// nicht zurückgesetzt, nur die Neu-Auswahl steuert auf diese vier zu.
-export const WIDGET_SIZE_PRESETS = [
-  { value: '1x1', labelKey: 'dashboard.widgetSizeTiny'     },
-  // 2 Spalten x 1 Zeile ist BREIT. Der Schluessel hiess `widgetSizeNarrow`
-  // („Schmal (2×1)"), und wer das woertlich nahm, bekam das Gegenteil
-  // (Re-Critique 2026-09-27, W2).
-  { value: '2x1', labelKey: 'dashboard.widgetSizeWide'     },
-  { value: '1x2', labelKey: 'dashboard.widgetSizeTall'     },
-  // 2x2 ist die GROESSTE der vier Formen, aber keine ist mehr der Vorschlag:
-  // defaultWidgetSize() liefert 1x2, 2x1 oder 1x1. Der Schluessel hiess
-  // `widgetSizeStandard` („Standard (2×2)") und behauptete damit einen
-  // Ausgangswert, den es nicht gibt (#1723). Der Name sagt jetzt die Form.
-  { value: '2x2', labelKey: 'dashboard.widgetSizeSquare'   },
-];
-
-// Alle bekannten Größen inkl. Legacy-Werte — für normalizeDashboardConfig-Validierung
-export const WIDGET_SIZE_OPTIONS = [...new Set([
-  ...WIDGET_SIZE_PRESETS.map((p) => p.value),
-  '1x2', '1x3', '1x4', '2x3', '2x4', '3x1', '3x3', '3x4', '4x1', '4x3', '4x4',
-])];
-
-// Bildet einen beliebigen (auch Legacy-)Größenwert auf das nächstliegende der vier
-// kuratierten Presets ab: Breite/Höhe ≥2 → 2, sonst 1. So kann normalizeDashboardConfig
-// migrierte Layouts (z.B. 4x2 aus einer früheren Version) auf ein Preset zusammenziehen,
-// statt dem betroffenen Nutzer als einziger eine 5. Dropdown-Option zu zeigen (Critique P2).
-export function nearestPreset(size) {
-  const values = WIDGET_SIZE_PRESETS.map((p) => p.value);
-  if (values.includes(size)) return size;
-  const [cols, rows] = String(size).split('x').map(Number);
-  if (!Number.isFinite(cols) || !Number.isFinite(rows)) return '1x1';
-  return `${cols >= 2 ? 2 : 1}x${rows >= 2 ? 2 : 1}`;
-}
-
-export function defaultWidgetSize(id) {
-  // Listen-Widgets defaulten auf schmal-hoch (1×2) statt breit-hoch (2×2): eine
-  // „Heute"-Liste braucht Höhe, nicht Breite — 1×2 halbiert die Grundfläche und
-  // packt sich sauber neben andere Widgets, statt als 2-spaltige Kachel eine
-  // ganze Rasterzeile zu belegen (löst die Masonry-Imbalance an der Wurzel).
-  // Inhaltsschwere Karten (gestapelte Blöcke) starten hoch statt 1×1, damit die
-  // Zeile nicht per grid-auto ragged nachwächst (Critique P4). Budget stapelt
-  // Saldo + Sparen + Einnahme/Ausgabe + Top-Ausgabe → 1×2; family stapelt seit
-  // dem „Heute dran"-Umbau Mitglieder-Zeilen und braucht dieselbe Höhe.
-  //
-  // NOTIZEN UND GEBURTSTAGE GEHOEREN IN DIESELBE LISTE, und dass sie es nicht
-  // taten, hat man am Standard-Desktop gesehen: sichtbar sind ab Werk genau
-  // vier Widgets - Geburtstage (1x1), Budget (1x2), Familie (1x2), Notizen
-  // (2x1). Vier Spalten fassen die drei hohen nebeneinander, die breite
-  // Notizkachel passt daneben nicht mehr und faellt eine Zeile tiefer; was
-  // bleibt, ist das Loch rechts unten, das `dense` nicht schliessen kann,
-  // weil kein Widget mehr uebrig ist. Beide sind Listen wie die anderen und
-  // brauchen Hoehe, nicht Breite: mit 1x2 fuellen die vier Standard-Widgets
-  // die Zeile lueckenlos. Bestandslayouts bleiben unberuehrt - gespeichert
-  // wird die Groesse, nicht dieser Default.
-  // `countdown` steht bei den Geburtstagen, weil es dieselbe Kachel ist: eine
-  // nach Nähe sortierte Liste aus Name und „noch so lange". Es ist zugleich das
-  // einzige Widget, das erst existiert, sobald jemand etwas markiert hat -
-  // siehe die Verfügbarkeitsregel in pages/dashboard.js.
-  // `schedule` joins `family` for the same reason: it too is a member list -
-  // avatar, name, shift - and left at the 1x1 default it rendered 318px against
-  // the 218px the size class promised, stretching whatever shared its grid row
-  // (PR #930 review).
-  // `pantry` („Laeuft bald ab") ist dieselbe Kachel wie die Geburtstage: eine
-  // nach Naehe sortierte Liste aus Name und „noch so lange".
-  if (['tasks', 'calendar', 'budget', 'family', 'notes', 'birthdays', 'countdown', 'schedule', 'waste', 'pantry'].includes(id)) return '1x2';
-  // Die Uhr startet breit statt quadratisch: Uhrzeit und darunter der ausgeschriebene
-  // Wochentag brauchen Zeile, nicht Höhe - auf 1x1 bräche das Datum um (#651).
-  // `quicklinks` steht bei der Uhr und nicht bei den Listen: es ist eine ZEILE
-  // aus Kacheln (#469), keine Liste aus Zeilen. Auf 1x1 passten zwei davon
-  // nebeneinander, und eine Startrampe mit zwei Plaetzen ist keine.
-  // `nutrition` steht hier und nicht bei den Listen: die Kachel zeigt eine
-  // Fortschrittszeile je Naehrwert, also Balken nebeneinander - sie braucht
-  // Zeile, nicht Hoehe, genau wie das Fasten daneben.
-  if (['weather', 'shopping', 'health', 'cycle', 'fasting', 'nutrition', 'meals', 'clock', 'quicklinks'].includes(id)) return '2x1';
-  // DIE KENNZAHLREIHE IST EINE ZEILE, KEIN BLOCK (Critique 2026-08-13, P1).
-  //
-  // Hier stand '2x2' mit der Begruendung, das Raster sei der Vergleich, fuer den
-  // die Reihe gebaut ist. Gerendert war das Ergebnis ein anderes: 753x671px bei
-  // 1440x900, vier Kacheln zu je 372x330px fuer einen Inhalt von rund 80px
-  // Hoehe. Die eigene Zusage der Mitteilung lautete „in der Hoehe, die ein
-  // Widget-Kopf kostet" - das sind 44px. Faktor 15.
-  //
-  // Vier Kacheln nebeneinander vergleichen sich genauso wie vier im Quadrat,
-  // und sie tun es in einer Zeile statt in einem Drittel des Schirms. Das
-  // 2x2-Raster bleibt waehlbar, es ist nur nicht mehr der Vorschlag.
-  // Bestandslayouts bleiben unberuehrt - gespeichert wird die Groesse, nicht
-  // dieser Default.
-  if (id === 'metrics') return '2x1';
-  return '1x1';
-}
-
-// Standardmäßig ausgeblendet: die vier vom Cockpit abgedeckten Domänen (kein Echo)
-// plus die spezialisierten Module und Widgets (unter anderem Health, fasting,
-// Haushaltshilfe und Abfall). Sie sind nicht in jedem Haushalt aktiv und erscheinen als Opt-in im
-// „Anpassen"-Panel, statt frische Dashboards mit leeren Kacheln zu überladen
-// (PRODUCT.md: „Power wird auf Abruf enthüllt, nicht in einem Raster ausgebreitet").
-// `clock` kommt dazu: auf einem Gerät mit Statusleiste ist eine zweite Uhr
-// Doppelung. Ihren Zweck erfüllt sie am Wandtablet ohne Systemleiste (#651) -
-// das ist ein bewusster Aufbau, kein Standardfall.
-// `weather` ebenso (Seele-Paket): das Wetter spricht als Masthead-Zeile unterm
-// Gruß; die große Karte mit Vorhersage ist der Wandtablet-Opt-in im Tray.
-// Bestandslayouts behalten ihre gespeicherte Sichtbarkeit - dort entfällt
-// stattdessen die Masthead-Zeile (kein Echo).
-// `quicklinks` reiht sich bei den Opt-ins ein, und zwar aus dem staerksten der
-// hier genannten Gruende: die Reihe ist am ersten Tag LEER. Sichtbar ab Werk
-// haette jeder Haushalt - auch jeder bestehende, denn eine neu bekannte Id erbt
-// diesen Default - eine Kachel bekommen, die nichts zeigt und um Einrichtung
-// bittet. Sie steht im Anpassen-Tray und kommt, wenn jemand sie holt.
-// `nutrition` steht bei den Opt-ins aus demselben Grund wie `fasting`: ein
-// Tagebuch fuehrt, wer es fuehren will. Und der Eintrag hier ist nicht
-// Kosmetik - eine Id, die in dieser Menge FEHLT, ist nach dem Update in JEDEM
-// bestehenden Haushalt eingeblendet, weil `normalizeDashboardConfig` eine neu
-// bekannte Id mit `defaultWidgetVisible(id)` einsortiert.
-// `pantry` („Laeuft bald ab", Critique 2026-09-23) aus demselben Grund: nicht
-// jeder Haushalt fuehrt Mindesthaltbarkeiten, und ein frisches Dashboard mit
-// einer Kachel „nichts laeuft ab" waere die Ueberladung, die diese Menge
-// verhindern soll.
-// Die Domaenen, die Dziś selbst als Plan zeigt - ihre alten Kacheln starten aus.
-const COCKPIT_COVERED_WIDGETS = new Set(['tasks', 'calendar', 'shopping', 'meals']);
-
-export const DEFAULT_HIDDEN_WIDGETS = new Set([...COCKPIT_COVERED_WIDGETS, 'health', 'cycle', 'fasting', 'nutrition', 'housekeeping', 'schedule', 'waste', 'pantry', 'clock', 'weather', 'quicklinks']);
-
-export function defaultWidgetVisible(id) {
-  return !DEFAULT_HIDDEN_WIDGETS.has(id);
-}
-
-export const DEFAULT_WIDGET_CONFIG = WIDGET_IDS.map((id, i) => ({ id, visible: defaultWidgetVisible(id), order: i, size: defaultWidgetSize(id) }));
-
-/**
- * Wo eine fehlende Id in ein gespeichertes Layout gehört: direkt hinter den
- * nächsten in WIDGET_IDS VORANGEHENDEN Eintrag, der dort schon vorkommt.
- *
- * ANHÄNGEN WAR DIE BEQUEMERE ANTWORT UND DIE TEURERE. Eine ans Ende gehängte
- * Id ist nur dann an ihrer Default-Position, wenn sie auch in WIDGET_IDS ganz
- * hinten steht. Aus einer Datenoperation wurde so eine Reihenfolgen-Vorschrift
- * für eine Liste zwei Bildschirme weiter oben. Hier kostet die richtige
- * Antwort eine Rückwärtssuche.
- *
- * SIE FOLGT IHREM VORGÄNGER, AUCH WENN DER UMGEZOGEN IST, und das ist eine
- * Entscheidung, keine Nebenwirkung. In einem Layout, das der Nutzer selbst
- * umsortiert hat, gibt es keine „Default-Position" mehr - es gibt nur noch
- * Nachbarn. Gemessen am Demo-Haushalt (Stand 2026-08-13): dort steht `weather`
- * ganz vorn, und `metrics` rückt deshalb von hinten auf Platz zwei, weil sein
- * Vorgänger `clock` an `weather` hängt. Die Alternative wäre, in umsortierten
- * Layouts weiter anzuhängen - dann stünde ein Widget am Ende, weil dort Platz
- * ist, und nicht, weil es dorthin gehört. Festgehalten im Guard
- * „ein umsortiertes Layout laesst den Neuzugang seinem Vorgaenger folgen".
- */
-function defaultInsertIndex(ordered, missingId) {
-  for (let i = WIDGET_IDS.indexOf(missingId) - 1; i >= 0; i--) {
-    const at = ordered.findIndex((w) => w.id === WIDGET_IDS[i]);
-    if (at !== -1) return at + 1;
-  }
-  return 0;
-}
-
-export function normalizeDashboardConfig(input) {
-  const valid = Array.isArray(input)
-    ? input
-      .filter((w) => w && typeof w === 'object' && WIDGET_IDS.includes(w.id))
-      .map((w, i) => ({
-        id: w.id,
-        visible: w.visible !== false,
-        order: Number.isFinite(Number(w.order)) ? Number(w.order) : i,
-        // Gültige (inkl. Legacy-)Größen auf das nächste Preset ziehen; Unbekanntes
-        // fällt auf den Domänen-Default. So sieht niemand eine 5. Größen-Option.
-        size: WIDGET_SIZE_OPTIONS.includes(w.size) ? nearestPreset(w.size) : defaultWidgetSize(w.id),
-        // OPTIONEN GEHEN DURCH, OHNE DASS DIESE DATEI SIE KENNT (#814). Sie
-        // gehören dem Widget, das sie stellt; hier hätten sie nur eine zweite
-        // Liste ergeben, die bei jedem neuen Widget nachgezogen werden müsste -
-        // dieselbe Entscheidung wie im Backend, das sie als Form prüft und
-        // nicht als Bedeutung. Ein leeres Objekt wird nicht mitgeschleppt.
-        ...(w.options && typeof w.options === 'object' && !Array.isArray(w.options) && Object.keys(w.options).length
-          ? { options: { ...w.options } }
-          : {}),
-      }))
-    : [];
-  // Erst sortieren, dann einsortieren: `order` und Array-Position können in
-  // einem gespeicherten Layout auseinanderlaufen, und eingefügt wird an einer
-  // Position, nicht an einer Zahl.
-  const ordered = valid.sort((a, b) => a.order - b.order);
-  const presentIds = new Set(ordered.map((w) => w.id));
-  for (const id of WIDGET_IDS) {
-    if (presentIds.has(id)) continue;
-    // Neu hinzugekommene Widget-IDs (bei bestehenden, gespeicherten Layouts) erben den
-    // Standard-Sichtbarkeitswert ihrer Domäne — Opt-in-Module (health/housekeeping)
-    // erscheinen also nicht ungefragt, sondern bleiben im „Anpassen"-Panel angeboten.
-    ordered.splice(defaultInsertIndex(ordered, id), 0, { id, visible: defaultWidgetVisible(id), order: 0, size: defaultWidgetSize(id) });
-    // Zwei neue Ids nacheinander: die erste zählt für die zweite bereits als
-    // vorhanden, deshalb bleiben sie in ihrer WIDGET_IDS-Reihenfolge stehen.
-    presentIds.add(id);
-  }
-  return ordered.map((w, i) => ({ ...w, order: i }));
-}
-
-/**
- * Die Optionen der Widgets als Pfad der Uebersichts-Abfrage (#814).
- *
- * SIE MUESSEN MIT DER ANFRAGE REISEN, nicht im Browser nachfiltern: die Route
- * deckelt die Liste bei fuenf und zaehlt die Kacheln unbegrenzt. Wer hier
- * nachtraeglich siebte, stellte zwei Zeilen unter eine Kachel, die sieben sagt
- * (dieselbe Lehre wie #647).
- *
- * WELCHE OPTION WELCHEN PARAMETER ERGIBT, WEISS NUR DER BROWSER. Der Server
- * speichert `options` als Form und kennt weder Widget noch Bedeutung - eine
- * Registry dort waere der billige Anfang und danach der Preis jedes weiteren
- * Widgets. Diese Funktion ist die Uebersetzung, und sie steht hier, weil sie
- * rein ist und ihre Zusicherung sonst am `__test`-Export der Seite haenge.
- *
- * @param {object[]} config normalisierte Widget-Konfiguration
- * @returns {string} '/dashboard' oder '/dashboard?…'
- */
-/**
- * Die gespeicherte Listen-Auswahl der Einkaufs-Kachel als Ids (#1818):
- * positive ganze Zahlen, ohne Doppelte. Was sonst im Layout steht (ein
- * Fremdwert, ein String aus aelterem Stand), faellt weg - dieselbe Form, die
- * die Route aus `?shopping_list=` liest.
- *
- * @param {unknown} value `options.lists`
- * @returns {number[]}
- */
-export function normalizeShoppingListSelection(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
-}
-
-export function dashboardQuery(config) {
-  const params = new URLSearchParams();
-  const optionsOf = (id) => (Array.isArray(config) ? config.find((w) => w.id === id)?.options : null) ?? {};
-  if (optionsOf('calendar').scope === 'mine') params.set('events_scope', 'mine');
-  // Nur die Abwahl reist mit (#927): „mit Geburtstagen" ist der Auslieferungs-
-  // zustand der Route, und ein Parameter, der ihn wiederholt, stuende in jeder
-  // Anfrage - dieselbe Regel, nach der `scope: 'all'` nicht gespeichert wird.
-  if (optionsOf('calendar').birthdays === 'hide') params.set('events_birthdays', 'hide');
-  // Die Stufe reist geklemmt und nur, wenn sie nicht die Vorgabe ist (#1680):
-  // ein gespeicherter Fremdwert ergibt hier dieselbe Anfrage wie gar keiner.
-  const eventLimit = clampEventLimit(optionsOf('calendar').limit);
-  if (eventLimit !== EVENT_LIMIT_DEFAULT) params.set('events_limit', String(eventLimit));
-  for (const key of optionsOf('tasks').categories ?? []) params.append('tasks_category', key);
-  for (const id of optionsOf('notes').categories ?? []) params.append('notes_category', String(id));
-  // Die Listen-Auswahl der Einkaufs-Kachel (#1818). Sie reist wie jede andere
-  // Option, ob die Kachel sichtbar ist oder nicht: die Route legt die Auswahl
-  // in ein eigenes Feld (`shoppingTile`) und laesst alles andere unberuehrt,
-  // also haengt keine Zahl ausserhalb der Kachel an ihr.
-  for (const id of normalizeShoppingListSelection(optionsOf('shopping').lists)) params.append('shopping_list', String(id));
-  const query = params.toString();
-  return query ? `/dashboard?${query}` : '/dashboard';
-}
 
 /**
  * Der Abruf der Uebersicht fuer die Flaeche, die ihn zeichnet (#1817).
@@ -316,7 +30,7 @@ export function dashboardQuery(config) {
  * zweite Antwort der Seite, die davon abhaengt, wer fragt: die Wand haengt den
  * Parameter auch dort an und bekommt keine.
  *
- * @param {string} query '/dashboard' oder '/dashboard?…' (dashboardQuery, layoutHintQuery), oder '/reminders/pending'
+ * @param {string} query '/dashboard' oder '/reminders/pending'
  * @param {{ wall?: boolean }} [surface]
  * @returns {string}
  */
@@ -369,27 +83,12 @@ export function forgetPendingReminders() {
   sharedPending = null;
 }
 
-/* WELCHE PARAMETER DIE ZAHLEN DER ANTWORT UNBERUEHRT LASSEN (#1680).
- *
- * Die Navigations-Badges und Modulkacheln nehmen die `/dashboard`-Antwort der
- * Seite nur an, wenn sie ungefiltert ist (router.js, `primeModuleCountsFrom`):
- * `tasks_category` aendert `openTaskCount`, und eine eingeschraenkte Zahl ist
- * eine andere Zahl. `events_limit` schraenkt nichts ein - es verlaengert eine
- * Liste, die in keine Zahl eingeht. Ohne diese Ausnahme galt jede Antwort mit
- * gewaehlter Stufe als gefiltert, und der Router holte anderthalb Sekunden
- * spaeter dieselbe Aggregation ein zweites Mal, bei jedem Kaltstart.
- *
- * `shopping_list` (#1818) steht aus demselben Grund hier: die Auswahl fuellt
- * ein eigenes Feld der Antwort (`shoppingTile`) und laesst `shoppingOpenCount`
- * unberuehrt - die Zahl, die Navigation und Kuechen-Kachel lesen.
- *
- * ALLOWLIST: was hier nicht steht, gilt als Filter. Ein neuer Parameter kostet
- * so hoechstens den zweiten Abruf, nie eine falsche Zahl. `events_scope` und
- * `events_birthdays` stehen bewusst nicht hier - sie waren vor #1680 schon
- * „gefiltert", und ob sie es bleiben, ist nicht Sache dieser Aenderung. */
-const COUNT_NEUTRAL_PARAMS = new Set(['events_limit', 'shopping_list']);
-
 /**
+ * Die Navigations-Badges und Modulkacheln nehmen die `/dashboard`-Antwort der
+ * Seite nur an, wenn sie ungefiltert ist (router.js, `primeModuleCountsFrom`).
+ * Seit es keine Optionen mehr gibt, ist der einzige Parameter `audience`
+ * (die Haushaltsfassung der Wand): jeder Parameter gilt als Filter.
+ *
  * @param {string} query Pfad der Uebersichts-Abfrage ('/dashboard' oder '/dashboard?…')
  * @returns {boolean} true, wenn die Antwort darauf andere Zahlen tragen kann als die ungefilterte
  */
@@ -397,5 +96,5 @@ export function dashboardQueryFiltersCounts(query) {
   const text = String(query ?? '');
   const at = text.indexOf('?');
   if (at === -1) return false;
-  return [...new URLSearchParams(text.slice(at + 1)).keys()].some((key) => !COUNT_NEUTRAL_PARAMS.has(key));
+  return [...new URLSearchParams(text.slice(at + 1)).keys()].length > 0;
 }

@@ -31,7 +31,6 @@ import { createCalDAVClient, supportsComponent, createUploadGate, withAccountOri
 import { sqlLooksLikeOwnEventUid } from '../utils/own-uid.js';
 import { sameCredentialOrigin } from '../utils/credential-origin.js';
 import { rruleLine } from './recurrence.js';
-import { nearestIcalColorName } from '../utils/ical-color.js';
 import { authoredAfterInbound, outboundEvent } from './outbound-dtstart.js';
 import { icsReading, icsSnapshot, isEcho } from './outbound-echo.js';
 import { followInboundStartChange } from './calendar-occurrence-overrides.js';
@@ -77,10 +76,8 @@ function buildCalDAVICS(event, householdZone = null) {
 
   if (event.description)     lines.push(`DESCRIPTION:${escapeICSText(event.description)}`);
   if (event.location)        lines.push(`LOCATION:${escapeICSText(event.location)}`);
-  // Eigenfarbe als CSS3-Name (RFC 7986, #897). Ein Termin ohne eigene Farbe
-  // bekommt keine Zeile und erbt beim Anbieter die des Kalenders.
-  const colorName = nearestIcalColorName(event.color);
-  if (colorName) lines.push(`COLOR:${colorName}`);
+  // Keine COLOR-Zeile (One Today): Yuvomi waehlt keine Terminfarben mehr,
+  // der Termin erbt beim Anbieter die Farbe seines Kalenders.
 
   // Ein reines Datum als UNTIL wird neben einem getimten DTSTART zum Ende des
   // Ortstags in UTC (#1974, utils/rrule-until.js).

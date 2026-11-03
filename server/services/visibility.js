@@ -182,6 +182,10 @@ export const HOUSEHOLD_AUDIENCE_SHOWS = Object.freeze({
   dinnerPlan: true,
   shoppingLists: true,
   wastePickups: true,
+  // The wall's Notes card (2026-11-02): the titles of up to three pinned notes,
+  // `{ id, title }` and nothing else. `pinnedNotes` carries the content and
+  // stays out; the display account still has no `notes:read`.
+  wallNotes: true,
   pantryExpiring: Object.freeze(['todayItems', 'todayCount']),
   housekeeping: Object.freeze(['present', 'presentSince', 'workerName']),
 });

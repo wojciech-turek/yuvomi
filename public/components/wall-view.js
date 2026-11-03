@@ -17,7 +17,6 @@
 import { t, getLocale } from '/i18n.js';
 import { esc } from '/utils/html.js';
 import { personDisc, razemDisc, personToken } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 import { recipeThumbHtml } from '/utils/recipe-thumb.js';
 import { planWallRows } from '/utils/wall-plan.js';
 import { renderWallTimer } from '/components/wall-timer.js';
@@ -33,22 +32,21 @@ export function wallDateLabel(dayKey) {
 }
 
 /**
- * A person's 40pt wall disc: their initials from the ONE initials rule
- * (utils/initials.js - "W", and "LI"/"LE" where two people share a letter),
- * in their person colour. `label` names it for a screen reader.
+ * A person's 40pt wall disc: the one person disc (utils/person-color.js) -
+ * their photo, else their initials from the ONE initials rule ("W", and
+ * "LI"/"LE" where two people share a letter) in their person colour. `label`
+ * names it for a screen reader.
  */
 export function wallPersonDisc(person, household = [], { label = true } = {}) {
-  const name = person?.display_name ?? '';
-  return personDisc(person, { text: initials(name, '?'), label: label ? name : '', household, size: 'lg', className: 'wall-disc' });
+  return personDisc(person, { label, household, size: 'lg', className: 'wall-disc' });
 }
 
-/** The 40pt disc of a row: an initial, or the split disc of two people. */
+/** The 40pt disc of a row: a person, or the split disc of two or more. */
 function whoDisc(who, household) {
   if (!who || who.kind === 'none') return '';
   if (who.kind === 'person') return wallPersonDisc(who.person, household);
-  const [a, b] = who.people;
   const names = who.people.map((p) => p.display_name ?? '').filter(Boolean).join(', ');
-  return razemDisc(a, b ?? a, { label: t('today.togetherWith', { names }), household, size: 'lg', className: 'wall-disc' });
+  return razemDisc(who.people, { label: t('today.togetherWith', { names }), household, size: 'lg', className: 'wall-disc' });
 }
 
 // --------------------------------------------------------
@@ -96,7 +94,7 @@ function renderHead(model, { clock, weather, weatherIcon, timer }) {
           ${teraz}
         </div>
       </div>
-      ${model.sections.weather ? renderWeather(weather, weatherIcon) : ''}
+      ${renderWeather(weather, weatherIcon)}
     </header>`;
 }
 
@@ -231,6 +229,40 @@ function renderShopping(shop, { canTick }) {
     </section>`;
 }
 
+/**
+ * Notes and Birthdays as two one-line strips in ONE card (visual pass of One
+ * Today, 2026-11-03): "Notatki  Hasło do wifi · Lista na weekend" and
+ * "Urodziny  Halina dziś · Tomek 8 lis". As two full cards they never fitted
+ * a 1280x800 tablet on a day with a dinner (87px left under dinner and
+ * shopping, a three-line card needs about 205); one card with two lines in the
+ * label step is 84. Each line is cut as a whole with "…" when it is too long.
+ * Read-only: nothing to tap. Each strip keeps `data-wall-card`, so the fit
+ * still hides Birthdays first, then Notes (fitWallCards).
+ */
+function renderStrip(id, label, items) {
+  return `
+      <div class="wall-strip" data-wall-card="${id}">
+        <h2 class="wall-card__label wall-strip__label" id="wall-${id}-title">${esc(label)}</h2>
+        <ul class="wall-strip__items" aria-labelledby="wall-${id}-title">${items.map((item, index) => `<li class="wall-strip__item${item.today ? ' wall-strip__item--today' : ''}">${index ? '<span class="wall-strip__dot" aria-hidden="true">·</span>' : ''}${item.html}</li>`).join('')}</ul>
+      </div>`;
+}
+
+function renderStrips(notes, birthdays) {
+  const strips = [];
+  if (notes) {
+    strips.push(renderStrip('notes', t('nav.notes'), notes.map((note) => ({ html: esc(note.title) }))));
+  }
+  if (birthdays) {
+    strips.push(renderStrip('birthdays', t('nav.birthdays'), birthdays.map((row) => ({
+      today: row.today,
+      html: `${esc(row.name)} <span class="wall-strip__when">${esc(row.when ?? '')}</span>`,
+    }))));
+  }
+  return strips.length ? `
+    <section class="wall-card wall-strips" data-wall-strips>${strips.join('')}
+    </section>` : '';
+}
+
 function renderQuestion(question, settled) {
   if (settled) {
     return `
@@ -257,6 +289,7 @@ function renderStage(model, ui) {
   if (model.dinner) aside.push(renderDinnerCard(model.dinner, household));
   if (model.tomorrow && model.scene === 'wieczor') aside.push(renderTomorrow(model.tomorrow, household));
   if (model.shopping) aside.push(renderShopping(model.shopping, model));
+  if (model.notes || model.birthdays) aside.push(renderStrips(model.notes, model.birthdays));
 
   if (model.hero) {
     const right = [model.plan ? renderPlan(model.plan, household) : '', ...aside].filter(Boolean);
@@ -297,7 +330,7 @@ function renderDock(model, { timer, screensaverEnabled }) {
         ${saver}
         ${stale}
       </div>
-      ${model.timers || model.timer ? `<div class="wall__dock-end">${timer.controls}</div>` : ''}
+      <div class="wall__dock-end">${timer.controls}</div>
     </footer>`;
 }
 
@@ -361,6 +394,41 @@ export function renderWhoChooser(title, people, household = []) {
 // --------------------------------------------------------
 
 /**
+ * Strip-level fit: while the aside spills over its column, or the day plan
+ * beside them would have to hide rows, the optional strips go whole, Birthdays
+ * first, then Notes; with both gone their card goes too. They come back on
+ * every fit, so a resize or a rebuild can show them again.
+ */
+function fitWallCards(root) {
+  for (const aside of root?.querySelectorAll?.('.wall__aside') ?? []) {
+    const cards = ['birthdays', 'notes']
+      .map((id) => aside.querySelector(`[data-wall-card="${id}"]`))
+      .filter(Boolean);
+    const box = aside.querySelector('[data-wall-strips]');
+    if (box) box.hidden = false;
+    for (const card of cards) card.hidden = false;
+    // The day plan keeps priority: it shares this column with flex:1 and gives
+    // way first, so the aside itself never spills. Measure the plan's own list
+    // at full length - when it would have to hide rows, a card goes instead.
+    const planList = aside.querySelector('.wall-plan [data-wall-fit]');
+    if (planList) {
+      for (const row of planList.querySelectorAll('[data-wall-row]')) row.hidden = false;
+      const more = planList.querySelector('[data-wall-more]');
+      if (more) more.hidden = true;
+    }
+    const planSqueezed = () => Boolean(planList)
+      && planList.querySelector('[data-wall-row]') !== null
+      && planList.scrollHeight > planList.clientHeight + 1;
+    const overflows = () => aside.scrollHeight > aside.clientHeight + 1 || planSqueezed();
+    for (const card of cards) {
+      if (!overflows()) break;
+      card.hidden = true;
+    }
+    if (box) box.hidden = cards.length > 0 && cards.every((card) => card.hidden);
+  }
+}
+
+/**
  * Fits every Dziś list on the wall to the room its card has: rows that do not
  * fit are hidden and the last line says "+N więcej" (planWallRows). Measured,
  * not computed - row height follows the fluid wall type. On a phone the card
@@ -369,6 +437,7 @@ export function renderWhoChooser(title, people, household = []) {
  */
 export function fitWallLists(root) {
   let hiddenTotal = 0;
+  fitWallCards(root);
   for (const list of root?.querySelectorAll?.('[data-wall-fit]') ?? []) {
     const rows = [...list.querySelectorAll('[data-wall-row]')];
     const more = list.querySelector('[data-wall-more]');

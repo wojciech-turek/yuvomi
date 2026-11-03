@@ -12,13 +12,14 @@ import { stagger, vibrate, scheduleUndoableDelete, acknowledgeCheck, collapseOut
 import { wireSwipeRows, maybeShowSwipeHint } from '/utils/swipe-row.js';
 import { t, getLocale, formatDate, formatTime, formatDateInput, parseDateInput, isDateInputValid, formatTimeInput, parseTimeInput } from '/i18n.js';
 import { esc } from '/utils/html.js';
+import { SHEET_ICONS, sheetSectionHead, sheetSectionHtml, revealButtonHtml, titleFieldHtml, heardLineHtml } from '/utils/sheet-parts.js';
 import { rowActionHtml, rowMenuHtml } from '/utils/row-action.js';
 import { refresh as refreshReminders } from '/reminders.js';
 import { renderUserMultiSelect, getSelectedUserIds, bindUserMultiSelect, renderAvatarStack } from '/components/user-multi-select.js';
 import { withChosenPeople } from '/utils/people-picker.js';
 import { remindAtFromWallTime, wallTimeFromRemindAt, parseRemindAtAsUtc } from '/utils/reminder-offset.js';
 import { dueQuickPick, reminderQuickPicks, defaultReminder } from '/utils/task-quick-dates.js';
-import { openDictationSheet, startTaskDictation } from '/components/task-dictation.js';
+import { openDictationSheet } from '/components/task-dictation.js';
 import { navModuleAccess } from '/permissions.js';
 import { renderPageSearch, wirePageSearch } from '/utils/page-search.js';
 import { renderDocumentAttachField, bindDocumentAttachField } from '/components/document-attach.js';
@@ -30,7 +31,6 @@ import { isNavModuleReadOnly } from '/permissions.js';
 import { isSoloHousehold, hidesPrivacyControls } from '/utils/household.js';
 import { popoverMenuHtml, installPopoverMenus, pageToolsMenuHtml, pageToolsActionEl, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { filterButtonHtml, syncFilterButton, openFilterSheet, filterChipsHtml } from '/utils/filter-sheet.js';
-import { initials } from '/utils/initials.js';
 import { toggleRowHtml } from '/settings/components.js';
 import { wireTablist } from '/utils/tablist.js';
 import { attachSegmentIndicator } from '/utils/segment-indicator.js';
@@ -364,7 +364,7 @@ function taskWhen(task, bucket) {
   const days = daysFromToday(due);
   if (!finished && days < 0) {
     return {
-      pill: { tone: 'danger', text: t('tasks.overduePill') },
+      pill: { tone: 'warning', text: t('tasks.overduePill') },
       text: days === -1 ? t('tasks.overdueSinceYesterday') : t('tasks.overdueSince', { date: shortDayLabel(due) }),
     };
   }
@@ -376,21 +376,21 @@ function taskWhen(task, bucket) {
   return { pill: null, text: [date, by].filter(Boolean).join(' · ') };
 }
 
-/** "#dom" - die Kategorie als schlichtes Etikett, wie ein Tag geschrieben. */
-function hashTag(label) {
+/** "dom" - die Kategorie als schlichter Name, ohne Raute. */
+function categoryName(label) {
   const text = String(label ?? '').trim();
-  return text ? `#${text.toLocaleLowerCase(getLocale())}` : '';
+  return text ? text.toLocaleLowerCase(getLocale()) : '';
 }
 
 /**
  * Die Metazeile: Pille, Wiederholungszeichen und EIN Text, der mit Ellipse
- * endet - Wann · Rhythmus · #Kategorie · razem · Beschreibung. Dahinter
+ * endet - Wann · Rhythmus · Kategorie · razem · Beschreibung. Dahinter
  * leise Zeichen fuer Anhang und eingeschraenkte Sichtbarkeit.
  */
 function taskMetaHtml(task, { bucket = null, showCategory = true } = {}) {
   const when = taskWhen(task, bucket);
   const parts = [when.text, rhythmText(task)];
-  if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(hashTag(catLabel(task.category)));
+  if (showCategory && task.category && task.category !== FALLBACK_CATEGORY) parts.push(categoryName(catLabel(task.category)));
   if (whoOf(task.assigned_users).kind === 'razem' && includesViewer(task.assigned_users, rowViewerId())) parts.push(t('tasks.together'));
   parts.push(descriptionLead(task.description));
   const text = parts.filter(Boolean).join(' · ');
@@ -938,9 +938,6 @@ function wireGroupToggle(container) {
 // `[data-reveal-time]`, `[data-remind-pick]`.
 // --------------------------------------------------------
 
-/** Lucide-Zeichen der drei kleinen Knoepfe. */
-const SHEET_ICONS = Object.freeze({ due: 'calendar', reminder: 'bell', note: 'pencil' });
-
 /** Die Schnellwahl der Faelligkeit, in der Reihenfolge des Blatts. */
 const DUE_PICKS = Object.freeze(['today', 'tomorrow', 'weekend']);
 const DUE_PICK_LABELS = Object.freeze({
@@ -952,6 +949,8 @@ const REMIND_PICK_LABELS = Object.freeze({
 /** Name und x-Beschriftung der kompakten Zeilen eines Diktats (Entwurf TaskSpoken). */
 const ROW_LABELS = Object.freeze({ due: 'tasks.dueShort', reminder: 'reminders.sectionTitle', note: 'tasks.descriptionLabel' });
 const ROW_REMOVE_LABELS = Object.freeze({ due: 'tasks.removeDue', reminder: 'reminders.removeReminder', note: 'tasks.removeNote' });
+/** Zeichen und Namen der kompakten Zeilen fuer sheet-parts.js. */
+const ROW_OPTIONS = Object.freeze({ icons: SHEET_ICONS, labels: ROW_LABELS, removeLabels: ROW_REMOVE_LABELS });
 
 /** Uhrzeit einer Erinnerung, die nur einen Tag nennt (R9, wie der Server). */
 const DAY_ONLY_REMINDER_TIME = '09:00';
@@ -975,50 +974,6 @@ function duePickOf(value, today = todayKey(), chosen = '') {
   return DUE_PICKS.find((key) => dueQuickPick(key, today) === value) ?? 'pick';
 }
 
-function sheetSectionHead(name, titleHtml, { removable = true } = {}) {
-  return `
-          <div class="task-sheet__section-head">
-            ${titleHtml}
-            ${removable ? `<button type="button" class="task-sheet__remove" data-remove="${name}">${t('tasks.removeField')}</button>` : ''}
-          </div>`;
-}
-
-/**
- * Ein Abschnitt des Blatts. Mit `row` (nur aus einem Diktat, Entwurf TaskSpoken)
- * steht er zuerst als kompakte Zeile da - Zeichen, Name, Wert und ein x, das
- * genau das tut, was „Entfernen" tut. Ein Tipp auf die Zeile klappt die
- * Felder auf (`[data-expand]`). Die Felder stehen in beiden Faellen im DOM:
- * das Speichern liest dieselben Eingaben.
- */
-function sheetSectionHtml(name, { open, attrs = '', labelledBy = '', row = null }, innerHtml) {
-  const group = labelledBy ? ` role="group" aria-labelledby="${labelledBy}"` : '';
-  return `
-      <div class="task-sheet__section" data-section="${name}"${group}${attrs}${open ? '' : ' hidden'}>${row === null ? '' : sheetRowHtml(name, row)}
-        <div class="task-sheet__body" id="task-${name}-body"${row === null ? '' : ' hidden'}>${innerHtml}
-        </div>
-      </div>`;
-}
-
-/** The widest of the row names in this language: every label is sized to it,
- *  so "Jutro" and "Jutro, 07:30" start in one line under each other. */
-function longestRowLabel() {
-  return Object.values(ROW_LABELS).map((key) => t(key)).sort((a, b) => b.length - a.length)[0] ?? '';
-}
-
-function sheetRowHtml(name, value) {
-  return `
-        <div class="task-sheet__row" data-row="${name}">
-          <button type="button" class="task-sheet__row-main" data-expand="${name}" aria-expanded="false" aria-controls="task-${name}-body">
-            <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>
-            <span data-fit="${esc(longestRowLabel())}" class="task-sheet__row-label">${t(ROW_LABELS[name])}</span>
-            <span class="task-sheet__row-value">${esc(value)}</span>
-          </button>
-          <button type="button" class="task-sheet__row-remove" data-remove="${name}" aria-label="${esc(t(ROW_REMOVE_LABELS[name]))}">
-            <i data-lucide="x" class="icon-md" aria-hidden="true"></i>
-          </button>
-        </div>`;
-}
-
 /** Ein Datum mit Uhrzeit in Worten fuer eine kompakte Zeile: „Morgen, 07:30". */
 function rowWhen(date, time) {
   return [date ? relativeDateLabel(date) : '', time ? formatTime(time) : ''].filter(Boolean).join(', ');
@@ -1031,7 +986,7 @@ function dueSectionHtml({ dueDate, dueTime, spoken = false }) {
   // Eine Uhrzeit ohne Datum nimmt der Server an - sie darf nicht verborgen sein.
   const open = !!(dueDate || dueTime);
   return sheetSectionHtml('due', {
-    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null,
+    open, labelledBy: 'task-due-heading', row: spoken && open ? rowWhen(dueDate, dueTime) : null, rowOptions: ROW_OPTIONS,
   }, `${sheetSectionHead('due', `<span class="task-sheet__section-title" id="task-due-heading">${t('tasks.dueDateLabel')}</span>`)}
           <div class="task-sheet__pills">${pills}
           </div>
@@ -1075,6 +1030,7 @@ function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken 
     labelledBy: 'task-remind-heading',
     attrs: storedAt ? ` data-stored-at="${esc(storedAt)}"` : '',
     row: spoken && wall && !locked ? rowWhen(wall.date, wall.time) : null,
+    rowOptions: ROW_OPTIONS,
   }, `${sheetSectionHead('reminder', `<span class="task-sheet__section-title" id="task-remind-heading">${t('tasks.remindMe')}</span>`, { removable: !locked })}
           <div class="task-sheet__when">
             <div class="task-sheet__field task-sheet__when-date">
@@ -1097,16 +1053,10 @@ function reminderSectionHtml({ access, wall, storedAt, dueDate, dueTime, spoken 
 function noteSectionHtml({ note, spoken = false }) {
   // Eine benannte Gruppe wie Faelligkeit und Erinnerung (F11); ihr Name ist
   // die Ueberschrift, die zugleich das Etikett des Feldes bleibt.
-  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null },
+  return sheetSectionHtml('note', { open: !!note, labelledBy: 'task-note-heading', row: spoken && note ? note : null, rowOptions: ROW_OPTIONS },
     `${sheetSectionHead('note', `<label class="task-sheet__section-title" id="task-note-heading" for="task-description">${t('tasks.descriptionLabel')}</label>`)}
           <textarea class="input task-sheet__note" id="task-description" name="description"
                     rows="3" placeholder="${t('tasks.notePlaceholder')}">${esc(note)}</textarea>`);
-}
-
-function revealButtonHtml(name, labelKey, open) {
-  return `<button type="button" class="task-sheet__chip" data-reveal="${name}"${open ? ' hidden' : ''}>
-          <i data-lucide="${SHEET_ICONS[name]}" class="icon-md" aria-hidden="true"></i>${t(labelKey)}
-        </button>`;
 }
 
 /**
@@ -1141,11 +1091,14 @@ function moreSummary(task) {
  *        countdown, recurrence_rule, recurrence_from_completion).
  *        `spoken` (nur beim Anlegen): gesetzte Abschnitte stehen als kompakte
  *        Zeilen mit x da (Entwurf TaskSpoken) - ein Tipp klappt sie auf.
+ *        `heard`: der gesagte Satz; mit `spoken` steht er als Zeile ueber dem Titel.
  */
-function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false } = {}) {
+function renderModalContent({ task = null, users = [], reminder = null, draft = null, spoken = false, heard = '' } = {}) {
   const isEdit = !!task;
   const d = isEdit ? null : (draft ?? null);
   const rows = spoken && !isEdit;
+  const heardHtml = rows ? heardLineHtml(heard) : '';
+  const heardLine = heardHtml ? `${heardHtml}\n      ` : '';
 
   const selectedIds = isEdit
     ? (task.assigned_users?.map((u) => u.id) ?? (task.assigned_to ? [task.assigned_to] : []))
@@ -1281,25 +1234,15 @@ function renderModalContent({ task = null, users = [], reminder = null, draft = 
            fragt "Verwerfen?" (data-dirty-base, components/modal.js). -->
       <input type="hidden" id="task-from-draft" value="1" data-dirty-base="">` : ''}
 
-      <div class="form-group">
-        <div class="form-field task-sheet__title${isEdit ? '' : ' task-sheet__title--mic'}">
-          <label class="sr-only" for="task-title">${t('tasks.titlePlaceholderShort')}</label>
-          <input class="input" type="text" id="task-title" name="title"
-                 value="${esc(title)}" placeholder="${t('tasks.titlePlaceholderShort')}"
-                 required maxlength="200" autocomplete="off">
-          ${isEdit ? '' : `<!-- Diktieren nur beim Anlegen (R10): ein gesprochener Satz
-               ueberschriebe die Werte einer bestehenden Aufgabe. -->
-          <button type="button" class="task-sheet__mic" data-action="dictate" aria-label="${t('tasks.sayIt')}">
-            <i data-lucide="mic" class="icon-lg" aria-hidden="true"></i>
-          </button>`}
-          <div class="form-field__error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/>
-                 <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/>
-            </svg>
-            ${t('common.required')}
-          </div>
-        </div>
+      ${heardLine}<div class="form-group">
+        ${titleFieldHtml({
+    id: 'task-title',
+    name: 'title',
+    value: title,
+    placeholder: t('tasks.titlePlaceholderShort'),
+    labelKey: 'tasks.titlePlaceholderShort',
+    mic: isEdit ? null : { labelKey: 'tasks.sayIt' },
+  })}
       </div>
 
       <!-- Wer: nur die Chips der Mitglieder; keiner gewaehlt heisst niemandem
@@ -2064,14 +2007,15 @@ function wireCountdownGate(panel) {
 /**
  * @param {{task?: object|null, users?: object[], reminder?: object|null,
  *          onChanged?: (() => (void|Promise<void>))|null, draft?: object|null,
- *          spoken?: boolean}} opts
+ *          spoken?: boolean, heard?: string}} opts
  *        `draft` fuellt ein neues Blatt vor (siehe renderModalContent).
  *        `spoken`: das Blatt kommt aus einem Diktat und traegt im Kopf
- *        „Noch einmal sagen" (`data-action="dictate"`).
+ *        „Noch einmal sagen" (`data-action="dictate"`); `heard` ist der gesagte
+ *        Satz, der dann ueber dem Titel steht.
  *        Beim Anlegen oeffnen das Mikrofon im Titelfeld und „Noch einmal
  *        sagen" das Hoerblatt (dictateOverSheet).
  */
-function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false } = {}, container) {
+function openTaskModal({ task = null, users = [], reminder = null, onChanged = null, draft = null, spoken = false, heard = '' } = {}, container) {
   // Der letzte Riegel vor dem Formular - hinter FAB, Kopfknopf und
   // Leerzustands-CTA, die alle hierher fuehren.
   if (readOnly()) return;
@@ -2081,7 +2025,7 @@ function openTaskModal({ task = null, users = [], reminder = null, onChanged = n
   const dictateWith = { users, onChanged, container };
   openSharedModal({
     title: isEdit ? t('tasks.editTask') : t('tasks.newTask'),
-    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit }),
+    content: renderModalContent({ task, users, reminder, draft: isEdit ? null : draft, spoken: spoken && !isEdit, heard }),
     size: 'lg',
     // `type="button"` liefert openModal.
     headerAction: spoken && !isEdit
@@ -2174,10 +2118,11 @@ function keepChosen(draft, chosen) {
  *
  * Das Blatt wird geparkt (askOverModal), das Hoerblatt liegt darueber und
  * bekommt den jetzigen Titel mit. „Done" ersetzt das Blatt durch ein frisches,
- * gefuelltes (`spoken`). Vom Mikrofon im Titelfeld aus (`keep`) traegt es mit,
- * was schon gewaehlt war und der Satz nicht setzt (Wer, Faelligkeit,
- * Erinnerung, Notiz, „Mehr" - F9); „Noch einmal sagen" ersetzt, was vorher
- * drin stand.
+ * gefuelltes (`spoken`, mit dem eben gesagten Satz als `heard`); das
+ * Hoerblatt sagt hier eine Aufgabe (seine Worte ohne `copy`). Vom Mikrofon im
+ * Titelfeld aus (`keep`) traegt es mit, was schon gewaehlt war und der Satz
+ * nicht setzt (Wer, Faelligkeit, Erinnerung, Notiz, „Mehr" - F9); „Noch einmal
+ * sagen" ersetzt, was vorher drin stand.
  * Schliessen bringt das Blatt zurueck, wie es war: wer aus Versehen aufs
  * Mikrofon tippt, verliert nichts. „Type instead" ebenso, nur steht dann, was
  * schon gesagt oder getippt war, als Titel darin.
@@ -2195,14 +2140,14 @@ async function dictateOverSheet(panel, { users = [], onChanged = null, container
       members: users,
       // Das Hoerblatt geht zu, bevor das Blatt zurueckkommt - erst dann ersetzt
       // das gefuellte Blatt es.
-      onDraft: (draft) => { resolve({ draft }); closeModal({ force: true }); },
+      onDraft: (draft, { text = '' } = {}) => { resolve({ draft, heard: text }); closeModal({ force: true }); },
       onTypeInstead: (text) => { resolve({ type: true, text }); closeModal({ force: true }); },
       onCancel: () => resolve(null),
     });
   }));
   if (answer?.draft) {
     const draft = chosen ? keepChosen(answer.draft, chosen) : answer.draft;
-    openTaskModal({ users, onChanged, draft, spoken: true }, container);
+    openTaskModal({ users, onChanged, draft, spoken: true, heard: answer.heard }, container);
   } else if (answer?.type) {
     // Was schon gesagt oder getippt war, wird der Titel - weiter geht es mit der Tastatur.
     const field = panel.querySelector('#task-title');
@@ -3517,7 +3462,7 @@ function renderHistoryEntry(entry) {
     ? (entry.user_name || t('tasks.historyUnknownMember'))
     : null;
   const avatar = renderAvatarStack(
-    [{ display_name: name, color: entry.person_color, avatar_data: entry.person_avatar }],
+    [{ id: entry.person_user_id, display_name: name, avatar_data: entry.person_avatar }],
     { size: 32, maxVisible: 1 },
   );
   // Der Avatar traegt hier NICHTS bei, was nicht daneben stuende: der Name
@@ -3580,24 +3525,14 @@ function renderHistoryPeople() {
   };
   /* Die Marke ist Schmuck fuer die Vorlesehilfe: den Namen traegt der Knopf.
    * Ohne `aria-hidden` kaeme er zweimal - einmal als `aria-label`, einmal aus
-   * dem `alt` des Avatarbildes.
+   * dem Label der Scheibe.
    *
-   * ZWEI RENDERER, ZWEI FELDNAMEN FUER DIESELBE FARBE. `state.users` kommt aus
-   * `/tasks/meta/options` und heisst dort `avatar_color`, so wie es in der
-   * Tabelle steht; `renderAvatarStack` liest `color`, weil es sonst aus
-   * `ASSIGNED_USERS_SQL` gefuettert wird, das genau dafuer umbenennt
-   * (`'color', u.avatar_color`). Beide Seiten sind fuer sich richtig - wer sie
-   * ungefiltert zusammensteckt, bekommt lautlos die Fallback-Farbe fuer JEDEN,
-   * und damit sind zwei Mitglieder mit gleichen Initialen auf dem Telefon nicht
-   * mehr zu unterscheiden. Deshalb hier die Uebersetzung.
-   *
-   * Ein Foto traegt `/meta/options` nicht, also bleiben es Initialen auf der
-   * Nutzerfarbe. Das ist kein Verlust gegenueber dem Nachbarn: `renderUserMulti
-   * Select` wird aus derselben Liste bedient und zeigt aus demselben Grund
-   * ebenfalls keins. Die Farbe ist ohnehin das Identitaetssignal (User-Farben-
-   * Regel), das Bild die Zugabe. */
+   * Die Farbe ist der Platz der Person im Haushalt (person-color.js), keine
+   * gespeicherte Farbe; ein Profilbild bringt `/meta/options` mit, und die
+   * Scheibe zeigt es - wie der Nachbar `renderUserMultiSelect`, der aus
+   * derselben Liste bedient wird. */
   const personMark = (u) => `<span class="history-people__mark" aria-hidden="true">${
-    renderAvatarStack([{ ...u, color: u.avatar_color }], { size: 22, maxVisible: 1 })}</span>`;
+    renderAvatarStack([u], { size: 22, maxVisible: 1 })}</span>`;
   // Nur wer wirklich etwas beisteuern kann: die Housekeeping-Konten sind aus
   // /meta/options schon heraus, und ein Haushalt aus einer Person braucht die
   // Auswahl gar nicht.
@@ -4042,8 +3977,8 @@ function filterSheetGroups() {
     groups.push({ heading: t('tasks.filterGroupPerson'),
       html: mine + chipsHtml('assigned_to', t('tasks.filterGroupPerson'), state.users.map((u) => ({
         value: String(u.id), label: u.display_name,
-        // Die Scheibe der Person wie im Kalenderblatt (utils/filter-sheet.js).
-        swatchColor: u.avatar_color ?? null, swatchLabel: initials(u.display_name),
+        // Die Personenscheibe wie im Kalenderblatt (utils/filter-sheet.js).
+        person: u,
       }))) });
   }
   // KATEGORIE UND TAG SIND EINGEKLAPPT, SOLANGE NICHTS GEWAEHLT IST (Critique
@@ -6083,8 +6018,8 @@ export async function prepareNewTask({ user = null } = {}) {
 }
 
 /** Das Blatt "Neue Aufgabe", nachdem prepareNewTask gelaufen ist (Diktat von aussen). */
-export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false } = {}) {
-  openTaskModal({ users: state.users, onChanged, draft, spoken }, null);
+export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken = false, heard = '' } = {}) {
+  openTaskModal({ users: state.users, onChanged, draft, spoken, heard }, null);
 }
 
 /**
@@ -6093,23 +6028,16 @@ export function openPreparedNewTask({ onChanged = () => {}, draft = null, spoken
  * „Dodaj zadanie" auf Dziś oeffnet DASSELBE Formular wie das „Nowe zadanie"
  * im Kopf dieser Seite (`openTaskModal`) - kein zweites, kleineres. Geladen
  * wird hier, was das Formular braucht (Blatt, Mitglieder, Kategorien); nach
- * dem Speichern frischt `onChanged` die aufrufende Flaeche auf.
- *
- * Mit `dictate` („Say a task", Quick-Add) gibt es VOR dem Hoerblatt kein
- * await: startTaskDictation (components/task-dictation.js) oeffnet es und
- * startet die Erkennung noch in diesem Aufruf und laedt daneben. Wer aus
- * einem Tipp heraus erst diese Seite importieren muss, ruft
- * startTaskDictation direkt - ein `await import()` davor kostet in Safari
- * die Nutzergeste.
+ * dem Speichern frischt `onChanged` die aufrufende Flaeche auf. Gesprochen
+ * wird ueber "Powiedz" im "+" (startQuickAdd, components/task-dictation.js).
  *
  * @param {{user?: object|null, onChanged?: () => (void|Promise<void>),
- *          draft?: object|null, dictate?: boolean}} opts
+ *          draft?: object|null}} opts
  * @returns {Promise<boolean>} false, wenn nichts geoeffnet wurde (nur lesend,
  *          oder ohne Kategorien - ein Speichern liefe in die Ablehnung).
  */
-export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null, dictate = false } = {}) {
+export async function openNewTaskFrom({ user = null, onChanged = () => {}, draft = null } = {}) {
   if (readOnly()) return false;
-  if (dictate) return startTaskDictation({ user, onChanged });
   await prepareNewTask({ user });
   openTaskModal({ users: state.users, onChanged, draft }, null);
   return true;

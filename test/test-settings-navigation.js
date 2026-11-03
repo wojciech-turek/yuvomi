@@ -1084,26 +1084,22 @@ test('Feiertage: die Ebenen-Schalter speichern sofort, ein Fehler legt zurueck (
   try {
     const showPublic = schalter(false);
     const showSchool = schalter(true);
-    const publicColorGroup = { hidden: true };
-    const schoolColorGroup = { hidden: false };
     const gespeichert = [];
     let fehler = null;
     cal.bindHolidayLayerSwitches({
-      showPublic, showSchool, publicColorGroup, schoolColorGroup,
+      showPublic, showSchool,
       save: async (patch) => { if (fehler) throw fehler; gespeichert.push(patch); },
     });
     showPublic.checked = true;
     await showPublic.fire();
-    assert.deepEqual(gespeichert, [{ holiday_show_public: true }], 'nur der eigene Wert, ohne Land und Farben');
+    assert.deepEqual(gespeichert, [{ holiday_show_public: true }], 'nur der eigene Wert, ohne Land');
     assert.equal(toasts.at(-1)?.[1], 'success');
     assert.equal(showPublic.disabled, false, 'nach dem Speichern wieder bedienbar');
 
     fehler = new Error('offline');
     showSchool.checked = false;
-    schoolColorGroup.hidden = true;
     await showSchool.fire();
     assert.equal(showSchool.checked, true, 'Fehler: der Schalter legt sich zurueck');
-    assert.equal(schoolColorGroup.hidden, false, 'und die Farbe folgt ihm');
     assert.equal(toasts.at(-1)?.[1], 'danger');
   } finally {
     globalThis.window = prevWindow;
@@ -1164,7 +1160,7 @@ test('Einstellungen: jeder Schalter in einem Formular mit Speichern speichert so
   for (const id of ['holiday-show-public', 'holiday-show-school']) {
     assert.match(cal, new RegExp(`attrs: \\{ id: '${id}', 'data-instant-save': true \\}`), `${id} ist ein Sofort-Schalter`);
   }
-  assert.match(cal, /bindHolidayLayerSwitches\(\{ showPublic, showSchool, publicColorGroup, schoolColorGroup \}\);/,
+  assert.match(cal, /bindHolidayLayerSwitches\(\{ showPublic, showSchool \}\);/,
     'die Seite verdrahtet die Sofort-Speicherung wirklich');
 });
 
@@ -1801,7 +1797,6 @@ const HOLIDAY_TEST_COUNTRIES = [
 function schoolControls({ checked }) {
   return {
     showSchool: { checked, disabled: false },
-    schoolColorGroup: { hidden: !checked },
     schoolUnavailableHint: { hidden: true },
   };
 }
@@ -1819,13 +1814,11 @@ test('#965 Review: DE -> US -> DE gibt den Schulferien-Haken zurueck', () => {
   // wuerde holiday_show_school=1 fuer ein Land ohne Datenquelle gespeichert.
   assert.equal(c.showSchool.disabled, true);
   assert.equal(c.showSchool.checked, false);
-  assert.equal(c.schoolColorGroup.hidden, true);
   assert.equal(c.schoolUnavailableHint.hidden, false);
 
   apply(HOLIDAY_TEST_COUNTRIES, 'DE'); // zurueck: der gemerkte Haken kommt wieder
   assert.equal(c.showSchool.disabled, false);
   assert.equal(c.showSchool.checked, true, 'der Umweg ueber die USA darf die Ebene nicht kosten');
-  assert.equal(c.schoolColorGroup.hidden, false);
   assert.equal(c.schoolUnavailableHint.hidden, true);
 });
 
@@ -1838,7 +1831,6 @@ test('#965 Review: ein nie gesetzter Haken kommt nach dem Umweg auch nicht zurue
 
   apply(HOLIDAY_TEST_COUNTRIES, 'DE');
   assert.equal(c.showSchool.checked, false, 'wiederhergestellt wird nur, was vorher da war');
-  assert.equal(c.schoolColorGroup.hidden, true);
 });
 
 test('#965 Review: US -> DE -> US merkt sich den Stand nur einmal, nicht den gesperrten', () => {
@@ -2651,7 +2643,7 @@ test('Standard-Erinnerungsliste: eine gescheiterte Abfrage ist ein Fehler mit Au
  * ======================================================================== */
 
 const PRE_R10_LEAVES = Object.freeze({
-  '/settings/personal/account': { id: 'personal-account', adminOnly: false, labelKey: 'settings.pageAccount', options: ['settings.displayNameLabel', 'settings.colorLabel', 'settings.contactDetailsLegend', 'settings.changePassword', 'settings.twoFactorTitle', 'settings.otherSessionsTitle', 'settings.oidcLinkTitle'] },
+  '/settings/personal/account': { id: 'personal-account', adminOnly: false, labelKey: 'settings.pageAccount', options: ['settings.displayNameLabel', 'settings.contactDetailsLegend', 'settings.changePassword', 'settings.twoFactorTitle', 'settings.otherSessionsTitle', 'settings.oidcLinkTitle'] },
   '/settings/personal/appearance': { id: 'personal-appearance', adminOnly: false, labelKey: 'settings.pageAppearance', options: ['settings.sectionDesign', 'settings.wallModeLabel', 'settings.screensaverIdleLabel', 'settings.screensaverClockLabel', 'settings.screensaverCoverLabel', 'settings.localeLabel', 'settings.dataLanguageLabel', 'settings.regionLabel', 'settings.currencyLabel', 'settings.timezoneLabel', 'settings.dateFormatLabel', 'settings.timeFormatLabel'] },
   '/settings/personal/device': { id: 'personal-device', adminOnly: false, labelKey: 'settings.pageDevice', options: ['settings.pwaInstallTitle'] },
   '/settings/personal/notifications': { id: 'personal-notifications', adminOnly: false, labelKey: 'settings.pageNotifications', options: ['settings.pushToggleTitle', 'settings.notificationChannelsTitle'] },
@@ -3670,6 +3662,22 @@ function probeSheets() {
   return sheetProbe;
 }
 
+test('One Today: die Kalender-Blaetter haben keine Farbfelder - Feiertage, Abos, Import, Kalenderauswahl', async () => {
+  const rendered = await probeSheets();
+  for (const id of ['modules-calendar', 'personal-calendar-subscriptions', 'sync-calendar']) {
+    const html = rendered.get(id) ?? '';
+    assert.ok(html.length > 200, `${id} wurde gezeichnet`);
+    assert.doesNotMatch(html, /type="color"|id="[a-z-]*-color"|holiday_(?:public|school)_color/, `${id}: ein Farbfeld`);
+  }
+  assert.match(rendered.get('modules-calendar'), /id="holiday-show-public"/, 'die Feiertags-Schalter stehen weiter da');
+  // Die Kalenderauswahl der Anbieter (CalDAV, Google, Outlook) baut ihre Zeilen
+  // per DOM: dort darf keine Kalenderfarbe des Anbieters mehr gemalt werden.
+  const sync = await readFile(new URL('../public/settings/pages/sync-calendar.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(sync, /calendarColor|backgroundColor|caldav-calendar-color/, 'sync-calendar.js malt eine Kalenderfarbe');
+  const subs = await readFile(new URL('../public/settings/pages/personal-calendar-subscriptions.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(subs, /sub\.color|\bcolor:/, 'die Abo-Seite liest oder sendet eine Farbe');
+});
+
 test('R17: kein Einstellungsblatt rendert eine Karte mit genau einem Bedienelement', async () => {
   const rendered = await probeSheets();
 
@@ -3945,7 +3953,7 @@ test('R19: umgestellte Blaetter sprechen den Zeilen-Dialekt', async () => {
   const account = await readFile(new URL('../public/settings/pages/personal-account.js', import.meta.url), 'utf8');
   // Re-Kritik 2026-10-17: auch Anzeigename und Farbe neben dem Bild (vorher
   // Felder unter Etiketten, zwei Dialekte in einer Karte).
-  for (const id of ['profile-display-name', 'profile-avatar-color', 'profile-phone', 'profile-email', 'profile-birth-date', 'current-password', 'new-password', 'confirm-password']) {
+  for (const id of ['profile-display-name', 'profile-phone', 'profile-email', 'profile-birth-date', 'current-password', 'new-password', 'confirm-password']) {
     assert.match(account, new RegExp(`settingRowHtml\\(\\{\\s*label: t\\('settings\\.[a-zA-Z]+'\\), labelFor: '${id}'`), `Konto: ${id} als Zeile`);
   }
   const profile = account.slice(account.indexOf('<div class="settings-profile-editor">'), account.indexOf('id="profile-error"'));
@@ -4376,4 +4384,24 @@ test('R19: das Kuechenblatt spricht den Zeilen-Dialekt der Einstellungen', async
   assert.match(meals, /settingRowHtml\(\{\s*label: builtInMealTypeLabel\(mealType\),\s*labelFor: `meal-name-\$\{mealType\}`/, 'Etikett links, Feld rechts');
   assert.doesNotMatch(meals, /class="settings-card"|class="form-field"|class="form-label"/, 'keine Karte und kein gestapeltes Feld mehr');
   assert.match(meals, /settings-group__footer">\$\{t\('settings\.mealTypesHint'\)\}/, 'der Hinweis als Gruppenfuss');
+});
+
+// ONE TODAY (2026-11-02): die Uebersicht hat keine Farbzeile mehr (niemand
+// waehlt eine Personenfarbe), und die Ausweiskarte zeichnet die eine
+// Personenscheibe mit den Initialen aus dem vollen Namen (hier stand ein
+// selbstgebauter Ein-Buchstaben-Avatar).
+test('One Today: keine Farbzeile in der Uebersicht und kein Farbfeld im Konto, die Ausweiskarte traegt die Personenscheibe', async () => {
+  const overviewValues = await import('/settings/overview-values.js');
+  assert.equal(overviewValues.colorValue, undefined, 'keine Personenfarbe als Wert');
+  const shellSource = await readFile(new URL('../public/settings/shell.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(shellSource, /personal-color|settings\.rowColor|settings\.colorLabel/, 'die Zeile \"Deine Farbe\" ist weg');
+  for (const rel of ['personal-account', 'admin-family']) {
+    const page = await readFile(new URL(`../public/settings/pages/${rel}.js`, import.meta.url), 'utf8');
+    assert.doesNotMatch(page, /type="color"|avatar_color|avatar-color/, `${rel}: kein Farbfeld an der Person`);
+  }
+
+  const shell = await readFile(new URL('../public/settings/shell.js', import.meta.url), 'utf8');
+  const card = shell.slice(shell.indexOf('function createIdentityCard('), shell.indexOf('function renderOverview('));
+  assert.match(card, /personDiscEl\(user \?\? \{\}, \{ size: 56, className: 'settings-identity__avatar' \}\)/);
+  assert.doesNotMatch(card, /toLocaleUpperCase|textContent = \(\[/, 'kein eigener Ein-Buchstaben-Avatar');
 });

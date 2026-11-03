@@ -158,7 +158,7 @@ function setHousehold(zone) {
 /** Alle ausgehenden Wege derselben Zeile: Name -> Tage beim Empfaenger. */
 function providerDays(event, zone) {
   const out = {};
-  out.google = googleDays(google.localEventToGoogle(event, {}, zone));
+  out.google = googleDays(google.localEventToGoogle(event, zone));
   const viaIcs = (ics) => icsDays(lineOf(ics, 'DTSTART'), lineOf(ics, 'RRULE'));
   out.caldavCreate = viaIcs(caldav.buildCalDAVICS(event, zone));
   out.icloudCreate = viaIcs(apple.buildICS(event, zone));
@@ -315,7 +315,7 @@ test('(b) ein UNTIL mit Uhrzeit ohne Zone geht als Ortszeit der Serie zu Google,
     start_datetime: '2035-10-01T21:30:00Z', end_datetime: '2035-10-01T22:00:00Z',
     recurrence_rule: 'RRULE:FREQ=DAILY;UNTIL=20351010T143000',
   };
-  const body = google.localEventToGoogle(event, {}, 'America/Los_Angeles');
+  const body = google.localEventToGoogle(event, 'America/Los_Angeles');
   assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T213000Z');
   const yuvomi = expandRecurringEvents([{ id: 1, ...event }], '2020-01-01', '2036-12-31');
   assert.equal(yuvomi.length, 10, 'Vorbedingung: Yuvomi zaehlt den 10.10. mit');
@@ -328,7 +328,7 @@ test('(b) die Ortszeit wird in der Zone der Serie gelesen, auch wenn Google eine
     start_datetime: '2035-10-01T07:00:00Z', end_datetime: '2035-10-01T08:00:00Z',
     recurrence_rule: 'FREQ=DAILY;UNTIL=20351010T090000',
   };
-  const body = google.localEventToGoogle(event, {}, 'America/New_York');
+  const body = google.localEventToGoogle(event, 'America/New_York');
   assert.equal(body.recurrence[0], 'RRULE:FREQ=DAILY;UNTIL=20351010T070000Z');
 });
 
@@ -361,7 +361,7 @@ test('Review 1: ein Datums-UNTIL einer Serie mit eigener Zone endet bei Google a
   };
   const yuvomi = expandRecurringEvents([{ id: 1, ...event }], '2020-01-01', '2036-12-31');
   assert.equal(yuvomi.length, 10, 'Vorbedingung: Yuvomi zeigt 1. bis 10.10. Ortszeit');
-  const body = google.localEventToGoogle(event, {}, google.outboundTimeZone(null));
+  const body = google.localEventToGoogle(event, google.outboundTimeZone(null));
   assert.equal(body.start.timeZone, 'Europe/Berlin');
   assert.equal(googleCount(body), 10, body.recurrence[0]);
 });
@@ -412,6 +412,6 @@ test('Review 4: eine Ortszeit ohne Zone an einer Serie ohne Zone endet bei Googl
   };
   const yuvomi = yuvomiDays(event);
   assert.equal(yuvomi.length, 10, 'Vorbedingung: Yuvomi liest das Ende als Tag');
-  const body = google.localEventToGoogle(event, {}, 'Europe/Berlin');
+  const body = google.localEventToGoogle(event, 'Europe/Berlin');
   assert.deepEqual(googleDays(body), yuvomi, body.recurrence[0]);
 });

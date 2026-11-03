@@ -314,7 +314,7 @@ test('markiert ein gespiegeltes Event, wenn ein gespiegeltes Feld sich ändert',
 
 test('jedes gespiegelte Feld löst für sich einen Push aus', () => {
   const changes = {
-    title: 'Anders', description: 'Text', location: 'Küche', color: '#FF0000',
+    title: 'Anders', description: 'Text', location: 'Küche',
     all_day: 1, start_datetime: '2035-04-01T08:00', end_datetime: '2035-04-01T09:00',
     recurrence_rule: 'FREQ=WEEKLY',
   };
@@ -330,10 +330,10 @@ test('jedes gespiegelte Feld löst für sich einen Push aus', () => {
   }
 });
 
-test('rein lokale Felder (Sichtbarkeit, Icon) lösen keinen Push aus', () => {
+test('rein lokale Felder (Sichtbarkeit, Icon, Farbe) lösen keinen Push aus', () => {
   reset();
   const before = insertGoogleEvent({ googleId: 'gev-internal', target: 'primary' });
-  db.prepare("UPDATE calendar_events SET visibility = 'private', icon = 'cake' WHERE id = ?").run(before.id);
+  db.prepare("UPDATE calendar_events SET visibility = 'private', icon = 'cake', color = '#FF0000', color_modified = 1 WHERE id = ?").run(before.id);
 
   assert.equal(__test.markEventOutbound(before, reload(before.id)), false);
   assert.equal(reload(before.id).outbound_dirty, 0);
@@ -386,12 +386,27 @@ function seedDirty(fields = {}, googleId = 'gev-push') {
   return reload(before.id);
 }
 
+test('One Today: der Push traegt keine colorId - weder eine Farbe noch ein Leeren', async () => {
+  for (const [label, fields] of [
+    ['gespeicherte Farbe', { title: 'Mit Farbe', color: '#DC2127', color_modified: 1 }],
+    ['geleerte Farbe', { title: 'Ohne Farbe', color: null, color_modified: 1 }],
+  ]) {
+    reset();
+    seedDirty(fields, `gev-color-${fields.color_modified}-${fields.color ?? 'none'}`);
+    const calendar = fakeCalendar({ calendars: writableCalendars() });
+    assert.equal(await __test.processPendingUpdates(calendar), 1, label);
+    const [patch] = calendar.patches;
+    assert.equal(patch.requestBody.summary, fields.title, label);
+    assert.equal(Object.hasOwn(patch.requestBody, 'colorId'), false, `${label}: ${JSON.stringify(patch.requestBody)}`);
+  }
+});
+
 test('pusht die lokale Änderung als events.patch in den richtigen Kalender', async () => {
   reset();
   const event = seedDirty({ title: 'Zahnarzt' });
 
   const calendar = fakeCalendar({ calendars: writableCalendars() });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 1);
+  assert.equal(await __test.processPendingUpdates(calendar), 1);
 
   assert.equal(calendar.patches.length, 1);
   const [patch] = calendar.patches;
@@ -408,7 +423,7 @@ test('ohne Änderungen wird weder gepatcht noch nach Metadaten gefragt', async (
   insertGoogleEvent({ googleId: 'gev-clean', target: 'primary' });
 
   const calendar = fakeCalendar({ calendars: writableCalendars() });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
   assert.equal(calendar.patches.length, 0);
   assert.equal(calendar.metaCalls.length, 0);
 });
@@ -419,7 +434,7 @@ test('holt die Kalender-Metadaten je Lauf nur einmal', async () => {
   seedDirty({ title: 'B' }, 'gev-m2');
 
   const calendar = fakeCalendar({ calendars: writableCalendars() });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 2);
+  assert.equal(await __test.processPendingUpdates(calendar), 2);
   assert.deepEqual(calendar.metaCalls, ['primary']);
 });
 
@@ -428,7 +443,7 @@ test('überspringt Kalender ohne Schreibrecht, ohne den Marker liegen zu lassen'
   const event = seedDirty({ title: 'Nur lesbar' }, 'gev-reader');
 
   const calendar = fakeCalendar({ calendars: writableCalendars(['primary'], { accessRole: 'reader' }) });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
 
   assert.equal(calendar.patches.length, 0);
   assert.equal(reload(event.id).outbound_dirty, 0, 'ein unschreibbares Ziel darf nicht ewig nachlaufen');
@@ -439,7 +454,7 @@ test('unzugängliche Kalender-Metadaten gelten als nicht schreibbar', async () =
   const event = seedDirty({ title: 'Weg' }, 'gev-nometa');
 
   const calendar = fakeCalendar({ calendars: {} }); // calendarList.get wirft 404
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
   assert.equal(calendar.patches.length, 0);
   assert.equal(reload(event.id).outbound_dirty, 0);
 });
@@ -453,7 +468,7 @@ for (const status of [404, 410]) {
       calendars: writableCalendars(),
       onPatch: () => { throw apiError(status); },
     });
-    assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+    assert.equal(await __test.processPendingUpdates(calendar), 0);
     assert.equal(reload(event.id).outbound_dirty, 0);
   });
 }
@@ -466,7 +481,7 @@ test('ein echter Fehler zählt hoch und lässt den Marker stehen', async () => {
     calendars: writableCalendars(),
     onPatch: () => { throw apiError(500); },
   });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
 
   const row = reload(event.id);
   assert.equal(row.outbound_dirty, 1, 'der nächste Sync muss es erneut versuchen');
@@ -485,7 +500,7 @@ test('pusht den Stand zum Zeitpunkt des Aufrufs, nicht den der Auswahl', async (
     return originalGet(params);
   };
 
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.patches[0].requestBody.summary, 'Ganz neu');
 });
@@ -499,7 +514,7 @@ test('gibt einen Push nach MAX_OUTBOUND_ATTEMPTS auf', async () => {
     onPatch: () => { throw apiError(500); },
   });
   for (let i = 0; i < __test.MAX_OUTBOUND_ATTEMPTS; i++) {
-    await __test.processPendingUpdates(calendar, {});
+    await __test.processPendingUpdates(calendar);
   }
 
   assert.equal(calendar.patches.length, __test.MAX_OUTBOUND_ATTEMPTS);
@@ -532,7 +547,7 @@ test('verschiebt das Event bei Google und zieht die lokale Zuordnung nach', asyn
   const { before } = seedMove();
 
   const calendar = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 1);
+  assert.equal(await __test.processPendingUpdates(calendar), 1);
 
   assert.deepEqual(calendar.moves, [{
     calendarId: 'primary', eventId: 'gev-move', destination: 'fam@g',
@@ -554,7 +569,7 @@ test('übernimmt eine vom Umzug zurückgegebene neue Event-ID', async () => {
     calendars: writableCalendars(['primary', 'fam@g']),
     onMove: () => ({ data: { id: 'gev-move-neu' } }),
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(reload(before.id).external_calendar_id, 'gev-move-neu');
 });
@@ -566,7 +581,7 @@ test('verschiebt zuerst und patcht danach im Zielkalender', async () => {
   __test.markEventOutbound(before, reload(before.id));
 
   const calendar = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 1);
+  assert.equal(await __test.processPendingUpdates(calendar), 1);
 
   assert.equal(calendar.moves.length, 1);
   assert.equal(calendar.patches.length, 1);
@@ -585,7 +600,7 @@ test('lässt den Termin liegen, wenn der Zielkalender nicht schreibbar ist', asy
       ...writableCalendars(['fam@g'], { accessRole: 'reader' }),
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 0);
   const row = reload(before.id);
@@ -603,7 +618,7 @@ test('patcht nicht im alten Kalender, wenn der Umzug scheitert', async () => {
     calendars: writableCalendars(['primary', 'fam@g']),
     onMove: () => { throw apiError(500); },
   });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
 
   assert.equal(calendar.patches.length, 0, 'sonst stünde die Änderung im falschen Kalender');
   const row = reload(before.id);
@@ -620,7 +635,7 @@ test('gibt einen von Google abgelehnten Umzug sofort auf (400)', async () => {
     onMove: () => { throw apiError(400); },
   });
   // Ein 400 (z. B. Serieninstanz verschieben) wiederholt sich garantiert.
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
 
   assert.equal(calendar.moves.length, 1, 'kein zweiter Versuch');
   assert.equal(reload(before.id).outbound_move_to, null);
@@ -636,7 +651,7 @@ test('ein aufgegebener Umzug nimmt die Feldänderung nicht mit', async () => {
     calendars: writableCalendars(['primary', 'fam@g']),
     onMove: () => { throw apiError(400); },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   const row = reload(before.id);
   assert.equal(row.outbound_move_to, null, 'der Umzug ist aufgegeben');
@@ -644,7 +659,7 @@ test('ein aufgegebener Umzug nimmt die Feldänderung nicht mit', async () => {
 
   // Der nächste Lauf schickt sie in den bisherigen Kalender.
   const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.equal(next.moves.length, 0);
   assert.equal(next.patches[0].calendarId, 'primary');
   assert.equal(next.patches[0].requestBody.summary, 'Trotzdem umbenannt');
@@ -689,7 +704,7 @@ test('nach einem gescheiterten Umzug nimmt die Rückkehr zum aktuellen Kalender 
   const { before } = seedMove();
   const calendars = writableCalendars(['primary', 'fam@g']);
   await __test.processPendingUpdates(
-    fakeCalendar({ calendars, onMove: () => { throw apiError(503); } }), {},
+    fakeCalendar({ calendars, onMove: () => { throw apiError(503); } }),
   );
   assert.equal(reload(before.id).outbound_move_to, 'fam@g', 'Vorbedingung: der Umzug steht weiter an');
 
@@ -699,7 +714,7 @@ test('nach einem gescheiterten Umzug nimmt die Rückkehr zum aktuellen Kalender 
   assert.equal(reload(before.id).outbound_move_to, null);
 
   const calendar = fakeCalendar({ calendars });
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
   assert.equal(calendar.moves.length, 0, 'der Termin bleibt in dem Kalender, der gewählt ist');
 });
 
@@ -1246,7 +1261,7 @@ test('eine Bearbeitung während des Patches bleibt für den nächsten Push vorge
     calendars: writableCalendars(),
     onPatch: () => put(event.id, { title: 'Zweite' }),
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.patches[0].requestBody.summary, 'Erste');
   const row = reload(event.id);
@@ -1257,7 +1272,7 @@ test('eine Bearbeitung während des Patches bleibt für den nächsten Push vorge
   assert.equal(reload(event.id).title, 'Zweite');
 
   const next = fakeCalendar({ calendars: writableCalendars() });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.equal(next.patches[0].requestBody.summary, 'Zweite');
   assert.equal(reload(event.id).outbound_dirty, 0);
 });
@@ -1274,7 +1289,7 @@ test('eine Bearbeitung während des Umzugs geht im selben Lauf in den Zielkalend
       return { data: { id: params.eventId } };
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 1);
   assert.equal(calendar.patches.length, 1, 'die Auswahl kannte die Umbenennung noch nicht');
@@ -1295,7 +1310,7 @@ test('ein Umzug, der während des Patches vorgemerkt wird, bleibt stehen', async
     calendars: writableCalendars(['primary', 'fam@g']),
     onPatch: () => put(event.id, { target_google_calendar_id: 'fam@g' }),
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 0);
   let row = reload(event.id);
@@ -1303,7 +1318,7 @@ test('ein Umzug, der während des Patches vorgemerkt wird, bleibt stehen', async
   assert.equal(row.outbound_dirty, 0, 'die Umbenennung ist mit dem Patch draussen');
 
   const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.deepEqual(next.moves, [{ calendarId: 'primary', eventId: 'gev-move-in-patch', destination: 'fam@g' }]);
   row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
@@ -1322,7 +1337,7 @@ test('ein weiterer Umzug während des Umzugs bleibt vorgemerkt', async () => {
       return { data: { id: params.eventId } };
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 1);
   let row = reload(event.id);
@@ -1330,7 +1345,7 @@ test('ein weiterer Umzug während des Umzugs bleibt vorgemerkt', async () => {
   assert.equal(row.outbound_move_to, 'work@g', 'der zweite Umzug hat Google noch nicht erreicht');
 
   const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g', 'work@g']) });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.deepEqual(next.moves, [{ calendarId: 'fam@g', eventId: 'gev-move-in-move', destination: 'work@g' }]);
   row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'work@g');
@@ -1352,14 +1367,14 @@ test('ein Rückweg in die Quelle während des Umzugs wird als neuer Umzug vorgem
       return { data: { id: params.eventId } };
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   let row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'fam@g', 'Vorbedingung: der Umzug ins Ziel ist ausgeführt');
   assert.equal(row.outbound_move_to, 'primary', 'der Rückweg läuft im nächsten Durchgang');
 
   const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.deepEqual(next.moves, [{ calendarId: 'fam@g', eventId: 'gev-move-back', destination: 'primary' }]);
   row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'primary');
@@ -1381,7 +1396,7 @@ test('ein Zielwechsel während des Umzugs zurück auf das Umzugsziel merkt nicht
       return { data: { id: params.eventId } };
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   const row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'fam@g');
@@ -1401,13 +1416,13 @@ test('ein nach dem Umzug scheiternder Patch gibt nach MAX_OUTBOUND_ATTEMPTS auf'
     calendars: writableCalendars(['primary', 'fam@g']),
     onPatch: () => { throw apiError(500); },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
   let row = reload(before.id);
   assert.equal(row.outbound_move_to, null, 'der Umzug selbst ist erledigt');
   assert.equal(row.outbound_attempts, 1);
 
   for (let i = 1; i < __test.MAX_OUTBOUND_ATTEMPTS; i++) {
-    await __test.processPendingUpdates(calendar, {});
+    await __test.processPendingUpdates(calendar);
   }
   assert.equal(calendar.moves.length, 1);
   assert.equal(calendar.patches.length, __test.MAX_OUTBOUND_ATTEMPTS);
@@ -1431,7 +1446,7 @@ test('ein Zwischenziel während des Umzugs verfällt, wenn der Patch wieder aufs
     },
     onPatch: () => put(event.id, { target_google_calendar_id: 'fam@g' }),
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 1);
   assert.equal(calendar.patches.length, 1);
@@ -1456,7 +1471,7 @@ test('eine Bearbeitung während des Umzugs bekommt beim scheiternden Patch ihre 
     },
     onPatch: () => { throw apiError(500); },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.patches.length, 1);
   const row = reload(event.id);
@@ -1478,7 +1493,7 @@ test('ein während des Patches gewählter und wieder verworfener Umzug verfällt
       await put(event.id, { target_google_calendar_id: 'primary' });
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 0);
   assert.equal(calendar.patches.length, 1);
@@ -1519,7 +1534,7 @@ for (const [label, makeError] of [['503', () => apiError(503)], ['ohne HTTP-Stat
     const event = seedDirty({ title: 'Offline bearbeitet' }, `gev-meta-${label}`);
 
     const calendar = failMeta(fakeCalendar({ calendars: writableCalendars() }), ['primary'], makeError);
-    assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+    assert.equal(await __test.processPendingUpdates(calendar), 0);
 
     assert.equal(calendar.patches.length, 0);
     const row = reload(event.id);
@@ -1527,7 +1542,7 @@ for (const [label, makeError] of [['503', () => apiError(503)], ['ohne HTTP-Stat
     assert.equal(row.outbound_attempts, 1);
 
     const next = fakeCalendar({ calendars: writableCalendars() });
-    assert.equal(await __test.processPendingUpdates(next, {}), 1);
+    assert.equal(await __test.processPendingUpdates(next), 1);
     assert.equal(next.patches[0].requestBody.summary, 'Offline bearbeitet');
     assert.equal(reload(event.id).outbound_dirty, 0);
   });
@@ -1539,11 +1554,11 @@ test('ein dauerhaft scheiternder Metadaten-Abruf gibt nach MAX_OUTBOUND_ATTEMPTS
 
   const calendar = failMeta(fakeCalendar({ calendars: writableCalendars() }), ['primary'], () => apiError(503));
   for (let i = 0; i < __test.MAX_OUTBOUND_ATTEMPTS - 1; i++) {
-    await __test.processPendingUpdates(calendar, {});
+    await __test.processPendingUpdates(calendar);
   }
   assert.equal(reload(event.id).outbound_dirty, 1, 'Vorbedingung: bis zum letzten Versuch bleibt sie stehen');
 
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
   assert.equal(calendar.patches.length, 0);
   assert.equal(reload(event.id).outbound_dirty, 0);
 });
@@ -1557,7 +1572,7 @@ test('ein gescheiterter Abruf des Zielkalenders lässt den Umzug vorgemerkt und 
   const calendar = failMeta(
     fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g']) }), ['fam@g'], () => apiError(503),
   );
-  assert.equal(await __test.processPendingUpdates(calendar, {}), 0);
+  assert.equal(await __test.processPendingUpdates(calendar), 0);
 
   assert.equal(calendar.moves.length, 0);
   assert.equal(calendar.patches.length, 0, 'sonst stünde die Änderung im falschen Kalender');
@@ -1586,7 +1601,7 @@ test('ein während des Zielabrufs gewähltes Ziel fällt nicht mit dem unschreib
     if (params.calendarId === 'fam@g') await put(event.id, { target_google_calendar_id: 'work@g' });
     return originalGet(params);
   };
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.moves.length, 0);
   const row = reload(event.id);
@@ -1608,14 +1623,14 @@ test('ein während des scheiternden Umzugs gewähltes Ziel fällt nicht mit ihm'
       throw apiError(400);
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   let row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'primary');
   assert.equal(row.outbound_move_to, 'work@g', 'der zuletzt gewählte Kalender steht weiter an');
 
   const next = fakeCalendar({ calendars: writableCalendars(['primary', 'fam@g', 'work@g']) });
-  assert.equal(await __test.processPendingUpdates(next, {}), 1);
+  assert.equal(await __test.processPendingUpdates(next), 1);
   assert.deepEqual(next.moves, [{ calendarId: 'primary', eventId: 'gev-move-fail-retarget', destination: 'work@g' }]);
   row = reload(event.id);
   assert.equal(__test.currentGoogleCalendarId(row), 'work@g');
@@ -1639,7 +1654,7 @@ test('eine Bearbeitung während des scheiternden Umzugs gibt ihm seine Versuche 
       throw apiError(503);
     },
   });
-  await __test.processPendingUpdates(calendar, {});
+  await __test.processPendingUpdates(calendar);
 
   assert.equal(calendar.patches.length, 0);
   const row = reload(event.id);
@@ -1792,7 +1807,7 @@ test('#1875: der Patch nennt die gesetzte Haushaltszone, nicht die des Kalenders
     seedDirty({ start_datetime: '2035-07-10T14:00', end_datetime: '2035-07-10T15:00' }, 'gev-zone-patch');
 
     const calendar = fakeCalendar({ calendars: writableCalendars(['primary'], { timeZone: 'UTC' }) });
-    assert.equal(await __test.processPendingUpdates(calendar, {}), 1);
+    assert.equal(await __test.processPendingUpdates(calendar), 1);
 
     const { start, end } = calendar.patches[0].requestBody;
     assert.equal(start.dateTime, '2035-07-10T14:00:00', 'die Wanduhrzeit geht unverändert hinaus');
@@ -1825,7 +1840,7 @@ test('#1875: ohne gesetzte Haushaltszone bleibt es bei der Zone des Kalenders (#
 
   seedDirty({ start_datetime: '2035-07-10T14:00', end_datetime: '2035-07-10T15:00' }, 'gev-zone-unset');
   const patching = fakeCalendar({ calendars: writableCalendars(['primary'], { timeZone: 'Australia/Adelaide' }) });
-  assert.equal(await __test.processPendingUpdates(patching, {}), 1);
+  assert.equal(await __test.processPendingUpdates(patching), 1);
   assert.equal(patching.patches[0].requestBody.start.timeZone, 'Australia/Adelaide');
 
   reset();
@@ -1843,7 +1858,7 @@ test('#1875: meldet Google keine Kalenderzone, gilt die Haushaltszone', async ()
   await withHouseholdZone('Europe/Amsterdam', async () => {
     seedDirty({ start_datetime: '2035-07-10T14:00', end_datetime: '2035-07-10T15:00' }, 'gev-zone-nocal');
     const calendar = fakeCalendar({ calendars: writableCalendars(['primary'], { timeZone: undefined }) });
-    assert.equal(await __test.processPendingUpdates(calendar, {}), 1);
+    assert.equal(await __test.processPendingUpdates(calendar), 1);
     assert.equal(calendar.patches[0].requestBody.start.timeZone, 'Europe/Amsterdam');
   });
 });

@@ -181,7 +181,6 @@ test('keine Absage der Budget-Routen traegt deutschen Wortlaut', async () => {
   await run('a-name-long', 'POST', '/accounts', { name: long });
   await run('a-type', 'POST', '/accounts', { name: 'N', type: 'nope' });
   await run('a-balance', 'POST', '/accounts', { name: 'N', starting_balance: 'abc' });
-  await run('a-color', 'POST', '/accounts', { name: 'N', color: 'nope' });
   await run('a-bank', 'POST', '/accounts', { name: 'N', credit_bank: long });
   await run('a-limit', 'POST', '/accounts', { name: 'N', credit_limit: 'abc' });
   await run('a-limit-neg', 'POST', '/accounts', { name: 'N', credit_limit: -1 });
@@ -189,7 +188,6 @@ test('keine Absage der Budget-Routen traegt deutschen Wortlaut', async () => {
   await run('ap-name', 'PUT', `/accounts/${aid}`, { name: '' });
   await run('ap-type', 'PUT', `/accounts/${aid}`, { type: 'nope' });
   await run('ap-balance', 'PUT', `/accounts/${aid}`, { starting_balance: 'abc' });
-  await run('ap-color', 'PUT', `/accounts/${aid}`, { color: 'nope' });
   await run('ap-bank', 'PUT', `/accounts/${aid}`, { credit_bank: long });
   await run('ap-limit', 'PUT', `/accounts/${aid}`, { credit_limit: 'abc' });
   await run('ap-limit-neg', 'PUT', `/accounts/${aid}`, { credit_limit: -1 });

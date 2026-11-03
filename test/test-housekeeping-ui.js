@@ -1200,3 +1200,15 @@ test('Einstellungen: der Hinweis zu Zahlungsaufgaben nennt, wer sie sieht', () =
   assert.match(de.settings.housekeepingPaymentTasksHint, /nur die Person, die eincheckt, und die Administratoren/);
   assert.match(en.settings.housekeepingPaymentTasksHint, /Only the person who checks in and the administrators/);
 });
+
+// ONE TODAY (2026-11-02), No person colour pickers: Hauspersonal steht nicht im
+// Haushalt. Das Formular hat weder Profil- noch Kalenderfarbe, die Scheibe
+// trägt keine gespeicherte Farbe (die neutrale steht im Stylesheet), und das
+// Speichern sendet keine Farbfelder.
+test('Haushaltshilfe: keine Farbfelder im Formular, neutrale Scheibe ohne gespeicherte Farbe', () => {
+  const page = readFileSync(new URL('../public/pages/housekeeping.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /type="color"|avatar_color|calendar_color|worker_avatar_color|housekeeping\.(?:profileColor|calendarColor)/);
+  assert.doesNotMatch(page, /class="housekeeping-avatar[^"]*"[^>]*style=/, 'die Scheibe malt keine eigene Farbe');
+  const css = readFileSync(new URL('../public/styles/housekeeping.css', import.meta.url), 'utf8');
+  assert.match(css, /\.housekeeping-avatar \{[^}]*background: var\(--color-fill\);[^}]*color: var\(--color-text-secondary\);/);
+});

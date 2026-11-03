@@ -267,7 +267,7 @@ test(`TZ=${process.env.TZ}: Google bekommt weiter die Haushaltsziffern, die Tage
     id: 9, title: 'G', all_day: 0, tzid: LA, series_authored: 1,
     start_datetime: '2035-11-01T05:30', end_datetime: '2035-11-01T06:00',
     recurrence_rule: 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1;COUNT=3',
-  }, {}, BERLIN);
+  }, BERLIN);
   assert.deepEqual(body.start, { dateTime: '2035-11-01T05:30:00', timeZone: BERLIN });
 });
 

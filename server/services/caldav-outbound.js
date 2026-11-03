@@ -25,7 +25,6 @@ import { patchICSEvent } from '../utils/ics-patch.js';
 import { eventDateTimeFields, rruleForDtstart } from '../utils/ics-datetime.js';
 import { householdTimeZone } from '../utils/timezone.js';
 import * as db from '../db.js';
-import { nearestIcalColorName } from '../utils/ical-color.js';
 import { outboundEvent } from './outbound-dtstart.js';
 import { icsSnapshot } from './outbound-echo.js';
 import { findObjectWithUid } from '../utils/own-uid.js';
@@ -212,33 +211,9 @@ export function icsFieldsForEvent(event, householdZone = null) {
     DTEND:       when.dtend,
   };
 
-  // COLOR ist Teil von MIRRORED_FIELDS, wurde aber nie geschrieben (#897): eine
-  // Umfaerbung kostete einen PUT, der beim Server nichts aenderte.
-  //
-  // DREI FAELLE, und der Unterschied zwischen den letzten beiden ist der ganze
-  // Punkt von #899:
-  //
-  //   1. Eine Eigenfarbe, die sich abbilden laesst → ihr CSS3-Name geht hinaus.
-  //   2. Keine Eigenfarbe, und der Nutzer hat sie GELEERT (color_modified = 1)
-  //      → null, und der Patcher entfernt die COLOR-Zeile. Verwaltet heisst
-  //      ersetzen UND entfernen; erst hier wird die zweite Haelfte gebraucht.
-  //   3. Keine Eigenfarbe, weil wir nie eine gelernt haben (color_modified = 0)
-  //      → das Feld bleibt weg, "nicht anfassen".
-  //
-  // Fall 3 ist keine Vorsicht ohne Anlass. Ein Termin kommt ohne COLOR herein,
-  // jemand faerbt ihn spaeter auf dem SERVER, und Yuvomi erfaehrt davon erst
-  // beim naechsten Inbound-Lauf - der aber laeuft nicht zwischen der Bearbeitung
-  // und ihrem Push. Ein pauschales null haette dessen Farbe abgeraeumt, und vor
-  // #899 dauerhaft: das Gatter hing an `user_modified`, das jede Bearbeitung
-  // setzt, also holte auch kein spaeterer Lauf sie zurueck.
-  //
-  // Eine Farbe, die sich nicht abbilden laesst (kein gueltiges #RRGGBB), faellt
-  // NICHT in Fall 2: `event.color` steht, geleert wurde nichts. Sie bleibt in
-  // Fall 3 - ein null wuerde eine fremde Farbe wegwerfen, um einen Wert
-  // wiederzugeben, den wir gar nicht ausdruecken koennen.
-  const colorName = nearestIcalColorName(event.color);
-  if (colorName) fields.COLOR = colorName;
-  else if (!event.color && event.color_modified) fields.COLOR = null;
+  // Kein COLOR (One Today): Yuvomi waehlt keine Terminfarben mehr. Ein
+  // fehlendes Feld heisst fuer den Patcher "nicht anfassen" - eine Farbe, die
+  // der Server traegt, bleibt stehen (ics-patch.js verwaltet COLOR nicht mehr).
 
   return { fields, tzid: when.tzid };
 }

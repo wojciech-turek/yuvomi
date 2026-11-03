@@ -24,7 +24,6 @@ import crypto from 'node:crypto';
 import * as db from '../db.js';
 import * as outbound from './calendar-outbound.js';
 import { decodeHtmlEntities } from '../utils/html-entities.js';
-import { nearestColorId } from '../utils/ical-color.js';
 // Fallback-Zone für den Outbound-Sync, wenn Google für den Zielkalender keine liefert.
 import {
   configuredHouseholdTimeZone, householdTimeZone, isValidTimeZone, localToUTCPrecise,
@@ -329,11 +328,10 @@ function pendingUpdateCount() {
 /**
  * Schiebt lokal bearbeitete, bereits gespiegelte Events zu Google.
  * @param {import('googleapis').calendar_v3.Calendar} calendar
- * @param {Record<string,string>} colorMap
  * @param {Map} metaCache
  * @returns {Promise<number>} erfolgreich gepushte Events
  */
-async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Map()) {
+async function processPendingUpdates(calendar, metaCache = new Map()) {
   const events = outbound.pendingUpdates('google');
   if (events.length === 0) return 0;
 
@@ -463,7 +461,7 @@ async function processPendingUpdates(calendar, colorMap = {}, metaCache = new Ma
     }
 
     try {
-      const { body: gEvent, snapshot } = buildGoogleRequest(fresh, colorMap, outboundTimeZone(activeMeta?.timeZone));
+      const { body: gEvent, snapshot } = buildGoogleRequest(fresh, outboundTimeZone(activeMeta?.timeZone));
       await calendar.events.patch({ calendarId, eventId, requestBody: gEvent });
       // Während des Patches Eingetroffenes bleibt vorgemerkt. Der Schnappschuss
       // (#1956) geht im selben Schreibvorgang.
@@ -506,7 +504,7 @@ async function runFlushWith(createCalendar, hasDeletions, hasUpdates) {
   await ensureAccessToken(calendar);
   const deleted = hasDeletions ? await processPendingDeletions(calendar) : 0;
   const updated = hasUpdates
-    ? await processPendingUpdates(calendar, await fetchEventColorMap(calendar), new Map())
+    ? await processPendingUpdates(calendar, new Map())
     : 0;
   return { deleted, updated };
 }
@@ -884,7 +882,9 @@ async function runSync(createCalendar) {
   const calendar = createCalendar();
   await ensureAccessToken(calendar);
 
-  // Event-Farbpalette (colorId → Hex) einmalig für den ganzen Sync laden.
+  // Event-Farbpalette (colorId → Hex) einmalig für den ganzen Sync laden - nur
+  // fuer den Eingang: eine Eigenfarbe von Google wird gespeichert (nicht
+  // gezeigt), hinaus geht keine (One Today).
   const eventColorMap = await fetchEventColorMap(calendar);
 
   const calendarIds = enabledCalendarIds();
@@ -900,7 +900,7 @@ async function runSync(createCalendar) {
   if (!isReadonly()) {
     const removed = await processPendingDeletions(calendar);
     if (removed) log.info(`${removed} pending deletion(s) applied at Google.`);
-    const pushed = await processPendingUpdates(calendar, eventColorMap, metaCache);
+    const pushed = await processPendingUpdates(calendar, metaCache);
     if (pushed) log.info(`${pushed} local change(s) pushed to Google.`);
   }
 
@@ -981,15 +981,11 @@ async function runSync(createCalendar) {
         continue;
       }
       try {
-        const { body: gEvent, snapshot } = buildGoogleRequest(event, eventColorMap, outboundTimeZone(meta?.timeZone));
+        const { body: gEvent, snapshot } = buildGoogleRequest(event, outboundTimeZone(meta?.timeZone));
         const created = await calendar.events.insert({ calendarId: targetId, requestBody: gEvent });
         // refId aus den Metadaten: trägt Name und Farbe des Kalenders statt der
         // rohen ID als Notnamen.
         const calRefId = meta.refId;
-        // `color_modified` mit hoch: die gerade hinausgegangene Farbe ist unsere.
-        // Die elf `colorId`s sind eine verlustbehaftete Abbildung des Hex-Werts -
-        // ohne das Flag holte der nächste Inbound-Lauf die gemappte Farbe zurück
-        // und ersetzte damit die gewählte (#899).
         // Gebucht wird gegen den Stand NACH dem await (#1926), und zwar in dem
         // einen Schreibvorgang selbst: Spiegel wird nur die Zeile, die die
         // Auswahl oben JETZT noch für diesen Kalender nennte. Wer inzwischen
@@ -1011,7 +1007,6 @@ async function runSync(createCalendar) {
         const booked = db.get().prepare(`
           UPDATE calendar_events
           SET external_calendar_id = ?, external_source = 'google', local_calendar_id = NULL, calendar_ref_id = ?,
-              color_modified = CASE WHEN color IS NOT NULL THEN 1 ELSE color_modified END,
               outbound_dirty = CASE WHEN ? = 1 THEN 1 ELSE outbound_dirty END,
               outbound_attempts = CASE WHEN ? = 1 THEN 0 ELSE outbound_attempts END,
               outbound_snapshot = ?
@@ -1528,12 +1523,11 @@ function outboundTimeZone(calendarTimeZone) {
 /**
  * Lokales Event → Google-Event-Body.
  * @param {object} event
- * @param {Record<string,string>} colorMap
  * @param {string} [timeZone]  IANA-Zone, in der Google die Wanduhrzeit interpretiert
  *                             (siehe outboundTimeZone()).
  */
-function localEventToGoogle(rawEvent, colorMap = {}, timeZone = outboundTimeZone(null)) {
-  return buildGoogleRequest(rawEvent, colorMap, timeZone).body;
+function localEventToGoogle(rawEvent, timeZone = outboundTimeZone(null)) {
+  return buildGoogleRequest(rawEvent, timeZone).body;
 }
 
 /**
@@ -1545,13 +1539,13 @@ function localEventToGoogle(rawEvent, colorMap = {}, timeZone = outboundTimeZone
  *
  * @returns {{ body: object, snapshot: string|null }}
  */
-function buildGoogleRequest(rawEvent, colorMap = {}, timeZone = outboundTimeZone(null)) {
-  const body = googleBody(rawEvent, colorMap, timeZone);
+function buildGoogleRequest(rawEvent, timeZone = outboundTimeZone(null)) {
+  const body = googleBody(rawEvent, timeZone);
   const aligned = alignmentMoved(rawEvent, { zone: timeZone, householdZone: householdTimeZone(db.get()) });
   return { body, snapshot: sentSnapshot(rawEvent, googleReading(inboundFields(body, null)), { aligned }) };
 }
 
-function googleBody(rawEvent, colorMap, timeZone) {
+function googleBody(rawEvent, timeZone) {
   // Start und Ende mit der eigenen Wiederholungsregel in Einklang (#986), bevor
   // irgendein Feld daraus abgeleitet wird - ein importiertes DTSTART bleibt
   // unberuehrt (#756). Begruendung in services/outbound-dtstart.js.
@@ -1565,35 +1559,9 @@ function googleBody(rawEvent, colorMap, timeZone) {
     location:    event.location    || undefined,
   };
 
-  // Event-Farbe verlustbehaftet auf die nächste der 11 Google-colorIds mappen.
-  // Ohne verfügbare Palette (colors.get fehlgeschlagen) bleibt colorId ungesetzt,
-  // dann erbt das Event in Google die Kalenderfarbe.
-  //
-  // NULL STATT WEGLASSEN, wenn der Nutzer die Farbe GELEERT hat (#891/#899).
-  // Der Unterschied zählt nur beim Update, und dort entscheidet er alles: der
-  // Push ist ein `events.patch`, und ein PATCH fasst genau die Felder an, die im
-  // Body STEHEN. Ein fehlendes `colorId` heißt also "nicht anfassen", nicht
-  // "löschen" - Google behielte seine alte Farbe, während Yuvomi die der
-  // zugewiesenen Person zeigt, und die beiden blieben dauerhaft verschieden.
-  //
-  // ABER NUR BEI EINEM ECHTEN LEEREN, und das ist der Unterschied zu #891: dort
-  // ging das null bei jedem Termin ohne Farbe hinaus, auch bei einem, der nie
-  // eine hatte. Ein Termin kommt ohne `colorId` herein (lokal NULL), jemand
-  // färbt ihn später in Google, und die nächste beliebige Bearbeitung in Yuvomi
-  // hätte dessen Farbe abgeräumt, ohne dass sie hier je jemand angefasst hätte.
-  // `color_modified` trennt die beiden Zustände: nur wer die Farbe wirklich
-  // geleert hat, leert sie auch drüben.
-  //
-  // Eine fehlende Palette ist wieder etwas anderes als eine fehlende Farbe: dann
-  // trägt der Termin sehr wohl eine, wir können sie nur nicht auf eine colorId
-  // abbilden. Dort ist "nicht anfassen" richtig, und ein Nullwert würde eine in
-  // Google gesetzte Farbe löschen, obwohl niemand das wollte.
-  if (event.color) {
-    const colorId = nearestColorId(event.color, colorMap);
-    if (colorId) gEvent.colorId = colorId;
-  } else if (event.color_modified) {
-    gEvent.colorId = null;
-  }
+  // KEINE colorId (One Today): Yuvomi waehlt keine Terminfarben mehr. Der Push
+  // ist ein `events.patch`, und ein fehlendes Feld heisst dort "nicht
+  // anfassen" - eine Farbe, die der Termin bei Google traegt, bleibt stehen.
 
   if (allDay) {
     const startDate = event.start_datetime.slice(0, 10);

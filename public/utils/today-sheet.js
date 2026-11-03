@@ -25,17 +25,17 @@
  *   priority  kleiner = wichtiger; entscheidet, was unter dem Deckel bleibt
  *   open      ist hier noch etwas ZU TUN? Nur offene Zeilen halten die Coda auf
  *
- * EINE NEUE QUELLE ANDOCKEN: ein Eintrag in TODAY_SHEET_SOURCES mit `module`,
- * `widget` und `collect(data, ctx)`, der aus einem Feld der /dashboard-Antwort
+ * EINE NEUE QUELLE ANDOCKEN: ein Eintrag in TODAY_SHEET_SOURCES mit `module`
+ * und `collect(data, ctx)`, der aus einem Feld der /dashboard-Antwort
  * Zeilen dieser Form macht, dazu die Tonklassen `today-cockpit-card--<tone>` und
- * `wall-row--<tone>` in dashboard.css. Modulschalter, Widget-Recht und die
- * Kein-Echo-Regel prueft `sourceSpeaks()` fuer alle gleich; die Quelle muss nur
+ * `wall-row--<tone>` in dashboard.css. Den Modulschalter und das
+ * Modulrecht prueft `sourceSpeaks()` fuer alle gleich; die Quelle muss nur
  * ihre Daten lesen. Das juengste Beispiel ist der Vorrat (`id: 'pantry'`,
  * liest `pantryExpiring.todayItems`/`todayCount`).
  */
 
 import { t, formatTime } from '/i18n.js';
-import { canSeeWidget as canSeeWidgetDefault, isPermAdmin, moduleAccess } from '/permissions.js';
+import { isPermAdmin, moduleAccess } from '/permissions.js';
 import { MODULE_ICON } from '/nav-icons.js';
 import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import { housekeepingSinceLabel } from '/utils/day-label.js';
@@ -63,18 +63,16 @@ const WASTE_PUT_OUT_SORT = '18:00';
  * haben hier eine eigene Quelle (eine zweite Zeile waere ein Echo), Zyklus und
  * Fasten sind Stupser ihrer eigenen Kacheln, und der Vorrat spricht ueber seine
  * eigene Quelle (`pantry`). Was hier nicht steht, spricht weiter ueber Toast
- * und Glocke. `echo` nennt das Widget, das dasselbe Objekt schon zeigen wuerde;
- * `widget` das Widget, dessen Sperre die Erinnerung stumm schaltet (nur wo das
- * Modul eine Kachel hat - sonst gilt allein das Modulrecht).
+ * und Glocke.
  */
 const REMINDER_SHEET_ORIGINS = {
-  task:                   { module: 'tasks',     widget: 'tasks',    tone: 'task',      icon: MODULE_ICON.tasks,     route: '/tasks',     kind: 'task',  echo: 'tasks' },
-  event:                  { module: 'calendar',  widget: 'calendar', tone: 'event',     icon: MODULE_ICON.calendar,  route: '/calendar',  kind: 'event', echo: 'calendar' },
-  subscription:           { module: 'budget',    widget: 'budget',   tone: 'budget',    icon: MODULE_ICON.budget,    route: '/budget' },
-  inventory_item:         { module: 'inventory',                     tone: 'inventory', icon: MODULE_ICON.inventory, route: '/inventory' },
-  inventory_tracked_date: { module: 'inventory',                     tone: 'inventory', icon: MODULE_ICON.inventory, route: '/inventory' },
-  document_expiry:        { module: 'documents',                     tone: 'documents', icon: MODULE_ICON.documents, route: '/documents' },
-  health_prevention_due:  { module: 'health',    widget: 'health',   tone: 'health',    icon: MODULE_ICON.health,    route: '/health' },
+  task:                   { module: 'tasks',     tone: 'task',      icon: MODULE_ICON.tasks,     route: '/tasks',     kind: 'task' },
+  event:                  { module: 'calendar',  tone: 'event',     icon: MODULE_ICON.calendar,  route: '/calendar',  kind: 'event' },
+  subscription:           { module: 'budget',    tone: 'budget',    icon: MODULE_ICON.budget,    route: '/budget' },
+  inventory_item:         { module: 'inventory', tone: 'inventory', icon: MODULE_ICON.inventory, route: '/inventory' },
+  inventory_tracked_date: { module: 'inventory', tone: 'inventory', icon: MODULE_ICON.inventory, route: '/inventory' },
+  document_expiry:        { module: 'documents', tone: 'documents', icon: MODULE_ICON.documents, route: '/documents' },
+  health_prevention_due:  { module: 'health',    tone: 'health',    icon: MODULE_ICON.health,    route: '/health' },
 };
 
 function openDoseCount(health) {
@@ -98,7 +96,6 @@ export const TODAY_SHEET_SOURCES = [
     // sind alle erledigt, entfaellt die Zeile und die Quelle meldet „erledigt".
     id: 'doses',
     module: 'health',
-    widget: 'health',
     settled: (data) => (Number(data?.health?.dosesTotal) || 0) > 0 && openDoseCount(data.health) === 0,
     collect(data, ctx) {
       const open = openDoseCount(data?.health);
@@ -128,7 +125,6 @@ export const TODAY_SHEET_SOURCES = [
     // man geht einmal zur Strasse, nicht dreimal.
     id: 'waste',
     module: 'waste',
-    widget: 'waste',
     collect(data, ctx) {
       const pickups = Array.isArray(data?.wastePickups) ? data.wastePickups : [];
       const rows = [];
@@ -175,7 +171,6 @@ export const TODAY_SHEET_SOURCES = [
     // ihn - im Blatt oder in seiner Kachel -, und hier kommt keine zweite Zeile.
     id: 'birthdays',
     module: 'calendar',
-    widget: 'birthdays',
     collect(data, ctx) {
       const list = Array.isArray(data?.birthdays) ? data.birthdays : [];
       const events = Array.isArray(data?.upcomingEvents) ? data.upcomingEvents : [];
@@ -209,7 +204,6 @@ export const TODAY_SHEET_SOURCES = [
     // (`todayCount`); was darueber hinausgeht, steht als „+N weitere" da.
     id: 'pantry',
     module: 'pantry',
-    widget: 'pantry',
     collect(data) {
       const slice = data?.pantryExpiring;
       const items = Array.isArray(slice?.todayItems) ? slice.todayItems : [];
@@ -238,7 +232,6 @@ export const TODAY_SHEET_SOURCES = [
     // Termin haelt sie die Coda nicht auf.
     id: 'shifts',
     module: 'schedule',
-    widget: 'schedule',
     collect(data, ctx) {
       const shifts = Array.isArray(data?.myShiftsToday) ? data.myShiftsToday : [];
       return shifts.map((entry) => {
@@ -249,7 +242,7 @@ export const TODAY_SHEET_SOURCES = [
           kind: 'shift',
           objectId: type.id ?? null,
           sortKey: start ?? SORT_ALL_DAY,
-          timeLabel: start && end ? `${formatTime(start)} - ${formatTime(end)}` : '',
+          timeLabel: start && end ? `${formatTime(start)}-${formatTime(end)}` : '',
           title: type.short_code ? `${type.short_code} · ${type.name}` : type.name,
           sub: t('nav.schedule'),
           icon: MODULE_ICON.schedule,
@@ -268,17 +261,12 @@ export const TODAY_SHEET_SOURCES = [
     // keine zweite Zeile wert.
     id: 'reminders',
     module: null,
-    widget: null,
     collect(data, ctx) {
       const list = Array.isArray(data?.pendingReminders) ? data.pendingReminders : [];
       const rows = [];
       for (const reminder of list) {
         const origin = REMINDER_SHEET_ORIGINS[reminder.entity_type];
         if (!origin || ctx.moduleOff(origin.module)) continue;
-        // Die Quelle selbst hat kein Widget, ihre Herkunft schon: ein gesperrtes
-        // Gesundheits-Widget schweigt auch ueber die faellige Vorsorge (#467).
-        if (origin.widget && !ctx.canSeeWidget(origin.widget)) continue;
-        if (origin.echo && ctx.widgetShown(origin.echo)) continue;
         if (origin.kind && ctx.existing.some((row) => row.kind === origin.kind
           && String(row.objectId) === String(reminder.entity_id))) continue;
         rows.push({
@@ -303,7 +291,6 @@ export const TODAY_SHEET_SOURCES = [
     // Die Haushaltshilfe ist gerade da. Eine Auskunft, kein Auftrag.
     id: 'housekeeping',
     module: 'housekeeping',
-    widget: 'housekeeping',
     collect(data, ctx) {
       const hk = data?.housekeeping;
       if (!hk?.present) return [];
@@ -337,35 +324,29 @@ export const TODAY_SHEET_SOURCES = [
 ];
 
 /**
- * Spricht diese Quelle fuer diesen Betrachter? Drei Riegel, fuer jede Quelle
- * gleich: das Modul ist an, das Widget ist ihm nicht verwehrt (#467 - ein
- * gesperrtes Gesundheits-Widget heisst auch: keine Dosen im Blatt), und die
- * Kachel steht NICHT sichtbar im Raster (Kein-Echo: jede Domaene hat genau
- * eine Repraesentation, Blatt ODER Kachel).
+ * Spricht diese Quelle fuer diesen Betrachter? Ein Riegel, fuer jede Quelle
+ * gleich: das Modul ist an und dem Betrachter nicht gesperrt. Es gibt keine
+ * Kacheln und keine Rechte pro Kachel mehr.
  */
 export function sourceSpeaks(source, ctx) {
   if (source.module && ctx.moduleOff(source.module)) return false;
-  if (source.widget && !ctx.canSeeWidget(source.widget)) return false;
-  if (source.widget && ctx.widgetShown(source.widget)) return false;
   return source.allowed ? Boolean(source.allowed(ctx)) : true;
 }
 
 /**
  * Der Kontext, den jede Quelle liest. Die Riegel kommen von aussen, damit
- * Cockpit (mit Widget-Konfiguration) und Wand (ohne) dieselben Quellen fragen.
+ * Today und Wand dieselben Quellen fragen.
  */
 export function todaySheetContext({
-  todayKey, tomorrowKey, nowTime, cfg = [], isAdmin = isPermAdmin(), viewer = null,
+  todayKey, tomorrowKey, nowTime, isAdmin = isPermAdmin(), viewer = null,
   isModuleDisabled = () => false,
-  canSeeWidget = canSeeWidgetDefault,
   existing = [],
 } = {}) {
-  const widgetShown = (id) => Array.isArray(cfg) && cfg.some((w) => w.id === id && w.visible);
   // Zwei Achsen, wie ueberall (#467): der Haushaltsschalter des Moduls und das
   // Modulrecht des Betrachters. Der Server liefert gesperrte Module ohnehin
   // leer - der Riegel hier haelt auch einen alten Stand im Speicher stumm.
   const moduleOff = (module) => Boolean(isModuleDisabled(module)) || moduleAccess(module) === 'none';
-  return { todayKey, tomorrowKey, nowTime, isAdmin, viewer, moduleOff, canSeeWidget, widgetShown, existing };
+  return { todayKey, tomorrowKey, nowTime, isAdmin, viewer, moduleOff, existing };
 }
 
 /** Die Zeilen aller sprechenden Quellen, plus ob eine davon „heute erledigt" meldet. */

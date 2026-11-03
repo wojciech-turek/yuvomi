@@ -482,7 +482,7 @@ test('es gibt genau eine Umschalter-Optik im Modul', () => {
       const [, classes] = bar;
       // Die Haupt-Tabs und der Scope-Umschalter tragen die app-weite Pillen-
       // Grammatik (sub-tabs.css) - sie sitzen in der Toolbar, nicht im Panel.
-      if (/budget-tabs|budget-scope|budget-color-picker/.test(classes)) continue;
+      if (/budget-tabs|budget-scope/.test(classes)) continue;
       assert.match(
         classes,
         /segmented/,
@@ -1731,13 +1731,13 @@ test('Trendpfeile sind Icons, keine Textglyphen', () => {
   assert.match(budget, /trendMarkup\(/);
 });
 
-test('Konto-Farben kommen aus Tokens und tragen sprechende Labels', () => {
-  const palette = budget.match(/const ACCOUNT_COLORS = \[[\s\S]*?\];/);
-  assert.ok(palette, 'ACCOUNT_COLORS fehlt');
-  assert.doesNotMatch(palette[0], /#[0-9a-fA-F]{6}/, 'Hex-Literale gehören in tokens.css');
-  assert.match(palette[0], /nameKey: 'budget\.color/);
-  // Screenreader lasen vorher den Hexcode vor.
-  assert.match(budget, /t\(c\.nameKey\)/);
+test('Konten haben keine Farbwahl: kein Swatch, kein Akzent je Konto, nichts wird gesendet', () => {
+  assert.doesNotMatch(budget, /ACCOUNT_COLORS|accountAccent|budget-color-|am-color|account-accent|selectedColor/);
+  assert.doesNotMatch(budget, /account_color_invalid/);
+  const accountBody = budget.slice(budget.indexOf("const body = { name, type, starting_balance"), budget.indexOf("const body = { name, type, starting_balance") + 120);
+  assert.doesNotMatch(accountBody, /color/, 'das Konto-Formular sendet keine Farbe');
+  const css = read('../public/styles/budget.css');
+  assert.doesNotMatch(css, /budget-color-/, 'kein Swatch-CSS');
 });
 
 test('kein toter Toast-Typ: nur gestylte Varianten werden verwendet', () => {
@@ -2333,8 +2333,6 @@ test('alle neuen Keys existieren in jeder Locale', () => {
   const keys = [
     'budget.trendDelta', 'budget.statsRangeLabel', 'budget.statsOtherCategories',
     'budget.statsTrendSummary', 'budget.statsDonutSummary',
-    'budget.colorTeal', 'budget.colorBlue', 'budget.colorViolet', 'budget.colorMagenta',
-    'budget.colorOrange', 'budget.colorGreen', 'budget.colorOcher',
     'budget.statsPointLabel', 'budget.statsPointsLabel',
     'budget.expensesOnly', 'budget.expensesOnlyHint',
     'subscriptions.resetFilters', 'subscriptions.noMatchesTitle', 'subscriptions.noMatchesDescription',
@@ -4883,6 +4881,26 @@ test('R16: der Budgetkopf fuehrt den Zeitraum mobil in der Titelzeile', () => {
   const label = [...eachRule(budgetCss)].filter((r) => r.at.some((a) => /max-width:\s*767px/.test(a))
     && r.selector.trim() === '.page-toolbar--period-inline .budget-nav__label');
   assert.ok(label.some((r) => /inline-size:/.test(r.body)), 'feste Labelbreite - sonst wandern die Pfeile beim Blaettern');
+});
+
+/* ONE TODAY, Abschlussrunde (Visual QA 2026-11-02): AM TELEFON STAND
+ * „Budg…". Seit v2 dockt die Shell den Seiten-FAB am Telefon als
+ * Geisterkreis in den Aktions-Slot des Kopfs (router.js dockFabAsGhost), und
+ * hier teilt sich der Slot die Zeile mit Titel und Monatsstepper: 44px Kreis
+ * plus Gap gingen dem Titel ab, gemessen 122px fuer „Budget" bei 390px, ohne
+ * einen Pixel Luft, bei 375px abgeschnitten. Dieselbe Loesung wie im Kalender
+ * („Kalenda…", calendar.css): unter 768px traegt der Kopf keinen Slot, das
+ * Plus schwebt ueber der Leiste (dockFabIntoToolbar misst den Slot und laesst
+ * den Knopf dann in der fab-layer). Gemessen: test:ko-layout-browser. */
+test('Telefon: der Budgetkopf traegt keinen Plus-Kreis neben Titel und Monat, „Budget" bleibt ganz', () => {
+  const phone = [...eachRule(budgetCss)].filter((r) => r.at.some((a) => /max-width:\s*767px/.test(a)));
+  const hides = phone.filter((r) => /\.budget-nav\s*>\s*\.page-toolbar__actions/.test(r.selector) && /display:\s*none/.test(r.body));
+  assert.equal(hides.length, 1, 'unter 768px blendet budget.css den Aktions-Slot des Budgetkopfs aus');
+  const tablet = [...eachRule(budgetCss)].filter((r) => !r.at.some((a) => /max-width:\s*767px/.test(a))
+    && /\.budget-nav\s*>\s*\.page-toolbar__actions/.test(r.selector) && /display:\s*none/.test(r.body));
+  assert.deepEqual(tablet, [], 'ab 768px hat die Zeile Platz: der Kreis bleibt im Kopf');
+  assert.match(read('../public/router.js'), /if \(slot\.getClientRects\(\)\.length\) return true;/,
+    'die Shell misst den Slot nach dem Andocken und laesst den Knopf sonst schweben');
 });
 
 /* R19 (Critique 2026-10-16 P2): EINGEKLAPPT IST DER BUDGETKOPF EINE ZEILE.

@@ -1,50 +1,44 @@
 /**
  * Modul: Dziś v2 - the model (2026-10-27)
- * Zweck: What the home screen shows, as plain data: the weather card with the
- *        rain of the day, the calendar of today (earlier, now, ahead and a peek
- *        at tomorrow), the pending tasks and the birthdays soon. Drawn by
+ * Zweck: What the home screen shows, as plain data: the weather line with the
+ *        rain of the day, the next thing (Next up), the calendar of today
+ *        (earlier, now, ahead and a peek at tomorrow), the pending tasks in
+ *        their groups, three notes and the next three birthdays. Drawn by
  *        components/today-view.js, wired in pages/dashboard.js.
  * Abhängigkeiten: /i18n.js, /utils/today-plan.js, /utils/date.js,
- *                 /utils/day-label.js
+ *                 /utils/day-label.js, /utils/note-line.js
  *
- * THE OWNER'S ORDER (design v2, "Main" and "DzisFull"): the weather first,
- * because "will it rain today" is the question of the morning; then the
- * calendar, compact, with the ongoing event marked in place instead of
- * repeated in a second card; then the tasks that are waiting, tickable; the
- * birthdays last and quiet. There is no Teraz card, no dinner card and no day
- * plan any more - the wall keeps its own model (utils/wall-plan.js).
+ * ONE TODAY (2026-11-02) adds the data of the new page: weatherLine, nextUp,
+ * the task groups of pendingTasks, birthdaysNext and notesCard. The weather
+ * card and its chart left the page (Task 16): `weatherLine` is the one
+ * reading of the forecast left, a line in the header.
+ * "Wkrótce" (birthdaysSoon, the 30-day cut) went with the card it filled.
+ *
+ * THE OWNER'S ORDER (One Today, spec section 3): "will it rain today" stays
+ * the question of the morning, answered in one line beside the date; then the
+ * one thing that comes next; the calendar, compact, with the ongoing event
+ * marked in place; the tasks that are waiting, tickable, in their groups; the
+ * notes; the birthdays last. There is no Teraz card, no dinner card and no
+ * day plan - the wall keeps its own model (utils/wall-plan.js).
  */
 
-import { t, formatTime, getLocale, getTimeFormat, getNumberFormat } from '/i18n.js';
-import { buildPlan, buildTomorrow, firstName } from '/utils/today-plan.js';
+import { t, formatTime, getLocale } from '/i18n.js';
+import { buildPlan, buildTomorrow, firstName, minutesOf, MEAL_TIMES } from '/utils/today-plan.js';
 import { addLocalDays } from '/utils/date.js';
 import { shortDayMonth, shortWeekdayDayMonth } from '/utils/day-label.js';
+import { firstLine, noteLines } from '/utils/note-line.js';
 
 /** A chance of rain from this many percent counts as rain (as the server). */
 export const RAIN_POP = 40;
-/** The bars of the hourly chart: the hour before, now and twelve ahead. */
-export const CHART_BARS = 14;
-/** Tallest bar of the chart, in px (the chart is 24 high). */
-const BAR_MAX = 24;
-const BAR_MIN = 3;
 /** How many tasks the card lists (the server sends the five most pressing). */
 export const TASK_ROWS = 5;
-/** Birthdays: how far ahead and how many. */
-export const SOON_DAYS = 30;
-export const SOON_ROWS = 3;
+/** Birthdays: how many, however far away. */
+const BIRTHDAY_ROWS = 3;
 /** From this minute of the day "no rain until evening" would be a lie. */
 const EVENING_MIN = 17 * 60;
 
 const hhmm = (hour) => `${String(hour).padStart(2, '0')}:00`;
 
-/**
- * The hour under a bar of the chart: "15" (in the region's digits), "3PM" for
- * a 12-hour clock - a full "15:00" is wider than three bars.
- */
-export function chartHourLabel(hour) {
-  if (getTimeFormat() === '12h') return `${hour % 12 || 12}${hour >= 12 ? 'PM' : 'AM'}`;
-  return getNumberFormat({ useGrouping: false }).format(hour);
-}
 const minutesToTime = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 /** "Wtorek, 27 października" in the household zone. */
@@ -64,72 +58,34 @@ export function greetingKey(nowMin) {
 // --------------------------------------------------------
 
 /**
- * The weather card, or null without weather. The rain line and the chart look
- * at the REST of the day (from the current hour); the server's day summary
- * covers the whole day and stays true for its cached half hour.
+ * "11° · bez deszczu do wieczora" for the head of the page, or null without
+ * weather. The rain phrase looks at the REST of the day (from the current
+ * hour); the server's day summary covers the whole day and stays true for its
+ * cached half hour. Without hourly data the line says only the temperature.
  */
-export function weatherCard(weather, ctx) {
+export function weatherLine(weather, ctx) {
   if (!weather?.current) return null;
-  const openMeteo = weather.provider === 'open-meteo';
-  const describe = (desc) => (openMeteo ? t(desc) : String(desc ?? ''));
   const nowHour = Math.floor((Number.isFinite(ctx.nowMin) ? ctx.nowMin : 0) / 60);
-  const hours = (Array.isArray(weather.today_hours) ? weather.today_hours : [])
-    .filter((h) => Number.isInteger(h?.hour));
-  const byHour = new Map(hours.map((h) => [h.hour, h]));
-  const ahead = hours.filter((h) => h.hour >= nowHour && Number.isFinite(h.pop));
+  const ahead = (Array.isArray(weather.today_hours) ? weather.today_hours : [])
+    .filter((h) => Number.isInteger(h?.hour) && h.hour >= nowHour && Number.isFinite(h.pop));
   const wet = ahead.filter((h) => h.pop >= RAIN_POP);
 
-  let rain = null;
+  let phrase = '';
   if (wet.length) {
     const from = wet[0].hour;
     const to = wet[wet.length - 1].hour;
-    const popMax = Math.max(...wet.map((h) => h.pop));
-    let label;
-    if (from <= nowHour) label = t('today.rainUntil', { time: formatTime(hhmm(to)) });
-    else if (from === to) label = t('today.rainAt', { time: formatTime(hhmm(from)) });
-    else label = t('today.rainWindow', { from: formatTime(hhmm(from)), to: formatTime(hhmm(to)) });
-    const bars = [];
-    for (let hour = nowHour - 1; hour < nowHour - 1 + CHART_BARS; hour += 1) {
-      if (hour < 0 || hour > 23) continue;
-      const pop = byHour.get(hour)?.pop;
-      const known = Number.isFinite(pop);
-      bars.push({
-        hour,
-        now: hour === nowHour,
-        wet: known && pop >= RAIN_POP,
-        height: known ? Math.max(BAR_MIN, Math.round((BAR_MAX * pop) / 100)) : BAR_MIN,
-        // Every third hour is named; the two after "teraz" stay empty, so the
-        // word has three bars of room in every language.
-        label: hour === nowHour
-          ? t('today.chartNow')
-          : (hour % 3 === 0 && (hour < nowHour || hour > nowHour + 2) ? chartHourLabel(hour) : ''),
-      });
-    }
-    rain = { label, chance: t('today.rainChance', { pop: popMax }), bars };
+    if (from <= nowHour) phrase = t('today.rainUntil', { time: formatTime(hhmm(to)) });
+    else if (from === to) phrase = t('today.rainAt', { time: formatTime(hhmm(from)) });
+    else phrase = t('today.rainWindow', { from: formatTime(hhmm(from)), to: formatTime(hhmm(to)) });
+  } else if (ahead.length) {
+    phrase = t(ctx.nowMin >= EVENING_MIN ? 'today.dryRestOfDay' : 'today.dryEvening');
   }
-  const dry = !rain && ahead.length
-    ? {
-      label: t(ctx.nowMin >= EVENING_MIN ? 'today.dryRestOfDay' : 'today.dryEvening'),
-      chance: t('today.rainChance', { pop: Math.max(...ahead.map((h) => h.pop)) }),
-    }
-    : null;
 
   const temp = Number(weather.current.temp);
-  const hi = Number(weather.today?.temp_max);
-  const lo = Number(weather.today?.temp_min);
-  const feels = Number(weather.current.feels_like);
-  const deg = (n) => `${Math.round(n)}°`;
-  const meta = [
-    Number.isFinite(hi) && Number.isFinite(lo) && weather.today?.temp_max != null ? `${deg(hi)} / ${deg(lo)}` : '',
-    Number.isFinite(feels) ? t('today.feelsLike', { temp: deg(feels) }) : '',
-  ].filter(Boolean).join(' · ');
+  const lower = phrase ? phrase[0].toLocaleLowerCase(getLocale()) + phrase.slice(1) : '';
   return {
-    icon: openMeteo ? String(weather.current.icon || 'cloud') : 'cloud',
-    temp: Number.isFinite(temp) ? deg(temp) : '',
-    desc: describe(weather.current.desc),
-    meta,
-    rain,
-    dry,
+    icon: weather.provider === 'open-meteo' ? String(weather.current.icon || 'cloud') : 'cloud',
+    text: [Number.isFinite(temp) ? `${Math.round(temp)}°` : '', lower].filter(Boolean).join(' · '),
   };
 }
 
@@ -165,7 +121,7 @@ function eventRoute(row, dayKey) {
  */
 export function calendarDay(data, ctx) {
   const plan = buildPlan({ planEvents: Array.isArray(data?.planEvents) ? data.planEvents : [] }, { ...ctx, moduleOff: (m) => m !== 'calendar' || Boolean(ctx.moduleOff?.(m)) });
-  const rows = plan.all.filter((row) => row.kind === 'event').map((row) => {
+  const rows = plan.all.filter((row) => row.kind === 'event' && !row.event?.birthday_name).map((row) => {
     const ends = Number.isFinite(row.endMin) && row.endMin < 24 * 60;
     const ongoing = !row.past && (row.running || (row.allDay && ends && row.endMin > ctx.nowMin));
     return {
@@ -189,7 +145,7 @@ export function calendarDay(data, ctx) {
     .sort((a, b) => (a.allDay === b.allDay ? a.startMin - b.startMin : (a.allDay ? -1 : 1)) || a.title.localeCompare(b.title));
   const last = earlier[earlier.length - 1];
   const tomorrowEvents = buildTomorrow({ planEvents: data?.planEvents ?? [] }, { ...ctx, moduleOff: (m) => m !== 'calendar' || Boolean(ctx.moduleOff?.(m)) })
-    .rows.filter((row) => row.kind === 'event');
+    .rows.filter((row) => row.kind === 'event' && !row.event?.birthday_name);
   const first = tomorrowEvents[0];
   return {
     earlier: {
@@ -207,6 +163,74 @@ export function calendarDay(data, ctx) {
       route: `/calendar?date=${encodeURIComponent(ctx.tomorrowKey)}`,
     } : null,
     empty: !earlier.length && !ahead.length,
+  };
+}
+
+// --------------------------------------------------------
+// Next up
+// --------------------------------------------------------
+
+/** The minute a row happens, meals by their slot (they carry no clock time). */
+function rowMinute(row) {
+  if (row.kind === 'meal') return minutesOf(MEAL_TIMES[row.meal?.meal_type] ?? MEAL_TIMES.dinner);
+  return row.sortMin;
+}
+
+/** Where a tap on the row goes: events by id and day, a task to its deep link, the rest by their own route. */
+function routeOf(row, ctx) {
+  if (row.kind === 'event') return eventRoute(row, row.dayKey ?? ctx.todayKey);
+  if (row.kind === 'task' && row.id != null) return `/tasks?open=${encodeURIComponent(String(row.id))}`;
+  return String(row.route ?? '');
+}
+
+/** Next up knows events, meals, timed tasks and a household help visit - no reminders, shifts, doses. */
+const NEXT_UP_ROWS = (row) => row.kind === 'event' || row.kind === 'meal' || row.kind === 'task'
+  || (row.kind === 'info' && row.sourceKind === 'housekeeping');
+
+const clockOf = (min) => formatTime(minutesToTime(min));
+
+/**
+ * The one thing that comes next: the first open row of today that is running
+ * or still ahead and has a time (household help counts, no cap), with its
+ * lead ("Za 25 min · 12:30") and the following timed row ("Potem ..."). With
+ * nothing left today, the first timed row of tomorrow ("Jutro 08:00"). Null
+ * when there is nothing at all.
+ */
+export function nextUp(data, ctx) {
+  const ahead = buildPlan(data ?? {}, ctx).open.filter((row) => {
+    const min = rowMinute(row);
+    return NEXT_UP_ROWS(row) && Number.isFinite(min) && !row.overdue && !row.done && (row.running || min > ctx.nowMin);
+  });
+  const row = ahead[0];
+  if (row) {
+    const min = rowMinute(row);
+    const time = clockOf(min);
+    const away = Math.ceil(min - ctx.nowMin);
+    let lead;
+    if (row.running) lead = t('today.nowRunning');
+    else if (away < 60) lead = t('today.inMinutesAt', { minutes: Math.max(1, away), time });
+    else lead = t('today.atTimeOnly', { time });
+    const following = ahead.slice(1).find((r) => rowMinute(r) > ctx.nowMin);
+    return {
+      lead,
+      title: row.title,
+      then: following ? t('today.thenShort', { time: clockOf(rowMinute(following)), title: following.title }) : null,
+      route: routeOf(row, ctx),
+      kind: row.kind,
+    };
+  }
+  const tomorrow = buildTomorrow(data ?? {}, ctx, { limit: Infinity }).rows
+    .filter(NEXT_UP_ROWS)
+    .map((r) => ({ r, min: rowMinute(r) }))
+    .filter(({ min }) => Number.isFinite(min) && min >= 0 && min < 24 * 60)
+    .sort((a, b) => a.min - b.min)[0];
+  if (!tomorrow) return null;
+  return {
+    lead: t('today.tomorrowAt', { time: clockOf(tomorrow.min) }),
+    title: tomorrow.r.title,
+    then: null,
+    route: routeOf(tomorrow.r, ctx),
+    kind: tomorrow.r.kind,
   };
 }
 
@@ -230,64 +254,135 @@ export function dueLabel(dueDate, ctx) {
   return shortDayMonth(due);
 }
 
+const TASK_GROUPS = [
+  ['late', 'today.groupLate'],
+  ['today', 'today.groupToday'],
+  ['tomorrow', 'today.groupTomorrow'],
+  ['later', 'today.groupLater'],
+  ['none', 'today.groupNone'],
+];
+
+function taskGroup(due, ctx) {
+  if (!due) return 'none';
+  if (due < ctx.todayKey) return 'late';
+  if (due === ctx.todayKey) return 'today';
+  if (due === ctx.tomorrowKey) return 'tomorrow';
+  return 'later';
+}
+
 /**
- * The tasks that wait, in the server's order (overdue, then by date, undated
- * last): title, due text, a flag for high/urgent, and whose it is.
+ * The tasks that wait, sorted into groups (late, today, tomorrow, later, no
+ * date; empty ones dropped). A group names the day, so a row says its date
+ * only when late ("wczoraj") or later ("czw 6 lis"). `rows` is the same list
+ * flat, in group order. Inside a group the server's order stays.
  */
 export function pendingTasks(data, ctx) {
   const open = (Array.isArray(data?.urgentTasks) ? data.urgentTasks : []).filter((task) => task && task.status !== 'done');
-  const rows = open.slice(0, TASK_ROWS).map((task) => {
+  const made = open.slice(0, TASK_ROWS).map((task) => {
     const due = String(task.due_date ?? '').slice(0, 10);
+    const group = taskGroup(due, ctx);
     const people = Array.isArray(task.assigned_users) ? task.assigned_users.filter((p) => p && p.id != null) : [];
+    let dueText = '';
+    if (group === 'late') dueText = dueLabel(due, ctx);
+    else if (group === 'later') dueText = shortWeekdayDayMonth(due, { year: false });
     return {
       key: `task:${task.id}`,
       id: task.id,
       title: String(task.title ?? ''),
-      due: dueLabel(due, ctx),
-      late: Boolean(due) && due < ctx.todayKey,
+      group,
+      due: dueText,
+      late: group === 'late',
       flag: task.priority === 'high' || task.priority === 'urgent',
       person: people[0] ?? null,
       task,
     };
   });
+  const groups = TASK_GROUPS
+    .map(([id, label]) => ({ id, label: t(label), rows: made.filter((row) => row.group === id) }))
+    .filter((group) => group.rows.length);
+  const rows = groups.flatMap((group) => group.rows);
   const total = Number(data?.openTaskCount);
-  return { rows, total: Number.isFinite(total) && total >= rows.length ? total : rows.length };
+  return { rows, groups, total: Number.isFinite(total) && total >= rows.length ? total : rows.length };
 }
 
 // --------------------------------------------------------
 // Birthdays
 // --------------------------------------------------------
 
-/** "Babcia Halina · 70. urodziny", "sob 1 lis · za 5 dni" - the next 30 days, three at most. */
-export function birthdaysSoon(data, ctx) {
+/**
+ * The next three birthdays or name days, however far away (the server sends
+ * five occurrences, sorted by days). "kończy 36 · sob 1 lis · za 5 dni".
+ */
+export function birthdaysNext(data, ctx) {
   return (Array.isArray(data?.birthdays) ? data.birthdays : [])
-    .filter((b) => Number.isFinite(Number(b?.days_until)) && Number(b.days_until) >= 0 && Number(b.days_until) <= SOON_DAYS)
-    .slice(0, SOON_ROWS)
+    .filter((b) => Number.isFinite(Number(b?.days_until)) && Number(b.days_until) >= 0)
+    .slice(0, BIRTHDAY_ROWS)
     .map((b) => {
       const days = Number(b.days_until);
       const age = Number(b.next_age);
-      const kind = b.kind === 'name_day'
-        ? t('today.nameDayKind')
-        : (Number.isFinite(age) && age > 0 ? t('birthdays.heroAge', { age }) : t('today.birthdayKind'));
-      const when = days === 0 ? t('calendar.relDay.today') : days === 1 ? t('calendar.relDay.tomorrow') : t('birthdays.inDays', { count: days });
+      let sub;
+      if (b.kind === 'name_day') sub = t('today.nameDayKind');
+      else if (Number.isFinite(age) && age > 0) sub = t('birthdays.turnsAge', { age });
+      else sub = firstLine(b.notes) || t('today.birthdayKind');
       return {
         key: `birthday:${b.id}:${b.kind}`,
         id: b.id,
         name: String(b.name ?? ''),
-        kind,
-        when: `${shortWeekdayDayMonth(addLocalDays(ctx.todayKey, days))} · ${when}`,
+        today: days === 0,
+        days,
+        sub,
+        date: shortWeekdayDayMonth(addLocalDays(ctx.todayKey, days), { year: false }),
+        // Without the weekday ("8 lut"): the wall's one-line strip (wall-plan.js).
+        day: shortDayMonth(addLocalDays(ctx.todayKey, days), { year: false }),
+        far: days === 0 ? '' : days === 1 ? t('calendar.relDay.tomorrow') : t('birthdays.inDays', { count: days }),
         route: b.id != null ? `/birthdays?open=${encodeURIComponent(String(b.id))}` : '/birthdays',
       };
     });
 }
 
-/** What changes by the clock alone - the page rebuilds only when this does. */
-export function clockStamp(calendar, weather, ctx) {
+// --------------------------------------------------------
+// Notes
+// --------------------------------------------------------
+
+/**
+ * Pinned notes, at most three; with none pinned, the three most recently
+ * changed (spec 3.5). The server sends pinned first, then by last change, so
+ * its order holds for both. Each: the title (else the first line of the text)
+ * and one line under it; null without notes.
+ */
+export function notesCard(data) {
+  const all = (Array.isArray(data?.pinnedNotes) ? data.pinnedNotes : []).filter((n) => n && n.id != null);
+  const pinned = all.filter((n) => Boolean(Number(n.pinned)));
+  const notes = (pinned.length ? pinned : all).slice(0, 3);
+  if (!notes.length) return null;
+  return notes.map((note) => {
+    const title = String(note.title ?? '').trim();
+    const lines = noteLines(note.content, 2);
+    return {
+      id: note.id,
+      title: title || lines[0] || t('today.noteUntitled'),
+      line: (title ? lines[0] : lines[1]) ?? '',
+      route: `/notes?open=${encodeURIComponent(String(note.id))}`,
+    };
+  });
+}
+
+/**
+ * What changes by the clock alone - the page rebuilds only when this does:
+ * past and ongoing events, the hour, the words of the weather line
+ * (`weatherLine`) and Next up: its lead ("Za 25 min" counts down), its title
+ * (another thing can come up with the same lead, "Teraz" after "Teraz") and
+ * its "Potem" line.
+ */
+export function clockStamp(calendar, weather, ctx, next = null) {
   return JSON.stringify([
     ctx.todayKey,
     calendar?.earlier?.rows.map((row) => row.key),
     calendar?.rows.map((row) => `${row.key}:${row.ongoing}`),
     Math.floor(ctx.nowMin / 60),
-    weather?.dry?.label ?? '',
+    weather?.text ?? '',
+    next?.lead ?? '',
+    next?.title ?? '',
+    next?.then ?? '',
   ]);
 }

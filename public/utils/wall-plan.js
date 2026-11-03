@@ -29,6 +29,7 @@ import { zonedDateKey, zonedTimeKey } from '/utils/timezone.js';
 import {
   planContext, buildPlan, pickNow, buildTomorrow, dayClosed, minutesOf, firstName, MEAL_TIMES, DINNER_FROM, DINNER_LINGER_MIN,
 } from '/utils/today-plan.js';
+import { birthdaysNext } from '/utils/dzis-plan.js';
 
 /** Until when it is morning on the wall. */
 export const MORNING_UNTIL = '10:00';
@@ -44,15 +45,6 @@ export const WALL_REFRESH_MS = 5 * 60 * 1000;
 export const WALL_TOMORROW_ROWS = 3;
 /** How many items the shopping card names before "+N". */
 export const WALL_SHOPPING_NAMES = 3;
-
-/** The sections the household can switch (services/wall-settings.js). */
-export const WALL_SECTION_IDS = Object.freeze(['dinner', 'plan', 'shopping', 'timers', 'weather']);
-
-/** Every section on unless the household said otherwise. */
-export function normalizeWallSections(raw) {
-  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  return Object.fromEntries(WALL_SECTION_IDS.map((id) => [id, source[id] !== false]));
-}
 
 /**
  * The scene by the clock:
@@ -217,7 +209,6 @@ function dinnerOfToday(data) {
  * @param {object} data the household /dashboard answer (or null while loading)
  * @param {object} opts
  * @param {Date}   [opts.now]
- * @param {object} [opts.sections]   wall_sections from /preferences
  * @param {boolean} [opts.mayWrite]  the household allows ticking on the wall
  * @param {boolean} [opts.isDisplay] the session is the paired display account
  * @param {{state: string, remainingMs: number}} [opts.timer]
@@ -228,20 +219,17 @@ function dinnerOfToday(data) {
  * @param {(key: string) => string} [opts.mealLabel]
  */
 export function buildWall(data, {
-  now = new Date(), sections = null, mayWrite = false, isDisplay = false, timer = { state: 'idle', remainingMs: 0 },
+  now = new Date(), mayWrite = false, isDisplay = false, timer = { state: 'idle', remainingMs: 0 },
   lastLoadedAt = null, predictions = [], question = null, moduleOff = () => false, mealLabel = (key) => key,
   tickers = null,
 } = {}) {
-  const on = normalizeWallSections(sections);
   const ctx = planContext({ now, viewer: null, users: data?.users ?? [], moduleOff, mealLabel });
   const timerShown = timer?.state === 'running' || timer?.state === 'done';
   const base = {
     scene: 'dzien',
     todayKey: ctx.todayKey,
     nowTime: ctx.nowTime,
-    sections: on,
     timer: timerShown ? timer : null,
-    timers: on.timers,
     stale: staleMinutes(lastLoadedAt, now),
     teraz: null,
     hero: null,
@@ -249,6 +237,8 @@ export function buildWall(data, {
     plan: null,
     tomorrow: null,
     shopping: null,
+    notes: null,
+    birthdays: null,
     question: null,
     canTick: false,
     household: data?.users ?? [],
@@ -256,7 +246,7 @@ export function buildWall(data, {
   if (!data) return base;
 
   const { plan, now: teraz } = wallDay(data, ctx, timerShown ? timer : null);
-  const dinner = !moduleOff('meals') && on.dinner ? dinnerOfToday(data) : null;
+  const dinner = !moduleOff('meals') ? dinnerOfToday(data) : null;
   const dinnerMin = minutesOf(MEAL_TIMES.dinner);
   const dinnerWindow = Boolean(dinner) && ctx.nowMin >= minutesOf(DINNER_FROM) && ctx.nowMin < dinnerMin + DINNER_LINGER_MIN;
   const dinnerOver = Boolean(dinner) && ctx.nowMin >= dinnerMin + DINNER_LINGER_MIN;
@@ -280,7 +270,7 @@ export function buildWall(data, {
         meal: dinner,
         cook: dinner.cook_user_id
           ? (ctx.users.find((u) => u.id === dinner.cook_user_id)
-            ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '', avatar_color: dinner.cook_color ?? null })
+            ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '' })
           : null,
         minutes: dinnerMin - ctx.nowMin,
         ingredients: data?.dinnerPlan && data.dinnerPlan.meal_id === dinner.id ? data.dinnerPlan : null,
@@ -290,14 +280,12 @@ export function buildWall(data, {
     else model.dinner = card;
   }
 
-  if (on.plan) {
-    // The hero shows tonight's dinner; it is not a row as well. Before the
-    // window the dinner card does the same.
-    const rows = plan.open
-      .filter((row) => !(row.kind === 'meal' && dinner && row.id === dinner.id && (model.hero || model.dinner)))
-      .map((row) => wallRow(row, { canTick }));
-    model.plan = { rows, closed, empty: !plan.hasAnything };
-  }
+  // The hero shows tonight's dinner; it is not a row as well. Before the
+  // window the dinner card does the same.
+  const rows = plan.open
+    .filter((row) => !(row.kind === 'meal' && dinner && row.id === dinner.id && (model.hero || model.dinner)))
+    .map((row) => wallRow(row, { canTick }));
+  model.plan = { rows, closed, empty: !plan.hasAnything };
 
   if (scene === 'wieczor') {
     const tomorrow = buildTomorrow(data, ctx);
@@ -310,7 +298,7 @@ export function buildWall(data, {
     model.tomorrow = rows.length ? { rows, total: tomorrow.total ?? rows.length } : null;
   }
 
-  if (on.shopping && !moduleOff('shopping')) {
+  if (!moduleOff('shopping')) {
     const lists = Array.isArray(data?.shoppingLists) ? data.shoppingLists : [];
     const items = lists.flatMap((list) => (list.items ?? []).map((item) => ({ ...item, list_id: list.id })));
     const count = Number(data?.shoppingOpenCount) || 0;
@@ -325,6 +313,25 @@ export function buildWall(data, {
         listId: lists[0]?.id ?? null,
       };
     }
+  }
+
+  // Notes: the titles of the pinned notes the household answer carries
+  // (`wallNotes`, never content). Birthdays: the same next three as Today.
+  if (!moduleOff('notes')) {
+    const notes = (Array.isArray(data?.wallNotes) ? data.wallNotes : [])
+      .map((note) => ({ id: note?.id, title: String(note?.title ?? '').trim() }))
+      .filter((note) => note.id != null && note.title)
+      .slice(0, 3);
+    if (notes.length) model.notes = notes;
+  }
+  if (!moduleOff('birthdays')) {
+    // On the wall a birthday is one item of a one-line strip: the name and
+    // when ("dziś", "jutro", else "8 lut" - no weekday, no "za 97 dni").
+    const rows = birthdaysNext(data, ctx).map((row) => ({
+      ...row,
+      when: row.days === 0 ? t('calendar.relDay.today') : row.days === 1 ? t('calendar.relDay.tomorrow') : row.day,
+    }));
+    if (rows.length) model.birthdays = rows;
   }
 
   // The weekly question: Sunday evening, while the AI has one open and the
@@ -347,7 +354,8 @@ export function wallFingerprint(model) {
     model.scene, model.teraz, model.stale, model.timer?.state ?? null,
     model.hero?.minutes > 0 && model.hero?.minutes < 60 ? model.hero.minutes : null,
     model.plan?.rows.map((row) => [row.key, row.time, Boolean(row.pill)]), model.plan?.closed,
-    model.tomorrow?.rows.map((row) => row.key), model.shopping, Boolean(model.question), model.dinner?.title ?? null,
+    model.tomorrow?.rows.map((row) => row.key), model.shopping,
+    model.notes, model.birthdays?.map((row) => [row.key, row.today, row.far]), Boolean(model.question), model.dinner?.title ?? null,
   ]);
 }
 

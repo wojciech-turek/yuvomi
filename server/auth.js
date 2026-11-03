@@ -21,7 +21,7 @@ import { memberEmail } from './services/member-email.js';
 import { GravatarError, fetchGravatar, gravatarEnabled, gravatarHost } from './services/gravatar.js';
 import {
   accessScopeSql, activeAccountSql, deactivatedAtColumnSql, householdMemberSql, isActiveAccount,
-  isHouseholdMember, memberOrderSql, memberPositionSql,
+  isHouseholdMember, listMemberOrder, memberOrderSql, memberPositionSql,
 } from './services/household-members.js';
 import { RemovalRefused, removeUser } from './services/user-removal.js';
 import {
@@ -134,6 +134,26 @@ function initialsRoster(database, userId) {
   const guest = database.prepare('SELECT 1 FROM split_expense_guest_users WHERE user_id = ?').get(userId);
   if (guest) return [];
   return database.prepare(INITIALS_ROSTER_SQL).all().map((row) => row.display_name);
+}
+
+/**
+ * Die Haushaltsreihenfolge, aus der jede Personenscheibe ihre Farbe nimmt
+ * (One Today, public/utils/person-color.js `setHouseholdOrder`): die
+ * Mitglieder mit ihrer Position, wie `/family/members` sie ordnet. Sie reist
+ * aus demselben Grund wie `initialsRoster` an jeder Auth-Antwort mit: eine
+ * Seite, die nur eine Person in der Hand hat (Seitenleiste, Kontakte,
+ * Geburtstage), zeichnet sie sonst in einer anderen Farbe als Today.
+ *
+ * Nur Mitglieder: Hauspersonal, Gaeste, Wandtabletts und Ehemalige tragen die
+ * neutrale Scheibe. Ein Gast geteilter Ausgaben bekommt die Liste nicht, aus
+ * dem Grund, aus dem er die Namen nicht bekommt.
+ *
+ * @returns {Array<{ id: number, sort_order: number|null }>}
+ */
+function householdOrder(database, userId) {
+  const guest = database.prepare('SELECT 1 FROM split_expense_guest_users WHERE user_id = ?').get(userId);
+  if (guest) return [];
+  return listMemberOrder({ db: database });
 }
 
 /**
@@ -1254,6 +1274,7 @@ function loginPayload(req, user) {
     // Familienfelder.
     householdSize: householdSize(db.get()),
     initialsRoster: initialsRoster(db.get(), user.id),
+    householdOrder: householdOrder(db.get(), user.id),
     othersCanRead: othersCanRead(db.get(), user.id),
     csrfToken: req.session.csrfToken,
   };
@@ -2700,6 +2721,7 @@ router.get('/me', requireAuth, (req, res) => {
         permissions: clientPermissions(db.get(), user),
         householdSize: householdSize(db.get()),
         initialsRoster: initialsRoster(db.get(), user.id),
+        householdOrder: householdOrder(db.get(), user.id),
         othersCanRead: othersCanRead(db.get(), user.id),
         ...gravatarClientState(user.id),
       });
@@ -2743,6 +2765,7 @@ router.get('/me', requireAuth, (req, res) => {
       permissions: clientPermissions(db.get(), user, { isDisplay: req.authMethod === 'display' }),
       householdSize: householdSize(db.get()),
       initialsRoster: initialsRoster(db.get(), user.id),
+      householdOrder: householdOrder(db.get(), user.id),
       othersCanRead: othersCanRead(db.get(), user.id),
       ...gravatarClientState(user.id),
       csrfToken: req.session.csrfToken,
@@ -3380,7 +3403,8 @@ export function assertSsoOnlyAllowed(ssoOnly, password, { linked = false, email 
 /**
  * POST /api/v1/auth/users
  * Admin only. Erstellt neues Familienmitglied.
- * Body: { username, display_name, password?, sso_only?, avatar_color?, family_role?, system_admin? }
+ * Body: { username, display_name, password?, sso_only?, family_role?, system_admin? }
+ * (Eine mitgeschickte `avatar_color` wird ignoriert: niemand waehlt eine Personenfarbe.)
  * Response: { user: { id, username, display_name, avatar_color, role } }
  *
  * `sso_only: true` legt ein Konto ohne Passwort an (#847). Bis dahin musste ein
@@ -3396,7 +3420,6 @@ router.post('/users', requireAuth, requireAdmin, csrfMiddleware, async (req, res
       display_name,
       password,
       sso_only,
-      avatar_color = avatarColors[crypto.randomInt(avatarColors.length)],
       avatar_data,
       family_role = 'other',
       system_admin = req.body.role === 'admin',
@@ -3446,7 +3469,7 @@ router.post('/users', requireAuth, requireAdmin, csrfMiddleware, async (req, res
           INSERT INTO users (username, display_name, password_hash, avatar_color, avatar_data, role, family_role)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `)
-        .run(username, display_name, hash, avatar_color, normalizedAvatarData ?? null, role, family_role);
+        .run(username, display_name, hash, avatarColors[crypto.randomInt(avatarColors.length)], normalizedAvatarData ?? null, role, family_role);
       // Kinder-Startrechte (R20): in derselben Transaktion wie das Konto, damit
       // es nie einen Moment mit Budget und Haushaltshilfe-Loehnen gibt.
       applyChildStartPermissions(db.get(), {
@@ -3511,7 +3534,8 @@ router.patch('/users/:id', requireAuth, requireAdmin, csrfMiddleware, async (req
 
     const username = req.body.username !== undefined ? String(req.body.username || '').trim() : existing.username;
     const displayName = req.body.display_name !== undefined ? String(req.body.display_name || '').trim() : existing.display_name;
-    const avatarColor = req.body.avatar_color !== undefined ? String(req.body.avatar_color || '').trim() : existing.avatar_color;
+    // `avatar_color` aus dem Body wird ignoriert: die Spalte ist NOT NULL und bleibt, wie sie ist.
+    const avatarColor = existing.avatar_color;
     const familyRole = req.body.family_role !== undefined ? String(req.body.family_role || '').trim() : existing.family_role;
     const nextRole = req.body.system_admin !== undefined
       ? (req.body.system_admin === true || req.body.system_admin === 'true' ? 'admin' : 'member')
@@ -3654,7 +3678,8 @@ router.patch('/me/profile', requireAuth, csrfMiddleware, (req, res) => {
     if (!existing) return res.status(404).json({ error: 'User not found.', code: 404 });
 
     const displayName = req.body.display_name !== undefined ? String(req.body.display_name || '').trim() : existing.display_name;
-    const avatarColor = req.body.avatar_color !== undefined ? String(req.body.avatar_color || '').trim() : existing.avatar_color;
+    // `avatar_color` aus dem Body wird ignoriert: die Spalte ist NOT NULL und bleibt, wie sie ist.
+    const avatarColor = existing.avatar_color;
     const avatarData = req.body.avatar_data !== undefined
       ? normalizeAvatarData(req.body.avatar_data)
       : existing.avatar_data;

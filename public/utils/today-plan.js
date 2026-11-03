@@ -317,9 +317,9 @@ function mealRow(meal, ctx, dayKey = ctx.todayKey) {
   const time = MEAL_TIMES[meal.meal_type] ?? MEAL_TIMES.dinner;
   const cook = meal.cook_user_id
     ? (ctx.users.find((u) => u.id === meal.cook_user_id)
-      ?? { id: meal.cook_user_id, display_name: meal.cook_name ?? '', avatar_color: meal.cook_color ?? null })
+      ?? { id: meal.cook_user_id, display_name: meal.cook_name ?? '' })
     : null;
-  const people = cook ? [{ ...cook, color: cook.color ?? cook.avatar_color }] : [];
+  const people = cook ? [cook] : [];
   return {
     key: `meal:${meal.id}`,
     kind: 'meal',
@@ -438,13 +438,11 @@ export function buildPlan(data, ctx, { featuredDinner = null } = {}) {
   }
 
   // The other modules (reminders, birthdays, pantry, shift, help, approvals)
-  // through the shared contract - with no widget configuration, so no
-  // "no echo" bolt applies: Dziś has no module widgets any more.
+  // through the shared contract.
   const sheetCtx = todaySheetContext({
     todayKey: ctx.todayKey,
     tomorrowKey: ctx.tomorrowKey,
     nowTime: ctx.nowTime,
-    cfg: [],
     viewer: ctx.viewer,
     isModuleDisabled: off,
     existing: rows.map((row) => ({ kind: row.kind, objectId: row.id })),
@@ -522,7 +520,7 @@ export function pickNow(data, plan, ctx, { timer = null } = {}) {
     if (ctx.nowMin >= minutesOf(DINNER_FROM) && ctx.nowMin < dinnerMin + DINNER_LINGER_MIN) {
       const cook = dinner.cook_user_id
         ? (ctx.users.find((u) => u.id === dinner.cook_user_id)
-          ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '', avatar_color: dinner.cook_color ?? null })
+          ?? { id: dinner.cook_user_id, display_name: dinner.cook_name ?? '' })
         : null;
       const plan2 = data?.dinnerPlan && data.dinnerPlan.meal_id === dinner.id ? data.dinnerPlan : null;
       return {
@@ -586,7 +584,7 @@ export function dayClosed(plan) {
  * tomorrow's pickup, the events, the tasks due, dinner. Replaces the old
  * family card - the discs already say who does what.
  */
-export function buildTomorrow(data, ctx) {
+export function buildTomorrow(data, ctx, { limit = TOMORROW_ROWS } = {}) {
   const rows = [];
   const off = (module) => Boolean(ctx.moduleOff?.(module));
   if (!off('waste')) {
@@ -627,5 +625,5 @@ export function buildTomorrow(data, ctx) {
     }
   }
   const timedFirst = rows.sort((a, b) => a.sortMin - b.sortMin);
-  return { rows: timedFirst.slice(0, TOMORROW_ROWS), total: timedFirst.length };
+  return { rows: timedFirst.slice(0, limit), total: timedFirst.length };
 }

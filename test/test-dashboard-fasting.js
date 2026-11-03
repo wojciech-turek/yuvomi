@@ -5,15 +5,6 @@ import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import Database from 'better-sqlite3-multiple-ciphers';
 import express from 'express';
-import { WIDGET_IDS, DEFAULT_HIDDEN_WIDGETS, defaultWidgetSize } from '../public/utils/dashboard-widgets.js';
-import { PERMISSION_WIDGETS } from '../server/permissions.js';
-
-test('fasting dashboard widget is registered and sized as a compact timer', () => {
-  assert.ok(WIDGET_IDS.includes('fasting'));
-  assert.ok(DEFAULT_HIDDEN_WIDGETS.has('fasting'), 'existing dashboards must opt in to the new widget');
-  assert.equal(defaultWidgetSize('fasting'), '2x1');
-  assert.deepEqual(PERMISSION_WIDGETS.find((item) => item.id === 'fasting'), { id: 'fasting', module: 'health' });
-});
 
 // TAFLA (2026-10-24): die Fasten-Kachel des alten Rasters ist gegangen, und
 // mit ihr ihr Modulton in dashboard.css. Die geteilten Steuerelemente stehen

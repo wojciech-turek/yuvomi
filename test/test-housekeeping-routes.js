@@ -122,12 +122,12 @@ test('POST /worker: Admin legt Tages-Worker an -> 201 und erscheint in /workers'
   assert.equal(staff.role, 'member');
 });
 
-// Re-Critique 2026-09-28 (P9): ein neues Profil ohne eigene Farbwahl bekommt
-// die Vorgabe der geteilten Startpalette (utils/color.js USER_COLOR_DEFAULT),
-// nicht mehr #7C3AED - im Dark exakt die Flaeche des Primaerknopfs. Ein
-// bestehendes Profil behaelt beim Speichern ohne Farbfeld seine Farbe.
-test('POST /worker: neues Profil ohne Farbwahl -> Startpalette statt Markenviolett; Bestand bleibt', async () => {
-  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily' } });
+// Niemand waehlt eine Farbe (No person colour pickers): ein neues Profil
+// bekommt die feste Startfarbe der NOT-NULL-Spalten, ein mitgeschickter
+// avatar_color/calendar_color wird ignoriert (200/201 wie gewohnt), und ein
+// Bestand behaelt beim Speichern seine gespeicherten Werte.
+test('POST /worker: Farbfelder im Body werden ignoriert; neues Profil Startfarbe, Bestand bleibt', async () => {
+  const r = await call('POST', '/worker', { as: ADM, body: { display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily', avatar_color: '#ABCDEF', calendar_color: '#FEDCBA' } });
   assert.equal(r.status, 201);
   const row = db.prepare(`SELECT hw.id, hw.calendar_color, u.avatar_color FROM housekeeping_workers hw
     JOIN users u ON u.id = hw.user_id WHERE u.display_name = 'Farbprobe'`).get();
@@ -135,7 +135,7 @@ test('POST /worker: neues Profil ohne Farbwahl -> Startpalette statt Markenviole
   assert.equal(row.avatar_color.toUpperCase(), '#0891B2');
   db.prepare('UPDATE housekeeping_workers SET calendar_color = ? WHERE id = ?').run('#123456', row.id);
   db.prepare('UPDATE users SET avatar_color = ? WHERE id = (SELECT user_id FROM housekeeping_workers WHERE id = ?)').run('#654321', row.id);
-  const u = await call('POST', '/worker', { as: ADM, body: { id: row.id, display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily' } });
+  const u = await call('POST', '/worker', { as: ADM, body: { id: row.id, display_name: 'Farbprobe', daily_rate: 40, rate_type: 'daily', avatar_color: '#ABCDEF', calendar_color: '#FEDCBA' } });
   assert.ok(u.status === 200 || u.status === 201, `status ${u.status}`);
   const after = db.prepare(`SELECT hw.calendar_color, u.avatar_color FROM housekeeping_workers hw
     JOIN users u ON u.id = hw.user_id WHERE hw.id = ?`).get(row.id);
@@ -1495,10 +1495,7 @@ test('Beleg: eine neue Verknuepfung verlangt Dokumentenzugriff und Sichtbarkeit 
   }
 });
 
-test('ein umgefaerbter gespiegelter Besuch faellt aus dem Schnappschuss der Farb-Heilung (#1270)', async () => {
-  // Die Farbe der Betreuungskraft ist eine lokale Wahl. Stand der Termin im
-  // Schnappschuss, darf die Heilung ihn danach nicht mehr fassen - auch wenn
-  // der Server die COLOR-Zeile verwirft.
+test('Besuchstermine tragen keine Farbe: Hauspersonal ist neutral, beim Anlegen und beim Aendern', async () => {
   const workerId = await freshWorker('Heila');
   const created = await call('POST', '/work-sessions/check-in', {
     as: ADM,
@@ -1506,30 +1503,15 @@ test('ein umgefaerbter gespiegelter Besuch faellt aus dem Schnappschuss der Farb
   });
   const { id } = db.prepare('SELECT calendar_event_id AS id FROM housekeeping_work_sessions WHERE id = ?')
     .get(created.body.data.id);
-  db.prepare(`
-    UPDATE calendar_events
-    SET external_source = 'caldav', external_calendar_id = ?, color = '#111111', outbound_dirty = 0
-    WHERE id = ?
-  `).run(`hk-heal-${id}@test`, id);
-  const snapshot = () => JSON.parse(db.prepare("SELECT value FROM sync_config WHERE key = 'caldav_legacy_color_heal_snapshot_9'").get().value);
-  db.prepare("INSERT INTO sync_config (key, value) VALUES ('caldav_legacy_color_heal_snapshot_9', ?)")
-    .run(JSON.stringify({ [id]: '#111111' }));
-  try {
-    const r = await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-08-02', daily_rate: 40 } });
-    assert.equal(r.status, 200);
-    assert.notEqual(db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color, '#111111',
-      'Vorbedingung: der Besuch hat die Farbe der Betreuungskraft');
-    assert.deepEqual(snapshot(), {}, 'raus aus dem Schnappschuss');
-
-    // Ohne Farbwechsel bleibt ein Eintrag stehen.
-    const color = db.prepare('SELECT color FROM calendar_events WHERE id = ?').get(id).color;
-    db.prepare("UPDATE sync_config SET value = ? WHERE key = 'caldav_legacy_color_heal_snapshot_9'")
-      .run(JSON.stringify({ [id]: String(color).toLowerCase() }));
-    await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-08-03', daily_rate: 40 } });
-    assert.deepEqual(snapshot(), { [id]: String(color).toLowerCase() }, 'ohne Farbwechsel keine Wahl');
-  } finally {
-    db.prepare("DELETE FROM sync_config WHERE key LIKE 'caldav_legacy_color_heal_%'").run();
-  }
+  const stored = () => db.prepare('SELECT color, color_modified FROM calendar_events WHERE id = ?').get(id);
+  assert.equal(stored().color, null, 'angelegt ohne Farbe');
+  assert.equal(stored().color_modified, 0);
+  // Ein Altbestand mit Farbe verliert sie beim Aendern des Besuchs.
+  db.prepare("UPDATE calendar_events SET color = '#111111' WHERE id = ?").run(id);
+  const r = await call('PUT', `/visits/${created.body.data.id}`, { as: ADM, body: { date: '2025-08-02', daily_rate: 40 } });
+  assert.equal(r.status, 200);
+  assert.equal(stored().color, null, 'geaendert ohne Farbe');
+  assert.equal(stored().color_modified, 0, 'keine lokale Farbwahl vermerkt');
 });
 
 // --------------------------------------------------------------------------

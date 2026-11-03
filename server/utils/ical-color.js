@@ -12,8 +12,9 @@
  * Die Tabelle deckt die vollständige CSS-Color-Module-Level-3-Namensliste ab
  * (inkl. der grey/gray- und aqua/cyan-Synonyme) und zusätzlich `rebeccapurple`,
  * das erst mit Level 4 dazukam. Beim LESEN ist diese Großzügigkeit richtig - wer
- * den Namen schickt, meint eine gültige Farbe. Beim SCHREIBEN nicht: siehe
- * `OUTBOUND_COLOR_NAMES`.
+ * den Namen schickt, meint eine gültige Farbe. Geschrieben wird keine Farbe
+ * mehr (One Today): die Eigenfarbe eines Anbieters wird nur gespeichert, nicht
+ * gezeigt und nicht zurueckgeschickt.
  */
 
 const CSS_COLOR_NAMES = {
@@ -89,86 +90,3 @@ export function resolveIcalColor(raw) {
 
   return CSS_COLOR_NAMES[value] || null;
 }
-
-// RFC 7986 §5.9 erlaubt für COLOR ausdrücklich die Namensliste aus CSS Color
-// Level 3 (W3C REC vom 07.06.2011). `rebeccapurple` steht dort nicht - es kam
-// erst 2014 mit Level 4 dazu. Ein strenger Server darf den Wert deshalb
-// zurückweisen, und weil ein abgelehnter PUT das ganze Kalenderobjekt betrifft,
-// nähme er die übrigen Änderungen desselben Termins mit.
-//
-// Die Farbe ist gut erreichbar, nicht exotisch: über ein grobes RGB-Raster
-// gelegt gewinnt `rebeccapurple` in 60 Fällen, und das Violett der App-Identität
-// liegt in der Nachbarschaft. Sie fällt für den Ausgang weg; der nächste
-// zulässige Name (`darkslateblue`/`blueviolet`) tritt an ihre Stelle.
-const NON_CSS3_NAMES = new Set(['rebeccapurple']);
-
-const OUTBOUND_COLOR_NAMES = Object.fromEntries(
-  Object.entries(CSS_COLOR_NAMES).filter(([name]) => !NON_CSS3_NAMES.has(name)),
-);
-
-/**
- * Umkehrung von resolveIcalColor: der CSS3-Name, der `#RRGGBB` am nächsten kommt.
- *
- * RFC 7986 §5.9 lässt für COLOR ausschliesslich einen case-insensitiven CSS3-Namen
- * zu; ein Hex-Wert wäre nicht konform und darf von einem strengen Server verworfen
- * werden. Die Abbildung ist deshalb verlustbehaftet - dieselbe Bauart wie die auf
- * Googles elf colorIds, nur mit 147 statt 11 Zielwerten.
- *
- * Der Verlust bleibt lokal folgenlos: eine Umfärbung setzt `user_modified = 1`, und
- * der Inbound schreibt `color` nur, solange das 0 ist. Der beim nächsten Abruf
- * zurückgelesene Nachbarwert überschreibt die Wahl des Nutzers also nicht.
- *
- * @param {string|null|undefined} hex `#RRGGBB`
- * @returns {string|null} CSS3-Name (klein), oder null bei leerem/ungültigem Wert
- */
-export function nearestIcalColorName(hex) {
-  return nearestColorId(hex, OUTBOUND_COLOR_NAMES);
-}
-
-/** Zerlegt `#RRGGBB` in {r,g,b}; null bei ungültigem Wert. */
-function hexToRgb(hex) {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex ?? '').trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
-/**
- * Gewichtete RGB-Distanz nach der „redmean"-Näherung. Bildet die menschliche
- * Farbwahrnehmung deutlich besser ab als plain euklidisches RGB, ohne die Kosten
- * einer CIELAB-Konvertierung. Rückgabe ist ein relatives Distanzquadrat (nur zum
- * Vergleichen gedacht, keine echte Einheit).
- */
-function redmeanDistance(a, b) {
-  const rmean = (a.r + b.r) / 2;
-  const dr = a.r - b.r;
-  const dg = a.g - b.g;
-  const db = a.b - b.b;
-  return (2 + rmean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rmean) / 256) * db * db;
-}
-
-/**
- * Findet in einer Paletten-Map (id → `#RRGGBB`) die id mit der geringsten
- * (perzeptuellen) Distanz zum Zielwert. Gebraucht für Outbound-Sync zu Anbietern
- * mit fester Farbpalette (z. B. Googles 11 Event-Farben), wo eine freie Hex-Farbe
- * verlustbehaftet auf die nächste Paletten-ID abgebildet werden muss.
- * @param {string} hex - Zielfarbe `#RRGGBB`
- * @param {Record<string,string>} paletteMap - id → Hex
- * @returns {string|null} nächste id, oder null bei ungültigem Ziel/leerer Palette.
- *   Bei Gleichstand gewinnt die zuerst geprüfte id.
- */
-export function nearestColorId(hex, paletteMap) {
-  const target = hexToRgb(hex);
-  if (!target || !paletteMap) return null;
-  let bestId = null;
-  let bestDist = Infinity;
-  for (const [id, val] of Object.entries(paletteMap)) {
-    const rgb = hexToRgb(val);
-    if (!rgb) continue;
-    const dist = redmeanDistance(target, rgb);
-    if (dist < bestDist) { bestDist = dist; bestId = id; }
-  }
-  return bestId;
-}
-
-export const __test = { CSS_COLOR_NAMES, OUTBOUND_COLOR_NAMES, NON_CSS3_NAMES, hexToRgb };

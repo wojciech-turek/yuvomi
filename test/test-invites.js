@@ -575,7 +575,6 @@ test('accept schreibt die Startrechte, bevor das Konto benutzbar ist', async () 
   const { resolvePermissions } = await import('../server/permissions.js');
   const resolved = resolvePermissions(routeDb, { id: userId, role: 'member', family_role: 'other' });
   assert.equal(resolved.modules.health, 'none');
-  assert.equal(resolved.widgets.cycle, 'none', 'ein Widget erbt die Sperre seines Moduls');
   assert.equal(resolved.modules.tasks, 'write', 'was die Vorlage nicht nennt, bleibt offen');
 });
 

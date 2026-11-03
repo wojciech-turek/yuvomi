@@ -305,11 +305,11 @@ test('loadWasteRange(): loest keinen Request aus, wenn wasteEnabled() false ist,
 // coalesced-Flags, Deep-Link-Datenattribut
 // -------------------------------------------------------------------------
 
-test('renderWasteChip(): traegt Icon UND Typname zusammen - Farbe ist nie der einzige Identitaetstraeger', () => {
+test('renderWasteChip(): traegt Icon UND Typname zusammen, ohne Farbe', () => {
   const html = calendarHelpers.renderWasteChip(occurrence());
   assert(html.includes('data-lucide="trash-2"'), 'das Typ-Icon muss stehen');
   assert(html.includes('Bioabfall'), 'der Typname muss als Text stehen, nicht nur als Farbe');
-  assert(html.includes('--holi-color:#4CAF50'), 'die Farbe traegt trotzdem als Akzent, ueber dasselbe --holi-color-Rezept wie Feiertag/Schichtplan');
+  assert(!html.includes('--holi-color') && html.includes('cal-holiday'), 'der Chip ist der eine ruhige Ton, keine Typfarbe');
 });
 
 test('renderWasteChip(): icon:false (Monatsansicht-Kanon) laesst das Icon weg, behaelt aber den Text', () => {
@@ -463,7 +463,7 @@ test('wasteTypeOptions(): ein Eintrag je distinktem Typ, aus den geladenen Vorko
     const options = calendarHelpers.wasteTypeOptions();
     assert(options.length === 2, `zwei distinkte Typen erwartet, erhalten ${options.length}`);
     assert(options[0].name === 'Bioabfall' && options[1].name === 'Restmüll', 'alphabetisch sortiert');
-    assert(options[0].id === 1 && options[0].color === '#4CAF50');
+    assert(options[0].id === 1 && !('color' in options[0]), 'Namen ohne Farbe');
   });
 });
 

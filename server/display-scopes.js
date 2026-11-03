@@ -217,11 +217,10 @@ export const DISPLAY_PREFERENCE_KEYS = Object.freeze([
   'date_format', 'time_format', 'week_start', 'region', 'currency',
   'timezone', 'timezone_effective',
   'disabled_modules', 'hidden_modules', 'module_order', 'mobile_nav_order',
-  'dashboard_widgets', 'dashboard_today_glance',
   'tasks_subtasks_expanded',
-  // What the wall draws and whether it offers its check rings (Tafla).
-  'wall_allow_ticking', 'wall_sections',
-  'holiday_show_public', 'holiday_show_school', 'holiday_public_color', 'holiday_school_color',
+  // Whether the wall offers its check rings (Tafla).
+  'wall_allow_ticking',
+  'holiday_show_public', 'holiday_show_school',
   'screensaver_enabled',
 ]);
 

@@ -31,9 +31,6 @@ import { mayReadModule, mayWriteModule } from '../permissions.js';
 const log = createLogger('SplitExpenses');
 const router = express.Router();
 
-const avatarColors = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#FF2D55'];
-const randomAvatarColor = () => avatarColors[Math.floor(Math.random() * avatarColors.length)];
-
 // Derselbe Waehrungsvorrat wie in den Einstellungen und in den Abos - eine
 // Liste fuer Server und Browser (#841, public/utils/currency-codes.js).
 const GROUP_TYPES = ['household', 'couple', 'travel', 'event', 'shopping', 'general'];
@@ -297,9 +294,9 @@ function userFromContact(database, contactId, actorId, groupId, passwordHash, { 
     }
   }
   const created = database.prepare(`
-    INSERT INTO users (username, display_name, password_hash, avatar_color, role, family_role)
-    VALUES (?, ?, ?, ?, 'member', 'other')
-  `).run(uniqueUsername(contact.name), contact.name, passwordHash, randomAvatarColor());
+    INSERT INTO users (username, display_name, password_hash, role, family_role)
+    VALUES (?, ?, ?, 'member', 'other')
+  `).run(uniqueUsername(contact.name), contact.name, passwordHash);
   database.prepare('UPDATE contacts SET family_user_id = ? WHERE id = ?').run(created.lastInsertRowid, contact.id);
   database.prepare('INSERT OR IGNORE INTO split_expense_guest_users (user_id, group_id, created_by) VALUES (?, ?, ?)')
     .run(created.lastInsertRowid, groupId, actorId);
@@ -996,9 +993,9 @@ router.post('/groups/:id/guests', async (req, res) => {
           throw new Refusal(409, EMAIL_IN_USE_MESSAGE, 'email_in_use');
         }
         const created = db.get().prepare(`
-          INSERT INTO users (username, display_name, password_hash, avatar_color, role, family_role)
-          VALUES (?, ?, ?, ?, 'member', ?)
-        `).run(username, vDisplayName.value, hash, randomAvatarColor(), familyRole);
+          INSERT INTO users (username, display_name, password_hash, role, family_role)
+          VALUES (?, ?, ?, 'member', ?)
+        `).run(username, vDisplayName.value, hash, familyRole);
         syncGuestArtifacts(db.get(), created.lastInsertRowid, {
           displayName: vDisplayName.value,
           phone: vPhone.value,

@@ -190,9 +190,9 @@ test('importToLocal: another user can import the same feed independently', async
   assert.equal(n, 3);
 });
 
-test('importToLocal: applies fallback color to events without their own color', () => {
+test('importToLocal: no fallback color - an event without its own COLOR stays without one (One Today)', () => {
   const timed = db.prepare(`SELECT color FROM calendar_events WHERE external_calendar_id = 'evt-timed@acme' AND created_by = ?`).get(uid);
-  assert.equal(timed.color, '#007AFF');
+  assert.equal(timed.color, null);
 });
 
 test('importToLocal: targets the selected local calendar and deduplicates inside that calendar', async () => {
@@ -286,9 +286,9 @@ test('POST /import: 400 when neither ics nor url provided', async () => {
   assert.equal(res.status, 400);
 });
 
-test('POST /import: 400 on invalid color', async () => {
+test('POST /import: a sent color is ignored, not an error (One Today)', async () => {
   const res = await request('POST', '/api/v1/calendar/import', { ics: SAMPLE_ICS, color: 'not-a-color' });
-  assert.equal(res.status, 400);
+  assert.equal(res.status, 201);
 });
 
 test('POST /import: 400 on invalid local calendar', async () => {

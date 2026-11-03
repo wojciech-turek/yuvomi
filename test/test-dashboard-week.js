@@ -188,17 +188,6 @@ test('Sichtbarkeit: ein privater Termin eines anderen erscheint nicht', async ()
   assert.ok(!got.includes('Privat vom Admin'), 'privater Termin durchgerutscht');
 });
 
-test('events_scope=mine gilt auch fuer die Woche', async () => {
-  const got = titles(await dashboardAs(KID, '?events_scope=mine'));
-  assert.deepEqual(got, ['Spaet heute']);
-});
-
-test('events_birthdays=hide gilt auch fuer die Woche', async () => {
-  const got = titles(await dashboardAs(ADMIN, '?events_birthdays=hide'));
-  assert.ok(!got.includes('Birthday: Oma'));
-  assert.ok(got.includes('Reise'), 'ein normaler Ganztagstermin bleibt');
-});
-
 test('gesperrter Kalender: die Woche ist leer, die Form bleibt', async () => {
   database.prepare(`
     INSERT OR REPLACE INTO access_permissions (subject_type, subject_id, resource_type, resource_key, access)

@@ -4090,7 +4090,7 @@ test('Profil bei `housekeeping: read`: die Leseansicht zeigt jeden Wert des Bear
     ['ana@example.org', 'ana@example.org'], ['1990-04-12', '1990-04-12'],
     ['housekeeping.rateHourly', 'housekeeping.rateHourly'], ['value="14.5"', '14,50'],
     ['housekeeping.scheduleTwiceMonthly', 'housekeeping.scheduleTwiceMonthly'],
-    ['#12AB34', '#12AB34'], ['#FF8800', '#FF8800'], ['Schluessel beim Nachbarn', 'Schluessel beim Nachbarn'],
+    ['Schluessel beim Nachbarn', 'Schluessel beim Nachbarn'],
   ];
 
   const [editor] = mitModal(() => withAccess({ housekeeping: 'write' }, () => hk.openStaffModal(ana, hkContainer())));
@@ -4098,8 +4098,15 @@ test('Profil bei `housekeeping: read`: die Leseansicht zeigt jeden Wert des Bear
 
   const [lesen] = mitModal(() => withAccess({ housekeeping: 'read' }, () => hk.openStaffModal(ana, hkContainer())));
   for (const [, inLeseansicht] of werte) assert.ok(lesen.content.includes(inLeseansicht), `die Leseansicht zeigt ${inLeseansicht}`);
-  assert.match(lesen.content, /<span class="housekeeping-swatch" style="--swatch:#12AB34" aria-hidden="true"><\/span>#12AB34/,
-    'die Farbe als Feld UND als Wert - nicht allein an der Farbe');
+  for (const farbe of ['#12AB34', '#FF8800']) {
+    assert.ok(!editor.content.includes(farbe) && !lesen.content.includes(farbe), `${farbe}: die Farbe der Haushaltshilfe wird nicht gezeigt`);
+  }
+  assert.doesNotMatch(editor.content, /type="color"/, 'kein Farbfeld im Editor');
+  // Die Scheibe: gerendert ohne eigene Farbe (die neutrale steht im Stylesheet).
+  assert.match(lesen.content, /<div class="housekeeping-avatar">/, 'Leseansicht: neutrale Scheibe, kein Inline-Stil');
+  assert.match(editor.content, /<button class="housekeeping-avatar housekeeping-avatar--lg" type="button" id="housekeeping-avatar-btn"\s+aria-label/,
+    'Editor: neutrale Scheibe, kein Inline-Stil');
+  assert.doesNotMatch(lesen.content + editor.content, /class="housekeeping-avatar[^"]*"[^>]*style=/);
   assert.doesNotMatch(lesen.content, /housekeeping\.dailyRate/, 'wie im Editor nur der Satz der gewaehlten Abrechnungsart');
 
   // Die Antwort folgt dem Datensatz: was nicht gesetzt ist, bekommt keine Zeile.

@@ -803,8 +803,7 @@
    * Familientönen: Serie 2 mit money (dE 0.0), Serie 3 mit kitchen (dE 0.0) und
    * Serie 7 mit work (dE 1.9, unter der Wahrnehmungsschwelle 2.3). Bewegt wurde
    * nur Serie 2 - sie ist die einzige, die ihr Spender-Chrome je trifft: die
-   * Serien sind zugleich die nutzerwählbaren Kontofarben (ACCOUNT_COLORS in
-   * budget.js), und ein Konto in „Türkis" war im Budget nicht vom Modulton des
+   * Serien waren einst zugleich die wählbaren Kontofarben, und ein Konto in „Türkis" war im Budget nicht vom Modulton des
    * umgebenden Chrome zu unterscheiden.
    *
    * Serie 3 und 7 bleiben bewusst auf ihren Familienwerten: sichtbar wird die
@@ -947,14 +946,17 @@
   /* --------------------------------------------------------
    * 4c. Personenfarben (Tafla, 2026-10-19)
    *
-   * The only hue that means WHO. Six curated pairs; each user is mapped to one
-   * of them from their avatar colour (nearest hue, collisions inside the
-   * household resolved by user id) - utils/person-color.js, personToken().
-   * Roles: the initial on a 20/36/40 disc (ink on tint), the 3pt calendar edge,
-   * the 6pt dot. Shared items ("razem") use the split disc of both people
-   * (razemDisc()) and the violet accent as their edge - blue and rose mix to
-   * violet, so "together" needs no third hue. Nothing else uses hue for
-   * identity. Your own items carry no avatar.
+   * The only hue that means WHO. Six curated pairs; each household member
+   * takes the pair of their place in the household order (sort_order, then
+   * id; mod 6), nobody picks one and a stored avatar colour is ignored -
+   * utils/person-color.js, personToken() (One Today, 2026-11-02). Someone
+   * outside the household is neutral (--color-text-secondary on --color-fill).
+   * Roles: the initial on the person disc (ink on tint, personDisc()), the 3pt
+   * calendar edge, the 6pt dot. Shared items ("razem") use the split disc of
+   * two people (razemDisc(); three or more: the violet accent) and the violet
+   * accent as their edge - blue and rose mix to violet, so "together" needs no
+   * third hue. Nothing else uses hue for identity. Your own items carry no
+   * avatar.
    *
    * Every ink holds AA as text on white, --color-bg, --color-fill, hearth and
    * its own tint, white on it >= 6.0 (v2, light only; the dark pairs went with
@@ -1017,7 +1019,7 @@
    *                            the card edge and section rules are
    *                            --color-separator / --color-border (#EAE9E5)
    *   --color-overdue          "Po terminie": overdue dates, high priority
-   *                            flag; 5.18 on white, 4.78 on the ground
+   *                            flag; an alias of --color-warning (attention)
    *   --color-rain             hourly rain bars (#5B8DEF, a shape: 3.23 on
    *                            the card), --color-rain-soft the dry hours
    *   --color-rain-ink         the umbrella of a wet day on Dziś (#2F6FDB,
@@ -1025,7 +1027,7 @@
    *   --color-card-border      the 1px edge of a card (no shadow in v2)
    * -------------------------------------------------------- */
   --color-separator-inner: #EFEEEA;
-  --color-overdue:         #C2410C;
+  --color-overdue:         var(--color-warning);
   --color-rain:            #5B8DEF;
   --color-rain-soft:       #DCE5F6;
   --color-rain-ink:        #2F6FDB;
@@ -1373,8 +1375,7 @@
    *      E2  chrome (capsule, +, add bar, collapsed top bar, toast) with its
    *          0.5px inner highlight
    *      E3  sheets, cast upwards over the scrim
-   *      --shadow-accent-glow  ONLY on the + and the one primary per screen;
-   *          halve it when pressed.
+   *      no accent glow on any button (one meaning per colour).
    *    The inner highlights hang on --glass-inset-strength, so
    *    prefers-reduced-transparency and prefers-contrast switch them off with
    *    every other specular. Dark values: both dark blocks.
@@ -1399,9 +1400,6 @@
   --shadow-e3:  var(--_shadow-e3);
   /* v2: a card has no shadow - its edge is --color-card-border. */
   --shadow-card: none;
-  --_shadow-accent-glow: 0 6px 20px rgba(108, 58, 237, 0.30),
-                         inset 0 1px 0 rgba(255, 255, 255, calc(0.22 * var(--glass-inset-strength)));
-  --shadow-accent-glow:  var(--_shadow-accent-glow);
 
   /* --------------------------------------------------------
    * 9. Border-Radien
@@ -1484,6 +1482,10 @@
   --type-page-tracking: -0.02em;
   --type-section:       1.0625rem;  /* 17px */
   --type-section-lh:    1.5rem;     /* 24px */
+  /* The one section header on every page (Today, Tasks, Shopping, Calendar days,
+   * Birthdays months, More, Meals, Notes): 20/24 semibold on the page gutter. */
+  --type-section-head:    1.25rem;    /* 20px */
+  --type-section-head-lh: 1.5rem;     /* 24px */
   --type-row:           0.9375rem;  /* 15px */
   --type-row-lh:        1.25rem;    /* 20px */
   --type-meta:          0.75rem;    /* 12px */

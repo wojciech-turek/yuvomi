@@ -630,8 +630,9 @@ test('formatWeekLabel() befragt tatsaechlich matchMedia fuer den schmalen Umscha
 });
 
 // Projektregel „- statt Em-/En-Dash, auch in UI-Texten" (A4 P3, 2026-09-26):
-// das Wochenlabel trug als einziger Zeitraum-Kopf einen Halbgeviertstrich,
-// der Kalender schreibt „27.08. - 29.08.". Der Browser-Loader stubbt die
+// das Wochenlabel trug als einziger Zeitraum-Kopf einen Halbgeviertstrich.
+// Seit dem Copy-Durchgang (2026-11-02) ist eine Spanne ein Bindestrich OHNE
+// Leerzeichen, wie im Kalender („27.08.-29.08."). Der Browser-Loader stubbt die
 // Datumsformate auf `String(d)`; der Trenner ist das Einzige, was die
 // Funktion selbst beitraegt, und genau der wird hier geprueft.
 test('formatWeekLabel() trennt mit Bindestrich, nicht mit Halbgeviertstrich', () => {
@@ -641,7 +642,7 @@ test('formatWeekLabel() trennt mit Bindestrich, nicht mit Halbgeviertstrich', ()
     try {
       const label = mealsUi.formatWeekLabel('2026-09-14');
       assert(!/[\u2013\u2014]/.test(label), `Wochenlabel (${narrow ? 'schmal' : 'breit'}) enthaelt einen Gedankenstrich: ${label}`);
-      assert(/ - /.test(label), 'die beiden Enden trennt „ - "');
+      assert(!/ - /.test(label) && label.includes('-'), `die beiden Enden trennt ein Bindestrich ohne Leerzeichen: ${label}`);
     } finally {
       globalThis.window = zuvorWindow;
     }
@@ -1704,6 +1705,63 @@ test('A4 P1: bei 1440px passen sieben Tage ohne Querscroll (116 Gutter + 7 Spalt
   assert(need <= 1156, `Bedarf ${need}px > 1156px - bei 1440 laeuft die Woche ueber, der Montag wird angeschnitten`);
 });
 
+test('Wide screens: bei 1280px passen sieben Tage ohne Rezept-Spalte (Gutter + 7 Spalten + 7 Luecken <= 996), Namen ohne Trennstrich und ohne abgeschnittene Buchstaben', () => {
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)].filter((r) => r.at?.join(' ').includes('max-width: 1439px'));
+  const grid = rules.find((r) => /\.meals-layout--rail-hidden \.week-grid$/.test(r.selector.trim()));
+  assert(grid, 'keine Regel fuer das Board ohne Rezept-Spalte unter 1440px');
+  const base = [...eachRule(css)].find((r) => r.selector.trim() === '.week-grid' && /--meal-gutter-width/.test(r.body));
+  const gutter = Number(base.body.match(/--meal-gutter-width:\s*(\d+)px/)?.[1]);
+  const col = Number(grid.body.match(/repeat\(7,\s*minmax\((\d+)px/)?.[1]);
+  assert(gutter > 0 && col > 0, `Gutter/Spalte nicht lesbar (${gutter}/${col})`);
+  // 996 = 1280 - 220 Seitenleiste - 2 x 32 Seitenrand.
+  const need = gutter + 7 * col + 7 * 8;
+  assert(need <= 996, `Bedarf ${need}px > 996px - bei 1280 liegt der Sonntag ausserhalb`);
+  const title = rules.find((r) => /\.meals-layout--rail-hidden \.meal-card__title$/.test(r.selector.trim()));
+  assert(title && /hyphens:\s*manual/.test(title.body) && /overflow-wrap:\s*normal/.test(title.body),
+    'Gerichtenamen bleiben unter 1440px ganz: kein Trennstrich, kein Bruch ohne Strich (W1)');
+  // Sichtdurchgang 2026-11-03: ein ganzes Wort, breiter als seine Box, verlor
+  // Buchstaben ("Homema" statt "Homemade", 93px in 84). Die Box muss die
+  // Woerter halten: 15px-Zeilenschrift und 8px Einzug statt 17px und 16px.
+  assert(/font-size:\s*var\(--type-row\)/.test(title.body), 'der Titel steht in der 15px-Zeilenschrift');
+  const pad = rules.find((r) => /\.meals-layout--rail-hidden \.meal-card__open/.test(r.selector));
+  assert(/padding-inline:\s*var\(--space-2\)/.test(pad?.body ?? ''), 'der Text steht 8px statt 16px vom Kartenrand');
+  // 112px Mindestspalte minus 2 x 8: 96px Text; bei 1280 sind es 101. Gemessen
+  // in 600 15px Inter: "Homemade" 83, "makaronowa" 93, "ziemniaczane" 100.
+  assert(col - 2 * 8 >= 96, `zu wenig Platz fuer den Titel: ${col - 16}px`);
+  const mark = rules.find((r) => /\.meals-layout--rail-hidden \.meal-card__title \.meal-card__recurrence/.test(r.selector));
+  assert(/display:\s*inline-flex/.test(mark?.body ?? ''), 'das Wiederholungszeichen laeuft im Titel mit, statt ihm eine Spalte zu nehmen');
+});
+
+test('Wide screens: die Woche nennt ihre Zeile --meal-type-row, nicht --type-row (das Schrift-Token)', () => {
+  // Der Renderer setzte `--type-row: 2` inline an jeden Platz - jede Schrift
+  // darin, die das 15px-Token `--type-row` las, bekam "2" und fiel auf 17px
+  // zurueck (Sichtdurchgang One Today, 2026-11-03).
+  const js = readFileSync(new URL('../public/pages/meals.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  assert(!/--type-row:/.test(js), 'meals.js setzt --type-row (kollidiert mit dem Schrift-Token)');
+  assert(/--meal-type-row:/.test(js), 'meals.js setzt die Zeile als --meal-type-row');
+  assert(!/grid-row:\s*var\(--type-row\)/.test(css), 'meals.css liest die Zeile aus --type-row');
+});
+
+test('Wide screens: unter 1440px beginnt die Rezept-Spalte eingeklappt, ab 1440px nur wenn die Woche nicht passt', () => {
+  withBoardEnv(null, () => {
+    window.matchMedia = (q) => ({ matches: /1439/.test(q) });
+    const b = mondayBoard();
+    // Die Woche passt auch mit offener Spalte - und doch klappt sie unter 1440 zu.
+    Object.defineProperty(b.grid, 'scrollWidth', { get: () => 100 });
+    mealsUi.setContainerForTest(b.container);
+    mealsUi.wireRailToggle();
+    assert(!b.railOpen(), 'unter 1440px startet die Spalte zu');
+    window.matchMedia = () => ({ matches: false });
+    const c = mondayBoard();
+    Object.defineProperty(c.grid, 'scrollWidth', { get: () => 100 });
+    mealsUi.setContainerForTest(c.container);
+    mealsUi.wireRailToggle();
+    assert(c.railOpen(), 'ab 1440px bleibt sie offen, solange die Woche passt');
+  });
+});
+
 test('D3 Kueche: alle vier Tab-Koepfe halten die Kante der Kuechen-Leiste, keiner das Lesemass (Re-Critique 2026-09-27, A1 P2-5)', () => {
   // Die Primaeraktion dockt am Ende des Kopfes an. Trugen Rezepte, Vorrat und
   // Einkauf `--narrow`, endete ihr Kopf am Lesemass (FAB x 865 bei 1440),
@@ -1991,6 +2049,7 @@ test('Tafla: der Wochenbereich traegt keinen Gedankenstrich (Projektregel), auch
       for (const monday of ['2026-10-19', '2026-10-26']) {
         const label = mealsUi.weekRangeLabel(monday);
         assert(!/[–—]/.test(label), `${locale} ${monday}: ${label}`);
+        assert(!/\s-|-\s/.test(label), `${locale} ${monday}: eine Spanne ohne Leerzeichen am Bindestrich: ${label}`);
         assert(/\d/.test(label), `${locale} ${monday}: ${label}`);
       }
     }
@@ -2052,6 +2111,36 @@ test('Tafla-Blatt: der Primaerknopf nennt das Ergebnis, die Chips entscheiden, w
   gleich(mealsUi.collectModalIngredients(overlay).map((i) => i.name), ['Ryż'], 'nur gedrueckte Chips werden Zutaten');
   gleich(mealsUi.collectModalIngredients(overlay, { allChips: true }).map((i) => i.name), ['Ryż', 'Cebula'],
     '"Als Rezept speichern" nimmt jeden Chip');
+});
+
+test('Task 13: Mahlzeit-Blatt hat den Kopf wie jedes Blatt: Titel links, schlichtes X rechts, keine graue Scheibe', () => {
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)];
+  const header = rules.filter((r) => r.selector.trim() === '.meal-sheet .modal-panel__header');
+  assert(!header.some((r) => /grid-template-columns/.test(r.body)), 'kein 3-Spalten-Raster im Kopf');
+  const title = rules.filter((r) => r.selector.trim() === '.meal-sheet .modal-panel__title');
+  assert(!title.some((r) => /text-align:\s*center|grid-column/.test(r.body)), 'der Titel steht links, nicht mittig');
+  assert(!rules.some((r) => /\.meal-sheet \.modal-panel__close::before/.test(r.selector)), 'keine Scheibe hinter dem X');
+  assert(!rules.some((r) => /\.meal-sheet \.modal-panel__header-actions/.test(r.selector) && /grid-column/.test(r.body)), 'das X sitzt nicht links');
+  const chip = rules.find((r) => r.selector.trim() === '.meal-sheet .user-ms__option:has(.user-ms__checkbox:checked)');
+  assert(/border-color:\s*var\(--color-accent\)/.test(chip?.body ?? '') && /--color-accent-tint/.test(chip?.body ?? ''), 'Personen-Chip getoent violett');
+  const primary = rules.filter((r) => r.selector.trim() === '.meal-sheet .meal-sheet__primary');
+  assert(!primary.some((r) => /box-shadow/.test(r.body)), 'Primaerknopf ohne Glow');
+});
+
+test('One Today, Sichtdurchgang: der Kopf des Mahlzeit-Blatts hat Polster, Haarlinie und Titelgroesse des geteilten Kopfs', () => {
+  const css = readFileSync(new URL('../public/styles/meals.css', import.meta.url), 'utf8');
+  const rules = [...eachRule(css)];
+  // Kein eigener Kopf: was layout.css `.modal-panel__header` setzt (Polster,
+  // Haarlinie), gilt hier wie bei "Nowe zadanie".
+  const header = rules.filter((r) => /\.meal-sheet\s+\.modal-panel__header\b/.test(r.selector));
+  assert(!header.some((r) => /padding|border-bottom|min-height/.test(r.body)),
+    `der Kopf traegt kein eigenes Polster und keine eigene Kante: ${header.map((r) => r.body.trim()).join(' | ')}`);
+  const title = rules.filter((r) => /\.meal-sheet\s+\.modal-panel__title\b/.test(r.selector));
+  assert(!title.some((r) => /font-size|line-height|font-weight/.test(r.body)),
+    'der Titel hat die Groesse jedes Blatt-Titels (--type-section-title)');
+  const body = rules.filter((r) => r.selector.trim() === '.meal-sheet .modal-panel__body');
+  assert(!body.some((r) => /padding/.test(r.body)), 'der Rumpf beginnt wie bei jedem Blatt unter der Haarlinie');
 });
 
 // --------------------------------------------------------

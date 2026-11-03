@@ -973,8 +973,6 @@ function getForRange(from, to) {
   const group       = db.get().prepare("SELECT value FROM sync_config WHERE key='holiday_group'").get()?.value || null;
   const showPublic  = db.get().prepare("SELECT value FROM sync_config WHERE key='holiday_show_public'").get()?.value === '1';
   const showSchool  = db.get().prepare("SELECT value FROM sync_config WHERE key='holiday_show_school'").get()?.value === '1';
-  const pubColor    = db.get().prepare("SELECT value FROM sync_config WHERE key='holiday_public_color'").get()?.value ?? '#FF3B30';
-  const schColor    = db.get().prepare("SELECT value FROM sync_config WHERE key='holiday_school_color'").get()?.value ?? '#34C759';
 
   if (!country || (!showPublic && !showSchool)) return [];
 
@@ -1024,12 +1022,9 @@ function getForRange(from, to) {
   // Union-Spanne kollabiert, sodass nie zwei Balken übereinanderliegen.
   // Nicht überlappende gleichnamige Einträge (z. B. mehrere bewegliche
   // Ferientage) bleiben bewusst getrennt. (#434)
-  const merged = mergeOverlappingByName(rows);
-
-  return merged.map((r) => ({
-    ...r,
-    color: r.type === 'public' ? pubColor : schColor,
-  }));
+  // Ohne Farbe: alle Feiertage stehen in EINEM ruhigen Ton da (One Today), den
+  // der Client zeichnet.
+  return mergeOverlappingByName(rows);
 }
 
 export { sync, getCountries, getSubdivisions, getGroups, getForRange, __setFetchImpl };

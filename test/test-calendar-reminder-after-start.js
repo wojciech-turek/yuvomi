@@ -273,7 +273,6 @@ function openDialog({
   field('modal-allday-end', end.slice(0, 10));
   field('modal-location');
   field('modal-description');
-  field('modal-cancel', '', 'button');
   field('modal-save', '', 'button');
 
   const toggle = field('modal-reminder-toggle');
@@ -555,11 +554,17 @@ test('auch die Uhrzeit und der Ganztags-Schalter bewerten neu', () => {
   assert.equal(offsetOf(row).value, '60', 'eine Stunde vor 10:30');
   userSets(panel.querySelector('#modal-start-time'), '09:00');
   assert.equal(offsetOf(row).value, 'after_start');
-  // Ganztags gilt 09:00 als Anker - die Erinnerung um 09:30 bleibt danach.
+  userSets(panel.querySelector('#modal-start-time'), '10:30');
+  assert.equal(offsetOf(row).value, '60');
+  // Ganztags gilt 09:00 als Anker - der Schalter allein legt die Erinnerung
+  // um 09:30 wieder hinter den Beginn. Der Tag geht dabei mit (One Today,
+  // Task 11); einen anderen waehlt man danach im Ganztags-Feld.
   const allday = panel.querySelector('#modal-allday');
   allday.checked = true;
-  panel.querySelector('#modal-allday-start').value = '2026-09-19';
   allday.dispatch('change');
+  assert.equal(panel.querySelector('#modal-allday-start').value, '2026-09-18', 'der Tag ging mit');
+  assert.equal(offsetOf(row).value, 'after_start', 'ganztags am 18. um 09:00 liegt sie danach');
+  userSets(panel.querySelector('#modal-allday-start'), '2026-09-19');
   assert.equal(offsetOf(row).value, 'custom', 'am 19. um 09:00 liegt sie wieder davor');
 });
 

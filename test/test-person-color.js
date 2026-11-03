@@ -1,104 +1,195 @@
 /**
- * Personenfarbe (Tafla, 2026-10-19): utils/person-color.js und tokens.css 4c.
+ * Personenfarbe: utils/person-color.js und tokens.css 4c.
  *
- * Drei Zusagen:
- * 1. DIE ZUORDNUNG ist stabil und kollisionsfrei: die iOS-Vorgabefarben der
- *    Avatare landen auf ihrem naechsten Platz, graue Avatare starten bei
- *    (id - 1) mod 6, und zwei Mitglieder eines Haushalts teilen nie einen
- *    Platz - unabhaengig von der Reihenfolge der Liste.
- * 2. DIE PALETTE IM JS IST DIE IN tokens.css.
- * 3. JEDES PAAR HAELT AA: Tinte auf Karte, Papier, Fill, Herd und der eigenen
- *    Toenung; Weiss auf der Tinte.
- * 2026-10-27, v2: light only - die dunklen Paare (darkInk/darkTint und die
- * beiden Dark-Bloecke) sind gegangen; Blau und Rose tragen die Scheiben aus
- * Foundations.dc.html, und Platz 1/2 haben einen eigenen 8pt-Punkt.
+ * Seit One Today (2026-11-02) gibt es EINE Zuordnung und EINE Scheibe:
+ * 1. DER PLATZ ist die Stelle in der Haushaltsreihenfolge (`sort_order`, bei
+ *    Gleichstand die id), mod 6. Die gespeicherte Avatarfarbe zaehlt nicht
+ *    mehr. Wer nicht in der Reihenfolge steht (Gast, Ehemalige, Hauspersonal),
+ *    traegt die neutrale Scheibe. Die Reihenfolge haelt `setHouseholdOrder()`
+ *    (api.js beim Start, nach jeder Aenderung an Mitgliedern) - eine Seite ohne
+ *    eigene Haushaltsliste bekommt dieselbe Antwort wie eine mit.
+ * 2. DIE SCHEIBE (`personDisc`) ist ein Markup fuer jede Stelle: das Bild,
+ *    sonst die Initialen aus dem einen Helfer in der Tinte auf der Toenung.
+ * 3. DIE PALETTE IM JS IST DIE IN tokens.css, und jedes Paar haelt AA.
  *
- * Ausfuehren: node --test test/test-person-color.js
+ * Ausfuehren: npm run test:person-color
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  PERSON_PALETTE, avatarHue, personSlot, personToken, razemBackground, razemDisc, personDisc,
+  PERSON_PALETTE, personSlot, personToken, razemBackground, razemDisc, personDisc, personDiscEl, setHouseholdOrder,
 } from '../public/utils/person-color.js';
+import { setInitialsRoster, clearInitialsRoster } from '../public/utils/initials.js';
 import { contrastRatio } from '../public/utils/contrast.js';
 
 const TOKENS = readFileSync(new URL('../public/styles/tokens.css', import.meta.url), 'utf8');
+const LAYOUT = readFileSync(new URL('../public/styles/layout.css', import.meta.url), 'utf8');
 
-test('die iOS-Vorgabefarben der Avatare landen auf ihrem naechsten Platz', () => {
-  // server/auth.js: avatarColors = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#FF2D55']
-  const cases = [
-    ['#007AFF', 1, 'blue'],
-    ['#FF2D55', 2, 'rose'],
-    ['#34C759', 3, 'green'],
-    ['#FF9500', 4, 'terracotta'],
-    ['#FF3B30', 4, 'terracotta'],
-    ['#AF52DE', 5, 'plum'],
-  ];
-  for (const [color, slot, key] of cases) {
-    assert.equal(personSlot({ id: 1, avatar_color: color }), slot, `${color} -> ${key}`);
+const NEUTRAL = { slot: null, ink: 'var(--color-text-secondary)', tint: 'var(--color-fill)' };
+
+// Die Mitglieder, wie die API sie schickt: in der Haushaltsreihenfolge, mit
+// `sort_order` (memberPositionSql). Mariola steht vorn, obwohl ihre id groesser ist.
+const MARIOLA = { id: 7, display_name: 'Mariola', sort_order: 0, avatar_color: '#007AFF' };
+const WOJTEK = { id: 3, display_name: 'Wojtek', sort_order: 1, avatar_color: '#FF2D55' };
+const HOUSEHOLD = [MARIOLA, WOJTEK];
+
+test('der Platz ist die Stelle in der Haushaltsreihenfolge, mit und ohne mitgegebene Liste', (t) => {
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder(HOUSEHOLD);
+  assert.equal(personSlot(MARIOLA), 1, 'die Erste der Reihenfolge');
+  assert.equal(personSlot(WOJTEK), 2, 'der Zweite');
+  for (const person of HOUSEHOLD) {
+    assert.deepEqual(personToken(person), personToken(person, HOUSEHOLD), `${person.display_name}: dieselbe Antwort ohne Liste`);
+    assert.deepEqual(personToken({ id: person.id }), personToken(person), 'die id allein genuegt');
+    assert.deepEqual(personToken({ id: String(person.id) }), personToken(person), 'auch als Text');
   }
-  // Jede Palettenfarbe ist ihr eigener Platz (2026-10-27, v2: light only -
-  // die dunkle Tinte als Wahl entfaellt mit ihr).
-  for (const entry of PERSON_PALETTE) {
-    assert.equal(personSlot({ id: 9, avatar_color: entry.ink }), entry.slot, entry.key);
-    assert.equal(personSlot({ id: 9, avatar_color: entry.ink.toLowerCase() }), entry.slot, `${entry.key} (klein geschrieben)`);
-    assert.equal('darkInk' in entry || 'darkTint' in entry, false, `${entry.key}: kein dunkles Paar mehr`);
-  }
-  // Die v2-Punkte der Haushaltsfarben (Foundations "Wojtek" / "Mariola")
-  // landen auf Blau und Rose.
-  assert.equal(personSlot({ id: 1, avatar_color: '#2F6FDB' }), 1, 'Wojtek-Blau -> Platz 1');
-  assert.equal(personSlot({ id: 1, avatar_color: '#D9467A' }), 2, 'Mariola-Rose -> Platz 2');
+  assert.deepEqual(personToken(MARIOLA), { slot: 1, ink: 'var(--person-1)', tint: 'var(--person-1-tint)' });
+  // Die Reihenfolge der uebergebenen Liste zaehlt nicht, nur sort_order.
+  assert.equal(personSlot(WOJTEK, [WOJTEK, MARIOLA]), 2);
 });
 
-test('ein Avatar ohne Farbton startet bei (id - 1) mod 6', () => {
-  for (const color of ['#888888', '#FFFFFF', '#000000', '', null, 'var(--color-accent)', '#12345']) {
-    assert.equal(avatarHue(color), null, `${color} hat keinen Farbton`);
-  }
-  assert.equal(personSlot({ id: 1, avatar_color: '#808080' }), 1);
-  assert.equal(personSlot({ id: 2 }), 2);
-  assert.equal(personSlot({ id: 6 }), 6);
+test('sort_order entscheidet, nicht die id; Gleichstand und Unplatzierte nach id', (t) => {
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder([
+    { id: 1, sort_order: 2 }, { id: 2, sort_order: 0 }, { id: 3, sort_order: 1 },
+    { id: 9, sort_order: null }, { id: 5, sort_order: null }, { id: 4 },
+  ]);
+  assert.deepEqual([2, 3, 1, 4, 5, 9].map((id) => personSlot({ id })), [1, 2, 3, 4, 5, 6]);
+  // Ab dem siebten Mitglied beginnt die Palette von vorn.
+  setHouseholdOrder([1, 2, 3, 4, 5, 6, 7].map((id) => ({ id, sort_order: id })));
   assert.equal(personSlot({ id: 7 }), 1);
-  assert.equal(personSlot({}), 1, 'ohne id und Farbe: der erste Platz');
+  // Eine Liste ohne sort_order (nie umsortiert) ordnet nach id - ein neuer
+  // Name aendert keine Farbe.
+  setHouseholdOrder([{ id: 4, display_name: 'Zoe' }, { id: 2, display_name: 'Anna' }]);
+  assert.deepEqual([personSlot({ id: 2 }), personSlot({ id: 4 })], [1, 2]);
 });
 
-test('zwei Mitglieder eines Haushalts teilen nie eine Farbe, egal in welcher Reihenfolge', () => {
-  const wojtek = { id: 1, avatar_color: '#007AFF' };
-  const mariola = { id: 2, avatar_color: '#0A84FF' }; // auch blau gewaehlt
-  const kuchnia = { id: 3, avatar_color: '#8E8E93' }; // grau, Anzeigekonto
-  const household = [kuchnia, mariola, wojtek];
-  const slots = household.map((u) => personSlot(u, household));
-  assert.equal(new Set(slots).size, 3, `Plaetze ${slots.join(', ')}`);
-  assert.equal(personSlot(wojtek, household), 1, 'die kleinere id behaelt ihren Wunschplatz');
-  assert.equal(personSlot(mariola, household), 6, 'die zweite Blaue nimmt den naechsten freien Ton (Petrol)');
-  assert.deepEqual(household.map((u) => personSlot(u, [...household].reverse())), slots, 'die Reihenfolge der Liste zaehlt nicht');
-  // Sechs Mitglieder mit derselben Farbe belegen alle sechs Plaetze.
-  const six = [1, 2, 3, 4, 5, 6].map((id) => ({ id, avatar_color: '#FF2D55' }));
-  assert.deepEqual(six.map((u) => personSlot(u, six)).sort(), [1, 2, 3, 4, 5, 6]);
-  // Wer nicht in der Liste steht, waehlt hinter den Mitgliedern.
-  assert.notEqual(personSlot({ id: 99, avatar_color: '#007AFF' }, [wojtek]), 1);
+test('die gespeicherte Avatarfarbe hat keine Wirkung', (t) => {
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder(HOUSEHOLD);
+  for (const avatar_color of ['#007AFF', '#FF2D55', '#34C759', '#888888', '', null, 'var(--x)']) {
+    assert.deepEqual(personToken({ id: 7, avatar_color }), personToken({ id: 7 }), `${avatar_color}`);
+    assert.deepEqual(personToken({ id: 3, avatar_color, color: avatar_color }), personToken({ id: 3 }), `${avatar_color} als color`);
+  }
+  const source = readFileSync(new URL('../public/utils/person-color.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(source, /avatar_color|\.color\b/, 'person-color.js liest keine gespeicherte Farbe');
 });
 
-test('personToken liefert die beiden Tokens, die Scheiben bauen sicheres Markup', () => {
-  assert.deepEqual(personToken({ id: 1, avatar_color: '#AD3568' }), {
-    slot: 2, ink: 'var(--person-2)', tint: 'var(--person-2-tint)',
+test('wer nicht in der Reihenfolge steht, traegt die neutrale Scheibe', (t) => {
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder(HOUSEHOLD);
+  assert.deepEqual(personToken({ id: 99, display_name: 'Gast' }), NEUTRAL, 'Gast geteilter Ausgaben');
+  assert.deepEqual(personToken({}), NEUTRAL, 'ohne id');
+  assert.deepEqual(personToken(null), NEUTRAL);
+  assert.equal(personSlot({ id: 99 }), null);
+  // Hauspersonal und Ehemalige stehen in Listen wie /auth/users, aber nicht in der Reihenfolge.
+  const directory = [...HOUSEHOLD, { id: 12, sort_order: null, is_household_member: false }];
+  setHouseholdOrder(directory);
+  assert.deepEqual(personToken({ id: 12 }), NEUTRAL, 'Hauspersonal');
+  assert.deepEqual(personToken({ id: 12 }, directory), NEUTRAL, 'auch mit der Liste');
+  assert.equal(personSlot(WOJTEK), 2, 'und schiebt niemanden weiter');
+  // Ohne jede Reihenfolge (vor dem Start, Gast-Sitzung) ist jede Scheibe neutral.
+  setHouseholdOrder([]);
+  assert.deepEqual(personToken(MARIOLA), NEUTRAL);
+  assert.equal(personSlot(MARIOLA, HOUSEHOLD), 1, 'eine mitgegebene Liste traegt dann allein');
+});
+
+test('personDisc: das Bild, sonst die Initialen in der Tinte auf der Toenung', (t) => {
+  t.after(() => { setHouseholdOrder([]); clearInitialsRoster(); });
+  setHouseholdOrder(HOUSEHOLD);
+
+  const plain = personDisc(WOJTEK);
+  assert.equal(plain, '<span class="person-disc person-disc--sm" aria-hidden="true" style="--person-disc-ink: var(--person-2); --person-disc-tint: var(--person-2-tint)">W</span>');
+
+  const photo = personDisc({ ...WOJTEK, avatar_data: 'data:image/png;base64,QQ==' }, { label: true });
+  assert.match(photo, /^<span class="person-disc person-disc--sm person-disc--photo" role="img" aria-label="Wojtek" title="Wojtek" style="[^"]*">/);
+  assert.match(photo, /<img src="data:image\/png;base64,QQ==" alt="" loading="lazy"><\/span>$/, 'das Bild, ohne den Namen zu wiederholen');
+  assert.doesNotMatch(photo, />W</, 'kein Initial neben dem Bild');
+
+  // Label: true nimmt den Namen, ein Text gilt so, wie er kommt (escapet).
+  assert.match(personDisc(WOJTEK, { label: 'Woj <b>"&' }), /role="img" aria-label="Woj &lt;b&gt;&quot;&amp;"/);
+  assert.match(personDisc({ id: 3, display_name: '<i>' }, { label: true }), /aria-label="&lt;i&gt;"/);
+
+  // Groessen: sm 20, md 36, lg 40 als Klassen; jede andere als Mass.
+  assert.match(personDisc(WOJTEK, { size: 'md' }), /class="person-disc person-disc--md"/);
+  assert.match(personDisc(WOJTEK, { size: 36 }), /class="person-disc person-disc--md"/);
+  assert.match(personDisc(WOJTEK, { size: 40 }), /class="person-disc person-disc--lg"/);
+  assert.match(personDisc(WOJTEK, { size: 'xl' }), /class="person-disc person-disc--sm"/, 'unbekannte Groesse faellt auf sm');
+  const custom = personDisc(WOJTEK, { size: 26, className: 'user-ms__avatar' });
+  assert.match(custom, /class="person-disc user-ms__avatar"/);
+  assert.match(custom, /--person-disc-size: 26px; --person-disc-font: 12px/);
+  assert.match(personDisc(WOJTEK, { size: 16 }), /><\/span>$/, 'unter 20 traegt die Scheibe keinen Text');
+  assert.match(personDisc(WOJTEK, { size: 22, ring: true }), /class="person-disc person-disc--ring"/);
+
+  // Die Zeichen kommen aus dem einen Helfer, mit den Doppelten des Haushalts.
+  setInitialsRoster(['Linda Johnson', 'Leo Johnson']);
+  assert.match(personDisc({ id: 7, display_name: 'Linda Johnson' }), />LI<\/span>$/);
+  assert.match(personDisc({ id: 7, display_name: '' }), />\?<\/span>$/, 'ohne Namen ein ?');
+
+  // Nicht im Haushalt: neutral.
+  assert.match(personDisc({ id: 99, display_name: 'Gast' }), /--person-disc-ink: var\(--color-text-secondary\); --person-disc-tint: var\(--color-fill\)/);
+  assert.equal(personDisc(null), '', 'ohne Person keine Scheibe');
+});
+
+test('personDiscEl: dieselbe Scheibe als Element fuer DOM-Bauer', (t) => {
+  class El {
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.attrs = {}; this.styles = {}; this.children = []; this.textContent = ''; this.className = ''; }
+    get style() { return { setProperty: (k, v) => { this.styles[k] = v; } }; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    appendChild(c) { this.children.push(c); return c; }
+  }
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { createElement: (tag) => new El(tag) };
+  t.after(() => {
+    setHouseholdOrder([]);
+    if (saved) Object.defineProperty(globalThis, 'document', saved); else delete globalThis.document;
   });
-  const a = { id: 1, avatar_color: '#2A64A8' };
-  const b = { id: 2, avatar_color: '#AD3568' };
-  assert.equal(razemBackground(a, b), 'linear-gradient(135deg, var(--person-1) 0 50%, var(--person-2) 50% 100%)');
+  setHouseholdOrder(HOUSEHOLD);
 
-  const disc = razemDisc(a, b, { label: 'Razem <b>"&' });
-  assert.match(disc, /^<span class="person-disc person-disc--sm person-disc--razem" role="img" aria-label="Razem &lt;b&gt;&quot;&amp;"/);
-  assert.match(disc, /style="background: linear-gradient\(135deg, var\(--person-1\) 0 50%, var\(--person-2\) 50% 100%\)"><\/span>$/);
-  assert.match(razemDisc(a, b), /aria-hidden="true"/, 'ohne Label ist die Scheibe Dekor');
-  assert.match(razemDisc(a, b, { size: 'xl' }), /person-disc--sm/, 'unbekannte Groesse faellt auf sm');
+  const plain = personDiscEl(WOJTEK, { size: 56, className: 'settings-identity__avatar' });
+  assert.equal(plain.className, 'person-disc settings-identity__avatar');
+  assert.equal(plain.attrs['aria-hidden'], 'true');
+  assert.deepEqual(plain.styles, {
+    '--person-disc-ink': 'var(--person-2)', '--person-disc-tint': 'var(--person-2-tint)',
+    '--person-disc-size': '56px', '--person-disc-font': '24px',
+  });
+  assert.equal(plain.textContent, 'W');
 
-  const own = personDisc(b, { text: '<O>', label: 'Ola', size: 'md' });
-  assert.match(own, /class="person-disc person-disc--md"/);
-  assert.match(own, /style="--person-disc-ink: var\(--person-2\); --person-disc-tint: var\(--person-2-tint\)">&lt;O&gt;<\/span>$/);
-  // Die Scheibe hat ihre Regel im geteilten Stylesheet.
-  const layout = readFileSync(new URL('../public/styles/layout.css', import.meta.url), 'utf8');
-  for (const sel of ['.person-disc {', '.person-disc--md {', '.person-disc--lg {']) assert.ok(layout.includes(`\n${sel}`), sel);
+  const photo = personDiscEl({ ...MARIOLA, avatar_data: 'data:image/png;base64,QQ==' }, { label: true });
+  assert.equal(photo.className, 'person-disc person-disc--sm person-disc--photo');
+  assert.deepEqual(photo.attrs, { role: 'img', 'aria-label': 'Mariola', title: 'Mariola' });
+  assert.equal(photo.children[0].tagName, 'IMG');
+  assert.equal(photo.children[0].alt, '', 'das Bild wiederholt den Namen nicht');
+  assert.equal(photo.textContent, '');
+  assert.equal(personDiscEl(null), null);
+});
+
+test('die geteilte Scheibe: zwei Tinten, ab drei Personen das Violett', (t) => {
+  t.after(() => setHouseholdOrder([]));
+  setHouseholdOrder(HOUSEHOLD);
+  assert.equal(razemBackground(MARIOLA, WOJTEK), 'linear-gradient(135deg, var(--person-1) 0 50%, var(--person-2) 50% 100%)');
+
+  const two = razemDisc([MARIOLA, WOJTEK], { label: 'Razem <b>"&' });
+  assert.match(two, /^<span class="person-disc person-disc--sm person-disc--razem" role="img" aria-label="Razem &lt;b&gt;&quot;&amp;"/);
+  assert.match(two, /style="background: linear-gradient\(135deg, var\(--person-1\) 0 50%, var\(--person-2\) 50% 100%\)"><\/span>$/);
+  assert.match(razemDisc([MARIOLA, WOJTEK]), /aria-hidden="true"/, 'ohne Label ist die Scheibe Dekor');
+  assert.match(razemDisc([MARIOLA, WOJTEK], { size: 'lg', className: 'wall-disc' }), /class="person-disc person-disc--lg person-disc--razem wall-disc"/);
+
+  const three = razemDisc([MARIOLA, WOJTEK, { id: 99 }]);
+  assert.match(three, /style="background: var\(--color-accent\)"><\/span>$/, 'drei und mehr: der gemeinsame Ton');
+  assert.equal(razemDisc([]), '');
+});
+
+test('die Scheibe hat ihre Regeln im geteilten Stylesheet', () => {
+  for (const sel of ['.person-disc {', '.person-disc--md {', '.person-disc--lg {', '.person-disc--ring {', '.person-disc--photo img {']) {
+    assert.ok(LAYOUT.includes(`\n${sel}`), sel);
+  }
+  const base = LAYOUT.slice(LAYOUT.indexOf('\n.person-disc {'), LAYOUT.indexOf('}', LAYOUT.indexOf('\n.person-disc {')));
+  assert.match(base, /background: var\(--person-disc-tint, var\(--color-fill\)\)/);
+  assert.match(base, /color: var\(--person-disc-ink, var\(--color-text-secondary\)\)/);
+  assert.match(base, /font-size: var\(--person-disc-font, var\(--type-meta\)\)/);
 });
 
 // 2026-10-27, v2: light only - nur noch der helle Block; die Dark-Bloecke

@@ -20,11 +20,12 @@
 
 /**
  * Die Mitglieder in ihrer Reihenfolge, dahinter jede schon gewaehlte Person, die
- * keine ist - einmal. Die Datensaetze nennen die Farbe teils `color`
- * (`assigned_users`), die Auswahl liest `avatar_color`; beides wird angeglichen.
+ * keine ist - einmal. Eine Farbe tragen die Personen nicht: die Scheibe nimmt
+ * sie aus der Haushaltsreihenfolge (utils/person-color.js), und wer nicht im
+ * Haushalt steht, ist neutral.
  *
  * @param {Array<{id: number}>} members
- * @param {Array<{id: number, display_name?: string, color?: string, avatar_color?: string}>|null|undefined} chosen
+ * @param {Array<{id: number, display_name?: string}>|null|undefined} chosen
  * @returns {Array<object>}
  */
 export function withChosenPeople(members, chosen) {
@@ -34,7 +35,7 @@ export function withChosenPeople(members, chosen) {
     const id = Number(person?.id);
     if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
     seen.add(id);
-    list.push({ ...person, id, avatar_color: person.avatar_color ?? person.color ?? null });
+    list.push({ ...person, id });
   }
   return list;
 }

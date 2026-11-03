@@ -67,11 +67,12 @@ test('am Wandtablett hakt Dziś nichts ab und legt nichts an (#1808, v2)', () =>
   // Der Einstieg endete an einer Route, die ein Display nicht erreicht:
   // `PUT /preferences` antwortet ihm mit 403. TAFLA: „Dostosuj Dziś" hing an
   // `canCustomize: !onDisplay`. 2026-10-27, v2: es gibt kein Anpassen mehr;
-  // dieselbe Regel gilt fuer das, was Dziś schreibt - die Kreise und
-  // „Dodaj zadanie" stehen nur mit Schreibrecht und nie am Display.
+  // dieselbe Regel gilt fuer das, was Dziś schreibt - die Kreise stehen nur
+  // mit Schreibrecht und nie am Display. One Today (2026-11-02): „Dodaj
+  // zadanie" ist gegangen; die Seite selbst legt nichts an, das tut das +.
   assert.match(dashboardSource, /const onDisplay = user\?\.access_scope === 'display';/);
   assert.match(dashboardSource, /canCheck: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
-  assert.match(dashboardSource, /canAddTask: !onDisplay && moduleAccess\('tasks'\) === 'write',/);
+  assert.doesNotMatch(dashboardSource, /canAddTask|data-day-action="add-task"|'add-task'/);
   assert.doesNotMatch(dashboardSource, /canCustomize/);
   // Quick-Add (2026-10-29): auch das + steht nie am Display (test:add-menu
   // prueft das Verhalten von todayAddFab).
@@ -93,7 +94,7 @@ test('die Zeile in Dziś nennt den Titel vor der Person (H13, A7 Sam)', () => {
     urgentTasks: [{ id: 1, title: 'Einverstaendnis abgeben', due_date: todayStr, status: 'open', priority: 'medium', assigned_users: [linda] }],
   }, ctx);
   assert.equal(tasks.rows.length, 1, 'Reichweite: die Aufgabe steht in der Karte');
-  const page = renderTodayPage({ user: linda, household: [linda], dateLabel: '', greetingKey: 'x', weather: null, calendar: null, tasks, birthdays: [], canCheck: false, canAddTask: false });
+  const page = renderTodayPage({ user: linda, household: [linda], dateLabel: '', greetingKey: 'x', weatherLine: null, nextUp: null, calendar: null, tasks, notes: null, birthdays: [], canCheck: false });
   const html = page.slice(page.indexOf('<li class="dz-task'), page.indexOf('</li>', page.indexOf('<li class="dz-task')));
   const title = html.indexOf('Einverstaendnis abgeben');
   const person = html.search(/role="img" aria-label="Linda Johnson"/);

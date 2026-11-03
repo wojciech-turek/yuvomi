@@ -494,7 +494,7 @@ export function runSearch(database, q, userId, { hiddenModules = null, disabledN
   // Migrationsnotiz). Kein Besitzer-Filter (Haushaltseigentum, wie Kontakte),
   // archivierte Typen bleiben ausgeblendet wie überall sonst in Waste.
   if (allows('waste')) results.waste = database.prepare(`
-    SELECT wt.id, wt.name AS title, wt.icon, wt.color
+    SELECT wt.id, wt.name AS title, wt.icon
     FROM search_index s
     JOIN waste_types wt ON wt.id = s.entity_id
     WHERE s.entity = 'waste_type' AND s.search_index MATCH @match

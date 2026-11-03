@@ -132,8 +132,6 @@ const APP_SHELL = [
   '/utils/contrast.js',
   '/utils/cook-steps.js',
   '/utils/countdown.js',
-  '/utils/dashboard-event-limit.js',
-  '/utils/dashboard-layout-hint.js',
   '/utils/dashboard-widgets.js',
   '/utils/date-status.js',
   '/utils/date.js',
@@ -210,6 +208,7 @@ const APP_SHELL = [
   '/utils/note-category-filter.js',
   '/utils/note-category-name.js',
   '/utils/note-category-picker.js',
+  '/utils/note-line.js',
   '/utils/focus-quiet.js',
   '/utils/overlay-history.js',
   '/utils/overlay-host.js',
@@ -380,15 +379,18 @@ const PAGE_MODULES = [
   // Schnellwahl des Blatts „Neue Aufgabe" - nur pages/tasks.js laedt sie.
   '/utils/task-quick-dates.js',
   // Das Diktat (Hoerblatt, Spracherkennung, Satz -> Entwurf) - ueber
-  // pages/tasks.js und ueber das Menue hinter dem + auf Dziś (add-menu.js,
-  // dort statisch, damit "Say a task" im Tipp startet).
+  // pages/tasks.js, die Mikrofone von Termin- und Einkaufsblatt und das Menue
+  // hinter dem + auf Dziś (add-menu.js, dort statisch, damit "Say it" im Tipp
+  // startet; es zieht utils/quick-draft.js mit, das den Satz routet).
   '/components/task-dictation.js',
   // Das Einkaufsblatt von Dziś - per import() aus add-menu.js.
   '/components/shopping-add-sheet.js',
   // Das Menue hinter dem + auf Dziś (Quick-Add) - die Uebersicht laedt es per
   // import() beim Tipp auf das +, nicht mit dem Start.
   '/components/add-menu.js',
+  '/utils/quick-draft.js',
   '/utils/shopping-entry.js',
+  '/utils/sheet-parts.js',
   '/utils/speech.js',
   '/utils/task-draft.js',
   '/vendor/sortablejs/sortable.esm.min.js',

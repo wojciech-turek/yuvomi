@@ -1,10 +1,11 @@
 /**
  * Modul: Wall settings (Tafla, 2026-10-19)
- * Zweck: The household's choices for the kitchen wall - which sections it
- *        shows and whether it may tick things off ("Pozwól odhaczać na
- *        ścianie"). Both live in `sync_config` next to every other household
- *        preference; this file reads them and answers the one question the
- *        write routes ask: may a paired display write right now?
+ * Zweck: The household's one choice for the kitchen wall - whether it may
+ *        tick things off ("Pozwól odhaczać na ścianie"). It lives in
+ *        `sync_config` next to every other household preference; this file
+ *        reads it and answers the one question the write routes ask: may a
+ *        paired display write right now? (The wall always draws one fixed
+ *        set; there are no section switches.)
  * Abhängigkeiten: server/db.js (only through the `db` handed in or the default)
  *
  * READ-ONLY BY DEFAULT (owner decision, 2026-10-19). The wall shows; ticking a
@@ -21,11 +22,7 @@
 
 import * as dbModule from '../db.js';
 
-/** The sections the wall can show, in the order the settings page lists them. */
-export const WALL_SECTION_IDS = Object.freeze(['dinner', 'plan', 'shopping', 'timers', 'weather']);
-
 const TICKING_KEY = 'wall_allow_ticking';
-const SECTIONS_KEY = 'wall_sections';
 
 function cfg(database, key) {
   return database.prepare('SELECT value FROM sync_config WHERE key = ?').get(key)?.value ?? null;
@@ -34,37 +31,6 @@ function cfg(database, key) {
 /** Is ticking on the wall allowed in this household? Default: no. */
 export function wallWritesAllowed({ db } = {}) {
   return cfg(db || dbModule.get(), TICKING_KEY) === '1';
-}
-
-/**
- * Which sections the wall shows, every known id with a boolean. Unknown or
- * missing ids fall back to "on": a household that never opened the page keeps
- * the whole wall.
- * @returns {Record<string, boolean>}
- */
-export function parseWallSections(raw) {
-  let parsed = null;
-  try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
-  const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  return Object.fromEntries(WALL_SECTION_IDS.map((id) => [id, source[id] !== false]));
-}
-
-export function wallSections({ db } = {}) {
-  return parseWallSections(cfg(db || dbModule.get(), SECTIONS_KEY));
-}
-
-/**
- * Validates a `wall_sections` body: an object whose keys are known section ids
- * and whose values are booleans. Returns the full normalised map or null.
- */
-export function normalizeWallSections(value, current = parseWallSections(null)) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const next = { ...current };
-  for (const [key, on] of Object.entries(value)) {
-    if (!WALL_SECTION_IDS.includes(key) || typeof on !== 'boolean') return null;
-    next[key] = on;
-  }
-  return next;
 }
 
 /**

@@ -11,6 +11,7 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import test from 'node:test';
 import Database from 'better-sqlite3-multiple-ciphers';
 
@@ -25,6 +26,8 @@ const { getCountdowns, nextEventDate, daysBetween } = await import('../server/se
 const { nextOccurrence } = await import('../server/services/recurrence.js');
 const { MIRRORED_FIELDS } = await import('../server/services/calendar-outbound.js');
 const { countdownPhrase, daysBetweenDateKeys } = await import('../public/utils/countdown.js');
+const { personToken } = await import('../public/utils/person-color.js');
+const { listMemberOrder } = await import('../server/services/household-members.js');
 
 // Die meisten Faelle interessiert nur die Liste; `total` hat seine eigenen
 // Tests weiter unten.
@@ -760,82 +763,92 @@ test('der Sprung beim Aufholen liefert dasselbe wie das Zaehlen (#877)', () => {
 
 
 // --------------------------------------------------------
-// Die geliehene Farbe (#891)
+// Die Farbe sind die Leute (One Today, spec 7; vorher #891)
 // --------------------------------------------------------
 
-test('ein Countdown ohne eigene Farbe leiht sich die der zugewiesenen Person', () => {
-  // Die Kachel loeste die Farbe bis v2.48.0 selbst auf - `row.color || null` -,
-  // was folgenlos war, solange die Spalte NOT NULL war. Mit einer Farbe, die
-  // fehlen DARF, saehe derselbe Termin hier farblos aus (Modulton) und im
-  // Kalender daneben in der Farbe der Person. Dritte Stelle desselben Musters.
+/** Die Tinte einer Person in der Haushaltsreihenfolge - dieselbe Regel wie im Kalender. */
+const inkOf = (userId) => personToken({ id: userId }, listMemberOrder({ db: get() })).ink;
+
+test('One Today: ein Countdown traegt die Tinte der zugewiesenen Person - nie eine gespeicherte Farbe', () => {
   reset();
   const heute = '2026-08-27';
   const bunt = seedUser('bunt', 'member');
   get().prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#EC4899', bunt);
 
-  const id = seedEvent({ title: 'Geliehen', start: '2026-09-10', color: null, assignedTo: bunt });
+  const id = seedEvent({ title: 'Geliehen', start: '2026-09-10', color: '#3CA368', assignedTo: bunt });
   get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(id, bunt);
 
   const zeile = getCountdowns(get(), { userId: ALICE, todayKey: heute }).items.find((c) => c.title === 'Geliehen');
   assert.ok(zeile, 'der Countdown muss ueberhaupt erscheinen');
-  assert.equal(zeile.color, '#EC4899',
-    'ohne eigene Farbe gilt die der zugewiesenen Person, nicht der Modulton');
+  assert.match(inkOf(bunt), /^var\(--person-\d\)$/, 'Vorbedingung: die Person steht im Haushalt');
+  assert.equal(zeile.color, inkOf(bunt), 'die Tinte der Person, weder #3CA368 noch #EC4899');
 });
 
-test('eine eigene Farbe schlaegt die geliehene weiterhin', () => {
-  // Die Gegenprobe: ohne sie waere der Test oben auch dann gruen, wenn die
-  // Kachel IMMER die Personenfarbe naehme und eine bewusste Wahl wegwuerfe.
+test('One Today: zwei Zugewiesene geben den gemeinsamen Ton, niemand null - auch mit eigener oder Kalenderfarbe', () => {
   reset();
   const heute = '2026-08-27';
-  const bunt = seedUser('bunt2', 'member');
-  get().prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#EC4899', bunt);
-
-  const id = seedEvent({ title: 'Eigen', start: '2026-09-10', color: '#3CA368', assignedTo: bunt });
-  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(id, bunt);
-
-  const zeile = getCountdowns(get(), { userId: ALICE, todayKey: heute }).items.find((c) => c.title === 'Eigen');
-  assert.equal(zeile.color, '#3CA368', 'eine ausdrueckliche Farbe bleibt');
-});
-
-test('ein lokaler Countdown erbt die Kalenderfarbe erst mit mehreren Kalendern', () => {
-  reset();
-  seedEvent({ title: 'Lokal', start: '2026-09-10', color: null, assignedTo: null });
-  const item = () => getCountdowns(get(), { userId: ALICE, todayKey: '2026-08-27' }).items.find(c => c.title === 'Lokal');
-  assert.equal(item().color, null);
-  const id = get().prepare("INSERT INTO local_calendars (name, color) VALUES ('Second', '#3366AA')").run().lastInsertRowid;
+  const zwei = seedEvent({ title: 'Zu zweit', start: '2026-09-10', color: '#3CA368', assignedTo: ALICE });
+  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?), (?, ?)').run(zwei, ALICE, zwei, BOB);
+  seedEvent({ title: 'Niemand', start: '2026-09-11', color: '#3CA368', assignedTo: null });
+  const second = get().prepare("INSERT INTO local_calendars (name, color) VALUES ('Second', '#3366AA')").run().lastInsertRowid;
   try {
-    const calendar = get().prepare('SELECT color FROM local_calendars WHERE is_default = 1').get();
-    assert.equal(item().color, calendar.color);
+    const items = getCountdowns(get(), { userId: ALICE, todayKey: heute }).items;
+    assert.equal(items.find((c) => c.title === 'Zu zweit').color, 'var(--color-accent)');
+    assert.equal(items.find((c) => c.title === 'Niemand').color, null,
+      'ohne Person null, damit der Modulton greift - keine eigene, keine Kalenderfarbe');
   } finally {
-    get().prepare('DELETE FROM local_calendars WHERE id = ?').run(id);
+    get().prepare('DELETE FROM local_calendars WHERE id = ?').run(second);
   }
-  assert.equal(item().color, null);
 });
 
-test('ohne jede Quelle bleibt die Farbe null, damit der Modulton greift', () => {
-  // Bewusst NICHT das neutrale Grau aus `resolveEventColor()`: die Kachel hat
-  // mit dem Ton ihres Moduls einen besseren Notnagel, und ein Grau sieht aus
-  // wie eine Angabe. Deshalb `resolveEventColorOrNull()`.
+test('One Today: die Countdown-Farbe ist ein CSS-Wert oder null, nie Hex - und kein Client rechnet mit ihr', () => {
+  // Seit One Today liefert die Kachel `var(--person-N)`, `var(--color-accent)`
+  // oder null statt eines Hex-Werts. Wer sie als Hex laese (Luminanz, Kontrast,
+  // Kanaele), bekaeme Unsinn - deshalb beide Haelften: der Wert und die Leser.
   reset();
-  const zeile = getCountdowns(get(), { userId: ALICE, todayKey: '2026-08-27' }).items.find((c) => c.title === 'Nackt');
-  assert.equal(zeile, undefined, 'Vorbedingung: noch nichts angelegt');
+  const heute = '2026-08-27';
+  const eins = seedEvent({ title: 'Eins', start: '2026-09-10', color: '#3CA368', assignedTo: BOB });
+  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(eins, BOB);
+  const zwei = seedEvent({ title: 'Zwei', start: '2026-09-11', color: '#3CA368', assignedTo: ALICE });
+  get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?), (?, ?)').run(zwei, ALICE, zwei, BOB);
+  seedEvent({ title: 'Keiner', start: '2026-09-12', color: '#3CA368' });
+  seedTask({ title: 'Aufgabe', due: '2026-09-13' });
+  const items = getCountdowns(get(), { userId: ALICE, todayKey: heute }).items;
+  assert.ok(items.length >= 4, 'Vorbedingung: Termine und eine Aufgabe');
+  for (const item of items) {
+    assert.ok(item.color == null || /^var\(--[a-z0-9-]+\)$/.test(item.color), `${item.title}: ${item.color}`);
+    assert.doesNotMatch(String(item.color ?? ''), /#[0-9a-f]{3,8}/i, `${item.title}: kein Hex`);
+  }
 
-  seedEvent({ title: 'Nackt', start: '2026-09-10', color: null, assignedTo: null });
-  const nackt = getCountdowns(get(), { userId: ALICE, todayKey: '2026-08-27' }).items.find((c) => c.title === 'Nackt');
-  assert.equal(nackt.color, null, 'keine Quelle heisst null, nicht Grau');
+  // Die Leser: jede Datei in public/, die die Countdowns der Uebersicht liest.
+  const root = new URL('../public/', import.meta.url);
+  const files = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = new URL(name, dir);
+      if (statSync(full).isDirectory()) {
+        if (name !== 'vendor' && name !== 'locales') walk(new URL(`${name}/`, dir));
+      } else if (name.endsWith('.js')) files.push(full);
+    }
+  };
+  walk(root);
+  const readers = files.filter((file) => /\.countdowns\b|countdowns:/.test(readFileSync(file, 'utf8')));
+  assert.deepEqual(readers.map((file) => file.pathname.split('/public/')[1]), ['pages/dashboard.js'],
+    'ein neuer Leser der Countdowns: hier pruefen, dass er die Farbe nicht als Hex liest');
+  const dashboard = readFileSync(readers[0], 'utf8');
+  const fn = dashboard.slice(dashboard.indexOf('function visibleCountdowns('), dashboard.indexOf('function setHtml('));
+  assert.match(fn, /c\.source === 'task'/, 'Vorbedingung: der Filter liest die Herkunft');
+  assert.doesNotMatch(fn, /\.color\b/, 'die Uebersicht liest die Countdown-Farbe nicht');
+  assert.doesNotMatch(dashboard, /countdown[\s\S]{0,80}getReadableTextColor|getReadableTextColor[\s\S]{0,80}countdown/i);
 });
 
 test('ein geloeschtes primaeres Mitglied laesst die Kachel nicht farblos zurueck', () => {
   // Der Fremdschluessel setzt `assigned_to` auf NULL und nimmt die Zuweisungs-
-  // zeile des Geloeschten mit; die uebrigen Zugewiesenen bleiben. Der Kalender
-  // faellt dann auf den ersten verbliebenen zurueck. Ohne dieselbe Ruecknahme
-  // waere die Kachel die EINZIGE Stelle, die hier den Modulton zeigt - genau
-  // die Art Abweichung, die #891 an drei Stellen aufgeraeumt hat.
+  // zeile des Geloeschten mit; die uebrigen Zugewiesenen bleiben. Die Kachel
+  // traegt dann die Farbe des verbliebenen - wie der Kalender daneben.
   reset();
   const geht  = seedUser('geht', 'member');
   const bleibt = seedUser('bleibt', 'member');
-  get().prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#587DCE', geht);
-  get().prepare('UPDATE users SET avatar_color = ? WHERE id = ?').run('#D8B349', bleibt);
 
   const id = seedEvent({ title: 'Verwaist', start: '2026-09-10', color: null, assignedTo: geht });
   get().prepare('INSERT INTO event_assignments (event_id, user_id) VALUES (?, ?)').run(id, geht);
@@ -851,8 +864,8 @@ test('ein geloeschtes primaeres Mitglied laesst die Kachel nicht farblos zurueck
 
   const zeile = getCountdowns(get(), { userId: ALICE, todayKey: '2026-08-27' })
     .items.find((c) => c.title === 'Verwaist');
-  assert.equal(zeile.color, '#D8B349',
-    'die Kachel faellt auf den verbliebenen Zugewiesenen zurueck, nicht auf den Modulton');
+  assert.equal(zeile.color, inkOf(bleibt),
+    'die Kachel traegt die Tinte des verbliebenen Zugewiesenen, nicht den Modulton');
 });
 
 test('der Countdown zeigt kein Datum, an dem die Serie kein Vorkommen hat (#960)', () => {

@@ -15,7 +15,6 @@ import {
   categoryNameKey,
   hydrateNotesWithCategories,
   listVisibleCategories,
-  pruneCategoryFromDashboardConfigs,
   replaceEditableAssignments,
   validateCategoryName,
 } from '../server/services/note-categories.js';
@@ -197,35 +196,6 @@ test('assignment replacement accepts household categories but rejects invisible 
   assert.deepEqual(
     db.prepare('SELECT category_id FROM note_category_assignments WHERE note_id = ? ORDER BY category_id').all(note).map((row) => row.category_id),
     [household, bobPersonal].sort((a, b) => a - b),
-  );
-  db.close();
-});
-
-test('deleting a category can prune it from all dashboard note widget filters', () => {
-  const db = database();
-  const config = [
-    { id: 'notes', options: { categories: ['3', '8'] } },
-    { id: 'tasks', options: { categories: ['household'] } },
-  ];
-  const insert = db.prepare('INSERT INTO sync_config (key, value) VALUES (?, ?)');
-  for (const key of ['dashboard_widgets', 'dashboard_widgets_default', 'dashboard_widgets:user:12', 'dashboard_widgets:user:13']) {
-    insert.run(key, JSON.stringify(config));
-  }
-  insert.run('dashboard_widgets:user:14', JSON.stringify([{ id: 'notes', options: { categories: ['3'] } }]));
-  insert.run('unrelated', JSON.stringify(config));
-  pruneCategoryFromDashboardConfigs(db, 3);
-  for (const key of ['dashboard_widgets', 'dashboard_widgets_default', 'dashboard_widgets:user:12', 'dashboard_widgets:user:13']) {
-    const stored = JSON.parse(db.prepare('SELECT value FROM sync_config WHERE key = ?').get(key).value);
-    assert.deepEqual(stored[0].options.categories, ['8'], key);
-    assert.deepEqual(stored[1].options.categories, ['household'], key);
-  }
-  assert.deepEqual(
-    JSON.parse(db.prepare('SELECT value FROM sync_config WHERE key = ?').get('unrelated').value),
-    config,
-  );
-  assert.deepEqual(
-    JSON.parse(db.prepare("SELECT value FROM sync_config WHERE key = 'dashboard_widgets:user:14'").get().value),
-    [{ id: 'notes' }],
   );
   db.close();
 });

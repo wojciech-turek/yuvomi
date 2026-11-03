@@ -505,13 +505,17 @@ sections); the approved artboards and spec live with the design brief (BUILD.md)
   pairs (`--person-1..6` with `--person-N-tint`: 1 blue `#2A64A8` on `#E1E9F3`, 2 rose
   `#AD3568` on `#F4E3EA`, then green, terracotta, plum, teal; dark variants per token).
   `public/utils/person-color.js` does the mapping: `personToken(user, household)` returns
-  `{ slot, ink: 'var(--person-N)', tint: 'var(--person-N-tint)' }`, taking the nearest hue
-  of the user's avatar colour, starting grey avatars at (id - 1) mod 6, and never giving
-  two members of one household the same slot. Person colour appears ONLY as the initial on
-  a disc (20 rows / 36 header / 40 wall, `personDisc()`), the 3pt calendar edge and the 6pt
-  dot. Your own items show no avatar. **Shared ("razem")** items use `razemDisc(a, b,
-  { label })`: a letterless disc split at 135 degrees, `linear-gradient(135deg, A 0 50%,
-  B 50% 100%)` of the two people's inks (the only gradient besides the scroll-edge fade);
+  `{ slot, ink: 'var(--person-N)', tint: 'var(--person-N-tint)' }`, where the slot is the
+  member's place in the household order (`sort_order`, then id; mod 6) held by
+  `setHouseholdOrder()` from every auth answer (One Today, 2026-11-02: nobody picks a
+  colour, a stored avatar colour is ignored); someone outside the household (guest, staff,
+  former member) is neutral. Person colour appears ONLY on the one person disc
+  (`personDisc()`: the photo, else the initials on the tint; 20 rows / 36 header / 40
+  wall, any other size for chips and stacks), the 3pt calendar edge and the 6pt dot. Your
+  own items show no avatar. **Shared ("razem")** items use `razemDisc(people, { label })`:
+  a letterless disc split at 135 degrees, `linear-gradient(135deg, A 0 50%, B 50% 100%)`
+  of two people's inks (three or more: the violet accent; the only gradient besides the
+  scroll-edge fade);
   shared calendar events use the violet accent as their edge - blue and rose mix to
   violet, so "together" needs no third hue. Both helpers return escaped markup for
   `insertAdjacentHTML`; the label comes translated from the caller, without a label the
@@ -676,8 +680,29 @@ Vollton rule below now applies only to CONTENT colours (a category, a chosen col
 Guard: "Tafla: module accents leave the chrome" (`test-frontend-audit.js`).
 
 **Die Personenfarben-Regel** (person palette, `person-color.js`, razem disc) is written
-out in the Direction Contract above. Calendar event colours, categories, account and
-meal-type colours are content and keep their hues.
+out in the Direction Contract above. Person colours come only from `personToken`: the
+household-order slot of the fixed six-colour set; a stored `avatar_color` is ignored.
+
+**One meaning per colour, and no colours chosen by people (One Today, 2026-11-02;
+supersedes what this section said about content colours keeping their hues).**
+
+- **Violet** (`--color-accent`): what you can tap, what is chosen, what is next. Nothing
+  else - not "AI", not decoration. No glow on any button.
+- **Attention** (the warning family, amber-brown): the priority flag (the same colour on
+  every screen), overdue, today's birthday. `--color-overdue` aliases `--color-warning`.
+- **Danger red**: destructive actions and errors only.
+- **Success green** only where something really succeeded; a filled field is never green.
+- The dinner **hearth** wash stays: it means tonight's dinner.
+- **No colour pickers anywhere.** Event colour, local calendar, ICS subscription and holiday
+  colours, contact categories, shift types, waste types, budget accounts, subscriptions and
+  household help workers have no colour any more. An event is coloured by its people (one
+  person: their colour; several or "razem": the split or shared treatment; nobody: neutral);
+  colours from Google, CalDAV or Outlook are neither shown nor sent back. Categories lose the
+  "#". Household help workers get a neutral disc and edge.
+- What keeps a colour: the automatic person slots, the budget category series (assigned by
+  catalogue position, charts need distinguishable series), the fixed module accents, the
+  hearth wash. The database columns stay (migrations are append-only); nothing reads them
+  and the API ignores colour fields it is sent.
 
 The text below is the history of the earlier palette; where it names a value Tafla
 changed (ink, ink-2, the dark violet `#A78BFA`, the status colours, the family tones in
@@ -3974,43 +3999,55 @@ ohne Gesamtzahl (die Termine, bei fuenf geschnitten) traegt keine Badge: eine Za
 ihre eigene Obergrenze nennt, ist keine Auskunft. Die Badge ist `aria-hidden`, dieselbe Zahl
 steht als sr-only-Satz hinter der h3 - sonst hiesse die Ueberschrift „Geburtstage 5".
 
-### Dziś v2 (entschieden 2026-10-27, Entwurf „Main" / „DzisFull")
-Die Startseite zeigt ausserhalb des Wand-Modus genau, was der Entwurf zeigt, von oben nach
-unten (`public/utils/dzis-plan.js` rechnet, `public/components/today-view.js` zeichnet, die
-Regeln stehen am Ende von `public/styles/dashboard.css` auf den v2-Tokens):
+### Dziś: One Today (entschieden 2026-11-02, Sichtdurchgang 2026-11-03)
+Ein Dziś fuer alle: dieselben Abschnitte in derselben Reihenfolge fuer jede Person und jeden
+Besuch, nichts pro Person einstellbar (`public/utils/dzis-plan.js` rechnet,
+`public/components/today-view.js` zeichnet, die Regeln stehen am Ende von
+`public/styles/dashboard.css`). Nur was nicht fuer Geschmack, sondern fuer Zugang steht, nimmt
+einen Abschnitt weg: ein Modul, das der Haushalt abgeschaltet hat, oder eines, das die Person
+gar nicht sehen darf (`moduleAccess === 'none'`). Von oben nach unten:
 
-- **Kopf**: Datum (`--type-row` 15, ink-2), Gruss (`--type-page` 26/600, die h2 der Seite),
-  rechts der eigene Avatar (36 auf 44) als Weg in die Einstellungen. Keine Werkzeuge.
-- **Wetterkarte** (die Frage des Morgens: regnet es heute?): Symbol, Temperatur 26/600 in
-  tabellarischen Ziffern, Zustand, „14° / 8° · odczuwalna 9°". Darunter hinter einer
-  Haarlinie die Regenzeile des RESTES des Tages aus `today_hours` der Wetter-Antwort - Schirm,
-  „Deszcz 13:00-17:00" (erste bis letzte Stunde ab 40 %), „do 85%" - und 14 Balken ab der
-  Stunde vor jetzt (`--color-rain` ab 40 %, darunter `--color-rain-soft`, die laufende Stunde in
-  Tinte, „teraz" und jede dritte Stunde benannt, aria-hidden). Trocken: Sonne und „Bez deszczu
-  do wieczora" (nach 17 Uhr „do końca dnia"). Die Karte fuehrt in die Wettereinstellungen;
-  ohne Wetter steht keine Karte.
-- **Kalendarz**, kompakt: Vergangenes faltet sich in „N wcześniej · 08:00 Titel" (klappt an Ort
-  und Stelle auf), der laufende Termin steht hervorgehoben an seinem Platz (Akzent 8 %,
-  „teraz · do 11:00") statt in einer zweiten Karte; Zeilen 48 mit Uhrzeit 15/600, Personenpunkt
-  (`--person-N-dot`, bei „razem" beide), Titel, Meta 12. Die letzte Zeile blickt auf morgen
-  („Jutro · 08:00 Przedszkole · i 2 więcej"), „Tydzień" oeffnet die Woche (`?view=week`).
-- **Zadania**: was wartet, in der Reihenfolge des Servers (ueberfaellig, datiert, ohne Datum),
-  fuenf Zeilen, die Zahl aller offenen neben der h3. Der eine Abhakkreis (`.check-ring`) hakt an
-  Ort und Stelle ab (Durchstreichen, dann geht die Zeile, „Cofnij" in der Meldung);
-  Faelligkeit 12, ueberfaellig in `--color-overdue` 600; Fahne nur fuer hoch/dringend;
-  Personenscheibe. Die letzte Zeile „Dodaj zadanie" oeffnet dasselbe Formular wie „Nowe
-  zadanie" im Kopf von Zadania (`openNewTaskFrom`, `pages/tasks.js`); nach dem Speichern frischt
-  die Karte auf. Lesende Konten und das Display sehen keine Kreise und kein „Dodaj zadanie".
-- **Wkrótce**, leise und ohne Karte: Geburtstage und Namenstage der naechsten 30 Tage,
-  hoechstens drei, 44er Zeilen mit Torte, „Name · 70. urodziny" und „sob 1 lis · za 5 dni",
-  jede fuehrt zu ihrem Anlass (`/birthdays?open=<id>`).
+- **Kopf**: das Datum (`--type-row` 15, ink-2) und das Wetter als EINE Zeile („9° · bez
+  deszczu do wieczora": Symbol, Temperatur, die kurze Regenphrase des restlichen Tages), ein
+  Link in die Wettereinstellungen. Darunter der Gruss (`--type-page` 26/600, die h2 der Seite)
+  und rechts daneben die eigene Personenscheibe (36 auf 44), der Weg ins Profil. **Am Telefon
+  (bis 767px) steht das Wetter immer in einer eigenen Zeile unter dem Datum**, buendig mit ihm:
+  bei 390px passen Datum und Wetter in keiner der beiden Sprachen in eine Zeile, und eine
+  kurze Phrase sprang vorher wieder nach rechts - das Wetter wechselte zwischen zwei Besuchen
+  den Platz (Kopf 96 statt 72). Ab 768px steht es rechts auf der Zeile des Datums. Keine
+  Wetterkarte, kein Regendiagramm.
+- **Następne** (die eine schwere Karte: weiss, ohne Rand, weicher Schatten): das naechste
+  zeitlich Feste, das heute noch kommt (Termine, Mahlzeiten zu ihrer Slotzeit, Aufgaben mit
+  Uhrzeit, Besuche der Haushaltshilfe). Zeile 1 violett („Za 25 min · 12:30", „Teraz"), Zeile 2
+  gross der Titel, Zeile 3 grau das Danach („Potem 18:30 obiad: Spaghetti"). Ist heute nichts
+  mehr, steht das Erste von morgen („Jutro 08:30 · …"); ist an beiden Tagen nichts, steht keine
+  Karte. Ein Tipp oeffnet das Ding. Es steht weiter auch in Kalender oder Aufgaben darunter.
+- **Kalendarz**, kompakt wie in v2 (Vergangenes faltet sich in „N wcześniej", der laufende
+  Termin hervorgehoben an seinem Platz, Zeilen 48, Personenpunkt), ohne Geburtstage (die haben
+  ihre eigene Karte), mit der Zeile „Jutro" am Fuss; „Tydzień" oeffnet die Woche.
+- **Zadania**: die fuenf dringendsten offenen Aufgaben unter kleinen Gruppenlabels „Zaległe"
+  (Aufmerksamkeitston), „Dziś", „Jutro", „Później" (die Zeile behaelt ihr Kurzdatum) und „Bez
+  terminu"; leere Gruppen fehlen. Abhaken an Ort und Stelle, Fahne nur fuer hoch/dringend im
+  Aufmerksamkeitston, Personenscheibe. Keine Zeile „Dodaj zadanie" mehr: das + legt an.
+- **Notatki**: angeheftete Notizen, hoechstens drei; ohne Anheften die drei zuletzt
+  geaenderten. Titel und die erste Zeile des Texts als Klartext, kein Symbol je Zeile,
+  „Wszystkie" im Kopf. Ohne Notizen keine Karte.
+- **Urodziny**: die naechsten drei Geburtstage oder Namenstage, egal wie weit weg. Der heutige
+  steht in der Aufmerksamkeits-Waschung mit Torte und der Pille „Dziś"; die anderen sagen
+  „kończy N" (oder die Notiz) und rechts das Datum ohne Jahr und „za N dni". Nichts gespeichert:
+  keine Karte.
 
-Gegangen sind die Teraz-Karte, das Abendessen, der Plan des Tages (er wiederholte den laufenden
-Termin), Zakupy, Jutro, die Frage der Woche, die Vorschaukacheln, Erweiterungs-Widgets und
-„Dostosuj Dziś"; der Wand-Modus startet aus „Więcej". Mit dem Blatt gelten auch seine Optionen
-nicht mehr (Kalender „nur meine", Geburtstage aus, die Stufe der Liste, Aufgaben-Kategorien):
-die Seite fragt `/dashboard` ohne Filter, die gespeicherten Werte bleiben unberuehrt. Der
-Tagesplan (`utils/today-plan.js`) und das Tagesprogramm gelten seitdem fuer die Wand.
+Jeder Abschnittskopf ist der eine Kopf aller Seiten (20/600 auf dem 16er-Rand,
+`--type-section-head`). **Ab 1024px** stehen die Abschnitte in zwei Spalten unter dem vollen
+Kopf (links Następne und Kalendarz, rechts Zadania, Notatki, Urodziny; CSS-Spalten, die
+DOM-Reihenfolge bleibt die Lesereihenfolge), und das + sitzt unten rechts an der Inhaltsbox
+statt in der Fensterecke.
+
+Gegangen sind (2026-10-27) die Teraz-Karte, das Abendessen, der Plan des Tages, Zakupy, Jutro,
+die Frage der Woche, die Vorschaukacheln, Erweiterungs-Widgets und „Dostosuj Dziś", und
+(One Today) die Wetterkarte mit ihrem Diagramm, „Wkrótce" und „Dodaj zadanie". Gespeicherte
+Anordnungen pro Person oder Haushalt gibt es nicht mehr (Migration 254); der Wand-Modus startet
+aus „Więcej" und zeichnet seinen eigenen festen Satz (siehe „Der Wand-Modus").
 
 ### Die Modulseiten (Tafla, 2026-10-20)
 The pages behind Więcej speak ONE vocabulary, `public/styles/inset-list.css` (global, next to
@@ -4337,14 +4374,24 @@ die Ziele bleiben 48px. Vorher vier umrandete Kreise je Zeile.
 > Fokusring (heller Ring, Stimme als Halo) sind die des geteilten `.page-fab`. test-frontend-audit
 > laesst in dashboard.css genau diese zwei Selektoren zu und sonst keine FAB-Geometrie. Er oeffnet
 > das Menue zum Hinzufuegen (components/add-menu.js, beim Tipp nachgeladen - nicht im Start) als
-> Blatt: oben hervorgehoben **Say a task** (Stimme zu 8 %, Mikrofon im 40er-Kreis, darunter ein
-> Beispielsatz), dann **Task, Event, Shopping item, Meal**; jede Zeile nur mit Schreibrecht auf
-> ihr Modul, ohne Zeile kein +, nie am Display. Ein Tipp schliesst das Menue und oeffnet das
-> passende Blatt ueber Dziś; "Say a task" startet die Erkennung noch im Tipp (Safari verlangt die
-> Geste - add-menu.js importiert `task-dictation.js` deshalb statisch, und `startTaskDictation`
-> ist die Zeile selbst). "Dodaj zadanie" in der Karte der Aufgaben bleibt. Der Rundgang nennt am
-> Desktop beide Orte (`onboarding.step3BodyDesktopPlus`). Die Leiste hat weiterhin kein +; kein
-> Speed-Dial, kein globales Erfassen.
+> Blatt. **Seit One Today (2026-11-02):** oben hervorgehoben **Say it / Powiedz** (Stimme zu 8 %,
+> Mikrofon im 40er-Kreis, darunter ein Beispielsatz fuer mehrere Arten: „Kup mleko i chleb ·
+> Trening Leo w czwartek o 17"), dann **Task, Event, Shopping item**; Meal ist gegangen (Mahlzeiten
+> legt Jedzenie an). Jede Zeile nur mit Schreibrecht auf ihr Modul, „Say it" sobald eine der drei
+> steht; ohne Zeile kein +, nie am Display. Ein Tipp schliesst das Menue und oeffnet das passende
+> Blatt ueber Dziś; „Say it" startet die Erkennung noch im Tipp (Safari verlangt die Geste -
+> add-menu.js importiert `task-dictation.js` deshalb statisch, `startQuickAdd` ist die Zeile
+> selbst). Ein Satz geht EINMAL an `POST /quick-add/parse` (Haiku) und oeffnet gefuellt das Blatt
+> seiner Art - Aufgabe, Termin oder Einkauf -, als geaendert gezaehlt (R11), mit „Powtórz" im
+> Kopf und dem gehoerten Satz klein und grau ueber den Feldern; gespeichert wird erst im Blatt.
+> Ohne KI entscheidet eine lokale Regel zwischen Einkauf und Aufgabe. Alle Anlege-Blaetter teilen
+> einen Aufbau (Titel links, schlichtes X rechts, Haarlinie; ein Titelfeld mit Mikrofon;
+> getoente Personenchips; kompakte Zeilen mit Symbol, Label, Wert und X; „Więcej"; EIN
+> Primaerknopf, der das Ding nennt), das Mahlzeit-Blatt auf Jedzenie traegt denselben Kopf.
+> „Dodaj zadanie" in der Karte der Aufgaben ist gegangen. **Ab 1024px** sitzt das + unten rechts
+> an der Inhaltsbox von Dziś, nicht in der Fensterecke. Der Rundgang nennt am Desktop beide Orte
+> (`onboarding.step3BodyDesktopPlus`). Die Leiste hat weiterhin kein +; kein Speed-Dial, kein
+> globales Erfassen.
 
 > **Tafla (2026-10-19):** am Telefon schwebt kein Seiten-FAB mehr. Das globale **+** neben der
 > Kapsel (deckende Stimme `--color-btn-primary`, Akzent-Glow, 52pt; minimiert 48) oeffnet das
@@ -4683,6 +4730,25 @@ Zeile des Aufklappers nennt sie.
 
 ### Der Wand-Modus (Signature Component)
 
+> **One Today (2026-11-02, checked on the wall 2026-11-03): one fixed set, Notes and Birthdays
+> as two strips.** The wall always draws the same set: clock and date, the next line, weather,
+> the day plan, tonight's dinner, shopping, the kitchen timers, the Sunday question, and in the
+> right-hand column under dinner and shopping ONE read-only card with two one-line strips (no
+> taps): **Notatki** (pinned notes only, titles only, three at most; only notes every member can
+> see; the display gets a titles-only answer, `wallNotes`, and no general read access to notes)
+> and **Urodziny** (the same next three birthdays and name days as Dziś, each "name when":
+> "dziś", "jutro", else "8 lut"; today's in the attention colour). Each strip is its label and
+> its items on one line in the label step (24/30, the wall's floor), cut as a whole with "…";
+> the card has 12px padding top and bottom: 84px at 1280x800. As two full cards they never fit
+> there on a day with a dinner (87px left under dinner 292 and shopping 85; a three-line card
+> needs about 205), so the strips are what the owner's "Notes and Birthdays on the tablet" can
+> be. Measured (test:dashboard-surface-browser, the page clock at 12:00): both strips stand on a
+> dinner day at 1280x800. No per-tablet or per-household section switches any more:
+> `wall_sections` and its settings UI are gone (migration 255), `wall_allow_ticking` stays.
+> **The plan keeps priority:** `fitWallCards` hides whole strips, Birthdays first, then Notes
+> (and their card with the last one), while the column spills or the plan would have to hide
+> rows - in the Kolacja scene the plan shares the column with them and wins.
+>
 > **Tafla (2026-10-19, artboards „Ściana", „Gotowanie", „TabletKuchnia"): the wall as it
 > is now.** Model `public/utils/wall-plan.js`, markup `public/components/wall-view.js`,
 > wiring in `pages/dashboard.js`, guards `test:wall-tafla` (plus `test:wall-tasks`,
@@ -4711,8 +4777,8 @@ Zeile des Aufklappers nennt sie.
 > - **Weekly question** on Sunday from 18:00, where the wall may answer.
 >
 > **READ-ONLY BY DEFAULT, WITH A HOUSEHOLD SWITCH.** "Pozwól odhaczać na ścianie"
-> (`sync_config.wall_allow_ticking`, admin only, default off) and the wall sections
-> (`wall_sections`) live in `/preferences`; the display reads both. Off: no rings, no "+"
+> (`sync_config.wall_allow_ticking`, admin only, default off) lives in `/preferences`; the
+> display reads it (the wall sections `wall_sections` are gone since One Today). Off: no rings, no "+"
 > chips, no answering - and the SERVER refuses the paired display (`refuseWallWrite`,
 > `services/wall-settings.js`: tick, add a running-out item by name, answer/skip the
 > question, all 403 `wall_read_only`; `/displays/people` names nobody to tick for). On: 48pt

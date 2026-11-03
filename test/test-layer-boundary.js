@@ -59,7 +59,6 @@ const SHARED_ISOMORPHIC = new Set([
   // bei einem Randfall auseinander, sondern bei der naechsten Stufe: der Server
   // lieferte sie, und der Browser zeigte weiter fuenf. Rein: eine eingefrorene
   // Liste und ein Vergleich, kein DOM und kein Node.
-  'public/utils/dashboard-event-limit.js',
   // #1074: Ziffern fremder Systeme nach ASCII. Client und Server lesen dieselben
   // Mengentexte („۲۵۰ g") - der Client, um eine Zutat zu skalieren, der Server,
   // um sie beim Uebertrag in die Einkaufsliste zusammenzuzaehlen. Zwei Fassungen
@@ -77,14 +76,15 @@ const SHARED_ISOMORPHIC = new Set([
   // esc(), traegt aber auch den Notiz-Renderer mit seinen CSS-Klassen und ist
   // damit Frontend-Code, kein geteiltes Util.
   'public/utils/html-escape.js',
-  // #891: Wie ein Termin zu seiner Farbe kommt - eigene Farbe, sonst die der
-  // PRIMAEREN zugewiesenen Person, sonst die des Kalenders. Der Browser malt
-  // damit Kalender und Uebersicht, der Server beantwortet damit die
+  // #891, One Today: Wie ein Termin zu seiner Farbe kommt - durch seine Leute
+  // (eine Person ihre Tinte, zwei geteilt, mehr gemeinsam, niemand neutral).
+  // Der Browser malt damit den Kalender, der Server beantwortet damit die
   // Countdown-Kachel, die ihre Zeilen fertig ausliefert statt die Rohfelder.
   // Zwei Fassungen liefen genau dort auseinander, wo es niemandem auffaellt:
-  // derselbe Termin traegt in der einen Kachel die Farbe der Person und in der
-  // anderen den Modulton - und vor #891 war der Unterschied unsichtbar, weil
-  // die Spalte NOT NULL war und die Rangfolge nie ueber ihr erstes Glied kam.
+  // derselbe Termin truege in der einen Kachel die Farbe der Person und in der
+  // anderen eine andere. Sie importiert relativ person-color.js (mit
+  // html-escape.js und initials.js): reine Funktionen, DOM nur in
+  // `personDiscEl`, das der Server nie ruft.
   'public/utils/event-color.js',
   // #734: Wie ein Kommentartext gegen die Mitgliederliste gelesen wird. Der
   // Browser hebt damit hervor, der Server wählt damit die Empfänger der

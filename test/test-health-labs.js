@@ -192,6 +192,34 @@ test('analyteTrend: leerer Name oder leere Eingabe → []', () => {
 // die Bewertung („Niedrig") lag rechts ausserhalb des Bilds. Unter 640px steht
 // jeder Analyt jetzt als Zeile (Name links, Wert rechts, Referenz und
 // Bewertung darunter), auffaellige zuerst.
+// Copy-Durchgang 2026-11-02: eine Spanne ist ein Bindestrich ohne Leerzeichen.
+// ref_low/ref_high sind freie REAL-Spalten - mit einer negativen Grenze laese
+// sich "-2-2" (Basenueberschuss) oder "-5--1" wie eine Rechnung. Dort spricht
+// die Spanne in Worten (health.labs.refRangeWords), die Zahlen im Format der
+// Region. Der Browser-Loader gibt t() als Schluessel plus Werte zurueck.
+test('referenceLabel: "3.5-5" ohne Leerzeichen, mit negativer Grenze in Worten', async () => {
+  const { __test: health } = await import('../public/pages/health.js');
+  const before = globalThis.__formatLocale;
+  try {
+    globalThis.__formatLocale = 'en';
+    assert.equal(health.referenceLabel(3.5, 5), '3.5-5');
+    globalThis.__formatLocale = 'pl';
+    assert.equal(health.referenceLabel(3.5, 5), '3,5-5', 'die Zahl im Format der Region');
+    assert.equal(health.referenceLabel(-2, 2), 'health.labs.refRangeWords{"low":"-2","high":"2"}');
+    assert.equal(health.referenceLabel(-5, -1), 'health.labs.refRangeWords{"low":"-5","high":"-1"}');
+    assert.equal(health.referenceLabel(0, 2), '0-2', 'null ist nicht negativ');
+    assert.equal(health.referenceLabel(-2, null), '≥ -2', 'eine Grenze allein bleibt beim Zeichen');
+  } finally {
+    if (before === undefined) delete globalThis.__formatLocale;
+    else globalThis.__formatLocale = before;
+  }
+  const { readFileSync } = await import('node:fs');
+  for (const locale of ['en', 'pl']) {
+    const words = JSON.parse(readFileSync(new URL(`../public/locales/${locale}.json`, import.meta.url), 'utf8')).health.labs.refRangeWords;
+    assert.equal(words, { en: '{{low}} to {{high}}', pl: 'od {{low}} do {{high}}' }[locale], locale);
+  }
+});
+
 test('Laborwerte mobil: Zeilen statt seitlich scrollender Tabelle, auffaellige zuerst (Critique 2026-10-16)', async () => {
   const { readFileSync } = await import('node:fs');
   const { eachRule } = await import('./css-rules.js');

@@ -448,26 +448,8 @@
   }
 }
 
-.settings-identity__avatar {
-  flex: none;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: var(--identity-tint);
-  color: var(--identity-ink);
-  font-size: var(--type-title);
-  line-height: var(--type-title-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.settings-identity__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+/* Der Avatar der Ausweiskarte ist die eine Personenscheibe (layout.css,
+ * `.person-disc`, 56 aus shell.js). */
 
 .settings-identity__copy {
   flex: 1;
@@ -1652,15 +1634,6 @@
   overflow: hidden;
 }
 
-/* Initialen auf einer frei gewählten Hintergrundfarbe: weiß war fix, und auf
-   hellen Tönen ergab das gemessene 3,5:1 und 2,8:1 (Critique 2026-07-27).
-   `prefersInkText()` in `/utils/contrast.js` entscheidet je Farbe; das Token
-   ist laut tokens.css:104 genau dafür da. */
-.settings-avatar--ink,
-.perm-chip__avatar--ink {
-  color: var(--color-ink-on-bright);
-}
-
 .settings-avatar--sm {
   width: 32px;
   height: 32px;
@@ -1774,60 +1747,6 @@
   min-width: 0;
 }
 
-.settings-name-color-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: end;
-}
-
-.settings-name-color-row__name {
-  min-width: 0;
-}
-
-.settings-color-field {
-  align-items: center;
-}
-
-/* Die Zielgröße kommt aus dem Token, nicht aus einer Zahl. Hier standen 44px
- * fest verdrahtet - das ist exakt der ZEIGER-Wert von --target-base, eingefroren
- * bevor er den Finger kannte: das Token wächst unter `@media (hover: none)` auf
- * --target-lg, die Kopie hier nicht. Gemessen 44x45 am Finger gegen ein Minimum
- * von 48, und zwar freistehend (nächstes Zielzentrum 161px, die Spacing-Ausnahme
- * greift also nicht).
- *
- * Warum nicht die Trefferfläche per ::before dehnen wie .weather-widget__refresh:
- * das geht hier technisch nicht. `<input type="color">` ist ein replaced element
- * und rendert keine Pseudo-Elemente. Die Wahl bestand also gar nicht - und sie
- * wäre auch inhaltlich falsch gewesen: bei einem Farbfeld IST die sichtbare
- * Fläche die Funktion, anders als bei einem Icon in einem dichten Widget.
- *
- * Der Platz kostet nichts Nennenswertes: die Zeile ist
- * `minmax(0, 1fr) auto`, die 4px gehen bei 375px zu ~1,4 % vom Namensfeld ab. */
-.settings-color-button {
-  width: var(--target-base);
-  height: var(--target-base);
-  padding: var(--space-0h);
-  border: var(--space-px) solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  cursor: pointer;
-}
-
-.settings-color-button::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.settings-color-button::-webkit-color-swatch {
-  border: none;
-  border-radius: var(--radius-full);
-}
-
-.settings-color-button::-moz-color-swatch {
-  border: none;
-  border-radius: var(--radius-full);
-}
-
 @media (max-width: 639px) {
   .settings-profile-editor {
     grid-template-columns: 1fr;
@@ -1934,12 +1853,6 @@
 .settings-page .settings-card-description,
 .settings-page .settings-leaf-header__description {
   max-width: 50ch;
-}
-
-.form-input--color {
-  padding: var(--space-1) var(--space-2);
-  height: 44px;
-  cursor: pointer;
 }
 
 /* --------------------------------------------------------
@@ -2871,13 +2784,6 @@
   min-width: 0;
 }
 
-.caldav-calendar-color {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
 /* Zwei Zeilen statt Ellipse: der Name entscheidet, welche Kontakte im Haushalt
    landen. Eine Ellipse rettet nur der title-Tooltip - den es auf Touch nicht
    gibt, also genau auf dem Hauptgerät der Zielgruppe nicht. */
@@ -3609,22 +3515,6 @@
   color: var(--color-accent);
 }
 
-.perm-chip__avatar {
-  display: inline-grid;
-  place-items: center;
-  /* 24px, nicht 22px (#1607): zwei Hangul- oder Han-Zeichen sind bei 12px
-   * Schrift zusammen 24px breit und liefen in der 22px-Scheibe ueber den Rand. */
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  color: var(--color-text-on-accent);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.perm-chip__avatar img { width: 100%; height: 100%; object-fit: cover; }
-
 .perm-chip__badge {
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
@@ -3746,13 +3636,6 @@
 
 .perm-modgroup + .perm-modgroup { border-top: var(--space-px) solid var(--color-border); }
 
-.perm-modgroup__widgets {
-  padding-inline-start: var(--space-8);
-  padding-bottom: var(--space-1);
-}
-
-.perm-modgroup__widgets .perm-row--widget { border-top: var(--space-px) solid var(--color-border-subtle); }
-
 .perm-modgroup__capabilities {
   margin-block: 0 var(--space-3);
   margin-inline: var(--space-8) var(--space-3);
@@ -3774,13 +3657,6 @@
 .perm-row--capability { padding: var(--space-3); }
 .perm-row--capability .perm-seg__opt { display: inline-flex; gap: var(--space-1); padding-inline: var(--space-3); }
 .perm-row--capability .perm-seg__label { display: inline; font-size: var(--text-xs); }
-
-.perm-modgroup--general .perm-modgroup__general-title {
-  padding: var(--space-3) var(--space-4) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-}
 
 .perm-row {
   display: flex;
@@ -3809,9 +3685,7 @@
   flex-shrink: 0;
 }
 
-/* Widget-Zeilen leiser als Module (kleineres Icon, sekundäre Farbe). */
-.perm-row--widget { padding-top: var(--space-2); padding-bottom: var(--space-2); }
-.perm-row--widget .perm-row__label { color: var(--color-text-secondary); }
+/* Das Icon einer Fähigkeits-Zeile: kleiner und leiser als das eines Moduls. */
 .perm-row__wicon { width: 15px !important; height: 15px !important; color: var(--color-text-tertiary) !important; }
 
 .perm-row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3965,7 +3839,6 @@
 @media (max-width: 1023px), (pointer: coarse) {
   .perm-legend { display: none; }
 
-  .perm-modgroup__widgets { padding-inline-start: var(--space-4); }
   .perm-modgroup__capabilities { margin-inline-start: var(--space-4); }
 
   .perm-chip { min-height: var(--target-base); }
@@ -4614,28 +4487,6 @@
   color: var(--color-text-quaternary);
 }
 
-/* Personenscheibe im Leitplatz (Domownicy): 40 bei Personen, 20 im Hinweis. */
-.settings-page .tafla-disc {
-  flex: none;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  background: var(--disc-tint);
-  color: var(--disc-ink);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
-  font-weight: var(--font-weight-semibold);
-}
-
-.settings-page .tafla-disc img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .settings-page .tafla-row--person .tafla-row__lead {
   width: 40px;
 }
@@ -5202,19 +5053,6 @@
 
 .family-page .settings-add-btn {
   width: 100%;
-}
-
-.family-page .settings-avatar--sm {
-  width: 40px;
-  height: 40px;
-  font-size: var(--type-body);
-  font-weight: var(--font-weight-semibold);
-}
-
-/* Die Personenscheibe: Initial in der Tinte auf der Toenung (person-color.js). */
-.settings-avatar--person {
-  background: var(--disc-tint);
-  color: var(--disc-ink);
 }
 
 .family-page .settings-member__name {

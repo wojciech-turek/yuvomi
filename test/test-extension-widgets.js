@@ -1,82 +1,24 @@
 /**
- * Test: Extension dashboard widgets (client utils)
+ * Test: Extension module list (client utils)
  * Run: node --test test/test-extension-widgets.js
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { withoutBlockComments } from './source-text.js';
 
 const ext = await import('../public/utils/extension-widgets.js');
 
-const savedExtWidget = {
-  id: 'akahu:balance',
-  visible: true,
-  order: 1,
-  size: '2x2',
-  options: { account: 'savings' },
-};
-
-const sampleModules = [{
-  id: 'demo-ext',
-  enabled: true,
-  status: 'enabled',
-  capabilities: {
-    permissionModuleKey: 'ext:demo-ext',
-    widgets: [{
-      id: 'demo-ext:summary',
-      shortId: 'summary',
-      entry: '/api/v1/modules/assets/demo-ext/widgets/summary.js',
-      label: 'Summary',
-      icon: 'box',
-      defaultSize: '1x2',
-      defaultVisible: false,
-      moduleKey: 'ext:demo-ext',
-    }],
-  },
-}];
-
-test('extension widget ids merge with core widgets', () => {
-  ext.setExtensionModules(sampleModules);
-  const ids = ext.allWidgetIds();
-  assert.ok(ids.includes('tasks'));
-  assert.ok(ids.includes('demo-ext:summary'));
+test('setExtensionModules keeps the list getExtensionModules hands back, and ignores a non-array', () => {
+  const list = [{ id: 'demo-ext', enabled: true, status: 'enabled' }];
+  ext.setExtensionModules(list);
+  assert.deepEqual(ext.getExtensionModules(), list);
+  ext.setExtensionModules(null);
+  assert.deepEqual(ext.getExtensionModules(), []);
 });
 
-test('normalizeDashboardConfigWithExtensions keeps extension widget ids', () => {
-  ext.setExtensionModules(sampleModules);
-  const cfg = ext.normalizeDashboardConfigWithExtensions([
-    { id: 'demo-ext:summary', visible: true, order: 0, size: '1x2' },
-  ]);
-  assert.ok(cfg.some((w) => w.id === 'demo-ext:summary'));
-});
-
-test('isExtensionWidget detects namespaced ids', () => {
-  assert.equal(ext.isExtensionWidget('demo-ext:summary'), true);
-  assert.equal(ext.isExtensionWidget('budget'), false);
-});
-
-test('buildDefaultWidgetConfig inserts extension widgets before weather', () => {
-  ext.setExtensionModules(sampleModules);
-  const cfg = ext.buildDefaultWidgetConfig();
-  const summaryIdx = cfg.findIndex((w) => w.id === 'demo-ext:summary');
-  const weatherIdx = cfg.findIndex((w) => w.id === 'weather');
-  assert.ok(summaryIdx >= 0);
-  assert.ok(weatherIdx >= 0);
-  assert.ok(summaryIdx < weatherIdx);
-});
-
-test('normalizeDashboardConfigWithExtensions inserts a missing first id at 0, not the end', () => {
-  ext.setExtensionModules(sampleModules);
-  const cfg = ext.normalizeDashboardConfigWithExtensions([
-    { id: 'calendar', visible: true, order: 0, size: '1x2' },
-  ]);
-  // Seit Tafla (2026-10-19) fuehren die Dziś-Abschnitte die Liste; die erste
-  // fehlende Id ist 'today-weather', und 'tasks' steht weiter vor 'calendar'.
-  assert.equal(cfg[0].id, 'today-weather');
-  assert.notEqual(cfg[cfg.length - 1].id, 'today-weather');
-  assert.ok(cfg.findIndex((w) => w.id === 'tasks') < cfg.findIndex((w) => w.id === 'calendar'));
+test('the dashboard widget catalog is gone: only the module list helpers are exported', () => {
+  assert.deepEqual(Object.keys(ext).sort(), ['getExtensionModules', 'selectThirdPartyModuleList', 'setExtensionModules']);
 });
 
 test('selectThirdPartyModuleList keeps the previous list when the request fails', () => {
@@ -111,38 +53,3 @@ test('syncThirdPartyModules uses selectThirdPartyModuleList instead of clearing 
   assert.equal(body.includes('selectThirdPartyModuleList'), true);
   assert.equal(/catch\s*\{[^}]*_thirdPartyModules\s*=\s*\[\]/.test(body), false);
 });
-
-test('normalizeDashboardConfigWithExtensions keeps unknown ext widgets when the catalog is empty', () => {
-  ext.setExtensionModules([]);
-  const cfg = ext.normalizeDashboardConfigWithExtensions([savedExtWidget]);
-  const kept = cfg.find((w) => w.id === 'akahu:balance');
-  assert.ok(kept, 'akahu:balance must survive an empty catalog');
-  assert.equal(kept.visible, true);
-  assert.equal(kept.size, '2x2');
-  assert.deepEqual(kept.options, { account: 'savings' });
-});
-
-test('normalizeDashboardConfigWithExtensions keeps ext widgets of a disabled module', () => {
-  ext.setExtensionModules([{
-    id: 'akahu',
-    enabled: false,
-    status: 'disabled',
-    capabilities: {
-      widgets: [{ id: 'akahu:balance', defaultSize: '1x2' }],
-    },
-  }]);
-  const cfg = ext.normalizeDashboardConfigWithExtensions([savedExtWidget]);
-  const kept = cfg.find((w) => w.id === 'akahu:balance');
-  assert.ok(kept, 'disabled-module layout must come back on re-enable');
-  assert.deepEqual(kept.options, { account: 'savings' });
-  assert.equal(kept.size, '2x2');
-});
-
-test('normalizeDashboardConfigWithExtensions still drops unknown core widget ids', () => {
-  ext.setExtensionModules(sampleModules);
-  const cfg = ext.normalizeDashboardConfigWithExtensions([
-    { id: 'not-a-widget', visible: true, order: 0, size: '1x2' },
-  ]);
-  assert.equal(cfg.some((w) => w.id === 'not-a-widget'), false);
-});
-

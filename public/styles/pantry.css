@@ -474,9 +474,9 @@
 .pantry-group .list-group__title {
   align-items: baseline;
   gap: var(--space-1h);
-  padding-inline: var(--space-4);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+  padding-inline: 0;
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   text-transform: none;
   letter-spacing: var(--tracking-normal);

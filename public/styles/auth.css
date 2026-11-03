@@ -210,7 +210,6 @@
 
 .auth-page .btn--primary.auth-form__submit {
   margin-top: var(--space-6);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 /* "Nie pamiętam hasła": a plain verb, centred, 44 tall. */

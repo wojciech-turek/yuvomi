@@ -14,9 +14,9 @@ export function quickLinksPaths() {
         tag: 'Quick links',
         stateChanging: true,
         requestBody: jsonBody(null),
-        description: 'Body: { name, url, icon_data?, icon_name?, color?, visibility? }. A tile shows '
+        description: 'Body: { name, url, icon_data?, icon_name?, visibility? }. A tile shows '
           + 'one of three faces: an uploaded image (`icon_data`), a built-in Lucide symbol '
-          + '(`icon_name`), or the first letter of its name on `color`.',
+          + '(`icon_name`), or the first letter of its name on a neutral tile. A `color` in the body is ignored.',
       }),
     },
     '/api/v1/quick-links/order': {

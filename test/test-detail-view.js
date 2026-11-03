@@ -373,7 +373,7 @@ test('die Termin-Detailansicht zeigt, was das alte Popup verschwieg', async () =
     'ein freier Name ohne Konto bleibt eine Zeile');
   assert.doesNotMatch(fn, /calendar\.detailWhen/, 'die Wann-Zeile ist in den Kopf gewandert');
   const head = src.slice(src.indexOf('function eventDetailHead'), src.indexOf('function eventMapUrl'));
-  assert.match(head, /dot: resolveEventBackground\(ev\)/, 'Farbpunkt statt Farbstreifen');
+  assert.match(head, /dot: eventTone\(ev\)\.fill/, 'Farbpunkt statt Farbstreifen - in der Farbe der Leute (One Today)');
   assert.match(head, /subtitle: eventWhenRelative\(ev\)/, 'die Zeit in Worten');
   assert.match(head, /subtitleLabel: t\('calendar\.detailWhen'\)/, 'Screenreader hoeren weiter "Wann"');
   assert.match(head, /people: ev\.assigned_users \?\? \[\]/, 'Personen als Avatare');
@@ -475,8 +475,9 @@ test('jeder Weg zu einer bestehenden Aufgabe führt in die Detailansicht', async
   assert.ok(modalCalls.every((m) => !/\btask\b/.test(m[0])), 'keiner mit einer Aufgabe');
   assert.match(src, /openTaskModal\(\{ users: state\.users \}, container\)/, 'der FAB ohne task');
   // Das Diktat: ein neues, gefülltes Blatt - vom Mikrofon im Titelfeld aus mit
-  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`).
-  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true \}, container\)/,
+  // dem, was schon gewählt war (Quick-Add F9, `keepChosen`), und mit dem eben
+  // gehörten Satz (One Today, Task 14).
+  assert.match(src, /openTaskModal\(\{ users, onChanged, draft, spoken: true, heard: answer\.heard \}, container\)/,
     'das Diktat: ein neues, gefülltes Blatt');
 });
 
@@ -739,11 +740,16 @@ test('R18: der Kopf der Leseansicht - Unterzeile mit Farbpunkt, Kennzahlen, Pers
     assert.equal(detailHeadEl({ dot: '#00668F', subtitle: '  ', people: [], facts: [''] }), null, 'ohne einen Teil entsteht kein Kopf - auch kein Punkt allein');
 
     // Termin: Farbpunkt, Zeit in Worten (Screenreadern beim Namen genannt), Personen.
+    // Die Personenfarbe ist der Platz im Haushalt (person-color.js), nicht die
+    // gespeicherte Farbe am Datensatz.
+    const { setHouseholdOrder } = await import('../public/utils/person-color.js');
+    setHouseholdOrder([{ id: 9, sort_order: 0 }, { id: 4, sort_order: 1 }]);
     const termin = detailHeadEl({
       dot: '#00668F', subtitle: 'Heute, 20:00 - 22:00', subtitleLabel: 'Wann',
-      people: [{ display_name: 'Emma <b>Johnson</b>', color: '#CE2A63' }, { display_name: 'Leo', avatar_data: 'data:image/png;base64,AA' }, { color: '#000000' }],
+      people: [{ id: 4, display_name: 'Emma <b>Johnson</b>', color: '#CE2A63' }, { id: 5, display_name: 'Leo', avatar_data: 'data:image/png;base64,AA' }, { color: '#000000' }],
       peopleLabel: 'Zugewiesen',
     });
+    setHouseholdOrder([]);
     assert.equal(termin.className, 'detail-head');
     const line = termin.find('detail-head__subtitle');
     assert.equal(line.find('detail-head__dot').styles['--detail-accent'], '#00668F', 'der Punkt traegt die Kalenderfarbe');
@@ -758,8 +764,10 @@ test('R18: der Kopf der Leseansicht - Unterzeile mit Farbpunkt, Kennzahlen, Pers
     assert.equal(persons[0].find('detail-head__name').textContent, 'Emma <b>Johnson</b>', 'der Name ist Text, kein Markup');
     const scheibe = persons[0].find('detail-head__avatar');
     assert.equal(scheibe.attrs['aria-hidden'], 'true', 'die Scheibe ist Schmuck neben dem Namen');
-    assert.equal(scheibe.styles['background-color'], '#CE2A63', 'Identitaetsfarbe der Person');
-    assert.ok(scheibe.styles.color, 'mit lesbarer Tinte darauf');
+    assert.match(scheibe.className, /^person-disc /, 'die eine Personenscheibe');
+    assert.equal(scheibe.styles['--person-disc-tint'], 'var(--person-2-tint)', 'die Toenung ihres Platzes im Haushalt');
+    assert.equal(scheibe.styles['--person-disc-ink'], 'var(--person-2)', 'mit ihrer Tinte darauf');
+    assert.ok(!Object.values(scheibe.styles).includes('#CE2A63'), 'nicht die gespeicherte Farbe');
     assert.match(scheibe.textContent, /^E/, 'Initialen');
     const bild = persons[1].find('detail-head__avatar').children[0];
     assert.equal(bild.tagName, 'IMG');

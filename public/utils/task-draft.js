@@ -124,7 +124,7 @@ function withoutReadSpans(text, tokens) {
   return out;
 }
 
-function localDraft(sentence, { members, now }) {
+export function localDraft(sentence, { members, now }) {
   const opts = { now: householdWallClock(now), members, type: 'task' };
   const text = sentence.replace(LEADING_FILLER, '');
   const { main, when } = splitReminder(text, opts);

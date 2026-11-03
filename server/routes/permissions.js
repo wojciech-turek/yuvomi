@@ -1,6 +1,6 @@
 /**
  * Modul: Zugriffsrechte-Routen (Rollen & Rechte)
- * Zweck: Admin-API zum Lesen und Setzen der Modul-/Widget-Rechte pro
+ * Zweck: Admin-API zum Lesen und Setzen der Modulrechte pro
  *        Familienrolle und pro einzelnem Mitglied (#467). Die verbindliche
  *        Durchsetzung liegt in server/index.js (Session-Gate) — diese Routen
  *        pflegen nur die Konfiguration.
@@ -49,7 +49,7 @@ router.use(requireAdmin);
 
 /**
  * GET /api/v1/permissions/catalog
- * Liefert Module, Widgets, Rollen und die Mitgliederliste für die Rechte-Matrix.
+ * Liefert Module, Fähigkeiten, Rollen und die Mitgliederliste für die Rechte-Matrix.
  */
 router.get('/catalog', async (req, res) => {
   try {
@@ -89,8 +89,8 @@ router.get('/role/:familyRole', (req, res) => {
 
 /**
  * PUT /api/v1/permissions/role/:familyRole
- * Body: { modules, widgets, capabilities }. Modul- und Widget-Achse werden bei
- * jedem Aufruf ersetzt; Capabilities nur, wenn das Feld ausdrücklich vorkommt.
+ * Body: { modules, capabilities }. Die Modulachse wird bei
+ * jedem Aufruf ersetzt (ein altes `widgets`-Feld wird ignoriert); Capabilities nur, wenn das Feld ausdrücklich vorkommt.
  * So bleiben ältere Clients kompatibel. Standard-Werte werden nicht gespeichert.
  */
 router.put('/role/:familyRole', (req, res) => {
@@ -135,7 +135,7 @@ router.get('/user/:userId', (req, res) => {
 /**
  * PUT /api/v1/permissions/user/:userId
  * Body wie bei role. Leere Maps leeren jeweils ihre eigene Achse. Zum Entfernen
- * aller Overrides müssen modules, widgets und capabilities leer gesendet werden.
+ * aller Overrides müssen modules und capabilities leer gesendet werden.
  */
 router.put('/user/:userId', (req, res) => {
   try {

@@ -2473,8 +2473,10 @@ router.post('/parse', async (req, res) => {
 // --------------------------------------------------------
 router.get('/meta/options', (req, res) => {
   try {
+    // `avatar_data`: die Personenscheibe zeigt ein Profilbild ueberall (One
+    // Today) - Zuweisung, Filter und Verlauf der Aufgaben lesen diese Liste.
     const users = db.get().prepare(
-      `SELECT u.id, u.display_name, u.avatar_color, ${memberPositionSql('u')} AS sort_order FROM users u
+      `SELECT u.id, u.display_name, u.avatar_color, u.avatar_data, ${memberPositionSql('u')} AS sort_order FROM users u
        WHERE ${householdMemberSql('u')}
        ORDER BY ${memberOrderSql('u')}`
     ).all();

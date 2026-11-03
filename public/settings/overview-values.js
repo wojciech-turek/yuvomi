@@ -18,18 +18,8 @@ import { t, formatDate, formatTime } from '/i18n.js';
 import { pushStatus, pushSupported } from '/push.js';
 import { getHouseholdSize } from '/utils/household.js';
 import { todayKey, zonedDateKey } from '/utils/timezone.js';
-import { personSlot, PERSON_PALETTE } from '/utils/person-color.js';
 import { BUILT_IN_MODULES, KITCHEN_CHILD_IDS } from './module-order.js';
 import { getPreferences } from './preferences-cache.js';
-
-/** Name und Tinte der eigenen Personenfarbe (dieselbe Zuordnung wie ueberall). */
-export function colorValue(user, household = []) {
-  if (!user) return null;
-  const slot = personSlot(user, household);
-  const entry = PERSON_PALETTE[slot - 1];
-  if (!entry) return null;
-  return { text: t(`settings.colorName.${entry.key}`), ink: `var(--person-${slot})` };
-}
 
 /** Wie viele Module der Haushalt an hat - die Kueche zaehlt als eines. */
 export function enabledModuleCount(disabled = []) {
@@ -95,13 +85,6 @@ export function loadOverviewValues(user, put) {
     if (personal) put('weather-personal', personal);
     if (prefs.weather_city) put('weather', prefs.weather_city);
     if (admin) put('modules', t('settings.valueModulesOn', { count: enabledModuleCount(prefs.disabled_modules) }));
-  }));
-  // Die Farbe haengt am Haushalt (zwei Menschen teilen nie eine), also mit
-  // der Liste der Mitglieder; ohne sie gilt die eigene Vorliebe.
-  jobs.push(safe(api.get('/auth/users')).then((res) => {
-    const members = (Array.isArray(res?.data) ? res.data : []).filter((u) => u.is_household_member !== false);
-    const color = colorValue(user, members);
-    if (color) put('color', color);
   }));
   if (pushSupported()) {
     jobs.push(safe(pushStatus()).then((status) => {

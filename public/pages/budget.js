@@ -203,28 +203,8 @@ const ACCOUNT_TYPE_ICONS = {
   other:      'circle-dollar-sign',
 };
 
-// Kuratierte Konto-Akzentfarben. Die Werte kommen aus tokens.css
-// (--chart-series-*), damit die Palette im Dark Mode mit aufgehellt wird und
-// nirgends Hex-Literale im JS stehen. Leerer Wert = Modul-Akzent (Teal).
-// nameKey benennt den Farbton für Screenreader — vorher stand dort der Hexcode,
-// den die Sprachausgabe als „Raute-Null-F-Sieben..." vorgelesen hat.
-const ACCOUNT_COLORS = [
-  { value: 'var(--chart-series-2)', nameKey: 'budget.colorTeal' },
-  { value: 'var(--chart-series-4)', nameKey: 'budget.colorBlue' },
-  { value: 'var(--chart-series-1)', nameKey: 'budget.colorViolet' },
-  { value: 'var(--chart-series-6)', nameKey: 'budget.colorMagenta' },
-  { value: 'var(--chart-series-3)', nameKey: 'budget.colorOrange' },
-  { value: 'var(--chart-series-7)', nameKey: 'budget.colorGreen' },
-  { value: 'var(--chart-series-5)', nameKey: 'budget.colorOcher' },
-];
-
 function accountTypeLabel(type) {
   return t(`budget.accountType_${ACCOUNT_TYPES.includes(type) ? type : 'other'}`);
-}
-
-// Akzentfarbe eines Kontos für die Kachel; Fallback auf den Modul-Akzent.
-function accountAccent(color) {
-  return esc(color) || 'var(--module-accent)';
 }
 
 function accountName(id) {
@@ -348,10 +328,6 @@ const TAB_CAPS = {
   // widersprechen. Der Slot haelt seine Hoehe (budget.css, .budget-nav__month).
   'split-expenses': { month: false, add: 'splitExpenses.addExpense', label: 'newLabel.splitExpenses' },
 };
-
-// Sentinel für „keine eigene Farbe" im Kontofarb-Wähler: der echte Wert ist der
-// leere String, den eine Auswahl-Leiste nicht als Auswahl unterscheiden kann.
-const DEFAULT_COLOR_ID = 'default';
 
 /** Reiter aus `?tab=` - nur einer, den es gibt (TAB_CAPS ist die Liste). */
 function tabFromQuery(search) {
@@ -1244,7 +1220,7 @@ function renderBody() {
       // rohen Grenzen (reportRangeFrom/To) braucht reportShowsToday() für die
       // Containment-Prüfung von „Aktuell" bei Auflösung „Woche".
       onPeriod: ({ from, to }) => {
-        state.reportPeriod = `${formatDate(from)} - ${formatDate(to)}`;
+        state.reportPeriod = `${formatDate(from)}-${formatDate(to)}`;
         state.reportRangeFrom = from;
         state.reportRangeTo   = to;
         if (state.activeTab === 'reports' && state.range === 'week') {
@@ -2814,7 +2790,7 @@ function renderAccountsPage() {
         ].filter(Boolean).join(' · ')}</span>`
       : '';
     return `
-      <div class="budget-account ${a.archived ? 'budget-account--archived' : ''}" style="--account-accent:${accountAccent(a.color)}">
+      <div class="budget-account ${a.archived ? 'budget-account--archived' : ''}">
         ${/* NAME AUS DEM INHALT, DIE HANDLUNG ALS NACHSATZ (R20, WCAG 2.5.3):
               das `aria-label` nannte Typ und Startsaldo nicht, die die Zeile
               zeigt. Jetzt liest sie Name, Typ, Saldo und Start, dann
@@ -2900,21 +2876,7 @@ function openAccountModal(account = null) {
     `<option value="${key}" ${isEdit && account.type === key ? 'selected' : ''}>${esc(accountTypeLabel(key))}</option>`
   ).join('');
 
-  const currentColor = isEdit ? (account.color || '') : '';
   const activeType = isEdit ? account.type : 'checking';
-  // Einfachauswahl wie die Filterleisten des Moduls: role="radiogroup" und die
-  // geteilte Verhaltensschicht statt role="group" mit eigenem Klick-Handler.
-  // Die Standardfarbe hat den leeren Wert und trägt deshalb den Sentinel als
-  // data-tab-id - wireTablist erkennt einen leeren String nicht als Auswahl.
-  const swatch = (value, styleColor, label) => {
-    const on = currentColor === value;
-    return `<button type="button" role="radio" class="budget-color-swatch${on ? ' is-active' : ''}"
-             data-tab-id="${esc(value || DEFAULT_COLOR_ID)}" style="--swatch:${esc(styleColor)}"
-             aria-label="${esc(label)}" aria-checked="${on}" tabindex="${on ? '0' : '-1'}"></button>`;
-  };
-  const colorSwatches = swatch('', 'var(--module-accent)', t('budget.accountColorDefault'))
-    + ACCOUNT_COLORS.map((c) => swatch(c.value, c.value, t(c.nameKey))).join('');
-
   const content = `
     <div class="form-group">
       <label class="form-label" for="am-name">${t('budget.accountNameLabel')}${REQUIRED_MARK}</label>
@@ -2949,10 +2911,6 @@ function openAccountModal(account = null) {
         <p class="form-hint">${t('budget.creditLimitHint')}</p>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">${t('budget.accountColorLabel')}</label>
-      <div class="budget-color-picker" id="am-color" role="radiogroup" aria-label="${t('budget.accountColorLabel')}">${colorSwatches}</div>
-    </div>
 
     <div class="modal-panel__footer modal-panel__footer--plain">
       <div style="display:flex;gap:var(--space-1);margin-inline-end:auto">
@@ -2976,14 +2934,6 @@ function openAccountModal(account = null) {
     content,
     size: 'sm',
     onSave(panel) {
-      let selectedColor = currentColor;
-      wireTablist(panel.querySelector('#am-color'), {
-        activeId: currentColor || DEFAULT_COLOR_ID,
-        activeClass: 'is-active',
-        mode: 'select',
-        onChange: (id) => { selectedColor = id === DEFAULT_COLOR_ID ? '' : id; },
-      });
-
       panel.querySelector('#am-cancel').addEventListener('click', closeModal);
 
       // Bank und Limit gehören nur zur Kreditkarte; bei jedem anderen Typ wären
@@ -3058,7 +3008,7 @@ function openAccountModal(account = null) {
         saveBtn.disabled = true;
         saveBtn.textContent = '…';
         try {
-          const body = { name, type, starting_balance: startingBalance, color: selectedColor || null };
+          const body = { name, type, starting_balance: startingBalance };
           // Ein Typwechsel weg von der Kreditkarte räumt die Felder mit ab, sonst
           // blieben Bank und Limit unsichtbar am Konto hängen.
           body.credit_bank  = type === 'credit' ? (panel.querySelector('#am-credit-bank').value.trim() || null) : null;
@@ -5362,7 +5312,6 @@ const BUDGET_REFUSALS = new Map([
   ['account_credit_limit_invalid', ['#am-credit-limit', 'budget.validAmountRequired']],
   ['account_credit_bank_invalid', ['#am-credit-bank', BUDGET_SAVE_FAILED]],
   ['account_type_invalid', ['#am-type', BUDGET_SAVE_FAILED]],
-  ['account_color_invalid', [null, BUDGET_SAVE_FAILED]],
   // Kategorie aus dem Buchungsdialog (categories.js) - die Saetze der Verwaltung.
   ['category_name_invalid', [null, 'common.nameRequired']],
   ['subcategory_name_invalid', [null, 'common.nameRequired']],

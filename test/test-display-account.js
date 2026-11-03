@@ -387,14 +387,13 @@ test('die Rechte-Nutzlast traegt die Scope-Liste als Modulrechte', async () => {
   assert.ok(!Object.values(modules).includes('write'), 'ein Display schreibt in keinem Modul');
 });
 
-test('gesperrte Module nehmen ihre Kacheln mit', async () => {
-  // Die Vererbung stand schon da ("Widgets erben die Modulsperre") - sie greift
-  // nur, weil die Verengung VOR ihr laeuft. Steht sie danach, sind die Module
-  // gesperrt und die Kacheln trotzdem sichtbar.
+test('gesperrte Module bleiben gesperrt, und es gibt keine Kachel-Rechte mehr', async () => {
+  // Die Verengung laeuft nach den apply()-Durchgaengen; Today und die Wand
+  // folgen allein dem Modulzugriff.
   const me = await asDisplay(displayToken)('GET', '/auth/me');
-  const widgets = me.body.permissions.widgets;
+  assert.equal(me.body.permissions.widgets, undefined);
   for (const id of ['budget', 'notes', 'health']) {
-    assert.equal(widgets[id], 'none', `Kachel ${id} muss gesperrt sein`);
+    assert.equal(me.body.permissions.modules[id], 'none', `Modul ${id} muss gesperrt sein`);
   }
 });
 
@@ -855,6 +854,46 @@ test('calendar:read reicht NICHT an das Kontaktbuch', async () => {
   assert.equal((await admin('GET', '/birthdays/import/candidates')).status, 200);
 });
 
+// Say it (quick add) is for people: no module owns /quick-add, so the scope
+// gate of the REAL app refuses every scoped credential before the router runs
+// (and so before any AI call). test-quick-add.js mounts the router bare and
+// pins the gate's helpers; this is the same rule through the chain itself.
+test('Powiedz: ein gescoptes Token und das Display kommen nicht an /quick-add/parse', async () => {
+  const created = await admin('POST', '/displays', { display_name: 'Powiedz-Probe' });
+  const issued = await admin('POST', `/displays/${created.body.data.id}/pairing-code`, {});
+  const display = asDisplay((await pair(issued.body.data.code)).token);
+  assert.equal((await display('GET', '/tasks')).status, 200, 'Vorbedingung: das Display ist gekoppelt');
+
+  const tokenRes = await admin('POST', '/auth/api-tokens', {
+    name: 'Schreiber', scopes: ['tasks:write', 'calendar:write', 'shopping:write'],
+  });
+  assert.equal(tokenRes.status, 201);
+  const bearer = async (path, body = { text: 'Kup mleko' }) => {
+    const res = await fetch(`${BASE}/api/v1${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenRes.body.token}` },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  assert.equal((await bearer('/tasks', { title: 'Vom Token' })).status, 201, 'Vorbedingung: das Token schreibt Aufgaben');
+
+  for (const path of ['/quick-add/parse', '/Quick-Add/parse', '/quick-add/parse/']) {
+    for (const [who, call] of [['Token', () => bearer(path)], ['Display', () => display('POST', path, { text: 'Kup mleko' })]]) {
+      const res = await call();
+      assert.equal(res.status, 403, `${who} ${path} war ${res.status}`);
+      // Benannt: das Scope-Gate sperrt, nicht die Route (die antwortet ohne
+      // KI mit 200 und `source: null`, ein Display mit `wall_read_only`).
+      assert.match(String(res.body?.error), /scope/i, `${who} ${path}: am Scope-Gate`);
+      assert.equal(res.body?.data, undefined, `${who} ${path}: keine Antwort der Route`);
+    }
+  }
+  // Eine Sitzung erreicht dieselbe Route (ohne KI: 200, `source: null`).
+  const session = await admin('POST', '/quick-add/parse', { text: 'Kup mleko' });
+  assert.equal(session.status, 200, 'die Route selbst ist da');
+  assert.equal(session.body?.data?.source, null);
+});
+
 test('der Katalog nennt die Kopplungsroute als unauthentifiziert', async () => {
   // Sonst traegt `op()` Bearer, API-Key und Cookie ein und verlangt von einem
   // frisch aufgehaengten Tablett genau das Credential, das es sich dort erst
@@ -1078,118 +1117,17 @@ test('ein Display sieht von /preferences nur den Darstellungsteil', async () => 
   const res = await display('GET', '/preferences');
   assert.equal(res.status, 200);
   for (const key of ['weather_lat', 'weather_lon', 'budget_mode', 'housekeeping_payment_tasks',
-    'tasks_default_target', 'calendar_default_target', 'visible_meal_types']) {
+    'tasks_default_target', 'calendar_default_target', 'visible_meal_types',
+    'dashboard_widgets', 'dashboard_today_glance', 'dashboard_widgets_default', 'dashboard_today_glance_default', 'dashboard_follows_default']) {
     assert.equal(key in res.body.data, false, `${key} gehoert nicht an die Wand`);
   }
   // Und was die App zum Starten und Zeichnen braucht, ist da - ein zu enger
   // Filter waere derselbe Fehler in die andere Richtung (im Browser gemessen:
   // ohne diese Felder faellt der Auth-Guard in seinen catch).
   for (const key of ['language_effective', 'date_format', 'time_format', 'week_start',
-    'timezone_effective', 'app_name', 'disabled_modules', 'dashboard_widgets', 'screensaver_enabled']) {
+    'timezone_effective', 'app_name', 'disabled_modules', 'screensaver_enabled']) {
     assert.ok(key in res.body.data, `${key} fehlt dem Tablett`);
   }
-});
-
-test('ein Display speichert keine Anordnung und folgt der Vorgabe des Haushalts (#1808)', async () => {
-  // Der gemeldete Weg: am Tablett die Uebersicht umordnen und "Fertig" tippen
-  // ist `PUT /preferences` mit `dashboard_widgets`. Die Absage ist die Regel
-  // (ein Display aendert keine Einstellungen, DISPLAY_WRITE_ROUTES), der Fehler
-  // lag an der Oberflaeche, die den Weg anbot (test:dashboard-a11y).
-  const created = await admin('POST', '/displays', { display_name: 'Anordnungsprobe' });
-  const issued = await admin('POST', `/displays/${created.body.data.id}/pairing-code`, {});
-  const display = asDisplay((await pair(issued.body.data.code)).token);
-
-  const vorher = (await display('GET', '/preferences')).body.data.dashboard_widgets;
-  assert.ok(Array.isArray(vorher), 'Vorbedingung: das Tablett bekommt eine Anordnung');
-  // Eine Anordnung, die es so vorher nicht gab - damit "folgt der Vorgabe"
-  // unten nicht dasselbe ist wie "hat sich nicht bewegt".
-  const umgeordnet = [
-    { id: 'calendar', visible: true, order: 0, size: '2x1' },
-    { id: 'tasks', visible: true, order: 1, size: '1x1' },
-  ];
-  assert.notDeepEqual(vorher.map((w) => w.id), umgeordnet.map((w) => w.id));
-
-  const eigene = await display('PUT', '/preferences', { dashboard_widgets: umgeordnet, dashboard_today_glance: false });
-  assert.equal(eigene.status, 403, 'das Tablett schreibt keine Einstellungen');
-  assert.deepEqual((await display('GET', '/preferences')).body.data.dashboard_widgets, vorher,
-    'und es ist auch nichts geschrieben worden');
-  // Die Suche im selben Kopf ist derselbe Fall.
-  assert.equal((await display('GET', '/search?q=milch')).status, 403);
-
-  // DER WEG, DER GEHT: ein Administrator setzt die Vorgabe des Haushalts, und
-  // das Tablett folgt ihr, weil es nie etwas Eigenes gespeichert hat.
-  const gesetzt = await admin('PUT', '/preferences', { dashboard_widgets_default: umgeordnet });
-  assert.equal(gesetzt.status, 200);
-  try {
-    const danach = (await display('GET', '/preferences')).body.data.dashboard_widgets;
-    assert.deepEqual(danach.map((w) => w.id), umgeordnet.map((w) => w.id),
-      'das Tablett zeigt die Vorgabe des Haushalts');
-    assert.notDeepEqual(danach.map((w) => w.id), vorher.map((w) => w.id), 'und nicht mehr den alten Stand');
-  } finally {
-    // Die Vorgabe gilt fuer jedes Konto ohne eigene Anordnung, also auch fuer
-    // die Faelle nach diesem.
-    await admin('PUT', '/preferences', { dashboard_widgets_default: null });
-  }
-});
-
-test('"Mir zugewiesen" in der Vorgabe des Haushalts leert das Tablett nicht (#1808)', async () => {
-  // Ein Display folgt der Vorgabe des Haushalts, und sein Browser schickt deren
-  // Kachel-Optionen als Query mit (dashboardQuery). `events_scope=mine` hiess
-  // am Server "dem AUFRUFER zugewiesen" - auf einem Tablett also dem
-  // Display-Konto, dem nie jemand einen Termin zuweist (#1207). Die Auswahl
-  // wirkt auf die ganze Uebersicht, also war nicht nur die Kachel leer.
-  const created = await admin('POST', '/displays', { display_name: 'Terminprobe' });
-  const issued = await admin('POST', `/displays/${created.body.data.id}/pairing-code`, {});
-  const display = asDisplay((await pair(issued.body.data.code)).token);
-
-  const neu = await admin('POST', '/auth/users', {
-    username: 'mila', display_name: 'Mila', password: 'milapass12345', role: 'member',
-  });
-  assert.equal(neu.status, 201, `Mitglied anlegen: ${JSON.stringify(neu.body)}`);
-  const milaId = neu.body.user?.id ?? neu.body.data?.id;
-  const mila = as(await login('mila', 'milapass12345'));
-
-  // Zwei Tage voraus: sicher Zukunft, sicher im Wochenfenster, in jeder Zone.
-  const start = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19);
-  const fuerMila = await admin('POST', '/calendar', { title: 'Scope Mila', start_datetime: start, assigned_to: [milaId] });
-  assert.equal(fuerMila.status, 201, JSON.stringify(fuerMila.body));
-  const fuerAlle = await admin('POST', '/calendar', { title: 'Scope Alle', start_datetime: start });
-  assert.equal(fuerAlle.status, 201, JSON.stringify(fuerAlle.body));
-
-  const probe = (body, key) => body[key].map((e) => e.title).filter((title) => title.startsWith('Scope ')).sort();
-
-  // Vorbedingung: ohne die Option sieht das Tablett beide - sonst waere "leer"
-  // unten eine Sperre oder ein Fenster, nicht der Filter.
-  const offen = await display('GET', '/dashboard');
-  assert.deepEqual(probe(offen.body, 'upcomingEvents'), ['Scope Alle', 'Scope Mila']);
-
-  // GEGENFALL: fuer ein Mitglied bleibt `mine` die Auslegung des Kalenders.
-  const eigene = await mila('GET', '/dashboard?events_scope=mine');
-  assert.deepEqual(probe(eigene.body, 'upcomingEvents'), ['Scope Mila'], 'ein Mitglied sieht mit "mine" nur die eigenen');
-  assert.deepEqual(probe(eigene.body, 'weekEvents'), ['Scope Mila']);
-
-  // UND EIN API-TOKEN BLEIBT PERSOENLICH. Die Ausnahme gilt dem Display, nicht
-  // "allem, was keine Sitzung ist": ein Token handelt fuer eine Person, der
-  // sehr wohl Termine zugewiesen sind. Ohne diesen Fall ueberlebte die
-  // Verwechslung `authMethod === 'session'` die ganze Suite.
-  const tokenRes = await admin('POST', '/auth/api-tokens', {
-    name: 'Milas Uebersicht', subject_user_id: milaId, scopes: ['dashboard:read', 'calendar:read'],
-  });
-  assert.equal(tokenRes.status, 201, JSON.stringify(tokenRes.body));
-  const perToken = await fetch(`${BASE}/api/v1/dashboard?events_scope=mine`, {
-    headers: { Authorization: `Bearer ${tokenRes.body.token}` },
-  });
-  assert.equal(perToken.status, 200);
-  const tokenBody = await perToken.json();
-  assert.deepEqual(probe(tokenBody, 'upcomingEvents'), ['Scope Mila'], 'ein Token sieht mit "mine" nur die Termine seiner Person');
-  assert.deepEqual(probe(tokenBody, 'weekEvents'), ['Scope Mila']);
-
-  // Der Fall selbst, so wie ihn das Tablett stellt.
-  const wand = await display('GET', '/dashboard?events_scope=mine');
-  assert.equal(wand.status, 200);
-  assert.deepEqual(probe(wand.body, 'upcomingEvents'), ['Scope Alle', 'Scope Mila'],
-    'ein Display hat kein "mir": die Option gilt dort als "alle"');
-  assert.deepEqual(probe(wand.body, 'weekEvents'), ['Scope Alle', 'Scope Mila'], 'und der Wochenstreifen ebenso');
 });
 
 test('der Hinweis in den Einstellungen nennt genau die Bereiche, die ein Display liest (#1808)', async () => {

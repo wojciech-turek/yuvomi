@@ -10,7 +10,7 @@ import { createLogger } from '../logger.js';
 import { hashPassword } from '../utils/password.js';
 import * as db from '../db.js';
 import { normalizeAvatarData, syncFamilyMemberArtifacts } from '../auth.js';
-import { collectErrors, color, date, datetime, month, num, oneOf, str, id as validateId, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
+import { collectErrors, date, datetime, month, num, oneOf, str, id as validateId, MAX_SHORT, MAX_TEXT, MAX_TITLE } from '../middleware/validate.js';
 import { isAdminRequest } from '../middleware/require-admin.js';
 import { minutesBetween, computeHourlyAmount } from '../services/housekeeping-billing.js';
 import { assertDocumentsNotDeleting, sendDocumentDeletionConflict } from '../services/document-deletion-lock.js';
@@ -47,7 +47,6 @@ import {
   utcToWall,
 } from '../utils/timezone.js';
 import { addMonthsClamped } from '../utils/interval-date.js';
-import { recordLocalColorChoice } from '../services/legacy-color-snapshot.js';
 import { paymentTaskAudience, normalizePaymentTaskAudience } from '../services/payment-task-audience.js';
 import {
   byCheckInDesc,
@@ -67,7 +66,7 @@ const PAYMENT_SCHEDULES = ['daily', 'twice_monthly', 'monthly'];
 // Lese-Rueckfall fuer eine Zeile ohne Farbe - Bestand, deshalb unveraendert.
 const DEFAULT_CALENDAR_COLOR = '#7C3AED';
 // Startfarbe eines NEUEN Profils ohne eigene Wahl: die Vorgabe der geteilten
-// Nutzerfarben-Palette (public/utils/color.js USER_COLOR_DEFAULT, Cyan),
+// Nutzerfarben-Palette (Cyan),
 // nicht mehr #7C3AED - das ist im Dark exakt die Flaeche des Primaerknopfs
 // (Re-Critique 2026-09-28, P9). Ein bestehendes Profil behaelt beim
 // Speichern ohne Farbfeld seine gespeicherte Farbe; keine Migration.
@@ -438,11 +437,10 @@ function createVisitCalendarEvent(database, worker, checkIn, actorId, title = nu
     INSERT INTO calendar_events
       (title, start_datetime, end_datetime, all_day, color, icon, assigned_to, created_by, external_source,
        series_authored)
-    VALUES (?, ?, NULL, 1, ?, ?, ?, ?, 'local', 1)
+    VALUES (?, ?, NULL, 1, NULL, ?, ?, ?, 'local', 1)
   `).run(
     title || visitTitleFallback(database, worker),
     visitDate,
-    worker.calendar_color || DEFAULT_CALENDAR_COLOR,
     HOUSEKEEPING_EVENT_ICON,
     worker.user_id,
     actorId,
@@ -489,7 +487,7 @@ function householdWallOf(checkIn, tz) {
 // Hier stand `checkIn.slice(0, 10)`, der UTC-Tag des Besuchs (#1540).
 function updateVisitLinks(database, session, worker, visitDate, dailyRate, extras, eventTitle = null, paymentTitle = null, paymentDescription = null) {
   if (session.calendar_event_id) {
-    // Datum, Titel und Farbe des Termins stehen in MIRRORED_FIELDS. Ein Besuch,
+    // Datum und Titel des Termins stehen in MIRRORED_FIELDS. Ein Besuch,
     // den der Apple-Sync bereits hochgeladen hat, trägt external_source='apple'
     // und erreicht den Provider nur noch über outbound_dirty - ohne die
     // Vormerkung bliebe die Verschiebung eines Besuchs lokal (dieselbe Lücke wie
@@ -501,29 +499,17 @@ function updateVisitLinks(database, session, worker, visitDate, dailyRate, extra
           start_datetime = ?,
           end_datetime = NULL,
           all_day = 1,
-          color = ?,
-          -- Die Farbe kommt von der Betreuungskraft, nicht vom Provider: mit dem
-          -- Flag daneben führt Yuvomi sie auch weiter (#899). Ohne es schriebe
-          -- der Outbound sie als CSS3-Namen hinaus und der nächste Inbound-Lauf
-          -- holte den gerundeten Wert zurück - der Besuch wechselte still seine
-          -- Farbe, obwohl niemand sie angefasst hat.
-          color_modified = 1,
+          -- Ein Besuch traegt keine Farbe: Hauspersonal ist neutral.
+          color = NULL,
           icon = ?
       WHERE id = ?
     `).run(
       eventTitle,
       visitDate,
-      worker?.calendar_color || DEFAULT_CALENDAR_COLOR,
       HOUSEKEEPING_EVENT_ICON,
       session.calendar_event_id,
     );
     const after = database.prepare('SELECT * FROM calendar_events WHERE id = ?').get(session.calendar_event_id);
-    // Die Farbe der Betreuungskraft ist eine lokale Wahl: ein gespiegelter
-    // Besuch ist damit keine Altlast der Farb-Heilung (#1270) mehr.
-    if (before && after && after.external_source === 'caldav'
-        && String(before.color ?? '').toLowerCase() !== String(after.color ?? '').toLowerCase()) {
-      recordLocalColorChoice(database, [session.calendar_event_id]);
-    }
     // Marker inline statt über markEventOutbound, aus zwei Gründen:
     //
     //   - markEventOutbound lehnt einen schreibgeschützten Provider ab
@@ -953,11 +939,12 @@ router.post('/worker', async (req, res) => {
     const vBirthDate = date(req.body.birth_date, 'birth_date');
     const vDailyRate = num(req.body.daily_rate, 'daily_rate', { required: true });
     const vSchedule = oneOf(req.body.payment_schedule || 'monthly', PAYMENT_SCHEDULES, 'payment_schedule');
-    const vCalendarColor = color(req.body.calendar_color || existing?.calendar_color || NEW_WORKER_COLOR, 'calendar_color');
+    // Eine mitgeschickte `calendar_color`/`avatar_color` wird ignoriert: niemand waehlt eine Farbe.
+    const calendarColor = existing?.calendar_color || NEW_WORKER_COLOR;
     const vNotes = str(req.body.notes, 'notes', { max: MAX_TEXT, required: false });
     const vRateType = oneOf(req.body.rate_type || 'daily', ['daily', 'hourly'], 'rate_type');
     const vHourlyRate = num(req.body.hourly_rate, 'hourly_rate');
-    const errors = collectErrors([vDisplayName, vUsername, vPhone, vEmail, vBirthDate, vDailyRate, vSchedule, vCalendarColor, vNotes, vRateType, vHourlyRate]);
+    const errors = collectErrors([vDisplayName, vUsername, vPhone, vEmail, vBirthDate, vDailyRate, vSchedule, vNotes, vRateType, vHourlyRate]);
     if (errors.length) return res.status(400).json({ error: errors.join(' '), code: 400 });
     if (vUsername.value && !/^[a-zA-Z0-9._-]{3,64}$/.test(vUsername.value)) {
       return res.status(400).json({ error: 'Username must be 3-64 characters long and may only contain letters, numbers, dots, hyphens, and underscores.', code: 400 });
@@ -968,7 +955,7 @@ router.post('/worker', async (req, res) => {
     if ((vHourlyRate.value ?? 0) < 0) {
       return res.status(400).json({ error: 'hourly_rate must be greater than or equal to zero.', code: 400 });
     }
-    const avatarColor = String(req.body.avatar_color || existing?.avatar_color || NEW_WORKER_COLOR).trim();
+    const avatarColor = existing?.avatar_color || NEW_WORKER_COLOR;
     const avatarData = req.body.avatar_data !== undefined
       ? normalizeAvatarData(req.body.avatar_data)
       : existing?.avatar_data ?? null;
@@ -993,7 +980,7 @@ router.post('/worker', async (req, res) => {
       `).run(
         vUsername.value || existing?.username || `housekeeper_${targetUserId}`,
         vDisplayName.value,
-        avatarColor || NEW_WORKER_COLOR,
+        avatarColor,
         avatarData ?? null,
         targetUserId,
       );
@@ -1007,7 +994,7 @@ router.post('/worker', async (req, res) => {
           notes = excluded.notes,
           rate_type = excluded.rate_type,
           hourly_rate = excluded.hourly_rate
-      `).run(targetUserId, vDailyRate.value, vSchedule.value, vCalendarColor.value, vNotes.value, vRateType.value, vHourlyRate.value ?? 0);
+      `).run(targetUserId, vDailyRate.value, vSchedule.value, calendarColor, vNotes.value, vRateType.value, vHourlyRate.value ?? 0);
       syncFamilyMemberArtifacts(db.get(), targetUserId, {
         displayName: vDisplayName.value,
         phone: vPhone.value,

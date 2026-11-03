@@ -184,23 +184,24 @@ test('getForRange: [] when both layers disabled', () => {
   assert.deepEqual(getForRange('2026-01-01', '2026-12-31'), []);
 });
 
-test('getForRange: returns public holiday with configured public color', () => {
+test('getForRange: returns the public holiday without a colour, even when an old one is stored (One Today)', () => {
   setConfig({ holiday_country: 'DE', holiday_show_public: '1', holiday_public_color: '#AA0000' });
   seedHoliday({ type: 'public', start: '2026-01-01', end: '2026-01-01', name: 'Neujahr' });
   const rows = getForRange('2026-01-01', '2026-01-31');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].type, 'public');
   assert.equal(rows[0].name, 'Neujahr');
-  assert.equal(rows[0].color, '#AA0000');
+  assert.equal(Object.hasOwn(rows[0], 'color'), false, 'holidays are drawn in one fixed style; the API carries no colour');
 });
 
-test('getForRange: school holiday uses the school color, not the public one', () => {
+test('getForRange: a school holiday carries no colour either (One Today)', () => {
   setConfig({ holiday_country: 'DE', holiday_show_school: '1',
     holiday_public_color: '#AA0000', holiday_school_color: '#00AA00' });
   seedHoliday({ type: 'school', start: '2026-07-20', end: '2026-08-30', name: 'Sommerferien' });
   const rows = getForRange('2026-08-01', '2026-08-10');
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].color, '#00AA00');
+  assert.equal(rows[0].type, 'school');
+  assert.equal(Object.hasOwn(rows[0], 'color'), false);
 });
 
 test('getForRange: date overlap – includes spanning ranges, excludes outside ones', () => {

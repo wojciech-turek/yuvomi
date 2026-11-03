@@ -67,6 +67,10 @@ async function withAccess(modules, fn) {
 const ANNA = { id: 1, display_name: 'Anna', avatar_color: '#FF9500', avatar_data: null };
 const BEN = { id: 2, display_name: 'Ben', avatar_color: '#34C759', avatar_data: null };
 const MITGLIEDER = [ANNA, BEN];
+// Die Personenfarben folgen der Haushaltsreihenfolge, die die App beim Start
+// haelt (api.js, person-color.js): Anna Platz 1, Ben Platz 2.
+const { setHouseholdOrder } = await import('../public/utils/person-color.js');
+setHouseholdOrder(MITGLIEDER);
 
 const MITTAG = { key: 'lunch', label: 'Mittag' };
 const mahlzeit = (over = {}) => ({
@@ -142,8 +146,9 @@ test('Wochenansicht: eine Mahlzeit mit Koch traegt seinen Avatar in der Meta-Zei
   const html = await withAccess(SCHREIBEN, () => kachel(mitBen()));
   const meta = abschnitt(html, 'class="meal-card__meta"', '</button>');
   assert.match(meta, /class="meal-card__cook"/, 'das Koch-Zeichen steht in der Meta-Zeile');
-  assert.match(meta, /class="avatar-stack__item"/, 'als Avatar der geteilten Komponente');
-  assert.match(meta, /background-color:#34C759/, 'in der Farbe der Person');
+  assert.match(meta, /class="person-disc [^"]*avatar-stack__item"/, 'als Personenscheibe der geteilten Komponente');
+  assert.match(meta, /--person-disc-tint: var\(--person-2-tint\)/, 'in der Farbe seines Platzes im Haushalt');
+  assert.doesNotMatch(meta, /#34C759/, 'nicht in der gespeicherten Avatarfarbe');
   assert.match(meta, /title="Ben"/);
   assert.match(meta, /<span class="sr-only">meals\.cookNamed\{&quot;name&quot;:&quot;Ben&quot;\}<\/span>/,
     'der Name geht als Satz mit - die Scheibe traegt ihn sonst nur als title');
@@ -176,17 +181,20 @@ test('Wochenansicht: ein Koch ohne Zutaten bekommt seine eigene Meta-Zeile; ein 
   const BEN_MIT_BILD = { ...BEN, avatar_data: 'data:image/png;base64,QkVO' };
   const karte = (modules, members) => withAccess(modules, () => mitPlan({ members }, () => kachel(mitBen())));
   const mitBild = await karte(SCHREIBEN, [ANNA, BEN_MIT_BILD]);
-  assert.match(mitBild, /<img src="data:image\/png;base64,QkVO" alt="Ben"/, 'das Profilbild des Mitglieds steht an der Karte');
+  const BILD = /role="img" aria-label="Ben"[^>]*><img src="data:image\/png;base64,QkVO" alt=""/;
+  assert.match(mitBild, BILD, 'das Profilbild des Mitglieds steht an der Karte');
   assert.match(abschnitt(mitBild, 'class="meal-card__cook"', '</button>'), /<img src="data:image\/png;base64,QkVO"/, 'und zwar am Koch-Zeichen');
-  assert.match(await karte(LESEN, [ANNA, BEN_MIT_BILD]), /<img src="data:image\/png;base64,QkVO" alt="Ben"/, 'auch bei `read`');
+  assert.match(await karte(LESEN, [ANNA, BEN_MIT_BILD]), BILD, 'auch bei `read`');
 
   // Ohne Bild am Mitglied, und fuer einen Koch, der in der Liste nicht steht
-  // (ehemalig, Hauspersonal): die Initialen auf seiner Farbe, kein leeres Bild.
+  // (ehemalig, Hauspersonal): die Initialen, kein leeres Bild. Die Farbe ist
+  // sein Platz im Haushalt, nicht die gespeicherte der Mahlzeit.
   for (const members of [MITGLIEDER, [ANNA], []]) {
     const ohneBild = await karte(SCHREIBEN, members);
     assert.match(ohneBild, /class="meal-card__cook"/, 'das Zeichen bleibt');
     assert.doesNotMatch(ohneBild, /<img src="data:/, 'kein Bild');
-    assert.match(ohneBild, /background-color:#34C759/, 'die Farbe aus der Mahlzeit');
+    assert.match(ohneBild, />B<\/span>/, 'sein Initial');
+    assert.doesNotMatch(ohneBild, /#34C759/, 'nicht die gespeicherte Farbe aus der Mahlzeit');
   }
   // Ein Bildfeld an der Mahlzeit selbst liest niemand mehr.
   assert.doesNotMatch(await withAccess(SCHREIBEN, () => mitPlan({}, () => kachel(mitBen({ cook_avatar: 'data:image/png;base64,QUxU' })))), /QUxU/);
@@ -237,7 +245,8 @@ test('Dziś: die Zeile der Mahlzeit traegt den Koch als ihre Person', () => {
   assert.equal(mit.who.kind, 'person', 'wen die Zeile angeht, ist der Koch');
   assert.equal(mit.who.person.id, 2);
   assert.equal(mit.who.person.avatar_data, 'data:image/png;base64,QkVO');
-  assert.equal(mit.who.person.color, '#34C759');
+  assert.equal(mit.who.person.color, undefined, 'die Zeile traegt keine gespeicherte Farbe - die Scheibe nimmt den Platz im Haushalt');
+  assert.equal(mahlzeitZeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }), []).who.person.avatar_color, undefined);
   assert.ok(!mahlzeitZeile(heute({ cook_user_id: 2, cook_name: 'Ben', cook_color: '#34C759' }), []).who.person.avatar_data,
     'ohne Eintrag in `users` (ein Koch, der dort nicht steht) bleiben die Initialen');
 
@@ -299,7 +308,7 @@ test('Leseansicht bei `read`: der Koch steht als Wert da - mit Avatar und Namen,
   const zeile = abschnitt(lesend.content, 'data-lucide="cooking-pot"', 'data-lucide="list"');
   assert.match(zeile, /meals\.cookLabel/, 'die Zeile ist beschriftet');
   assert.match(zeile, /class="meal-read__cook"/);
-  assert.match(zeile, /class="avatar-stack__item"/, 'der Avatar');
+  assert.match(zeile, /class="person-disc [^"]*avatar-stack__item"/, 'der Avatar');
   assert.match(zeile, /<span>Ben<\/span>/, 'und der Name ausgeschrieben');
   assert.doesNotMatch(lesend.content, /user-ms|data-ms-input|<input|<select|<button/, 'keine Auswahl und keine Eingabe');
 
@@ -689,7 +698,8 @@ test('Speichern mit Serien-Umfang: der Koch geht nur mit, wenn er in diesem Dial
 // -------------------------------------------------------------------------
 
 // Der Slot der Mahlzeiten-Kachel (`.meal-slot__cook` in dashboard.css) ist mit
-// dem Raster gegangen (Tafla); die Scheibe an der Zeile von Dziś ist `.day-disc`.
+// dem Raster gegangen (Tafla); die Scheibe an der Zeile von Dziś ist die eine
+// Personenscheibe (`.person-disc`, layout.css).
 test('Stylesheets: die Koch-Zeichen schrumpfen nicht', () => {
   const regel = (datei, selektor) => {
     const css = readFileSync(new URL(`../public/styles/${datei}`, import.meta.url), 'utf8');

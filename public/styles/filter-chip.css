@@ -143,6 +143,17 @@
   overflow: hidden;
 }
 
+/* Eine Person traegt die Personenscheibe (person-color.js, `.person-disc`,
+ * 20 wie die Farbscheibe): ihre Toenung und Tinte statt einer Farbflaeche,
+ * ohne den Rand der Farbscheibe. */
+.filter-chip__swatch--person {
+  background-color: var(--person-disc-tint);
+  color: var(--person-disc-ink);
+  box-shadow: none;
+  font-size: var(--type-meta);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* Trefferzahl im Chip: macht vor dem Klick sichtbar, ob sich der Filter lohnt. */
 .filter-chip__count {
   min-width: 1.25em;

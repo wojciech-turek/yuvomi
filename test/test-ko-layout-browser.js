@@ -5,7 +5,9 @@
  *        brach zwischen zwei Silben um ("선택합니 / 다."), 68 Stellen in 27 von
  *        46 Ansichten bei 375px. (3) Die Werteachse des Budget-Verlaufs stand
  *        in Won links ausserhalb ihres Scrollports ("₩6,000,000": 6px bei 375px
- *        Fensterbreite, 13px bei 1280px).
+ *        Fensterbreite, 13px bei 1280px). (4) One Today, Abschlussrunde: der
+ *        Budgettitel stand am Telefon als „Budg…" neben Monatsstepper und
+ *        angedocktem Plus-Kreis.
  * Ausfuehren: npm run test:ko-layout-browser (haengt an test:document-guards)
  *
  * WARUM IM BROWSER. Alle drei Befunde sind Masse eines gesetzten Dokuments: wo
@@ -290,6 +292,39 @@ for (const device of ['mobile', 'desktop']) {
     const before = Math.max(0, (64 * 600 - geo.hostWidth * 56) / 544);
     assert.ok(Math.abs(geo.paddingLeft - before) <= 0.5,
       `das Polster ist ${geo.paddingLeft.toFixed(2)}px statt ${before.toFixed(2)}px - ein kurzer Wert darf das Diagramm nicht verschieben`);
+    await page.close();
+  });
+}
+
+/* ── 4. Der Budgettitel bleibt ganz am Telefon ─────────────────────────────── */
+
+// Visual QA 2026-11-02: "Budg…" bei 390px. Der Plus-Kreis, den die Shell am
+// Telefon in den Kopf dockt, teilte sich die Zeile mit Titel und Monat; jetzt
+// schwebt er ueber der Leiste wie im Kalender (budget.css, test:budget-ui).
+for (const locale of ['pl', 'en']) {
+  test(`Budget am Telefon (${locale}): der Titel steht ganz neben dem Monat, das Plus ist erreichbar`, async () => {
+    const page = await openPage(harness, { device: 'mobile', locale });
+    await gotoRoute(page, '/budget');
+    await page.waitForSelector('.budget-nav .page-toolbar__title', { timeout: 15000 });
+    const head = await page.evaluate(() => {
+      const title = document.querySelector('.budget-nav .page-toolbar__title');
+      const month = document.querySelector('.budget-nav .budget-nav__month');
+      const fab = document.querySelector('#fab-new-budget');
+      const box = (el) => el.getBoundingClientRect();
+      return {
+        text: title.textContent.trim(),
+        scroll: title.scrollWidth,
+        client: title.clientWidth,
+        sameRow: Math.abs(box(title).top - box(month).top) < 4,
+        fabInHead: Boolean(fab?.closest('.budget-nav')),
+        fabShown: Boolean(fab && fab.getClientRects().length && box(fab).width >= 44),
+      };
+    });
+    assert.ok(head.text.length >= 6, `Vorbedingung: der Titel ist da (${head.text})`);
+    assert.ok(head.sameRow, 'Vorbedingung: Titel und Monat teilen die Zeile');
+    assert.ok(head.scroll <= head.client, `„${head.text}" ist abgeschnitten: ${head.scroll}px Text in ${head.client}px`);
+    assert.equal(head.fabInHead, false, 'kein Plus-Kreis im Kopf');
+    assert.ok(head.fabShown, 'das Plus steht sichtbar und gross genug ueber der Leiste');
     await page.close();
   });
 }

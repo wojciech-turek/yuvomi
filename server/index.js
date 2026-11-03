@@ -47,6 +47,7 @@ import { passwordLoginWarning, OIDC_PASSWORD_SENTINEL } from './services/oidc.js
 import dashboardRouter from './routes/dashboard.js';
 import tasksRouter from './routes/tasks.js';
 import shoppingRouter from './routes/shopping.js';
+import quickAddRouter from './routes/quick-add.js';
 import mealsRouter from './routes/meals.js';
 import recipesRouter from './routes/recipes.js';
 import pantryRouter from './routes/pantry.js';
@@ -730,6 +731,9 @@ app.use('/api/v1', idempotencyMiddleware);
 app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/tasks', tasksRouter);
 app.use('/api/v1/shopping', shoppingRouter);
+// "Powiedz": ein Satz wird Aufgabe, Termin oder Einkauf (One Today). Der Pfad
+// gehoert keinem Modul, die Route prueft das Schreibrecht je Art selbst.
+app.use('/api/v1/quick-add', quickAddRouter);
 app.use('/api/v1/meals', mealsRouter);
 app.use('/api/v1/recipes', recipesRouter);
 app.use('/api/v1/recipe-providers', recipeProvidersRouter);

@@ -169,7 +169,6 @@ function openDialog(event, create = null) {
     'modal-allday-start', 'modal-allday-end']) field(id, values[id]);
   field('modal-location', event?.location ?? '');
   field('modal-description', event?.description ?? '');
-  field('modal-cancel', '', 'button');
   field('modal-save', '', 'button');
   const toggle = field('modal-reminder-toggle');
   toggle.type = 'checkbox';

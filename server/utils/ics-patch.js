@@ -14,12 +14,12 @@ import { vtimezoneFor } from './vtimezone.js';
 
 // Properties, die Yuvomi verwaltet und daher ersetzen darf - je Komponente.
 //
-// COLOR (RFC 7986) kam mit #897 dazu. Es reicht nicht, den Wert auszugeben:
-// solange die Property hier fehlt, verwirft der Patcher sie wieder, und ein
-// Termin, dem seine Eigenfarbe genommen wurde, behielte die alte auf dem Server.
-// Verwaltet heisst deshalb beides - ersetzen UND entfernen.
+// COLOR (RFC 7986) steht seit One Today nicht mehr darin (mit #897 kam es
+// dazu): Yuvomi waehlt keine Terminfarben mehr und schickt keine hinaus. Eine
+// Farbe, die der Server traegt, bleibt Zeichen fuer Zeichen stehen - auch wenn
+// ein Aufrufer doch ein COLOR mitgaebe.
 const MANAGED_VEVENT = new Set([
-  'SUMMARY', 'DESCRIPTION', 'LOCATION', 'DTSTART', 'DTEND', 'RRULE', 'COLOR',
+  'SUMMARY', 'DESCRIPTION', 'LOCATION', 'DTSTART', 'DTEND', 'RRULE',
 ]);
 // VTODO (#617): STATUS, COMPLETED und PERCENT-COMPLETE gehören zusammen - Clients
 // lesen den Erledigt-Zustand mal am einen, mal am anderen ab.

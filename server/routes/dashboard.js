@@ -10,7 +10,7 @@ import { hydrateNotesWithCategories } from '../services/note-categories.js';
 import * as db from '../db.js';
 import { hydrateBirthdayOccurrences } from '../services/birthdays.js';
 import { getEventsOverlappingDays, getUpcomingEvents } from '../services/calendar-event-reader.js';
-import { taskScopeWhere, taskCategoryWhere, categoryBindings, normalizeCategoryFilter } from '../services/task-scope.js';
+import { taskScopeWhere } from '../services/task-scope.js';
 import { getCountdowns } from '../services/countdowns.js';
 import { listQuickLinksFor } from './quick-links.js';
 import {
@@ -31,7 +31,6 @@ import { isAdminUser, serializeEvents } from './calendar/helpers.js';
 import { getOccurrences as getWasteOccurrences } from '../services/waste-store.js';
 import { scheduleData } from '../services/schedule.js';
 import { MEAL_COOK_COLUMNS_SQL, MEAL_COOK_JOIN_SQL } from '../services/meal-cook.js';
-import { clampEventLimit } from '../../public/utils/dashboard-event-limit.js';
 import { nameKey } from '../utils/name-key.js';
 
 const log = createLogger('Dashboard');
@@ -45,7 +44,7 @@ const log = createLogger('Dashboard');
  * Modulrechte pro Rolle und Mitglied (#467). Ein Kind, dem der Kalender auf
  * `none` steht, bekam über /dashboard weiterhin Termintitel, Beschreibung, Ort
  * und Anhangsnamen geliefert — die App fiel nicht auf, weil der Browser die
- * Kachel über `canSeeWidget` ausblendet, aber die Daten lagen auf der Leitung,
+ * Kachel im Browser ausblendet, aber die Daten lagen auf der Leitung,
  * im Netzwerk-Tab und im Service-Worker-Cache. Die SPEC sagt zu #467
  * „Enforcement is server-side"; für diesen Endpoint stimmte das nicht.
  *
@@ -74,7 +73,7 @@ const DENIED_PAYLOAD = Object.freeze({
     memberTodayTasks: [], tasksDoneToday: 0, wallTasks: [], planTasks: [],
   }),
   meals: () => ({ todayMeals: [], tomorrowMeals: [], dinnerPlan: null }),
-  notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0 }),
+  notes: () => ({ pinnedNotes: [], pinnedNotesCount: 0, notesTotal: 0, wallNotes: [] }),
   shopping: () => ({ shoppingLists: [], shoppingOpenCount: 0, shoppingOpenLists: 0 }),
   // Der Monat bleibt stehen: er ist keine Budgetzahl, sondern der Zeitraum, auf
   // den die Kachel beschriftet ist — und er steht ohnehin im Kalender.
@@ -110,9 +109,6 @@ const DENIED_PAYLOAD = Object.freeze({
  * die Schluessel, die keinem Modul gehoeren. Von ihr aus baut die
  * Haushaltsfassung (`householdAudienceAnswer`) - was die Wand nicht zeichnet,
  * bleibt in genau dieser Form stehen.
- *
- * `shoppingTile` fehlt hier, und das ist seine leere Fassung: das Feld gibt es
- * nur bei einer Listen-Auswahl, und ein Konto ohne den Einkauf bekommt es nie.
  */
 function emptyAnswer(context) {
   const empty = { users: [], countdowns: [], countdownTotal: 0, quicklinks: [] };
@@ -252,7 +248,7 @@ const WALL_TASKS_PER_MEMBER = 6;
  *            open: {id: number, title: string, due_date: string}[],
  *            done: {id: number, title: string}[]}[]}
  */
-function wallTasksByMember(d, { today, zone, now, categoryAnd = '', categoryBinds = {} }) {
+function wallTasksByMember(d, { today, zone, now }) {
   // Grobe Vorauswahl in SQL (48 Stunden decken jede Zone), der Tag selbst wird
   // unten in der Haushaltszone entschieden.
   const since = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
@@ -264,7 +260,7 @@ function wallTasksByMember(d, { today, zone, now, categoryAnd = '', categoryBind
     WHERE t.archived_at IS NULL
       AND t.visibility = 'all'
       AND t.due_date IS NOT NULL AND t.due_date <= @today
-      AND ${taskScopeWhere('t', { bind: '@today' })}${categoryAnd}
+      AND ${taskScopeWhere('t', { bind: '@today' })}
       AND (t.status != 'done' OR t.due_date = @today OR tc.completed_at >= @since)
     ORDER BY
       t.due_date ASC,
@@ -274,7 +270,7 @@ function wallTasksByMember(d, { today, zone, now, categoryAnd = '', categoryBind
         WHEN 'low' THEN 3 ELSE 4
       END ASC,
       t.id ASC
-  `).all({ today, since, ...categoryBinds });
+  `).all({ today, since });
 
   const byMember = new Map();
   for (const row of rows) {
@@ -317,7 +313,7 @@ const PLAN_TASK_CAP = 80;
  * line ("cukiernia Lajkonik"); the description itself stays in the task.
  */
 function planTasksFor(d, {
-  today, tomorrow, zone, now, visibleSql, me, categoryAnd = '', categoryBinds = {},
+  today, tomorrow, zone, now, visibleSql, me,
 }) {
   const since = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
   const rows = d.prepare(`
@@ -328,7 +324,7 @@ function planTasksFor(d, {
     FROM tasks t
     WHERE t.archived_at IS NULL
       AND ${taskScopeWhere('t', { bind: '@today' })}
-      AND ${visibleSql}${categoryAnd}
+      AND ${visibleSql}
       AND (
         (t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date <= @tomorrow)
         OR (t.status = 'done' AND (t.due_date = @today OR EXISTS (
@@ -337,7 +333,7 @@ function planTasksFor(d, {
       )
     ORDER BY t.due_date ASC, t.due_time IS NULL ASC, t.due_time ASC, t.id ASC
     LIMIT ${PLAN_TASK_CAP * 2}
-  `).all({ today, tomorrow, since, me, ...categoryBinds });
+  `).all({ today, tomorrow, since, me });
   const out = [];
   for (const row of rows) {
     const task = addAssignedUsers(row);
@@ -423,21 +419,6 @@ function dinnerPlanFor(d, meal, { pantry = true, shopping = true } = {}) {
   };
 }
 
-/**
- * `?shopping_list=` als Liste von Listen-Ids (#1818): einzeln oder mehrfach
- * angegeben, nur positive ganze Zahlen, ohne Doppelte, hoechstens 50 - dieselbe
- * Form und Grenze wie `notes_category` und wie die gespeicherten Optionen
- * (preferences.js). Alles andere faellt weg, nie ein Fehler.
- */
-export function normalizeShoppingListFilter(raw) {
-  if (raw === undefined || raw === null) return [];
-  return [...new Set(
-    (Array.isArray(raw) ? raw : [raw])
-      .filter((value) => typeof value === 'string' && /^[1-9]\d{0,14}$/.test(value))
-      .map(Number),
-  )].slice(0, 50);
-}
-
 const router = express.Router();
 
 /**
@@ -447,7 +428,7 @@ const router = express.Router();
  * so bricht ein fehlerhaftes Widget nicht das gesamte Dashboard.
  *
  * Response: {
- *   upcomingEvents: CalendarEvent[],   // Nächste 5 Termine (`events_limit`: 8 oder 12)
+ *   upcomingEvents: CalendarEvent[],   // Nächste 5 Termine
  *   familyEvents:   CalendarEvent[],   // Termine je Mitglied fuer die Familienkarte (#1449)
  *   weekEvents:     WeekEvent[],       // Termine, die die Woche ab heute berühren (schlank)
  *   urgentTasks:    Task[],            // High/Urgent mit Fälligkeit ≤ 48h
@@ -472,49 +453,6 @@ router.get('/', (req, res) => {
   const result = {};
   const userId = req.authUserId || req.session.userId;
 
-  /* WIDGET-OPTIONEN KOMMEN ALS QUERY-PARAMETER, NICHT AUS DEM GESPEICHERTEN
-   * LAYOUT (#814). Der Server kennt die Widget-Ids bewusst nicht - sie gehören
-   * dem Frontend, und ein neues Widget soll keine Backend-Änderung kosten. Er
-   * speichert `options` deshalb nur als Form und versteht hier ausschliesslich
-   * die zwei Achsen, die er ohnehin abfragen kann.
-   *
-   * SIE WIRKEN AUF DIE GANZE ÜBERSICHT, nicht auf eine Kachel. Aufgaben stehen
-   * hier an vier Stellen (Liste, Kennzahl, „heute dran" je Mitglied, das
-   * Kopfband) und Termine an dreien; würde eine Auswahl nur die Liste
-   * einschränken, stünden zwei Zeilen unter einer Kachel, die sieben sagt -
-   * derselbe Fehler wie in #647, eine Ebene höher.
-   *
-   * Und sie wirken VOR der Deckelung, weil jede dieser Abfragen ihr eigenes
-   * LIMIT trägt.
-   *
-   * AUSGENOMMEN SIND DIE COUNTDOWNS (#647), und zwar bewusst: dort steht keine
-   * Aufgabe, weil sie in einer Liste vorkommt, sondern weil jemand sie
-   * ausdrücklich markiert hat. Eine Kategorie-Auswahl, die eine markierte
-   * Aufgabe wieder verschwinden lässt, nähme eine Entscheidung zurück, die
-   * jemand ausdrücklich getroffen hat. */
-  const taskCategories = normalizeCategoryFilter(req.query.tasks_category);
-  const taskCategoryFragment = taskCategoryWhere('t', taskCategories, { named: 'cat' });
-  const taskCategoryAnd = taskCategoryFragment ? ` AND ${taskCategoryFragment}` : '';
-  const taskCategoryBinds = categoryBindings(taskCategories, 'cat');
-  const noteCategories = [...new Set(
-    (Array.isArray(req.query.notes_category) ? req.query.notes_category : [req.query.notes_category])
-      .map(Number)
-      .filter((id) => Number.isInteger(id) && id > 0),
-  )].slice(0, 50);
-  const noteCategoryBinds = Object.fromEntries(noteCategories.map((id, index) => [`note_category_${index}`, id]));
-  // Ein EXISTS je Auswahl ist absichtlich AND. Die Sichtbarkeitsbedingung im
-  // Unterselect verhindert, dass erratene IDs fremder persoenlicher Kategorien
-  // verraten, an welchen geteilten Notizen sie haengen.
-  const noteCategoryAnd = noteCategories.map((_id, index) => `
-    AND EXISTS (
-      SELECT 1
-      FROM note_category_assignments nca
-      JOIN note_categories nc ON nc.id = nca.category_id
-      WHERE nca.note_id = n.id
-        AND nc.id = @note_category_${index}
-        AND (nc.scope = 'household' OR nc.owner_user_id = @me)
-    )
-  `).join('');
   /* FUER WEN DIE ANTWORT IST (#1817). `audience=household` fragt die Fassung
    * fuer eine GETEILTE FLAECHE ab - die Wand. Dort gilt nicht „was darf die
    * angemeldete Person sehen", sondern „was darf jeder sehen": Aufgaben und
@@ -544,38 +482,6 @@ router.get('/', (req, res) => {
   const taskVisibleSql = householdAudience
     ? householdVisibleWhere('t')
     : visibilityWhere('t', 'task_assignments', 'task_id', '@me');
-  // `mine` ist die Auslegung des Kalendermoduls: zugewiesen an mich.
-  // EIN DISPLAY HAT KEIN "MIR" (#1808): es folgt der Vorgabe des Haushalts, sein
-  // Browser schickt deren Option mit, und dem Display-Konto weist nie jemand
-  // einen Termin zu (#1207) - das Tablett stuende leer da. Gelesen wird die
-  // Option deshalb HIER als "alle", statt sie beim Speichern der Vorgabe zu
-  // streichen: dieselbe Vorgabe gilt auch fuer Mitglieder, und dort stimmt sie.
-  // DIESELBE ANTWORT GILT FUER JEDE WAND (#1817): mit `audience=household` gibt
-  // es kein "mich", auch nicht aus der Sitzung eines Mitglieds.
-  const eventsAssignedTo = req.query.events_scope === 'mine' && req.authMethod !== 'display' && !householdAudience
-    ? userId : null;
-  /* GEBURTSTAGE IM TERMIN-WIDGET (#927). Wer sie auf der Uebersicht schon als
-   * eigene Kachel stehen hat, las sie zweimal - einmal bei den Geburtstagen,
-   * einmal zwischen den naechsten Terminen. Abwaehlbar ist deshalb der EINE
-   * Ort, an dem sie mitlaufen, statt dass die Kachel danebensteht.
-   *
-   * NICHT UEBERNOMMEN WIRD DER FILTER DES KALENDERMODULS, obwohl die Anfrage
-   * dorthin zeigte: der Ebenen-Schalter dort liegt im localStorage und gilt
-   * fuer das Geraet, die Widget-Optionen liegen in den Einstellungen und gelten
-   * fuer das Konto. Ein Wert an zwei Orten mit zwei Reichweiten waere die
-   * teurere Antwort - am Wandtablet haette das Abwaehlen am Telefon gewirkt
-   * oder eben nicht, je nachdem, welchen der beiden man liest.
-   *
-   * Der Standard bleibt „mit Geburtstagen": ein Filter wirkt nur, wo jemand ihn
-   * gesetzt hat. Der Parameter reist deshalb nur in seiner einen Richtung. */
-  // Den Haushaltsschalter (#1660) kennt der geteilte Leser selbst: sind die
-  // Geburtstage abgeschaltet, laufen sie nicht mit, was immer hier steht.
-  const includeBirthdays = req.query.events_birthdays !== 'hide';
-  // Wie viele Kommende die Kachel listet (#1680): 5, 8 oder 12 aus einer
-  // Allowlist, die der Browser mit dieser Route teilt. Alles andere - fehlend,
-  // leer, `7`, `500`, `abc`, doppelt angegeben - ist die Vorgabe fuenf.
-  const eventsLimit = clampEventLimit(req.query.events_limit);
-
   const now = new Date();
 
   // Lokaler Datums-/Wochentagsschlüssel: die Fälligkeit einer Dosis hängt am lokalen
@@ -659,7 +565,7 @@ router.get('/', (req, res) => {
     // das Heute-Blatt laesst sie weg. Welche beendet sind, entscheidet der
     // Browser an der Uhr: ein Termin endet auch zwischen zwei Abrufen.
     result.upcomingEvents = serializeEvents(getUpcomingEvents(d, {
-      userId, limit: eventsLimit, fromToday: true, assignedTo: eventsAssignedTo, includeBirthdays,
+      userId, limit: 5, fromToday: true,
       keepEndedToday: ENDED_TODAY_POOL, household: householdAudience,
     }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) });
   } catch (err) {
@@ -685,7 +591,7 @@ router.get('/', (req, res) => {
   if (allows('calendar')) try {
     result.weekEvents = serializeEvents(getEventsOverlappingDays(d, {
       userId, fromKey: shiftDateKey(todayLocalKey, -1), days: 9,
-      assignedTo: eventsAssignedTo, includeBirthdays, household: householdAudience,
+      household: householdAudience,
     }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) })
       .map(weekEventFields);
   } catch (err) {
@@ -703,7 +609,7 @@ router.get('/', (req, res) => {
   if (allows('calendar')) try {
     result.planEvents = serializeEvents(getEventsOverlappingDays(d, {
       userId, fromKey: todayLocalKey, days: 2,
-      assignedTo: eventsAssignedTo, includeBirthdays, household: householdAudience, limit: 120,
+      household: householdAudience, limit: 120,
     }), { database: d, viewer: documentViewer(req), actorId: userId, isAdmin: isAdminUser(req) })
       .map(planEventFields);
   } catch (err) {
@@ -738,7 +644,7 @@ router.get('/', (req, res) => {
         -- öffnete, fand sie in der Liste nicht wieder.
         AND t.archived_at IS NULL
         AND ${taskScopeWhere('t', { bind: '@today' })}
-        AND ${taskVisibleSql}${taskCategoryAnd}
+        AND ${taskVisibleSql}
       ORDER BY
         CASE WHEN __due_sort IS NOT NULL AND __due_sort < @now THEN 0 ELSE 1 END ASC,
         __due_sort IS NULL ASC,
@@ -748,7 +654,7 @@ router.get('/', (req, res) => {
           WHEN 'low' THEN 3 ELSE 4
         END ASC
       LIMIT 5
-    `).all({ now: nowIso, me: userId, today: todayLocalKey, ...taskCategoryBinds }).map(({ __due_sort, ...task }) => addAssignedUsers(task));
+    `).all({ now: nowIso, me: userId, today: todayLocalKey}).map(({ __due_sort, ...task }) => addAssignedUsers(task));
   } catch (err) {
     log.error('urgentTasks error:', err.message);
     result.urgentTasks = [];
@@ -766,8 +672,8 @@ router.get('/', (req, res) => {
       SELECT COUNT(*) AS n FROM tasks t
       WHERE t.status != 'done' AND t.archived_at IS NULL
         AND ${taskScopeWhere('t', { bind: '@today' })}
-        AND ${taskVisibleSql}${taskCategoryAnd}
-    `).get({ me: userId, today: todayLocalKey, ...taskCategoryBinds }).n;
+        AND ${taskVisibleSql}
+    `).get({ me: userId, today: todayLocalKey}).n;
   } catch (err) {
     log.error('openTaskCount error:', err.message);
     result.openTaskCount = null;
@@ -781,58 +687,12 @@ router.get('/', (req, res) => {
       WHERE t.status != 'done' AND t.archived_at IS NULL
         AND t.due_date IS NOT NULL AND t.due_date < @today
         AND ${taskScopeWhere('t', { bind: '@today' })}
-        AND ${taskVisibleSql}${taskCategoryAnd}
-    `).get({ today: todayLocalKey, me: userId, ...taskCategoryBinds }).n;
+        AND ${taskVisibleSql}
+    `).get({ today: todayLocalKey, me: userId}).n;
   } catch (err) {
     log.error('overdueTaskCount error:', err.message);
     result.overdueTaskCount = null;
   }
-
-  /* WELCHE EINKAUFSLISTEN DIE KACHEL ZEIGT (#1818, aus D#1624). `shopping_list`
-   * nennt eine Auswahl von Listen-Ids; ohne den Parameter bleibt alles, wie es
-   * war.
-   *
-   * DIE AUSWAHL GILT NUR DER KACHEL, und zwar an der Quelle: sie fuellt ein
-   * EIGENES Feld der Antwort (`shoppingTile`) und laesst `shoppingLists`,
-   * `shoppingOpenCount` und `shoppingOpenLists` unberuehrt. Anders als bei
-   * Aufgaben und Notizen, wo eine Auswahl die ganze Uebersicht meint: der
-   * Einkauf spricht ausserhalb der Kachel als ZAHL ("n offen" im Heute-Blatt,
-   * an der Wand, in der Navigation), und die liest dieselben Daten. Die erste
-   * Fassung filterte die geteilten Felder - das Wandtablet eines Haushalts,
-   * dessen Vorgabe eine Liste waehlt, zeigte "1 offen" bei vierzehn. Kein
-   * Leser der ungefilterten Felder haengt jetzt von einer Kachel-Option ab,
-   * und der Parameter aendert keine Zahl der Navigation.
-   *
-   * In der Kachel wirkt die Auswahl VOR der Deckelung und auf Liste UND Zahl:
-   * eine Kachel, die eine Liste zeigt und ueber allen "23" zaehlt,
-   * widerspraeche sich.
-   *
-   * GEPRUEFT WIRD GEGEN DIE TABELLE, nicht nur die Form. Eine Liste, die es
-   * nicht (mehr) gibt, faellt aus der Auswahl; bleibt KEINE uebrig, gilt die
-   * Anfrage als ungefiltert - derselbe Satz wie bei den anderen Kacheln: keine
-   * Auswahl heisst "alle". So macht eine geloeschte Liste in einer gespeicherten
-   * Anordnung die Kachel weder leer noch kaputt, und Unsinn (`abc`, `-1`, eine
-   * erfundene Id) antwortet wie gar kein Parameter. Listen-Ids sind
-   * AUTOINCREMENT, eine geloeschte Id kehrt nie als andere Liste zurueck.
-   *
-   * RECHTE: Einkaufslisten haben keine Zeilen-Sichtbarkeit, das Modul ist ganz
-   * sichtbar oder gar nicht. Die Auswahl wird deshalb NUR gelesen, wenn das
-   * Modul fuer diese Person offen ist - sonst bleibt es bei der leeren Fassung
-   * von oben, was immer der Parameter nennt. */
-  let shoppingSelection = null;
-  if (allows('shopping')) try {
-    const wanted = normalizeShoppingListFilter(req.query.shopping_list);
-    if (wanted.length) {
-      const existing = d.prepare(
-        `SELECT id FROM shopping_lists WHERE id IN (${wanted.map(() => '?').join(', ')})`,
-      ).all(...wanted).map((row) => row.id);
-      if (existing.length) shoppingSelection = existing;
-    }
-  } catch (err) {
-    log.error('shopping selection error:', err.message);
-  }
-  const shoppingMarks = shoppingSelection ? shoppingSelection.map(() => '?').join(', ') : '';
-  const shoppingBinds = shoppingSelection ?? [];
 
   if (allows('shopping')) try {
     const row = d.prepare(`
@@ -899,12 +759,13 @@ router.get('/', (req, res) => {
   }
 
   // Neueste Notizen (gepinnte zuerst, dann aktuellste)
-  if (allows('notes')) try {
+  if (allows('notes') && !householdAudience) try {
+    result.wallNotes = [];
     result.pinnedNotes = d.prepare(`
       SELECT n.*, u.display_name AS author_name, u.avatar_color AS author_color
       FROM notes n
       LEFT JOIN users u ON n.created_by = u.id
-      WHERE 1 = 1 ${noteCategoryAnd}
+      WHERE 1 = 1
       ORDER BY n.pinned DESC, n.updated_at DESC
       -- FUENF, WEIL DIE KACHEL ZWEI HOCH SEIN DARF - dieselbe Korrektur, die
       -- die Geburtstage oben schon bekommen haben und bei der die Notizen
@@ -915,7 +776,7 @@ router.get('/', (req, res) => {
       -- (listRowCap in public/pages/dashboard.js) - der Server liefert nur
       -- den Vorrat fuer die groesste Fassung.
       LIMIT 5
-    `).all({ me: userId, ...noteCategoryBinds });
+    `).all({ me: userId });
     result.pinnedNotes = hydrateNotesWithCategories(d, result.pinnedNotes, userId);
     /* `pinnedNotes` HEISST SO, IST ES ABER NICHT: die Liste sortiert Gepinntes
      * nach vorn und schneidet bei drei ab - sie filtert nicht. Fuer die Vorschau
@@ -925,8 +786,8 @@ router.get('/', (req, res) => {
      * braucht deshalb eine eigene, echte Zahl. */
     result.pinnedNotesCount = d.prepare(`
       SELECT COUNT(*) AS n FROM notes n
-      WHERE n.pinned = 1 ${noteCategoryAnd}
-    `).get({ me: userId, ...noteCategoryBinds }).n;
+      WHERE n.pinned = 1
+    `).get({ me: userId }).n;
     /* UND DIE MENGE, AUS DER DIE VORSCHAU SCHOEPFT - fuer die Badge und das
      * „+N weitere" der Kachel. `pinnedNotesCount` ist dafuer die falsche Zahl:
      * die Vorschau fuellt nach den angehefteten mit den neuesten auf, eine Badge
@@ -935,13 +796,38 @@ router.get('/', (req, res) => {
      * (#814: Filter vor Schnitt UND Zahl). */
     result.notesTotal = d.prepare(`
       SELECT COUNT(*) AS n FROM notes n
-      WHERE 1 = 1 ${noteCategoryAnd}
-    `).get({ me: userId, ...noteCategoryBinds }).n;
+      WHERE 1 = 1
+    `).get({ me: userId }).n;
   } catch (err) {
     log.error('pinnedNotes error:', err.message);
     result.pinnedNotes = [];
     result.pinnedNotesCount = 0;
     result.notesTotal = 0;
+  }
+
+
+  // The wall's notes: the household audience reads ONLY the titles of pinned
+  // notes (no content, no author, none of the counts) - `pinnedNotes` stays
+  // empty for it. A note without a title is left out, the wall has no first
+  // line to fall back on. Notes have no visibility of their own, so every
+  // pinned, titled note qualifies. A member's answer keeps `wallNotes: []`;
+  // the member's Today reads `pinnedNotes`.
+  // Gated on the HOUSEHOLD switch, not on the credential: the coupled display
+  // has no `notes:read` scope (and must not get one), yet the wall draws titles.
+  // Everybody else (a member whose access denies notes, a token without
+  // `notes:read`) keeps the empty fill: the audience flag is not a permission.
+  if (householdAudience && (req.authMethod === 'display'
+    ? !modulesLeftOut(d, new Set()).has('notes')
+    : allows('notes'))) try {
+    result.wallNotes = d.prepare(`
+      SELECT n.id, TRIM(n.title) AS title FROM notes n
+      WHERE n.pinned = 1 AND TRIM(COALESCE(n.title, '')) <> ''
+      ORDER BY n.updated_at DESC, n.id DESC
+      LIMIT 3
+    `).all();
+  } catch (err) {
+    log.error('wallNotes error:', err.message);
+    result.wallNotes = [];
   }
 
   // Einkaufslisten mit offenen Artikeln (max. 3 Listen, je bis zu 6 offene Items).
@@ -972,37 +858,6 @@ router.get('/', (req, res) => {
   }
 
   // DIE FASSUNG DER KACHEL (#1818), nur bei einer Auswahl. Die gewaehlten
-  // Listen stehen da, AUCH OHNE OFFENES: wer eine Liste auf die Uebersicht
-  // holt, will sie antippen, um den ersten Artikel einzutragen - genau dann
-  // waere sie sonst verschwunden. Listen mit Offenem zuerst, damit der Deckel
-  // von drei keine volle Liste hinter einer leeren versteckt; darin wie bisher
-  // die zuletzt geaenderte.
-  //
-  // `listCount` zaehlt JEDE gewaehlte Liste, die es gibt - auch die ohne
-  // Offenes. Daraus rechnet die Kachel "+n weitere Listen": eine gewaehlte
-  // Liste, die der Deckel abschneidet, ist so als "+1" da und fehlt nie stumm.
-  //
-  // Scheitert die Abfrage, fehlt das Feld, und die Kachel zeigt alle Listen.
-  if (shoppingSelection && wants('shoppingTile')) try {
-    const lists = d.prepare(`
-      SELECT sl.id, sl.name,
-        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id AND si.is_checked = 0) AS open_count,
-        (SELECT COUNT(*) FROM shopping_items si WHERE si.list_id = sl.id) AS total_count
-      FROM shopping_lists sl
-      WHERE sl.id IN (${shoppingMarks})
-      ORDER BY (open_count > 0) DESC, sl.updated_at DESC
-      LIMIT 3
-    `).all(...shoppingBinds);
-    for (const list of lists) list.items = shoppingItemsOf(list.id);
-    const openCount = d.prepare(`
-      SELECT COUNT(*) AS items FROM shopping_items si
-      WHERE si.is_checked = 0 AND si.list_id IN (${shoppingMarks})
-    `).get(...shoppingBinds).items;
-    result.shoppingTile = { lists, openCount, listCount: shoppingSelection.length };
-  } catch (err) {
-    log.error('shoppingTile error:', err.message);
-  }
-
   // Alle User (für Avatar-Farben in Widgets)
   try {
     result.users = d.prepare(
@@ -1030,7 +885,7 @@ router.get('/', (req, res) => {
     const merged = [];
     for (const member of result.users) {
       for (const event of getUpcomingEvents(d, {
-        userId, limit: FAMILY_AHEAD_PER_MEMBER, fromToday: true, assignedTo: member.id, includeBirthdays,
+        userId, limit: FAMILY_AHEAD_PER_MEMBER, fromToday: true, assignedTo: member.id,
         keepEndedToday: ENDED_TODAY_POOL, household: householdAudience,
       })) {
         const key = `${event.id}@${event.start_datetime}`;
@@ -1132,7 +987,7 @@ router.get('/', (req, res) => {
   // kurze Liste, die genau hier gebraucht wird.
   //
   // KEINE ZEILE IN DENIED_PAYLOAD, und das ist kein Vergessen: ein Schnellzugriff
-  // gehoert keinem Modul (siehe PERMISSION_WIDGETS). Die Achse, die er hat, ist
+  // gehoert keinem Modul. Die Achse, die er hat, ist
   // geteilt gegen privat, und die setzt `listQuickLinksFor` ueber die anfragende
   // Person durch - eine fremde private Kachel liegt also auch dann nicht auf der
   // Leitung, wenn der Browser sie nie zeichnen wuerde.
@@ -1377,7 +1232,6 @@ router.get('/', (req, res) => {
         type_id: o.type_id,
         type_name: o.type_name,
         type_icon: o.type_icon,
-        type_color: o.type_color,
         deep_link: o.deep_link,
       }));
   } catch (err) {
@@ -1401,7 +1255,6 @@ router.get('/', (req, res) => {
           short_code: entry.shift_type.short_code ?? null,
           start_time: entry.shift_type.start_time ?? null,
           end_time: entry.shift_type.end_time ?? null,
-          color: entry.shift_type.color ?? null,
           icon: entry.shift_type.icon ?? null,
         },
       }));
@@ -1434,9 +1287,9 @@ router.get('/', (req, res) => {
       WHERE t.status != 'done' AND t.archived_at IS NULL
         AND t.due_date IS NOT NULL AND t.due_date <= @today
         AND ${taskScopeWhere('t', { bind: '@today' })}
-        AND ${taskVisibleSql}${taskCategoryAnd}
+        AND ${taskVisibleSql}
       GROUP BY ta.user_id
-    `).all({ today: todayLocalKey, me: userId, ...taskCategoryBinds });
+    `).all({ today: todayLocalKey, me: userId});
   } catch (err) {
     log.error('memberTodayTasks error:', err.message);
     result.memberTodayTasks = [];
@@ -1454,8 +1307,6 @@ router.get('/', (req, res) => {
       today: todayLocalKey,
       zone: householdTimeZone(d),
       now,
-      categoryAnd: taskCategoryAnd,
-      categoryBinds: taskCategoryBinds,
     });
   } catch (err) {
     log.error('wallTasks error:', err.message);
@@ -1471,8 +1322,8 @@ router.get('/', (req, res) => {
       WHERE t.status = 'done' AND t.archived_at IS NULL
         AND t.due_date = @today
         AND ${taskScopeWhere('t', { bind: '@today' })}
-        AND ${taskVisibleSql}${taskCategoryAnd}
-    `).get({ today: todayLocalKey, me: userId, ...taskCategoryBinds }).n;
+        AND ${taskVisibleSql}
+    `).get({ today: todayLocalKey, me: userId}).n;
   } catch (err) {
     log.error('tasksDoneToday error:', err.message);
     result.tasksDoneToday = 0;
@@ -1489,8 +1340,6 @@ router.get('/', (req, res) => {
       now,
       visibleSql: taskVisibleSql,
       me: userId,
-      categoryAnd: taskCategoryAnd,
-      categoryBinds: taskCategoryBinds,
     });
   } catch (err) {
     log.error('planTasks error:', err.message);

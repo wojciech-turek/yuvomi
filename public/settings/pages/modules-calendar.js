@@ -149,21 +149,11 @@ function renderPage(container, preferences) {
               checked: !!preferences.holiday_show_public,
               attrs: { id: 'holiday-show-public', 'data-instant-save': true },
             })}
-            ${settingRowHtml({
-              label: t('settings.holidayPublicColor'), labelFor: 'holiday-public-color',
-              attrs: { id: 'holiday-public-color-group', hidden: !preferences.holiday_show_public },
-              control: `<input class="form-input" type="color" id="holiday-public-color" value="${esc(preferences.holiday_public_color)}">`,
-            })}
             ${settingSwitchRowHtml({
               label: t('settings.holidaySchoolLabel'),
               checked: !!preferences.holiday_show_school,
               attrs: { id: 'holiday-show-school', 'data-instant-save': true },
               extra: `<p class="form-hint" id="holiday-school-unavailable-hint" hidden>${t('settings.holidaySchoolUnavailable')}</p>`,
-            })}
-            ${settingRowHtml({
-              label: t('settings.holidaySchoolColor'), labelFor: 'holiday-school-color',
-              attrs: { id: 'holiday-school-color-group', hidden: !preferences.holiday_show_school },
-              control: `<input class="form-input" type="color" id="holiday-school-color" value="${esc(preferences.holiday_school_color)}">`,
             })}
           </div>
           <div id="holidays-form-error" class="form-error" role="alert" hidden></div>
@@ -290,7 +280,7 @@ export function countrySchoolHolidaysAvailable(countries, countryCode) {
  * ein bewusster Klick des Nutzers passiert nur im entsperrten Zustand und
  * bleibt damit unangetastet.
  */
-export function createSchoolAvailabilityUpdater({ showSchool, schoolColorGroup, schoolUnavailableHint }) {
+export function createSchoolAvailabilityUpdater({ showSchool, schoolUnavailableHint }) {
   let gemerkt = null;
   return (countries, countryCode) => {
     const available = countrySchoolHolidaysAvailable(countries, countryCode);
@@ -299,10 +289,8 @@ export function createSchoolAvailabilityUpdater({ showSchool, schoolColorGroup, 
     if (!available) {
       if (gemerkt === null) gemerkt = showSchool.checked;
       showSchool.checked = false;
-      schoolColorGroup.hidden = true;
     } else if (gemerkt !== null) {
       showSchool.checked = gemerkt;
-      schoolColorGroup.hidden = !gemerkt;
       gemerkt = null;
     }
     return available;
@@ -539,8 +527,6 @@ function holidayPreferenceData(container, discoveryState) {
     }),
     holiday_show_public: container.querySelector('#holiday-show-public')?.checked ?? false,
     holiday_show_school: container.querySelector('#holiday-show-school')?.checked ?? false,
-    holiday_public_color: container.querySelector('#holiday-public-color').value,
-    holiday_school_color: container.querySelector('#holiday-school-color').value,
   };
 }
 
@@ -548,18 +534,14 @@ function holidayPreferenceData(container, discoveryState) {
  * Feiertage/Schulferien anzeigen: jeder Schalter speichert nur seinen eigenen
  * Wert. Exportiert fuer test:settings-navigation (als Programm gemessen).
  */
-export function bindHolidayLayerSwitches({
-  showPublic, showSchool, publicColorGroup, schoolColorGroup, save = savePreferences,
-}) {
+export function bindHolidayLayerSwitches({ showPublic, showSchool, save = savePreferences }) {
   bindInstantSwitch(showPublic, {
     save: (on) => save({ holiday_show_public: on }),
     savedMessage: t('settings.holidaySaved'),
-    onRevert: (on) => { publicColorGroup.hidden = !on; },
   });
   bindInstantSwitch(showSchool, {
     save: (on) => save({ holiday_show_school: on }),
     savedMessage: t('settings.holidaySaved'),
-    onRevert: (on) => { schoolColorGroup.hidden = !on; },
   });
 }
 
@@ -646,8 +628,6 @@ async function bindEvents(container, preferences) {
   const groupGroup = container.querySelector('#holiday-group-group');
   const showPublic = container.querySelector('#holiday-show-public');
   const showSchool = container.querySelector('#holiday-show-school');
-  const publicColorGroup = container.querySelector('#holiday-public-color-group');
-  const schoolColorGroup = container.querySelector('#holiday-school-color-group');
   const schoolUnavailableHint = container.querySelector('#holiday-school-unavailable-hint');
   const auObservanceHint = container.querySelector('#holiday-au-observance-hint');
   const syncButton = container.querySelector('#holiday-sync-btn');
@@ -659,7 +639,7 @@ async function bindEvents(container, preferences) {
   // Merken-und-Wiederherstellen fuer den Schulferien-Schalter, siehe
   // createSchoolAvailabilityUpdater (Review-Fund zu #965).
   const updateSchoolAvailability = createSchoolAvailabilityUpdater({
-    showSchool, schoolColorGroup, schoolUnavailableHint,
+    showSchool, schoolUnavailableHint,
   });
   const applySchoolAvailability = (countryCode) => {
     updateSchoolAvailability(countriesData, countryCode);
@@ -752,17 +732,11 @@ async function bindEvents(container, preferences) {
     updateSyncState();
   });
 
-  showPublic.addEventListener('change', () => {
-    publicColorGroup.hidden = !showPublic.checked;
-  });
-  showSchool.addEventListener('change', () => {
-    schoolColorGroup.hidden = !showSchool.checked;
-  });
   // DIE EBENEN SCHALTEN SOFORT (R15 A7 P1-1): ein Schalter verspricht
   // sofortige Wirkung wie die Termindauer darueber; vorher warteten sie auf
-  // "Speichern" und gingen beim Blattwechsel still verloren. Land, Region,
-  // Gruppe und Farben bleiben im Formular - sie haengen aneinander.
-  bindHolidayLayerSwitches({ showPublic, showSchool, publicColorGroup, schoolColorGroup });
+  // "Speichern" und gingen beim Blattwechsel still verloren. Land, Region und
+  // Gruppe bleiben im Formular - sie haengen aneinander.
+  bindHolidayLayerSwitches({ showPublic, showSchool });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -775,8 +749,6 @@ async function bindEvents(container, preferences) {
         holiday_group: preferenceData.holiday_group,
         holiday_show_public: preferenceData.holiday_show_public,
         holiday_show_school: preferenceData.holiday_show_school,
-        holiday_public_color: preferenceData.holiday_public_color,
-        holiday_school_color: preferenceData.holiday_school_color,
       });
       discoveryState.persistedCountry = preferenceData.holiday_country;
       discoveryState.persistedSubdivision = preferenceData.holiday_subdivision;
@@ -801,8 +773,6 @@ async function bindEvents(container, preferences) {
     });
     showPublic.checked = layerSelection.showPublic;
     showSchool.checked = layerSelection.showSchool;
-    publicColorGroup.hidden = !layerSelection.showPublic;
-    schoolColorGroup.hidden = !layerSelection.showSchool;
 
     const preferenceData = holidayPreferenceData(container, discoveryState);
     syncButton.disabled = true;
@@ -813,8 +783,6 @@ async function bindEvents(container, preferences) {
         holiday_group: preferenceData.holiday_group,
         holiday_show_public: preferenceData.holiday_show_public,
         holiday_show_school: preferenceData.holiday_show_school,
-        holiday_public_color: preferenceData.holiday_public_color,
-        holiday_school_color: preferenceData.holiday_school_color,
       });
       discoveryState.persistedCountry = preferenceData.holiday_country;
       discoveryState.persistedSubdivision = preferenceData.holiday_subdivision;

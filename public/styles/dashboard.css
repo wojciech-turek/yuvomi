@@ -755,7 +755,6 @@
   font: inherit;
   font-size: var(--wall-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
   cursor: pointer;
 }
 
@@ -962,6 +961,71 @@
   inline-size: var(--space-12);
   block-size: var(--space-12);
   color: var(--color-accent);
+}
+
+/* ── Notizen und Geburtstage (nur lesen) ──
+ * Zwei einzeilige Streifen in EINER Karte (Sichtdurchgang One Today,
+ * 2026-11-03): „Notatki  Hasło do wifi · Lista na weekend" und
+ * „Urodziny  Halina dziś · Tomek 8 lis". Als zwei volle Karten passten sie bei
+ * 1280x800 an einem Tag mit Abendessen nie unter Abendessen und Einkauf (87px
+ * frei, eine dreizeilige Karte braucht rund 205). Hier: 12px Polster oben und
+ * unten, zwei Zeilen in der Label-Stufe (24/30, der Boden der Wand) - 84px.
+ * Jede Zeile wird als Ganzes mit „…" gekuerzt; nichts nimmt einen Tipp. */
+.wall-card[hidden],
+.wall-strip[hidden] {
+  display: none;
+}
+
+/* Ein Raster mit zwei Spalten: die Labels links, die Zeilen rechts beginnen an
+ * EINER Kante („Notatki"/„Urodziny" sind verschieden breit). Der Streifen
+ * selbst loest sich darin auf (`display: contents`); ein verborgener nimmt
+ * beide Zellen mit. */
+.wall-strips {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-4);
+  row-gap: 0;
+  padding-block: var(--space-3);
+}
+
+.wall-strip {
+  display: contents;
+}
+
+.wall-strip__items {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--wall-label);
+  line-height: var(--wall-label-lh);
+  color: var(--color-text-primary);
+}
+
+.wall-strip__item {
+  display: inline;
+}
+
+.wall-strip__dot {
+  padding-inline: var(--space-2);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.wall-strip__when {
+  color: var(--color-text-secondary);
+}
+
+/* Der heutige Geburtstag im Aufmerksamkeitston, Name und „dziś". */
+.wall-strip__item--today,
+.wall-strip__item--today .wall-strip__when {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ── Einkauf ── */
@@ -1395,17 +1459,19 @@
 /* --------------------------------------------------------
  * DZIŚ (design v2, 2026-10-27)
  *
- * The home screen as the owner's design draws it ("Main", "DzisFull"): the
- * header, the weather card with the rain of the day, the compact calendar,
- * the pending tasks and the birthdays soon - nothing else. Markup in
+ * The home screen as spec section 3 (One Today, 2026-11-02) draws it: the
+ * header (the date with the weather in one line, the greeting and the disc),
+ * Next up, the compact calendar, the pending tasks in their groups, the
+ * notes and the next birthdays - nothing else. Markup in
  * components/today-view.js, model in utils/dzis-plan.js.
  *
  * Everything runs on the v2 tokens (tokens.css, Foundations): the four type
  * steps `--type-page` 26, `--type-section` 17, `--type-row` 15 and
- * `--type-meta` 12, the card (`--color-card-border`, `--radius-card`, no
- * shadow), `--color-separator-inner` between rows, `--color-overdue`, the
- * rain pair `--color-rain` / `--color-rain-soft` and the umbrella's
- * `--color-rain-ink`. No hex stands on the page.
+ * `--type-meta` 12 (Next up's title takes `--type-title` 22), the card
+ * (`--color-card-border`, `--radius-card`, no shadow - Next up alone is the
+ * heavy card: no border, `--shadow-md`), `--color-separator-inner` between
+ * rows, `--color-overdue` and the warning family for attention. No hex
+ * stands on the page.
  * -------------------------------------------------------- */
 
 .dz {
@@ -1423,20 +1489,86 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Header ─────────────────────────────────────────────── */
+/* ── Wide screens (>=1024px) ────────────────────────────── */
 
-.dz-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+/* Two columns under a full-width head: Next up and the calendar on the left,
+ * tasks, notes and birthdays on the right. The DOM order stays the reading
+ * order and the keyboard order, so the columns are CSS columns, not a grid:
+ * a forced column break before the tasks section ends the left column. A grid
+ * with the sections placed by hand would tie both columns to shared rows (a
+ * tall tasks list would push the calendar down), and a grid that keeps the
+ * columns apart needs two wrappers, which would change the markup. A section
+ * never splits across the break. */
+:root {
+  /* Two 30rem columns and the gap between them. */
+  --dz-max: 62rem;
 }
 
-.dz-head__text {
+@media (min-width: 1024px) {
+  .dz {
+    display: block;
+    max-width: var(--dz-max);
+    column-count: 2;
+    column-gap: var(--space-8);
+    column-fill: balance;
+  }
+
+  .dz > * {
+    break-inside: avoid;
+    margin-block: 0 var(--space-6);
+  }
+
+  .dz-head {
+    column-span: all;
+  }
+
+  .dz-sec--tasks {
+    break-before: column;
+  }
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+
+/* Two rows: the date with the weather on the right, then the greeting with
+ * the disc on the right. */
+.dz-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "line line"
+    "greeting me";
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+}
+
+/* The date and the weather share a line while both fit; a long date and a
+ * long rain phrase ("Poniedziałek, 2 listopada" and "bez deszczu do końca
+ * dnia") put the weather on a line of its own under the date. */
+.dz-head__line {
+  grid-area: line;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
   min-width: 0;
+}
+
+/* ON A PHONE THE WEATHER HAS ITS OWN LINE, ALWAYS (visual pass 2026-11-03).
+ * At 390px the date and the weather fit on one line in neither language
+ * ("Wtorek, 3 listopada" 137px + "9° · bez deszczu do wieczora" 248px; the
+ * English pair is as long), so the weather wrapped under the date - but only
+ * while the phrase was long: a short one ("10° · deszcz 14-16") jumped back
+ * to the right, and the weather changed places between two visits. Now it
+ * stands under the date by design, flush with it, on every phone; from 768px
+ * it keeps the right end of the date line. */
+@media (max-width: 767px) {
+  .dz-head__line {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .dz-head__date {
@@ -1446,7 +1578,45 @@
   color: var(--color-text-secondary);
 }
 
+/* "10° · bez deszczu do wieczora": one line of text that keeps its
+ * --target-base hit by hanging into the lines above and below (as
+ * .dz-sec__link does), its text on the line. Where the hit reaches the
+ * disc, the disc wins (.dz-head__me stands above it). */
+.dz-head__weather {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1h);
+  min-width: 0;
+  padding-block: calc((var(--target-base) - var(--type-row-lh)) / 2);
+  margin-block: calc((var(--target-base) - var(--type-row-lh)) / -2);
+  padding-inline: var(--space-2);
+  margin-inline: calc(var(--space-2) * -1);
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  border-radius: var(--radius-xs);
+}
+
+.dz-head__weather-icon {
+  flex: none;
+  inline-size: 18px;
+  block-size: 18px;
+  stroke-width: 1.75;
+}
+
+.dz-head__weather-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dz-head__greeting {
+  grid-area: greeting;
   margin: 0;
   font-size: var(--type-page);
   line-height: var(--type-page-lh);
@@ -1460,23 +1630,30 @@
   -webkit-hyphenate-limit-after: 4;
 }
 
-/* The avatar is the way to the profile: 36 visual in a --target-base hit,
- * hanging 4 into the gutter as the design has it. */
+/* The disc is the way to the profile: 36 visual in a --target-base hit,
+ * beside the greeting, hanging 4 into the gutter as the design has it. */
 .dz-head__me {
-  flex: none;
+  grid-area: me;
+  position: relative;
+  z-index: 2;
   display: grid;
   place-items: center;
   inline-size: var(--target-base);
   block-size: var(--target-base);
-  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) 0 0;
+  margin-inline-end: calc(var(--space-1) * -1);
   border-radius: var(--radius-full);
   text-decoration: none;
 }
 
 /* DIE KOMPAKTE HOEHENKLASSE (DESIGN.md, "Die Chrome-Regel"): below 500px of
- * window height the header falls to its date line; the greeting leaves the
- * picture but stays in the document - it is the page's h2. */
+ * window height the header falls to its date line with the disc beside it;
+ * the greeting leaves the picture but stays in the document - it is the
+ * page's h2. */
 @media (max-height: 499px) {
+  .dz-head {
+    grid-template-areas: "line me";
+  }
+
   .dz-head__greeting {
     position: absolute;
     inline-size: 1px;
@@ -1488,29 +1665,6 @@
     white-space: nowrap;
     border: 0;
   }
-}
-
-/* ── Person discs ───────────────────────────────────────── */
-
-.day-disc {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--disc-tint, var(--color-fill));
-  color: var(--disc-ink, var(--color-text-secondary));
-  font-weight: var(--font-weight-semibold);
-}
-
-.day-disc--20 { inline-size: 20px; block-size: 20px; font-size: var(--type-meta); line-height: 20px; }
-.day-disc--36 { inline-size: 36px; block-size: 36px; font-size: var(--type-row); line-height: 36px; }
-
-.day-disc--photo img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
 }
 
 /* ── Cards and section heads ────────────────────────────── */
@@ -1542,8 +1696,8 @@
 
 .dz-sec__title {
   margin: 0;
-  font-size: var(--type-section);
-  line-height: var(--type-section-lh);
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
@@ -1590,142 +1744,55 @@
   block-size: 14px;
 }
 
-/* ── Weather ────────────────────────────────────────────── */
+/* ── Next up ────────────────────────────────────────────── */
 
-.dz-weather {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+/* The one heavy object of the page: white, no border, a soft shadow. The
+ * whole card is one link; its focus ring stays inside the rounded edge. */
+.dz-next {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
 }
 
-.dz-weather__now {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.dz-next__card {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  display: grid;
+  gap: var(--space-1);
+  min-block-size: var(--target-base);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-radius: inherit;
+  color: var(--color-text-primary);
+  text-decoration: none;
 }
 
-.dz-weather__icon {
-  flex: none;
-  inline-size: 28px;
-  block-size: 28px;
-  color: var(--color-text-secondary);
-  stroke-width: 1.75;
+/* "Za 25 min · 12:30" / "Teraz" / "Jutro 08:30": violet, what comes next. */
+.dz-next__lead {
+  font-size: var(--type-row);
+  line-height: var(--type-row-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
 }
 
-.dz-weather__temp {
-  flex: none;
-  font-size: var(--type-page);
-  line-height: var(--type-page-lh);
+.dz-next__title {
+  font-size: var(--type-title);
+  line-height: var(--type-title-lh);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--type-page-tracking);
-  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 4 4;
+  -webkit-hyphenate-limit-before: 4;
+  -webkit-hyphenate-limit-after: 4;
 }
 
-.dz-weather__text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.dz-weather__desc {
+/* "Potem 18:30 obiad: Spaghetti" */
+.dz-next__then {
+  margin-block-start: var(--space-0h);
   font-size: var(--type-row);
   line-height: var(--type-row-lh);
-}
-
-.dz-weather__meta {
-  font-size: var(--type-meta);
-  line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-}
-
-/* The rain line sits under a hairline: the umbrella and its window, or the
- * sun and "Bez deszczu do wieczora". */
-.dz-weather__rain {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-block-start: var(--space-3);
-  border-block-start: 1px solid var(--color-separator-inner);
-}
-
-.dz-weather__rain-icon {
-  flex: none;
-  inline-size: 18px;
-  block-size: 18px;
-  color: var(--color-rain-ink);
-  stroke-width: 1.75;
-}
-
-.dz-weather__rain--dry .dz-weather__rain-icon {
-  color: var(--color-text-secondary);
-}
-
-.dz-weather__rain-label {
-  min-width: 0;
-  font-size: var(--type-row);
-  line-height: var(--type-row-lh);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.dz-weather__chance {
-  flex: none;
-  margin-inline-start: auto;
-  font-size: var(--type-meta);
-  line-height: var(--type-meta-lh);
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The chart: fourteen hours from the one before now, 24 high. A bar from 40%
- * is rain blue, below it the pale blue, the current hour in ink. */
-.dz-chart {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.dz-chart__bars,
-.dz-chart__labels {
-  display: grid;
-  grid-template-columns: repeat(14, minmax(0, 1fr));
-  gap: var(--space-1);
-}
-
-.dz-chart__bars {
-  align-items: end;
-  block-size: 24px;
-}
-
-.dz-chart__bar {
-  display: block;
-  block-size: var(--bar, 3px);
-  border-radius: var(--radius-2xs);
-  background: var(--color-rain-soft);
-}
-
-.dz-chart__bar--wet {
-  background: var(--color-rain);
-}
-
-.dz-chart__bar--now {
-  background: var(--color-text-primary);
-}
-
-.dz-chart__labels {
-  font-size: var(--type-meta);
-  line-height: var(--type-meta-lh);
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.dz-chart__now {
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
 }
 
 /* ── Kalendarz ──────────────────────────────────────────── */
@@ -1917,6 +1984,21 @@
 
 /* ── Zadania ────────────────────────────────────────────── */
 
+/* The small label over each group: "Zaległe" in the attention colour,
+ * "Dziś", "Jutro", "Później", "Bez terminu" quiet. */
+.dz-group {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.dz-group--late {
+  color: var(--color-overdue);
+}
+
 .dz-tasks__list {
   margin: 0;
   padding: 0;
@@ -1996,7 +2078,7 @@
 .dz-task__flag {
   inline-size: 14px;
   block-size: 14px;
-  color: var(--color-overdue);
+  color: var(--color-warning);
   stroke-width: 2;
 }
 
@@ -2024,30 +2106,6 @@
   font-size: var(--type-row);
   line-height: var(--type-row-lh);
   color: var(--color-text-secondary);
-}
-
-.dz-tasks__add {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  min-block-size: var(--target-base);
-  padding: 0 var(--space-4);
-  border: 0;
-  border-block-start: 1px solid var(--color-separator-inner);
-  background: none;
-  font-size: var(--type-row);
-  line-height: var(--type-row-lh);
-  color: var(--color-accent);
-  text-align: start;
-  cursor: pointer;
-}
-
-.dz-tasks__add svg {
-  flex: none;
-  inline-size: 18px;
-  block-size: 18px;
-  stroke-width: 2;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2086,79 +2144,128 @@
   to { transform: scale(1.8); opacity: 0; }
 }
 
-/* ── Wkrótce ────────────────────────────────────────────── */
+/* ── Notatki and Urodziny ───────────────────────────────── */
 
-/* Quiet on purpose: no card, a muted head, 44 rows. */
-.dz-soon {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.dz-soon__title {
-  margin: 0;
-  font-size: var(--type-row);
-  line-height: var(--type-row-lh);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.dz-soon__list {
+/* A list in a card: rows under hairlines from the text edge. */
+.dz-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.dz-soon__list > li {
+.dz-list__row {
   position: relative;
 }
 
-.dz-soon__list > li + li::before {
+.dz-list__row + .dz-list__row::before {
   content: '';
   position: absolute;
   inset-block-start: 0;
-  inset-inline: 30px 0;
-  border-block-start: 1px solid var(--color-separator);
+  inset-inline: var(--space-4) 0;
+  border-block-start: 1px solid var(--color-separator-inner);
 }
 
-.dz-soon__row {
+/* A note: the title, and its first line of text as plain words. */
+.dz-note {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-0h);
   min-block-size: var(--target-base);
+  padding: var(--space-3) var(--space-4);
   color: var(--color-text-primary);
   text-decoration: none;
 }
 
-.dz-soon__icon {
-  flex: none;
-  inline-size: 18px;
-  block-size: 18px;
-  color: var(--color-ink-3);
-  stroke-width: 1.75;
-}
-
-.dz-soon__name {
+.dz-note__title,
+.dz-note__line,
+.dz-bday__name,
+.dz-bday__sub {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dz-note__title,
+.dz-bday__name {
   font-size: var(--type-row);
   line-height: var(--type-row-lh);
 }
 
-.dz-soon__kind {
-  font-size: var(--type-meta);
-  color: var(--color-text-secondary);
-}
-
-.dz-soon__when {
-  flex: none;
-  margin-inline-start: auto;
+.dz-note__line,
+.dz-bday__sub {
   font-size: var(--type-meta);
   line-height: var(--type-meta-lh);
   color: var(--color-text-secondary);
+}
+
+/* A birthday: the name and "kończy 36" (or the note, or "imieniny") on the
+ * left, the day and how far on the right. */
+.dz-bday {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--target-base);
+  padding: var(--space-2h) var(--space-4);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+/* Today's stands in the attention wash; the wash is its edge, so the row
+ * under it draws no hairline. */
+.dz-bday--today {
+  background: color-mix(in srgb, var(--color-warning) var(--tint-wash), var(--color-surface));
+}
+
+.dz-list__row:has(> .dz-bday--today) + .dz-list__row::before {
+  content: none;
+}
+
+.dz-bday__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-0h);
+  min-width: 0;
+}
+
+.dz-bday__when {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-0h);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
   font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.dz-bday__far {
+  color: var(--color-text-secondary);
+}
+
+/* The cake and "Dziś" in the attention colour. */
+.dz-bday__pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0h) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-warning-tint);
+  color: var(--color-warning-ink);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-lh);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dz-bday__cake {
+  flex: none;
+  inline-size: 14px;
+  block-size: 14px;
+  stroke-width: 2;
 }
 
 /* ---- Das + von Dziś (Quick-Add, 2026-10-29; Entwurf HomePlus, Ruling R14) ----
@@ -2192,6 +2299,21 @@
 
 #fab-add:hover {
   background-color: var(--color-btn-primary-hover);
+}
+
+/* Ab 1024px steht das + am unteren rechten Rand der Inhaltsbox von Dziś (die
+ * zwei 30rem-Spalten), nicht am Rand des Fensters. Es liegt ausserhalb von
+ * .app-content (#fab-layer), also rechnet das Blatt die Box aus Fensterbreite,
+ * Seitenleiste (--sidebar-width) und Inhaltsbreite nach: gleiche Rechnung wie
+ * --page-inline-pad am .dashboard und die Mitte von .dz. Nie weiter aussen als
+ * der Fensterabstand des geteilten Knopfes. */
+@media (min-width: 1024px) {
+  #fab-add {
+    --dz-view: calc(100vw - var(--sidebar-width));
+    --dz-pad: max(var(--page-gutter), calc((var(--dz-view) - var(--content-max-width)) / 2));
+    --dz-box: min(calc(var(--dz-view) - 2 * var(--dz-pad)), var(--dz-max));
+    inset-inline-end: max(var(--space-4), calc((var(--dz-view) - var(--dz-box)) / 2));
+  }
 }
 
 /* Der Halo des geteilten Fokusrings (.page-fab:focus-visible) - die eigene

@@ -22,7 +22,7 @@
 import { api } from '/api.js';
 import { t, formatTime, getLocale, getNumberFormat } from '/i18n.js';
 import { esc } from '/utils/html.js';
-import { personToken } from '/utils/person-color.js';
+import { personDisc } from '/utils/person-color.js';
 import { getHouseholdSize } from '/utils/household.js';
 import { navModuleAccess } from '/permissions.js';
 import { todayKey, nowFields } from '/utils/timezone.js';
@@ -611,14 +611,9 @@ function renderInbox(items, { expanded }) {
     </section>`;
 }
 
+/** The viewer's own disc: the one person disc (photo, else initials), 40. */
 function avatarHtml(user, household) {
-  const token = personToken(user ?? {}, household);
-  const style = `--avatar-ink: ${token.ink}; --avatar-tint: ${token.tint}`;
-  if (user?.avatar_data) {
-    return `<span class="more-avatar" aria-hidden="true" style="${esc(style)}"><img src="${esc(user.avatar_data)}" alt=""></span>`;
-  }
-  const initial = [...firstName(user?.display_name)][0] ?? '?';
-  return `<span class="more-avatar" aria-hidden="true" style="${esc(style)}">${esc(initial.toLocaleUpperCase(getLocale()))}</span>`;
+  return personDisc(user ?? {}, { size: 'lg', household });
 }
 
 function renderProfile(state) {

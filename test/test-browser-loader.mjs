@@ -266,7 +266,11 @@ const STUBS = {
     // Test sterben, der genau diesen Pfad faehrt, und zwar an einem TypeError
     // statt an der Sache, die er messen wollte. Den Knopfzustand baut der Stub
     // bewusst NICHT nach: wer ihn pruefen will, wuerde sonst den Stub messen.
-    export const btnLoading = () => () => {};
+    // Wer sehen will, WANN ein Knopf dreht und wieder ruht, setzt
+    // globalThis.__btnLoading (es liefert sein eigenes stop()).
+    export const btnLoading = (...args) => (
+      typeof globalThis.__btnLoading === 'function' ? globalThis.__btnLoading(...args) : () => {}
+    );
     export const btnSuccess = () => {};
     export const btnError = () => {};
     // Wer sehen will, OB eine Seite den Fokus nach dem Neuzeichnen

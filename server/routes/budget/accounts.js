@@ -6,7 +6,7 @@
 import express from 'express';
 import { createLogger } from '../../logger.js';
 import * as db from '../../db.js';
-import { str, oneOf, num, color as validateColor, MAX_SHORT } from '../../middleware/validate.js';
+import { str, oneOf, num, MAX_SHORT } from '../../middleware/validate.js';
 import {
   budgetFilter, listAccounts, ACCOUNT_TYPE_KEYS, nextAccountSortOrder, cents, refusal, refusals, refuse,
 } from './helpers.js';
@@ -37,7 +37,7 @@ router.get('/accounts', (req, res) => {
 /**
  * POST /api/v1/budget/accounts
  * Neues Konto anlegen.
- * Body: { name, type?, starting_balance?, currency?, color?, credit_bank?, credit_limit? }
+ * Body: { name, type?, starting_balance?, currency?, credit_bank?, credit_limit? }
  * Response: { data: Account }
  */
 router.post('/accounts', (req, res) => {
@@ -45,7 +45,6 @@ router.post('/accounts', (req, res) => {
     const vName    = str(req.body.name, 'Name', { max: MAX_SHORT });
     const vType    = oneOf(req.body.type || 'checking', ACCOUNT_TYPE_KEYS, 'Account type');
     const vBalance = num(req.body.starting_balance ?? 0, 'Starting balance', { required: false });
-    const vColor   = validateColor(req.body.color, 'Color', { allowTokens: true });
     const vBank    = req.body.credit_bank === undefined || req.body.credit_bank === null || req.body.credit_bank === ''
       ? { value: null, error: null }
       : str(req.body.credit_bank, 'Bank', { max: MAX_SHORT });
@@ -54,7 +53,6 @@ router.post('/accounts', (req, res) => {
       ...refusals('account_name_invalid', [vName]),
       ...refusals('account_type_invalid', [vType]),
       ...refusals('account_balance_invalid', [vBalance]),
-      ...refusals('account_color_invalid', [vColor]),
       ...refusals('account_credit_bank_invalid', [vBank]),
       ...refusals('account_credit_limit_invalid', [vLimit]),
     ];
@@ -64,14 +62,13 @@ router.post('/accounts', (req, res) => {
     }
 
     const currency = req.body.currency ? str(req.body.currency, 'Currency', { max: 8 }).value : null;
-    const color    = vColor.value;
 
     const result = db.get().prepare(`
-      INSERT INTO budget_accounts (name, type, starting_balance, currency, color, sort_order, created_by, credit_bank, credit_limit)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO budget_accounts (name, type, starting_balance, currency, sort_order, created_by, credit_bank, credit_limit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       vName.value, vType.value, cents(vBalance.value ?? 0),
-      currency, color, nextAccountSortOrder(),
+      currency, nextAccountSortOrder(),
       req.authUserId || req.session.userId,
       vBank.value, vLimit.value === null ? null : cents(vLimit.value)
     );
@@ -86,7 +83,7 @@ router.post('/accounts', (req, res) => {
 
 /**
  * PUT /api/v1/budget/accounts/:id
- * Konto aktualisieren (Name, Typ, Startsaldo, Währung, Farbe, Archiv-Status,
+ * Konto aktualisieren (Name, Typ, Startsaldo, Währung, Archiv-Status,
  * bei Kreditkarten zusätzlich Bank und Kreditlimit).
  * Response: { data: Account }
  */
@@ -100,7 +97,6 @@ router.put('/accounts/:id', (req, res) => {
     if (req.body.name !== undefined) checks.push(['account_name_invalid', str(req.body.name, 'Name', { max: MAX_SHORT })]);
     if (req.body.type !== undefined) checks.push(['account_type_invalid', oneOf(req.body.type, ACCOUNT_TYPE_KEYS, 'Account type')]);
     if (req.body.starting_balance !== undefined) checks.push(['account_balance_invalid', num(req.body.starting_balance, 'Starting balance')]);
-    if (req.body.color !== undefined) checks.push(['account_color_invalid', validateColor(req.body.color, 'Color', { allowTokens: true })]);
     if (req.body.credit_bank) checks.push(['account_credit_bank_invalid', str(req.body.credit_bank, 'Bank', { max: MAX_SHORT })]);
     if (req.body.credit_limit !== undefined) checks.push(['account_credit_limit_invalid', num(req.body.credit_limit, 'Credit limit', { required: false })]);
     const errors = checks.flatMap(([reason, result]) => refusals(reason, [result]));
@@ -109,9 +105,6 @@ router.put('/accounts/:id', (req, res) => {
     const currency = req.body.currency !== undefined
       ? (req.body.currency ? str(req.body.currency, 'Currency', { max: 8 }).value : null)
       : existing.currency;
-    const color = req.body.color !== undefined
-      ? validateColor(req.body.color, 'Color', { allowTokens: true }).value
-      : existing.color;
     const archived = req.body.archived !== undefined ? (req.body.archived ? 1 : 0) : existing.archived;
     // Leerer String und null löschen das Feld, `undefined` lässt es unangetastet -
     // sonst könnte ein Teil-Update Bank oder Limit unbeabsichtigt verwerfen.
@@ -131,7 +124,6 @@ router.put('/accounts/:id', (req, res) => {
           type             = COALESCE(?, type),
           starting_balance = COALESCE(?, starting_balance),
           currency         = ?,
-          color            = ?,
           archived         = ?,
           credit_bank      = ?,
           credit_limit     = ?
@@ -140,7 +132,7 @@ router.put('/accounts/:id', (req, res) => {
       req.body.name !== undefined ? String(req.body.name).trim() : null,
       req.body.type !== undefined ? req.body.type : null,
       req.body.starting_balance !== undefined ? cents(req.body.starting_balance) : null,
-      currency, color, archived, creditBank, creditLimit, id
+      currency, archived, creditBank, creditLimit, id
     );
 
     const account = listAccounts(true, budgetFilter(req, 'e', { scoped: false })).find((a) => a.id === id);

@@ -191,15 +191,13 @@
 }
 
 /* Die Scheibe: 28, Initialen 13/600. Ohne Konto neutral (Fill, Tinte-2), ein
- * Haushaltsmitglied in seiner Personenfarbe (inline aus person-color.js). */
+ * Haushaltsmitglied als Personenscheibe (person-color.js). */
 .contact-item__icon {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-full);
-  /* Haut aus .vivid-mark (layout.css), aber nur mit kuratiertem Ton - sonst
-   * neutral. */
-  --seal-accent: var(--cat, var(--color-fill));
-  color: var(--cat-ink, var(--color-text-secondary));
+  --seal-accent: var(--color-fill);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,16 +222,12 @@
   font-size: var(--type-title);
 }
 
+/* Ein Haushaltsmitglied traegt die eine Personenscheibe (person-color.js,
+ * `.person-disc`): hier nur gegen die Kategorie-Tinte der Grundregel oben
+ * gesichert, die sonst je nach Ladefolge gewaenne. */
 .contact-item__icon--member {
-  overflow: hidden;
-  font-size: var(--type-footnote);
-  font-weight: var(--font-weight-semibold);
-}
-
-.contact-item__icon--member img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  background-color: var(--person-disc-tint);
+  color: var(--person-disc-ink);
 }
 
 .contact-item__body {
@@ -363,8 +357,8 @@
   height: var(--target-md);
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  --seal-accent: var(--cat, var(--color-fill-well));
-  color: var(--cat-ink, var(--color-text-secondary));
+  --seal-accent: var(--color-fill-well);
+  color: var(--color-text-secondary);
 }
 
 .contacts-cat-select .form-input {

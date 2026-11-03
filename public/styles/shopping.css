@@ -777,9 +777,9 @@
  * sentence case, 16 in from the card edge. The button keeps a full target
  * without growing the 22pt line (negative block margin). */
 .shopping-page .list-group__title {
-  padding-inline: var(--space-4);
-  font-size: var(--type-body);
-  line-height: var(--type-body-lh);
+  padding-inline: 0;
+  font-size: var(--type-section-head);
+  line-height: var(--type-section-head-lh);
   font-weight: var(--font-weight-semibold);
   text-transform: none;
   letter-spacing: normal;
@@ -789,7 +789,7 @@
 .shopping-page .list-group__toggle {
   gap: 6px;
   min-height: var(--target-base);
-  margin-block: calc((var(--type-body-lh) - var(--target-base)) / 2);
+  margin-block: calc((var(--type-section-head-lh) - var(--target-base)) / 2);
   text-align: start;
 }
 
@@ -1121,7 +1121,6 @@
   border-radius: var(--radius-full);
   font-size: var(--type-body);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-accent-glow);
 }
 
 .shopping-done__plain {

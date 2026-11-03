@@ -1812,7 +1812,7 @@ const SHARED_PRESSABLE = [
  *  -> 206 (2026-10-24): das Kachelraster der Uebersicht ist mit Tafla gegangen.
  *  -> 198 (2026-10-26): beides zusammengefuehrt - Chips und Kachelraster entfallen gemeinsam.
  *  -> 197 (2026-10-26): der Hover der toten `.notes-page .note-item` (glass.css) ist weg. */
-const UNGUARDED_HOVER_MAX = 193;
+const UNGUARDED_HOVER_MAX = 189;
 
 function hoverRules() {
   const out = [];

@@ -20,7 +20,6 @@ import { normalizeRecipeMealTypes, recipeSupportsMealType, recipeAllowsMealType 
 import { mountEmptyState, mountLoadError, emptyStateEl } from '/utils/empty-state.js';
 import { mealPayloadFromRecipe } from '/utils/recipe-to-meal.js';
 import { findPageFab } from '/utils/fab.js';
-import { ensureStyleApplied } from '/utils/page-style.js';
 import { pageToolsMenuHtml, popoverMenuHtml, installPopoverMenus, syncPopoverMenuItem } from '/utils/popover-menu.js';
 import { zonedWeekday, nowFields } from '/utils/timezone.js';
 import { mealTypeList, mealTypeLabel, primeMealTypeNames, MEAL_TYPE_KEYS } from '/utils/meal-types.js';
@@ -34,7 +33,6 @@ import { isSoloHousehold } from '/utils/household.js';
 import { errorSentence } from '/utils/friendly-error.js';
 import { openCookForMeal } from '/components/cook-mode.js';
 import { personDisc } from '/utils/person-color.js';
-import { initials } from '/utils/initials.js';
 
 // --------------------------------------------------------
 // Konstanten
@@ -373,11 +371,12 @@ function formatWeekLabel(monday) {
   // Unter 640px faellt das Jahr an BEIDEN Enden weg (`formatDayMonth`): die
   // Kalenderwoche liegt so gut wie nie ueber einen Jahreswechsel, und die
   // gesparte Breite ist hier der knappere Preis - eine Woche wie
-  // "28.12. - 03.01." bleibt trotzdem eindeutig genug fuer den Kopf einer
-  // Seite, die ohnehin "diese Woche" zeigt.
+  // "28.12.-03.01." bleibt trotzdem eindeutig genug fuer den Kopf einer
+  // Seite, die ohnehin "diese Woche" zeigt. Eine Spanne ist ein Bindestrich
+  // ohne Leerzeichen (Copy-Durchgang 2026-11-02, wie calendar.dayRangeLabel).
   const from = narrow ? formatDayMonth(monday) : formatDate(monday);
   const to = narrow ? formatDayMonth(sunday) : formatDate(sunday);
-  return `${from} - ${to}`;
+  return `${from}-${to}`;
 }
 
 /**
@@ -554,19 +553,18 @@ async function loadMembers() {
 /**
  * Der Koch einer Mahlzeit als Person, wie `renderAvatarStack()` und
  * `withChosenPeople()` sie lesen - oder null. Die Leseabfragen liefern ihn
- * flach neben der Mahlzeit (`cook_user_id`, `cook_name`, `cook_color`), im
- * Planer wie in der Uebersicht.
+ * flach neben der Mahlzeit (`cook_user_id`, `cook_name`), im Planer wie in
+ * der Uebersicht. Seine Farbe ist sein Platz im Haushalt (person-color.js).
  *
  * DAS BILD KOMMT AUS DER MITGLIEDERLISTE, nicht aus der Mahlzeit: der Server
  * haengt es nicht mehr an jede Zeile. Ein Koch, der kein Mitglied (mehr) ist,
- * steht dort nicht und zeigt seine Initialen auf seiner Farbe.
+ * steht dort nicht und traegt die neutrale Scheibe mit seinen Initialen.
  */
 function mealCook(meal) {
   if (!meal?.cook_user_id) return null;
   return {
     id: meal.cook_user_id,
     display_name: meal.cook_name ?? '',
-    color: meal.cook_color ?? null,
     avatar_data: state.members.find((member) => member.id === meal.cook_user_id)?.avatar_data ?? null,
   };
 }
@@ -721,55 +719,12 @@ function mealsLayoutHtml() {
 /**
  * Alles, was der Plan und der Mahlzeit-Dialog lesen: die Woche, Listen,
  * Einstellungen, Kategorien, Rezepte, Mitglieder, Vorrat und - nach den Listen -
- * was schon auf einer steht. Eine Stelle fuer render() und openNewMealFrom().
+ * was schon auf einer steht.
  */
 async function loadMealsData(monday) {
   await Promise.all([loadWeek(monday), loadLists(), loadPreferences(), loadCategories(), loadRecipes(), loadMembers(), loadPantry()]);
   // Was schon auf einer Liste steht, braucht die Listen - deshalb danach.
   await loadListedNames();
-}
-
-/**
- * Der naechste Platz des Tages, der noch leer ist - nach der Uhr: ab der
- * Mahlzeit, die jetzt dran ist (`startType`), die erste ohne Mahlzeit. Der
- * Zwischensnack ist nie die Vermutung (wie mealTypeForHour); gibt es dahinter
- * nichts Freies, bleibt es bei `startType`. Ohne `startType` beginnt die Suche
- * vorn und endet beim letzten Platz.
- * @param {string[]} types sichtbare Mahlzeitarten, in Planreihenfolge
- * @param {Array<{meal_type: string}>} meals Mahlzeiten dieses Tages
- * @param {string} [startType]
- * @returns {string}
- */
-export function firstEmptyMealSlot(types, meals, startType = null) {
-  const taken = new Set((meals ?? []).map((meal) => meal.meal_type));
-  const guessable = types.filter((type) => type !== 'snack');
-  const pool = guessable.length ? guessable : types;
-  const rank = (type) => MEAL_TYPE_KEYS.indexOf(type);
-  const fromHere = pool.filter((type) => rank(type) >= rank(startType));
-  const fallback = pool.includes(startType) ? startType : (pool[pool.length - 1] ?? 'lunch');
-  return (fromHere.length ? fromHere : pool).find((type) => !taken.has(type)) ?? fallback;
-}
-
-/**
- * Das Formular „Mahlzeit hinzufuegen" von ausserhalb der Seite oeffnen
- * (Uebersicht): heute, der naechste noch leere Platz. Laedt, was der Dialog
- * liest, wie render() es tut; gezeichnet wird nichts, solange die Seite nicht
- * steht, und ihr naechstes render() holt alles frisch.
- *
- * @param {{user?: object|null, onChanged?: () => (void|Promise<void>)}} [opts]
- * @returns {Promise<boolean>} false bei nur lesendem Zugriff
- */
-export async function openNewMealFrom({ user = null, onChanged = () => {} } = {}) {
-  if (readOnly()) return false;
-  const today = todayKey();
-  const [, release] = await Promise.all([loadMealsData(getMondayOf(today)), ensureStyleApplied('/styles/meals.css')]);
-  state.userId = user?.id ?? state.userId;
-  const types = MEAL_TYPE_KEYS.filter((key) => state.visibleMealTypes.includes(key));
-  const startType = mealTypeForHour(nowFields().hour);
-  const mealType = firstEmptyMealSlot(types, state.meals.filter((meal) => meal.date === today), startType);
-  // Das Blatt gilt nur, solange der Dialog offen ist (generische Selektoren).
-  openMealModal({ mode: 'create', date: today, mealType, onChanged, onClose: release });
-  return true;
 }
 
 export async function render(container, { user }) {
@@ -1027,7 +982,11 @@ function wireRailToggle() {
   } else {
     const grid = _container?.querySelector('#week-grid');
     const desktop = !window.matchMedia?.('(max-width: 639px)').matches;
-    hidden = Boolean(desktop && grid && grid.scrollWidth > grid.clientWidth + 1);
+    // Unter 1440px beginnt die Spalte eingeklappt (Wide screens, 2026-11-02):
+    // nur so zeigt das Board bei 1280px alle sieben Tage. Der Menueeintrag
+    // "Rezepte anzeigen" holt sie zurueck.
+    const narrow = Boolean(window.matchMedia?.('(max-width: 1439px)').matches);
+    hidden = Boolean(desktop && (narrow || (grid && grid.scrollWidth > grid.clientWidth + 1)));
   }
   apply(hidden);
   // Jetzt steht die Breite des Boards fest - erst jetzt die Frage, ob „heute"
@@ -1150,7 +1109,7 @@ function renderBoardGrid() {
   // darum ist die Gutter-Spalte fürs Accessibility-Tree ein reines Duplikat
   // und wird mit aria-hidden ausgeblendet.
   const gutterHTML = visibleTypes.map((type, ti) => `
-    <div class="week-gutter-label" data-type="${type.key}" style="--type-row: ${ti + 2}" aria-hidden="true">
+    <div class="week-gutter-label" data-type="${type.key}" style="--meal-type-row: ${ti + 2}" aria-hidden="true">
       <span class="week-gutter-label__text">${type.label}</span>
     </div>
   `).join('');
@@ -1369,7 +1328,9 @@ function renderSlot(date, type, mealsForDay, dayCol, typeRow) {
   const meals = mealsForDay.filter((m) => m.meal_type === type.key);
   // Explizite Grid-Platzierung fürs Desktop-Board (day-column/day-slots werden
   // dort zu display:contents); mobil ohne Wirkung, da die Slots im Fluss liegen.
-  const gridPos = `--day-col: ${dayCol}; --type-row: ${typeRow}`;
+  // `--meal-type-row`, nicht `--type-row`: das ist das Schrift-Token (15px,
+  // tokens.css), und der gleiche Name machte es in jeder Karte zur Zeilenzahl.
+  const gridPos = `--day-col: ${dayCol}; --meal-type-row: ${typeRow}`;
   // Bei `read` bleibt vom Platz der ZUSTAND - leer oder belegt -, jede Handlung
   // daran geht (Regel 2): die Plus-Knoepfe, der Ziehgriff und das Loeschen.
   const ro = readOnly();
@@ -1567,20 +1528,20 @@ function dayMonthLabel(key) {
 
 /**
  * "19-25 paź" (Intl.formatRange in der Sprache der App). Der Halbgeviertstrich
- * der Formatierung wird zum Bindestrich - die Projektregel fuer UI-Texte, wie
- * im Wochenlabel des Boards (formatWeekLabel).
+ * der Formatierung wird zum Bindestrich ohne Leerzeichen - die Projektregel
+ * fuer Spannen in UI-Texten (Copy-Durchgang 2026-11-02), wie im Wochenlabel
+ * des Boards (formatWeekLabel) und in calendar.dayRangeLabel.
  */
 function weekRangeLabel(monday) {
   const sunday = addDays(monday, 6);
   try {
     const fmt = new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
     if (typeof fmt.formatRange === 'function') {
-      // "19-25 pa\u017a" zwischen zwei Ziffern, sonst mit Luft: "26 pa\u017a - 1 lis".
-      return fmt.formatRange(dateFromKey(monday), dateFromKey(sunday))
-        .replace(/(\d?)\s*[\u2013\u2014]\s*(\d?)/g, (_, before, after) => (before && after ? `${before}-${after}` : `${before} - ${after}`));
+      // "19-25 pa\u017a", ueber den Monatswechsel "26 pa\u017a-1 lis".
+      return fmt.formatRange(dateFromKey(monday), dateFromKey(sunday)).replace(/\s*[\u2013\u2014]\s*/g, '-');
     }
   } catch { /* Rueckfall unten */ }
-  return `${dayMonthLabel(monday)} - ${dayMonthLabel(sunday)}`;
+  return `${dayMonthLabel(monday)}-${dayMonthLabel(sunday)}`;
 }
 
 /** Der Name der Mahlzeit fuer Saetze ("Dodaj kolację"); eigene Namen des Haushalts klein. */
@@ -1956,7 +1917,7 @@ function heroHtml(meal) {
         <div class="meals-hero__text">
           <span class="meals-hero__eyebrow">${esc(mealTypeLabel(meal.meal_type))}</span>
           <h2 class="meals-hero__heading">${title}</h2>
-          ${cookText ? `<span class="meals-hero__cook">${personDisc({ id: cook.id, avatar_color: cook.color }, { text: initials(cook.display_name), household: state.members })}<span>${esc(cookText)}</span></span>` : ''}
+          ${cookText ? `<span class="meals-hero__cook">${personDisc(cook, { household: state.members })}<span>${esc(cookText)}</span></span>` : ''}
         </div>
         ${plateHtml(meal, 'meals-hero__plate')}
       </div>
@@ -3319,31 +3280,6 @@ function cookPickerHtml(meal) {
     </div>`;
 }
 
-/**
- * Tafla: people are told apart by the curated person colours, not by the
- * avatar colour they once picked (utils/person-color.js). The cook chips of
- * the sheet come from the shared people picker, which still paints the raw
- * avatar colour; here each initial disc becomes the person disc - same
- * place, same class (so the picker's sizing and logic stay), ink on tint.
- * A photo avatar stays a photo.
- */
-function cookAvatarsAsPersonDiscs(panel) {
-  for (const input of panel.querySelectorAll(`input[data-ms-input="${COOK_INPUT}"]:not(.user-ms__none)`)) {
-    const avatar = input.closest('.user-ms__option')?.querySelector('.user-ms__avatar');
-    if (!avatar || avatar.classList.contains('person-disc') || avatar.querySelector('img')) continue;
-    const id = Number(input.value);
-    const member = state.members.find((m) => m.id === id);
-    const cook = state.modal?.meal?.cook_user_id === id ? mealCook(state.modal.meal) : null;
-    const user = member ?? { id, avatar_color: cook?.color ?? null, display_name: cook?.display_name ?? '' };
-    avatar.insertAdjacentHTML('afterend', personDisc(user, {
-      text: initials(user.display_name ?? ''),
-      household: state.members,
-      className: 'user-ms__avatar',
-    }));
-    avatar.remove();
-  }
-}
-
 /** Die im Dialog gewaehlte Koch-id oder null ("Niemand"). */
 function selectedCookId(overlay) {
   return getSelectedUserIds(overlay, COOK_INPUT)[0] ?? null;
@@ -3368,7 +3304,6 @@ function selectedCookId(overlay) {
  * setzt den Merker nicht.
  */
 function wireCookPicker(panel) {
-  cookAvatarsAsPersonDiscs(panel);
   bindUserMultiSelect(panel, COOK_INPUT, { single: true });
   panel.querySelector(`.user-ms[data-ms-name="${COOK_INPUT}"]`)?.addEventListener('change', () => {
     if (state.modal) state.modal.cookTouched = true;
