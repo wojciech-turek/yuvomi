@@ -1149,6 +1149,31 @@ test('Allowlist: das gekoppelte Display (ohne notes:read) bekommt die Titel ange
   assert.deepEqual(wall.pinnedNotes, []);
 }));
 
+// The paired display has no notes access of its own (`notes: 'none'`), yet
+// the server sends it the titles; the built wall draws them. Only the
+// household switch takes the strip away (final review C1, 2026-11-03).
+test('Wand: das gekoppelte Display zeichnet die Notizen-Zeile aus wallNotes, obwohl es selbst notes: none hat', async () => {
+  let wall;
+  await withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
+    seedWallSources();
+    wall = await asCoupledDisplay(() => overview(DISPLAY, '?audience=household'));
+  })();
+  const displayUser = db.prepare('SELECT id, role, family_role FROM users WHERE id = ?').get(DISPLAY);
+  const displayPerms = resolvePermissions(db, displayUser, { isDisplay: true });
+  assert.equal(displayPerms.modules.notes, 'none', 'Vorbedingung: das Display darf Notizen nicht lesen');
+  assert.deepEqual(wall.wallNotes.map((note) => note.title), ['Kontonummer Sparbuch'], 'Vorbedingung: der Server schickt den Titel');
+  await onWallAt(NOON_BERLIN, () => {
+    setPermissions({ ...displayPerms, widgets: {} });
+    const html = dash.renderWallSurface(wall, null, { now: new Date(), isDisplay: true });
+    assert.match(html, /data-wall-card="notes"/, 'die Notizen-Zeile steht an der Wand');
+    assert.ok(html.includes('Kontonummer Sparbuch'), 'mit dem Titel');
+    global.window.yuvomi.isModuleDisabled = (module) => module === 'notes';
+    const off = dash.renderWallSurface(wall, null, { now: new Date(), isDisplay: true });
+    assert.ok(!/data-wall-card="notes"/.test(off), 'Notizen im Haushalt aus: keine Zeile');
+    assert.ok(!off.includes('Kontonummer Sparbuch'));
+  })();
+});
+
 test('Allowlist: ist das Notizen-Modul im Haushalt abgeschaltet, bleibt wallNotes leer', withClock(NOON_BERLIN, 'Europe/Berlin', async () => {
   seedWallSources();
   db.prepare("UPDATE sync_config SET value = '[\"notes\"]' WHERE key = 'disabled_modules'").run();

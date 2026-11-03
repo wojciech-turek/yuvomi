@@ -639,9 +639,18 @@ function startClockTicker(container, signal, onTick = null) {
 /** Nach diesem Takt versucht die Wand einen Ladefehler von selbst zu heilen. */
 const WALL_HEAL_MS = 60_000;
 
-/** Module, die an der Wand fehlen: abgeschaltet oder ohne Leserecht. */
+/**
+ * Module, die an der Wand fehlen: abgeschaltet oder ohne Leserecht.
+ *
+ * Notizen sind die Ausnahme: die Wand zeichnet nur die Titel angepinnter
+ * Notizen, die der Server je Credential schickt (`wallNotes`, leer fuer jeden,
+ * der Notizen nicht sehen darf). Das gekoppelte Display hat kein Leserecht auf
+ * Notizen und bekommt die Titel trotzdem; hier zaehlt nur der Haushaltsschalter.
+ */
 function wallModuleOff(module) {
-  return Boolean(globalThis.window?.yuvomi?.isModuleDisabled?.(module)) || moduleAccess(module) === 'none';
+  if (globalThis.window?.yuvomi?.isModuleDisabled?.(module)) return true;
+  if (module === 'notes') return false;
+  return moduleAccess(module) === 'none';
 }
 
 /**
