@@ -16,6 +16,7 @@ import * as db from '../db.js';
 import { createLogger } from '../logger.js';
 import { mayWriteModule } from '../permissions.js';
 import { refuseWallWrite } from '../services/wall-settings.js';
+import { householdDisabledModules } from '../services/household-modules.js';
 import { AiError, claude } from '../ai/index.js';
 import { KIND_MODULE, QUICK_ADD_KINDS, parseQuickAddSentence } from '../services/quick-add.js';
 
@@ -53,12 +54,18 @@ export function createQuickAddRouter({ client = claude } = {}) {
     if (kind !== null && !QUICK_ADD_KINDS.includes(kind)) {
       return res.status(400).json({ error: 'Kind must be task, event or shopping.', code: 400 });
     }
-    // Vor dem Aufruf: wer nichts davon schreiben darf, kostet keine KI.
-    const writable = QUICK_ADD_KINDS.filter((k) => mayWriteModule(req, KIND_MODULE[k]));
-    if (kind ? !writable.includes(kind) : writable.length === 0) return res.status(403).json(READ_ONLY);
     try {
+      // Vor dem Aufruf: wer nichts davon schreiben darf, kostet keine KI.
+      const writable = QUICK_ADD_KINDS.filter((k) => mayWriteModule(req, KIND_MODULE[k]));
+      if (kind ? !writable.includes(kind) : writable.length === 0) return res.status(403).json(READ_ONLY);
+      // "Powiedz" waehlt nur unter Arten, deren Modul der Haushalt nutzt. Das
+      // Mikrofon eines Blatts (`kind`) fuellt sein Blatt weiter: abgeschaltet
+      // heisst nicht gesperrt (docs/DECISIONS.md 11).
+      const off = householdDisabledModules(db.get());
+      const kinds = kind ? writable : writable.filter((k) => !off.has(KIND_MODULE[k]));
+      if (!kinds.length) return res.status(403).json(READ_ONLY);
       const result = await parseQuickAddSentence({
-        text, userId: req.authUserId || req.session?.userId, kind, kinds: writable, client,
+        text, userId: req.authUserId || req.session?.userId, kind, kinds, client,
       });
       if (!result) return res.status(403).json(READ_ONLY);
       res.json({ data: { source: 'ai', kind: result.kind, fields: result.fields } });

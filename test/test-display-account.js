@@ -854,6 +854,46 @@ test('calendar:read reicht NICHT an das Kontaktbuch', async () => {
   assert.equal((await admin('GET', '/birthdays/import/candidates')).status, 200);
 });
 
+// Say it (quick add) is for people: no module owns /quick-add, so the scope
+// gate of the REAL app refuses every scoped credential before the router runs
+// (and so before any AI call). test-quick-add.js mounts the router bare and
+// pins the gate's helpers; this is the same rule through the chain itself.
+test('Powiedz: ein gescoptes Token und das Display kommen nicht an /quick-add/parse', async () => {
+  const created = await admin('POST', '/displays', { display_name: 'Powiedz-Probe' });
+  const issued = await admin('POST', `/displays/${created.body.data.id}/pairing-code`, {});
+  const display = asDisplay((await pair(issued.body.data.code)).token);
+  assert.equal((await display('GET', '/tasks')).status, 200, 'Vorbedingung: das Display ist gekoppelt');
+
+  const tokenRes = await admin('POST', '/auth/api-tokens', {
+    name: 'Schreiber', scopes: ['tasks:write', 'calendar:write', 'shopping:write'],
+  });
+  assert.equal(tokenRes.status, 201);
+  const bearer = async (path, body = { text: 'Kup mleko' }) => {
+    const res = await fetch(`${BASE}/api/v1${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenRes.body.token}` },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  assert.equal((await bearer('/tasks', { title: 'Vom Token' })).status, 201, 'Vorbedingung: das Token schreibt Aufgaben');
+
+  for (const path of ['/quick-add/parse', '/Quick-Add/parse', '/quick-add/parse/']) {
+    for (const [who, call] of [['Token', () => bearer(path)], ['Display', () => display('POST', path, { text: 'Kup mleko' })]]) {
+      const res = await call();
+      assert.equal(res.status, 403, `${who} ${path} war ${res.status}`);
+      // Benannt: das Scope-Gate sperrt, nicht die Route (die antwortet ohne
+      // KI mit 200 und `source: null`, ein Display mit `wall_read_only`).
+      assert.match(String(res.body?.error), /scope/i, `${who} ${path}: am Scope-Gate`);
+      assert.equal(res.body?.data, undefined, `${who} ${path}: keine Antwort der Route`);
+    }
+  }
+  // Eine Sitzung erreicht dieselbe Route (ohne KI: 200, `source: null`).
+  const session = await admin('POST', '/quick-add/parse', { text: 'Kup mleko' });
+  assert.equal(session.status, 200, 'die Route selbst ist da');
+  assert.equal(session.body?.data?.source, null);
+});
+
 test('der Katalog nennt die Kopplungsroute als unauthentifiziert', async () => {
   // Sonst traegt `op()` Bearer, API-Key und Cookie ein und verlangt von einem
   // frisch aufgehaengten Tablett genau das Credential, das es sich dort erst

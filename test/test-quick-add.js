@@ -271,10 +271,55 @@ test('kinds the caller may not get: a task in their place, or nothing when tasks
   const asTask = await parse({ kind: 'event', title: 'Trening Leo', event_date: '2026-11-05', start_time: '17:00' }, { kinds: ['task', 'shopping'], text: 'Trening Leo w czwartek o 17' });
   assert.equal(asTask.out.kind, 'task');
   assert.equal(asTask.out.fields.title, 'Trening Leo');
-  const none = await parse({ kind: 'event', title: 'Trening Leo', event_date: '2026-11-05', start_time: '17:00' }, { kinds: ['shopping'] });
+  // An event without a day or hour is a task, and tasks are out: nothing.
+  const none = await parse({ kind: 'event', title: 'Trening Leo' }, { kinds: ['event', 'shopping'] });
   assert.equal(none.out, null);
   const fine = await parse({ kind: 'shopping', items: [{ name: 'mleko', amount: '' }] }, { kinds: ['shopping'] });
   assert.equal(fine.out.kind, 'shopping');
+});
+
+// The AI chooses only among the kinds the caller may get (final review M3):
+// the schema's enum is those kinds; one kind left is forced like a sheet's mic.
+test('the schema offers only the kinds the caller may get; one left is forced', async () => {
+  const two = await parse({ kind: 'task', title: 'x' }, { kinds: ['task', 'shopping'] });
+  assert.deepEqual(two.sent[0].output_config.format.schema.properties.kind.enum, ['task', 'shopping']);
+  assert.match(two.sent[0].system, /Only these kinds can be chosen here: "task", "shopping"/);
+  assert.doesNotMatch(two.sent[0].system, /kind is always/);
+  const order = await parse({ kind: 'task', title: 'x' }, { kinds: ['shopping', 'task'] });
+  assert.deepEqual(order.sent[0].output_config.format.schema.properties.kind.enum, ['task', 'shopping'], 'in the schema\'s order');
+  const one = await parse({ kind: 'event', title: 'Mleko' }, { kinds: ['shopping'], text: 'mleko' });
+  assert.deepEqual(one.sent[0].output_config.format.schema.properties.kind.enum, ['shopping']);
+  assert.match(one.sent[0].system, /kind is always "shopping"/);
+  assert.doesNotMatch(one.sent[0].system, /comes from the shopping form/);
+  assert.equal(one.out.kind, 'shopping', 'forced, whatever the model says');
+  assert.deepEqual(one.out.fields, { items: [] });
+});
+
+// An event the person may not put in the calendar becomes a task that keeps
+// the day and the hour they said (final review M2): due_date and due_time.
+test('an event demoted to a task keeps its day and hour as due date and time', async () => {
+  const noCalendar = { kinds: ['task', 'shopping'] };
+  const timed = await parse({ kind: 'event', title: 'Trening Leo', event_date: '2026-11-05', start_time: '17:00', end_time: '18:00' }, noCalendar);
+  assert.equal(timed.out.kind, 'task');
+  assert.deepEqual(timed.out.fields, {
+    title: 'Trening Leo', due_date: '2026-11-05', due_time: '17:00', remind_date: null, remind_time: null, assigned_to: [],
+  });
+  const allDay = await parse({ kind: 'event', title: 'Wycieczka', event_date: '2026-11-05' }, noCalendar);
+  assert.deepEqual([allDay.out.fields.due_date, allDay.out.fields.due_time], ['2026-11-05', null]);
+  // An hour without a day: the event's own rule (today if ahead, else tomorrow; 11:00 now).
+  const later = await parse({ kind: 'event', title: 'Spotkanie', start_time: '15:00' }, noCalendar);
+  assert.deepEqual([later.out.fields.due_date, later.out.fields.due_time], ['2026-10-29', '15:00']);
+  const past = await parse({ kind: 'event', title: 'Spotkanie', start_time: '08:00' }, noCalendar);
+  assert.deepEqual([past.out.fields.due_date, past.out.fields.due_time], ['2026-10-30', '08:00']);
+  // Invalid values stay out.
+  const bad = await parse({ kind: 'event', title: 'Trening', event_date: '2026-02-30', start_time: '25:00' }, noCalendar);
+  assert.deepEqual([bad.out.fields.due_date, bad.out.fields.due_time], [null, null]);
+  // Neither a day nor an hour: a plain task, also when the calendar is writable.
+  for (const kinds of [noCalendar.kinds, undefined]) {
+    const plain = await parse({ kind: 'event', title: 'Wizyta u dentysty' }, { kinds });
+    assert.equal(plain.out.kind, 'task');
+    assert.deepEqual([plain.out.fields.title, plain.out.fields.due_date, plain.out.fields.due_time], ['Wizyta u dentysty', null, null]);
+  }
 });
 
 test('the schema is strict: every property required, no others', async () => {
@@ -423,10 +468,17 @@ test('route: an event for a member who may not write the calendar opens as a tas
 });
 
 test('route: the routed kind and tasks both closed answers 403', async () => {
-  const fake = fakeClaude(answer({ kind: 'event', title: 'Trening Leo', event_date: '2026-11-05', start_time: '17:00' }));
-  const r = await as({ access: { tasks: 'read', calendar: 'none' }, fake }, () => post(on, { text: 'Trening Leo w czwartek o 17' }));
+  // Event and shopping open, tasks closed: an "event" without a day or hour is a task, which is closed.
+  const fake = fakeClaude(answer({ kind: 'event', title: 'Wizyta u dentysty' }));
+  const r = await as({ access: { tasks: 'read' }, fake }, () => post(on, { text: 'Wizyta u dentysty' }));
   assert.equal(r.status, 403);
   assert.equal(r.json.code, 403);
+  // Only shopping open: the AI is held to shopping, so the sentence fills the shopping sheet.
+  const only = fakeClaude(answer({ kind: 'shopping', items: [{ name: 'mleko', amount: '' }] }));
+  const shop = await as({ access: { tasks: 'read', calendar: 'none' }, fake: only }, () => post(on, { text: 'mleko' }));
+  assert.equal(shop.status, 200);
+  assert.equal(shop.json.data.kind, 'shopping');
+  assert.deepEqual(only.sent[0].output_config.format.schema.properties.kind.enum, ['shopping']);
 });
 
 test('route: a member who may write none of tasks, calendar and shopping is refused before any AI call', async () => {
@@ -436,6 +488,33 @@ test('route: a member who may write none of tasks, calendar and shopping is refu
   assert.equal(r.json.code, 403);
   assert.equal(r.json.reason, 'module_read_only');
   assert.equal(fake.sent.length, 0, 'no AI call');
+});
+
+test('route: the AI chooses only among kinds the member may write and the household uses', async () => {
+  const kindsSent = (fake) => fake.sent[0].output_config.format.schema.properties.kind.enum;
+  actor = { id: MARIOLA, role: 'member' };
+  try {
+    const readOnly = fakeClaude(answer({ kind: 'task', title: 'x' }));
+    await as({ access: { calendar: 'read' }, fake: readOnly }, () => post(on, { text: 'Trening Leo w czwartek o 17' }));
+    assert.deepEqual(kindsSent(readOnly), ['task', 'shopping'], 'calendar read only: no event');
+  } finally { actor = { id: WOJTEK, role: 'admin' }; }
+  db.prepare(`INSERT INTO sync_config (key, value) VALUES ('disabled_modules', '["shopping"]')
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+  try {
+    const off = fakeClaude(answer({ kind: 'task', title: 'x' }));
+    await as({ fake: off }, () => post(on, { text: 'kup mleko' }));
+    assert.deepEqual(kindsSent(off), ['task', 'event'], 'shopping switched off: no shopping');
+    // A sheet's own mic still fills its sheet (switched off is not a lock).
+    const sheet = fakeClaude(answer({ kind: 'shopping', items: [{ name: 'mleko', amount: '' }] }));
+    const r = await as({ fake: sheet }, () => post(on, { text: 'mleko', kind: 'shopping' }));
+    assert.equal(r.status, 200);
+    assert.deepEqual(kindsSent(sheet), ['shopping']);
+  } finally {
+    db.prepare(`UPDATE sync_config SET value = '[]' WHERE key = 'disabled_modules'`).run();
+  }
+  const all = fakeClaude(answer({ kind: 'task', title: 'x' }));
+  await as({ fake: all }, () => post(on, { text: 'x' }));
+  assert.deepEqual(kindsSent(all), ['task', 'event', 'shopping']);
 });
 
 test('route: a forced kind the member may not write is refused before any AI call', async () => {
@@ -462,6 +541,27 @@ test('route: nothing is written to any table', async () => {
   }
   await post(off, { text: 'Kup mleko' });
   assert.deepEqual(counts(), before);
+});
+
+// The router above is mounted bare; the scope gate of server/index.js sits in
+// front of it in the app. These pin the gate's own helpers for this path: no
+// module owns /quick-add, so no scoped credential (API token or display) gets
+// through, whatever its scopes, in any spelling Express would route here.
+// The HTTP case through the real app is in test-display-account.js.
+test('gate: no scoped token and no display reaches /quick-add, in any spelling', async () => {
+  const { tokenAccessRequirement, tokenAllows, getAllScopes } = await import('../server/scopes.js');
+  const { displayMayAct, DISPLAY_SCOPES } = await import('../server/display-scopes.js');
+  const writer = ['tasks:write', 'calendar:write', 'shopping:write'];
+  for (const path of ['/quick-add/parse', '/api/v1/quick-add/parse', '/Quick-Add/parse', '/quick-add/parse/',
+    '//quick-add/parse', '/quick-add//parse']) {
+    const need = tokenAccessRequirement(path, 'POST');
+    assert.equal(need.moduleKey, null, `${path}: no module owns it`);
+    assert.equal(tokenAllows(writer, need.moduleKey, need.access), false, `${path}: tasks, calendar and shopping write are not enough`);
+    assert.equal(tokenAllows(getAllScopes(), need.moduleKey, need.access), false, `${path}: nor every scope there is`);
+    assert.equal(tokenAllows([...DISPLAY_SCOPES], need.moduleKey, need.access), false, `${path}: nor the display's scopes`);
+    assert.equal(displayMayAct('POST', path), false, `${path}: not on the display's route list`);
+    assert.equal(displayMayAct('POST', path, { screensaver: true }), false, `${path}: not with the screensaver either`);
+  }
 });
 
 test('route: an unexpected failure is a 500 that never logs the sentence', async () => {

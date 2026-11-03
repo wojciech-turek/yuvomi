@@ -19,8 +19,11 @@ export function quickAddPaths() {
           + 'nor an hour and a shopping answer without items come back as a task with the sentence as title. When the AI cannot '
           + 'answer (switched off, no key, monthly limit, network) the status is 200 with `{ data: { source: null, unavailable: '
           + 'code } }`. Write access is checked per kind: a member who may write none of tasks, calendar and shopping, or not '
-          + 'the given `kind`, is refused with 403 before any AI call; a routed kind the member may not write comes back as a '
-          + 'task when they may write tasks, else 403. A paired wall display and a scoped API token are always refused with 403.',
+          + 'the given `kind`, is refused with 403 before any AI call. Without `kind` the AI chooses only among the kinds the '
+          + 'member may write and whose module the household has not switched off (`disabled_modules`); when only one is left, '
+          + 'the answer is always that kind. A routed kind the member may not write comes back as a task when they may write '
+          + 'tasks (an event keeps its day and start as `due_date` and `due_time`), else 403. A paired wall display and a '
+          + 'scoped API token are always refused with 403.',
       }),
     },
   };

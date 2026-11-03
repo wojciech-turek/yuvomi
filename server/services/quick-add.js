@@ -79,7 +79,7 @@ function nextWeekday(today, weekday) {
   return addDays(today, ((weekday - current + 7) % 7) || 7);
 }
 
-function systemPrompt({ today, weekday, time, zone, names, speaker, kind }) {
+function systemPrompt({ today, weekday, time, zone, names, speaker, kind, only = false, kinds = QUICK_ADD_KINDS }) {
   const tomorrow = addDays(today, 1);
   const friday = nextWeekday(today, 5);
   const thursday = nextWeekday(today, 4);
@@ -95,7 +95,9 @@ function systemPrompt({ today, weekday, time, zone, names, speaker, kind }) {
     '- task: everything else, something a person has to do ("zadzwonić", "zapłacić", "umówić", "wyrzucić", "zabrać"), also when a day or an hour is said for doing it.',
     '- An event needs a day or an hour. A sentence with neither a day nor an hour is never an event: it is a task.',
     '- When unsure: task.',
-    ...(kind ? [`This sentence comes from the ${kind} form, so kind is always "${kind}": fill the fields of that kind even when the sentence sounds like another kind or names neither a day nor an hour.`] : []),
+    ...(kind && !only ? [`This sentence comes from the ${kind} form, so kind is always "${kind}": fill the fields of that kind even when the sentence sounds like another kind or names neither a day nor an hour.`] : []),
+    ...(kind && only ? [`Only "${kind}" can be added for this person, so kind is always "${kind}": fill the fields of that kind even when the sentence sounds like another kind or names neither a day nor an hour.`] : []),
+    ...(!kind && kinds.length < QUICK_ADD_KINDS.length ? [`Only these kinds can be chosen here: ${kinds.map((k) => `"${k}"`).join(', ')}. A sentence that sounds like another kind takes the closest of these${kinds.includes('task') ? ' (normally "task", with the day and hour said as its due date and time)' : ''}.`] : []),
     'Task fields (kind "task"):',
     ...taskFieldRules({ time, names }),
     'Event fields (kind "event"):',
@@ -184,8 +186,9 @@ function fieldsFor(kind, out, base) {
  * @param {string} opts.text - the sentence (trimmed here)
  * @param {number} opts.userId - who speaks
  * @param {'task'|'event'|'shopping'|null} [opts.kind] - a sheet's own mic: the answer is always this kind
- * @param {string[]} [opts.kinds] - kinds the caller may get when `kind` is not given (the writable ones);
- *        any other kind comes back as a task when 'task' is among them, else the result is null
+ * @param {string[]} [opts.kinds] - kinds the caller may get when `kind` is not given (writable and switched on);
+ *        the schema offers only these, one alone is forced; any other kind comes back as a task when
+ *        'task' is among them, else the result is null
  * @returns {Promise<{kind: 'task'|'event'|'shopping', fields: object}|null>}
  * @throws {AiError} from the client, unchanged
  */
@@ -194,23 +197,30 @@ export async function parseQuickAddSentence({
 }) {
   const sentence = String(text ?? '').trim();
   const ctx = dictationContext({ userId, now, database });
+  // Das Modell waehlt nur unter den Arten, die der Aufrufer bekommen darf (in
+  // der Reihenfolge des Schemas); bleibt nur eine, ist sie vorgegeben wie das
+  // Mikrofon eines Blatts.
+  const allowed = QUICK_ADD_KINDS.filter((k) => kinds.includes(k));
+  const only = !kind && allowed.length === 1;
+  const forced = kind ?? (only ? allowed[0] : null);
 
   const out = await client.json({
     feature: 'task_dictation',
     tier: 'fast',
     userId,
     system: systemPrompt({
-      today: ctx.today, weekday: ctx.weekday, time: ctx.nowTime, zone: ctx.zone, names: ctx.names, speaker: ctx.speaker, kind,
+      today: ctx.today, weekday: ctx.weekday, time: ctx.nowTime, zone: ctx.zone, names: ctx.names, speaker: ctx.speaker,
+      kind: forced, only, kinds: allowed,
     }),
     text: `Zdanie: ${sentence}`,
-    schema: schemaFor(ctx.names, kind ? [kind] : QUICK_ADD_KINDS),
+    schema: schemaFor(ctx.names, forced ? [forced] : allowed),
     maxTokens: 600,
     effort: 'low',
   });
 
   const base = { members: ctx.members, userId, today: ctx.today, nowTime: ctx.nowTime, sentence };
   // Das Mikrofon eines Blatts fuellt dieses Blatt, was immer das Modell sagt.
-  if (kind) return { kind, fields: fieldsFor(kind, out, base) };
+  if (forced) return { kind: forced, fields: fieldsFor(forced, out, base) };
 
   let routed = QUICK_ADD_KINDS.includes(out?.kind) ? out.kind : 'task';
   let fields = fieldsFor(routed, out, base);
@@ -221,8 +231,21 @@ export async function parseQuickAddSentence({
   // Aufgaben schreiben darf.
   if (!kinds.includes(routed)) {
     if (!kinds.includes('task')) return null;
+    if (routed === 'event') return { kind: 'task', fields: eventAsTaskFields(out, fields, base) };
     routed = 'task';
   }
   if (routed === 'task') fields = taskFieldsFrom(out, base);
   return { kind: routed, fields };
+}
+
+/**
+ * Ein Termin, den die Person nicht in den Kalender schreiben darf, wird eine
+ * Aufgabe, die Tag und Stunde behaelt: der Tag des Termins (mit seiner Regel
+ * fuer eine Stunde ohne Tag) wird der Faelligkeitstag, der Beginn die
+ * Faelligkeitszeit. Beide sind schon geprueft (cleanDate, cleanTime); eine
+ * Zeit ohne Tag gibt es hier nicht, der Termin hat immer einen Tag.
+ */
+function eventAsTaskFields(out, event, base) {
+  const task = taskFieldsFrom(out, base);
+  return { ...task, due_date: event.date, due_time: event.date ? event.start_time : null };
 }
